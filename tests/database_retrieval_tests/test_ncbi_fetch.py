@@ -103,3 +103,22 @@ def test_ncbi_esummary_gene():
     output = run_ncbi_esummary(inputs, NCBIFetchConfig())
     assert output.summary
     assert output.source_url is not None
+
+
+@pytest.mark.integration
+def test_ncbi_esearch_retstart_paginates():
+    """`retstart` shifts the result window so a paginated second page returns different IDs."""
+    page1 = run_ncbi_esearch(
+        NCBIEsearchInput(db="protein", search_term="kinase[Title]", max_results=5, retstart=0),
+        NCBIFetchConfig(),
+    )
+    page2 = run_ncbi_esearch(
+        NCBIEsearchInput(db="protein", search_term="kinase[Title]", max_results=5, retstart=5),
+        NCBIFetchConfig(),
+    )
+    assert page1.success and page2.success
+    assert len(page1.ids) == 5 and len(page2.ids) == 5
+    # The two windows must not overlap — that's the whole point of retstart.
+    assert set(page1.ids).isdisjoint(set(page2.ids)), (
+        f"retstart did not shift the result window: page1={page1.ids}, page2={page2.ids}"
+    )

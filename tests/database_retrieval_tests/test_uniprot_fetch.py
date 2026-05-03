@@ -151,3 +151,63 @@ def test_uniprot_fetch_by_name_returns_canonical_swissprot(target_name, organism
     assert output.success
     assert output.accession == expected_accession
     assert "swiss-prot" in (output.entry_type or "").lower()
+
+
+@pytest.mark.integration
+def test_uniprot_fetch_with_fields_shrinks_response_and_populates_typed_output():
+    """`fields` config restricts the API response and only populates requested typed fields.
+
+    Without `fields`, UniProt returns ~880 KB for human TP53 with every
+    annotation populated. A targeted selection collapses the response to
+    well under 10% of that size while still populating the typed Output
+    fields the caller requested.
+    """
+    minimal = run_uniprot_fetch(
+        UniProtFetchInput(uniprot_id="P04637"),
+        UniProtFetchConfig(fields=["accession", "sequence", "gene_names", "xref_pdb"]),
+    )
+    full = run_uniprot_fetch(
+        UniProtFetchInput(uniprot_id="P04637"),
+        UniProtFetchConfig(),
+    )
+
+    # Same canonical sequence is returned in both cases — the API filter only
+    # restricts what comes back, not which entry is selected.
+    assert minimal.success and full.success
+    assert minimal.accession == full.accession == "P04637"
+    assert minimal.sequence == full.sequence
+    assert minimal.gene_names == full.gene_names
+    assert minimal.pdb_crossrefs == full.pdb_crossrefs
+
+    # The minimal raw_entry must be meaningfully smaller — payload reduction
+    # is the whole point of this knob. UniProt always returns `entryType`,
+    # `extraAttributes`, and `primaryAccession` in the response envelope, so
+    # the floor is ~hundreds of bytes; the full TP53 record is ~880 KB.
+    assert len(str(minimal.raw_entry)) < len(str(full.raw_entry)) / 5, (
+        "minimal `fields` request should shrink raw_entry by >5x; got "
+        f"minimal={len(str(minimal.raw_entry))} vs full={len(str(full.raw_entry))}"
+    )
+
+    # Fields not requested are absent from raw_entry. `comments` carries
+    # function annotations / disease info / subcellular location etc. — none
+    # of which we asked for.
+    assert "comments" not in minimal.raw_entry
+    assert "comments" in full.raw_entry
+    assert "features" not in minimal.raw_entry
+    assert "features" in full.raw_entry
+
+
+@pytest.mark.integration
+def test_uniprot_fetch_with_fields_in_search_mode():
+    """`fields` works in search mode and the ranker still picks the canonical Swiss-Prot."""
+    output = run_uniprot_fetch(
+        UniProtFetchInput(target_name="TP53", organism="Homo sapiens"),
+        UniProtFetchConfig(fields=["accession", "gene_names", "reviewed", "xref_pdb"]),
+    )
+    assert output.success
+    assert output.accession == "P04637"
+    assert "swiss-prot" in (output.entry_type or "").lower()
+    # The ranker reads `entryType`, `genes`, and PDB cross-refs — including
+    # the corresponding fields keeps ranking quality intact.
+    assert output.gene_names
+    assert len(output.pdb_crossrefs) > 0

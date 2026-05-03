@@ -132,9 +132,12 @@ class PubChemFetchConfig(BaseConfig):
             Defaults to a 15-property bundle covering structure (SMILES, InChI),
             mass, and basic descriptor counts (TPSA, HBA, HBD, etc.).
         include_synonyms (bool): If True, also fetch the compound's synonyms
-            (one extra HTTP call).
-        max_synonyms (int): Maximum number of synonyms to return (PubChem can
-            return hundreds; the wrapper truncates client-side).
+            (one extra HTTP call). Returns up to 50 synonyms.
+        include_description (bool): If True, also fetch the compound's textual
+            descriptions (one extra HTTP call to ``/description/JSON``).
+        include_aids (bool): If True, also fetch the list of BioAssay IDs that
+            tested this compound (one extra HTTP call to ``/aids/JSON``). For
+            common compounds this can return thousands of assay IDs.
     """
 
     properties: list[PubChemProperty] = ConfigField(
@@ -145,13 +148,19 @@ class PubChemFetchConfig(BaseConfig):
     include_synonyms: bool = ConfigField(
         title="Include Synonyms",
         default=False,
-        description="If True, also fetch the compound's synonyms list",
+        description="If True, also fetch the compound's synonyms list (up to 50 returned)",
     )
-    max_synonyms: int = ConfigField(
-        title="Max Synonyms",
-        default=50,
-        ge=1,
-        description="Maximum number of synonyms to return",
+    include_description: bool = ConfigField(
+        title="Include Description",
+        default=False,
+        description="If True, also fetch the compound's textual descriptions",
+        advanced=True,
+    )
+    include_aids: bool = ConfigField(
+        title="Include BioAssay IDs",
+        default=False,
+        description="If True, also fetch the list of BioAssay IDs that tested this compound",
+        advanced=True,
     )
 
 
@@ -180,8 +189,13 @@ class PubChemFetchOutput(BaseToolOutput):
         hbond_acceptor_count (int | None): Number of hydrogen-bond acceptors.
         rotatable_bond_count (int | None): Number of rotatable bonds.
         heavy_atom_count (int | None): Number of non-hydrogen atoms.
-        synonyms (list[str]): Up to `max_synonyms` synonyms (empty when
+        synonyms (list[str]): Up to 50 synonyms (empty when
             `include_synonyms` is False).
+        descriptions (list[str]): Textual descriptions of the compound, one
+            per source (empty when `include_description` is False).
+        bioassay_ids (list[int]): BioAssay IDs that have tested this
+            compound (empty when `include_aids` is False). For common
+            compounds this can return thousands of IDs.
         source_url (str): URL of the PubChem property request.
         raw_property_record (dict[str, Any]): Complete property record from
             PubChem for advanced programmatic access.
@@ -205,6 +219,8 @@ class PubChemFetchOutput(BaseToolOutput):
     rotatable_bond_count: int | None = Field(default=None, description="Rotatable bond count")
     heavy_atom_count: int | None = Field(default=None, description="Non-hydrogen atom count")
     synonyms: list[str] = Field(default_factory=list, description="Compound synonyms")
+    descriptions: list[str] = Field(default_factory=list, description="Textual descriptions of the compound")
+    bioassay_ids: list[int] = Field(default_factory=list, description="BioAssay IDs that tested this compound")
     source_url: str = Field(description="URL of the property request")
     raw_property_record: dict[str, Any] = Field(
         default_factory=dict, description="Complete property record from PubChem for advanced access"
@@ -298,7 +314,9 @@ def run_pubchem_fetch(
         cid = all_cids[0]
 
         property_record, property_url = _fetch_properties(cid, config, session)
-        synonyms = _fetch_synonyms(cid, config, session) if config.include_synonyms else []
+        synonyms = _fetch_synonyms(cid, session) if config.include_synonyms else []
+        descriptions = _fetch_descriptions(cid, session) if config.include_description else []
+        bioassay_ids = _fetch_aids(cid, session) if config.include_aids else []
 
         return PubChemFetchOutput(
             cid=cid,
@@ -319,6 +337,8 @@ def run_pubchem_fetch(
             rotatable_bond_count=_opt_int(property_record.get("RotatableBondCount")),
             heavy_atom_count=_opt_int(property_record.get("HeavyAtomCount")),
             synonyms=synonyms,
+            descriptions=descriptions,
+            bioassay_ids=bioassay_ids,
             source_url=property_url,
             raw_property_record=property_record,
         )
@@ -383,12 +403,11 @@ def _fetch_properties(
     return properties[0], url
 
 
-def _fetch_synonyms(
-    cid: int,
-    config: PubChemFetchConfig,
-    session: requests.Session,
-) -> list[str]:
-    """Fetch the synonym list for a CID, truncated to `max_synonyms`.
+_MAX_SYNONYMS = 50
+
+
+def _fetch_synonyms(cid: int, session: requests.Session) -> list[str]:
+    """Fetch up to 50 synonyms for a CID.
 
     A 404 indicates PubChem has no synonyms for this CID -> empty list. Any
     other malformed shape raises KeyError via direct dict access.
@@ -401,7 +420,40 @@ def _fetch_synonyms(
     info = response.json()["InformationList"]["Information"]
     if not info:
         return []
-    return [str(s) for s in info[0]["Synonym"][: config.max_synonyms]]
+    return [str(s) for s in info[0]["Synonym"][:_MAX_SYNONYMS]]
+
+
+def _fetch_descriptions(cid: int, session: requests.Session) -> list[str]:
+    """Fetch textual descriptions for a CID, one per source.
+
+    A 404 indicates PubChem has no descriptions for this CID -> empty list.
+    Records without a Description field are skipped (some sources only
+    contribute a Title).
+    """
+    url = f"{_PUBCHEM_BASE}/compound/cid/{cid}/description/JSON"
+    response = session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
+    if response.status_code == 404:
+        return []
+    response.raise_for_status()
+    info = response.json()["InformationList"]["Information"]
+    return [str(record["Description"]) for record in info if record.get("Description")]
+
+
+def _fetch_aids(cid: int, session: requests.Session) -> list[int]:
+    """Fetch the list of BioAssay IDs that have tested this CID.
+
+    A 404 indicates PubChem has no assay records for this CID -> empty list.
+    For common compounds (e.g., aspirin) this can return thousands of IDs.
+    """
+    url = f"{_PUBCHEM_BASE}/compound/cid/{cid}/aids/JSON"
+    response = session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
+    if response.status_code == 404:
+        return []
+    response.raise_for_status()
+    info = response.json()["InformationList"]["Information"]
+    if not info:
+        return []
+    return [int(aid) for aid in info[0].get("AID", [])]
 
 
 def _opt_float(value: Any) -> float | None:

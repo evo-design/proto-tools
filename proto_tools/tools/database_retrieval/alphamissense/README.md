@@ -24,7 +24,12 @@ AlphaMissense is an adaptation of AlphaFold fine-tuned on human and primate vari
 ## How It Works
 
 **Method overview:**
-The tool issues a single HTTP GET against `https://alphafold.ebi.ac.uk/files/AF-{accession}-F1-aa-substitutions.csv`, parses the CSV (one row per substitution with columns `protein_variant`, `am_pathogenicity`, `am_class`), and applies any optional filters specified in `Config` (positions, alt residues, score range, classification). It returns the filtered list of `AlphaMissensePrediction` records along with summary statistics (`num_total_predictions`, `num_returned`, `mean_pathogenicity`, `source_url`).
+The tool issues a single HTTP GET against one of three AFDB CSV variants chosen by `coordinate_system`:
+- `"uniprot"` (default) → `AF-{accession}-F1-aa-substitutions.csv` (3 cols: `protein_variant`, `am_pathogenicity`, `am_class`; full saturation grid)
+- `"hg19"` → `AF-{accession}-F1-hg19.csv` (10 cols incl. `CHROM`, `POS`, `REF`, `ALT`, `transcript_id`; SNV-accessible only, GRCh37)
+- `"hg38"` → `AF-{accession}-F1-hg38.csv` (10 cols, SNV-accessible only, GRCh38)
+
+The CSV is parsed into a list of `AlphaMissensePrediction` records, each carrying the protein-level fields. In genomic mode the genomic-coordinate fields (`chrom`, `pos`, `ref`, `alt`, `transcript_id`) are also populated. Filtering is post-hoc and client-side — the wrapper exposes no filter knobs.
 
 **Key assumptions:**
 - The provided UniProt accession is a reviewed human protein covered by AlphaMissense
@@ -52,13 +57,11 @@ The tool issues a single HTTP GET against `https://alphafold.ebi.ac.uk/files/AF-
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `positions` | `list[int] \| None` | `None` | If set, return only predictions whose 1-indexed position is in this list. `None` returns all positions. |
-| `alt_residues` | `list[str] \| None` | `None` | If set, return only predictions whose alternate amino acid (single letter) is in this list. `None` returns all alts. |
-| `min_pathogenicity` | `float \| None` | `None` | If set, drop predictions with score below this threshold (range 0.0-1.0). |
-| `max_pathogenicity` | `float \| None` | `None` | If set, drop predictions with score above this threshold (range 0.0-1.0). |
-| `classification_filter` | `list[AlphaMissenseClass] \| None` | `None` | If set, return only predictions whose classification is in this list. `AlphaMissenseClass` is `Literal["likely_benign", "ambiguous", "likely_pathogenic"]`. |
+| `coordinate_system` | `Literal["uniprot", "hg19", "hg38"]` | `"uniprot"` | Which AFDB CSV variant to fetch. UniProt mode returns the full saturation grid in protein coordinates; hg19/hg38 modes return only SNV-accessible substitutions mapped to genomic coordinates. |
 
-All filter knobs are AND-combined: e.g. `positions=[100, 200]` together with `alt_residues=["L", "K"]` returns only the four `(pos, alt)` combinations that satisfy both constraints.
+**Filtering:** the wrapper exposes no filter knobs because the AFDB CSV has no server-side filtering API. Filter the returned `predictions` list client-side: `[p for p in output.predictions if p.position in {175, 248, 273}]` or `[p for p in output.predictions if p.pathogenicity_score >= 0.564]`.
+
+**Common threshold shortcuts:** `pathogenicity_score >= 0.564` → likely-pathogenic only; `>= 0.34` → ambiguous + pathogenic.
 
 ## Output Specification
 
@@ -66,10 +69,9 @@ All filter knobs are AND-combined: e.g. `positions=[100, 200]` together with `al
 # Return type: AlphaMissenseFetchOutput
 AlphaMissenseFetchOutput(
     uniprot_accession: str,                              # UniProt accession looked up
-    predictions: list[AlphaMissensePrediction],          # Per-substitution predictions after filtering
-    num_total_predictions: int,                          # Predictions in source CSV before filtering
-    num_returned: int,                                   # Predictions in `predictions` after filtering
-    mean_pathogenicity: float | None,                    # Mean score across returned predictions; None if empty
+    predictions: list[AlphaMissensePrediction],          # Per-substitution predictions
+    num_predictions: int,                                # Number of predictions in the source CSV
+    mean_pathogenicity: float | None,                    # Mean score across all predictions; None if empty
     source_url: str,                                     # URL of the AlphaMissense CSV fetched
 )
 ```
@@ -79,21 +81,25 @@ AlphaMissenseFetchOutput(
 | Field | Type | Description |
 |-------|------|-------------|
 | `uniprot_accession` | `str` | UniProt accession that was looked up (uppercased). |
-| `predictions` | `list[AlphaMissensePrediction]` | Per-substitution pathogenicity predictions, after Config filters have been applied. |
-| `num_total_predictions` | `int` | Number of predictions in the source CSV before any filters were applied. |
-| `num_returned` | `int` | Number of predictions in `predictions` after filtering. Equal to `num_total_predictions` when no filters are set. |
-| `mean_pathogenicity` | `float \| None` | Mean pathogenicity score across the returned predictions; `None` when `predictions` is empty. |
+| `predictions` | `list[AlphaMissensePrediction]` | Per-substitution pathogenicity predictions. |
+| `num_predictions` | `int` | Number of predictions in the source CSV. For UniProt mode this is the full saturation grid (~7,500 rows for TP53); for hg19/hg38 modes it's the SNV-accessible subset (~2,500 for TP53). |
+| `mean_pathogenicity` | `float \| None` | Mean pathogenicity score across all predictions; `None` when `predictions` is empty. |
 | `source_url` | `str` | URL of the AlphaMissense CSV fetched (useful for provenance / debugging). |
 
 **`AlphaMissensePrediction` fields:**
 
-| Field | Type | Range | Description |
-|-------|------|-------|-------------|
-| `position` | `int` | `>= 1` | 1-indexed residue position in the canonical UniProt sequence. |
-| `wild_type_aa` | `str` | single letter | Wild-type amino acid at this position. |
-| `alt_aa` | `str` | single letter | Alternate amino acid being scored. |
-| `pathogenicity_score` | `float` | `0.0 - 1.0` | AlphaMissense pathogenicity score. Higher values indicate the variant is more likely to be pathogenic. |
-| `classification` | `AlphaMissenseClass` | `Literal` | Pre-computed AlphaMissense class label: `"likely_benign"`, `"ambiguous"`, or `"likely_pathogenic"`. |
+| Field | Type | Mode | Description |
+|-------|------|------|-------------|
+| `position` | `int` | both | 1-indexed residue position in the canonical UniProt sequence. |
+| `wild_type_aa` | `str` | both | Wild-type amino acid at this position (single letter). |
+| `alt_aa` | `str` | both | Alternate amino acid being scored (single letter). |
+| `pathogenicity_score` | `float` | both | AlphaMissense pathogenicity score in `[0, 1]`. Higher = more likely to be pathogenic. |
+| `classification` | `AlphaMissenseClass` | both | Class label: `"likely_benign"`, `"ambiguous"`, or `"likely_pathogenic"`. |
+| `chrom` | `str \| None` | hg19/hg38 | Chromosome (e.g. `"chr17"`). `None` in UniProt mode. |
+| `pos` | `int \| None` | hg19/hg38 | 1-indexed genomic position. `None` in UniProt mode. |
+| `ref` | `str \| None` | hg19/hg38 | Reference allele. `None` in UniProt mode. |
+| `alt` | `str \| None` | hg19/hg38 | Alternate allele. `None` in UniProt mode. |
+| `transcript_id` | `str \| None` | hg19/hg38 | GENCODE transcript ID (e.g. `"ENST00000445888.6"`). `None` in UniProt mode. |
 
 **Supported export formats:** `json`
 
@@ -113,7 +119,7 @@ The `pathogenicity_score` is a calibrated value in `[0, 1]`, where `0` indicates
 - A high `pathogenicity_score` does not guarantee a clinically reportable variant. AlphaMissense is calibrated on protein-level functional disruption; loss-of-function does not always produce disease in heterozygotes (recessive genes) or in genes under low selective constraint.
 - A `likely_benign` call does not imply zero functional impact. Subtle, condition-dependent, or quantitative effects (e.g. reduced affinity, altered allostery) may still be present.
 - `mean_pathogenicity` over a wide region (or the whole protein) is a coarse summary; for hotspot detection, group predictions by `position` and inspect distributions per residue.
-- Empty `predictions` after aggressive filtering: re-check filter values; very high `min_pathogenicity` thresholds combined with a small protein can yield zero rows.
+- Empty `predictions`: only happens for non-human or uncovered accessions, which surface as `output.success=False`. The wrapper itself never filters the CSV — every row is returned as a `AlphaMissensePrediction`.
 
 ## Quick Start Examples
 
@@ -128,8 +134,7 @@ inputs = AlphaMissenseFetchInput(uniprot_id="P04637")
 output = run_alphamissense_fetch(inputs, AlphaMissenseFetchConfig())
 
 print(f"Accession: {output.uniprot_accession}")
-print(f"Total predictions in CSV: {output.num_total_predictions}")
-print(f"Returned (after filters): {output.num_returned}")
+print(f"Predictions in CSV: {output.num_predictions}")
 print(f"Mean pathogenicity: {output.mean_pathogenicity:.3f}")
 print(f"Source: {output.source_url}")
 
@@ -138,26 +143,27 @@ for p in output.predictions[:5]:
     print(f"  {p.wild_type_aa}{p.position}{p.alt_aa}: {p.pathogenicity_score:.3f} ({p.classification})")
 ```
 
-**Example 2: Fetch only likely-pathogenic substitutions for BRCA1**
+**Example 2: Filter to high-confidence pathogenic substitutions for BRCA1**
 ```python
+from collections import Counter
+
 from proto_tools.tools.database_retrieval import (
     AlphaMissenseFetchConfig, AlphaMissenseFetchInput, run_alphamissense_fetch,
 )
 
-# Pull only high-confidence pathogenic predictions for human BRCA1 (P38398).
-# Useful for triaging missense VUS in a clinical sequencing pipeline.
-inputs = AlphaMissenseFetchInput(uniprot_id="P38398")
-config = AlphaMissenseFetchConfig(
-    classification_filter=["likely_pathogenic"],  # Drop ambiguous + benign
-    min_pathogenicity=0.8,                         # Tighten beyond default 0.564 cutoff
+# Pull the full saturation grid for human BRCA1 (P38398), then filter
+# client-side. Useful for triaging missense VUS in a clinical sequencing pipeline.
+output = run_alphamissense_fetch(
+    AlphaMissenseFetchInput(uniprot_id="P38398"),
+    AlphaMissenseFetchConfig(),
 )
-output = run_alphamissense_fetch(inputs, config)
 
-print(f"BRCA1: {output.num_returned} of {output.num_total_predictions} substitutions are high-confidence pathogenic")
+# 0.564 = likely_pathogenic threshold; 0.8 = high-confidence only
+high_conf_pathogenic = [p for p in output.predictions if p.pathogenicity_score >= 0.8]
+print(f"BRCA1: {len(high_conf_pathogenic)} of {output.num_predictions} substitutions are high-confidence pathogenic")
 
 # Group by position to find hotspots
-from collections import Counter
-hotspots = Counter(p.position for p in output.predictions).most_common(10)
+hotspots = Counter(p.position for p in high_conf_pathogenic).most_common(10)
 print("Top hotspots (position, # pathogenic alts):")
 for pos, count in hotspots:
     print(f"  {pos}: {count}/19")
@@ -165,30 +171,58 @@ for pos, count in hotspots:
 
 **Example 3: Disease-relevant filter -- pathogenic vs benign at specific TP53 positions**
 ```python
+from collections import Counter
+
 from proto_tools.tools.database_retrieval import (
     AlphaMissenseFetchConfig, AlphaMissenseFetchInput, run_alphamissense_fetch,
 )
 
 # TP53 R175, R248, R273 are well-known mutational hotspots in cancer.
-# Compare predicted pathogenicity for substitutions at these positions.
-inputs = AlphaMissenseFetchInput(uniprot_id="P04637")
-config = AlphaMissenseFetchConfig(
-    positions=[175, 248, 273],  # Cancer hotspot residues
+output = run_alphamissense_fetch(
+    AlphaMissenseFetchInput(uniprot_id="P04637"),
+    AlphaMissenseFetchConfig(),
 )
-output = run_alphamissense_fetch(inputs, config)
+
+# Filter to the hotspot positions (client-side)
+hotspots = {175, 248, 273}
+hotspot_predictions = [p for p in output.predictions if p.position in hotspots]
 
 # Sort by score; pathogenic first
-ranked = sorted(output.predictions, key=lambda p: -p.pathogenicity_score)
+ranked = sorted(hotspot_predictions, key=lambda p: -p.pathogenicity_score)
 for p in ranked:
     print(f"{p.wild_type_aa}{p.position}{p.alt_aa}: {p.pathogenicity_score:.3f} ({p.classification})")
 
 # Counts by class at these positions
-from collections import Counter
-class_counts = Counter(p.classification for p in output.predictions)
+class_counts = Counter(p.classification for p in hotspot_predictions)
 print(f"\nClass distribution: {dict(class_counts)}")
 ```
 
-**Example 4: Chained workflow -- gene symbol -> UniProt -> AlphaMissense (variant-design constraint loop)**
+**Example 4: Genomic mode -- map a VCF variant to its AlphaMissense score**
+```python
+from proto_tools.tools.database_retrieval import (
+    AlphaMissenseFetchConfig, AlphaMissenseFetchInput, run_alphamissense_fetch,
+)
+
+# Pull the GRCh38-coordinate AlphaMissense table for TP53.
+# Each row carries the genomic coordinate fields needed to match a VCF entry.
+output = run_alphamissense_fetch(
+    AlphaMissenseFetchInput(uniprot_id="P04637"),
+    AlphaMissenseFetchConfig(coordinate_system="hg38"),
+)
+
+# Look up a specific VCF variant: chr17:7669612 G->T
+hits = [
+    p for p in output.predictions
+    if p.chrom == "chr17" and p.pos == 7669612 and p.ref == "G" and p.alt == "T"
+]
+for hit in hits:
+    print(
+        f"chr17:{hit.pos} {hit.ref}>{hit.alt} -> {hit.wild_type_aa}{hit.position}{hit.alt_aa} "
+        f"on {hit.transcript_id}: {hit.classification} (score {hit.pathogenicity_score:.3f})"
+    )
+```
+
+**Example 5: Chained workflow -- gene symbol -> UniProt -> AlphaMissense (variant-design constraint loop)**
 ```python
 from proto_tools.tools.database_retrieval import (
     AlphaMissenseFetchConfig, AlphaMissenseFetchInput, run_alphamissense_fetch,
@@ -208,7 +242,7 @@ am = run_alphamissense_fetch(
     AlphaMissenseFetchInput(uniprot_id=uniprot.accession),
     AlphaMissenseFetchConfig(),
 )
-# am.num_total_predictions == 189 * 19 == 3591
+# am.num_predictions == 189 * 19 == 3591
 
 # 3. Sanity check: UniProt sequence and AlphaMissense WT letters must agree.
 #    A silent disagreement here would mean the constraint scores the wrong residues.
@@ -216,7 +250,7 @@ for prediction in am.predictions:
     assert prediction.wild_type_aa == uniprot.sequence[prediction.position - 1]
 ```
 
-**Example 5: Chained workflow -- joining AFDB structure + AlphaMissense tolerance to rank "design-friendly" residues**
+**Example 6: Chained workflow -- joining AFDB structure + AlphaMissense tolerance to rank "design-friendly" residues**
 ```python
 from proto_tools.tools.database_retrieval import (
     AlphaFoldDBFetchConfig, AlphaFoldDBFetchInput, run_alphafold_db_fetch,
@@ -258,19 +292,18 @@ print(f"{len(design_friendly)} design-friendly TP53 residues")
 
 **Common mistakes:**
 1. **Using a non-human UniProt accession:** AlphaMissense covers all reviewed human UniProt proteins only. Non-human accessions return 404 from the CSV endpoint and surface as `output.success=False` with a clear error message. Resolve the accession with `uniprot-fetch` first if you are unsure of the organism.
-2. **Pulling all predictions in tight constraint loops:** A typical protein has 7,000-20,000 substitution rows. When using AlphaMissense as a per-step constraint inside an optimization loop, set `min_pathogenicity` / `max_pathogenicity` (or `classification_filter`) to keep payloads small.
-3. **Misreading combined filters:** Filter combinations are AND-ed. `positions=[100, 200]` with `alt_residues=["L", "K"]` returns only the four `(pos, alt)` combinations that satisfy both, not the union of position-100 rows and alt-L rows.
-4. **Applying scores to non-missense variants:** The score is for missense substitutions only; it does not predict effects of insertions, deletions, frameshifts, or stop-gained / stop-lost. Do not extrapolate.
-5. **Using AlphaMissense as the sole evidence for novel disease calls:** AlphaMissense is calibrated against ClinVar's known disease genes. For novel disease-related interpretations, cross-reference with ClinVar (`ncbi-efetch`), gnomAD allele frequencies, and orthogonal functional evidence.
+2. **Pulling all predictions in tight constraint loops:** A typical protein has 7,000-20,000 substitution rows. The wrapper always returns the full grid; cache the output once per accession and filter client-side as needed.
+3. **Applying scores to non-missense variants:** The score is for missense substitutions only; it does not predict effects of insertions, deletions, frameshifts, or stop-gained / stop-lost. Do not extrapolate.
+4. **Using AlphaMissense as the sole evidence for novel disease calls:** AlphaMissense is calibrated against ClinVar's known disease genes. For novel disease-related interpretations, cross-reference with ClinVar (`ncbi-efetch`), gnomAD allele frequencies, and orthogonal functional evidence.
 
 **Tips for optimal results:**
-- Use `classification_filter=["likely_pathogenic"]` together with a tighter `min_pathogenicity` (e.g. `0.8`) to rank only high-confidence variants.
+- Use `[p for p in output.predictions if p.pathogenicity_score >= 0.564]` to keep only likely-pathogenic predictions; use `>= 0.8` for high-confidence only.
 - For hotspot analysis on a single protein, inspect `predictions` grouped by `position` rather than relying on `mean_pathogenicity`.
-- Cache the `source_url` and the full unfiltered output once per accession when running many filtered queries against the same protein -- a single fetch already contains all 19x(L) substitutions.
+- The full saturation grid for a typical protein is `19 × length` predictions (~1 MB for TP53). One fetch covers all client-side filters, so cache once per accession.
 
 **Edge cases to watch for:**
 - Recently added or recently retired UniProt accessions: AlphaFold DB CSVs are released as a fixed snapshot; very recent accessions may not have a CSV yet, returning 404.
-- `mean_pathogenicity is None`: indicates `predictions` is empty after filtering, not that the protein is uncovered. Check `num_total_predictions` to disambiguate.
+- `mean_pathogenicity is None`: indicates `predictions` is empty (only happens when the upstream CSV is empty). Check `num_predictions` to confirm.
 - Selenocysteine (U) and pyrrolysine (O): AlphaMissense scores the canonical 20-AA alphabet only; positions encoding non-standard residues may behave unexpectedly in downstream consumers.
 
 ## References

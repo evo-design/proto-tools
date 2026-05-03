@@ -47,7 +47,7 @@ The tool wraps the PubChem PUG REST API in two stages:
    response into typed fields. PubChem returns `MolecularWeight` and `ExactMass` as JSON strings (preserving the
    server-formatted precision) and most other numeric descriptors as native JSON numbers; the wrapper coerces both to
    `float` or `int` as appropriate. If `include_synonyms=True`, a second call to `/compound/cid/{cid}/synonyms/JSON`
-   retrieves the synonym list (truncated to `max_synonyms`).
+   retrieves the synonym list (truncated to 50).
 
 A shared `requests` session with retry/backoff handles transient HTTP failures.
 
@@ -86,8 +86,9 @@ rejects calls supplying zero or more than one identifier.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `properties` | `list[PubChemProperty]` | 15 defaults (see below) | PubChem property names to request. |
-| `include_synonyms` | `bool` | `False` | If `True`, fetch the compound's synonyms (one extra HTTP call). |
-| `max_synonyms` | `int` | `50` | Maximum number of synonyms to return (truncated client-side). |
+| `include_synonyms` | `bool` | `False` | If `True`, fetch the compound's synonyms (one extra HTTP call to `/synonyms/JSON`; up to 50 returned). |
+| `include_description` | `bool` | `False` | If `True`, fetch the compound's textual descriptions (one extra HTTP call to `/description/JSON`). |
+| `include_aids` | `bool` | `False` | If `True`, fetch the list of BioAssay IDs that tested this compound (one extra HTTP call to `/aids/JSON`; can return thousands of IDs). |
 
 **Default `properties` bundle (15 entries):** `MolecularFormula`, `MolecularWeight`, `SMILES`, `ConnectivitySMILES`,
 `InChI`, `InChIKey`, `IUPACName`, `ExactMass`, `TPSA`, `Complexity`, `Charge`, `HBondDonorCount`,
@@ -146,7 +147,7 @@ PubChemFetchOutput(
 | `hbond_acceptor_count` | `int \| None` | Number of hydrogen-bond acceptors. |
 | `rotatable_bond_count` | `int \| None` | Number of rotatable bonds. |
 | `heavy_atom_count` | `int \| None` | Number of non-hydrogen atoms. |
-| `synonyms` | `list[str]` | Up to `max_synonyms` synonyms; empty list when `include_synonyms=False`. |
+| `synonyms` | `list[str]` | Up to 50 synonyms; empty list when `include_synonyms=False`. |
 | `source_url` | `str` | URL of the PubChem property request (useful for debugging and citation). |
 | `raw_property_record` | `dict[str, Any]` | Complete property record from PubChem for advanced access (includes any properties requested beyond the 15 default fields). |
 
@@ -223,7 +224,7 @@ from proto_tools.tools.database_retrieval import (
 
 # Caffeine, with synonyms
 inputs = PubChemFetchInput(name="caffeine")
-config = PubChemFetchConfig(include_synonyms=True, max_synonyms=10)
+config = PubChemFetchConfig(include_synonyms=True)
 output = run_pubchem_fetch(inputs, config)
 
 print(f"Resolved to CID {output.cid} ({output.molecular_formula})")

@@ -10,14 +10,12 @@ import pytest
 from proto_tools.tools.database_retrieval import (
     AlphaMissenseFetchConfig,
     AlphaMissenseFetchInput,
-    AlphaMissensePrediction,
     UniProtFetchConfig,
     UniProtFetchInput,
     run_alphamissense_fetch,
     run_uniprot_fetch,
 )
 from proto_tools.tools.database_retrieval.alphamissense.alphamissense_fetch import (
-    _apply_filters,
     _fetch_csv,
     _parse_row,
 )
@@ -58,42 +56,6 @@ def test_parse_row_rejects_malformed_input(row, error_pattern):
         _parse_row(row, "url")
 
 
-def _make_predictions(spec):
-    """Build a list of AlphaMissensePrediction from a list of (position, alt, score, classification) tuples."""
-    return [
-        AlphaMissensePrediction(
-            position=position, wild_type_aa="A", alt_aa=alt, pathogenicity_score=score, classification=classification
-        )
-        for position, alt, score, classification in spec
-    ]
-
-
-@pytest.mark.parametrize(
-    "config_kwargs, kept_indices",
-    [
-        ({"positions": [2, 4]}, [1, 3]),
-        ({"alt_residues": ["L", "K"]}, [1, 2]),
-        ({"min_pathogenicity": 0.5, "max_pathogenicity": 0.7}, [2]),
-        ({"classification_filter": ["likely_pathogenic"]}, [3]),
-        ({"positions": [2, 4], "min_pathogenicity": 0.6}, [3]),  # combined: AND of position and score
-    ],
-    ids=["positions", "alt-residues", "score-bounds", "classification", "combined-AND"],
-)
-def test_apply_filters(config_kwargs, kept_indices):
-    """Each Config filter narrows the prediction list; combinations are AND-ed."""
-    predictions = _make_predictions(
-        [
-            (1, "A", 0.1, "likely_benign"),  # idx 0
-            (2, "L", 0.4, "ambiguous"),  # idx 1
-            (3, "K", 0.6, "ambiguous"),  # idx 2
-            (4, "P", 0.9, "likely_pathogenic"),  # idx 3
-        ]
-    )
-    config = AlphaMissenseFetchConfig(**config_kwargs)
-    filtered = _apply_filters(predictions, config)
-    assert filtered == [predictions[i] for i in kept_indices]
-
-
 def test_fetch_csv_returns_none_on_404():
     """A 404 from AFDB indicates no AlphaMissense data for the accession (e.g. non-human protein)."""
     session = MagicMock()
@@ -115,8 +77,7 @@ def test_alphamissense_fetch_full_p04637_predictions():
     assert output.success
     assert output.tool_id == "alphamissense-fetch"
     assert output.uniprot_accession == "P04637"
-    assert output.num_total_predictions == 393 * 19
-    assert output.num_returned == output.num_total_predictions
+    assert output.num_predictions == 393 * 19
     assert output.mean_pathogenicity is not None
     assert 0.0 <= output.mean_pathogenicity <= 1.0
     valid_classes = {"likely_benign", "ambiguous", "likely_pathogenic"}
@@ -128,39 +89,39 @@ def test_alphamissense_fetch_full_p04637_predictions():
 
 @pytest.mark.integration
 def test_alphamissense_fetch_known_pathogenic_tp53_r175h():
-    """R175H is the most common cancer-driver TP53 mutation; AlphaMissense must call it pathogenic."""
+    """R175H is the most common cancer-driver TP53 mutation; AlphaMissense must call it pathogenic.
+
+    Filtering happens client-side now; the wrapper returns the full grid and
+    the caller picks the position/alt of interest.
+    """
     output = run_alphamissense_fetch(
         AlphaMissenseFetchInput(uniprot_id="P04637"),
-        AlphaMissenseFetchConfig(positions=[175], alt_residues=["H"]),
+        AlphaMissenseFetchConfig(),
     )
     assert output.success
-    assert output.num_returned == 1
-    r175h = output.predictions[0]
-    assert r175h.position == 175
+    r175h = next(p for p in output.predictions if p.position == 175 and p.alt_aa == "H")
     assert r175h.wild_type_aa == "R"
-    assert r175h.alt_aa == "H"
     assert r175h.classification == "likely_pathogenic"
     assert r175h.pathogenicity_score > 0.7  # well above the 0.564 likely-pathogenic threshold
 
 
 @pytest.mark.integration
-def test_alphamissense_fetch_combined_filters_real_workflow():
-    """Realistic constraint loop: only confidently pathogenic substitutions at TP53 hotspots 175/248/273."""
+def test_alphamissense_fetch_client_side_filter_at_hotspots():
+    """Realistic constraint loop: caller post-filters to confidently pathogenic at TP53 hotspots 175/248/273."""
     output = run_alphamissense_fetch(
         AlphaMissenseFetchInput(uniprot_id="P04637"),
-        AlphaMissenseFetchConfig(
-            positions=[175, 248, 273],
-            classification_filter=["likely_pathogenic"],
-            min_pathogenicity=0.8,
-        ),
+        AlphaMissenseFetchConfig(),
     )
     assert output.success
-    assert output.num_total_predictions == 393 * 19
-    assert 0 < output.num_returned <= 3 * 19
-    for prediction in output.predictions:
-        assert prediction.position in {175, 248, 273}
+    assert output.num_predictions == 393 * 19
+
+    hotspot_positions = {175, 248, 273}
+    high_confidence_pathogenic = [
+        p for p in output.predictions if p.position in hotspot_positions and p.pathogenicity_score >= 0.8
+    ]
+    assert 0 < len(high_confidence_pathogenic) <= 3 * 19
+    for prediction in high_confidence_pathogenic:
         assert prediction.classification == "likely_pathogenic"
-        assert prediction.pathogenicity_score >= 0.8
 
 
 @pytest.mark.integration
@@ -213,7 +174,7 @@ def test_workflow_uniprot_then_alphamissense_grid_consistency():
     )
     assert am.success
     assert am.uniprot_accession == "P01116"
-    assert am.num_total_predictions == uniprot.length * 19  # 189 * 19 = 3591
+    assert am.num_predictions == uniprot.length * 19  # 189 * 19 = 3591
 
     # 3. Cross-tool sequence consistency: every WT letter in AlphaMissense's grid
     #    must match the UniProt canonical sequence at the same 1-indexed position.
@@ -228,3 +189,46 @@ def test_workflow_uniprot_then_alphamissense_grid_consistency():
         assert wt == uniprot.sequence[position - 1], (
             f"WT mismatch at position {position}: AlphaMissense={wt!r}, UniProt={uniprot.sequence[position - 1]!r}"
         )
+
+
+@pytest.mark.integration
+def test_alphamissense_fetch_hg38_returns_genomic_coords():
+    """`coordinate_system='hg38'` returns the genomic-coord CSV with chrom/pos/ref/alt populated."""
+    output = run_alphamissense_fetch(
+        AlphaMissenseFetchInput(uniprot_id="P04637"),
+        AlphaMissenseFetchConfig(coordinate_system="hg38"),
+    )
+    assert output.success
+    # Genomic CSV is a subset (SNV-accessible only) — fewer rows than the full grid.
+    assert 0 < output.num_predictions < 393 * 19
+    assert output.source_url.endswith("AF-P04637-F1-hg38.csv")
+
+    # Every prediction has the genomic-coordinate fields populated.
+    for prediction in output.predictions:
+        assert prediction.chrom and prediction.chrom.startswith("chr")
+        assert prediction.pos is not None and prediction.pos > 0
+        assert prediction.ref in {"A", "C", "G", "T"}
+        assert prediction.alt in {"A", "C", "G", "T"}
+        assert prediction.transcript_id and prediction.transcript_id.startswith("ENST")
+
+
+@pytest.mark.integration
+def test_alphamissense_fetch_hg19_vs_hg38_have_same_classifications():
+    """A given protein variant gets the same pathogenicity score in hg19 vs hg38 mode."""
+    hg19 = run_alphamissense_fetch(
+        AlphaMissenseFetchInput(uniprot_id="P04637"),
+        AlphaMissenseFetchConfig(coordinate_system="hg19"),
+    )
+    hg38 = run_alphamissense_fetch(
+        AlphaMissenseFetchInput(uniprot_id="P04637"),
+        AlphaMissenseFetchConfig(coordinate_system="hg38"),
+    )
+    assert hg19.success and hg38.success
+    # Same protein variants are reachable by SNV in both genome builds, so the
+    # row counts and per-variant scores must match.
+    assert hg19.num_predictions == hg38.num_predictions
+    hg19_by_variant = {(p.position, p.alt_aa): p.pathogenicity_score for p in hg19.predictions}
+    for p38 in hg38.predictions:
+        score19 = hg19_by_variant.get((p38.position, p38.alt_aa))
+        if score19 is not None:
+            assert score19 == pytest.approx(p38.pathogenicity_score, abs=1e-6)

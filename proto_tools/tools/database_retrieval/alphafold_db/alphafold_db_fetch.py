@@ -41,9 +41,20 @@ class AlphaFoldDBFetchInput(BaseToolInput):
 
     Attributes:
         uniprot_id (str): UniProt accession to look up (e.g. 'P04637').
+        isoform (int | None): Isoform number to select from the multi-record
+            AFDB response. ``None`` (default) returns the canonical entry
+            (``AF-{accession}-F1``); ``2`` selects ``AF-{accession}-2-F1``,
+            etc. AFDB typically exposes isoforms 2-9 for human proteins.
+            Raises ``ValueError`` if the requested isoform doesn't exist.
     """
 
     uniprot_id: str = InputField(description="UniProt accession (e.g. 'P04637')")
+    isoform: int | None = InputField(
+        default=None,
+        ge=2,
+        description="Isoform number to fetch (None = canonical record). For non-canonical isoforms only.",
+        advanced=True,
+    )
 
 
 class AlphaFoldDBFetchConfig(BaseConfig):
@@ -51,10 +62,17 @@ class AlphaFoldDBFetchConfig(BaseConfig):
 
     Attributes:
         structure_format (Literal["pdb", "cif"]): Structure file format to download.
-        include_structure (bool): If True, download the structure file text.
-        include_plddt (bool): If True, download the per-residue pLDDT JSON.
+        include_structure (bool): If True (default), download the structure file
+            text. Set to False for metadata-only probes (URLs, mean pLDDT, gene,
+            sequence) — saves ~100-500 KB per call, meaningful for batch sweeps.
+        include_plddt (bool): If True (default), download the per-residue pLDDT
+            JSON. Set to False to skip the ~3 KB extra fetch.
         include_pae (bool): If True, download the PAE (predicted aligned error)
-            matrix. PAE files can be large for long proteins; default off.
+            matrix. Disabled by default — pAE files can be tens of MB for long
+            proteins.
+        include_msa (bool): If True, download the A3M MSA used as input to
+            AlphaFold prediction. Disabled by default — A3M files can be
+            hundreds of KB to several MB for highly conserved proteins.
     """
 
     structure_format: Literal["pdb", "cif"] = ConfigField(
@@ -65,17 +83,26 @@ class AlphaFoldDBFetchConfig(BaseConfig):
     include_structure: bool = ConfigField(
         title="Include Structure Text",
         default=True,
-        description="Download the structure file text into the output",
+        description="Download the structure file text; set False for metadata-only probes",
+        advanced=True,
     )
     include_plddt: bool = ConfigField(
         title="Include Per-Residue pLDDT",
         default=True,
         description="Download the per-residue pLDDT confidence array",
+        advanced=True,
     )
     include_pae: bool = ConfigField(
         title="Include PAE Matrix",
         default=False,
         description="Download the PAE (predicted aligned error) matrix; large for long proteins",
+        advanced=True,
+    )
+    include_msa: bool = ConfigField(
+        title="Include MSA",
+        default=False,
+        description="Download the A3M MSA used as input to prediction; large for conserved proteins",
+        advanced=True,
     )
 
 
@@ -108,15 +135,18 @@ class AlphaFoldDBFetchOutput(BaseToolOutput):
             AlphaFold DB.
         pae_image_url (str): URL to the rendered PAE PNG on AlphaFold DB.
         msa_url (str | None): URL to the MSA A3M used for prediction, when present.
-        structure_format (str): Format of the structure file downloaded ('pdb' or
-            'cif'); empty when structure was not requested.
+        structure_format (str): Format of the downloaded structure file ('pdb' or
+            'cif'); empty when `include_structure` is False.
         structure_text (str | None): Structure file contents in `structure_format`.
             None when `include_structure` is False.
-        plddt_per_residue (list[float] | None): Per-residue pLDDT scores (0-100).
-            None when `include_plddt` is False.
+        plddt_per_residue (list[float] | None): Per-residue pLDDT scores (0-100),
+            one entry per residue in `sequence`. None when `include_plddt` is False.
         pae_matrix (list[list[float]] | None): NxN predicted aligned error matrix
             in angstroms, indexed by aligned-pair (residue i, residue j). None when
             `include_pae` is False.
+        msa_a3m (str | None): A3M-format MSA contents used as input to the
+            AlphaFold prediction. None when `include_msa` is False or when the
+            entry has no associated MSA URL.
         source_url (str): AlphaFold DB API URL used for the metadata lookup.
         raw_entry (dict[str, Any]): Complete AlphaFold DB JSON record for advanced
             programmatic access.
@@ -146,6 +176,7 @@ class AlphaFoldDBFetchOutput(BaseToolOutput):
     structure_text: str | None = Field(default=None, description="Structure file contents")
     plddt_per_residue: list[float] | None = Field(default=None, description="Per-residue pLDDT (0-100)")
     pae_matrix: list[list[float]] | None = Field(default=None, description="NxN predicted aligned error matrix")
+    msa_a3m: str | None = Field(default=None, description="A3M-format MSA contents used as input to prediction")
     source_url: str = Field(description="AlphaFold DB API URL used for lookup")
     raw_entry: dict[str, Any] = Field(
         default_factory=dict, description="Complete AlphaFold DB JSON record for advanced programmatic access"
@@ -203,25 +234,20 @@ def run_alphafold_db_fetch(
 ) -> AlphaFoldDBFetchOutput:
     """Fetch a prediction record from AlphaFold DB.
 
-    Returns the prediction metadata, file URLs, and optionally the structure
-    text, per-residue pLDDT array, and PAE matrix. AlphaFold DB returns
-    multiple records when the protein has annotated alternative isoforms
-    (common for human proteins; e.g. P04637 / TP53 returns 9 records, one
-    per isoform) and when the canonical sequence is split into overlapping
-    fragments (rare; only proteins longer than ~2,700 residues). In both
-    cases the wrapper returns the first record (the canonical isoform's
-    first fragment) and logs a warning when there is more than one.
+    AFDB returns one record per isoform (TP53 has 9). Without ``isoform`` the
+    canonical record (``AF-{accession}-F1``) is selected and a warning lists
+    available alternatives.
 
     Args:
         inputs (AlphaFoldDBFetchInput): UniProt accession to look up.
-        config (AlphaFoldDBFetchConfig): Format selection, payload toggles, and
-            HTTP retry settings.
+        config (AlphaFoldDBFetchConfig): Format selection (pdb/cif) and
+            artifact toggles (PAE, MSA).
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        AlphaFoldDBFetchOutput: Prediction metadata, URLs, and optionally
-            structure text, per-residue pLDDT, and PAE matrix.
+        AlphaFoldDBFetchOutput: Prediction metadata, structure text, per-residue
+            pLDDT array, and optionally the PAE matrix and A3M MSA.
     """
     del instance
 
@@ -239,20 +265,11 @@ def run_alphafold_db_fetch(
         if entries is None or not entries:
             raise ValueError(f"AlphaFold DB has no prediction for accession '{accession}'")
 
-        entry = entries[0]
-        if len(entries) > 1:
-            logger.warning(
-                "AlphaFold DB returned %d records for '%s' (alternative isoforms or "
-                "additional fragments); using the canonical record %s",
-                len(entries),
-                accession,
-                entry["modelEntityId"],
-            )
+        entry = _select_record(entries, accession, inputs.isoform)
 
-        structure_format = config.structure_format
         structure_text: str | None = None
         if config.include_structure:
-            structure_url = entry["pdbUrl"] if structure_format == "pdb" else entry["cifUrl"]
+            structure_url = entry["pdbUrl"] if config.structure_format == "pdb" else entry["cifUrl"]
             structure_text = _fetch_text(structure_url, session)
 
         plddt_per_residue: list[float] | None = None
@@ -262,6 +279,14 @@ def run_alphafold_db_fetch(
         pae_matrix: list[list[float]] | None = None
         if config.include_pae:
             pae_matrix = _fetch_pae(entry["paeDocUrl"], session)
+
+        msa_a3m: str | None = None
+        if config.include_msa:
+            msa_url = entry.get("msaUrl")
+            if msa_url:
+                msa_a3m = _fetch_text(msa_url, session)
+            else:
+                logger.debug("AlphaFold DB entry %s has no msaUrl; msa_a3m will be None", entry.get("modelEntityId"))
 
         return AlphaFoldDBFetchOutput(
             uniprot_accession=entry.get("uniprotAccession", accession),
@@ -282,10 +307,11 @@ def run_alphafold_db_fetch(
             plddt_doc_url=entry["plddtDocUrl"],
             pae_image_url=entry["paeImageUrl"],
             msa_url=entry.get("msaUrl"),
-            structure_format=structure_format if config.include_structure else "",
+            structure_format=config.structure_format if config.include_structure else "",
             structure_text=structure_text,
             plddt_per_residue=plddt_per_residue,
             pae_matrix=pae_matrix,
+            msa_a3m=msa_a3m,
             source_url=api_url,
             raw_entry=entry,
         )
@@ -296,6 +322,44 @@ def run_alphafold_db_fetch(
 # ============================================================================
 # Private Helpers
 # ============================================================================
+
+
+def _select_record(
+    entries: list[dict[str, Any]],
+    accession: str,
+    isoform: int | None,
+) -> dict[str, Any]:
+    """Pick the requested record from the multi-record AFDB response.
+
+    Canonical entries have IDs like 'AF-{accession}-F1'; isoforms have
+    'AF-{accession}-{isoform}-F1'. When isoform is None the canonical record
+    (no isoform number in the ID) is returned. When set, the matching record
+    is returned, or ValueError if it doesn't exist.
+    """
+    canonical_id = f"AF-{accession}-F1"
+    if isoform is None:
+        for entry in entries:
+            if entry.get("modelEntityId") == canonical_id:
+                if len(entries) > 1:
+                    isoform_ids = sorted(e["modelEntityId"] for e in entries if e.get("modelEntityId") != canonical_id)
+                    logger.warning(
+                        "AlphaFold DB returned %d records for '%s'; using the canonical "
+                        "record %s. Other isoforms available: %s",
+                        len(entries),
+                        accession,
+                        canonical_id,
+                        ", ".join(isoform_ids),
+                    )
+                return entry
+        # Fallback: no entry matched the canonical pattern; use the first record.
+        return entries[0]
+
+    target_id = f"AF-{accession}-{isoform}-F1"
+    for entry in entries:
+        if entry.get("modelEntityId") == target_id:
+            return entry
+    available = sorted(e.get("modelEntityId", "?") for e in entries)
+    raise ValueError(f"Isoform {isoform} not available for '{accession}'. Got {len(entries)} record(s): {available}")
 
 
 def _fetch_prediction(api_url: str, session: requests.Session) -> list[dict[str, Any]] | None:
@@ -312,7 +376,7 @@ def _fetch_prediction(api_url: str, session: requests.Session) -> list[dict[str,
 
 
 def _fetch_text(url: str, session: requests.Session) -> str:
-    """Fetch a structure file as text."""
+    """Fetch a remote file as text (used for structure files and MSA A3M)."""
     response = session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
     response.raise_for_status()
     return response.text

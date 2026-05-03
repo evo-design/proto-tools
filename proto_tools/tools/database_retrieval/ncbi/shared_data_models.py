@@ -59,12 +59,14 @@ class NCBIFetchConfig(BaseConfig):
         title="NCBI API Key",
         default=None,
         description="Optional NCBI API key (lifts rate limit from 3 to 10 req/s)",
+        advanced=True,
         include_in_key=False,
     )
     ncbi_email: str | None = ConfigField(
         title="NCBI Email",
         default=None,
         description="Optional contact email; recommended by NCBI for traceability",
+        advanced=True,
         include_in_key=False,
     )
 
@@ -90,19 +92,22 @@ def _ncbi_esearch(
     max_results: int,
     config: NCBIFetchConfig,
     session: requests.Session,
+    retstart: int = 0,
 ) -> list[str]:
     """Run NCBI esearch and return ID list."""
-    params = {
+    params: dict[str, Any] = {
         "db": db,
         "term": term,
         "retmode": "json",
         "retmax": max_results,
     }
+    if retstart:
+        params["retstart"] = retstart
     params.update(_ncbi_common_params(config))
 
     response = session.get(
         f"{_NCBI_EUTILS_BASE}/esearch.fcgi",
-        params=params,  # type: ignore[arg-type]
+        params=params,
         timeout=_REQUEST_TIMEOUT_SECONDS,
     )
     if not _check_response(response, "ncbi-esearch"):

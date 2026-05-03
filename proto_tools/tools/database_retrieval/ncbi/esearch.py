@@ -38,7 +38,11 @@ class NCBIEsearchInput(BaseToolInput):
             or 'gene'.
         search_term (str): NCBI search query (e.g. 'lacI[Gene] AND Escherichia
             coli[Organism]').
-        max_results (int): Maximum number of IDs to return from the search.
+        max_results (int): Maximum number of IDs to return from the search
+            (NCBI ``retmax`` parameter).
+        retstart (int): Sequential index of the first hit to return (NCBI
+            ``retstart`` parameter; 0-indexed). Use with ``max_results`` to
+            paginate through large result sets.
     """
 
     db: Literal["protein", "nuccore", "gene"] = InputField(
@@ -48,10 +52,16 @@ class NCBIEsearchInput(BaseToolInput):
         description="NCBI search query (e.g. 'lacI[Gene] AND Escherichia coli[Organism]')",
     )
     max_results: int = InputField(
-        default=5,
+        default=20,
         ge=1,
-        le=100,
-        description="Maximum number of IDs to return from a search",
+        le=10000,
+        description="Maximum number of IDs to return from a search (NCBI retmax; default 20 matches NCBI)",
+    )
+    retstart: int = InputField(
+        default=0,
+        ge=0,
+        description="Sequential index of the first hit to return (NCBI retstart, 0-indexed). For pagination.",
+        advanced=True,
     )
 
 
@@ -141,6 +151,7 @@ def run_ncbi_esearch(
             max_results=inputs.max_results,
             config=config,
             session=session,
+            retstart=inputs.retstart,
         )
         return NCBIEsearchOutput(ids=ids)
     finally:

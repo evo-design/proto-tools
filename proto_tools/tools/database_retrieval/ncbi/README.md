@@ -73,7 +73,8 @@ All tools include automatic retry with exponential backoff and optional NCBI API
 |-----------|------|---------|-------------|
 | `db` | `Literal["protein", "nuccore", "gene"]` | *required* | NCBI database to query |
 | `search_term` | `str` | *required* | NCBI search query (e.g., `lacI[Gene Name] AND Escherichia coli[Organism]`) |
-| `max_results` | `int` | `5` | Maximum number of IDs to return (1-100) |
+| `max_results` | `int` | `20` | Maximum number of IDs to return (1-10000; NCBI `retmax`). Default of 20 matches the NCBI API default. |
+| `retstart` | `int` | `0` | Sequential index of the first hit to return (NCBI `retstart`, 0-indexed). Use with `max_results` to paginate through large result sets. |
 
 ### `NCBIEsummaryInput`
 
@@ -97,7 +98,7 @@ All tools include automatic retry with exponential backoff and optional NCBI API
 
 For sequence retrieval workflows:
 1. **`return_format`**: Most impactful choice. Use `"fasta"` for full sequences, `"fasta_cds_na"` specifically for coding DNA sequences (required for codon optimization analysis).
-2. **`max_results`** (ESearch): Control breadth of search. Start with 5, increase to 20-100 for comprehensive surveys.
+2. **`max_results`** (ESearch): Control breadth of search. Default of 20 matches the NCBI API default; raise up to 10000 for comprehensive surveys.
 
 ## Configuration
 

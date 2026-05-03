@@ -78,11 +78,9 @@ fetches the genomic interval directly from the chromosome accession.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `max_candidates_per_source` | `int` | `5` | Maximum database candidates to evaluate per name-based search. |
-| `strict_type_checks` | `bool` | `True` | Reject requests where molecule type conflicts with target (e.g. protein for an ncRNA gene). |
-| `fail_on_type_mismatch` | `bool` | `True` | Treat molecule type mismatches as errors instead of warnings. |
-| `include_sequence_checksums` | `bool` | `True` | Include SHA256 checksums per sequence. |
-| `ncbi_api_key` | `Optional[str]` | `None` | Optional NCBI API key. |
-| `ncbi_email` | `Optional[str]` | `None` | Optional NCBI contact email. |
+| `type_check_mode` | `Literal["off", "warn", "error"]` | `"error"` | How to handle molecule-type mismatches (e.g. requesting "protein" for an ncRNA gene). `"off"` skips validation, `"warn"` logs a warning and continues, `"error"` fails the request. |
+| `ncbi_api_key` | `Optional[str]` | `None` | Optional NCBI API key (lifts rate limit from 3 to 10 req/s). |
+| `ncbi_email` | `Optional[str]` | `None` | Optional contact email; recommended by NCBI for traceability. |
 
 ## Output Specification
 
@@ -198,7 +196,7 @@ print(f"KRAS best X-ray template: {candidates[0]}")
 2. Include strand with genomic coordinates for better reproducibility.
 3. For protein from loci, provide transcript/CDS IDs when possible to avoid isoform ambiguity.
 4. Expect partial success in mixed batches and inspect per-request errors instead of failing whole jobs.
-5. Use `strict_type_checks=True` in production to catch ncRNA/protein mismatches early.
+5. Use `type_check_mode="error"` (the default) in production to catch ncRNA/protein mismatches early.
 6. Iterable-level tool caching is enabled (same pattern as other batch tools) when running in a Program/Optimizer context.
 7. A UniProt hit does not guarantee a PDB structure exists; structure fetch requires a linked PDB entry.
 

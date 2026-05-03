@@ -105,8 +105,9 @@ def test_alphafold_db_fetch_full_p04637_record():
     derived_mean = sum(output.plddt_per_residue) / len(output.plddt_per_residue)
     assert derived_mean == pytest.approx(output.mean_plddt, abs=0.5)
 
-    # PAE is opt-in
+    # PAE and MSA are opt-in
     assert output.pae_matrix is None
+    assert output.msa_a3m is None
 
 
 @pytest.mark.integration
@@ -126,6 +127,23 @@ def test_alphafold_db_fetch_with_pae_returns_square_matrix():
 
 
 @pytest.mark.integration
+def test_alphafold_db_fetch_with_msa_returns_a3m_text():
+    """include_msa=True returns parseable A3M-format MSA contents."""
+    output = run_alphafold_db_fetch(
+        AlphaFoldDBFetchInput(uniprot_id="P04637"),
+        AlphaFoldDBFetchConfig(include_msa=True),
+    )
+    assert output.success
+    assert output.msa_a3m is not None
+    # A3M begins with a header line ('>...') and the first sequence record corresponds
+    # to the query — its ungapped/uppercase residues must equal the entry's sequence.
+    lines = output.msa_a3m.splitlines()
+    assert lines[0].startswith(">")
+    query_seq = "".join(c for c in lines[1] if c.isalpha() and c.isupper())
+    assert query_seq == output.sequence
+
+
+@pytest.mark.integration
 def test_alphafold_db_fetch_cif_format():
     """structure_format='cif' returns a parseable mmCIF body."""
     output = run_alphafold_db_fetch(
@@ -136,22 +154,6 @@ def test_alphafold_db_fetch_cif_format():
     assert output.structure_format == "cif"
     assert output.structure_text.startswith("data_")  # mmCIF data block header
     assert "_atom_site." in output.structure_text  # atom loop column prefix
-
-
-@pytest.mark.integration
-def test_alphafold_db_fetch_metadata_only_skips_payload_downloads():
-    """Disabling all three payloads still populates URLs but skips structure / pLDDT / PAE bodies."""
-    output = run_alphafold_db_fetch(
-        AlphaFoldDBFetchInput(uniprot_id="P04637"),
-        AlphaFoldDBFetchConfig(include_structure=False, include_plddt=False, include_pae=False),
-    )
-    assert output.success
-    assert output.structure_text is None
-    assert output.plddt_per_residue is None
-    assert output.pae_matrix is None
-    # Metadata still fully populated
-    assert output.entry_id == "AF-P04637-F1"
-    assert output.pdb_url and output.cif_url and output.plddt_doc_url and output.pae_doc_url
 
 
 @pytest.mark.integration
@@ -237,6 +239,56 @@ def test_alphafold_db_fetch_multi_isoform_picks_canonical(caplog):
 
     # Multi-record warning must name the canonical record so callers know which one was selected
     warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
-    assert any("AF-P04637-F1" in w and "alternative isoforms or additional fragments" in w for w in warnings), (
+    assert any("AF-P04637-F1" in w and "Other isoforms available" in w for w in warnings), (
         f"expected multi-record warning naming the canonical record; got: {warnings}"
     )
+
+
+@pytest.mark.integration
+def test_alphafold_db_fetch_metadata_only_skips_payload_downloads():
+    """All include_* off returns metadata only.
+
+    This is the canonical batch / probe workflow: hit AFDB to confirm an entry
+    exists and grab the URLs + mean pLDDT without paying for the structure
+    text (~250 KB) or per-residue pLDDT (~3 KB).
+    """
+    output = run_alphafold_db_fetch(
+        AlphaFoldDBFetchInput(uniprot_id="P04637"),
+        AlphaFoldDBFetchConfig(include_structure=False, include_plddt=False, include_pae=False, include_msa=False),
+    )
+    assert output.success
+    assert output.entry_id == "AF-P04637-F1"
+    assert output.mean_plddt is not None  # always in the metadata
+    # All URLs are still populated regardless of which payloads were skipped
+    assert output.pdb_url and output.cif_url and output.plddt_doc_url and output.pae_doc_url
+    # Heavy payloads are skipped
+    assert output.structure_text is None
+    assert output.plddt_per_residue is None
+    assert output.pae_matrix is None
+    assert output.msa_a3m is None
+    assert output.structure_format == ""
+
+
+@pytest.mark.integration
+def test_alphafold_db_fetch_isoform_selects_non_canonical():
+    """Setting `isoform=2` returns the AF-P04637-2-F1 record, not the canonical."""
+    output = run_alphafold_db_fetch(
+        AlphaFoldDBFetchInput(uniprot_id="P04637", isoform=2),
+        AlphaFoldDBFetchConfig(),
+    )
+    assert output.success
+    assert output.entry_id == "AF-P04637-2-F1"
+    # Isoform 2 is shorter than canonical (341 aa vs 393 aa per the live API)
+    assert output.sequence_length == 341
+    assert output.sequence_length != 393
+
+
+@pytest.mark.integration
+def test_alphafold_db_fetch_invalid_isoform_fails_loudly():
+    """Asking for an isoform that doesn't exist surfaces a clear error."""
+    output = run_alphafold_db_fetch(
+        AlphaFoldDBFetchInput(uniprot_id="P04637", isoform=99),
+        AlphaFoldDBFetchConfig(),
+    )
+    assert output.success is False
+    assert any("Isoform 99 not available" in err for err in output.errors)

@@ -347,11 +347,11 @@ class SequenceFetchConfig(BaseConfig):
     Attributes:
         max_candidates_per_source (int): Maximum database candidates to
             evaluate per name-based search.
-        strict_type_checks (bool): Reject requests where molecule type
-            conflicts with target (e.g. protein for an ncRNA gene).
-        fail_on_type_mismatch (bool): Treat molecule type mismatches as errors
-            instead of warnings.
-        include_sequence_checksums (bool): Include SHA256 checksums in outputs.
+        type_check_mode (Literal["off", "warn", "error"]): Controls how
+            molecule-type mismatches are handled (e.g. requesting "protein"
+            for a name that looks like an ncRNA gene).
+            ``"off"`` skips validation entirely; ``"warn"`` records a warning
+            but continues; ``"error"`` (default) fails the request.
         ncbi_api_key (str | None): Optional NCBI API key. Without one NCBI
             limits to 3 requests/second; with one the limit is 10/second.
         ncbi_email (str | None): Optional contact email; recommended by NCBI.
@@ -365,26 +365,16 @@ class SequenceFetchConfig(BaseConfig):
         description="Maximum database candidates to evaluate per name-based search",
         advanced=True,
     )
-    strict_type_checks: bool = ConfigField(
-        title="Strict Type Checks",
-        default=True,
-        description="Reject requests where molecule type conflicts with target (e.g. protein for an ncRNA gene)",
-    )
-    fail_on_type_mismatch: bool = ConfigField(
-        title="Fail On Mismatch",
-        default=True,
-        description="Treat molecule type mismatches as errors instead of warnings",
-    )
-    include_sequence_checksums: bool = ConfigField(
-        title="Include Checksums",
-        default=True,
-        description="Include SHA256 checksums per sequence",
-        advanced=True,
+    type_check_mode: Literal["off", "warn", "error"] = ConfigField(
+        title="Type Check Mode",
+        default="error",
+        description="Molecule-type mismatch handling: 'off' (skip), 'warn' (log + continue), 'error' (fail)",
     )
     ncbi_api_key: str | None = ConfigField(
         title="NCBI API Key",
         default=None,
         description="Optional NCBI API key (lifts rate limit from 3 to 10 req/s)",
+        advanced=True,
         include_in_key=False,
     )
     ncbi_email: str | None = ConfigField(
@@ -544,13 +534,14 @@ def _process_single_request(
 
     type_error = _validate_request_type_compatibility(request, config)
     if type_error:
-        if config.fail_on_type_mismatch:
+        if config.type_check_mode == "error":
             return _failed_result(
                 request=request,
                 request_index=request_index,
                 error=f"TYPE_MISMATCH: {type_error}",
             )
-        warnings.append(f"TYPE_MISMATCH: {type_error}")
+        if config.type_check_mode == "warn":
+            warnings.append(f"TYPE_MISMATCH: {type_error}")
 
     if "protein" in request.sequence_types and request.genomic_coordinates:
         warnings.append("Protein from genomic coordinates is inferred and may be ambiguous due to introns.")
@@ -616,7 +607,7 @@ def _validate_request_type_compatibility(
     config: SequenceFetchConfig,
 ) -> str | None:
     """Validate obvious ncRNA/protein mismatches. Returns error message or None."""
-    if not config.strict_type_checks:
+    if config.type_check_mode == "off":
         return None
 
     if "protein" not in request.sequence_types:
@@ -669,7 +660,6 @@ def _fetch_protein(
                 accession=accession,
                 sequence=sequence,
                 source_url=f"{_UNIPROT_BASE}/uniprotkb/{accession}",
-                config=config,
                 inferred=False,
             ),
             ids,
@@ -696,7 +686,6 @@ def _fetch_protein(
                 accession=accession,
                 sequence=sequence,
                 source_url=url,
-                config=config,
                 inferred=False,
             ),
             {"protein_id": accession},
@@ -725,7 +714,6 @@ def _fetch_protein(
                 accession=accession,
                 sequence=sequence,
                 source_url=f"https://www.rcsb.org/structure/{accession}",
-                config=config,
                 inferred=False,
             ),
             {"pdb_id": accession, "protein_id": _accession_from_header(header) or accession},
@@ -751,7 +739,6 @@ def _fetch_protein(
                     accession=accession,
                     sequence=sequence,
                     source_url=f"{_UNIPROT_BASE}/uniprotkb/{accession}",
-                    config=config,
                     inferred=False,
                 ),
                 {"uniprot_id": accession},
@@ -791,7 +778,6 @@ def _fetch_protein(
             accession=accession,
             sequence=sequence,
             source_url=url,
-            config=config,
             inferred=False,
         ),
         {"protein_id": accession},
@@ -837,7 +823,6 @@ def _fetch_dna_genomic(
                 accession=accession,
                 sequence=sequence,
                 source_url=url,
-                config=config,
                 inferred=False,
             ),
             {"genbank_accession": accession},
@@ -864,7 +849,6 @@ def _fetch_dna_genomic(
                 accession=accession,
                 sequence=sequence,
                 source_url=url,
-                config=config,
                 inferred=False,
             ),
             {"genbank_accession": accession},
@@ -928,7 +912,6 @@ def _fetch_dna_genomic(
             accession=accession,
             sequence=sequence,
             source_url=url,
-            config=config,
             inferred=False,
         ),
         {"genbank_accession": accession},
@@ -1016,7 +999,6 @@ def _fetch_dna_genomic_from_gene_locus(
             accession=accession,
             sequence=sequence,
             source_url=url,
-            config=config,
             inferred=False,
         ),
         {"gene_id": selected_gene_id, "genbank_accession": accession},
@@ -1058,7 +1040,6 @@ def _fetch_dna_cds(
                 accession=cds_acc,
                 sequence=selected.sequence,
                 source_url=url,
-                config=config,
                 inferred=False,
             ),
             {"cds_accession": cds_acc},
@@ -1088,7 +1069,6 @@ def _fetch_dna_cds(
                         accession=cds_acc,
                         sequence=selected.sequence,
                         source_url=url,
-                        config=config,
                         inferred=True,
                     ),
                     {"cds_accession": cds_acc},
@@ -1130,7 +1110,6 @@ def _fetch_dna_cds(
             accession=cds_acc,
             sequence=selected.sequence,
             source_url=url,
-            config=config,
             inferred=False,
         ),
         {"cds_accession": cds_acc},
@@ -1169,7 +1148,6 @@ def _fetch_rna_transcript(
                 accession=accession,
                 sequence=transcribe(sequence.upper()),  # type: ignore[no-untyped-call]
                 source_url=url,
-                config=config,
                 inferred=True,
             ),
             {"transcript_id": accession},
@@ -1205,7 +1183,6 @@ def _fetch_rna_transcript(
             accession=accession,
             sequence=transcribe(sequence.upper()),  # type: ignore[no-untyped-call]
             source_url=url,
-            config=config,
             inferred=True,
         ),
         {"transcript_id": accession},
@@ -1238,7 +1215,6 @@ def _fetch_rna_premrna(
             accession=genomic_record.accession,
             sequence=transcribe(premrna.upper()),  # type: ignore[no-untyped-call]
             source_url=genomic_record.source_url,
-            config=config,
             inferred=True,
         ),
         ids,
@@ -1378,12 +1354,11 @@ def _sequence_record(
     accession: str | None,
     sequence: str,
     source_url: str | None,
-    config: SequenceFetchConfig,
     inferred: bool,
 ) -> FetchedSequence:
     """Build a normalized FetchedSequence record."""
     clean_sequence = re.sub(r"\s+", "", sequence).upper()
-    checksum = hashlib.sha256(clean_sequence.encode("utf-8")).hexdigest() if config.include_sequence_checksums else None
+    checksum = hashlib.sha256(clean_sequence.encode("utf-8")).hexdigest()
 
     return FetchedSequence(
         sequence_type=sequence_type,

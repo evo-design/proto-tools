@@ -72,8 +72,8 @@ def test_fetch_properties_raises_when_property_table_empty():
         _fetch_properties(2244, PubChemFetchConfig(), session)
 
 
-def test_fetch_synonyms_truncates_to_max():
-    """Synonym truncation is client-side; the server returns whatever it has."""
+def test_fetch_synonyms_truncates_to_50():
+    """Synonym list is capped at 50 client-side regardless of server response."""
     session = MagicMock()
     response = MagicMock()
     response.status_code = 200
@@ -81,8 +81,9 @@ def test_fetch_synonyms_truncates_to_max():
         "InformationList": {"Information": [{"CID": 2244, "Synonym": [f"syn-{i}" for i in range(100)]}]}
     }
     session.get.return_value = response
-    synonyms = _fetch_synonyms(2244, PubChemFetchConfig(max_synonyms=5), session)
-    assert synonyms == [f"syn-{i}" for i in range(5)]
+    synonyms = _fetch_synonyms(2244, session)
+    assert len(synonyms) == 50
+    assert synonyms == [f"syn-{i}" for i in range(50)]
 
 
 def test_fetch_synonyms_404_returns_empty_list():
@@ -90,7 +91,7 @@ def test_fetch_synonyms_404_returns_empty_list():
     response = MagicMock()
     response.status_code = 404
     session.get.return_value = response
-    assert _fetch_synonyms(2244, PubChemFetchConfig(), session) == []
+    assert _fetch_synonyms(2244, session) == []
 
 
 # ---------------------------------------------------------------------------
@@ -166,13 +167,13 @@ def test_pubchem_fetch_smiles_canonicalization_roundtrip():
 
 @pytest.mark.integration
 def test_pubchem_fetch_with_synonyms():
-    """Enabling synonyms triggers the second HTTP call and respects max_synonyms."""
+    """Enabling synonyms triggers the second HTTP call and returns up to 50 synonyms."""
     output = run_pubchem_fetch(
         PubChemFetchInput(name="aspirin"),
-        PubChemFetchConfig(include_synonyms=True, max_synonyms=5),
+        PubChemFetchConfig(include_synonyms=True),
     )
     assert output.success
-    assert 0 < len(output.synonyms) <= 5
+    assert 0 < len(output.synonyms) <= 50
     assert "aspirin" in [s.lower() for s in output.synonyms]
 
 
@@ -228,3 +229,40 @@ def test_pubchem_fetch_unknown_name_returns_failure():
     assert any("PubChem returned no CIDs" in err for err in output.errors)
     # Error message includes which identifier was tried, for debuggability
     assert any("name='notacompoundxyz123def'" in err for err in output.errors)
+
+
+@pytest.mark.integration
+def test_pubchem_fetch_include_description():
+    """Setting `include_description=True` populates `descriptions` with at least one entry."""
+    output = run_pubchem_fetch(
+        PubChemFetchInput(cid=2244),
+        PubChemFetchConfig(include_description=True),
+    )
+    assert output.success
+    assert len(output.descriptions) > 0
+    # At least one description should mention aspirin or salicylate
+    combined = " ".join(output.descriptions).lower()
+    assert "aspirin" in combined or "salicyl" in combined
+
+
+@pytest.mark.integration
+def test_pubchem_fetch_include_aids_returns_assay_ids():
+    """Setting `include_aids=True` returns a list of integer assay IDs."""
+    output = run_pubchem_fetch(
+        PubChemFetchInput(cid=2244),
+        PubChemFetchConfig(include_aids=True),
+    )
+    assert output.success
+    # Aspirin has hundreds of bioassays
+    assert len(output.bioassay_ids) > 100
+    assert all(isinstance(aid, int) and aid > 0 for aid in output.bioassay_ids)
+
+
+@pytest.mark.integration
+def test_pubchem_fetch_default_excludes_optional_payloads():
+    """Default config does NOT make extra HTTP calls for synonyms/descriptions/aids."""
+    output = run_pubchem_fetch(PubChemFetchInput(cid=2244), PubChemFetchConfig())
+    assert output.success
+    assert output.synonyms == []
+    assert output.descriptions == []
+    assert output.bioassay_ids == []

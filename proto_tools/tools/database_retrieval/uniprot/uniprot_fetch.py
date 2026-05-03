@@ -18,6 +18,7 @@ from proto_tools.utils import (
     BaseConfig,
     BaseToolInput,
     BaseToolOutput,
+    ConfigField,
     InputField,
     build_http_session,
 )
@@ -70,6 +71,7 @@ class UniProtFetchInput(BaseToolInput):
         ge=1,
         le=25,
         description="Maximum number of search results to evaluate when ranking",
+        advanced=True,
     )
 
     @model_validator(mode="after")
@@ -131,12 +133,23 @@ class UniProtFetchOutput(BaseToolOutput):
 class UniProtFetchConfig(BaseConfig):
     """Configuration for UniProt fetch operations.
 
-    UniProt fetch has no user-facing knobs — all behavior comes from the
-    Input fields (uniprot_id, target_name, organism, prefer_pdb_crossref,
-    max_candidates). This class is kept (rather than removed) so callers
-    can still pass ``run_uniprot_fetch(input, config)`` without breakage,
-    but it has no fields.
+    Attributes:
+        fields (list[str] | None): UniProt's ``fields=`` query parameter — if
+            set, restrict the API response to these fields. ``None`` (default)
+            returns the full entry (~880 KB for human TP53); a targeted
+            selection can shrink it ~1000x. Caveat: typed Output fields are
+            only populated when the corresponding API field is included, so
+            callers using ``entry_type`` / ``gene_names`` / ``pdb_crossrefs``
+            must include ``"reviewed"`` / ``"gene_names"`` / ``"xref_pdb"``.
+            Search-mode ranking reads the same three fields. Full list:
+            https://www.uniprot.org/help/return_fields.
     """
+
+    fields: list[str] | None = ConfigField(
+        title="Response Fields",
+        default=None,
+        description="If set, return only these UniProt fields; None returns the full entry",
+    )
 
 
 # ============================================================================
@@ -174,14 +187,14 @@ def run_uniprot_fetch(
 
     Args:
         inputs (UniProtFetchInput): A UniProt fetch request with accession or name+organism.
-        config (UniProtFetchConfig): Empty placeholder (UniProt fetch has no user knobs).
+        config (UniProtFetchConfig): Optional response-field filter (`fields`).
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         UniProtFetchOutput: Protein entry with sequence, gene names, and
             PDB cross-references.
     """
-    del config, instance
+    del instance
 
     session = build_http_session(
         http_retries=_HTTP_RETRIES,
@@ -191,7 +204,7 @@ def run_uniprot_fetch(
 
     try:
         if inputs.uniprot_id:
-            entry = _fetch_entry(inputs.uniprot_id, session)
+            entry = _fetch_entry(inputs.uniprot_id, session, fields=config.fields)
             if entry is None:
                 raise ValueError(f"UniProt ID '{inputs.uniprot_id}' not found")
         else:
@@ -201,6 +214,7 @@ def run_uniprot_fetch(
                 prefer_pdb_crossref=inputs.prefer_pdb_crossref,
                 max_candidates=inputs.max_candidates,
                 session=session,
+                fields=config.fields,
             )
             if entry is None:
                 raise ValueError(f"No UniProt entry found for '{inputs.target_name}' in '{inputs.organism}'")
@@ -232,10 +246,16 @@ def run_uniprot_fetch(
 # ============================================================================
 
 
-def _fetch_entry(uniprot_id: str, session: requests.Session) -> dict[str, Any] | None:
+def _fetch_entry(
+    uniprot_id: str,
+    session: requests.Session,
+    fields: list[str] | None = None,
+) -> dict[str, Any] | None:
     """Fetch a UniProtKB entry by accession. Returns None on 404."""
+    params = {"fields": ",".join(fields)} if fields else None
     response = session.get(
         f"{_UNIPROT_BASE}/uniprotkb/{uniprot_id}.json",
+        params=params,
         timeout=_REQUEST_TIMEOUT_SECONDS,
     )
     if response.status_code == 404:
@@ -251,6 +271,7 @@ def _search_entry(
     prefer_pdb_crossref: bool,
     max_candidates: int,
     session: requests.Session,
+    fields: list[str] | None = None,
 ) -> dict[str, Any] | None:
     """Search UniProt by name and organism and return best ranked entry."""
     all_results: list[dict[str, Any]] = []
@@ -262,14 +283,16 @@ def _search_entry(
     ]
 
     for query in queries:
-        params = {
+        params: dict[str, Any] = {
             "query": query,
             "format": "json",
             "size": max_candidates,
         }
+        if fields:
+            params["fields"] = ",".join(fields)
         response = session.get(
             f"{_UNIPROT_BASE}/uniprotkb/search",
-            params=params,  # type: ignore[arg-type]
+            params=params,
             timeout=_REQUEST_TIMEOUT_SECONDS,
         )
         if response.status_code >= 400:

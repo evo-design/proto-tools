@@ -37,7 +37,7 @@ The tool wraps the AlphaFold DB prediction API in a single HTTP flow:
 **Limitations:**
 - Monomer predictions only: AFDB does not host complexes (use AlphaFold-Multimer or AlphaFold3 for those)
 - Coverage is broad but not universal: not every UniProt accession has an AFDB entry
-- Multiple records per accession (alternative isoforms; or fragments for proteins >~2,700 residues) are not all returned -- the wrapper takes only the canonical (first) record. Query AFDB directly if you need a non-canonical isoform or a downstream fragment.
+- Multiple records per accession: alternative isoforms are selectable via the `isoform` input parameter (`isoform=2`, etc.); the wrapper defaults to the canonical record (`AF-{accession}-F1`). Fragments for proteins >~2,700 residues are not exposed -- query AFDB directly for downstream fragments.
 - Predictions reflect AlphaFold2's confidence; low-pLDDT regions may be genuinely disordered or simply hard to predict
 - Rate-limited by the AFDB API (typically generous, but burst queries may be throttled)
 
@@ -51,15 +51,17 @@ The tool wraps the AlphaFold DB prediction API in a single HTTP flow:
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `uniprot_id` | `str` | (required) | UniProt accession to look up (e.g., "P04637" for human TP53) |
+| `isoform` | `int \| None` | `None` | Optional isoform number to select from the AFDB records list. `None` returns the canonical entry (e.g., `AF-P04637-F1` for TP53). Set to `2` for `AF-P04637-2-F1`, etc. Typical isoform numbers are 2-9. |
 
 ## Configuration
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `structure_format` | `Literal["pdb", "cif"]` | `"pdb"` | Structure file format to download |
-| `include_structure` | `bool` | `True` | If True, download the structure file text into the output |
-| `include_plddt` | `bool` | `True` | If True, download the per-residue pLDDT confidence array |
-| `include_pae` | `bool` | `False` | If True, download the pAE matrix; off by default because pAE files are large for long proteins |
+| `include_structure` | `bool` | `True` | Download the structure file text. Set to `False` for metadata-only probes (saves ~100-500 KB per call) |
+| `include_plddt` | `bool` | `True` | Download the per-residue pLDDT JSON (~3 KB per call) |
+| `include_pae` | `bool` | `False` | Download the pAE matrix; off by default because pAE files are large for long proteins |
+| `include_msa` | `bool` | `False` | Download the A3M MSA used as input to prediction; off by default because A3M files can be hundreds of KB to several MB for highly conserved proteins |
 
 ## Output Specification
 
@@ -84,10 +86,11 @@ AlphaFoldDBFetchOutput(
     plddt_doc_url: str,                     # URL to per-residue pLDDT JSON document
     pae_image_url: str,                     # URL to rendered pAE PNG
     msa_url: Optional[str],                 # URL to MSA A3M file, when present
-    structure_format: str,                  # "pdb" or "cif" (empty if structure not requested)
-    structure_text: Optional[str],          # Structure file contents
-    plddt_per_residue: Optional[List[float]],     # Per-residue pLDDT (0-100)
-    pae_matrix: Optional[List[List[float]]],      # N x N pAE matrix in angstroms
+    structure_format: str,                  # "pdb" or "cif"; "" when include_structure=False
+    structure_text: Optional[str],          # Structure file contents; None when include_structure=False
+    plddt_per_residue: Optional[List[float]],  # Per-residue pLDDT (0-100); None when include_plddt=False
+    pae_matrix: Optional[List[List[float]]],      # N x N pAE matrix; None when include_pae=False
+    msa_a3m: Optional[str],                 # A3M MSA contents; None when include_msa=False or no msaUrl
     source_url: str,                        # AFDB API URL used for the metadata lookup
     raw_entry: Dict[str, Any],              # Complete AFDB JSON record
 )
@@ -109,10 +112,11 @@ AlphaFoldDBFetchOutput(
 | `cif_url` | `str` | URL to the mmCIF structure file on AFDB |
 | `plddt_doc_url` | `str` | URL to the per-residue pLDDT JSON document |
 | `pae_doc_url` | `str` | URL to the pAE JSON document |
-| `structure_format` | `str` | `"pdb"` or `"cif"` matching the downloaded file; empty when `include_structure=False` |
+| `structure_format` | `str` | `"pdb"` or `"cif"`, matching the downloaded file |
 | `structure_text` | `Optional[str]` | Structure file contents in `structure_format`; `None` when `include_structure=False` |
-| `plddt_per_residue` | `Optional[List[float]]` | Per-residue pLDDT scores (0-100); `None` when `include_plddt=False` |
+| `plddt_per_residue` | `Optional[List[float]]` | Per-residue pLDDT scores (0-100), one per residue; `None` when `include_plddt=False` |
 | `pae_matrix` | `Optional[List[List[float]]]` | N x N predicted aligned error matrix in angstroms; `None` when `include_pae=False` |
+| `msa_a3m` | `Optional[str]` | A3M-format MSA contents used as input to prediction; `None` when `include_msa=False` or when the entry has no associated `msaUrl` |
 | `raw_entry` | `Dict[str, Any]` | Complete AFDB JSON record for advanced programmatic access |
 
 **Supported export formats:** `json`
@@ -178,25 +182,24 @@ n = len(output.pae_matrix)
 print(f"pAE matrix: {n} x {n}, mean = {sum(sum(r) for r in output.pae_matrix) / (n * n):.2f} angstrom")
 ```
 
-**Example 3: Metadata-only lookup (no payloads)**
+**Example 3: Metadata-only probe (skip the heavy downloads)**
 ```python
 from proto_tools.tools.database_retrieval import (
     AlphaFoldDBFetchConfig, AlphaFoldDBFetchInput, run_alphafold_db_fetch,
 )
 
-# Cheap metadata probe: just check whether AFDB has EGFR and grab the URLs
-inputs = AlphaFoldDBFetchInput(uniprot_id="P00533")
-config = AlphaFoldDBFetchConfig(
-    include_structure=False,
-    include_plddt=False,
-    include_pae=False,
+# Cheap probe: confirm AFDB has the protein, get the URLs and mean pLDDT,
+# but skip the structure file (~250 KB) and per-residue pLDDT (~3 KB).
+# Useful for batch coverage checks before committing to large downloads.
+output = run_alphafold_db_fetch(
+    AlphaFoldDBFetchInput(uniprot_id="P00533"),  # EGFR
+    AlphaFoldDBFetchConfig(include_structure=False, include_plddt=False),
 )
-output = run_alphafold_db_fetch(inputs, config)
 
 print(f"AFDB has {output.entry_id}, mean pLDDT {output.mean_plddt:.1f}")
 print(f"PDB URL:  {output.pdb_url}")
 print(f"mmCIF URL: {output.cif_url}")
-print(f"pAE PNG:  {output.pae_image_url}")
+# output.structure_text is None; output.plddt_per_residue is None
 ```
 
 **Example 4: Save the structure to disk for downstream tools**
@@ -250,7 +253,7 @@ assert afdb.sequence_length == uniprot.length
 **Common mistakes:**
 1. **Assuming every UniProt accession has an AFDB entry:** AFDB has broad but not universal coverage. The wrapper raises `ValueError` when the API returns no prediction; catch this and fall back to predicting from sequence with `esmfold` or `alphafold3`.
 2. **Downloading pAE for long proteins by default:** pAE matrices scale as `N x N` and can be tens of MB for proteins with thousands of residues. `include_pae` defaults to `False`; only enable when you actually need inter-residue confidence.
-3. **Ignoring the warning when multiple records are returned:** AFDB returns extra records when the protein has alternative isoforms (very common for human proteins) or when a >2,700-residue sequence is split across fragments (rare). The wrapper takes the first record (canonical isoform's fragment 1) and logs a warning; if you need a non-canonical isoform or a downstream fragment, query AFDB directly.
+3. **Ignoring the warning when multiple records are returned:** AFDB returns extra records when the protein has alternative isoforms (very common for human proteins) or when a >2,700-residue sequence is split across fragments (rare). The wrapper defaults to the canonical record (`AF-{accession}-F1`) and logs a warning listing other available isoforms; pass `isoform=N` to select a specific alternative isoform. Downstream fragments require querying AFDB directly.
 4. **Expecting complex structures:** AFDB hosts AlphaFold2 monomer predictions only. For complexes, use `alphafold3` or AlphaFold-Multimer; for an experimental complex, use `pdb-fetch-entry`.
 5. **Using AFDB for designed (non-natural) sequences:** AFDB only contains predictions for natural UniProt sequences. For wild-type targets that are not in AFDB, or for any custom sequence, predict the structure de novo with `esmfold` or `alphafold3`.
 
@@ -261,7 +264,7 @@ assert afdb.sequence_length == uniprot.length
 
 **Edge cases to watch for:**
 - 404 from AFDB -> the wrapper raises `ValueError("AlphaFold DB has no prediction for accession ...")`. Handle it and fall back to de novo prediction (`esmfold`, `alphafold3`).
-- Multiple records (alternative isoforms or additional fragments) -> only the first record (canonical isoform, fragment 1) is returned and a warning is logged; check `entry_id` and `sequence_start` / `sequence_end` to confirm which record was selected.
+- Multiple records (alternative isoforms or additional fragments) -> the canonical record (`AF-{accession}-F1`) is returned by default and a warning lists other available isoforms; pass `isoform=N` to select a specific alternative. Check `entry_id` and `sequence_start` / `sequence_end` to confirm which record was selected.
 - Disordered or flexibly linked regions -> very-low pLDDT and high off-diagonal pAE are expected; treat them as biology, not as a model failure.
 
 ## References

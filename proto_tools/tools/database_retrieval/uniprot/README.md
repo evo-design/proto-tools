@@ -57,7 +57,15 @@ The tool wraps the UniProt REST API with two modes:
 
 ## Configuration
 
-`UniProtFetchConfig` has no user-facing fields. Pass it bare (or omit entirely): all behavior comes from the Input. Example: `run_uniprot_fetch(UniProtFetchInput(uniprot_id="P04637"))`.
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `fields` | `list[str] \| None` | `None` | If set, restrict the UniProt API response to these fields. Default returns the full entry (~880 KB for human TP53). A targeted selection like `["accession", "sequence", "gene_names", "xref_pdb"]` shrinks the response to ~1 KB. See [UniProt return fields](https://www.uniprot.org/help/return_fields) for the full list. |
+
+**When to set `fields`:** batch lookups where the full record is overkill, or any caller that only inspects typed Output fields and never touches `raw_entry`.
+
+**Caveats:**
+- Typed Output fields are populated only when the corresponding API field is included. If you set `fields=["accession"]`, only `output.accession` is populated; `output.sequence`, `output.gene_names`, etc. fall back to `None` / `[]`.
+- The wrapper's search-mode ranker reads `gene_names`, `reviewed`, and `xref_pdb`. Excluding those while in search mode degrades ranking quality. If using search mode with `fields`, include at minimum `["accession", "gene_names", "reviewed", "xref_pdb"]`.
 
 ## Output Specification
 
