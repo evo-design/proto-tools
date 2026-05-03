@@ -341,7 +341,9 @@ def _entry_priority(
     gene_names = _extract_gene_names(entry)
     has_exact_gene = int(target in gene_names)
     has_pdb = int(bool(_extract_pdb_crossrefs(entry)))
-    reviewed = int("reviewed" in str(entry.get("entryType", "")).lower())
+    # Match Swiss-Prot specifically, not the substring "reviewed" (which also
+    # matches "unreviewed" on TrEMBL entries and silently inverts the ranking).
+    reviewed = int("swiss-prot" in str(entry.get("entryType", "")).lower())
     accession = str(entry.get("primaryAccession", ""))
     return (
         has_exact_gene,
