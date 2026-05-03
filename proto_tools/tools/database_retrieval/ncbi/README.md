@@ -250,6 +250,67 @@ region = result.fasta_records[0].sequence
 print(f"Region length: {len(region)} bp")
 ```
 
+**Example 5: Chained workflow -- NCBI gene -> RefSeq mRNA -> CDS for codon optimization**
+
+Mirrors the `mrna_cds_optimization` design eval: resolve a gene by symbol, retrieve its canonical RefSeq mRNA, then pull just the CDS for use as a codon-optimization template.
+
+```python
+from proto_tools.tools.database_retrieval import (
+    NCBIEfetchInput, NCBIEsearchInput, NCBIFetchConfig,
+    run_ncbi_efetch, run_ncbi_esearch,
+)
+
+# 1. Search RefSeq for the canonical human BRCA1 mRNA
+search = run_ncbi_esearch(
+    NCBIEsearchInput(
+        db="nuccore",
+        search_term='BRCA1[Gene Name] AND "Homo sapiens"[Organism] AND refseq[Filter] AND mRNA[Filter]',
+        max_results=1,
+    ),
+    NCBIFetchConfig(),
+)
+assert search.ids, "no RefSeq mRNA hits"
+
+# 2. Pull just the CDS from that mRNA (skips UTRs)
+cds = run_ncbi_efetch(
+    NCBIEfetchInput(db="nuccore", identifier=search.ids[0], return_format="fasta_cds_na"),
+    NCBIFetchConfig(),
+)
+record = cds.fasta_records[0]
+print(f"BRCA1 CDS: {record.accession}, {len(record.sequence)} nt")
+assert len(record.sequence) % 3 == 0  # CDS must be a complete reading frame
+```
+
+**Example 6: Chained workflow -- NCBI gene summary -> UniProt protein record**
+
+Bridge from organism-genome data (NCBI) to protein-centric data (UniProt).
+
+```python
+from proto_tools.tools.database_retrieval import (
+    NCBIEsummaryInput, NCBIFetchConfig,
+    UniProtFetchConfig, UniProtFetchInput,
+    run_ncbi_esummary, run_uniprot_fetch,
+)
+
+# 1. NCBI esummary returns the full ESummary payload. For gene records the
+#    structure is `{"uids": ["<id>"], "<id>": {"name": "...", ...}}`, so the
+#    canonical symbol lives at summary[identifier]["name"].
+gene_id = "7157"  # NCBI Gene ID for human TP53
+gene_summary = run_ncbi_esummary(
+    NCBIEsummaryInput(db="gene", identifier=gene_id),
+    NCBIFetchConfig(),
+)
+gene_symbol = gene_summary.summary[gene_id]["name"]  # "TP53"
+
+# 2. UniProt: protein-centric record for the same gene
+uniprot = run_uniprot_fetch(
+    UniProtFetchInput(target_name=gene_symbol, organism="Homo sapiens", prefer_pdb_crossref=True),
+    UniProtFetchConfig(),
+)
+print(f"NCBI gene {gene_id} ({gene_symbol}) -> UniProt {uniprot.accession}, {uniprot.length} aa")
+print(f"  Linked PDB structures: {len(uniprot.pdb_crossrefs)}")
+```
+
 ## Best Practices & Gotchas
 
 **Common mistakes:**

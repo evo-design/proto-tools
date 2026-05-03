@@ -170,6 +170,36 @@ db_types = set(xref.get("database") for xref in xrefs)
 print(f"Cross-referenced databases: {sorted(db_types)}")
 ```
 
+**Example 4: Chained workflow -- gene symbol -> UniProt -> PDB structure**
+
+A common prototyper pattern: resolve a target by gene symbol, then pull experimental structures for design templates.
+
+```python
+from proto_tools.tools.database_retrieval import (
+    PdbFetchConfig, PdbFetchEntryInput, PdbFetchFastaInput,
+    UniProtFetchConfig, UniProtFetchInput,
+    run_pdb_fetch_entry, run_pdb_fetch_fasta, run_uniprot_fetch,
+)
+
+# 1. Resolve TP53 by gene symbol; bias toward the reviewed Swiss-Prot entry
+#    that carries PDB cross-references.
+uniprot = run_uniprot_fetch(
+    UniProtFetchInput(target_name="TP53", organism="Homo sapiens", prefer_pdb_crossref=True),
+    UniProtFetchConfig(),
+)
+assert uniprot.accession == "P04637"
+assert len(uniprot.pdb_crossrefs) > 0
+
+# 2. Walk the PDB cross-refs and pull the first structure's metadata + chain FASTA.
+first_pdb_id = uniprot.pdb_crossrefs[0]
+pdb_meta = run_pdb_fetch_entry(PdbFetchEntryInput(pdb_id=first_pdb_id), PdbFetchConfig())
+pdb_fasta = run_pdb_fetch_fasta(PdbFetchFastaInput(pdb_id=first_pdb_id), PdbFetchConfig())
+
+print(f"UniProt {uniprot.accession} ({uniprot.length} aa) -> PDB {first_pdb_id}")
+print(f"  method={pdb_meta.method}, resolution={pdb_meta.resolution} A")
+print(f"  {len(pdb_fasta.chains)} chains; first chain length: {len(pdb_fasta.chains[0].sequence)}")
+```
+
 ## Best Practices & Gotchas
 
 **Common mistakes:**
