@@ -18,6 +18,10 @@ from proto_tools.utils import BaseConfig, ConfigField
 logger = logging.getLogger(__name__)
 
 _NCBI_EUTILS_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+_REQUEST_TIMEOUT_SECONDS = 15
+_HTTP_RETRIES = 2
+_BACKOFF_SECONDS = 1.0
+_USER_AGENT = "proto-tools/ncbi-fetch-v1"
 
 
 # ============================================================================
@@ -43,53 +47,25 @@ class NCBIFetchConfig(BaseConfig):
     """Configuration for NCBI Entrez operations.
 
     Attributes:
-        request_timeout_seconds (int): HTTP timeout per request.
-        http_retries (int): Number of retries for failed requests.
-        backoff_seconds (float): Seconds to wait between retries (doubles after each
-            attempt).
-        ncbi_api_key (str | None): Optional NCBI API key for higher rate limits.
-        ncbi_email (str | None): Optional contact email for NCBI requests.
-        user_agent (str): Identifier string sent to database APIs with each request.
+        ncbi_api_key (str | None): Optional NCBI API key. Without one NCBI
+            limits to 3 requests/second; with one the limit is 10/second.
+            See https://www.ncbi.nlm.nih.gov/account/settings/.
+        ncbi_email (str | None): Optional contact email. NCBI recommends
+            providing this so they can reach the operator if a script
+            misbehaves.
     """
 
-    request_timeout_seconds: int = ConfigField(
-        title="Request Timeout",
-        default=15,
-        ge=1,
-        description="HTTP timeout in seconds",
-        advanced=True,
-    )
-    http_retries: int = ConfigField(
-        title="HTTP Retries",
-        default=2,
-        ge=0,
-        description="Retries for HTTP requests",
-        advanced=True,
-    )
-    backoff_seconds: float = ConfigField(
-        title="Backoff Seconds",
-        default=1.0,
-        ge=0.0,
-        description="Seconds to wait between retries (doubles after each attempt)",
-        advanced=True,
-    )
     ncbi_api_key: str | None = ConfigField(
         title="NCBI API Key",
         default=None,
-        description="Optional NCBI API key",
-        advanced=True,
+        description="Optional NCBI API key (lifts rate limit from 3 to 10 req/s)",
+        include_in_key=False,
     )
     ncbi_email: str | None = ConfigField(
         title="NCBI Email",
         default=None,
-        description="Optional NCBI contact email",
-        advanced=True,
-    )
-    user_agent: str = ConfigField(
-        title="User Agent",
-        default="proto-tools/ncbi-fetch-v1",
-        description="Identifier string sent to database APIs with each request",
-        advanced=True,
+        description="Optional contact email; recommended by NCBI for traceability",
+        include_in_key=False,
     )
 
 
@@ -127,7 +103,7 @@ def _ncbi_esearch(
     response = session.get(
         f"{_NCBI_EUTILS_BASE}/esearch.fcgi",
         params=params,  # type: ignore[arg-type]
-        timeout=config.request_timeout_seconds,
+        timeout=_REQUEST_TIMEOUT_SECONDS,
     )
     if not _check_response(response, "ncbi-esearch"):
         return []
@@ -152,7 +128,7 @@ def _ncbi_esummary(
     response = session.get(
         f"{_NCBI_EUTILS_BASE}/esummary.fcgi",
         params=params,
-        timeout=config.request_timeout_seconds,
+        timeout=_REQUEST_TIMEOUT_SECONDS,
     )
     if not _check_response(response, "ncbi-esummary"):
         return None
@@ -190,7 +166,7 @@ def _ncbi_efetch(
     response = session.get(
         f"{_NCBI_EUTILS_BASE}/efetch.fcgi",
         params=params,
-        timeout=config.request_timeout_seconds,
+        timeout=_REQUEST_TIMEOUT_SECONDS,
     )
     if not _check_response(response, "ncbi-efetch"):
         return None

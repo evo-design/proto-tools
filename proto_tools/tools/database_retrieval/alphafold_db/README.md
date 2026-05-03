@@ -9,7 +9,7 @@
 ## Background
 
 **What does this tool measure/predict?**
-The [AlphaFold Protein Structure Database](https://alphafold.ebi.ac.uk/) (AFDB) is a public archive of protein 3D structures predicted by [AlphaFold2](https://www.nature.com/articles/s41586-021-03819-2) (Jumper et al. 2021), built and maintained by [DeepMind](https://deepmind.google/) and [EMBL-EBI](https://www.ebi.ac.uk/). It hosts predictions for >200 million UniProt sequences across the proteomes of nearly every catalogued organism, indexed by UniProt accession. Each entry includes the predicted atomic coordinates, per-residue pLDDT confidence (0-100), and a pairwise pAE matrix that reports the expected positional error in angstroms when residues `i` and `j` are aligned.
+The [AlphaFold Protein Structure Database](https://alphafold.ebi.ac.uk/) (AFDB) is a public archive of protein 3D structures predicted by [AlphaFold2](https://www.nature.com/articles/s41586-021-03819-2) (Jumper et al. 2021), built and maintained by [DeepMind](https://deepmind.google/) and [EMBL-EBI](https://www.ebi.ac.uk/). It hosts predictions for >214 million UniProt sequences (Varadi et al. 2024 NAR update) across the proteomes of nearly every catalogued organism, indexed by UniProt accession. Each entry includes the predicted atomic coordinates, per-residue pLDDT confidence (0-100), and a pairwise pAE matrix that reports the expected positional error in angstroms when residues `i` and `j` are aligned.
 
 **Why is this important?**
 - Structural biology: obtain a high-quality predicted structure when no experimental PDB entry exists
@@ -60,10 +60,6 @@ The tool wraps the AlphaFold DB prediction API in a single HTTP flow:
 | `include_structure` | `bool` | `True` | If True, download the structure file text into the output |
 | `include_plddt` | `bool` | `True` | If True, download the per-residue pLDDT confidence array |
 | `include_pae` | `bool` | `False` | If True, download the pAE matrix; off by default because pAE files are large for long proteins |
-| `request_timeout_seconds` | `int` | `15` | HTTP timeout in seconds per request |
-| `http_retries` | `int` | `2` | Number of retries for failed HTTP requests |
-| `backoff_seconds` | `float` | `1.0` | Initial wait between retries (doubles after each attempt) |
-| `user_agent` | `str` | `"proto-tools/alphafold-db-fetch-v1"` | Identifier string sent to the AlphaFold DB API |
 
 ## Output Specification
 

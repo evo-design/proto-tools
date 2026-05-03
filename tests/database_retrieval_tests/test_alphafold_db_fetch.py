@@ -36,13 +36,13 @@ def test_fetch_plddt_parses_confidence_score_array():
     session = _mock_session(
         {"residueNumber": [1, 2, 3], "confidenceScore": [42.5, 50.1, 91.0], "confidenceCategory": ["D", "D", "H"]}
     )
-    result = _fetch_plddt("https://example/plddt.json", AlphaFoldDBFetchConfig(), session)
+    result = _fetch_plddt("https://example/plddt.json", session)
     assert result == [42.5, 50.1, 91.0]
 
 
 def test_fetch_pae_parses_predicted_aligned_error_matrix():
     session = _mock_session([{"predicted_aligned_error": [[0.1, 1.2], [1.2, 0.0]]}])
-    result = _fetch_pae("https://example/pae.json", AlphaFoldDBFetchConfig(), session)
+    result = _fetch_pae("https://example/pae.json", session)
     assert result == [[0.1, 1.2], [1.2, 0.0]]
 
 
@@ -59,13 +59,13 @@ def test_fetch_parsers_reject_malformed_payloads(fetch_fn, payload, error_patter
     """Each parser must surface a clear ValueError when AFDB's JSON shape is unexpected."""
     session = _mock_session(payload)
     with pytest.raises(ValueError, match=error_pattern):
-        fetch_fn("https://example/file.json", AlphaFoldDBFetchConfig(), session)
+        fetch_fn("https://example/file.json", session)
 
 
 def test_fetch_prediction_returns_none_on_404():
     """A 404 from the AFDB API short-circuits without parsing the body."""
     session = _mock_session(payload=None, status_code=404)
-    result = _fetch_prediction("https://example/api", AlphaFoldDBFetchConfig(), session)
+    result = _fetch_prediction("https://example/api", session)
     assert result is None
     session.get.return_value.json.assert_not_called()
 

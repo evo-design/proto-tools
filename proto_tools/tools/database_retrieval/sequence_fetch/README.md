@@ -77,16 +77,12 @@ fetches the genomic interval directly from the chromosome accession.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `request_timeout_seconds` | `int` | `15` | HTTP timeout in seconds. |
-| `http_retries` | `int` | `2` | Retries for upstream HTTP requests. |
-| `backoff_seconds` | `float` | `1.0` | Seconds to wait between retries (doubles after each attempt). |
 | `max_candidates_per_source` | `int` | `5` | Maximum database candidates to evaluate per name-based search. |
 | `strict_type_checks` | `bool` | `True` | Reject requests where molecule type conflicts with target (e.g. protein for an ncRNA gene). |
 | `fail_on_type_mismatch` | `bool` | `True` | Treat molecule type mismatches as errors instead of warnings. |
 | `include_sequence_checksums` | `bool` | `True` | Include SHA256 checksums per sequence. |
 | `ncbi_api_key` | `Optional[str]` | `None` | Optional NCBI API key. |
 | `ncbi_email` | `Optional[str]` | `None` | Optional NCBI contact email. |
-| `user_agent` | `str` | `"proto-tools/sequence-fetch-v1"` | Identifier string sent to database APIs with each request. |
 
 ## Output Specification
 

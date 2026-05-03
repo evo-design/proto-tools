@@ -51,18 +51,13 @@ The tool wraps the UniProt REST API with two modes:
 | `target_name` | `Optional[str]` | `None` | Gene or protein name for search (e.g., "TP53", "tumor protein p53") |
 | `organism` | `Optional[str]` | `None` | Organism for search disambiguation (e.g., "Homo sapiens", "E. coli") |
 | `prefer_pdb_crossref` | `bool` | `False` | When searching by name, prioritize entries that have linked PDB structures |
-| `max_candidates` | `int` | `5` | Maximum number of search results to evaluate when ranking (1-20) |
+| `max_candidates` | `int` | `5` | Maximum number of search results to evaluate when ranking (1-25) |
 
 **Validation rules:** Provide either `uniprot_id` (direct lookup) OR both `target_name` and `organism` (search mode). The validator enforces this.
 
 ## Configuration
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `request_timeout_seconds` | `int` | `15` | HTTP timeout in seconds per request |
-| `http_retries` | `int` | `2` | Number of retries for failed HTTP requests |
-| `backoff_seconds` | `float` | `1.0` | Initial wait between retries (doubles after each attempt) |
-| `user_agent` | `str` | `"proto-tools/uniprot-fetch-v1"` | Identifier string sent to UniProt API |
+`UniProtFetchConfig` has no user-facing fields. Pass it bare (or omit entirely): all behavior comes from the Input. Example: `run_uniprot_fetch(UniProtFetchInput(uniprot_id="P04637"))`.
 
 ## Output Specification
 
@@ -200,6 +195,33 @@ print(f"  method={pdb_meta.method}, resolution={pdb_meta.resolution} A")
 print(f"  {len(pdb_fasta.chains)} chains; first chain length: {len(pdb_fasta.chains[0].sequence)}")
 ```
 
+**Example 5: Chained workflow -- gene symbol -> UniProt -> AlphaFold DB structure**
+
+When no experimental structure exists in the PDB (or when you want a complete monomer model rather than a partial chain), pull the AlphaFold DB prediction. Same gene-name resolver, different downstream fetch.
+
+```python
+from proto_tools.tools.database_retrieval import (
+    AlphaFoldDBFetchConfig, AlphaFoldDBFetchInput,
+    UniProtFetchConfig, UniProtFetchInput,
+    run_alphafold_db_fetch, run_uniprot_fetch,
+)
+
+# 1. Resolve gene symbol to a UniProt accession.
+uniprot = run_uniprot_fetch(
+    UniProtFetchInput(target_name="MLH1", organism="Homo sapiens"),
+    UniProtFetchConfig(),
+)
+
+# 2. Fetch the AlphaFold prediction keyed on that accession.
+afdb = run_alphafold_db_fetch(
+    AlphaFoldDBFetchInput(uniprot_id=uniprot.accession),
+    AlphaFoldDBFetchConfig(include_plddt=True),
+)
+
+print(f"UniProt {uniprot.accession} ({uniprot.length} aa) -> AFDB {afdb.entry_id}")
+print(f"  mean pLDDT: {afdb.mean_plddt:.1f}")
+```
+
 ## Best Practices & Gotchas
 
 **Common mistakes:**
@@ -232,7 +254,9 @@ print(f"  {len(pdb_fasta.chains)} chains; first chain length: {len(pdb_fasta.cha
 
 **Tools often used together:**
 - **`sequence-fetch`**: Multi-source orchestrator that resolves sequences from gene names across NCBI, UniProt, and PDB. Use when you want automatic database routing.
-- **`pdb-fetch-entry`** / **`pdb-fetch-fasta`**: Fetch PDB metadata and chain sequences for PDB IDs found in `pdb_crossrefs`.
+- **`pdb-fetch-entry`** / **`pdb-fetch-fasta`**: Fetch PDB metadata and chain sequences for PDB IDs found in `pdb_crossrefs` (Example 4).
+- **`alphafold-db-fetch`**: Fetch AlphaFold-predicted structure keyed on the UniProt accession returned here (Example 5). Useful when no experimental structure exists.
+- **`alphamissense-fetch`**: Per-residue saturation pathogenicity grid for the resolved accession; pair with the UniProt sequence to mask intolerant positions during variant design.
 - **`blast-search`**: Search for homologs of a protein sequence retrieved from UniProt.
 
 **Alternative tools (similar function):**

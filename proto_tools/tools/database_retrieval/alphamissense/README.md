@@ -57,10 +57,6 @@ The tool issues a single HTTP GET against `https://alphafold.ebi.ac.uk/files/AF-
 | `min_pathogenicity` | `float \| None` | `None` | If set, drop predictions with score below this threshold (range 0.0-1.0). |
 | `max_pathogenicity` | `float \| None` | `None` | If set, drop predictions with score above this threshold (range 0.0-1.0). |
 | `classification_filter` | `list[AlphaMissenseClass] \| None` | `None` | If set, return only predictions whose classification is in this list. `AlphaMissenseClass` is `Literal["likely_benign", "ambiguous", "likely_pathogenic"]`. |
-| `request_timeout_seconds` | `int` | `15` | HTTP timeout in seconds per request. |
-| `http_retries` | `int` | `2` | Number of retries for failed HTTP requests. |
-| `backoff_seconds` | `float` | `1.0` | Initial wait between retries (doubles after each attempt). |
-| `user_agent` | `str` | `"proto-tools/alphamissense-fetch-v1"` | Identifier string sent to the AlphaFold DB API with each request. |
 
 All filter knobs are AND-combined: e.g. `positions=[100, 200]` together with `alt_residues=["L", "K"]` returns only the four `(pos, alt)` combinations that satisfy both constraints.
 

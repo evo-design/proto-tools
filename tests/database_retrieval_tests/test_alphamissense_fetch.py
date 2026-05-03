@@ -100,7 +100,7 @@ def test_fetch_csv_returns_none_on_404():
     response = MagicMock()
     response.status_code = 404
     session.get.return_value = response
-    assert _fetch_csv("https://example.com/missing.csv", AlphaMissenseFetchConfig(), session) is None
+    assert _fetch_csv("https://example.com/missing.csv", session) is None
 
 
 # ---------------------------------------------------------------------------

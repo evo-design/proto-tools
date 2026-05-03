@@ -28,6 +28,10 @@ from proto_tools.utils import (
 logger = logging.getLogger(__name__)
 
 _AFDB_FILES_BASE = "https://alphafold.ebi.ac.uk/files"
+_REQUEST_TIMEOUT_SECONDS = 15
+_HTTP_RETRIES = 2
+_BACKOFF_SECONDS = 1.0
+_USER_AGENT = "proto-tools/alphamissense-fetch-v1"
 
 AlphaMissenseClass = Literal["likely_benign", "ambiguous", "likely_pathogenic"]
 
@@ -88,12 +92,6 @@ class AlphaMissenseFetchConfig(BaseConfig):
             pathogenicity score at most this value (0.0-1.0).
         classification_filter (list[AlphaMissenseClass] | None): If set, return only
             predictions whose classification is in this list.
-        request_timeout_seconds (int): HTTP timeout per request.
-        http_retries (int): Number of retries for failed requests.
-        backoff_seconds (float): Seconds to wait between retries (doubles after each
-            attempt).
-        user_agent (str): Identifier string sent to the AlphaFold DB API with each
-            request.
     """
 
     positions: list[int] | None = ConfigField(
@@ -124,33 +122,6 @@ class AlphaMissenseFetchConfig(BaseConfig):
         title="Classification Filter",
         default=None,
         description="If set, return only predictions matching these classifications",
-    )
-    request_timeout_seconds: int = ConfigField(
-        title="Request Timeout",
-        default=15,
-        ge=1,
-        description="HTTP timeout in seconds",
-        advanced=True,
-    )
-    http_retries: int = ConfigField(
-        title="HTTP Retries",
-        default=2,
-        ge=0,
-        description="Retries for HTTP requests",
-        advanced=True,
-    )
-    backoff_seconds: float = ConfigField(
-        title="Backoff Seconds",
-        default=1.0,
-        ge=0.0,
-        description="Seconds to wait between retries (doubles after each attempt)",
-        advanced=True,
-    )
-    user_agent: str = ConfigField(
-        title="User Agent",
-        default="proto-tools/alphamissense-fetch-v1",
-        description="Identifier string sent to the AlphaFold DB API with each request",
-        advanced=True,
     )
 
 
@@ -222,6 +193,7 @@ def example_input() -> Any:
     ),
     uses_gpu=False,
     example_input=example_input,
+    cacheable=True,
 )
 def run_alphamissense_fetch(
     inputs: AlphaMissenseFetchInput,
@@ -249,13 +221,13 @@ def run_alphamissense_fetch(
     csv_url = f"{_AFDB_FILES_BASE}/AF-{accession}-F1-aa-substitutions.csv"
 
     session = build_http_session(
-        http_retries=config.http_retries,
-        backoff_seconds=config.backoff_seconds,
-        user_agent=config.user_agent,
+        http_retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+        user_agent=_USER_AGENT,
     )
 
     try:
-        rows = _fetch_csv(csv_url, config, session)
+        rows = _fetch_csv(csv_url, session)
         if rows is None:
             raise ValueError(
                 f"AlphaMissense has no predictions for accession '{accession}'. "
@@ -283,13 +255,9 @@ def run_alphamissense_fetch(
 # ============================================================================
 
 
-def _fetch_csv(
-    url: str,
-    config: AlphaMissenseFetchConfig,
-    session: requests.Session,
-) -> list[dict[str, str]] | None:
+def _fetch_csv(url: str, session: requests.Session) -> list[dict[str, str]] | None:
     """Fetch and parse the AlphaMissense aa-substitutions CSV. Returns None on 404."""
-    response = session.get(url, timeout=config.request_timeout_seconds)
+    response = session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
     if response.status_code == 404:
         logger.debug("AlphaMissense CSV not found at %s", url)
         return None
