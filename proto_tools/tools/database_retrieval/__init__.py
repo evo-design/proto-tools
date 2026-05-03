@@ -1,5 +1,13 @@
 """Database retrieval tools for biological sequences and structures."""
 
+# AlphaFold DB fetch
+from proto_tools.tools.database_retrieval.alphafold_db import (
+    AlphaFoldDBFetchConfig,
+    AlphaFoldDBFetchInput,
+    AlphaFoldDBFetchOutput,
+    run_alphafold_db_fetch,
+)
+
 # AlphaMissense fetch
 from proto_tools.tools.database_retrieval.alphamissense import (
     AlphaMissenseClass,
@@ -63,6 +71,11 @@ from proto_tools.tools.database_retrieval.uniprot import (
 )
 
 __all__ = [
+    # AlphaFold DB fetch
+    "AlphaFoldDBFetchConfig",
+    "AlphaFoldDBFetchInput",
+    "AlphaFoldDBFetchOutput",
+    "run_alphafold_db_fetch",
     # AlphaMissense fetch
     "AlphaMissenseClass",
     "AlphaMissenseFetchConfig",

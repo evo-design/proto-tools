@@ -45,6 +45,9 @@ from proto_tools.tools.causal_models import (
 
 # Database retrieval tools
 from proto_tools.tools.database_retrieval import (
+    AlphaFoldDBFetchConfig,
+    AlphaFoldDBFetchInput,
+    AlphaFoldDBFetchOutput,
     AlphaMissenseClass,
     AlphaMissenseFetchConfig,
     AlphaMissenseFetchInput,
@@ -79,6 +82,7 @@ from proto_tools.tools.database_retrieval import (
     UniProtFetchConfig,
     UniProtFetchInput,
     UniProtFetchOutput,
+    run_alphafold_db_fetch,
     run_alphamissense_fetch,
     run_ncbi_efetch,
     run_ncbi_esearch,
@@ -851,6 +855,11 @@ __all__ = [
     "AlphaGenomeScoreISMConfig",
     "AlphaGenomeScoreISMOutput",
     "DEFAULT_ALPHAGENOME_MODEL_VERSION",
+    # Database retrieval - AlphaFold DB Fetch
+    "run_alphafold_db_fetch",
+    "AlphaFoldDBFetchInput",
+    "AlphaFoldDBFetchConfig",
+    "AlphaFoldDBFetchOutput",
     # Database retrieval - AlphaMissense Fetch
     "run_alphamissense_fetch",
     "AlphaMissenseFetchInput",
