@@ -209,16 +209,6 @@ Runnable walkthroughs of the core framework features live in [`tutorials/`](tuto
 
 Each specific tool also ships a minimal `examples/example.ipynb` under `proto_tools/tools/{category}/{tool}/examples/`.
 
-## MCP Servers
-
-### proto-tools: tool discovery & schemas
-
-The proto-tools MCP server has been migrated to [proto-tools-api](https://github.com/proto-bio/proto-tools-api). See that repo for setup and usage.
-
-### proto-language: DSL, constraints, generators
-
-A separate MCP server exposes the language layer: constraints, generators, optimizers, program validation, and doc search. See the [proto-language repo](https://github.com/proto-bio/proto-language) for details.
-
 ## Using with Claude Code
 
 Run tools interactively through natural language using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Launch `claude` from the repo root:
