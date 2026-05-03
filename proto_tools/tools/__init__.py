@@ -74,6 +74,10 @@ from proto_tools.tools.database_retrieval import (
     PdbFetchFastaConfig,
     PdbFetchFastaInput,
     PdbFetchFastaOutput,
+    PubChemFetchConfig,
+    PubChemFetchInput,
+    PubChemFetchOutput,
+    PubChemProperty,
     SequenceFetchConfig,
     SequenceFetchInput,
     SequenceFetchOutput,
@@ -89,6 +93,7 @@ from proto_tools.tools.database_retrieval import (
     run_ncbi_esummary,
     run_pdb_fetch_entry,
     run_pdb_fetch_fasta,
+    run_pubchem_fetch,
     run_sequence_fetch,
     run_uniprot_fetch,
 )
@@ -867,6 +872,12 @@ __all__ = [
     "AlphaMissenseFetchOutput",
     "AlphaMissensePrediction",
     "AlphaMissenseClass",
+    # Database retrieval - PubChem Fetch
+    "run_pubchem_fetch",
+    "PubChemFetchInput",
+    "PubChemFetchConfig",
+    "PubChemFetchOutput",
+    "PubChemProperty",
     # Database retrieval - NCBI Entrez tools
     "run_ncbi_esearch",
     "NCBIEsearchConfig",

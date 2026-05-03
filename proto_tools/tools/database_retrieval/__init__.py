@@ -50,6 +50,15 @@ from proto_tools.tools.database_retrieval.pdb import (
     run_pdb_fetch_fasta,
 )
 
+# PubChem fetch
+from proto_tools.tools.database_retrieval.pubchem import (
+    PubChemFetchConfig,
+    PubChemFetchInput,
+    PubChemFetchOutput,
+    PubChemProperty,
+    run_pubchem_fetch,
+)
+
 # Multi-source sequence fetch (orchestrator)
 from proto_tools.tools.database_retrieval.sequence_fetch import (
     FetchedSequence,
@@ -83,6 +92,12 @@ __all__ = [
     "AlphaMissenseFetchOutput",
     "AlphaMissensePrediction",
     "run_alphamissense_fetch",
+    # PubChem fetch
+    "PubChemFetchConfig",
+    "PubChemFetchInput",
+    "PubChemFetchOutput",
+    "PubChemProperty",
+    "run_pubchem_fetch",
     # NCBI Entrez tools
     "NCBIFastaRecord",
     "NCBIFetchConfig",
