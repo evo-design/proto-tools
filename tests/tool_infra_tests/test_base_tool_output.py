@@ -159,7 +159,7 @@ def test_cache_key_excludes_non_key_fields():
     "errors,match",
     [
         (["something broke"], "something broke"),
-        ([], "no error messages"),
+        ([], "no errors recorded"),
     ],
     ids=["with-errors", "empty-errors"],
 )

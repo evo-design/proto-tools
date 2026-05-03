@@ -38,9 +38,7 @@ class Boltz2Model:
             if hf_home:
                 self.cache_dir = Path(hf_home) / "boltz"
             else:
-                raise RuntimeError(
-                    "Cannot determine Boltz2 cache directory. Set PROTO_HOME or PROTO_MODEL_CACHE to configure storage."
-                )
+                raise RuntimeError("boltz2: cannot determine cache directory; set PROTO_HOME or PROTO_MODEL_CACHE")
         self.boltz_executable: str | None = None
 
     def __call__(
@@ -115,15 +113,19 @@ class Boltz2Model:
         env = get_subprocess_device_env(device)
 
         # Run the command with stdout/stderr visible
-        subprocess.run(
-            cmd,  # type: ignore[arg-type]
-            check=True,
-            text=True,
-            env=env,
-            encoding="utf-8",
-            stdout=sys.stdout if verbose else subprocess.DEVNULL,
-            stderr=sys.stderr if verbose else subprocess.DEVNULL,
-        )
+        try:
+            subprocess.run(
+                cmd,  # type: ignore[arg-type]
+                check=True,
+                text=True,
+                env=env,
+                encoding="utf-8",
+                stdout=sys.stdout if verbose else subprocess.PIPE,
+                stderr=sys.stderr if verbose else subprocess.PIPE,
+            )
+        except subprocess.CalledProcessError as e:
+            stderr_tail = " | ".join((e.stderr or "").strip().splitlines()[-10:]) or "<no stderr>"
+            raise RuntimeError(f"boltz2: failed (exit {e.returncode}): {stderr_tail}") from e
 
         logger.debug("Boltz prediction completed")
         sys.stdout.flush()
@@ -145,12 +147,12 @@ class Boltz2Model:
         prediction_dir = Path(output_dir) / f"boltz_results_{input_name}" / "predictions" / input_name
 
         if not prediction_dir.is_dir():
-            raise FileNotFoundError(f"Prediction directory not found: {prediction_dir}")
+            raise FileNotFoundError(f"boltz2: prediction directory not found: {prediction_dir}")
 
         # Read confidence metrics
         confidence_file = prediction_dir / f"confidence_{input_name}_model_0.json"
         if not confidence_file.exists():
-            raise FileNotFoundError(f"Confidence file not found: {confidence_file}")
+            raise FileNotFoundError(f"boltz2: confidence file not found: {confidence_file}")
 
         with open(confidence_file) as f:
             confidence_data = json.load(f)
@@ -159,7 +161,7 @@ class Boltz2Model:
         # Read structure
         cif_file = prediction_dir / f"{input_name}_model_0.cif"
         if not cif_file.exists():
-            raise FileNotFoundError(f"Structure file not found: {cif_file}")
+            raise FileNotFoundError(f"boltz2: structure file not found: {cif_file}")
 
         return {
             "structure_cif_output": cif_file.read_text(),
@@ -174,9 +176,7 @@ class Boltz2Model:
         venv_boltz = Path(sys.executable).parent / "boltz"
         exe = str(venv_boltz) if venv_boltz.exists() else shutil.which("boltz")
         if not exe:
-            raise ImportError(
-                "Could not find the 'boltz' executable. Please make sure Boltz2 is installed in the current environment."
-            )
+            raise ImportError("boltz2: 'boltz' executable not found in current environment")
         self.boltz_executable = exe
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self._loaded = True
@@ -209,7 +209,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             seed=input_dict["seed"],
             verbose=input_dict["verbose"],
         )
-    raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"boltz2: unknown operation {operation!r}; valid: ['predict']")
 
 
 def to_device(device: str) -> dict[str, Any]:
@@ -229,7 +229,7 @@ def get_memory_stats() -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+        raise ValueError("boltz2: usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

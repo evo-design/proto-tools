@@ -132,7 +132,7 @@ def test_managed_devices_validation_invalid_device(mock_2_gpus):
     # Try to configure more devices than available (only 2 GPUs exist: cuda:0, cuda:1)
     with patch.dict(os.environ, {"BIO_TOOLS_MANAGED_DEVICES": "cuda:0,cuda:1,cuda:2"}):
         dm = DeviceManager.get_instance()
-        with pytest.raises(ValueError, match="BIO_TOOLS_MANAGED_DEVICES specifies invalid device"):
+        with pytest.raises(ValueError, match=r"BIO_TOOLS_MANAGED_DEVICES has invalid device\(s\)"):
             dm._get_available_devices()
 
     DeviceManager.reset_instance()
@@ -145,7 +145,7 @@ def test_managed_devices_validation_invalid_device_number_format(mock_2_gpus):
     # Try to configure device index 2 with only 2 GPUs (0 and 1 valid)
     with patch.dict(os.environ, {"BIO_TOOLS_MANAGED_DEVICES": "0,1,2"}):
         dm = DeviceManager.get_instance()
-        with pytest.raises(ValueError, match="BIO_TOOLS_MANAGED_DEVICES specifies invalid device"):
+        with pytest.raises(ValueError, match=r"BIO_TOOLS_MANAGED_DEVICES has invalid device\(s\)"):
             dm._get_available_devices()
 
     DeviceManager.reset_instance()

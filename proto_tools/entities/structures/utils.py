@@ -117,7 +117,10 @@ def detect_structure_format(structure_content: str) -> str:
     lines = [line.strip() for line in structure_content.split("\n") if line.strip()]
 
     if not lines:
-        raise ValueError("Empty structure content. Must be PDB or CIF format.")
+        raise ValueError(
+            f"Empty structure content (length={len(structure_content)}, "
+            f"whitespace_only={not structure_content.strip()}). Must be PDB or CIF format."
+        )
 
     first_line = lines[0]
 
@@ -145,7 +148,11 @@ def detect_structure_format(structure_content: str) -> str:
         if line.startswith(("ATOM", "HETATM")):
             return "pdb"
 
-    raise ValueError("Could not determine structure format (CIF or PDB).")
+    preview = structure_content.splitlines()[0][:120] if structure_content.strip() else ""
+    raise ValueError(
+        f"Could not determine structure format (length={len(structure_content)}, "
+        f"first_line={preview!r}). Must be PDB or CIF format."
+    )
 
 
 def is_valid_structure(structure_filepath_or_content: str | Path) -> bool:

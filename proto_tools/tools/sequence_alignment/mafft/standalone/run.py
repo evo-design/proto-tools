@@ -58,7 +58,9 @@ def find_mafft_binary() -> Path:
     mafft_path = bin_dir / "mafft"
 
     if not mafft_path.exists():
-        raise FileNotFoundError(f"MAFFT binary not found at {mafft_path}. The venv may not be set up correctly.")
+        raise FileNotFoundError(
+            f"mafft: binary not found at {mafft_path} — re-run the tool's standalone/setup.sh to provision the venv"
+        )
 
     return mafft_path
 
@@ -138,11 +140,9 @@ def run_mafft_alignment(
                 env=env,
             )
         except subprocess.CalledProcessError as e:
+            stderr_tail = (e.stderr or "").strip().splitlines()[-10:]
             raise RuntimeError(
-                f"MAFFT alignment failed with exit code {e.returncode}.\n"
-                f"Command: {' '.join(cmd)}\n"
-                f"STDERR: {e.stderr}\n"
-                f"STDOUT: {e.stdout}"
+                f"mafft: alignment failed (exit {e.returncode}): {' | '.join(stderr_tail) or '<no stderr>'}"
             ) from e
 
         # Parse aligned sequences from stdout
@@ -181,7 +181,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 def main() -> None:
     """Main entry point for standalone MAFFT runner."""
     if len(sys.argv) != 3:
-        print("Usage: python run.py <input.json> <output.json>", file=sys.stderr)
+        print("mafft: usage: python run.py <input.json> <output.json>", file=sys.stderr)
         sys.exit(1)
 
     input_path = Path(sys.argv[1])

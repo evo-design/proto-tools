@@ -35,13 +35,18 @@ def run_tmalign_alignment(pdb_text_1: str, pdb_text_2: str) -> dict[str, Any]:
         path_1.write_text(pdb_text_1)
         path_2.write_text(pdb_text_2)
 
-        result = subprocess.run(
-            [str(binary), str(path_1), str(path_2)],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f"TMalign failed with code {result.returncode}: {result.stderr}")
+        try:
+            result = subprocess.run(
+                [str(binary), str(path_1), str(path_2)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as e:
+            stderr_tail = (e.stderr or "").strip().splitlines()[-10:]
+            raise RuntimeError(
+                f"tmalign: alignment failed (exit {e.returncode}): {' | '.join(stderr_tail) or '<no stderr>'}"
+            ) from e
 
     output = result.stdout
 
@@ -59,7 +64,7 @@ def run_tmalign_alignment(pdb_text_1: str, pdb_text_2: str) -> dict[str, Any]:
     )
 
     if not m1 or not m2:
-        raise RuntimeError(f"Could not parse TM-scores from TMalign output:\n{output}")
+        raise RuntimeError(f"tmalign: could not parse TM-scores from TMalign output: {output[-500:]}")
 
     return {
         "tm_score_chain_1": float(m1.group(1)),
@@ -80,7 +85,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 # =============================================================================
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print("Usage: python run.py <input.json> <output.json>", file=sys.stderr)
+        print("tmalign: usage: python run.py <input.json> <output.json>", file=sys.stderr)
         sys.exit(1)
 
     with open(sys.argv[1]) as f:

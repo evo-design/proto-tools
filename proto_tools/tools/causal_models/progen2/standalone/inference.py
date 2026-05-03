@@ -79,17 +79,23 @@ class ProGen2Model:
 
         model_path = self.local_path or f"{HUGGINGFACE_REPO_PREFIX}/{self.model_checkpoint}"
 
-        self.model = (
-            AutoModelForCausalLM.from_pretrained(
-                model_path,
-                trust_remote_code=True,
-                torch_dtype="auto",
+        try:
+            self.model = (
+                AutoModelForCausalLM.from_pretrained(
+                    model_path,
+                    trust_remote_code=True,
+                    torch_dtype="auto",
+                )
+                .to(device)
+                .eval()
             )
-            .to(device)
-            .eval()
-        )
+        except OSError as e:
+            raise RuntimeError(f"progen2: HF weight load from {model_path!r} failed: {e}") from e
 
-        self.tokenizer = Tokenizer.from_pretrained(model_path)
+        try:
+            self.tokenizer = Tokenizer.from_pretrained(model_path)
+        except OSError as e:
+            raise RuntimeError(f"progen2: HF tokenizer load from {model_path!r} failed: {e}") from e
         self.device = device
         self.pad_token_id = self.tokenizer.token_to_id(PROGEN2_PAD_TOKEN)  # ID 0
         self._loaded = True
@@ -100,7 +106,7 @@ class ProGen2Model:
     def to_device(self, device: str) -> None:
         """Move model to a different device."""
         if not self._loaded:
-            raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
+            raise ValueError("progen2: cannot move unloaded model to device — call load() first")
         if self.device != device:
             self.model = move_model_to_device(self.model, self.device, device)
             self.device = device
@@ -122,7 +128,7 @@ class ProGen2Model:
     ) -> tuple[torch.Tensor, torch.Tensor, list[int]]:
         """Tokenize and pad sequences into a batch with attention mask."""
         if not sequences:
-            raise ValueError("Cannot prepare empty batch")
+            raise ValueError("progen2: cannot prepare empty batch")
         assert self.pad_token_id is not None, "Model not loaded; call load() first"
         encodings = self.tokenizer.encode_batch(sequences)
         token_lists = [e.ids for e in encodings]
@@ -203,7 +209,7 @@ class ProGen2Model:
         set_torch_seed(seed)
 
         if not prompts:
-            raise ValueError("Cannot sample from empty prompt list")
+            raise ValueError("progen2: cannot sample from empty prompt list")
 
         # Batch processing logic
         all_sequences: list[str] = []
@@ -309,7 +315,7 @@ class ProGen2Model:
         set_torch_seed(seed)
 
         if not sequences:
-            raise ValueError("Cannot score empty sequence list")
+            raise ValueError("progen2: cannot score empty sequence list")
 
         # Ensure sequences have start token
         normalized_seqs = [
@@ -412,7 +418,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             return_logits=input_dict["return_logits"],
             seed=input_dict["seed"],
         )
-    raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"progen2: unknown operation {operation!r}; valid: ['sample', 'score']")
 
 
 def to_device(device: str) -> dict[str, Any]:
@@ -436,7 +442,7 @@ def get_memory_stats() -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+        raise ValueError("progen2: usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

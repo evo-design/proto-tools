@@ -144,6 +144,12 @@ class ColabFoldSearchWrapper:
             logger.debug(f"Using specified database: {db_name}")
         else:
             db_name = self._detect_database_name(msa_db_dir, verbose)  # type: ignore[assignment]
+            if db_name is None:
+                raise RuntimeError(
+                    f"colabfold-search: no MMseqs2 database files found in {msa_db_dir} "
+                    f"(expected *.dbtype); ensure the MSA database has been prepared, "
+                    f"or pass database_name explicitly"
+                )
 
         cmd.extend(["--db1", db_name])
 
@@ -178,11 +184,8 @@ class ColabFoldSearchWrapper:
             }
 
         except subprocess.CalledProcessError as e:
-            error_msg = f"colabfold_search failed with exit code {e.returncode}"
-            if e.stderr:
-                error_msg += f"\nSTDERR: {e.stderr}"
-            if e.stdout:
-                error_msg += f"\nSTDOUT: {e.stdout}"
+            stderr_tail = " | ".join((e.stderr or "").strip().splitlines()[-10:]) or "<no stderr>"
+            error_msg = f"colabfold-search: failed (exit {e.returncode}): {stderr_tail}"
 
             # Check if this is a "prof_res does not exist" error
             # This happens when sequences have no hits at all
@@ -254,8 +257,7 @@ class ColabFoldSearchWrapper:
             self.colabfold_search_executable = shutil.which("colabfold_search")
         else:
             raise ImportError(
-                "Could not find the 'colabfold_search' executable. "
-                "Please make sure ColabFold is installed in the current environment."
+                "colabfold-search: 'colabfold_search' executable not found in venv; re-run standalone/setup.sh"
             )
 
         # Find mmseqs binary (required by colabfold_search)
@@ -265,10 +267,7 @@ class ColabFoldSearchWrapper:
         elif shutil.which("mmseqs") is not None:
             self.mmseqs_executable = shutil.which("mmseqs")
         else:
-            raise ImportError(
-                "Could not find the 'mmseqs' executable. "
-                "Please make sure MMseqs2 is installed in the current environment."
-            )
+            raise ImportError("colabfold-search: 'mmseqs' executable not found in venv; re-run standalone/setup.sh")
 
         self._loaded = True
 
@@ -295,7 +294,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 # Standalone script entry point for venv execution
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python msa_search.py <input_json_path> <output_json_path>")
+        raise ValueError("colabfold-search: usage: python msa_search.py <input_json_path> <output_json_path>")
 
     # Get the input and output json paths
     input_json_path = sys.argv[1]

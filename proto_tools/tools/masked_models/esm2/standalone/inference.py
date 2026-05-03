@@ -70,9 +70,9 @@ class ESM2Model:
 
         # Validate input sequences
         if not sequences:
-            raise ValueError("ESM2Model.__call__ requires at least one input sequence.")
+            raise ValueError("esm2: __call__ requires at least one input sequence")
         if any(len(seq) == 0 for seq in sequences):
-            raise ValueError("ESM2Model.__call__ does not support empty sequences.")
+            raise ValueError("esm2: __call__ does not support empty sequences")
 
         # Get the max sequence length
         max_seq_len = max(len(seq) for seq in sequences)
@@ -304,9 +304,9 @@ class ESM2Model:
 
         # Reject empty inputs up front
         if not sequences:
-            raise ValueError("ESM2Model.score requires at least one non-empty sequence.")
+            raise ValueError("esm2: score requires at least one non-empty sequence")
         if any(len(s) == 0 for s in sequences):
-            raise ValueError("ESM2Model.score does not support empty sequences.")
+            raise ValueError("esm2: score does not support empty sequences")
 
         # Tokenize all sequences together, padded to a common length
         encoded = self.tokenizer(sequences, add_special_tokens=True, padding=True, return_tensors="pt")
@@ -392,7 +392,7 @@ class ESM2Model:
             seq_valid = is_valid[cursor : cursor + length]
             valid_count = int(seq_valid.sum().item())
             if valid_count == 0:
-                raise ValueError(f"No valid characters found for ESM2 scoring in sequence: {sequences[i]}")
+                raise ValueError(f"esm2: score sequence {i}/{len(sequences)} contains no valid amino-acid characters")
             log_prob = (seq_log_probs * seq_valid.float()).sum().item()
             avg_ll = log_prob / valid_count
 
@@ -425,8 +425,12 @@ class ESM2Model:
         # Uses flash attention enabled version: https://huggingface.co/fredzzp/esm2_t33_650M_UR50D
         from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-        self.model = AutoModelForMaskedLM.from_pretrained("fredzzp/" + self.model_checkpoint).to(device).eval()
-        self.tokenizer = AutoTokenizer.from_pretrained("fredzzp/" + self.model_checkpoint)
+        repo = "fredzzp/" + self.model_checkpoint
+        try:
+            self.model = AutoModelForMaskedLM.from_pretrained(repo).to(device).eval()
+            self.tokenizer = AutoTokenizer.from_pretrained(repo)
+        except OSError as e:
+            raise RuntimeError(f"esm2: HF weight load from {repo!r} failed: {e}") from e
 
         # Create amino acid token IDs and keep them on the same device as model
         self.amino_acid_token_ids = torch.tensor(
@@ -442,7 +446,7 @@ class ESM2Model:
     def to_device(self, device: str) -> None:
         """Move model to a different device."""
         if not self._loaded:
-            raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
+            raise ValueError("esm2: cannot move unloaded model to device — call load() first")
 
         if self.device != device:
             self.model = move_model_to_device(self.model, self.device, device)
@@ -504,7 +508,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             return_logits=input_dict["return_logits"],
             seed=input_dict["seed"],
         )
-    raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"esm2: unknown operation {operation!r}; valid: ['embeddings', 'inference', 'sample', 'score']")
 
 
 def to_device(device: str) -> dict[str, Any]:
@@ -528,7 +532,7 @@ def get_memory_stats() -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+        raise ValueError("esm2: usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

@@ -5,8 +5,7 @@ source standalone_helpers.sh
 
 ARCH=$(uname -m)
 if [ "$ARCH" = "aarch64" ]; then
-    echo "ERROR: ProGen2 is not supported on aarch64."
-    echo "ProGen2 pins torch==2.2.2 which has no aarch64 CUDA wheel available."
+    echo "ERROR: progen2 setup: not supported on aarch64 (torch==2.2.2 pin has no aarch64 CUDA wheel)" >&2
     exit 1
 fi
 

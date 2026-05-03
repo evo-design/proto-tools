@@ -413,6 +413,12 @@ def cache_stitch_items(
         **dict(strip.cached_results),
         **dict(zip(strip.uncached_indices, computed_items, strict=False)),
     }
+    if len(result_map) != total_count:
+        raise RuntimeError(
+            f"cache_stitch_items: result_map has {len(result_map)} entries but total_count={total_count} "
+            f"(diff={total_count - len(result_map)}; cached={len(strip.cached_results)}, "
+            f"uncached={len(strip.uncached_indices)}, computed={len(computed_items)})"
+        )
     return [result_map[i] for i in range(total_count)]
 
 

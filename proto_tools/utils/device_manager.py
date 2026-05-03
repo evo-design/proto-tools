@@ -361,9 +361,9 @@ class DeviceManager:
 
             if invalid_devices:
                 raise ValueError(
-                    f"BIO_TOOLS_MANAGED_DEVICES specifies invalid device(s): "
-                    f"{', '.join(invalid_devices)}. Only {num_gpus} GPU(s) available "
-                    f"(cuda:0 through cuda:{num_gpus - 1})"
+                    f"BIO_TOOLS_MANAGED_DEVICES has invalid device(s): {', '.join(invalid_devices)} "
+                    f"(only {num_gpus} GPU(s) available: cuda:0..cuda:{num_gpus - 1}); "
+                    f"format: comma-separated like 'cuda:0,cuda:1'"
                 )
 
             return list(self._managed_devices)
@@ -793,7 +793,10 @@ class DeviceManager:
         available = self._get_available_devices()
         invalid = [dev for dev in requested_devices if dev not in available]
         if invalid:
-            raise RuntimeError(f"Devices {invalid} not in managed pool {available}")
+            raise RuntimeError(
+                f"{toolkit}: requested device(s) {invalid} not in managed pool {available}; "
+                f"set BIO_TOOLS_MANAGED_DEVICES to include them or pick from {available}"
+            )
 
         self._resolve_device_conflicts(requested_devices)
 
@@ -872,9 +875,10 @@ class DeviceManager:
             all_devices = self._get_available_devices()
             gpu_devices = [d for d in all_devices if self._is_gpu(d)]
             if not gpu_devices:
+                cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "(unset)")
                 raise RuntimeError(
-                    f"No GPUs available for {toolkit} (requested device: {device}). "
-                    f"Set device='cpu' in the tool config to run on CPU."
+                    f"{toolkit}: requested {device!r} but no GPUs visible "
+                    f"(CUDA_VISIBLE_DEVICES={cvd}; check nvidia-smi); set device='cpu' to run on CPU"
                 )
 
             # Explicit device(s) requested
@@ -986,9 +990,10 @@ class DeviceManager:
         all_devices = self._get_available_devices()
         gpu_devices = [d for d in all_devices if self._is_gpu(d)]
         if not gpu_devices:
+            cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "(unset)")
             raise RuntimeError(
-                f"No GPUs available for {toolkit} (requested device: {device}). "
-                f"Set device='cpu' in the tool config to run on CPU."
+                f"{toolkit}: requested {device!r} but no GPUs visible "
+                f"(CUDA_VISIBLE_DEVICES={cvd}; check nvidia-smi); set device='cpu' to run on CPU"
             )
 
         def noop_callback(action: Any) -> None:  # noqa: ARG001 — required by tool interface

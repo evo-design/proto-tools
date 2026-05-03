@@ -42,7 +42,9 @@ def _venv_path() -> str:
     """Return the tool's venv directory, resolved from standard env vars."""
     venv_path = os.environ.get("VIRTUAL_ENV") or os.environ.get("TOOL_VENV_PATH") or os.environ.get("VENV_PATH")
     if not venv_path:
-        raise FileNotFoundError("Cannot locate tool venv: VIRTUAL_ENV / TOOL_VENV_PATH / VENV_PATH not set.")
+        raise FileNotFoundError(
+            "alphafold3: cannot locate tool venv — VIRTUAL_ENV / TOOL_VENV_PATH / VENV_PATH not set"
+        )
     return venv_path
 
 
@@ -61,7 +63,7 @@ def _resolve_sif_path(override: str | None = None) -> str | None:
     """
     if override:
         if not os.path.exists(override):
-            raise FileNotFoundError(f"Config sif_path does not exist: {override}")
+            raise FileNotFoundError(f"alphafold3: config sif_path does not exist: {override}")
         return override
     default = os.path.join(_venv_path(), "alphafold3.sif")
     return default if os.path.exists(default) else None
@@ -79,11 +81,11 @@ def _resolve_repo_path() -> str:
     venv_path = _venv_path()
     marker = os.path.join(venv_path, "alphafold3_repo_path.txt")
     if not os.path.exists(marker):
-        raise FileNotFoundError(f"AlphaFold3 repo marker not found at {marker}. Re-run setup.sh.")
+        raise FileNotFoundError(f"alphafold3: repo marker not found at {marker}; re-run setup.sh")
     with open(marker) as f:
         repo_path = f.read().strip()
     if not os.path.exists(os.path.join(repo_path, "run_alphafold.py")):
-        raise FileNotFoundError(f"run_alphafold.py not found in {repo_path}. Re-run setup.sh.")
+        raise FileNotFoundError(f"alphafold3: run_alphafold.py not found in {repo_path}; re-run setup.sh")
     return repo_path
 
 
@@ -183,9 +185,9 @@ class AlphaFold3Model:
             weights_dir = resolve_weights_dir("alphafold3")
             if not weights_dir:
                 raise FileNotFoundError(
-                    "Unable to resolve AlphaFold3 weights directory. "
-                    "Set PROTO_ALPHAFOLD3_WEIGHTS_DIR or configure PROTO_MODEL_CACHE, "
-                    "or pass model_dir via the tool config."
+                    "alphafold3: unable to resolve weights directory; "
+                    "set PROTO_ALPHAFOLD3_WEIGHTS_DIR or configure PROTO_MODEL_CACHE, "
+                    "or pass model_dir via the tool config"
                 )
             self.model_dir = weights_dir
 
@@ -196,10 +198,10 @@ class AlphaFold3Model:
         )
         if not has_weights:
             raise FileNotFoundError(
-                f"No AlphaFold3 weights (.bin / .bin.zst) found in {self.model_dir}. "
-                "Request access via https://github.com/google-deepmind/alphafold3#obtaining-model-parameters "
-                "and place the downloaded weights file in that directory (or override "
-                "with PROTO_ALPHAFOLD3_WEIGHTS_DIR)."
+                f"alphafold3: no weights (.bin / .bin.zst) found in {self.model_dir}; "
+                "request access via https://github.com/google-deepmind/alphafold3#obtaining-model-parameters "
+                "and place the downloaded weights file there (or override "
+                "with PROTO_ALPHAFOLD3_WEIGHTS_DIR)"
             )
 
         self._loaded = True
@@ -304,10 +306,12 @@ class AlphaFold3Model:
         # Pin the subprocess to the caller-specified GPU via CUDA_VISIBLE_DEVICES
         env = get_subprocess_device_env(device)
 
+        # Inherit streams when verbose for real-time progress; capture when not
+        # verbose so we can surface stderr tail on failure.
         process = subprocess.Popen(
             run_cmds,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=sys.stdout if verbose else subprocess.PIPE,
+            stderr=sys.stderr if verbose else subprocess.PIPE,
             text=True,
             env=env,
         )
@@ -315,12 +319,12 @@ class AlphaFold3Model:
         _stdout, stderr = process.communicate()
 
         if process.returncode != 0:
-            error_msg = (
-                f"AlphaFold3 failed with return code {process.returncode}\n"
-                f"Command: {' '.join(run_cmds)}\n"
-                f"Stderr:\n{stderr}"
-            )
-            raise AlphaFold3ExecutionError(error_msg)
+            if stderr:
+                stderr_tail = " | ".join(stderr.strip().splitlines()[-10:])
+            else:
+                # verbose=True streamed stderr to terminal — no buffer to tail.
+                stderr_tail = "<streamed to terminal; rerun with verbose=False to capture>"
+            raise AlphaFold3ExecutionError(f"alphafold3: failed (exit {process.returncode}): {stderr_tail}")
 
         logger.debug("AlphaFold3 execution completed successfully.")
 
@@ -394,6 +398,8 @@ def get_memory_stats() -> dict[str, Any]:
 
 # Worker protocol entry point
 if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        raise ValueError("alphafold3: usage: python inference.py <input_json_path> <output_json_path>")
     with open(sys.argv[1]) as f:
         input_data = json.load(f)
     result = dispatch(input_data)

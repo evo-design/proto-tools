@@ -128,7 +128,10 @@ class Evo2SampleConfig(CausalModelSampleConfig):
     @model_validator(mode="after")
     def _validate_kv_cache_settings(self) -> "Evo2SampleConfig":
         if (self.old_kv_cache is not None or self.return_kv_cache) and not self.cached_generation:
-            raise ValueError("Evo2 KV cache handles require cached_generation=True.")
+            raise ValueError(
+                "evo2-sample: old_kv_cache and/or return_kv_cache require cached_generation=True; "
+                "set cached_generation=True or remove the KV-cache flag."
+            )
         return self
 
     # Evo2 model params

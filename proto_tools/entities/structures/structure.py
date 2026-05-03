@@ -237,10 +237,12 @@ class Structure(BaseModel):
     def _validate_structure(self) -> Structure:
         """Validate that the structure content is parseable and format is resolved."""
         if self.structure_format is None:
-            msg = "structure_format could not be determined"
+            msg = (
+                f"structure_format could not be determined (source={self.source!r}, content_len={len(self.structure)})"
+            )
             raise ValueError(msg)
         if not is_valid_structure(structure_filepath_or_content=self.structure):
-            msg = "Structure content is invalid"
+            msg = f"Structure content is invalid (source={self.source!r}, format={self.structure_format!r}, content_len={len(self.structure)})"
             raise ValueError(msg)
         return self
 
@@ -333,7 +335,7 @@ class Structure(BaseModel):
                         self._gemmi_struct = struct
                         break
                 if self._gemmi_struct is None:
-                    raise ValueError("No valid structure found in CIF content")
+                    raise ValueError(f"No valid structure found in CIF content (source={self.source!r})")
             else:
                 self._gemmi_struct = gemmi.read_pdb_string(self.structure)
         return self._gemmi_struct  # type: ignore[no-any-return]
@@ -613,7 +615,7 @@ class Structure(BaseModel):
                 except Exception:  # noqa: S112
                     continue
             if gemmi_struct is None:
-                raise ValueError("No valid structure found in CIF content")
+                raise ValueError(f"No valid structure found in CIF content (source={self.source!r})")
 
             before = [chain.name for model in gemmi_struct for chain in model]
             gemmi_struct.shorten_chain_names()

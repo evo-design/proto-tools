@@ -234,18 +234,21 @@ class ESMFoldModel:
             from transformers import AutoTokenizer, EsmForProteinFolding
         except ImportError:
             raise ImportError(
-                "Could not import transformers. Make sure ESMFold dependencies "
-                "are installed in the current environment."
+                "esmfold: transformers not importable; ensure ESMFold dependencies are installed"
             ) from None
 
         if verbose:
             logger.info(f"Loading ESMFold model: facebook/esmfold_v1 on {device}")
 
-        self.model = EsmForProteinFolding.from_pretrained("facebook/esmfold_v1", trust_remote_code=True)
+        repo = "facebook/esmfold_v1"
+        try:
+            self.model = EsmForProteinFolding.from_pretrained(repo, trust_remote_code=True)
+            self.tokenizer = AutoTokenizer.from_pretrained(repo)
+        except OSError as e:
+            raise RuntimeError(f"esmfold: HF weight load from {repo!r} failed: {e}") from e
 
         self.model = self.model.to(device)
         self.model.esm = self.model.esm.half()
-        self.tokenizer = AutoTokenizer.from_pretrained("facebook/esmfold_v1")
         self.device = device
         self._loaded = True
 
@@ -255,7 +258,7 @@ class ESMFoldModel:
     def to_device(self, device: str) -> None:
         """Move model to a different device."""
         if not self._loaded:
-            raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
+            raise ValueError("esmfold: cannot move unloaded model to device — call load() first")
 
         if self.device != device:
             self.model = move_model_to_device(self.model, self.device, device)
@@ -307,7 +310,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             include_pae_matrix=input_dict["include_pae_matrix"],
         )
         return {"results": results}
-    raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"esmfold: unknown operation {operation!r}; valid: ['predict']")
 
 
 def to_device(device: str) -> dict[str, Any]:
@@ -334,7 +337,7 @@ def get_memory_stats() -> dict[str, Any]:
 # ============================================================================
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+        raise ValueError("esmfold: usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

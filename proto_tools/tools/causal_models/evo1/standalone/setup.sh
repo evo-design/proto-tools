@@ -33,11 +33,7 @@ if ! "$MAMBA_BIN" create -y -p "$VENV_PATH/cuda_env" -c nvidia -c conda-forge \
     "cuda-nvcc=${CUDA_TOOLKIT_VERSION}" \
     "cuda-cudart-dev=${CUDA_TOOLKIT_VERSION}" \
     "gcc=12.*" "gxx=12.*" "sysroot_linux-64=2.17"; then
-    echo "ERROR: Failed to install CUDA toolkit via micromamba"
-    echo "This may indicate:"
-    echo "  - Network connectivity issues"
-    echo "  - Unavailable CUDA version ${CUDA_TOOLKIT_VERSION} for your platform"
-    echo "  - Insufficient disk space"
+    echo "ERROR: evo1 setup: micromamba CUDA toolkit install failed (network/availability of CUDA ${CUDA_TOOLKIT_VERSION}/disk space)" >&2
     exit 1
 fi
 
@@ -50,7 +46,7 @@ echo "Using local CUDA installation at: $CUDA_HOME"
 # Auto-detect CUDA target directory (e.g., x86_64-linux, aarch64-linux, sbsa-linux)
 CUDA_TARGET=$(ls "$CUDA_HOME/targets/" 2>/dev/null | head -1)
 if [ -z "$CUDA_TARGET" ]; then
-    echo "ERROR: No CUDA target directory found in $CUDA_HOME/targets/"
+    echo "ERROR: evo1 setup: no CUDA target directory under $CUDA_HOME/targets/" >&2
     exit 1
 fi
 echo "Detected CUDA target: $CUDA_TARGET"

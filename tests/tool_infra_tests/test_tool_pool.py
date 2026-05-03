@@ -777,7 +777,7 @@ def test_local_partition_failure_preserves_other_results(clean_registry):
     inputs = MockInput(items=["a", "b", "c", "d"])
     config = MockConfig(device="cuda")
 
-    with pytest.raises(PartialFailureError, match=r"1 partition.*failed") as exc_info:
+    with pytest.raises(PartialFailureError, match=r"1/2 partition\(s\) failed") as exc_info:
         pool._parallel_dispatch("fail-tool", run_fail_tool, inputs, config)
 
     err = exc_info.value

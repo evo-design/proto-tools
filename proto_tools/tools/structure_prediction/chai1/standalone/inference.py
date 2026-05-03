@@ -132,7 +132,7 @@ class Chai1Model:
             self._chai1_run_inference = run_inference
         except ImportError:
             raise ImportError(
-                "Could not import chai_lab. Make sure Chai1 is installed in the current environment."
+                "chai1: chai_lab not importable; ensure Chai1 is installed in the current environment"
             ) from None
 
         self.device = device
@@ -187,7 +187,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             verbose=input_dict["verbose"],
             include_pae_matrix=input_dict["include_pae_matrix"],
         )
-    raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"chai1: unknown operation {operation!r}; valid: ['predict']")
 
 
 def to_device(device: str) -> dict[str, Any]:
@@ -208,7 +208,7 @@ if __name__ == "__main__":
     import json
 
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+        raise ValueError("chai1: usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

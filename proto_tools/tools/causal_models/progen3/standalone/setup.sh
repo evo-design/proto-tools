@@ -5,8 +5,7 @@ source standalone_helpers.sh
 
 ARCH=$(uname -m)
 if [ "$ARCH" = "aarch64" ]; then
-    echo "ERROR: ProGen3 is not supported on aarch64."
-    echo "ProGen3 requires flash-attn which has no aarch64 wheels."
+    echo "ERROR: progen3 setup: not supported on aarch64 (flash-attn has no aarch64 wheels)" >&2
     exit 1
 fi
 
@@ -34,7 +33,7 @@ echo "Using local CUDA installation at: $CUDA_HOME"
 # Auto-detect CUDA target directory (e.g., x86_64-linux, aarch64-linux)
 CUDA_TARGET=$(ls "$CUDA_HOME/targets/" 2>/dev/null | head -1)
 if [ -z "$CUDA_TARGET" ]; then
-    echo "ERROR: No CUDA target directory found in $CUDA_HOME/targets/"
+    echo "ERROR: progen3 setup: no CUDA target directory under $CUDA_HOME/targets/" >&2
     exit 1
 fi
 echo "Detected CUDA target: $CUDA_TARGET"
@@ -119,7 +118,7 @@ uv pip install -r requirements.txt
 
 # Validate progen3 import
 if ! python -c "from progen3.modeling import ProGen3ForCausalLM; print('ProGen3 import OK')"; then
-    echo "ERROR: ProGen3 import failed after installation"
+    echo "ERROR: progen3 setup: import 'from progen3.modeling import ProGen3ForCausalLM' failed after install" >&2
     exit 1
 fi
 

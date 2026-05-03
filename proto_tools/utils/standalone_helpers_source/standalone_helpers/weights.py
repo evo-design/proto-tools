@@ -26,8 +26,14 @@ def resolve_weights_dir(toolkit: str) -> str | None:
         toolkit (str): The tool's directory name (e.g., "fampnn", "protenix").
 
     Returns:
-        str | None: Absolute path string to the weights directory, or None (NONE mode
-            with no per-tool override). Creates the directory if it doesn't exist.
+        str | None: Absolute path string to the weights directory. Returns ``None``
+            only in ``NONE`` mode when no venv path is available (caller falls back
+            to its own default). Creates the directory if it doesn't exist.
+
+    Raises:
+        RuntimeError: If ``PROTO_MODEL_CACHE=IN_ENV`` but neither
+            ``TOOL_VENV_PATH`` nor ``VENV_PATH`` is set (cannot resolve a venv-local
+            weights directory without a venv).
     """
     # 1. Per-tool override always wins
     override_var = f"PROTO_{toolkit.upper()}_WEIGHTS_DIR"
@@ -56,11 +62,9 @@ def resolve_weights_dir(toolkit: str) -> str | None:
             path = os.path.join(venv_path, "model_weight_cache")
             os.makedirs(path, exist_ok=True)
             return path
-        logger.warning(
-            "PROTO_MODEL_CACHE=IN_ENV but no TOOL_VENV_PATH or VENV_PATH set. "
-            "Returning None; tool will use its own default."
+        raise RuntimeError(
+            f"resolve_weights_dir({toolkit!r}): PROTO_MODEL_CACHE=IN_ENV but TOOL_VENV_PATH/VENV_PATH unset"
         )
-        return None
 
     if mode:
         # Explicit path (absolute or relative)

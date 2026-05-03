@@ -118,37 +118,20 @@ def test_get_subprocess_device_env_warns_without_parent_cuda_visible_devices(mon
     assert any("CUDA_VISIBLE_DEVICES not set" in record.message for record in caplog.records)
 
 
-def test_get_subprocess_device_env_handles_invalid_device_format(monkeypatch, caplog):
-    """Verify graceful handling of invalid device formats."""
-    import logging
-
+def test_get_subprocess_device_env_rejects_invalid_device_format(monkeypatch):
+    """Invalid device format raises ValueError naming the bad input."""
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1,2")
 
-    with caplog.at_level(logging.WARNING):
-        env = get_subprocess_device_env("invalid-device-string")
-
-    # Should log a warning about unexpected format
-    assert any("Unexpected device format" in record.message for record in caplog.records)
-
-    # Should still return an env dict with no GPU access (invalid = no devices)
-    assert isinstance(env, dict)
-    assert env["CUDA_VISIBLE_DEVICES"] == ""
+    with pytest.raises(ValueError, match="unrecognized device 'invalid-device-string'"):
+        get_subprocess_device_env("invalid-device-string")
 
 
-def test_get_subprocess_device_env_handles_index_out_of_range(monkeypatch, caplog):
-    """Verify graceful handling when device index exceeds parent's devices."""
-    import logging
-
+def test_get_subprocess_device_env_rejects_index_out_of_range(monkeypatch):
+    """Out-of-range device index raises RuntimeError naming the bad index and parent state."""
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1")  # Only 2 devices
 
-    with caplog.at_level(logging.ERROR):
-        env = get_subprocess_device_env("cuda:5")  # Index 5 doesn't exist
-
-    # Should log an error
-    assert any("exceeds parent CUDA_VISIBLE_DEVICES length" in record.message for record in caplog.records)
-
-    # Should return env with unchanged CUDA_VISIBLE_DEVICES (fallback)
-    assert env["CUDA_VISIBLE_DEVICES"] == "0,1"
+    with pytest.raises(RuntimeError, match="device index 5 out of range"):
+        get_subprocess_device_env("cuda:5")
 
 
 def test_get_subprocess_device_env_handles_spaces_in_parent(monkeypatch):
@@ -253,14 +236,12 @@ def test_multi_gpu_subprocess_removes_jax_restrictions(monkeypatch):
     assert "XLA_PYTHON_CLIENT_ALLOCATOR" not in env
 
 
-def test_invalid_device_empty_cvd_gets_jax_cpu(monkeypatch):
-    """Invalid device format resulting in empty CVD should set JAX to CPU."""
+def test_invalid_device_raises(monkeypatch):
+    """Invalid device format raises ValueError instead of falling back to CPU."""
     monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
 
-    env = get_subprocess_device_env("not-a-device")
-
-    assert env["CUDA_VISIBLE_DEVICES"] == ""
-    assert env["JAX_PLATFORMS"] == "cpu"
+    with pytest.raises(ValueError, match="unrecognized device 'not-a-device'"):
+        get_subprocess_device_env("not-a-device")
 
 
 # ── resolve_weights_dir ──────────────────────────────────────────────────────
@@ -372,16 +353,15 @@ def test_resolve_weights_dir_creates_explicit_path(monkeypatch, tmp_path):
     assert os.path.isdir(result)
 
 
-def test_resolve_weights_dir_in_env_no_venv(monkeypatch):
-    """IN_ENV with no TOOL_VENV_PATH/VENV_PATH returns None."""
+def test_resolve_weights_dir_in_env_no_venv_raises(monkeypatch):
+    """IN_ENV with no TOOL_VENV_PATH/VENV_PATH raises RuntimeError naming the toolkit."""
     monkeypatch.setenv("PROTO_MODEL_CACHE", "IN_ENV")
     monkeypatch.delenv("TOOL_VENV_PATH", raising=False)
     monkeypatch.delenv("VENV_PATH", raising=False)
     monkeypatch.delenv("PROTO_FAMPNN_WEIGHTS_DIR", raising=False)
 
-    result = resolve_weights_dir("fampnn")
-
-    assert result is None
+    with pytest.raises(RuntimeError, match=r"resolve_weights_dir.*'fampnn'.*IN_ENV"):
+        resolve_weights_dir("fampnn")
 
 
 def test_resolve_weights_dir_no_proto_home_falls_back_to_default(monkeypatch, tmp_path):

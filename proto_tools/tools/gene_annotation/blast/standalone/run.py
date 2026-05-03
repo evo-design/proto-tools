@@ -19,7 +19,7 @@ def _find_binary(name: str) -> str:
     binary = Path(sys.executable).parent / name
     if not binary.exists():
         raise FileNotFoundError(
-            f"BLAST+ binary '{name}' not found at {binary}. The standalone environment may need to be recreated."
+            f"blast: binary '{name}' not found at {binary}; re-run standalone/setup.sh to provision the venv"
         )
     return str(binary)
 
@@ -62,9 +62,13 @@ def run_local_blast(input_data: dict[str, Any]) -> dict[str, Any]:
         else:
             cmd.extend([flag, str(val)])
 
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"Local BLAST search failed with code {proc.returncode}: {proc.stderr}")
+    try:
+        proc = subprocess.run(cmd, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as e:
+        stderr_tail = (e.stderr or "").strip().splitlines()[-10:]
+        raise RuntimeError(
+            f"blast: {Path(program).name} search failed (exit {e.returncode}): {' | '.join(stderr_tail) or '<no stderr>'}"
+        ) from e
 
     return {"stdout": proc.stdout}
 
@@ -103,9 +107,13 @@ def run_create_blast_db(input_data: dict[str, Any]) -> dict[str, Any]:
         else:
             cmd.extend([flag, str(val)])
 
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"BLAST database creation failed with code {proc.returncode}: {proc.stderr}")
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as e:
+        stderr_tail = (e.stderr or "").strip().splitlines()[-10:]
+        raise RuntimeError(
+            f"blast: makeblastdb failed (exit {e.returncode}): {' | '.join(stderr_tail) or '<no stderr>'}"
+        ) from e
 
     return {"db_path": input_data["out_prefix"]}
 
@@ -125,7 +133,7 @@ def to_device(device: str) -> dict[str, Any]:
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print(
-            f"Usage: python {sys.argv[0]} <input_json_path> <output_json_path>",
+            f"blast: usage: python {sys.argv[0]} <input_json_path> <output_json_path>",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -143,7 +151,7 @@ if __name__ == "__main__":
     elif operation == "create_blast_db":
         output_data = run_create_blast_db(input_data)
     else:
-        raise ValueError(f"Unknown operation: {operation}")
+        raise ValueError(f"blast: unknown operation {operation!r}; valid: ['local_blast', 'create_blast_db']")
 
     with open(output_json_path, "w") as f:
         json.dump(output_data, f)

@@ -156,7 +156,8 @@ class Evo2Model:
         old_cache_batch_size = _cache_batch_size(old_kv_cache) if old_kv_cache is not None else None
         if old_cache_batch_size is not None and old_cache_batch_size != len(prompts):
             raise ValueError(
-                f"old_kv_cache batch size must match the number of prompts ({old_cache_batch_size} != {len(prompts)})."
+                f"evo2: old_kv_cache batch size must match the number of prompts "
+                f"({old_cache_batch_size} != {len(prompts)})"
             )
 
         for batch_idx in tqdm(range(num_batches), desc="Evo2 Sequence Generation", unit="batch", total=num_batches):
@@ -240,7 +241,7 @@ class Evo2Model:
     ) -> tuple[torch.Tensor, list[int]]:
         """Tokenize and pad sequences into a batch."""
         if not sequences:
-            raise ValueError("Cannot prepare empty batch")
+            raise ValueError("evo2: cannot prepare empty batch")
 
         # Tokenize sequences and convert to tensors
         tokens = [self.tokenizer.tokenize(seq) for seq in sequences]
@@ -296,7 +297,7 @@ class Evo2Model:
         set_torch_seed(seed)
 
         if not sequences:
-            raise ValueError("Cannot score empty sequence list")
+            raise ValueError("evo2: cannot score empty sequence list")
 
         # Batch processing logic
         all_logits = []
@@ -397,7 +398,7 @@ class Evo2Model:
         auto-shards onto the correct CUDA_VISIBLE_DEVICES.
         """
         if not self._loaded:
-            raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
+            raise ValueError("evo2: cannot move unloaded model to device — call load() first")
 
         if self.device == device:
             return
@@ -515,10 +516,10 @@ def _replicate_cache(cache: dict[str, Any], n_replicates: int) -> dict[str, Any]
     )
 
     if n_replicates < 1:
-        raise ValueError(f"n_replicates must be at least 1 (found {n_replicates}).")
+        raise ValueError(f"evo2: n_replicates must be at least 1 (got {n_replicates})")
     batch_size = _cache_batch_size(cache)
     if batch_size != 1:
-        raise ValueError(f"Can only replicate a single-sequence cache (found batch size {batch_size}).")
+        raise ValueError(f"evo2: can only replicate a single-sequence cache (got batch size {batch_size})")
 
     mha, hcl, hcm, hcs = cache["mha"], cache["hcl"], cache["hcm"], cache["hcs"]
     return {
@@ -581,7 +582,7 @@ _kv_cache_store: dict[str, dict[str, Any]] = {}
 def _cache_id_from_handle(cache_handle: dict[str, Any]) -> str:
     cache_id = cache_handle.get("cache_id")
     if cache_handle.get("type") != KV_CACHE_REF_TYPE or not isinstance(cache_id, str):
-        raise ValueError("Expected an Evo2 KV-cache handle returned by a persistent Evo2 worker.")
+        raise ValueError("evo2: expected a KV-cache handle returned by a persistent Evo2 worker")
     return cache_id
 
 
@@ -589,10 +590,7 @@ def _resolve_cache_handle(cache_handle: dict[str, Any]) -> dict[str, Any]:
     cache_id = _cache_id_from_handle(cache_handle)
     cache = _kv_cache_store.get(cache_id)
     if cache is None:
-        raise ValueError(
-            "Evo2 KV-cache handle is no longer available. It may have been released, "
-            "or the persistent Evo2 worker may have restarted."
-        )
+        raise ValueError("evo2: KV-cache handle no longer available — released, or the persistent worker restarted")
     return cache
 
 
@@ -623,8 +621,8 @@ def _uses_worker_local_cache_handles(input_dict: dict[str, Any]) -> bool:
 def _ensure_cache_handles_use_persistent_worker(input_dict: dict[str, Any]) -> None:
     if __name__ == "__main__" and _uses_worker_local_cache_handles(input_dict):
         raise RuntimeError(
-            "Evo2 KV-cache handles require a persistent ToolInstance worker. "
-            "Wrap calls in ToolInstance.persist() or pass a persistent ToolInstance."
+            "evo2: KV-cache handles require a persistent ToolInstance worker — "
+            "wrap calls in ToolInstance.persist() or pass a persistent ToolInstance"
         )
 
 
@@ -704,7 +702,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             return_logits=input_dict["return_logits"],
             seed=input_dict["seed"],
         )
-    raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"evo2: unknown operation {operation!r}; valid: ['release_kv_caches', 'sample', 'score']")
 
 
 def _cleanup_vortex_debug_log() -> None:
@@ -747,7 +745,7 @@ def get_memory_stats() -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+        raise ValueError("evo2: usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

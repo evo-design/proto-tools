@@ -71,7 +71,10 @@ def resolve_sequence_ids(sequences: list[str], ids: list[str] | None) -> list[st
     """
     if ids is not None:
         if len(ids) != len(sequences):
-            raise ValueError(f"sequence_ids length ({len(ids)}) must match sequences length ({len(sequences)})")
+            raise ValueError(
+                f"resolve_sequence_ids: ids length ({len(ids)}) != sequences length ({len(sequences)}); "
+                f"pass ids=None to auto-generate seq_0, seq_1, ..."
+            )
         return ids
     return [f"seq_{i}" for i in range(len(sequences))]
 

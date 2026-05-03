@@ -70,9 +70,9 @@ class ESMCModel:
             self.to_device(device)
 
         if not sequences:
-            raise ValueError("ESMCModel.__call__ requires at least one sequence.")
+            raise ValueError("esmc: __call__ requires at least one sequence")
         if any(len(seq) == 0 for seq in sequences):
-            raise ValueError("ESMCModel.__call__ does not support empty sequences.")
+            raise ValueError("esmc: __call__ does not support empty sequences")
 
         max_seq_len = max(len(seq) for seq in sequences)
         batches = [sequences[i : i + batch_size] for i in range(0, len(sequences), batch_size)]
@@ -141,7 +141,10 @@ class ESMCModel:
         if verbose:
             logger.info(f"Loading ESM C model: {self.model_checkpoint} on {device}")
 
-        self.model = ESMC.from_pretrained(self.model_checkpoint, device=torch.device(device)).eval()
+        try:
+            self.model = ESMC.from_pretrained(self.model_checkpoint, device=torch.device(device)).eval()
+        except OSError as e:
+            raise RuntimeError(f"esmc: HF weight load from {self.model_checkpoint!r} failed: {e}") from e
         self.tokenizer = self.model.tokenizer
 
         self.amino_acid_token_ids = torch.tensor(
@@ -159,7 +162,7 @@ class ESMCModel:
         from standalone_helpers import move_model_to_device
 
         if not self._loaded:
-            raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
+            raise ValueError("esmc: cannot move unloaded model to device — call load() first")
 
         if self.device != device:
             self.model = move_model_to_device(self.model, self.device, device)
@@ -200,7 +203,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             verbose=input_dict["verbose"],
             return_logits=input_dict["return_logits"],
         )
-    raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"esmc: unknown operation {operation!r}; valid: ['embeddings', 'inference']")
 
 
 def to_device(device: str) -> dict[str, Any]:
@@ -222,7 +225,7 @@ def get_memory_stats() -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+        raise ValueError("esmc: usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

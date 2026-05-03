@@ -35,11 +35,13 @@ def _detect_database_name(dataset_dir: Path, db_prefix: str | None) -> str:
             ``.dbtype`` file is absent.
     """
     if not dataset_dir.exists():
-        raise FileNotFoundError(f"Dataset directory does not exist: {dataset_dir}")
+        raise FileNotFoundError(f"mmseqs2-homology-search: dataset directory does not exist: {dataset_dir}")
 
     if db_prefix:
         if not (dataset_dir / f"{db_prefix}.dbtype").is_file():
-            raise FileNotFoundError(f"Expected MMseqs2 DB file {db_prefix}.dbtype not found in {dataset_dir}")
+            raise FileNotFoundError(
+                f"mmseqs2-homology-search: expected MMseqs2 DB file {db_prefix}.dbtype not found in {dataset_dir}"
+            )
         return db_prefix
 
     # Auto-detect: prefer *_db.dbtype files
@@ -51,7 +53,7 @@ def _detect_database_name(dataset_dir: Path, db_prefix: str | None) -> str:
             if not any(f.stem.endswith(suffix) for suffix in ("_seq", "_aln", "_h", "_seq_h"))
         ]
     if not candidates:
-        raise FileNotFoundError(f"No MMseqs2 DB files (*.dbtype) found in {dataset_dir}")
+        raise FileNotFoundError(f"mmseqs2-homology-search: no MMseqs2 DB files (*.dbtype) found in {dataset_dir}")
     return candidates[0].stem
 
 
@@ -62,14 +64,18 @@ def _resolve_executables() -> tuple[str, str]:
     if not colabfold_path.exists():
         which_colabfold = shutil.which("colabfold_search")
         if not which_colabfold:
-            raise FileNotFoundError("colabfold_search not found in env (colabfold package missing)")
+            raise FileNotFoundError(
+                "mmseqs2-homology-search: colabfold_search executable not found in venv (colabfold package missing); re-run standalone/setup.sh"
+            )
         colabfold_path = Path(which_colabfold)
 
     mmseqs_path = venv_bin / "mmseqs"
     if not mmseqs_path.exists():
         which_mmseqs = shutil.which("mmseqs")
         if not which_mmseqs:
-            raise FileNotFoundError("mmseqs not found in env (MMseqs2 binary missing)")
+            raise FileNotFoundError(
+                "mmseqs2-homology-search: mmseqs binary not found in venv; re-run standalone/setup.sh"
+            )
         mmseqs_path = Path(which_mmseqs)
 
     return str(colabfold_path), str(mmseqs_path)
@@ -238,7 +244,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         return {
             "success": False,
             "output_dir": str(output_dir),
-            "error": f"colabfold_search timed out after {e.timeout}s (set Mmseqs2HomologySearchConfig.timeout higher if needed)",
+            "error": f"mmseqs2-homology-search: colabfold_search timed out after {e.timeout}s (raise Mmseqs2HomologySearchConfig.timeout if needed)",
         }
     except subprocess.CalledProcessError as e:
         if verbose:
@@ -256,13 +262,13 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             "success": False,
             "output_dir": str(output_dir),
             "returncode": e.returncode,
-            "error": f"colabfold_search exit {e.returncode}\nSTDERR: {stderr}\nSTDOUT: {e.stdout or ''}",
+            "error": f"mmseqs2-homology-search: colabfold_search failed (exit {e.returncode}): {' | '.join((stderr or '').strip().splitlines()[-10:]) or '<no stderr>'}",
         }
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise SystemExit("Usage: python run.py <input_json_path> <output_json_path>")
+        raise SystemExit("mmseqs2-homology-search: usage: python run.py <input_json_path> <output_json_path>")
     input_json_path = Path(sys.argv[1])
     output_json_path = Path(sys.argv[2])
     output_json_path.write_text(json.dumps(dispatch(json.loads(input_json_path.read_text()))))

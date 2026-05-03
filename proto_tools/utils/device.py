@@ -351,14 +351,21 @@ def _validate_and_map_cuda_indices(
     num_gpus = len(parent_device_list) if parent_device_list else number_of_available_gpus()
     max_idx = max(cuda_indices)
 
+    cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "(unset)")
     if num_gpus == 0:
-        raise ValueError("Requested CUDA devices but no GPUs detected (check CUDA_VISIBLE_DEVICES or nvidia-smi)")
+        raise ValueError(
+            f"Requested CUDA indices {cuda_indices} but no GPUs detected (CUDA_VISIBLE_DEVICES={cvd}; check nvidia-smi)"
+        )
     if max_idx >= num_gpus:
         if parent_device_list:
             raise ValueError(
-                f"Device index {max_idx} exceeds parent CUDA_VISIBLE_DEVICES length ({len(parent_device_list)})"
+                f"CUDA index {max_idx} out of range for parent CUDA_VISIBLE_DEVICES={cvd} "
+                f"(length {len(parent_device_list)}; requested {cuda_indices})"
             )
-        raise ValueError(f"Device index {max_idx} exceeds available GPUs ({num_gpus})")
+        raise ValueError(
+            f"CUDA index {max_idx} out of range; only {num_gpus} GPU(s) available "
+            f"(CUDA_VISIBLE_DEVICES={cvd}; requested {cuda_indices})"
+        )
 
     seen: set[str] = set()
     physical: list[str] = []
@@ -438,12 +445,14 @@ def determine_visible_devices(device: int | str | list[int | str]) -> str:
     if isinstance(device, int):
         device_int = device
         num_gpus = number_of_available_gpus()
+        cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "(unset)")
         if device_int >= num_gpus:
-            raise ValueError(f"Device index {device_int} is greater than the number of available GPUs ({num_gpus})")
+            raise ValueError(f"Device index {device_int} >= visible GPU count ({num_gpus}); CUDA_VISIBLE_DEVICES={cvd}")
         if parent_device_list:
             if device_int >= len(parent_device_list):
                 raise ValueError(
-                    f"Device index {device_int} exceeds parent CUDA_VISIBLE_DEVICES length ({len(parent_device_list)})"
+                    f"Device index {device_int} exceeds parent CUDA_VISIBLE_DEVICES length ({len(parent_device_list)}); "
+                    f"CUDA_VISIBLE_DEVICES={cvd}"
                 )
             return parent_device_list[device_int]
         return str(device)

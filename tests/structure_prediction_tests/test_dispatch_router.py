@@ -26,7 +26,7 @@ def _dispatch(tool_config=None, *, config_cls=_FakeConfig):
 
 def test_unknown_tool_raises():
     cpx = StructurePredictionComplex(chains=["MVLSPADKTN"])
-    with pytest.raises(ValueError, match="Unknown structure prediction tool"):
+    with pytest.raises(ValueError, match=r"predict_structures: unknown toolkit"):
         predict_structures(cpx, toolkit="nonexistent_tool")
 
 

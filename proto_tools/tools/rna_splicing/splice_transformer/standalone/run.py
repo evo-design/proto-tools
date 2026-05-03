@@ -63,7 +63,7 @@ def to_device(device: str) -> dict[str, Any]:
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print(
-            f"Usage: python {sys.argv[0]} <input_json_path> <output_json_path>",
+            f"splice-transformer: usage: python {sys.argv[0]} <input_json_path> <output_json_path>",
             file=sys.stderr,
         )
         sys.exit(1)

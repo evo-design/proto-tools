@@ -168,7 +168,7 @@ def test_multiple_sequences_with_custom_ids():
 def test_sequence_ids_length_mismatch_raises():
     from proto_tools.utils import resolve_sequence_ids
 
-    with pytest.raises(ValueError, match="must match"):
+    with pytest.raises(ValueError, match="ids length"):
         resolve_sequence_ids(["ATGAAA", "ATGBBB"], ["only_one"])
 
 

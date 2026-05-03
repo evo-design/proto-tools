@@ -113,7 +113,7 @@ def _extract_from_source(archive_path: Path, bin_dir: Path) -> None:
         # Find the extracted source directory
         src_dirs = [d for d in build_path.iterdir() if d.is_dir()]
         if len(src_dirs) != 1:
-            raise RuntimeError(f"Expected one source directory, found: {src_dirs}")
+            raise RuntimeError(f"mafft: expected one source directory in tarball, found: {src_dirs}")
         core_dir = src_dirs[0] / "core"
 
         print(f"  Compiling MAFFT from source in {core_dir}...")

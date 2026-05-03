@@ -33,7 +33,11 @@ class EnformerModel:
         if verbose:
             logger.info(f"Loading Enformer model on {device}")
 
-        self.model = from_pretrained("EleutherAI/enformer-official-rough").to(device)
+        repo = "EleutherAI/enformer-official-rough"
+        try:
+            self.model = from_pretrained(repo).to(device)
+        except OSError as e:
+            raise RuntimeError(f"enformer: HF weight load from {repo!r} failed: {e}") from e
         self.device = device
         self._loaded = True
 
@@ -54,7 +58,7 @@ class EnformerModel:
         from standalone_helpers import move_model_to_device
 
         if not self._loaded:
-            raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
+            raise ValueError("enformer: cannot move unloaded model to device — call load() first")
 
         if self.device != device:
             self.model = move_model_to_device(self.model, self.device, device)
@@ -136,7 +140,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             "predictions": torch.cat(predictions, dim=0),
             "applied_species": input_dict["species"],
         }
-    raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"enformer: unknown operation {operation!r}; valid: ['predict']")
 
 
 def to_device(device: str) -> dict[str, Any]:
@@ -160,7 +164,7 @@ def get_memory_stats() -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+        raise ValueError("enformer: usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

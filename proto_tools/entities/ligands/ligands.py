@@ -127,7 +127,10 @@ class Fragment(BaseModel):
 
         fragments = Chem.rdmolops.GetMolFrags(mol, asMols=True)
         if len(fragments) > 1:
-            msg = "Invalid Mol as Fragment input: Mol must contain only one fragment"
+            msg = (
+                f"Fragment.from_mol: input Mol must contain exactly one fragment, "
+                f"got {len(fragments)} (canonical SMILES={Chem.MolToSmiles(mol, canonical=True)!r})"
+            )
             raise ValueError(msg)
         smiles = Chem.MolToSmiles(Chem.RemoveHs(mol), canonical=True)
         frag = cls(smiles=smiles, name=name)
@@ -182,7 +185,11 @@ class Fragment(BaseModel):
 
         conf_ids = AllChem.EmbedMultipleConfs(self.mol, numConfs=num_conformers, params=params)  # type: ignore[attr-defined]
         if not conf_ids:
-            raise RuntimeError("Failed to generate conformers for this molecule.")
+            raise RuntimeError(
+                f"Failed to generate conformers for Fragment(smiles={self.smiles!r}, name={self.name!r}) "
+                f"with num_conformers={num_conformers}, random_seed={random_seed}, "
+                f"prune_rms_threshold={prune_rms_threshold}"
+            )
 
         for conf_id in conf_ids:
             AllChem.UFFOptimizeMolecule(self.mol, confId=conf_id)  # type: ignore[attr-defined]

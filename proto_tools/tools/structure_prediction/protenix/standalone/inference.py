@@ -170,7 +170,9 @@ class ProtenixModel:
         # PROTENIX_ROOT_DIR is always set by dispatch() via resolve_weights_dir()
         protenix_root = os.environ.get("PROTENIX_ROOT_DIR")
         if not protenix_root:
-            raise RuntimeError("PROTENIX_ROOT_DIR not set. Set PROTO_HOME or PROTO_MODEL_CACHE to configure storage.")
+            raise RuntimeError(
+                "protenix: PROTENIX_ROOT_DIR not set — set PROTO_HOME or PROTO_MODEL_CACHE to configure storage"
+            )
         checkpoint_dir = Path(protenix_root) / "checkpoint"
         cleanup_corrupted_checkpoints(checkpoint_dir, model_name)
 
@@ -217,16 +219,20 @@ class ProtenixModel:
         # This ensures ./esm_embeddings/ is created in the temp dir, not the repo root
         working_dir = str(Path(output_dir).parent)
 
-        subprocess.run(
-            cmd,  # type: ignore[arg-type]
-            check=True,
-            text=True,
-            env=env,
-            encoding="utf-8",
-            stdout=sys.stdout if verbose else subprocess.DEVNULL,
-            stderr=sys.stderr if verbose else subprocess.DEVNULL,
-            cwd=working_dir,
-        )
+        try:
+            subprocess.run(
+                cmd,  # type: ignore[arg-type]
+                check=True,
+                text=True,
+                env=env,
+                encoding="utf-8",
+                stdout=sys.stdout if verbose else subprocess.PIPE,
+                stderr=sys.stderr if verbose else subprocess.PIPE,
+                cwd=working_dir,
+            )
+        except subprocess.CalledProcessError as e:
+            stderr_tail = " | ".join((e.stderr or "").strip().splitlines()[-10:]) or "<no stderr>"
+            raise RuntimeError(f"protenix: failed (exit {e.returncode}): {stderr_tail}") from e
 
         logger.debug("Protenix prediction completed")
 
@@ -236,7 +242,7 @@ class ProtenixModel:
             err_files = list(err_dir.iterdir())
             if err_files:
                 messages = [f"{ef.name}: {ef.read_text()[:500]}" for ef in err_files]
-                raise RuntimeError("Protenix reported errors:\n" + "\n".join(messages))
+                raise RuntimeError("protenix: errors reported:\n" + "\n".join(messages))
 
         # Read job names from input JSON to preserve ordering
         with open(input_json_path) as f:
@@ -276,7 +282,7 @@ class ProtenixModel:
         logger.debug(f"Looking for predictions in: {predictions_dir}")
 
         if not predictions_dir.is_dir():
-            raise FileNotFoundError(f"Predictions directory not found: {predictions_dir}")
+            raise FileNotFoundError(f"protenix: predictions directory not found: {predictions_dir}")
 
         best_cif = None
         best_metrics = None
@@ -303,7 +309,7 @@ class ProtenixModel:
                 best_cif = cif_file
 
         if best_cif is None:
-            raise FileNotFoundError(f"No structure output found for job '{job_name}' in {predictions_dir}")
+            raise FileNotFoundError(f"protenix: no structure output found for job {job_name!r} in {predictions_dir}")
 
         return {
             "structure_cif_output": best_cif.read_text(),
@@ -318,10 +324,7 @@ class ProtenixModel:
         venv_protenix = Path(sys.executable).parent / "protenix"
         exe = str(venv_protenix) if venv_protenix.exists() else shutil.which("protenix")
         if not exe:
-            raise ImportError(
-                "Could not find the 'protenix' executable. "
-                "Please make sure Protenix is installed in the current environment."
-            )
+            raise ImportError("protenix: 'protenix' executable not found in current environment")
         self.protenix_executable = exe
         self._loaded = True
         logger.debug(f"Protenix initialized. Using executable: {self.protenix_executable}")
@@ -367,7 +370,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             verbose=input_dict["verbose"],
         )
         return {"results": results}
-    raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"protenix: unknown operation {operation!r}; valid: ['predict']")
 
 
 def to_device(device: str) -> dict[str, Any]:
@@ -382,7 +385,7 @@ def get_memory_stats() -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+        raise ValueError("protenix: usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

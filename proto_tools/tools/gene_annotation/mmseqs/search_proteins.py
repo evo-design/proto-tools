@@ -390,7 +390,7 @@ def _parse_m8_output(raw_output: str) -> pd.DataFrame:
     except pd.errors.EmptyDataError:
         return pd.DataFrame(columns=col_names)
     except Exception as e:
-        raise ValueError(f"Failed to parse m8 output: {e}") from e
+        raise ValueError(f"mmseqs-search-proteins: failed to parse m8 output ({len(raw_output)} bytes): {e}") from e
 
     return df
 

@@ -58,23 +58,13 @@ def require_hf_token(tool_display_name: str, repo_url: str = "") -> None:
         repo_url (str): HuggingFace repo URL where the user can accept the license.
 
     Raises:
-        EnvironmentError: If no HuggingFace token is found.
+        OSError: If no HuggingFace token is found.
     """
     if resolve_hf_token():
         return
 
-    msg = (
-        f"{tool_display_name} requires a HuggingFace token to download gated model weights.\n"
-        "\n"
-        "To fix this:\n"
-        "  1. Create a HuggingFace account at https://huggingface.co\n"
+    repo = repo_url or "the model's HuggingFace page"
+    raise OSError(
+        f"{tool_display_name}: HF_TOKEN unset and no cached token; accept license at {repo} "
+        f"and run 'export HF_TOKEN=hf_...' (or 'hf auth login')"
     )
-    if repo_url:
-        msg += f"  2. Accept the model license at: {repo_url}\n"
-    else:
-        msg += "  2. Accept the model license on its HuggingFace page\n"
-    msg += (
-        "  3. Create an access token at: https://huggingface.co/settings/tokens\n"
-        "  4. Set it in your environment: export HF_TOKEN=hf_...\n"
-    )
-    raise OSError(msg)

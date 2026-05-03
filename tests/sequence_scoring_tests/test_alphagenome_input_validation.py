@@ -22,12 +22,12 @@ from proto_tools import (
 
 
 def test_interval_rejects_end_before_start():
-    with pytest.raises(ValidationError, match="end must be greater than start"):
+    with pytest.raises(ValidationError, match=r"interval_end \(\d+\) must be > interval_start"):
         AlphaGenomeInterval(chromosome="chr1", interval_start=100, interval_end=50)
 
 
 def test_interval_rejects_end_equal_to_start():
-    with pytest.raises(ValidationError, match="end must be greater than start"):
+    with pytest.raises(ValidationError, match=r"interval_end \(\d+\) must be > interval_start"):
         AlphaGenomeInterval(chromosome="chr1", interval_start=100, interval_end=100)
 
 
@@ -40,7 +40,7 @@ def test_interval_rejects_negative_start():
 
 
 def test_variant_rejects_empty_reference_bases():
-    with pytest.raises(ValidationError, match="Allele values cannot be empty"):
+    with pytest.raises(ValidationError, match=r"_bases: cannot be empty"):
         AlphaGenomeVariant(
             chromosome="chr1",
             interval_start=0,
@@ -52,7 +52,7 @@ def test_variant_rejects_empty_reference_bases():
 
 
 def test_variant_rejects_empty_alternate_bases():
-    with pytest.raises(ValidationError, match="Allele values cannot be empty"):
+    with pytest.raises(ValidationError, match=r"_bases: cannot be empty"):
         AlphaGenomeVariant(
             chromosome="chr1",
             interval_start=0,
@@ -64,7 +64,7 @@ def test_variant_rejects_empty_alternate_bases():
 
 
 def test_variant_rejects_invalid_reference_bases():
-    with pytest.raises(ValidationError, match="Allele values must only contain DNA bases"):
+    with pytest.raises(ValidationError, match=r"_bases: must only contain DNA bases"):
         AlphaGenomeVariant(
             chromosome="chr1",
             interval_start=0,
@@ -76,7 +76,7 @@ def test_variant_rejects_invalid_reference_bases():
 
 
 def test_variant_rejects_invalid_alternate_bases():
-    with pytest.raises(ValidationError, match="Allele values must only contain DNA bases"):
+    with pytest.raises(ValidationError, match=r"_bases: must only contain DNA bases"):
         AlphaGenomeVariant(
             chromosome="chr1",
             interval_start=0,
@@ -101,7 +101,7 @@ def test_variant_normalizes_alleles_to_uppercase():
 
 
 def test_variant_rejects_position_before_interval_start():
-    with pytest.raises(ValidationError, match="variant_position must be within"):
+    with pytest.raises(ValidationError, match=r"variant_position \(\d+\) must be within"):
         AlphaGenomeVariant(
             chromosome="chr1",
             interval_start=1000,
@@ -113,7 +113,7 @@ def test_variant_rejects_position_before_interval_start():
 
 
 def test_variant_rejects_position_at_interval_end():
-    with pytest.raises(ValidationError, match="variant_position must be within"):
+    with pytest.raises(ValidationError, match=r"variant_position \(\d+\) must be within"):
         AlphaGenomeVariant(
             chromosome="chr1",
             interval_start=0,
@@ -125,7 +125,7 @@ def test_variant_rejects_position_at_interval_end():
 
 
 def test_variant_rejects_position_after_interval_end():
-    with pytest.raises(ValidationError, match="variant_position must be within"):
+    with pytest.raises(ValidationError, match=r"variant_position \(\d+\) must be within"):
         AlphaGenomeVariant(
             chromosome="chr1",
             interval_start=0,

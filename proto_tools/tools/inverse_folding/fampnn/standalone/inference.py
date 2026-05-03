@@ -475,7 +475,9 @@ class FAMPNNModel:
         for part in parts:
             match = re.fullmatch(r"([A-Z])(\d+)([A-Z])", part)
             if not match:
-                raise ValueError(f"Invalid mutation format: '{part}'. Expected '<WT><position><MUT>' (e.g., 'A1V')")
+                raise ValueError(
+                    f"fampnn: invalid mutation format {part!r}; expected '<WT><position><MUT>' (e.g., 'A1V')"
+                )
             wt, pos, mut = match.groups()
             converted.append(f"{wt}{int(pos) - 1}{mut}")
         return ":".join(converted)
@@ -593,7 +595,7 @@ class FAMPNNModel:
             "0.3_cath": "fampnn_0_3_cath.pt",
         }
         if model_variant not in variant_map:
-            raise ValueError(f"Unknown model_variant: {model_variant}. Choose from {list(variant_map.keys())}")
+            raise ValueError(f"fampnn: unknown model_variant {model_variant!r}; valid: {list(variant_map.keys())}")
 
         weights_filename = variant_map[model_variant]
 
@@ -613,8 +615,8 @@ class FAMPNNModel:
 
             pkg_dir = Path(fampnn_pkg.__file__).parent.parent
             search_paths.append(pkg_dir / "weights")
-        except Exception:
-            pass
+        except ImportError as e:
+            logger.debug("fampnn: package not importable, skipping its weights/ as a fallback path (%s)", e)
 
         checkpoint_path = None
         for search_dir in search_paths:
@@ -625,8 +627,8 @@ class FAMPNNModel:
 
         if checkpoint_path is None:
             raise FileNotFoundError(
-                f"Could not find {weights_filename} in any of: {[str(p) for p in search_paths]}. "
-                f"Set PROTO_FAMPNN_WEIGHTS_DIR or run setup.sh to download weights."
+                f"fampnn: weights {weights_filename} not found in {search_paths}; "
+                f"set PROTO_FAMPNN_WEIGHTS_DIR or run setup.sh"
             )
 
         if verbose:
@@ -648,7 +650,7 @@ class FAMPNNModel:
         from standalone_helpers import move_model_to_device
 
         if self.model is None:
-            raise RuntimeError("Cannot move unloaded model. Call load() first.")
+            raise ValueError("fampnn: cannot move unloaded model to device — call load() first")
         if self.device == device:
             return
 
@@ -753,7 +755,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 device=input_dict["device"],
                 verbose=input_dict["verbose"],
             )
-        raise ValueError(f"Unknown operation: {operation}")
+        raise ValueError(
+            f"fampnn: unknown operation {operation!r}; valid: ['sample', 'pack', 'score_all_mutations', 'score_mutations']"
+        )
 
 
 def to_device(device: str) -> dict[str, Any]:
@@ -776,7 +780,7 @@ def get_memory_stats() -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+        raise ValueError("fampnn: usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

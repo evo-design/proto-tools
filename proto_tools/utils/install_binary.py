@@ -14,6 +14,7 @@ Usage:
 import importlib.util
 import platform
 import sys
+import tarfile
 import tempfile
 import time
 import urllib.request
@@ -118,7 +119,7 @@ def _download_with_progress(url: str, dest: Path) -> None:
 
     # Validate download integrity
     if total > 0 and downloaded != total:
-        raise OSError(f"Download incomplete: got {downloaded} bytes, expected {total} bytes from {url}")
+        raise OSError(f"Download incomplete from {url}: got {downloaded}/{total} bytes; check network and retry")
 
 
 def install_binary(toolkit: str) -> None:
@@ -153,9 +154,7 @@ def install_binary(toolkit: str) -> None:
         else:
             supported = ", ".join(f"{s}/{m}" for s, m in config.URLS)
             raise RuntimeError(
-                f"No {toolkit} binary available for {system}/{machine} "
-                f"(raw arch: {raw_machine}). "
-                f"Supported platforms: {supported}"
+                f"{toolkit}: no binary for {system}/{machine} (raw arch {raw_machine!r}); supported: {supported}"
             )
 
     bin_dir = Path(sys.executable).parent
@@ -174,11 +173,16 @@ def install_binary(toolkit: str) -> None:
                 print(f"  Download complete ({size_mb:.1f} MB)")
                 print(f"  Extracting binaries to {bin_dir}...")
 
-                config.extract(archive_path, bin_dir)
+                try:
+                    config.extract(archive_path, bin_dir)
+                except (OSError, EOFError, tarfile.TarError) as e:
+                    raise OSError(
+                        f"{toolkit}: extract failed for {archive_path} -> {bin_dir}: {type(e).__name__}: {e}"
+                    ) from e
 
             print(f"{toolkit} installation complete!")
             return
-        except (OSError, EOFError, urllib.error.URLError) as exc:  # noqa: PERF203 -- retry loop
+        except (OSError, EOFError, tarfile.TarError, urllib.error.URLError) as exc:  # noqa: PERF203 -- retry loop
             last_error = exc
             if attempt < _MAX_DOWNLOAD_RETRIES:
                 print(

@@ -575,7 +575,7 @@ def run_colabfold_search(
         return _local_search(sequences, sequence_ids, config, msa_out_dir, instance=instance)  # type: ignore[arg-type]
     if config.search_mode == "remote":
         return _remote_search(sequences, sequence_ids, config, msa_out_dir, instance=instance)  # type: ignore[arg-type]
-    raise ValueError(f"Invalid search mode: {config.search_mode}")
+    raise ValueError(f"colabfold-search: invalid search_mode {config.search_mode!r}; expected 'local' or 'remote'")
 
 
 # ============================================================================
@@ -821,9 +821,9 @@ def _remote_search(
 
         if num_successful == 0:
             # Total failure
-            error_msg = "Remote MSA search failed for all sequences"
+            error_msg = f"colabfold-search: remote MSA search failed for all {num_failed} sequence(s)"
             if "errors" in output_data:
-                error_msg += f"\nErrors: {output_data['errors']}"
+                error_msg += f"; errors: {output_data['errors']}"
             raise RuntimeError(error_msg)
         # Partial failure - log warning but continue
         if config.verbose:

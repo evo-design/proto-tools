@@ -83,7 +83,7 @@ def _resolve_checkpoint_path(model_version: str) -> Path | None:
         checkpoint_path = Path(env_checkpoint).expanduser()
         if checkpoint_path.exists():
             return checkpoint_path
-        raise FileNotFoundError(f"ALPHAGENOME_CHECKPOINT_PATH does not exist: {checkpoint_path}")
+        raise FileNotFoundError(f"alphagenome: ALPHAGENOME_CHECKPOINT_PATH does not exist: {checkpoint_path}")
 
     repo_id = f"google/alphagenome-{model_version.replace('_', '-').lower()}"
     try:
@@ -91,7 +91,8 @@ def _resolve_checkpoint_path(model_version: str) -> Path | None:
             repo_id=repo_id,
             local_files_only=True,
         )
-    except Exception:
+    except Exception as e:
+        logger.debug("alphagenome: cache probe failed: %s", e)
         return None
     return Path(checkpoint)
 
@@ -308,17 +309,21 @@ class AlphaGenomeModel:
 
         jax_device = resolve_jax_device(device)
         checkpoint_path = _resolve_checkpoint_path(self.model_version)
-        if checkpoint_path is not None:
-            if verbose:
-                logger.info("Loading AlphaGenome checkpoint from %s", checkpoint_path)
-            self.model = dna_model.create(checkpoint_path, device=jax_device)
-        else:
-            if verbose:
-                logger.info(
-                    "No local checkpoint found for model '%s'; falling back to Hugging Face download.",
-                    self.model_version,
-                )
-            self.model = dna_model.create_from_huggingface(self.model_version, device=jax_device)
+        try:
+            if checkpoint_path is not None:
+                if verbose:
+                    logger.info("Loading AlphaGenome checkpoint from %s", checkpoint_path)
+                self.model = dna_model.create(checkpoint_path, device=jax_device)
+            else:
+                if verbose:
+                    logger.info(
+                        "No local checkpoint found for model '%s'; falling back to Hugging Face download.",
+                        self.model_version,
+                    )
+                self.model = dna_model.create_from_huggingface(self.model_version, device=jax_device)
+        except Exception as e:
+            src = checkpoint_path or f"HF repo {self.model_version!r}"
+            raise RuntimeError(f"alphagenome: model load from {src} failed: {e}") from e
         self.device = device
         self._loaded = True
 
@@ -463,7 +468,7 @@ def _validate_min_scorer_width(
             default=max(_SUPPORTED_CONTEXT_LENGTHS),
         )
         raise ValueError(
-            f"{operation}: effective context ({effective:,} bp) is smaller than "
+            f"alphagenome: {operation}: effective context ({effective:,} bp) is smaller than "
             f"the minimum required by the scorer ({min_scorer_width:,} bp). "
             f"Please provide an interval of at least {min_context:,} bp."
         )
@@ -476,7 +481,7 @@ def _validate_sequence_length(sequence_length: int, operation: str) -> None:
 
     supported = ", ".join(f"{length:,}" for length in sorted(_SUPPORTED_CONTEXT_LENGTHS))
     raise ValueError(
-        f"{operation}: sequence length ({sequence_length:,} bp) is unsupported. Supported lengths: {supported} bp."
+        f"alphagenome: {operation}: sequence length ({sequence_length:,} bp) is unsupported. Supported lengths: {supported} bp."
     )
 
 
@@ -495,7 +500,7 @@ def _resize_interval(
     target = min((ctx for ctx in _SUPPORTED_CONTEXT_LENGTHS if ctx >= interval.width), default=None)
     if target is None:
         raise ValueError(
-            f"Context interval ({interval.width:,} bp) exceeds the largest "
+            f"alphagenome: context interval ({interval.width:,} bp) exceeds the largest "
             f"supported context length ({max(_SUPPORTED_CONTEXT_LENGTHS):,} bp)."
         )
     supported_str = ", ".join(f"{ctx:,}" for ctx in sorted(_SUPPORTED_CONTEXT_LENGTHS))
@@ -557,7 +562,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         _model = AlphaGenomeModel(model_version=model_version)
 
     if operation not in _OPERATIONS:
-        raise ValueError(f"Unsupported operation: {operation!r}")
+        raise ValueError(f"alphagenome: unknown operation {operation!r}; valid: {sorted(_OPERATIONS)}")
 
     method = getattr(_model, operation)
     return method(**kwargs)  # type: ignore[no-any-return]
@@ -585,7 +590,7 @@ def get_memory_stats() -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+        raise ValueError("alphagenome: usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

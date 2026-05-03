@@ -161,17 +161,21 @@ class RFdiffusion3Model:
 
         env = get_subprocess_device_env(device)
 
-        # Run the command
-        result = subprocess.run(
-            cmd,  # type: ignore[arg-type]
-            check=True,
-            text=True,
-            env=env,
-            encoding="utf-8",
-        )
-
-        if result.stdout:
-            logger.debug(result.stdout)
+        # Run the command — inherit streams when verbose for real-time progress;
+        # capture when not verbose so we can surface stderr tail on failure.
+        try:
+            subprocess.run(
+                cmd,  # type: ignore[arg-type]
+                check=True,
+                text=True,
+                env=env,
+                encoding="utf-8",
+                stdout=sys.stdout if verbose else subprocess.PIPE,
+                stderr=sys.stderr if verbose else subprocess.PIPE,
+            )
+        except subprocess.CalledProcessError as e:
+            stderr_tail = " | ".join((e.stderr or "").strip().splitlines()[-10:]) or "<no stderr>"
+            raise RuntimeError(f"rfdiffusion3: failed (exit {e.returncode}): {stderr_tail}") from e
 
         # Extract the outputs
         return self._extract_rfd3_outputs(output_dir)
@@ -191,7 +195,7 @@ class RFdiffusion3Model:
         venv_rfdiffusion3 = Path(sys.executable).parent / "rfd3"
         exe = str(venv_rfdiffusion3) if venv_rfdiffusion3.exists() else shutil.which("rfd3")
         if not exe:
-            raise ImportError("Could not find 'rfd3' executable. rc-foundry[rfd3] must be installed.")
+            raise ImportError("rfdiffusion3: 'rfd3' executable not found; rc-foundry[rfd3] must be installed")
         self.rfd3_executable = exe
         self._loaded = True
 
@@ -290,7 +294,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         _model = RFdiffusion3Model()
 
     kwargs = dict(input_dict)
-    kwargs.pop("operation")
+    operation = kwargs.pop("operation")
+    if operation != "design":
+        raise ValueError(f"rfdiffusion3: unknown operation {operation!r}; valid: ['design']")
     device = kwargs.pop("device")
     rfdiffusion3_input_json = kwargs.pop("input_json_path")
     rfdiffusion3_output_dir = kwargs.pop("output_dir")
@@ -322,7 +328,7 @@ def get_memory_stats() -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+        raise ValueError("rfdiffusion3: usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

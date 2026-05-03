@@ -96,7 +96,13 @@ proto_install_cuda_toolkit() {
 
     if [ -z "$cuda_constraint" ]; then
         local cuda_major="${DETECTED_CUDA_VERSION:-12}"
-        cuda_constraint="${cuda_major}.*"
+        # Cap >= 13 to 12.8 — conda-forge cuda-* packages don't yet ship CUDA 13.
+        if [ "$cuda_major" -ge 13 ] 2>/dev/null; then
+            echo "proto_install_cuda_toolkit: detected CUDA ${cuda_major}; capping to 12.8 (no conda-forge cuda-13 packages yet)"
+            cuda_constraint="12.8"
+        else
+            cuda_constraint="${cuda_major}.*"
+        fi
     fi
 
     echo "Installing CUDA toolkit ${cuda_constraint} locally via micromamba..."
@@ -113,9 +119,11 @@ proto_install_cuda_toolkit() {
         packages+=("${extra_packages[@]}")
     fi
 
+    local cuda_log="/tmp/cuda_install.$$.log"
     if ! "$MAMBA_BIN" create -y -p "$VENV_PATH/cuda_env" -c nvidia -c conda-forge \
-        "${packages[@]}"; then
-        echo "ERROR: Failed to install CUDA toolkit via micromamba"
+        "${packages[@]}" 2>&1 | tee "$cuda_log"; then
+        echo "ERROR: proto_install_cuda_toolkit (constraint=${cuda_constraint}) failed at $VENV_PATH/cuda_env via $MAMBA_BIN; tail of log ($cuda_log):" >&2
+        tail -5 "$cuda_log" >&2
         exit 1
     fi
 }
@@ -199,8 +207,9 @@ proto_resolve_weights_dir() {
 #                 header. Pass via heredoc for readability.
 #
 # Sets ASSET_DIR to the resolved path on success. Exits 64 with the sentinel
-# on the last stderr line on failure (last-line so ``_stderr_tail`` in
-# ``tool_instance.py`` always preserves it).
+# as the FIRST stderr line on failure, followed by 1-2 lines of context. The
+# parser in ``tool_instance.py`` scans the whole output, so position is for
+# human readability — the sentinel comes first so it's not buried.
 #
 # Example:
 #   proto_resolve_asset_availability alphafold3 "*.bin*" \
@@ -291,28 +300,15 @@ proto_resolve_asset_availability() {
     fi
 
     {
-        echo ""
-        echo "============================================================"
-        echo "${toolkit} ${asset_kind} not provisioned on this host"
-        echo "============================================================"
-        echo "Resolved location (default cache):"
-        echo "  ${ASSET_DIR}"
-        echo "Expected files matching: ${pattern}"
+        # Sentinel FIRST so callers and humans see the machine-readable signal
+        # before context. The proto-tools test layer parses this exact prefix
+        # and converts the failure into a skip.
+        echo "[proto-tools] ASSET_NOT_AVAILABLE: ${toolkit}:${asset_kind}"
+        echo "${toolkit} ${asset_kind} not provisioned at ${ASSET_DIR} (expected files matching '${pattern}'); set ${override_var}=/path or place files there to enable."
         if [ -n "$license_url" ]; then
-            echo ""
-            echo "License / access:"
-            echo "  ${license_url}"
+            echo "License / access: ${license_url}"
         fi
         _emit_hint
-        echo ""
-        echo "To enable:"
-        echo "  1. Place ${asset_kind} matching '${pattern}' in the directory above, OR"
-        echo "  2. Set ${override_var}=/path/to/${asset_kind}/dir and re-run."
-        echo "============================================================"
-        # Sentinel must be the LAST stderr line so _stderr_tail (last 10
-        # non-empty lines) preserves it. The proto-tools test layer parses
-        # this exact prefix and converts the failure into a skip.
-        echo "[proto-tools] ASSET_NOT_AVAILABLE: ${toolkit}:${asset_kind}"
     } >&2
     exit 64
 }
@@ -362,34 +358,34 @@ proto_check_gated_hf_repo() {
     fi
 
     if [ "$http_code" != "200" ]; then
-        echo ""
-        echo "============================================================"
-        echo "ERROR: Cannot access HuggingFace repo '${repo_id}'"
-        echo "============================================================"
-        echo ""
-        if [ -z "$hf_token" ]; then
-            echo "No HuggingFace token found. This is a gated model that"
-            echo "requires authentication."
-            echo ""
-            echo "To fix this:"
-            echo "  1. Create a HuggingFace account at https://huggingface.co"
-            echo "  2. Accept the model license at:"
-            echo "     ${license_url}"
-            echo "  3. Create an access token at:"
-            echo "     https://huggingface.co/settings/tokens"
-            echo "  4. Set the token in your environment:"
-            echo "     export HF_TOKEN=hf_..."
-            echo "     Or log in with: huggingface-cli login"
+        local reason
+        local token_state
+        if [ -n "$hf_token" ]; then
+            token_state="present"
         else
-            echo "A HuggingFace token was found but access was denied (HTTP ${http_code})."
-            echo ""
-            echo "To fix this:"
-            echo "  1. Visit: ${license_url}"
-            echo "  2. Accept the license/terms for this model"
-            echo "  3. Re-run the setup"
+            token_state="missing"
         fi
-        echo ""
-        echo "============================================================"
+        case "$http_code" in
+            401)
+                if [ "$token_state" = "present" ]; then
+                    reason="unauthorized — token present but rejected (expired/revoked); regenerate at https://huggingface.co/settings/tokens"
+                else
+                    reason="unauthorized — no HF_TOKEN found; set HF_TOKEN (or run 'hf auth login')"
+                fi
+                ;;
+            403)
+                if [ "$token_state" = "present" ]; then
+                    reason="forbidden — token present but license not accepted; accept at ${license_url}"
+                else
+                    reason="forbidden — no HF_TOKEN found and license not accepted; set HF_TOKEN AND accept license at ${license_url}"
+                fi
+                ;;
+            404) reason="repo or file not found" ;;
+            429) reason="rate limited" ;;
+            000|"") reason="curl could not reach huggingface.co (network/DNS failure)" ;;
+            *)   reason="HTTP ${http_code} (token=${token_state})" ;;
+        esac
+        echo "ERROR: HuggingFace gated-repo check for '${repo_id}/${probe_file}' failed: ${reason}" >&2
         exit 1
     fi
 }

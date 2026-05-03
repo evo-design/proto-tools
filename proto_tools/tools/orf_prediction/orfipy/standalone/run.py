@@ -135,9 +135,16 @@ def run_orfipy(input_data: dict[str, Any]) -> dict[str, Any]:
         if config.get("translation_table") is not None:
             cmd.extend(["--table", str(config["translation_table"])])
 
-        proc = subprocess.run(cmd, capture_output=True, text=True, cwd=temp_dir_str, timeout=300)
+        timeout_seconds = 300
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, cwd=temp_dir_str, timeout=timeout_seconds)
+        except subprocess.TimeoutExpired as e:
+            raise RuntimeError(f"orfipy: ORF prediction timed out after {timeout_seconds}s") from e
         if proc.returncode != 0:
-            raise RuntimeError(f"Orfipy failed with code {proc.returncode}: {proc.stderr}")
+            stderr_tail = (proc.stderr or "").strip().splitlines()[-10:]
+            raise RuntimeError(
+                f"orfipy: ORF prediction failed (exit {proc.returncode}): {' | '.join(stderr_tail) or '<no stderr>'}"
+            )
 
         # Parse all results and group by parent sequence
         from Bio import SeqIO
@@ -152,7 +159,7 @@ def run_orfipy(input_data: dict[str, Any]) -> dict[str, Any]:
 
         if len(aa_records) != len(nt_records):
             raise ValueError(
-                f"Mismatch between amino acid ({len(aa_records)}) and nucleotide ({len(nt_records)}) records"
+                f"orfipy: mismatch between amino acid ({len(aa_records)}) and nucleotide ({len(nt_records)}) records"
             )
 
         # Group ORFs by parent sequence index
@@ -208,7 +215,7 @@ def to_device(device: str) -> dict[str, Any]:
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print(
-            f"Usage: python {sys.argv[0]} <input_json_path> <output_json_path>",
+            f"orfipy: usage: python {sys.argv[0]} <input_json_path> <output_json_path>",
             file=sys.stderr,
         )
         sys.exit(1)

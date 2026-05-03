@@ -11,6 +11,7 @@ original order.
 import contextlib
 import contextvars
 import logging
+import os
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import ContextVar
@@ -245,8 +246,10 @@ class ToolPool:
         else:
             n = number_of_available_gpus()
             if n == 0:
+                cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "(unset)")
                 raise RuntimeError(
-                    "ToolPool requires at least one GPU. No GPUs detected (check CUDA_VISIBLE_DEVICES or nvidia-smi)."
+                    f"ToolPool requires at least one GPU but none detected "
+                    f"(CUDA_VISIBLE_DEVICES={cuda_visible}); pass devices=[...] or check nvidia-smi"
                 )
             self._devices = [f"cuda:{i}" for i in range(n)]
 
@@ -393,10 +396,11 @@ class ToolPool:
 
                     output_items = getattr(result, iterable_output_field, [])  # type: ignore[arg-type]
                     if len(output_items) != len(assignment.items):
+                        input_indices = [wi.original_index for wi in assignment.items]
                         raise RuntimeError(
-                            f"ToolPool: {tool_key} returned {len(output_items)} "
-                            f"items but expected {len(assignment.items)} for "
-                            f"device {device_id}"
+                            f"ToolPool: {tool_key} on {device_id} returned {len(output_items)} "
+                            f"{iterable_output_field} but expected {len(assignment.items)} "
+                            f"(input indices {input_indices})"
                         )
                     indexed = [
                         (wi.original_index, item) for wi, item in zip(assignment.items, output_items, strict=False)
@@ -442,8 +446,14 @@ class ToolPool:
             if failed:
                 n_failed = sum(len(f["indices"]) for f in failed)
                 n_ok = len(all_indexed)
+                first_exc = failed[0]["exception"]
+                first_msg = str(first_exc).splitlines()[0] if str(first_exc) else "<no message>"
+                if len(first_msg) > 200:
+                    first_msg = first_msg[:200] + "..."
                 raise PartialFailureError(
-                    f"ToolPool: {len(failed)} partition(s) failed ({n_failed} items lost, {n_ok} succeeded)",
+                    f"ToolPool: {len(failed)}/{len(active_assignments)} partition(s) failed "
+                    f"({n_failed} items lost, {n_ok} succeeded); "
+                    f"first failure: {type(first_exc).__name__}: {first_msg}",
                     succeeded=list(all_indexed),
                     failed=failed,
                 )

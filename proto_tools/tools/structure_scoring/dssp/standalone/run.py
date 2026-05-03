@@ -14,7 +14,7 @@ def _find_dssp_binary() -> str:
         candidate = bin_dir / name
         if candidate.exists():
             return str(candidate)
-    raise FileNotFoundError(f"DSSP binary not found in {bin_dir}. Recreate the dssp standalone environment.")
+    raise FileNotFoundError(f"dssp: binary not found in {bin_dir}; re-run standalone/setup.sh")
 
 
 def _secondary_structure_percentages(pdb_content: str, chain_id: str, dssp_binary: str) -> dict[str, float]:
@@ -34,7 +34,7 @@ def _secondary_structure_percentages(pdb_content: str, chain_id: str, dssp_binar
         parser = PDBParser(QUIET=True)  # type: ignore[no-untyped-call]
         model = parser.get_structure("protein", str(tmp_path))[0]  # type: ignore[no-untyped-call]
         if chain_id not in model:
-            raise ValueError(f"Chain {chain_id!r} not found in DSSP input PDB")
+            raise ValueError(f"dssp: chain {chain_id!r} not found in input PDB")
 
         dssp = DSSP(model, str(tmp_path), dssp=dssp_binary)  # type: ignore[no-untyped-call]
         ss_counts = {"helix": 0, "sheet": 0, "loop": 0}
@@ -55,7 +55,7 @@ def _secondary_structure_percentages(pdb_content: str, chain_id: str, dssp_binar
 
         total = sum(ss_counts.values())
         if total == 0:
-            raise ValueError(f"DSSP produced no residue assignments for chain {chain_id!r}")
+            raise ValueError(f"dssp: produced no residue assignments for chain {chain_id!r}")
         return {
             "helix_pct": round(ss_counts["helix"] / total * 100.0, 2),
             "sheet_pct": round(ss_counts["sheet"] / total * 100.0, 2),
@@ -81,7 +81,7 @@ def to_device(device: str) -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print(f"Usage: {sys.argv[0]} <input_json_path> <output_json_path>", file=sys.stderr)
+        print(f"dssp: usage: {sys.argv[0]} <input_json_path> <output_json_path>", file=sys.stderr)
         sys.exit(1)
 
     with open(sys.argv[1]) as f:

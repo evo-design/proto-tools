@@ -195,13 +195,18 @@ def detect_compute_environment() -> dict[str, str]:
     try:
         driver_major = int(driver_version.split(".")[0])
     except (ValueError, IndexError):
-        logger.warning(f"Could not parse driver version '{driver_version}', using fallback compatibility range")
+        logger.warning(
+            f"Unparseable NVIDIA driver version {driver_version!r} (expected 'major.minor', e.g. '550.54'); "
+            f"falling back to driver_major=0"
+        )
         driver_major = 0
 
     try:
         cuda_major = int(cuda_version.split(".")[0])
     except (ValueError, IndexError):
-        logger.warning(f"Could not parse CUDA version '{cuda_version}', defaulting to CUDA 12")
+        logger.warning(
+            f"Unparseable CUDA version {cuda_version!r} (expected 'major.minor', e.g. '12.4'); defaulting to CUDA 12"
+        )
         cuda_major = 12
 
     # Get recommended specs

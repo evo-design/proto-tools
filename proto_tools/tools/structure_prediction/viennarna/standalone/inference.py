@@ -77,14 +77,14 @@ class ViennaRNAModel:
 
         # Validate input sequences
         if not sequences:
-            raise ValueError("At least one sequence is required")
+            raise ValueError("viennarna: at least one sequence is required")
 
         valid_chars = set("AUGCTNaugctn")
         for seq_idx, seq in enumerate(sequences):
             invalid_chars = set(seq) - valid_chars
             if invalid_chars:
                 raise ValueError(
-                    f"Invalid nucleotide characters in sequence {seq_idx}: {', '.join(sorted(invalid_chars))}"
+                    f"viennarna: sequence {seq_idx} contains invalid nucleotide characters: {', '.join(sorted(invalid_chars))}"
                 )
 
         # Configure model details
@@ -164,7 +164,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     kwargs.pop("device")  # ViennaRNA is CPU-only, doesn't use device
     if operation == "predict":
         return _model(**kwargs)
-    raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"viennarna: unknown operation {operation!r}; valid: ['predict']")
 
 
 # ============================================================================
@@ -179,7 +179,7 @@ def to_device(device: str) -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+        raise ValueError("viennarna: usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

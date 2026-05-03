@@ -23,7 +23,7 @@ uv pip install cvxopt
 # 1. grad_merge_method: string default breaks JAX JIT — convert to bool dict
 sed -i "s/\"grad_merge_method\": 'pcgrad'/\"grad_merge_method\": {\"scale\": False, \"mgda\": False, \"pcgrad\": True}/" "$GERMINAL_DIR/colabdesign/af/model.py"
 grep -q '"grad_merge_method": {"scale"' "$GERMINAL_DIR/colabdesign/af/model.py" \
-  || { echo "ERROR: grad_merge_method sed patch did not apply"; exit 1; }
+  || { echo "ERROR: alphafold2 setup: grad_merge_method sed patch did not apply (Germinal ColabDesign fork)" >&2; exit 1; }
 # 2. iglm/ablang: imported at module level but require torch — stub them out
 #    (our pipeline scores AbLang externally via proto-tools' ablang-gradient tool)
 mkdir -p "$GERMINAL_DIR/colabdesign/iglm" "$GERMINAL_DIR/colabdesign/ablang"

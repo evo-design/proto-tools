@@ -392,6 +392,12 @@ class PersistentWorker:
         """Check if the worker subprocess is running."""
         return self._process is not None and self._process.poll() is None
 
+    def _crash_context(self) -> str:
+        """Return ``"process exit=X; last stderr: Y"`` for embedding in error messages."""
+        exit_code = self._process.poll() if self._process is not None else "no-process"
+        stderr_tail = " | ".join(self._stderr_lines[-20:]) or "<no stderr>"
+        return f"process exit={exit_code}; last stderr: {stderr_tail}"
+
     def _drain_stderr(self) -> None:
         """Background thread: read stderr lines from the worker process.
 
@@ -480,7 +486,7 @@ class PersistentWorker:
                 self.start()
 
             if self._process is None or self._process.stdin is None or self._process.stdout is None:
-                raise RuntimeError(f"Worker for {self.toolkit} failed to start: process or pipes are None")
+                raise RuntimeError(f"{self.toolkit} worker not ready ({self._crash_context()})")
 
             request_id = uuid.uuid4().hex[:8]
             request = {"id": request_id, "input": input_dict}
@@ -490,9 +496,8 @@ class PersistentWorker:
                 self._process.stdin.write(request_line)
                 self._process.stdin.flush()
             except (BrokenPipeError, OSError) as exc:
-                stderr_tail = "\n".join(self._stderr_lines[-20:])
                 raise RuntimeError(
-                    f"Worker for {self.toolkit} crashed while sending request.\nstderr:\n{stderr_tail}"
+                    f"{self.toolkit} worker crashed sending request {request_id} ({self._crash_context()})"
                 ) from exc
 
             # Read response line (with optional timeout).
@@ -501,7 +506,9 @@ class PersistentWorker:
                 ready, _, _ = select.select([self._process.stdout.fileno()], [], [], timeout)
                 if not ready:
                     self.stop()
-                    raise TimeoutError(f"Worker for {self.toolkit} timed out after {timeout}s")
+                    raise TimeoutError(
+                        f"{self.toolkit} worker timed out waiting for response to request {request_id} after {timeout}s"
+                    )
 
             # Read header, skipping non-protocol lines (warnings/logs).
             # Header is either PROTO_LENGTH:<n> (pipe payload) or PROTO_FILE:<path>
@@ -511,8 +518,10 @@ class PersistentWorker:
             while True:
                 header_line = self._process.stdout.readline()
                 if not header_line:
-                    stderr_tail = "\n".join(self._stderr_lines[-20:])
-                    raise RuntimeError(f"Worker for {self.toolkit} closed stdout unexpectedly.\nstderr:\n{stderr_tail}")
+                    raise RuntimeError(
+                        f"{self.toolkit} worker closed stdout before responding to request {request_id} "
+                        f"({self._crash_context()})"
+                    )
 
                 header_line = header_line.strip()
                 if header_line.startswith(("PROTO_LENGTH:", "PROTO_FILE:")):
@@ -549,29 +558,36 @@ class PersistentWorker:
                     json_length = int(header_line.split(":", 1)[1])
                 except (ValueError, IndexError) as exc:
                     raise RuntimeError(
-                        f"Worker for {self.toolkit} sent invalid LENGTH header: {header_line!r}"
+                        f"{self.toolkit} worker sent invalid LENGTH header {header_line!r} "
+                        f"for request {request_id} ({self._crash_context()})"
                     ) from exc
 
                 response_bytes = self._process.stdout.read(json_length)
                 if len(response_bytes) != json_length:
                     raise RuntimeError(
-                        f"Worker for {self.toolkit} sent incomplete JSON: "
-                        f"expected {json_length} bytes, got {len(response_bytes)}"
+                        f"{self.toolkit} worker sent incomplete JSON for request {request_id}: "
+                        f"expected {json_length} bytes, got {len(response_bytes)} ({self._crash_context()})"
                     )
 
                 try:
                     response = json.loads(response_bytes)
                 except json.JSONDecodeError as exc:
-                    raise RuntimeError(f"Worker for {self.toolkit} returned invalid JSON: {response_bytes!r}") from exc
+                    raise RuntimeError(
+                        f"{self.toolkit} worker returned invalid JSON for request {request_id} "
+                        f"({self._crash_context()}); payload: {response_bytes!r}"
+                    ) from exc
 
             if response.get("id") != request_id:
                 raise RuntimeError(
-                    f"Worker for {self.toolkit} returned mismatched request id: "
-                    f"expected {request_id}, got {response.get('id')}"
+                    f"{self.toolkit} worker returned mismatched id "
+                    f"(expected {request_id}, got {response.get('id')}); {self._crash_context()}"
                 )
 
             if "error" in response:
-                raise RuntimeError(f"Worker for {self.toolkit} returned an error:\n{response['error']}")
+                raise RuntimeError(
+                    f"{self.toolkit} worker error for request {request_id}: {response['error']}; "
+                    f"{self._crash_context()}"
+                )
 
             return response["result"]  # type: ignore[no-any-return]
 

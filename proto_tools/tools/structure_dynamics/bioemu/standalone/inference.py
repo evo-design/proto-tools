@@ -91,7 +91,7 @@ class BioEmuModel:
         xtc_path = output_path / "samples.xtc"
 
         if not top_path.exists():
-            raise FileNotFoundError(f"BioEmu topology file not found: {top_path}")
+            raise FileNotFoundError(f"bioemu: topology file not found: {top_path}")
 
         traj = md.load(str(xtc_path), top=str(top_path)) if xtc_path.exists() else md.load(str(top_path))
 
@@ -160,17 +160,20 @@ def run_bioemu_batch(input_data: dict[str, Any]) -> dict[str, Any]:
         # Derive a distinct but reproducible seed for each sequence
         per_seq_seed = seed + seq_idx if seed is not None else None
 
-        result = model(
-            sequence=sequence,
-            num_samples=input_data["num_samples"],
-            model_name=input_data["model_name"],
-            filter_samples=input_data["filter_samples"],
-            batch_size=input_data["batch_size"],
-            device=input_data["device"],
-            output_dir=per_sequence_output_dir,
-            seed=per_seq_seed,
-            verbose=verbose,
-        )
+        try:
+            result = model(
+                sequence=sequence,
+                num_samples=input_data["num_samples"],
+                model_name=input_data["model_name"],
+                filter_samples=input_data["filter_samples"],
+                batch_size=input_data["batch_size"],
+                device=input_data["device"],
+                output_dir=per_sequence_output_dir,
+                seed=per_seq_seed,
+                verbose=verbose,
+            )
+        except Exception as e:
+            raise RuntimeError(f"bioemu: sequence {seq_idx + 1}/{len(sequences)} failed: {e}") from e
         results.append(result)
 
     model.unload(verbose=verbose)
@@ -187,7 +190,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     operation = input_dict["operation"]
     if operation == "sample":
         return run_bioemu_batch(input_dict)
-    raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"bioemu: unknown operation {operation!r}; valid: ['sample']")
 
 
 def to_device(device: str) -> dict[str, Any]:
@@ -207,7 +210,7 @@ def get_memory_stats() -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+        raise ValueError("bioemu: usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as handle:
         input_payload = json.load(handle)

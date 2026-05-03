@@ -685,14 +685,11 @@ class ToolInstance:
             return
         if self.toolkit in self._build_failures:
             tail = self._build_failures[self.toolkit]
-            hint = f"\n{tail}" if tail else ""
             sentinel = self._parse_asset_sentinel(tail)
             if sentinel is not None:
                 toolkit, asset_kind = sentinel
                 raise MissingAssetError(toolkit, asset_kind, tail)
-            raise RuntimeError(
-                f"'{self.toolkit}' may not be compatible with your system. Check logs for details.{hint}"
-            )
+            raise RuntimeError(f"{self.toolkit}: previously failed setup; last error: {tail or '<no stderr>'}")
         # Show one-time notice if using default storage locations
         from proto_tools.utils.proto_home import show_first_run_notice
 
@@ -1237,7 +1234,7 @@ class ToolInstance:
                 )
                 raise
             except subprocess.TimeoutExpired:
-                raise TimeoutError(f"Tool {self.toolkit} timed out after {effective_timeout}s") from None
+                raise TimeoutError(f"{self.toolkit}: timed out after {effective_timeout}s") from None
             finally:
                 pbar.close()
 
@@ -1460,8 +1457,8 @@ class ToolInstance:
                 stderr = e.stderr.decode("utf-8", errors="replace") if e.stderr else ""
                 logger.error("Failed to create foundation environment:\n%s", stderr)
                 raise RuntimeError(
-                    f"Failed to create foundation environment at {foundation_path}. "
-                    f"Check network connectivity and disk space."
+                    f"foundation_env: micromamba create failed at {foundation_path} (exit {e.returncode}): "
+                    f"{' | '.join((stderr or '').strip().splitlines()[-10:]) or '<no stderr>'}"
                 ) from e
 
             marker.touch()
@@ -1771,7 +1768,7 @@ class ToolInstance:
         """
         tool_dir = cls._get_tool_dirs().get(toolkit)
         if tool_dir is None:
-            raise ValueError(f"Unknown tool {toolkit!r}")
+            raise ValueError(f"Unknown tool {toolkit!r}; valid: {sorted(cls._get_tool_dirs())}")
 
         standalone_dir = tool_dir / "standalone"
         marker = standalone_dir / "shared_env.txt"
@@ -1855,8 +1852,8 @@ class ToolInstance:
         """Detect the ``proto_resolve_asset_availability`` sentinel in output.
 
         The shell helper prints
-        ``[proto-tools] ASSET_NOT_AVAILABLE: <toolkit>:<asset_kind>`` as the
-        last stderr line and exits 64. Returns ``(toolkit, asset_kind)`` when
+        ``[proto-tools] ASSET_NOT_AVAILABLE: <toolkit>:<asset_kind>`` to
+        stderr and exits 64. Returns ``(toolkit, asset_kind)`` when
         present (any line — checks the whole output, not just the tail, so it
         survives even if subsequent shell teardown adds noise after exit).
 
@@ -2043,7 +2040,6 @@ class ToolInstance:
                 f"OUTPUT:\n{combined_output or ''}\n"
             )
             self._build_failures[self.toolkit] = tail
-            hint = f"\n{tail}" if tail else ""
 
             # Asset-not-provisioned signalled by proto_resolve_asset_availability:
             # raise the typed exception so the test layer converts it to a skip
@@ -2053,9 +2049,7 @@ class ToolInstance:
                 toolkit, asset_kind = sentinel
                 raise MissingAssetError(toolkit, asset_kind, tail)
 
-            raise RuntimeError(
-                f"'{self.toolkit}' may not be compatible with your system. setup.sh failed (exit {returncode}).{hint}"
-            )
+            raise RuntimeError(f"{self.toolkit}: setup.sh failed (exit {returncode}): {tail or '<no stderr>'}")
 
 
 atexit.register(ToolInstance.clear_all)

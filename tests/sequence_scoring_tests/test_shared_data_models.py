@@ -56,5 +56,5 @@ def test_sequence_target_range_rejects_reversed_coordinates():
     """Target ranges should keep start and end paired and ordered."""
     with pytest.raises(ValueError, match="integer"):
         SequenceTargetRange(start=True, end=2)
-    with pytest.raises(ValueError, match="greater than or equal"):
+    with pytest.raises(ValueError, match=r"end \(4\) must be >= start \(5\)"):
         SequenceTargetRange(start=5, end=4)

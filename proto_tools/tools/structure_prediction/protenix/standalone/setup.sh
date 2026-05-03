@@ -25,11 +25,7 @@ if ! "$MAMBA_BIN" create -y -p "$VENV_PATH/cuda_env" -c nvidia -c conda-forge \
     "cuda-nvcc=${CUDA_TOOLKIT_VERSION}" \
     "cuda-cudart-dev=${CUDA_TOOLKIT_VERSION}" \
     "gcc=12.*" "gxx=12.*" "sysroot_linux-64=2.17"; then
-    echo "ERROR: Failed to install CUDA toolkit via micromamba"
-    echo "This may indicate:"
-    echo "  - Network connectivity issues"
-    echo "  - Unavailable CUDA version ${CUDA_TOOLKIT_VERSION} for your platform"
-    echo "  - Insufficient disk space"
+    echo "ERROR: protenix setup: micromamba CUDA toolkit install failed (network/availability of CUDA ${CUDA_TOOLKIT_VERSION}/disk space)" >&2
     exit 1
 fi
 
@@ -41,7 +37,7 @@ echo "Using local CUDA installation at: $CUDA_HOME"
 # The conda CUDA toolkit uses different target names depending on version and arch.
 CUDA_TARGET=$(ls "$CUDA_HOME/targets/" 2>/dev/null | head -1)
 if [ -z "$CUDA_TARGET" ]; then
-    echo "ERROR: No CUDA target directory found in $CUDA_HOME/targets/"
+    echo "ERROR: protenix setup: no CUDA target directory under $CUDA_HOME/targets/" >&2
     exit 1
 fi
 echo "Detected CUDA target: $CUDA_TARGET"
@@ -163,7 +159,7 @@ SITECUSTOMIZE
 
 echo "Testing CUDA extension compilation..."
 python -c "from protenix.model.layer_norm.layer_norm import FusedLayerNorm; print('✓ Protenix CUDA extensions loaded successfully')" || {
-    echo "ERROR: Failed to load Protenix CUDA extensions"
+    echo "ERROR: protenix setup: layer_norm CUDA extension failed to load (FusedLayerNorm import)" >&2
     exit 1
 }
 

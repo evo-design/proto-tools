@@ -26,7 +26,7 @@ def _resolve_model_choice(antibodies: list[Antibody] | list[AntibodyLogits]) -> 
     """Select the AbLang model variant and validate batch homogeneity."""
     first = _chain_config(antibodies[0])
     if any(_chain_config(ab) != first for ab in antibodies[1:]):
-        raise ValueError("All antibodies in a batch must have the same chain configuration")
+        raise ValueError("ablang: all antibodies in a batch must have the same chain configuration")
     has_heavy, has_light = first
     if has_heavy and has_light:
         return "ablang2-paired"

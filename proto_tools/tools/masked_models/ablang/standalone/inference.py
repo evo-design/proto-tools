@@ -81,13 +81,13 @@ def _redownload_ablang_to_cache(model_choice: str) -> Path | None:
     with tmp_tarball.open("rb") as f:
         if f.read(2) != b"\x1f\x8b":
             tmp_tarball.unlink()
-            raise RuntimeError(f"AbLang {model_choice}: pre-fetched tarball is not gzip")
+            raise RuntimeError(f"ablang: pre-fetched {model_choice} tarball is not gzip")
     tar_cmd = ["tar", "-zxf", str(tmp_tarball), "-C", str(cache_dir)]
     subprocess.run(tar_cmd, check=True, env=env)
     tmp_tarball.unlink()
 
     if not (cache_dir / weight_file).exists():
-        raise RuntimeError(f"AbLang {model_choice}: extracted tarball missing expected weight file {weight_file}")
+        raise RuntimeError(f"ablang: extracted {model_choice} tarball missing expected weight file {weight_file}")
     return cache_dir
 
 
@@ -272,7 +272,7 @@ class AbLangModel:
     def to_device(self, device: str) -> None:
         """Move model to a different device."""
         if not self._loaded:
-            raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
+            raise ValueError("ablang: cannot move unloaded model to device — call load() first")
 
         if self.device != device:
             import torch
@@ -360,7 +360,7 @@ class AbLangModel:
         self._ensure_loaded(device, verbose)
 
         if not sequences:
-            raise ValueError("AbLangModel.embeddings requires at least one input sequence.")
+            raise ValueError("ablang: embeddings requires at least one input sequence")
 
         if verbose:
             logger.info(f"Computing embeddings for {len(sequences)} sequences (batch_size={batch_size})")
@@ -403,13 +403,15 @@ class AbLangModel:
         self._ensure_loaded(device, verbose)
 
         if not sequences:
-            raise ValueError("AbLangModel.score requires at least one input sequence.")
+            raise ValueError("ablang: score requires at least one input sequence")
 
         if verbose:
             logger.info(f"Scoring {len(sequences)} sequences with mode={scoring_mode} (batch_size={batch_size})")
 
         if scoring_mode not in ("pseudo_log_likelihood", "confidence"):
-            raise ValueError(f"Unknown scoring_mode: {scoring_mode}. Must be 'pseudo_log_likelihood' or 'confidence'.")
+            raise ValueError(
+                f"ablang: unknown scoring_mode {scoring_mode!r}; valid: ['pseudo_log_likelihood', 'confidence']"
+            )
 
         all_metrics: list[dict[str, float]] = []
 
@@ -454,7 +456,7 @@ class AbLangModel:
         self._ensure_loaded(device, verbose)
 
         if not sequences:
-            raise ValueError("AbLangModel.sample requires at least one input sequence.")
+            raise ValueError("ablang: sample requires at least one input sequence")
 
         # Convert standard mask token (_) to ablang's native mask token (*)
         sequences = [seq.replace("_", "*") for seq in sequences]
@@ -483,7 +485,7 @@ class AbLangModel:
         import torch
 
         if self._ablang_vocab is None:
-            raise RuntimeError("AbLang vocabulary not initialized. Call load() first.")
+            raise ValueError("ablang: vocabulary not initialized — call load() first")
 
         mapping_matrix = torch.zeros(
             len(STANDARD_AMINO_ACIDS),
@@ -564,7 +566,7 @@ class AbLangModel:
             # Wrap with special tokens: ablang1 → <residues>, ablang2 → <VH>|<VL>
             if self._is_ablang1:
                 if chain_break_position is not None:
-                    raise ValueError("AbLang1 gradient layout does not support paired chain_break_position.")
+                    raise ValueError("ablang: AbLang1 gradient layout does not support paired chain_break_position")
                 input_embeddings = torch.cat(
                     (special_embeddings(["<"]), residue_embeddings, special_embeddings([">"])),
                     dim=0,
@@ -572,9 +574,11 @@ class AbLangModel:
                 token_ids = torch.cat((special_ids(["<"]), residue_token_ids, special_ids([">"])), dim=0)  # (L+2,)
             else:
                 if chain_break_position is None:
-                    raise ValueError("AbLang2 paired gradient requires chain_break_position.")
+                    raise ValueError("ablang: AbLang2 paired gradient requires chain_break_position")
                 if chain_break_position <= 0 or chain_break_position >= residue_token_ids.shape[0]:
-                    raise ValueError(f"Bad chain split={chain_break_position}; expected 1..{sequence_length - 1}.")
+                    raise ValueError(
+                        f"ablang: chain_break_position={chain_break_position} out of range; expected 1..{sequence_length - 1}"
+                    )
                 input_embeddings = torch.cat(
                     (
                         special_embeddings(["<"]),
@@ -718,7 +722,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             device=input_dict["device"],
             verbose=input_dict["verbose"],
         )
-    raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(
+        f"ablang: unknown operation {operation!r}; valid: ['embeddings', 'score', 'sample', 'compute_gradient']"
+    )
 
 
 def to_device(device: str) -> dict[str, Any]:
@@ -741,7 +747,7 @@ def get_memory_stats() -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+        raise ValueError("ablang: usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

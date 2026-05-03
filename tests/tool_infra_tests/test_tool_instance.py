@@ -1073,7 +1073,7 @@ def test_send_timeout_kills_worker():
     with patch("proto_tools.utils.persistent_worker.select") as mock_sel:
         mock_sel.select.return_value = ([], [], [])  # timeout — nothing ready
 
-        with pytest.raises(TimeoutError, match="timed out after 5s"):
+        with pytest.raises(TimeoutError, match=r"timed out .* after 5s"):
             worker.send({"op": "score"}, timeout=5)
 
     # Worker should have been stopped (process set to None)
@@ -1293,7 +1293,7 @@ def test_failure_writes_status_and_raises(tmp_path: Path):
             "proto_tools.utils.tool_instance._run_setup_script",
             return_value=(42, "setup failed!"),
         ),
-        pytest.raises(RuntimeError, match="may not be compatible"),
+        pytest.raises(RuntimeError, match=r"setup\.sh failed"),
     ):
         inst._create_env()
 

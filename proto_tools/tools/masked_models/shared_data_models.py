@@ -62,9 +62,9 @@ class MaskedModelInput(BaseToolInput):
         """
         seqs = [value] if isinstance(value, str) else value
 
-        for seq in seqs:
+        for idx, seq in enumerate(seqs):
             if seq is None:
-                raise ValueError("Sequence cannot be None")
+                raise ValueError(f"sequences[{idx}]: cannot be None")
 
         return seqs
 

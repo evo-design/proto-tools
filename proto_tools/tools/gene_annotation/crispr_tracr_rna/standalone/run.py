@@ -13,6 +13,7 @@ Usage (called by ToolInstance, not directly):
 
 import csv
 import json
+import logging
 import math
 import os
 import subprocess
@@ -21,6 +22,8 @@ import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -62,8 +65,7 @@ def _find_crispr_tracr_rna_script() -> str:
         return which_result
 
     raise FileNotFoundError(
-        "CRISPRtracrRNA.py not found. Set CRISPR_TRACR_RNA_PATH environment variable "
-        "to the CRISPRtracrRNA installation directory, or run setup.sh to install."
+        "crispr-tracr-rna: CRISPRtracrRNA.py not found; set CRISPR_TRACR_RNA_PATH or run standalone/setup.sh"
     )
 
 
@@ -124,13 +126,14 @@ def _parse_tracr_results(output_dir: Path, sequence_ids: list[str]) -> list[dict
                     if is_priority:
                         covered_by_priority.add(acc_id)
         except Exception as e:
-            print(f"Warning: Failed to parse {csv_file}: {e}", file=sys.stderr)
+            logger.warning("crispr-tracr-rna: failed to parse %s: %s", csv_file, e)
             continue
 
     if not any(candidates_by_id.values()) and sequence_ids:
-        print(
-            f"Warning: No tracrRNA CSV output files found in {output_dir} for {len(sequence_ids)} input sequences",
-            file=sys.stderr,
+        logger.warning(
+            "crispr-tracr-rna: no tracrRNA CSV output files found in %s for %d input sequences",
+            output_dir,
+            len(sequence_ids),
         )
 
     # Sort score-descending; rows with no score (NA / missing) sort last.
@@ -298,15 +301,17 @@ def _run_tracr_batch(
             )
         except subprocess.TimeoutExpired as e:
             raise RuntimeError(
-                f"CRISPRtracrRNA.py batch {batch_idx} timed out after {max(600, len(sequences) * 120)} seconds"
+                f"crispr-tracr-rna: batch {batch_idx} CRISPRtracrRNA.py timed out after {max(600, len(sequences) * 120)}s"
             ) from e
 
         if proc.returncode != 0:
-            print(
-                f"Batch {batch_idx}: CRISPRtracrRNA.py exited with code {proc.returncode}",
-                file=sys.stderr,
+            stderr_tail = (proc.stderr or "").strip().splitlines()[-10:]
+            logger.warning(
+                "crispr-tracr-rna: batch %d CRISPRtracrRNA.py failed (exit %d): %s",
+                batch_idx,
+                proc.returncode,
+                " | ".join(stderr_tail) or "<no stderr>",
             )
-            print(proc.stderr, file=sys.stderr)
 
         results = _parse_tracr_results(output_dir, sequence_ids)
 
@@ -314,10 +319,10 @@ def _run_tracr_batch(
             # CRISPRtracrRNA can crash on sequences where fasta36 finds no
             # anti-repeat hits (IndexError in anti_repeat_search.py). Expected
             # for some generated sequences — treat as "no tracrRNA found".
-            print(
-                f"WARNING: Batch {batch_idx} produced no results "
-                f"(exit code {proc.returncode}); treating as no tracrRNA found",
-                file=sys.stderr,
+            logger.warning(
+                "crispr-tracr-rna: batch %d produced no results (exit %d); treating as no tracrRNA found",
+                batch_idx,
+                proc.returncode,
             )
 
     return results
@@ -371,9 +376,10 @@ def run_crispr_tracr_rna(input_data: dict[str, Any]) -> dict[str, Any]:
         for i in range(0, len(sequences), batch_size)
     ]
 
-    print(
-        f"Running CRISPRtracrRNA with {len(batches)} parallel workers ({batch_size} sequences/batch)",
-        file=sys.stderr,
+    logger.info(
+        "crispr-tracr-rna: running with %d parallel workers (%d sequences/batch)",
+        len(batches),
+        batch_size,
     )
 
     # Run batches in parallel (ThreadPoolExecutor is fine since workers
@@ -401,10 +407,7 @@ def run_crispr_tracr_rna(input_data: dict[str, Any]) -> dict[str, Any]:
             try:
                 all_results[idx] = future.result()  # type: ignore[call-overload]
             except Exception as e:
-                print(
-                    f"ERROR: Batch {idx} failed: {e}",
-                    file=sys.stderr,
-                )
+                logger.error("crispr-tracr-rna: batch %d failed: %s", idx, e)
                 batch_errors.append(idx)
                 # Empty per-sequence results so each input is still represented.
                 _, batch_ids = batches[idx]
@@ -413,9 +416,11 @@ def run_crispr_tracr_rna(input_data: dict[str, Any]) -> dict[str, Any]:
                 ]
 
     if batch_errors:
-        print(
-            f"WARNING: {len(batch_errors)}/{len(batches)} batches failed: {batch_errors}",
-            file=sys.stderr,
+        logger.warning(
+            "crispr-tracr-rna: %d/%d batches failed: %s",
+            len(batch_errors),
+            len(batches),
+            batch_errors,
         )
 
     # Flatten in original order
@@ -446,7 +451,7 @@ def to_device(device: str) -> dict[str, Any]:
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print(
-            f"Usage: python {sys.argv[0]} <input_json_path> <output_json_path>",
+            f"crispr-tracr-rna: usage: python {sys.argv[0]} <input_json_path> <output_json_path>",
             file=sys.stderr,
         )
         sys.exit(1)

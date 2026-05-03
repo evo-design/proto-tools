@@ -151,7 +151,7 @@ class Evo1Model:
         set_torch_seed(seed)
 
         if not sequences:
-            raise ValueError("Cannot score empty sequence list")
+            raise ValueError("evo1: cannot score empty sequence list")
 
         from evo.scoring import logits_to_logprobs, prepare_batch
 
@@ -236,8 +236,12 @@ class Evo1Model:
 
         from evo import Evo
 
-        evo_obj = Evo(self.model_name)
-        huggingface_hub.snapshot_download = _orig_snapshot_download
+        try:
+            evo_obj = Evo(self.model_name)
+        except OSError as e:
+            raise RuntimeError(f"evo1: HF weight load for {self.model_name!r} failed: {e}") from e
+        finally:
+            huggingface_hub.snapshot_download = _orig_snapshot_download
         self.model = evo_obj.model
         self.tokenizer = evo_obj.tokenizer
 
@@ -251,7 +255,7 @@ class Evo1Model:
     def to_device(self, device: str) -> None:
         """Move model to a different device."""
         if not self._loaded:
-            raise RuntimeError("Cannot move unloaded model. Call load() first.")
+            raise ValueError("evo1: cannot move unloaded model to device — call load() first")
         if self.device != device:
             self.model = move_model_to_device(self.model, self.device, device)
             self.device = device
@@ -307,7 +311,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         if result["logits"] is not None:
             result["logits"] = [t.tolist() for t in result["logits"]]
         return result
-    raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"evo1: unknown operation {operation!r}; valid: ['sample', 'score']")
 
 
 def to_device(device: str) -> dict[str, Any]:
@@ -331,7 +335,7 @@ def get_memory_stats() -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError(f"Usage: python {sys.argv[0]} <input_json_path> <output_json_path>")
+        raise ValueError(f"evo1: usage: python {sys.argv[0]} <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

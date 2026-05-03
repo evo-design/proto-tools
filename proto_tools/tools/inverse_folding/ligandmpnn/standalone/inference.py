@@ -63,7 +63,7 @@ class LigandMPNNModel:
             Dictionary with keys: sequences, metrics
         """
         if seed is None:
-            raise ValueError("LigandMPNNModel.sample requires an explicit int seed.")
+            raise ValueError("ligandmpnn: sample requires an explicit int seed")
 
         # Lazy load the model
         if not self._loaded or self.device != device:
@@ -144,7 +144,7 @@ class LigandMPNNModel:
                 - metrics: Dict with log_likelihood, avg_log_likelihood, perplexity
         """
         raise NotImplementedError(
-            "LigandMPNN scoring is not yet implemented. Use proteinmpnn-score for protein-only contexts."
+            "ligandmpnn: score is not yet implemented; use proteinmpnn-score for protein-only contexts"
         )
 
     def load(self, device: str = "cuda", verbose: bool = False) -> None:
@@ -181,7 +181,7 @@ class LigandMPNNModel:
         For LigandMPNN, this requires reloading the Foundry engine with the new device.
         """
         if not self._loaded:
-            raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
+            raise ValueError("ligandmpnn: cannot move unloaded model to device — call load() first")
 
         if self.device != device:
             # LigandMPNN uses Foundry engine which doesn't support standard .to() movement
@@ -248,7 +248,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 device=input_dict["device"],
                 verbose=input_dict["verbose"],
             )
-        raise ValueError(f"Unknown operation: {operation}")
+        raise ValueError(f"ligandmpnn: unknown operation {operation!r}; valid: ['sample', 'score']")
 
 
 def to_device(device: str) -> dict[str, Any]:
@@ -272,7 +272,7 @@ def get_memory_stats() -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+        raise ValueError("ligandmpnn: usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

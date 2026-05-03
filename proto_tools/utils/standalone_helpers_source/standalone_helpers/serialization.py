@@ -1,6 +1,9 @@
 """Shared bio constants and serialization helpers for standalone inference scripts."""
 
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 AMINO_ACIDS_LIST: list[str] = list("ACDEFGHIKLMNPQRSTVWY")
 """Canonical 20 standard amino acids in alphabetical order."""
@@ -33,4 +36,9 @@ def serialize_output(value: Any) -> Any:
         value = value.cpu()
     if hasattr(value, "item"):
         return value.item()
+    if not isinstance(value, (str, int, float, bool)):
+        logger.warning(
+            "serialize_output: passing through unrecognized type %s; downstream JSON encoding may fail",
+            type(value).__name__,
+        )
     return value

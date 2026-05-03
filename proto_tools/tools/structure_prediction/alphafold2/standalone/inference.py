@@ -61,14 +61,11 @@ def _resolve_params_dir() -> str:
     else:
         venv_path = os.environ.get("TOOL_VENV_PATH")
         if not venv_path:
-            raise RuntimeError("TOOL_VENV_PATH not set. AlphaFold2 must be run via ToolInstance.")
+            raise RuntimeError("alphafold2: TOOL_VENV_PATH not set — must be run via ToolInstance")
         params_dir = Path(venv_path) / "data" / "params"
 
     if not params_dir.exists() or not any(params_dir.glob("*.npz")):
-        raise RuntimeError(
-            f"AlphaFold2 parameters not found at {params_dir}. "
-            "Run the standalone setup.sh script to download parameters."
-        )
+        raise RuntimeError(f"alphafold2: parameters not found at {params_dir}; run setup.sh to download")
 
     _params_dir = str(params_dir)
     return _params_dir
@@ -298,7 +295,7 @@ class AlphaFold2Model:
         )
         if backend == "germinal":
             if not os.path.isdir(germinal_dir):
-                raise RuntimeError(f"Germinal ColabDesign not found at {germinal_dir}. Run setup.sh.")
+                raise RuntimeError(f"alphafold2: Germinal ColabDesign not found at {germinal_dir}; run setup.sh")
             if germinal_dir not in sys.path:
                 sys.path.insert(0, germinal_dir)
                 self._purge_colabdesign_modules()
@@ -589,7 +586,7 @@ class AlphaFold2Model:
           as callbacks based on ``loss_weights``.
         """
         if target_pdb is None:
-            raise ValueError("target_pdb is required for binder gradient computation.")
+            raise ValueError("alphafold2: target_pdb is required for binder gradient computation")
 
         self._ensure_loaded(device, backend=backend, verbose=verbose)
         key = ("binder", use_multimer, False, recycle_mode, self._backend)
@@ -634,7 +631,9 @@ class AlphaFold2Model:
             prep_kwargs["lens"] = {"fw": [0, 0, 0, 0], "cdrs": [0, 0, 0]}
             if starting_binder_seq is not None:
                 if len(starting_binder_seq) != len(logits):
-                    raise ValueError(f"starting_binder_seq len {len(starting_binder_seq)} != logits len {len(logits)}")
+                    raise ValueError(
+                        f"alphafold2: starting_binder_seq length {len(starting_binder_seq)} != logits length {len(logits)}"
+                    )
                 prep_kwargs["starting_binder_seq"] = starting_binder_seq
 
         af_model.prep_inputs(**prep_kwargs)
@@ -738,7 +737,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             verbose=input_dict["verbose"],
             include_pae_matrix=input_dict["include_pae_matrix"],
         )
-    raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"alphafold2: unknown operation {operation!r}; valid: ['predict', 'compute_gradient']")
 
 
 def to_device(device: str) -> dict[str, Any]:
@@ -761,7 +760,7 @@ def get_memory_stats() -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+        raise ValueError("alphafold2: usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

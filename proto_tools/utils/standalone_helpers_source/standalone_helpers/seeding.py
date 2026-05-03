@@ -141,7 +141,8 @@ def enable_jax_compilation_cache(toolkit: str) -> str | None:
 
     try:
         import jax
-    except ImportError:
+    except ImportError as e:
+        logger.warning("enable_jax_compilation_cache(%s): jax not importable in this env: %s", toolkit, e)
         return None
 
     override = os.environ.get("JAX_COMPILATION_CACHE_DIR", "").strip()

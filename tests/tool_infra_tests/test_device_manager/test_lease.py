@@ -72,7 +72,7 @@ def test_lease_cleanup_on_exception(device_manager):
 
 def test_lease_no_gpus_raises(no_gpus_manager):
     """RuntimeError raised when no GPUs available."""
-    with pytest.raises(RuntimeError, match="No GPUs available"), no_gpus_manager.lease("esmfold", device="cuda"):
+    with pytest.raises(RuntimeError, match="no GPUs visible"), no_gpus_manager.lease("esmfold", device="cuda"):
         pass
 
 

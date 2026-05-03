@@ -40,7 +40,7 @@ def _create_sequences_from_strings(
     elif alphabet == "rna":
         alphabet_obj = pyhmmer.easel.Alphabet.rna()
     else:
-        raise ValueError(f"Unsupported alphabet: {alphabet}")
+        raise ValueError(f"pyhmmer: unsupported alphabet: {alphabet!r} (expected amino, dna, or rna)")
 
     digital_sequences = []
 
@@ -79,7 +79,7 @@ def _convert_hits_to_dicts(
         Tuple of (sequence_hits, domain_hits) as lists of dicts.
     """
     if len(hits) != len(queries):
-        raise ValueError("The number of TopHit objects and queries must be the same")
+        raise ValueError(f"pyhmmer: TopHit objects ({len(hits)}) must match number of queries ({len(queries)})")
 
     sequence_data = []
     domain_data = []
@@ -328,7 +328,7 @@ def to_device(device: str) -> dict[str, Any]:
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print(
-            f"Usage: python {sys.argv[0]} <input_json_path> <output_json_path>",
+            f"pyhmmer: usage: python {sys.argv[0]} <input_json_path> <output_json_path>",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -352,7 +352,9 @@ if __name__ == "__main__":
     elif operation == "jackhmmer":
         output_data = run_jackhmmer(input_data)
     else:
-        raise ValueError(f"Unknown operation: {operation}")
+        raise ValueError(
+            f"pyhmmer: unknown operation {operation!r}; valid: ['hmmsearch', 'hmmscan', 'phmmer', 'nhmmer', 'jackhmmer']"
+        )
 
     with open(output_json_path, "w") as f:
         json.dump(output_data, f)

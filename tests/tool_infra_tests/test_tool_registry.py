@@ -395,7 +395,7 @@ def test_tool_output_error_access_raises_exception(clean_registry):
     assert result.timestamp is not None
     assert len(result.warnings) == 0
     assert len(result.errors) == 2
-    assert result.errors[0] == "Tool execution failed"
+    assert result.errors[0] == "RuntimeError: Tool execution failed"
 
 
 def test_tool_output_successful_access_works(clean_registry):

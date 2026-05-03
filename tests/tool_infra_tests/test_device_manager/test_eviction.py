@@ -222,7 +222,7 @@ def test_missing_callback_raises_even_without_gpus(no_gpus_manager):
 
 def test_gpu_request_raises_without_gpus(no_gpus_manager, mock_callback):
     """Test RuntimeError raised when requesting GPU with no GPUs available."""
-    with pytest.raises(RuntimeError, match="No GPUs available"):
+    with pytest.raises(RuntimeError, match="no GPUs visible"):
         no_gpus_manager.request_device("tool1", "instance1", device="cuda", eviction_callback=mock_callback)
 
 

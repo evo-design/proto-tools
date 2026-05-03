@@ -4,8 +4,7 @@ set -euo pipefail
 
 ARCH=$(uname -m)
 if [ "$ARCH" = "aarch64" ]; then
-    echo "ERROR: Evo2 is not supported on aarch64."
-    echo "Evo2 requires transformer-engine and flash-attn which only provide x86_64 pre-built wheels."
+    echo "ERROR: evo2 setup: not supported on aarch64 (transformer-engine and flash-attn have no aarch64 wheels)" >&2
     exit 1
 fi
 
@@ -40,7 +39,7 @@ echo "Using local CUDA installation at: $CUDA_HOME"
 # Auto-detect CUDA target directory (e.g., x86_64-linux, aarch64-linux, sbsa-linux)
 CUDA_TARGET=$(ls "$CUDA_HOME/targets/" 2>/dev/null | head -1)
 if [ -z "$CUDA_TARGET" ]; then
-    echo "ERROR: No CUDA target directory found in $CUDA_HOME/targets/"
+    echo "ERROR: evo2 setup: no CUDA target directory under $CUDA_HOME/targets/" >&2
     exit 1
 fi
 echo "Detected CUDA target: $CUDA_TARGET"

@@ -8,11 +8,14 @@ Usage (called by ToolInstance, not directly):
 """
 
 import json
+import logging
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -120,12 +123,20 @@ def _run_single_minced(sequence: str, seq_id: str, config: dict[str, Any]) -> di
         try:
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         except subprocess.TimeoutExpired:
+            logger.warning("minced: %s timed out after 120s; returning empty arrays", seq_id)
             return {
                 "sequence_id": seq_id,
                 "crispr_arrays": [],
             }
 
         if proc.returncode != 0:
+            stderr_tail = (proc.stderr or "").strip().splitlines()[-10:]
+            logger.warning(
+                "minced: %s failed (exit %d): %s; returning empty arrays",
+                seq_id,
+                proc.returncode,
+                " | ".join(stderr_tail) or "<no stderr>",
+            )
             return {
                 "sequence_id": seq_id,
                 "crispr_arrays": [],
@@ -184,7 +195,7 @@ def to_device(device: str) -> dict[str, Any]:
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print(
-            f"Usage: python {sys.argv[0]} <input_json_path> <output_json_path>",
+            f"minced: usage: python {sys.argv[0]} <input_json_path> <output_json_path>",
             file=sys.stderr,
         )
         sys.exit(1)

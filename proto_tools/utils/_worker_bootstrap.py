@@ -35,6 +35,10 @@ from typing import Any
 # stays well above the pipe buffer while keeping file I/O overhead negligible.
 _FILE_FALLBACK_THRESHOLD = 100_000_000
 
+# Commands accepted by the worker dispatch loop; kept in sync with the if/elif
+# chain in the dispatcher so error messages don't drift.
+_VALID_COMMANDS = ("to_device", "get_memory_stats")
+
 
 def _copy_standalone_helpers(script_path: str) -> None:
     """Copy standalone helpers (Python package and shell file) to the tool's standalone directory.
@@ -134,7 +138,8 @@ def _build_legacy_dispatch(module: Any) -> Any:
             if func is not None:
                 return func(input_dict)  # type: ignore[no-any-return]
             raise ValueError(
-                f"Cannot dispatch operation '{operation}': no function '{func_name}' found in {module.__name__}"
+                f"Cannot dispatch operation {operation!r}: no function {func_name!r} found in "
+                f"{module.__name__}; valid: {sorted(run_funcs) or ['(none)']}"
             )
 
         # No operation key; auto-route if there's exactly one run_* function.
@@ -268,7 +273,7 @@ def main() -> None:
                     result = _serialize(result)
                     response = {"id": request_id, "result": result}
                 else:
-                    raise ValueError(f"Unknown command: {command}")
+                    raise ValueError(f"Unknown command: {command!r}; valid: {list(_VALID_COMMANDS)}")
             else:
                 # Normal dispatch
                 result = dispatch(input_dict)

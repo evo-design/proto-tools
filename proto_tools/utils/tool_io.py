@@ -57,9 +57,7 @@ class ToolExecutionError(Exception):
     def __init__(self, message: str):
         """Initialize ToolExecutionError."""
         self.message = message
-        # Extract the last line and append to the top
-        last_line = self.message.splitlines()[-1]
-        super().__init__(f"Attempt to access field of tool output after failure: {last_line}\n{self.message}")
+        super().__init__(message)
 
 
 class MissingAssetError(ToolExecutionError):
@@ -580,10 +578,13 @@ class BaseToolOutput(BaseModel, ABC):
         if name in model_fields:
             success = object.__getattribute__(self, "__dict__").get("success", True)
             if success is False:
+                tool_id = object.__getattribute__(self, "__dict__").get("tool_id", type(self).__name__)
                 errors = object.__getattribute__(self, "__dict__").get("errors", [])
                 if errors:
-                    raise ToolExecutionError("\nError Messages:\n" + "\n".join(errors))
-                raise ToolExecutionError("Tool failed with no error messages recorded")
+                    raise ToolExecutionError(
+                        f"{tool_id}: cannot read field {name!r} — tool failed: {' | '.join(errors)}"
+                    )
+                raise ToolExecutionError(f"{tool_id}: cannot read field {name!r} — tool failed (no errors recorded)")
 
         # (2) Forward to any Metrics-typed field whose container holds ``name``.
         for field_name in model_fields:

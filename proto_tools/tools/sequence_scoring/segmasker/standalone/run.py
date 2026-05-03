@@ -21,7 +21,7 @@ def _find_binary(name: str) -> str:
     binary = Path(sys.executable).parent / name
     if not binary.exists():
         raise FileNotFoundError(
-            f"Binary '{name}' not found at {binary}. The standalone environment may need to be recreated."
+            f"segmasker: binary '{name}' not found at {binary}; re-run standalone/setup.sh to provision the venv"
         )
     return str(binary)
 
@@ -89,12 +89,14 @@ def run_segmasker(input_data: dict[str, Any]) -> dict[str, Any]:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
 
         if result.returncode != 0:
-            raise RuntimeError(f"Segmasker failed: {result.stderr}")
+            raise RuntimeError(
+                f"segmasker: failed (exit {result.returncode}): {' | '.join((result.stderr or '').strip().splitlines()[-10:]) or '<no stderr>'}"
+            )
 
         seq_records = list(SeqIO.parse(StringIO(result.stdout), "fasta"))  # type: ignore[no-untyped-call]
 
         if len(seq_records) != len(sequences):
-            raise RuntimeError(f"Segmasker returned {len(seq_records)} results but expected {len(sequences)}")
+            raise RuntimeError(f"segmasker: returned {len(seq_records)} results but expected {len(sequences)}")
 
         fractions: list[float] = []
         counts: list[int] = []
@@ -136,8 +138,8 @@ def run_segmasker(input_data: dict[str, Any]) -> dict[str, Any]:
             "results_data": results_data,
         }
 
-    except subprocess.TimeoutExpired:
-        raise RuntimeError("Segmasker execution timed out after 60 seconds") from None
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError("segmasker: execution timed out after 60 seconds") from e
 
     finally:
         Path(tmp_path).unlink(missing_ok=True)
@@ -163,7 +165,7 @@ def to_device(device: str) -> dict[str, Any]:
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print(
-            f"Usage: python {sys.argv[0]} <input_json_path> <output_json_path>",
+            f"segmasker: usage: python {sys.argv[0]} <input_json_path> <output_json_path>",
             file=sys.stderr,
         )
         sys.exit(1)

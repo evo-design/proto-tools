@@ -54,10 +54,13 @@ class ProGen3Model:
 
         model_path = self.local_path or f"{HUGGINGFACE_REPO_PREFIX}/{self.model_checkpoint}"
 
-        self.model = ProGen3ForCausalLM.from_pretrained(
-            model_path,
-            torch_dtype=torch.bfloat16,
-        )
+        try:
+            self.model = ProGen3ForCausalLM.from_pretrained(
+                model_path,
+                torch_dtype=torch.bfloat16,
+            )
+        except OSError as e:
+            raise RuntimeError(f"progen3: HF weight load from {model_path!r} failed: {e}") from e
         # After CUDA_VISIBLE_DEVICES restriction, cuda:0 is the allocated GPU
         self.model.eval().to("cuda:0")
         self.device = device
@@ -75,7 +78,7 @@ class ProGen3Model:
         ``dist.get_device()`` calls.
         """
         if not self._loaded:
-            raise RuntimeError("Cannot move unloaded model. Call load() first.")
+            raise ValueError("progen3: cannot move unloaded model to device — call load() first")
         if self.device == device:
             return
         if device == "cpu":
@@ -431,7 +434,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             reduction=input_dict["reduction"],
             seed=input_dict["seed"],
         )
-    raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"progen3: unknown operation {operation!r}; valid: ['sample', 'score']")
 
 
 def to_device(device: str) -> dict[str, Any]:
@@ -459,7 +462,7 @@ def get_memory_stats() -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+        raise ValueError("progen3: usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

@@ -199,7 +199,10 @@ class DatasetRegistry:
     def register(cls, entry: DatasetEntry) -> None:
         """Register a dataset entry. Raises on duplicate ``name``."""
         if entry.name in cls._entries:
-            raise ValueError(f"Dataset {entry.name!r} already registered")
+            raise ValueError(
+                f"DatasetRegistry: dataset {entry.name!r} already registered "
+                f"(existing molecule_type={cls._entries[entry.name].molecule_type!r})"
+            )
         cls._entries[entry.name] = entry
 
     @classmethod

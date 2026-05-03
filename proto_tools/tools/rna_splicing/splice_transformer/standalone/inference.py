@@ -174,13 +174,21 @@ class SpliceTransformerModel:
             logger.debug("Downloading SpliceTransformer checkpoint from HuggingFace Hub...")
             from huggingface_hub import hf_hub_download
 
-            model_path = hf_hub_download(
-                repo_id="brianhie/SpTransformer",
-                filename="SpTransformer_pytorch.ckpt",
-            )
+            try:
+                model_path = hf_hub_download(
+                    repo_id="brianhie/SpTransformer",
+                    filename="SpTransformer_pytorch.ckpt",
+                )
+            except OSError as e:
+                raise RuntimeError(
+                    f"splice-transformer: HF checkpoint download from 'brianhie/SpTransformer' failed: {e}"
+                ) from e
 
         # Load and fix state dict
-        save_dict = torch.load(model_path, map_location=device)
+        try:
+            save_dict = torch.load(model_path, map_location=device)
+        except Exception as e:
+            raise RuntimeError(f"splice-transformer: torch.load failed for checkpoint at {model_path}: {e}") from e
         state_dict = self._fix_state_dict_keys(save_dict["state_dict"])
         self.model.load_state_dict(state_dict)
 
@@ -192,7 +200,7 @@ class SpliceTransformerModel:
     def to_device(self, device: str) -> None:
         """Move model to a different device."""
         if not self._loaded:
-            raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
+            raise ValueError("splice-transformer: cannot move unloaded model to device — call load() first")
 
         if self.device != device:
             self.model = move_model_to_device(self.model, self.device, device)
@@ -233,7 +241,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             verbose=input_dict["verbose"],
         )
         return {"prediction": prediction}
-    raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"splice-transformer: unknown operation {operation!r}; valid: ['predict']")
 
 
 def to_device(device: str) -> dict[str, Any]:
@@ -257,7 +265,7 @@ def get_memory_stats() -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+        raise ValueError("splice_transformer: usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

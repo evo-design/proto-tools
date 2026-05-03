@@ -16,7 +16,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """
     operation = input_dict["operation"]
     if operation != "score":
-        raise ValueError(f"Unknown operation: {operation}")
+        raise ValueError(f"ipsae: unknown operation {operation!r}; valid: ['score']")
 
     pdb_content: str = input_dict["pdb_content"]
     pae_matrix: list[list[float]] = input_dict["pae_matrix"]
@@ -28,7 +28,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     ipsae_script = os.path.join(script_dir, "ipsae.py")
 
     if not os.path.isfile(ipsae_script):
-        raise FileNotFoundError(f"ipsae.py not found at {ipsae_script}; run setup.sh first")
+        raise FileNotFoundError(f"ipsae: ipsae.py not found at {ipsae_script}; run setup.sh first")
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         pdb_path = os.path.join(tmp_dir, "complex.pdb")
@@ -52,7 +52,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         )
 
         if result.returncode != 0:
-            raise RuntimeError(f"ipsae.py failed (exit {result.returncode}):\n{result.stderr}\n{result.stdout}")
+            stderr_tail = " | ".join((result.stderr or "").strip().splitlines()[-10:]) or "<no stderr>"
+            raise RuntimeError(f"ipsae: ipsae.py failed (exit {result.returncode}); last stderr: {stderr_tail}")
 
         pae_str = f"{int(pae_cutoff):02d}"
         dist_str = f"{int(dist_cutoff):02d}"
@@ -60,7 +61,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
         if not os.path.isfile(output_file):
             candidates = [f for f in os.listdir(tmp_dir) if f.endswith(".txt")]
-            raise FileNotFoundError(f"Expected output file {output_file} not found. Files in tmp_dir: {candidates}")
+            raise FileNotFoundError(
+                f"ipsae: expected output file {output_file} not found; tmp_dir contents: {candidates}"
+            )
 
         chain_pair_results = _parse_output(output_file)
 
@@ -104,6 +107,8 @@ def get_memory_stats() -> dict[str, Any]:
 
 
 if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        raise ValueError("ipsae: usage: python inference.py <input_json_path> <output_json_path>")
     input_path = sys.argv[1]
     output_path = sys.argv[2]
     with open(input_path) as f:

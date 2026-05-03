@@ -7,6 +7,7 @@ automatic schema generation for API/frontend integration.
 """
 
 import contextlib
+import difflib
 import inspect
 import logging
 import re
@@ -309,11 +310,11 @@ class ToolRegistry:
 
             if (iterable_input_field is None) != (iterable_output_field is None):
                 raise ValueError(
-                    f"Tool '{key}': iterable_input_field and iterable_output_field must both be set or both be None"
+                    f"@tool({key!r}): iterable_input_field and iterable_output_field must both be set or both None"
                 )
 
             if gpu_only and not uses_gpu:
-                raise ValueError(f"Tool '{key}': gpu_only=True requires uses_gpu=True")
+                raise ValueError(f"@tool({key!r}): gpu_only=True requires uses_gpu=True")
 
             # Capture source file from call stack (find first frame in tools directory)
             stack = inspect.stack()
@@ -397,8 +398,7 @@ class ToolRegistry:
                             )
                     elif effective_gpu_only and device_str == "cpu":
                         raise ValueError(
-                            f"Tool {key!r} is gpu_only; cannot run with device='cpu'. "
-                            f"Use a CUDA device (e.g. 'cuda' or 'cuda:0')."
+                            f"Tool {key!r} is gpu_only and rejects device='cpu'; use 'cuda', 'cuda:N', or 'cudaxN'"
                         )
                     elif device_str != "cpu" and not uses_gpu:
                         logger.warning(
@@ -699,8 +699,9 @@ class ToolRegistry:
             ValueError: If key not found in registry
         """
         if key not in cls._registry:
-            available = ", ".join(sorted(cls._registry.keys()))
-            raise ValueError(f"Unknown tool: '{key}'. Available tools: {available}")
+            suggestions = difflib.get_close_matches(key, cls._registry.keys(), n=3, cutoff=0.6)
+            hint = f"; did you mean: {', '.join(suggestions)}?" if suggestions else ""
+            raise ValueError(f"Unknown tool {key!r} ({len(cls._registry)} registered){hint}")
         return cls._registry[key]
 
     @classmethod
@@ -990,7 +991,7 @@ def _make_error_output(
         success=False,
         timestamp=datetime.now(),
         warnings=warning_strings or [],
-        errors=[str(exception), traceback_str],
+        errors=[f"{type(exception).__name__}: {exception}", traceback_str],
     )
 
 

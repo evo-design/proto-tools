@@ -5,9 +5,7 @@ source standalone_helpers.sh
 
 ARCH=$(uname -m)
 if [ "$ARCH" = "aarch64" ]; then
-    echo "ERROR: Chai is not supported on aarch64."
-    echo "chai_lab==0.6.1 pins torch<2.7 which lacks sm_121 support, and its"
-    echo "pre-compiled TorchScript ESM2 model is incompatible with newer GPU architectures."
+    echo "ERROR: chai1 setup: not supported on aarch64 (chai_lab==0.6.1 pins torch<2.7 lacks sm_121 + ships x86_64-only TorchScript ESM2)" >&2
     exit 1
 fi
 

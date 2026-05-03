@@ -40,7 +40,7 @@ def test_resolve_sequence_ids(seqs, ids, expected):
 
 
 def test_resolve_sequence_ids_length_mismatch():
-    with pytest.raises(ValueError, match="must match"):
+    with pytest.raises(ValueError, match="ids length"):
         resolve_sequence_ids(["A"], ids=["x", "y"])
 
 
@@ -208,5 +208,5 @@ def test_resolve_hf_token_none(monkeypatch):
 
 def test_require_hf_token_raises_when_missing(monkeypatch):
     monkeypatch.setattr("proto_tools.utils.auth.resolve_hf_token", lambda: None)
-    with pytest.raises(OSError, match="requires a HuggingFace token"):
+    with pytest.raises(OSError, match="HF_TOKEN unset"):
         require_hf_token("ESM3")

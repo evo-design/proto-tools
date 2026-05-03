@@ -157,7 +157,7 @@ class ColabFoldRemoteSearchWrapper:
             self.run_mmseqs2 = run_mmseqs2
         except ImportError as e:
             raise ImportError(
-                "Error: The 'colabfold' module is missing.\nPlease install it using 'pip install colabfold[alphafold]'"
+                "colabfold-search: 'colabfold' module not installed; pip install 'colabfold[alphafold]' or re-run standalone/setup.sh"
             ) from e
 
         self._loaded = True
@@ -180,7 +180,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 # Standalone script entry point for venv execution
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python remote_msa_search.py <input_json_path> <output_json_path>")
+        raise ValueError("colabfold-search: usage: python remote_msa_search.py <input_json_path> <output_json_path>")
 
     # Get the input and output json paths
     input_json_path = sys.argv[1]

@@ -24,17 +24,20 @@ def _find_binary(name: str = "mmseqs") -> str:
     binary = Path(sys.executable).parent / name
     if not binary.exists():
         raise FileNotFoundError(
-            f"MMseqs2 binary '{name}' not found at {binary}. The standalone environment may need to be recreated."
+            f"mmseqs: binary '{name}' not found at {binary}; re-run standalone/setup.sh to provision the venv"
         )
     return str(binary)
 
 
 def _run_cmd(cmd: list[str], description: str) -> subprocess.CompletedProcess:  # type: ignore[type-arg]
     """Run a subprocess command and raise on failure."""
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"{description} failed with code {proc.returncode}: {proc.stderr}")
-    return proc
+    try:
+        return subprocess.run(cmd, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as e:
+        stderr_tail = (e.stderr or "").strip().splitlines()[-10:]
+        raise RuntimeError(
+            f"mmseqs: {description} failed (exit {e.returncode}): {' | '.join(stderr_tail) or '<no stderr>'}"
+        ) from e
 
 
 def _write_fasta(
@@ -337,7 +340,7 @@ def to_device(device: str) -> dict[str, Any]:
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print(
-            f"Usage: python {sys.argv[0]} <input_json_path> <output_json_path>",
+            f"mmseqs: usage: python {sys.argv[0]} <input_json_path> <output_json_path>",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -357,7 +360,9 @@ if __name__ == "__main__":
     elif operation == "clustering":
         output_data = run_clustering(input_data)
     else:
-        raise ValueError(f"Unknown operation: {operation}")
+        raise ValueError(
+            f"mmseqs: unknown operation {operation!r}; valid: ['protein_search', 'genome_search', 'clustering']"
+        )
 
     with open(output_json_path, "w") as f:
         json.dump(output_data, f)

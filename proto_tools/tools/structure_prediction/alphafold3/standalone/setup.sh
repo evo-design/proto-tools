@@ -76,7 +76,7 @@ SIF_PATH="${VENV_PATH}/alphafold3.sif"
 # pattern for weights.
 if [ -n "${PROTO_ALPHAFOLD3_SIF_PATH:-}" ]; then
   if [ ! -f "$PROTO_ALPHAFOLD3_SIF_PATH" ]; then
-    echo "[af3] ERROR: PROTO_ALPHAFOLD3_SIF_PATH points at non-existent file: $PROTO_ALPHAFOLD3_SIF_PATH"
+    echo "[af3] ERROR: PROTO_ALPHAFOLD3_SIF_PATH points at non-existent file: $PROTO_ALPHAFOLD3_SIF_PATH" >&2
     exit 1
   fi
   echo "[af3] Using pre-built sif from PROTO_ALPHAFOLD3_SIF_PATH=$PROTO_ALPHAFOLD3_SIF_PATH"
@@ -126,7 +126,7 @@ if [ "$USE_SIF" -eq 1 ]; then
       echo "[af3] apptainer install failed — falling back to env path"
       USE_SIF=0
     else
-      echo "[af3] ERROR: ALPHAFOLD3_BUILD_SIF=1 but apptainer install failed"
+      echo "[af3] ERROR: ALPHAFOLD3_BUILD_SIF=1 but apptainer install failed" >&2
       exit 1
     fi
   fi
@@ -138,7 +138,7 @@ if [ "$USE_SIF" -eq 1 ]; then
   # Singularity.def lives alongside this script — it mirrors DeepMind's Dockerfile.
   DEF_FILE="$(dirname "$(readlink -f "$0")")/Singularity.def"
   if [ ! -f "$DEF_FILE" ]; then
-    echo "[af3] ERROR: Singularity.def not found at $DEF_FILE"
+    echo "[af3] ERROR: Singularity.def not found at $DEF_FILE" >&2
     exit 1
   fi
 
@@ -151,7 +151,7 @@ if [ "$USE_SIF" -eq 1 ]; then
       echo "[af3] sif build failed — falling back to env path"
       USE_SIF=0
     else
-      echo "[af3] ERROR: sif build failed (ALPHAFOLD3_BUILD_SIF=1)"
+      echo "[af3] ERROR: sif build failed (ALPHAFOLD3_BUILD_SIF=1)" >&2
       exit 1
     fi
   else

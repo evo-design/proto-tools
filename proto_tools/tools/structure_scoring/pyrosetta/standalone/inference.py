@@ -851,7 +851,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             scorefxn_name=input_dict["scorefxn"],
             seed=input_dict.get("seed"),
         )
-    raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(
+        f"pyrosetta: unknown operation {operation!r}; valid: ['sap', 'sasa', 'energy', 'relax', 'interface_analyzer']"
+    )
 
 
 # ============================================================================
@@ -873,7 +875,7 @@ def get_memory_stats() -> dict[str, Any]:
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print(
-            f"Usage: python {sys.argv[0]} <input_json_path> <output_json_path>",
+            f"pyrosetta: usage: python {sys.argv[0]} <input_json_path> <output_json_path>",
             file=sys.stderr,
         )
         sys.exit(1)

@@ -210,7 +210,7 @@ def test_fragment_hash():
 
 def test_fragment_from_mol_multi_fragment_raises():
     mol = Chem.MolFromSmiles("CCO.CO")
-    with pytest.raises(ValueError, match="must contain only one fragment"):
+    with pytest.raises(ValueError, match=r"must contain exactly one fragment"):
         Fragment.from_mol(mol)
 
 

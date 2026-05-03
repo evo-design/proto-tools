@@ -67,9 +67,9 @@ class ESM3Model:
 
         # Validate input sequences
         if not sequences:
-            raise ValueError("ESM3Model.__call__ requires at least one sequence.")
+            raise ValueError("esm3: __call__ requires at least one sequence")
         if any(len(seq) == 0 for seq in sequences):
-            raise ValueError("ESM3Model.__call__ does not support empty sequences.")
+            raise ValueError("esm3: __call__ does not support empty sequences")
 
         # Get the max sequence length
         max_seq_len = max(len(seq) for seq in sequences)
@@ -354,9 +354,9 @@ class ESM3Model:
 
         # Reject empty inputs up front
         if not sequences:
-            raise ValueError("ESM3Model.score requires at least one non-empty sequence.")
+            raise ValueError("esm3: score requires at least one non-empty sequence")
         if any(len(s) == 0 for s in sequences):
-            raise ValueError("ESM3Model.score does not support empty sequences.")
+            raise ValueError("esm3: score does not support empty sequences")
 
         # Tokenize all sequences together, padded to a common length
         encoded = self.tokenizer(sequences, add_special_tokens=True, padding=True, return_tensors="pt")
@@ -442,7 +442,7 @@ class ESM3Model:
             seq_valid = is_valid[cursor : cursor + length]
             valid_count = int(seq_valid.sum().item())
             if valid_count == 0:
-                raise ValueError(f"No valid characters found for ESM3 scoring in sequence: {sequences[i]}")
+                raise ValueError(f"esm3: score sequence {i}/{len(sequences)} contains no valid amino-acid characters")
             log_prob = (seq_log_probs * seq_valid.float()).sum().item()
             avg_ll = log_prob / valid_count
 
@@ -476,7 +476,10 @@ class ESM3Model:
             logger.info(f"Loading ESM3 model: {self.model_checkpoint} on {device}")
 
         # Load model and tokenizer
-        self.model = ESM3.from_pretrained(self.model_checkpoint, device=torch.device(device)).eval()
+        try:
+            self.model = ESM3.from_pretrained(self.model_checkpoint, device=torch.device(device)).eval()
+        except OSError as e:
+            raise RuntimeError(f"esm3: HF weight load from {self.model_checkpoint!r} failed: {e}") from e
         self.tokenizer = EsmSequenceTokenizer()
 
         self.amino_acid_token_ids = torch.tensor(
@@ -494,7 +497,7 @@ class ESM3Model:
         from standalone_helpers import move_model_to_device
 
         if not self._loaded:
-            raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
+            raise ValueError("esm3: cannot move unloaded model to device — call load() first")
 
         if self.device != device:
             self.model = move_model_to_device(self.model, self.device, device)
@@ -563,7 +566,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             device=input_dict["device"],
             verbose=input_dict["verbose"],
         )
-    raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(
+        f"esm3: unknown operation {operation!r}; valid: ['embeddings', 'inference', 'sample', 'score', 'predict_structure']"
+    )
 
 
 def to_device(device: str) -> dict[str, Any]:
@@ -587,7 +592,7 @@ def get_memory_stats() -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+        raise ValueError("esm3: usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

@@ -34,7 +34,9 @@ class BorzoiModel:
             use_flash_attn: Whether to use FlashAttention
         """
         if species == "mouse" and use_flash_attn:
-            raise ValueError("FlashAttention (flashzoi) is not available for mouse Borzoi checkpoints.")
+            raise ValueError(
+                "borzoi: FlashAttention (flashzoi) is not available for mouse checkpoints — set use_flash_attn=False"
+            )
 
         self.species = species
         self.replicate = replicate
@@ -56,7 +58,10 @@ class BorzoiModel:
         if verbose:
             logger.info(f"Loading Borzoi model: {self.model_name} on {device}")
 
-        self.model = Borzoi.from_pretrained(self.model_name).to(device)
+        try:
+            self.model = Borzoi.from_pretrained(self.model_name).to(device)
+        except OSError as e:
+            raise RuntimeError(f"borzoi: HF weight load from {self.model_name!r} failed: {e}") from e
         self.device = device
         self._loaded = True
 
@@ -90,7 +95,7 @@ class BorzoiModel:
         from standalone_helpers import move_model_to_device
 
         if not self._loaded:
-            raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
+            raise ValueError("borzoi: cannot move unloaded model to device — call load() first")
 
         if self.device == device:
             return
@@ -143,7 +148,10 @@ class BorzoiModel:
         onehot = torch.zeros(len(sequences), 4, seq_len, device=device)
         for batch_idx, sequence in enumerate(sequences):
             if len(sequence) != seq_len:
-                raise ValueError("All Borzoi batch sequences must have the same length.")
+                raise ValueError(
+                    f"borzoi: all batch sequences must have the same length; "
+                    f"sequence {batch_idx} has length {len(sequence)} != {seq_len}"
+                )
             positions: list[int] = []
             bases: list[int] = []
             for pos, char in enumerate(sequence):
@@ -224,7 +232,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             "applied_species": _model.species,
             "applied_replicate": _model.replicate,
         }
-    raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"borzoi: unknown operation {operation!r}; valid: ['predict']")
 
 
 def to_device(device: str) -> dict[str, Any]:
@@ -248,7 +256,7 @@ def get_memory_stats() -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+        raise ValueError("borzoi: usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

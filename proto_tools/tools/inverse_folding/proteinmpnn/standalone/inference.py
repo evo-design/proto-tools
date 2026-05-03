@@ -77,7 +77,7 @@ class ProteinMPNNModel:
 
         key = set_jax_seed(seed)
         if key is None:
-            raise ValueError("ProteinMPNNModel.sample requires an explicit int seed (jax.random.PRNGKey rejects None).")
+            raise ValueError("proteinmpnn: sample requires an explicit int seed (jax.random.PRNGKey rejects None)")
 
         # Lazy load the model (reload if model_choice changed)
         if not self._loaded or self._model_choice != model_choice:
@@ -147,7 +147,7 @@ class ProteinMPNNModel:
 
         key = set_jax_seed(seed)
         if key is None:
-            raise ValueError("ProteinMPNNModel.score requires an explicit int seed (jax.random.PRNGKey rejects None).")
+            raise ValueError("proteinmpnn: score requires an explicit int seed (jax.random.PRNGKey rejects None)")
 
         # Lazy load the model (reload if model_choice changed)
         if not self._loaded or self._model_choice != model_choice:
@@ -223,7 +223,7 @@ class ProteinMPNNModel:
         from standalone_helpers import move_model_to_device
 
         if self.model is None:
-            raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
+            raise ValueError("proteinmpnn: cannot move unloaded model to device — call load() first")
         if self.device == device:
             return
 
@@ -298,7 +298,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 verbose=input_dict["verbose"],
                 return_logits=input_dict["return_logits"],
             )
-        raise ValueError(f"Unknown operation: {operation}")
+        raise ValueError(f"proteinmpnn: unknown operation {operation!r}; valid: ['sample', 'score']")
 
 
 def to_device(device: str) -> dict[str, Any]:
@@ -318,7 +318,7 @@ def get_memory_stats() -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+        raise ValueError("proteinmpnn: usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

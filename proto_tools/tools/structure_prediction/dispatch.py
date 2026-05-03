@@ -84,9 +84,7 @@ def predict_structures(
         complexes = [complexes]
 
     if toolkit not in SP_TOOL_MAP:
-        raise ValueError(
-            f"Unknown structure prediction tool: '{toolkit}'. Supported tools: {', '.join(SP_TOOL_MAP.keys())}"
-        )
+        raise ValueError(f"predict_structures: unknown toolkit {toolkit!r}; supported: {sorted(SP_TOOL_MAP)}")
 
     # Collect the expected config class for the tool
     expected_config_class = SP_TOOL_MAP[toolkit]["config"]

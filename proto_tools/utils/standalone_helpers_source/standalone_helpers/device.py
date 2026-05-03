@@ -136,12 +136,7 @@ def get_subprocess_device_env(device: str) -> dict[str, str]:
     # Parse logical device indices from device string
     indices = _parse_cuda_indices(device)
     if indices is None:
-        logger.warning(
-            f"Unexpected device format: '{device}'. Expected 'cuda:N' or 'cuda:N,M'. "
-            f"Setting CUDA_VISIBLE_DEVICES to empty string."
-        )
-        env["CUDA_VISIBLE_DEVICES"] = ""
-        return _apply_jax_subprocess_env(env)
+        raise ValueError(f"get_subprocess_device_env: unrecognized device {device!r}; expected 'cpu' or 'cuda[:N]'")
 
     # Get parent's CUDA_VISIBLE_DEVICES to map logical → physical indices
     parent_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
@@ -160,12 +155,10 @@ def get_subprocess_device_env(device: str) -> dict[str, str]:
 
     for idx in indices:
         if idx >= len(parent_devices):
-            logger.error(
-                f"Device index {idx} exceeds parent CUDA_VISIBLE_DEVICES length "
-                f"({len(parent_devices)}). Parent devices: {parent_visible}"
+            raise RuntimeError(
+                f"get_subprocess_device_env: device index {idx} out of range "
+                f"(parent CUDA_VISIBLE_DEVICES={parent_visible!r}, len={len(parent_devices)})"
             )
-            # Fall back to parent's devices unchanged
-            return _apply_jax_subprocess_env(env)
 
     physical_devices = [parent_devices[idx] for idx in indices]
     env["CUDA_VISIBLE_DEVICES"] = ",".join(physical_devices)

@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, ValidationInfo, field_validator, model_validator
 
 from proto_tools.utils import (
     BaseConfig,
@@ -105,7 +105,7 @@ class AlphaGenomeInterval(BaseToolInput):
     def validate_interval(self) -> "AlphaGenomeInterval":
         """Validate interval start < end."""
         if self.interval_end <= self.interval_start:
-            raise ValueError("end must be greater than start")
+            raise ValueError(f"interval_end ({self.interval_end}) must be > interval_start ({self.interval_start})")
         return self
 
 
@@ -132,20 +132,26 @@ class AlphaGenomeVariant(AlphaGenomeInterval):
 
     @field_validator("reference_bases", "alternate_bases")
     @classmethod
-    def validate_allele_bases(cls, bases: str) -> str:
+    def validate_allele_bases(cls, bases: str, info: ValidationInfo) -> str:
         """Validate allele sequence characters."""
         normalized = bases.strip().upper()
         if not normalized:
-            raise ValueError("Allele values cannot be empty")
-        if not set(normalized) <= set("ACGTN"):
-            raise ValueError("Allele values must only contain DNA bases A/C/G/T/N")
+            raise ValueError(f"{info.field_name}: cannot be empty")
+        invalid = sorted(set(normalized) - set("ACGTN"))
+        if invalid:
+            raise ValueError(
+                f"{info.field_name}: must only contain DNA bases A/C/G/T/N; got invalid {invalid} in {bases!r}"
+            )
         return normalized
 
     @model_validator(mode="after")
     def validate_variant_position(self) -> "AlphaGenomeVariant":
         """Ensure variant position is within the interval."""
         if not (self.interval_start <= self.variant_position < self.interval_end):
-            raise ValueError("variant_position must be within [interval_start, interval_end)")
+            raise ValueError(
+                f"variant_position ({self.variant_position}) must be within "
+                f"[interval_start={self.interval_start}, interval_end={self.interval_end})"
+            )
         return self
 
 

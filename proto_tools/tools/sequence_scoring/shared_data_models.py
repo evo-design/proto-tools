@@ -5,7 +5,7 @@ from __future__ import annotations
 from numbers import Integral
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 from proto_tools.utils import BaseToolInput, InputField, return_invalid_nucleotide_chars
 
@@ -38,16 +38,16 @@ class SequenceTargetRange(BaseToolInput):
 
     @field_validator("start", "end", mode="before")
     @classmethod
-    def validate_coordinate(cls, value: Any) -> int:
+    def validate_coordinate(cls, value: Any, info: ValidationInfo) -> int:
         """Validate target range coordinates."""
         if isinstance(value, bool) or not isinstance(value, Integral):
-            raise ValueError("Target range coordinates must be integers.")
+            raise ValueError(f"{info.field_name}: must be an integer, got {type(value).__name__}={value!r}")
         return int(value)
 
     def model_post_init(self, __context: object) -> None:
         """Validate target range coordinates."""
         if self.end < self.start:
-            raise ValueError("end must be greater than or equal to start")
+            raise ValueError(f"end ({self.end}) must be >= start ({self.start})")
 
 
 class PreparedSequenceWindow(BaseModel):

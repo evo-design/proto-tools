@@ -275,8 +275,8 @@ class ESMIF1Model:
                     logger.info(f"Loaded ProteinDPO weights from {dpo_weights_path}")
             else:
                 raise FileNotFoundError(
-                    f"ProteinDPO weights not found at {dpo_weights_path}. "
-                    f"Run setup.sh or set PROTO_ESM_IF1_WEIGHTS_DIR."
+                    f"esm-if1: ProteinDPO weights not found at {dpo_weights_path}; "
+                    f"run setup.sh or set PROTO_ESM_IF1_WEIGHTS_DIR"
                 )
 
         self.model = self.model.to(device)
@@ -291,7 +291,7 @@ class ESMIF1Model:
     def to_device(self, device: str) -> None:
         """Move model to a different device."""
         if not self._loaded:
-            raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
+            raise ValueError("esm-if1: cannot move unloaded model to device — call load() first")
         if self.device != device:
             self.model = move_model_to_device(self.model, self.device, device)
             self.device = device
@@ -351,7 +351,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 weights_variant=input_dict["weights_variant"],
                 verbose=input_dict["verbose"],
             )
-        raise ValueError(f"Unknown operation: {operation}")
+        raise ValueError(f"esm-if1: unknown operation {operation!r}; valid: ['sample', 'score']")
 
 
 def to_device(device: str) -> dict[str, Any]:
@@ -374,7 +374,7 @@ def get_memory_stats() -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+        raise ValueError("esm_if1: usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)
