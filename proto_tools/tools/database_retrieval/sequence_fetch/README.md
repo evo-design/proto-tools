@@ -159,6 +159,43 @@ for item in result.results:
 result.export(name="sequence_fetch_run", export_path="./outputs", file_format="fasta")
 ```
 
+**Chained workflow -- multi-source fetch -> per-source follow-up calls**
+
+`sequence_fetch` *is* the chaining orchestrator -- under the hood it dispatches to
+`uniprot-fetch`, `ncbi-efetch`, and `pdb-fetch-entry` -- but downstream you often
+want to enrich the result with calls that the orchestrator itself doesn't make.
+
+```python
+from proto_tools.tools.database_retrieval import (
+    PdbFetchConfig, PdbFetchEntryInput,
+    SequenceFetchConfig, SequenceFetchInput,
+    run_pdb_fetch_entry, run_sequence_fetch,
+)
+
+# 1. Multi-source: pull the protein sequence + linked PDB IDs in one call
+result = run_sequence_fetch(
+    SequenceFetchInput(
+        requests=[{
+            "request_id": "kras",
+            "target_name": "KRAS",
+            "organism": "Homo sapiens",
+            "sequence_types": ["protein", "structure"],
+        }]
+    ),
+    SequenceFetchConfig(),
+)
+kras = result.results[0]
+
+# 2. Follow-up: walk the structure refs and pick the best-resolution X-ray entry.
+candidates = []
+for s in kras.fetched_structures[:10]:
+    meta = run_pdb_fetch_entry(PdbFetchEntryInput(pdb_id=s.pdb_id), PdbFetchConfig())
+    if meta.success and meta.resolution is not None and (meta.method or "").startswith("X-RAY"):
+        candidates.append((s.pdb_id, meta.resolution))
+candidates.sort(key=lambda c: c[1])
+print(f"KRAS best X-ray template: {candidates[0]}")
+```
+
 ## Best Practices & Gotchas
 
 1. Provide IDs whenever possible. ID-first routing is far more reliable than name-only lookup.

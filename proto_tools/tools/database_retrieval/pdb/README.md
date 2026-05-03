@@ -193,6 +193,37 @@ unique_seqs = list(set(c.sequence for c in protein_chains))
 print(f"Unique protein sequences: {len(unique_seqs)}")
 ```
 
+**Example 4: Chained workflow -- UniProt -> highest-resolution PDB structure**
+
+A common an internal repo pattern when picking a structural template: walk a UniProt record's PDB cross-references and pick the highest-resolution X-ray entry.
+
+```python
+from proto_tools.tools.database_retrieval import (
+    PdbFetchConfig, PdbFetchEntryInput,
+    UniProtFetchConfig, UniProtFetchInput,
+    run_pdb_fetch_entry, run_uniprot_fetch,
+)
+
+# 1. Resolve KRAS by symbol; bias toward the reviewed Swiss-Prot entry.
+uniprot = run_uniprot_fetch(
+    UniProtFetchInput(target_name="KRAS", organism="Homo sapiens", prefer_pdb_crossref=True),
+    UniProtFetchConfig(),
+)
+assert uniprot.accession == "P01116"
+assert len(uniprot.pdb_crossrefs) > 0
+
+# 2. Pull metadata for each linked PDB and pick the X-ray entry with the best resolution.
+candidates = []
+for pdb_id in uniprot.pdb_crossrefs[:10]:  # cap to keep the example fast
+    meta = run_pdb_fetch_entry(PdbFetchEntryInput(pdb_id=pdb_id), PdbFetchConfig())
+    if meta.success and meta.resolution is not None and (meta.method or "").startswith("X-RAY"):
+        candidates.append((pdb_id, meta.resolution, meta.title))
+
+candidates.sort(key=lambda c: c[1])  # ascending: smaller resolution = better
+best_id, best_res, best_title = candidates[0]
+print(f"Best X-ray template for KRAS: {best_id} ({best_res} A) -- {best_title}")
+```
+
 ## Best Practices & Gotchas
 
 **Common mistakes:**
