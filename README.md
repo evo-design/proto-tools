@@ -103,6 +103,7 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 <a href="proto_tools/tools/database_retrieval/">database_retrieval/</a>             # Sequence and structure database access
 ├── <a href="proto_tools/tools/database_retrieval/alphafold_db/">alphafold_db/</a>
 ├── <a href="proto_tools/tools/database_retrieval/alphamissense/">alphamissense/</a>
+├── <a href="proto_tools/tools/database_retrieval/interproscan/">interproscan/</a>
 ├── <a href="proto_tools/tools/database_retrieval/ncbi/">ncbi/</a>
 ├── <a href="proto_tools/tools/database_retrieval/pdb/">pdb/</a>
 ├── <a href="proto_tools/tools/database_retrieval/pubchem/">pubchem/</a>

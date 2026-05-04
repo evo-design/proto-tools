@@ -18,6 +18,17 @@ from proto_tools.tools.database_retrieval.alphamissense import (
     run_alphamissense_fetch,
 )
 
+# InterPro fetch
+from proto_tools.tools.database_retrieval.interproscan import (
+    InterProApp,
+    InterProDomain,
+    InterProDomainType,
+    InterProScanFetchConfig,
+    InterProScanFetchInput,
+    InterProScanFetchOutput,
+    run_interproscan_fetch,
+)
+
 # NCBI Entrez tools
 from proto_tools.tools.database_retrieval.ncbi import (
     NCBIEfetchConfig,
@@ -92,6 +103,14 @@ __all__ = [
     "AlphaMissenseFetchOutput",
     "AlphaMissensePrediction",
     "run_alphamissense_fetch",
+    # InterPro fetch
+    "InterProApp",
+    "InterProDomain",
+    "InterProDomainType",
+    "InterProScanFetchConfig",
+    "InterProScanFetchInput",
+    "InterProScanFetchOutput",
+    "run_interproscan_fetch",
     # PubChem fetch
     "PubChemFetchConfig",
     "PubChemFetchInput",
