@@ -222,6 +222,9 @@ print(f"Wrote {pdb_path} ({pdb_path.stat().st_size:,} bytes)")
 from proto_tools.tools.database_retrieval import (
     AlphaFoldDBFetchConfig, AlphaFoldDBFetchInput, run_alphafold_db_fetch,
 )
+from proto_tools.tools.structure_scoring.pyrosetta import (
+    PyRosettaEnergyConfig, PyRosettaEnergyInput, run_pyrosetta_energy,
+)
 
 # Pull the AlphaFold-predicted structure for human KRAS and pass it directly
 # to any tool that consumes a Structure -- no Structure(structure=text, ...)
@@ -231,9 +234,14 @@ afdb = run_alphafold_db_fetch(
     AlphaFoldDBFetchConfig(),
 )
 
-# e.g. score with PyRosetta (or hand to TM-align, US-align, ProteinMPNN, ...):
-# from proto_tools.tools.scoring.pyrosetta import run_pyrosetta_energy, PyRosettaEnergyInput
-# energy = run_pyrosetta_energy(PyRosettaEnergyInput(structures=[afdb.structure]))
+# Score with PyRosetta. The same one-line composition works for every tool
+# that takes a Structure or list[Structure]: tmalign, usalign, proteinmpnn,
+# esm-if1, dssp, pyrosetta-relax, pdockq2, structure-metrics, etc.
+energy = run_pyrosetta_energy(
+    PyRosettaEnergyInput(inputs=[afdb.structure]),
+    PyRosettaEnergyConfig(),
+)
+print(f"{afdb.entry_id} total energy: {energy.results[0]['total_energy']:.1f} REU")
 ```
 
 **Example 6: Chained workflow -- gene symbol -> UniProt -> AFDB structure (template-fetching for variant design)**
