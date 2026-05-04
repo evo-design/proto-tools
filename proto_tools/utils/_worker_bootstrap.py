@@ -88,6 +88,18 @@ def _copy_standalone_helpers(script_path: str) -> None:
             sys.stderr.write(f"[worker] Warning: Failed to copy {name}: {exc}\n")
 
 
+def _remove_bootstrap_dir_from_sys_path() -> None:
+    """Prevent the bootstrap directory from shadowing standalone dependencies.
+
+    Persistent workers execute this file as a script, so Python places
+    ``proto_tools/utils`` on ``sys.path``. That directory contains generic
+    module names such as ``progress.py``; leaving it importable can shadow
+    third-party packages inside isolated standalone tool environments.
+    """
+    bootstrap_dir = Path(__file__).resolve().parent
+    sys.path[:] = [entry for entry in sys.path if Path(entry or ".").resolve() != bootstrap_dir]
+
+
 def _load_module(script_path: str) -> Any:
     """Import a standalone script as a Python module."""
     path = Path(script_path).resolve()
@@ -218,6 +230,7 @@ def main() -> None:
 
     # Copy standalone helpers to the tool's directory if not present
     _copy_standalone_helpers(script_path)
+    _remove_bootstrap_dir_from_sys_path()
 
     module = _load_module(script_path)
 
