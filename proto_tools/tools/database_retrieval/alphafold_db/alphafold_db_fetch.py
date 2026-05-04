@@ -7,11 +7,12 @@ from the AlphaFold Protein Structure Database by UniProt accession.
 import json
 import logging
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 import requests
 from pydantic import Field
 
+from proto_tools.entities.structures.structure import BFactorType, Structure
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -21,6 +22,7 @@ from proto_tools.utils import (
     InputField,
     build_http_session,
 )
+from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +65,13 @@ class AlphaFoldDBFetchConfig(BaseConfig):
     Attributes:
         structure_format (Literal["pdb", "cif"]): Structure file format to download.
         include_structure (bool): If True (default), download the structure file
-            text. Set to False for metadata-only probes (URLs, mean pLDDT, gene,
-            sequence) — saves ~100-500 KB per call, meaningful for batch sweeps.
-        include_plddt (bool): If True (default), download the per-residue pLDDT
-            JSON. Set to False to skip the ~3 KB extra fetch.
-        include_pae (bool): If True, download the PAE (predicted aligned error)
-            matrix. Disabled by default — pAE files can be tens of MB for long
-            proteins.
+            text and the per-residue pLDDT array, returning a parsed ``Structure``
+            on the output. Set to False for metadata-only probes (URLs, mean pLDDT,
+            gene, sequence) — saves ~100-500 KB per call, meaningful for batch sweeps.
+        include_pae (bool): If True, also download the PAE (predicted aligned
+            error) matrix and attach it to ``output.structure.metrics["pae_matrix"]``.
+            Disabled by default — pAE files can be tens of MB for long proteins.
+            No-op when ``include_structure=False``.
         include_msa (bool): If True, download the A3M MSA used as input to
             AlphaFold prediction. Disabled by default — A3M files can be
             hundreds of KB to several MB for highly conserved proteins.
@@ -81,21 +83,15 @@ class AlphaFoldDBFetchConfig(BaseConfig):
         description="Structure file format to download (pdb or mmCIF)",
     )
     include_structure: bool = ConfigField(
-        title="Include Structure Text",
+        title="Include Structure",
         default=True,
-        description="Download the structure file text; set False for metadata-only probes",
-        advanced=True,
-    )
-    include_plddt: bool = ConfigField(
-        title="Include Per-Residue pLDDT",
-        default=True,
-        description="Download the per-residue pLDDT confidence array",
+        description="Fetch structure + per-residue pLDDT into output.structure; False for metadata-only probes",
         advanced=True,
     )
     include_pae: bool = ConfigField(
         title="Include PAE Matrix",
         default=False,
-        description="Download the PAE (predicted aligned error) matrix; large for long proteins",
+        description="Also fetch PAE into output.structure.metrics; ignored when include_structure=False",
         advanced=True,
     )
     include_msa: bool = ConfigField(
@@ -104,6 +100,42 @@ class AlphaFoldDBFetchConfig(BaseConfig):
         description="Download the A3M MSA used as input to prediction; large for conserved proteins",
         advanced=True,
     )
+
+
+class AlphaFoldDBMetrics(Metrics):
+    """Per-structure metrics emitted by AlphaFold DB fetch.
+
+    Attached to ``Structure.metrics`` when ``include_structure=True``. Uses the
+    same ``avg_plddt`` / ``pae_matrix`` keys as the structure-prediction tools
+    (ESMFold, AlphaFold2, AlphaFold3) so a downstream tool reading
+    ``s.metrics["avg_plddt"]`` composes uniformly across DB-fetched and
+    predicted structures.
+
+    Metrics documented in ``metric_spec``:
+        avg_plddt (float): Mean per-residue pLDDT score (0-100). Always present
+            (sourced from AlphaFold DB's ``globalMetricValue`` field).
+        plddt_per_residue (list[float]): Per-residue pLDDT scores (0-100), one
+            entry per residue in the structure. Always present.
+        pae_matrix (list[list[float]]): NxN predicted aligned error matrix in
+            angstroms. Present when ``include_pae=True``.
+    """
+
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "avg_plddt": {"availability": "always", "type": "float", "min": 0.0, "max": 100.0},
+        "plddt_per_residue": {
+            "availability": "always",
+            "type": "list[float]",
+            "min": 0.0,
+            "max": 100.0,
+        },
+        "pae_matrix": {
+            "availability": "when include_pae=True",
+            "type": "list[list[float]]",
+            "min": 0.0,
+            "max": None,
+        },
+    }
+    primary_metric: str | None = "avg_plddt"
 
 
 class AlphaFoldDBFetchOutput(BaseToolOutput):
@@ -127,7 +159,10 @@ class AlphaFoldDBFetchOutput(BaseToolOutput):
         model_created_date (str | None): ISO 8601 timestamp when this prediction was
             generated.
         mean_plddt (float | None): Mean per-residue pLDDT for the prediction
-            (AlphaFold DB's globalMetricValue field).
+            (AlphaFold DB's globalMetricValue field). Always populated from the
+            metadata response, regardless of ``include_structure``; when
+            ``include_structure=True`` it is also mirrored at
+            ``structure.metrics["avg_plddt"]``.
         pdb_url (str): URL to the PDB structure file on AlphaFold DB.
         cif_url (str): URL to the mmCIF structure file on AlphaFold DB.
         pae_doc_url (str): URL to the PAE JSON document on AlphaFold DB.
@@ -135,17 +170,13 @@ class AlphaFoldDBFetchOutput(BaseToolOutput):
             AlphaFold DB.
         pae_image_url (str): URL to the rendered PAE PNG on AlphaFold DB.
         msa_url (str | None): URL to the MSA A3M used for prediction, when present.
-        structure_format (str): Format of the downloaded structure file ('pdb' or
-            'cif'); empty when `include_structure` is False.
-        structure_text (str | None): Structure file contents in `structure_format`.
-            None when `include_structure` is False.
-        plddt_per_residue (list[float] | None): Per-residue pLDDT scores (0-100),
-            one entry per residue in `sequence`. None when `include_plddt` is False.
-        pae_matrix (list[list[float]] | None): NxN predicted aligned error matrix
-            in angstroms, indexed by aligned-pair (residue i, residue j). None when
-            `include_pae` is False.
+        structure (Structure | None): Parsed AlphaFold structure (PDB or mmCIF
+            body in ``structure_format``, ``b_factor_type=BFactorType.PLDDT``)
+            with an :class:`AlphaFoldDBMetrics` ``metrics`` container carrying
+            ``avg_plddt``, ``plddt_per_residue``, and (when ``include_pae=True``)
+            ``pae_matrix``. None when ``include_structure=False``.
         msa_a3m (str | None): A3M-format MSA contents used as input to the
-            AlphaFold prediction. None when `include_msa` is False or when the
+            AlphaFold prediction. None when ``include_msa`` is False or when the
             entry has no associated MSA URL.
         source_url (str): AlphaFold DB API URL used for the metadata lookup.
         raw_entry (dict[str, Any]): Complete AlphaFold DB JSON record for advanced
@@ -172,10 +203,10 @@ class AlphaFoldDBFetchOutput(BaseToolOutput):
     plddt_doc_url: str = Field(description="URL to per-residue pLDDT JSON document")
     pae_image_url: str = Field(description="URL to rendered PAE PNG")
     msa_url: str | None = Field(default=None, description="URL to MSA A3M file, when present")
-    structure_format: str = Field(default="", description="Format of downloaded structure ('pdb' or 'cif')")
-    structure_text: str | None = Field(default=None, description="Structure file contents")
-    plddt_per_residue: list[float] | None = Field(default=None, description="Per-residue pLDDT (0-100)")
-    pae_matrix: list[list[float]] | None = Field(default=None, description="NxN predicted aligned error matrix")
+    structure: Structure | None = Field(
+        default=None,
+        description="Parsed AlphaFold Structure (PLDDT B-factors, metrics with pLDDT and PAE); None when skipped",
+    )
     msa_a3m: str | None = Field(default=None, description="A3M-format MSA contents used as input to prediction")
     source_url: str = Field(description="AlphaFold DB API URL used for lookup")
     raw_entry: dict[str, Any] = Field(
@@ -246,8 +277,9 @@ def run_alphafold_db_fetch(
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        AlphaFoldDBFetchOutput: Prediction metadata, structure text, per-residue
-            pLDDT array, and optionally the PAE matrix and A3M MSA.
+        AlphaFoldDBFetchOutput: Prediction metadata plus an optional parsed
+            ``Structure`` (with per-residue pLDDT and optional PAE on
+            ``structure.metrics``) and optionally the A3M MSA.
     """
     del instance
 
@@ -267,18 +299,27 @@ def run_alphafold_db_fetch(
 
         entry = _select_record(entries, accession, inputs.isoform)
 
-        structure_text: str | None = None
+        structure: Structure | None = None
         if config.include_structure:
             structure_url = entry["pdbUrl"] if config.structure_format == "pdb" else entry["cifUrl"]
             structure_text = _fetch_text(structure_url, session)
-
-        plddt_per_residue: list[float] | None = None
-        if config.include_plddt:
             plddt_per_residue = _fetch_plddt(entry["plddtDocUrl"], session)
+            pae_matrix: list[list[float]] | None = None
+            if config.include_pae:
+                pae_matrix = _fetch_pae(entry["paeDocUrl"], session)
 
-        pae_matrix: list[list[float]] | None = None
-        if config.include_pae:
-            pae_matrix = _fetch_pae(entry["paeDocUrl"], session)
+            metrics = AlphaFoldDBMetrics(
+                avg_plddt=entry.get("globalMetricValue"),
+                plddt_per_residue=plddt_per_residue,
+                pae_matrix=pae_matrix,
+            )
+            structure = Structure(
+                structure=structure_text,
+                structure_format=config.structure_format,
+                b_factor_type=BFactorType.PLDDT,
+                metrics=metrics,
+                source="alphafold-db-fetch",
+            )
 
         msa_a3m: str | None = None
         if config.include_msa:
@@ -307,10 +348,7 @@ def run_alphafold_db_fetch(
             plddt_doc_url=entry["plddtDocUrl"],
             pae_image_url=entry["paeImageUrl"],
             msa_url=entry.get("msaUrl"),
-            structure_format=config.structure_format if config.include_structure else "",
-            structure_text=structure_text,
-            plddt_per_residue=plddt_per_residue,
-            pae_matrix=pae_matrix,
+            structure=structure,
             msa_a3m=msa_a3m,
             source_url=api_url,
             raw_entry=entry,

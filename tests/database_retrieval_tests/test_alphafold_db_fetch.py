@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from proto_tools.entities.structures.structure import BFactorType, Structure
 from proto_tools.tools.database_retrieval import (
     AlphaFoldDBFetchConfig,
     AlphaFoldDBFetchInput,
@@ -20,6 +21,7 @@ from proto_tools.tools.database_retrieval.alphafold_db.alphafold_db_fetch import
     _fetch_plddt,
     _fetch_prediction,
 )
+from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 
 
 def _mock_session(payload, status_code=200):
@@ -77,7 +79,7 @@ def test_fetch_prediction_returns_none_on_404():
 
 @pytest.mark.integration
 def test_alphafold_db_fetch_full_p04637_record():
-    """Default fetch returns a complete record with parseable PDB structure and a length-matched pLDDT."""
+    """Default fetch returns a complete record with a parsed PDB Structure and length-matched pLDDT."""
     output = run_alphafold_db_fetch(AlphaFoldDBFetchInput(uniprot_id="P04637"), AlphaFoldDBFetchConfig())
     assert output.success
     assert output.tool_id == "alphafold-db-fetch"
@@ -89,25 +91,36 @@ def test_alphafold_db_fetch_full_p04637_record():
     assert output.mean_plddt is not None and 0.0 <= output.mean_plddt <= 100.0
     assert output.latest_version >= 4
 
-    # Structure text must parse into a real PDB record, not just contain the literal "ATOM"
-    atom_lines = [line for line in output.structure_text.splitlines() if line.startswith("ATOM ")]
+    # Structure shape: parsed Structure with PDB body, PLDDT B-factors, AFDB source
+    assert output.structure is not None
+    assert output.structure.structure_format == "pdb"
+    assert output.structure.b_factor_type == BFactorType.PLDDT
+    assert output.structure.source == "alphafold-db-fetch"
+
+    # Structure body must parse into a real PDB record, not just contain the literal "ATOM"
+    atom_lines = [line for line in output.structure.structure.splitlines() if line.startswith("ATOM ")]
     assert len(atom_lines) > 1000  # 393 residues * many atoms each
     # First ATOM line follows the PDB column convention: cols 13-16 = atom name, cols 18-20 = residue name
     first_atom = atom_lines[0]
     assert first_atom[13:16].strip() in {"N", "CA", "C", "O"}
     assert first_atom[17:20].strip() == "MET"  # TP53 starts with methionine
 
-    # pLDDT array must align 1:1 with the sequence
-    assert output.plddt_per_residue is not None
-    assert len(output.plddt_per_residue) == output.sequence_length
-    assert all(0 <= v <= 100 for v in output.plddt_per_residue)
+    # pLDDT array must align 1:1 with the sequence and live on structure.metrics
+    plddt_per_residue = output.structure.metrics["plddt_per_residue"]
+    assert len(plddt_per_residue) == output.sequence_length
+    assert all(0 <= v <= 100 for v in plddt_per_residue)
     # Mean of the array equals the reported global mean (within float tolerance)
-    derived_mean = sum(output.plddt_per_residue) / len(output.plddt_per_residue)
-    assert derived_mean == pytest.approx(output.mean_plddt, abs=0.5)
+    derived_mean = sum(plddt_per_residue) / len(plddt_per_residue)
+    assert derived_mean == pytest.approx(output.structure.metrics["avg_plddt"], abs=0.5)
+    # avg_plddt on the Structure mirrors the top-level mean_plddt metadata
+    assert output.structure.metrics["avg_plddt"] == pytest.approx(output.mean_plddt, abs=1e-6)
 
     # PAE and MSA are opt-in
-    assert output.pae_matrix is None
+    assert "pae_matrix" not in output.structure.metrics
     assert output.msa_a3m is None
+
+    # Spec contract: every always-available metric is present, typed, and in-range
+    assert_metrics_in_spec(output)
 
 
 @pytest.mark.integration
@@ -118,12 +131,16 @@ def test_alphafold_db_fetch_with_pae_returns_square_matrix():
         AlphaFoldDBFetchConfig(include_pae=True),
     )
     assert output.success
-    assert output.pae_matrix is not None
+    assert output.structure is not None
+    pae_matrix = output.structure.metrics["pae_matrix"]
     n = output.sequence_length
-    assert len(output.pae_matrix) == n
-    assert all(len(row) == n for row in output.pae_matrix)
+    assert len(pae_matrix) == n
+    assert all(len(row) == n for row in pae_matrix)
     # Diagonal entries are conventionally near-zero (a residue's error against itself)
-    assert all(output.pae_matrix[i][i] < 5.0 for i in range(0, n, 50))
+    assert all(pae_matrix[i][i] < 5.0 for i in range(0, n, 50))
+
+    # With include_pae=True, pae_matrix is now also a spec-validated metric
+    assert_metrics_in_spec(output)
 
 
 @pytest.mark.integration
@@ -151,9 +168,10 @@ def test_alphafold_db_fetch_cif_format():
         AlphaFoldDBFetchConfig(structure_format="cif"),
     )
     assert output.success
-    assert output.structure_format == "cif"
-    assert output.structure_text.startswith("data_")  # mmCIF data block header
-    assert "_atom_site." in output.structure_text  # atom loop column prefix
+    assert output.structure is not None
+    assert output.structure.structure_format == "cif"
+    assert output.structure.structure.startswith("data_")  # mmCIF data block header
+    assert "_atom_site." in output.structure.structure  # atom loop column prefix
 
 
 @pytest.mark.integration
@@ -210,8 +228,8 @@ def test_workflow_uniprot_then_afdb_yields_consistent_template():
 
     # 4. KRAS Switch I + Switch II loops are well-defined; nucleotide-binding pocket
     #    residues should be high-confidence. Confirm pLDDT is informative (not flat).
-    plddt = afdb.plddt_per_residue
-    assert plddt is not None
+    assert afdb.structure is not None
+    plddt = afdb.structure.metrics["plddt_per_residue"]
     assert max(plddt) - min(plddt) > 30, "pLDDT array is suspiciously flat for KRAS"
 
 
@@ -246,7 +264,7 @@ def test_alphafold_db_fetch_multi_isoform_picks_canonical(caplog):
 
 @pytest.mark.integration
 def test_alphafold_db_fetch_metadata_only_skips_payload_downloads():
-    """All include_* off returns metadata only.
+    """include_structure=False returns metadata only.
 
     This is the canonical batch / probe workflow: hit AFDB to confirm an entry
     exists and grab the URLs + mean pLDDT without paying for the structure
@@ -254,19 +272,16 @@ def test_alphafold_db_fetch_metadata_only_skips_payload_downloads():
     """
     output = run_alphafold_db_fetch(
         AlphaFoldDBFetchInput(uniprot_id="P04637"),
-        AlphaFoldDBFetchConfig(include_structure=False, include_plddt=False, include_pae=False, include_msa=False),
+        AlphaFoldDBFetchConfig(include_structure=False, include_pae=False, include_msa=False),
     )
     assert output.success
     assert output.entry_id == "AF-P04637-F1"
     assert output.mean_plddt is not None  # always in the metadata
     # All URLs are still populated regardless of which payloads were skipped
     assert output.pdb_url and output.cif_url and output.plddt_doc_url and output.pae_doc_url
-    # Heavy payloads are skipped
-    assert output.structure_text is None
-    assert output.plddt_per_residue is None
-    assert output.pae_matrix is None
+    # Heavy payloads are skipped — no Structure, no MSA
+    assert output.structure is None
     assert output.msa_a3m is None
-    assert output.structure_format == ""
 
 
 @pytest.mark.integration
@@ -292,3 +307,29 @@ def test_alphafold_db_fetch_invalid_isoform_fails_loudly():
     )
     assert output.success is False
     assert any("Isoform 99 not available" in err for err in output.errors)
+
+
+@pytest.mark.integration
+def test_alphafold_db_fetch_structure_composes_with_structure_pipeline():
+    """The fetched Structure is drop-in compatible with structure-consuming tools.
+
+    This pins the original motivation of the refactor: anything typed
+    ``Structure`` (TM-align, US-align, inverse folding, structure-scoring,
+    PyRosetta wrappers) accepts ``output.structure`` directly without an
+    intermediate ``Structure(structure=text, structure_format=...)`` wrap.
+    """
+    output = run_alphafold_db_fetch(AlphaFoldDBFetchInput(uniprot_id="P04637"), AlphaFoldDBFetchConfig())
+    assert output.success
+    assert isinstance(output.structure, Structure)
+
+    # Lazy gemmi parse must succeed and expose chain content
+    sequences = output.structure.get_chain_sequences()
+    assert sequences, "expected at least one chain"
+    chain_id = next(iter(sequences))
+    assert sequences[chain_id] == output.sequence
+
+    # Per-residue pLDDT can also be derived from the B-factor column (normalized to 0-1)
+    derived = output.structure.per_residue_plddt
+    assert derived is not None
+    assert len(derived) == output.sequence_length
+    assert all(0.0 <= v <= 1.0 for v in derived)

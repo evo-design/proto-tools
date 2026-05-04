@@ -264,7 +264,7 @@ afdb = run_alphafold_db_fetch(
     AlphaFoldDBFetchInput(uniprot_id=accession),
     AlphaFoldDBFetchConfig(),
 )
-plddt = afdb.plddt_per_residue
+plddt = afdb.structure.metrics["plddt_per_residue"]
 
 # Pull saturation grid; aggregate by position
 am = run_alphamissense_fetch(

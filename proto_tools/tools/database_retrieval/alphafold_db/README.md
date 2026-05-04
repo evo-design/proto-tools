@@ -4,7 +4,7 @@
 
 ## Overview
 
-`alphafold-db-fetch` retrieves an AlphaFold-predicted protein structure from the [AlphaFold Protein Structure Database](https://alphafold.ebi.ac.uk/) by UniProt accession. It returns the structure file text (PDB or mmCIF), per-residue pLDDT confidence, an optional pAE (predicted aligned error) matrix, and rich metadata (entry ID, AFDB version, gene, organism, source URLs, full JSON record). This is a CPU-only tool that wraps the AlphaFold DB REST API.
+`alphafold-db-fetch` retrieves an AlphaFold-predicted protein structure from the [AlphaFold Protein Structure Database](https://alphafold.ebi.ac.uk/) by UniProt accession. It returns a parsed `Structure` (PDB or mmCIF, with `b_factor_type=PLDDT` and per-residue pLDDT plus optional pAE on `structure.metrics`), drop-in compatible with every structure-consuming tool in proto-tools (TM-align, US-align, inverse folding, structure-scoring, structure-design conditioning), alongside rich metadata (entry ID, AFDB version, gene, organism, source URLs, full JSON record). This is a CPU-only tool that wraps the AlphaFold DB REST API.
 
 ## Background
 
@@ -58,9 +58,8 @@ The tool wraps the AlphaFold DB prediction API in a single HTTP flow:
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `structure_format` | `Literal["pdb", "cif"]` | `"pdb"` | Structure file format to download |
-| `include_structure` | `bool` | `True` | Download the structure file text. Set to `False` for metadata-only probes (saves ~100-500 KB per call) |
-| `include_plddt` | `bool` | `True` | Download the per-residue pLDDT JSON (~3 KB per call) |
-| `include_pae` | `bool` | `False` | Download the pAE matrix; off by default because pAE files are large for long proteins |
+| `include_structure` | `bool` | `True` | Download the structure file and per-residue pLDDT into `output.structure`. Set to `False` for metadata-only probes (saves ~100-500 KB per call) |
+| `include_pae` | `bool` | `False` | Also download the pAE matrix into `output.structure.metrics["pae_matrix"]`. Off by default because pAE files are large for long proteins. No-op when `include_structure=False` |
 | `include_msa` | `bool` | `False` | Download the A3M MSA used as input to prediction; off by default because A3M files can be hundreds of KB to several MB for highly conserved proteins |
 
 ## Output Specification
@@ -79,17 +78,17 @@ AlphaFoldDBFetchOutput(
     sequence_end: int,                      # 1-indexed inclusive end residue of the prediction
     latest_version: int,                    # Latest AFDB version of this prediction (the version served)
     model_created_date: Optional[str],      # ISO 8601 prediction timestamp
-    mean_plddt: Optional[float],            # Mean per-residue pLDDT (0-100)
+    mean_plddt: Optional[float],            # Mean per-residue pLDDT (0-100); always populated
     pdb_url: str,                           # URL to PDB structure file
     cif_url: str,                           # URL to mmCIF structure file
     pae_doc_url: str,                       # URL to pAE JSON document
     plddt_doc_url: str,                     # URL to per-residue pLDDT JSON document
     pae_image_url: str,                     # URL to rendered pAE PNG
     msa_url: Optional[str],                 # URL to MSA A3M file, when present
-    structure_format: str,                  # "pdb" or "cif"; "" when include_structure=False
-    structure_text: Optional[str],          # Structure file contents; None when include_structure=False
-    plddt_per_residue: Optional[List[float]],  # Per-residue pLDDT (0-100); None when include_plddt=False
-    pae_matrix: Optional[List[List[float]]],      # N x N pAE matrix; None when include_pae=False
+    structure: Optional[Structure],         # Parsed Structure (b_factor_type=PLDDT,
+                                            #   metrics=AlphaFoldDBMetrics with avg_plddt,
+                                            #   plddt_per_residue, pae_matrix); None
+                                            #   when include_structure=False
     msa_a3m: Optional[str],                 # A3M MSA contents; None when include_msa=False or no msaUrl
     source_url: str,                        # AFDB API URL used for the metadata lookup
     raw_entry: Dict[str, Any],              # Complete AFDB JSON record
@@ -107,15 +106,12 @@ AlphaFoldDBFetchOutput(
 | `sequence` | `str` | Amino-acid sequence covered by the prediction |
 | `sequence_length` | `int` | Length of the predicted sequence in residues |
 | `latest_version` | `int` | Latest AFDB version of this prediction (always the version served by the API) |
-| `mean_plddt` | `Optional[float]` | Global mean pLDDT score (0-100); higher is more confident |
+| `mean_plddt` | `Optional[float]` | Global mean pLDDT score (0-100); higher is more confident. Always populated from the metadata response, regardless of `include_structure`. When `include_structure=True`, also mirrored at `structure.metrics["avg_plddt"]` |
 | `pdb_url` | `str` | URL to the PDB structure file on AFDB |
 | `cif_url` | `str` | URL to the mmCIF structure file on AFDB |
 | `plddt_doc_url` | `str` | URL to the per-residue pLDDT JSON document |
 | `pae_doc_url` | `str` | URL to the pAE JSON document |
-| `structure_format` | `str` | `"pdb"` or `"cif"`, matching the downloaded file |
-| `structure_text` | `Optional[str]` | Structure file contents in `structure_format`; `None` when `include_structure=False` |
-| `plddt_per_residue` | `Optional[List[float]]` | Per-residue pLDDT scores (0-100), one per residue; `None` when `include_plddt=False` |
-| `pae_matrix` | `Optional[List[List[float]]]` | N x N predicted aligned error matrix in angstroms; `None` when `include_pae=False` |
+| `structure` | `Optional[Structure]` | Parsed [`Structure`](../../../entities/structures/structure.py) — PDB or mmCIF body in `structure.structure_format`, `b_factor_type=BFactorType.PLDDT`, `source="alphafold-db-fetch"`, with an `AlphaFoldDBMetrics` `metrics` container exposing `avg_plddt`, `plddt_per_residue`, and (when `include_pae=True`) `pae_matrix`. `None` when `include_structure=False`. Drop-in compatible with every structure-consuming tool in proto-tools (TM-align, US-align, inverse folding, structure-scoring, structure-design conditioning) |
 | `msa_a3m` | `Optional[str]` | A3M-format MSA contents used as input to prediction; `None` when `include_msa=False` or when the entry has no associated `msaUrl` |
 | `raw_entry` | `Dict[str, Any]` | Complete AFDB JSON record for advanced programmatic access |
 
@@ -136,7 +132,7 @@ AlphaFoldDBFetchOutput(
 - High-pAE off-diagonal blocks indicate that the relative orientation between two regions is uncertain (common between flexibly linked domains).
 
 **Interpreting edge cases:**
-- A high `mean_plddt` can hide locally unreliable regions; always inspect `plddt_per_residue` before trusting a specific residue.
+- A high `mean_plddt` can hide locally unreliable regions; always inspect `output.structure.metrics["plddt_per_residue"]` before trusting a specific residue.
 - `latest_version` advances when AFDB refreshes the prediction (e.g. with a newer AlphaFold model); refetch when the version moves past what you cached.
 - For very long proteins split into multiple fragments, `sequence_start` / `sequence_end` describe the residue range covered by the canonical first fragment, not the full UniProt sequence.
 
@@ -156,7 +152,7 @@ print(f"Entry: {output.entry_id} ({output.organism_scientific_name})")
 print(f"Length: {output.sequence_length} aa")
 print(f"Mean pLDDT: {output.mean_plddt:.1f}")
 print(f"AFDB version: v{output.latest_version}")
-print(f"Structure ({output.structure_format}, first 200 chars):\n{output.structure_text[:200]}")
+print(f"Structure ({output.structure.structure_format}, first 200 chars):\n{output.structure.structure[:200]}")
 ```
 
 **Example 2: Fetch as mmCIF and include the pAE matrix**
@@ -174,12 +170,14 @@ config = AlphaFoldDBFetchConfig(
 output = run_alphafold_db_fetch(inputs, config)
 
 # Identify low-confidence residues
-low_conf = [i + 1 for i, score in enumerate(output.plddt_per_residue) if score < 70]
+plddt = output.structure.metrics["plddt_per_residue"]
+low_conf = [i + 1 for i, score in enumerate(plddt) if score < 70]
 print(f"{len(low_conf)} residues with pLDDT < 70 (out of {output.sequence_length})")
 
 # Mean pAE between residue blocks (rough inter-domain confidence indicator)
-n = len(output.pae_matrix)
-print(f"pAE matrix: {n} x {n}, mean = {sum(sum(r) for r in output.pae_matrix) / (n * n):.2f} angstrom")
+pae = output.structure.metrics["pae_matrix"]
+n = len(pae)
+print(f"pAE matrix: {n} x {n}, mean = {sum(sum(r) for r in pae) / (n * n):.2f} angstrom")
 ```
 
 **Example 3: Metadata-only probe (skip the heavy downloads)**
@@ -193,13 +191,13 @@ from proto_tools.tools.database_retrieval import (
 # Useful for batch coverage checks before committing to large downloads.
 output = run_alphafold_db_fetch(
     AlphaFoldDBFetchInput(uniprot_id="P00533"),  # EGFR
-    AlphaFoldDBFetchConfig(include_structure=False, include_plddt=False),
+    AlphaFoldDBFetchConfig(include_structure=False),
 )
 
 print(f"AFDB has {output.entry_id}, mean pLDDT {output.mean_plddt:.1f}")
 print(f"PDB URL:  {output.pdb_url}")
 print(f"mmCIF URL: {output.cif_url}")
-# output.structure_text is None; output.plddt_per_residue is None
+# output.structure is None
 ```
 
 **Example 4: Save the structure to disk for downstream tools**
@@ -214,12 +212,31 @@ inputs = AlphaFoldDBFetchInput(uniprot_id="P04637")
 output = run_alphafold_db_fetch(inputs, AlphaFoldDBFetchConfig())
 
 pdb_path = Path(f"{output.entry_id}.pdb")
-pdb_path.write_text(output.structure_text)
+output.structure.write_pdb(pdb_path)
 print(f"Wrote {pdb_path} ({pdb_path.stat().st_size:,} bytes)")
 # Now usable as input to tmalign, usalign, ProteinMPNN, PyRosetta, etc.
 ```
 
-**Example 5: Chained workflow -- gene symbol -> UniProt -> AFDB structure (template-fetching for variant design)**
+**Example 5: Compose with downstream structure-consuming tools**
+```python
+from proto_tools.tools.database_retrieval import (
+    AlphaFoldDBFetchConfig, AlphaFoldDBFetchInput, run_alphafold_db_fetch,
+)
+
+# Pull the AlphaFold-predicted structure for human KRAS and pass it directly
+# to any tool that consumes a Structure -- no Structure(structure=text, ...)
+# wrap, no temp file, no glue code.
+afdb = run_alphafold_db_fetch(
+    AlphaFoldDBFetchInput(uniprot_id="P01116"),
+    AlphaFoldDBFetchConfig(),
+)
+
+# e.g. score with PyRosetta (or hand to TM-align, US-align, ProteinMPNN, ...):
+# from proto_tools.tools.scoring.pyrosetta import run_pyrosetta_energy, PyRosettaEnergyInput
+# energy = run_pyrosetta_energy(PyRosettaEnergyInput(structures=[afdb.structure]))
+```
+
+**Example 6: Chained workflow -- gene symbol -> UniProt -> AFDB structure (template-fetching for variant design)**
 ```python
 from proto_tools.tools.database_retrieval import (
     AlphaFoldDBFetchConfig, AlphaFoldDBFetchInput, run_alphafold_db_fetch,
@@ -259,7 +276,7 @@ assert afdb.sequence_length == uniprot.length
 
 **Tips for optimal results:**
 - Use `mmCIF` (`structure_format="cif"`) when downstream tooling needs full chain/residue metadata; PDB is fine for most quick analyses.
-- Inspect `plddt_per_residue` before any per-residue interpretation; the global `mean_plddt` can be misleading.
+- Inspect `output.structure.metrics["plddt_per_residue"]` before any per-residue interpretation; the global `mean_plddt` can be misleading.
 - Cache `latest_version` alongside any structure you persist; refetch when AFDB advances past your cached version.
 
 **Edge cases to watch for:**

@@ -223,11 +223,12 @@ uniprot = run_uniprot_fetch(
 # 2. Fetch the AlphaFold prediction keyed on that accession.
 afdb = run_alphafold_db_fetch(
     AlphaFoldDBFetchInput(uniprot_id=uniprot.accession),
-    AlphaFoldDBFetchConfig(include_plddt=True),
+    AlphaFoldDBFetchConfig(),
 )
 
 print(f"UniProt {uniprot.accession} ({uniprot.length} aa) -> AFDB {afdb.entry_id}")
 print(f"  mean pLDDT: {afdb.mean_plddt:.1f}")
+print(f"  per-residue pLDDT length: {len(afdb.structure.metrics['plddt_per_residue'])}")
 ```
 
 ## Best Practices & Gotchas
