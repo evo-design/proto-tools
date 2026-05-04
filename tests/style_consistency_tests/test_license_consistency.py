@@ -205,8 +205,17 @@ def test_toolkit_license_yaml_schema(toolkit_dir: Path) -> None:
     if not isinstance(last_updated, str) or not _ISO_DATE_RE.fullmatch(last_updated):
         errors.append(f"last_updated: expected ISO date string YYYY-MM-DD, got {last_updated!r}")
 
+    # proto_tools_original: opt-in marker for toolkits with no upstream to point at.
+    if "proto_tools_original" in data and not isinstance(data["proto_tools_original"], bool):
+        errors.append(f"proto_tools_original: expected bool, got {type(data['proto_tools_original']).__name__}")
+
     # Reject unknown top-level keys so typos surface immediately.
-    allowed_top = _REQUIRED_TOP_KEYS | {"weights", "attribution_required", "notes"}
+    allowed_top = _REQUIRED_TOP_KEYS | {
+        "weights",
+        "attribution_required",
+        "notes",
+        "proto_tools_original",
+    }
     extra = set(data.keys()) - allowed_top
     if extra:
         errors.append(f"unknown top-level keys: {sorted(extra)}")
@@ -240,9 +249,6 @@ _URL_CHECK_HEADERS = {
     "Accept": "*/*",
 }
 _URL_CHECK_TIMEOUT_S = 15
-
-# TODO: Remove when proto-tools is public
-_PRIVATE_URL_PREFIXES: tuple[str, ...] = ("https://github.com/proto-bio/",)
 
 
 def _check_url(url: str) -> str | None:
@@ -283,20 +289,21 @@ def test_toolkit_license_yaml_urls_reachable(toolkit_dir: Path) -> None:
     if not isinstance(data, dict):
         pytest.skip("invalid top-level — covered by the schema test")
 
-    # Collect every (label, url) pair from code/weights blocks
+    # proto-tools-original toolkits point at our own repo; nothing upstream
+    # to verify reachable.
+    if data.get("proto_tools_original") is True:
+        pytest.skip("proto_tools_original — no upstream URL to check")
+
     targets: list[tuple[str, str]] = []
     for label in ("code", "weights"):
         block = data.get(label)
         if isinstance(block, dict):
             url = block.get("url")
-            if not isinstance(url, str) or not url.startswith(("http://", "https://")):
-                continue
-            if url.startswith(_PRIVATE_URL_PREFIXES):
-                continue
-            targets.append((f"{label}.url", url))
+            if isinstance(url, str) and url.startswith(("http://", "https://")):
+                targets.append((f"{label}.url", url))
 
     if not targets:
-        pytest.skip("only private-repo URLs to check")
+        pytest.skip("no URLs to check")
 
     failures: list[str] = []
     for label, url in targets:
@@ -425,8 +432,11 @@ def test_toolkit_license_yaml_spdx_matches_url(toolkit_dir: Path) -> None:
     if not isinstance(data, dict):
         pytest.skip("invalid top-level — covered by the schema test")
 
+    if data.get("proto_tools_original") is True:
+        pytest.skip("proto_tools_original — no upstream license to fingerprint")
+
     # Build (label, spdx, raw_url) targets, dropping anything we can't or
-    # shouldn't fingerprint (Custom, private repo, HF model card, etc).
+    # shouldn't fingerprint (Custom, HF model card, non-raw URLs, etc).
     targets: list[tuple[str, str, str]] = []
     for label in ("code", "weights"):
         block = data.get(label)
@@ -437,8 +447,6 @@ def test_toolkit_license_yaml_spdx_matches_url(toolkit_dir: Path) -> None:
         if not isinstance(spdx, str) or not isinstance(url, str):
             continue
         if spdx not in _SPDX_FINGERPRINTS:
-            continue
-        if url.startswith(_PRIVATE_URL_PREFIXES):
             continue
         raw_url = _to_raw_text_url(url)
         if raw_url is None:

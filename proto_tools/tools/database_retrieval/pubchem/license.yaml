@@ -1,8 +1,9 @@
 code:
-  spdx: Apache-2.0
-  url: https://github.com/proto-bio/proto-tools
+  spdx: Custom (NCBI public domain)
+  url: https://www.ncbi.nlm.nih.gov/home/about/policies/
+  text: PubChem is operated by NCBI/NLM/NIH and is a work of the United States Government, not subject to copyright in the U.S. PubChem data and the PUG REST API are in the public domain and may be used, redistributed, and modified without restriction; standard NCBI usage policies (rate limits, attribution to depositors when republishing third-party content) apply. Some PubChem records re-distribute third-party content (e.g. vendor catalog data) whose terms are set by the original depositor — consult the per-record source attribution. See the canonical URL above for full NCBI terms.
 commercial_use: 'yes'
 redistribution: true
 attribution_required: false
-notes: proto-tools original wrapper around NCBI's public PubChem PUG REST API. PubChem data is in the public domain (NCBI usage policies apply to the API endpoints themselves).
+notes: PubChem core data is U.S. Government public domain. Some records re-distribute third-party content with depositor-specific terms; attribute the source database when republishing.
 last_updated: '2026-05-04'

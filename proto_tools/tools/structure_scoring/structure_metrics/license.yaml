@@ -4,5 +4,6 @@ code:
 commercial_use: 'yes'
 redistribution: true
 attribution_required: false
-notes: proto-tools original code; standard structural geometry metrics (RMSD, GDT, lDDT, etc.) implemented in-repo.
+proto_tools_original: true
+notes: proto-tools original code; longest-helix and radius-of-gyration metrics implemented in-repo using Biotite as a Python library dependency.
 last_updated: '2026-05-01'

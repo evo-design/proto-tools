@@ -44,6 +44,19 @@ CC-BY-* and CC-BY-NC-* licenses → `true`. Apache-2.0 / MIT typically don't
 require runtime attribution → `false` (NOTICE preservation only applies if
 you redistribute source, which is rarely the wrapper's concern).
 
+### `proto_tools_original: bool` (optional, default `false`)
+
+**Question answered:** Is the toolkit's computation/orchestration fully
+proto-tools-original code, with no upstream tool/service we can point at?
+
+- Omit (or set `false`) — toolkit wraps an upstream tool, model, or public
+  API. `code.url` (and `weights.url` when present) must point at the
+  upstream's canonical license source.
+- `true` — toolkit is a pure proto-tools utility (e.g. `random_protein`,
+  `random_nucleotide`, `pdockq2` formula re-implementation). Network-gated
+  reachability and SPDX-text fingerprint checks are skipped for this
+  toolkit; URL points at our own repo.
+
 ## Quick decision matrix
 
 | License (weights) | redistribution | commercial_use | attribution_required |

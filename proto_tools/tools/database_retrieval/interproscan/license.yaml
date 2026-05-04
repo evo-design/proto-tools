@@ -1,0 +1,8 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/ebi-pf-team/interproscan/blob/master/LICENSE
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: InterProScan (EMBL-EBI / Pfam team) is Apache-2.0. This wrapper calls EBI's public InterPro REST API and iprscan5 submit-and-poll service; member databases aggregated by InterPro have varying terms but data accessed via the public InterPro API is freely usable.
+last_updated: '2026-05-04'

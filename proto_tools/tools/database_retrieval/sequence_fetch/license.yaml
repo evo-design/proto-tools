@@ -4,5 +4,6 @@ code:
 commercial_use: 'yes'
 redistribution: true
 attribution_required: false
-notes: proto-tools original code; multi-source sequence retrieval helper.
+proto_tools_original: true
+notes: proto-tools original orchestration code; routes sequence requests across NCBI Entrez, UniProt REST, and RCSB PDB. Each underlying source has its own data terms — see the per-source toolkits (ncbi, uniprot, pdb) for those.
 last_updated: '2026-05-01'
