@@ -1,8 +1,11 @@
 code:
   spdx: Apache-2.0
-  url: https://github.com/evo-design/proto-tools
+  url: https://github.com/google-deepmind/alphamissense/blob/main/LICENSE
+weights:
+  spdx: CC-BY-4.0
+  url: https://alphafold.ebi.ac.uk/faq
 commercial_use: 'yes'
 redistribution: true
-attribution_required: false
-notes: proto-tools original wrapper that fetches AlphaMissense pre-computed CSVs from the AlphaFold Protein Structure Database. AlphaMissense code (google-deepmind/alphamissense) is Apache-2.0; the distributed predictions are released by EMBL-EBI under CC-BY-4.0.
+attribution_required: true
+notes: AlphaMissense code (google-deepmind/alphamissense) is Apache-2.0. Pre-computed missense predictions are distributed via the EMBL-EBI AlphaFold Protein Structure Database under CC-BY-4.0; attribution required when redistributing the predictions.
 last_updated: '2026-05-04'

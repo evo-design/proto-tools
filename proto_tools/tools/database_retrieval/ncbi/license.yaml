@@ -1,8 +1,9 @@
 code:
-  spdx: Apache-2.0
-  url: https://github.com/evo-design/proto-tools
+  spdx: Custom (NCBI public domain)
+  url: https://www.ncbi.nlm.nih.gov/home/about/policies/
+  text: NCBI Entrez and the E-utilities are works of the United States Government and are not subject to copyright in the U.S. The data served by NCBI public APIs is in the public domain and may be used, redistributed, and modified without restriction; standard NCBI usage policies (rate limits, attribution to the source database when republishing) apply to the API endpoints. See the canonical URL above for full terms.
 commercial_use: 'yes'
 redistribution: true
 attribution_required: false
-notes: proto-tools original wrapper around NCBI public APIs (Entrez/E-utilities). Underlying NCBI data is public; NCBI usage policies apply to the API endpoints themselves.
-last_updated: '2026-05-01'
+notes: NCBI Entrez/E-utilities are operated by NCBI/NLM/NIH. Data is in the public domain; rate limits apply (3 requests/sec without an API key, 10/sec with).
+last_updated: '2026-05-04'

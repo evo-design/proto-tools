@@ -1,8 +1,8 @@
 code:
-  spdx: Apache-2.0
-  url: https://github.com/evo-design/proto-tools
+  spdx: CC-BY-4.0
+  url: https://www.uniprot.org/help/license
 commercial_use: 'yes'
 redistribution: true
-attribution_required: false
-notes: proto-tools original wrapper around UniProt's public REST API. Underlying UniProt data is CC-BY-4.0.
-last_updated: '2026-05-01'
+attribution_required: true
+notes: UniProt data is released under CC-BY-4.0 by the UniProt consortium (SIB, EMBL-EBI, PIR). Free for any use including commercial; attribution to UniProt is required.
+last_updated: '2026-05-04'

@@ -4,5 +4,6 @@ code:
 commercial_use: 'yes'
 redistribution: true
 attribution_required: false
+proto_tools_original: true
 notes: proto-tools original code; trivial random nucleotide sampler.
 last_updated: '2026-05-01'

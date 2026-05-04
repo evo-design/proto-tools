@@ -1,8 +1,11 @@
 code:
   spdx: Apache-2.0
-  url: https://github.com/evo-design/proto-tools
+  url: https://github.com/google-deepmind/alphafold/blob/main/LICENSE
+weights:
+  spdx: CC-BY-4.0
+  url: https://alphafold.ebi.ac.uk/faq
 commercial_use: 'yes'
 redistribution: true
-attribution_required: false
-notes: proto-tools original wrapper around the EMBL-EBI AlphaFold Protein Structure Database REST API. AlphaFold DB structures themselves are released under CC-BY-4.0.
+attribution_required: true
+notes: AlphaFold code (google-deepmind/alphafold) is Apache-2.0. Structures distributed via the EMBL-EBI AlphaFold Protein Structure Database (alphafold.ebi.ac.uk) are released under CC-BY-4.0; attribution to AlphaFold + EMBL-EBI is required when redistributing structures.
 last_updated: '2026-05-04'
