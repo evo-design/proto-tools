@@ -101,6 +101,7 @@ class FoldseekClusterConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="Sequence-identity threshold (0-1); 0.0 lets 3Di structural similarity dominate",
+        advanced=True,
     )
     cov: float = ConfigField(
         title="Coverage Threshold",

@@ -405,6 +405,12 @@ from proto_tools.tools.sequence_scoring import (
 
 # Structure alignment tools
 from proto_tools.tools.structure_alignment import (
+    FoldmasonMSAConfig,
+    FoldmasonMSAInput,
+    FoldmasonMSAOutput,
+    FoldmasonScoreMSAConfig,
+    FoldmasonScoreMSAInput,
+    FoldmasonScoreMSAOutput,
     FoldseekCluster,
     FoldseekClusterConfig,
     FoldseekClusterInput,
@@ -431,6 +437,8 @@ from proto_tools.tools.structure_alignment import (
     USalignInput,
     USalignMetrics,
     USalignOutput,
+    run_foldmason_msa,
+    run_foldmason_score_msa,
     run_foldseek_cluster,
     run_foldseek_multimer_search,
     run_foldseek_multimercluster,
@@ -788,6 +796,15 @@ __all__ = [
     "BioEmuInput",
     "BioEmuConfig",
     "BioEmuOutput",
+    # Structure alignment - FoldMason (msa, score-msa)
+    "run_foldmason_msa",
+    "FoldmasonMSAInput",
+    "FoldmasonMSAConfig",
+    "FoldmasonMSAOutput",
+    "run_foldmason_score_msa",
+    "FoldmasonScoreMSAInput",
+    "FoldmasonScoreMSAConfig",
+    "FoldmasonScoreMSAOutput",
     # Structure alignment - Foldseek (search, cluster, multimer search/cluster, rbh)
     "run_foldseek_search",
     "FoldseekHit",

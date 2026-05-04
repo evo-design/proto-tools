@@ -125,6 +125,7 @@ class FoldseekMultimerSearchConfig(BaseConfig):
         default=None,
         description="Local-only (required) — path to a local Foldseek multimer database",
         depends_on={"search_mode": ["local"]},
+        hidden=True,
     )
     num_threads: int = ConfigField(
         title="Threads (local)",
@@ -134,6 +135,7 @@ class FoldseekMultimerSearchConfig(BaseConfig):
         advanced=True,
         include_in_key=False,
         depends_on={"search_mode": ["local"]},
+        hidden=True,
     )
 
     _REMOTE_ONLY_DEFAULTS = {  # noqa: RUF012

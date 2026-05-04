@@ -302,6 +302,7 @@ class BlastSearchConfig(BaseConfig):
         title="Local BLAST Database",
         description=("Path to a local BLAST database (no file extensions). Required for local mode."),
         depends_on={"search_mode": ["local"]},
+        hidden=True,
     )
     num_threads: int = ConfigField(
         default=4,
@@ -310,6 +311,7 @@ class BlastSearchConfig(BaseConfig):
         description="Number of CPU threads for local BLAST search",
         advanced=True,
         depends_on={"search_mode": ["local"]},
+        hidden=True,
     )
 
     # --- Scoring parameters ---

@@ -1,5 +1,15 @@
 """Structure alignment tools."""
 
+from proto_tools.tools.structure_alignment.foldmason import (
+    FoldmasonMSAConfig,
+    FoldmasonMSAInput,
+    FoldmasonMSAOutput,
+    FoldmasonScoreMSAConfig,
+    FoldmasonScoreMSAInput,
+    FoldmasonScoreMSAOutput,
+    run_foldmason_msa,
+    run_foldmason_score_msa,
+)
 from proto_tools.tools.structure_alignment.foldseek import (
     FoldseekCluster,
     FoldseekClusterConfig,
@@ -41,6 +51,15 @@ from proto_tools.tools.structure_alignment.usalign import (
 )
 
 __all__ = [
+    # FoldMason
+    "FoldmasonMSAConfig",
+    "FoldmasonMSAInput",
+    "FoldmasonMSAOutput",
+    "FoldmasonScoreMSAConfig",
+    "FoldmasonScoreMSAInput",
+    "FoldmasonScoreMSAOutput",
+    "run_foldmason_msa",
+    "run_foldmason_score_msa",
     # Foldseek
     "FoldseekCluster",
     "FoldseekClusterConfig",
