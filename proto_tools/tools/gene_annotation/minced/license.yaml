@@ -2,7 +2,11 @@ code:
   spdx: GPL-3.0
   url: https://github.com/ctSkennerton/minced/blob/master/LICENSE
 commercial_use: 'yes'
-redistribution: true
+redistribution: false
 attribution_required: false
-notes: MinCED is GPL-3.0. Commercial use allowed; redistribution requires source availability under GPL terms.
-last_updated: '2026-05-01'
+notes: |
+  GPL-3.0. License permits redistribution per se, but copyleft and source-
+  disclosure obligations make MinCED unsuitable for bundling in a proprietary
+  SaaS image without legal review. Use CRISPRtracrRNA (MIT) for the same
+  CRISPR-detection use case where possible.
+last_updated: '2026-05-04'

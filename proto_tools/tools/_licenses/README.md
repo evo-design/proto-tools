@@ -14,15 +14,22 @@ following meanings:
 
 ### `redistribution: bool`
 
-**Question answered:** Can this tool be offered as a hosted service?
+**Question answered:** Can this tool be offered as part of a hosted
+service?
 
-- `true`  — the tool's license permits it to be packaged and served via a
-  hosted API; you can choose between running it locally and calling a hosted
-  version.
-- `false` — the tool's license forbids it from being included in a hosted
-  service. To use it, you must run it yourself with your own weights and
-  credentials. Typical reasons: non-commercial weights (CC-BY-NC-*) or
-  vendor terms that prohibit redistribution.
+- `true`  — the tool can be packaged into a hosted service and called via
+  an API. Permissive licenses (Apache-2.0, MIT, BSD, public domain) live
+  here.
+- `false` — the tool cannot be hosted as part of a service without legal
+  review. To use it, run it yourself with your own weights and
+  credentials. Common reasons:
+  - **Copyleft** (GPL, LGPL, AGPL): the license permits redistribution,
+    but its source-disclosure obligations are incompatible with hosting
+    in a proprietary service.
+  - **Non-commercial weights** (CC-BY-NC-*).
+  - **Custom restrictive vendor terms** that forbid redistribution or
+    require a separate license (AlphaFold3, AlphaGenome, Forge,
+    ViennaRNA).
 
 ### `commercial_use: yes | no | restricted`
 
@@ -63,13 +70,20 @@ proto-tools-original code, with no upstream tool/service we can point at?
 |---|---|---|---|
 | Apache-2.0 | true | yes | false |
 | MIT | true | yes | false |
+| BSD-2-Clause / BSD-3-Clause | true | yes | false |
 | CC-BY-4.0 | true | yes | true |
+| GPL-2.0 / GPL-3.0 / LGPL / AGPL | false | yes | false |
 | CC-BY-NC-4.0 | false | no | true |
 | CC-BY-NC-SA-4.0 | false | no | true |
 | `Custom (...)` non-commercial vendor terms | usually false | no | depends |
 
 When code and weights have different licenses, the **most restrictive** of
 the two drives `redistribution` and `commercial_use`.
+
+Note that copyleft licenses (GPL/LGPL/AGPL) keep `commercial_use: yes`
+because the license itself doesn't restrict commercial use — but
+`redistribution: false` because copyleft and source-disclosure obligations
+make proprietary-image bundling unsafe without legal review.
 
 ## Adding a new SPDX license
 

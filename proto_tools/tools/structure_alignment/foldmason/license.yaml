@@ -2,7 +2,10 @@ code:
   spdx: GPL-3.0
   url: https://github.com/steineggerlab/foldmason/blob/master/LICENSE.md
 commercial_use: 'yes'
-redistribution: true
+redistribution: false
 attribution_required: false
-notes: FoldMason (Steinegger Lab) is GPL-3.0; downstream code that links FoldMason must comply with GPL terms.
+notes: |
+  GPL-3.0. License permits redistribution per se, but copyleft and source-
+  disclosure obligations make FoldMason unsuitable for bundling in a proprietary
+  SaaS image without legal review.
 last_updated: '2026-05-04'

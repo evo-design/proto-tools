@@ -2,7 +2,14 @@ code:
   spdx: AGPL-3.0
   url: https://gitlab.com/ElofssonLab/afm-benchmark/-/blob/main/LICENSE
 commercial_use: 'yes'
-redistribution: true
+redistribution: false
 attribution_required: true
-notes: pDockQ2 is a published method by Zhu/Elofsson lab (Zhu et al. 2023). The canonical reference implementation lives in the Elofsson Lab afm-benchmark repository under AGPL-3.0; this wrapper re-implements the scoring formula in pure Python and inherits the upstream method's license. Cite the original paper.
+notes: |
+  pDockQ2 is a published method by Zhu/Elofsson lab (Zhu et al. 2023). The
+  canonical reference implementation lives in the Elofsson Lab afm-benchmark
+  repository under AGPL-3.0; this wrapper re-implements the scoring formula in
+  pure Python and inherits the upstream method's license. AGPL-3.0 permits
+  redistribution per se, but copyleft and network-use source-disclosure
+  obligations make pDockQ2 unsuitable for bundling in a proprietary SaaS image
+  without legal review. Cite the original paper.
 last_updated: '2026-05-04'

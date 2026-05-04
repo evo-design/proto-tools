@@ -2,7 +2,10 @@ code:
   spdx: GPL-3.0
   url: https://github.com/hyattpd/Prodigal/blob/GoogleImport/LICENSE
 commercial_use: 'yes'
-redistribution: true
+redistribution: false
 attribution_required: false
-notes: Prodigal (Hyatt) is GPL-3.0. Free for commercial use; redistribution must follow GPL.
-last_updated: '2026-05-01'
+notes: |
+  Prodigal (Hyatt) is GPL-3.0. License permits redistribution per se, but
+  copyleft and source-disclosure obligations make Prodigal unsuitable for
+  bundling in a proprietary SaaS image without legal review.
+last_updated: '2026-05-04'

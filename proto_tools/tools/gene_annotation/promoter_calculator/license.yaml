@@ -2,7 +2,12 @@ code:
   spdx: GPL-3.0
   url: https://github.com/barricklab/promoter-calculator/blob/master/LICENSE
 commercial_use: 'yes'
-redistribution: true
+redistribution: false
 attribution_required: false
-notes: Barrick Lab's fork of the Salis Lab Promoter Calculator is GPL-3.0; original Salis Lab implementation has the same upstream license.
+notes: |
+  Barrick Lab's fork of the Salis Lab Promoter Calculator is GPL-3.0; original
+  Salis Lab implementation has the same upstream license. License permits
+  redistribution per se, but copyleft and source-disclosure obligations make
+  Promoter Calculator unsuitable for bundling in a proprietary SaaS image
+  without legal review.
 last_updated: '2026-05-04'
