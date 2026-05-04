@@ -54,6 +54,22 @@ def test_rfdiffusion3_json_spec_generation():
     assert spec["spec-1"]["contig"] == "50-80"
 
 
+def test_rfdiffusion3_dispatch_operation_is_design(monkeypatch):
+    """Dispatch input must use operation='design' — the only value inference.py accepts."""
+    from proto_tools.tools.structure_design.rfdiffusion3 import rfdiffusion3_sample as mod
+
+    captured: dict = {}
+
+    def fake(tool_id, input_data, **kw):
+        captured.update(input_data)
+        return {"designs": []}
+
+    monkeypatch.setattr(mod.ToolInstance, "dispatch", fake)
+    run_rfdiffusion3(RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(length="40")]), RFdiffusion3Config())
+
+    assert captured["operation"] == "design"
+
+
 # ---------------------------------------------------------------------------
 # Integration tests
 # ---------------------------------------------------------------------------

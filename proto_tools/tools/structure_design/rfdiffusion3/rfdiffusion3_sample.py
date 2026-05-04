@@ -577,7 +577,7 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
             f.write(json_spec)
 
         input_data = {
-            "operation": "sample",
+            "operation": "design",
             "input_json_path": str(input_json_path),
             "output_dir": str(output_dir),
             "device": config.device,
