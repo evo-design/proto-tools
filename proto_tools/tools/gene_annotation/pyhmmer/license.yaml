@@ -1,0 +1,8 @@
+code:
+  spdx: MIT
+  url: https://github.com/althonos/pyhmmer/blob/master/COPYING
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: pyhmmer (Larralde) is MIT-licensed; bundled HMMER (Eddy) is BSD-3-Clause. Both are permissive.
+last_updated: '2026-05-01'

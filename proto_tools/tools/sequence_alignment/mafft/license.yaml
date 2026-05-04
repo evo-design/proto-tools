@@ -1,0 +1,8 @@
+code:
+  spdx: BSD-3-Clause
+  url: https://mafft.cbrc.jp/alignment/software/license.txt
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: 'MAFFT (Katoh) ships under a BSD-3-Clause-equivalent custom license (3 conditions: retain copyright in source, in binary docs, no endorsement). Functionally identical to BSD-3-Clause.'
+last_updated: '2026-05-01'

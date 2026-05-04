@@ -1,0 +1,8 @@
+code:
+  spdx: MIT
+  url: https://github.com/facebookresearch/esm/blob/main/LICENSE
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: ESMFold code (facebookresearch/esm) and HuggingFace weights (facebook/esmfold_v1) are both MIT-licensed.
+last_updated: '2026-05-01'

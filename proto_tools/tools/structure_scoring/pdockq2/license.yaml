@@ -1,0 +1,8 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/proto-bio/proto-tools
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: pDockQ2 metric from Zhu/Elofsson lab (Zhu et al. 2023). proto-tools re-implements the scoring formula in its own code under Apache-2.0. Cite the original paper.
+last_updated: '2026-05-01'

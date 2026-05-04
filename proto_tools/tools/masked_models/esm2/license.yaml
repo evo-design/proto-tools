@@ -1,0 +1,8 @@
+code:
+  spdx: MIT
+  url: https://github.com/facebookresearch/esm/blob/main/LICENSE
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: Meta AI's ESM-2 codebase and HuggingFace weight checkpoints (facebook/esm2_*) are all MIT-licensed.
+last_updated: '2026-05-01'

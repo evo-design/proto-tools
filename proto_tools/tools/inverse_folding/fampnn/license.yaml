@@ -1,0 +1,8 @@
+code:
+  spdx: MIT
+  url: https://github.com/richardshuai/fampnn/blob/main/LICENSE
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: FAMPnn (Shuai et al., Stanford) is MIT-licensed; weights released alongside the code under the same terms.
+last_updated: '2026-05-01'

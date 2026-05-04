@@ -1,0 +1,13 @@
+code:
+  spdx: Custom (Cambrian Open License Agreement)
+  url: https://www.evolutionaryscale.ai/policies/cambrian-open-license-agreement
+  text: 'EvolutionaryScale Cambrian Open License Agreement: permits research, educational, and commercial use of the licensed code and weights, subject to a naming requirement that any derivative model must include ''ESM'' in its name and credit EvolutionaryScale. Full terms at the canonical URL above.'
+weights:
+  spdx: Custom (Cambrian Non-Commercial License Agreement)
+  url: https://www.evolutionaryscale.ai/policies/cambrian-non-commercial-license-agreement
+  text: 'EvolutionaryScale Cambrian Non-Commercial License Agreement: permits research and educational use only. Commercial use is prohibited without a separate paid license from EvolutionaryScale. Includes a naming requirement and prohibited-use policy. Full terms at the canonical URL above.'
+commercial_use: 'no'
+redistribution: false
+attribution_required: true
+notes: evolutionaryscale/esm code is under the Cambrian Open License; ESM3-small-open weights (HuggingFace EvolutionaryScale/esm3-sm-open-v1) are under the Cambrian Non-Commercial License Agreement. Commercial inference requires a separate EvolutionaryScale agreement.
+last_updated: '2026-05-01'

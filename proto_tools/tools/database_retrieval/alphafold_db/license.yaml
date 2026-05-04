@@ -1,0 +1,8 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/proto-bio/proto-tools
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: proto-tools original wrapper around the EMBL-EBI AlphaFold Protein Structure Database REST API. AlphaFold DB structures themselves are released under CC-BY-4.0.
+last_updated: '2026-05-04'

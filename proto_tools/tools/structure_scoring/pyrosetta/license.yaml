@@ -1,0 +1,9 @@
+code:
+  spdx: Custom (PyRosetta Software License)
+  url: https://www.pyrosetta.org/home/licensing-pyrosetta
+  text: PyRosetta is licensed by the University of Washington CoMotion. Free for academic, non-profit, and government use; commercial use requires a paid commercial license. Redistribution is forbidden under the standard license. Citation of the relevant Rosetta publications is required. Full terms at the canonical URL above.
+commercial_use: restricted
+redistribution: false
+attribution_required: true
+notes: 'PyRosetta requires a separate license: free for academic/non-profit/government use, commercial use requires a paid commercial license from UW CoMotion. Redistribution forbidden under standard license.'
+last_updated: '2026-05-01'

@@ -1,0 +1,8 @@
+code:
+  spdx: MIT
+  url: https://github.com/facebookresearch/esm/blob/main/LICENSE
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: Meta AI's facebookresearch/esm repo (including ESM-IF1 weights distributed via fair-esm) is MIT-licensed; weights ship under the same license as the code.
+last_updated: '2026-05-01'

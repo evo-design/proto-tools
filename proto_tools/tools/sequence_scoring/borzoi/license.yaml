@@ -1,0 +1,11 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/calico/borzoi/blob/main/LICENSE
+weights:
+  spdx: CC-BY-4.0
+  url: https://huggingface.co/johahi/borzoi-replicate-0
+commercial_use: 'yes'
+redistribution: true
+attribution_required: true
+notes: Borzoi code (calico/borzoi) is Apache-2.0; PyTorch-converted weights at johahi/borzoi-replicate-{0..3} are CC-BY-4.0 (attribution required).
+last_updated: '2026-05-01'

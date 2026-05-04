@@ -1,0 +1,8 @@
+code:
+  spdx: BSD-3-Clause
+  url: https://github.com/RosettaCommons/foundry/blob/production/LICENSE.md
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: RosettaCommons/foundry is BSD-3-Clause (UW Institute for Protein Design, 2025). The repo's LICENSE.md applies to both code and the model weights distributed via 'foundry install rfd3'; no separate non-commercial weights license file ships in the repo.
+last_updated: '2026-05-01'
