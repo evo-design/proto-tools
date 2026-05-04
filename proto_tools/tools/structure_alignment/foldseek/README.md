@@ -44,14 +44,14 @@ Per Foldseek's GitHub README, "many of Foldseek's modules (subprograms) rely on 
 2. The wrapper writes inputs to a temp dir, invokes `foldseek easy-search` / `easy-cluster` / `easy-multimersearch` / `easy-multimercluster` / `easy-rbh` via `ToolInstance.dispatch`, parses the M8 (or cluster TSV) output.
 
 **Key assumptions:**
-- Query structures are PDB-format text (single-chain for search/cluster, multi-chain for multimer).
+- Query structures for search/multimer-search/rbh are PDB-format text. Cluster + multimer-cluster accept PDB or mmCIF (auto-detected per input).
 - Remote modes require network reachability of `search.foldseek.com` (anonymous access).
 - Local modes require the standalone env to have been provisioned (`setup.sh`).
 
 **Limitations:**
 - The server's documented `/api/result/{id}` endpoint has a known 404 bug ([Foldseek issue #380](https://github.com/steineggerlab/foldseek/issues/380)); the wrapper uses `/api/result/download/{id}` instead.
 - Local search/multimer-search/rbh modes need a target — either a pre-built Foldseek database or a directory of PDB files (Foldseek auto-builds a temporary DB from a directory). Pre-build with `foldseek createdb` outside this wrapper for repeated reuse against large target sets.
-- No CIF input — PDB-format text only.
+- mmCIF input is supported only by `foldseek-cluster` and `foldseek-multimercluster`; search/multimer-search/rbh remain PDB-only.
 - No documented public-server rate limit; for large batch sweeps prefer local mode.
 
 **Computational requirements:**
@@ -68,10 +68,13 @@ Per Foldseek's GitHub README, "many of Foldseek's modules (subprograms) rely on 
 
 ### `FoldseekClusterInput`
 
+Provide structures via exactly one of `structures` or `structures_dir` (mutually exclusive).
+
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `structures` | `list[str]` | *required* (≥2) | PDB-format text strings to cluster. |
-| `structure_ids` | `list[str] \| None` | `None` | Optional IDs per structure (default: `'structure_0'`, `'structure_1'`, ...). |
+| `structures` | `list[str] \| None` | `None` | PDB- or mmCIF-format text strings to cluster (≥2). Format is auto-detected per input. Mutually exclusive with `structures_dir`. |
+| `structures_dir` | `str \| None` | `None` | Path to a directory of structure files (`.pdb`, `.cif`, `.mmcif`, plus `.gz` variants; ≥2). Filename stems become `structure_ids`. Mutually exclusive with `structures`. |
+| `structure_ids` | `list[str] \| None` | `None` | Optional IDs per structure (only valid with `structures`; default: `'structure_0'`, `'structure_1'`, ...). |
 
 ### `FoldseekMultimerSearchInput`
 
@@ -81,10 +84,13 @@ Per Foldseek's GitHub README, "many of Foldseek's modules (subprograms) rely on 
 
 ### `FoldseekMultimerClusterInput`
 
+Provide multimers via exactly one of `structures` or `structures_dir` (mutually exclusive). `structure_ids` (whether user-supplied or derived from filename stems) must not contain `_`, since Foldseek emits cluster member IDs as `{multimer_id}_{chain}` and silent ID mangling would result.
+
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `structures` | `list[str]` | *required* (≥2) | Multi-chain PDB-format text strings to cluster. |
-| `structure_ids` | `list[str] \| None` | `None` | Optional IDs per multimer (default: `'multimer_0'`, `'multimer_1'`, ...). Chain names in the PDB must not contain `_`. |
+| `structures` | `list[str] \| None` | `None` | Multi-chain PDB- or mmCIF-format text strings to cluster (≥2). Format auto-detected per input. Mutually exclusive with `structures_dir`. |
+| `structures_dir` | `str \| None` | `None` | Path to a directory of multimer files (`.pdb`, `.cif`, `.mmcif`, plus `.gz` variants; ≥2). Filename stems become `structure_ids` and must not contain `_`. Mutually exclusive with `structures`. |
+| `structure_ids` | `list[str] \| None` | `None` | Optional IDs per multimer (only valid with `structures`; default: `'multimer-0'`, `'multimer-1'`, ...). Must not contain `_`. |
 
 ### `FoldseekRBHInput`
 
@@ -241,8 +247,16 @@ from proto_tools.tools.structure_alignment import (
     FoldseekClusterConfig, FoldseekClusterInput, run_foldseek_cluster,
 )
 
+# Option A — pass in-memory text strings (PDB or mmCIF; format auto-detected).
 output = run_foldseek_cluster(
     FoldseekClusterInput(structures=[design_a, design_b, design_c, design_d]),
+    FoldseekClusterConfig(),
+)
+
+# Option B — point at a directory; .pdb/.cif/.mmcif and their .gz variants
+# are picked up, and filename stems become structure_ids.
+output = run_foldseek_cluster(
+    FoldseekClusterInput(structures_dir="/data/rfdiffusion_outputs"),
     FoldseekClusterConfig(),
 )
 for cluster in output.clusters:
@@ -270,8 +284,16 @@ from proto_tools.tools.structure_alignment import (
     FoldseekMultimerClusterConfig, FoldseekMultimerClusterInput, run_foldseek_multimercluster,
 )
 
+# Option A — in-memory text (PDB or mmCIF; format auto-detected).
 output = run_foldseek_multimercluster(
     FoldseekMultimerClusterInput(structures=[complex_a, complex_b, complex_c]),
+    FoldseekMultimerClusterConfig(),
+)
+
+# Option B — directory of structure files. Filename stems must not contain `_`
+# (Foldseek emits cluster member IDs as `{multimer_id}_{chain}`).
+output = run_foldseek_multimercluster(
+    FoldseekMultimerClusterInput(structures_dir="/data/binder-target-complexes"),
     FoldseekMultimerClusterConfig(),
 )
 for cluster in output.clusters:
@@ -296,13 +318,15 @@ for hit in output.hits:
 ## Best Practices & Gotchas
 
 1. **Don't filter Foldseek hits by `sequence_identity`.** This defeats the purpose of structure search; use `evalue` or `bit_score`.
-2. **Submit PDB, not mmCIF.** Convert upstream (e.g. via `alphafold-db-fetch` with `structure_format="pdb"`) if your structure is in CIF.
+2. **Submit PDB for search/multimer-search/rbh.** These three tools accept PDB only. `foldseek-cluster` and `foldseek-multimercluster` also accept mmCIF (auto-detected), so you can pass `.cif` text or feed a directory of mixed `.pdb` / `.cif` / `.gz` files via `structures_dir`.
 3. **Clustering uses 3Di structural similarity, not sequence identity.** The default `min_seq_id=0.0` is intentional — set it >0 only when you also want a sequence-similarity floor.
-4. **Cache responsibly.** All five tools are `cacheable=True`; subsequent calls with the same inputs + config skip the work. Polling parameters and threads are correctly excluded from the cache key.
-5. **Multimer wire format:** the wrapper transparently encodes `mode` as `complex-{mode}` for the multimer endpoint. Pass plain `"3diaa"` / `"tmalign"` / `"lolalign"` in the config.
-6. **Public-server fairness.** No documented rate limit, but the search server is best-effort. For batch sweeps over hundreds of queries, use local mode.
-7. **Multimer chain naming.** `foldseek-multimercluster` encodes member IDs as `{multimer_id}_{chain}`. PDB chain identifiers must not contain `_` (the wrapper does not pre-validate; the CLI surfaces a clear error if they collide).
-8. **RBH is local-only and asymmetric in input.** `foldseek-rbh` takes a single query PDB plus a target DB (or a directory of PDBs that Foldseek auto-builds into a DB). Returns only mutual best hits, not all alignments — expect 0 or 1 hit per query for most distant comparisons.
+4. **There is no "give me exactly k clusters" knob.** Foldseek (like MMseqs2) clusters by similarity threshold, not target count. To approximate k, sweep `cov` (or `min_seq_id`) and pick the run whose cluster count is closest to k. Lower `cov` → fewer, larger clusters; higher `cov` → more, smaller clusters.
+5. **For sequence-only clustering, use [`mmseqs2-clustering`](../../sequence_alignment/mmseqs2/README.md).** Foldseek's cluster modes are structural; if you only have FASTA sequences and no structures, MMseqs2 is the right tool.
+6. **Cache responsibly.** All five tools are `cacheable=True`; subsequent calls with the same inputs + config skip the work. `structures_dir` is read into text content at validation time, so cache keys reflect file content (not just the path) — mutating files in place correctly invalidates the cache.
+7. **Multimer wire format:** the wrapper transparently encodes `mode` as `complex-{mode}` for the multimer endpoint. Pass plain `"3diaa"` / `"tmalign"` / `"lolalign"` in the config.
+8. **Public-server fairness.** No documented rate limit, but the search server is best-effort. For batch sweeps over hundreds of queries, use local mode.
+9. **Multimer ID rule.** `foldseek-multimercluster` encodes member IDs as `{multimer_id}_{chain}`. The wrapper rejects any `structure_id` (user-supplied OR filename-derived) containing `_` to prevent silent ID mangling.
+10. **RBH is local-only and asymmetric in input.** `foldseek-rbh` takes a single query PDB plus a target DB (or a directory of PDBs that Foldseek auto-builds into a DB). Returns only mutual best hits, not all alignments — expect 0 or 1 hit per query for most distant comparisons.
 
 ## Related Tools
 

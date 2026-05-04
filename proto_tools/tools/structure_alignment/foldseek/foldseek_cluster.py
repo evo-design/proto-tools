@@ -4,13 +4,15 @@ Local-only — no remote analog. The public Foldseek server only does query-vs-D
 search; clustering an arbitrary user set requires the local CLI.
 """
 
+import gzip
 import json
 import logging
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from proto_tools.entities.structures.utils import detect_structure_format
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -22,6 +24,9 @@ from proto_tools.utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+# gz variants before plain variants so `.pdb.gz` matches before `.pdb` in `str.endswith`.
+_SUPPORTED_EXTENSIONS: tuple[str, ...] = (".pdb.gz", ".cif.gz", ".mmcif.gz", ".pdb", ".cif", ".mmcif")
 
 
 # ============================================================================
@@ -47,39 +52,38 @@ class FoldseekClusterInput(BaseToolInput):
     """Input for Foldseek structural clustering.
 
     Attributes:
-        structures (list[str]): PDB-format text strings to cluster (≥2).
-        structure_ids (list[str] | None): Optional IDs per structure (default:
-            ``'structure_0'``, ``'structure_1'``, ...). Length must match
-            ``structures``.
+        structures (list[str] | None): PDB- or mmCIF-format text strings (≥2;
+            format auto-detected per string). Mutually exclusive with
+            ``structures_dir``.
+        structures_dir (str | None): Directory of ``.pdb``/``.cif``/``.mmcif``
+            files (incl. ``.gz``; ≥2). Filename stems become ``structure_ids``.
+            Mutually exclusive with ``structures``.
+        structure_ids (list[str] | None): Optional IDs (only with
+            ``structures``; default ``'structure_0'``, ``'structure_1'``, ...).
     """
 
-    structures: list[str] = InputField(
-        description="PDB-format text strings to cluster (must provide at least 2)",
+    structures: list[str] | None = InputField(
+        default=None,
+        description="PDB- or mmCIF-format text strings to cluster (≥2). Mutually exclusive with structures_dir.",
         min_length=2,
+    )
+    structures_dir: str | None = InputField(
+        default=None,
+        description="Directory of .pdb/.cif/.mmcif files (incl. .gz; ≥2). Stems become structure_ids.",
     )
     structure_ids: list[str] | None = InputField(
         default=None,
-        description="Optional IDs per structure (default: 'structure_0', 'structure_1', ...)",
+        description="Optional IDs (only with `structures`; default: 'structure_0', 'structure_1', ...).",
     )
 
-    @field_validator("structure_ids")
+    @model_validator(mode="before")
     @classmethod
-    def _ids_are_safe_filenames(cls, ids: list[str] | None) -> list[str] | None:
-        """Reject IDs containing path separators or `..` — they're written to disk as `{id}.pdb`."""
-        if ids is None:
-            return None
-        for sid in ids:
-            if not sid or "/" in sid or "\\" in sid or sid in {".", ".."}:
-                raise ValueError(f"structure_id {sid!r} is not a safe filename")
-        return ids
+    def _resolve(cls, data: Any) -> Any:
+        return _resolve_structures_dir_in_data(data)
 
     @model_validator(mode="after")
-    def _ids_match_structures_length(self) -> "FoldseekClusterInput":
-        """structure_ids, when supplied, must have the same length as structures."""
-        if self.structure_ids is not None and len(self.structure_ids) != len(self.structures):
-            raise ValueError(
-                f"structure_ids length ({len(self.structure_ids)}) must match structures length ({len(self.structures)})"
-            )
+    def _check(self) -> "FoldseekClusterInput":
+        _validate_resolved_input(self.structures, self.structure_ids)
         return self
 
 
@@ -236,21 +240,25 @@ def run_foldseek_cluster(
     """Cluster structures with Foldseek easy-cluster.
 
     Args:
-        inputs (FoldseekClusterInput): PDB structures + optional IDs.
+        inputs (FoldseekClusterInput): Structures (PDB or mmCIF) + optional IDs.
         config (FoldseekClusterConfig): Clustering thresholds + threads.
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         FoldseekClusterOutput: Clusters with their representatives + members.
     """
-    ids = inputs.structure_ids or [f"structure_{i}" for i in range(len(inputs.structures))]
+    assert inputs.structures is not None  # noqa: S101 — guaranteed by model validator
+    structures = inputs.structures
+    ids = inputs.structure_ids or [f"structure_{i}" for i in range(len(structures))]
+    formats = [detect_structure_format(s) for s in structures]
 
     output_data = ToolInstance.dispatch(
         "foldseek",
         {
             "operation": "easy_cluster",
-            "structures": inputs.structures,
+            "structures": structures,
             "structure_ids": ids,
+            "structure_formats": formats,
             "min_seq_id": config.min_seq_id,
             "cov": config.cov,
             "cov_mode": config.cov_mode,
@@ -267,13 +275,96 @@ def run_foldseek_cluster(
     return FoldseekClusterOutput(
         clusters=clusters,
         num_clusters=len(clusters),
-        num_structures=len(inputs.structures),
+        num_structures=len(structures),
     )
 
 
 # ============================================================================
 # Private Helpers
 # ============================================================================
+
+
+def _read_structures_dir(dir_path: str) -> tuple[list[str], list[str]]:
+    """Enumerate supported structure files (sorted by filename); return (texts, stems)."""
+    path = Path(dir_path).expanduser().resolve()
+    if not path.is_dir():
+        raise ValueError(f"structures_dir {dir_path!r} is not an existing directory")
+
+    matches: list[tuple[Path, str]] = []
+    for child in sorted(path.iterdir(), key=lambda p: p.name.lower()):
+        if not child.is_file():
+            continue
+        name_lower = child.name.lower()
+        for ext in _SUPPORTED_EXTENSIONS:
+            if name_lower.endswith(ext):
+                matches.append((child, child.name[: -len(ext)]))
+                break
+
+    if len(matches) < 2:
+        raise ValueError(
+            f"structures_dir {str(path)!r} must contain at least 2 structure files "
+            f"(extensions: {_SUPPORTED_EXTENSIONS}); found {len(matches)}"
+        )
+
+    structures, ids = [], []
+    for file_path, stem in matches:
+        if file_path.name.lower().endswith(".gz"):
+            with gzip.open(file_path, "rt", encoding="utf-8") as f:
+                structures.append(f.read())
+        else:
+            structures.append(file_path.read_text(encoding="utf-8"))
+        ids.append(stem)
+    return structures, ids
+
+
+def _resolve_structures_dir_in_data(data: Any) -> Any:
+    """``mode="before"`` helper: enforce mutex, read ``structures_dir`` into ``structures`` + ``structure_ids``."""
+    if not isinstance(data, dict):
+        return data
+    has_structures = data.get("structures") is not None
+    has_dir = data.get("structures_dir") is not None
+    if has_structures and has_dir:
+        raise ValueError("Provide exactly one of `structures` or `structures_dir`, not both.")
+    if not has_dir:
+        return data
+    if data.get("structure_ids") is not None:
+        raise ValueError(
+            "`structure_ids` may not be combined with `structures_dir`; IDs are derived from filename stems."
+        )
+    structures, ids = _read_structures_dir(data["structures_dir"])
+    return {**data, "structures": structures, "structure_ids": ids, "structures_dir": None}
+
+
+def _validate_resolved_input(
+    structures: list[str] | None,
+    structure_ids: list[str] | None,
+    *,
+    reject_underscore: bool = False,
+) -> None:
+    """``mode="after"`` helper: require structures, validate IDs (safe + length + optional ``_``)."""
+    if structures is None:
+        raise ValueError("Provide exactly one of `structures` or `structures_dir`.")
+    if structure_ids is None:
+        return
+    seen: set[str] = set()
+    for sid in structure_ids:
+        if not sid or "/" in sid or "\\" in sid or sid in {".", ".."}:
+            raise ValueError(f"structure_id {sid!r} is not a safe filename")
+        if reject_underscore and "_" in sid:
+            raise ValueError(
+                f"structure_id {sid!r} contains '_', which collides with Foldseek's "
+                f"'{{multimer_id}}_{{chain}}' output schema. Rename to avoid '_'."
+            )
+        if sid in seen:
+            raise ValueError(
+                f"structure_id {sid!r} is duplicated; each ID must be unique "
+                f"(filename stems collide if a directory contains both `<stem>.pdb` and `<stem>.cif`)"
+            )
+        seen.add(sid)
+    if len(structure_ids) != len(structures):
+        raise ValueError(
+            f"structure_ids length ({len(structure_ids)}) must match structures length ({len(structures)})"
+        )
 
 
 def _parse_cluster_tsv(tsv_text: str) -> list[FoldseekCluster]:

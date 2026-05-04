@@ -37,12 +37,10 @@ def _run_cmd(cmd: list[str], description: str) -> subprocess.CompletedProcess:  
         ) from e
 
 
-def _write_pdbs(structures: list[str], pdb_dir: Path, ids: list[str] | None = None) -> list[str]:
-    """Write each PDB-text string to a file in pdb_dir; return assigned IDs."""
-    assigned = ids or [f"structure_{i}" for i in range(len(structures))]
-    for sid, text in zip(assigned, structures, strict=True):
-        (pdb_dir / f"{sid}.pdb").write_text(text)
-    return assigned
+def _write_structures(structures: list[str], out_dir: Path, ids: list[str], formats: list[str]) -> None:
+    """Write each structure to a file in out_dir as ``{id}.{format}``."""
+    for sid, text, fmt in zip(ids, structures, formats, strict=True):
+        (out_dir / f"{sid}.{fmt}").write_text(text)
 
 
 # Force `pident` (0-100) so local M8 matches the public server's format.
@@ -102,8 +100,9 @@ def run_easy_cluster(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run `foldseek easy-cluster` over user-provided structures.
 
     Args:
-        input_data: keys ``structures`` (list[str] PDB texts),
-            ``structure_ids`` (list[str] | None), ``min_seq_id``, ``cov``,
+        input_data: keys ``structures`` (list[str] of PDB or mmCIF text),
+            ``structure_ids`` (list[str]), ``structure_formats`` (list[str],
+            ``"pdb"`` or ``"cif"`` per entry), ``min_seq_id``, ``cov``,
             ``cov_mode``, ``evalue``, ``alignment_type``, ``tmscore_threshold``,
             ``lddt_threshold``, ``num_threads``.
 
@@ -113,16 +112,21 @@ def run_easy_cluster(input_data: dict[str, Any]) -> dict[str, Any]:
     foldseek = _find_binary()
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
-        pdb_dir = tmp_path / "pdbs"
-        pdb_dir.mkdir()
-        _write_pdbs(input_data["structures"], pdb_dir, input_data.get("structure_ids"))
+        structures_dir = tmp_path / "structures"
+        structures_dir.mkdir()
+        _write_structures(
+            input_data["structures"],
+            structures_dir,
+            input_data["structure_ids"],
+            input_data["structure_formats"],
+        )
 
         prefix = tmp_path / "cluster"
         _run_cmd(
             [
                 foldseek,
                 "easy-cluster",
-                str(pdb_dir),
+                str(structures_dir),
                 str(prefix),
                 str(tmp_path / "fs_tmp"),
                 "--min-seq-id",
@@ -200,11 +204,12 @@ def run_easy_multimercluster(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run `foldseek easy-multimercluster` over user-provided multi-chain structures.
 
     Args:
-        input_data: keys ``structures`` (list[str] multi-chain PDB texts),
-            ``structure_ids`` (list[str] | None), ``multimer_tm_threshold``,
-            ``chain_tm_threshold``, ``interface_lddt_threshold``,
-            ``alignment_type``, ``tmscore_threshold``, ``lddt_threshold``,
-            ``num_threads``.
+        input_data: keys ``structures`` (list[str] of multi-chain PDB or mmCIF
+            text), ``structure_ids`` (list[str]), ``structure_formats``
+            (list[str], ``"pdb"`` or ``"cif"`` per entry),
+            ``multimer_tm_threshold``, ``chain_tm_threshold``,
+            ``interface_lddt_threshold``, ``alignment_type``,
+            ``tmscore_threshold``, ``lddt_threshold``, ``num_threads``.
 
     Returns:
         ``{"clusters_tsv": <tsv_text>, "rep_seq_fasta": <fasta_text>}`` —
@@ -213,16 +218,21 @@ def run_easy_multimercluster(input_data: dict[str, Any]) -> dict[str, Any]:
     foldseek = _find_binary()
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
-        pdb_dir = tmp_path / "pdbs"
-        pdb_dir.mkdir()
-        _write_pdbs(input_data["structures"], pdb_dir, input_data.get("structure_ids"))
+        structures_dir = tmp_path / "structures"
+        structures_dir.mkdir()
+        _write_structures(
+            input_data["structures"],
+            structures_dir,
+            input_data["structure_ids"],
+            input_data["structure_formats"],
+        )
 
         prefix = tmp_path / "multimercluster"
         _run_cmd(
             [
                 foldseek,
                 "easy-multimercluster",
-                str(pdb_dir),
+                str(structures_dir),
                 str(prefix),
                 str(tmp_path / "fs_tmp"),
                 "--multimer-tm-threshold",

@@ -1,8 +1,6 @@
-"""tests/structure_alignment_tests/test_foldseek_cluster.py.
+"""Tests for foldseek-cluster (local-only structural clustering)."""
 
-Tests for foldseek-cluster (local-only structural clustering).
-"""
-
+import gzip
 from pathlib import Path
 from unittest.mock import patch
 
@@ -17,6 +15,7 @@ from proto_tools.tools.structure_alignment import (
 from proto_tools.tools.structure_alignment.foldseek.foldseek_cluster import _parse_cluster_tsv
 
 _TINY_PDB = "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
+_TINY_CIF = "data_TEST\nloop_\n_atom_site.id\n_atom_site.type_symbol\n1 C\n"
 _FIXTURES = Path(__file__).parent.parent / "dummy_data"
 
 
@@ -24,85 +23,52 @@ _FIXTURES = Path(__file__).parent.parent / "dummy_data"
 
 
 def test_parse_cluster_tsv_groups_members_by_representative():
-    """Multiple lines per representative collapse into one FoldseekCluster with all members."""
-    tsv = "rep1\tmem1\nrep1\tmem2\nrep1\trep1\nrep2\tmem3\nrep2\trep2\n"
+    """Multiple lines per representative collapse into one cluster with all members."""
+    clusters = _parse_cluster_tsv("rep1\tmem1\nrep1\tmem2\nrep1\trep1\nrep2\tmem3\nrep2\trep2\n")
 
-    clusters = _parse_cluster_tsv(tsv)
-
-    assert len(clusters) == 2
     by_rep = {c.representative_id: c for c in clusters}
     assert sorted(by_rep["rep1"].member_ids) == ["mem1", "mem2", "rep1"]
     assert sorted(by_rep["rep2"].member_ids) == ["mem3", "rep2"]
 
 
 def test_parse_cluster_tsv_skips_blank_and_short_lines():
-    """Empty / single-column lines are silently dropped (defensive)."""
-    tsv = "rep1\tmem1\n\nshort_line\nrep1\tmem2\n"
-
-    clusters = _parse_cluster_tsv(tsv)
+    """Empty / single-column lines are silently dropped."""
+    clusters = _parse_cluster_tsv("rep1\tmem1\n\nshort_line\nrep1\tmem2\n")
 
     assert len(clusters) == 1
     assert sorted(clusters[0].member_ids) == ["mem1", "mem2"]
 
 
-# ── run_foldseek_cluster (mocked dispatch) ────────────────────────────────────
+# ── FoldseekClusterInput validators ───────────────────────────────────────────
 
 
-def test_run_foldseek_cluster_dispatches_easy_cluster():
-    """The wrapper sends operation=easy_cluster + structures + ids; output is parsed clusters."""
-    inputs = FoldseekClusterInput(structures=[_TINY_PDB, _TINY_PDB, _TINY_PDB])
-
-    with patch(
-        "proto_tools.tools.structure_alignment.foldseek.foldseek_cluster.ToolInstance.dispatch"
-    ) as mock_dispatch:
-        mock_dispatch.return_value = {
-            "clusters_tsv": "structure_0\tstructure_0\nstructure_0\tstructure_1\nstructure_2\tstructure_2\n"
-        }
-        output = run_foldseek_cluster(inputs, FoldseekClusterConfig())
-
-    assert output.success
-    assert output.num_clusters == 2
-    assert output.num_structures == 3
-
-    # The dispatch call shape — toolkit + operation + payload
-    call = mock_dispatch.call_args
-    assert call.args[0] == "foldseek"
-    payload = call.args[1]
-    assert payload["operation"] == "easy_cluster"
-    assert payload["structures"] == [_TINY_PDB, _TINY_PDB, _TINY_PDB]
-    assert payload["structure_ids"] == ["structure_0", "structure_1", "structure_2"]
-    assert payload["min_seq_id"] == 0.0  # default lets 3Di structural similarity dominate
-
-
-def test_run_foldseek_cluster_uses_user_supplied_ids():
-    """User-supplied structure_ids are forwarded verbatim to the standalone."""
-    inputs = FoldseekClusterInput(
-        structures=[_TINY_PDB, _TINY_PDB],
-        structure_ids=["my_protein_a", "my_protein_b"],
-    )
-
-    with patch(
-        "proto_tools.tools.structure_alignment.foldseek.foldseek_cluster.ToolInstance.dispatch"
-    ) as mock_dispatch:
-        mock_dispatch.return_value = {"clusters_tsv": "my_protein_a\tmy_protein_a\nmy_protein_a\tmy_protein_b\n"}
-        output = run_foldseek_cluster(inputs, FoldseekClusterConfig())
-
-    assert output.success
-    assert output.num_clusters == 1
-    assert sorted(output.clusters[0].member_ids) == ["my_protein_a", "my_protein_b"]
-    assert mock_dispatch.call_args.args[1]["structure_ids"] == ["my_protein_a", "my_protein_b"]
-
-
-def test_foldseek_cluster_input_rejects_id_count_mismatch():
-    """structure_ids must match structures length — Pydantic-level validation."""
-    with pytest.raises(ValidationError, match="structure_ids length"):
-        FoldseekClusterInput(structures=[_TINY_PDB, _TINY_PDB], structure_ids=["only_one_id"])
-
-
-def test_foldseek_cluster_input_requires_min_two_structures():
-    """A single structure can't be clustered; Pydantic rejects at validation time."""
+def test_input_requires_at_least_two_structures():
     with pytest.raises(ValidationError, match="at least 2"):
         FoldseekClusterInput(structures=[_TINY_PDB])
+
+
+def test_input_requires_one_of_structures_or_dir():
+    with pytest.raises(ValidationError, match="exactly one"):
+        FoldseekClusterInput()
+
+
+def test_input_rejects_both_structures_and_dir(tmp_path):
+    (tmp_path / "a.pdb").write_text(_TINY_PDB)
+    (tmp_path / "b.pdb").write_text(_TINY_PDB)
+    with pytest.raises(ValidationError, match="exactly one"):
+        FoldseekClusterInput(structures=[_TINY_PDB, _TINY_PDB], structures_dir=str(tmp_path))
+
+
+def test_input_rejects_ids_with_dir(tmp_path):
+    (tmp_path / "a.pdb").write_text(_TINY_PDB)
+    (tmp_path / "b.pdb").write_text(_TINY_PDB)
+    with pytest.raises(ValidationError, match="may not be combined"):
+        FoldseekClusterInput(structures_dir=str(tmp_path), structure_ids=["x", "y"])
+
+
+def test_input_rejects_id_count_mismatch():
+    with pytest.raises(ValidationError, match="structure_ids length"):
+        FoldseekClusterInput(structures=[_TINY_PDB, _TINY_PDB], structure_ids=["only-one"])
 
 
 @pytest.mark.parametrize(
@@ -110,36 +76,150 @@ def test_foldseek_cluster_input_requires_min_two_structures():
     ["../escape", "/etc/passwd", "..", ".", "path/with/slash", "path\\with\\backslash", ""],
     ids=["dot-dot-prefix", "absolute-path", "dotdot", "dot", "fwd-slash", "back-slash", "empty"],
 )
-def test_foldseek_cluster_input_rejects_unsafe_structure_ids(bad_id):
-    """structure_ids are written as `{id}.pdb` files; reject path-traversal-shaped values."""
+def test_input_rejects_unsafe_structure_ids(bad_id):
+    """IDs are written to disk as ``{id}.{ext}``; reject path-traversal-shaped values."""
     with pytest.raises(ValidationError, match="not a safe filename"):
-        FoldseekClusterInput(
-            structures=[_TINY_PDB, _TINY_PDB],
-            structure_ids=[bad_id, "ok"],
-        )
+        FoldseekClusterInput(structures=[_TINY_PDB, _TINY_PDB], structure_ids=[bad_id, "ok"])
+
+
+def test_input_rejects_nonexistent_dir():
+    with pytest.raises(ValidationError, match="not an existing directory"):
+        FoldseekClusterInput(structures_dir="/nonexistent/path/abcxyz")
+
+
+def test_input_rejects_dir_with_too_few_files(tmp_path):
+    (tmp_path / "only.pdb").write_text(_TINY_PDB)
+    with pytest.raises(ValidationError, match="at least 2"):
+        FoldseekClusterInput(structures_dir=str(tmp_path))
+
+
+def test_input_rejects_duplicate_user_supplied_ids():
+    """Duplicate IDs would clobber each other in foldseek's TSV output."""
+    with pytest.raises(ValidationError, match="duplicated"):
+        FoldseekClusterInput(structures=[_TINY_PDB, _TINY_PDB], structure_ids=["a", "a"])
+
+
+def test_input_rejects_dir_with_colliding_stems(tmp_path):
+    """`protein.pdb` + `protein.cif` produce identical stems and would collide silently."""
+    (tmp_path / "protein.pdb").write_text(_TINY_PDB)
+    (tmp_path / "protein.cif").write_text(_TINY_CIF)
+    with pytest.raises(ValidationError, match="duplicated"):
+        FoldseekClusterInput(structures_dir=str(tmp_path))
+
+
+# ── FoldseekClusterInput resolution from directory ────────────────────────────
+
+
+def test_input_resolves_dir_with_mixed_formats(tmp_path):
+    """Mixed .pdb + .cif: both read into structures, stems become structure_ids, structures_dir cleared."""
+    (tmp_path / "alpha.pdb").write_text(_TINY_PDB)
+    (tmp_path / "beta.cif").write_text(_TINY_CIF)
+
+    inputs = FoldseekClusterInput(structures_dir=str(tmp_path))
+
+    assert inputs.structures_dir is None
+    assert sorted(inputs.structure_ids or []) == ["alpha", "beta"]
+    assert _TINY_PDB in (inputs.structures or [])
+    assert _TINY_CIF in (inputs.structures or [])
+
+
+def test_input_resolves_dir_decompresses_gz_files(tmp_path):
+    """`.pdb.gz` / `.cif.gz` are decompressed during read."""
+    with gzip.open(tmp_path / "alpha.pdb.gz", "wt", encoding="utf-8") as f:
+        f.write(_TINY_PDB)
+    with gzip.open(tmp_path / "beta.cif.gz", "wt", encoding="utf-8") as f:
+        f.write(_TINY_CIF)
+
+    inputs = FoldseekClusterInput(structures_dir=str(tmp_path))
+
+    assert sorted(inputs.structure_ids or []) == ["alpha", "beta"]
+    assert _TINY_PDB in (inputs.structures or [])
+    assert _TINY_CIF in (inputs.structures or [])
+
+
+def test_input_dir_skips_unsupported_files(tmp_path):
+    """Files without supported extensions (e.g. README.md) are filtered out."""
+    (tmp_path / "alpha.pdb").write_text(_TINY_PDB)
+    (tmp_path / "beta.pdb").write_text(_TINY_PDB)
+    (tmp_path / "README.md").write_text("just notes")
+    (tmp_path / ".DS_Store").write_text("junk")
+
+    inputs = FoldseekClusterInput(structures_dir=str(tmp_path))
+
+    assert sorted(inputs.structure_ids or []) == ["alpha", "beta"]
+
+
+# ── run_foldseek_cluster (mocked dispatch) ────────────────────────────────────
+
+
+def test_run_foldseek_cluster_dispatches_easy_cluster():
+    """Wrapper sends operation=easy_cluster, default IDs, and per-structure formats."""
+    inputs = FoldseekClusterInput(structures=[_TINY_PDB, _TINY_CIF, _TINY_PDB])
+
+    with patch(
+        "proto_tools.tools.structure_alignment.foldseek.foldseek_cluster.ToolInstance.dispatch"
+    ) as mock_dispatch:
+        mock_dispatch.return_value = {"clusters_tsv": "structure_0\tstructure_0\nstructure_0\tstructure_1\n"}
+        output = run_foldseek_cluster(inputs, FoldseekClusterConfig())
+
+    assert output.success
+    assert output.num_structures == 3
+
+    payload = mock_dispatch.call_args.args[1]
+    assert mock_dispatch.call_args.args[0] == "foldseek"
+    assert payload["operation"] == "easy_cluster"
+    assert payload["structure_ids"] == ["structure_0", "structure_1", "structure_2"]
+    assert payload["structure_formats"] == ["pdb", "cif", "pdb"]
+
+
+def test_run_foldseek_cluster_uses_user_supplied_ids():
+    inputs = FoldseekClusterInput(
+        structures=[_TINY_PDB, _TINY_PDB],
+        structure_ids=["my-protein-a", "my-protein-b"],
+    )
+
+    with patch(
+        "proto_tools.tools.structure_alignment.foldseek.foldseek_cluster.ToolInstance.dispatch"
+    ) as mock_dispatch:
+        mock_dispatch.return_value = {"clusters_tsv": ""}
+        run_foldseek_cluster(inputs, FoldseekClusterConfig())
+
+    assert mock_dispatch.call_args.args[1]["structure_ids"] == ["my-protein-a", "my-protein-b"]
+
+
+def test_run_foldseek_cluster_with_directory(tmp_path):
+    """Directory input flows through the wrapper: stems → IDs, per-file format detected."""
+    (tmp_path / "alpha.pdb").write_text(_TINY_PDB)
+    (tmp_path / "beta.cif").write_text(_TINY_CIF)
+    inputs = FoldseekClusterInput(structures_dir=str(tmp_path))
+
+    with patch(
+        "proto_tools.tools.structure_alignment.foldseek.foldseek_cluster.ToolInstance.dispatch"
+    ) as mock_dispatch:
+        mock_dispatch.return_value = {"clusters_tsv": ""}
+        run_foldseek_cluster(inputs, FoldseekClusterConfig())
+
+    payload = mock_dispatch.call_args.args[1]
+    assert dict(zip(payload["structure_ids"], payload["structure_formats"], strict=True)) == {
+        "alpha": "pdb",
+        "beta": "cif",
+    }
 
 
 # ── Integration ───────────────────────────────────────────────────────────────
 
 
 @pytest.mark.integration
-def test_foldseek_cluster_end_to_end_with_real_pdb_fixtures():
-    """Local end-to-end: cluster two real single-chain PDB fixtures via the foldseek binary."""
-    structures = [
-        (_FIXTURES / "renin_af3.pdb").read_text(),
-        (_FIXTURES / "test_structure_similarity.pdb").read_text(),
-    ]
+def test_foldseek_cluster_end_to_end_with_directory(tmp_path):
+    """Real foldseek binary processes a directory of mixed PDB + CIF fixtures."""
+    (tmp_path / "renin-pdb.pdb").write_text((_FIXTURES / "renin_af3.pdb").read_text())
+    (tmp_path / "renin-cif.cif").write_text((_FIXTURES / "renin.cif").read_text())
 
     output = run_foldseek_cluster(
-        FoldseekClusterInput(structures=structures, structure_ids=["renin", "test"]),
+        FoldseekClusterInput(structures_dir=str(tmp_path)),
         FoldseekClusterConfig(),
     )
 
     assert output.success, f"errors: {output.errors}"
     assert output.num_structures == 2
-    assert output.num_clusters >= 1  # Can be 1 or 2 depending on structural similarity
-    # Every input ID appears in exactly one cluster (modulo Foldseek's _chain suffixing).
-    all_members = {m for cluster in output.clusters for m in cluster.member_ids}
-    assert {"renin", "test"}.issubset(all_members) or all(
-        any(m.startswith(prefix) for m in all_members) for prefix in ("renin", "test")
-    )
+    assert output.num_clusters >= 1

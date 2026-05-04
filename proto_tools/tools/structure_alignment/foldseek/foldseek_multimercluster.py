@@ -9,11 +9,14 @@ import logging
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, model_validator
 
+from proto_tools.entities.structures.utils import detect_structure_format
 from proto_tools.tools.structure_alignment.foldseek.foldseek_cluster import (
     FoldseekCluster,
     _parse_cluster_tsv,
+    _resolve_structures_dir_in_data,
+    _validate_resolved_input,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -36,48 +39,45 @@ logger = logging.getLogger(__name__)
 class FoldseekMultimerClusterInput(BaseToolInput):
     """Input for Foldseek multimer (complex) structural clustering.
 
-    Foldseek emits cluster member IDs as ``{multimer_id}_{chain}``. To keep
-    those IDs round-trippable, ``structure_ids`` must not contain ``_`` — chain
-    IDs in PDBs are single ASCII characters (column 22) and cannot contain
-    ``_``, so the only place ``_`` can leak in is the user-supplied multimer ID.
-    The wrapper does not pre-validate this; member IDs in the output reflect
-    whatever Foldseek produced.
+    IDs must not contain ``_``: Foldseek emits cluster member IDs as
+    ``{multimer_id}_{chain}``, so silent ID mangling is rejected up front
+    (whether user-supplied or filename-derived).
 
     Attributes:
-        structures (list[str]): Multi-chain PDB-format text strings to cluster
-            (≥2).
-        structure_ids (list[str] | None): Optional IDs per structure (default:
-            ``'multimer_0'``, ``'multimer_1'``, ...). Length must match
-            ``structures``. See note above re: ``_`` in IDs.
+        structures (list[str] | None): Multi-chain PDB- or mmCIF-format text
+            strings (≥2; format auto-detected per string). Mutually exclusive
+            with ``structures_dir``.
+        structures_dir (str | None): Directory of multimer ``.pdb``/``.cif``/
+            ``.mmcif`` files (incl. ``.gz``; ≥2). Filename stems become
+            ``structure_ids`` and must not contain ``_``. Mutually exclusive
+            with ``structures``.
+        structure_ids (list[str] | None): Optional IDs (only with
+            ``structures``; default ``'multimer-0'``, ``'multimer-1'``, ...).
+            Must not contain ``_``.
     """
 
-    structures: list[str] = InputField(
-        description="Multi-chain PDB-format text strings to cluster (must provide at least 2)",
+    structures: list[str] | None = InputField(
+        default=None,
+        description="Multi-chain PDB or mmCIF text strings to cluster (≥2).",
         min_length=2,
+    )
+    structures_dir: str | None = InputField(
+        default=None,
+        description="Directory of multimer .pdb/.cif/.mmcif files (incl. .gz; ≥2). Stems must not contain '_'.",
     )
     structure_ids: list[str] | None = InputField(
         default=None,
-        description="Optional IDs per structure (default: 'multimer_0', 'multimer_1', ...)",
+        description="Optional IDs (only with `structures`; default: 'multimer-0', ...). Must not contain '_'.",
     )
 
-    @field_validator("structure_ids")
+    @model_validator(mode="before")
     @classmethod
-    def _ids_are_safe_filenames(cls, ids: list[str] | None) -> list[str] | None:
-        """Reject IDs containing path separators or `..` — they're written to disk as `{id}.pdb`."""
-        if ids is None:
-            return None
-        for sid in ids:
-            if not sid or "/" in sid or "\\" in sid or sid in {".", ".."}:
-                raise ValueError(f"structure_id {sid!r} is not a safe filename")
-        return ids
+    def _resolve(cls, data: Any) -> Any:
+        return _resolve_structures_dir_in_data(data)
 
     @model_validator(mode="after")
-    def _ids_match_structures_length(self) -> "FoldseekMultimerClusterInput":
-        """structure_ids, when supplied, must have the same length as structures."""
-        if self.structure_ids is not None and len(self.structure_ids) != len(self.structures):
-            raise ValueError(
-                f"structure_ids length ({len(self.structure_ids)}) must match structures length ({len(self.structures)})"
-            )
+    def _check(self) -> "FoldseekMultimerClusterInput":
+        _validate_resolved_input(self.structures, self.structure_ids, reject_underscore=True)
         return self
 
 
@@ -232,22 +232,28 @@ def run_foldseek_multimercluster(
     """Cluster multimers with Foldseek easy-multimercluster.
 
     Args:
-        inputs (FoldseekMultimerClusterInput): Multi-chain PDB structures + optional IDs.
-        config (FoldseekMultimerClusterConfig): Multimer/chain/interface thresholds + threads.
+        inputs (FoldseekMultimerClusterInput): Multi-chain structures
+            (PDB or mmCIF) + optional IDs.
+        config (FoldseekMultimerClusterConfig): Multimer/chain/interface
+            thresholds + threads.
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         FoldseekMultimerClusterOutput: Clusters with representatives + members,
             plus the representative-multimer FASTA.
     """
-    ids = inputs.structure_ids or [f"multimer_{i}" for i in range(len(inputs.structures))]
+    assert inputs.structures is not None  # noqa: S101 — guaranteed by model validator
+    structures = inputs.structures
+    ids = inputs.structure_ids or [f"multimer-{i}" for i in range(len(structures))]
+    formats = [detect_structure_format(s) for s in structures]
 
     output_data = ToolInstance.dispatch(
         "foldseek",
         {
             "operation": "easy_multimercluster",
-            "structures": inputs.structures,
+            "structures": structures,
             "structure_ids": ids,
+            "structure_formats": formats,
             "multimer_tm_threshold": config.multimer_tm_threshold,
             "chain_tm_threshold": config.chain_tm_threshold,
             "interface_lddt_threshold": config.interface_lddt_threshold,
@@ -263,6 +269,6 @@ def run_foldseek_multimercluster(
     return FoldseekMultimerClusterOutput(
         clusters=clusters,
         num_clusters=len(clusters),
-        num_multimers=len(inputs.structures),
+        num_multimers=len(structures),
         rep_seq_fasta=output_data.get("rep_seq_fasta", ""),
     )
