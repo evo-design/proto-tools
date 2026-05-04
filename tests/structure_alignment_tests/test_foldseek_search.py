@@ -185,10 +185,10 @@ def test_foldseek_search_end_to_end_with_tp53():
         AlphaFoldDBFetchInput(uniprot_id="P04637"),
         AlphaFoldDBFetchConfig(structure_format="pdb"),
     )
-    assert afdb.success and afdb.structure_text
+    assert afdb.success and afdb.structure is not None
 
     output = run_foldseek_search(
-        FoldseekSearchInput(structure_text=afdb.structure_text),
+        FoldseekSearchInput(structure_text=afdb.structure.structure_pdb),
         FoldseekSearchConfig(databases=["pdb100"], timeout_seconds=600.0),
     )
 
