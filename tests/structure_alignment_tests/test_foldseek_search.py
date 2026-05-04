@@ -135,6 +135,12 @@ def test_local_mode_dispatches_easy_search():
         "operation": "easy_search",
         "structure_text": "HEADER...\nATOM ...\nEND\n",
         "local_db": "/path/to/db",
+        "evalue": 10.0,
+        "sensitivity": 9.5,
+        "max_seqs": 1000,
+        "alignment_type": 2,
+        "tmscore_threshold": 0.0,
+        "lddt_threshold": 0.0,
         "num_threads": 8,
     }
 

@@ -45,6 +45,10 @@ def test_run_foldseek_rbh_dispatches_easy_rbh():
         "sensitivity": 7.0,  # user-supplied
         "max_seqs": 1000,  # default
         "alignment_type": 2,  # default 3Di+AA
+        "cov": 0.0,
+        "cov_mode": 0,
+        "tmscore_threshold": 0.0,
+        "lddt_threshold": 0.0,
         "num_threads": 8,
     }
 
