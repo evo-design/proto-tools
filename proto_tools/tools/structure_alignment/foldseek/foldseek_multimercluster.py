@@ -85,12 +85,14 @@ class FoldseekMultimerClusterConfig(BaseConfig):
     """Configuration for Foldseek easy-multimercluster.
 
     Attributes:
-        multimer_tm_threshold (float): Multimer-level TM-score threshold (0-1).
-            Two multimers cluster only if their multimer TM-score exceeds this.
-        chain_tm_threshold (float): Per-chain TM-score threshold (0-1) used to
-            filter chain-pair alignments before assembling the multimer score.
-        interface_lddt_threshold (float): Interface lDDT threshold (0-1) for
-            chain-pair alignments.
+        multimer_tm_threshold (float): Maps to ``--multimer-tm-threshold``.
+            Multimer-level TM-score (0-1) above which two multimers cluster
+            together.
+        chain_tm_threshold (float): Maps to ``--chain-tm-threshold``. Per-chain
+            TM-score (0-1) used to filter chain-pair alignments before
+            assembling the multimer score.
+        interface_lddt_threshold (float): Maps to ``--interface-lddt-threshold``.
+            Interface lDDT (0-1) for chain-pair alignments.
         alignment_type (Literal[0, 1, 2, 3]): Alignment scoring method (0=3Di,
             1=TMalign, 2=3Di+AA, 3=LoL).
         tmscore_threshold (float): Keep chain-pair alignments with TM-score
@@ -105,21 +107,21 @@ class FoldseekMultimerClusterConfig(BaseConfig):
         default=0.65,
         ge=0.0,
         le=1.0,
-        description="Multimer-level TM-score (0-1) above which two multimers cluster together",
+        description="Multimer TM-score (0-1) for cluster merging; lower = more permissive",
     )
     chain_tm_threshold: float = ConfigField(
         title="Chain TM-score Threshold",
         default=0.001,
         ge=0.0,
         le=1.0,
-        description="Per-chain TM-score (0-1) above which chain-pair alignments contribute",
+        description="Per-chain TM-score (0-1) above which chain-pair alignments contribute to clustering",
     )
     interface_lddt_threshold: float = ConfigField(
         title="Interface lDDT Threshold",
         default=0.5,
         ge=0.0,
         le=1.0,
-        description="Interface lDDT (0-1) above which chain-pair alignments contribute",
+        description="Interface lDDT (0-1); lower = more permissive cluster merging",
     )
     alignment_type: Literal[0, 1, 2, 3] = ConfigField(
         title="Alignment Type",

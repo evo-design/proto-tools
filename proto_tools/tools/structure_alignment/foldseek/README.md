@@ -136,9 +136,9 @@ Same shape as `FoldseekSearchConfig`. Remote mode wraps `mode` as `complex-{mode
 |-----------|------|---------|-------------|
 | `local_db` | `str \| None` | *required* | Path to a local Foldseek target DB or directory of PDBs (auto-createdb). |
 | `evalue` | `float` | `10.0` | E-value threshold for the inner alignment step. |
-| `sensitivity` | `float` | `9.5` | Foldseek prefilter sensitivity (1.0-9.5; higher is slower + more sensitive). |
+| `sensitivity` | `float` | `4.0` | Foldseek prefilter sensitivity (1.0-9.5; higher is slower + more sensitive). Matches `setStructureRbhDefaults`. |
 | `max_seqs` | `int` | `1000` | Max candidate target sequences per query in the prefilter stage. |
-| `alignment_type` | `Literal[0, 1, 2]` | `2` | (advanced) 0 = 3Di SW, 1 = TMalign, 2 = 3Di+AA SW (default). |
+| `alignment_type` | `Literal[0, 1, 2, 3]` | `2` | (advanced) 0 = 3Di SW, 1 = TMalign, 2 = 3Di+AA SW (default), 3 = LoL. |
 | `num_threads` | `int` | `4` | (advanced) CPU threads. |
 
 ## Output Specification

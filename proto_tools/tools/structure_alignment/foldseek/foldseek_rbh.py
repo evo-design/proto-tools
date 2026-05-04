@@ -58,12 +58,14 @@ class FoldseekRBHConfig(BaseConfig):
             auto-builds a temporary DB). Required.
         evalue (float): E-value cutoff (lower = stricter).
         sensitivity (float): Prefilter sensitivity (1.0-9.5; higher = slower
-            + more sensitive).
+            + more sensitive). Default 4.0 matches foldseek's
+            ``setStructureRbhDefaults`` (which, unlike the search workflow,
+            does not bump sensitivity to 9.5).
         max_seqs (int): Max prefilter targets per query.
-        alignment_type (Literal[0, 1, 2]): Alignment scoring method (0=3Di,
-            1=TMalign, 2=3Di+AA). Note: foldseek's RBH workflow only branches
-            on TMalign (1) and 3Di+AA (2); 0 falls through to the same
-            alignment branch as 2.
+        alignment_type (Literal[0, 1, 2, 3]): Alignment scoring method (0=3Di,
+            1=TMalign, 2=3Di+AA, 3=LoL). Note: foldseek's RBH workflow only
+            branches on TMalign (1) and 3Di+AA (2); 0 falls through to the
+            same alignment branch as 2.
         cov (float): Minimum aligned-residue coverage for an RBH pair (0-1).
             0.0 keeps all.
         cov_mode (Literal[0, 1, 2]): How `cov` is measured: 0=bidirectional,
@@ -88,10 +90,10 @@ class FoldseekRBHConfig(BaseConfig):
     )
     sensitivity: float = ConfigField(
         title="Sensitivity",
-        default=9.5,
+        default=4.0,
         ge=1.0,
         le=9.5,
-        description="Prefilter sensitivity (1.0-9.5). Lower = faster, higher = more sensitive (default 9.5)",
+        description="Prefilter sensitivity (1.0-9.5). Lower = faster, higher = more sensitive (default 4.0)",
     )
     max_seqs: int = ConfigField(
         title="Max Sequences",
@@ -99,10 +101,10 @@ class FoldseekRBHConfig(BaseConfig):
         ge=1,
         description="Max prefilter targets per query (raise for more candidates)",
     )
-    alignment_type: Literal[0, 1, 2] = ConfigField(
+    alignment_type: Literal[0, 1, 2, 3] = ConfigField(
         title="Alignment Type",
         default=2,
-        description="Alignment scoring: 0=3Di SW, 1=TMalign, 2=3Di+AA (default). RBH treats 0 same as 2",
+        description="Alignment scoring: 0=3Di SW, 1=TMalign, 2=3Di+AA (default), 3=LoL. RBH treats 0 same as 2",
         advanced=True,
     )
     cov: float = ConfigField(

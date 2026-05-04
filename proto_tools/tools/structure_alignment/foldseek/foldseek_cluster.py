@@ -123,7 +123,6 @@ class FoldseekClusterConfig(BaseConfig):
         title="Coverage Mode",
         default=0,
         description="Coverage mode: 0=bidirectional, 1=target-only, 2=query-only",
-        advanced=True,
     )
     evalue: float = ConfigField(
         title="E-value Threshold",

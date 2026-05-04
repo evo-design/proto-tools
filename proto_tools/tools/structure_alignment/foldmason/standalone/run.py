@@ -71,15 +71,15 @@ def run_easy_msa(input_data: dict[str, Any]) -> dict[str, Any]:
         cmd = [foldmason, "easy-msa", *(str(p) for p in pdb_paths), str(prefix), str(tmp_path / "fm_tmp")]
         cmd += [
             "--gap-open",
-            str(input_data.get("gap_open", 25)),
+            str(input_data["gap_open"]),
             "--gap-extend",
-            str(input_data.get("gap_extend", 2)),
+            str(input_data["gap_extend"]),
             "--refine-iters",
-            str(input_data.get("refine_iters", 0)),
+            str(input_data["refine_iters"]),
             "--precluster",
-            "1" if input_data.get("precluster", False) else "0",
+            "1" if input_data["precluster"] else "0",
             "--threads",
-            str(input_data.get("num_threads", 4)),
+            str(input_data["num_threads"]),
         ]
         guide_tree = input_data.get("guide_tree_newick")
         if guide_tree:
@@ -137,11 +137,11 @@ def run_msa2lddt(input_data: dict[str, Any]) -> dict[str, Any]:
             str(db_prefix),
             str(msa_path),
             "--pair-threshold",
-            str(input_data.get("pair_threshold", 0.0)),
+            str(input_data["pair_threshold"]),
             "--only-scoring-cols",
-            "1" if input_data.get("only_scoring_cols", False) else "0",
+            "1" if input_data["only_scoring_cols"] else "0",
             "--threads",
-            str(input_data.get("num_threads", 4)),
+            str(input_data["num_threads"]),
         ]
         guide_tree = input_data.get("guide_tree_newick")
         if guide_tree:
