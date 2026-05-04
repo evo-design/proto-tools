@@ -292,7 +292,6 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
         default=True,
         description="Use MMseqs2-GPU (requires .idx_pad index and Turing+ NVIDIA GPU)",
         advanced=True,
-        include_in_key=False,
     )
     pairing_strategy: Literal["greedy", "complete"] = ConfigField(
         title="Pairing Strategy",
@@ -628,7 +627,12 @@ def _is_provisioned(entry: DatasetEntry, cache_dir: Path, *, require_idx_pad: bo
     """Cheap, side-effect-free check for whether the indexed DB exists on disk."""
     if not (cache_dir / f"{entry.db_prefix}.dbtype").is_file():
         return False
-    return not (require_idx_pad and entry.gpu_padded_marker and not (cache_dir / entry.gpu_padded_marker).exists())
+    if require_idx_pad and entry.gpu_padded_marker:
+        # A complete padded DB has both the marker and its ``.dbtype`` companion.
+        marker = cache_dir / entry.gpu_padded_marker
+        if not marker.exists() or not Path(f"{marker}.dbtype").is_file():
+            return False
+    return True
 
 
 def _auto_provision(name: str, cache_dir: Path) -> None:
@@ -722,10 +726,10 @@ def _check_dataset_provisioned(name: str, entry: DatasetEntry, cache_dir: Path, 
         )
     if require_idx_pad and entry.gpu_padded_marker:
         marker = cache_dir / entry.gpu_padded_marker
-        if not marker.exists():
+        if not marker.exists() or not Path(f"{marker}.dbtype").is_file():
             raise FileNotFoundError(
-                f"Dataset {name!r} is missing its GPU-padded index marker "
-                f"({entry.gpu_padded_marker}) at {cache_dir}.\n"
+                f"Dataset {name!r} is missing a complete GPU-padded DB "
+                f"({entry.gpu_padded_marker} with sibling .dbtype) at {cache_dir}.\n"
                 "Build it with: mmseqs makepaddedseqdb <db_prefix> <gpu_padded_marker>\n"
                 "(setup_databases.py runs this automatically; rerun or set use_gpu=False)"
             )

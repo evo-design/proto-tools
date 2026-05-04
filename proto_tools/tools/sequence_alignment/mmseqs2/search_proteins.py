@@ -232,6 +232,7 @@ class Mmseqs2SearchProteinsConfig(BaseConfig):
         threads (int): Number of CPU threads for parallel processing.
         split (int): Memory management mode (0=auto).
         sensitivity (float): Search sensitivity (1.0=fast, 7.5=very sensitive).
+            Ignored when ``use_gpu=True`` (GPU runs at max sensitivity).
         only_top_hits (bool): If True, keep only the best hit per query sequence.
         use_gpu (bool): Run MMseqs2 with GPU acceleration. Off by default; opt-in
             because the user-supplied ``mmseqs_db`` must already have a
@@ -256,7 +257,7 @@ class Mmseqs2SearchProteinsConfig(BaseConfig):
         default=DEFAULT_SENSITIVITY,
         ge=1.0,
         le=7.5,
-        description="Search sensitivity (1.0=fast, 7.5=very sensitive)",
+        description="Search sensitivity (1.0=fast, 7.5=very sensitive); ignored when use_gpu=True",
         advanced=True,
     )
     only_top_hits: bool = ConfigField(
