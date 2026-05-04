@@ -384,7 +384,7 @@ curl -L -o /dev/null -w '%{http_code}' "URL_FROM_BINARY_CONFIG"
 - Platform missing: add `(system, machine)` tuple to `URLS` in `binary_config.py` — use `"arm64"` not `"aarch64"`
 - Truncated: validates Content-Length — try a different mirror URL
 
-See `utils/install_binary.py`, `blast/standalone/binary_config.py`, `mmseqs/standalone/binary_config.py`.
+See `utils/install_binary.py`, `sequence_alignment/blast/standalone/binary_config.py`, `gene_annotation/mmseqs/standalone/binary_config.py`.
 
 ---
 

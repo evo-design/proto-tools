@@ -1,7 +1,4 @@
-"""proto_tools/tools/gene_annotation/blast/blast_search.py.
-
-Unified BLAST search tool supporting both online (NCBI) and local modes.
-"""
+"""Unified BLAST search tool supporting both online (NCBI) and local modes."""
 
 import csv
 import io
@@ -598,7 +595,7 @@ def example_input() -> Any:
 @tool(
     key="blast-search",
     label="BLAST Search",
-    category="gene_annotation",
+    category="sequence_alignment",
     input_class=BlastSearchInput,
     config_class=BlastSearchConfig,
     output_class=BlastSearchOutput,
@@ -629,7 +626,7 @@ def run_blast_search(
         RuntimeError: If the BLAST search fails.
 
     Examples:
-        >>> from proto_tools.tools.gene_annotation import run_blast_search, BlastSearchInput, BlastSearchConfig
+        >>> from proto_tools.tools.sequence_alignment import run_blast_search, BlastSearchInput, BlastSearchConfig
         >>> inputs = BlastSearchInput(query="ATGCGTAAA")
         >>> config = BlastSearchConfig(program="blastn", database="nt")
         >>> result = run_blast_search(inputs, config)

@@ -1,6 +1,6 @@
 """BLAST sequence search and database creation."""
 
-from proto_tools.tools.gene_annotation.blast.blast_search import (
+from proto_tools.tools.sequence_alignment.blast.blast_search import (
     BLAST_DATABASES,
     BLAST_PROGRAMS,
     BlastHit,
@@ -9,7 +9,7 @@ from proto_tools.tools.gene_annotation.blast.blast_search import (
     BlastSearchOutput,
     run_blast_search,
 )
-from proto_tools.tools.gene_annotation.blast.create_blast_db import (
+from proto_tools.tools.sequence_alignment.blast.create_blast_db import (
     CreateBlastDbConfig,
     CreateBlastDbInput,
     CreateBlastDbOutput,

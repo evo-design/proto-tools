@@ -1,7 +1,4 @@
-"""tests/gene_annotation_tests/test_blast.py.
-
-Tests for BLAST tools.
-"""
+"""Tests for BLAST tools."""
 
 import warnings
 from pathlib import Path
@@ -10,7 +7,7 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
-from proto_tools.tools.gene_annotation import (
+from proto_tools.tools.sequence_alignment import (
     BlastSearchConfig,
     BlastSearchInput,
     BlastSearchOutput,
@@ -19,7 +16,7 @@ from proto_tools.tools.gene_annotation import (
     run_blast_search,
     run_create_blast_db,
 )
-from proto_tools.tools.gene_annotation.blast.blast_search import (
+from proto_tools.tools.sequence_alignment.blast.blast_search import (
     BlastHit,
     _blast_results_to_hits,
 )

@@ -1,5 +1,16 @@
 """Sequence alignment and MSA tools."""
 
+from proto_tools.tools.sequence_alignment.blast import (
+    BlastHit,
+    BlastSearchConfig,
+    BlastSearchInput,
+    BlastSearchOutput,
+    CreateBlastDbConfig,
+    CreateBlastDbInput,
+    CreateBlastDbOutput,
+    run_blast_search,
+    run_create_blast_db,
+)
 from proto_tools.tools.sequence_alignment.colabfold_search import (
     ColabfoldSearchConfig,
     ColabfoldSearchInput,
@@ -20,6 +31,16 @@ from proto_tools.tools.sequence_alignment.msas import MSA
 __all__ = [
     # Schemas
     "MSA",
+    # BLAST
+    "run_blast_search",
+    "run_create_blast_db",
+    "BlastHit",
+    "BlastSearchInput",
+    "BlastSearchConfig",
+    "BlastSearchOutput",
+    "CreateBlastDbInput",
+    "CreateBlastDbConfig",
+    "CreateBlastDbOutput",
     # MAFFT
     "run_mafft_align",
     "MafftInput",

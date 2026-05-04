@@ -197,12 +197,12 @@ class ToolRegistry:
         >>> @tool(
         ...     key="blast-search",
         ...     label="BLAST Search",
-        ...     input=BLASTInput,
-        ...     config=BLASTConfig,
-        ...     output=BLASTOutput,
+        ...     input_class=BlastSearchInput,
+        ...     config_class=BlastSearchConfig,
+        ...     output_class=BlastSearchOutput,
         ...     description="Protein similarity search using BLAST",
         ... )
-        ... def run_blast(config: BLASTConfig) -> BLASTOutput:
+        ... def run_blast_search(inputs: BlastSearchInput, config: BlastSearchConfig) -> BlastSearchOutput:
         ...     pass
 
         API/Frontend Usage:
@@ -210,9 +210,12 @@ class ToolRegistry:
         >>> schema = ToolRegistry.get_config_schema("blast-search")
 
         Direct Usage:
-        >>> from proto_tools.tools.gene_annotation import run_blast, BLASTConfig
-        >>> config = BLASTConfig(query_sequences=["MVLSP"], database="/data/nr")
-        >>> result = run_blast(config)
+        >>> from proto_tools.tools.sequence_alignment import (
+        ...     run_blast_search,
+        ...     BlastSearchInput,
+        ...     BlastSearchConfig,
+        ... )
+        >>> result = run_blast_search(BlastSearchInput(query="MVLSP"), BlastSearchConfig(database="/data/nr"))
     """
 
     _registry: ClassVar[dict[str, ToolSpec]] = {}

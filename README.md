@@ -109,7 +109,6 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 ├── <a href="proto_tools/tools/database_retrieval/sequence_fetch/">sequence_fetch/</a>
 └── <a href="proto_tools/tools/database_retrieval/uniprot/">uniprot/</a>
 <a href="proto_tools/tools/gene_annotation/">gene_annotation/</a>                # Sequence annotation and homology search
-├── <a href="proto_tools/tools/gene_annotation/blast/">blast/</a>
 ├── <a href="proto_tools/tools/gene_annotation/crispr_tracr_rna/">crispr_tracr_rna/</a>
 ├── <a href="proto_tools/tools/gene_annotation/minced/">minced/</a>
 ├── <a href="proto_tools/tools/gene_annotation/mmseqs/">mmseqs/</a>
@@ -133,7 +132,8 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 └── <a href="proto_tools/tools/orf_prediction/prodigal/">prodigal/</a>
 <a href="proto_tools/tools/rna_splicing/">rna_splicing/</a>                   # RNA splice site prediction
 └── <a href="proto_tools/tools/rna_splicing/splice_transformer/">splice_transformer/</a>
-<a href="proto_tools/tools/sequence_alignment/">sequence_alignment/</a>             # Multiple sequence alignment
+<a href="proto_tools/tools/sequence_alignment/">sequence_alignment/</a>             # Sequence search and multiple sequence alignment
+├── <a href="proto_tools/tools/sequence_alignment/blast/">blast/</a>
 ├── <a href="proto_tools/tools/sequence_alignment/colabfold_search/">colabfold_search/</a>
 ├── <a href="proto_tools/tools/sequence_alignment/mafft/">mafft/</a>
 └── <a href="proto_tools/tools/sequence_alignment/mmseqs2_homology_search/">mmseqs2_homology_search/</a>
@@ -170,7 +170,7 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 Every tool follows the same `Input` / `Config` / `run_{tool}()` / `Output` pattern. Config is always optional; omit it to use defaults.
 
 ```python
-from proto_tools.tools.gene_annotation.blast import (
+from proto_tools.tools.sequence_alignment.blast import (
     run_blast_search, BlastSearchInput, BlastSearchConfig,
 )
 

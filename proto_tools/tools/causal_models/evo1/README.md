@@ -190,7 +190,7 @@ for i, seq in enumerate(result.sequences):
 - **`evo2-sample`**: Successor model for eukaryotic and longer-context generation
 - **`prodigal`**: Find ORFs in generated DNA sequences
 - **`minced-crispr`**: Detect CRISPR arrays in generated sequences
-- **`local-blast`**: Search generated sequences against reference databases
+- **`blast-search`**: Search generated sequences against reference databases
 
 **Alternative tools (similar function):**
 - **`evo2-sample`**: Use for eukaryotic genomes or when longer context is needed

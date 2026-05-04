@@ -67,8 +67,8 @@ proto_tools/tools/structure_scoring/ipsae/standalone/ipsae.py
 
 # BLAST database artifacts generated when run_create_blast_db runs with default
 # config alongside the example_input fixture (.ndb, .nhr, .nin, .nsq, etc.)
-proto_tools/tools/gene_annotation/blast/example_input_fixture.*
-!proto_tools/tools/gene_annotation/blast/example_input_fixture.fasta
+proto_tools/tools/sequence_alignment/blast/example_input_fixture.*
+!proto_tools/tools/sequence_alignment/blast/example_input_fixture.fasta
 
 .claude/worktrees/
 uv.lock

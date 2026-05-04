@@ -1,4 +1,4 @@
-<a href="https://bio-pro.mintlify.app/tools/gene-annotation/blast"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/sequence-alignment/blast"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
 
 # BLAST
 
@@ -181,7 +181,7 @@ See `BlastSearchConfig` class for the full list of supported parameters.
 
 **Example 1: Search NCBI online (simplest)**
 ```python
-from proto_tools.tools.gene_annotation import run_blast_search, BlastSearchInput, BlastSearchConfig
+from proto_tools.tools.sequence_alignment import run_blast_search, BlastSearchInput, BlastSearchConfig
 
 # Your DNA sequence
 inputs = BlastSearchInput(query="ATGCGTAAACGATTGCAGTACGATCGATCG")
@@ -198,7 +198,7 @@ print(result.results_df.head())  # View top hits
 
 **Example 2: Create a local database and search it**
 ```python
-from proto_tools.tools.gene_annotation import (
+from proto_tools.tools.sequence_alignment import (
     run_create_blast_db, CreateBlastDbInput, CreateBlastDbConfig,
     run_blast_search, BlastSearchInput, BlastSearchConfig
 )

@@ -199,5 +199,5 @@ print(f"{result.num_sequences_with_promoter} of {len(result.results)} have promo
 
 ## Related Tools
 
-- **`minced`**, **`local-blast`**, **`pyhmmer-hmmsearch`**: complementary annotation of the same DNA region
+- **`minced`**, **`blast-search`**, **`pyhmmer-hmmsearch`**: complementary annotation of the same DNA region
 - **RBS Calculator** (separate tool): pair with promoter strength for full transcription + translation modelling

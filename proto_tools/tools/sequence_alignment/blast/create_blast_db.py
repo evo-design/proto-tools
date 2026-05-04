@@ -1,7 +1,4 @@
-"""proto_tools/tools/gene_annotation/blast/create_blast_db.py.
-
-BLAST database creation tool.
-"""
+"""BLAST database creation tool."""
 
 from pathlib import Path
 from typing import Any, Literal
@@ -172,7 +169,7 @@ def example_input() -> Any:
 @tool(
     key="blast-create-db",
     label="Create BLAST Database",
-    category="gene_annotation",
+    category="sequence_alignment",
     input_class=CreateBlastDbInput,
     config_class=CreateBlastDbConfig,
     output_class=CreateBlastDbOutput,
@@ -202,7 +199,11 @@ def run_create_blast_db(
         ValueError: If the BLAST database creation fails.
 
     Examples:
-        >>> from proto_tools.tools.gene_annotation import run_create_blast_db, CreateBlastDbConfig, CreateBlastDbInput
+        >>> from proto_tools.tools.sequence_alignment import (
+        ...     run_create_blast_db,
+        ...     CreateBlastDbConfig,
+        ...     CreateBlastDbInput,
+        ... )
         >>> inputs = CreateBlastDbInput(fasta="sequences.fasta")
         >>> config = CreateBlastDbConfig(dbtype="nucl", title="My Database")
         >>> result = run_create_blast_db(inputs, config)

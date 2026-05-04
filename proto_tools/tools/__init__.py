@@ -100,12 +100,6 @@ from proto_tools.tools.database_retrieval import (
 
 # Gene annotation tools
 from proto_tools.tools.gene_annotation import (
-    BlastSearchConfig,
-    BlastSearchInput,
-    BlastSearchOutput,
-    CreateBlastDbConfig,
-    CreateBlastDbInput,
-    CreateBlastDbOutput,
     CrisprArray,
     CrisprRepeatSpacer,
     CrisprTracrRNAConfig,
@@ -151,8 +145,6 @@ from proto_tools.tools.gene_annotation import (
     PyPhmmerConfig,
     PyPhmmerInput,
     PyPhmmerOutput,
-    run_blast_search,
-    run_create_blast_db,
     run_crispr_tracr_rna,
     run_minced,
     run_mmseqs_clustering,
@@ -322,9 +314,15 @@ from proto_tools.tools.rna_splicing import (
 # Sequence alignment tools
 from proto_tools.tools.sequence_alignment import (
     MSA,
+    BlastSearchConfig,
+    BlastSearchInput,
+    BlastSearchOutput,
     ColabfoldSearchConfig,
     ColabfoldSearchInput,
     ColabfoldSearchOutput,
+    CreateBlastDbConfig,
+    CreateBlastDbInput,
+    CreateBlastDbOutput,
     MafftConfig,
     MafftInput,
     MafftOutput,
@@ -333,7 +331,9 @@ from proto_tools.tools.sequence_alignment import (
     Mmseqs2HomologySearchOutput,
     Mmseqs2HomologySearchQuery,
     Mmseqs2HomologySearchResult,
+    run_blast_search,
     run_colabfold_search,
+    run_create_blast_db,
     run_mafft_align,
     run_mmseqs2_homology_search,
 )

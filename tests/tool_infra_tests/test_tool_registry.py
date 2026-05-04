@@ -1372,7 +1372,7 @@ def test_get_docs_url():
     assert ToolRegistry.get_docs_url("evo2-sample") == "https://bio-pro.mintlify.app/tools/causal-models/evo2"
 
     # Multi-key tool dir: blast-search and blast-create-db share the blast/ dir
-    assert ToolRegistry.get_docs_url("blast-search") == "https://bio-pro.mintlify.app/tools/gene-annotation/blast"
+    assert ToolRegistry.get_docs_url("blast-search") == "https://bio-pro.mintlify.app/tools/sequence-alignment/blast"
 
     # Tool dir with no links.yaml still resolves — the URL is computed from path
     assert (

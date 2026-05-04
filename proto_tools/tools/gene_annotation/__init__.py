@@ -1,18 +1,5 @@
 """Gene annotation and sequence search tools."""
 
-# BLAST tools
-from proto_tools.tools.gene_annotation.blast import (
-    BlastHit,
-    BlastSearchConfig,
-    BlastSearchInput,
-    BlastSearchOutput,
-    CreateBlastDbConfig,
-    CreateBlastDbInput,
-    CreateBlastDbOutput,
-    run_blast_search,
-    run_create_blast_db,
-)
-
 # CRISPRtracrRNA tools
 from proto_tools.tools.gene_annotation.crispr_tracr_rna import (
     CrisprTracrRNAConfig,
@@ -92,16 +79,6 @@ from proto_tools.tools.gene_annotation.pyhmmer import (
 )
 
 __all__ = [
-    # BLAST
-    "run_blast_search",
-    "run_create_blast_db",
-    "BlastHit",
-    "BlastSearchInput",
-    "BlastSearchConfig",
-    "BlastSearchOutput",
-    "CreateBlastDbInput",
-    "CreateBlastDbConfig",
-    "CreateBlastDbOutput",
     # PyHMMER
     "run_pyhmmer_hmmsearch",
     "run_pyhmmer_hmmscan",
