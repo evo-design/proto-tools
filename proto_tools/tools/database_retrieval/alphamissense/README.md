@@ -24,7 +24,7 @@ AlphaMissense is an adaptation of AlphaFold fine-tuned on human and primate vari
 ## How It Works
 
 **Method overview:**
-The tool issues a single HTTP GET against one of three AFDB CSV variants chosen by `coordinate_system`:
+The tool issues a single HTTP GET to AlphaFold DB for one of three CSV file-name variants chosen by `coordinate_system`:
 - `"uniprot"` (default) → `AF-{accession}-F1-aa-substitutions.csv` (3 cols: `protein_variant`, `am_pathogenicity`, `am_class`; full saturation grid)
 - `"hg19"` → `AF-{accession}-F1-hg19.csv` (10 cols incl. `CHROM`, `POS`, `REF`, `ALT`, `transcript_id`; SNV-accessible only, GRCh37)
 - `"hg38"` → `AF-{accession}-F1-hg38.csv` (10 cols, SNV-accessible only, GRCh38)
