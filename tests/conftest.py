@@ -551,6 +551,15 @@ class BenchmarkReportCollector:
             cold_seconds=round(cold_seconds, 2) if cold_seconds is not None else None,
             warm_seconds=round(warm_seconds, 2) if warm_seconds is not None else None,
         )
+        # Live ticker: emit one INFO line per benchmark as it completes so a
+        # caller (CLI or CI) sees progress instead of waiting for the markdown
+        # reports written at session end. The structured shape mirrors the
+        # post-deploy smoke check's per-job log line for easy grep/diff across
+        # the two surfaces.
+        suffix = f" — {error_message}" if error_message else ""
+        logging.getLogger("proto_tools.tests").info(
+            "[%s] %s in %.0fs%s", tool_key, outcome.upper(), duration_seconds, suffix
+        )
 
     def write_reports(self) -> list[Path]:
         """Render one markdown file per recorded tool. Returns the paths written."""
