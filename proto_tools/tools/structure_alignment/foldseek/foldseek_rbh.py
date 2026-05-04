@@ -56,45 +56,83 @@ class FoldseekRBHConfig(BaseConfig):
         local_db (str | None): Path to the target — either a prebuilt Foldseek
             DB (e.g. ``/data/pdb100``) or a directory of PDB files (Foldseek
             auto-builds a temporary DB). Required.
-        evalue (float): E-value threshold for the inner alignment step.
-        sensitivity (float): Foldseek prefilter sensitivity (1.0-9.5; higher
-            is slower + more sensitive).
-        max_seqs (int): Max candidate target sequences per query in the
-            prefilter stage.
-        alignment_type (Literal[0, 1, 2]): Foldseek alignment type — 0=3Di
-            Gotoh-Smith-Waterman, 1=TMalign, 2=3Di+AA Gotoh-Smith-Waterman
-            (default).
+        evalue (float): E-value cutoff (lower = stricter).
+        sensitivity (float): Prefilter sensitivity (1.0-9.5; higher = slower
+            + more sensitive).
+        max_seqs (int): Max prefilter targets per query.
+        alignment_type (Literal[0, 1, 2]): Alignment scoring method (0=3Di,
+            1=TMalign, 2=3Di+AA). Note: foldseek's RBH workflow only branches
+            on TMalign (1) and 3Di+AA (2); 0 falls through to the same
+            alignment branch as 2.
+        cov (float): Minimum aligned-residue coverage for an RBH pair (0-1).
+            0.0 keeps all.
+        cov_mode (Literal[0, 1, 2]): How `cov` is measured: 0=bidirectional,
+            1=target-only, 2=query-only.
+        tmscore_threshold (float): Keep RBH pairs with TM-score above this
+            (0-1). 0.0 keeps all.
+        lddt_threshold (float): Keep RBH pairs with LDDT above this (0-1).
+            0.0 keeps all.
         num_threads (int): CPU threads.
     """
 
     local_db: str | None = ConfigField(
         title="Local Foldseek Target",
         default=None,
-        description="Path to a local Foldseek target DB or a directory of PDBs (auto-createdb)",
+        description="Path to a local Foldseek target DB or directory of PDBs (auto-createdb)",
     )
     evalue: float = ConfigField(
         title="E-value Threshold",
         default=10.0,
         ge=0.0,
-        description="E-value threshold for the inner alignment step",
+        description="E-value cutoff for inner alignment. Lower = stricter (default 10.0 reports all)",
     )
     sensitivity: float = ConfigField(
         title="Sensitivity",
         default=9.5,
         ge=1.0,
         le=9.5,
-        description="Prefilter sensitivity (higher is slower and more sensitive)",
+        description="Prefilter sensitivity (1.0-9.5). Lower = faster, higher = more sensitive (default 9.5)",
     )
     max_seqs: int = ConfigField(
         title="Max Sequences",
         default=1000,
         ge=1,
-        description="Max candidate targets per query in the prefilter stage",
+        description="Max prefilter targets per query (raise for more candidates)",
     )
     alignment_type: Literal[0, 1, 2] = ConfigField(
         title="Alignment Type",
         default=2,
-        description="0=3Di SW, 1=TMalign, 2=3Di+AA SW (default)",
+        description="Alignment scoring: 0=3Di SW, 1=TMalign, 2=3Di+AA (default). RBH treats 0 same as 2",
+        advanced=True,
+    )
+    cov: float = ConfigField(
+        title="Coverage Threshold",
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Min aligned-residue coverage for an RBH pair (0-1). 0.0 keeps all",
+        advanced=True,
+    )
+    cov_mode: Literal[0, 1, 2] = ConfigField(
+        title="Coverage Mode",
+        default=0,
+        description="Coverage mode: 0=bidirectional, 1=target-only, 2=query-only",
+        advanced=True,
+    )
+    tmscore_threshold: float = ConfigField(
+        title="TM-score Threshold",
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="TM-score floor for RBH pairs (0-1). 0.0 keeps all",
+        advanced=True,
+    )
+    lddt_threshold: float = ConfigField(
+        title="LDDT Threshold",
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="LDDT floor for RBH pairs (0-1). 0.0 keeps all",
         advanced=True,
     )
     num_threads: int = ConfigField(
@@ -205,6 +243,10 @@ def run_foldseek_rbh(
             "sensitivity": config.sensitivity,
             "max_seqs": config.max_seqs,
             "alignment_type": config.alignment_type,
+            "cov": config.cov,
+            "cov_mode": config.cov_mode,
+            "tmscore_threshold": config.tmscore_threshold,
+            "lddt_threshold": config.lddt_threshold,
             "num_threads": config.num_threads,
         },
         instance=instance,

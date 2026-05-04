@@ -120,6 +120,16 @@ class FoldseekSearchConfig(BaseConfig):
         poll_interval_seconds (float): Remote-only — delay between status polls.
         timeout_seconds (float): Remote-only — max wall-clock time for the search.
         local_db (str | None): Local-only (required) — path to a local Foldseek DB.
+        evalue (float): Local-only — E-value cutoff (lower = stricter).
+        sensitivity (float): Local-only — prefilter sensitivity (1.0-9.5;
+            higher = slower + more sensitive).
+        max_seqs (int): Local-only — max prefilter targets per query.
+        alignment_type (Literal[0, 1, 2, 3]): Local-only — alignment scoring
+            method (0=3Di, 1=TMalign, 2=3Di+AA, 3=LoL).
+        tmscore_threshold (float): Local-only — keep alignments with TM-score
+            above this (0-1). 0.0 keeps all.
+        lddt_threshold (float): Local-only — keep alignments with LDDT above
+            this (0-1). 0.0 keeps all.
         num_threads (int): Local-only — CPU threads.
     """
 
@@ -161,7 +171,63 @@ class FoldseekSearchConfig(BaseConfig):
     local_db: str | None = ConfigField(
         title="Local Foldseek Database",
         default=None,
-        description="Local-only (required) — path to a local Foldseek database",
+        description="Path to a local Foldseek DB or a directory of PDB files (required for local mode)",
+        depends_on={"search_mode": ["local"]},
+        hidden=True,
+    )
+    evalue: float = ConfigField(
+        title="E-value Threshold",
+        default=10.0,
+        ge=0.0,
+        description="E-value cutoff. Lower = stricter (1e-3 for confident homologs; default 10.0 reports all)",
+        advanced=True,
+        depends_on={"search_mode": ["local"]},
+        hidden=True,
+    )
+    sensitivity: float = ConfigField(
+        title="Sensitivity",
+        default=9.5,
+        ge=1.0,
+        le=9.5,
+        description="Prefilter sensitivity (1.0-9.5). Lower = faster, higher = more sensitive (default 9.5)",
+        advanced=True,
+        depends_on={"search_mode": ["local"]},
+        hidden=True,
+    )
+    max_seqs: int = ConfigField(
+        title="Max Sequences",
+        default=1000,
+        ge=1,
+        description="Max prefilter targets per query. Raise to surface more hits at cost of runtime",
+        advanced=True,
+        depends_on={"search_mode": ["local"]},
+        hidden=True,
+    )
+    alignment_type: Literal[0, 1, 2, 3] = ConfigField(
+        title="Alignment Type",
+        default=2,
+        description="Alignment scoring: 0=3Di SW, 1=TMalign, 2=3Di+AA (default), 3=LoL",
+        advanced=True,
+        depends_on={"search_mode": ["local"]},
+        hidden=True,
+    )
+    tmscore_threshold: float = ConfigField(
+        title="TM-score Threshold",
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="TM-score floor for hits (0-1). 0.0 keeps all; 0.5 ≈ same fold",
+        advanced=True,
+        depends_on={"search_mode": ["local"]},
+        hidden=True,
+    )
+    lddt_threshold: float = ConfigField(
+        title="LDDT Threshold",
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="LDDT floor for hits (0-1). 0.0 keeps all; 0.7+ = high local accuracy",
+        advanced=True,
         depends_on={"search_mode": ["local"]},
         hidden=True,
     )
@@ -169,7 +235,7 @@ class FoldseekSearchConfig(BaseConfig):
         title="Threads (local)",
         default=4,
         ge=1,
-        description="Local-only — CPU threads for the local search",
+        description="CPU threads for local search",
         advanced=True,
         include_in_key=False,
         depends_on={"search_mode": ["local"]},
@@ -184,6 +250,12 @@ class FoldseekSearchConfig(BaseConfig):
     }
     _LOCAL_ONLY_DEFAULTS = {  # noqa: RUF012
         "local_db": None,
+        "evalue": 10.0,
+        "sensitivity": 9.5,
+        "max_seqs": 1000,
+        "alignment_type": 2,
+        "tmscore_threshold": 0.0,
+        "lddt_threshold": 0.0,
         "num_threads": 4,
     }
 
@@ -341,6 +413,12 @@ def _local_search(
             "operation": "easy_search",
             "structure_text": inputs.structure_text,
             "local_db": config.local_db,
+            "evalue": config.evalue,
+            "sensitivity": config.sensitivity,
+            "max_seqs": config.max_seqs,
+            "alignment_type": config.alignment_type,
+            "tmscore_threshold": config.tmscore_threshold,
+            "lddt_threshold": config.lddt_threshold,
             "num_threads": config.num_threads,
         },
         instance=instance,

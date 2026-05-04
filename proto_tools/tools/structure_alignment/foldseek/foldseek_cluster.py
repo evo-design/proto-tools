@@ -92,6 +92,15 @@ class FoldseekClusterConfig(BaseConfig):
         cov (float): Coverage threshold (0-1) for the alignment.
         cov_mode (Literal[0, 1, 2]): Foldseek coverage mode (0: bidirectional,
             1: target, 2: query).
+        evalue (float): E-value cutoff for cluster-membership alignments
+            (lower = stricter; default 0.01 matches the foldseek cluster
+            workflow's runtime default).
+        alignment_type (Literal[0, 1, 2, 3]): Alignment scoring method (0=3Di,
+            1=TMalign, 2=3Di+AA, 3=LoL).
+        tmscore_threshold (float): Keep cluster-membership alignments with
+            TM-score above this (0-1). 0.0 keeps all.
+        lddt_threshold (float): Keep cluster-membership alignments with LDDT
+            above this (0-1). 0.0 keeps all.
         num_threads (int): CPU threads.
     """
 
@@ -100,7 +109,7 @@ class FoldseekClusterConfig(BaseConfig):
         default=0.0,
         ge=0.0,
         le=1.0,
-        description="Sequence-identity threshold (0-1); 0.0 lets 3Di structural similarity dominate",
+        description="Sequence-identity floor (0-1). 0.0 lets 3Di structural similarity dominate",
         advanced=True,
     )
     cov: float = ConfigField(
@@ -108,12 +117,41 @@ class FoldseekClusterConfig(BaseConfig):
         default=0.8,
         ge=0.0,
         le=1.0,
-        description="Coverage threshold for the alignment",
+        description="Min aligned-residue coverage for cluster membership (0-1)",
     )
     cov_mode: Literal[0, 1, 2] = ConfigField(
         title="Coverage Mode",
         default=0,
-        description="Foldseek coverage mode: 0 (bidirectional), 1 (target), 2 (query)",
+        description="Coverage mode: 0=bidirectional, 1=target-only, 2=query-only",
+        advanced=True,
+    )
+    evalue: float = ConfigField(
+        title="E-value Threshold",
+        default=0.01,
+        ge=0.0,
+        description="E-value cutoff for cluster-membership alignments. Lower = stricter (default 0.01)",
+        advanced=True,
+    )
+    alignment_type: Literal[0, 1, 2, 3] = ConfigField(
+        title="Alignment Type",
+        default=2,
+        description="Alignment scoring: 0=3Di SW, 1=TMalign, 2=3Di+AA (default), 3=LoL",
+        advanced=True,
+    )
+    tmscore_threshold: float = ConfigField(
+        title="TM-score Threshold",
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="TM-score floor for cluster-membership alignments (0-1). 0.0 keeps all",
+        advanced=True,
+    )
+    lddt_threshold: float = ConfigField(
+        title="LDDT Threshold",
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="LDDT floor for cluster-membership alignments (0-1). 0.0 keeps all",
         advanced=True,
     )
     num_threads: int = ConfigField(
@@ -217,6 +255,10 @@ def run_foldseek_cluster(
             "min_seq_id": config.min_seq_id,
             "cov": config.cov,
             "cov_mode": config.cov_mode,
+            "evalue": config.evalue,
+            "alignment_type": config.alignment_type,
+            "tmscore_threshold": config.tmscore_threshold,
+            "lddt_threshold": config.lddt_threshold,
             "num_threads": config.num_threads,
         },
         instance=instance,

@@ -55,10 +55,11 @@ def run_easy_search(input_data: dict[str, Any]) -> dict[str, Any]:
 
     Args:
         input_data: keys ``structure_text`` (PDB text), ``local_db`` (path),
-            ``num_threads`` (int).
+            ``evalue``, ``sensitivity``, ``max_seqs``, ``alignment_type``,
+            ``tmscore_threshold``, ``lddt_threshold``, ``num_threads``.
 
     Returns:
-        ``{"stdout": <m8_text>}`` — standard 12-column BLAST M8.
+        ``{"stdout": <m8_text>}`` — standard 12-column BLAST M8 (pident, 0-100).
     """
     foldseek = _find_binary()
     with tempfile.TemporaryDirectory() as tmp:
@@ -75,10 +76,22 @@ def run_easy_search(input_data: dict[str, Any]) -> dict[str, Any]:
                 input_data["local_db"],
                 str(m8_out),
                 str(tmp_path / "fs_tmp"),
-                "--threads",
-                str(input_data.get("num_threads", 4)),
                 "--format-output",
                 _M8_FORMAT_PIDENT,
+                "-e",
+                str(input_data.get("evalue", 10.0)),
+                "-s",
+                str(input_data.get("sensitivity", 9.5)),
+                "--max-seqs",
+                str(input_data.get("max_seqs", 1000)),
+                "--alignment-type",
+                str(input_data.get("alignment_type", 2)),
+                "--tmscore-threshold",
+                str(input_data.get("tmscore_threshold", 0.0)),
+                "--lddt-threshold",
+                str(input_data.get("lddt_threshold", 0.0)),
+                "--threads",
+                str(input_data.get("num_threads", 4)),
             ],
             "easy-search",
         )
@@ -91,7 +104,8 @@ def run_easy_cluster(input_data: dict[str, Any]) -> dict[str, Any]:
     Args:
         input_data: keys ``structures`` (list[str] PDB texts),
             ``structure_ids`` (list[str] | None), ``min_seq_id``, ``cov``,
-            ``cov_mode``, ``num_threads``.
+            ``cov_mode``, ``evalue``, ``alignment_type``, ``tmscore_threshold``,
+            ``lddt_threshold``, ``num_threads``.
 
     Returns:
         ``{"clusters_tsv": <tsv_text>}`` — 2 cols: representative_id, member_id.
@@ -117,6 +131,14 @@ def run_easy_cluster(input_data: dict[str, Any]) -> dict[str, Any]:
                 str(input_data.get("cov", 0.8)),
                 "--cov-mode",
                 str(input_data.get("cov_mode", 0)),
+                "-e",
+                str(input_data.get("evalue", 0.01)),
+                "--alignment-type",
+                str(input_data.get("alignment_type", 2)),
+                "--tmscore-threshold",
+                str(input_data.get("tmscore_threshold", 0.0)),
+                "--lddt-threshold",
+                str(input_data.get("lddt_threshold", 0.0)),
                 "--threads",
                 str(input_data.get("num_threads", 4)),
             ],
@@ -131,10 +153,11 @@ def run_easy_multimersearch(input_data: dict[str, Any]) -> dict[str, Any]:
 
     Args:
         input_data: keys ``structure_text`` (multi-chain PDB), ``local_db``,
-            ``num_threads``.
+            ``evalue``, ``sensitivity``, ``max_seqs``, ``alignment_type``,
+            ``tmscore_threshold``, ``lddt_threshold``, ``num_threads``.
 
     Returns:
-        ``{"stdout": <m8_text>}`` — standard 12-column BLAST M8.
+        ``{"stdout": <m8_text>}`` — standard 12-column BLAST M8 (pident, 0-100).
     """
     foldseek = _find_binary()
     with tempfile.TemporaryDirectory() as tmp:
@@ -151,10 +174,22 @@ def run_easy_multimersearch(input_data: dict[str, Any]) -> dict[str, Any]:
                 input_data["local_db"],
                 str(m8_out),
                 str(tmp_path / "fs_tmp"),
-                "--threads",
-                str(input_data.get("num_threads", 4)),
                 "--format-output",
                 _M8_FORMAT_PIDENT,
+                "-e",
+                str(input_data.get("evalue", 10.0)),
+                "-s",
+                str(input_data.get("sensitivity", 4.0)),
+                "--max-seqs",
+                str(input_data.get("max_seqs", 300)),
+                "--alignment-type",
+                str(input_data.get("alignment_type", 2)),
+                "--tmscore-threshold",
+                str(input_data.get("tmscore_threshold", 0.0)),
+                "--lddt-threshold",
+                str(input_data.get("lddt_threshold", 0.0)),
+                "--threads",
+                str(input_data.get("num_threads", 4)),
             ],
             "easy-multimersearch",
         )
@@ -167,7 +202,9 @@ def run_easy_multimercluster(input_data: dict[str, Any]) -> dict[str, Any]:
     Args:
         input_data: keys ``structures`` (list[str] multi-chain PDB texts),
             ``structure_ids`` (list[str] | None), ``multimer_tm_threshold``,
-            ``chain_tm_threshold``, ``interface_lddt_threshold``, ``num_threads``.
+            ``chain_tm_threshold``, ``interface_lddt_threshold``,
+            ``alignment_type``, ``tmscore_threshold``, ``lddt_threshold``,
+            ``num_threads``.
 
     Returns:
         ``{"clusters_tsv": <tsv_text>, "rep_seq_fasta": <fasta_text>}`` —
@@ -194,6 +231,12 @@ def run_easy_multimercluster(input_data: dict[str, Any]) -> dict[str, Any]:
                 str(input_data.get("chain_tm_threshold", 0.001)),
                 "--interface-lddt-threshold",
                 str(input_data.get("interface_lddt_threshold", 0.5)),
+                "--alignment-type",
+                str(input_data.get("alignment_type", 2)),
+                "--tmscore-threshold",
+                str(input_data.get("tmscore_threshold", 0.0)),
+                "--lddt-threshold",
+                str(input_data.get("lddt_threshold", 0.0)),
                 "--threads",
                 str(input_data.get("num_threads", 4)),
             ],
@@ -213,7 +256,8 @@ def run_easy_rbh(input_data: dict[str, Any]) -> dict[str, Any]:
     Args:
         input_data: keys ``structure_text`` (PDB text), ``local_db`` (target
             DB path or directory of PDBs), ``evalue``, ``sensitivity``,
-            ``max_seqs``, ``alignment_type``, ``num_threads``.
+            ``max_seqs``, ``alignment_type``, ``cov``, ``cov_mode``,
+            ``tmscore_threshold``, ``lddt_threshold``, ``num_threads``.
 
     Returns:
         ``{"stdout": <m8_text>}`` — standard 12-column BLAST M8 (pident, 0-100).
@@ -243,6 +287,14 @@ def run_easy_rbh(input_data: dict[str, Any]) -> dict[str, Any]:
                 str(input_data.get("max_seqs", 1000)),
                 "--alignment-type",
                 str(input_data.get("alignment_type", 2)),
+                "-c",
+                str(input_data.get("cov", 0.0)),
+                "--cov-mode",
+                str(input_data.get("cov_mode", 0)),
+                "--tmscore-threshold",
+                str(input_data.get("tmscore_threshold", 0.0)),
+                "--lddt-threshold",
+                str(input_data.get("lddt_threshold", 0.0)),
                 "--threads",
                 str(input_data.get("num_threads", 4)),
             ],

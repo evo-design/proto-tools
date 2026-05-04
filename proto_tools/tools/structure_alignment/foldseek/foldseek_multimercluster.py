@@ -7,7 +7,7 @@ search; clustering an arbitrary user set of multimers requires the local CLI.
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 
@@ -91,6 +91,12 @@ class FoldseekMultimerClusterConfig(BaseConfig):
             filter chain-pair alignments before assembling the multimer score.
         interface_lddt_threshold (float): Interface lDDT threshold (0-1) for
             chain-pair alignments.
+        alignment_type (Literal[0, 1, 2, 3]): Alignment scoring method (0=3Di,
+            1=TMalign, 2=3Di+AA, 3=LoL).
+        tmscore_threshold (float): Keep chain-pair alignments with TM-score
+            above this (0-1). 0.0 keeps all.
+        lddt_threshold (float): Keep chain-pair alignments with LDDT above
+            this (0-1). 0.0 keeps all.
         num_threads (int): CPU threads.
     """
 
@@ -99,21 +105,43 @@ class FoldseekMultimerClusterConfig(BaseConfig):
         default=0.65,
         ge=0.0,
         le=1.0,
-        description="Multimer-level TM-score threshold (0-1)",
+        description="Multimer-level TM-score (0-1) above which two multimers cluster together",
     )
     chain_tm_threshold: float = ConfigField(
         title="Chain TM-score Threshold",
         default=0.001,
         ge=0.0,
         le=1.0,
-        description="Per-chain TM-score threshold (0-1) for chain-pair filtering",
+        description="Per-chain TM-score (0-1) above which chain-pair alignments contribute",
     )
     interface_lddt_threshold: float = ConfigField(
         title="Interface lDDT Threshold",
         default=0.5,
         ge=0.0,
         le=1.0,
-        description="Interface lDDT threshold (0-1) for chain-pair alignments",
+        description="Interface lDDT (0-1) above which chain-pair alignments contribute",
+    )
+    alignment_type: Literal[0, 1, 2, 3] = ConfigField(
+        title="Alignment Type",
+        default=2,
+        description="Alignment scoring: 0=3Di SW, 1=TMalign, 2=3Di+AA (default), 3=LoL",
+        advanced=True,
+    )
+    tmscore_threshold: float = ConfigField(
+        title="TM-score Threshold",
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="TM-score floor for chain-pair alignments (0-1). 0.0 keeps all",
+        advanced=True,
+    )
+    lddt_threshold: float = ConfigField(
+        title="LDDT Threshold",
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="LDDT floor for chain-pair alignments (0-1). 0.0 keeps all",
+        advanced=True,
     )
     num_threads: int = ConfigField(
         title="Threads",
@@ -221,6 +249,9 @@ def run_foldseek_multimercluster(
             "multimer_tm_threshold": config.multimer_tm_threshold,
             "chain_tm_threshold": config.chain_tm_threshold,
             "interface_lddt_threshold": config.interface_lddt_threshold,
+            "alignment_type": config.alignment_type,
+            "tmscore_threshold": config.tmscore_threshold,
+            "lddt_threshold": config.lddt_threshold,
             "num_threads": config.num_threads,
         },
         instance=instance,
