@@ -18,13 +18,29 @@ from proto_tools.tools.sequence_alignment.colabfold_search import (
     run_colabfold_search,
 )
 from proto_tools.tools.sequence_alignment.mafft import MafftConfig, MafftInput, MafftOutput, run_mafft_align
-from proto_tools.tools.sequence_alignment.mmseqs2_homology_search import (
+from proto_tools.tools.sequence_alignment.mmseqs2 import (
+    Mmseqs2ClusteringConfig,
+    Mmseqs2ClusteringInput,
+    Mmseqs2ClusteringOutput,
+    Mmseqs2ClusterMember,
+    Mmseqs2ClusterResult,
+    Mmseqs2Hit,
     Mmseqs2HomologySearchConfig,
     Mmseqs2HomologySearchInput,
     Mmseqs2HomologySearchOutput,
     Mmseqs2HomologySearchQuery,
     Mmseqs2HomologySearchResult,
+    Mmseqs2SearchGenomesConfig,
+    Mmseqs2SearchGenomesInput,
+    Mmseqs2SearchGenomesOutput,
+    Mmseqs2SearchProteinsConfig,
+    Mmseqs2SearchProteinsInput,
+    Mmseqs2SearchProteinsOutput,
+    Mmseqs2SequenceSearchResult,
+    run_mmseqs2_clustering,
     run_mmseqs2_homology_search,
+    run_mmseqs2_search_genomes,
+    run_mmseqs2_search_proteins,
 )
 from proto_tools.tools.sequence_alignment.msas import MSA
 
@@ -51,7 +67,27 @@ __all__ = [
     "ColabfoldSearchInput",
     "ColabfoldSearchConfig",
     "ColabfoldSearchOutput",
-    # MMseqs2 Homology Search
+    # MMseqs2 shared schemas
+    "Mmseqs2Hit",
+    "Mmseqs2SequenceSearchResult",
+    "Mmseqs2ClusterMember",
+    "Mmseqs2ClusterResult",
+    # MMseqs2 protein search
+    "run_mmseqs2_search_proteins",
+    "Mmseqs2SearchProteinsInput",
+    "Mmseqs2SearchProteinsConfig",
+    "Mmseqs2SearchProteinsOutput",
+    # MMseqs2 genome search
+    "run_mmseqs2_search_genomes",
+    "Mmseqs2SearchGenomesInput",
+    "Mmseqs2SearchGenomesConfig",
+    "Mmseqs2SearchGenomesOutput",
+    # MMseqs2 clustering
+    "run_mmseqs2_clustering",
+    "Mmseqs2ClusteringInput",
+    "Mmseqs2ClusteringConfig",
+    "Mmseqs2ClusteringOutput",
+    # MMseqs2 Homology Search (MSA)
     "run_mmseqs2_homology_search",
     "Mmseqs2HomologySearchInput",
     "Mmseqs2HomologySearchConfig",

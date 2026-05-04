@@ -294,7 +294,7 @@ print(f"Embedding dim: {len(result.results[0].mean_embedding)}")  # 768
 **Tools often used together:**
 - `structure_prediction/esmfold`: Predict antibody structure from sequence
 - `inverse_folding/proteinmpnn`: Structure-conditioned antibody sequence design
-- `mmseqs-clustering`: Cluster antibody sequences before/after embedding analysis
+- `mmseqs2-clustering`: Cluster antibody sequences before/after embedding analysis
 
 **Alternative tools:**
 - `esm2`: General protein language model (broader training data, but not antibody-specific)

@@ -1,1 +1,4 @@
+biopython>=1.81
+pandas>=2.0.0
+tqdm>=4.60.0
 colabfold[alphafold] @ git+https://github.com/sokrypton/ColabFold

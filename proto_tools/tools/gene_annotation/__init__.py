@@ -21,26 +21,6 @@ from proto_tools.tools.gene_annotation.minced import (
     run_minced,
 )
 
-# MMseqs2 tools
-from proto_tools.tools.gene_annotation.mmseqs import (
-    MmseqsClusteringConfig,
-    MmseqsClusteringInput,
-    MmseqsClusteringOutput,
-    MmseqsClusterMember,
-    MmseqsClusterResult,
-    MmseqsHit,
-    MmseqsSearchGenomesConfig,
-    MmseqsSearchGenomesInput,
-    MmseqsSearchGenomesOutput,
-    MmseqsSearchProteinsConfig,
-    MmseqsSearchProteinsInput,
-    MmseqsSearchProteinsOutput,
-    MmseqsSequenceSearchResult,
-    run_mmseqs_clustering,
-    run_mmseqs_search_genomes,
-    run_mmseqs_search_proteins,
-)
-
 # Promoter Calculator tools
 from proto_tools.tools.gene_annotation.promoter_calculator import (
     PromoterCalculatorConfig,
@@ -103,26 +83,6 @@ __all__ = [
     "SequenceHit",
     "DomainHit",
     "PyHmmerConfig",
-    # MMseqs2 schema classes
-    "MmseqsHit",
-    "MmseqsSequenceSearchResult",
-    "MmseqsClusterMember",
-    "MmseqsClusterResult",
-    # MMseqs2 protein search
-    "run_mmseqs_search_proteins",
-    "MmseqsSearchProteinsInput",
-    "MmseqsSearchProteinsConfig",
-    "MmseqsSearchProteinsOutput",
-    # MMseqs2 genome search
-    "run_mmseqs_search_genomes",
-    "MmseqsSearchGenomesInput",
-    "MmseqsSearchGenomesConfig",
-    "MmseqsSearchGenomesOutput",
-    # MMseqs2 clustering
-    "run_mmseqs_clustering",
-    "MmseqsClusteringInput",
-    "MmseqsClusteringConfig",
-    "MmseqsClusteringOutput",
     # CRISPRtracrRNA
     "CrisprTracrRNAConfig",
     "CrisprTracrRNAInput",

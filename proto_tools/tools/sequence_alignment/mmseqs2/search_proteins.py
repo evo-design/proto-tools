@@ -1,6 +1,6 @@
-"""proto_tools/tools/gene_annotation/mmseqs/search_proteins.py.
+"""MMseqs2 protein-vs-database search via ``mmseqs easy-search``.
 
-Also defines shared data models (MmseqsHit, MmseqsSequenceSearchResult),
+Also defines shared data models (Mmseqs2Hit, Mmseqs2SequenceSearchResult),
 constants, and helper functions used by all MMseqs2 search tools.
 """
 
@@ -47,7 +47,7 @@ M8_COLUMNS = ["query", "target", "pident", "evalue"]
 # Data Models
 # ============================================================================
 # Shared:
-class MmseqsHit(BaseModel):
+class Mmseqs2Hit(BaseModel):
     """A single MMseqs2 search hit.
 
     Represents a single alignment between a query sequence and a target sequence
@@ -64,7 +64,7 @@ class MmseqsHit(BaseModel):
     evalue: float = Field(description="E-value (expected number of chance matches)")
 
 
-class MmseqsSequenceSearchResult(BaseModel):
+class Mmseqs2SequenceSearchResult(BaseModel):
     """Results for a single query sequence from an MMseqs2 search.
 
     Contains all hits found for one query sequence, along with the query
@@ -73,15 +73,15 @@ class MmseqsSequenceSearchResult(BaseModel):
     Attributes:
         query_id (str): Identifier of the query sequence.
         query_sequence (str): The input query sequence.
-        hits (list[MmseqsHit]): All hits found for this query, sorted by pident descending.
+        hits (list[Mmseqs2Hit]): All hits found for this query, sorted by pident descending.
     """
 
     query_id: str = Field(description="Query sequence identifier")
     query_sequence: str = Field(description="The input query sequence")
-    hits: list[MmseqsHit] = Field(default_factory=list, description="List of hits for this query")
+    hits: list[Mmseqs2Hit] = Field(default_factory=list, description="List of hits for this query")
 
     @property
-    def top_hit(self) -> MmseqsHit | None:
+    def top_hit(self) -> Mmseqs2Hit | None:
         """Get the best hit by percent identity, or None if no hits."""
         return max(self.hits, key=lambda h: h.pident) if self.hits else None
 
@@ -97,7 +97,7 @@ class MmseqsSequenceSearchResult(BaseModel):
 
 
 # Input:
-class MmseqsSearchProteinsInput(BaseToolInput):
+class Mmseqs2SearchProteinsInput(BaseToolInput):
     """Input object for MMseqs2 protein search.
 
     This class defines the input parameters for running MMseqs2 protein sequence
@@ -144,27 +144,27 @@ class MmseqsSearchProteinsInput(BaseToolInput):
 
 
 # Output:
-class MmseqsSearchProteinsOutput(BaseToolOutput):
+class Mmseqs2SearchProteinsOutput(BaseToolOutput):
     """Output from MMseqs2 protein search.
 
     Contains per-sequence search results matching the input order.
 
     Attributes:
-        results (list[MmseqsSequenceSearchResult]): List of search results, one per
+        results (list[Mmseqs2SequenceSearchResult]): List of search results, one per
             input sequence. The order matches the input sequences order.
     """
 
-    results: list[MmseqsSequenceSearchResult] = Field(description="List of search results, one per input sequence")
+    results: list[Mmseqs2SequenceSearchResult] = Field(description="List of search results, one per input sequence")
 
     def __len__(self) -> int:
         """Get the number of results."""
         return len(self.results)
 
-    def __getitem__(self, idx: int) -> MmseqsSequenceSearchResult:
+    def __getitem__(self, idx: int) -> Mmseqs2SequenceSearchResult:
         """Get a result by index."""
         return self.results[idx]
 
-    def __iter__(self) -> Iterator[MmseqsSequenceSearchResult]:  # type: ignore[override]
+    def __iter__(self) -> Iterator[Mmseqs2SequenceSearchResult]:  # type: ignore[override]
         """Iterate over the results."""
         return iter(self.results)
 
@@ -225,7 +225,7 @@ class MmseqsSearchProteinsOutput(BaseToolOutput):
 
 
 # Config:
-class MmseqsSearchProteinsConfig(BaseConfig):
+class Mmseqs2SearchProteinsConfig(BaseConfig):
     """Configuration object for MMseqs2 protein search.
 
     Attributes:
@@ -233,6 +233,9 @@ class MmseqsSearchProteinsConfig(BaseConfig):
         split (int): Memory management mode (0=auto).
         sensitivity (float): Search sensitivity (1.0=fast, 7.5=very sensitive).
         only_top_hits (bool): If True, keep only the best hit per query sequence.
+        use_gpu (bool): Run MMseqs2 with GPU acceleration. Off by default; opt-in
+            because the user-supplied ``mmseqs_db`` must already have a
+            ``.idx_pad`` GPU index (built via ``mmseqs makepaddedseqdb``).
     """
 
     threads: int = ConfigField(
@@ -262,6 +265,17 @@ class MmseqsSearchProteinsConfig(BaseConfig):
         description="If True, keep only the best hit per query sequence",
         advanced=True,
     )
+    use_gpu: bool = ConfigField(
+        title="Use GPU",
+        default=False,
+        description="Run MMseqs2-GPU; requires a *.idx_pad GPU index for the target DB",
+        advanced=True,
+    )
+
+    @property
+    def devices_per_instance(self) -> int:
+        """Per-call GPU need: 1 when ``use_gpu`` is set, 0 otherwise."""
+        return 1 if self.use_gpu else 0
 
 
 # ============================================================================
@@ -269,55 +283,55 @@ class MmseqsSearchProteinsConfig(BaseConfig):
 # ============================================================================
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return MmseqsSearchProteinsInput(
+    return Mmseqs2SearchProteinsInput(
         query_sequences=["MKTL"],
         mmseqs_db=str(Path(__file__).parent / "examples" / "example.fasta"),
     )
 
 
 @tool(
-    key="mmseqs-search-proteins",
+    key="mmseqs2-search-proteins",
     label="MMseqs2 Protein Search",
-    category="gene_annotation",
-    input_class=MmseqsSearchProteinsInput,
-    config_class=MmseqsSearchProteinsConfig,
-    output_class=MmseqsSearchProteinsOutput,
+    category="sequence_alignment",
+    input_class=Mmseqs2SearchProteinsInput,
+    config_class=Mmseqs2SearchProteinsConfig,
+    output_class=Mmseqs2SearchProteinsOutput,
     description="Search protein sequences using MMseqs2 with per-sequence results",
     example_input=example_input,
     iterable_input_field="query_sequences",
     iterable_output_field="results",
     cacheable=True,
 )
-def run_mmseqs_search_proteins(
-    inputs: MmseqsSearchProteinsInput,
-    config: MmseqsSearchProteinsConfig,
+def run_mmseqs2_search_proteins(
+    inputs: Mmseqs2SearchProteinsInput,
+    config: Mmseqs2SearchProteinsConfig,
     instance: Any = None,
-) -> MmseqsSearchProteinsOutput:
+) -> Mmseqs2SearchProteinsOutput:
     """Perform protein sequence search using MMseqs2.
 
     Searches query protein sequences against a target database and returns
     per-sequence results with all hits.
 
     Args:
-        inputs (MmseqsSearchProteinsInput): Validated input containing query
+        inputs (Mmseqs2SearchProteinsInput): Validated input containing query
             sequences and target database path.
-        config (MmseqsSearchProteinsConfig): Configuration with search parameters.
+        config (Mmseqs2SearchProteinsConfig): Configuration with search parameters.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        MmseqsSearchProteinsOutput: Per-sequence search results in input order.
+        Mmseqs2SearchProteinsOutput: Per-sequence search results in input order.
 
     Raises:
         FileNotFoundError: If target database cannot be found.
         RuntimeError: If MMseqs2 command execution fails.
 
     Examples:
-        >>> inputs = MmseqsSearchProteinsInput(
+        >>> inputs = Mmseqs2SearchProteinsInput(
         ...     query_sequences=["MSKGEELFT", "MVLSPADKTN"], mmseqs_db="/path/to/protein_db"
         ... )
-        >>> config = MmseqsSearchProteinsConfig()
-        >>> result = run_mmseqs_search_proteins(inputs, config)
+        >>> config = Mmseqs2SearchProteinsConfig()
+        >>> result = run_mmseqs2_search_proteins(inputs, config)
         >>> print(f"Found {result[0].num_hits} hits for first sequence")
         >>> if result[0].top_hit:
         ...     print(f"Top hit: {result[0].top_hit.pident}% identity")
@@ -326,17 +340,36 @@ def run_mmseqs_search_proteins(
     sequence_ids = resolve_sequence_ids(sequences, inputs.sequence_ids)
     num_sequences = len(sequences)
 
+    # GPU mode requires the easy-search target to be a GPU-padded MMseqs2 DB
+    # built via ``mmseqs makepaddedseqdb`` (the upstream wiki shows
+    # ``mmseqs easy-search <query> <padded_db> <result> <tmp> --gpu 1``).
+    # Resolve the padded stem now so we pass *it*, not the user's original DB,
+    # to easy-search.
+    mmseqs_db_for_dispatch = inputs.mmseqs_db
+    if config.use_gpu:
+        padded_stem = _resolve_gpu_db_stem(inputs.mmseqs_db)
+        if padded_stem is None:
+            raise ValueError(
+                f"mmseqs2-search-proteins: use_gpu=True requires a GPU-padded MMseqs2 DB "
+                f"alongside {inputs.mmseqs_db!r}. Build one with:\n"
+                f"  mmseqs createdb <fasta> <db>     # only if your input is a FASTA file\n"
+                f"  mmseqs makepaddedseqdb <db> <db>.idx_pad\n"
+                f"or set use_gpu=False."
+            )
+        mmseqs_db_for_dispatch = padded_stem
+
     output_data = ToolInstance.dispatch(
-        "mmseqs",
+        "mmseqs2",
         {
-            "device": "cpu",
+            "device": "cuda" if config.use_gpu else "cpu",
             "operation": "protein_search",
             "sequences": sequences,
             "sequence_ids": sequence_ids,
-            "mmseqs_db": inputs.mmseqs_db,
+            "mmseqs_db": mmseqs_db_for_dispatch,
             "threads": config.threads,
             "split": config.split,
             "sensitivity": config.sensitivity,
+            "use_gpu": config.use_gpu,
             "m8_columns": M8_COLUMNS,
         },
         instance=instance,
@@ -354,13 +387,14 @@ def run_mmseqs_search_proteins(
     # Build per-sequence results
     results = _build_sequence_search_results(sequences, sequence_ids, df)
 
-    return MmseqsSearchProteinsOutput(
+    return Mmseqs2SearchProteinsOutput(
         metadata={
             "mmseqs_db": inputs.mmseqs_db,
             "threads": config.threads,
             "sensitivity": config.sensitivity,
             "only_top_hits": config.only_top_hits,
             "num_sequences": num_sequences,
+            "use_gpu": config.use_gpu,
         },
         results=results,
     )
@@ -369,6 +403,47 @@ def run_mmseqs_search_proteins(
 # ============================================================================
 # Helper Functions
 # ============================================================================
+def _resolve_gpu_db_stem(mmseqs_db: str) -> str | None:
+    """Resolve the GPU-padded MMseqs2 DB stem to pass to ``easy-search --gpu 1``.
+
+    Per the proto-tools convention (matching ``databases/entries/uniref30_2302.py``
+    and the existing ``mmseqs2-homology-search`` tool), the GPU-padded DB built
+    via ``mmseqs makepaddedseqdb <stem> <stem>.idx_pad`` lives at
+    ``<stem>.idx_pad``. A valid padded DB also has the standard MMseqs2
+    metadata file ``<padded_stem>.dbtype`` alongside.
+
+    Args:
+        mmseqs_db (str): Path to an MMseqs2 DB stem (regular or padded), or a
+            directory containing one. FASTA inputs always return ``None`` —
+            ``easy-search --gpu 1`` requires a padded DB, not a raw FASTA.
+
+    Returns:
+        str | None: The padded DB stem path if a valid padded DB is found,
+            otherwise ``None``.
+    """
+    db = Path(mmseqs_db)
+
+    def _is_valid_padded_db(stem: Path) -> bool:
+        return stem.exists() and Path(f"{stem}.dbtype").is_file()
+
+    # Case 1: user passed the padded DB stem directly.
+    if db.name.endswith(".idx_pad") and _is_valid_padded_db(db):
+        return str(db)
+
+    # Case 2: padded sibling at <db>.idx_pad (proto-tools convention).
+    sibling = db.parent / f"{db.name}.idx_pad"
+    if _is_valid_padded_db(sibling):
+        return str(sibling)
+
+    # Case 3: passed path is a directory containing a padded DB.
+    if db.is_dir():
+        for cand in sorted(db.glob("*.idx_pad")):
+            if _is_valid_padded_db(cand):
+                return str(cand)
+
+    return None
+
+
 def _parse_m8_output(raw_output: str) -> pd.DataFrame:
     """Parse raw m8 tabular output string into a pandas DataFrame.
 
@@ -390,7 +465,7 @@ def _parse_m8_output(raw_output: str) -> pd.DataFrame:
     except pd.errors.EmptyDataError:
         return pd.DataFrame(columns=col_names)
     except Exception as e:
-        raise ValueError(f"mmseqs-search-proteins: failed to parse m8 output ({len(raw_output)} bytes): {e}") from e
+        raise ValueError(f"mmseqs2-search-proteins: failed to parse m8 output ({len(raw_output)} bytes): {e}") from e
 
     return df
 
@@ -411,7 +486,7 @@ def _filter_top_hits(df: pd.DataFrame) -> pd.DataFrame:
 
 def _build_sequence_search_results(
     sequences: list[str], sequence_ids: list[str], df: pd.DataFrame
-) -> list[MmseqsSequenceSearchResult]:
+) -> list[Mmseqs2SequenceSearchResult]:
     """Build per-sequence search results from DataFrame.
 
     Args:
@@ -420,7 +495,7 @@ def _build_sequence_search_results(
         df (pd.DataFrame): DataFrame with MMseqs2 search results.
 
     Returns:
-        list[MmseqsSequenceSearchResult]: List of MmseqsSequenceSearchResult objects, one per input sequence.
+        list[Mmseqs2SequenceSearchResult]: List of Mmseqs2SequenceSearchResult objects, one per input sequence.
     """
     results = []
     for seq, seq_id in zip(sequences, sequence_ids, strict=False):
@@ -428,7 +503,7 @@ def _build_sequence_search_results(
         if not df.empty and "query" in df.columns:
             seq_df = df[df["query"] == seq_id]
             hits = [
-                MmseqsHit(
+                Mmseqs2Hit(
                     target_id=row["target"],
                     pident=row["pident"],
                     evalue=row["evalue"],
@@ -441,7 +516,7 @@ def _build_sequence_search_results(
             hits = []
 
         results.append(
-            MmseqsSequenceSearchResult(
+            Mmseqs2SequenceSearchResult(
                 query_id=seq_id,
                 query_sequence=seq,
                 hits=hits,

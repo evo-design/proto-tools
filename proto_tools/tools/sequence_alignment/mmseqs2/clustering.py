@@ -1,7 +1,4 @@
-"""proto_tools/tools/gene_annotation/mmseqs/clustering.py.
-
-MMseqs2 sequence clustering tool.
-"""
+"""MMseqs2 sequence clustering tool."""
 
 from __future__ import annotations
 
@@ -12,7 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-from proto_tools.tools.gene_annotation.mmseqs.search_proteins import DEFAULT_MIN_SEQ_ID
+from proto_tools.tools.sequence_alignment.mmseqs2.search_proteins import DEFAULT_MIN_SEQ_ID
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -29,7 +26,7 @@ from proto_tools.utils import (
 # Data Models
 # ============================================================================
 # Shared:
-class MmseqsClusterMember(BaseModel):
+class Mmseqs2ClusterMember(BaseModel):
     """A member of an MMseqs2 cluster.
 
     Represents a sequence that belongs to a cluster, either as the representative
@@ -46,7 +43,7 @@ class MmseqsClusterMember(BaseModel):
     is_representative: bool = Field(default=False, description="Whether this is the cluster representative")
 
 
-class MmseqsClusterResult(BaseModel):
+class Mmseqs2ClusterResult(BaseModel):
     """Clustering result for a single input sequence.
 
     Contains information about which cluster the sequence belongs to and
@@ -66,7 +63,7 @@ class MmseqsClusterResult(BaseModel):
 
 
 # Input:
-class MmseqsClusteringInput(BaseToolInput):
+class Mmseqs2ClusteringInput(BaseToolInput):
     """Input object for MMseqs2 sequence clustering.
 
     Attributes:
@@ -98,27 +95,27 @@ class MmseqsClusteringInput(BaseToolInput):
 
 
 # Output:
-class MmseqsClusteringOutput(BaseToolOutput):
+class Mmseqs2ClusteringOutput(BaseToolOutput):
     """Output from MMseqs2 sequence clustering.
 
     Contains per-sequence clustering results matching the input order.
 
     Attributes:
-        results (list[MmseqsClusterResult]): List of clustering results, one per
+        results (list[Mmseqs2ClusterResult]): List of clustering results, one per
             input sequence. The order matches the input sequences order.
     """
 
-    results: list[MmseqsClusterResult] = Field(description="List of clustering results, one per input sequence")
+    results: list[Mmseqs2ClusterResult] = Field(description="List of clustering results, one per input sequence")
 
     def __len__(self) -> int:
         """Get the number of results."""
         return len(self.results)
 
-    def __getitem__(self, idx: int) -> MmseqsClusterResult:
+    def __getitem__(self, idx: int) -> Mmseqs2ClusterResult:
         """Get a result by index."""
         return self.results[idx]
 
-    def __iter__(self) -> Iterator[MmseqsClusterResult]:  # type: ignore[override]
+    def __iter__(self) -> Iterator[Mmseqs2ClusterResult]:  # type: ignore[override]
         """Iterate over the results."""
         return iter(self.results)
 
@@ -165,7 +162,7 @@ class MmseqsClusteringOutput(BaseToolOutput):
 
 
 # Config:
-class MmseqsClusteringConfig(BaseConfig):
+class Mmseqs2ClusteringConfig(BaseConfig):
     """Configuration object for MMseqs2 sequence clustering.
 
     Attributes:
@@ -187,47 +184,47 @@ class MmseqsClusteringConfig(BaseConfig):
 # ============================================================================
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return MmseqsClusteringInput(input_sequences=["MKTL", "MKTL", "ARND"])
+    return Mmseqs2ClusteringInput(input_sequences=["MKTL", "MKTL", "ARND"])
 
 
 @tool(
-    key="mmseqs-clustering",
-    label="MMseqs Clustering",
-    category="gene_annotation",
-    input_class=MmseqsClusteringInput,
-    config_class=MmseqsClusteringConfig,
-    output_class=MmseqsClusteringOutput,
+    key="mmseqs2-clustering",
+    label="MMseqs2 Clustering",
+    category="sequence_alignment",
+    input_class=Mmseqs2ClusteringInput,
+    config_class=Mmseqs2ClusteringConfig,
+    output_class=Mmseqs2ClusteringOutput,
     description="Perform sequence clustering using MMseqs2 to reduce redundancy",
     example_input=example_input,
     cacheable=True,
 )
-def run_mmseqs_clustering(
-    inputs: MmseqsClusteringInput,
-    config: MmseqsClusteringConfig,
+def run_mmseqs2_clustering(
+    inputs: Mmseqs2ClusteringInput,
+    config: Mmseqs2ClusteringConfig,
     instance: Any = None,
-) -> MmseqsClusteringOutput:
+) -> Mmseqs2ClusteringOutput:
     """Perform sequence clustering using MMseqs2.
 
     Groups similar sequences based on sequence identity threshold and returns
     per-sequence cluster assignments.
 
     Args:
-        inputs (MmseqsClusteringInput): Validated input containing sequences
+        inputs (Mmseqs2ClusteringInput): Validated input containing sequences
             to cluster.
-        config (MmseqsClusteringConfig): Configuration with clustering threshold.
+        config (Mmseqs2ClusteringConfig): Configuration with clustering threshold.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        MmseqsClusteringOutput: Per-sequence cluster assignments in input order.
+        Mmseqs2ClusteringOutput: Per-sequence cluster assignments in input order.
 
     Raises:
         RuntimeError: If any MMseqs2 command fails during execution.
 
     Examples:
-        >>> inputs = MmseqsClusteringInput(input_sequences=["MVLSPADKTN...", "MVLSPADKTN...", "MKLLVVAAAA..."])
-        >>> config = MmseqsClusteringConfig(min_seq_id=0.95)
-        >>> result = run_mmseqs_clustering(inputs, config)
+        >>> inputs = Mmseqs2ClusteringInput(input_sequences=["MVLSPADKTN...", "MVLSPADKTN...", "MKLLVVAAAA..."])
+        >>> config = Mmseqs2ClusteringConfig(min_seq_id=0.95)
+        >>> result = run_mmseqs2_clustering(inputs, config)
         >>> print(f"Found {result.num_clusters} clusters")
         >>> for i, r in enumerate(result):
         ...     print(f"Seq {i}: cluster={r.cluster_id}, rep={r.is_representative}")
@@ -237,7 +234,7 @@ def run_mmseqs_clustering(
     num_sequences = len(sequences)
 
     output_data = ToolInstance.dispatch(
-        "mmseqs",
+        "mmseqs2",
         {
             "device": "cpu",
             "operation": "clustering",
@@ -258,7 +255,7 @@ def run_mmseqs_clustering(
         cluster_id = cluster_assignments.get(seq_id, seq_id)
         is_rep = seq_id == cluster_id
         results.append(
-            MmseqsClusterResult(
+            Mmseqs2ClusterResult(
                 sequence_id=seq_id,
                 input_sequence=seq,
                 cluster_id=cluster_id,
@@ -266,7 +263,7 @@ def run_mmseqs_clustering(
             )
         )
 
-    return MmseqsClusteringOutput(
+    return Mmseqs2ClusteringOutput(
         metadata={
             "min_seq_id": config.min_seq_id,
             "num_sequences": num_sequences,

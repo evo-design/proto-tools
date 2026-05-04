@@ -306,7 +306,7 @@ print(f"Processed {len(result.results)} sequences")
 **Tools often used together:**
 - `esm3`: Newer generative model with structure prediction
 - `inverse_folding/proteinmpnn`: Structure-conditioned sequence design
-- `mmseqs-clustering`: Cluster sequences before/after embedding analysis
+- `mmseqs2-clustering`: Cluster sequences before/after embedding analysis
 
 **Alternative tools:**
 - `progen2`: Autoregressive protein generation

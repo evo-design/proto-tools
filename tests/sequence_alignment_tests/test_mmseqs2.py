@@ -1,34 +1,32 @@
-"""tests/gene_annotation_tests/test_mmseqs.py.
-
-Tests for the MMseqs2 tools.
-"""
+"""Tests for the MMseqs2 toolkit's protein search, genome search, and clustering tools."""
 
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
-from proto_tools.tools.gene_annotation.mmseqs import (
-    MmseqsClusteringConfig,
-    MmseqsClusteringInput,
-    MmseqsClusteringOutput,
-    MmseqsClusterResult,
-    MmseqsHit,
-    MmseqsSearchGenomesConfig,
-    MmseqsSearchGenomesInput,
-    MmseqsSearchGenomesOutput,
-    MmseqsSearchProteinsConfig,
-    MmseqsSearchProteinsInput,
-    MmseqsSearchProteinsOutput,
-    MmseqsSequenceSearchResult,
-    run_mmseqs_clustering,
-    run_mmseqs_search_genomes,
-    run_mmseqs_search_proteins,
+from proto_tools.tools.sequence_alignment.mmseqs2 import (
+    Mmseqs2ClusteringConfig,
+    Mmseqs2ClusteringInput,
+    Mmseqs2ClusteringOutput,
+    Mmseqs2ClusterResult,
+    Mmseqs2Hit,
+    Mmseqs2SearchGenomesConfig,
+    Mmseqs2SearchGenomesInput,
+    Mmseqs2SearchGenomesOutput,
+    Mmseqs2SearchProteinsConfig,
+    Mmseqs2SearchProteinsInput,
+    Mmseqs2SearchProteinsOutput,
+    Mmseqs2SequenceSearchResult,
+    run_mmseqs2_clustering,
+    run_mmseqs2_search_genomes,
+    run_mmseqs2_search_proteins,
 )
-from proto_tools.tools.gene_annotation.mmseqs.search_proteins import (
+from proto_tools.tools.sequence_alignment.mmseqs2.search_proteins import (
     _build_sequence_search_results,
     _filter_top_hits,
     _parse_m8_output,
+    _resolve_gpu_db_stem,
 )
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -43,10 +41,10 @@ M8_FILE = TEST_DATA_DIR / "test_mmseqs_results.m8"
 def test_sequence_search_result_properties():
     """Computed properties: num_hits, has_hits, top_hit."""
     hits = [
-        MmseqsHit(target_id="db_1", pident=95.0, evalue=1e-50),
-        MmseqsHit(target_id="db_2", pident=85.0, evalue=1e-30),
+        Mmseqs2Hit(target_id="db_1", pident=95.0, evalue=1e-50),
+        Mmseqs2Hit(target_id="db_2", pident=85.0, evalue=1e-30),
     ]
-    result = MmseqsSequenceSearchResult(
+    result = Mmseqs2SequenceSearchResult(
         query_id="seq_0",
         query_sequence="MVLSPADKTN",
         hits=hits,
@@ -57,7 +55,7 @@ def test_sequence_search_result_properties():
 
 
 def test_sequence_search_result_no_hits():
-    result = MmseqsSequenceSearchResult(
+    result = Mmseqs2SequenceSearchResult(
         query_id="seq_0",
         query_sequence="MVLSPADKTN",
         hits=[],
@@ -69,10 +67,10 @@ def test_sequence_search_result_no_hits():
 
 def test_search_proteins_output_iteration():
     results = [
-        MmseqsSequenceSearchResult(query_id="seq_0", query_sequence="SEQ1", hits=[]),
-        MmseqsSequenceSearchResult(query_id="seq_1", query_sequence="SEQ2", hits=[]),
+        Mmseqs2SequenceSearchResult(query_id="seq_0", query_sequence="SEQ1", hits=[]),
+        Mmseqs2SequenceSearchResult(query_id="seq_1", query_sequence="SEQ2", hits=[]),
     ]
-    output = MmseqsSearchProteinsOutput(results=results, metadata={})
+    output = Mmseqs2SearchProteinsOutput(results=results, metadata={})
 
     assert len(output) == 2
     assert output[0].query_sequence == "SEQ1"
@@ -83,11 +81,11 @@ def test_search_proteins_output_iteration():
 
 def test_clustering_output_representative_indices():
     results = [
-        MmseqsClusterResult(sequence_id="seq_0", input_sequence="S1", cluster_id="seq_0", is_representative=True),
-        MmseqsClusterResult(sequence_id="seq_1", input_sequence="S2", cluster_id="seq_0", is_representative=False),
-        MmseqsClusterResult(sequence_id="seq_2", input_sequence="S3", cluster_id="seq_2", is_representative=True),
+        Mmseqs2ClusterResult(sequence_id="seq_0", input_sequence="S1", cluster_id="seq_0", is_representative=True),
+        Mmseqs2ClusterResult(sequence_id="seq_1", input_sequence="S2", cluster_id="seq_0", is_representative=False),
+        Mmseqs2ClusterResult(sequence_id="seq_2", input_sequence="S3", cluster_id="seq_2", is_representative=True),
     ]
-    output = MmseqsClusteringOutput(results=results, metadata={})
+    output = Mmseqs2ClusteringOutput(results=results, metadata={})
 
     assert output.representative_indices == [0, 2]
     assert output.num_clusters == 2
@@ -248,6 +246,62 @@ def test_build_results_with_custom_ids():
     assert results[1].query_id == "protein_b"
 
 
+# ── GPU opt-in for mmseqs2-search-proteins ───────────────────────────────
+
+
+def test_resolve_gpu_db_stem_finds_sibling(tmp_path):
+    """``<db>.idx_pad`` sibling (proto-tools convention) is the canonical happy path."""
+    db = tmp_path / "uniref30_2302_db"
+    db.write_text("")
+    (tmp_path / "uniref30_2302_db.dbtype").write_text("")
+    padded = tmp_path / "uniref30_2302_db.idx_pad"
+    padded.write_text("")
+    (tmp_path / "uniref30_2302_db.idx_pad.dbtype").write_text("")
+    assert _resolve_gpu_db_stem(str(db)) == str(padded)
+
+
+def test_resolve_gpu_db_stem_accepts_padded_path_directly(tmp_path):
+    """User passing the padded stem directly is recognized as GPU-ready (Case 1)."""
+    padded = tmp_path / "foo.idx_pad"
+    padded.write_text("")
+    (tmp_path / "foo.idx_pad.dbtype").write_text("")
+    assert _resolve_gpu_db_stem(str(padded)) == str(padded)
+
+
+def test_resolve_gpu_db_stem_rejects_padded_data_without_dbtype(tmp_path):
+    """A bare ``.idx_pad`` data file with no ``.dbtype`` companion is rejected."""
+    db = tmp_path / "broken_db"
+    db.write_text("")
+    (tmp_path / "broken_db.idx_pad").write_text("")
+    assert _resolve_gpu_db_stem(str(db)) is None
+
+
+def test_run_protein_search_use_gpu_without_padded_db_fails(tmp_path):
+    """End-to-end: ``use_gpu=True`` with no padded DB returns success=False with remediation."""
+    fasta = tmp_path / "tiny.faa"
+    fasta.write_text(">seq_0\nMKTL\n")
+    output = run_mmseqs2_search_proteins(
+        Mmseqs2SearchProteinsInput(query_sequences=["MKTL"], mmseqs_db=str(fasta)),
+        Mmseqs2SearchProteinsConfig(use_gpu=True),
+    )
+    assert output.success is False
+    assert any("GPU-padded MMseqs2 DB" in e and "makepaddedseqdb" in e for e in output.errors)
+
+
+def test_search_proteins_devices_per_instance_reflects_use_gpu():
+    """Per-call GPU need: 1 when ``use_gpu``, 0 otherwise."""
+    assert Mmseqs2SearchProteinsConfig().devices_per_instance == 0
+    assert Mmseqs2SearchProteinsConfig(use_gpu=True).devices_per_instance == 1
+
+
+def test_standalone_dispatch_rejects_unknown_operation():
+    """Unified ``dispatch()`` validates ``operation`` and lists valid choices on failure."""
+    from proto_tools.tools.sequence_alignment.mmseqs2.standalone import run as standalone
+
+    with pytest.raises(ValueError, match=r"unknown operation 'bogus'"):
+        standalone.dispatch({"operation": "bogus"})
+
+
 # ── M8 workflow (pure Python, local test data) ───────────────────────────
 
 
@@ -282,7 +336,7 @@ def test_search_proteins_input_valid(tmp_path):
     db_file = tmp_path / "database.faa"
     db_file.write_text(">db1\nMVLSPADKTN\n")
 
-    inputs = MmseqsSearchProteinsInput(
+    inputs = Mmseqs2SearchProteinsInput(
         query_sequences=["MVLSPADKTN", "MKLLVVAAAA"],
         mmseqs_db=str(db_file),
     )
@@ -294,7 +348,7 @@ def test_search_proteins_input_rejects_empty(tmp_path):
     db_file.write_text(">db1\nMVLSPADKTN\n")
 
     with pytest.raises(ValueError, match="query_sequences list cannot be empty"):
-        MmseqsSearchProteinsInput(
+        Mmseqs2SearchProteinsInput(
             query_sequences=[],
             mmseqs_db=str(db_file),
         )
@@ -305,7 +359,7 @@ def test_search_proteins_input_rejects_non_list(tmp_path):
     db_file.write_text(">db1\nMVLSPADKTN\n")
 
     with pytest.raises(ValueError, match="query_sequences must be a list"):
-        MmseqsSearchProteinsInput(
+        Mmseqs2SearchProteinsInput(
             query_sequences="single_string",
             mmseqs_db=str(db_file),
         )
@@ -313,17 +367,17 @@ def test_search_proteins_input_rejects_non_list(tmp_path):
 
 def test_search_genomes_input_rejects_empty_query():
     with pytest.raises(ValueError, match="query_genomes list cannot be empty"):
-        MmseqsSearchGenomesInput(query_genomes=[], target_genomes=["ATGC"])
+        Mmseqs2SearchGenomesInput(query_genomes=[], target_genomes=["ATGC"])
 
 
 def test_search_genomes_input_rejects_empty_target():
     with pytest.raises(ValueError, match="target_genomes list cannot be empty"):
-        MmseqsSearchGenomesInput(query_genomes=["ATGC"], target_genomes=[])
+        Mmseqs2SearchGenomesInput(query_genomes=["ATGC"], target_genomes=[])
 
 
 def test_clustering_input_rejects_empty():
     with pytest.raises(ValueError, match="input_sequences list cannot be empty"):
-        MmseqsClusteringInput(input_sequences=[])
+        Mmseqs2ClusteringInput(input_sequences=[])
 
 
 # ---------------------------------------------------------------------------
@@ -336,19 +390,19 @@ def test_mmseqs_search_proteins_execution(tmp_path):
     db_file = tmp_path / "database.faa"
     db_file.write_text(">db1\nMVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT\n")
 
-    inputs = MmseqsSearchProteinsInput(
+    inputs = Mmseqs2SearchProteinsInput(
         query_sequences=[
             "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT",
             "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT",
         ],
         mmseqs_db=str(db_file),
     )
-    config = MmseqsSearchProteinsConfig(threads=2)
-    result = run_mmseqs_search_proteins(inputs, config)
+    config = Mmseqs2SearchProteinsConfig(threads=2)
+    result = run_mmseqs2_search_proteins(inputs, config)
 
     validate_output(result)
 
-    assert isinstance(result, MmseqsSearchProteinsOutput)
+    assert isinstance(result, Mmseqs2SearchProteinsOutput)
     assert len(result) == 2
     assert result[0].num_hits >= 1
     assert result[1].num_hits >= 1
@@ -359,14 +413,14 @@ def test_mmseqs_search_proteins_no_hits(tmp_path):
     db_file = tmp_path / "database.faa"
     db_file.write_text(">db1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n")
 
-    inputs = MmseqsSearchProteinsInput(
+    inputs = Mmseqs2SearchProteinsInput(
         query_sequences=["WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW"],
         mmseqs_db=str(db_file),
     )
-    config = MmseqsSearchProteinsConfig(threads=2)
-    result = run_mmseqs_search_proteins(inputs, config)
+    config = Mmseqs2SearchProteinsConfig(threads=2)
+    result = run_mmseqs2_search_proteins(inputs, config)
 
-    assert isinstance(result, MmseqsSearchProteinsOutput)
+    assert isinstance(result, Mmseqs2SearchProteinsOutput)
     assert result.success is True
     assert len(result) == 1
     assert result[0].num_hits == 0
@@ -380,13 +434,13 @@ def test_mmseqs_clustering_execution():
         "MKLLVVAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",  # Different
     ]
 
-    inputs = MmseqsClusteringInput(input_sequences=sequences)
-    config = MmseqsClusteringConfig(min_seq_id=0.95)
-    result = run_mmseqs_clustering(inputs, config)
+    inputs = Mmseqs2ClusteringInput(input_sequences=sequences)
+    config = Mmseqs2ClusteringConfig(min_seq_id=0.95)
+    result = run_mmseqs2_clustering(inputs, config)
 
     validate_output(result)
 
-    assert isinstance(result, MmseqsClusteringOutput)
+    assert isinstance(result, Mmseqs2ClusteringOutput)
     assert len(result) == 3
     assert result.num_clusters == 2
 
@@ -402,9 +456,9 @@ def test_mmseqs_clustering_all_identical():
         "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT",
     ]
 
-    inputs = MmseqsClusteringInput(input_sequences=sequences)
-    config = MmseqsClusteringConfig(min_seq_id=0.95)
-    result = run_mmseqs_clustering(inputs, config)
+    inputs = Mmseqs2ClusteringInput(input_sequences=sequences)
+    config = Mmseqs2ClusteringConfig(min_seq_id=0.95)
+    result = run_mmseqs2_clustering(inputs, config)
 
     assert result.num_clusters == 1
     assert all(r.cluster_id == result[0].cluster_id for r in result)
@@ -423,13 +477,13 @@ def test_mmseqs_search_genomes_execution():
         "ATGAAGCTGCTGGTGGTGGCCGCCGCCGCCGCCGCCGCCGCCGCCGCCGCCGCCATGAAGCTGCTGGTGGTGGCCGCCGCCGCCGCCGCCGCCGCCGCCGCCGCCGCC",
     ]
 
-    inputs = MmseqsSearchGenomesInput(query_genomes=query_seqs, target_genomes=target_seqs)
-    config = MmseqsSearchGenomesConfig()
-    result = run_mmseqs_search_genomes(inputs, config)
+    inputs = Mmseqs2SearchGenomesInput(query_genomes=query_seqs, target_genomes=target_seqs)
+    config = Mmseqs2SearchGenomesConfig()
+    result = run_mmseqs2_search_genomes(inputs, config)
 
     validate_output(result)
 
-    assert isinstance(result, MmseqsSearchGenomesOutput)
+    assert isinstance(result, Mmseqs2SearchGenomesOutput)
     assert len(result) == 2
 
 
@@ -438,12 +492,12 @@ def test_single_sequence_protein_search(tmp_path):
     db_file = tmp_path / "database.faa"
     db_file.write_text(">db1\nMVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT\n")
 
-    inputs = MmseqsSearchProteinsInput(
+    inputs = Mmseqs2SearchProteinsInput(
         query_sequences=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"],
         mmseqs_db=str(db_file),
     )
-    config = MmseqsSearchProteinsConfig(threads=2)
-    result = run_mmseqs_search_proteins(inputs, config)
+    config = Mmseqs2SearchProteinsConfig(threads=2)
+    result = run_mmseqs2_search_proteins(inputs, config)
 
     assert len(result) == 1
     assert result[0].num_hits >= 1
@@ -451,11 +505,11 @@ def test_single_sequence_protein_search(tmp_path):
 
 @pytest.mark.integration
 def test_single_sequence_clustering():
-    inputs = MmseqsClusteringInput(
+    inputs = Mmseqs2ClusteringInput(
         input_sequences=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"],
     )
-    config = MmseqsClusteringConfig(min_seq_id=0.95)
-    result = run_mmseqs_clustering(inputs, config)
+    config = Mmseqs2ClusteringConfig(min_seq_id=0.95)
+    result = run_mmseqs2_clustering(inputs, config)
 
     assert len(result) == 1
     assert result.num_clusters == 1

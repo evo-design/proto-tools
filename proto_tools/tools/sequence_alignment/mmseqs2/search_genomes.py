@@ -1,7 +1,4 @@
-"""proto_tools/tools/gene_annotation/mmseqs/search_genomes.py.
-
-MMseqs2 genome-to-genome nucleotide search tool.
-"""
+"""MMseqs2 genome-to-genome nucleotide search tool."""
 
 from __future__ import annotations
 
@@ -12,12 +9,12 @@ from typing import Any
 
 from pydantic import Field, field_validator
 
-from proto_tools.tools.gene_annotation.mmseqs.search_proteins import (
+from proto_tools.tools.sequence_alignment.mmseqs2.search_proteins import (
     DEFAULT_GENOME_SENSITIVITY,
     DEFAULT_THREADS,
     M8_COLUMNS,
     SEARCH_TYPE_NUCLEOTIDE,
-    MmseqsSequenceSearchResult,
+    Mmseqs2SequenceSearchResult,
     _build_sequence_search_results,
     _parse_m8_output,
 )
@@ -37,7 +34,7 @@ from proto_tools.utils import (
 # Data Models
 # ============================================================================
 # Input:
-class MmseqsSearchGenomesInput(BaseToolInput):
+class Mmseqs2SearchGenomesInput(BaseToolInput):
     """Input object for MMseqs2 genome search.
 
     Attributes:
@@ -88,27 +85,27 @@ class MmseqsSearchGenomesInput(BaseToolInput):
 
 
 # Output:
-class MmseqsSearchGenomesOutput(BaseToolOutput):
+class Mmseqs2SearchGenomesOutput(BaseToolOutput):
     """Output from MMseqs2 genome search.
 
     Contains per-sequence search results matching the input query order.
 
     Attributes:
-        results (list[MmseqsSequenceSearchResult]): List of search results, one per
+        results (list[Mmseqs2SequenceSearchResult]): List of search results, one per
             input query genome. The order matches the input query genomes order.
     """
 
-    results: list[MmseqsSequenceSearchResult] = Field(description="List of search results, one per input query genome")
+    results: list[Mmseqs2SequenceSearchResult] = Field(description="List of search results, one per input query genome")
 
     def __len__(self) -> int:
         """Get the number of results."""
         return len(self.results)
 
-    def __getitem__(self, idx: int) -> MmseqsSequenceSearchResult:
+    def __getitem__(self, idx: int) -> Mmseqs2SequenceSearchResult:
         """Get a result by index."""
         return self.results[idx]
 
-    def __iter__(self) -> Iterator[MmseqsSequenceSearchResult]:  # type: ignore[override]
+    def __iter__(self) -> Iterator[Mmseqs2SequenceSearchResult]:  # type: ignore[override]
         """Iterate over the results."""
         return iter(self.results)
 
@@ -165,7 +162,7 @@ class MmseqsSearchGenomesOutput(BaseToolOutput):
 
 
 # Config:
-class MmseqsSearchGenomesConfig(BaseConfig):
+class Mmseqs2SearchGenomesConfig(BaseConfig):
     """Configuration object for MMseqs2 genome-to-genome search.
 
     Attributes:
@@ -201,55 +198,55 @@ class MmseqsSearchGenomesConfig(BaseConfig):
 # ============================================================================
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return MmseqsSearchGenomesInput(
+    return Mmseqs2SearchGenomesInput(
         query_genomes=["ATCGATCG"],
         target_genomes=["ATCGATCG", "GCTAGCTA"],
     )
 
 
 @tool(
-    key="mmseqs-search-genomes",
-    label="MMseqs Genome Search",
-    category="gene_annotation",
-    input_class=MmseqsSearchGenomesInput,
-    config_class=MmseqsSearchGenomesConfig,
-    output_class=MmseqsSearchGenomesOutput,
+    key="mmseqs2-search-genomes",
+    label="MMseqs2 Genome Search",
+    category="sequence_alignment",
+    input_class=Mmseqs2SearchGenomesInput,
+    config_class=Mmseqs2SearchGenomesConfig,
+    output_class=Mmseqs2SearchGenomesOutput,
     description="Execute nucleotide genome-to-genome search workflow",
     example_input=example_input,
     iterable_input_field="query_genomes",
     iterable_output_field="results",
     cacheable=True,
 )
-def run_mmseqs_search_genomes(
-    inputs: MmseqsSearchGenomesInput,
-    config: MmseqsSearchGenomesConfig,
+def run_mmseqs2_search_genomes(
+    inputs: Mmseqs2SearchGenomesInput,
+    config: Mmseqs2SearchGenomesConfig,
     instance: Any = None,
-) -> MmseqsSearchGenomesOutput:
+) -> Mmseqs2SearchGenomesOutput:
     """Execute nucleotide genome-to-genome search workflow.
 
     Implements the full MMseqs2 nucleotide search pipeline including database
     creation, indexing, searching, and result conversion.
 
     Args:
-        inputs (MmseqsSearchGenomesInput): Validated input containing query
+        inputs (Mmseqs2SearchGenomesInput): Validated input containing query
             and target genome sequences.
-        config (MmseqsSearchGenomesConfig): Configuration with search parameters.
+        config (Mmseqs2SearchGenomesConfig): Configuration with search parameters.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        MmseqsSearchGenomesOutput: Per-sequence search results in query order.
+        Mmseqs2SearchGenomesOutput: Per-sequence search results in query order.
 
     Raises:
         RuntimeError: If any MMseqs2 command fails during execution.
 
     Examples:
-        >>> inputs = MmseqsSearchGenomesInput(
+        >>> inputs = Mmseqs2SearchGenomesInput(
         ...     query_genomes=["ATGGTGCTGTCTCCT...", "ATGAAGCTGCTGGTG..."],
         ...     target_genomes=["ATGGTGCTGTCTCCT...", "ATGAAGCTGCTGGTG..."],
         ... )
-        >>> config = MmseqsSearchGenomesConfig()
-        >>> result = run_mmseqs_search_genomes(inputs, config)
+        >>> config = Mmseqs2SearchGenomesConfig()
+        >>> result = run_mmseqs2_search_genomes(inputs, config)
         >>> for r in result:
         ...     print(f"Found {r.num_hits} hits")
     """
@@ -260,7 +257,7 @@ def run_mmseqs_search_genomes(
     num_queries = len(query_sequences)
 
     output_data = ToolInstance.dispatch(
-        "mmseqs",
+        "mmseqs2",
         {
             "device": "cpu",
             "operation": "genome_search",
@@ -284,7 +281,7 @@ def run_mmseqs_search_genomes(
     # Build per-sequence results
     results = _build_sequence_search_results(query_sequences, query_ids, df)
 
-    return MmseqsSearchGenomesOutput(
+    return Mmseqs2SearchGenomesOutput(
         metadata={
             "search_type": config.search_type,
             "threads": config.threads,

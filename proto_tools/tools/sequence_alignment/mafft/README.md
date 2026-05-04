@@ -266,7 +266,7 @@ for seq_id, aligned_seq in zip(msa.sequence_ids, msa.aligned_sequences):
 ## Related Tools
 
 **Tools often used together:**
-- `mmseqs-clustering`: Cluster sequences before alignment to reduce redundancy
+- `mmseqs2-clustering`: Cluster sequences before alignment to reduce redundancy
 - `pyhmmer`: Build HMM profiles from alignments
 - `esmfold`: Predict structures from aligned sequences
 
