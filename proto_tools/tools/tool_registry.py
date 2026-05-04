@@ -46,7 +46,10 @@ from proto_tools.utils.device import (
     parse_device_string,
     validate_device_allocation,
 )
-from proto_tools.utils.progress import reset_current_tool_function, set_current_tool_function
+from proto_tools.utils.progress import (
+    reset_current_tool_function,
+    set_current_tool_function,
+)
 from proto_tools.utils.tool_cache import (
     CacheStripResult,
     _generate_cache_key,
@@ -114,7 +117,8 @@ class ToolSpec(BaseModel):
         ),
     )
     device_count: str = Field(
-        default="1", description="Expected device count requirement (e.g., '1', '1-2', '>=1', '<=2')"
+        default="1",
+        description="Expected device count requirement (e.g., '1', '1-2', '>=1', '<=2')",
     )
 
     # Configuration model - serialized as JSON Schema
@@ -126,7 +130,10 @@ class ToolSpec(BaseModel):
     input_model: type[BaseToolInput] = Field(exclude=True)
     output_model: type[BaseToolOutput] = Field(exclude=True)
     function: Callable[..., Any] = Field(exclude=True)
-    source_file: Path = Field(exclude=True, description="Path to the source file where the tool function is defined")
+    source_file: Path = Field(
+        exclude=True,
+        description="Path to the source file where the tool function is defined",
+    )
     example_input: Callable[[], BaseToolInput] | None = Field(
         default=None,
         exclude=True,
@@ -308,7 +315,9 @@ class ToolRegistry:
                 that wraps the function with metadata tracking.
         """
 
-        def decorator(func: Callable[..., BaseToolOutput]) -> Callable[..., BaseToolOutput]:
+        def decorator(
+            func: Callable[..., BaseToolOutput],
+        ) -> Callable[..., BaseToolOutput]:
             cls._check_duplicate(key, func.__name__)
 
             if (iterable_input_field is None) != (iterable_output_field is None):
@@ -356,7 +365,9 @@ class ToolRegistry:
                     reset_current_tool_function(_func_token)
 
             def _wrapper_body(
-                inputs: BaseToolInput, config: BaseConfig | None, instance: "str | ToolInstance | None"
+                inputs: BaseToolInput,
+                config: BaseConfig | None,
+                instance: "str | ToolInstance | None",
             ) -> BaseToolOutput:
                 # Auto-configure logging if no handlers exist (one-time, O(1) after first call)
                 from proto_tools.utils.logging_config import _auto_configure_logging
@@ -439,7 +450,10 @@ class ToolRegistry:
                     current_items = list(getattr(inputs, spec.iterable_input_field))
                     strip = cache_strip_items(key, current_items, config)
                     if strip is not None and strip.all_cached:
-                        logger.debug("[Iterable Cache] %s: full cache hit, skipping dispatch", key)
+                        logger.debug(
+                            "[Iterable Cache] %s: full cache hit, skipping dispatch",
+                            key,
+                        )
                         cached_list = [strip.cached_results[i] for i in range(len(current_items))]
                         # Expand dedup if needed
                         if deduped and len(deduped.unique_items) < len(original_items):
@@ -524,7 +538,12 @@ class ToolRegistry:
                     try:
                         dispatched = cls._try_dispatch(key, inputs, config)
                     except Exception as e:
-                        logger.error("Tool %s: _try_dispatch raised %s: %s", key, type(e).__name__, e)
+                        logger.error(
+                            "Tool %s: _try_dispatch raised %s: %s",
+                            key,
+                            type(e).__name__,
+                            e,
+                        )
                         return _make_error_output(
                             output_class,
                             key,
@@ -608,7 +627,9 @@ class ToolRegistry:
                                 logger.debug(f"Tool {key}: completed in {result.execution_time:.2f}s")
                                 return result
 
-                        except _RETRYABLE_EXCEPTIONS as e:  # noqa: PERF203 -- retry loop
+                        except (  # noqa: PERF203 -- retry loop
+                            _RETRYABLE_EXCEPTIONS
+                        ) as e:
                             last_exception = e
                             last_traceback = traceback.format_exc()
                             if attempt < MAX_RETRIES:
@@ -868,6 +889,48 @@ class ToolRegistry:
             return data
 
     @classmethod
+    def get_license(cls, key: str) -> dict[str, Any] | None:
+        """Get license.yaml metadata for a tool.
+
+        Returns parsed contents of the tool's license.yaml file.
+
+        Args:
+            key (str): Tool identifier (e.g., 'evo2-sample', 'blast-search')
+
+        Returns:
+            dict[str, Any] | None: Parsed YAML dict, or None if no license.yaml
+                exists for this toolkit.
+
+        Raises:
+            ValueError: If tool key is not found in registry
+        """
+        cls.get(key)
+        license_file = _find_license_file(key)
+        if license_file is None:
+            return None
+        with open(license_file) as f:
+            data = yaml.safe_load(f)
+            if not isinstance(data, dict):
+                return None
+            return data
+
+    @classmethod
+    def list_licenses(cls) -> dict[str, dict[str, Any]]:
+        """Get all available licenses as {tool_key: license_dict}.
+
+        Returns:
+            dict[str, dict[str, Any]]: Dictionary mapping tool keys to their
+                parsed license.yaml contents. Only includes tools that have
+                license.yaml files.
+        """
+        licenses = {}
+        for key in cls._registry:
+            license_data = cls.get_license(key)
+            if license_data is not None:
+                licenses[key] = license_data
+        return licenses
+
+    @classmethod
     def get_docs_url(cls, key: str) -> str | None:
         """Get the documentation URL for a tool.
 
@@ -1111,6 +1174,11 @@ def _find_citation_file(tool_key: str) -> Path | None:
 def _find_links_file(tool_key: str) -> Path | None:
     """Find links.yaml for a tool by searching tool directories."""
     return _find_tool_metadata_file(tool_key, "links.yaml")
+
+
+def _find_license_file(tool_key: str) -> Path | None:
+    """Find license.yaml for a tool by searching tool directories."""
+    return _find_tool_metadata_file(tool_key, "license.yaml")
 
 
 # Alias for simpler decorator syntax: @tool(...) instead of @ToolRegistry.register(...)

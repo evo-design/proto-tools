@@ -1,0 +1,8 @@
+code:
+  spdx: BSD-3-Clause
+  url: https://github.com/oxpig/AbLang/blob/main/LICENSE
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: ABlang (Olsen et al., Oxford OPIG) is BSD-3-Clause; weights are downloaded by the package and ship under the same terms.
+last_updated: '2026-05-01'

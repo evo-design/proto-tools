@@ -1,0 +1,11 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/google-deepmind/deepmind-research/blob/master/LICENSE
+weights:
+  spdx: CC-BY-4.0
+  url: https://github.com/google-deepmind/deepmind-research/blob/master/enformer/README.md
+commercial_use: 'yes'
+redistribution: true
+attribution_required: true
+notes: Enformer code lives in google-deepmind/deepmind-research (Apache-2.0). The published Enformer weights are CC-BY-4.0; the model card lives in the deepmind-research/enformer subdirectory.
+last_updated: '2026-05-01'

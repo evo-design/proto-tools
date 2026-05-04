@@ -1,0 +1,11 @@
+code:
+  spdx: BSD-3-Clause
+  url: https://github.com/enijkamp/progen2/blob/main/LICENSE.txt
+weights:
+  spdx: BSD-3-Clause
+  url: https://huggingface.co/hugohrban/progen2-small
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: Salesforce released ProGen2 code as BSD-3-Clause; community-published weights at hugohrban/progen2-* declare BSD-3-Clause on their HuggingFace cards.
+last_updated: '2026-05-01'

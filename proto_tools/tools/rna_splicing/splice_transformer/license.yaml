@@ -1,0 +1,8 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/ShenLab-Genomics/SpliceTransformer/blob/main/LICENSE
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: SpliceTransformer (Shen Lab) is Apache-2.0; weights are released alongside the code under the same license.
+last_updated: '2026-05-01'

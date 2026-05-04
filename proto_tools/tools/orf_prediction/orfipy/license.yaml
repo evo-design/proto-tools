@@ -1,0 +1,8 @@
+code:
+  spdx: MIT
+  url: https://github.com/urmi-21/orfipy/blob/master/LICENSE
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: orfipy (Singh et al.) is MIT-licensed.
+last_updated: '2026-05-01'

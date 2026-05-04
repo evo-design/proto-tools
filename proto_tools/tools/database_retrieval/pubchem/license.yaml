@@ -1,0 +1,8 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/evo-design/proto-tools
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: proto-tools original wrapper around NCBI's public PubChem PUG REST API. PubChem data is in the public domain (NCBI usage policies apply to the API endpoints themselves).
+last_updated: '2026-05-04'

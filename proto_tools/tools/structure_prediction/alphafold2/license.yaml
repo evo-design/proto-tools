@@ -1,0 +1,11 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/google-deepmind/alphafold/blob/main/LICENSE
+weights:
+  spdx: CC-BY-4.0
+  url: https://github.com/google-deepmind/alphafold#model-parameters-license
+commercial_use: "yes"
+redistribution: true
+attribution_required: true
+notes: ""
+last_updated: "2026-05-01"

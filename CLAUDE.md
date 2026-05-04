@@ -79,6 +79,7 @@ proto_tools/
 │   │   │   ├── __init__.py         # Exports: Input, Config, Output, run_*
 │   │   │   ├── {tool_key_snake}.py # Implementation (one per registered tool)
 │   │   │   ├── cite.bib            # BibTeX citation (optional if no published paper)
+│   │   │   ├── license.yaml        # License metadata (code/weights, commercial use, redistribution)
 │   │   │   ├── examples/           # Example notebook
 │   │   │   │   └── example.ipynb   # Working example with imports and output
 │   │   │   └── standalone/         # [optional] Isolated tool environment
@@ -102,6 +103,7 @@ ToolRegistry.get_schemas("tool-key")                  # Input, config, output JS
 ToolRegistry.get_citation("tool-key")                 # BibTeX string
 ToolRegistry.get_doi("tool-key")                      # DOI extracted from cite.bib
 ToolRegistry.get_links("tool-key")                    # Parsed links.yaml (github, image, huggingface, …)
+ToolRegistry.get_license("tool-key")                  # Parsed license.yaml (code/weights SPDX, commercial use, …)
 ToolRegistry.get_docs_url("tool-key")                 # Documentation URL computed from tool directory
 ToolRegistry.get_example_input("esmfold-prediction")  # Minimal valid Input
 ToolRegistry.get_example_notebook_path("tool-key")    # Path to examples/example.ipynb

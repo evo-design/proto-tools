@@ -1,0 +1,13 @@
+code:
+  spdx: Custom (Cambrian Open License Agreement)
+  url: https://www.evolutionaryscale.ai/policies/cambrian-open-license-agreement
+  text: 'EvolutionaryScale Cambrian Open License Agreement: permits research, educational, and commercial use of the licensed code and weights, subject to a naming requirement that any derivative model must include ''ESM'' in its name and credit EvolutionaryScale. Full terms at the canonical URL above.'
+weights:
+  spdx: Custom (Cambrian Open License Agreement)
+  url: https://huggingface.co/EvolutionaryScale/esmc-300m-2024-12
+  text: 'EvolutionaryScale Cambrian Open License Agreement: permits research, educational, and commercial use of the licensed code and weights, subject to a naming requirement that any derivative model must include ''ESM'' in its name and credit EvolutionaryScale. Full terms at the canonical URL above.'
+commercial_use: restricted
+redistribution: false
+attribution_required: true
+notes: The toolkit's default ESM-C 300M (HuggingFace EvolutionaryScale/esmc-300m-2024-12) is under the permissive Cambrian Open License (commercial use OK with naming requirement). The 600M variant — also exposed by the toolkit via the 'esmc_600m' checkpoint — is under the Cambrian Non-Commercial License Agreement, which forbids commercial use. Marking restricted/false to flag the variant-dependent constraint; users picking the 300M default should treat as commercial-OK with attribution.
+last_updated: '2026-05-01'

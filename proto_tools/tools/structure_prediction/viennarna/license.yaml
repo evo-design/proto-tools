@@ -1,0 +1,9 @@
+code:
+  spdx: Custom (ViennaRNA Package License)
+  url: https://github.com/ViennaRNA/ViennaRNA/blob/master/COPYING
+  text: 'ViennaRNA Package custom license: research, educational, and commercial use of the binary is permitted without restriction. Redistribution for fee (beyond media costs) or inclusion in commercial software products requires written permission from the authors. Citation of the corresponding publications is required. Full terms at the canonical URL above.'
+commercial_use: 'yes'
+redistribution: false
+attribution_required: true
+notes: 'ViennaRNA Package custom license: research, educational, and commercial USE of the binary is permitted. Redistribution for fee (beyond media costs) or inclusion in commercial software products requires written permission from the authors — which makes hosting it as a paid service forbidden under the standard terms. Citation of the corresponding publications is required.'
+last_updated: '2026-05-01'

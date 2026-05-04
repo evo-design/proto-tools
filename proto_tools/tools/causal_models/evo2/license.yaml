@@ -1,0 +1,8 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/arcinstitute/evo2/blob/main/LICENSE
+commercial_use: "yes"
+redistribution: true
+attribution_required: false
+notes: "Model weights at arcinstitute/evo2_* on HuggingFace are released under the same license as the code (Apache-2.0)."
+last_updated: "2026-05-01"

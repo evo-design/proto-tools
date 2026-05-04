@@ -1,0 +1,8 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/evo-design/proto-tools
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: proto-tools original wrapper around NCBI public APIs (Entrez/E-utilities). Underlying NCBI data is public; NCBI usage policies apply to the API endpoints themselves.
+last_updated: '2026-05-01'

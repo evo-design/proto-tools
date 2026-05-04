@@ -1,0 +1,8 @@
+code:
+  spdx: MIT
+  url: https://github.com/jwohlwend/boltz/blob/main/LICENSE
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: Boltz-2 (Wohlwend et al.) code and HuggingFace weights (boltz-community/boltz-2) are both MIT-licensed.
+last_updated: '2026-05-01'

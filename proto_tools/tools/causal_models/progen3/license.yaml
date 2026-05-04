@@ -1,0 +1,11 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/Profluent-AI/progen3/blob/main/LICENSE-CODE
+weights:
+  spdx: CC-BY-NC-SA-4.0
+  url: https://github.com/Profluent-AI/progen3#license
+commercial_use: "no"
+redistribution: false
+attribution_required: true
+notes: "Profluent releases ProGen3 weights (Profluent-Bio/progen3-* on HuggingFace) under CC-BY-NC-SA-4.0, which forbids commercial use and propagates a ShareAlike obligation onto any derivative artifact."
+last_updated: "2026-05-01"

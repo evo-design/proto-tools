@@ -1,0 +1,8 @@
+code:
+  spdx: GPL-3.0
+  url: https://github.com/ctSkennerton/minced/blob/master/LICENSE
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: MinCED is GPL-3.0. Commercial use allowed; redistribution requires source availability under GPL terms.
+last_updated: '2026-05-01'

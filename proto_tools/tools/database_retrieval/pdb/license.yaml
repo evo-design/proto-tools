@@ -1,0 +1,8 @@
+code:
+  spdx: MIT
+  url: https://github.com/rcsb/py-rcsb-api/blob/master/LICENSE
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: Wraps RCSB PDB's py-rcsb-api client (MIT from RCSB). PDB data is publicly redistributable under CC0.
+last_updated: '2026-05-01'

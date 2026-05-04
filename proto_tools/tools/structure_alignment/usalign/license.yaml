@@ -1,0 +1,9 @@
+code:
+  spdx: Custom (Zhang Lab academic-use license)
+  url: https://github.com/pylelab/USalign/blob/master/LICENSE
+  text: 'Zhang Lab custom academic-use license: permits free copying, modification, and distribution provided the original copyright notice and references to the corresponding publications are preserved. Commercial integration historically requires a separate agreement with the Zhang Lab. Full terms at the canonical URL above.'
+commercial_use: 'yes'
+redistribution: true
+attribution_required: true
+notes: 'US-align (Zhang Lab, pylelab/USalign) ships under the same custom license as TM-align: any purpose with or without fee, provided notices and citation references are preserved.'
+last_updated: '2026-05-01'

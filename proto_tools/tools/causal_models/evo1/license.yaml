@@ -1,0 +1,8 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/evo-design/evo/blob/main/LICENSE
+commercial_use: "yes"
+redistribution: true
+attribution_required: false
+notes: "Model weights at togethercomputer/evo-1-8k-base on HuggingFace are released under the same license as the code (Apache-2.0)."
+last_updated: "2026-05-01"

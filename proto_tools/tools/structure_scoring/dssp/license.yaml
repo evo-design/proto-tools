@@ -1,0 +1,8 @@
+code:
+  spdx: BSD-2-Clause
+  url: https://github.com/PDB-REDO/dssp/blob/trunk/LICENSE
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: PDB-REDO/dssp (mkdssp) is BSD-2-Clause.
+last_updated: '2026-05-01'

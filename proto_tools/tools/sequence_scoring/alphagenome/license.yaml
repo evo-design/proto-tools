@@ -1,0 +1,12 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/google-deepmind/alphagenome_research/blob/main/LICENSE
+weights:
+  spdx: Custom (AlphaGenome Terms of Use)
+  url: https://deepmind.google.com/science/alphagenome/model-terms
+  text: 'DeepMind AlphaGenome Terms of Use: weights are gated and restricted to non-commercial scientific research only. Prohibited uses include commercial product development, clinical decision-making, and applications outside the published research scope. Full terms at the canonical URL above.'
+commercial_use: 'no'
+redistribution: false
+attribution_required: true
+notes: AlphaGenome client code is Apache-2.0; weights (HuggingFace google/alphagenome-all-folds) are governed by DeepMind's AlphaGenome Terms of Use, which restrict use to non-commercial scientific research.
+last_updated: '2026-05-01'

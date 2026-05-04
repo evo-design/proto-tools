@@ -1,0 +1,8 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/bytedance/Protenix/blob/main/LICENSE
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: Protenix (ByteDance) README explicitly states code and model parameters are released under Apache-2.0 and free for academic and commercial use.
+last_updated: '2026-05-01'

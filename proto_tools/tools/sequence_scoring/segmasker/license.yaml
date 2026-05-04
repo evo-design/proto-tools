@@ -1,0 +1,9 @@
+code:
+  spdx: Custom (NCBI BLAST+ public domain)
+  url: https://www.ncbi.nlm.nih.gov/IEB/ToolBox/CPP_DOC/lxr/source/scripts/projects/blast/LICENSE
+  text: NCBI BLAST+ is a work of the United States Government and is not subject to copyright in the U.S. As a public-domain work it may be used, modified, and redistributed without restriction. See the full NCBI public-domain notice at the canonical URL above.
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: segmasker ships with NCBI BLAST+ (U.S. Government public domain). Same status as BLAST+.
+last_updated: '2026-05-01'

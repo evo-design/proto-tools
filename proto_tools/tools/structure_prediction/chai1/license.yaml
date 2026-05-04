@@ -1,0 +1,8 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/chaidiscovery/chai-lab/blob/main/LICENSE
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: Chai-1 (Chai Discovery) code and weights (HuggingFace chaidiscovery/chai-1) are both Apache-2.0; explicitly endorsed for academic and commercial use.
+last_updated: '2026-05-01'
