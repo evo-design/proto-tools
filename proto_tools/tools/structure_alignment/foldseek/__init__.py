@@ -1,39 +1,28 @@
-"""Structure alignment tools."""
+"""Foldseek toolkit: structural homology search, clustering, and multimer search."""
 
-from proto_tools.tools.structure_alignment.foldseek import (
+from proto_tools.tools.structure_alignment.foldseek.foldseek_cluster import (
     FoldseekCluster,
     FoldseekClusterConfig,
     FoldseekClusterInput,
     FoldseekClusterOutput,
-    FoldseekHit,
+    run_foldseek_cluster,
+)
+from proto_tools.tools.structure_alignment.foldseek.foldseek_multimer_search import (
     FoldseekMultimerHit,
     FoldseekMultimerSearchConfig,
     FoldseekMultimerSearchInput,
     FoldseekMultimerSearchOutput,
+    run_foldseek_multimer_search,
+)
+from proto_tools.tools.structure_alignment.foldseek.foldseek_search import (
+    FoldseekHit,
     FoldseekSearchConfig,
     FoldseekSearchInput,
     FoldseekSearchOutput,
-    run_foldseek_cluster,
-    run_foldseek_multimer_search,
     run_foldseek_search,
-)
-from proto_tools.tools.structure_alignment.tmalign import (
-    TMalignConfig,
-    TMalignInput,
-    TMalignMetrics,
-    TMalignOutput,
-    run_tmalign,
-)
-from proto_tools.tools.structure_alignment.usalign import (
-    USalignConfig,
-    USalignInput,
-    USalignMetrics,
-    USalignOutput,
-    run_usalign,
 )
 
 __all__ = [
-    # Foldseek
     "FoldseekCluster",
     "FoldseekClusterConfig",
     "FoldseekClusterInput",
@@ -49,16 +38,4 @@ __all__ = [
     "run_foldseek_cluster",
     "run_foldseek_multimer_search",
     "run_foldseek_search",
-    # TMalign
-    "TMalignConfig",
-    "TMalignInput",
-    "TMalignMetrics",
-    "TMalignOutput",
-    "run_tmalign",
-    # USalign
-    "USalignConfig",
-    "USalignInput",
-    "USalignMetrics",
-    "USalignOutput",
-    "run_usalign",
 ]

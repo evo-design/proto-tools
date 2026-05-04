@@ -18,6 +18,7 @@ from proto_tools.utils.gradient_models import GradientInput, GradientOutput
 from proto_tools.utils.http_session import build_http_session
 from proto_tools.utils.logging_config import get_logger, setup_logging
 from proto_tools.utils.msa import extract_msa_sequences
+from proto_tools.utils.polling import poll_until_complete
 from proto_tools.utils.progress import SPINNER_STYLES, SpinnerStyle, progress_bar, set_substatus
 from proto_tools.utils.sequence import (
     DNA_NUCLEOTIDES,
@@ -112,6 +113,7 @@ __all__ = [
     "SUPPORTED_DEVICE_PREFIXES",
     # HTTP
     "build_http_session",
+    "poll_until_complete",
     # Logging
     "get_logger",
     "setup_logging",
