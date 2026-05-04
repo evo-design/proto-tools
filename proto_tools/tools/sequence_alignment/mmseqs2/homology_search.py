@@ -1,5 +1,7 @@
 """Generalized MMseqs2-based homology search for MSA generation.
 
+The MSA-generation entry point of the unified ``mmseqs2`` toolkit, alongside
+``mmseqs2-search-proteins`` / ``mmseqs2-search-genomes`` / ``mmseqs2-clustering``.
 Replaces ``colabfold-search`` in structure predictors. Phase 3 (this file):
 protein search via the registry's UniRef30 entry, GPU by default, unpaired
 only. Paired MSA support and additional datasets land in subsequent PRs
@@ -495,8 +497,6 @@ def run_mmseqs2_homology_search(
     _OUTER_TIMEOUT_GRACE_S = 30
     inner_timeout = max(1, config.timeout - _OUTER_TIMEOUT_GRACE_S)
 
-    standalone_script = Path(__file__).parent / "standalone" / "run.py"
-
     # A3M files are intermediates: the standalone writes them, the tool layer
     # parses them into in-memory MSA objects, then the tempdir auto-cleans.
     # Persistence goes through `result.export(path, "a3m")` — same pattern as
@@ -504,6 +504,7 @@ def run_mmseqs2_homology_search(
     with tempfile.TemporaryDirectory(prefix="mmseqs2_homology_search_") as tmp_dir_str:
         msa_out_dir = Path(tmp_dir_str)
         payload = {
+            "operation": "homology_search",
             "sequences": sequences,
             "dataset_dir": str(cache_dir),
             "db_prefix": entry.db_prefix,
@@ -520,10 +521,9 @@ def run_mmseqs2_homology_search(
         }
 
         output = ToolInstance.dispatch(
-            "mmseqs2_homology_search",
+            "mmseqs2",
             payload,
             instance=instance,
-            script_path=standalone_script,
             config=config,
         )
 
@@ -658,10 +658,10 @@ def _auto_provision(name: str, cache_dir: Path) -> None:
     import fcntl
 
     from proto_tools.tools.sequence_alignment.databases import DatasetRegistry
-    from proto_tools.tools.sequence_alignment.mmseqs2_homology_search.setup_databases import provision
+    from proto_tools.tools.sequence_alignment.mmseqs2.setup_databases import provision
     from proto_tools.utils.tool_instance import ToolInstance
 
-    instance = ToolInstance("mmseqs2_homology_search")
+    instance = ToolInstance("mmseqs2")
     instance.ensure_ready()
     env_bin = instance.env_path / "bin"
 

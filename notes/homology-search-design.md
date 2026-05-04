@@ -19,7 +19,7 @@ All three are one design away from each other: a **dataset registry** that holds
 **In scope:**
 
 - Dataset registry at `proto_tools/tools/sequence_alignment/databases/` (shared with `colabfold-search` from day 1 — see [Dataset Registry](#dataset-registry))
-- `mmseqs2-homology-search` tool at `proto_tools/tools/sequence_alignment/mmseqs2_homology_search/`
+- `mmseqs2-homology-search` tool at `proto_tools/tools/sequence_alignment/mmseqs2/` (one of four tools in the unified `mmseqs2` toolkit alongside `mmseqs2-search-proteins`, `mmseqs2-search-genomes`, `mmseqs2-clustering`)
 - GPU-accelerated by default (MMseqs2-GPU, same engine as AlphaFast)
 - Protein + nucleotide (RNA/DNA) support via registry-driven MMseqs2 flags
 - Paired MSAs via grouped input (shape from #543)
@@ -28,7 +28,7 @@ All three are one design away from each other: a **dataset registry** that holds
 
 **Out of scope:**
 
-- `mmseqs-search-proteins` / `mmseqs-search-genomes` / `mmseqs-clustering` — different workflow (annotation / clustering, not MSA generation). Left alone.
+- `mmseqs2-search-proteins` / `mmseqs2-search-genomes` / `mmseqs2-clustering` — different workflow (ad-hoc search / clustering, not MSA generation). Now share the `mmseqs2` toolkit with this tool but route to separate operations in `standalone/run.py`.
 - Cloud API for hosted datasets — belongs in `the tools backend`, not here. Registry schema should be forward-compatible (URL → API endpoint swap).
 - Template search (structure-level). Separate tool, separate issue.
 
@@ -218,7 +218,7 @@ The volume persists across container starts, so the download cost is paid once p
 
 ## `mmseqs2-homology-search` Tool Surface
 
-`proto_tools/tools/sequence_alignment/mmseqs2_homology_search/mmseqs2_homology_search.py`.
+`proto_tools/tools/sequence_alignment/mmseqs2/homology_search.py`.
 
 ### Input
 
@@ -247,7 +247,7 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
     use_gpu: bool = True                       # GPU default; falls back to CPU with warning if no GPU
     pairing_strategy: Literal["greedy", "complete"] = "greedy"
     sensitivity: float | None = None           # None = use registry default
-    output_dir: str | None = None              # defaults to $PROTO_HOME/mmseqs2_homology_search
+    output_dir: str | None = None              # defaults to $PROTO_HOME/mmseqs2
     search_mode: Literal["local", "remote"] = "local"   # remote reserved for future cloud API
     timeout: int = 3600
 ```

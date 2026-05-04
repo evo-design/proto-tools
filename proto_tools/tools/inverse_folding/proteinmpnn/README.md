@@ -343,7 +343,7 @@ for pos in range(len(probs)):
 **Tools often used together:**
 - `esmfold` / `boltz2` / `chai1`: Validate that designed sequences fold correctly
 - `esm2-embedding`: Sequence-level analysis of designed proteins
-- `mmseqs-clustering`: Cluster designed sequences and select diverse representatives for experimental testing
+- `mmseqs2-clustering`: Cluster designed sequences and select diverse representatives for experimental testing
 - `rfdiffusion3`: Generate novel backbone structures to use as input to ProteinMPNN
 
 **Alternative tools:**

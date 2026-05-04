@@ -356,8 +356,8 @@ if result.domain_hits_df is not None:
 
 **Tools often used together:**
 - `blast-search`: Run a quick BLAST first, then use PyHMMER for deeper analysis on hits of interest.
-- `mmseqs-clustering`: Cluster sequences before building HMMs to reduce redundancy.
+- `mmseqs2-clustering`: Cluster sequences before building HMMs to reduce redundancy.
 
 **Alternative tools:**
 - `blast-search`: Use for quick pairwise searches, broad database compatibility, or when HMM workflows are unnecessary.
-- `mmseqs-search-proteins`: Use for fast large-scale protein searches (less sensitive but much faster).
+- `mmseqs2-search-proteins`: Use for fast large-scale protein searches (less sensitive but much faster).

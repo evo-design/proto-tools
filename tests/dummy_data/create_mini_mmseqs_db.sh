@@ -13,7 +13,7 @@ MMSEQS=""
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Go up from tests/dummy_data to project root
 PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
-ENV_MMSEQS="$PROJECT_ROOT/tool_envs/mmseqs_env/bin/mmseqs"
+ENV_MMSEQS="$PROJECT_ROOT/tool_envs/mmseqs2_env/bin/mmseqs"
 
 if [ -f "$ENV_MMSEQS" ]; then
     MMSEQS="$ENV_MMSEQS"
@@ -28,7 +28,7 @@ else
     echo ""
     echo "To set up mmseqs, run in Python:"
     echo "  from proto_tools.utils.tool_instance import ToolInstance"
-    echo "  ToolInstance('mmseqs')"
+    echo "  ToolInstance('mmseqs2')"
     exit 1
 fi
 

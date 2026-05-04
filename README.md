@@ -108,10 +108,9 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 ├── <a href="proto_tools/tools/database_retrieval/pubchem/">pubchem/</a>
 ├── <a href="proto_tools/tools/database_retrieval/sequence_fetch/">sequence_fetch/</a>
 └── <a href="proto_tools/tools/database_retrieval/uniprot/">uniprot/</a>
-<a href="proto_tools/tools/gene_annotation/">gene_annotation/</a>                # Sequence annotation and homology search
+<a href="proto_tools/tools/gene_annotation/">gene_annotation/</a>                # Sequence annotation
 ├── <a href="proto_tools/tools/gene_annotation/crispr_tracr_rna/">crispr_tracr_rna/</a>
 ├── <a href="proto_tools/tools/gene_annotation/minced/">minced/</a>
-├── <a href="proto_tools/tools/gene_annotation/mmseqs/">mmseqs/</a>
 ├── <a href="proto_tools/tools/gene_annotation/promoter_calculator/">promoter_calculator/</a>
 └── <a href="proto_tools/tools/gene_annotation/pyhmmer/">pyhmmer/</a>
 <a href="proto_tools/tools/inverse_folding/">inverse_folding/</a>                # Sequence design from structures
@@ -136,7 +135,7 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 ├── <a href="proto_tools/tools/sequence_alignment/blast/">blast/</a>
 ├── <a href="proto_tools/tools/sequence_alignment/colabfold_search/">colabfold_search/</a>
 ├── <a href="proto_tools/tools/sequence_alignment/mafft/">mafft/</a>
-└── <a href="proto_tools/tools/sequence_alignment/mmseqs2_homology_search/">mmseqs2_homology_search/</a>
+└── <a href="proto_tools/tools/sequence_alignment/mmseqs2/">mmseqs2/</a>
 <a href="proto_tools/tools/sequence_scoring/">sequence_scoring/</a>               # Genomic and regulatory scoring
 ├── <a href="proto_tools/tools/sequence_scoring/alphagenome/">alphagenome/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/borzoi/">borzoi/</a>

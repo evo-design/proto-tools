@@ -265,5 +265,5 @@ print(good_hits)
 - `pyhmmer-hmmscan`: Follow up BLAST hits with domain annotation for functional characterization.
 
 **Alternative tools:**
-- `mmseqs-search-proteins` / `mmseqs-search-genomes`: Faster alternative for very large-scale searches (100-1000x faster).
+- `mmseqs2-search-proteins` / `mmseqs2-search-genomes`: Faster alternative for very large-scale searches (100-1000x faster).
 - `pyhmmer-hmmsearch` / `pyhmmer-phmmer`: More sensitive for detecting remote homologs using profile HMMs.

@@ -8,13 +8,13 @@ import pytest
 from pydantic import ValidationError
 
 from proto_tools.tools.sequence_alignment.databases import DatasetRegistry, dataset_slug, get_dataset_dir
-from proto_tools.tools.sequence_alignment.mmseqs2_homology_search import (
+from proto_tools.tools.sequence_alignment.mmseqs2 import (
     Mmseqs2HomologySearchConfig,
     Mmseqs2HomologySearchInput,
     Mmseqs2HomologySearchQuery,
     run_mmseqs2_homology_search,
 )
-from proto_tools.tools.sequence_alignment.mmseqs2_homology_search.mmseqs2_homology_search import (
+from proto_tools.tools.sequence_alignment.mmseqs2.homology_search import (
     _check_dataset_provisioned,
     _rename_a3m_to_sequence_id,
 )
@@ -135,6 +135,51 @@ def test_missing_gpu_padded_marker_gives_use_gpu_false_hint(tmp_path: Path) -> N
     (tmp_path / f"{entry.db_prefix}.dbtype").write_bytes(b"")
     with pytest.raises(FileNotFoundError, match=r"use_gpu=False"):
         _check_dataset_provisioned("uniref30-2302", entry, tmp_path, require_idx_pad=True)
+
+
+def test_dispatch_payload_carries_operation_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tool layer must include ``operation="homology_search"`` in the dispatch payload.
+
+    Regression: the unified ``mmseqs2`` standalone routes by ``operation`` key.
+    A previous version of the merged tool layer omitted this key, which would
+    have made the dispatcher raise ``unknown operation None`` at runtime.
+    """
+    from proto_tools.tools.sequence_alignment.mmseqs2 import (
+        Mmseqs2HomologySearchConfig,
+        Mmseqs2HomologySearchInput,
+        run_mmseqs2_homology_search,
+    )
+    from proto_tools.utils.tool_instance import ToolInstance
+
+    # Provision a minimal cache so the pre-dispatch ``_check_dataset_provisioned`` passes.
+    entry = DatasetRegistry.get("uniref30-2302")
+    cache = tmp_path / dataset_slug("uniref30-2302")
+    cache.mkdir()
+    for out in entry.index_recipe.output_files or []:
+        (cache / out.replace("{name}", dataset_slug("uniref30-2302"))).write_bytes(b"")
+    monkeypatch.setattr(
+        "proto_tools.tools.sequence_alignment.mmseqs2.homology_search.get_dataset_dir",
+        lambda _: cache,
+    )
+
+    captured: dict[str, object] = {}
+
+    def fake_dispatch(toolkit: str, payload: dict[str, object], **_: object) -> dict[str, object]:
+        captured["toolkit"] = toolkit
+        captured["payload"] = payload
+        return {"success": True, "output_dir": payload["output_dir"], "db_name": entry.db_prefix}
+
+    monkeypatch.setattr(ToolInstance, "dispatch", staticmethod(fake_dispatch))
+
+    # The @tool wrapper catches the downstream A3M parse failure (output_dir is
+    # empty) so the call returns rather than raising. We only need the payload.
+    run_mmseqs2_homology_search(
+        Mmseqs2HomologySearchInput(queries=["MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLI"]),
+        Mmseqs2HomologySearchConfig(use_gpu=False),
+    )
+
+    assert captured["toolkit"] == "mmseqs2"
+    assert captured["payload"]["operation"] == "homology_search"
 
 
 # ============================================================================

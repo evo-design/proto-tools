@@ -209,5 +209,5 @@ print(f"KRAS best X-ray template: {candidates[0]}")
 ## Related Tools
 
 - `blast-search`: sequence similarity search after retrieval
-- `mmseqs-search-proteins`: scalable protein homology search
+- `mmseqs2-search-proteins`: scalable protein homology search
 - `prodigal` / `orfipy`: coding region discovery from raw DNA

@@ -474,7 +474,7 @@ class ColabfoldSearchConfig(BaseConfig):
             raise ValueError(
                 f"use_gpu=True requires a GPU-formatted database, but {self.database_name}.idx_pad "
                 f"was not found in {self.msa_db_dir}. "
-                f"Create it with: mmseqs makepaddedseqdb {self.database_name}.idx {self.database_name}.idx_pad"
+                f"Create it with: mmseqs makepaddedseqdb {self.database_name} {self.database_name}.idx_pad"
             )
         return self
 

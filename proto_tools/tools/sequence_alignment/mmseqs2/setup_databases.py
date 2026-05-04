@@ -15,7 +15,7 @@ in ``databases/entries/``, no script changes needed.
 Usage::
 
     # Default (no args): UniRef30 only, smallest viable bootstrap
-    python -m proto_tools.tools.sequence_alignment.mmseqs2_homology_search.setup_databases
+    python -m proto_tools.tools.sequence_alignment.mmseqs2.setup_databases
 
     # Specific datasets
     python -m ...setup_databases uniref30-2302 small-bfd
@@ -31,12 +31,11 @@ Usage::
 
 Prerequisites:
     The ``mmseqs`` binary must be on ``PATH`` (and ``zstd`` for any
-    ``.zst``-distributed dataset). The mmseqs2-homology-search tool's
-    micromamba env ships an ``mmseqs`` at
-    ``$PROTO_HOME/proto_tool_envs/mmseqs2_homology_search_env/bin/`` —
-    after the tool has been dispatched once that env is created and you
-    can append it to PATH for this script. Resolving the binary
-    automatically from the tool env is a planned follow-up.
+    ``.zst``-distributed dataset). The ``mmseqs2`` toolkit's micromamba env
+    ships an ``mmseqs`` at ``$PROTO_HOME/proto_tool_envs/mmseqs2_env/bin/`` —
+    after any of the toolkit's tools has been dispatched once that env is
+    created and you can append it to PATH for this script. Resolving the
+    binary automatically from the tool env is a planned follow-up.
 """
 
 from __future__ import annotations
