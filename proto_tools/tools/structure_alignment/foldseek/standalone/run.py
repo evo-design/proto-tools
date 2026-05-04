@@ -1,7 +1,8 @@
 """Foldseek standalone runner for ToolInstance venv execution.
 
-Handles single-chain search, multimer search, and clustering operations.
-Communicates via JSON input/output files (ToolInstance pattern).
+Handles single-chain search, multimer search, clustering, multimer clustering,
+and reciprocal-best-hits operations. Communicates via JSON input/output files
+(ToolInstance pattern).
 
 Usage (called by ToolInstance, not directly):
     python run.py <input.json> <output.json>
@@ -160,6 +161,96 @@ def run_easy_multimersearch(input_data: dict[str, Any]) -> dict[str, Any]:
         return {"stdout": m8_out.read_text() if m8_out.exists() else ""}
 
 
+def run_easy_multimercluster(input_data: dict[str, Any]) -> dict[str, Any]:
+    """Run `foldseek easy-multimercluster` over user-provided multi-chain structures.
+
+    Args:
+        input_data: keys ``structures`` (list[str] multi-chain PDB texts),
+            ``structure_ids`` (list[str] | None), ``multimer_tm_threshold``,
+            ``chain_tm_threshold``, ``interface_lddt_threshold``, ``num_threads``.
+
+    Returns:
+        ``{"clusters_tsv": <tsv_text>, "rep_seq_fasta": <fasta_text>}`` —
+        TSV is 2 cols: representative_id, member_id.
+    """
+    foldseek = _find_binary()
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        pdb_dir = tmp_path / "pdbs"
+        pdb_dir.mkdir()
+        _write_pdbs(input_data["structures"], pdb_dir, input_data.get("structure_ids"))
+
+        prefix = tmp_path / "multimercluster"
+        _run_cmd(
+            [
+                foldseek,
+                "easy-multimercluster",
+                str(pdb_dir),
+                str(prefix),
+                str(tmp_path / "fs_tmp"),
+                "--multimer-tm-threshold",
+                str(input_data.get("multimer_tm_threshold", 0.65)),
+                "--chain-tm-threshold",
+                str(input_data.get("chain_tm_threshold", 0.001)),
+                "--interface-lddt-threshold",
+                str(input_data.get("interface_lddt_threshold", 0.5)),
+                "--threads",
+                str(input_data.get("num_threads", 4)),
+            ],
+            "easy-multimercluster",
+        )
+        tsv_path = prefix.with_name(prefix.name + "_cluster.tsv")
+        fasta_path = prefix.with_name(prefix.name + "_rep_seq.fasta")
+        return {
+            "clusters_tsv": tsv_path.read_text() if tsv_path.exists() else "",
+            "rep_seq_fasta": fasta_path.read_text() if fasta_path.exists() else "",
+        }
+
+
+def run_easy_rbh(input_data: dict[str, Any]) -> dict[str, Any]:
+    """Run `foldseek easy-rbh` for reciprocal-best-hits between a query and a target DB.
+
+    Args:
+        input_data: keys ``structure_text`` (PDB text), ``local_db`` (target
+            DB path or directory of PDBs), ``evalue``, ``sensitivity``,
+            ``max_seqs``, ``alignment_type``, ``num_threads``.
+
+    Returns:
+        ``{"stdout": <m8_text>}`` — standard 12-column BLAST M8 (pident, 0-100).
+    """
+    foldseek = _find_binary()
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        query_pdb = tmp_path / "query.pdb"
+        query_pdb.write_text(input_data["structure_text"])
+        m8_out = tmp_path / "result.m8"
+
+        _run_cmd(
+            [
+                foldseek,
+                "easy-rbh",
+                str(query_pdb),
+                input_data["local_db"],
+                str(m8_out),
+                str(tmp_path / "fs_tmp"),
+                "--format-output",
+                _M8_FORMAT_PIDENT,
+                "-e",
+                str(input_data.get("evalue", 10.0)),
+                "-s",
+                str(input_data.get("sensitivity", 9.5)),
+                "--max-seqs",
+                str(input_data.get("max_seqs", 1000)),
+                "--alignment-type",
+                str(input_data.get("alignment_type", 2)),
+                "--threads",
+                str(input_data.get("num_threads", 4)),
+            ],
+            "easy-rbh",
+        )
+        return {"stdout": m8_out.read_text() if m8_out.exists() else ""}
+
+
 def to_device(device: str) -> dict[str, Any]:
     """Passthrough for CLI tool — automatically unloads after each call."""
     return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
@@ -169,6 +260,8 @@ _OPERATIONS = {
     "easy_search": run_easy_search,
     "easy_cluster": run_easy_cluster,
     "easy_multimersearch": run_easy_multimersearch,
+    "easy_multimercluster": run_easy_multimercluster,
+    "easy_rbh": run_easy_rbh,
 }
 
 

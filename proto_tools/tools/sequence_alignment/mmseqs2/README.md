@@ -177,4 +177,4 @@ See `setup_databases.py --list` for available datasets and presets matching pred
 - **`blast-search`**: smaller-scale searches with NCBI database access; lower throughput than MMseqs2 but a more familiar E-value-driven workflow.
 - **`pyhmmer-hmmsearch` / `pyhmmer-hmmscan`**: profile-based search for remote homologs (<30% identity) when MMseqs2 sensitivity isn't enough.
 - **`colabfold-search`**: the original wrapper of the homology-search backend; will be deprecated after structure-predictor migrations to `mmseqs2-homology-search` complete (Phase 6 of #581).
-- **`foldseek-search`** *(planned)*: structure-based search for remote homologs the sequence layer misses.
+- **`foldseek-search`** / **`foldseek-cluster`** / **`foldseek-multimer-search`** / **`foldseek-multimercluster`** / **`foldseek-rbh`**: structure-based search and clustering for remote homologs the sequence layer misses.

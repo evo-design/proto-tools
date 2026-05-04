@@ -121,6 +121,7 @@ class FoldseekClusterConfig(BaseConfig):
         ge=1,
         description="CPU threads",
         advanced=True,
+        include_in_key=False,
     )
 
 

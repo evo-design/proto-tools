@@ -132,6 +132,7 @@ class FoldseekMultimerSearchConfig(BaseConfig):
         ge=1,
         description="Local-only — CPU threads",
         advanced=True,
+        include_in_key=False,
         depends_on={"search_mode": ["local"]},
     )
 

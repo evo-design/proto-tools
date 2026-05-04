@@ -4,15 +4,17 @@
 
 ## Overview
 
-The Foldseek toolkit wraps the Steinegger Lab's structural search/alignment binary and the public Foldseek server (`search.foldseek.com`). Three sibling tools, all backed by the same Foldseek codebase:
+The Foldseek toolkit wraps the Steinegger Lab's structural search/alignment binary and the public Foldseek server (`search.foldseek.com`). Five sibling tools, all backed by the same Foldseek codebase:
 
 | Tool key | Operation | Modes |
 |---|---|---|
 | `foldseek-search` | Single-chain query-vs-DB structural search | remote (server) + local (CLI) |
 | `foldseek-cluster` | Cluster a set of structures by structural similarity | local only |
 | `foldseek-multimer-search` | Multimer (complex) structural search | remote (server) + local (CLI) |
+| `foldseek-multimercluster` | Cluster a set of multi-chain assemblies by complex-level structural similarity | local only |
+| `foldseek-rbh` | Reciprocal-best-hits structural search between a query and a target DB | local only |
 
-`foldseek-search` is the canonical tool for "find proteins structurally similar to my query" — the structural analog of BLAST. `foldseek-cluster` groups a user-supplied set of PDBs into structural clusters. `foldseek-multimer-search` searches with a multi-chain assembly (biological complex) against multimer-aware databases.
+`foldseek-search` is the canonical tool for "find proteins structurally similar to my query" — the structural analog of BLAST. `foldseek-cluster` groups a user-supplied set of PDBs into structural clusters. `foldseek-multimer-search` searches with a multi-chain assembly (biological complex) against multimer-aware databases. `foldseek-multimercluster` is the multi-chain analog of `foldseek-cluster` — it groups assemblies by combined chain + interface similarity. `foldseek-rbh` returns only mutual best hits between a query and a target DB (useful for structural orthology calls).
 
 ## Background
 
@@ -37,9 +39,9 @@ Per Foldseek's GitHub README, "many of Foldseek's modules (subprograms) rely on 
 3. Download the `.tar.gz` archive from `/api/result/download/{id}` — one `alis_{db}.m8` file per queried database.
 4. Parse each M8 file (standard 12-column BLAST tabular format) into typed `FoldseekHit` objects.
 
-**Local modes (`foldseek-search`/`foldseek-multimer-search` with `search_mode="local"`, `foldseek-cluster`):**
+**Local modes (`foldseek-search`/`foldseek-multimer-search` with `search_mode="local"`, `foldseek-cluster`, `foldseek-multimercluster`, `foldseek-rbh`):**
 1. Provision the Foldseek binary via the standalone env (`standalone/setup.sh` calls `proto_tools/utils/install_binary.py foldseek`, which downloads the platform-specific tarball from `mmseqs.com/foldseek` and extracts the binary into the venv's `bin/` directory).
-2. The wrapper writes inputs to a temp dir, invokes `foldseek easy-search` / `easy-cluster` / `easy-multimersearch` via `ToolInstance.dispatch`, parses the M8 (or cluster TSV) output.
+2. The wrapper writes inputs to a temp dir, invokes `foldseek easy-search` / `easy-cluster` / `easy-multimersearch` / `easy-multimercluster` / `easy-rbh` via `ToolInstance.dispatch`, parses the M8 (or cluster TSV) output.
 
 **Key assumptions:**
 - Query structures are PDB-format text (single-chain for search/cluster, multi-chain for multimer).
@@ -48,7 +50,7 @@ Per Foldseek's GitHub README, "many of Foldseek's modules (subprograms) rely on 
 
 **Limitations:**
 - The server's documented `/api/result/{id}` endpoint has a known 404 bug ([Foldseek issue #380](https://github.com/steineggerlab/foldseek/issues/380)); the wrapper uses `/api/result/download/{id}` instead.
-- Local modes need a pre-built Foldseek database (use `foldseek createdb` outside this wrapper).
+- Local search/multimer-search/rbh modes need a target — either a pre-built Foldseek database or a directory of PDB files (Foldseek auto-builds a temporary DB from a directory). Pre-build with `foldseek createdb` outside this wrapper for repeated reuse against large target sets.
 - No CIF input — PDB-format text only.
 - No documented public-server rate limit; for large batch sweeps prefer local mode.
 
@@ -76,6 +78,19 @@ Per Foldseek's GitHub README, "many of Foldseek's modules (subprograms) rely on 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `structure_text` | `str` | *required* | Multi-chain PDB-format text of the query complex. |
+
+### `FoldseekMultimerClusterInput`
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `structures` | `list[str]` | *required* (≥2) | Multi-chain PDB-format text strings to cluster. |
+| `structure_ids` | `list[str] \| None` | `None` | Optional IDs per multimer (default: `'multimer_0'`, `'multimer_1'`, ...). Chain names in the PDB must not contain `_`. |
+
+### `FoldseekRBHInput`
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `structure_text` | `str` | *required* | PDB-format text of the single-chain query. |
 
 ## Configuration
 
@@ -106,6 +121,26 @@ Per Foldseek's GitHub README, "many of Foldseek's modules (subprograms) rely on 
 
 Same shape as `FoldseekSearchConfig`. Remote mode wraps `mode` as `complex-{mode}` on the wire (e.g. `complex-3diaa`); the wrapper handles this transparently. The `databases` default is `["pdb100"]` — the multimer-aware subset.
 
+### `FoldseekMultimerClusterConfig`
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `multimer_tm_threshold` | `float` | `0.65` | Multimer-level TM-score threshold (0-1). |
+| `chain_tm_threshold` | `float` | `0.001` | Per-chain TM-score threshold (0-1) for chain-pair filtering. |
+| `interface_lddt_threshold` | `float` | `0.5` | Interface lDDT threshold (0-1) for chain-pair alignments. |
+| `num_threads` | `int` | `4` | (advanced) CPU threads. |
+
+### `FoldseekRBHConfig`
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `local_db` | `str \| None` | *required* | Path to a local Foldseek target DB or directory of PDBs (auto-createdb). |
+| `evalue` | `float` | `10.0` | E-value threshold for the inner alignment step. |
+| `sensitivity` | `float` | `9.5` | Foldseek prefilter sensitivity (1.0-9.5; higher is slower + more sensitive). |
+| `max_seqs` | `int` | `1000` | Max candidate target sequences per query in the prefilter stage. |
+| `alignment_type` | `Literal[0, 1, 2]` | `2` | (advanced) 0 = 3Di SW, 1 = TMalign, 2 = 3Di+AA SW (default). |
+| `num_threads` | `int` | `4` | (advanced) CPU threads. |
+
 ## Output Specification
 
 ```python
@@ -126,6 +161,21 @@ FoldseekClusterOutput(
 )
 
 # foldseek-multimer-search — same shape as FoldseekSearchOutput
+
+# foldseek-multimercluster
+FoldseekMultimerClusterOutput(
+    clusters: list[FoldseekCluster],   # representative_id + member_ids per cluster (chain-aware IDs)
+    num_clusters: int,
+    num_multimers: int,
+    rep_seq_fasta: str,                # Representative-multimer FASTA from Foldseek
+)
+
+# foldseek-rbh
+FoldseekRBHOutput(
+    hits: list[FoldseekHit],           # Mutual best-hit alignments (same 12-col M8 schema)
+    num_hits: int,
+    target_db: str,                    # The target DB path that was queried
+)
 ```
 
 `FoldseekHit` (and the type-aliased `FoldseekMultimerHit`) — 12 fields per the standard BLAST M8 columns: `database`, `target_id`, `sequence_identity` (normalized to [0, 1]), `alignment_length`, `mismatches`, `gap_openings`, `query_start`, `query_end`, `target_start`, `target_end`, `evalue`, `bit_score`.
@@ -213,14 +263,46 @@ output = run_foldseek_multimer_search(
 print(f"{output.num_hits} multimer hits")
 ```
 
+**Example 5: Cluster a candidate set of designed complexes by multimer-level similarity.**
+
+```python
+from proto_tools.tools.structure_alignment import (
+    FoldseekMultimerClusterConfig, FoldseekMultimerClusterInput, run_foldseek_multimercluster,
+)
+
+output = run_foldseek_multimercluster(
+    FoldseekMultimerClusterInput(structures=[complex_a, complex_b, complex_c]),
+    FoldseekMultimerClusterConfig(),
+)
+for cluster in output.clusters:
+    print(f"  {cluster.representative_id}: {len(cluster.member_ids)} members")
+```
+
+**Example 6: Reciprocal best hits between a query and a local target DB (structural orthology call).**
+
+```python
+from proto_tools.tools.structure_alignment import (
+    FoldseekRBHConfig, FoldseekRBHInput, run_foldseek_rbh,
+)
+
+output = run_foldseek_rbh(
+    FoldseekRBHInput(structure_text=my_pdb_text),
+    FoldseekRBHConfig(local_db="/data/target_pdbs", num_threads=8),
+)
+for hit in output.hits:
+    print(f"  reciprocal best: {hit.target_id} (evalue={hit.evalue:.2e})")
+```
+
 ## Best Practices & Gotchas
 
 1. **Don't filter Foldseek hits by `sequence_identity`.** This defeats the purpose of structure search; use `evalue` or `bit_score`.
 2. **Submit PDB, not mmCIF.** Convert upstream (e.g. via `alphafold-db-fetch` with `structure_format="pdb"`) if your structure is in CIF.
 3. **Clustering uses 3Di structural similarity, not sequence identity.** The default `min_seq_id=0.0` is intentional — set it >0 only when you also want a sequence-similarity floor.
-4. **Cache responsibly.** All three tools are `cacheable=True`; subsequent calls with the same inputs + config skip the work. Polling parameters and threads are correctly excluded from the cache key.
+4. **Cache responsibly.** All five tools are `cacheable=True`; subsequent calls with the same inputs + config skip the work. Polling parameters and threads are correctly excluded from the cache key.
 5. **Multimer wire format:** the wrapper transparently encodes `mode` as `complex-{mode}` for the multimer endpoint. Pass plain `"3diaa"` / `"tmalign"` / `"lolalign"` in the config.
 6. **Public-server fairness.** No documented rate limit, but the search server is best-effort. For batch sweeps over hundreds of queries, use local mode.
+7. **Multimer chain naming.** `foldseek-multimercluster` encodes member IDs as `{multimer_id}_{chain}`. PDB chain identifiers must not contain `_` (the wrapper does not pre-validate; the CLI surfaces a clear error if they collide).
+8. **RBH is local-only and asymmetric in input.** `foldseek-rbh` takes a single query PDB plus a target DB (or a directory of PDBs that Foldseek auto-builds into a DB). Returns only mutual best hits, not all alignments — expect 0 or 1 hit per query for most distant comparisons.
 
 ## Related Tools
 
