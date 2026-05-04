@@ -470,11 +470,14 @@ class ColabfoldSearchConfig(BaseConfig):
             return self
         assert self.msa_db_dir is not None  # resolved by `set_default_msa_db_dir`
         idx_pad = Path(self.msa_db_dir) / f"{self.database_name}.idx_pad"
-        if not idx_pad.exists():
+        # Both the padded data file and its ``.dbtype`` must exist; without
+        # the latter, ``easy-search`` falls through to its FASTA-input branch.
+        if not idx_pad.exists() or not Path(f"{idx_pad}.dbtype").is_file():
             raise ValueError(
-                f"use_gpu=True requires a GPU-formatted database, but {self.database_name}.idx_pad "
-                f"was not found in {self.msa_db_dir}. "
-                f"Create it with: mmseqs makepaddedseqdb {self.database_name} {self.database_name}.idx_pad"
+                f"use_gpu=True requires a GPU-formatted database, but a complete padded DB "
+                f"({self.database_name}.idx_pad with sibling .dbtype) was not found in "
+                f"{self.msa_db_dir}. Create it with: "
+                f"mmseqs makepaddedseqdb {self.database_name} {self.database_name}.idx_pad"
             )
         return self
 

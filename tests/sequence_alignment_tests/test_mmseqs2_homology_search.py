@@ -137,6 +137,16 @@ def test_missing_gpu_padded_marker_gives_use_gpu_false_hint(tmp_path: Path) -> N
         _check_dataset_provisioned("uniref30-2302", entry, tmp_path, require_idx_pad=True)
 
 
+def test_padded_marker_without_dbtype_is_rejected(tmp_path: Path) -> None:
+    """Bare padded data file without sibling ``.dbtype`` is an incomplete build."""
+    entry = DatasetRegistry.get("uniref30-2302")
+    (tmp_path / f"{entry.db_prefix}.dbtype").write_bytes(b"")
+    (tmp_path / entry.gpu_padded_marker).write_bytes(b"")
+    # No <marker>.dbtype companion — must reject.
+    with pytest.raises(FileNotFoundError, match=r"sibling \.dbtype"):
+        _check_dataset_provisioned("uniref30-2302", entry, tmp_path, require_idx_pad=True)
+
+
 def test_dispatch_payload_carries_operation_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Tool layer must include ``operation="homology_search"`` in the dispatch payload.
 
