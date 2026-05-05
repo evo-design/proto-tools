@@ -180,7 +180,7 @@ class ESMFoldConfig(StructurePredictionConfig):
             multiple structures. Complexes are automatically split into safe batches
             based on this limit. Must be at least 100. Default: 1200.
 
-        num_recycles (int): Recycling iterations through the structure module. Default 4.
+        num_recycles (int): Recycling iterations through the structure module.
 
         device (str): Device to run the model on (``"cuda"``, ``"cpu"``). Inherited
             from ``StructurePredictionConfig``. Default: ``"cuda"``.
@@ -220,7 +220,7 @@ class ESMFoldConfig(StructurePredictionConfig):
         title="Recycling Iterations",
         default=4,
         ge=1,
-        description="Iterative refinement passes through ESMFold. Default 4; raise for hard targets",
+        description="Iterative refinement passes through ESMFold; raise for hard targets",
         advanced=True,
     )
 

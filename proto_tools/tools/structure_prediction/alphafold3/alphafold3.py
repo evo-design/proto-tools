@@ -136,8 +136,8 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
             back to the env-based install if absent.
             Default: ``None``.
 
-        num_recycles (int): Recycling iterations. Default 10.
-        num_diffusion_samples (int): Diffusion samples per seed. Default 5;
+        num_recycles (int): Recycling iterations.
+        num_diffusion_samples (int): Diffusion samples per seed;
             total candidates = len(seeds) * num_diffusion_samples.
 
         use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
@@ -197,14 +197,14 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
         title="Recycling Iterations",
         default=10,
         ge=1,
-        description="Recycling iterations. Default 10; raise for hard targets, lower for speed",
+        description="Recycling iterations; raise for hard targets, lower for speed",
         advanced=True,
     )
     num_diffusion_samples: int = ConfigField(
         title="Diffusion Samples per Seed",
         default=5,
         ge=1,
-        description="Diffusion samples per seed. Default 5; total candidates = seeds * samples",
+        description="Diffusion samples per seed; total candidates = seeds * samples",
         advanced=True,
     )
 

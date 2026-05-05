@@ -123,13 +123,12 @@ class Boltz2Config(MSAStructurePredictionConfig):
             Default 200; typical range 100-500.
 
         diffusion_samples (int): Independent structure samples per complex; the
-            best by confidence is returned. Default 25; lower for faster runs.
+            best by confidence is returned; lower for faster runs.
 
         step_scale (float): Diffusion step size; lower = more sample diversity.
-            Default 1.5.
 
         max_msa_seqs (int): Cap on MSA depth fed into the model; reduces memory
-            on deep MSAs. Default 8192.
+            on deep MSAs.
 
         subsample_msa (bool): Stochastically subsample MSA each call for diversity.
             Default True.
@@ -160,28 +159,28 @@ class Boltz2Config(MSAStructurePredictionConfig):
         title="Number of Recycling Steps",
         default=10,
         ge=0,
-        description="Iterative refinement passes. Default 10 (high-quality); 3 is the lighter/faster setting",
+        description="Iterative refinement passes. High-quality setting; lower (e.g. 3) for faster runs",
         advanced=True,
     )
     sampling_steps: int = ConfigField(
         title="Number of Sampling Steps",
         default=200,
         ge=1,
-        description="Denoising steps in the diffusion process. Default 200; raise for refinement",
+        description="Denoising steps in the diffusion process; raise for refinement",
         advanced=True,
     )
     diffusion_samples: int = ConfigField(
         title="Number of Diffusion Samples",
         default=25,
         ge=1,
-        description="Independent samples; best by confidence kept. Default 25 (thorough); 1 is the fastest setting",
+        description="Independent samples per complex; best by confidence kept. Lower (e.g. 1) for faster runs",
         advanced=True,
     )
     step_scale: float = ConfigField(
         title="Diffusion Step Scale",
         default=1.5,
         gt=0.0,
-        description="Diffusion step size; lower = more sample diversity. Default 1.5; range 1.0-2.0",
+        description="Diffusion step size (range 1.0-2.0); lower = more sample diversity",
         advanced=True,
     )
     max_msa_seqs: int = ConfigField(
