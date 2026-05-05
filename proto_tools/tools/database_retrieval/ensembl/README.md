@@ -4,12 +4,15 @@
 
 ## Overview
 
-The `ensembl` toolkit wraps Ensembl's REST API for DNA-design context. Two tools share the toolkit:
+The `ensembl` toolkit wraps Ensembl's REST API for DNA-design context. Five tools share the toolkit, one per endpoint family — each with a concretely typed result so JSON Schema / MCP consumers see the real shape:
 
-- **`ensembl-fetch`** — gene / transcript / exon hierarchy lookup, sequence retrieval, region overlap, and cross-references. One tool with an `endpoint:` switch over five fetch endpoints.
+- **`ensembl-lookup`** — gene lookup by Ensembl gene ID **or** gene symbol → `EnsemblGene`.
+- **`ensembl-sequence`** — DNA / cDNA / CDS / protein sequence retrieval by Ensembl ID → `EnsemblSequence`.
+- **`ensembl-overlap`** — features overlapping a region (genes, exons, regulatory elements, motifs, variants) → `list[EnsemblOverlapFeatureRecord]`.
+- **`ensembl-xrefs`** — cross-references from an Ensembl ID to external databases (UniProt, EntrezGene, RefSeq) → `list[EnsemblXref]`.
 - **`ensembl-vep`** — variant-effect prediction from HGVS notation; returns per-transcript consequences (Sequence Ontology terms, SIFT / PolyPhen, codons, AA changes).
 
-Both call `rest.ensembl.org` (GRCh38) by default; setting `assembly="GRCh37"` routes to `grch37.rest.ensembl.org`. HTTP-only — no isolated env, no GPU.
+All five call `rest.ensembl.org` (GRCh38) by default; setting `assembly="GRCh37"` routes to `grch37.rest.ensembl.org`. HTTP-only — no isolated env, no GPU.
 
 ## Background
 
@@ -24,19 +27,19 @@ The Ensembl REST API is the canonical programmatic interface to the same data th
 
 ## How It Works
 
-**`ensembl-fetch`** dispatches on `config.endpoint` to one of five Ensembl REST endpoints:
+Each tool wraps one Ensembl REST endpoint family:
 
-| `endpoint` | URL | Returns |
+| Tool | URL | Returns |
 |---|---|---|
-| `lookup_id` | `GET /lookup/id/{id}?expand=1` | `EnsemblGene` with nested `Transcript[]` / `Exon[]` / `Translation` |
-| `lookup_symbol` | `GET /lookup/symbol/{species}/{symbol}?expand=1` | Same shape as `lookup_id` |
-| `sequence` | `GET /sequence/id/{id}?type={genomic\|cdna\|cds\|protein}` | `EnsemblSequence` |
-| `overlap` | `GET /overlap/id/{id}?feature={gene\|exon\|regulatory\|...}` | `list[EnsemblOverlapFeatureRecord]` |
-| `xrefs` | `GET /xrefs/id/{id}` or `/xrefs/symbol/{species}/{symbol}` | `list[EnsemblXref]` |
+| `ensembl-lookup` | `GET /lookup/id/{id}?object_type=gene` or `/lookup/symbol/{species}/{symbol}`; add `expand=1` for nested transcripts/exons | `EnsemblGene` |
+| `ensembl-sequence` | `GET /sequence/id/{id}?type={genomic\|cdna\|cds\|protein}` | `EnsemblSequence` |
+| `ensembl-overlap` | `GET /overlap/id/{id}?feature={gene\|exon\|regulatory\|...}` | `list[EnsemblOverlapFeatureRecord]` |
+| `ensembl-xrefs` | `GET /xrefs/id/{id}` | `list[EnsemblXref]` |
+| `ensembl-vep` | `GET /vep/{species}/hgvs/{hgvs}` | `list[EnsemblVEPConsequence]` |
 
-The result is a discriminated union driven by `output.endpoint`. Pascal-case keys (`Transcript`, `Exon`, `Translation`) are preserved verbatim from the API to round-trip cleanly through `model_dump()`.
+Pascal-case keys (`Transcript`, `Exon`, `Translation`) are preserved verbatim from the API to round-trip cleanly through `model_dump()`.
 
-**`ensembl-vep`** wraps `GET /vep/{species}/hgvs/{hgvs}`. The HGVS form accepts genomic (`9:g.22125504G>C`), coding (`ENST00000357654:c.5074G>A`), and protein (`ENSP00000418960:p.Tyr124Cys`) notations.
+`ensembl-vep`'s HGVS form accepts genomic (`9:g.22125504G>C`), coding (`ENST00000357654:c.5074G>A`), and protein (`ENSP00000418960:p.Tyr124Cys`) notations.
 
 ### Rate limiting + transient errors
 
@@ -44,12 +47,20 @@ Ensembl's 429 responses include `Retry-After`; urllib3's `Retry()` honors it aut
 
 ## Input Parameters
 
-### `ensembl-fetch`
+### `ensembl-lookup`
 
 | Field | Type | Description |
 |---|---|---|
-| `ensembl_id` | `str \| None` | Ensembl ID (`ENSG...`, `ENST...`, `ENSP...`). Required for `lookup_id`, `sequence`, `overlap`. |
-| `symbol` | `str \| None` | Gene symbol (e.g. `BRCA1`). Required for `lookup_symbol`. Either field works for `xrefs`. |
+| `ensembl_id` | `str \| None` | Ensembl gene ID (for example, `ENSG00000012048`). |
+| `symbol` | `str \| None` | Gene symbol (e.g. `BRCA1`). Requires `config.species`. |
+
+Exactly one of the two must be provided.
+
+### `ensembl-sequence` / `ensembl-overlap` / `ensembl-xrefs`
+
+| Field | Type | Description |
+|---|---|---|
+| `ensembl_id` | `str` | Ensembl ID (`ENSG...`, `ENST...`, `ENSP...`). |
 
 ### `ensembl-vep`
 
@@ -59,60 +70,36 @@ Ensembl's 429 responses include `Retry-After`; urllib3's `Retry()` honors it aut
 
 ## Configuration
 
-### `ensembl-fetch`
+All five tools share `assembly: Literal["GRCh38","GRCh37"]` (default `"GRCh38"`; `GRCh37` routes to `grch37.rest.ensembl.org`).
 
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `endpoint` | `Literal["lookup_id","lookup_symbol","sequence","overlap","xrefs"]` | `"lookup_id"` | Which Ensembl REST endpoint to call. |
-| `species` | `Literal[5 species]` | `"homo_sapiens"` | Used by `lookup_symbol` and symbol-form `xrefs`. |
-| `assembly` | `Literal["GRCh38","GRCh37"]` | `"GRCh38"` | GRCh37 routes to `grch37.rest.ensembl.org`. |
-| `sequence_type` | `Literal["genomic","cdna","cds","protein"]` | `"cdna"` | Sequence flavor (`sequence` endpoint only). |
-| `overlap_feature` | `Literal[...]` | `"gene"` | Feature class (`overlap` endpoint only). |
-| `expand` | `bool` | `True` | Include transcripts/exons (`lookup_*` only). |
-
-### `ensembl-vep`
-
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `species` | `Literal[5 species]` | `"homo_sapiens"` | Species slug for VEP. |
-| `assembly` | `Literal["GRCh38","GRCh37"]` | `"GRCh38"` | Genome assembly. |
+| Tool | Field | Type | Default | Description |
+|---|---|---|---|---|
+| `ensembl-lookup` | `species` | `Literal[5 species]` | `"homo_sapiens"` | Used when `symbol` is provided. |
+| `ensembl-lookup` | `expand` | `bool` | `False` | Advanced. Include transcripts / exons in the response. |
+| `ensembl-sequence` | `sequence_type` | `Literal["genomic","cdna","cds","protein"]` | `"genomic"` | Sequence flavor. |
+| `ensembl-overlap` | `overlap_feature` | `Literal["gene","transcript","exon",...]` | `"gene"` | Feature class to retrieve. |
+| `ensembl-vep` | `species` | `Literal[5 species]` | `"homo_sapiens"` | Species slug for VEP. |
 
 ## Output Specification
 
-### `ensembl-fetch`
+Every output carries `source_url: str` and `raw_payload: dict | list[dict]` alongside the typed `result`.
 
-| Field | Type | Description |
-|---|---|---|
-| `endpoint` | `EnsemblEndpoint` | Echoes the endpoint that produced this result. |
-| `result` | `EnsemblGene \| EnsemblSequence \| list[EnsemblXref] \| list[EnsemblOverlapFeatureRecord]` | Parsed payload (concrete type depends on `endpoint`). |
-| `source_url` | `str` | Final URL hit. |
-| `raw_payload` | `dict \| list[dict]` | Raw API JSON. |
-
-### `ensembl-vep`
-
-| Field | Type | Description |
-|---|---|---|
-| `consequences` | `list[EnsemblVEPConsequence]` | One record per VEP input. |
-| `num_consequences` | `int` | `len(consequences)`. |
-| `source_url` | `str` | Final URL hit. |
-| `raw_payload` | `list[dict]` | Raw API JSON. |
+| Tool | `result` type |
+|---|---|
+| `ensembl-lookup` | `EnsemblGene` |
+| `ensembl-sequence` | `EnsemblSequence` |
+| `ensembl-overlap` | `list[EnsemblOverlapFeatureRecord]` |
+| `ensembl-xrefs` | `list[EnsemblXref]` |
+| `ensembl-vep` | `consequences: list[EnsemblVEPConsequence]`, `num_consequences: int` |
 
 ## Quick Start Examples
 
 **Example 1: lookup BRCA1 by symbol (returns gene + 47 transcripts)**
 
 ```python
-from proto_tools.tools.database_retrieval import (
-    EnsemblFetchInput,
-    EnsemblFetchConfig,
-    run_ensembl_fetch,
-)
+from proto_tools.tools.database_retrieval import EnsemblLookupConfig, EnsemblLookupInput, run_ensembl_lookup
 
-out = run_ensembl_fetch(
-    EnsemblFetchInput(symbol="BRCA1"),
-    EnsemblFetchConfig(endpoint="lookup_symbol"),
-)
-assert out.success
+out = run_ensembl_lookup(EnsemblLookupInput(symbol="BRCA1"), EnsemblLookupConfig(expand=True))
 gene = out.result
 print(f"{gene.display_name} ({gene.id}): {len(gene.Transcript)} transcripts; canonical={gene.canonical_transcript}")
 # BRCA1 (ENSG00000012048): 47 transcripts; canonical=ENST00000357654.9
@@ -121,14 +108,29 @@ print(f"{gene.display_name} ({gene.id}): {len(gene.Transcript)} transcripts; can
 **Example 2: protein sequence of the canonical transcript**
 
 ```python
-out = run_ensembl_fetch(
-    EnsemblFetchInput(ensembl_id="ENST00000357654"),
-    EnsemblFetchConfig(endpoint="sequence", sequence_type="protein"),
+from proto_tools.tools.database_retrieval import EnsemblSequenceInput, EnsemblSequenceConfig, run_ensembl_sequence
+
+out = run_ensembl_sequence(
+    EnsemblSequenceInput(ensembl_id="ENST00000357654"),
+    EnsemblSequenceConfig(sequence_type="protein"),
 )
 print(f"{out.result.id}: {len(out.result.seq)} aa")
 ```
 
-**Example 3: variant effect prediction**
+**Example 3: regulatory features overlapping BRCA1**
+
+```python
+from proto_tools.tools.database_retrieval import EnsemblOverlapInput, EnsemblOverlapConfig, run_ensembl_overlap
+
+out = run_ensembl_overlap(
+    EnsemblOverlapInput(ensembl_id="ENSG00000012048"),
+    EnsemblOverlapConfig(overlap_feature="regulatory"),
+)
+for record in out.result[:5]:
+    print(record.feature_type, record.raw.get("feature_name"))
+```
+
+**Example 4: variant effect prediction**
 
 ```python
 from proto_tools.tools.database_retrieval import EnsemblVEPInput, run_ensembl_vep
@@ -138,18 +140,15 @@ top = out.consequences[0]
 print(f"{top.allele_string}: {top.most_severe_consequence}, {len(top.transcript_consequences)} transcripts affected")
 ```
 
-**Example 4: chained workflow — Ensembl → UniProt cross-reference**
+**Example 5: chained workflow — Ensembl xrefs → UniProt fetch**
 
 ```python
 from proto_tools.tools.database_retrieval import (
-    EnsemblFetchInput, EnsemblFetchConfig, run_ensembl_fetch,
+    EnsemblXrefsInput, run_ensembl_xrefs,
     UniProtFetchInput, run_uniprot_fetch,
 )
 
-xrefs = run_ensembl_fetch(
-    EnsemblFetchInput(ensembl_id="ENSG00000012048"),
-    EnsemblFetchConfig(endpoint="xrefs"),
-)
+xrefs = run_ensembl_xrefs(EnsemblXrefsInput(ensembl_id="ENSG00000012048"))
 uniprot_id = next(x.primary_id for x in xrefs.result if x.dbname == "Uniprot_gn")
 uniprot = run_uniprot_fetch(UniProtFetchInput(uniprot_id=uniprot_id))
 print(f"BRCA1 UniProt: {uniprot.accession}, {uniprot.length} aa")
@@ -159,14 +158,14 @@ print(f"BRCA1 UniProt: {uniprot.accession}, {uniprot.length} aa")
 
 **Common mistakes:**
 
-1. **Forgetting `expand=True` on `lookup_*`:** without it, the result has no nested `Transcript[]`. The default is `True` for this reason; only flip to `False` if you genuinely just want the gene-level fields.
+1. **Forgetting `expand=True` on `ensembl-lookup`:** without it, the result has no nested `Transcript[]`. The default follows Ensembl REST (`False`), so request expansion explicitly when you need transcript/exon detail.
 2. **Mixing assemblies:** GRCh38 and GRCh37 coordinates differ. Pin `config.assembly` per workflow; don't assume one default fits both.
-3. **Treating `overlap` records as fully typed:** `feature_type` differs per query (`gene` vs `regulatory` vs `variation`) and the typed fields are the intersection. Use `record.raw` for feature-specific keys.
-4. **HGVS protein form for VEP:** `ENSP00000418960:p.Tyr124Cys` works, but the corresponding cdNA/genomic notation is often more reliable when the protein ID has multiple matching transcripts.
+3. **Treating `ensembl-overlap` records as fully typed:** `feature_type` differs per query (`gene` vs `regulatory` vs `variation`) and the typed fields are the intersection. Use `record.raw` for feature-specific keys.
+4. **HGVS protein form for VEP:** `ENSP00000418960:p.Tyr124Cys` works, but the corresponding cDNA/genomic notation is often more reliable when the protein ID has multiple matching transcripts.
 
 **Tips:**
 
-- For gene-symbol → genomic-context flows, chain `lookup_symbol` → `sequence` (with `sequence_type="genomic"`) on the canonical transcript ID.
+- For gene-symbol → sequence flows, chain `ensembl-lookup` (by symbol) → `ensembl-sequence` on the canonical transcript ID. Pick `sequence_type="cds"` for the coding sequence, `"cdna"` for the spliced mRNA, or `"genomic"` for the intron-included pre-mRNA span.
 - `overlap_feature="regulatory"` returns Ensembl Regulatory Build features (CTCF binding sites, open chromatin, etc.) — useful for cis-element design.
 
 ## References
@@ -183,6 +182,6 @@ print(f"BRCA1 UniProt: {uniprot.accession}, {uniprot.length} aa")
 
 ## Related Tools
 
-- **`uniprot-fetch`**: Resolve Ensembl `xrefs` rows with `dbname="Uniprot_gn"` to a UniProt accession; chain into `interproscan-fetch` / `alphamissense-fetch` for protein-level annotations.
-- **`ncbi-efetch`**: Pull GenBank / RefSeq records when you need NCBI-side identifiers; Ensembl's `xrefs` endpoint also exposes `EntrezGene` mappings.
+- **`uniprot-fetch`**: Resolve `ensembl-xrefs` rows with `dbname="Uniprot_gn"` to a UniProt accession; chain into `interproscan-fetch` / `alphamissense-fetch` for protein-level annotations.
+- **`ncbi-efetch`**: Pull GenBank / RefSeq records when you need NCBI-side identifiers; `ensembl-xrefs` also exposes `EntrezGene` mappings.
 - **`alphafold-db-fetch`**: Once an Ensembl protein is mapped to UniProt, fetch its predicted structure for downstream design.

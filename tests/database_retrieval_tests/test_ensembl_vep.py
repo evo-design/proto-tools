@@ -9,10 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from proto_tools.tools.database_retrieval import (
-    EnsemblFetchConfig,
-    EnsemblFetchInput,
     EnsemblVEPInput,
-    run_ensembl_fetch,
     run_ensembl_vep,
 )
 
@@ -134,24 +131,3 @@ def test_vep_invalid_hgvs_surfaces_failure():
     """Malformed HGVS yields a 400 from the server, surfaced as output.success=False."""
     out = run_ensembl_vep(EnsemblVEPInput(hgvs="not-a-real-hgvs"))
     assert out.success is False
-
-
-@pytest.mark.integration
-def test_workflow_lookup_then_vep_against_canonical_transcript():
-    """User flow: lookup BRCA1 → take canonical transcript → run VEP with a coding HGVS on that transcript."""
-    lookup = run_ensembl_fetch(
-        EnsemblFetchInput(symbol="BRCA1"),
-        EnsemblFetchConfig(endpoint="lookup_symbol"),
-    )
-    assert lookup.success, lookup.errors
-    canonical = lookup.result.canonical_transcript
-    assert canonical is not None
-    transcript_id = canonical.split(".")[0]
-    # Use a missense variant on the canonical transcript (BRCA1 c.181T>G is well-studied).
-    vep = run_ensembl_vep(EnsemblVEPInput(hgvs=f"{transcript_id}:c.181T>G"))
-    assert vep.success, vep.errors
-    assert vep.num_consequences >= 1
-    # At least one consequence should reference the canonical transcript.
-    assert any(
-        tc.get("transcript_id") == transcript_id for cons in vep.consequences for tc in cons.transcript_consequences
-    )
