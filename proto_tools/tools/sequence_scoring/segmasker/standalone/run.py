@@ -38,12 +38,12 @@ def run_segmasker(input_data: dict[str, Any]) -> dict[str, Any]:
     from Bio import SeqIO
 
     sequences = input_data["sequences"]
-    config = input_data.get("config", {})
+    config = input_data["config"]
 
     segmasker_path = _find_binary("segmasker")
-    window = config.get("window", 15)
-    locut = config.get("locut", 1.8)
-    hicut = config.get("hicut", 3.4)
+    window = config["window"]
+    locut = config["locut"]
+    hicut = config["hicut"]
 
     seq_lengths = [len(s) for s in sequences]
 

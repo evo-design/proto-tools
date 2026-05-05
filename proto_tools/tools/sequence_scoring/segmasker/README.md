@@ -25,7 +25,7 @@ In protein design, high low-complexity content often signals poor sequence quali
 
 ## How It Works
 
-1. **Sliding window**: A window of configurable size (default 15 residues) slides across the sequence
+1. **Sliding window**: A window of configurable size (default 12 residues) slides across the sequence
 2. **Entropy calculation**: For each window position, the Shannon entropy of amino acid composition is computed
 3. **Threshold classification**: Windows with entropy below `locut` are flagged as low-complexity; the `hicut` threshold defines the boundary for extending masked regions
 4. **Region merging**: Adjacent low-complexity windows are merged into contiguous regions
@@ -41,9 +41,9 @@ In protein design, high low-complexity content often signals poor sequence quali
 
 | Parameter | Type | Default | Range | Description |
 |-----------|------|---------|-------|-------------|
-| `window` | `int` | `15` | >= 1 | Sliding window size for complexity calculation. Larger windows are less sensitive to short LCRs. |
-| `locut` | `float` | `1.8` | Typical: 1.4-2.2 | Low-complexity threshold. Regions below this are classified as low-complexity. |
-| `hicut` | `float` | `3.4` | Typical: 2.5-3.8 | High-complexity threshold. Must be greater than `locut`. Controls region boundary extension. |
+| `window` | `int` | `12` | >= 1 | Sliding window size for complexity calculation. Larger windows are less sensitive to short LCRs. |
+| `locut` | `float` | `2.2` | Typical: 2.0-2.5 | Low-complexity threshold. Regions below this are classified as low-complexity. |
+| `hicut` | `float` | `2.5` | Typical: 2.5-3.5 | High-complexity threshold. Must be >= `locut`. Controls region boundary extension. |
 
 ### Parameter Guides
 
@@ -51,17 +51,17 @@ In protein design, high low-complexity content often signals poor sequence quali
 
 | Window | Effect | Use Case |
 |--------|--------|----------|
-| 10-12 | More sensitive, detects short LCRs | Fine-grained analysis of short peptides |
-| 15 | Balanced (default) | General-purpose screening |
-| 18-20 | Less sensitive, ignores short LCRs | Focus on extended low-complexity stretches |
+| 10-12 | More sensitive, detects short LCRs (default = 12) | General-purpose screening |
+| 15 | Balanced | Mid-length stretches |
+| 18-25 | Less sensitive, ignores short LCRs | Focus on extended low-complexity stretches |
 
 **Threshold tuning:**
 
 | locut / hicut | Stringency | Effect |
 |---------------|------------|--------|
-| 1.4 / 2.5 | High | Flags only the most extreme compositional bias |
-| 1.8 / 3.4 | Default | Standard NCBI settings, balanced sensitivity |
-| 2.2 / 3.8 | Low | Flags moderate compositional bias as low-complexity |
+| 1.8 / 2.2 | High | Flags only the most extreme compositional bias |
+| 2.2 / 2.5 | Default | Segmasker's protein-tuned SEG parameters |
+| 2.5 / 3.5 | Low | Flags moderate compositional bias as low-complexity |
 
 ### Sweep Priorities
 
@@ -148,8 +148,8 @@ result.export("/path/to/output", file_format="csv")
 
 ## Best Practices & Gotchas
 
-- **Default thresholds are well-calibrated.** The NCBI defaults (window=15, locut=1.8, hicut=3.4) match the standard SEG parameterization used in BLAST. Only adjust if you have a specific reason.
-- **Short sequences may not be informative.** Sequences shorter than the window size cannot be reliably assessed. Ensure input sequences are at least 15-20 residues.
+- **Default thresholds are well-calibrated.** Defaults (window=12, locut=2.2, hicut=2.5) are segmasker's own protein-tuned SEG parameters. Only adjust if you have a specific reason.
+- **Short sequences may not be informative.** Sequences shorter than the window size cannot be reliably assessed. Ensure input sequences are at least 12-15 residues.
 - **Low-complexity does not mean low-quality.** Some functional proteins naturally contain LCRs (e.g., collagen, spider silk). Context matters.
 - **Empty sequences return 0.0 fraction.** Empty strings are handled gracefully and assigned a fraction of 0.0 rather than raising an error.
 - **Results are cached.** Repeated calls with identical inputs and config will return cached results.

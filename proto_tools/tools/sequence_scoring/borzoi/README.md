@@ -69,7 +69,7 @@ Target-range extraction is start-aligned, not midpoint-centered: when possible, 
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `output_tracks` | `List[int]` | **required** | Track indices to extract from model output |
+| `output_tracks` | `List[int]` | `[0]` | Indices of Borzoi output tracks to extract (7611 human / 2608 mouse) |
 | `species` | `"human"` or `"mouse"` | `"human"` | Species model to use |
 | `replicate` | `"0"`, `"1"`, `"2"`, or `"3"` | `"0"` | Which replicate model to run |
 | `avg_output_tracks` | `bool` | `True` | Whether to average selected tracks into one output |
@@ -81,7 +81,7 @@ Target-range extraction is start-aligned, not midpoint-centered: when possible, 
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `output_tracks` | `List[int]` | **required** | Track indices to extract from model output |
+| `output_tracks` | `List[int]` | `[0]` | Indices of Borzoi output tracks to extract (7611 human / 2608 mouse) |
 | `species` | `"human"` or `"mouse"` | `"human"` | Species model to use |
 | `avg_output_tracks` | `bool` | `True` | Whether to average selected tracks into one output |
 | `batch_size` | `int` | `1` | Number of sequences to process simultaneously on GPU |

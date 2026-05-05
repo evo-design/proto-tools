@@ -58,7 +58,7 @@ Target-range extraction is start-aligned, not midpoint-centered: when possible, 
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `output_tracks` | `List[int]` | **required** | Track indices to extract from the model output |
+| `output_tracks` | `List[int]` | `[0]` | Indices of Enformer output tracks to extract (5313 human / 1643 mouse) |
 | `species` | `"human"` or `"mouse"` | `"human"` | Species output head to use |
 | `batch_size` | `int` | `1` | Number of sequences to process simultaneously on GPU |
 | `device` | `str` | `"cuda"` | Inference device |

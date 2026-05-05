@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import Any, ClassVar
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -60,46 +60,40 @@ class SegmaskerInput(BaseToolInput):
 class SegmaskerConfig(BaseConfig):
     """Configuration object for Segmasker low-complexity detection.
 
-    This class defines configuration parameters for running NCBI's segmasker tool
-    to identify low-complexity regions in protein sequences. Low-complexity regions
-    are compositionally biased sequences that may interfere with homology searches.
-
     Attributes:
-        window (int): Window size for analyzing sequence complexity. The algorithm
-            examines the sequence in sliding windows of this size. Larger windows
-            are less sensitive to short low-complexity regions. Typical range: 12-20.
-            Must be at least 1. Default: 15.
-
-        locut (float): Low-complexity cutoff threshold. Regions with complexity
-            scores below this threshold are classified as low-complexity. Lower
-            values identify only the most extreme low-complexity regions. Typical
-            range: 1.4-2.2. Default: 1.8.
-
-        hicut (float): High-complexity cutoff threshold. Regions with complexity
-            scores above this threshold are classified as high-complexity. Used to
-            define the transition between masked and unmasked regions. Should be
-            greater than ``locut``. Typical range: 2.5-3.8. Default: 3.4.
+        window (int): Sliding-window size for SEG complexity analysis. Larger
+            windows are less sensitive to short low-complexity stretches.
+        locut (float): Lower complexity cutoff. Regions scoring below this are
+            classified as low-complexity.
+        hicut (float): Upper complexity cutoff. Defines the transition between
+            masked and unmasked regions. Must be >= ``locut``.
     """
 
     window: int = ConfigField(
         title="Window Size",
-        default=15,
+        default=12,
         ge=1,
-        description="Window size for low-complexity detection",
+        description="Sliding-window size for SEG; smaller = more sensitive to short low-complexity runs",
         advanced=True,
     )
     locut: float = ConfigField(
         title="Low-complexity Threshold",
-        default=1.8,
-        description="Threshold below which a region is considered low-complexity",
+        default=2.2,
+        description="Lower SEG complexity cutoff; lower = stricter (only the most biased regions)",
         advanced=True,
     )
     hicut: float = ConfigField(
         title="High-complexity Threshold",
-        default=3.4,
-        description="Threshold above which a region is considered high-complexity",
+        default=2.5,
+        description="Upper SEG complexity cutoff; must be >= locut",
         advanced=True,
     )
+
+    @model_validator(mode="after")
+    def _hicut_ge_locut(self) -> "SegmaskerConfig":
+        if self.hicut < self.locut:
+            raise ValueError(f"hicut ({self.hicut}) must be >= locut ({self.locut})")
+        return self
 
 
 class SegmaskerMetrics(Metrics):

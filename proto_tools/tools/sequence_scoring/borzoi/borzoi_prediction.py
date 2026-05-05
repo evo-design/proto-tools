@@ -287,7 +287,7 @@ class BorzoiConfig(BaseConfig):
     output_tracks: list[int] = ConfigField(
         title="Output Tracks",
         default=[0],
-        description="Track indices to extract from model output",
+        description="Indices of Borzoi output tracks to extract (7611 human / 2608 mouse)",
     )
     species: Literal["human", "mouse"] = ConfigField(
         title="Species",

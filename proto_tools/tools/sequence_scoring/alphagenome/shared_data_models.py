@@ -295,7 +295,7 @@ class AlphaGenomePredictConfig(BaseConfig):
     ontology_terms: list[str] | None = ConfigField(
         title="Ontology Terms",
         default=None,
-        description="Optional ontology term filters",
+        description="UBERON tissue/cell IDs to filter tracks (e.g. 'UBERON:0001167'); None = all",
         advanced=True,
     )
     organism: Literal["human", "mouse"] = ConfigField(
