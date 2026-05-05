@@ -143,6 +143,12 @@ class Chai1Config(MSAStructurePredictionConfig):
             diffusion sample. Increases diversity in structure generation. Must be
             at least 1. Default: 1.
 
+        low_memory (bool): Stream MSA + template features per sample to reduce
+            peak GPU memory at the cost of speed. Default: True.
+
+        recycle_msa_subsample (int): Stochastically subsample MSA across recycles
+            for diversity. 0 disables (default).
+
         use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
             for protein chains using ColabFold search. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``True``.
@@ -200,6 +206,19 @@ class Chai1Config(MSAStructurePredictionConfig):
         default=1,
         ge=1,
         description="Number of independent trunk forward passes per diffusion sample",
+        advanced=True,
+    )
+    low_memory: bool = ConfigField(
+        title="Low Memory Mode",
+        default=True,
+        description="Stream features per sample to reduce peak GPU memory; trades speed for memory",
+        advanced=True,
+    )
+    recycle_msa_subsample: int = ConfigField(
+        title="Recycle MSA Subsample",
+        default=0,
+        ge=0,
+        description="Stochastic MSA subsampling across recycles for diversity. 0 disables",
         advanced=True,
     )
     timeout: int = ConfigField(
@@ -378,6 +397,8 @@ def run_chai1_on_complex(
             "num_diffn_timesteps": config.num_diffn_timesteps,
             "num_diffn_samples": config.num_diffn_samples,
             "num_trunk_samples": config.num_trunk_samples,
+            "low_memory": config.low_memory,
+            "recycle_msa_subsample": config.recycle_msa_subsample,
             "seed": config.seed,
             "include_pae_matrix": config.include_pae_matrix,
         }

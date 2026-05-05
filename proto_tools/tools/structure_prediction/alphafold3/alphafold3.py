@@ -136,6 +136,10 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
             back to the env-based install if absent.
             Default: ``None``.
 
+        num_recycles (int): Recycling iterations. Default 10.
+        num_diffusion_samples (int): Diffusion samples per seed. Default 5;
+            total candidates = len(seeds) * num_diffusion_samples.
+
         use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
             for protein chains using ColabFold search. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``True``.
@@ -158,7 +162,7 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
         title="AlphaFold3 Job Name",
         default="af3_job",
         description="Name of the AlphaFold3 folding job",
-        advanced=True,
+        hidden=True,
     )
 
     seeds: list[int] = ConfigField(
@@ -186,6 +190,21 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
         title="AlphaFold3 Apptainer Image",
         default=None,
         description="Pre-built AlphaFold3 .sif image. If unset, prefers provisioned sif then env.",
+        hidden=True,
+    )
+
+    num_recycles: int = ConfigField(
+        title="Recycling Iterations",
+        default=10,
+        ge=1,
+        description="Recycling iterations. Default 10; raise for hard targets, lower for speed",
+        advanced=True,
+    )
+    num_diffusion_samples: int = ConfigField(
+        title="Diffusion Samples per Seed",
+        default=5,
+        ge=1,
+        description="Diffusion samples per seed. Default 5; total candidates = seeds * samples",
         advanced=True,
     )
 
@@ -298,6 +317,8 @@ def run_alphafold3(
                     "sif_path": config.sif_path,
                     "verbose": config.verbose,
                     "include_pae_matrix": config.include_pae_matrix,
+                    "num_recycles": config.num_recycles,
+                    "num_diffusion_samples": config.num_diffusion_samples,
                 }
 
                 # Dispatch to worker (goes through DeviceManager)

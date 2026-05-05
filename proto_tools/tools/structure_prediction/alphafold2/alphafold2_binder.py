@@ -292,7 +292,7 @@ class AlphaFold2BinderConfig(BaseConfig):
     device: str = ConfigField(
         title="Device",
         default="cuda",
-        description="Device to run the model on.",
+        description="Device to run the model on (GPU-required tool overrides BaseConfig 'cpu' default)",
         hidden=True,
         include_in_key=False,
     )

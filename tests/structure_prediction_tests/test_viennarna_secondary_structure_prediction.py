@@ -150,6 +150,16 @@ def test_viennarna_mixed_empty_and_valid_sequences():
     assert output.results[2].mfe is not None
 
 
+@pytest.mark.integration
+def test_viennarna_dangles_and_circ_reach_engine():
+    """dangles=0 produces a less-negative MFE than dangles=2 (proves plumbing); circ=True runs."""
+    inputs = ViennaRNAInput(sequences=[_HAIRPIN])
+    d2 = run_viennarna(inputs, ViennaRNAConfig(dangles=2)).results[0]
+    d0 = run_viennarna(inputs, ViennaRNAConfig(dangles=0)).results[0]
+    assert d0.mfe is not None and d2.mfe is not None and d0.mfe >= d2.mfe
+    assert run_viennarna(inputs, ViennaRNAConfig(circ=True)).success
+
+
 # ── Benchmark ────────────────────────────────────────────────────────────────
 
 

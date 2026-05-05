@@ -10,7 +10,7 @@ import csv
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -164,6 +164,11 @@ class ViennaRNAConfig(BaseConfig):
         no_lonely_pairs (bool): Disallow lonely base pairs (helices of length 1).
             This can reduce artifacts in structure prediction. Default: False.
 
+        dangles (Literal[0, 1, 2, 3]): Dangling-end treatment. Default 2.
+        circ (bool): Treat as circular RNA. Default False.
+        max_bp_span (int): Max base-pair span. Default -1 (no limit); positive
+            values forbid long-range pairing.
+
     """
 
     temperature: float = ConfigField(
@@ -183,6 +188,33 @@ class ViennaRNAConfig(BaseConfig):
         description="Disallow lonely base pairs (helices of length 1)",
         advanced=True,
     )
+    dangles: Literal[0, 1, 2, 3] = ConfigField(
+        title="Dangling-End Energies",
+        default=2,
+        description="Dangling-end treatment: 0=ignore, 1=minimal, 2=multibranch (default), 3=accurate",
+        advanced=True,
+    )
+    circ: bool = ConfigField(
+        title="Circular RNA",
+        default=False,
+        description="Treat sequence as circular. Default False; True for plasmids/viroids/circRNAs",
+        advanced=True,
+    )
+    max_bp_span: int = ConfigField(
+        title="Max Base-Pair Span",
+        default=-1,
+        ge=-1,
+        description="Max base-pair span in nt. -1 = no limit (default); positive forbids long-range pairs",
+        advanced=True,
+    )
+
+    @field_validator("max_bp_span")
+    @classmethod
+    def _max_bp_span_zero_is_ambiguous(cls, v: int) -> int:
+        """Reject max_bp_span=0 — ambiguous (no limit vs no pairs); use -1 for no limit."""
+        if v == 0:
+            raise ValueError("max_bp_span=0 is ambiguous; use -1 for no limit or a positive integer")
+        return v
 
 
 # ============================================================================
@@ -259,6 +291,9 @@ def run_viennarna(
         "temperature": config.temperature,
         "use_dna_params": config.use_dna_params,
         "no_lonely_pairs": config.no_lonely_pairs,
+        "dangles": config.dangles,
+        "circ": config.circ,
+        "max_bp_span": config.max_bp_span,
         "verbose": config.verbose,
     }
 

@@ -49,6 +49,9 @@ class Boltz2Model:
         recycling_steps: int = 10,
         sampling_steps: int = 200,
         diffusion_samples: int = 25,
+        step_scale: float = 1.5,
+        max_msa_seqs: int = 8192,
+        subsample_msa: bool = True,
         num_workers: int = 4,
         seed: int | None = None,
         verbose: bool = False,
@@ -62,6 +65,9 @@ class Boltz2Model:
             recycling_steps: Number of recycling steps
             sampling_steps: Number of sampling steps
             diffusion_samples: Number of diffusion samples
+            step_scale: Diffusion step size; lower = more sample diversity
+            max_msa_seqs: Cap on MSA depth fed into the model
+            subsample_msa: Stochastically subsample MSA each call
             num_workers: Number of workers for prediction
             seed: Random seed forwarded to the boltz CLI as ``--seed``. None
                 leaves the boltz default (unseeded) in place.
@@ -96,11 +102,15 @@ class Boltz2Model:
             f"--recycling_steps={recycling_steps}",
             f"--diffusion_samples={diffusion_samples}",
             f"--sampling_steps={sampling_steps}",
+            f"--step_scale={step_scale}",
+            f"--max_msa_seqs={max_msa_seqs}",
             "--output_format=mmcif",
             f"--devices={num_devices}",
             f"--cache={self.cache_dir!s}",
             f"--num_workers={num_workers}",
         ]
+        if subsample_msa:
+            cmd.append("--subsample_msa")
         if seed is not None:
             cmd.append(f"--seed={seed}")
 
@@ -205,6 +215,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             recycling_steps=input_dict["recycling_steps"],
             sampling_steps=input_dict["sampling_steps"],
             diffusion_samples=input_dict["diffusion_samples"],
+            step_scale=input_dict["step_scale"],
+            max_msa_seqs=input_dict["max_msa_seqs"],
+            subsample_msa=input_dict["subsample_msa"],
             num_workers=input_dict["num_workers"],
             seed=input_dict["seed"],
             verbose=input_dict["verbose"],

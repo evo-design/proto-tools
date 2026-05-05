@@ -116,19 +116,23 @@ class Boltz2Config(MSAStructurePredictionConfig):
     Inherits from ``MSAStructurePredictionConfig``.
 
     Attributes:
-        recycling_steps (int): Number of iterative refinement passes through the
-            model. Higher values produce more refined structures but increase
-            computation time. Typical range: 3-20. Must be at least 0.
-            Default: 10.
+        recycling_steps (int): Iterative refinement passes through the model.
+            Default 10; raise for hard targets, lower for speed.
 
-        sampling_steps (int): Number of denoising steps in the diffusion process.
-            Higher values produce more refined structures but are slower. Typical
-            range: 100-500. Must be at least 1. Default: 200.
+        sampling_steps (int): Denoising steps in the diffusion process.
+            Default 200; typical range 100-500.
 
-        diffusion_samples (int): Number of independent structure samples to generate
-            per complex. Only the best sample (by confidence score) is returned.
-            Higher values explore more of the conformational space but increase
-            computation time. Must be at least 1. Default: 25.
+        diffusion_samples (int): Independent structure samples per complex; the
+            best by confidence is returned. Default 25; lower for faster runs.
+
+        step_scale (float): Diffusion step size; lower = more sample diversity.
+            Default 1.5.
+
+        max_msa_seqs (int): Cap on MSA depth fed into the model; reduces memory
+            on deep MSAs. Default 8192.
+
+        subsample_msa (bool): Stochastically subsample MSA each call for diversity.
+            Default True.
 
         num_workers (int): Number of CPU workers for parallel processing during
             prediction. Automatically set to the minimum of available CPU cores or 4.
@@ -156,21 +160,41 @@ class Boltz2Config(MSAStructurePredictionConfig):
         title="Number of Recycling Steps",
         default=10,
         ge=0,
-        description="Number of iterative refinement passes (higher=more refined structures but slower)",
+        description="Iterative refinement passes. Default 10 (high-quality); 3 is the lighter/faster setting",
         advanced=True,
     )
     sampling_steps: int = ConfigField(
         title="Number of Sampling Steps",
         default=200,
         ge=1,
-        description="Number of denoising steps in the diffusion process (higher=more refined but slower)",
+        description="Denoising steps in the diffusion process. Default 200; raise for refinement",
         advanced=True,
     )
     diffusion_samples: int = ConfigField(
         title="Number of Diffusion Samples",
         default=25,
         ge=1,
-        description="Number of independent structure samples to generate (Only best is returned for each complex)",
+        description="Independent samples; best by confidence kept. Default 25 (thorough); 1 is the fastest setting",
+        advanced=True,
+    )
+    step_scale: float = ConfigField(
+        title="Diffusion Step Scale",
+        default=1.5,
+        gt=0.0,
+        description="Diffusion step size; lower = more sample diversity. Default 1.5; range 1.0-2.0",
+        advanced=True,
+    )
+    max_msa_seqs: int = ConfigField(
+        title="Max MSA Sequences",
+        default=8192,
+        ge=1,
+        description="Cap on MSA depth fed into the model; lower for memory savings on deep MSAs",
+        advanced=True,
+    )
+    subsample_msa: bool = ConfigField(
+        title="Subsample MSA",
+        default=True,
+        description="Stochastically subsample MSA each call for diversity. Default True",
         advanced=True,
     )
     num_workers: int = ConfigField(
@@ -387,6 +411,9 @@ def run_boltz2_on_complex(
             "recycling_steps": config.recycling_steps,
             "sampling_steps": config.sampling_steps,
             "diffusion_samples": config.diffusion_samples,
+            "step_scale": config.step_scale,
+            "max_msa_seqs": config.max_msa_seqs,
+            "subsample_msa": config.subsample_msa,
             "num_workers": config.num_workers,
             "device": config.device,
             "verbose": config.verbose,

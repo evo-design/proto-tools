@@ -72,6 +72,7 @@ def mock_af3_inference(tmp_path):
     def mock_dispatch(toolkit, input_data, **kwargs):
         with open(input_data["input_json_path"]) as f:
             captured_data["input_json"] = json.load(f)
+        captured_data["input_data"] = input_data
         return {
             "structure_pdb": dummy_pdb_path,
             "metrics": mock_metrics,
