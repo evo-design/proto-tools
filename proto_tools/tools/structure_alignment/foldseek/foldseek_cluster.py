@@ -26,7 +26,20 @@ from proto_tools.utils import (
 logger = logging.getLogger(__name__)
 
 # gz variants before plain variants so `.pdb.gz` matches before `.pdb` in `str.endswith`.
-_SUPPORTED_EXTENSIONS: tuple[str, ...] = (".pdb.gz", ".cif.gz", ".mmcif.gz", ".pdb", ".cif", ".mmcif")
+_STRUCTURE_EXTENSIONS: tuple[str, ...] = (".pdb.gz", ".cif.gz", ".mmcif.gz", ".pdb", ".cif", ".mmcif")
+_FASTA_EXTENSIONS: tuple[str, ...] = (".fasta.gz", ".fa.gz", ".faa.gz", ".fasta", ".fa", ".faa")
+_SUPPORTED_EXTENSIONS: tuple[str, ...] = _STRUCTURE_EXTENSIONS + _FASTA_EXTENSIONS
+
+
+def _detect_input_format(text: str) -> str:
+    """Return ``"fasta"``, ``"pdb"``, or ``"cif"`` for an input text string.
+
+    FASTA is identified by a leading ``>`` (after stripping whitespace);
+    everything else is delegated to :func:`detect_structure_format`.
+    """
+    if text.lstrip().startswith(">"):
+        return "fasta"
+    return detect_structure_format(text)
 
 
 # ============================================================================
@@ -51,25 +64,30 @@ class FoldseekCluster(BaseModel):
 class FoldseekClusterInput(BaseToolInput):
     """Input for Foldseek structural clustering.
 
+    Inputs may be PDB, mmCIF, or FASTA — format is auto-detected per string.
+    A single call must use one mode (all FASTA OR all PDB/mmCIF). FASTA inputs
+    go through Foldseek's built-in ProstT5 model to predict 3Di sequences.
+
     Attributes:
-        structures (list[str] | None): PDB- or mmCIF-format text strings (≥2;
-            format auto-detected per string). Mutually exclusive with
+        structures (list[str] | None): PDB, mmCIF, or single-record FASTA text
+            strings (≥2; format auto-detected). Mutually exclusive with
             ``structures_dir``.
-        structures_dir (str | None): Directory of ``.pdb``/``.cif``/``.mmcif``
-            files (incl. ``.gz``; ≥2). Filename stems become ``structure_ids``.
-            Mutually exclusive with ``structures``.
+        structures_dir (str | None): Directory of ``.pdb``/``.cif``/``.mmcif``/
+            ``.fasta``/``.fa``/``.faa`` files (incl. ``.gz``; ≥2). Filename
+            stems become ``structure_ids``. Mutually exclusive with
+            ``structures``.
         structure_ids (list[str] | None): Optional IDs (only with
             ``structures``; default ``'structure_0'``, ``'structure_1'``, ...).
     """
 
     structures: list[str] | None = InputField(
         default=None,
-        description="PDB- or mmCIF-format text strings to cluster (≥2). Mutually exclusive with structures_dir.",
+        description="PDB, mmCIF, or single-record FASTA text strings (≥2). Mutually exclusive with structures_dir.",
         min_length=2,
     )
     structures_dir: str | None = InputField(
         default=None,
-        description="Directory of .pdb/.cif/.mmcif files (incl. .gz; ≥2). Stems become structure_ids.",
+        description="Directory of structure (.pdb/.cif) or FASTA (.fasta/.fa) files, incl. .gz; ≥2.",
     )
     structure_ids: list[str] | None = InputField(
         default=None,
@@ -105,6 +123,10 @@ class FoldseekClusterConfig(BaseConfig):
             TM-score above this (0-1). 0.0 keeps all.
         lddt_threshold (float): Keep cluster-membership alignments with LDDT
             above this (0-1). 0.0 keeps all.
+        prostt5_weights_dir (str | None): Path to ProstT5 model weights for
+            FASTA inputs. If None, weights are auto-provisioned under
+            ``resolve_weights_dir("foldseek")/prostt5/weights`` on first FASTA
+            call (honors ``PROTO_FOLDSEEK_WEIGHTS_DIR`` / ``PROTO_MODEL_CACHE``).
         num_threads (int): CPU threads.
     """
 
@@ -156,6 +178,13 @@ class FoldseekClusterConfig(BaseConfig):
         le=1.0,
         description="LDDT floor for cluster-membership alignments (0-1). 0.0 keeps all",
         advanced=True,
+    )
+    prostt5_weights_dir: str | None = ConfigField(
+        title="ProstT5 Weights Directory",
+        default=None,
+        description="Path to ProstT5 weights for FASTA inputs (auto-provisioned if None).",
+        advanced=True,
+        include_in_key=False,
     )
     num_threads: int = ConfigField(
         title="Threads",
@@ -240,7 +269,7 @@ def run_foldseek_cluster(
     """Cluster structures with Foldseek easy-cluster.
 
     Args:
-        inputs (FoldseekClusterInput): Structures (PDB or mmCIF) + optional IDs.
+        inputs (FoldseekClusterInput): Structures (PDB, mmCIF, or FASTA) + optional IDs.
         config (FoldseekClusterConfig): Clustering thresholds + threads.
         instance (Any): Optional ToolInstance for subprocess execution.
 
@@ -250,7 +279,7 @@ def run_foldseek_cluster(
     assert inputs.structures is not None  # noqa: S101 — guaranteed by model validator
     structures = inputs.structures
     ids = inputs.structure_ids or [f"structure_{i}" for i in range(len(structures))]
-    formats = [detect_structure_format(s) for s in structures]
+    formats = [_detect_input_format(s) for s in structures]
 
     output_data = ToolInstance.dispatch(
         "foldseek",
@@ -266,6 +295,7 @@ def run_foldseek_cluster(
             "alignment_type": config.alignment_type,
             "tmscore_threshold": config.tmscore_threshold,
             "lddt_threshold": config.lddt_threshold,
+            "prostt5_weights_dir": config.prostt5_weights_dir,
             "num_threads": config.num_threads,
         },
         instance=instance,
@@ -284,8 +314,10 @@ def run_foldseek_cluster(
 # ============================================================================
 
 
-def _read_structures_dir(dir_path: str) -> tuple[list[str], list[str]]:
-    """Enumerate supported structure files (sorted by filename); return (texts, stems)."""
+def _read_structures_dir(
+    dir_path: str, extensions: tuple[str, ...] = _SUPPORTED_EXTENSIONS
+) -> tuple[list[str], list[str]]:
+    """Enumerate ``extensions``-matching files (sorted by filename); return (texts, stems)."""
     path = Path(dir_path).expanduser().resolve()
     if not path.is_dir():
         raise ValueError(f"structures_dir {dir_path!r} is not an existing directory")
@@ -295,7 +327,7 @@ def _read_structures_dir(dir_path: str) -> tuple[list[str], list[str]]:
         if not child.is_file():
             continue
         name_lower = child.name.lower()
-        for ext in _SUPPORTED_EXTENSIONS:
+        for ext in extensions:
             if name_lower.endswith(ext):
                 matches.append((child, child.name[: -len(ext)]))
                 break
@@ -303,7 +335,7 @@ def _read_structures_dir(dir_path: str) -> tuple[list[str], list[str]]:
     if len(matches) < 2:
         raise ValueError(
             f"structures_dir {str(path)!r} must contain at least 2 structure files "
-            f"(extensions: {_SUPPORTED_EXTENSIONS}); found {len(matches)}"
+            f"(extensions: {extensions}); found {len(matches)}"
         )
 
     structures, ids = [], []
@@ -317,7 +349,7 @@ def _read_structures_dir(dir_path: str) -> tuple[list[str], list[str]]:
     return structures, ids
 
 
-def _resolve_structures_dir_in_data(data: Any) -> Any:
+def _resolve_structures_dir_in_data(data: Any, *, extensions: tuple[str, ...] = _SUPPORTED_EXTENSIONS) -> Any:
     """``mode="before"`` helper: enforce mutex, read ``structures_dir`` into ``structures`` + ``structure_ids``."""
     if not isinstance(data, dict):
         return data
@@ -331,7 +363,7 @@ def _resolve_structures_dir_in_data(data: Any) -> Any:
         raise ValueError(
             "`structure_ids` may not be combined with `structures_dir`; IDs are derived from filename stems."
         )
-    structures, ids = _read_structures_dir(data["structures_dir"])
+    structures, ids = _read_structures_dir(data["structures_dir"], extensions=extensions)
     return {**data, "structures": structures, "structure_ids": ids, "structures_dir": None}
 
 
@@ -340,10 +372,18 @@ def _validate_resolved_input(
     structure_ids: list[str] | None,
     *,
     reject_underscore: bool = False,
+    reject_fasta: bool = False,
 ) -> None:
-    """``mode="after"`` helper: require structures, validate IDs (safe + length + optional ``_``)."""
+    """``mode="after"`` helper: require structures, validate IDs, enforce uniform format."""
     if structures is None:
         raise ValueError("Provide exactly one of `structures` or `structures_dir`.")
+
+    fasta_count = sum(1 for s in structures if _detect_input_format(s) == "fasta")
+    if 0 < fasta_count < len(structures):
+        raise ValueError("Cannot mix FASTA with PDB/mmCIF inputs in a single call; all inputs must be the same kind.")
+    if reject_fasta and fasta_count:
+        raise ValueError("FASTA input is not supported here; pass PDB or mmCIF text/files.")
+
     if structure_ids is None:
         return
     seen: set[str] = set()

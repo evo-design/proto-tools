@@ -16,6 +16,8 @@ from proto_tools.tools.structure_alignment.foldseek.foldseek_cluster import _par
 
 _TINY_PDB = "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
 _TINY_CIF = "data_TEST\nloop_\n_atom_site.id\n_atom_site.type_symbol\n1 C\n"
+_TINY_FASTA = ">protein_a\nMKTLLEVAEK\n"
+_TINY_FASTA_2 = ">protein_b\nMQTLLDVAEH\n"
 _FIXTURES = Path(__file__).parent.parent / "dummy_data"
 
 
@@ -107,6 +109,12 @@ def test_input_rejects_dir_with_colliding_stems(tmp_path):
         FoldseekClusterInput(structures_dir=str(tmp_path))
 
 
+def test_input_rejects_mixed_pdb_and_fasta():
+    """A single call must be all-FASTA or all-structure."""
+    with pytest.raises(ValidationError, match="Cannot mix FASTA"):
+        FoldseekClusterInput(structures=[_TINY_FASTA, _TINY_PDB])
+
+
 # ── FoldseekClusterInput resolution from directory ────────────────────────────
 
 
@@ -147,6 +155,18 @@ def test_input_dir_skips_unsupported_files(tmp_path):
     inputs = FoldseekClusterInput(structures_dir=str(tmp_path))
 
     assert sorted(inputs.structure_ids or []) == ["alpha", "beta"]
+
+
+def test_input_resolves_dir_with_fasta_files(tmp_path):
+    """`.fasta` / `.fa` files are enumerated by the cluster dir resolver."""
+    (tmp_path / "alpha.fasta").write_text(_TINY_FASTA)
+    (tmp_path / "beta.fa").write_text(_TINY_FASTA_2)
+
+    inputs = FoldseekClusterInput(structures_dir=str(tmp_path))
+
+    assert sorted(inputs.structure_ids or []) == ["alpha", "beta"]
+    assert _TINY_FASTA in (inputs.structures or [])
+    assert _TINY_FASTA_2 in (inputs.structures or [])
 
 
 # ── run_foldseek_cluster (mocked dispatch) ────────────────────────────────────
@@ -204,6 +224,24 @@ def test_run_foldseek_cluster_with_directory(tmp_path):
         "alpha": "pdb",
         "beta": "cif",
     }
+
+
+def test_run_foldseek_cluster_with_fasta_inputs():
+    """FASTA inputs propagate as `structure_formats=['fasta', ...]` and carry prostt5_weights_dir."""
+    inputs = FoldseekClusterInput(structures=[_TINY_FASTA, _TINY_FASTA_2])
+
+    with patch(
+        "proto_tools.tools.structure_alignment.foldseek.foldseek_cluster.ToolInstance.dispatch"
+    ) as mock_dispatch:
+        mock_dispatch.return_value = {"clusters_tsv": ""}
+        run_foldseek_cluster(
+            inputs,
+            FoldseekClusterConfig(prostt5_weights_dir="/path/to/prostt5"),
+        )
+
+    payload = mock_dispatch.call_args.args[1]
+    assert payload["structure_formats"] == ["fasta", "fasta"]
+    assert payload["prostt5_weights_dir"] == "/path/to/prostt5"
 
 
 # ── Integration ───────────────────────────────────────────────────────────────

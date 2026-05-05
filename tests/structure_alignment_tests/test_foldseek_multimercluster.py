@@ -103,6 +103,23 @@ def test_input_resolves_dir_with_mixed_formats(tmp_path):
     assert _TINY_MULTIMER_CIF in (inputs.structures or [])
 
 
+def test_input_dir_skips_fasta_files(tmp_path):
+    """Multimer dir enumerator ignores FASTA — multimer doesn't support FASTA inputs at all."""
+    (tmp_path / "alpha.pdb").write_text(_TINY_MULTIMER_PDB)
+    (tmp_path / "beta.pdb").write_text(_TINY_MULTIMER_PDB)
+    (tmp_path / "ignored.fasta").write_text(">seq\nMKTL\n")
+
+    inputs = FoldseekMultimerClusterInput(structures_dir=str(tmp_path))
+
+    assert sorted(inputs.structure_ids or []) == ["alpha", "beta"]
+
+
+def test_input_rejects_fasta_text():
+    """Direct FASTA text is rejected at validation, not at runtime in the wrapper."""
+    with pytest.raises(ValidationError, match="FASTA input is not supported"):
+        FoldseekMultimerClusterInput(structures=[">s1\nMKTL\n", ">s2\nMQTL\n"])
+
+
 def test_input_resolves_dir_decompresses_gz_files(tmp_path):
     """`.pdb.gz` files are decompressed during read."""
     with gzip.open(tmp_path / "alpha.pdb.gz", "wt", encoding="utf-8") as f:

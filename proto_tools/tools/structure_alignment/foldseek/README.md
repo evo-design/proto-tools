@@ -44,14 +44,15 @@ Per Foldseek's GitHub README, "many of Foldseek's modules (subprograms) rely on 
 2. The wrapper writes inputs to a temp dir, invokes `foldseek easy-search` / `easy-cluster` / `easy-multimersearch` / `easy-multimercluster` / `easy-rbh` via `ToolInstance.dispatch`, parses the M8 (or cluster TSV) output.
 
 **Key assumptions:**
-- Query structures for search/multimer-search/rbh are PDB-format text. Cluster + multimer-cluster accept PDB or mmCIF (auto-detected per input).
+- Search/multimer-search/rbh accept PDB-format text only. `foldseek-cluster` accepts PDB, mmCIF, or FASTA (auto-detected per input). `foldseek-multimercluster` accepts PDB or mmCIF.
 - Remote modes require network reachability of `search.foldseek.com` (anonymous access).
-- Local modes require the standalone env to have been provisioned (`setup.sh`).
+- Local modes require the standalone env to have been provisioned (`setup.sh`); FASTA cluster mode lazily downloads ProstT5 weights (~2.7 GB) on first call.
 
 **Limitations:**
 - The server's documented `/api/result/{id}` endpoint has a known 404 bug ([Foldseek issue #380](https://github.com/steineggerlab/foldseek/issues/380)); the wrapper uses `/api/result/download/{id}` instead.
 - Local search/multimer-search/rbh modes need a target — either a pre-built Foldseek database or a directory of PDB files (Foldseek auto-builds a temporary DB from a directory). Pre-build with `foldseek createdb` outside this wrapper for repeated reuse against large target sets.
-- mmCIF input is supported only by `foldseek-cluster` and `foldseek-multimercluster`; search/multimer-search/rbh remain PDB-only.
+- mmCIF input is supported only by `foldseek-cluster` and `foldseek-multimercluster`; search/multimer-search/rbh remain PDB-only. FASTA input is supported only by `foldseek-cluster`.
+- A single cluster call must use one input mode (all FASTA OR all structure); mixing is rejected at validation time.
 - No documented public-server rate limit; for large batch sweeps prefer local mode.
 
 **Computational requirements:**
@@ -68,12 +69,12 @@ Per Foldseek's GitHub README, "many of Foldseek's modules (subprograms) rely on 
 
 ### `FoldseekClusterInput`
 
-Provide structures via exactly one of `structures` or `structures_dir` (mutually exclusive).
+Provide structures via exactly one of `structures` or `structures_dir` (mutually exclusive). A single call must use one mode — all FASTA OR all structure (PDB/mmCIF). FASTA inputs run through Foldseek's built-in ProstT5 model to predict 3Di sequences before clustering.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `structures` | `list[str] \| None` | `None` | PDB- or mmCIF-format text strings to cluster (≥2). Format is auto-detected per input. Mutually exclusive with `structures_dir`. |
-| `structures_dir` | `str \| None` | `None` | Path to a directory of structure files (`.pdb`, `.cif`, `.mmcif`, plus `.gz` variants; ≥2). Filename stems become `structure_ids`. Mutually exclusive with `structures`. |
+| `structures` | `list[str] \| None` | `None` | PDB, mmCIF, or single-record FASTA text strings (≥2). Format auto-detected per input. Mutually exclusive with `structures_dir`. |
+| `structures_dir` | `str \| None` | `None` | Directory of structure files (`.pdb`/`.cif`/`.mmcif`) or FASTA files (`.fasta`/`.fa`/`.faa`), plus `.gz` variants (≥2). Filename stems become `structure_ids`. Mutually exclusive with `structures`. |
 | `structure_ids` | `list[str] \| None` | `None` | Optional IDs per structure (only valid with `structures`; default: `'structure_0'`, `'structure_1'`, ...). |
 
 ### `FoldseekMultimerSearchInput`
@@ -121,6 +122,7 @@ Provide multimers via exactly one of `structures` or `structures_dir` (mutually 
 | `min_seq_id` | `float` | `0.0` | Sequence-identity threshold (0-1); 0.0 lets 3Di structural similarity dominate. |
 | `cov` | `float` | `0.8` | Coverage threshold for the alignment. |
 | `cov_mode` | `Literal[0, 1, 2]` | `0` | (advanced) 0 = bidirectional, 1 = target, 2 = query. |
+| `prostt5_weights_dir` | `str \| None` | `None` | (advanced) Path to ProstT5 weights for FASTA inputs. Auto-provisioned under `resolve_weights_dir("foldseek")/prostt5/weights` (default: `$PROTO_HOME/proto_model_cache/foldseek/prostt5/weights`) on first FASTA call. |
 | `num_threads` | `int` | `4` | (advanced) CPU threads. |
 
 ### `FoldseekMultimerSearchConfig`
@@ -247,16 +249,25 @@ from proto_tools.tools.structure_alignment import (
     FoldseekClusterConfig, FoldseekClusterInput, run_foldseek_cluster,
 )
 
-# Option A — pass in-memory text strings (PDB or mmCIF; format auto-detected).
+# Option A — in-memory text strings (PDB, mmCIF, or FASTA; format auto-detected per input).
 output = run_foldseek_cluster(
     FoldseekClusterInput(structures=[design_a, design_b, design_c, design_d]),
     FoldseekClusterConfig(),
 )
 
-# Option B — point at a directory; .pdb/.cif/.mmcif and their .gz variants
+# Option B — point at a directory; .pdb/.cif/.mmcif/.fasta/.fa and their .gz variants
 # are picked up, and filename stems become structure_ids.
 output = run_foldseek_cluster(
     FoldseekClusterInput(structures_dir="/data/rfdiffusion_outputs"),
+    FoldseekClusterConfig(),
+)
+
+# Option C — sequences only (no structures yet). Foldseek runs ProstT5 internally
+# to predict 3Di sequences, then clusters by predicted structure. Weights are
+# auto-provisioned on first call (~2.7 GB; cached via the standard
+# `resolve_weights_dir("foldseek")` path — see notes/storage.md).
+output = run_foldseek_cluster(
+    FoldseekClusterInput(structures_dir="/data/uniprot_subset_fastas"),
     FoldseekClusterConfig(),
 )
 for cluster in output.clusters:
@@ -318,10 +329,10 @@ for hit in output.hits:
 ## Best Practices & Gotchas
 
 1. **Don't filter Foldseek hits by `sequence_identity`.** This defeats the purpose of structure search; use `evalue` or `bit_score`.
-2. **Submit PDB for search/multimer-search/rbh.** These three tools accept PDB only. `foldseek-cluster` and `foldseek-multimercluster` also accept mmCIF (auto-detected), so you can pass `.cif` text or feed a directory of mixed `.pdb` / `.cif` / `.gz` files via `structures_dir`.
-3. **Clustering uses 3Di structural similarity, not sequence identity.** The default `min_seq_id=0.0` is intentional — set it >0 only when you also want a sequence-similarity floor.
+2. **Input formats per tool.** Search / multimer-search / rbh accept PDB only. `foldseek-cluster` accepts PDB, mmCIF, or FASTA (auto-detected); FASTA inputs run through Foldseek's built-in ProstT5 model to predict 3Di sequences. `foldseek-multimercluster` accepts PDB or mmCIF.
+3. **Clustering uses 3Di structural similarity, not sequence identity.** The default `min_seq_id=0.0` is intentional — set it >0 only when you also want a sequence-similarity floor. (Note: this is "structural clustering predicted from sequence" when you pass FASTA — distinct from raw sequence-similarity clustering, which is what [`mmseqs2-clustering`](../../sequence_alignment/mmseqs2/README.md) does.)
 4. **There is no "give me exactly k clusters" knob.** Foldseek (like MMseqs2) clusters by similarity threshold, not target count. To approximate k, sweep `cov` (or `min_seq_id`) and pick the run whose cluster count is closest to k. Lower `cov` → fewer, larger clusters; higher `cov` → more, smaller clusters.
-5. **For sequence-only clustering, use [`mmseqs2-clustering`](../../sequence_alignment/mmseqs2/README.md).** Foldseek's cluster modes are structural; if you only have FASTA sequences and no structures, MMseqs2 is the right tool.
+5. **ProstT5 weights are ~2.7 GB.** On the first FASTA cluster call the wrapper downloads them to `resolve_weights_dir("foldseek")/prostt5/weights` (default: `$PROTO_HOME/proto_model_cache/foldseek/prostt5/weights`; honors `PROTO_FOLDSEEK_WEIGHTS_DIR` and `PROTO_MODEL_CACHE` per [`notes/storage.md`](../../../../notes/storage.md)). Override per-call with `FoldseekClusterConfig(prostt5_weights_dir=...)` or pre-provision via `foldseek databases ProstT5 <out> <tmp>`.
 6. **Cache responsibly.** All five tools are `cacheable=True`; subsequent calls with the same inputs + config skip the work. `structures_dir` is read into text content at validation time, so cache keys reflect file content (not just the path) — mutating files in place correctly invalidates the cache.
 7. **Multimer wire format:** the wrapper transparently encodes `mode` as `complex-{mode}` for the multimer endpoint. Pass plain `"3diaa"` / `"tmalign"` / `"lolalign"` in the config.
 8. **Public-server fairness.** No documented rate limit, but the search server is best-effort. For batch sweeps over hundreds of queries, use local mode.
