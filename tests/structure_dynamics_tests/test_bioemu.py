@@ -115,6 +115,67 @@ def test_config_rejects_invalid_model_name():
         BioEmuConfig(model_name="invalid-model")
 
 
+def test_config_passes_new_fields_to_dispatch():
+    """All five new Config fields must flow to the dispatch payload."""
+    # Pre-supply an empty MSA dict so preprocess() skips ColabFold (network-free test).
+    complex_ = StructurePredictionComplex(chains=[{"sequence": _SAMPLE_SEQUENCE, "entity_type": "protein"}])
+    bioemu_input = BioEmuInput(complexes=[complex_], msas={})
+    bioemu_config = BioEmuConfig(
+        num_samples=2,
+        model_name="bioemu-v1.2",
+        denoiser_type="heun",
+        denoiser_config="steering.yaml",
+        msa_host_url="https://msa.example.com",
+        cache_embeds_dir="embeds_cache",
+        cache_so3_dir="so3_cache",
+    )
+
+    with patch(
+        "proto_tools.tools.structure_dynamics.bioemu.bioemu_sample.ToolInstance",
+    ) as mock_cls:
+        mock_cls.dispatch.return_value = {
+            "results": [
+                {
+                    "pdb_frames": [_SAMPLE_PDB_CONTENT],
+                    "num_frames": 1,
+                    "num_residues": len(_SAMPLE_SEQUENCE),
+                }
+            ]
+        }
+        run_bioemu(bioemu_input, bioemu_config)
+
+    payload = mock_cls.dispatch.call_args[0][1]
+    assert payload["model_name"] == "bioemu-v1.2"
+    assert payload["denoiser_type"] == "heun"
+    assert payload["denoiser_config"] == "steering.yaml"
+    assert payload["msa_host_url"] == "https://msa.example.com"
+    assert payload["cache_embeds_dir"] == "embeds_cache"
+    assert payload["cache_so3_dir"] == "so3_cache"
+
+
+def test_config_cache_key_invariants():
+    """Cache dirs / output_dir excluded; msa_host_url INCLUDED (server change → different MSAs)."""
+    base = BioEmuConfig().cache_key()
+
+    # Excluded — storage knobs don't affect the returned ensembles
+    assert (
+        BioEmuConfig(
+            cache_embeds_dir="embeds",
+            cache_so3_dir="so3",
+            output_dir="raw",
+        ).cache_key()
+        == base
+    )
+
+    # Included — different MSA server can produce different MSAs → different ensembles
+    assert BioEmuConfig(msa_host_url="https://other.example.com").cache_key() != base
+
+
+def test_config_include_pae_matrix_is_hidden():
+    """include_pae_matrix is inherited from StructurePredictionConfig but unused by BioEmu."""
+    assert BioEmuConfig.model_json_schema()["properties"]["include_pae_matrix"]["hidden"] is True
+
+
 # ── Output assembly (mocked dispatch) ────────────────────────────────────────
 
 

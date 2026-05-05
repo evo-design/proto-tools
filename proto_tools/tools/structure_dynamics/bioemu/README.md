@@ -28,10 +28,11 @@ This makes BioEmu orders of magnitude faster than MD while capturing the same la
 
 | Model | Description | Recommended |
 |-------|-------------|-------------|
-| `bioemu-v1.0` | Initial release | No |
-| `bioemu-v1.1` | Improved sampling quality and filtering | Yes (default) |
+| `bioemu-v1.0` | Initial preprint release | No |
+| `bioemu-v1.1` | Weights from the published Science paper | Yes (default) |
+| `bioemu-v1.2` | Trained on extended MD + folding free-energy data | Use when folding-state thermodynamics matter |
 
-Both models accept the same inputs and produce the same output format. v1.1 generally produces higher-quality ensembles with better coverage of the conformational landscape.
+All three variants accept the same inputs and produce the same output format. v1.1 generally produces higher-quality ensembles than v1.0; v1.2 is recommended when comparing predictions against folding-free-energy measurements.
 
 ## Execution Modes
 
@@ -67,9 +68,14 @@ Both models accept the same inputs and produce the same output format. v1.1 gene
 | Parameter | Type | Default | Range | Description |
 |-----------|------|---------|-------|-------------|
 | `num_samples` | `int` | `500` | >= 1 | Number of conformations to sample per sequence |
-| `model_name` | `"bioemu-v1.0"` \| `"bioemu-v1.1"` | `"bioemu-v1.1"` | -- | BioEmu model variant |
-| `filter_samples` | `bool` | `True` | -- | Apply quality filtering to remove poorly generated structures |
-| `batch_size` | `int` | `10` | >= 1 | Internal batch size for sampling (affects GPU memory, not output count) |
+| `model_name` | `"bioemu-v1.0"` \| `"bioemu-v1.1"` \| `"bioemu-v1.2"` | `"bioemu-v1.1"` | -- | BioEmu checkpoint variant |
+| `filter_samples` | `bool` | `True` | -- | Drop unphysical samples (steric clashes, chain discontinuities) |
+| `batch_size` | `int` | `10` | >= 1 | Batch size at L=100; effective batch scales as `batch_size * (100/L)^2` |
+| `denoiser_type` | `"dpm"` \| `"heun"` | `"dpm"` | -- | Diffusion sampler algorithm (dpm = 50 deterministic steps; heun = stochastic) |
+| `denoiser_config` | `Optional[str]` | `None` | -- | Path to a custom denoiser/steering YAML (e.g. `physical_steering.yaml`); overrides `denoiser_type` when set |
+| `msa_host_url` | `Optional[str]` | `None` | -- | Override the ColabFold MMseqs2 MSA server URL |
+| `cache_embeds_dir` | `Optional[str]` | `None` | -- | Directory to cache MSA embeddings across runs |
+| `cache_so3_dir` | `Optional[str]` | `None` | -- | Directory to cache SO3 precomputations across runs |
 | `output_dir` | `Optional[str]` | `None` | -- | Optional directory for raw BioEmu output files |
 | `device` | `str` | `"cuda"` | `"cuda"`, `"cpu"` | Inference device (inherited from StructurePredictionConfig) |
 | `verbose` | `bool` | `False` | -- | Verbose logging (inherited from StructurePredictionConfig) |
@@ -94,6 +100,10 @@ The `batch_size` parameter controls how many samples are generated in parallel o
 | 1 | Minimal | Slow |
 | 10 (default) | Moderate | Good balance |
 | 50 | High | Fast (if memory allows) |
+
+**Steering (`denoiser_config`):**
+
+BioEmu ships a Sequential Monte Carlo (SMC) steering system that biases sampling toward more physically plausible structures (fewer steric clashes, fewer chain breaks). To enable it, set `denoiser_config` to the path of a steering YAML (e.g. `src/bioemu/config/steering/physical_steering.yaml` from the upstream package). The YAML — not the wrapper — controls the particle count (`num_particles`, typically 3–10), the potential set, and start/end timesteps; the wrapper just forwards the path to upstream.
 
 ## Output Specification
 

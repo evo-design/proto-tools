@@ -151,14 +151,23 @@ class BioEmuConfig(StructurePredictionConfig):
 
     Attributes:
         num_samples (int): Number of conformations to sample per input sequence.
-        model_name (Literal['bioemu-v1.0', 'bioemu-v1.1']): BioEmu model variant.
-        filter_samples (bool): Whether to filter lower-quality generated samples.
-        batch_size (int): Batch size control for BioEmu internal sampling.
+        model_name (Literal['bioemu-v1.0', 'bioemu-v1.1', 'bioemu-v1.2']):
+            Checkpoint variant (v1.1 = Science paper; v1.2 = extended MD + folding-FE).
+        filter_samples (bool): Drop unphysical samples (steric clashes, chain breaks).
+        batch_size (int): Upstream's ``batch_size_100``; effective batch is
+            ``batch_size * (100 / L) ** 2``.
+        denoiser_type (Literal['dpm', 'heun']): Sampler algorithm — ``dpm``
+            is 50 deterministic steps; ``heun`` is stochastic.
+        denoiser_config (str | None): Path to a custom denoiser/steering YAML;
+            overrides ``denoiser_type`` when set.
+        msa_host_url (str | None): Override the ColabFold MMseqs2 MSA server URL.
+        cache_embeds_dir (str | None): Directory to cache MSA embeddings across runs.
+        cache_so3_dir (str | None): Directory to cache SO3 precomputations across runs.
         output_dir (str | None): Optional directory for raw BioEmu outputs.
-        colabfold_search_config (ColabfoldSearchConfig | None): Configuration for
-            ColabFold MSA search. Default: Uses ColabfoldSearchConfig defaults.
+        colabfold_search_config (ColabfoldSearchConfig | None): ColabFold MSA
+            search config. Defaults are used when ``None``.
+        include_pae_matrix (bool): Inherited but unused (no PAE in conformational sampling).
         device (str): Inference device (inherited).
-        include_pae_matrix (bool): Inherited; unused by BioEmu. Default: ``False``.
         verbose (bool): Verbose logging toggle (inherited).
     """
 
@@ -168,36 +177,78 @@ class BioEmuConfig(StructurePredictionConfig):
         ge=1,
         description="Number of conformations to sample per sequence",
     )
-    model_name: Literal["bioemu-v1.0", "bioemu-v1.1"] = ConfigField(
+    model_name: Literal["bioemu-v1.0", "bioemu-v1.1", "bioemu-v1.2"] = ConfigField(
         title="Model Name",
         default="bioemu-v1.1",
-        description="BioEmu model variant to use",
+        description="BioEmu checkpoint (v1.1 = Science paper; v1.2 = extended MD + folding-FE training)",
         advanced=True,
         reload_on_change=True,
     )
     filter_samples: bool = ConfigField(
         title="Filter Samples",
         default=True,
-        description="Whether to filter generated samples using BioEmu quality checks",
+        description="Drop unphysical samples (steric clashes, chain discontinuities)",
         advanced=True,
     )
     batch_size: int = ConfigField(
         title="Batch Size",
         default=10,
         ge=1,
-        description="Batch size control for BioEmu internal sampling",
+        description="Batch size at L=100; effective batch scales as batch_size * (100/L)^2",
         advanced=True,
+    )
+    denoiser_type: Literal["dpm", "heun"] = ConfigField(
+        title="Denoiser Type",
+        default="dpm",
+        description="Diffusion sampler algorithm (dpm = 50 deterministic steps; heun = stochastic)",
+        advanced=True,
+        reload_on_change=True,
+    )
+    denoiser_config: str | None = ConfigField(
+        title="Denoiser Config Path",
+        default=None,
+        description="Path to a custom denoiser/steering YAML; overrides denoiser_type when set",
+        hidden=True,
+        reload_on_change=True,
+        examples=["physical_steering.yaml"],
+    )
+    msa_host_url: str | None = ConfigField(
+        title="MSA Host URL",
+        default=None,
+        description="Override the ColabFold MMseqs2 MSA server URL",
+        hidden=True,
+    )
+    cache_embeds_dir: str | None = ConfigField(
+        title="MSA Embeds Cache Dir",
+        default=None,
+        description="Directory to cache MSA embeddings across runs",
+        hidden=True,
+        include_in_key=False,
+    )
+    cache_so3_dir: str | None = ConfigField(
+        title="SO3 Cache Dir",
+        default=None,
+        description="Directory to cache SO3 precomputations across runs",
+        hidden=True,
+        include_in_key=False,
     )
     output_dir: str | None = ConfigField(
         title="Output Directory",
         default=None,
         description="Optional directory for raw BioEmu output files",
         hidden=True,
+        include_in_key=False,
     )
     colabfold_search_config: ColabfoldSearchConfig | None = ConfigField(
         title="ColabFold Search Config",
         default=None,
-        description="Configuration for ColabFold MSA search. If None, uses default settings.",
+        description="Configuration for ColabFold MSA search; None uses defaults",
+        hidden=True,
+    )
+    include_pae_matrix: bool = ConfigField(
+        title="Include PAE Matrix",
+        default=False,
+        description="Unused by BioEmu (inherited from StructurePredictionConfig)",
         hidden=True,
     )
 
@@ -270,6 +321,11 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance: Any = None) 
             "model_name": config.model_name,
             "filter_samples": config.filter_samples,
             "batch_size": config.batch_size,
+            "denoiser_type": config.denoiser_type,
+            "denoiser_config": config.denoiser_config,
+            "msa_host_url": config.msa_host_url,
+            "cache_embeds_dir": config.cache_embeds_dir,
+            "cache_so3_dir": config.cache_so3_dir,
             "device": config.device,
             "output_dir": config.output_dir,
             "seed": config.seed,
@@ -297,6 +353,8 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance: Any = None) 
             "num_complexes": len(inputs.complexes),
             "total_structures": total_structures,
             "model_name": config.model_name,
+            "denoiser_type": config.denoiser_type,
+            "denoiser_config": config.denoiser_config,
         },
     )
 

@@ -62,23 +62,54 @@ Each `RFdiffusion3DesignSpec` contains:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `length` | `str` | Target protein length (int or "min-max" range) |
-| `contig` | `str` | Contig string specifying design topology |
+| `input_structure` | `Optional[str]` | Path to PDB/CIF or PDB string (motif scaffolding, binder design) |
+| `length` | `Optional[str]` | Target length (int or "min-max" range as string) |
+| `contig` | `Optional[str]` | Contig string specifying design topology |
+| `ligand` | `Optional[str]` | Ligand selection by 3-letter codes (e.g. `"HAX,OAA"`) |
+| `unindex` | `Optional[str \| dict]` | Unindexed motif components (flexible position) |
+| `select_fixed_atoms` | `Optional[bool \| str \| dict]` | Atoms held fixed in 3D space during diffusion |
+| `select_unfixed_sequence` | `Optional[bool \| str \| dict]` | Residues whose sequence can change |
+| `select_hotspots` | `Optional[bool \| str \| dict]` | Hotspots for binder/PPI design |
+| `symmetry` | `Optional[str \| dict]` | Symmetry config (homo-oligomer); pair with `sampler_kind="symmetry"` |
+| `select_buried` / `select_partially_buried` / `select_exposed` | `Optional[bool \| str \| dict]` | RASA conditioning |
+| `select_hbond_donor` / `select_hbond_acceptor` | `Optional[dict[str, list[str]]]` | Atom-wise H-bond flags |
+| `redesign_motif_sidechains` | `Optional[bool]` | Fix motif backbone, redesign side-chains |
+| `plddt_enhanced` | `Optional[bool]` | pLDDT-based denoising enhancement (upstream default: True) |
+| `infer_ori_strategy` | `Optional["com" \| "hotspots"]` | Origin placement strategy |
+| `ori_token` | `Optional[List[float]]` | `[x, y, z]` origin override (Angstroms) |
+| `partial_t` | `Optional[float]` | Noise (Angstroms) for partial diffusion (5.0-15.0 recommended) |
+| `is_non_loopy` | `Optional[bool]` | True/False produces fewer/more loops |
+
+Additional InputSpecification fields can be passed via `**kwargs` (model uses `extra="allow"`). See [upstream input.md](https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md).
 
 ## Configuration
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `n_batches` | `int` | `1` | Number of batches per spec |
-| `diffusion_batch_size` | `int` | `8` | Designs per batch (memory scales with this) |
+| `n_batches` | `int` | `1` | Independent batches per spec (total designs per spec = `n_batches * diffusion_batch_size`) |
+| `diffusion_batch_size` | `int` | `8` | Designs sampled in parallel per batch (memory scales with this) |
 | `num_timesteps` | `int` | `200` | Diffusion steps (higher = better quality, slower) |
-| `step_scale` | `float` | `1.5` | Step scale (higher = less diverse, more designable) |
+| `step_scale` | `float` | `1.5` | Step size scale; higher = less diverse, more designable (typical 1.0-2.0) |
+| `n_recycle` | `Optional[int]` | `None` | Recycle iterations; None inherits checkpoint default (~2) |
+| `sampler_kind` | `"default" \| "symmetry"` | `"default"` | Sampler kind; `"symmetry"` for homo-oligomer design |
+| `center_option` | `"all" \| "motif" \| "diffuse"` | `"all"` | Coordinate-frame centering mode |
+| `use_classifier_free_guidance` | `bool` | `False` | Enable classifier-free guidance (CFG) |
+| `cfg_scale` | `float` | `1.5` | CFG scale (typical 1.0-3.0); requires CFG enabled |
+| `cfg_features` | `Optional[List[str]]` | `None` | CFG feature names; None uses upstream default |
+| `cfg_t_max` | `Optional[float]` | `None` | Max diffusion timestep at which CFG is applied (0.0-1.0) |
+| `gamma_0` | `float` | `0.6` | Sampler stochasticity; 0.0 = deterministic ODE |
+| `low_memory_mode` | `bool` | `False` | Memory-efficient tokenization (slower); set if GPU RAM is tight |
+| `dump_trajectories` | `bool` | `False` | Save diffusion trajectory frames to output dir |
+| `align_trajectory_structures` | `bool` | `False` | Align trajectory frames (only when dumping) |
+| `prevalidate_inputs` | `bool` | `False` | Fail-fast input JSON validation before launching diffusion |
 
 ### Sweep Priorities
 
 1. **`num_timesteps`**: Most impactful for structure quality. Use 50-100 for rapid prototyping, 200-500 for production.
 2. **`step_scale`**: Controls diversity vs designability tradeoff. Lower (1.0-1.3) for diverse exploration, higher (1.5-2.0) for safer designs.
 3. **`diffusion_batch_size`**: Generate multiple designs per run; rank by downstream metrics.
+4. **`n_recycle`**: Bump to 5+ when designability matters more than throughput; default inherits checkpoint setting.
+5. **`use_classifier_free_guidance`** + **`cfg_scale`**: Enable when active-site / H-bond constraints matter; otherwise leave off (no-op when off).
 
 ## Output Specification
 

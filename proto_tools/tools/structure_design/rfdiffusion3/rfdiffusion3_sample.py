@@ -19,7 +19,7 @@ import logging
 import tempfile
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -79,7 +79,7 @@ class RFdiffusion3DesignSpec(BaseModel):
 
         select_fixed_atoms (bool | str | dict[str, str] | None): Atoms to fix
             in 3D space during diffusion. Accepts InputSelection format:
-            - ``True``: Fix all atoms from input (default when input provided)
+            - ``True``: Fix all atoms from input
             - ``False``: Unfix all atoms
             - Contig string: Specify residues to fix (e.g., ``"A1-10,B1-3"``)
             - Dict: Map chain/residue to atom selection using ``"BKBN"`` (backbone),
@@ -88,24 +88,56 @@ class RFdiffusion3DesignSpec(BaseModel):
 
         select_unfixed_sequence (bool | str | dict[str, str] | None): Residues
             whose sequence can change during design. Accepts InputSelection format:
-            - ``True``: All input regions have fixed sequences (default)
+            - ``True``: All input regions have fixed sequences (upstream default)
             - ``False``: All atoms have unfixed/diffused sequences
             - Contig string: Components to unfix sequence for (e.g., ``"A5-10,B1-3"``)
             Note: Ligands and DNA always have fixed sequences.
 
-        select_hotspots (str | dict[str, str] | None): Atom-level or residue-level
-            hotspots for protein-protein interaction design. Hotspots will typically be
-            at most 4.5 Angstroms to any heavy atom in the designed structure. Typically
-            used for designing binders.
+        select_hotspots (bool | str | dict[str, str] | None): Atom or residue
+            hotspots for binder/PPI design (typically <=4.5 Angstroms to any
+            heavy atom in the designed structure).
+
+        symmetry (str | dict[str, Any] | None): Symmetry config for
+            homo-oligomer design; pair with ``RFdiffusion3Config.sampler_kind="symmetry"``.
+
+        select_buried (bool | str | dict[str, str] | None): RASA selector for
+            buried residues.
+
+        select_partially_buried (bool | str | dict[str, str] | None): RASA
+            selector for partially buried residues.
+
+        select_exposed (bool | str | dict[str, str] | None): RASA selector for
+            solvent-exposed residues.
+
+        select_hbond_donor (dict[str, list[str]] | None): Atom-wise H-bond
+            donor flags, e.g. ``{"A40": ["NE2"]}``.
+
+        select_hbond_acceptor (dict[str, list[str]] | None): Atom-wise H-bond
+            acceptor flags, e.g. ``{"A45": ["OD1"]}``.
+
+        redesign_motif_sidechains (bool | None): Keep motif backbone fixed,
+            redesign side-chains.
+
+        plddt_enhanced (bool | None): Enable pLDDT-based denoising enhancement
+            (upstream default ``True``; ``None`` keeps it).
+
+        infer_ori_strategy (Literal['com', 'hotspots'] | None): Origin
+            placement — ``com`` (center of mass) or ``hotspots``.
+
+        ori_token (list[float] | None): ``[x, y, z]`` origin override (Angstroms).
 
         partial_t (float | None): Noise level (in Angstroms) for partial diffusion.
             Lower values preserve more of the input structure. Recommended values
             are 5.0-15.0 Angstroms. Useful for refinement or local redesign tasks.
 
+        is_non_loopy (bool | None): If ``True``/``False``, produces output
+            structures with fewer/more loops. ``None`` uses the model's
+            native default.
+
     Note:
         Additional RFdiffusion3 InputSpecification fields can be passed as
-        ``**kwargs``. Examples: ``symmetry``, ``select_buried``,
-        ``select_hbond_donor``. See
+        ``**kwargs`` via this model's ``extra="allow"`` mode (e.g.
+        ``dialect``, ``cif_parser_args``). See
         https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
     """
 
@@ -118,10 +150,12 @@ class RFdiffusion3DesignSpec(BaseModel):
     contig: str | None = Field(
         default=None,
         description="Contig string specifying design topology (e.g., '50-80,\\0,A1-100')",
+        examples=["50-80", "A1-100,50,A150-200"],
     )
     length: str | None = Field(
         default=None,
-        description="Total design length constraint ('min-max' or int)",
+        description="Total design length constraint ('min-max' or int as string)",
+        examples=["100", "80-120"],
     )
     ligand: str | None = Field(
         default=None,
@@ -139,28 +173,96 @@ class RFdiffusion3DesignSpec(BaseModel):
         default=None,
         description="Residues whose sequence can change (True/False, contig string, or dict)",
     )
-    select_hotspots: str | dict[str, str] | None = Field(
+    select_hotspots: bool | str | dict[str, str] | None = Field(
         default=None,
-        description="Atom/residue-level hotspots for binder design (contig string or dict)",
+        description="Atom/residue-level hotspots for binder design (True/False, contig string, or dict)",
+        examples=["A24,A35,A50"],
+    )
+    symmetry: str | dict[str, Any] | None = Field(
+        default=None,
+        description="Symmetry configuration for homo-oligomer design; pair with sampler_kind='symmetry'",
+        examples=["c3", "c5", "d2"],
+    )
+    select_buried: bool | str | dict[str, str] | None = Field(
+        default=None,
+        description="RASA selector for residues that should be buried (True/False, contig string, or dict)",
+    )
+    select_partially_buried: bool | str | dict[str, str] | None = Field(
+        default=None,
+        description="RASA selector for partially buried residues (True/False, contig string, or dict)",
+    )
+    select_exposed: bool | str | dict[str, str] | None = Field(
+        default=None,
+        description="RASA selector for solvent-exposed residues (True/False, contig string, or dict)",
+    )
+    select_hbond_donor: dict[str, list[str]] | None = Field(
+        default=None,
+        description="Atom-wise hydrogen-bond donor flags, e.g. {'A40': ['NE2']}",
+    )
+    select_hbond_acceptor: dict[str, list[str]] | None = Field(
+        default=None,
+        description="Atom-wise hydrogen-bond acceptor flags, e.g. {'A45': ['OD1']}",
+    )
+    redesign_motif_sidechains: bool | None = Field(
+        default=None,
+        description="Keep motif backbone fixed but redesign side-chains",
+    )
+    plddt_enhanced: bool | None = Field(
+        default=None,
+        description="Enable pLDDT-based denoising enhancement (upstream default: True)",
+    )
+    infer_ori_strategy: Literal["com", "hotspots"] | None = Field(
+        default=None,
+        description="Origin placement strategy: 'com' (center of mass) or 'hotspots'",
+    )
+    ori_token: list[float] | None = Field(
+        default=None,
+        min_length=3,
+        max_length=3,
+        description="[x, y, z] origin override (Angstroms) for COM placement",
+        examples=[[0.0, 0.0, 0.0]],
     )
     partial_t: float | None = Field(
         default=None,
         ge=0.0,
-        description="Noise level (Angstroms) for partial diffusion (5.0-15.0 recommended)",
+        description="Noise (Angstroms) for partial diffusion (5.0-15.0 recommended)",
+        examples=[5.0, 10.0, 15.0],
+    )
+    is_non_loopy: bool | None = Field(
+        default=None,
+        description="If True/False, produces output structures with fewer/more loops",
     )
 
     @model_validator(mode="after")
     def validate_has_design_params(self) -> Any:
-        """Validate that at least one design parameter is provided."""
-        has_params = any(
-            [
-                self.contig is not None,
-                self.length is not None,
-                self.model_extra,
-            ]
+        """Reject specs with no constraints (any typed field or extras suffices)."""
+        typed_design_fields = (
+            self.contig,
+            self.length,
+            self.input_structure,
+            self.ligand,
+            self.unindex,
+            self.select_fixed_atoms,
+            self.select_unfixed_sequence,
+            self.select_hotspots,
+            self.symmetry,
+            self.select_buried,
+            self.select_partially_buried,
+            self.select_exposed,
+            self.select_hbond_donor,
+            self.select_hbond_acceptor,
+            self.redesign_motif_sidechains,
+            self.plddt_enhanced,
+            self.infer_ori_strategy,
+            self.ori_token,
+            self.partial_t,
+            self.is_non_loopy,
         )
-        if not has_params:
-            raise ValueError("At least one of 'contig', 'length', or other design parameters must be provided")
+        if not any(f is not None for f in typed_design_fields) and not self.model_extra:
+            raise ValueError(
+                "At least one design parameter (contig, length, symmetry, "
+                "select_*, partial_t, etc.) or **kwargs must be provided"
+            )
         return self
 
     def to_dict(self) -> dict[str, Any]:
@@ -192,8 +294,30 @@ class RFdiffusion3DesignSpec(BaseModel):
             spec["select_unfixed_sequence"] = self.select_unfixed_sequence
         if self.select_hotspots is not None:
             spec["select_hotspots"] = self.select_hotspots
+        if self.symmetry is not None:
+            spec["symmetry"] = self.symmetry
+        if self.select_buried is not None:
+            spec["select_buried"] = self.select_buried
+        if self.select_partially_buried is not None:
+            spec["select_partially_buried"] = self.select_partially_buried
+        if self.select_exposed is not None:
+            spec["select_exposed"] = self.select_exposed
+        if self.select_hbond_donor is not None:
+            spec["select_hbond_donor"] = self.select_hbond_donor
+        if self.select_hbond_acceptor is not None:
+            spec["select_hbond_acceptor"] = self.select_hbond_acceptor
+        if self.redesign_motif_sidechains is not None:
+            spec["redesign_motif_sidechains"] = self.redesign_motif_sidechains
+        if self.plddt_enhanced is not None:
+            spec["plddt_enhanced"] = self.plddt_enhanced
+        if self.infer_ori_strategy is not None:
+            spec["infer_ori_strategy"] = self.infer_ori_strategy
+        if self.ori_token is not None:
+            spec["ori_token"] = self.ori_token
         if self.partial_t is not None:
             spec["partial_t"] = self.partial_t
+        if self.is_non_loopy is not None:
+            spec["is_non_loopy"] = self.is_non_loopy
 
         return spec
 
@@ -229,7 +353,7 @@ class RFdiffusion3Input(BaseToolInput):
         ... )
         >>>
         >>> # Raw JSON for advanced use
-        >>> inputs = RFdiffusion3Input(raw_json='{"spec-1": {"length": "100", "is_non_loopy": true}}')
+        >>> inputs = RFdiffusion3Input(raw_json='{"spec-1": {"length": "100", "select_buried": "ALA"}}')
     """
 
     design_specs: list[RFdiffusion3DesignSpec] = InputField(
@@ -281,36 +405,44 @@ class RFdiffusion3Config(BaseConfig):
     and execution options.
 
     Attributes:
-        n_batches (int): number of batches to generate per input key (default: 1).
-
-        diffusion_batch_size (int): number of diffusion samples (designs) per batch (default: 8).
-
-        num_timesteps (int): diffusion timesteps for sampling (default: 200).
-
-        step_scale (float): scales diffusion step size; higher -> less diverse,
-            more designable (default: 1.5).
-
-        low_memory_mode (bool): memory-efficient tokenization mode; set True if
-            GPU RAM is tight (default: False).
-
-        ckpt_path (str): String containing the path and file name of the checkpoint
-            path you want to use (default: rfd3).
-
-        input_dir (str | None): Optional directory containing input files for
-            local execution. If not set, input files are written to a temporary directory.
-
-        output_dir (str | None): Optional directory to write local output files.
-            If not set, local execution uses a temporary directory.
-
-        device (str): Device to run the model on (e.g., ``"cuda"``, ``"cpu"``).
-            Default: ``"cuda"``.
+        n_batches (int): Independent batches per spec
+            (total designs = ``n_batches * diffusion_batch_size * num_specs``).
+        diffusion_batch_size (int): Designs sampled in parallel per batch.
+        num_timesteps (int): Diffusion timesteps; more = slower, generally higher quality.
+        step_scale (float): Step size scale; higher = less diverse, more designable.
+        n_recycle (int | None): Recycle iterations; ``None`` inherits the
+            checkpoint default (~2).
+        sampler_kind (Literal['default', 'symmetry']): Sampler kind;
+            ``'symmetry'`` for homo-oligomer design (paired with ``DesignSpec.symmetry``).
+        center_option (Literal['all', 'motif', 'diffuse']): Coordinate-frame
+            centering — ``all`` (whole structure), ``motif`` (input motif),
+            ``diffuse`` (diffused region only).
+        use_classifier_free_guidance (bool): Enable CFG sampling. ``cfg_scale``,
+            ``cfg_features``, and ``cfg_t_max`` are no-ops when ``False``.
+        cfg_scale (float): CFG scale factor (typical 1.0-3.0).
+        cfg_features (list[Literal['active_donor', 'active_acceptor', 'ref_atomwise_rasa']] | None):
+            CFG feature names; ``None`` keeps upstream default (all three).
+        cfg_t_max (float | None): Diffusion-timestep cap for CFG (0.0-1.0);
+            ``None`` keeps upstream default.
+        gamma_0 (float): Sampler stochasticity; lower = more designable,
+            less diverse; ``0.0`` = deterministic ODE.
+        low_memory_mode (bool): Memory-efficient tokenization (slower);
+            enable only if GPU RAM is tight.
+        dump_trajectories (bool): Save diffusion trajectory frames (debugging).
+        align_trajectory_structures (bool): Align trajectory frames across
+            timesteps (only when ``dump_trajectories=True``).
+        prevalidate_inputs (bool): Fail-fast input JSON validation.
+        ckpt_path (str): Checkpoint path or alias (``"rfd3"`` = production preset).
+        input_dir (str | None): Local-execution input directory; ``None`` uses a tempdir.
+        output_dir (str | None): Local-execution output directory; ``None`` uses a tempdir.
+        device (str): ``"cuda"`` or ``"cpu"``.
 
     Note:
-        Additional CLI ``**kwargs`` are passed directly to RFdiffusion3. See
+        Additional Hydra ``**kwargs`` pass through ``extra="allow"`` to the
+        rfd3 CLI. Sampler sub-keys must use dotted paths
+        (e.g. ``inference_sampler.noise_scale=1.003``); flat keys are silently
+        ignored. See
         https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
-
-        Total number of designs = n_batches * diffusion_batch_size * num_specs.
-        Memory usage scales with diffusion_batch_size and protein length.
     """
 
     model_config = ConfigDict(extra="allow")
@@ -319,39 +451,120 @@ class RFdiffusion3Config(BaseConfig):
         title="Number of Batches",
         default=1,
         ge=1,
-        description="number of batches to generate per input key (default: 1).",
+        description="Independent batches per spec (total designs per spec = n_batches * diffusion_batch_size)",
     )
     diffusion_batch_size: int = ConfigField(
         title="Diffusion Batch Size",
         default=8,
         ge=1,
-        description="number of diffusion samples (designs) per batch (default: 8).",
+        description="Designs sampled in parallel per batch",
         advanced=True,
     )
     num_timesteps: int = ConfigField(
         title="Number of Timesteps",
         default=200,
         ge=1,
-        description="diffusion timesteps for sampling (default: 200).",
+        description="Diffusion timesteps for sampling (more = slower, generally higher quality)",
         advanced=True,
     )
     step_scale: float = ConfigField(
         title="Step Scale",
         default=1.5,
         ge=0.1,
-        description="scales diffusion step size; higher -> less diverse, more designable (default: 1.5).",
+        description="Diffusion step size scaling; higher = less diverse, more designable (typical: 1.0-2.0)",
+        advanced=True,
+    )
+    n_recycle: int | None = ConfigField(
+        title="Recycle Iterations",
+        default=None,
+        ge=0,
+        description="Recycle iterations; None inherits the checkpoint default (typically 2)",
+        advanced=True,
+        examples=[2, 5],
+    )
+    sampler_kind: Literal["default", "symmetry"] = ConfigField(
+        title="Sampler Kind",
+        default="default",
+        description="Inference sampler kind ('symmetry' for homo-oligomer design)",
+        advanced=True,
+        reload_on_change=True,
+    )
+    center_option: Literal["all", "motif", "diffuse"] = ConfigField(
+        title="Center Option",
+        default="all",
+        description="Coordinate-frame centering mode (all/motif/diffuse)",
+        advanced=True,
+    )
+    use_classifier_free_guidance: bool = ConfigField(
+        title="Use Classifier-Free Guidance",
+        default=False,
+        description="Enable CFG sampling (cfg_scale is a no-op when False)",
+        advanced=True,
+    )
+    cfg_scale: float = ConfigField(
+        title="CFG Scale",
+        default=1.5,
+        ge=0.0,
+        description="CFG scale (typical: 1.0-3.0); requires use_classifier_free_guidance=True",
+        advanced=True,
+        depends_on={"use_classifier_free_guidance": [True]},
+    )
+    cfg_features: list[Literal["active_donor", "active_acceptor", "ref_atomwise_rasa"]] | None = ConfigField(
+        title="CFG Features",
+        default=None,
+        description="CFG steering feature names; None uses upstream default (donor/acceptor/RASA)",
+        advanced=True,
+        depends_on={"use_classifier_free_guidance": [True]},
+        examples=[["active_donor", "active_acceptor", "ref_atomwise_rasa"]],
+    )
+    cfg_t_max: float | None = ConfigField(
+        title="CFG t_max",
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Maximum diffusion timestep (0.0-1.0) at which CFG is applied",
+        advanced=True,
+        depends_on={"use_classifier_free_guidance": [True]},
+    )
+    gamma_0: float = ConfigField(
+        title="Gamma 0",
+        default=0.6,
+        ge=0.0,
+        description="Sampler stochasticity; lower = more designable, less diverse; 0.0 = deterministic ODE",
         advanced=True,
     )
     low_memory_mode: bool = ConfigField(
         title="Low Memory Mode",
         default=False,
-        description="memory-efficient tokenization mode; set True if GPU RAM is tight (default: False).",
+        description="Memory-efficient tokenization (slower); set True only if GPU RAM is tight",
         advanced=True,
+    )
+    dump_trajectories: bool = ConfigField(
+        title="Dump Trajectories",
+        default=False,
+        description="Save diffusion trajectory frames to the output directory",
+        advanced=True,
+        include_in_key=False,
+    )
+    align_trajectory_structures: bool = ConfigField(
+        title="Align Trajectory Structures",
+        default=False,
+        description="Align trajectory structures across timesteps",
+        advanced=True,
+        depends_on={"dump_trajectories": [True]},
+        include_in_key=False,
+    )
+    prevalidate_inputs: bool = ConfigField(
+        title="Prevalidate Inputs",
+        default=False,
+        description="Validate the full input JSON before launching diffusion",
+        advanced=True,
+        include_in_key=False,
     )
     ckpt_path: str = ConfigField(
         title="Checkpoint Path",
         default="rfd3",
-        description="String containing the path and file name of the checkpoint path you want to use (default: rfd3).",
+        description="Checkpoint path or canonical alias (default: rfd3 production preset)",
         hidden=True,
     )
     input_dir: str | None = ConfigField(
@@ -359,12 +572,14 @@ class RFdiffusion3Config(BaseConfig):
         default=None,
         description="Optional input directory for local execution inputs",
         hidden=True,
+        include_in_key=False,
     )
     output_dir: str | None = ConfigField(
         title="Output Directory",
         default=None,
         description="Optional output directory for local execution outputs",
         hidden=True,
+        include_in_key=False,
     )
     device: str = ConfigField(
         title="Device",
@@ -375,17 +590,41 @@ class RFdiffusion3Config(BaseConfig):
     )
 
     def get_cli_kwargs(self) -> dict[str, Any]:
-        """Get all CLI arguments to pass to the inference script."""
-        cli_kwargs = {
-            "n_batches": self.n_batches,
-            "diffusion_batch_size": self.diffusion_batch_size,
-            "num_timesteps": self.num_timesteps,
-            "step_scale": self.step_scale,
-            "low_memory_mode": self.low_memory_mode,
-            "ckpt_path": self.ckpt_path,
-        }
+        """Build CLI args for the rfd3 inference script.
+
+        Sampler knobs use dotted Hydra paths (``inference_sampler.<key>``).
+        On collision, typed fields win over ``model_extra`` — same precedence
+        as :meth:`RFdiffusion3DesignSpec.to_dict`.
+        """
+        cli_kwargs: dict[str, Any] = {}
+        # Extras first so typed fields below override them on collision.
         if self.model_extra:
             cli_kwargs.update(self.model_extra)
+        cli_kwargs.update(
+            {
+                "n_batches": self.n_batches,
+                "diffusion_batch_size": self.diffusion_batch_size,
+                "num_timesteps": self.num_timesteps,
+                "step_scale": self.step_scale,
+                "inference_sampler.kind": self.sampler_kind,
+                "inference_sampler.center_option": self.center_option,
+                "inference_sampler.use_classifier_free_guidance": self.use_classifier_free_guidance,
+                "inference_sampler.cfg_scale": self.cfg_scale,
+                "inference_sampler.gamma_0": self.gamma_0,
+                "low_memory_mode": self.low_memory_mode,
+                "dump_trajectories": self.dump_trajectories,
+                "align_trajectory_structures": self.align_trajectory_structures,
+                "prevalidate_inputs": self.prevalidate_inputs,
+                "ckpt_path": self.ckpt_path,
+            }
+        )
+        # Forward optional sampler knobs only when explicitly set; otherwise upstream defaults stand.
+        if self.n_recycle is not None:
+            cli_kwargs["inference_sampler.n_recycle"] = self.n_recycle
+        if self.cfg_features is not None:
+            cli_kwargs["inference_sampler.cfg_features"] = self.cfg_features
+        if self.cfg_t_max is not None:
+            cli_kwargs["inference_sampler.cfg_t_max"] = self.cfg_t_max
         return cli_kwargs
 
 

@@ -30,6 +30,11 @@ class BioEmuModel:
         model_name: str = "bioemu-v1.1",
         filter_samples: bool = True,
         batch_size: int = 10,
+        denoiser_type: str = "dpm",
+        denoiser_config: str | None = None,
+        msa_host_url: str | None = None,
+        cache_embeds_dir: str | None = None,
+        cache_so3_dir: str | None = None,
         device: str = "cuda",
         output_dir: str | None = None,
         seed: int | None = None,
@@ -57,16 +62,26 @@ class BioEmuModel:
                 logger.info(f"Sampling {num_samples} conformations for sequence of length {len(sequence)}")
                 logger.info(f"Using model: {self._model_name}, device: {self.device}")
 
-            # Pass base_seed so bioemu uses our seed instead of time.time_ns()
-            bioemu_sample(
-                sequence=sequence,
-                num_samples=num_samples,
-                model_name=self._model_name,
-                output_dir=working_dir,
-                batch_size_100=batch_size,
-                filter_samples=filter_samples,
-                base_seed=seed,
-            )
+            # Forward optional fields only when set so upstream defaults stand.
+            kwargs: dict[str, Any] = {
+                "sequence": sequence,
+                "num_samples": num_samples,
+                "model_name": self._model_name,
+                "output_dir": working_dir,
+                "batch_size_100": batch_size,
+                "filter_samples": filter_samples,
+                "denoiser_type": denoiser_type,
+                "base_seed": seed,
+            }
+            if denoiser_config is not None:
+                kwargs["denoiser_config"] = denoiser_config
+            if msa_host_url is not None:
+                kwargs["msa_host_url"] = msa_host_url
+            if cache_embeds_dir is not None:
+                kwargs["cache_embeds_dir"] = cache_embeds_dir
+            if cache_so3_dir is not None:
+                kwargs["cache_so3_dir"] = cache_so3_dir
+            bioemu_sample(**kwargs)
 
             pdb_frames, num_frames, num_residues = self.extract_pdb_frames(working_dir, verbose)
             return {
@@ -167,6 +182,11 @@ def run_bioemu_batch(input_data: dict[str, Any]) -> dict[str, Any]:
                 model_name=input_data["model_name"],
                 filter_samples=input_data["filter_samples"],
                 batch_size=input_data["batch_size"],
+                denoiser_type=input_data.get("denoiser_type", "dpm"),
+                denoiser_config=input_data.get("denoiser_config"),
+                msa_host_url=input_data.get("msa_host_url"),
+                cache_embeds_dir=input_data.get("cache_embeds_dir"),
+                cache_so3_dir=input_data.get("cache_so3_dir"),
                 device=input_data["device"],
                 output_dir=per_sequence_output_dir,
                 seed=per_seq_seed,
