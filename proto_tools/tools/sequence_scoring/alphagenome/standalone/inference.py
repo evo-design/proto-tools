@@ -260,6 +260,8 @@ class AlphaGenomeModel:
         variant_scorers: list[str] | None = None,
         organism: str = "human",
         device: str = "cuda",
+        progress_bar: bool = False,
+        max_workers: int = 5,
     ) -> dict[str, Any]:
         """Run batched ISM scoring (sequential; upstream has no batched ISM)."""
         self._ensure_loaded(device)
@@ -292,6 +294,8 @@ class AlphaGenomeModel:
                 variant_scorers=scorers,
                 organism=_ORGANISM_ENUMS[organism],
                 interval_variant=interval_variant,
+                progress_bar=progress_bar,
+                max_workers=max_workers,
             )
             all_scores.append(_safe_tidy_scores(scores))
 

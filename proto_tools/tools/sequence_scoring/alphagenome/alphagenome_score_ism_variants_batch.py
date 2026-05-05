@@ -21,6 +21,7 @@ from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseToolInput,
     BaseToolOutput,
+    ConfigField,
     InputField,
     ToolInstance,
     require_hf_token,
@@ -184,7 +185,40 @@ class AlphaGenomeScoreISMOutput(BaseToolOutput):
         return iter(self.results)
 
 
-AlphaGenomeScoreISMConfig = AlphaGenomeScoreVariantsConfig
+class AlphaGenomeScoreISMConfig(AlphaGenomeScoreVariantsConfig):
+    """Configuration for batched AlphaGenome in-silico mutagenesis (ISM) scoring.
+
+    Attributes:
+        model_version (str): AlphaGenome Hugging Face model version.
+            Inherited from ``AlphaGenomeScoreVariantsConfig``.
+        variant_scorers (list[VariantScorerName] | None): Scorer names from
+            ``RECOMMENDED_VARIANT_SCORERS``; ``None`` uses all recommended.
+            Inherited from ``AlphaGenomeScoreVariantsConfig``.
+        organism (Literal['human', 'mouse']): Organism for predictions.
+            Inherited from ``AlphaGenomeScoreVariantsConfig``.
+        device (str): Device to run inference on. Inherited from
+            ``AlphaGenomeScoreVariantsConfig``.
+        progress_bar (bool): Show the per-request progress bar emitted by
+            alphagenome during ISM dispatch.
+        max_workers (int): Number of parallel HTTP workers used for ISM
+            request dispatch. Higher values speed up large ISM intervals.
+    """
+
+    progress_bar: bool = ConfigField(
+        title="Progress Bar",
+        default=False,
+        description="Show per-request progress bar during ISM dispatch; enable for long runs",
+        advanced=True,
+        include_in_key=False,
+    )
+    max_workers: int = ConfigField(
+        title="Max Workers",
+        default=5,
+        ge=1,
+        description="Parallel HTTP workers for ISM request dispatch; raise for large ISM intervals",
+        advanced=True,
+        include_in_key=False,
+    )
 
 
 # ============================================================================
@@ -257,6 +291,8 @@ def run_alphagenome_score_ism_variants_batch(
             "organism": config.organism,
             "model_version": config.model_version,
             "device": config.device,
+            "progress_bar": config.progress_bar,
+            "max_workers": config.max_workers,
         },
         instance=instance,
         config=config,

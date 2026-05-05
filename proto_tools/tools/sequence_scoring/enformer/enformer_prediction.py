@@ -278,14 +278,13 @@ class EnformerConfig(BaseConfig):
     output_tracks: list[int] = ConfigField(
         title="Output Tracks",
         default=[0],
-        description="Track indices to extract from model output",
+        description="Indices of Enformer output tracks to extract (5313 human / 1643 mouse)",
     )
     species: Literal["human", "mouse"] = ConfigField(
         title="Species",
         default="human",
         description="Species track head to use",
         advanced=True,
-        reload_on_change=True,
     )
     batch_size: int = ConfigField(
         title="Batch Size",

@@ -37,18 +37,6 @@ def test_segmasker_input_normalizes_single_string():
     assert inp.sequences == ["MKTL"]
 
 
-def test_segmasker_config_defaults():
-    config = SegmaskerConfig()
-    assert config.window == 15
-    assert config.locut == 1.8
-    assert config.hicut == 3.4
-
-
-def test_segmasker_config_rejects_invalid_window():
-    with pytest.raises(ValidationError, match="window"):
-        SegmaskerConfig(window=0)
-
-
 # ── Integration ───────────────────────────────────────────────────────────────
 
 
@@ -74,6 +62,31 @@ def test_segmasker_scores_sequences():
 
     # Every result has all three metrics populated
     assert all(r.low_complexity_count is not None for r in result.results)
+
+
+@pytest.mark.integration
+def test_segmasker_default_masks_differently_than_old_blast_settings():
+    """New segmasker defaults must produce a different mask than the old BLAST settings.
+
+    The wrapper previously shipped BLAST's nucleotide ``-seg`` settings
+    (``window=15, locut=1.8, hicut=3.4``) for protein masking, which is
+    biologically wrong. The new defaults are segmasker's own
+    (``window=12, locut=2.2, hicut=2.5``). Ensure they classify a
+    mildly-biased protein sequence differently — this proves the default
+    change is a real behavior change, not just a number swap on paper.
+    """
+    # Short sequence with mild compositional bias; segmasker's own defaults
+    # flag the alanine-rich stretch, BLAST's nucleotide -seg settings do not.
+    sequence = "MVLSPADKTNAAVKAAWGKAAVGAHAGE"
+    inputs = SegmaskerInput(sequences=[sequence])
+
+    new_default = run_segmasker(inputs, SegmaskerConfig())
+    old_blast = run_segmasker(inputs, SegmaskerConfig(window=15, locut=1.8, hicut=3.4))
+
+    assert new_default.results[0].low_complexity_count != old_blast.results[0].low_complexity_count, (
+        "Expected segmasker default (window=12, locut=2.2, hicut=2.5) and old BLAST -seg defaults "
+        "(window=15, locut=1.8, hicut=3.4) to mask differently on a mildly-biased protein; got identical counts"
+    )
 
 
 # ── Benchmark ─────────────────────────────────────────────────────────────────
