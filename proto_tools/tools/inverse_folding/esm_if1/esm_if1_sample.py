@@ -39,8 +39,7 @@ class ESMIF1SampleConfig(InverseFoldingConfig):
             'protein_dpo' loads DPO-aligned weights optimized for protein stability.
         num_sequences_per_structure (int): Total number of sequences to generate per structure.
         batch_size (int | None): Number of sequences to process simultaneously on GPU.
-        temperature (float): Controls randomness in sampling from logits.
-        excluded_amino_acids (list[str] | None): Amino acids disallowed in the designed sequence.
+        temperature (float): Sampling temperature; ESM-IF1's tuned default is 1.0.
         seed (int): Random seed for sampling reproducibility.
     """
 
@@ -50,6 +49,14 @@ class ESMIF1SampleConfig(InverseFoldingConfig):
         description="'esmif' for vanilla ESM-IF1, 'protein_dpo' for DPO-aligned weights",
         reload_on_change=True,
         examples=["esmif", "protein_dpo"],
+    )
+    # ESM-IF1's reference inference script uses temperature=1.0; the base 0.1 default is too greedy here.
+    temperature: float = ConfigField(
+        title="Sampling Temperature",
+        default=1.0,
+        ge=0.0,
+        description="Sampling temperature; lower = greedier, higher = more diverse",
+        examples=[0.5, 1.0, 2.0],
     )
 
 
@@ -113,9 +120,6 @@ def run_esm_if1_sample(
     Returns:
         ESMIF1SampleOutput: ESMIF1SampleOutput with designed sequences for each input structure.
     """
-    if config.excluded_amino_acids:
-        raise ValueError("ESM-IF1 does not support excluded_amino_acids. This feature may be added in a future update.")
-
     designed_sequences = []
 
     base_seed = config.seed if config.seed is not None else config.get_random_int()

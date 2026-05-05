@@ -113,26 +113,34 @@ def run_orfipy(input_data: dict[str, Any]) -> dict[str, Any]:
             "--outdir",
             str(outdir),
             "--procs",
-            "1",
+            str(config["threads"]),
             "--start",
-            config.get("start_codons", "ATG,GTG,TTG"),
+            config["start_codons"],
             "--stop",
-            config.get("stop_codons", "TAA,TAG,TGA"),
+            config["stop_codons"],
             "--strand",
-            config.get("strand", "b"),
+            config["strand"],
             "--min",
-            str(config.get("min_len", 0)),
+            str(config["min_len"]),
             "--max",
-            str(config.get("max_len", 10000)),
+            str(config["max_len"]),
             "--dna",
             str(nt_path),
             "--pep",
             str(aa_path),
         ]
 
-        if config.get("include_stop", True):
+        if config["include_stop"]:
             cmd.append("--include-stop")
-        if config.get("translation_table") is not None:
+        if config["ignore_case"]:
+            cmd.append("--ignore-case")
+        if config["partial_3"]:
+            cmd.append("--partial-3")
+        if config["partial_5"]:
+            cmd.append("--partial-5")
+        if config["between_stops"]:
+            cmd.append("--between-stops")
+        if config["translation_table"] is not None:
             cmd.extend(["--table", str(config["translation_table"])])
 
         timeout_seconds = 300

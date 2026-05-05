@@ -22,9 +22,14 @@ ALPHAFOLD_VOCAB: list[str] = list(
     "ARNDCQEGHILKMFPSTWYVX"
 )  # ColabDesign autoconverts to Alphafold alphabet for ProteinMPNN scoring
 
-# Maps model_choice to ColabDesign's (model_name, weights) parameters
+# Maps model_choice to ColabDesign's (model_name, weights) parameters.
+# v_48_002/010/020/030 are the same architecture trained at different noise levels;
+# v_48_020 is ColabDesign's default and is exposed via the "proteinmpnn" alias.
 _MODEL_CONFIG: dict[str, tuple[str, str]] = {
     "proteinmpnn": ("v_48_020", "original"),
+    "v_48_002": ("v_48_002", "original"),
+    "v_48_010": ("v_48_010", "original"),
+    "v_48_030": ("v_48_030", "original"),
     "abmpnn": ("abmpnn", "original"),
     "soluble": ("v_48_020", "soluble"),
 }
@@ -54,6 +59,7 @@ class ProteinMPNNModel:
         model_choice: str = "proteinmpnn",
         verbose: bool = False,
         return_logits: bool = False,
+        backbone_noise: float = 0.0,
     ) -> dict[str, Any]:
         """Sample protein sequences from the ProteinMPNN model.
 
@@ -69,6 +75,7 @@ class ProteinMPNNModel:
             model_choice: Model weights ('proteinmpnn', 'abmpnn', or 'soluble')
             verbose: Whether to print status messages
             return_logits: Whether to include logits in the output
+            backbone_noise: Gaussian noise (A) added to backbone coordinates before each forward pass.
 
         Returns:
             Dictionary with keys: seq, score, seqid, and optionally logits
@@ -98,6 +105,9 @@ class ProteinMPNNModel:
             chain=",".join(chain_ids),
             rm_aa=",".join(excluded_amino_acids) if excluded_amino_acids else None,
         )
+
+        if backbone_noise > 0.0:
+            self.model.set_opt(backbone_noise=backbone_noise)
 
         # Sample sequences
         sequences = self.model.sample_parallel(
@@ -285,6 +295,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 model_choice=model_choice,
                 verbose=input_dict["verbose"],
                 return_logits=input_dict["return_logits"],
+                backbone_noise=input_dict["backbone_noise"],
             )
         if operation == "score":
             return _model.score(

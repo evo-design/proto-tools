@@ -53,6 +53,7 @@ class FAMPNNScoreAllMutationsConfig(BaseConfig):
         default="0.3_cath",
         description="FAMPNN checkpoint: '0.3_cath' recommended for scoring",
         examples=["0.3_cath", "0.3", "0.0"],
+        reload_on_change=True,
     )
     batch_size: int = ConfigField(
         title="Batch Size",
@@ -104,7 +105,7 @@ class FAMPNNScoreAllMutationsOutput(BaseToolOutput):
         """Return the default output format."""
         return "csv"
 
-    def _export_output(self, export_path: Any, file_format: Any) -> None:
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         path = Path(export_path)
         path.mkdir(parents=True, exist_ok=True)
 

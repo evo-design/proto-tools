@@ -90,10 +90,12 @@ def run_prodigal(input_data: dict[str, Any]) -> dict[str, Any]:
     sequences = input_data["sequences"]
     config = input_data.get("config", {})
 
-    meta_mode = config.get("meta_mode", True)
-    closed_ends = config.get("closed_ends", False)
-    num_threads = config.get("num_threads", 1)
-    translation_table = config.get("translation_table", 11)
+    meta_mode = config["meta_mode"]
+    closed_ends = config["closed_ends"]
+    mask = config["mask"]
+    min_gene = config["min_gene"]
+    num_threads = config["num_threads"]
+    translation_table = config["translation_table"]
 
     if meta_mode and translation_table != 11:
         warnings.warn(
@@ -107,6 +109,8 @@ def run_prodigal(input_data: dict[str, Any]) -> dict[str, Any]:
     gene_finder = pyrodigal.GeneFinder(
         meta=meta_mode,
         closed=closed_ends,
+        mask=mask,
+        min_gene=min_gene,
     )
 
     if not meta_mode:

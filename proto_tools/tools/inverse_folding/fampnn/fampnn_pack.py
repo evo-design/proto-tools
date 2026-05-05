@@ -54,6 +54,7 @@ class FAMPNNPackConfig(BaseConfig):
         default="0.0",
         description="FAMPNN checkpoint: '0.0' recommended for packing, '0.3' for design",
         examples=["0.0", "0.3"],
+        reload_on_change=True,
     )
     num_samples_per_structure: int = ConfigField(
         title="Samples Per Structure",
@@ -63,9 +64,9 @@ class FAMPNNPackConfig(BaseConfig):
     )
     batch_size: int = ConfigField(
         title="Batch Size",
-        default=1,
+        default=16,
         ge=1,
-        description="Number of samples to process simultaneously on GPU.",
+        description="Number of samples to process simultaneously on GPU",
     )
     scn_diffusion_steps: int = ConfigField(
         title="Sidechain Diffusion Steps",
@@ -117,7 +118,7 @@ class FAMPNNPackingResult(BaseToolOutput):
         """Return the default output format."""
         return "pdb"
 
-    def _export_output(self, export_path: Any, file_format: Any) -> None:
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         path = Path(export_path)
         path.mkdir(parents=True, exist_ok=True)
 
@@ -161,6 +162,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_field="inputs",
     iterable_output_field="packed_structures",
+    cacheable=True,
 )
 def run_fampnn_pack(
     inputs: FAMPNNPackInput,

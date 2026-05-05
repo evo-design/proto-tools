@@ -146,8 +146,8 @@ def test_fampnn_sample_config_custom_batch_size():
 
 
 def test_fampnn_sample_config_rejects_excluded_amino_acids():
-    """excluded_amino_acids is not supported and should raise."""
-    with pytest.raises(Exception, match=r"excluded_amino_acids.*not supported"):
+    """FAMPNN does not declare excluded_amino_acids; extra='forbid' rejects it at construction."""
+    with pytest.raises(Exception, match=r"[Ee]xtra"):
         FAMPNNSampleConfig(excluded_amino_acids=["C"])
 
 

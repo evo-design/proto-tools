@@ -1,9 +1,10 @@
 """Standardized interface for ORF prediction using Orfipy."""
 
+import logging
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import ConfigDict, Field, computed_field, field_validator
+from pydantic import ConfigDict, Field, computed_field, field_validator, model_validator
 
 from proto_tools.tools.orf_prediction.orf import ORF
 from proto_tools.tools.tool_registry import tool
@@ -53,6 +54,8 @@ OrfipyTranslationTable = Literal[
 # numbers. Orfipy's translation_tables_dict uses contiguous numbering that diverges
 # from NCBI starting at key 7 (NCBI skips tables 7, 8, 15, 17-20, but orfipy
 # numbers them sequentially). See: orfipy/translation_tables.py
+logger = logging.getLogger(__name__)
+
 ORFIPY_TRANSLATION_TABLE_MAP: dict[str, int] = {
     "standard": 1,
     "vertebrate_mitochondrial": 2,
@@ -167,14 +170,25 @@ class OrfipyConfig(BaseConfig):
 
             Must be at least 0. Default: 0.
 
-        max_len (int): Maximum ORF length in nucleotides. ORFs longer than this
-            are filtered out. Useful for excluding very long ORFs that may span
-            multiple genes. Must be at least 1. Default: 10000.
+        max_len (int): Maximum ORF length in nucleotides. ORFs longer than this are silently filtered
+            out by orfipy; raise (e.g. ``1_000_000_000``) for genome-scale inputs. Default: 10000.
 
         include_stop (bool): Whether to include the stop codon in the reported
             ORF nucleotide sequence. If ``True``, the stop codon is included in
             both the nucleotide sequence and length calculations. If ``False``,
             the stop codon is excluded. Default: ``True``.
+
+        ignore_case (bool): Treat lowercase (soft-masked) nucleotides as
+            ORF-eligible. Default: ``False``.
+
+        partial_3 (bool): Report ORFs missing a stop codon at the 3' end of
+            the sequence. Default: ``False``.
+
+        partial_5 (bool): Report ORFs missing a start codon at the 5' end of
+            the sequence. Default: ``False``.
+
+        between_stops (bool): Report ORFs spanning stop-to-stop (start codons
+            ignored). Default: ``False``.
 
         translation_table (OrfipyTranslationTable | None): NCBI genetic code for
             translation. ``None`` uses the standard genetic code (table 1).
@@ -193,7 +207,7 @@ class OrfipyConfig(BaseConfig):
         title="Number of Threads",
         default=4,
         ge=1,
-        description="Number of CPU threads to use",
+        description="CPU threads passed to orfipy --procs",
         hidden=True,
     )
     start_codons: list[StartCodon] = ConfigField(
@@ -217,18 +231,42 @@ class OrfipyConfig(BaseConfig):
         title="Minimum Length",
         default=0,
         ge=0,
-        description="Minimum ORF length in nucleotides",
+        description="Min ORF length in nt; 0 keeps all ORFs",
     )
     max_len: int = ConfigField(
         title="Maximum Length",
         default=10000,
         ge=1,
-        description="Maximum ORF length in nucleotides",
+        description="Max ORF length in nt (caps payloads); raise to 1_000_000_000 for genome-scale",
     )
     include_stop: bool = ConfigField(
         title="Include Stop",
         default=True,
-        description="Whether to include the stop codon in the reported ORF",
+        description="Include the stop codon in the reported ORF nucleotide sequence and length",
+    )
+    ignore_case: bool = ConfigField(
+        title="Ignore Case",
+        default=False,
+        description="Treat lowercase (soft-masked) nucleotides as ORF-eligible",
+        advanced=True,
+    )
+    partial_3: bool = ConfigField(
+        title="Allow 3' Partial ORFs",
+        default=False,
+        description="Report ORFs missing a stop codon at the sequence end",
+        advanced=True,
+    )
+    partial_5: bool = ConfigField(
+        title="Allow 5' Partial ORFs",
+        default=False,
+        description="Report ORFs missing a start codon at the sequence start",
+        advanced=True,
+    )
+    between_stops: bool = ConfigField(
+        title="Between Stops",
+        default=False,
+        description="Report ORFs spanning stop-to-stop (ignores start codons; implies partial_3 + partial_5)",
+        advanced=True,
     )
     translation_table: OrfipyTranslationTable | None = ConfigField(
         title="Translation Table",
@@ -237,6 +275,13 @@ class OrfipyConfig(BaseConfig):
         advanced=True,
     )
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _validate_length_range(self) -> "OrfipyConfig":
+        """Reject inverted length ranges (orfipy silently returns 0 ORFs)."""
+        if self.min_len > self.max_len:
+            raise ValueError(f"min_len ({self.min_len}) must be <= max_len ({self.max_len})")
+        return self
 
 
 class OrfipyOutput(BaseToolOutput):
@@ -365,6 +410,16 @@ def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig, instance: A
     """
     sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
 
+    long_inputs = [sid for sid, seq in zip(sequence_ids, inputs.sequences, strict=True) if len(seq) > config.max_len]
+    if long_inputs:
+        logger.warning(
+            "orfipy: %d input sequence(s) exceed max_len=%d nt; ORFs longer than max_len will be filtered out. "
+            "Inputs: %s",
+            len(long_inputs),
+            config.max_len,
+            long_inputs[:5] + (["..."] if len(long_inputs) > 5 else []),
+        )
+
     output_data = ToolInstance.dispatch(
         "orfipy",
         {
@@ -379,6 +434,10 @@ def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig, instance: A
                 "min_len": config.min_len,
                 "max_len": config.max_len,
                 "include_stop": config.include_stop,
+                "ignore_case": config.ignore_case,
+                "partial_3": config.partial_3,
+                "partial_5": config.partial_5,
+                "between_stops": config.between_stops,
                 "translation_table": (
                     ORFIPY_TRANSLATION_TABLE_MAP[config.translation_table]
                     if config.translation_table is not None

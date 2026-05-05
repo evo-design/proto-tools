@@ -245,8 +245,7 @@ with open("packed.pdb", "w") as f:
 
 **Common mistakes:**
 1. **Mutation indexing**: FAMPNN uses **0-indexed** positions in mutation strings (e.g., `"A0V"` for position 0). This differs from PDB residue numbering.
-2. **`excluded_amino_acids`**: Not supported by FAMPNN. Will raise `ValueError` if set.
-3. **Missing sidechains in input PDB**: FAMPNN can handle missing sidechains (they become ghost atoms), but providing complete structures improves packing quality.
+2. **Missing sidechains in input PDB**: FAMPNN can handle missing sidechains (they become ghost atoms), but providing complete structures improves packing quality.
 
 ## References
 

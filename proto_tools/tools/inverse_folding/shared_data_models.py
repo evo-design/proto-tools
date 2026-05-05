@@ -8,7 +8,7 @@ import json
 from abc import ABC
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 from pydantic import BaseModel, Field, SerializeAsAny, model_validator
 
@@ -21,6 +21,12 @@ from proto_tools.utils import (
     InputField,
 )
 from proto_tools.utils.tool_io import Metrics, MetricSpec
+
+# 20 canonical amino acids (one-letter codes), in alphabetical order.
+# Mirrors ``standalone_helpers.AMINO_ACIDS_LIST`` for the standalone runtime;
+# typed here as a Literal so ``excluded_amino_acids`` rejects invalid letters
+# at parse time and the frontend renders a multi-select dropdown of valid options.
+AminoAcid = Literal["A", "C", "D", "E", "F", "G", "H", "I", "K", "L", "M", "N", "P", "Q", "R", "S", "T", "V", "W", "Y"]
 
 
 class SequenceStructurePair(BaseModel):
@@ -154,17 +160,17 @@ class InverseFoldingStructureInput(BaseModel):
 class InverseFoldingInput(BaseToolInput):
     """Tool input for inverse folding sampling operations.
 
-    Wraps a list of InverseFoldingInput objects for use with the ToolRegistry.
+    Wraps a list of InverseFoldingStructureInput objects for use with the ToolRegistry.
 
     Attributes:
-        inputs (list[InverseFoldingStructureInput]): List of InverseFoldingInput objects, each containing a structure
-            and optional chain_ids/fixed_positions constraints.
+        inputs (list[InverseFoldingStructureInput]): List of InverseFoldingStructureInput objects, each
+            containing a structure and optional chain_ids/fixed_positions constraints.
 
     Examples:
-        >>> sampling_input = InverseFoldingSamplingInput(
+        >>> sampling_input = InverseFoldingInput(
         ...     inputs=[
-        ...         InverseFoldingInput(structure="/path/to/protein1.pdb"),
-        ...         InverseFoldingInput(structure="/path/to/protein2.pdb"),
+        ...         InverseFoldingStructureInput(structure="/path/to/protein1.pdb"),
+        ...         InverseFoldingStructureInput(structure="/path/to/protein2.pdb"),
         ...     ]
         ... )
     """
@@ -190,10 +196,7 @@ class InverseFoldingConfig(BaseConfig):
             reduce if encountering out-of-memory errors. Defaults to
             ``num_sequences_per_structure``.
 
-        temperature (float): Controls randomness in sampling from logits. Defaults to 0.1.
-
-        excluded_amino_acids (list[str] | None): List of amino acids that are not allowed in the sequence.
-            If None, no amino acids will be disallowed. C is commonly specified. Defaults to None.
+        temperature (float): Sampling temperature; lower = greedier, higher = more diverse.
 
         device (str): Device to run the model on. Options include 'cuda' (NVIDIA GPU), 'cpu' (CPU execution), or specific GPU devices like 'cuda:0'. Defaults to 'cuda'.
     """
@@ -223,16 +226,8 @@ class InverseFoldingConfig(BaseConfig):
         title="Sampling Temperature",
         default=0.1,
         ge=0.0,
-        le=1.0,
-        description="Controls randomness in sampling from logits",
+        description="Sampling temperature; lower = greedier, higher = more diverse",
         examples=[0.1, 0.5, 1.0],
-    )
-
-    excluded_amino_acids: list[str] | None = ConfigField(
-        title="Unallowed Amino Acids",
-        default=None,
-        description="List of amino acids that are not allowed in the sequence. If None, no amino acids will be disallowed",
-        examples=["C"],
     )
 
     device: str = ConfigField(

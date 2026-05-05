@@ -62,7 +62,7 @@ ProteinMPNN runs on GPU (recommended) or CPU:
 
 ## Configuration
 
-### Sampling Configuration (`InverseFoldingConfig`)
+### Sampling Configuration (`ProteinMPNNSampleConfig`)
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -71,6 +71,8 @@ ProteinMPNN runs on GPU (recommended) or CPU:
 | `temperature` | `float` | `0.1` | Sampling temperature (0.0-1.0). Lower = more conservative, higher = more diverse |
 | `fixed_positions` | `Optional[Dict[str, List[int]]]` | `None` | Residues to keep fixed (not redesigned). Maps chain IDs to position lists |
 | `excluded_amino_acids` | `Optional[List[str]]` | `None` | Amino acids to exclude from design (e.g., `["C"]` to avoid cysteines) |
+| `model_choice` | `Literal["proteinmpnn", "abmpnn", "soluble"]` | `"proteinmpnn"` | Model weights: `proteinmpnn` (general), `abmpnn` (antibody), or `soluble` |
+| `backbone_noise` | `float` | `0.0` | Gaussian noise (A) on backbone coords; raise (e.g. `0.02`) for sampling diversity |
 | `seed` | `int` | `42` | Random seed for reproducibility |
 | `device` | `str` | `"cuda"` | Device for inference (`"cuda"` or `"cpu"`) |
 
