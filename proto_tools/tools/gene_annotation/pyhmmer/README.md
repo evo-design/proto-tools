@@ -76,15 +76,37 @@ Storage: HMM files are compact; Pfam-A is ~300MB.
 
 ## Configuration
 
+All defaults match HMMER 3 / pyhmmer Pipeline defaults (verified live).
+
 **Shared Parameters (All Tools)**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `num_threads` | `int` | `0` | Number of CPU threads (0 = auto-detect all available cores). |
-| `evalue_threshold` | `float` | `10.0` | E-value reporting threshold for sequence-level hits. |
-| `score_threshold` | `float` | `None` | Bit score threshold (overrides E-value if set). |
-| `domain_evalue_threshold` | `float` | `10.0` | E-value reporting threshold for domain-level hits. |
-| `domain_score_threshold` | `float` | `None` | Domain bit score threshold (overrides domain E-value if set). |
-| `max_iterations` (`pyhmmer-jackhmmer` only) | `int` | `5` | Maximum number of jackhmmer iterations. |
+
+| Parameter | Type | Default | HMMER Flag | Description |
+|-----------|------|---------|------------|-------------|
+| `num_threads` | `int` | `0` | `--cpu` | CPU threads (0 = auto-detect). |
+| `evalue_threshold` | `float` | `10.0` | `-E` | Sequence-level E-value cap to **report**. |
+| `score_threshold` | `float \| None` | `None` | `-T` | Sequence-level bit-score floor to **report** (overrides `-E` when set). |
+| `domain_evalue_threshold` | `float` | `10.0` | `--domE` | Per-domain E-value cap to **report**. |
+| `domain_score_threshold` | `float \| None` | `None` | `--domT` | Per-domain bit-score floor to **report** (overrides `--domE` when set). |
+| `inclusion_evalue_threshold` | `float` | `0.01` | `--incE` | Sequence-level E-value cap for **inclusion**. |
+| `inclusion_domain_evalue_threshold` | `float` | `0.01` | `--incdomE` | Per-domain E-value cap for **inclusion**. |
+| `z_value` | `float \| None` | `None` | `-Z` | Effective database size for E-value calc. |
+| `domain_z_value` | `float \| None` | `None` | `--domZ` | Significant hit count for domain E-value calc. |
+| `skip_filters` | `bool` | `False` | `--max` | Disable MSV/Vit/Fwd heuristic filters (slower, max sensitivity). |
+
+**Tool-specific knobs**
+
+| Tool | Parameter | Type | Default | HMMER Flag | Notes |
+|------|-----------|------|---------|------------|-------|
+| `pyhmmer-hmmsearch`, `pyhmmer-hmmscan` | `bit_cutoffs` | `Literal['gathering', 'noise', 'trusted'] \| None` | `None` | `--cut_ga` / `--cut_nc` / `--cut_tc` | Use the HMM's stored Pfam-curated cutoff in place of E-value reporting. |
+| `pyhmmer-nhmmer` | `strand` | `Literal['both', 'watson', 'crick']` | `'both'` | `--watson` / `--crick` | Restrict to forward (`watson`), reverse-complement (`crick`), or search both. |
+| `pyhmmer-jackhmmer` | `max_iterations` | `int` | `5` | `-N` | Iterations before stopping; converges early. |
+
+### Reporting vs Inclusion Thresholds
+
+HMMER applies two parallel filters per hit:
+
+- **Reporting** (`-E`, `-T`, `--domE`, `--domT`): controls what appears in output. Hits ≤ `evalue_threshold` are reported and serialized into `sequence_hits` / `domain_hits`.
+- **Inclusion** (`--incE`, `--incT`, `--incdomE`, `--incdomT`): a stricter sub-threshold that marks hits as "trusted." `included = True` on a hit means it passed inclusion. **Jackhmmer uses the included set to seed the next iteration's HMM**, so tightening `inclusion_evalue_threshold` (default 0.01) is how you control iterative drift.
 
 ### Parameter Guides
 
@@ -99,11 +121,20 @@ Storage: HMM files are compact; Pfam-A is ~300MB.
 - E-values are database-size dependent; scores are not.
 - For reproducible thresholds across different databases, use `score_threshold`.
 
+**Pfam bit-score cutoffs (`bit_cutoffs`):**
+- `'gathering'` (`--cut_ga`): use the curated GA threshold from the HMM file. Recommended for Pfam annotation.
+- `'noise'` (`--cut_nc`): permissive — typically only excludes obvious junk.
+- `'trusted'` (`--cut_tc`): strictest — only confidently curated members.
+- Only meaningful for `pyhmmer-hmmsearch` and `pyhmmer-hmmscan`; `phmmer`/`nhmmer`/`jackhmmer` build HMMs from queries on the fly and have no stored cutoffs.
+- **Setting `bit_cutoffs` against an HMM file without the requested cutoff raises `MissingCutoffs`**. Pfam-A always carries all three; ad-hoc HMMs typically don't. Use `None` for non-curated HMMs.
+
 ### Sweep Priorities
 
-1. `evalue_threshold`; Most impactful; controls overall sensitivity vs specificity tradeoff
-2. `domain_evalue_threshold`; Controls domain-level filtering independently from sequence-level
-3. `score_threshold`; Use when database-size-independent thresholds are needed
+1. `evalue_threshold` — controls overall sensitivity vs specificity tradeoff.
+2. `inclusion_evalue_threshold` — primary knob for jackhmmer iterative drift.
+3. `bit_cutoffs='gathering'` — for Pfam-annotated HMMs, replaces E-value with curated cutoff.
+4. `domain_evalue_threshold` — independent domain-level filtering.
+5. `skip_filters=True` — last-resort sensitivity boost; ~10× slower.
 
 ## Output Specification
 

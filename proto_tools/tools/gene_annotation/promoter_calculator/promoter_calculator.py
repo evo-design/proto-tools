@@ -70,7 +70,7 @@ class PromoterCalculatorInput(BaseToolInput):
         sequence_ids (list[str] | None): Optional sequence identifiers.
     """
 
-    sequences: list[str] = InputField(description="DNA sequences to scan for sigma70 promoters")
+    sequences: list[str] = InputField(description="DNA sequences to scan for E. coli sigma70 (housekeeping) promoters")
     sequence_ids: list[str] | None = InputField(
         default=None,
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
@@ -156,30 +156,23 @@ class PromoterCalculatorConfig(BaseConfig):
 
     Attributes:
         threads (int): CPU threads for the calculator's internal parallelism.
-            Default: 1.
-        verbosity (int): Calculator verbosity (0 = quiet). Default: 0.
-        circular (bool): Treat sequences as circular DNA. Default: False.
+            Default 1.
+        circular (bool): Treat sequences as circular (examines the wraparound
+            junction). Default False.
     """
 
     threads: int = ConfigField(
         title="Number of Threads",
         default=1,
         ge=1,
-        description="CPU threads for promoter calculator parallelism",
-        include_in_key=False,
-    )
-    verbosity: int = ConfigField(
-        title="Verbosity Level",
-        default=0,
-        ge=0,
-        description="Calculator verbosity (0 = quiet)",
+        description="CPU threads for promoter calculator parallelism; raise on multi-core hosts",
         hidden=True,
         include_in_key=False,
     )
     circular: bool = ConfigField(
         title="Circular Sequences",
         default=False,
-        description="Treat sequences as circular for promoter detection across ends",
+        description="Examine the wraparound junction (use for plasmids/circular genomes)",
     )
 
 
@@ -241,7 +234,6 @@ def run_promoter_calculator(
         "sequence_ids": sequence_ids,
         "config": {
             "threads": config.threads,
-            "verbosity": config.verbosity,
             "circular": config.circular,
         },
         "device": "cpu",

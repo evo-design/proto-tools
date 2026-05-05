@@ -149,30 +149,34 @@ def _convert_hits_to_dicts(
 
 
 def run_hmmsearch(input_data: dict[str, Any]) -> dict[str, Any]:
-    """Run PyHMMER hmmsearch (HMM profiles vs sequences).
-
-    Args:
-        input_data: Dict with keys: hmm_path, sequences, num_threads,
-                    evalue_threshold, score_threshold, domain_evalue_threshold,
-                    domain_score_threshold
-
-    Returns:
-        Dict with keys: sequence_hits (list of dicts), domain_hits (list of dicts)
-    """
+    """Run PyHMMER hmmsearch (HMM profiles vs sequences)."""
     hmms = _create_hmms_from_file(input_data["hmm_path"])
     sequences = _create_sequences_from_strings(input_data["sequences"], alphabet="amino")
 
-    query_hits = list(
-        pyhmmer.hmmsearch(
-            queries=hmms,
-            sequences=sequences,
-            cpus=input_data.get("num_threads", 0),
-            E=input_data.get("evalue_threshold", 10.0),
-            T=input_data.get("score_threshold"),
-            domE=input_data.get("domain_evalue_threshold", 10.0),
-            domT=input_data.get("domain_score_threshold"),
-        )
-    )
+    kwargs: dict[str, Any] = {
+        "cpus": input_data["num_threads"],
+        "E": input_data["evalue_threshold"],
+        "T": input_data["score_threshold"],
+        "domE": input_data["domain_evalue_threshold"],
+        "domT": input_data["domain_score_threshold"],
+        "incE": input_data["inclusion_evalue_threshold"],
+        "incdomE": input_data["inclusion_domain_evalue_threshold"],
+    }
+    # pyhmmer's Pipeline rejects seed=None (TypeError on int conversion); Z/domZ
+    # accept None directly and resolve to "use actual count". Skip all three when
+    # unset to keep the kwarg dict symmetric and the seed branch the load-bearing one.
+    if input_data["z_value"] is not None:
+        kwargs["Z"] = input_data["z_value"]
+    if input_data["domain_z_value"] is not None:
+        kwargs["domZ"] = input_data["domain_z_value"]
+    if input_data["seed"] is not None:
+        kwargs["seed"] = input_data["seed"]
+    if input_data["skip_filters"]:
+        kwargs |= {"F1": 1.0, "F2": 1.0, "F3": 1.0, "bias_filter": False}
+    if input_data["bit_cutoffs"] is not None:
+        kwargs["bit_cutoffs"] = input_data["bit_cutoffs"]
+
+    query_hits = list(pyhmmer.hmmsearch(queries=hmms, sequences=sequences, **kwargs))
 
     sequence_hits, domain_hits = _convert_hits_to_dicts(hits=query_hits, queries=hmms)
 
@@ -185,30 +189,31 @@ def run_hmmsearch(input_data: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_hmmscan(input_data: dict[str, Any]) -> dict[str, Any]:
-    """Run PyHMMER hmmscan (sequences vs HMM database).
-
-    Args:
-        input_data: Dict with keys: hmm_db_path, sequences, num_threads,
-                    evalue_threshold, score_threshold, domain_evalue_threshold,
-                    domain_score_threshold
-
-    Returns:
-        Dict with keys: sequence_hits (list of dicts), domain_hits (list of dicts)
-    """
+    """Run PyHMMER hmmscan (sequences vs HMM database)."""
     hmms = _create_hmms_from_file(input_data["hmm_db_path"])
     sequences = _create_sequences_from_strings(input_data["sequences"], alphabet="amino")
 
-    query_hits = list(
-        pyhmmer.hmmscan(
-            queries=sequences,
-            profiles=hmms,
-            cpus=input_data.get("num_threads", 0),
-            E=input_data.get("evalue_threshold", 10.0),
-            T=input_data.get("score_threshold"),
-            domE=input_data.get("domain_evalue_threshold", 10.0),
-            domT=input_data.get("domain_score_threshold"),
-        )
-    )
+    kwargs: dict[str, Any] = {
+        "cpus": input_data["num_threads"],
+        "E": input_data["evalue_threshold"],
+        "T": input_data["score_threshold"],
+        "domE": input_data["domain_evalue_threshold"],
+        "domT": input_data["domain_score_threshold"],
+        "incE": input_data["inclusion_evalue_threshold"],
+        "incdomE": input_data["inclusion_domain_evalue_threshold"],
+    }
+    if input_data["z_value"] is not None:
+        kwargs["Z"] = input_data["z_value"]
+    if input_data["domain_z_value"] is not None:
+        kwargs["domZ"] = input_data["domain_z_value"]
+    if input_data["seed"] is not None:
+        kwargs["seed"] = input_data["seed"]
+    if input_data["skip_filters"]:
+        kwargs |= {"F1": 1.0, "F2": 1.0, "F3": 1.0, "bias_filter": False}
+    if input_data["bit_cutoffs"] is not None:
+        kwargs["bit_cutoffs"] = input_data["bit_cutoffs"]
+
+    query_hits = list(pyhmmer.hmmscan(queries=sequences, profiles=hmms, **kwargs))
 
     sequence_hits, domain_hits = _convert_hits_to_dicts(hits=query_hits, queries=sequences)
 
@@ -221,30 +226,29 @@ def run_hmmscan(input_data: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_phmmer(input_data: dict[str, Any]) -> dict[str, Any]:
-    """Run PyHMMER phmmer (sequences vs sequences).
-
-    Args:
-        input_data: Dict with keys: sequences, target_sequences, num_threads,
-                    evalue_threshold, score_threshold, domain_evalue_threshold,
-                    domain_score_threshold
-
-    Returns:
-        Dict with keys: sequence_hits (list of dicts), domain_hits (list of dicts)
-    """
+    """Run PyHMMER phmmer (sequences vs sequences)."""
     query_sequences = _create_sequences_from_strings(input_data["sequences"], alphabet="amino")
     target_sequences = _create_sequences_from_strings(input_data["target_sequences"], alphabet="amino")
 
-    query_hits = list(
-        pyhmmer.phmmer(
-            queries=query_sequences,
-            sequences=target_sequences,
-            cpus=input_data.get("num_threads", 0),
-            E=input_data.get("evalue_threshold", 10.0),
-            T=input_data.get("score_threshold"),
-            domE=input_data.get("domain_evalue_threshold", 10.0),
-            domT=input_data.get("domain_score_threshold"),
-        )
-    )
+    kwargs: dict[str, Any] = {
+        "cpus": input_data["num_threads"],
+        "E": input_data["evalue_threshold"],
+        "T": input_data["score_threshold"],
+        "domE": input_data["domain_evalue_threshold"],
+        "domT": input_data["domain_score_threshold"],
+        "incE": input_data["inclusion_evalue_threshold"],
+        "incdomE": input_data["inclusion_domain_evalue_threshold"],
+    }
+    if input_data["z_value"] is not None:
+        kwargs["Z"] = input_data["z_value"]
+    if input_data["domain_z_value"] is not None:
+        kwargs["domZ"] = input_data["domain_z_value"]
+    if input_data["seed"] is not None:
+        kwargs["seed"] = input_data["seed"]
+    if input_data["skip_filters"]:
+        kwargs |= {"F1": 1.0, "F2": 1.0, "F3": 1.0, "bias_filter": False}
+
+    query_hits = list(pyhmmer.phmmer(queries=query_sequences, sequences=target_sequences, **kwargs))
 
     sequence_hits, domain_hits = _convert_hits_to_dicts(hits=query_hits, queries=query_sequences)
 
@@ -261,17 +265,28 @@ def run_nhmmer(input_data: dict[str, Any]) -> dict[str, Any]:
     query_sequences = _create_sequences_from_strings(input_data["sequences"], alphabet="dna")
     target_sequences = _create_sequences_from_strings(input_data["target_sequences"], alphabet="dna")
 
-    query_hits = list(
-        pyhmmer.nhmmer(
-            queries=query_sequences,
-            sequences=target_sequences,
-            cpus=input_data.get("num_threads", 0),
-            E=input_data.get("evalue_threshold", 10.0),
-            T=input_data.get("score_threshold"),
-            domE=input_data.get("domain_evalue_threshold", 10.0),
-            domT=input_data.get("domain_score_threshold"),
-        )
-    )
+    kwargs: dict[str, Any] = {
+        "cpus": input_data["num_threads"],
+        "E": input_data["evalue_threshold"],
+        "T": input_data["score_threshold"],
+        "domE": input_data["domain_evalue_threshold"],
+        "domT": input_data["domain_score_threshold"],
+        "incE": input_data["inclusion_evalue_threshold"],
+        "incdomE": input_data["inclusion_domain_evalue_threshold"],
+    }
+    if input_data["z_value"] is not None:
+        kwargs["Z"] = input_data["z_value"]
+    if input_data["domain_z_value"] is not None:
+        kwargs["domZ"] = input_data["domain_z_value"]
+    if input_data["seed"] is not None:
+        kwargs["seed"] = input_data["seed"]
+    if input_data["skip_filters"]:
+        kwargs |= {"F1": 1.0, "F2": 1.0, "F3": 1.0, "bias_filter": False}
+    # 'both' is the wrapper-default; pyhmmer expects None in that case.
+    if input_data["strand"] != "both":
+        kwargs["strand"] = input_data["strand"]
+
+    query_hits = list(pyhmmer.nhmmer(queries=query_sequences, sequences=target_sequences, **kwargs))
 
     sequence_hits, domain_hits = _convert_hits_to_dicts(hits=query_hits, queries=query_sequences)
 
@@ -288,17 +303,31 @@ def run_jackhmmer(input_data: dict[str, Any]) -> dict[str, Any]:
     query_sequences = _create_sequences_from_strings(input_data["sequences"], alphabet="amino")
     target_sequences = _create_sequences_from_strings(input_data["target_sequences"], alphabet="amino")
 
+    kwargs: dict[str, Any] = {
+        "cpus": input_data["num_threads"],
+        "E": input_data["evalue_threshold"],
+        "T": input_data["score_threshold"],
+        "domE": input_data["domain_evalue_threshold"],
+        "domT": input_data["domain_score_threshold"],
+        "incE": input_data["inclusion_evalue_threshold"],
+        "incdomE": input_data["inclusion_domain_evalue_threshold"],
+    }
+    if input_data["z_value"] is not None:
+        kwargs["Z"] = input_data["z_value"]
+    if input_data["domain_z_value"] is not None:
+        kwargs["domZ"] = input_data["domain_z_value"]
+    if input_data["seed"] is not None:
+        kwargs["seed"] = input_data["seed"]
+    if input_data["skip_filters"]:
+        kwargs |= {"F1": 1.0, "F2": 1.0, "F3": 1.0, "bias_filter": False}
+
     iteration_results = list(
         pyhmmer.jackhmmer(
             queries=query_sequences,
             sequences=target_sequences,
-            max_iterations=input_data.get("max_iterations", 5),
+            max_iterations=input_data["max_iterations"],
             checkpoints=False,
-            cpus=input_data.get("num_threads", 0),
-            E=input_data.get("evalue_threshold", 10.0),
-            T=input_data.get("score_threshold"),
-            domE=input_data.get("domain_evalue_threshold", 10.0),
-            domT=input_data.get("domain_score_threshold"),
+            **kwargs,
         )
     )
 

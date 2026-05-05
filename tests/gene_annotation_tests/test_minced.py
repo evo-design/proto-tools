@@ -69,6 +69,14 @@ def test_config_min_repeat_length_validation():
         MincedConfig(min_repeat_length=5)
 
 
+def test_inverted_ranges_rejected():
+    """MinCED silently accepts inverted ranges; the wrapper rejects them at construction."""
+    with pytest.raises(ValidationError, match="max_repeat_length"):
+        MincedConfig(min_repeat_length=30, max_repeat_length=20)
+    with pytest.raises(ValidationError, match="max_spacer_length"):
+        MincedConfig(min_spacer_length=40, max_spacer_length=20)
+
+
 # ── Data model properties ────────────────────────────────────────────────
 
 
@@ -192,6 +200,46 @@ def test_run_minced_no_crispr():
     assert isinstance(result, MincedOutput)
     assert len(result.results) == 1
     assert result.num_sequences_with_crispr == 0
+
+
+# A 25-bp variant of the E. coli K-12 CRISPR-2 repeat (originally 29 bp,
+# trimmed to 25). Falls between the old wrapper default (27) and the upstream
+# default (23). MinCED detects it with `-minRL 23` but not with `-minRL 27`.
+_SHORT_REPEAT_E_COLI = "CGGTTTATCCCCGCTGGCGCGGGGA"  # 25 bp
+_SHORT_REPEAT_SPACERS = [
+    "GTGGAATTCGCAGCCATGAACGCCATTGTC",
+    "TTGCAATGCTGAATAATTGCAATCGCAGAA",
+    "AAATCGCATCATTGCAATGCTGAATAATTG",
+    "CAATGCTGAATAATTGCAATCGCAGAACAT",
+    "GAATAATTGCAATCGCAGAACATAATGCTA",
+]
+_SHORT_REPEAT_SEQUENCE = (
+    "ATGAATTGTGCATTGGCATCATTAATTATTGTGCAATGCTAGAA"  # Leader
+    + "".join(_SHORT_REPEAT_E_COLI + s for s in _SHORT_REPEAT_SPACERS)
+    + _SHORT_REPEAT_E_COLI  # Final repeat
+    + "CACATCAATAATCGTGAGCGTAATTGCAA"  # Trailer
+)
+
+
+@pytest.mark.integration
+def test_run_minced_default_finds_short_repeat_after_default_change():
+    """Regression test for the 27→23 default change.
+
+    Source: ``minced --help`` reports ``-minRL 23`` as upstream. Wrapper used to
+    default to 27, silently missing CRISPR arrays with 23-26 bp repeats. This
+    test pins the new default with a 25-bp E. coli-derived repeat: ``MincedConfig()``
+    detects it; ``MincedConfig(min_repeat_length=27)`` (the old default) does not.
+    """
+    inputs = MincedInput(sequences=[_SHORT_REPEAT_SEQUENCE], sequence_ids=["short_repeat"])
+    new_default = run_minced(inputs, MincedConfig())
+    old_default = run_minced(inputs, MincedConfig(min_repeat_length=27))
+    assert new_default.success and old_default.success
+    new_arrays = new_default.results[0].num_arrays
+    old_arrays = old_default.results[0].num_arrays
+    assert new_arrays > 0, "MincedConfig() must detect 25-bp CRISPR repeats with the new minRL=23 default"
+    assert old_arrays == 0, (
+        "MincedConfig(min_repeat_length=27) must NOT detect 25-bp repeats (proves the change matters)"
+    )
 
 
 # ── Benchmark ─────────────────────────────────────────────────────────────────
