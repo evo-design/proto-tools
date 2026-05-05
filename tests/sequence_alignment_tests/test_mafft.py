@@ -428,7 +428,7 @@ def test_mafft_sequence_ids_length_mismatch_fails():
     )
     result = run_mafft_align(inputs, MafftConfig())
     assert result.success is False
-    assert any("must match" in err for err in result.errors)
+    assert any("ids length" in err for err in result.errors)
 
 
 # ── Benchmark ─────────────────────────────────────────────────────────────────
