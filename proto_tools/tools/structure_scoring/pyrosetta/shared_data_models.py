@@ -237,7 +237,7 @@ def warn_about_dropped_residues(results: list[dict[str, Any]]) -> None:
     and never reach this helper.
 
     ``dropped_residues`` is transport-only state and must not reach the
-    Pydantic output model, which uses ``extra="forbid"``.
+    Pydantic output model.
 
     Args:
         results (list[dict[str, Any]]): Raw result dicts from the PyRosetta

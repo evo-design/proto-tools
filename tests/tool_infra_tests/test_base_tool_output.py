@@ -6,7 +6,7 @@ Tests for BaseToolInput and BaseToolOutput.
 from datetime import datetime
 
 import pytest
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, computed_field
 
 from proto_tools.utils.tool_io import BaseToolInput, InputField, ToolExecutionError, _approx_equal_values
 from tests.tool_infra_tests.test_export_functionality import MockToolOutputBase
@@ -26,6 +26,17 @@ class _ComplexToolOutput(MockToolOutputBase):
     count: int = Field(description="Number of results")
 
 
+class _ComputedToolOutput(MockToolOutputBase):
+    """Example output with derived serialized state."""
+
+    items: list[str] = Field(default_factory=list, description="Output items")
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def count(self) -> int:
+        return len(self.items)
+
+
 # ── Validation ───────────────────────────────────────────────────────────────
 
 
@@ -41,16 +52,19 @@ def test_execution_time_allows_zero():
     assert output.execution_time == 0.0
 
 
-def test_extra_fields_forbidden():
-    """Extra fields are forbidden in outputs (unlike configs)."""
-    with pytest.raises(ValidationError, match="extra_field"):
-        _SimpleToolOutput(
+def test_extra_fields_warn_and_are_ignored():
+    """Output hydration warns on unknown fields but still ignores them."""
+    with pytest.warns(UserWarning, match="extra_field"):
+        output = _SimpleToolOutput(
             tool_id="test-tool",
             execution_time=1.5,
             success=True,
             result="test result",
             extra_field="extra value",
         )
+
+    assert output.result == "test result"
+    assert "extra_field" not in output.model_dump()
 
 
 def test_validate_assignment_rejects_negative_execution_time():
@@ -98,6 +112,19 @@ def test_json_round_trip():
     assert reconstructed.tool_id == output.tool_id
     assert reconstructed.result == output.result
     assert reconstructed.warnings == output.warnings
+
+
+def test_computed_field_json_round_trip(recwarn):
+    """Computed fields emitted in JSON dumps do not block revalidation."""
+    output = _ComputedToolOutput(items=["a", "b"])
+
+    dumped = output.model_dump(mode="json")
+    assert dumped["count"] == 2
+
+    reconstructed = _ComputedToolOutput.model_validate(dumped)
+    assert reconstructed.items == ["a", "b"]
+    assert reconstructed.count == 2
+    assert not recwarn
 
 
 # ── Schema ───────────────────────────────────────────────────────────────────

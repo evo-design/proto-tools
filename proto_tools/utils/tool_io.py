@@ -6,6 +6,7 @@ Base input/output classes for standardized tool results with metadata tracking.
 import json
 import math
 import os
+import warnings
 from abc import ABC, abstractmethod
 from collections.abc import ItemsView, Iterator, KeysView, Mapping, ValuesView
 from datetime import datetime
@@ -527,7 +528,8 @@ class BaseToolOutput(BaseModel, ABC):
     metadata: dict[str, Any] = Field(default_factory=dict, description="Additional tool-specific metadata")
 
     model_config = ConfigDict(
-        extra="forbid",
+        # Allow serialized computed fields to round-trip.
+        extra="ignore",
         arbitrary_types_allowed=True,
         validate_assignment=True,
         use_enum_values=True,
@@ -547,6 +549,27 @@ class BaseToolOutput(BaseModel, ABC):
             ]
         },
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _warn_on_unexpected_fields(cls, data: Any) -> Any:
+        if not isinstance(data, Mapping):
+            return data
+
+        allowed = set(cls.model_fields)
+        allowed.update(cls.model_computed_fields)
+
+        fields = list(cls.model_fields.values()) + list(cls.model_computed_fields.values())
+        aliases = [field.alias for field in fields if field.alias is not None]
+        allowed.update(aliases)
+
+        extras = sorted(set(data) - allowed)
+        if extras:
+            warnings.warn(
+                f"{cls.__name__} ignoring unexpected output field(s): {', '.join(extras)}",
+                stacklevel=2,
+            )
+        return data
 
     def __getattr__(self, name: str) -> Any:
         """Fallback attribute lookup.
