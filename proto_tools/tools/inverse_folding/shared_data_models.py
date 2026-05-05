@@ -8,7 +8,7 @@ import json
 from abc import ABC
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field, SerializeAsAny, model_validator
 
@@ -21,12 +21,6 @@ from proto_tools.utils import (
     InputField,
 )
 from proto_tools.utils.tool_io import Metrics, MetricSpec
-
-# 20 canonical amino acids (one-letter codes), in alphabetical order.
-# Mirrors ``standalone_helpers.AMINO_ACIDS_LIST`` for the standalone runtime;
-# typed here as a Literal so ``excluded_amino_acids`` rejects invalid letters
-# at parse time and the frontend renders a multi-select dropdown of valid options.
-AminoAcid = Literal["A", "C", "D", "E", "F", "G", "H", "I", "K", "L", "M", "N", "P", "Q", "R", "S", "T", "V", "W", "Y"]
 
 
 class SequenceStructurePair(BaseModel):

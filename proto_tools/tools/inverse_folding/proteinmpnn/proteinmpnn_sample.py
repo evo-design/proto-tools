@@ -11,7 +11,6 @@ import numpy as np
 from pydantic import Field
 
 from proto_tools.tools.inverse_folding.shared_data_models import (
-    AminoAcid,
     DesignedSequences,
     InverseFoldingConfig,
     InverseFoldingInput,
@@ -19,7 +18,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingStructureInput,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import ConfigField, ToolInstance
+from proto_tools.utils import AminoAcid, ConfigField, ToolInstance
 from proto_tools.utils.progress import progress_bar
 
 logger = logging.getLogger(__name__)

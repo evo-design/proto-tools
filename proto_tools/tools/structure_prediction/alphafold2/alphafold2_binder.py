@@ -20,6 +20,7 @@ from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.tools.structure_prediction.alphafold2.alphafold2 import AlphaFold2Metrics
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
+    AminoAcid,
     BaseConfig,
     ConfigField,
     GradientInput,
@@ -104,7 +105,7 @@ class AlphaFold2BinderConfig(BaseConfig):
         include_pae_matrix (bool): Attach full per-residue PAE matrix. Default: ``False``.
         bias_redesign (float | None): Persistent softmax bias toward wildtype at
             non-design positions. Germinal backend only.
-        omit_aas (str | None): Amino acids to ban (e.g. ``"C,W"``).
+        omit_aas (list[AminoAcid] | None): Amino acids to ban (e.g. ``["C", "W"]``).
         num_recycles (int): AF2 recycling iterations.
         recycle_mode (Literal["last", "sample", "average", "first"]): Which recycle's
             output is used for loss/gradient. ``"last"`` matches Germinal's VHH default;
@@ -149,11 +150,12 @@ class AlphaFold2BinderConfig(BaseConfig):
         description="Soft bias strength for non-design positions toward the wildtype template.",
         advanced=True,
     )
-    omit_aas: str | None = ConfigField(
+    omit_aas: list[AminoAcid] | None = ConfigField(
         title="Omit Amino Acids",
         default=None,
-        description="Comma-separated amino acids to ban during optimization, e.g. 'C,W'.",
+        description="Amino acids to ban during optimization (e.g. ['C', 'W']).",
         advanced=True,
+        examples=[["C"], ["C", "W"]],
     )
     num_recycles: int = ConfigField(
         title="Number of Recycles",
@@ -393,7 +395,8 @@ def run_alphafold2_binder(
             "binder_chain": inputs.binder_chain,
             "design_positions": inputs.design_positions,
             "bias_redesign": config.bias_redesign,
-            "omit_aas": config.omit_aas,
+            # ColabDesign's prep_inputs(rm_aa=...) expects a comma-separated string.
+            "omit_aas": ",".join(config.omit_aas) if config.omit_aas else None,
             "num_recycles": config.num_recycles,
             "recycle_mode": config.recycle_mode,
             "model_num": config.model_num,

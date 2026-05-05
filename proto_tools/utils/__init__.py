@@ -24,6 +24,7 @@ from proto_tools.utils.sequence import (
     DNA_NUCLEOTIDES,
     PROTEIN_AMINO_ACIDS,
     RNA_NUCLEOTIDES,
+    AminoAcid,
     calculate_gc_content,
     detect_sequence_type,
     one_hot_protein_logits,
@@ -80,6 +81,7 @@ __all__ = [
     "DNA_NUCLEOTIDES",
     "RNA_NUCLEOTIDES",
     "PROTEIN_AMINO_ACIDS",
+    "AminoAcid",
     # Gradient models
     "GradientInput",
     "GradientOutput",

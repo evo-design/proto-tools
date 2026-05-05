@@ -3,6 +3,7 @@
 Sequence validation, detection, and ID resolution utilities.
 """
 
+from typing import Literal, get_args
 
 # ============================================================================
 # Sequence Constants
@@ -11,7 +12,12 @@ Sequence validation, detection, and ID resolution utilities.
 # Valid characters for different sequence types
 DNA_NUCLEOTIDES = "ACGT"
 RNA_NUCLEOTIDES = "ACGU"
-PROTEIN_AMINO_ACIDS = "ACDEFGHIKLMNPQRSTVWY"
+
+# Source of truth for the 20 canonical amino acids.
+# ``PROTEIN_AMINO_ACIDS`` (str) and standalone-helpers' ``AMINO_ACIDS_LIST``
+# (list[str]) derive from this Literal so all three stay in sync.
+AminoAcid = Literal["A", "C", "D", "E", "F", "G", "H", "I", "K", "L", "M", "N", "P", "Q", "R", "S", "T", "V", "W", "Y"]
+PROTEIN_AMINO_ACIDS = "".join(get_args(AminoAcid))
 
 
 _PROTEIN_AA_INDEX = {aa: i for i, aa in enumerate(PROTEIN_AMINO_ACIDS)}
