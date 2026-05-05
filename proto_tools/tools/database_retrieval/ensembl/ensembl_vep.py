@@ -182,7 +182,7 @@ def run_ensembl_vep(
 
     Args:
         inputs (EnsemblVEPInput): HGVS notation (genomic / coding / protein).
-        config (EnsemblVEPConfig): Species + assembly + optional contact.
+        config (EnsemblVEPConfig): Species + assembly.
         instance (Any): Optional ToolInstance; unused for HTTP-only tools.
 
     Returns:

@@ -1,6 +1,7 @@
 """proto_tools/tools/database_retrieval/ensembl/shared_data_models.py.
 
-Pydantic submodels + HTTP helpers shared by ensembl-fetch and ensembl-vep.
+Pydantic submodels + HTTP helpers shared by the ensembl-* tools (lookup,
+sequence, overlap, xrefs, vep).
 """
 
 from typing import Any, Literal
@@ -25,6 +26,25 @@ EnsemblSpecies = Literal[
     "rattus_norvegicus",
     "danio_rerio",
     "saccharomyces_cerevisiae",
+]
+EnsemblSequenceType = Literal["genomic", "cdna", "cds", "protein"]
+EnsemblOverlapFeature = Literal[
+    "band",
+    "gene",
+    "transcript",
+    "cds",
+    "exon",
+    "repeat",
+    "simple",
+    "misc",
+    "variation",
+    "somatic_variation",
+    "structural_variation",
+    "somatic_structural_variation",
+    "constrained",
+    "regulatory",
+    "motif",
+    "mane",
 ]
 
 
@@ -52,7 +72,7 @@ def base_url_for(assembly: EnsemblAssembly) -> str:
 
 
 # ============================================================================
-# Nested payload submodels (used by ensembl-fetch lookup_id / lookup_symbol)
+# Nested payload submodels (used by ensembl-lookup)
 # ============================================================================
 
 
@@ -85,8 +105,8 @@ class EnsemblTranslation(BaseModel):
 
     Attributes:
         id (str): Ensembl protein ID (ENSP...).
-        start (int): Translation start in transcript coordinates.
-        end (int): Translation end in transcript coordinates.
+        start (int): 1-indexed inclusive genomic start of the CDS.
+        end (int): 1-indexed inclusive genomic end of the CDS.
         length (int): Protein length in amino acids.
         Parent (str): Parent transcript ID (PascalCase preserved from API).
     """
@@ -172,22 +192,24 @@ class EnsemblSequence(BaseModel):
     """Sequence record returned by /sequence/id/{id}.
 
     Attributes:
-        id (str): Ensembl ID the sequence was fetched for.
+        id (str): Stable ID echoed by the server. May differ from the input
+            ID — for example, an ENST input with ``type=protein`` resolves to
+            the corresponding ENSP.
         desc (str | None): Description string returned by the server.
         mol_type (str | None): Molecule type ('dna' / 'protein' / ...).
         seq (str): The raw sequence string.
     """
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
     id: str
     desc: str | None = None
-    mol_type: str | None = None
+    mol_type: str | None = Field(default=None, alias="molecule")
     seq: str
 
 
 class EnsemblXref(BaseModel):
-    """One cross-reference returned by /xrefs/id or /xrefs/symbol.
+    """One cross-reference returned by /xrefs/id.
 
     Attributes:
         dbname (str): External database name (e.g. 'Uniprot_gn', 'EntrezGene').
