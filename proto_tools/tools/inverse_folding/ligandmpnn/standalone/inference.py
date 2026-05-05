@@ -32,6 +32,7 @@ class LigandMPNNModel:
         self._engine: Any = None
         self.device: str | None = None
         self.checkpoint_path = checkpoint_path
+        self._model_type: str | None = None
 
     def sample(
         self,
@@ -44,6 +45,10 @@ class LigandMPNNModel:
         seed: int | None = None,
         device: str = "cuda",
         verbose: bool = False,
+        model_type: str = "ligand_mpnn",
+        ligand_mpnn_use_atom_context: bool = True,
+        ligand_mpnn_use_side_chain_context: bool = False,
+        ligand_mpnn_cutoff_for_score: float = 8.0,
     ) -> dict[str, Any]:
         """Sample protein sequences using LigandMPNN.
 
@@ -58,6 +63,14 @@ class LigandMPNNModel:
                 expects an int).
             device: Device to run on ('cuda' or 'cpu').
             verbose: Whether to print status messages.
+            model_type: LigandMPNN variant to load ('protein_mpnn',
+                'ligand_mpnn', 'soluble_mpnn', 'per_residue_label_membrane_mpnn',
+                'global_label_membrane_mpnn').
+            ligand_mpnn_use_atom_context: Encode ligand atom context.
+            ligand_mpnn_use_side_chain_context: Condition on sidechain atoms of
+                fixed residues.
+            ligand_mpnn_cutoff_for_score: Ligand-residue distance cutoff (A) for
+                ligand-interface recovery scoring.
 
         Returns:
             Dictionary with keys: sequences, metrics
@@ -65,9 +78,9 @@ class LigandMPNNModel:
         if seed is None:
             raise ValueError("ligandmpnn: sample requires an explicit int seed")
 
-        # Lazy load the model
-        if not self._loaded or self.device != device:
-            self.load(device, verbose)
+        # Lazy load the model (reload if model_type changed)
+        if not self._loaded or self.device != device or self._model_type != model_type:
+            self.load(device, verbose, model_type=model_type)
 
         # Build fixed_residues list from fixed_positions dict
         fixed_residues = None
@@ -86,6 +99,9 @@ class LigandMPNNModel:
             "number_of_batches": 1,
             "temperature": temperature,
             "omit_aa": excluded_amino_acids,
+            "ligand_mpnn_use_atom_context": int(ligand_mpnn_use_atom_context),
+            "ligand_mpnn_use_side_chain_context": int(ligand_mpnn_use_side_chain_context),
+            "ligand_mpnn_cutoff_for_score": ligand_mpnn_cutoff_for_score,
         }
 
         if fixed_residues:
@@ -113,44 +129,18 @@ class LigandMPNNModel:
         self.unload()
         return {"sequences": sequences, "metrics": metrics}
 
-    def score(
-        self,
-        pdb_structure: str,
-        chain_ids: list[str],
-        sequence: str,
-        fixed_positions: dict[str, list[int]] | None = None,
-        seed: int | None = None,
-        device: str = "cuda",
-        verbose: bool = False,
-    ) -> dict[str, Any]:
-        """Score a protein sequence against a structure via forward pass.
-
-        Computes logits for the sequence given the structure, then calculates
-        scoring metrics (log_likelihood, avg_log_likelihood, perplexity) from
-        the logits.
+    def load(self, device: str = "cuda", verbose: bool = False, model_type: str = "ligand_mpnn") -> None:
+        """Load the LigandMPNN model via Foundry.
 
         Args:
-            pdb_structure: Path to PDB file containing the structure.
-            chain_ids: List of chain IDs to score.
-            sequence: Protein sequence to score.
-            fixed_positions: Dict mapping chain IDs to fixed residue positions.
-            seed: Random seed for reproducibility.
-            device: Device to run on ('cuda' or 'cpu').
+            device: Device to load the model on.
             verbose: Whether to print status messages.
-
-        Returns:
-            Dictionary with keys:
-                - logits: Per-position logits array (seq_len, vocab_size)
-                - metrics: Dict with log_likelihood, avg_log_likelihood, perplexity
+            model_type: LigandMPNN variant ('protein_mpnn', 'ligand_mpnn',
+                'soluble_mpnn', 'per_residue_label_membrane_mpnn',
+                'global_label_membrane_mpnn').
         """
-        raise NotImplementedError(
-            "ligandmpnn: score is not yet implemented; use proteinmpnn-score for protein-only contexts"
-        )
-
-    def load(self, device: str = "cuda", verbose: bool = False) -> None:
-        """Load the LigandMPNN model via Foundry."""
         if verbose:
-            logger.info(f"Loading LigandMPNN model on {device}")
+            logger.info(f"Loading LigandMPNN model_type={model_type} on {device}")
 
         # Set FOUNDRY_CHECKPOINT_DIRS so Foundry finds BPT-managed weights
         from standalone_helpers import resolve_weights_dir
@@ -162,7 +152,7 @@ class LigandMPNNModel:
         from mpnn.inference_engines.mpnn import MPNNInferenceEngine
 
         self._engine = MPNNInferenceEngine(
-            model_type="ligand_mpnn",
+            model_type=model_type,
             checkpoint_path=self.checkpoint_path,
             is_legacy_weights=True,
             device=device,
@@ -170,6 +160,7 @@ class LigandMPNNModel:
             write_structures=False,
         )
         self.device = device
+        self._model_type = model_type
         self._loaded = True
 
         if verbose:
@@ -187,14 +178,15 @@ class LigandMPNNModel:
             # LigandMPNN uses Foundry engine which doesn't support standard .to() movement
             # Use helper for consistency (it will handle gracefully), then reload engine
             self._engine = move_model_to_device(self._engine, self.device, device)
-            # Foundry engine requires full reload for device change
-            self.load(device, verbose=False)
+            # Foundry engine requires full reload for device change; preserve model_type
+            self.load(device, verbose=False, model_type=self._model_type or "ligand_mpnn")
 
     def unload(self) -> None:
         """Unload the model to free GPU memory."""
         self._engine = None
         self._loaded = False
         self.device = None
+        self._model_type = None
 
         gc.collect()
         if torch.cuda.is_available():
@@ -237,18 +229,12 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 seed=input_dict["seed"],
                 device=input_dict["device"],
                 verbose=input_dict["verbose"],
+                model_type=input_dict["model_type"],
+                ligand_mpnn_use_atom_context=input_dict["ligand_mpnn_use_atom_context"],
+                ligand_mpnn_use_side_chain_context=input_dict["ligand_mpnn_use_side_chain_context"],
+                ligand_mpnn_cutoff_for_score=input_dict["ligand_mpnn_cutoff_for_score"],
             )
-        if operation == "score":
-            return _model.score(
-                pdb_structure=pdb_structure,  # type: ignore[arg-type]
-                chain_ids=input_dict["chain_ids"],
-                sequence=input_dict["sequence"],
-                fixed_positions=input_dict.get("fixed_positions"),
-                seed=input_dict["seed"],
-                device=input_dict["device"],
-                verbose=input_dict["verbose"],
-            )
-        raise ValueError(f"ligandmpnn: unknown operation {operation!r}; valid: ['sample', 'score']")
+        raise ValueError(f"ligandmpnn: unknown operation {operation!r}; valid: ['sample']")
 
 
 def to_device(device: str) -> dict[str, Any]:

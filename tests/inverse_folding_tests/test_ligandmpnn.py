@@ -9,9 +9,9 @@ import pytest
 
 from proto_tools.entities.structures.structure import Structure
 from proto_tools.tools.inverse_folding import (
-    InverseFoldingConfig,
     InverseFoldingInput,
     InverseFoldingStructureInput,
+    LigandMPNNSampleConfig,
     run_ligandmpnn_sample,
 )
 from tests.conftest import benchmark_twice, make_persistent_fixture
@@ -33,7 +33,7 @@ def cif_structure():
 def test_ligandmpnn_sample_simple(cif_structure: Structure):
     """Basic LigandMPNN sampling with a single structure."""
     inp = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=cif_structure, chain_ids=["A"])])
-    config = InverseFoldingConfig(num_sequences_per_structure=2, temperature=0.1, seed=42)
+    config = LigandMPNNSampleConfig(num_sequences_per_structure=2, temperature=0.1, seed=42)
 
     output = run_ligandmpnn_sample(inp, config)
 
@@ -53,7 +53,7 @@ def test_ligandmpnn_sample_simple(cif_structure: Structure):
 def test_ligandmpnn_sample_chunked_batching(cif_structure: Structure):
     """Chunked batching produces the correct number of sequences."""
     inp = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=cif_structure, chain_ids=["A"])])
-    config = InverseFoldingConfig(
+    config = LigandMPNNSampleConfig(
         num_sequences_per_structure=6,
         batch_size=2,
         temperature=0.1,
@@ -79,7 +79,7 @@ def test_ligandmpnn_sample_multiple_structures(cif_structure: Structure):
             InverseFoldingStructureInput(structure=cif_structure, chain_ids=["A"]),
         ]
     )
-    config = InverseFoldingConfig(num_sequences_per_structure=3, temperature=0.1, seed=42)
+    config = LigandMPNNSampleConfig(num_sequences_per_structure=3, temperature=0.1, seed=42)
 
     output = run_ligandmpnn_sample(inp, config)
 
@@ -100,7 +100,7 @@ def test_ligandmpnn_sample_multiple_structures(cif_structure: Structure):
 def test_ligandmpnn_sample_benchmark(request: pytest.FixtureRequest, cif_structure: Structure) -> None:
     """Benchmark ligandmpnn-sample: 50 designs of renin chain A (~217 aa) at batch_size=16 (cold + warm)."""
     inputs = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=cif_structure, chain_ids=["A"])])
-    config = InverseFoldingConfig(
+    config = LigandMPNNSampleConfig(
         num_sequences_per_structure=50,
         batch_size=16,
         temperature=0.1,

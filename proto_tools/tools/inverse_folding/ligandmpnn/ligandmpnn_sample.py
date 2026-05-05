@@ -5,11 +5,12 @@ LigandMPNN sampling tool.
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field
 
 from proto_tools.tools.inverse_folding.shared_data_models import (
+    AminoAcid,
     DesignedSequences,
     InverseFoldingConfig,
     InverseFoldingInput,
@@ -17,10 +18,19 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingStructureInput,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import ToolInstance
+from proto_tools.utils import ConfigField, ToolInstance
 from proto_tools.utils.progress import progress_bar
 
 logger = logging.getLogger(__name__)
+
+LigandMPNNModelType = Literal[
+    "protein_mpnn",
+    "ligand_mpnn",
+    "soluble_mpnn",
+    "per_residue_label_membrane_mpnn",
+    "global_label_membrane_mpnn",
+]
+
 
 # ============================================================================
 # Data Models
@@ -29,8 +39,59 @@ logger = logging.getLogger(__name__)
 LigandMPNNSampleInput = InverseFoldingInput
 # Output:
 LigandMPNNSampleOutput = InverseFoldingOutput
+
+
 # Config:
-LigandMPNNSampleConfig = InverseFoldingConfig
+class LigandMPNNSampleConfig(InverseFoldingConfig):
+    """Configuration for LigandMPNN sampling.
+
+    Attributes:
+        num_sequences_per_structure (int): Total number of sequences to generate per
+            input structure.
+        batch_size (int | None): Number of sequences to process simultaneously on GPU.
+            Defaults to num_sequences_per_structure.
+        temperature (float): Controls randomness in sampling from logits.
+        excluded_amino_acids (list[AminoAcid] | None): One-letter codes of amino acids to exclude.
+        seed (int): Random seed to use for sampling.
+        model_type (LigandMPNNModelType): LigandMPNN variant to load.
+        ligand_mpnn_use_atom_context (bool): Whether ligand-aware variants encode ligand atom context.
+        ligand_mpnn_use_side_chain_context (bool): Whether to condition on fixed-residue sidechain atoms.
+        ligand_mpnn_cutoff_for_score (float): Ligand-residue distance cutoff (A) for the ligand-interface
+            recovery score.
+    """
+
+    model_type: LigandMPNNModelType = ConfigField(
+        title="Model Type",
+        default="ligand_mpnn",
+        description="LigandMPNN variant: ligand-aware, protein-only, soluble, or membrane (per-residue/global)",
+        reload_on_change=True,
+        advanced=True,
+    )
+    ligand_mpnn_use_atom_context: bool = ConfigField(
+        title="Use Ligand Atom Context",
+        default=True,
+        description="Encode ligand atom context in the message-passing graph",
+        advanced=True,
+    )
+    ligand_mpnn_use_side_chain_context: bool = ConfigField(
+        title="Use Sidechain Context",
+        default=False,
+        description="Condition on sidechain atoms of fixed residues",
+        advanced=True,
+    )
+    ligand_mpnn_cutoff_for_score: float = ConfigField(
+        title="Ligand Cutoff for Score",
+        default=8.0,
+        gt=0.0,
+        description="Ligand-residue distance cutoff (A) for interface recovery score",
+        advanced=True,
+    )
+    excluded_amino_acids: list[AminoAcid] | None = ConfigField(
+        title="Excluded Amino Acids",
+        default=None,
+        description="Single-letter codes of amino acids to exclude (e.g. ['C'] to forbid cysteine)",
+        examples=[["C"]],
+    )
 
 
 class LigandMPNNSequences(DesignedSequences):
@@ -126,6 +187,10 @@ def run_ligandmpnn_sample(
                 "seed": base_seed + chunk_idx,
                 "device": config.device,
                 "verbose": config.verbose,
+                "model_type": config.model_type,
+                "ligand_mpnn_use_atom_context": config.ligand_mpnn_use_atom_context,
+                "ligand_mpnn_use_side_chain_context": config.ligand_mpnn_use_side_chain_context,
+                "ligand_mpnn_cutoff_for_score": config.ligand_mpnn_cutoff_for_score,
             }
             result = ToolInstance.dispatch(
                 "ligandmpnn",

@@ -68,17 +68,13 @@ SpliceTransformer runs on GPU (recommended) or CPU:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `target_seqs` | `List[str]` | Target sequences for prediction (typically 1000bp) |
-| `left_contexts` | `List[str]` | Left flanking sequences (must match `context_length`) |
-| `right_contexts` | `List[str]` | Right flanking sequences (must match `context_length`) |
+| `target_seqs` | `List[str]` | Target sequences for prediction (must be exactly 1000 bp) |
+| `left_contexts` | `List[str]` | Left flanking sequences (must be exactly 4000 bp) |
+| `right_contexts` | `List[str]` | Right flanking sequences (must be exactly 4000 bp) |
 
 ## Configuration
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `context_length` | `int` | `4000` | Length of left/right context sequences |
-| `device` | `str` | `cuda` | Device: `cuda`, `cpu` |
-| `verbose` | `bool` | `False` | Print progress messages |
+The wrapper exposes no SpliceTransformer-specific knobs; sequence lengths are pinned by the published checkpoint (1000 bp target, 4000 bp left + right context). `device`, `verbose`, `timeout`, and `seed` are inherited from `BaseConfig`.
 
 ## Output Specification
 
@@ -149,7 +145,7 @@ inputs = SpliceTransformerInput(
     left_contexts=[left_ctx],
     right_contexts=[right_ctx]
 )
-config = SpliceTransformerConfig(context_length=4000, verbose=True)
+config = SpliceTransformerConfig(verbose=True)
 
 result = run_splice_transformer(inputs, config)
 pred = np.array(result.prediction)
@@ -240,7 +236,7 @@ print(f"Processed {len(result.prediction)} sequences")
 
 **Sequence preparation:**
 
-1. **Consistent lengths**: All `left_contexts` must be same length (`context_length`), all `right_contexts` same length.
+1. **Pinned lengths**: All `target_seqs` must be exactly 1000 bp; all `left_contexts` and `right_contexts` exactly 4000 bp.
 
 2. **Same batch size**: Number of `target_seqs`, `left_contexts`, and `right_contexts` must match.
 
@@ -256,7 +252,7 @@ print(f"Processed {len(result.prediction)} sequences")
 
 **Common mistakes:**
 
-1. **Wrong context length**: Left/right context must exactly match `context_length` parameter.
+1. **Wrong context length**: Left/right context must be exactly 4000 bp; target sequences exactly 1000 bp.
 
 2. **Misaligned sequences**: Target and context must be from same genomic locus.
 
@@ -275,7 +271,7 @@ print(f"Processed {len(result.prediction)} sequences")
 ## References
 
 **Primary publication:**
-- Chen, J. et al. (2024). "Predicting RNA splicing from DNA sequence using Pangolin." *Nature Communications*. DOI: [10.1038/s41467-024-53088-6](https://doi.org/10.1038/s41467-024-53088-6)
+- You, N., Liu, C., Gu, Y., Wang, R., Jia, H., et al. (2024). "SpliceTransformer predicts tissue-specific splicing linked to human diseases." *Nature Communications*, 15(1). DOI: [10.1038/s41467-024-53088-6](https://doi.org/10.1038/s41467-024-53088-6)
 
 **Implementation:**
 - GitHub: [https://github.com/ShenLab-Genomics/SpliceTransformer](https://github.com/ShenLab-Genomics/SpliceTransformer)

@@ -124,47 +124,35 @@ class SpliceTransformerInput(BaseToolInput):
 
     @model_validator(mode="after")
     def validate_input_format(self) -> Any:
-        """Validate that the input sequence format is correct."""
+        """Validate sequence-list parity and per-sequence length against the published checkpoint."""
         if len(self.target_seqs) != len(self.left_contexts):
             raise ValueError("Number of target sequences must be the same as the number of left context sequences")
         if len(self.target_seqs) != len(self.right_contexts):
             raise ValueError("Number of target sequences must be the same as the number of right context sequences")
+        for i, (t, lf, rt) in enumerate(zip(self.target_seqs, self.left_contexts, self.right_contexts, strict=True)):
+            if len(t) != TARGET_LENGTH:
+                raise ValueError(f"target_seqs[{i}] length {len(t)} != expected {TARGET_LENGTH}")
+            if len(lf) != CONTEXT_LENGTH:
+                raise ValueError(f"left_contexts[{i}] length {len(lf)} != expected {CONTEXT_LENGTH}")
+            if len(rt) != CONTEXT_LENGTH:
+                raise ValueError(f"right_contexts[{i}] length {len(rt)} != expected {CONTEXT_LENGTH}")
         return self
 
 
 class SpliceTransformerConfig(BaseConfig):
-    """Configuration object for SpliceTransformer model.
-
-    This class defines configuration parameters for running SpliceTransformer,
-    a transformer-based model for predicting tissue-specific splice sites in
-    RNA sequences.
+    """Configuration for SpliceTransformer.
 
     Attributes:
-        context_length (int): Length of context sequence on both left (5') and
-            right (3') sides of the target sequence. All sequences in ``left_contexts``
-            and ``right_contexts`` must match this length. Longer contexts generally
-            improve prediction accuracy. Default: 4000.
-
-        device (str): Device to run the model on. Options include ``"cuda"`` (NVIDIA GPU),
-            ``"cpu"`` (CPU execution), or specific GPU devices like ``"cuda:0"``.
-            GPU is strongly recommended for acceptable inference speed. Default: ``"cuda"``.
-
-    Note:
-        The context length determines the receptive field for splice site prediction.
-        Standard value is 4000bp, which balances accuracy and computational cost.
+        device (str): Device to run the model on. Override of ``BaseConfig.device``
+            because SpliceTransformer is a GPU tool (default ``cuda``).
     """
 
-    context_length: int = ConfigField(
-        title="Context Length",
-        default=CONTEXT_LENGTH,
-        description="Context length on both left and right of target sequence.",  # All sequences in left_contexts and right_contexts must be this length
-        reload_on_change=True,
-    )
     device: str = ConfigField(
-        default="cuda",
         title="Device",
-        description="Device to run the model on (e.g., 'cuda', 'cpu')",
+        default="cuda",
+        description="Device to run the model on",
         hidden=True,
+        include_in_key=False,
     )
 
 
@@ -280,7 +268,7 @@ def run_splice_transformer(
         inputs (SpliceTransformerInput): Validated input containing target sequences
             and their left/right context sequences.
         config (SpliceTransformerConfig): Validated SpliceTransformer configuration
-            specifying context length and device settings.
+            (inherits device / verbose / timeout / seed from BaseConfig).
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
@@ -299,7 +287,7 @@ def run_splice_transformer(
         ...     left_contexts=["CGTA" * 1000],  # 4000bp
         ...     right_contexts=["TACG" * 1000],  # 4000bp
         ... )
-        >>> config = SpliceTransformerConfig(context_length=4000, verbose=True)
+        >>> config = SpliceTransformerConfig()
         >>> result = run_splice_transformer(inputs, config)
         >>> # Extract donor site probabilities (channel 2) for first sequence
         >>> import numpy as np
@@ -313,16 +301,14 @@ def run_splice_transformer(
         - Target length is typically 1000bp but can vary
         - Each subprocess is fresh (no in-process caching)
     """
-    # Local GPU/CPU via standalone venv
-
-    logger.debug(f"Using local device for SpliceTransformer inference (context_length={config.context_length})")
+    logger.debug("Using local device for SpliceTransformer inference (context_length=%d)", CONTEXT_LENGTH)
 
     input_data = {
         "operation": "predict",
         "target_seqs": inputs.target_seqs,
         "left_contexts": inputs.left_contexts,
         "right_contexts": inputs.right_contexts,
-        "context_length": config.context_length,
+        "context_length": CONTEXT_LENGTH,
         "device": config.device,
         "verbose": config.verbose,
     }
@@ -334,7 +320,4 @@ def run_splice_transformer(
         config=config,
     )
 
-    return SpliceTransformerOutput(
-        metadata={"context_length": config.context_length},
-        prediction=output_data["prediction"],
-    )
+    return SpliceTransformerOutput(prediction=output_data["prediction"])

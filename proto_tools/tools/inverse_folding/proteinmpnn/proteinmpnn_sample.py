@@ -11,6 +11,7 @@ import numpy as np
 from pydantic import Field
 
 from proto_tools.tools.inverse_folding.shared_data_models import (
+    AminoAcid,
     DesignedSequences,
     InverseFoldingConfig,
     InverseFoldingInput,
@@ -42,18 +43,34 @@ class ProteinMPNNSampleConfig(InverseFoldingConfig):
         batch_size (int | None): Number of sequences to process simultaneously on GPU.
             Defaults to num_sequences_per_structure.
         temperature (float): Controls randomness in sampling from logits.
-        excluded_amino_acids (list[str] | None): List of amino acids not allowed in the sequence.
+        excluded_amino_acids (list[AminoAcid] | None): One-letter codes of amino acids to exclude.
         seed (int): Random seed to use for sampling.
-        model_choice (Literal['proteinmpnn', 'abmpnn', 'soluble']): Model weights to use. ``"proteinmpnn"`` for the
-            general-purpose model, ``"abmpnn"`` for antibody-optimized, ``"soluble"`` for soluble-protein-trained weights.
+        model_choice (Literal['proteinmpnn', 'v_48_002', 'v_48_010', 'v_48_030', 'abmpnn', 'soluble']): Model
+            weights. ``"proteinmpnn"`` is ColabDesign's default ``v_48_020`` (medium training noise). The
+            ``v_48_*`` variants are the same architecture trained at different noise levels (002 / 010 / 030).
+            ``"abmpnn"`` is antibody-optimized; ``"soluble"`` is soluble-protein-trained.
+        backbone_noise (float): Gaussian noise (A) added to backbone coordinates before each forward pass.
     """
 
-    model_choice: Literal["proteinmpnn", "abmpnn", "soluble"] = ConfigField(
+    model_choice: Literal["proteinmpnn", "v_48_002", "v_48_010", "v_48_030", "abmpnn", "soluble"] = ConfigField(
         title="Model Choice",
         default="proteinmpnn",
-        description="Model weights: 'proteinmpnn' (general), 'abmpnn' (antibody), or 'soluble' (soluble proteins)",
+        description="Weights: proteinmpnn (=v_48_020), v_48_{002,010,030} noise variants, abmpnn, soluble",
         reload_on_change=True,
-        examples=["proteinmpnn", "abmpnn", "soluble"],
+        examples=["proteinmpnn", "v_48_010", "abmpnn", "soluble"],
+    )
+    backbone_noise: float = ConfigField(
+        title="Backbone Noise",
+        default=0.0,
+        ge=0.0,
+        description="Gaussian noise (A) on backbone coords; raise (e.g. 0.02) for diversity",
+        advanced=True,
+    )
+    excluded_amino_acids: list[AminoAcid] | None = ConfigField(
+        title="Excluded Amino Acids",
+        default=None,
+        description="Single-letter codes of amino acids to exclude (e.g. ['C'] to forbid cysteine)",
+        examples=[["C"]],
     )
 
 
@@ -151,6 +168,7 @@ def run_proteinmpnn_sample(
                 "model_choice": config.model_choice,
                 "verbose": config.verbose,
                 "return_logits": False,
+                "backbone_noise": config.backbone_noise,
             }
             result = ToolInstance.dispatch(
                 "proteinmpnn",

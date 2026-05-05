@@ -30,7 +30,6 @@ This context is critical for designing functional enzymes, metalloprotein bindin
 | Tool Key | Status | Description |
 |----------|--------|-------------|
 | `ligandmpnn-sample` | Available | Sample protein sequences conditioned on structure + ligand context |
-| `ligandmpnn-score` | Not implemented | Score sequence-structure compatibility (stub only) |
 
 ## Execution Modes
 
@@ -71,6 +70,10 @@ Each `InverseFoldingStructureInput` contains:
 | `batch_size` | `Optional[int]` | `None` | >= 1 | Max sequences per GPU forward pass (defaults to `num_sequences_per_structure`) |
 | `temperature` | `float` | `0.1` | 0.0-1.0 | Sampling temperature controlling sequence diversity |
 | `excluded_amino_acids` | `Optional[List[str]]` | `None` | Any standard AAs | Amino acids forbidden in designed positions. Common: `["C"]` to avoid disulfides. |
+| `model_type` | `Literal[...]` | `"ligand_mpnn"` | five variants | Model variant: `protein_mpnn`, `ligand_mpnn` (default), `soluble_mpnn`, `per_residue_label_membrane_mpnn`, `global_label_membrane_mpnn` |
+| `ligand_mpnn_use_atom_context` | `bool` | `True` | -- | Encode ligand atom context in graph (ligand-aware variants only) |
+| `ligand_mpnn_use_side_chain_context` | `bool` | `False` | -- | Condition on fixed-residue sidechain atoms |
+| `ligand_mpnn_cutoff_for_score` | `float` | `8.0` | > 0.0 | Ligand-residue distance cutoff (A) for ligand-interface recovery score |
 | `seed` | `int` | `42` | any int | Random seed for reproducibility |
 | `device` | `str` | `"cuda"` | `"cuda"`, `"cpu"` | Inference device |
 | `verbose` | `bool` | `False` | -- | Print status messages during execution |
@@ -209,7 +212,7 @@ result.export("/path/to/output_dir", file_format="json")
 - **GPU is required.** LigandMPNN runs on GPU via CUDA. CPU execution is technically possible but impractically slow for typical batch sizes.
 - **Chain IDs must exist in the structure.** If you specify `chain_ids` that are not present in the PDB, validation will raise an error with the available chains listed.
 - **Positions are 1-indexed.** Fixed positions follow biological convention (first residue = position 1), not 0-indexed.
-- **Scoring is not yet implemented.** The `ligandmpnn-score` tool key exists as a stub but is not functional. Use `proteinmpnn-score` for scoring protein-only contexts.
+- **For scoring, use `proteinmpnn-score`.** No LigandMPNN scoring tool is registered; use `proteinmpnn-score` for protein-only contexts.
 
 ## References
 

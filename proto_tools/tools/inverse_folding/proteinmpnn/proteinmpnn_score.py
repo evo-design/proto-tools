@@ -66,9 +66,10 @@ class ProteinMPNNScoringConfig(BaseConfig):
             When ``True``, returns logits for each sequence. When ``False``, only
             returns metrics (saves memory and serialization time). Default: ``False``.
 
-        model_choice (Literal['proteinmpnn', 'abmpnn', 'soluble']): Model weights to use.
-            ``"proteinmpnn"`` for general-purpose, ``"abmpnn"`` for antibody-optimized,
-            ``"soluble"`` for soluble-protein-trained weights. Default: ``"proteinmpnn"``.
+        model_choice (Literal['proteinmpnn', 'v_48_002', 'v_48_010', 'v_48_030', 'abmpnn', 'soluble']): Model
+            weights. ``"proteinmpnn"`` is ColabDesign's default ``v_48_020`` (medium training noise). The
+            ``v_48_*`` variants are the same architecture trained at different noise levels (002 / 010 / 030).
+            ``"abmpnn"`` is antibody-optimized; ``"soluble"`` is soluble-protein-trained.
 
     Note:
         - ProteinMPNN uses AlphaFold alphabet ordering (21 tokens including X)
@@ -80,7 +81,7 @@ class ProteinMPNNScoringConfig(BaseConfig):
         title="Fixed Positions",
         default=None,
         description="Dictionary mapping chain IDs to fixed positions in the sequence. If None, no positions will be fixed",
-        examples={"A": [1, 2, 3, 4, 5, 20, 21, 22], "B": [10, 11, 12, 13, 14, 15, 20, 21, 22]},
+        examples=[{"A": [1, 2, 3]}, {"A": [10, 20], "B": [5]}],
     )
 
     device: str = ConfigField(
@@ -99,12 +100,12 @@ class ProteinMPNNScoringConfig(BaseConfig):
         advanced=True,
     )
 
-    model_choice: Literal["proteinmpnn", "abmpnn", "soluble"] = ConfigField(
+    model_choice: Literal["proteinmpnn", "v_48_002", "v_48_010", "v_48_030", "abmpnn", "soluble"] = ConfigField(
         title="Model Choice",
         default="proteinmpnn",
-        description="Model weights: 'proteinmpnn' (general), 'abmpnn' (antibody), or 'soluble' (soluble proteins)",
+        description="Weights: proteinmpnn (=v_48_020), v_48_{002,010,030} noise variants, abmpnn, soluble",
         reload_on_change=True,
-        examples=["proteinmpnn", "abmpnn", "soluble"],
+        examples=["proteinmpnn", "v_48_010", "abmpnn", "soluble"],
     )
 
 

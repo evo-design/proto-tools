@@ -35,15 +35,12 @@ from proto_tools.tools.inverse_folding.fampnn import (
     run_fampnn_score_all_mutations,
 )
 from proto_tools.tools.inverse_folding.ligandmpnn import (
+    LigandMPNNModelType,
     LigandMPNNSampleConfig,
     LigandMPNNSampleInput,
     LigandMPNNSampleOutput,
-    LigandMPNNScoringConfig,
-    LigandMPNNScoringInput,
-    LigandMPNNScoringOutput,
     LigandMPNNSequences,
     run_ligandmpnn_sample,
-    run_ligandmpnn_score,
 )
 from proto_tools.tools.inverse_folding.proteinmpnn import (
     ProteinMPNNSampleConfig,
@@ -96,13 +93,10 @@ __all__ = [
     "ProteinMPNNSequences",
     # LigandMPNN
     "run_ligandmpnn_sample",
-    "run_ligandmpnn_score",
+    "LigandMPNNModelType",
     "LigandMPNNSampleInput",
     "LigandMPNNSampleConfig",
     "LigandMPNNSampleOutput",
-    "LigandMPNNScoringInput",
-    "LigandMPNNScoringConfig",
-    "LigandMPNNScoringOutput",
     "LigandMPNNSequences",
     # FAMPNN
     "AllMutationsScoreResult",

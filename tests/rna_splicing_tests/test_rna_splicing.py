@@ -38,6 +38,26 @@ def _run_splice_transformer_and_check(device: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Validator coverage
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "target,left,right,match",
+    [
+        ("A" * (TARGET_LENGTH - 1), "A" * CONTEXT_LENGTH, "A" * CONTEXT_LENGTH, "target_seqs"),
+        ("A" * TARGET_LENGTH, "A" * (CONTEXT_LENGTH - 1), "A" * CONTEXT_LENGTH, "left_contexts"),
+        ("A" * TARGET_LENGTH, "A" * CONTEXT_LENGTH, "A" * (CONTEXT_LENGTH + 1), "right_contexts"),
+    ],
+    ids=["target-too-short", "left-too-short", "right-too-long"],
+)
+def test_splice_transformer_input_rejects_wrong_lengths(target: str, left: str, right: str, match: str) -> None:
+    """The model is pinned to 1000 bp targets and 4000 bp contexts; mismatches must raise pre-dispatch."""
+    with pytest.raises(ValueError, match=match):
+        SpliceTransformerInput(target_seqs=[target], left_contexts=[left], right_contexts=[right])
+
+
+# ---------------------------------------------------------------------------
 # Integration tests
 # ---------------------------------------------------------------------------
 

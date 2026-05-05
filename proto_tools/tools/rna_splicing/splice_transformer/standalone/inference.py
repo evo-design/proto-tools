@@ -135,7 +135,7 @@ class SpliceTransformerModel:
         seq = torch.tensor(seq).to(self.device)
         seq = seq.transpose(1, 2)  # 　(batch, length, 4) -> (batch, 4, length)
         res = self._step(seq.float())  # type: ignore[attr-defined]
-        return res.transpose(1, 2).numpy()  # type: ignore[no-any-return]  # 　(batch, 4, length) -> (batch, length, 4)
+        return res.transpose(1, 2).numpy()  # type: ignore[no-any-return]  # 　(batch, 18, length) -> (batch, length, 18)
 
     # ============================================================================
     # Model Loading & Device Management
@@ -146,19 +146,25 @@ class SpliceTransformerModel:
             key.replace("attn.pos_emb.weights_", "attn.pos_emb.weights."): value for key, value in state_dict.items()
         }
 
-    def load(self, device: str = "cuda", verbose: bool = False) -> None:  # noqa: ARG002 — required by tool interface
+    def load(self, device: str = "cuda", verbose: bool = False) -> None:  # noqa: ARG002 - verbose kept for interface symmetry
         """Load SpliceTransformer model to device."""
         logger.debug(f"Loading SpliceTransformer (context_length={self.context_length}) on {device}")
 
         from model import SpTransformer
 
+        # Pinned to the published ShenLab-Genomics/SpliceTransformer checkpoint.
+        _CHECKPOINT_DIM = 128
+        _CHECKPOINT_ATTN_DEPTH = 8
+        _CHECKPOINT_MAX_SEQ_LEN = 8192
+        _CHECKPOINT_TISSUE_NUM = 15
+
         self.model = (
             SpTransformer(
-                128,
+                _CHECKPOINT_DIM,
                 context_len=self.context_length,
-                tissue_num=15,
-                max_seq_len=8192,
-                attn_depth=8,
+                tissue_num=_CHECKPOINT_TISSUE_NUM,
+                max_seq_len=_CHECKPOINT_MAX_SEQ_LEN,
+                attn_depth=_CHECKPOINT_ATTN_DEPTH,
                 training=False,
             )
             .to(device)

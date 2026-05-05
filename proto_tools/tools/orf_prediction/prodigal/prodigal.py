@@ -160,6 +160,12 @@ class ProdigalConfig(BaseConfig):
 
             Default: ``False``.
 
+        mask (bool): When ``True``, treat runs of N bases as masked and do not
+            call genes spanning them (equivalent to prodigal's ``-m``). Default: ``False``.
+
+        min_gene (int): Minimum gene length in nucleotides. Default: 90. Drop
+            for draft assemblies where short fragments are expected.
+
         num_threads (int): Number of CPU threads for parallel processing of multiple
             sequences. Higher values speed up batch processing. By default,
             automatically detects and uses all available CPU cores. Must be at
@@ -186,6 +192,19 @@ class ProdigalConfig(BaseConfig):
         title="Closed Ends",
         default=False,
         description="Prevent genes from running off sequence edges (use True for complete circular genomes)",
+        advanced=True,
+    )
+    mask: bool = ConfigField(
+        title="Mask N-Runs",
+        default=False,
+        description="Treat runs of N as masked; do not call genes across them",
+        advanced=True,
+    )
+    min_gene: int = ConfigField(
+        title="Minimum Gene Length",
+        default=90,
+        ge=3,
+        description="Minimum gene length in nt; lower for draft assemblies",
         advanced=True,
     )
     num_threads: int = ConfigField(
@@ -363,6 +382,8 @@ def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig, insta
             "config": {
                 "meta_mode": config.meta_mode,
                 "closed_ends": config.closed_ends,
+                "mask": config.mask,
+                "min_gene": config.min_gene,
                 "num_threads": config.num_threads,
                 "translation_table": TRANSLATION_TABLE_MAP[config.translation_table],
             },

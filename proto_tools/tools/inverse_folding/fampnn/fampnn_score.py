@@ -69,7 +69,6 @@ class FAMPNNScoreConfig(BaseConfig):
         seq_only (bool): If True, score without sidechain context (backbone-only).
         scn_diffusion_steps (int): Number of sidechain diffusion denoising steps.
         scn_step_scale (float): Step scale for sidechain diffusion.
-        seed (int): Random seed.
         device (str): Device to run on.
     """
 
@@ -78,6 +77,7 @@ class FAMPNNScoreConfig(BaseConfig):
         default="0.3_cath",
         description="FAMPNN checkpoint: '0.3_cath' recommended for scoring",
         examples=["0.3_cath", "0.3", "0.0"],
+        reload_on_change=True,
     )
     batch_size: int = ConfigField(
         title="Batch Size",
@@ -102,12 +102,6 @@ class FAMPNNScoreConfig(BaseConfig):
         default=1.5,
         gt=0.0,
         description="Step scale (eta) for sidechain diffusion",
-        hidden=True,
-    )
-    seed: int = ConfigField(
-        title="Random Seed",
-        default=42,
-        description="Random seed",
         hidden=True,
     )
     device: str = ConfigField(
@@ -153,7 +147,7 @@ class FAMPNNScoreOutput(BaseToolOutput):
         """Return the default output format."""
         return "csv"
 
-    def _export_output(self, export_path: Any, file_format: Any) -> None:
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         path = Path(export_path)
 
         if file_format == "csv":

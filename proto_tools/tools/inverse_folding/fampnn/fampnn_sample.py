@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field, field_validator
+from pydantic import Field
 
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedSequences,
@@ -77,8 +77,6 @@ class FAMPNNSampleConfig(InverseFoldingConfig):
         batch_size (int | None): Number of sequences to process simultaneously on GPU.
             Defaults to num_sequences_per_structure.
         temperature (float): Controls randomness in sampling from logits.
-        excluded_amino_acids (list[str] | None): List of amino acids not allowed in the sequence.
-            Not supported by FAMPNN (raises ValueError if set).
         seed (int): Random seed to use for sampling.
         model_variant (str): FAMPNN checkpoint variant. '0.3' for sequence design
             (PDB-trained, 0.3A noise), '0.0' for sidechain packing (PDB-trained,
@@ -99,6 +97,7 @@ class FAMPNNSampleConfig(InverseFoldingConfig):
         default="0.3",
         description="FAMPNN checkpoint: '0.3' (design), '0.0' (packing), '0.3_cath' (scoring)",
         examples=["0.3", "0.0", "0.3_cath"],
+        reload_on_change=True,
     )
     num_steps: int = ConfigField(
         title="Unmasking Steps",
@@ -138,13 +137,6 @@ class FAMPNNSampleConfig(InverseFoldingConfig):
         description="Step scale (eta) for sidechain diffusion",
         hidden=True,
     )
-
-    @field_validator("excluded_amino_acids")
-    @classmethod
-    def _reject_excluded_aa(cls, v: Any) -> None:
-        if v is not None:
-            raise ValueError("'excluded_amino_acids' is not supported by FAMPNN")
-        return v
 
 
 class FAMPNNSequences(DesignedSequences):
@@ -190,6 +182,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_field="inputs",
     iterable_output_field="designed_sequences",
+    cacheable=True,
 )
 def run_fampnn_sample(
     inputs: FAMPNNSampleInput,
