@@ -119,7 +119,7 @@ Coordinates use **0-based indexing with exclusive end** ([BED](https://en.wikipe
 
 **Available output types:** `ATAC`, `CAGE`, `DNASE`, `RNA_SEQ`, `CHIP_HISTONE`, `CHIP_TF`, `SPLICE_SITES`, `SPLICE_SITE_USAGE`, `SPLICE_JUNCTIONS`, `CONTACT_MAPS`, `PROCAP`
 
-### Variant Scoring Config (`AlphaGenomeScoreVariantsConfig`)
+### Variant Scoring Config (`AlphaGenomeScoreVariantsConfig` / `AlphaGenomeScoreISMConfig`)
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -129,15 +129,6 @@ Coordinates use **0-based indexing with exclusive end** ([BED](https://en.wikipe
 | `device` | `str` | `"cuda"` | Inference device |
 
 **Available variant scorers:** `ATAC`, `CONTACT_MAPS`, `DNASE`, `CHIP_TF`, `CHIP_HISTONE`, `CAGE`, `PROCAP`, `RNA_SEQ`, `RNA_SEQ_ACTIVE`, `SPLICE_SITES`, `SPLICE_SITE_USAGE`, `SPLICE_JUNCTIONS`, `POLYADENYLATION`, `ATAC_ACTIVE`, `DNASE_ACTIVE`, `CHIP_TF_ACTIVE`, `CHIP_HISTONE_ACTIVE`, `CAGE_ACTIVE`, `PROCAP_ACTIVE`
-
-### ISM Scoring Config (`AlphaGenomeScoreISMConfig`)
-
-Inherits all fields from `AlphaGenomeScoreVariantsConfig`, plus two ISM-specific knobs:
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `progress_bar` | `bool` | `False` | Show per-request progress bar during ISM dispatch |
-| `max_workers` | `int` | `5` | Parallel HTTP workers for ISM request dispatch |
 
 ### Interval Scoring Config (`AlphaGenomeScoreIntervalsConfig`)
 
