@@ -19,6 +19,7 @@ from proto_tools.tools.database_retrieval.ensembl.ensembl_sequence import (
     run_ensembl_sequence,
 )
 from proto_tools.tools.database_retrieval.ensembl.ensembl_vep import (
+    EnsemblVEPAnnotationConfig,
     EnsemblVEPConfig,
     EnsemblVEPConsequence,
     EnsemblVEPInput,
@@ -65,6 +66,7 @@ __all__ = [
     "EnsemblSpecies",
     "EnsemblTranscript",
     "EnsemblTranslation",
+    "EnsemblVEPAnnotationConfig",
     "EnsemblVEPConfig",
     "EnsemblVEPConsequence",
     "EnsemblVEPInput",

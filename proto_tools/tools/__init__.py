@@ -72,6 +72,7 @@ from proto_tools.tools.database_retrieval import (
     EnsemblSpecies,
     EnsemblTranscript,
     EnsemblTranslation,
+    EnsemblVEPAnnotationConfig,
     EnsemblVEPConfig,
     EnsemblVEPConsequence,
     EnsemblVEPInput,
@@ -988,6 +989,7 @@ __all__ = [
     "run_ensembl_vep",
     "EnsemblVEPInput",
     "EnsemblVEPConfig",
+    "EnsemblVEPAnnotationConfig",
     "EnsemblVEPOutput",
     "EnsemblVEPConsequence",
     # Database retrieval - InterPro Fetch
