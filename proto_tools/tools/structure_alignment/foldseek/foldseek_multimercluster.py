@@ -13,6 +13,7 @@ from pydantic import Field, model_validator
 
 from proto_tools.entities.structures.utils import detect_structure_format
 from proto_tools.tools.structure_alignment.foldseek.foldseek_cluster import (
+    _STRUCTURE_EXTENSIONS,
     FoldseekCluster,
     _parse_cluster_tsv,
     _resolve_structures_dir_in_data,
@@ -73,11 +74,16 @@ class FoldseekMultimerClusterInput(BaseToolInput):
     @model_validator(mode="before")
     @classmethod
     def _resolve(cls, data: Any) -> Any:
-        return _resolve_structures_dir_in_data(data)
+        return _resolve_structures_dir_in_data(data, extensions=_STRUCTURE_EXTENSIONS)
 
     @model_validator(mode="after")
     def _check(self) -> "FoldseekMultimerClusterInput":
-        _validate_resolved_input(self.structures, self.structure_ids, reject_underscore=True)
+        _validate_resolved_input(
+            self.structures,
+            self.structure_ids,
+            reject_underscore=True,
+            reject_fasta=True,
+        )
         return self
 
 

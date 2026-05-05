@@ -15,6 +15,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from standalone_helpers import resolve_weights_dir
+
 
 def _find_binary(name: str = "foldseek") -> str:
     """Find the Foldseek binary in the venv's bin/ directory."""
@@ -41,6 +43,39 @@ def _write_structures(structures: list[str], out_dir: Path, ids: list[str], form
     """Write each structure to a file in out_dir as ``{id}.{format}``."""
     for sid, text, fmt in zip(ids, structures, formats, strict=True):
         (out_dir / f"{sid}.{fmt}").write_text(text)
+
+
+def _ensure_prostt5_weights(override: str | None) -> str:
+    """Return a ProstT5 weights path, provisioning via `foldseek databases ProstT5` if missing.
+
+    Default cache: ``<resolve_weights_dir("foldseek")>/prostt5/weights`` (~2.7 GB,
+    one-time). Resolution honors ``PROTO_FOLDSEEK_WEIGHTS_DIR`` and
+    ``PROTO_MODEL_CACHE`` per ``notes/storage.md``.
+    ``override``, if set, must point to an existing path and is returned as-is.
+    """
+    if override:
+        if not Path(override).exists():
+            raise FileNotFoundError(f"prostt5_weights_dir {override!r} does not exist")
+        return override
+
+    base = resolve_weights_dir("foldseek")
+    if base is None:
+        raise RuntimeError("resolve_weights_dir('foldseek') returned None; cannot locate ProstT5 cache")
+    cache_dir = Path(base) / "prostt5"
+    weights_path = cache_dir / "weights"
+    marker = cache_dir / ".proto-ready"
+
+    if marker.exists():
+        return str(weights_path)
+
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as tmp:
+        _run_cmd(
+            [_find_binary(), "databases", "ProstT5", str(weights_path), tmp],
+            "databases ProstT5",
+        )
+    marker.touch()
+    return str(weights_path)
 
 
 # Force `pident` (0-100) so local M8 matches the public server's format.
@@ -100,16 +135,22 @@ def run_easy_cluster(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run `foldseek easy-cluster` over user-provided structures.
 
     Args:
-        input_data: keys ``structures`` (list[str] of PDB or mmCIF text),
-            ``structure_ids`` (list[str]), ``structure_formats`` (list[str],
-            ``"pdb"`` or ``"cif"`` per entry), ``min_seq_id``, ``cov``,
-            ``cov_mode``, ``evalue``, ``alignment_type``, ``tmscore_threshold``,
-            ``lddt_threshold``, ``num_threads``.
+        input_data: keys ``structures`` (list[str] of PDB, mmCIF, or FASTA
+            text), ``structure_ids`` (list[str]), ``structure_formats``
+            (list[str]: ``"pdb"`` / ``"cif"`` / ``"fasta"`` per entry; uniform
+            mode enforced upstream), ``prostt5_weights_dir`` (str | None;
+            required for FASTA mode, auto-provisioned if None), ``min_seq_id``,
+            ``cov``, ``cov_mode``, ``evalue``, ``alignment_type``,
+            ``tmscore_threshold``, ``lddt_threshold``, ``num_threads``.
 
     Returns:
         ``{"clusters_tsv": <tsv_text>}`` — 2 cols: representative_id, member_id.
     """
     foldseek = _find_binary()
+    formats = input_data["structure_formats"]
+    # Validator guarantees uniform mode; all entries are the same format.
+    is_fasta_mode = formats[0] == "fasta"
+
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         structures_dir = tmp_path / "structures"
@@ -118,36 +159,37 @@ def run_easy_cluster(input_data: dict[str, Any]) -> dict[str, Any]:
             input_data["structures"],
             structures_dir,
             input_data["structure_ids"],
-            input_data["structure_formats"],
+            formats,
         )
 
         prefix = tmp_path / "cluster"
-        _run_cmd(
-            [
-                foldseek,
-                "easy-cluster",
-                str(structures_dir),
-                str(prefix),
-                str(tmp_path / "fs_tmp"),
-                "--min-seq-id",
-                str(input_data["min_seq_id"]),
-                "-c",
-                str(input_data["cov"]),
-                "--cov-mode",
-                str(input_data["cov_mode"]),
-                "-e",
-                str(input_data["evalue"]),
-                "--alignment-type",
-                str(input_data["alignment_type"]),
-                "--tmscore-threshold",
-                str(input_data["tmscore_threshold"]),
-                "--lddt-threshold",
-                str(input_data["lddt_threshold"]),
-                "--threads",
-                str(input_data["num_threads"]),
-            ],
+        cmd = [
+            foldseek,
             "easy-cluster",
-        )
+            str(structures_dir),
+            str(prefix),
+            str(tmp_path / "fs_tmp"),
+            "--min-seq-id",
+            str(input_data["min_seq_id"]),
+            "-c",
+            str(input_data["cov"]),
+            "--cov-mode",
+            str(input_data["cov_mode"]),
+            "-e",
+            str(input_data["evalue"]),
+            "--alignment-type",
+            str(input_data["alignment_type"]),
+            "--tmscore-threshold",
+            str(input_data["tmscore_threshold"]),
+            "--lddt-threshold",
+            str(input_data["lddt_threshold"]),
+            "--threads",
+            str(input_data["num_threads"]),
+        ]
+        if is_fasta_mode:
+            cmd += ["--prostt5-model", _ensure_prostt5_weights(input_data.get("prostt5_weights_dir"))]
+
+        _run_cmd(cmd, "easy-cluster")
         tsv_path = prefix.with_name(prefix.name + "_cluster.tsv")
         return {"clusters_tsv": tsv_path.read_text() if tsv_path.exists() else ""}
 
