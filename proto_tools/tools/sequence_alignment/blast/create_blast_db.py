@@ -83,42 +83,25 @@ class CreateBlastDbOutput(BaseToolOutput):
 class CreateBlastDbConfig(BaseConfig):
     """Configuration object for creating a BLAST database.
 
-    This class defines all configuration parameters for creating a local BLAST
-    database using ``makeblastdb``. It controls the database type, output location,
-    metadata, and indexing options.
-
     Attributes:
-        dbtype (Literal['nucl', 'prot']): The type of database to create:
-
-            - ``"nucl"``: Nucleotide database (for DNA/RNA sequences)
-            - ``"prot"``: Protein database (for amino acid sequences)
-
-            This must match the sequence type in the input FASTA file.
-
-        out_prefix (str | None): Optional file path prefix for the generated
-            database files. If not specified, the database files will be created
-            in the same directory as the input FASTA file, using the FASTA filename
-            (without extension) as the prefix. For example, if the input is
-            ``"sequences.fasta"`` and ``out_prefix`` is ``None``, the database will
-            be named ``"sequences"``. If ``out_prefix`` is ``"/data/mydb"``, the
-            database files will be created as ``"/data/mydb.nhr"``,
-            ``"/data/mydb.nin"``, ``"/data/mydb.nsq"``, etc.
-
-        title (str | None): Optional descriptive title for the database. This
-            title will be displayed in BLAST search results and can help identify
-            the database contents. If not specified, ``makeblastdb`` will use the
-            input filename.
-
-        additional_params (dict[str, str | int | float | bool]): Dictionary
-            of additional parameters for ``makeblastdb``. Common options include:
-
-            - ``"parse_seqids"``: Parse sequence IDs in the FASTA file (boolean)
-            - ``"hash_index"``: Create hash index for faster lookups (boolean)
-            - ``"max_file_sz"``: Maximum file size for database volumes (string, e.g., ``"4GB"``)
-            - ``"taxid"``: Assign this taxonomy ID to all sequences (integer)
-            - ``"taxid_map"``: File mapping sequence IDs to taxonomy IDs (string path)
-            - ``"logfile"``: Path to log file for ``makeblastdb`` output (string path)
-            - ``"blastdb_version"``: BLAST database version (4 or 5, default: 5)
+        dbtype (Literal['nucl', 'prot']): ``"nucl"`` for DNA/RNA, ``"prot"``
+            for protein. Must match the input FASTA.
+        out_prefix (str | None): File-path prefix for generated DB files;
+            ``None`` falls back to the input FASTA stem.
+        title (str | None): Descriptive DB title shown in BLAST reports;
+            ``makeblastdb`` falls back to the input file name when ``None``.
+        parse_seqids (bool): Parse FASTA seq IDs so ``blastdbcmd`` can
+            address sequences by ID; required for v5 taxonomy lookups.
+        hash_index (bool): Create a hash index of seq IDs (faster ID lookups).
+        blastdb_version (Literal[4, 5]): DB format version. ``5`` (taxonomy-
+            aware) is the upstream default since BLAST+ 2.10.
+        max_file_sz (str): Max size per DB volume with a unit suffix
+            (e.g. ``"1GB"``); upstream caps at ``"4GB"``.
+        taxid (int | None): NCBI taxonomy ID assigned to every sequence;
+            set to tag a single-organism DB.
+        extra_args (list[str]): Extra ``makeblastdb`` CLI tokens passed
+            verbatim (e.g. ``["-mask_data", "/path/to/mask"]``). Escape
+            hatch for flags not exposed as typed fields above.
 
     Raises:
         ValueError: If ``dbtype`` is not ``"nucl"`` or ``"prot"``.
@@ -127,23 +110,54 @@ class CreateBlastDbConfig(BaseConfig):
     dbtype: Literal["nucl", "prot"] = ConfigField(
         title="Database Type",
         default="nucl",
-        description="Specifies the type of database to create: Nucleotide or Protein",
+        description="Database type: `nucl` for DNA/RNA, `prot` for amino acid. Must match the input FASTA.",
     )
-    # TODO: Determine how to handle this for the frontend.
     out_prefix: str | None = ConfigField(
         title="Output Prefix",
         default=None,
-        description="File-path prefix for database files (default: FASTA stem)",
+        description="File-path prefix for the generated DB files; falls back to the input FASTA stem when None.",
+        hidden=True,
     )
     title: str | None = ConfigField(
         title="Database Title",
         default=None,
-        description="Optional name for the database",
+        description="Descriptive DB title shown in search reports; `makeblastdb` falls back to the input file name.",
+        advanced=True,
     )
-    additional_params: dict[str, str | int | float | bool] = ConfigField(
-        title="Additional Parameter Dictionary",
-        default_factory=dict,
-        description="Extra flags for makeblastdb (e.g., parse_seqids, hash_index)",
+    parse_seqids: bool = ConfigField(
+        title="Parse Sequence IDs",
+        default=False,
+        description="Parse FASTA seq IDs so `blastdbcmd` can address sequences by ID; required for v5 taxonomy.",
+        advanced=True,
+    )
+    hash_index: bool = ConfigField(
+        title="Hash Index",
+        default=False,
+        description="Build a hash index of sequence IDs for faster ID lookups; usually paired with `parse_seqids`.",
+        advanced=True,
+    )
+    blastdb_version: Literal[4, 5] = ConfigField(
+        title="BLAST DB Version",
+        default=5,
+        description="BLAST DB format version: `5` (taxonomy-aware, default since BLAST+ 2.10) or `4` (legacy).",
+        advanced=True,
+    )
+    max_file_sz: str = ConfigField(
+        title="Max File Size",
+        default="1GB",
+        description="Max size per DB volume with unit suffix (e.g. `1GB`, `500MB`); `4GB` is the upstream max.",
+        advanced=True,
+    )
+    taxid: int | None = ConfigField(
+        title="Taxonomy ID",
+        default=None,
+        description="NCBI taxonomy ID assigned to every sequence; set to tag a single-organism DB.",
+        advanced=True,
+    )
+    extra_args: list[str] = ConfigField(
+        title="Extra CLI Arguments",
+        default=[],
+        description="Verbatim `makeblastdb` flags for fields not exposed above (e.g. `-mask_data /path`).",
         advanced=True,
     )
 
@@ -226,7 +240,12 @@ def run_create_blast_db(
             "dbtype": config.dbtype,
             "out_prefix": out_prefix,
             "title": config.title,
-            "additional_params": config.additional_params,
+            "parse_seqids": config.parse_seqids,
+            "hash_index": config.hash_index,
+            "blastdb_version": config.blastdb_version,
+            "max_file_sz": config.max_file_sz,
+            "taxid": config.taxid,
+            "extra_args": list(config.extra_args),
         },
         instance=instance,
         config=config,

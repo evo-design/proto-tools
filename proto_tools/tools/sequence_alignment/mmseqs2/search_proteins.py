@@ -10,7 +10,7 @@ import io
 import json
 from collections.abc import Iterator
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -32,15 +32,32 @@ from proto_tools.utils import (
 # Constants
 # ============================================================================
 
-DEFAULT_THREADS = 96
+# 0 = let mmseqs auto-detect all available cores.
+DEFAULT_THREADS = 0
 DEFAULT_SPLIT = 0
-DEFAULT_SENSITIVITY = 4.0
+DEFAULT_SEARCH_SENSITIVITY = 5.7
+# Genome-search wrapper opinion: bias toward higher sensitivity by default.
 DEFAULT_GENOME_SENSITIVITY = 7.5
-DEFAULT_MIN_SEQ_ID = 0.60
+DEFAULT_CLUSTER_SENSITIVITY = 4.0
+DEFAULT_MIN_SEQ_ID = 0.0
+DEFAULT_CLUSTER_EVALUE = 0.001
+DEFAULT_SEARCH_EVALUE = 0.001
+DEFAULT_COVERAGE = 0.0
+DEFAULT_CLUSTER_COVERAGE = 0.8
+DEFAULT_COV_MODE = 0
+DEFAULT_CLUSTER_MODE = 0
+DEFAULT_SEARCH_MAX_SEQS = 300
+DEFAULT_CLUSTER_MAX_SEQS = 20
+DEFAULT_NUCL_STRAND = 2
 SEARCH_TYPE_NUCLEOTIDE = 3
 
 # Standard column formats for MMseqs2 output
 M8_COLUMNS = ["query", "target", "pident", "evalue"]
+
+# Reusable type aliases used across the mmseqs2 toolkit configs.
+CovMode = Literal[0, 1, 2, 3, 4, 5]
+ClusterMode = Literal[0, 1, 2, 3]
+NuclStrand = Literal[0, 1, 2]
 
 
 # ============================================================================
@@ -229,47 +246,101 @@ class Mmseqs2SearchProteinsConfig(BaseConfig):
     """Configuration object for MMseqs2 protein search.
 
     Attributes:
-        threads (int): Number of CPU threads for parallel processing.
-        split (int): Memory management mode (0=auto).
-        sensitivity (float): Search sensitivity (1.0=fast, 7.5=very sensitive).
-            Ignored when ``use_gpu=True`` (GPU runs at max sensitivity).
-        only_top_hits (bool): If True, keep only the best hit per query sequence.
-        use_gpu (bool): Run MMseqs2 with GPU acceleration. Off by default; opt-in
-            because the user-supplied ``mmseqs_db`` must already have a
-            ``.idx_pad`` GPU index (built via ``mmseqs makepaddedseqdb``).
+        threads (int): CPU threads; ``0`` auto-detects all cores (the wrapper
+            omits ``--threads`` since ``mmseqs`` rejects ``--threads 0``).
+        split (int): Split into N chunks to bound memory; ``0`` = auto.
+        sensitivity (float): Prefilter sensitivity (1.0-7.5); higher = slower
+            but finds more remote homologs.
+        evalue (float): E-value threshold for reported hits.
+        min_seq_id (float): Minimum sequence identity (0.0-1.0) for reported hits.
+        coverage (float): Minimum aligned-residue fraction (0.0-1.0); semantics
+            depend on ``cov_mode``.
+        cov_mode (CovMode): 0=query AND target, 1=target, 2=query,
+            3-5=length-ratio variants.
+        max_seqs (int): Max prefilter results per query.
+        only_top_hits (bool): Wrapper filter; keep only the best hit
+            (highest pident) per query sequence.
+        use_gpu (bool): Run MMseqs2-GPU (``--gpu 1``); requires a ``.idx_pad``
+            sibling on the target DB (built via ``mmseqs makepaddedseqdb``).
+        extra_args (list[str]): Verbatim ``mmseqs easy-search`` CLI tokens
+            for niche flags (e.g. ``["--alignment-mode", "3"]``).
     """
 
     threads: int = ConfigField(
         title="Number of Threads",
         default=DEFAULT_THREADS,
-        ge=1,
-        description="Number of CPU threads for parallel processing",
+        ge=0,
+        description="CPU threads; `0` lets MMseqs2 auto-detect all available cores.",
         hidden=True,
+        include_in_key=False,
     )
     split: int = ConfigField(
         title="Split",
         default=DEFAULT_SPLIT,
         ge=0,
-        description="Memory management mode (0=auto, higher uses less memory)",
+        description="Split input into N chunks for memory-bounded prefiltering; `0` picks the best split automatically.",
+        advanced=True,
     )
     sensitivity: float = ConfigField(
         title="Search Sensitivity",
-        default=DEFAULT_SENSITIVITY,
+        default=DEFAULT_SEARCH_SENSITIVITY,
         ge=1.0,
         le=7.5,
-        description="Search sensitivity (1.0=fast, 7.5=very sensitive); ignored when use_gpu=True",
+        description="Prefilter sensitivity (1.0-7.5); higher = slower but more remote homologs found.",
+        advanced=True,
+    )
+    evalue: float = ConfigField(
+        title="E-value Threshold",
+        default=DEFAULT_SEARCH_EVALUE,
+        gt=0.0,
+        description="E-value threshold for reported hits; raise to keep weaker matches.",
+        advanced=True,
+    )
+    min_seq_id: float = ConfigField(
+        title="Minimum Sequence Identity",
+        default=DEFAULT_MIN_SEQ_ID,
+        ge=0.0,
+        le=1.0,
+        description="Minimum sequence identity (0-1) for reported hits; raise to filter to closer homologs.",
+        advanced=True,
+    )
+    coverage: float = ConfigField(
+        title="Coverage Threshold",
+        default=DEFAULT_COVERAGE,
+        ge=0.0,
+        le=1.0,
+        description="Minimum aligned-residue fraction (0-1); semantics depend on `cov_mode`.",
+        advanced=True,
+    )
+    cov_mode: CovMode = ConfigField(
+        title="Coverage Mode",
+        default=DEFAULT_COV_MODE,
+        description=("How `coverage` is measured: 0=query AND target, 1=target, 2=query, 3-5=length-ratio variants."),
+        advanced=True,
+    )
+    max_seqs: int = ConfigField(
+        title="Max Prefilter Hits",
+        default=DEFAULT_SEARCH_MAX_SEQS,
+        ge=1,
+        description="Max prefilter results per query; raise for deeper searches at the cost of runtime/memory.",
         advanced=True,
     )
     only_top_hits: bool = ConfigField(
         title="Only Top Hits",
         default=True,
-        description="If True, keep only the best hit per query sequence",
+        description="Wrapper-side filter: when True, keep only the best hit (highest pident) per query sequence.",
         advanced=True,
     )
     use_gpu: bool = ConfigField(
         title="Use GPU",
         default=False,
-        description="Run MMseqs2-GPU; requires a *.idx_pad GPU index for the target DB",
+        description="Run MMseqs2-GPU (`--gpu 1`); requires a `*.idx_pad` GPU index alongside the target DB.",
+        advanced=True,
+    )
+    extra_args: list[str] = ConfigField(
+        title="Extra CLI Arguments",
+        default=[],
+        description="Verbatim `mmseqs easy-search` tokens for niche flags (e.g. `['--alignment-mode', '3']`).",
         advanced=True,
     )
 
@@ -370,7 +441,13 @@ def run_mmseqs2_search_proteins(
             "threads": config.threads,
             "split": config.split,
             "sensitivity": config.sensitivity,
+            "evalue": config.evalue,
+            "min_seq_id": config.min_seq_id,
+            "coverage": config.coverage,
+            "cov_mode": config.cov_mode,
+            "max_seqs": config.max_seqs,
             "use_gpu": config.use_gpu,
+            "extra_args": list(config.extra_args),
             "m8_columns": M8_COLUMNS,
         },
         instance=instance,
@@ -393,6 +470,11 @@ def run_mmseqs2_search_proteins(
             "mmseqs_db": inputs.mmseqs_db,
             "threads": config.threads,
             "sensitivity": config.sensitivity,
+            "evalue": config.evalue,
+            "min_seq_id": config.min_seq_id,
+            "coverage": config.coverage,
+            "cov_mode": config.cov_mode,
+            "max_seqs": config.max_seqs,
             "only_top_hits": config.only_top_hits,
             "num_sequences": num_sequences,
             "use_gpu": config.use_gpu,

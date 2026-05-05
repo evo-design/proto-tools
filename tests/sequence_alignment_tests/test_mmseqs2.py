@@ -514,3 +514,24 @@ def test_single_sequence_clustering():
     assert len(result) == 1
     assert result.num_clusters == 1
     assert result[0].is_representative is True
+
+
+@pytest.mark.integration
+def test_search_proteins_threads_zero_runs_successfully(tmp_path):
+    """Behavior: ``threads=0`` (auto-detect) successfully runs end-to-end.
+
+    Catches the regression where mmseqs rejected ``--threads 0`` directly and
+    the standalone needs to omit the flag entirely to trigger auto-detection.
+    """
+    db_file = tmp_path / "database.faa"
+    db_file.write_text(">db1\nMVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT\n")
+
+    inputs = Mmseqs2SearchProteinsInput(
+        query_sequences=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"],
+        mmseqs_db=str(db_file),
+    )
+    # Default threads=0 — verify the standalone correctly omits the flag
+    # rather than passing `--threads 0` (which mmseqs rejects).
+    result = run_mmseqs2_search_proteins(inputs, Mmseqs2SearchProteinsConfig())
+    assert result.success is True
+    assert result[0].num_hits >= 1

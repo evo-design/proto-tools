@@ -70,7 +70,7 @@ Sequence IDs are auto-generated from a hash of the sequence if not provided.
 |-----------|------|---------|-------------|
 | `search_mode` | `"local"` \| `"remote"` | `"remote"` | Search mode. Remote uses ColabFold API; local uses MMSeqs2 database. |
 | `use_metagenomic_db` | `bool` | `False` | Include metagenomic sequences in search. Increases MSA depth but slows search. |
-| `sensitivity` | `Optional[float]` | `None` | MMSeqs2 sensitivity (1.0-9.0). Local mode only. Higher = more remote homologs found but slower. |
+| `sensitivity` | `Optional[float]` | `None` | MMSeqs2 `-s` (1.0-9.0). Local mode only; **ignored on GPU** (colabfold_search forces ungapped prefilter under `--gpu 1`). When `None` on CPU, falls back to colabfold's k-score path (server-equivalent). |
 | `database_name` | `str` | `"uniref30_2302_db"` | Database name for local search. |
 | `num_threads` | `Optional[int]` | `None` (auto) | CPU threads for local search. Auto-detects available cores. |
 | `output_dir` | `Optional[str]` | `None` | Output directory for MSA files. Defaults to `~/.cache/proto-language/colabfold_search`. |
@@ -249,6 +249,7 @@ if msa is not None:
 - **Local databases require manual setup.** Local mode does not auto-download. See [Local Database Setup](#local-database-setup) for the one-time provisioning script; UniRef30 is ~99 GB to download and ~630 GB after indexing.
 - **A3M vs FASTA format.** A3M files use lowercase letters for insertions relative to the query, making them more compact. FASTA files pad with gaps for a rectangular alignment. Most structure predictors accept A3M directly.
 - **MSA depth matters for structure prediction.** If your MSA is shallow (<30 sequences), consider enabling `use_metagenomic_db=True` or increasing `sensitivity` to find more distant homologs.
+- **Escape hatch for niche colabfold flags.** Local mode exposes `extra_args: list[str]` for verbatim `colabfold_search` CLI tokens not surfaced as typed fields (e.g. `["--max-accept", "500"]`, `["--qsc", "0.0"]`). Tokens are appended after the typed flags. Remote mode does not honor `extra_args` since it goes through the API.
 
 ## References
 

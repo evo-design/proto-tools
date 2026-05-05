@@ -71,6 +71,7 @@ def run_mafft_alignment(
     align_method: str = "auto",
     max_iterations: int = 0,
     threads: int = 1,
+    extra_args: list[str] | None = None,
 ) -> dict[str, Any]:
     """Run MAFFT alignment on the given sequences.
 
@@ -80,6 +81,7 @@ def run_mafft_alignment(
         align_method: Alignment method (auto, localpair, globalpair, genafpair)
         max_iterations: Maximum iterative refinement cycles
         threads: Number of CPU threads
+        extra_args: Verbatim mafft CLI tokens appended before the input FASTA
 
     Returns:
         Dictionary with aligned_sequences, sequence_ids, alignment_length, num_sequences
@@ -111,6 +113,10 @@ def run_mafft_alignment(
 
         # Add thread count
         cmd.extend(["--thread", str(threads)])
+
+        # Power-user escape hatch: append verbatim CLI tokens before the input FASTA.
+        if extra_args:
+            cmd.extend(str(arg) for arg in extra_args)
 
         # Add input file
         cmd.append(str(input_fasta))
@@ -175,6 +181,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         align_method=input_dict.get("align_method", "auto"),
         max_iterations=input_dict.get("max_iterations", 0),
         threads=input_dict.get("threads", 1),
+        extra_args=input_dict.get("extra_args"),
     )
 
 
@@ -202,6 +209,7 @@ def main() -> None:
     align_method = input_data.get("align_method", "auto")
     max_iterations = input_data.get("max_iterations", 0)
     threads = input_data.get("threads", 1)
+    extra_args = input_data.get("extra_args")
 
     # Run alignment
     output_data = run_mafft_alignment(
@@ -210,6 +218,7 @@ def main() -> None:
         align_method=align_method,
         max_iterations=max_iterations,
         threads=threads,
+        extra_args=extra_args,
     )
 
     # Write output JSON

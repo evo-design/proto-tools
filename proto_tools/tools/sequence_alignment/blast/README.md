@@ -248,6 +248,9 @@ print(good_hits)
 
 3. **Interpreting Short Hits:** A 100% identity match over only 20 base pairs usually has a poor E-value and may be biologically meaningless. Always check `length` alongside `pident`.
 
+**Escape hatch for niche flags:**
+Both `blast-create-db` and `blast-search` expose `extra_args: list[str]` for verbatim BLAST+ CLI tokens not surfaced as typed fields (e.g. `["-mask_data", "/path"]` for `makeblastdb`, `["-max_hsps", "1"]` for `blast-search`). Tokens are appended after the typed flags. `blast-search` only honors `extra_args` in `search_mode="local"`; the online QBLAST path doesn't accept arbitrary CLI flags.
+
 ## References
 
 **Primary Citation:**

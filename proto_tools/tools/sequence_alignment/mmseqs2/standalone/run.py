@@ -15,6 +15,7 @@ persistent-worker ``dispatch`` import (see ``utils/_worker_bootstrap.py``).
 """
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -70,7 +71,8 @@ def run_protein_search(input_data: dict[str, Any]) -> dict[str, Any]:
 
     Args:
         input_data: Dict with keys: sequences, sequence_ids, mmseqs_db,
-            threads, split, sensitivity, m8_columns, use_gpu (optional).
+            threads, split, sensitivity, evalue, min_seq_id, coverage,
+            cov_mode, max_seqs, m8_columns, use_gpu (optional).
 
     Returns:
         Dict with keys: stdout (raw tab-separated m8 output)
@@ -99,19 +101,33 @@ def run_protein_search(input_data: dict[str, Any]) -> dict[str, Any]:
             input_data["mmseqs_db"],
             m8_path,
             str(results_dir),
-            "--threads",
-            str(input_data.get("threads", 96)),
             "--split",
-            str(input_data.get("split", 0)),
+            str(input_data["split"]),
             "-s",
-            str(input_data.get("sensitivity", 4.0)),
+            str(input_data["sensitivity"]),
+            "-e",
+            str(input_data["evalue"]),
+            "--min-seq-id",
+            str(input_data["min_seq_id"]),
+            "-c",
+            str(input_data["coverage"]),
+            "--cov-mode",
+            str(input_data["cov_mode"]),
+            "--max-seqs",
+            str(input_data["max_seqs"]),
             "--remove-tmp-files",
             "1",
             "--format-output",
-            ",".join(input_data.get("m8_columns", ["query", "target", "pident", "evalue"])),
+            ",".join(input_data["m8_columns"]),
         ]
+        # threads=0 → omit --threads entirely so mmseqs uses its built-in
+        # "all available cores" auto-detection. mmseqs rejects --threads 0.
+        threads = int(input_data["threads"])
+        if threads > 0:
+            cmd += ["--threads", str(threads)]
         if use_gpu:
             cmd += ["--gpu", "1"]
+        cmd.extend(str(arg) for arg in input_data.get("extra_args", []))
 
         _run_cmd(cmd, "mmseqs easy-search")
 
@@ -131,7 +147,8 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
 
     Args:
         input_data: Dict with keys: query_sequences, query_ids, target_sequences,
-            target_ids, search_type, threads, sensitivity, m8_columns.
+            target_ids, search_type, threads, sensitivity, evalue, min_seq_id,
+            coverage, cov_mode, max_seqs, strand, m8_columns.
 
     Returns:
         Dict with keys: stdout (raw tab-separated m8 output)
@@ -164,15 +181,28 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
         Path(mmseqs_tmp).mkdir()
         Path(res_dir).mkdir()
 
-        search_type = str(input_data.get("search_type", 3))
-        sensitivity = str(input_data.get("sensitivity", 7.5))
+        search_type = str(input_data["search_type"])
+        sensitivity = str(input_data["sensitivity"])
+        evalue = str(input_data["evalue"])
+        min_seq_id = str(input_data["min_seq_id"])
+        coverage = str(input_data["coverage"])
+        cov_mode = str(input_data["cov_mode"])
+        max_seqs = str(input_data["max_seqs"])
+        strand = str(input_data["strand"])
 
-        # Cap threads at the target DB size: mmseqs splits the target DB into
-        # chunks proportional to thread count, and crashes with "World Size: <threads>
-        # dbSize: <num_target_seqs>" if there aren't enough chunks per worker.
-        requested_threads = int(input_data.get("threads", 96))
+        # Threads: 0 means "let mmseqs auto-detect" (binary default behavior).
+        # When the caller passes a positive value, cap it at the target DB size:
+        # mmseqs splits the target DB into chunks proportional to thread count
+        # and crashes with "World Size: <threads> dbSize: <num_target_seqs>" if
+        # there aren't enough chunks per worker.
+        requested_threads = int(input_data["threads"])
         target_db_size = len(input_data["target_sequences"])
-        effective_threads = max(1, min(requested_threads, target_db_size))
+        if requested_threads <= 0:
+            # Pick a small safe value capped at target DB size; mmseqs's own
+            # auto-detect would still hit the chunking bug on tiny test DBs.
+            effective_threads = max(1, min((os.cpu_count() or 1), target_db_size))
+        else:
+            effective_threads = max(1, min(requested_threads, target_db_size))
         threads = str(effective_threads)
 
         _run_cmd(
@@ -210,11 +240,24 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
                 threads,
                 "-s",
                 sensitivity,
+                "-e",
+                evalue,
+                "--min-seq-id",
+                min_seq_id,
+                "-c",
+                coverage,
+                "--cov-mode",
+                cov_mode,
+                "--max-seqs",
+                max_seqs,
+                "--strand",
+                strand,
+                *(str(arg) for arg in input_data.get("extra_args", [])),
             ],
             "mmseqs search",
         )
 
-        m8_columns = input_data.get("m8_columns", ["query", "target", "pident", "evalue"])
+        m8_columns = input_data["m8_columns"]
         _run_cmd(
             [
                 mmseqs,
@@ -244,7 +287,8 @@ def run_clustering(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run MMseqs2 clustering workflow and return cluster assignments.
 
     Args:
-        input_data: Dict with keys: sequences, sequence_ids, min_seq_id.
+        input_data: Dict with keys: sequences, sequence_ids, min_seq_id,
+            coverage, cov_mode, evalue, cluster_mode, max_seqs, sensitivity.
 
     Returns:
         Dict with keys: cluster_assignments (dict mapping member_id -> representative_id)
@@ -268,7 +312,13 @@ def run_clustering(input_data: dict[str, Any]) -> dict[str, Any]:
         res_dir.mkdir()
         mmseqs_tmp.mkdir()
 
-        min_seq_id = str(input_data.get("min_seq_id", 0.60))
+        min_seq_id = str(input_data["min_seq_id"])
+        coverage = str(input_data["coverage"])
+        cov_mode = str(input_data["cov_mode"])
+        evalue = str(input_data["evalue"])
+        cluster_mode = str(input_data["cluster_mode"])
+        max_seqs = str(input_data["max_seqs"])
+        sensitivity = str(input_data["sensitivity"])
 
         _run_cmd(
             [mmseqs, "createdb", input_fasta, str(db_dir / "seqs")],
@@ -283,6 +333,19 @@ def run_clustering(input_data: dict[str, Any]) -> dict[str, Any]:
                 str(mmseqs_tmp),
                 "--min-seq-id",
                 min_seq_id,
+                "-c",
+                coverage,
+                "--cov-mode",
+                cov_mode,
+                "-e",
+                evalue,
+                "--cluster-mode",
+                cluster_mode,
+                "--max-seqs",
+                max_seqs,
+                "-s",
+                sensitivity,
+                *(str(arg) for arg in input_data.get("extra_args", [])),
             ],
             "mmseqs cluster",
         )

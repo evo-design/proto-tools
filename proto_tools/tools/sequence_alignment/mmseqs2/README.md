@@ -145,15 +145,18 @@ See `setup_databases.py --list` for available datasets and presets matching pred
 | Value | Speed | Use Case |
 |-------|-------|----------|
 | `1.0` | Fastest | Near-identical matches only |
-| `4.0` | Default for protein search | Balanced for most workloads |
-| `7.5` | Slower | Genome searches, distant homologs |
+| `4.0` | Balanced | `mmseqs2-clustering` default (matches upstream `easy-cluster`) |
+| `5.7` | Standard | `mmseqs2-search-proteins` default (matches upstream `easy-search`) |
+| `7.5` | Slower | `mmseqs2-search-genomes` default (wrapper bias for nucleotide search; upstream = 5.7) |
+
+GPU mode (`use_gpu=True` on `mmseqs2-search-proteins`) honors `-s` normally — the binary does not override sensitivity under `--gpu 1`.
 
 **Clustering identity (`min_seq_id`):**
 
 | Value | Use Case |
 |-------|----------|
 | `0.95` | Remove near-duplicates (sequencing errors, isoforms) |
-| `0.60` | Group proteins into functional families (default) |
+| `0.60` | Group proteins into functional families (`mmseqs2-clustering` wrapper default; upstream MMseqs2 = `0.0`) |
 | `0.30` | Remote homologs |
 
 ## Best Practices & Gotchas
@@ -165,6 +168,7 @@ See `setup_databases.py --list` for available datasets and presets matching pred
 - **Clustering representatives:** the representative is *not* necessarily the "best" sequence — it's the first one to cover the cluster during greedy set-cover.
 - **GPU prerequisite:** `mmseqs2-search-proteins` opt-in `use_gpu=True` requires a `*.idx_pad` index alongside the DB; build with `mmseqs makepaddedseqdb`. Validation runs at call time and raises with the exact command if missing.
 - **Multi-dataset for homology search:** Phase 3 supports exactly one dataset per call. UniRef30 + ColabFoldDB merge support is planned.
+- **Escape hatch for niche flags:** every search/cluster tool exposes `extra_args: list[str]` for verbatim mmseqs CLI tokens not exposed as typed fields (e.g. `extra_args=["--alignment-mode", "3"]`). Tokens go through to `mmseqs easy-search` / `mmseqs search` / `mmseqs cluster` after the typed flags. `mmseqs2-homology-search` instead routes registry-driven `extra_args` via the dataset entry's `mmseqs_flags`.
 
 ## References
 

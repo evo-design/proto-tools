@@ -92,6 +92,7 @@ class ColabFoldSearchWrapper:
         database_name: str | None = None,
         use_gpu: bool = False,
         verbose: bool = False,
+        extra_args: list[str] | None = None,
     ) -> dict[str, Any]:
         """Run ColabFold MSA search.
 
@@ -105,6 +106,7 @@ class ColabFoldSearchWrapper:
             database_name: Name of the database to use. If None, auto-detects the database
             use_gpu: Whether to enable GPU acceleration
             verbose: Whether to print status messages
+            extra_args: Verbatim colabfold_search CLI tokens appended after typed flags
 
         Returns:
             Dictionary containing output_dir and success status
@@ -163,6 +165,10 @@ class ColabFoldSearchWrapper:
 
         if use_gpu:
             cmd.extend(["--gpu", "1"])
+
+        # Power-user escape hatch: append verbatim CLI tokens.
+        if extra_args:
+            cmd.extend(str(arg) for arg in extra_args)
 
         logger.debug(f"Running command: {' '.join(cmd)}")  # type: ignore[arg-type]
 
@@ -288,6 +294,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         database_name=input_dict.get("database_name"),
         use_gpu=input_dict.get("use_gpu", False),
         verbose=input_dict.get("verbose", True),
+        extra_args=input_dict.get("extra_args"),
     )
 
 
@@ -316,6 +323,7 @@ if __name__ == "__main__":
         database_name=input_data.get("database_name"),
         use_gpu=input_data.get("use_gpu", False),
         verbose=input_data.get("verbose", True),
+        extra_args=input_data.get("extra_args"),
     )
 
     # Write the output to a json file

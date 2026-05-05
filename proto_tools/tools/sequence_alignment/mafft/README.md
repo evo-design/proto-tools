@@ -248,6 +248,9 @@ for seq_id, aligned_seq in zip(msa.sequence_ids, msa.aligned_sequences):
 - Pre-filter sequences to remove obvious outliers
 - Remove redundant sequences (>95% identity) for cleaner alignments
 - Manually inspect alignments at conserved positions
+
+**Escape hatch for niche MAFFT flags:**
+`extra_args: list[str]` accepts verbatim `mafft` CLI tokens for flags not exposed as typed fields (e.g. `["--retree", "3", "--reorder"]`, `["--op", "1.0"]`). Tokens are inserted before the input FASTA path so they take precedence over MAFFT's own defaults.
 - Consider trimming poorly aligned regions for downstream analysis
 
 ## References

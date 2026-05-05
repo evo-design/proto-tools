@@ -258,21 +258,16 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
     """Configuration for ``mmseqs2-homology-search``.
 
     Attributes:
-        datasets (list[str]): Registered dataset keys to search. Phase 3 accepts
-            exactly one protein dataset; multi-dataset (e.g. UniRef30 + envdb +
-            BFD) and RNA/DNA support land in follow-up PRs. Default:
-            ``["uniref30-2302"]``.
-        use_gpu (bool): When True, runs MMseqs2-GPU (requires the dataset's
-            ``.idx_pad`` GPU index from ``setup_databases.sh`` and an NVIDIA
-            GPU of Turing generation or newer). Default: True.
+        datasets (list[str]): Registered dataset keys; Phase 3 accepts
+            exactly one protein dataset.
+        use_gpu (bool): Run MMseqs2-GPU; requires a ``.idx_pad`` index,
+            an NVIDIA GPU (Turing+), and a Linux host.
         pairing_strategy (Literal["greedy", "complete"]): Paired-MSA strategy
-            (used in Phase 4 only; ignored in Phase 3 since paired groups are
-            rejected). Default: ``"greedy"``.
-        sensitivity (float | None): MMseqs2 ``-s`` override. When None, uses
-            the dataset entry's registered ``mmseqs_flags.sensitivity``.
-            Default: None.
-        num_threads (int | None): CPU threads. Default: None (auto-detect).
-        timeout (int): Subprocess timeout in seconds. Default: 3600.
+            (used in Phase 4; ignored in Phase 3).
+        sensitivity (float | None): MMseqs2 ``-s`` override; ignored under
+            ``use_gpu=True``. ``None`` uses the dataset's registered default.
+        num_threads (int | None): CPU threads; ``None`` auto-detects all cores.
+        timeout (int): Subprocess timeout in seconds.
 
     Note:
         A3M files are written to a per-call temporary directory and parsed
@@ -285,40 +280,41 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
     datasets: list[str] = ConfigField(
         title="Datasets",
         default=["uniref30-2302"],
-        description="Registered dataset keys to search (Phase 3: exactly one protein dataset).",
+        description="Registered dataset keys (e.g. `uniref30-2302`). Phase 3: exactly one protein dataset.",
     )
     use_gpu: bool = ConfigField(
         title="Use GPU",
         default=True,
-        description="Use MMseqs2-GPU (requires .idx_pad index and Turing+ NVIDIA GPU)",
+        description="Use MMseqs2-GPU; requires a `.idx_pad` index, an NVIDIA GPU (Turing+), and a Linux host.",
         advanced=True,
     )
     pairing_strategy: Literal["greedy", "complete"] = ConfigField(
         title="Pairing Strategy",
         default="greedy",
-        description="Paired-MSA strategy (used in Phase 4; ignored in Phase 3)",
-        advanced=True,
+        description="Paired-MSA strategy (forward-compat field; not yet wired up).",
+        hidden=True,
     )
     sensitivity: float | None = ConfigField(
         title="MMseqs2 Sensitivity",
         default=None,
         ge=1.0,
         le=9.0,
-        description="MMseqs2 -s override; None uses the dataset's registered default",
+        description="MMseqs2 `-s` override (1.0-9.0); ignored on GPU; `None` uses the dataset's default.",
         advanced=True,
     )
     num_threads: int | None = ConfigField(
         title="Number of Threads",
         default=None,
         ge=1,
-        description="CPU threads (None for auto-detect)",
+        description="CPU threads; `None` auto-detects all available cores.",
         hidden=True,
+        include_in_key=False,
     )
     timeout: int = ConfigField(
         title="Timeout",
         default=3600,
         ge=1,
-        description="Subprocess timeout in seconds",
+        description="Subprocess timeout in seconds; full-database searches can exceed 10 minutes.",
         hidden=True,
         include_in_key=False,
     )

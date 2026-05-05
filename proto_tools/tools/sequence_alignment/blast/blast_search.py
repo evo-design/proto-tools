@@ -203,85 +203,87 @@ class BlastSearchOutput(BaseToolOutput):
 class BlastSearchConfig(BaseConfig):
     """Configuration for BLAST search.
 
-    Controls search mode (online vs local), BLAST program selection, scoring
-    parameters, filtering thresholds, and output options. Parameters that only
-    apply to one search mode are documented as such and are ignored when using
-    the other mode.
+    Controls search mode (online vs local), BLAST program selection, scoring,
+    filtering, and output options. The wrapper's online path goes through
+    Biopython's NCBIWWW.qblast which only exposes a subset of BLAST+ flags;
+    fields outside that subset are local-only and gated via ``depends_on`` /
+    listed in ``_local_only_fields``.
 
     Attributes:
-        search_mode (Literal['online', 'local']): ``"online"`` routes to NCBI QBLAST; ``"local"`` runs
-            BLAST+ CLI against a local database.
-        program (BLAST_PROGRAMS): BLAST algorithm (blastn, blastp, blastx, tblastn, tblastx).
-        database (BLAST_DATABASES): NCBI database to search (online mode only).
-        local_db (str | None): Path to a local BLAST database (local mode only, required).
-        num_threads (int): CPU threads for local search.
-        evalue (float | None): E-value threshold.
-        max_target_seqs (int | None): Max aligned sequences to keep.
-        max_hsps (int | None): Max HSPs per query-subject pair.
-        word_size (int | None): Word size for initial matches.
-        gapopen (int | None): Cost to open a gap.
-        gapextend (int | None): Cost to extend a gap.
-        matrix (SCORING_MATRICES | None): Scoring matrix for protein searches.
-        reward (int | None): Nucleotide match reward (blastn only).
-        penalty (int | None): Nucleotide mismatch penalty (blastn only).
-        task (BLAST_TASKS | None): BLAST task for optimized defaults.
-        perc_identity (float | None): Minimum percent identity filter.
-        qcov_hsp_perc (float | None): Minimum query coverage per HSP.
-        threshold (int | None): Min word score for lookup table (protein only).
-        comp_based_stats (Literal[0, 1, 2, 3] | None): Composition-based statistics mode (protein only).
-        soft_masking (bool | None): Use soft masking for initial matches.
-        lcase_masking (bool | None): Treat lowercase in FASTA as masked.
-        dust (str | None): Low-complexity filter for nucleotide queries (blastn only).
-        seg (str | None): Low-complexity filter for protein queries.
-        ungapped (bool | None): Perform ungapped alignment only.
-        strand (Literal['both', 'plus', 'minus'] | None): Query strand(s) to search (nucleotide queries only).
-        query_gencode (int | None): Genetic code for translating query (blastx/tblastx).
-        db_gencode (int | None): Genetic code for translating DB (tblastn/tblastx).
-        window_size (int | None): Multiple-hits window size.
-        xdrop_ungap (float | None): X-dropoff for ungapped extensions.
-        xdrop_gap (float | None): X-dropoff for preliminary gapped extensions.
-        xdrop_gap_final (float | None): X-dropoff for final gapped alignment.
-        use_sw_tback (bool | None): Compute Smith-Waterman alignments (protein only).
-        culling_limit (int | None): Delete hits enveloped by better hits.
-        best_hit_overhang (float | None): Best-hit algorithm overhang value.
-        best_hit_score_edge (float | None): Best-hit algorithm score edge value.
-        subject_besthit (bool | None): Only report best hit per subject.
+        search_mode (Literal['online', 'local']): ``"online"`` routes to NCBI
+            QBLAST; ``"local"`` runs BLAST+ CLI against a local database.
+        program (BLAST_PROGRAMS): BLAST algorithm (blastn, blastp, blastx,
+            tblastn, tblastx).
+        database (BLAST_DATABASES): NCBI database to search (online only).
         entrez_query (str | None): Restrict online search with an Entrez query.
-        hitlist_size (int | None): Number of hits to return (online mode only).
-        megablast (bool | None): Use MegaBLAST algorithm (online mode, blastn only).
+        hitlist_size (int | None): Number of hits to return (online only).
+        megablast (bool | None): Use MegaBLAST (online, blastn only).
+        local_db (str | None): Path to a local BLAST database (local only, required).
+        num_threads (int): CPU threads for local search.
+        evalue (float | None): E-value threshold (both modes).
+        word_size (int | None): Word size for initial matches (both modes).
+        gapopen (int | None): Cost to open a gap (both modes).
+        gapextend (int | None): Cost to extend a gap (both modes).
+        matrix (SCORING_MATRICES | None): Scoring matrix for protein searches
+            (both modes).
+        reward (int | None): Nucleotide match reward (blastn only, both modes).
+        penalty (int | None): Nucleotide mismatch penalty (blastn only, both modes).
+        threshold (int | None): Min word score for lookup table (protein only,
+            both modes).
+        comp_based_stats (Literal[0, 1, 2, 3] | None): Composition-based stats
+            mode (protein only, both modes).
+        max_target_seqs (int | None): Max aligned sequences to keep (local only).
+        perc_identity (float | None): Min percent identity filter (both modes).
+        qcov_hsp_perc (float | None): Min query coverage per HSP (local only).
+        soft_masking (bool | None): Soft masking for initial matches (local only).
+        lcase_masking (bool | None): Treat lowercase in FASTA as masked (both modes).
+        dust (str | None): Low-complexity filter for nucleotide queries (local only).
+        seg (str | None): Low-complexity filter for protein queries (local only).
+        task (BLAST_TASKS | None): Task preset (local only).
+        ungapped (bool | None): Ungapped alignment only (both modes).
+        strand (Literal['both', 'plus', 'minus'] | None): Query strand
+            (local only; for blastn/blastx/tblastx).
+        query_gencode (int | None): Genetic code for translating query
+            (blastx/tblastx, both modes).
+        db_gencode (int | None): Genetic code for translating DB
+            (tblastn/tblastx, both modes).
+        extra_args (list[str]): Verbatim BLAST+ CLI tokens for niche flags
+            not exposed above (e.g. ``["-max_hsps", "1"]``). Local mode only;
+            online mode goes through ``NCBIWWW.qblast`` which doesn't accept
+            arbitrary CLI tokens.
     """
 
     # --- Mode selection ---
     search_mode: Literal["online", "local"] = ConfigField(
         default="online",
         title="Search Mode",
-        description=('Search mode: "online" queries NCBI servers, "local" runs BLAST+ against a local database'),
+        description="`online` queries NCBI's QBLAST servers; `local` runs BLAST+ CLI against a local database.",
     )
     program: BLAST_PROGRAMS = ConfigField(
         default="blastn",
         title="BLAST Program",
-        description="BLAST algorithm to use for the search",
+        description="BLAST algorithm (blastn/blastp/blastx/tblastn/tblastx).",
     )
 
     # --- Online-only ---
     database: BLAST_DATABASES = ConfigField(
         default="nt",
         title="NCBI Database",
-        description=("NCBI database to search against (online mode only). Ignored when search_mode is 'local'."),
+        description="NCBI database to search against (e.g. `nt`, `nr`, `swissprot`, `pdb`).",
         advanced=True,
         depends_on={"search_mode": ["online"]},
     )
     entrez_query: str | None = ConfigField(
         default=None,
         title="Entrez Query",
-        description=("Restrict online search with an Entrez query (e.g. 'Homo sapiens[Organism]'). Online only."),
+        description="Restrict the online search with an Entrez query (e.g. `Homo sapiens[Organism]`).",
         advanced=True,
         depends_on={"search_mode": ["online"]},
     )
     hitlist_size: int | None = ConfigField(
         default=None,
         title="Hit List Size",
-        description=("Number of database sequences to return. Defaults to 50 on NCBI. Online mode only."),
+        description="Number of database sequences to return; NCBI defaults to 50 when unset.",
         ge=1,
         advanced=True,
         depends_on={"search_mode": ["online"]},
@@ -289,9 +291,7 @@ class BlastSearchConfig(BaseConfig):
     megablast: bool | None = ConfigField(
         default=None,
         title="Use MegaBLAST",
-        description=(
-            "Use MegaBLAST algorithm for blastn searches (online mode only). Ignored when search_mode is 'local'."
-        ),
+        description="Use the MegaBLAST algorithm for `blastn` (faster, optimized for highly similar sequences).",
         advanced=True,
         depends_on={"search_mode": ["online"]},
     )
@@ -300,105 +300,96 @@ class BlastSearchConfig(BaseConfig):
     local_db: str | None = ConfigField(
         default=None,
         title="Local BLAST Database",
-        description=("Path to a local BLAST database (no file extensions). Required for local mode."),
+        description="Path to a local BLAST database stem (no file extensions). Required for local mode.",
         depends_on={"search_mode": ["local"]},
-        hidden=True,
     )
     num_threads: int = ConfigField(
         default=4,
         ge=1,
         title="Number of Threads",
-        description="Number of CPU threads for local BLAST search",
-        advanced=True,
+        description="CPU threads for local BLAST search (upstream BLAST+ default is 1).",
         depends_on={"search_mode": ["local"]},
         hidden=True,
+        include_in_key=False,
     )
 
     # --- Scoring parameters ---
     evalue: float | None = ConfigField(
         default=None,
         title="E-value Threshold",
-        description=("Expectation value threshold for reporting hits. Default is 10.0 in both online and local BLAST."),
+        description="Expectation value threshold for reporting hits; BLAST+ default is 10.0 when unset.",
         gt=0,
     )
     word_size: int | None = ConfigField(
         default=None,
         title="Word Size",
-        description=("Length of initial exact match. Defaults: 28 (megablast), 11 (blastn), 3 (protein)."),
+        description="Length of the initial exact match; BLAST+ defaults: 28 (megablast), 11 (blastn), 3 (blastp).",
         ge=2,
         advanced=True,
     )
     gapopen: int | None = ConfigField(
         default=None,
         title="Gap Open Cost",
-        description=("Cost to open a gap. Defaults: 5 (blastn), 11 (protein programs)."),
+        description="Cost to open a gap; BLAST+ defaults: 5 (blastn), 11 (protein programs).",
         ge=0,
         advanced=True,
     )
     gapextend: int | None = ConfigField(
         default=None,
         title="Gap Extend Cost",
-        description=(
-            "Cost to extend a gap. Not supported for tblastx. Defaults: 2 (blastn), 1 (blastp/blastx/tblastn)."
-        ),
+        description="Cost to extend a gap; BLAST+ defaults 2 (blastn), 1 (protein). Not for tblastx.",
         ge=0,
         advanced=True,
     )
     matrix: SCORING_MATRICES | None = ConfigField(
         default=None,
         title="Scoring Matrix",
-        description=("Substitution matrix for protein alignments. Not applicable to blastn. Default: BLOSUM62."),
+        description="Substitution matrix for protein alignments; BLAST+ default is BLOSUM62. Not applicable to blastn.",
         advanced=True,
     )
     reward: int | None = ConfigField(
         default=None,
         title="Nucleotide Match Reward",
-        description=("Reward for a nucleotide match (blastn only). Default: 1 (megablast), 2 (blastn/dc-megablast)."),
+        description="Match reward (blastn only); BLAST+ defaults 1 (megablast), 2 (blastn).",
         ge=0,
         advanced=True,
     )
     penalty: int | None = ConfigField(
         default=None,
         title="Nucleotide Mismatch Penalty",
-        description=("Penalty for nucleotide mismatch (blastn only). Must be negative. Default: -2 or -3."),
+        description="Mismatch penalty (blastn, ≤0); BLAST+ defaults -2 (megablast), -3 (others).",
         le=0,
         advanced=True,
     )
     threshold: int | None = ConfigField(
         default=None,
         title="Word Score Threshold",
-        description=("Minimum word score for BLAST lookup table (protein only). Default: 11-13 depending on program."),
+        description="Minimum word score for the BLAST lookup table (protein only); BLAST+ default is 11 for blastp.",
         ge=1,
         advanced=True,
     )
     comp_based_stats: Literal[0, 1, 2, 3] | None = ConfigField(
         default=None,
         title="Composition-Based Statistics",
-        description=(
-            "Composition-based score adjustment (protein). 0=off, 1=stats, 2=adjust (default), 3=unconditional."
-        ),
+        description="Composition-based scoring (protein): 0=off, 1=stats, 2=adjust (default), 3=unconditional.",
         advanced=True,
     )
 
     # --- Filtering parameters ---
+    # Many of these are local-only because the wrapper's online path goes
+    # through Biopython's NCBIWWW.qblast, which doesn't expose them.
     max_target_seqs: int | None = ConfigField(
         default=None,
         title="Max Target Sequences",
-        description=("Maximum number of aligned sequences to keep. Default: 500 (local mode)."),
+        description="Maximum number of aligned sequences to keep; BLAST+ default is 500.",
         ge=1,
         advanced=True,
-    )
-    max_hsps: int | None = ConfigField(
-        default=None,
-        title="Max HSPs",
-        description=("Maximum number of HSPs (high-scoring segment pairs) per query-subject pair. Default: no limit."),
-        ge=1,
-        advanced=True,
+        depends_on={"search_mode": ["local"]},
     )
     perc_identity: float | None = ConfigField(
         default=None,
         title="Percent Identity Cutoff",
-        description=("Minimum percent identity for reported alignments (0-100). Most useful for blastn."),
+        description="Minimum percent identity for reported alignments (0-100); most useful with blastn.",
         ge=0,
         le=100,
         advanced=True,
@@ -410,71 +401,45 @@ class BlastSearchConfig(BaseConfig):
         ge=0,
         le=100,
         advanced=True,
-    )
-    culling_limit: int | None = ConfigField(
-        default=None,
-        title="Culling Limit",
-        description=("Delete hits enveloped by at least this many higher-scoring hits."),
-        ge=0,
-        advanced=True,
-    )
-    best_hit_overhang: float | None = ConfigField(
-        default=None,
-        title="Best Hit Overhang",
-        description=("Best Hit algorithm overhang value (>0 and <0.5). Incompatible with culling_limit."),
-        gt=0,
-        lt=0.5,
-        advanced=True,
-    )
-    best_hit_score_edge: float | None = ConfigField(
-        default=None,
-        title="Best Hit Score Edge",
-        description=("Best Hit algorithm score edge value (>0 and <0.5). Incompatible with culling_limit."),
-        gt=0,
-        lt=0.5,
-        advanced=True,
-    )
-    subject_besthit: bool | None = ConfigField(
-        default=None,
-        title="Subject Best Hit",
-        description="Only report the best hit per subject sequence.",
-        advanced=True,
+        depends_on={"search_mode": ["local"]},
     )
 
     # --- Masking parameters ---
     soft_masking: bool | None = ConfigField(
         default=None,
         title="Soft Masking",
-        description=(
-            "Apply filtering as soft masks (for seeding only). Default: true (blastn), false (protein programs)."
-        ),
+        description="Apply filter as soft masks (seeding only); BLAST+ defaults True (blastn), False (protein).",
         advanced=True,
+        depends_on={"search_mode": ["local"]},
     )
     lcase_masking: bool | None = ConfigField(
         default=None,
         title="Lowercase Masking",
-        description="Treat lowercase letters in FASTA input as masked.",
+        description="Treat lowercase letters in the FASTA input as masked.",
         advanced=True,
     )
     dust: str | None = ConfigField(
         default=None,
         title="DUST Filter",
-        description=("Low-complexity filter for nucleotide queries. Values: 'yes', 'no', or 'level window linker'."),
+        description="Nucleotide low-complexity filter: `yes`, `no`, or `level window linker` (default `20 64 1`).",
         advanced=True,
+        depends_on={"search_mode": ["local"]},
     )
     seg: str | None = ConfigField(
         default=None,
         title="SEG Filter",
-        description=("Low-complexity filter for protein queries. Values: 'yes', 'no', or 'window locut hicut'."),
+        description="Protein low-complexity filter: `yes`, `no`, or `window locut hicut` (blastp default `no`).",
         advanced=True,
+        depends_on={"search_mode": ["local"]},
     )
 
     # --- Search parameters ---
     task: BLAST_TASKS | None = ConfigField(
         default=None,
         title="BLAST Task",
-        description=("Task preset that sets optimized default parameters (e.g. megablast, blastp-fast, blastx-fast)."),
+        description="Task preset (e.g. `megablast`, `blastp-fast`, `blastx-fast`); flips multiple defaults at once.",
         advanced=True,
+        depends_on={"search_mode": ["local"]},
     )
     ungapped: bool | None = ConfigField(
         default=None,
@@ -485,55 +450,32 @@ class BlastSearchConfig(BaseConfig):
     strand: Literal["both", "plus", "minus"] | None = ConfigField(
         default=None,
         title="Query Strand",
-        description=("Query strand(s) to search: 'both', 'plus', or 'minus'. Only for blastn, blastx, tblastx."),
+        description="Query strand(s) to search; BLAST+ default is `both`. Only for blastn, blastx, tblastx.",
         advanced=True,
+        depends_on={"search_mode": ["local"]},
     )
     query_gencode: int | None = ConfigField(
         default=None,
         title="Query Genetic Code",
-        description=(
-            "Genetic code for translating the query sequence. Only for blastx and tblastx. Default: 1 (Standard)."
-        ),
+        description="Genetic code for translating the query (blastx/tblastx only); BLAST+ default 1 (Standard).",
         ge=1,
         advanced=True,
     )
     db_gencode: int | None = ConfigField(
         default=None,
         title="Database Genetic Code",
-        description=("Genetic code for translating database sequences. Only for tblastn/tblastx. Default: 1."),
+        description="Genetic code for translating database sequences (tblastn/tblastx only); BLAST+ default 1.",
         ge=1,
         advanced=True,
     )
-    window_size: int | None = ConfigField(
-        default=None,
-        title="Window Size",
-        description=("Multiple-hits window size for combining initial word hits."),
-        ge=0,
+
+    # --- Escape hatch ---
+    extra_args: list[str] = ConfigField(
+        default=[],
+        title="Extra CLI Arguments",
+        description="Verbatim BLAST+ CLI tokens for niche flags (e.g. `['-max_hsps', '1']`). Local mode only.",
         advanced=True,
-    )
-    xdrop_ungap: float | None = ConfigField(
-        default=None,
-        title="X-dropoff Ungapped",
-        description="X-dropoff value (in bits) for ungapped extensions.",
-        advanced=True,
-    )
-    xdrop_gap: float | None = ConfigField(
-        default=None,
-        title="X-dropoff Gapped",
-        description=("X-dropoff value (in bits) for preliminary gapped extensions."),
-        advanced=True,
-    )
-    xdrop_gap_final: float | None = ConfigField(
-        default=None,
-        title="X-dropoff Final",
-        description="X-dropoff value (in bits) for final gapped alignment.",
-        advanced=True,
-    )
-    use_sw_tback: bool | None = ConfigField(
-        default=None,
-        title="Smith-Waterman Traceback",
-        description=("Compute locally optimal Smith-Waterman alignments. Only for blastp, blastx, tblastn."),
-        advanced=True,
+        depends_on={"search_mode": ["local"]},
     )
 
     # Fields that only apply to online mode
@@ -543,10 +485,19 @@ class BlastSearchConfig(BaseConfig):
         "hitlist_size",
         "megablast",
     )
-    # Fields that only apply to local mode
+    # Fields that only apply to local mode. Includes everything in the
+    # local CLI surface that the wrapper's online qblast path doesn't map.
     _local_only_fields: tuple[Any, ...] = (
         "local_db",
         "num_threads",
+        "max_target_seqs",
+        "qcov_hsp_perc",
+        "soft_masking",
+        "dust",
+        "seg",
+        "task",
+        "strand",
+        "extra_args",
     )
 
     @model_validator(mode="after")
@@ -727,8 +678,7 @@ def _local_search(
     else:
         query_path = inputs.query
 
-    # Build CLI params from typed config fields.
-    # These config fields map 1:1 to BLAST+ CLI flags (same name).
+    # Typed config fields that map 1:1 to BLAST+ CLI flags (same name).
     _CLI_PARAMS = (
         "evalue",
         "word_size",
@@ -740,13 +690,8 @@ def _local_search(
         "threshold",
         "comp_based_stats",
         "max_target_seqs",
-        "max_hsps",
         "perc_identity",
         "qcov_hsp_perc",
-        "culling_limit",
-        "best_hit_overhang",
-        "best_hit_score_edge",
-        "subject_besthit",
         "soft_masking",
         "lcase_masking",
         "dust",
@@ -756,15 +701,23 @@ def _local_search(
         "strand",
         "query_gencode",
         "db_gencode",
-        "window_size",
-        "xdrop_ungap",
-        "xdrop_gap",
-        "xdrop_gap_final",
-        "use_sw_tback",
     )
-    cli_params: dict[str, Any] = {
-        name: getattr(config, name) for name in _CLI_PARAMS if getattr(config, name) is not None
-    }
+    cli_args: list[str] = []
+    for name in _CLI_PARAMS:
+        val = getattr(config, name)
+        if val is None:
+            continue
+        flag = f"-{name}"
+        if isinstance(val, bool):
+            if val:
+                cli_args.append(flag)
+        else:
+            cli_args.extend([flag, str(val)])
+    cli_args.extend(str(arg) for arg in config.extra_args)
+
+    # Default to tabular output unless the user overrides via extra_args.
+    if "-outfmt" not in cli_args:
+        cli_args.extend(["-outfmt", "6"])
 
     input_data = {
         "operation": "local_blast",
@@ -772,7 +725,7 @@ def _local_search(
         "query_path": query_path,
         "db": config.local_db,
         "num_threads": config.num_threads,
-        "additional_params": cli_params,
+        "cli_args": cli_args,
     }
 
     input_data["device"] = "cpu"

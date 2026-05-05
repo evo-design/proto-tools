@@ -10,11 +10,19 @@ from typing import Any
 from pydantic import Field, field_validator
 
 from proto_tools.tools.sequence_alignment.mmseqs2.search_proteins import (
+    DEFAULT_COV_MODE,
+    DEFAULT_COVERAGE,
     DEFAULT_GENOME_SENSITIVITY,
+    DEFAULT_MIN_SEQ_ID,
+    DEFAULT_NUCL_STRAND,
+    DEFAULT_SEARCH_EVALUE,
+    DEFAULT_SEARCH_MAX_SEQS,
     DEFAULT_THREADS,
     M8_COLUMNS,
     SEARCH_TYPE_NUCLEOTIDE,
+    CovMode,
     Mmseqs2SequenceSearchResult,
+    NuclStrand,
     _build_sequence_search_results,
     _parse_m8_output,
 )
@@ -165,31 +173,90 @@ class Mmseqs2SearchGenomesOutput(BaseToolOutput):
 class Mmseqs2SearchGenomesConfig(BaseConfig):
     """Configuration object for MMseqs2 genome-to-genome search.
 
+    Nucleotide-vs-nucleotide search; the search type is fixed because this tool's
+    purpose is exclusively nucleotide search.
+
     Attributes:
-        search_type (int): MMseqs2 search type (3=nucleotide vs nucleotide).
-        threads (int): Number of CPU threads for parallel processing.
-        sensitivity (float): Search sensitivity (1.0=fast, 7.5=very sensitive).
+        threads (int): CPU threads; ``0`` auto-detects all cores (the wrapper
+            omits ``--threads`` since ``mmseqs`` rejects ``--threads 0``).
+        sensitivity (float): Prefilter sensitivity (1.0-7.5). Wrapper default
+            7.5 (upstream MMseqs2 = 5.7).
+        evalue (float): E-value threshold for reported hits.
+        min_seq_id (float): Minimum sequence identity (0.0-1.0) for reported hits.
+        coverage (float): Minimum aligned-residue fraction (0.0-1.0); semantics
+            depend on ``cov_mode``.
+        cov_mode (CovMode): 0=query AND target, 1=target, 2=query,
+            3-5=length-ratio variants.
+        max_seqs (int): Max prefilter results per query.
+        strand (NuclStrand): 0=reverse, 1=forward, 2=both. Wrapper default
+            2 (upstream MMseqs2 = 1).
+        extra_args (list[str]): Verbatim ``mmseqs search`` CLI tokens for
+            niche flags (e.g. ``["--alignment-mode", "2"]``).
     """
 
-    search_type: int = ConfigField(
-        title="Search Type",
-        default=SEARCH_TYPE_NUCLEOTIDE,
-        description="MMseqs2 search type (3=nucleotide vs nucleotide)",
-        advanced=True,
-    )
     threads: int = ConfigField(
         title="Number of Threads",
         default=DEFAULT_THREADS,
-        ge=1,
-        description="Number of CPU threads for parallel processing",
+        ge=0,
+        description="CPU threads; `0` lets MMseqs2 auto-detect all available cores.",
         hidden=True,
+        include_in_key=False,
     )
     sensitivity: float = ConfigField(
         title="Search Sensitivity",
         default=DEFAULT_GENOME_SENSITIVITY,
         ge=1.0,
         le=7.5,
-        description="Search sensitivity (7.5=very sensitive, default for genomes)",
+        description="Prefilter sensitivity (1.0-7.5); wrapper biases higher than upstream's 5.7.",
+        advanced=True,
+    )
+    evalue: float = ConfigField(
+        title="E-value Threshold",
+        default=DEFAULT_SEARCH_EVALUE,
+        gt=0.0,
+        description="E-value threshold for reported hits; raise to keep weaker matches.",
+        advanced=True,
+    )
+    min_seq_id: float = ConfigField(
+        title="Minimum Sequence Identity",
+        default=DEFAULT_MIN_SEQ_ID,
+        ge=0.0,
+        le=1.0,
+        description="Minimum sequence identity (0-1) for reported hits; raise to filter to closer homologs.",
+        advanced=True,
+    )
+    coverage: float = ConfigField(
+        title="Coverage Threshold",
+        default=DEFAULT_COVERAGE,
+        ge=0.0,
+        le=1.0,
+        description="Minimum aligned-residue fraction (0-1); semantics depend on `cov_mode`.",
+        advanced=True,
+    )
+    cov_mode: CovMode = ConfigField(
+        title="Coverage Mode",
+        default=DEFAULT_COV_MODE,
+        description=("How `coverage` is measured: 0=query AND target, 1=target, 2=query, 3-5=length-ratio variants."),
+        advanced=True,
+    )
+    max_seqs: int = ConfigField(
+        title="Max Prefilter Hits",
+        default=DEFAULT_SEARCH_MAX_SEQS,
+        ge=1,
+        description="Max prefilter results per query; raise for deeper searches at the cost of runtime/memory.",
+        advanced=True,
+    )
+    strand: NuclStrand = ConfigField(
+        title="Search Strand",
+        default=DEFAULT_NUCL_STRAND,
+        description="Strand: 0=reverse, 1=forward, 2=both. Wrapper defaults to 2; upstream = 1.",
+        advanced=True,
+    )
+    extra_args: list[str] = ConfigField(
+        title="Extra CLI Arguments",
+        default=[],
+        description="Verbatim `mmseqs search` CLI tokens for niche flags (e.g. `['--alignment-mode', '2']`).",
+        advanced=True,
     )
 
 
@@ -265,9 +332,17 @@ def run_mmseqs2_search_genomes(
             "query_ids": query_ids,
             "target_sequences": target_sequences,
             "target_ids": target_ids,
-            "search_type": config.search_type,
+            # search_type is hardcoded: this tool only does nucleotide-vs-nucleotide.
+            "search_type": SEARCH_TYPE_NUCLEOTIDE,
             "threads": config.threads,
             "sensitivity": config.sensitivity,
+            "evalue": config.evalue,
+            "min_seq_id": config.min_seq_id,
+            "coverage": config.coverage,
+            "cov_mode": config.cov_mode,
+            "max_seqs": config.max_seqs,
+            "strand": config.strand,
+            "extra_args": list(config.extra_args),
             "m8_columns": M8_COLUMNS,
         },
         instance=instance,
@@ -283,9 +358,14 @@ def run_mmseqs2_search_genomes(
 
     return Mmseqs2SearchGenomesOutput(
         metadata={
-            "search_type": config.search_type,
             "threads": config.threads,
             "sensitivity": config.sensitivity,
+            "evalue": config.evalue,
+            "min_seq_id": config.min_seq_id,
+            "coverage": config.coverage,
+            "cov_mode": config.cov_mode,
+            "max_seqs": config.max_seqs,
+            "strand": config.strand,
             "num_queries": num_queries,
             "num_targets": len(target_sequences),
         },

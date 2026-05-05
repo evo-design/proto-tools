@@ -28,8 +28,9 @@ def run_local_blast(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run a local BLAST search and return raw tabular output.
 
     Args:
-        input_data: Dict with keys: program, query_path, db, num_threads,
-                    additional_params
+        input_data: Dict with keys: program, query_path, db, num_threads, cli_args.
+            ``cli_args`` is a pre-formatted token list (typed flags + user
+            ``extra_args``) assembled by the wrapper.
 
     Returns:
         Dict with keys: stdout (raw tab-separated output)
@@ -44,23 +45,8 @@ def run_local_blast(input_data: dict[str, Any]) -> dict[str, Any]:
         input_data["db"],
         "-num_threads",
         str(input_data["num_threads"]),
+        *input_data.get("cli_args", []),
     ]
-
-    # Add default output format only if not overridden
-    additional_params = input_data.get("additional_params", {})
-    if "outfmt" not in additional_params:
-        cmd.extend(["-outfmt", "6"])
-
-    # Process additional parameters into command line flags
-    for key, val in additional_params.items():
-        if val is None:
-            continue
-        flag = f"-{key}"
-        if isinstance(val, bool):
-            if val:
-                cmd.append(flag)
-        else:
-            cmd.extend([flag, str(val)])
 
     try:
         proc = subprocess.run(cmd, check=True, capture_output=True, text=True)
@@ -78,7 +64,8 @@ def run_create_blast_db(input_data: dict[str, Any]) -> dict[str, Any]:
 
     Args:
         input_data: Dict with keys: fasta_path, dbtype, out_prefix, title,
-                    additional_params
+                    parse_seqids, hash_index, blastdb_version, max_file_sz,
+                    taxid, extra_args.
 
     Returns:
         Dict with keys: db_path
@@ -93,19 +80,28 @@ def run_create_blast_db(input_data: dict[str, Any]) -> dict[str, Any]:
         input_data["dbtype"],
         "-out",
         input_data["out_prefix"],
+        "-blastdb_version",
+        str(input_data["blastdb_version"]),
+        "-max_file_sz",
+        input_data["max_file_sz"],
     ]
 
     title = input_data.get("title")
     if title:
         cmd.extend(["-title", title])
 
-    for key, val in input_data.get("additional_params", {}).items():
-        flag = f"-{key}"
-        if isinstance(val, bool):
-            if val:
-                cmd.append(flag)
-        else:
-            cmd.extend([flag, str(val)])
+    if input_data["parse_seqids"]:
+        cmd.append("-parse_seqids")
+
+    if input_data["hash_index"]:
+        cmd.append("-hash_index")
+
+    taxid = input_data.get("taxid")
+    if taxid is not None:
+        cmd.extend(["-taxid", str(taxid)])
+
+    # Power-user escape hatch for flags not exposed as typed fields.
+    cmd.extend(str(arg) for arg in input_data.get("extra_args", []))
 
     try:
         subprocess.run(cmd, check=True, capture_output=True, text=True)

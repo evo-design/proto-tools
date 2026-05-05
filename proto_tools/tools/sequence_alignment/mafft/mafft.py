@@ -99,35 +99,41 @@ class MafftConfig(BaseConfig):
     """Configuration object for MAFFT alignment.
 
     Attributes:
-        align_method (Literal['auto', 'localpair', 'globalpair', 'genafpair']): Alignment method to use:
-            - "auto": Automatically select based on input (default)
-            - "localpair": L-INS-i method (accurate, for <200 sequences)
-            - "globalpair": G-INS-i method (for similar-length sequences)
-            - "genafpair": E-INS-i method (for sequences with large unalignable regions)
-        max_iterations (int): Maximum number of iterative refinement cycles.
-            Higher values improve accuracy but increase runtime.
-            Default is 0 (use align_method default).
+        align_method (Literal['auto', 'localpair', 'globalpair', 'genafpair']):
+            ``"auto"`` (MAFFT picks by input size), ``"localpair"`` (L-INS-i),
+            ``"globalpair"`` (G-INS-i), or ``"genafpair"`` (E-INS-i).
+        max_iterations (int): Iterative-refinement cycles. ``0`` = no refinement;
+            ~1000 enables the full *-INS-i pipelines with ``*pair`` methods.
         threads (int): Number of CPU threads for parallel processing.
+        extra_args (list[str]): Verbatim ``mafft`` CLI tokens for niche flags
+            (e.g. ``["--retree", "3", "--reorder"]``).
     """
 
     align_method: Literal["auto", "localpair", "globalpair", "genafpair"] = ConfigField(
         title="Alignment Method",
         default="auto",
-        description="Alignment method: auto, localpair (L-INS-i), globalpair (G-INS-i), or genafpair (E-INS-i)",
+        description="auto, localpair (L-INS-i), globalpair (G-INS-i), or genafpair (E-INS-i).",
     )
     max_iterations: int = ConfigField(
         title="Maximum Iterations",
         default=0,
         ge=0,
-        description="Maximum iterative refinement cycles (0 is default, higher values are more accurate)",
+        description="Iterative-refinement cycles; 0 = no refinement; ~1000 enables full *-INS-i.",
         advanced=True,
     )
     threads: int = ConfigField(
         title="Number of Threads",
         default=1,
         ge=1,
-        description="Number of CPU threads for parallel processing",
+        description="CPU threads for parallel processing.",
         hidden=True,
+        include_in_key=False,
+    )
+    extra_args: list[str] = ConfigField(
+        title="Extra CLI Arguments",
+        default=[],
+        description="Verbatim `mafft` CLI tokens for niche flags (e.g. `['--retree', '3', '--reorder']`).",
+        advanced=True,
     )
 
 
@@ -189,6 +195,7 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig, instance: Any = Non
         "align_method": config.align_method,
         "max_iterations": config.max_iterations,
         "threads": config.threads,
+        "extra_args": list(config.extra_args),
     }
 
     input_data["device"] = "cpu"  # type: ignore[assignment]  # Literal mismatch: "cpu" not in declared Literal union

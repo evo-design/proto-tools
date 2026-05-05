@@ -268,114 +268,114 @@ class ColabfoldSearchOutput(BaseToolOutput):
 class ColabfoldSearchConfig(BaseConfig):
     """Configuration object for ColabFold MSA search.
 
-    This class defines all configuration parameters for running ColabFold's
-    MSA search using local MMSeqs2 against a local sequence database or the
-    online ColabFold API.
+    Defines all configuration parameters for running MSA search either against
+    a local MMseqs2 database or the online ColabFold API.
 
     Attributes:
-        search_mode (Literal['local', 'remote']): Mode to use for MSA search.
-            Options: "local" (uses local MMSeqs2 database search) or "remote" (uses
-            the ColabFold online API). Default: "remote".
-
-        use_metagenomic_db (bool): Whether to include metagenomic/environmental databases
-            in the search. Metagenomic databases can improve MSA quality for
-            some sequences but increase search time. Supported in both local and remote modes.
-            Default: False.
-
-        output_dir (str | None): Directory where output MSA files will be saved.
-            A subdirectory named 'msas' will be created to store A3M format
-            alignment files. Each sequence will get its own A3M file named
-            by its sequence ID. If None, uses the default cache directory
-            ($PROTO_HOME/colabfold_search). Default: None.
-
-        sensitivity (float | None): Only used if search_mode is "local". MMseqs2 sensitivity
-            parameter (1.0-9.0). Higher values increase sensitivity and may find more remote homologs,
-            but significantly slow down the search. Lower values are faster but
-            may miss distant homologs. If None, uses the default sensitivity (~8). Default: None.
-
-        msa_db_dir (str | None): Only used if search_mode is "local". Path to the local ColabFold/MMSeqs2
-            database directory. This directory should contain the database files downloaded using
-            the `setup_databases.sh` script. If None, defaults to `$PROTO_MODEL_CACHE/databases/uniref30_2302/`
-            (which resolves to `$PROTO_HOME/proto_model_cache/databases/uniref30_2302/` when
-            `PROTO_MODEL_CACHE` is unset). This location is deliberately *outside* `output_dir`
-            so the run-time cleanup in `_cleanup_default_output_dir_if_cache_empty` cannot delete
-            downloaded databases. Default: None.
-
-        database_name (str): Only used if search_mode is "local". Name of the database to use.
-            If not provided, the tool will automatically detect the available databases and use one.
-            Default: "uniref30_2302_db".
-
-        num_threads (int | None): Only used if search_mode is "local". Number of CPU threads to use for parallel
-            processing. If None, automatically detects and uses all available
-            CPU cores. Must be at least 1 if specified. Default: None (auto-detect).
-
-        use_gpu (bool): Only used if search_mode is "local". Whether to enable GPU-accelerated search using MMseqs2-GPU.
-            Requires a GPU-capable MMseqs2 binary and NVIDIA GPU (Turing gen or newer).
-            Only available on Linux. Raises ValueError if set with search_mode="remote"
-            or on unsupported platforms. When enabled, passes --gpu 1 to colabfold_search.
-            Default: False.
-
-        timeout (int): Maximum execution time in seconds. Full database searches
-            can take more than 10 minutes. Default: 3600.
-
+        search_mode (Literal['local', 'remote']): ``"local"`` runs MMseqs2
+            against a downloaded DB; ``"remote"`` queries ColabFold's MSA API.
+        use_metagenomic_db (bool): Include metagenomic/environmental DBs
+            (ColabFoldDB envdb / SPIRE) in the search. Off for speed; upstream
+            colabfold defaults this on (``--use-env=1``). Supported in both
+            local and remote modes.
+        output_dir (str | None): Directory where output MSA files are saved.
+            An ``msas`` subdirectory is created to store A3M files, one per
+            sequence ID. ``None`` resolves to ``$PROTO_HOME/colabfold_search``.
+        sensitivity (float | None): MMseqs2 ``-s`` override (1.0-9.0). Local
+            mode only. Ignored under ``use_gpu=True`` (colabfold_search forces
+            ungapped prefilter and drops ``-s``). When ``None`` on CPU, falls
+            back to colabfold's k-score path (matches the public MSA server).
+        msa_db_dir (str | None): Local mode only. Path to the MMseqs2 database
+            directory provisioned by ``setup_databases.sh``. ``None`` resolves
+            to ``$PROTO_MODEL_CACHE/databases/uniref30_2302/``. Deliberately
+            kept *outside* ``output_dir`` so the run-time cleanup in
+            ``_cleanup_default_output_dir_if_cache_empty`` cannot delete it.
+        database_name (str): Local mode only. MMseqs2 DB stem within
+            ``msa_db_dir`` (matches the ``*.dbtype`` file).
+        num_threads (int | None): Local mode only. CPU threads for parallel
+            search. ``None`` auto-detects all available cores.
+        use_gpu (bool): Local mode only. Run MMseqs2-GPU; requires an NVIDIA
+            GPU (Turing+), a Linux host, and a ``*.idx_pad`` GPU index built
+            via ``mmseqs makepaddedseqdb``. Validators raise ``ValueError`` if
+            set with ``search_mode="remote"``, on non-Linux platforms, or
+            without the padded DB on disk.
+        extra_args (list[str]): Local mode only. Verbatim ``colabfold_search``
+            CLI tokens appended after the typed flags (e.g.
+            ``["--max-accept", "500"]``). Power-user escape hatch for flags
+            not exposed as typed fields above.
+        timeout (int): Subprocess timeout in seconds. Full database searches
+            can take more than 10 minutes.
     """
 
     search_mode: Literal["local", "remote"] = ConfigField(
         title="Search Mode",
         default="remote",
-        description="Mode to use for MSA search.",
-        hidden=True,
+        description="`remote` queries ColabFold's MSA API; `local` runs MMseqs2 against a downloaded DB.",
     )
     use_metagenomic_db: bool = ConfigField(
         title="Use Metagenomic Database",
         default=False,
-        description="Whether to include metagenomic database in search",
+        description="Include metagenomic DBs (envdb/SPIRE). Off by default for speed (upstream = on).",
         advanced=True,
     )
     output_dir: str | None = ConfigField(
         title="Output Directory",
         default=None,
-        description="Directory for output MSA files (default: $PROTO_HOME/colabfold_search)",
+        description="Directory for output MSA files; resolves to a `$PROTO_HOME/colabfold_search` subdir when None.",
         hidden=True,
+        include_in_key=False,
     )
     msa_db_dir: str | None = ConfigField(
         title="MSA Database Directory",
         default=None,
-        description="Local MMSeqs2 database directory (default: $PROTO_MODEL_CACHE/databases/uniref30_2302/)",
+        description="Local MMseqs2 database directory; resolves to the registry-provisioned location when None.",
+        advanced=True,
+        depends_on={"search_mode": ["local"]},
     )
     database_name: str = ConfigField(
         title="Database Name",
         default="uniref30_2302_db",
-        description="Name of the database to use.",
+        description="MMseqs2 DB stem within `msa_db_dir` (matches the `*.dbtype` file).",
         advanced=True,
+        depends_on={"search_mode": ["local"]},
     )
     sensitivity: float | None = ConfigField(
         title="MMseqs2 Sensitivity",
         default=None,
         ge=1.0,
         le=9.0,
-        description="MMseqs2 parameter. Higher means more hits but slower search. Default matches ColabFold server.",
+        description="MMseqs2 `-s` (1.0-9.0); ignored on GPU; `None` falls back to colabfold's k-score path.",
         advanced=True,
+        depends_on={"search_mode": ["local"]},
     )
     num_threads: int | None = ConfigField(
         title="Number of Threads",
         default=None,
         ge=1,
-        description="Number of CPU threads (None for auto-detect)",
+        description="CPU threads; `None` auto-detects all available cores.",
         hidden=True,
+        include_in_key=False,
+        depends_on={"search_mode": ["local"]},
     )
     use_gpu: bool = ConfigField(
         title="Use GPU",
         default=False,
-        description="Enable GPU-accelerated MSA search (requires NVIDIA GPU, Turing gen or newer)",
+        description="GPU-accelerated MMseqs2; requires an NVIDIA GPU (Turing+) on Linux and a GPU-padded DB.",
         advanced=True,
-        include_in_key=False,
+        depends_on={"search_mode": ["local"]},
+    )
+    extra_args: list[str] = ConfigField(
+        title="Extra CLI Arguments",
+        default=[],
+        description="Verbatim `colabfold_search` CLI tokens for niche flags (e.g. `['--max-accept', '500']`).",
+        advanced=True,
+        depends_on={"search_mode": ["local"]},
     )
     timeout: int = ConfigField(
         title="Timeout",
         default=3600,
         ge=1,
-        description="Maximum execution time in seconds. Full database searches can take >10 minutes.",
+        description="Subprocess timeout in seconds; full-database searches can exceed 10 minutes.",
         hidden=True,
         include_in_key=False,
     )
@@ -511,7 +511,7 @@ def example_input() -> Any:
     input_class=ColabfoldSearchInput,
     config_class=ColabfoldSearchConfig,
     output_class=ColabfoldSearchOutput,
-    description="Generate Multiple Sequence Alignments using ColabFold local database search",
+    description="Generate Multiple Sequence Alignments via ColabFold (local MMseqs2 DB or remote API)",
     example_input=example_input,
     iterable_input_field="queries",
     iterable_output_field="results",
@@ -736,6 +736,7 @@ def _local_search(
             "sensitivity": config.sensitivity,
             "database_name": config.database_name,
             "use_gpu": config.use_gpu,
+            "extra_args": list(config.extra_args),
             "verbose": config.verbose,
         }
 
