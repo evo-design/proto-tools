@@ -18,6 +18,31 @@ from proto_tools.tools.database_retrieval.alphamissense import (
     run_alphamissense_fetch,
 )
 
+# Ensembl REST tools (ensembl-fetch + ensembl-vep)
+from proto_tools.tools.database_retrieval.ensembl import (
+    EnsemblAssembly,
+    EnsemblEndpoint,
+    EnsemblExon,
+    EnsemblFetchConfig,
+    EnsemblFetchInput,
+    EnsemblFetchOutput,
+    EnsemblGene,
+    EnsemblOverlapFeature,
+    EnsemblOverlapFeatureRecord,
+    EnsemblSequence,
+    EnsemblSequenceType,
+    EnsemblSpecies,
+    EnsemblTranscript,
+    EnsemblTranslation,
+    EnsemblVEPConfig,
+    EnsemblVEPConsequence,
+    EnsemblVEPInput,
+    EnsemblVEPOutput,
+    EnsemblXref,
+    run_ensembl_fetch,
+    run_ensembl_vep,
+)
+
 # InterPro fetch
 from proto_tools.tools.database_retrieval.interproscan import (
     InterProApp,
@@ -103,6 +128,28 @@ __all__ = [
     "AlphaMissenseFetchOutput",
     "AlphaMissensePrediction",
     "run_alphamissense_fetch",
+    # Ensembl REST tools (ensembl-fetch + ensembl-vep)
+    "EnsemblAssembly",
+    "EnsemblEndpoint",
+    "EnsemblExon",
+    "EnsemblFetchConfig",
+    "EnsemblFetchInput",
+    "EnsemblFetchOutput",
+    "EnsemblGene",
+    "EnsemblOverlapFeature",
+    "EnsemblOverlapFeatureRecord",
+    "EnsemblSequence",
+    "EnsemblSequenceType",
+    "EnsemblSpecies",
+    "EnsemblTranscript",
+    "EnsemblTranslation",
+    "EnsemblVEPConfig",
+    "EnsemblVEPConsequence",
+    "EnsemblVEPInput",
+    "EnsemblVEPOutput",
+    "EnsemblXref",
+    "run_ensembl_fetch",
+    "run_ensembl_vep",
     # InterPro fetch
     "InterProApp",
     "InterProDomain",

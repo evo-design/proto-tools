@@ -1,0 +1,8 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/Ensembl/ensembl/blob/main/LICENSE
+commercial_use: 'yes'
+redistribution: true
+attribution_required: true
+notes: Ensembl code (Ensembl/ensembl, Ensembl/ensembl-rest) is Apache-2.0 (https://www.ensembl.org/info/about/legal/code_licence.html). Ensembl-generated data is "available without restriction" per Ensembl's disclaimer; attribution is expected per the EMBL-EBI Terms of Use (https://www.ebi.ac.uk/about/terms-of-use). Some bundled third-party data may carry its own terms.
+last_updated: '2026-05-04'
