@@ -168,8 +168,6 @@ class MincedConfig(BaseConfig):
         min_spacer_length (int): Minimum spacer length in nt. Default 26.
         max_spacer_length (int): Maximum spacer length in nt. Default 50.
             Must be ≥ ``min_spacer_length``.
-        search_window_length (int): k-mer search window size, range 6-9.
-            Default 8.
     """
 
     min_num_repeats: int = ConfigField(
@@ -203,14 +201,6 @@ class MincedConfig(BaseConfig):
         default=50,
         ge=1,
         description="Max spacer length in nt; raise for noncanonical families with longer spacers",
-        advanced=True,
-    )
-    search_window_length: int = ConfigField(
-        title="Search Window Length",
-        default=8,
-        ge=6,
-        le=9,
-        description="k-mer seed size (range 6-9). Lower = more sensitive on short/divergent repeats",
         advanced=True,
     )
 
@@ -285,7 +275,6 @@ def run_minced(inputs: MincedInput, config: MincedConfig, instance: Any = None) 
             "max_repeat_length": config.max_repeat_length,
             "min_spacer_length": config.min_spacer_length,
             "max_spacer_length": config.max_spacer_length,
-            "search_window_length": config.search_window_length,
         },
     }
 
@@ -316,7 +305,6 @@ def run_minced(inputs: MincedInput, config: MincedConfig, instance: Any = None) 
             "max_repeat_length": config.max_repeat_length,
             "min_spacer_length": config.min_spacer_length,
             "max_spacer_length": config.max_spacer_length,
-            "search_window_length": config.search_window_length,
             "num_sequences": len(inputs.sequences),
         },
         results=results,

@@ -94,7 +94,7 @@ def _run_single_minced(sequence: str, seq_id: str, config: dict[str, Any]) -> di
     Args:
         sequence: Nucleotide sequence string.
         seq_id: Sequence identifier.
-        config: Configuration dict with MinCED -minNR/-minRL/-maxRL/-minSL/-maxSL/-searchWL knobs.
+        config: Configuration dict with MinCED -minNR/-minRL/-maxRL/-minSL/-maxSL knobs.
             All keys are required — the wrapper always populates them. Reading
             via ``config[key]`` (not ``config.get``) prevents silent drift if
             ``MincedConfig`` defaults ever change without the wrapper updating.
@@ -107,7 +107,6 @@ def _run_single_minced(sequence: str, seq_id: str, config: dict[str, Any]) -> di
     max_rl = config["max_repeat_length"]
     min_sl = config["min_spacer_length"]
     max_sl = config["max_spacer_length"]
-    search_wl = config["search_window_length"]
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir_path = Path(temp_dir)
@@ -120,8 +119,6 @@ def _run_single_minced(sequence: str, seq_id: str, config: dict[str, Any]) -> di
         minced_bin = str(Path(sys.prefix) / "bin" / "minced")
         cmd = [
             minced_bin,
-            "-searchWL",
-            str(search_wl),
             "-minNR",
             str(min_nr),
             "-minRL",

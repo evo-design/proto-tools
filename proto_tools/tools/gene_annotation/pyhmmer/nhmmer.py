@@ -91,7 +91,7 @@ class PyNhmmerConfig(PyHmmerConfig):
     strand: Literal["both", "watson", "crick"] = ConfigField(
         title="Strand",
         default="both",
-        description="Strand: 'both' (default, ~2x runtime), 'watson' (forward only), 'crick' (reverse only)",
+        description="Strand: 'both' (~2x runtime), 'watson' (forward only), 'crick' (reverse only)",
         advanced=True,
     )
 
