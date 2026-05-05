@@ -51,7 +51,6 @@ Every candidate TSS on both strands is scored independently by the biophysical l
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `threads` | `int` | `1` | CPU threads for the internal TSS scan (must be `>= 1`) |
-| `verbosity` | `int` | `0` | Calculator verbosity (0 = quiet) |
 | `circular` | `bool` | `False` | Treat input sequences as circular DNA (e.g. plasmids) |
 
 **Parameters to prioritize:**

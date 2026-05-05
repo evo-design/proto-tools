@@ -45,13 +45,14 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     sequences = input_dict["sequences"]
     sequence_ids = input_dict["sequence_ids"]
     config = input_dict.get("config", {})
-    threads = int(config.get("threads", 1))
-    verbosity = int(config.get("verbosity", 0))
-    circular = bool(config.get("circular", False))
+    threads = int(config["threads"])
+    circular = bool(config["circular"])
 
     results = []
     for seq, seq_id in zip(sequences, sequence_ids, strict=True):
-        predictions = promoter_calculator(seq, threads=threads, verbosity=verbosity, circular=circular)
+        # verbosity=0 pinned: any non-zero level prints progress to stdout, which
+        # corrupts the subprocess JSON contract.
+        predictions = promoter_calculator(seq, threads=threads, verbosity=0, circular=circular)
         results.append(
             {
                 "sequence_id": seq_id,

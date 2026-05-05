@@ -262,29 +262,30 @@ class CrisprTracrRNAConfig(BaseConfig):
     model_type: Literal["II", "all"] = ConfigField(
         title="Model Type",
         default="II",
-        description='CRISPR model type: "II" for type II only (faster), "all" for comprehensive',
+        description="CRISPR model: 'II' (type II only, fast, default) or 'all' (type II + type V cluster models)",
     )
     run_type: Literal["complete_run", "model_run"] = ConfigField(
         title="Run Type",
         default="complete_run",
-        description="Pipeline mode: complete_run = full pipeline; model_run = covariance-model scan only.",
+        description="Pipeline mode: 'complete_run' (full ranking, default) or 'model_run' (cmsearch scan only, fast)",
     )
     num_workers: int | None = ConfigField(
         title="Number of Workers",
         default=None,
-        description="Number of parallel workers (defaults to SLURM CPUs or 1)",
+        description="Parallel workers. None auto-selects $SLURM_CPUS_PER_TASK or 1",
+        hidden=True,
         include_in_key=False,
     )
     anti_repeat_similarity_threshold: float = ConfigField(
         title="Anti-repeat Similarity",
         default=0.7,
-        description="Minimum sequence similarity (0-1) between anti-repeat candidate and CRISPR repeat.",
+        description="Anti-repeat ↔ repeat similarity floor (0-1). Lower for divergent CRISPR families",
         depends_on={"run_type": "complete_run"},
     )
     anti_repeat_coverage_threshold: float = ConfigField(
         title="Anti-repeat Coverage",
         default=0.6,
-        description="Minimum alignment coverage (0-1) of anti-repeat candidates.",
+        description="Anti-repeat alignment coverage floor (0-1). Lower for partial anti-repeats",
         depends_on={"run_type": "complete_run"},
     )
     weight_crispr_array_score: float = ConfigField(
@@ -360,7 +361,8 @@ class CrisprTracrRNAConfig(BaseConfig):
     perform_type_v_anti_repeat_analysis: bool = ConfigField(
         title="Type V Anti-repeat Analysis",
         default=False,
-        description="Enable Type V (Cas12) anti-repeat search in model_run mode (no-op in complete_run).",
+        description="Search Type V (Cas12) anti-repeat locations. Niche; off by default",
+        advanced=True,
         depends_on={"run_type": "model_run"},
     )
 

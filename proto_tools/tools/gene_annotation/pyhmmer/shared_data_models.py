@@ -299,73 +299,97 @@ class PyHmmerOutput(BaseToolOutput):
 class PyHmmerConfig(BaseConfig):
     """Base configuration object for PyHMMER tools.
 
-    This class provides common configuration parameters for all PyHMMER search
-    operations, including threading, E-value thresholds, and score cutoffs.
+    Common knobs for hmmsearch / hmmscan / phmmer / nhmmer / jackhmmer.
+    Reporting thresholds control what appears in output; inclusion thresholds
+    mark a hit as 'trusted' (jackhmmer uses included hits to seed the next
+    iteration).
 
     Attributes:
-        num_threads (int): Number of CPU threads to use for parallel processing.
-            Setting to ``0`` enables automatic detection of available cores.
-            Higher values speed up searches on multi-core systems. Default: 0.
-
-        evalue_threshold (float): E-value reporting threshold for sequence-level
-            hits. Sequences with E-values at or below this threshold are reported.
-            Lower values are more stringent. Common values:
-
-            - ``10.0``: Default, permissive threshold
-            - ``1.0``: Moderately stringent
-            - ``0.001``: Very stringent
-
-            Must be greater than 0. Default: 10.0.
-
-        score_threshold (float | None): Score reporting threshold for
-            sequence-level hits. If specified, this overrides the E-value threshold.
-            Sequences with bit scores at or above this value are reported.
-            Default: ``None`` (use E-value threshold).
-
-        domain_evalue_threshold (float): E-value reporting threshold for
-            domain-level hits within sequences. Domains with E-values at or below
-            this threshold are reported. Must be greater than 0. Default: 10.0.
-
-        domain_score_threshold (float | None): Score reporting threshold for
-            domain-level hits. If specified, this overrides the domain E-value
-            threshold. Domains with bit scores at or above this value are reported.
-            Default: ``None`` (use domain E-value threshold).
-
-    Note:
-        When both E-value and score thresholds are specified, the score threshold
-        takes precedence. This applies independently to both sequence-level and
-        domain-level filtering.
+        num_threads (int): CPU threads; 0 = auto-detect. Default 0.
+        evalue_threshold (float): Sequence-level E-value cap to report.
+            Default 10.0.
+        score_threshold (float | None): Sequence-level bit-score floor.
+            Overrides E-value when set. Default None.
+        domain_evalue_threshold (float): Per-domain E-value cap to report.
+            Default 10.0.
+        domain_score_threshold (float | None): Per-domain bit-score floor.
+            Overrides domain E-value when set. Default None.
+        inclusion_evalue_threshold (float): Sequence-level inclusion E-value.
+            Default 0.01.
+        inclusion_domain_evalue_threshold (float): Per-domain inclusion E-value.
+            Default 0.01.
+        z_value (float | None): Effective database size for E-value calc.
+            None = use the actual target count.
+        domain_z_value (float | None): Significant hit count for domain E-value
+            calc. None = use actual.
+        skip_filters (bool): Disable MSV/Vit/Fwd heuristic filters.
+            Slower but maximally sensitive. Default False.
     """
 
     num_threads: int = ConfigField(
         title="Number of Threads",
         default=0,
         ge=0,
-        description="Number of CPU threads to use (0 for auto-detection)",
+        description="CPU threads. 0 auto-detects available cores",
         hidden=True,
+        include_in_key=False,
     )
     evalue_threshold: float = ConfigField(
         title="E-value Threshold",
         default=10.0,
         gt=0,
-        description="E-value reporting threshold for sequence level hits",
+        description="Sequence E-value cap. Lower = stricter; 0.001 for confident, 1e-10 for stringent",
     )
     score_threshold: float | None = ConfigField(
         title="Score Threshold",
         default=None,
-        description="Score reporting threshold. (Overrides the E-value threshold)",
+        description="Sequence bit-score floor. Use for cross-DB-size comparisons; overrides E-value if set",
         advanced=True,
     )
     domain_evalue_threshold: float = ConfigField(
         title="Domain E-value Threshold",
         default=10.0,
         gt=0,
-        description="E-value reporting threshold for domain level hits",
+        description="Domain E-value cap. Tighten independently from sequence threshold",
     )
     domain_score_threshold: float | None = ConfigField(
         title="Domain Score Threshold",
         default=None,
-        description="Score reporting threshold for domain level hits. (Overrides the Domain E-value threshold)",
+        description="Domain bit-score floor. For cross-DB-size comparisons; overrides domain E-value",
+        advanced=True,
+    )
+    inclusion_evalue_threshold: float = ConfigField(
+        title="Inclusion E-value Threshold",
+        default=0.01,
+        gt=0,
+        description="Inclusion E-value cap. Sets 'included' flag; seeds jackhmmer next iteration",
+        advanced=True,
+    )
+    inclusion_domain_evalue_threshold: float = ConfigField(
+        title="Inclusion Domain E-value",
+        default=0.01,
+        gt=0,
+        description="Domain inclusion E-value cap. Sets included flag on domain hits",
+        advanced=True,
+    )
+    z_value: float | None = ConfigField(
+        title="Database Size (Z)",
+        default=None,
+        gt=0,
+        description="Effective DB size for E-value calc. Set constant for cross-DB compare; None = actual count",
+        advanced=True,
+    )
+    domain_z_value: float | None = ConfigField(
+        title="Domain Database Size (Z)",
+        default=None,
+        gt=0,
+        description="Significant hits for domain E-value calc. Set with Z for cross-DB; None = actual",
+        advanced=True,
+    )
+    skip_filters: bool = ConfigField(
+        title="Skip Heuristic Filters",
+        default=False,
+        description="Disable MSV/Vit/Fwd + bias filters. 10-100x slower but max sensitivity for distant homologs",
         advanced=True,
     )
 

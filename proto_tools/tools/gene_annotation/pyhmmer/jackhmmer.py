@@ -54,21 +54,40 @@ class PyJackhmmerInput(PyHmmerInput):
 class PyJackhmmerConfig(PyHmmerConfig):
     """Configuration for PyHMMER jackhmmer search.
 
+    Inherits all reporting + inclusion + filter knobs from :class:`PyHmmerConfig`.
+    Adds ``max_iterations`` — the *defining* knob for iterative search; surfaced
+    as a primary parameter rather than buried in the advanced section.
+
     Attributes:
-        num_threads (int): Number of CPU threads to use.
-        evalue_threshold (float): Sequence-level E-value reporting threshold.
-        score_threshold (float | None): Sequence-level score threshold.
-        domain_evalue_threshold (float): Domain-level E-value reporting threshold.
-        domain_score_threshold (float | None): Domain-level score threshold.
-        max_iterations (int): Maximum number of jackhmmer search iterations.
+        num_threads (int): CPU threads (0 = auto). Inherited from ``PyHmmerConfig``.
+        evalue_threshold (float): Sequence-level E-value cap to report.
+            Inherited from ``PyHmmerConfig``.
+        score_threshold (float | None): Sequence-level bit-score floor.
+            Inherited from ``PyHmmerConfig``.
+        domain_evalue_threshold (float): Per-domain E-value cap to report.
+            Inherited from ``PyHmmerConfig``.
+        domain_score_threshold (float | None): Per-domain bit-score floor.
+            Inherited from ``PyHmmerConfig``.
+        inclusion_evalue_threshold (float): Sequence-level inclusion E-value.
+            Inherited from ``PyHmmerConfig``. Critical for jackhmmer — the
+            included set seeds the next iteration's HMM.
+        inclusion_domain_evalue_threshold (float): Per-domain inclusion E-value.
+            Inherited from ``PyHmmerConfig``.
+        z_value (float | None): Effective database size for E-value calc.
+            Inherited from ``PyHmmerConfig``.
+        domain_z_value (float | None): Significant hit count for domain E-value.
+            Inherited from ``PyHmmerConfig``.
+        skip_filters (bool): Disable MSV/Vit/Fwd filters.
+            Inherited from ``PyHmmerConfig``.
+        max_iterations (int): Maximum jackhmmer iterations; stops early on
+            convergence. Default 5.
     """
 
     max_iterations: int = ConfigField(
         title="Maximum Iterations",
         default=5,
         ge=1,
-        description="Maximum number of jackhmmer search iterations.",
-        advanced=True,
+        description="Max jackhmmer iterations; raise to 8-10 for distant homologs, 1-2 for fast preview",
     )
 
 
@@ -129,6 +148,12 @@ def run_pyhmmer_jackhmmer(
             "score_threshold": config.score_threshold,
             "domain_evalue_threshold": config.domain_evalue_threshold,
             "domain_score_threshold": config.domain_score_threshold,
+            "inclusion_evalue_threshold": config.inclusion_evalue_threshold,
+            "inclusion_domain_evalue_threshold": config.inclusion_domain_evalue_threshold,
+            "z_value": config.z_value,
+            "domain_z_value": config.domain_z_value,
+            "skip_filters": config.skip_filters,
+            "seed": config.seed,
         },
         instance=instance,
         config=config,
@@ -143,11 +168,8 @@ def run_pyhmmer_jackhmmer(
             "max_iterations": config.max_iterations,
             "iterations_per_query": output_data.get("iterations_per_query", []),
             "converged_per_query": output_data.get("converged_per_query", []),
-            "num_threads": config.num_threads,
             "evalue_threshold": config.evalue_threshold,
-            "score_threshold": config.score_threshold,
             "domain_evalue_threshold": config.domain_evalue_threshold,
-            "domain_score_threshold": config.domain_score_threshold,
         },
         sequence_hits=sequence_hits,
         domain_hits=domain_hits,

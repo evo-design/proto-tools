@@ -3,7 +3,7 @@
 PyHMMER nhmmer tool: search nucleotide sequences against nucleotide sequences.
 """
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import field_validator
 
@@ -14,7 +14,7 @@ from proto_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
     _build_hit_models,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import InputField, ToolInstance
+from proto_tools.utils import ConfigField, InputField, ToolInstance
 
 
 # ============================================================================
@@ -54,8 +54,46 @@ class PyNhmmerInput(PyHmmerInput):
 # Output:
 PyNhmmerOutput = PyHmmerOutput
 
+
 # Config:
-PyNhmmerConfig = PyHmmerConfig
+class PyNhmmerConfig(PyHmmerConfig):
+    """Configuration for PyHMMER nhmmer (long-targets nucleotide search).
+
+    Adds ``strand`` — nhmmer is the only HMMER tool that runs on nucleotide
+    targets, so it is the only place where forward / reverse-complement strand
+    selection makes sense. All other knobs are inherited from
+    :class:`PyHmmerConfig`.
+
+    Attributes:
+        num_threads (int): CPU threads (0 = auto). Inherited from ``PyHmmerConfig``.
+        evalue_threshold (float): Sequence-level E-value cap to report.
+            Inherited from ``PyHmmerConfig``.
+        score_threshold (float | None): Sequence-level bit-score floor.
+            Inherited from ``PyHmmerConfig``.
+        domain_evalue_threshold (float): Per-domain E-value cap to report. Inherited from ``PyHmmerConfig``.
+        domain_score_threshold (float | None): Per-domain bit-score floor. Inherited from ``PyHmmerConfig``.
+        inclusion_evalue_threshold (float): Sequence-level E-value cap for
+            inclusion. Inherited from ``PyHmmerConfig``.
+        inclusion_domain_evalue_threshold (float): Per-domain E-value cap for
+            inclusion. Inherited from ``PyHmmerConfig``.
+        z_value (float | None): Effective database size.
+            Inherited from ``PyHmmerConfig``.
+        domain_z_value (float | None): Significant hit count.
+            Inherited from ``PyHmmerConfig``.
+        skip_filters (bool): Disable MSV/Vit/Fwd filters.
+            Inherited from ``PyHmmerConfig``.
+        strand (Literal['both', 'watson', 'crick']): Strand to search.
+            ``both`` (default) runs the forward strand and its reverse complement;
+            ``watson`` runs only the forward strand; ``crick``
+            runs only the reverse complement.
+    """
+
+    strand: Literal["both", "watson", "crick"] = ConfigField(
+        title="Strand",
+        default="both",
+        description="Strand: 'both' (default, ~2x runtime), 'watson' (forward only), 'crick' (reverse only)",
+        advanced=True,
+    )
 
 
 # ============================================================================
@@ -106,6 +144,13 @@ def run_pyhmmer_nhmmer(inputs: PyNhmmerInput, config: PyNhmmerConfig, instance: 
             "score_threshold": config.score_threshold,
             "domain_evalue_threshold": config.domain_evalue_threshold,
             "domain_score_threshold": config.domain_score_threshold,
+            "inclusion_evalue_threshold": config.inclusion_evalue_threshold,
+            "inclusion_domain_evalue_threshold": config.inclusion_domain_evalue_threshold,
+            "z_value": config.z_value,
+            "domain_z_value": config.domain_z_value,
+            "skip_filters": config.skip_filters,
+            "strand": config.strand,
+            "seed": config.seed,
         },
         instance=instance,
         config=config,
@@ -117,11 +162,9 @@ def run_pyhmmer_nhmmer(inputs: PyNhmmerInput, config: PyNhmmerConfig, instance: 
         metadata={
             "num_query_sequences": output_data.get("num_query_sequences", 0),
             "num_target_sequences": output_data.get("num_target_sequences", 0),
-            "num_threads": config.num_threads,
             "evalue_threshold": config.evalue_threshold,
-            "score_threshold": config.score_threshold,
             "domain_evalue_threshold": config.domain_evalue_threshold,
-            "domain_score_threshold": config.domain_score_threshold,
+            "strand": config.strand,
         },
         sequence_hits=sequence_hits,
         domain_hits=domain_hits,

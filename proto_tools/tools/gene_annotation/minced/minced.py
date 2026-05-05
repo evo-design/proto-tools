@@ -8,7 +8,7 @@ a tool for finding CRISPR repeats and spacers in genomic sequences.
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -157,25 +157,75 @@ class MincedOutput(BaseToolOutput):
 class MincedConfig(BaseConfig):
     """Configuration for MinCED CRISPR array detection.
 
+    Tighten ``min_num_repeats`` to ≥4 for high-confidence detection; widen
+    spacer/repeat ranges for noncanonical CRISPR families.
+
     Attributes:
-        min_num_repeats (int): Minimum number of repeats in a CRISPR array.
-            Default: 3.
-        min_repeat_length (int): Minimum length of a repeat sequence.
-            Default: 27.
+        min_num_repeats (int): Minimum repeats per array. Default 3.
+        min_repeat_length (int): Minimum repeat length in nt. Default 23.
+        max_repeat_length (int): Maximum repeat length in nt. Default 47.
+            Must be ≥ ``min_repeat_length``.
+        min_spacer_length (int): Minimum spacer length in nt. Default 26.
+        max_spacer_length (int): Maximum spacer length in nt. Default 50.
+            Must be ≥ ``min_spacer_length``.
+        search_window_length (int): k-mer search window size, range 6-9.
+            Default 8.
     """
 
     min_num_repeats: int = ConfigField(
         title="Minimum Number of Repeats",
         default=3,
         ge=2,
-        description="Minimum number of repeats required for a CRISPR array",
+        description="Min repeats per array; raise to 4+ for high-confidence",
     )
     min_repeat_length: int = ConfigField(
         title="Minimum Repeat Length",
-        default=27,
+        default=23,
         ge=10,
-        description="Minimum length of a repeat sequence in nucleotides",
+        description="Min repeat length in nt; below 23 risks tandem-repeat hits",
     )
+    max_repeat_length: int = ConfigField(
+        title="Maximum Repeat Length",
+        default=47,
+        ge=10,
+        description="Max repeat length in nt; covers known CRISPR families, raise for unusual loci",
+        advanced=True,
+    )
+    min_spacer_length: int = ConfigField(
+        title="Minimum Spacer Length",
+        default=26,
+        ge=1,
+        description="Min spacer length in nt; lower (~18) for partial or degraded arrays",
+        advanced=True,
+    )
+    max_spacer_length: int = ConfigField(
+        title="Maximum Spacer Length",
+        default=50,
+        ge=1,
+        description="Max spacer length in nt; raise for noncanonical families with longer spacers",
+        advanced=True,
+    )
+    search_window_length: int = ConfigField(
+        title="Search Window Length",
+        default=8,
+        ge=6,
+        le=9,
+        description="k-mer seed size (range 6-9). Lower = more sensitive on short/divergent repeats",
+        advanced=True,
+    )
+
+    @model_validator(mode="after")
+    def _validate_ranges(self) -> "MincedConfig":
+        """Reject inverted repeat/spacer-length ranges that MinCED would silently accept."""
+        if self.max_repeat_length < self.min_repeat_length:
+            raise ValueError(
+                f"max_repeat_length ({self.max_repeat_length}) must be >= min_repeat_length ({self.min_repeat_length})"
+            )
+        if self.max_spacer_length < self.min_spacer_length:
+            raise ValueError(
+                f"max_spacer_length ({self.max_spacer_length}) must be >= min_spacer_length ({self.min_spacer_length})"
+            )
+        return self
 
 
 # ============================================================================
@@ -219,22 +269,26 @@ def run_minced(inputs: MincedInput, config: MincedConfig, instance: Any = None) 
 
     Examples:
         >>> inputs = MincedInput(sequences=["ATCG..." * 1000])
-        >>> config = MincedConfig(min_num_repeats=3, min_repeat_length=27)
+        >>> config = MincedConfig()
         >>> result = run_minced(inputs, config)
         >>> print(f"{result.num_sequences_with_crispr} sequences have CRISPR arrays")
     """
     sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
 
-    input_data = {
+    input_data: dict[str, Any] = {
+        "device": "cpu",
         "sequences": inputs.sequences,
         "sequence_ids": sequence_ids,
         "config": {
             "min_num_repeats": config.min_num_repeats,
             "min_repeat_length": config.min_repeat_length,
+            "max_repeat_length": config.max_repeat_length,
+            "min_spacer_length": config.min_spacer_length,
+            "max_spacer_length": config.max_spacer_length,
+            "search_window_length": config.search_window_length,
         },
     }
 
-    input_data["device"] = "cpu"
     output_data = ToolInstance.dispatch(
         "minced",
         input_data,
@@ -259,6 +313,10 @@ def run_minced(inputs: MincedInput, config: MincedConfig, instance: Any = None) 
         metadata={
             "min_num_repeats": config.min_num_repeats,
             "min_repeat_length": config.min_repeat_length,
+            "max_repeat_length": config.max_repeat_length,
+            "min_spacer_length": config.min_spacer_length,
+            "max_spacer_length": config.max_spacer_length,
+            "search_window_length": config.search_window_length,
             "num_sequences": len(inputs.sequences),
         },
         results=results,

@@ -132,23 +132,25 @@ def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig, instance: 
             "score_threshold": config.score_threshold,
             "domain_evalue_threshold": config.domain_evalue_threshold,
             "domain_score_threshold": config.domain_score_threshold,
+            "inclusion_evalue_threshold": config.inclusion_evalue_threshold,
+            "inclusion_domain_evalue_threshold": config.inclusion_domain_evalue_threshold,
+            "z_value": config.z_value,
+            "domain_z_value": config.domain_z_value,
+            "skip_filters": config.skip_filters,
+            "seed": config.seed,
         },
         instance=instance,
         config=config,
     )
 
-    # Convert results to typed hit models
     sequence_hits, domain_hits = _build_hit_models(output_data["sequence_hits"], output_data["domain_hits"])
 
     return PyPhmmerOutput(
         metadata={
             "num_query_sequences": output_data.get("num_query_sequences", 0),
             "num_target_sequences": output_data.get("num_target_sequences", 0),
-            "num_threads": config.num_threads,
             "evalue_threshold": config.evalue_threshold,
-            "score_threshold": config.score_threshold,
             "domain_evalue_threshold": config.domain_evalue_threshold,
-            "domain_score_threshold": config.domain_score_threshold,
         },
         sequence_hits=sequence_hits,
         domain_hits=domain_hits,

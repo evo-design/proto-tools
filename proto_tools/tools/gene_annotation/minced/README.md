@@ -27,9 +27,9 @@ MinCED uses a heuristic k-mer search to find candidate CRISPR arrays. It scans t
 
 **Key assumptions:**
 - Input sequences are prokaryotic or phage DNA
-- CRISPR repeats are 23-47 nt in length (by default, minimum 27 nt)
+- CRISPR repeats are 23-47 nt in length (matches MinCED's `-minRL`/`-maxRL` defaults)
 - Arrays contain at least 3 repeats (by default; minimum 2 allowed)
-- Spacers between repeats are 26-50 nt
+- Spacers between repeats are 26-50 nt (matches `-minSL`/`-maxSL`)
 
 **Limitations:**
 - May miss degenerate or highly diverged CRISPR arrays
@@ -53,14 +53,21 @@ MinCED uses a heuristic k-mer search to find candidate CRISPR arrays. It scans t
 
 **Configuration parameters:**
 
-| Parameter | Type | Default | Sweep Range | Description |
+All defaults match upstream MinCED's `-h` output (verified live).
+
+| Parameter | Type | Default | MinCED Flag | Description |
 |-----------|------|---------|-------------|-------------|
-| `min_num_repeats` | `int` | `3` | `2 - 5` | Minimum number of repeats required for a CRISPR array |
-| `min_repeat_length` | `int` | `27` | `20 - 35` | Minimum length of a repeat sequence in nucleotides |
+| `min_num_repeats` | `int` | `3` | `-minNR` | Minimum number of repeats required for a CRISPR array |
+| `min_repeat_length` | `int` | `23` | `-minRL` | Minimum length of a repeat sequence in nucleotides |
+| `max_repeat_length` | `int` | `47` | `-maxRL` | Maximum length of a repeat sequence in nucleotides |
+| `min_spacer_length` | `int` | `26` | `-minSL` | Minimum length of a spacer in nucleotides |
+| `max_spacer_length` | `int` | `50` | `-maxSL` | Maximum length of a spacer in nucleotides |
+| `search_window_length` | `int` | `8` | `-searchWL` | k-mer search window size (range 6–9) |
 
 **Parameters to prioritize for sweeps:**
 1. **`min_num_repeats`**: Lowering to 2 increases sensitivity but also false positives. Default of 3 balances sensitivity and specificity for most applications.
-2. **`min_repeat_length`**: Lowering below 23 may detect non-CRISPR tandem repeats. Increasing above 30 may miss arrays with shorter repeats.
+2. **`min_repeat_length`**: Lowering below 23 may detect non-CRISPR tandem repeats. Raising above 30 may miss canonical CRISPR arrays.
+3. **`search_window_length`**: 6 (max sensitivity, slower) → 9 (max speed, may miss short repeats).
 
 ---
 
@@ -186,8 +193,8 @@ inputs = MincedInput(
     sequence_ids=["genome_A", "genome_B", "genome_C"],
 )
 config = MincedConfig(
-    min_num_repeats=2,      # More sensitive
-    min_repeat_length=23,   # Allow shorter repeats
+    min_num_repeats=2,            # More sensitive (vs default 3)
+    search_window_length=6,       # Slower but more sensitive (vs default 8)
 )
 
 result = run_minced(inputs, config)

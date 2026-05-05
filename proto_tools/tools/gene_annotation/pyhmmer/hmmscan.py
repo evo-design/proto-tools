@@ -4,7 +4,7 @@ PyHMMER hmmscan tool: search protein sequences against an HMM database.
 """
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import field_validator
 
@@ -15,7 +15,7 @@ from proto_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
     _build_hit_models,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import InputField, ToolInstance
+from proto_tools.utils import ConfigField, InputField, ToolInstance
 
 
 # ============================================================================
@@ -56,8 +56,49 @@ class PyHmmscanInput(PyHmmerInput):
 # Output:
 PyHmmscanOutput = PyHmmerOutput
 
+
 # Config:
-PyHmmscanConfig = PyHmmerConfig
+class PyHmmscanConfig(PyHmmerConfig):
+    """Configuration for PyHMMER hmmscan.
+
+    Adds ``bit_cutoffs`` — only meaningful for hmmsearch and hmmscan, which
+    consume a pre-built HMM file that may carry curated GA/NC/TC cutoffs
+    (Pfam HMMs always do). All other knobs are inherited from
+    :class:`PyHmmerConfig`.
+
+    Attributes:
+        num_threads (int): CPU threads (0 = auto). Inherited from ``PyHmmerConfig``.
+        evalue_threshold (float): Sequence-level E-value cap to report.
+            Inherited from ``PyHmmerConfig``.
+        score_threshold (float | None): Sequence-level bit-score floor.
+            Inherited from ``PyHmmerConfig``.
+        domain_evalue_threshold (float): Per-domain E-value cap to report. Inherited from ``PyHmmerConfig``.
+        domain_score_threshold (float | None): Per-domain bit-score floor. Inherited from ``PyHmmerConfig``.
+        inclusion_evalue_threshold (float): Sequence-level E-value cap for
+            inclusion. Inherited from ``PyHmmerConfig``.
+        inclusion_domain_evalue_threshold (float): Per-domain E-value cap for
+            inclusion. Inherited from ``PyHmmerConfig``.
+        z_value (float | None): Effective database size.
+            Inherited from ``PyHmmerConfig``.
+        domain_z_value (float | None): Significant hit count.
+            Inherited from ``PyHmmerConfig``.
+        skip_filters (bool): Disable MSV/Vit/Fwd filters.
+            Inherited from ``PyHmmerConfig``.
+        bit_cutoffs (Literal['gathering', 'noise', 'trusted'] | None):
+            Use the HMM's stored bit-score cutoff in place of E-value reporting.
+            ``gathering`` is the Pfam-curated default for inclusion;
+            ``noise`` is the most permissive; ``trusted``
+            is the strictest. None = use E-value/score thresholds. Default: None.
+            Pyhmmer raises ``MissingCutoffs`` if the HMM file lacks the requested
+            cutoff line — set None for HMMs without curated thresholds.
+    """
+
+    bit_cutoffs: Literal["gathering", "noise", "trusted"] | None = ConfigField(
+        title="HMM Bit-Score Cutoffs",
+        default=None,
+        description="HMM curated cutoff: 'gathering' (Pfam GA), 'noise' (permissive), 'trusted' (strictest)",
+        advanced=True,
+    )
 
 
 # ============================================================================
@@ -137,23 +178,27 @@ def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig, instanc
             "score_threshold": config.score_threshold,
             "domain_evalue_threshold": config.domain_evalue_threshold,
             "domain_score_threshold": config.domain_score_threshold,
+            "inclusion_evalue_threshold": config.inclusion_evalue_threshold,
+            "inclusion_domain_evalue_threshold": config.inclusion_domain_evalue_threshold,
+            "z_value": config.z_value,
+            "domain_z_value": config.domain_z_value,
+            "skip_filters": config.skip_filters,
+            "bit_cutoffs": config.bit_cutoffs,
+            "seed": config.seed,
         },
         instance=instance,
         config=config,
     )
 
-    # Convert results to typed hit models
     sequence_hits, domain_hits = _build_hit_models(output_data["sequence_hits"], output_data["domain_hits"])
 
     return PyHmmscanOutput(
         metadata={
             "num_hmms": output_data.get("num_hmms", 0),
             "num_queries": output_data.get("num_queries", 0),
-            "num_threads": config.num_threads,
             "evalue_threshold": config.evalue_threshold,
-            "score_threshold": config.score_threshold,
             "domain_evalue_threshold": config.domain_evalue_threshold,
-            "domain_score_threshold": config.domain_score_threshold,
+            "bit_cutoffs": config.bit_cutoffs,
         },
         sequence_hits=sequence_hits,
         domain_hits=domain_hits,
