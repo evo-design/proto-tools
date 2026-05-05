@@ -32,6 +32,7 @@ class BioEmuModel:
         batch_size: int = 10,
         denoiser_type: str = "dpm",
         denoiser_config: str | None = None,
+        msa_a3m: str | None = None,
         msa_host_url: str | None = None,
         cache_embeds_dir: str | None = None,
         cache_so3_dir: str | None = None,
@@ -62,9 +63,17 @@ class BioEmuModel:
                 logger.info(f"Sampling {num_samples} conformations for sequence of length {len(sequence)}")
                 logger.info(f"Using model: {self._model_name}, device: {self.device}")
 
+            # If wrapper preprocessed an MSA, write it and pass the path so
+            # bioemu skips its internal ColabFold (upstream README contract).
+            sequence_arg: str = sequence
+            if msa_a3m:
+                sequence_arg = os.path.join(working_dir, "query.a3m")
+                with open(sequence_arg, "w") as handle:
+                    handle.write(msa_a3m)
+
             # Forward optional fields only when set so upstream defaults stand.
             kwargs: dict[str, Any] = {
-                "sequence": sequence,
+                "sequence": sequence_arg,
                 "num_samples": num_samples,
                 "model_name": self._model_name,
                 "output_dir": working_dir,
@@ -159,6 +168,7 @@ class BioEmuModel:
 def run_bioemu_batch(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run BioEmu sampling for one or more sequences."""
     sequences = input_data["sequences"]
+    msa_a3m_contents = input_data["msa_a3m_contents"]
     output_dir = input_data["output_dir"]
     seed = input_data["seed"]
     verbose = input_data["verbose"]
@@ -184,6 +194,7 @@ def run_bioemu_batch(input_data: dict[str, Any]) -> dict[str, Any]:
                 batch_size=input_data["batch_size"],
                 denoiser_type=input_data.get("denoiser_type", "dpm"),
                 denoiser_config=input_data.get("denoiser_config"),
+                msa_a3m=msa_a3m_contents.get(sequence),
                 msa_host_url=input_data.get("msa_host_url"),
                 cache_embeds_dir=input_data.get("cache_embeds_dir"),
                 cache_so3_dir=input_data.get("cache_so3_dir"),
