@@ -62,12 +62,10 @@ All defaults match upstream MinCED's `-h` output (verified live).
 | `max_repeat_length` | `int` | `47` | `-maxRL` | Maximum length of a repeat sequence in nucleotides |
 | `min_spacer_length` | `int` | `26` | `-minSL` | Minimum length of a spacer in nucleotides |
 | `max_spacer_length` | `int` | `50` | `-maxSL` | Maximum length of a spacer in nucleotides |
-| `search_window_length` | `int` | `8` | `-searchWL` | k-mer search window size (range 6–9) |
 
 **Parameters to prioritize for sweeps:**
 1. **`min_num_repeats`**: Lowering to 2 increases sensitivity but also false positives. Default of 3 balances sensitivity and specificity for most applications.
 2. **`min_repeat_length`**: Lowering below 23 may detect non-CRISPR tandem repeats. Raising above 30 may miss canonical CRISPR arrays.
-3. **`search_window_length`**: 6 (max sensitivity, slower) → 9 (max speed, may miss short repeats).
 
 ---
 
@@ -194,7 +192,7 @@ inputs = MincedInput(
 )
 config = MincedConfig(
     min_num_repeats=2,            # More sensitive (vs default 3)
-    search_window_length=6,       # Slower but more sensitive (vs default 8)
+    min_repeat_length=20,         # Allow shorter repeats (vs default 23)
 )
 
 result = run_minced(inputs, config)
