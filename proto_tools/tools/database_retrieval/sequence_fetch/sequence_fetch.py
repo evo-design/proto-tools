@@ -4,6 +4,7 @@ Thin orchestrator that chains database-specific tools (ncbi, uniprot,
 pdb) with molecule-type routing and cross-fetcher ID resolution.
 """
 
+import csv
 import hashlib
 import json
 import re
@@ -125,7 +126,7 @@ class SequenceFetchRequest(BaseModel):
     )
     additional_ids: dict[str, str] = Field(
         default_factory=dict,
-        description="Additional IDs for custom routing",
+        description="Extra IDs for custom routing; key 'accession' is consulted as a generic fallback",
     )
 
     @field_validator("sequence_types", mode="before")
@@ -311,7 +312,7 @@ class SequenceFetchOutput(BaseToolOutput):
     @property
     def output_format_options(self) -> list[str]:
         """Return the supported output format options."""
-        return ["json", "fasta"]
+        return ["json", "csv", "fasta"]
 
     @property
     def output_format_default(self) -> str:
@@ -319,14 +320,35 @@ class SequenceFetchOutput(BaseToolOutput):
         return "json"
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
+        path = Path(export_path).with_suffix(f".{file_format}")
         if file_format == "json":
-            path = Path(export_path).with_suffix(".json")
             with path.open("w", encoding="utf-8") as handle:
                 json.dump(self.model_dump(mode="json"), handle, indent=2)
             return
 
+        if file_format == "csv":
+            # One row per fetched sequence record (skips structure-only results
+            # and request-level metadata; use JSON for those).
+            rows: list[dict[str, Any]] = [
+                {
+                    "request_id": result.request_id,
+                    "target_name": result.target_name,
+                    "organism": result.organism,
+                    "status": result.status,
+                    **record.model_dump(),
+                }
+                for result in self.results
+                for record in result.fetched_sequences
+            ]
+            with path.open("w", encoding="utf-8", newline="") as handle:
+                if not rows:
+                    return
+                writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
+                writer.writeheader()
+                writer.writerows(rows)
+            return
+
         if file_format == "fasta":
-            path = Path(export_path).with_suffix(".fasta")
             with path.open("w", encoding="utf-8") as handle:
                 for result in self.results:
                     for record in result.fetched_sequences:
@@ -369,7 +391,10 @@ class SequenceFetchConfig(BaseConfig):
         title="Type Check Mode",
         default="error",
         description="Molecule-type mismatch handling: 'off' (skip), 'warn' (log + continue), 'error' (fail)",
+        advanced=True,
     )
+    # Mirrors NCBIFetchConfig.ncbi_api_key / ncbi_email — keep the descriptions
+    # in sync with ncbi/shared_data_models.py.
     ncbi_api_key: str | None = ConfigField(
         title="NCBI API Key",
         default=None,
@@ -380,7 +405,7 @@ class SequenceFetchConfig(BaseConfig):
     ncbi_email: str | None = ConfigField(
         title="NCBI Email",
         default=None,
-        description="Optional contact email; recommended by NCBI for traceability",
+        description="Optional contact email; pair with API key for IP-block recovery",
         advanced=True,
         include_in_key=False,
     )
@@ -469,6 +494,14 @@ def run_sequence_fetch(
 
     This tool resolves IDs and names across NCBI Entrez, UniProt, and PDB for
     sequence and structure retrieval.
+
+    Routing priority (per request):
+        Protein: ``uniprot_id`` → ``protein_id`` / ``preferred_accession`` →
+            ``pdb_id`` → name search.
+        Genomic: ``genomic_coordinates`` → ``preferred_accession`` →
+            name search → gene-locus fallback.
+        ``additional_ids`` is consulted last; the key ``"accession"`` is
+        used as a generic fallback when no typed override is set.
 
     Args:
         inputs (SequenceFetchInput): One or more sequence retrieval requests.

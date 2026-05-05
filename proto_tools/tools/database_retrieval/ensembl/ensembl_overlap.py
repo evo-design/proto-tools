@@ -5,6 +5,7 @@ ID's region. Returns a list of typed records with the full upstream dict
 preserved in ``raw`` since per-feature shapes diverge.
 """
 
+import csv
 import json
 import logging
 from pathlib import Path
@@ -14,8 +15,10 @@ from pydantic import Field, field_validator
 
 from proto_tools.tools.database_retrieval.ensembl.shared_data_models import (
     EnsemblAssembly,
+    EnsemblBiotype,
     EnsemblOverlapFeature,
     EnsemblOverlapFeatureRecord,
+    EnsemblSOTerm,
     base_url_for,
     build_session,
 )
@@ -60,21 +63,46 @@ class EnsemblOverlapConfig(BaseConfig):
     """Configuration for Ensembl overlap query.
 
     Attributes:
-        overlap_feature (EnsemblOverlapFeature): Feature class to retrieve
-            using Ensembl REST's ``/overlap/id`` feature values.
+        overlap_feature (EnsemblOverlapFeature): Type of feature to retrieve
+            (e.g. gene, transcript, exon, regulatory, variation).
         assembly (EnsemblAssembly): Genome assembly. ``GRCh38`` (default)
             or ``GRCh37``.
+        biotype (EnsemblBiotype | None): Restrict to a biotype (e.g.
+            ``protein_coding``); most useful when ``overlap_feature`` is
+            ``gene`` or ``transcript``.
+        so_term (EnsemblSOTerm | None): Restrict variation features by
+            Sequence Ontology consequence (e.g. ``missense_variant``).
+        variant_set (str | None): Restrict variation features to a named
+            variant set (e.g. ``ClinVar``).
     """
 
     overlap_feature: EnsemblOverlapFeature = ConfigField(
         title="Overlap Feature",
         default="gene",
-        description="Feature class to retrieve",
+        description="Type of feature to retrieve (e.g. gene, transcript, exon, regulatory, variation)",
     )
     assembly: EnsemblAssembly = ConfigField(
         title="Assembly",
         default="GRCh38",
         description="Genome assembly; GRCh37 routes to grch37.rest.ensembl.org",
+    )
+    biotype: EnsemblBiotype | None = ConfigField(
+        title="Biotype Filter",
+        default=None,
+        description="Restrict to a biotype (e.g. 'protein_coding'); most useful for gene/transcript features",
+        advanced=True,
+    )
+    so_term: EnsemblSOTerm | None = ConfigField(
+        title="SO Term Filter",
+        default=None,
+        description="Restrict variation features by SO consequence (e.g. 'missense_variant')",
+        advanced=True,
+    )
+    variant_set: str | None = ConfigField(
+        title="Variant Set Filter",
+        default=None,
+        description="Restrict variation features to a named variant set (e.g. 'ClinVar')",
+        advanced=True,
     )
 
 
@@ -98,7 +126,7 @@ class EnsemblOverlapOutput(BaseToolOutput):
     @property
     def output_format_options(self) -> list[str]:
         """Return supported output formats."""
-        return ["json"]
+        return ["json", "csv"]
 
     @property
     def output_format_default(self) -> str:
@@ -106,10 +134,21 @@ class EnsemblOverlapOutput(BaseToolOutput):
         return "json"
 
     def _export_output(self, export_path: Any, file_format: str) -> None:
+        path = Path(export_path).with_suffix(f".{file_format}")
         if file_format == "json":
-            path = Path(export_path).with_suffix(".json")
             with path.open("w", encoding="utf-8") as f:
                 json.dump(self.model_dump(mode="json"), f, indent=2)
+            return
+        if file_format == "csv":
+            rows = [
+                {**r.model_dump(exclude={"raw"}), "raw": json.dumps(r.raw, separators=(",", ":"))} for r in self.result
+            ]
+            with path.open("w", encoding="utf-8", newline="") as f:
+                if not rows:
+                    return
+                writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+                writer.writeheader()
+                writer.writerows(rows)
             return
         raise ValueError(f"Unsupported format: {file_format}")
 
@@ -155,7 +194,13 @@ def run_ensembl_overlap(
 
     base = base_url_for(config.assembly)
     url = f"{base}/overlap/id/{inputs.ensembl_id.strip()}"
-    params = {"feature": config.overlap_feature}
+    params: dict[str, Any] = {"feature": config.overlap_feature}
+    if config.biotype:
+        params["biotype"] = config.biotype
+    if config.so_term:
+        params["so_term"] = config.so_term
+    if config.variant_set:
+        params["variant_set"] = config.variant_set
 
     session = build_session("ensembl-overlap")
     try:

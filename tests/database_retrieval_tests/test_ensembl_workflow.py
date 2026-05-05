@@ -51,7 +51,7 @@ def test_panel_full_chain_brca1():
         EnsemblSequenceConfig(sequence_type="protein"),
     )
     assert seq.success, seq.errors
-    assert len(seq.result.seq) == 1863  # BRCA1 canonical isoform
+    assert len(seq.results[0].seq) == 1863  # BRCA1 canonical isoform
 
     exons = run_ensembl_overlap(
         EnsemblOverlapInput(ensembl_id=lookup.result.id),

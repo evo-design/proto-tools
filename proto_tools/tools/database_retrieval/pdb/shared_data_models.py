@@ -5,6 +5,7 @@ fetch_entry and fetch_fasta tool modules.
 """
 
 import logging
+import re
 from io import StringIO
 from typing import Any
 
@@ -41,19 +42,20 @@ def _get_protein_only_chars() -> set[str]:
 
 
 class PdbChain(BaseModel):
-    """Single chain from PDB FASTA.
+    """Single entity from PDB FASTA (one record = one unique sequence).
 
     Attributes:
-        chain_id (str | None): Chain identifier extracted from header.
+        chain_ids (list[str]): Author-assigned chain identifiers sharing this sequence
+            (typically multi-element for homo-oligomers).
         header (str): Full FASTA header line.
         sequence (str): Chain sequence string.
-        is_protein (bool): True if chain is protein, False if nucleic acid.
+        is_protein (bool): True if protein, False if nucleic acid.
     """
 
-    chain_id: str | None = Field(default=None, description="Chain identifier from header")
+    chain_ids: list[str] = Field(default_factory=list, description="Author-assigned chain IDs sharing this sequence")
     header: str = Field(description="FASTA header")
     sequence: str = Field(description="Chain sequence")
-    is_protein: bool = Field(description="True if chain is protein, False if nucleic acid")
+    is_protein: bool = Field(description="True if protein, False if nucleic acid")
 
 
 class PdbFetchConfig(BaseConfig):
@@ -81,13 +83,21 @@ def _request_pdb(session: requests.Session, url: str, source_label: str) -> requ
     return response
 
 
-def _chain_id_from_header(header: str) -> str | None:
-    """Extract chain ID from a PDB FASTA header."""
-    first_token = header.split("|")[0].strip()
-    parts = first_token.split("_")
-    if len(parts) >= 2:
-        return parts[1]
-    return None
+def _chain_ids_from_header(header: str) -> list[str]:
+    """Extract author-assigned chain IDs from a PDB FASTA header.
+
+    Parses the second pipe-segment ('Chains E[auth A], F[auth B]'); falls back to
+    the bare letters when [auth X] markers are absent (label == auth).
+    """
+    segments = header.split("|")
+    if len(segments) < 2:
+        return []
+    chains_segment = segments[1].strip()
+    auth_ids = re.findall(r"\[auth ([^\]]+)\]", chains_segment)
+    if auth_ids:
+        return [a.strip() for a in auth_ids]
+    bare = re.sub(r"^Chains?\s+", "", chains_segment)
+    return [c.strip() for c in bare.split(",") if c.strip()]
 
 
 def _fetch_pdb_entry(pdb_id: str, session: requests.Session) -> dict[str, Any] | None:
@@ -104,15 +114,9 @@ def _fetch_pdb_entry(pdb_id: str, session: requests.Session) -> dict[str, Any] |
     title = struct.get("title")
     method = exptl[0].get("method") if exptl else None
 
-    resolution = None
-    for key in ("resolution_combined", "d_resolution_high", "em_resolution"):
-        value = entry_info.get(key)
-        if isinstance(value, list) and value:
-            resolution = float(value[0])
-            break
-        if isinstance(value, (float, int)):
-            resolution = float(value)
-            break
+    # resolution_combined covers both X-ray and CryoEM; NMR / fiber have no resolution.
+    combined = entry_info.get("resolution_combined")
+    resolution = float(combined[0]) if isinstance(combined, list) and combined else None
 
     return {"title": title, "method": method, "resolution": resolution}
 

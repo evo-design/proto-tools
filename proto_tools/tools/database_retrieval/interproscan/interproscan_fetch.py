@@ -7,6 +7,7 @@ iprscan5 submit-and-poll service. Both paths converge on a unified
 CATH-Gene3D, Panther, and the rest of the InterPro member-DB catalog.
 """
 
+import csv
 import json
 import logging
 from pathlib import Path
@@ -206,16 +207,20 @@ class InterProScanFetchConfig(BaseConfig):
         include_go_terms (bool): Include GO term cross-references in the
             output. Maps to iprscan5's ``goterms`` form param on the
             submit path; filters parser output on the direct path.
-        include_pathways (bool): Include pathway cross-references
-            (Reactome, MetaCyc, …). Maps to iprscan5's ``pathways`` form
-            param on the submit path; filters parser output on the
-            direct path.
+        include_pathways (bool): Fetch Reactome/KEGG/MetaCyc pathway
+            cross-references after an iprscan5 sequence submission. Has
+            no effect on the UniProt-id path — InterPro's UniProt-keyed
+            endpoint does not return pathway data, so this stays empty
+            on that path regardless of the flag.
+        sequence_type (Literal['protein', 'nucleic']): Submit-only —
+            ``nucleic`` tells iprscan5 to 6-frame translate the input.
     """
 
     email: str | None = ConfigField(
         title="Contact Email",
         default=None,
         description="Required by EBI for sequence-submit path; ignored for direct UniProt lookup",
+        advanced=True,
         include_in_key=False,
     )
     applications: list[InterProApp] | None = ConfigField(
@@ -233,7 +238,13 @@ class InterProScanFetchConfig(BaseConfig):
     include_pathways: bool = ConfigField(
         title="Include Pathways",
         default=True,
-        description="Include pathway cross-references (Reactome, MetaCyc, ...)",
+        description="Reactome/KEGG/MetaCyc xrefs on the sequence path; no-op on UniProt-id path",
+        advanced=True,
+    )
+    sequence_type: Literal["protein", "nucleic"] = ConfigField(
+        title="Sequence Type",
+        default="protein",
+        description="Sequence-submit path: 'protein' or 'nucleic' (6-frame translated server-side)",
         advanced=True,
     )
 
@@ -269,7 +280,7 @@ class InterProScanFetchOutput(BaseToolOutput):
     @property
     def output_format_options(self) -> list[str]:
         """Return the supported output format options."""
-        return ["json"]
+        return ["json", "csv"]
 
     @property
     def output_format_default(self) -> str:
@@ -277,10 +288,27 @@ class InterProScanFetchOutput(BaseToolOutput):
         return "json"
 
     def _export_output(self, export_path: Any, file_format: str) -> None:
+        path = Path(export_path).with_suffix(f".{file_format}")
         if file_format == "json":
-            path = Path(export_path).with_suffix(".json")
             with path.open("w", encoding="utf-8") as f:
                 json.dump(self.model_dump(mode="json"), f, indent=2)
+            return
+        if file_format == "csv":
+            # One row per domain hit; nested fields (locations, go_terms,
+            # pathway_xrefs) are JSON-encoded into single cells.
+            rows: list[dict[str, Any]] = []
+            for d in self.domains:
+                row = d.model_dump()
+                for k, v in list(row.items()):
+                    if isinstance(v, (list, dict)):
+                        row[k] = json.dumps(v, separators=(",", ":"))
+                rows.append({"uniprot_accession": self.accession, **row})
+            with path.open("w", encoding="utf-8", newline="") as f:
+                if not rows:
+                    return
+                writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+                writer.writeheader()
+                writer.writerows(rows)
             return
         raise ValueError(f"Unsupported format: {file_format}")
 
@@ -412,7 +440,6 @@ def _direct_lookup(
             entry_domains, entry_sequence_length = _parse_direct_entry(
                 result,
                 include_go_terms=config.include_go_terms,
-                include_pathways=config.include_pathways,
             )
             domains.extend(entry_domains)
             if entry_sequence_length is not None and sequence_length is None:
@@ -439,23 +466,8 @@ def _parse_direct_entry(
     result: dict[str, Any],
     *,
     include_go_terms: bool,
-    include_pathways: bool,
 ) -> "tuple[list[InterProDomain], int | None]":
-    """Parse one /entry/all/protein/uniprot/{acc}/ result into domain rows.
-
-    A single result has one ``metadata`` block describing the InterPro / member-DB
-    entry, and a ``proteins`` list whose first entry holds the per-protein match
-    fragments. Each fragment becomes one row.
-
-    Args:
-        result (dict[str, Any]): One element of the API ``results`` list.
-        include_go_terms (bool): When False, drop GO term IDs from the row.
-        include_pathways (bool): When False, drop pathway IDs from the row.
-
-    Returns:
-        tuple[list[InterProDomain], int | None]: Parsed rows for this entry,
-            plus the queried protein's length (``None`` when missing).
-    """
+    """Parse one direct-lookup result into domain rows + protein length."""
     metadata = result.get("metadata", {})
     proteins = result.get("proteins", [])
     if not metadata or not proteins:
@@ -471,7 +483,8 @@ def _parse_direct_entry(
     if isinstance(integrated_raw, str) and integrated_raw.strip():
         integrated_ipr = integrated_raw.strip().upper()
     go_terms = _extract_xref_ids(metadata.get("go_terms")) if include_go_terms else []
-    pathways = _extract_xref_ids(metadata.get("pathway_xrefs") or metadata.get("pathways")) if include_pathways else []
+    # Direct UniProt-lookup endpoint never surfaces pathway xrefs; iprscan5 path does.
+    pathways: list[str] = []
 
     protein = proteins[0]
     sequence_length = protein.get("protein_length")
@@ -576,7 +589,7 @@ def _submit_iprscan(
     data: list[tuple[str, str]] = [
         ("email", email),
         ("sequence", sequence),
-        ("stype", "p"),
+        ("stype", "p" if config.sequence_type == "protein" else "n"),
         ("goterms", "true" if config.include_go_terms else "false"),
         ("pathways", "true" if config.include_pathways else "false"),
     ]

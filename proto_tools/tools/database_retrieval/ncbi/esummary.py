@@ -1,12 +1,13 @@
 """proto_tools/tools/database_retrieval/ncbi/esummary.py.
 
-Wraps the NCBI E-utilities esummary endpoint for fetching metadata
-about protein, nuccore, and gene records.
+Wraps the NCBI E-utilities esummary endpoint for fetching record
+metadata from NCBI Entrez databases.
 """
 
+import csv
 import json
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import Field
 
@@ -14,6 +15,7 @@ from proto_tools.tools.database_retrieval.ncbi.shared_data_models import (
     _BACKOFF_SECONDS,
     _HTTP_RETRIES,
     _USER_AGENT,
+    NCBIDatabase,
     NCBIFetchConfig,
     _ncbi_esummary,
 )
@@ -34,14 +36,15 @@ class NCBIEsummaryInput(BaseToolInput):
     """Input for NCBI esummary.
 
     Attributes:
-        db (Literal['protein', 'nuccore', 'gene']): NCBI database to query: 'protein', 'nuccore' (nucleotide core),
-            or 'gene'.
+        db (NCBIDatabase): NCBI database to query (e.g. 'protein', 'nuccore',
+            'gene', 'pubmed', 'taxonomy', 'structure'). See ``NCBIDatabase``
+            for the full set of supported databases.
         identifier (str): Accession or NCBI ID to summarize (e.g. 'NP_000537.3',
             '7157').
     """
 
-    db: Literal["protein", "nuccore", "gene"] = InputField(
-        description="NCBI database to query: 'protein', 'nuccore' (nucleotide core), or 'gene'"
+    db: NCBIDatabase = InputField(
+        description="NCBI database to query (e.g. 'protein', 'nuccore', 'gene', 'pubmed', 'taxonomy')"
     )
     identifier: str = InputField(
         description="Accession or NCBI ID for esummary (e.g. 'NP_000537.3', '7157')",
@@ -62,7 +65,7 @@ class NCBIEsummaryOutput(BaseToolOutput):
     @property
     def output_format_options(self) -> list[str]:
         """Return the supported output format options."""
-        return ["json"]
+        return ["json", "csv"]
 
     @property
     def output_format_default(self) -> str:
@@ -70,10 +73,37 @@ class NCBIEsummaryOutput(BaseToolOutput):
         return "json"
 
     def _export_output(self, export_path: Any, file_format: str) -> None:
+        path = Path(export_path).with_suffix(f".{file_format}")
         if file_format == "json":
-            path = Path(export_path).with_suffix(".json")
             with path.open("w", encoding="utf-8") as f:
                 json.dump(self.model_dump(mode="json"), f, indent=2)
+            return
+        if file_format == "csv":
+            # esummary's `summary` is a {uid -> record} dict whose record
+            # fields differ per db; flatten to one row per uid with nested
+            # values JSON-encoded.
+            records = [v for k, v in self.summary.items() if k != "uids" and isinstance(v, dict)]
+            rows: list[dict[str, Any]] = [
+                {
+                    k: (json.dumps(v, separators=(",", ":")) if isinstance(v, (dict, list)) else v)
+                    for k, v in rec.items()
+                }
+                for rec in records
+            ]
+            with path.open("w", encoding="utf-8", newline="") as f:
+                if not rows:
+                    return
+                fieldnames: list[str] = []
+                seen: set[str] = set()
+                for r in rows:
+                    for k in r:
+                        if k not in seen:
+                            seen.add(k)
+                            fieldnames.append(k)
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                for r in rows:
+                    writer.writerow({k: r.get(k, "") for k in fieldnames})
             return
         raise ValueError(f"Unsupported format: {file_format}")
 
@@ -112,7 +142,7 @@ def run_ncbi_esummary(
 
     Args:
         inputs (NCBIEsummaryInput): Database and identifier to summarize.
-        config (NCBIFetchConfig): HTTP timeout, retry, and authentication settings.
+        config (NCBIFetchConfig): NCBI API key and email settings.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 

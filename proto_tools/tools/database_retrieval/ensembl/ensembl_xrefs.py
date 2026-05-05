@@ -4,15 +4,17 @@ Wraps Ensembl REST ``/xrefs/id/{id}`` — cross-references from an Ensembl ID
 to external databases (UniProt, EntrezGene, RefSeq, ...).
 """
 
+import csv
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field, field_validator
 
 from proto_tools.tools.database_retrieval.ensembl.shared_data_models import (
     EnsemblAssembly,
+    EnsemblExternalDB,
     EnsemblXref,
     base_url_for,
     build_session,
@@ -60,12 +62,37 @@ class EnsemblXrefsConfig(BaseConfig):
     Attributes:
         assembly (EnsemblAssembly): Genome assembly. ``GRCh38`` (default)
             or ``GRCh37``.
+        all_levels (bool): Fan out to transcripts and translations.
+            On a gene query this also returns xrefs from each child
+            transcript and protein.
+        external_db (EnsemblExternalDB | None): Restrict to one external
+            database (e.g. ``UniProtKB/Swiss-Prot``, ``HGNC``).
+        object_type (Literal['gene','transcript','translation'] | None):
+            Restrict to one feature type when the stable ID resolves
+            ambiguously.
     """
 
     assembly: EnsemblAssembly = ConfigField(
         title="Assembly",
         default="GRCh38",
         description="Genome assembly; GRCh37 routes to grch37.rest.ensembl.org",
+    )
+    all_levels: bool = ConfigField(
+        title="All Levels",
+        default=False,
+        description="Fan out xrefs to child transcripts and translations (gene queries)",
+    )
+    external_db: EnsemblExternalDB | None = ConfigField(
+        title="External DB Filter",
+        default=None,
+        description="Restrict to one external DB (e.g. 'UniProtKB/Swiss-Prot', 'HGNC')",
+        advanced=True,
+    )
+    object_type: Literal["gene", "transcript", "translation"] | None = ConfigField(
+        title="Object Type Filter",
+        default=None,
+        description="Restrict to one feature type when the stable ID resolves ambiguously",
+        advanced=True,
     )
 
 
@@ -86,7 +113,7 @@ class EnsemblXrefsOutput(BaseToolOutput):
     @property
     def output_format_options(self) -> list[str]:
         """Return supported output formats."""
-        return ["json"]
+        return ["json", "csv"]
 
     @property
     def output_format_default(self) -> str:
@@ -94,10 +121,19 @@ class EnsemblXrefsOutput(BaseToolOutput):
         return "json"
 
     def _export_output(self, export_path: Any, file_format: str) -> None:
+        path = Path(export_path).with_suffix(f".{file_format}")
         if file_format == "json":
-            path = Path(export_path).with_suffix(".json")
             with path.open("w", encoding="utf-8") as f:
                 json.dump(self.model_dump(mode="json"), f, indent=2)
+            return
+        if file_format == "csv":
+            rows = [r.model_dump() for r in self.result]
+            with path.open("w", encoding="utf-8", newline="") as f:
+                if not rows:
+                    return
+                writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+                writer.writeheader()
+                writer.writerows(rows)
             return
         raise ValueError(f"Unsupported format: {file_format}")
 
@@ -144,11 +180,19 @@ def run_ensembl_xrefs(
     base = base_url_for(config.assembly)
     eid = inputs.ensembl_id.strip()
     url = f"{base}/xrefs/id/{eid}"
+    params: dict[str, Any] = {}
+    if config.all_levels:
+        params["all_levels"] = "1"
+    if config.external_db:
+        params["external_db"] = config.external_db
+    if config.object_type:
+        params["object_type"] = config.object_type
 
     session = build_session("ensembl-xrefs")
     try:
         response = session.get(
             url,
+            params=params,
             headers={"Accept": "application/json"},
             timeout=_REQUEST_TIMEOUT_SECONDS,
         )

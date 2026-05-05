@@ -13,6 +13,7 @@ from proto_tools.tools.database_retrieval import (
     run_pdb_fetch_fasta,
 )
 from proto_tools.tools.database_retrieval.pdb.shared_data_models import (
+    _chain_ids_from_header,
     _is_protein_sequence,
 )
 
@@ -31,6 +32,22 @@ def test_is_protein_sequence_rna():
 
 def test_is_protein_sequence_empty():
     assert _is_protein_sequence("") is False
+
+
+@pytest.mark.parametrize(
+    "header,expected",
+    [
+        (
+            "1LBG_2|Chains E[auth A], F[auth B], G[auth C], H[auth D]|PROTEIN|Escherichia coli (562)",
+            ["A", "B", "C", "D"],
+        ),
+        ("1ABC_1|Chains A, B|PROTEIN", ["A", "B"]),
+    ],
+    ids=["with-auth-markers", "bare-labels"],
+)
+def test_chain_ids_from_header(header: str, expected: list[str]) -> None:
+    """Pin the chain-id parser: prefer [auth X], fall back to bare letters."""
+    assert _chain_ids_from_header(header) == expected
 
 
 # ---------------------------------------------------------------------------

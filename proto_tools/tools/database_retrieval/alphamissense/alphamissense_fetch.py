@@ -99,7 +99,7 @@ class AlphaMissenseFetchInput(BaseToolInput):
             AlphaMissense; e.g. 'P04637').
     """
 
-    uniprot_id: str = InputField(description="UniProt accession (human; e.g. 'P04637')")
+    uniprot_id: str = InputField(description="UniProt accession (human canonical isoform; e.g. 'P04637')")
 
 
 class AlphaMissenseFetchConfig(BaseConfig):
@@ -121,7 +121,7 @@ class AlphaMissenseFetchConfig(BaseConfig):
     coordinate_system: CoordinateSystem = ConfigField(
         title="Coordinate System",
         default="uniprot",
-        description="AFDB CSV variant: 'uniprot' (protein coords) or 'hg19'/'hg38' (genomic coords)",
+        description="AFDB CSV flavor: 'uniprot' (protein coords) or 'hg19'/'hg38' (genomic coords)",
     )
 
 
@@ -152,7 +152,7 @@ class AlphaMissenseFetchOutput(BaseToolOutput):
     @property
     def output_format_options(self) -> list[str]:
         """Return the supported output format options."""
-        return ["json"]
+        return ["json", "csv"]
 
     @property
     def output_format_default(self) -> str:
@@ -160,10 +160,19 @@ class AlphaMissenseFetchOutput(BaseToolOutput):
         return "json"
 
     def _export_output(self, export_path: Any, file_format: str) -> None:
+        path = Path(export_path).with_suffix(f".{file_format}")
         if file_format == "json":
-            path = Path(export_path).with_suffix(".json")
             with path.open("w", encoding="utf-8") as f:
                 json.dump(self.model_dump(mode="json"), f, indent=2)
+            return
+        if file_format == "csv":
+            rows = [p.model_dump() for p in self.predictions]
+            with path.open("w", encoding="utf-8", newline="") as f:
+                if not rows:
+                    return
+                writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+                writer.writeheader()
+                writer.writerows(rows)
             return
         raise ValueError(f"Unsupported format: {file_format}")
 
@@ -231,7 +240,8 @@ def run_alphamissense_fetch(
         if rows is None:
             raise ValueError(
                 f"AlphaMissense has no predictions for accession '{accession}'. "
-                "Coverage is human-only; check that the accession is a reviewed human protein."
+                "Coverage is human canonical isoforms only — non-canonical isoforms (e.g. 'P04637-9') "
+                "and non-human accessions return 404."
             )
 
         predictions = [_parse_row(row, csv_url, is_genomic=is_genomic) for row in rows]

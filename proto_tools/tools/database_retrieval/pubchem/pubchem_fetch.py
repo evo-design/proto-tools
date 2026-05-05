@@ -4,6 +4,7 @@ Resolves small-molecule identifiers (CID, name, SMILES, InChIKey) against
 PubChem PUG REST and returns canonical structure data plus optional synonyms.
 """
 
+import csv
 import json
 import logging
 from pathlib import Path
@@ -32,7 +33,9 @@ _BACKOFF_SECONDS = 1.0
 _USER_AGENT = "proto-tools/pubchem-fetch-v1"
 
 PubChemProperty = Literal[
+    "Title",
     "MolecularFormula",
+    "MolecularFormulaNoCharge",
     "MolecularWeight",
     "SMILES",
     "ConnectivitySMILES",
@@ -57,6 +60,12 @@ PubChemProperty = Literal[
     "UndefinedBondStereoCount",
     "IsotopeAtomCount",
     "CovalentUnitCount",
+    "PatentCount",
+    "PatentFamilyCount",
+    "AnnotationTypes",
+    "AnnotationTypeCount",
+    "SourceCategories",
+    "LiteratureCount",
     "Volume3D",
     "XStericQuadrupole3D",
     "YStericQuadrupole3D",
@@ -75,6 +84,7 @@ PubChemProperty = Literal[
 ]
 
 _DEFAULT_PROPERTIES: list[PubChemProperty] = [
+    "Title",
     "MolecularFormula",
     "MolecularWeight",
     "SMILES",
@@ -101,26 +111,29 @@ _DEFAULT_PROPERTIES: list[PubChemProperty] = [
 class PubChemFetchInput(BaseToolInput):
     """Input for PubChem fetch.
 
-    Exactly one of `cid`, `name`, `smiles`, `inchikey` must be provided.
+    Exactly one of `cid`, `name`, `smiles`, `inchi`, `inchikey` must be provided.
 
     Attributes:
         cid (int | None): PubChem Compound Identifier (e.g. 2244 for aspirin).
         name (str | None): Common or systematic name (e.g. 'aspirin').
         smiles (str | None): SMILES string (e.g. 'CC(=O)Oc1ccccc1C(=O)O').
+        inchi (str | None): Standard InChI string
+            (e.g. 'InChI=1S/C9H8O4/c1-6(10)13-8-5-3-2-4-7(8)9(11)12/...').
         inchikey (str | None): Standard InChIKey (e.g. 'BSYNRYMUTXBXSQ-UHFFFAOYSA-N').
     """
 
     cid: int | None = InputField(default=None, ge=1, description="PubChem Compound Identifier")
     name: str | None = InputField(default=None, description="Common or systematic name")
     smiles: str | None = InputField(default=None, description="SMILES string")
+    inchi: str | None = InputField(default=None, description="Standard InChI string")
     inchikey: str | None = InputField(default=None, description="Standard InChIKey")
 
     @model_validator(mode="after")
     def validate_exactly_one_identifier(self) -> "PubChemFetchInput":
-        """Require exactly one of cid / name / smiles / inchikey."""
-        provided = [v for v in (self.cid, self.name, self.smiles, self.inchikey) if v is not None]
+        """Require exactly one of cid / name / smiles / inchi / inchikey."""
+        provided = [v for v in (self.cid, self.name, self.smiles, self.inchi, self.inchikey) if v is not None]
         if len(provided) != 1:
-            raise ValueError("Provide exactly one of: cid, name, smiles, inchikey")
+            raise ValueError("Provide exactly one of: cid, name, smiles, inchi, inchikey")
         return self
 
 
@@ -129,8 +142,9 @@ class PubChemFetchConfig(BaseConfig):
 
     Attributes:
         properties (list[PubChemProperty]): PubChem property names to request.
-            Defaults to a 15-property bundle covering structure (SMILES, InChI),
-            mass, and basic descriptor counts (TPSA, HBA, HBD, etc.).
+            Defaults to a 16-property bundle covering the common name (Title),
+            structure (SMILES, InChI), mass, and basic descriptor counts
+            (TPSA, HBA, HBD, etc.).
         include_synonyms (bool): If True, also fetch the compound's synonyms
             (one extra HTTP call). Returns up to 50 synonyms.
         include_description (bool): If True, also fetch the compound's textual
@@ -143,23 +157,23 @@ class PubChemFetchConfig(BaseConfig):
     properties: list[PubChemProperty] = ConfigField(
         title="Properties",
         default_factory=lambda: list(_DEFAULT_PROPERTIES),
-        description="PubChem property names to request",
+        description="PubChem property names (Title, SMILES, MolecularWeight, XLogP, TPSA, ...)",
     )
     include_synonyms: bool = ConfigField(
         title="Include Synonyms",
         default=False,
-        description="If True, also fetch the compound's synonyms list (up to 50 returned)",
+        description="Fetch synonyms (one extra HTTP call); truncated to 50 client-side",
     )
     include_description: bool = ConfigField(
         title="Include Description",
         default=False,
-        description="If True, also fetch the compound's textual descriptions",
+        description="Fetch textual descriptions of the compound (one extra HTTP call)",
         advanced=True,
     )
     include_aids: bool = ConfigField(
         title="Include BioAssay IDs",
         default=False,
-        description="If True, also fetch the list of BioAssay IDs that tested this compound",
+        description="Fetch BioAssay IDs that tested this compound; can be thousands for common ones",
         advanced=True,
     )
 
@@ -171,6 +185,8 @@ class PubChemFetchOutput(BaseToolOutput):
         cid (int): Resolved PubChem CID.
         all_matched_cids (list[int]): All CIDs returned by the resolver
             (length 1 for unambiguous queries; may be longer for ambiguous names).
+        title (str | None): Common compound name (e.g. 'Aspirin'), distinct
+            from the IUPAC systematic name in `iupac_name`.
         molecular_formula (str | None): Hill-system molecular formula.
         molecular_weight (float | None): Average molecular weight in g/mol.
         smiles (str | None): PubChem canonical SMILES with stereochemistry
@@ -203,6 +219,7 @@ class PubChemFetchOutput(BaseToolOutput):
 
     cid: int = Field(description="Resolved PubChem CID", ge=1)
     all_matched_cids: list[int] = Field(default_factory=list, description="All CIDs returned by the resolver")
+    title: str | None = Field(default=None, description="Common compound name (e.g. 'Aspirin')")
     molecular_formula: str | None = Field(default=None, description="Molecular formula in Hill order")
     molecular_weight: float | None = Field(default=None, description="Molecular weight (g/mol)")
     smiles: str | None = Field(default=None, description="Canonical SMILES")
@@ -229,7 +246,7 @@ class PubChemFetchOutput(BaseToolOutput):
     @property
     def output_format_options(self) -> list[str]:
         """Return the supported output format options."""
-        return ["json"]
+        return ["json", "csv"]
 
     @property
     def output_format_default(self) -> str:
@@ -237,10 +254,21 @@ class PubChemFetchOutput(BaseToolOutput):
         return "json"
 
     def _export_output(self, export_path: Any, file_format: str) -> None:
+        path = Path(export_path).with_suffix(f".{file_format}")
         if file_format == "json":
-            path = Path(export_path).with_suffix(".json")
             with path.open("w", encoding="utf-8") as f:
                 json.dump(self.model_dump(mode="json"), f, indent=2)
+            return
+        if file_format == "csv":
+            # Single-record CSV; list fields (synonyms, descriptions, bioassay_ids,
+            # all_matched_cids) and the raw record are JSON-encoded into one cell.
+            row = self.model_dump(exclude={"raw_property_record"})
+            for k in ("synonyms", "descriptions", "bioassay_ids", "all_matched_cids"):
+                row[k] = json.dumps(row[k], separators=(",", ":"))
+            with path.open("w", encoding="utf-8", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=list(row.keys()))
+                writer.writeheader()
+                writer.writerow(row)
             return
         raise ValueError(f"Unsupported format: {file_format}")
 
@@ -321,6 +349,7 @@ def run_pubchem_fetch(
         return PubChemFetchOutput(
             cid=cid,
             all_matched_cids=all_cids,
+            title=property_record.get("Title"),
             molecular_formula=property_record.get("MolecularFormula"),
             molecular_weight=_opt_float(property_record.get("MolecularWeight")),
             smiles=property_record.get("SMILES"),
@@ -359,27 +388,32 @@ def _describe_input(inputs: PubChemFetchInput) -> str:
         return f"name={inputs.name!r}"
     if inputs.smiles is not None:
         return f"smiles={inputs.smiles!r}"
+    if inputs.inchi is not None:
+        return f"inchi={inputs.inchi!r}"
     return f"inchikey={inputs.inchikey!r}"
 
 
 def _resolve_to_cids(inputs: PubChemFetchInput, session: requests.Session) -> list[int]:
-    """Resolve any identifier to a list of matching PubChem CIDs.
-
-    Returns an empty list on 404 (compound not found). Any other malformed
-    response shape raises KeyError via direct dict access -- a real schema
-    regression that the @tool decorator should surface.
-    """
+    """Resolve any identifier to matching PubChem CIDs (POST for InChI; GET otherwise)."""
     if inputs.cid is not None:
         return [inputs.cid]
 
-    if inputs.name is not None:
-        url = f"{_PUBCHEM_BASE}/compound/name/{quote(inputs.name, safe='')}/cids/JSON"
-    elif inputs.smiles is not None:
-        url = f"{_PUBCHEM_BASE}/compound/smiles/{quote(inputs.smiles, safe='')}/cids/JSON"
+    if inputs.inchi is not None:
+        url = f"{_PUBCHEM_BASE}/compound/inchi/cids/JSON"
+        response = session.post(
+            url,
+            data={"inchi": inputs.inchi},
+            timeout=_REQUEST_TIMEOUT_SECONDS,
+        )
     else:
-        url = f"{_PUBCHEM_BASE}/compound/inchikey/{quote(inputs.inchikey or '', safe='')}/cids/JSON"
+        if inputs.name is not None:
+            url = f"{_PUBCHEM_BASE}/compound/name/{quote(inputs.name, safe='')}/cids/JSON"
+        elif inputs.smiles is not None:
+            url = f"{_PUBCHEM_BASE}/compound/smiles/{quote(inputs.smiles, safe='')}/cids/JSON"
+        else:
+            url = f"{_PUBCHEM_BASE}/compound/inchikey/{quote(inputs.inchikey or '', safe='')}/cids/JSON"
+        response = session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
 
-    response = session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
     if response.status_code == 404:
         return []
     response.raise_for_status()

@@ -95,7 +95,7 @@ UniProtFetchOutput(
 | `pdb_crossrefs` | `List[str]` | PDB IDs linked to this protein (e.g., `["1TUP", "2XWR"]`) |
 | `raw_entry` | `Dict[str, Any]` | Complete UniProt JSON for advanced access (function annotations, cross-references, feature tables, etc.) |
 
-**Supported export formats:** `json`
+**Supported export formats:** `json`, `csv`
 
 ## Interpreting Results
 

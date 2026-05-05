@@ -7,7 +7,7 @@ by esearch, esummary, and efetch tool modules.
 import json
 import logging
 from io import StringIO
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 import requests
@@ -22,6 +22,40 @@ _REQUEST_TIMEOUT_SECONDS = 15
 _HTTP_RETRIES = 2
 _BACKOFF_SECONDS = 1.0
 _USER_AGENT = "proto-tools/ncbi-fetch-v1"
+
+# 27 of the 39 dbs returned by einfo; "nuccore" and "nucleotide" are aliases.
+NCBIDatabase = Literal[
+    "protein",
+    "nuccore",
+    "nucleotide",
+    "gene",
+    "pubmed",
+    "pmc",
+    "taxonomy",
+    "structure",
+    "snp",
+    "clinvar",
+    "omim",
+    "biosample",
+    "bioproject",
+    "sra",
+    "assembly",
+    "ipg",
+    "mesh",
+    "genome",
+    "dbvar",
+    "gds",
+    "geoprofiles",
+    "medgen",
+    "proteinclusters",
+    "protfam",
+    "pccompound",
+    "pcsubstance",
+    "pcassay",
+]
+
+# Sequence-only dbs (efetch FASTA returns empty for the rest).
+NCBISequenceDatabase = Literal["protein", "nuccore", "nucleotide"]
 
 
 # ============================================================================
@@ -44,15 +78,13 @@ class NCBIFastaRecord(BaseModel):
 
 
 class NCBIFetchConfig(BaseConfig):
-    """Configuration for NCBI Entrez operations.
+    """Shared NCBI Entrez configuration.
 
     Attributes:
-        ncbi_api_key (str | None): Optional NCBI API key. Without one NCBI
-            limits to 3 requests/second; with one the limit is 10/second.
-            See https://www.ncbi.nlm.nih.gov/account/settings/.
-        ncbi_email (str | None): Optional contact email. NCBI recommends
-            providing this so they can reach the operator if a script
-            misbehaves.
+        ncbi_api_key (str | None): Optional NCBI API key (lifts rate limit
+            from 3 to 10 requests/second).
+        ncbi_email (str | None): Optional contact email. NCBI usage policy
+            requires both ``tool`` and ``email`` for traceability.
     """
 
     ncbi_api_key: str | None = ConfigField(
@@ -65,7 +97,7 @@ class NCBIFetchConfig(BaseConfig):
     ncbi_email: str | None = ConfigField(
         title="NCBI Email",
         default=None,
-        description="Optional contact email; recommended by NCBI for traceability",
+        description="Optional contact email; pair with API key for traceability",
         advanced=True,
         include_in_key=False,
     )
@@ -77,7 +109,7 @@ class NCBIFetchConfig(BaseConfig):
 
 
 def _ncbi_common_params(config: NCBIFetchConfig) -> dict[str, Any]:
-    """Build common NCBI eutils parameters."""
+    """Build common eutils params shared by esearch/esummary/efetch."""
     params: dict[str, Any] = {"tool": "proto_tools_ncbi_fetch"}
     if config.ncbi_email:
         params["email"] = config.ncbi_email
@@ -93,6 +125,12 @@ def _ncbi_esearch(
     config: NCBIFetchConfig,
     session: requests.Session,
     retstart: int = 0,
+    sort: str | None = None,
+    field: str | None = None,
+    datetype: str | None = None,
+    mindate: str | None = None,
+    maxdate: str | None = None,
+    reldate: int | None = None,
 ) -> list[str]:
     """Run NCBI esearch and return ID list."""
     params: dict[str, Any] = {
@@ -103,6 +141,18 @@ def _ncbi_esearch(
     }
     if retstart:
         params["retstart"] = retstart
+    if sort:
+        params["sort"] = sort
+    if field:
+        params["field"] = field
+    if datetype:
+        params["datetype"] = datetype
+    if mindate:
+        params["mindate"] = mindate
+    if maxdate:
+        params["maxdate"] = maxdate
+    if reldate is not None:
+        params["reldate"] = reldate
     params.update(_ncbi_common_params(config))
 
     response = session.get(

@@ -73,9 +73,9 @@ def test_dispatches_and_parses():
         )
     assert out.success
     # type=protein on an ENST input resolves to the corresponding ENSP server-side.
-    assert out.result.id == "ENSP00000350283"
-    assert out.result.mol_type == "protein"
-    assert out.result.seq.startswith("MDLSAL")
+    assert out.results[0].id == "ENSP00000350283"
+    assert out.results[0].mol_type == "protein"
+    assert out.results[0].seq.startswith("MDLSAL")
 
 
 def test_wraps_corrupt_json_with_context():
@@ -110,7 +110,7 @@ def test_protein_sequence_for_brca1_canonical_live():
         EnsemblSequenceConfig(sequence_type="protein"),
     )
     assert out.success, out.errors
-    assert out.result.seq
-    assert out.result.seq.startswith("M")
+    assert out.results[0].seq
+    assert out.results[0].seq.startswith("M")
     # BRCA1 canonical isoform is 1863 aa.
-    assert len(out.result.seq) == 1863
+    assert len(out.results[0].seq) == 1863

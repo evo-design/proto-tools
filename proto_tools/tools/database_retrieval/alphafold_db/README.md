@@ -81,10 +81,15 @@ AlphaFoldDBFetchOutput(
     mean_plddt: Optional[float],            # Mean per-residue pLDDT (0-100); always populated
     pdb_url: str,                           # URL to PDB structure file
     cif_url: str,                           # URL to mmCIF structure file
+    bcif_url: Optional[str],                # URL to BinaryCIF structure file (~5x smaller); None on legacy entries
     pae_doc_url: str,                       # URL to pAE JSON document
     plddt_doc_url: str,                     # URL to per-residue pLDDT JSON document
     pae_image_url: str,                     # URL to rendered pAE PNG
     msa_url: Optional[str],                 # URL to MSA A3M file, when present
+    am_annotations_url: Optional[str],      # AlphaMissense pathogenicity CSV (sequence coords)
+    am_annotations_hg19_url: Optional[str], # AlphaMissense annotations on GRCh37
+    am_annotations_hg38_url: Optional[str], # AlphaMissense annotations on GRCh38
+    sequence_checksum: Optional[str],       # CRC64 checksum of the predicted sequence
     structure: Optional[Structure],         # Parsed Structure (b_factor_type=PLDDT,
                                             #   metrics=AlphaFoldDBMetrics with avg_plddt,
                                             #   plddt_per_residue, pae_matrix); None
@@ -109,13 +114,18 @@ AlphaFoldDBFetchOutput(
 | `mean_plddt` | `Optional[float]` | Global mean pLDDT score (0-100); higher is more confident. Always populated from the metadata response, regardless of `include_structure`. When `include_structure=True`, also mirrored at `structure.metrics["avg_plddt"]` |
 | `pdb_url` | `str` | URL to the PDB structure file on AFDB |
 | `cif_url` | `str` | URL to the mmCIF structure file on AFDB |
+| `bcif_url` | `Optional[str]` | URL to the BinaryCIF structure file (~5x smaller than text mmCIF); `None` on legacy entries that predate the bcif export |
 | `plddt_doc_url` | `str` | URL to the per-residue pLDDT JSON document |
 | `pae_doc_url` | `str` | URL to the pAE JSON document |
+| `am_annotations_url` | `Optional[str]` | AlphaMissense per-variant pathogenicity CSV (sequence coords); `None` for non-human or unscored entries |
+| `am_annotations_hg19_url` | `Optional[str]` | AlphaMissense annotations on GRCh37 |
+| `am_annotations_hg38_url` | `Optional[str]` | AlphaMissense annotations on GRCh38 |
+| `sequence_checksum` | `Optional[str]` | CRC64 checksum of the predicted sequence |
 | `structure` | `Optional[Structure]` | Parsed [`Structure`](../../../entities/structures/structure.py) — PDB or mmCIF body in `structure.structure_format`, `b_factor_type=BFactorType.PLDDT`, `source="alphafold-db-fetch"`, with an `AlphaFoldDBMetrics` `metrics` container exposing `avg_plddt`, `plddt_per_residue`, and (when `include_pae=True`) `pae_matrix`. `None` when `include_structure=False`. Drop-in compatible with every structure-consuming tool in proto-tools (TM-align, US-align, inverse folding, structure-scoring, structure-design conditioning) |
 | `msa_a3m` | `Optional[str]` | A3M-format MSA contents used as input to prediction; `None` when `include_msa=False` or when the entry has no associated `msaUrl` |
 | `raw_entry` | `Dict[str, Any]` | Complete AFDB JSON record for advanced programmatic access |
 
-**Supported export formats:** `json`
+**Supported export formats:** `json`, `csv`
 
 ## Interpreting Results
 

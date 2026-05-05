@@ -125,6 +125,7 @@ def test_pubchem_fetch_full_property_bundle_aspirin():
     output = run_pubchem_fetch(PubChemFetchInput(name="aspirin"), PubChemFetchConfig())
     assert output.success
     assert output.cid == 2244
+    assert output.title is not None and "aspirin" in output.title.lower()
     assert output.molecular_formula == "C9H8O4"
     assert output.molecular_weight == pytest.approx(180.16, rel=1e-2)
     assert output.smiles is not None

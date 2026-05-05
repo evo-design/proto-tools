@@ -4,6 +4,7 @@ Wraps the RCSB PDB FASTA endpoint for fetching chain sequences with
 automatic protein/nucleic acid classification.
 """
 
+import csv
 import json
 from pathlib import Path
 from typing import Any
@@ -17,7 +18,7 @@ from proto_tools.tools.database_retrieval.pdb.shared_data_models import (
     _USER_AGENT,
     PdbChain,
     PdbFetchConfig,
-    _chain_id_from_header,
+    _chain_ids_from_header,
     _fetch_pdb_fasta,
     _is_protein_sequence,
 )
@@ -58,7 +59,7 @@ class PdbFetchFastaOutput(BaseToolOutput):
     @property
     def output_format_options(self) -> list[str]:
         """Return the supported output format options."""
-        return ["json"]
+        return ["json", "csv", "fasta"]
 
     @property
     def output_format_default(self) -> str:
@@ -66,10 +67,28 @@ class PdbFetchFastaOutput(BaseToolOutput):
         return "json"
 
     def _export_output(self, export_path: Any, file_format: str) -> None:
+        path = Path(export_path).with_suffix(f".{file_format}")
         if file_format == "json":
-            path = Path(export_path).with_suffix(".json")
             with path.open("w", encoding="utf-8") as f:
                 json.dump(self.model_dump(mode="json"), f, indent=2)
+            return
+        if file_format == "csv":
+            rows = []
+            for c in self.chains:
+                d = c.model_dump()
+                d["chain_ids"] = ";".join(d["chain_ids"])
+                rows.append(d)
+            with path.open("w", encoding="utf-8", newline="") as f:
+                if not rows:
+                    return
+                writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+                writer.writeheader()
+                writer.writerows(rows)
+            return
+        if file_format == "fasta":
+            with path.open("w", encoding="utf-8") as f:
+                for c in self.chains:
+                    f.write(f">{c.header}\n{c.sequence}\n")
             return
         raise ValueError(f"Unsupported format: {file_format}")
 
@@ -133,7 +152,7 @@ def run_pdb_fetch_fasta(
             return PdbFetchFastaOutput()
         pdb_chains = [
             PdbChain(
-                chain_id=_chain_id_from_header(header),
+                chain_ids=_chain_ids_from_header(header),
                 header=header,
                 sequence=sequence,
                 is_protein=_is_protein_sequence(sequence),
