@@ -1,14 +1,15 @@
 """proto_tools/tools/database_retrieval/ncbi/efetch.py.
 
-Wraps the NCBI E-utilities efetch endpoint for fetching sequences and
-records from protein, nuccore, and gene databases.
+Wraps the NCBI E-utilities efetch endpoint for fetching records from
+NCBI Entrez databases.
 """
 
+import csv
 import json
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from proto_tools.tools.database_retrieval.ncbi.shared_data_models import (
     _BACKOFF_SECONDS,
@@ -16,6 +17,7 @@ from proto_tools.tools.database_retrieval.ncbi.shared_data_models import (
     _USER_AGENT,
     NCBIFastaRecord,
     NCBIFetchConfig,
+    NCBISequenceDatabase,
     _ncbi_efetch,
     _parse_fasta_records,
 )
@@ -33,45 +35,54 @@ from proto_tools.utils import (
 
 
 class NCBIEfetchInput(BaseToolInput):
-    """Input for NCBI efetch.
+    """Input for NCBI efetch (sequence dbs only; use esummary for metadata).
 
     Attributes:
-        db (Literal['protein', 'nuccore', 'gene']): NCBI database to query: 'protein', 'nuccore' (nucleotide core),
-            or 'gene'.
+        db (NCBISequenceDatabase): Sequence database to query.
         identifier (str): Accession or NCBI ID to fetch (e.g. 'NP_000537.3').
-        return_format (Literal['fasta', 'fasta_cds_na']): NCBI rettype: 'fasta' for sequences or
-            'fasta_cds_na' for coding DNA sequences.
-        seq_start (int | None): Start position for subsequence extraction (1-indexed,
-            inclusive).
-        seq_stop (int | None): Stop position for subsequence extraction (1-indexed,
-            inclusive).
-        strand (Literal['+', '-'] | None): Strand for nucleotide retrieval (+ or -).
+        return_format (Literal['fasta', 'fasta_cds_na']): NCBI rettype.
+            'fasta_cds_na' is nuccore-only.
+        seq_start (int | None): Subsequence start (1-indexed, inclusive).
+        seq_stop (int | None): Subsequence stop (1-indexed, inclusive).
+        strand (Literal['+', '-'] | None): Strand for nucleotide retrieval.
     """
 
-    db: Literal["protein", "nuccore", "gene"] = InputField(
-        description="NCBI database to query: 'protein', 'nuccore' (nucleotide core), or 'gene'"
+    db: NCBISequenceDatabase = InputField(
+        description="NCBI sequence database to query (protein, nuccore, or nucleotide)"
     )
     identifier: str = InputField(
         description="Accession or NCBI ID for efetch (e.g. 'NP_000537.3', '7157')",
     )
     return_format: Literal["fasta", "fasta_cds_na"] = InputField(
         default="fasta",
-        description="NCBI rettype: 'fasta' for sequences, 'fasta_cds_na' for CDS",
+        description="NCBI rettype: 'fasta' (protein/nuccore) or 'fasta_cds_na' (CDS, nuccore-only)",
+        advanced=True,
     )
     seq_start: int | None = InputField(
         default=None,
         ge=1,
         description="Start position for subsequence extraction (1-indexed, inclusive)",
+        advanced=True,
     )
     seq_stop: int | None = InputField(
         default=None,
         ge=1,
         description="Stop position for subsequence extraction (1-indexed, inclusive)",
+        advanced=True,
     )
     strand: Literal["+", "-"] | None = InputField(
         default=None,
-        description="Strand for nucleotide retrieval",
+        description="Strand for nucleotide retrieval (nuccore-only)",
+        advanced=True,
+        depends_on={"field": "db", "value": ["nuccore", "nucleotide"]},
     )
+
+    @model_validator(mode="after")
+    def _validate_format_db(self) -> "NCBIEfetchInput":
+        """Reject incompatible db / return_format combos before NCBI silently returns empty."""
+        if self.return_format == "fasta_cds_na" and self.db == "protein":
+            raise ValueError("return_format='fasta_cds_na' requires db='nuccore' or 'nucleotide' (CDS extraction)")
+        return self
 
 
 class NCBIEfetchOutput(BaseToolOutput):
@@ -88,7 +99,7 @@ class NCBIEfetchOutput(BaseToolOutput):
     @property
     def output_format_options(self) -> list[str]:
         """Return the supported output format options."""
-        return ["json"]
+        return ["json", "csv", "fasta"]
 
     @property
     def output_format_default(self) -> str:
@@ -96,10 +107,24 @@ class NCBIEfetchOutput(BaseToolOutput):
         return "json"
 
     def _export_output(self, export_path: Any, file_format: str) -> None:
+        path = Path(export_path).with_suffix(f".{file_format}")
         if file_format == "json":
-            path = Path(export_path).with_suffix(".json")
             with path.open("w", encoding="utf-8") as f:
                 json.dump(self.model_dump(mode="json"), f, indent=2)
+            return
+        if file_format == "csv":
+            rows = [r.model_dump() for r in self.fasta_records]
+            with path.open("w", encoding="utf-8", newline="") as f:
+                if not rows:
+                    return
+                writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+                writer.writeheader()
+                writer.writerows(rows)
+            return
+        if file_format == "fasta":
+            with path.open("w", encoding="utf-8") as f:
+                for r in self.fasta_records:
+                    f.write(f">{r.header}\n{r.sequence}\n")
             return
         raise ValueError(f"Unsupported format: {file_format}")
 
@@ -124,7 +149,7 @@ def example_input() -> Any:
     input_class=NCBIEfetchInput,
     config_class=NCBIFetchConfig,
     output_class=NCBIEfetchOutput,
-    description="Fetch sequences and records from NCBI Entrez by accession or ID",
+    description="Fetch FASTA records from NCBI sequence dbs (protein/nuccore) by accession or ID",
     uses_gpu=False,
     example_input=example_input,
     cacheable=True,
@@ -142,7 +167,7 @@ def run_ncbi_efetch(
     Args:
         inputs (NCBIEfetchInput): Database, identifier, format, and optional coordinate
             parameters.
-        config (NCBIFetchConfig): HTTP timeout, retry, and authentication settings.
+        config (NCBIFetchConfig): NCBI API key and email settings.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 

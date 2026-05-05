@@ -4,6 +4,7 @@ Fetches AlphaFold-predicted structures, per-residue pLDDT, and PAE matrices
 from the AlphaFold Protein Structure Database by UniProt accession.
 """
 
+import csv
 import json
 import logging
 from pathlib import Path
@@ -63,16 +64,17 @@ class AlphaFoldDBFetchConfig(BaseConfig):
     """Configuration for AlphaFold DB fetch.
 
     Attributes:
-        structure_format (Literal["pdb", "cif"]): Structure file format to download.
-        include_structure (bool): If True (default), download the structure file
-            text and the per-residue pLDDT array, returning a parsed ``Structure``
-            on the output. Set to False for metadata-only probes (URLs, mean pLDDT,
-            gene, sequence) — saves ~100-500 KB per call, meaningful for batch sweeps.
-        include_pae (bool): If True, also download the PAE (predicted aligned
+        structure_format (Literal["pdb", "cif"]): Structure file format.
+        include_structure (bool): If True (default), fetch the structure body
+            and the per-residue pLDDT array, returning a parsed ``Structure``
+            on the output. Set to False for metadata-only probes (URLs, mean
+            pLDDT, gene, sequence) — saves ~100-500 KB per call, meaningful
+            for batch sweeps.
+        include_pae (bool): If True, also fetch the PAE (predicted aligned
             error) matrix and attach it to ``output.structure.metrics["pae_matrix"]``.
-            Disabled by default — pAE files can be tens of MB for long proteins.
+            Disabled by default — PAE files can be tens of MB for long proteins.
             No-op when ``include_structure=False``.
-        include_msa (bool): If True, download the A3M MSA used as input to
+        include_msa (bool): If True, fetch the A3M MSA used as input to the
             AlphaFold prediction. Disabled by default — A3M files can be
             hundreds of KB to several MB for highly conserved proteins.
     """
@@ -80,24 +82,26 @@ class AlphaFoldDBFetchConfig(BaseConfig):
     structure_format: Literal["pdb", "cif"] = ConfigField(
         title="Structure Format",
         default="pdb",
-        description="Structure file format to download (pdb or mmCIF)",
+        description="Structure file format (pdb or mmCIF); ignored when include_structure=False",
+        depends_on={"field": "include_structure", "value": [True]},
     )
     include_structure: bool = ConfigField(
         title="Include Structure",
         default=True,
-        description="Fetch structure + per-residue pLDDT into output.structure; False for metadata-only probes",
+        description="Fetch the structure body and per-residue pLDDT; disable for metadata-only probes",
         advanced=True,
     )
     include_pae: bool = ConfigField(
         title="Include PAE Matrix",
         default=False,
-        description="Also fetch PAE into output.structure.metrics; ignored when include_structure=False",
+        description="Also fetch the predicted aligned error matrix; tens of MB for long proteins",
         advanced=True,
+        depends_on={"field": "include_structure", "value": [True]},
     )
     include_msa: bool = ConfigField(
         title="Include MSA",
         default=False,
-        description="Download the A3M MSA used as input to prediction; large for conserved proteins",
+        description="Fetch the A3M MSA used for prediction; large for conserved proteins",
         advanced=True,
     )
 
@@ -165,11 +169,18 @@ class AlphaFoldDBFetchOutput(BaseToolOutput):
             ``structure.metrics["avg_plddt"]``.
         pdb_url (str): URL to the PDB structure file on AlphaFold DB.
         cif_url (str): URL to the mmCIF structure file on AlphaFold DB.
+        bcif_url (str | None): URL to the BinaryCIF structure file; ``None``
+            on legacy entries that predate the bcif export.
         pae_doc_url (str): URL to the PAE JSON document on AlphaFold DB.
         plddt_doc_url (str): URL to the per-residue pLDDT JSON document on
             AlphaFold DB.
         pae_image_url (str): URL to the rendered PAE PNG on AlphaFold DB.
         msa_url (str | None): URL to the MSA A3M used for prediction, when present.
+        am_annotations_url (str | None): AlphaMissense pathogenicity CSV URL
+            (sequence coords); None for non-human or unscored entries.
+        am_annotations_hg19_url (str | None): AlphaMissense annotations on GRCh37.
+        am_annotations_hg38_url (str | None): AlphaMissense annotations on GRCh38.
+        sequence_checksum (str | None): CRC64 checksum of the predicted sequence.
         structure (Structure | None): Parsed AlphaFold structure (PDB or mmCIF
             body in ``structure_format``, ``b_factor_type=BFactorType.PLDDT``)
             with an :class:`AlphaFoldDBMetrics` ``metrics`` container carrying
@@ -199,10 +210,19 @@ class AlphaFoldDBFetchOutput(BaseToolOutput):
     mean_plddt: float | None = Field(default=None, description="Mean per-residue pLDDT")
     pdb_url: str = Field(description="URL to PDB structure file")
     cif_url: str = Field(description="URL to mmCIF structure file")
+    bcif_url: str | None = Field(default=None, description="URL to BinaryCIF structure file (None on legacy entries)")
     pae_doc_url: str = Field(description="URL to PAE JSON document")
     plddt_doc_url: str = Field(description="URL to per-residue pLDDT JSON document")
     pae_image_url: str = Field(description="URL to rendered PAE PNG")
     msa_url: str | None = Field(default=None, description="URL to MSA A3M file, when present")
+    am_annotations_url: str | None = Field(
+        default=None, description="URL to AlphaMissense pathogenicity CSV (sequence coords)"
+    )
+    am_annotations_hg19_url: str | None = Field(default=None, description="URL to AlphaMissense annotations on GRCh37")
+    am_annotations_hg38_url: str | None = Field(default=None, description="URL to AlphaMissense annotations on GRCh38")
+    sequence_checksum: str | None = Field(
+        default=None, description="CRC64 checksum of the predicted sequence (cache validation)"
+    )
     structure: Structure | None = Field(
         default=None,
         description="Parsed AlphaFold Structure (PLDDT B-factors, metrics with pLDDT and PAE); None when skipped",
@@ -216,7 +236,7 @@ class AlphaFoldDBFetchOutput(BaseToolOutput):
     @property
     def output_format_options(self) -> list[str]:
         """Return the supported output format options."""
-        return ["json"]
+        return ["json", "csv"]
 
     @property
     def output_format_default(self) -> str:
@@ -224,10 +244,19 @@ class AlphaFoldDBFetchOutput(BaseToolOutput):
         return "json"
 
     def _export_output(self, export_path: Any, file_format: str) -> None:
+        path = Path(export_path).with_suffix(f".{file_format}")
         if file_format == "json":
-            path = Path(export_path).with_suffix(".json")
             with path.open("w", encoding="utf-8") as f:
                 json.dump(self.model_dump(mode="json"), f, indent=2)
+            return
+        if file_format == "csv":
+            # Metadata-only CSV row; the parsed Structure / msa_a3m / raw_entry
+            # are excluded — use JSON export to preserve them.
+            row = self.model_dump(exclude={"structure", "msa_a3m", "raw_entry"})
+            with path.open("w", encoding="utf-8", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=list(row.keys()))
+                writer.writeheader()
+                writer.writerow(row)
             return
         raise ValueError(f"Unsupported format: {file_format}")
 
@@ -344,10 +373,15 @@ def run_alphafold_db_fetch(
             mean_plddt=entry.get("globalMetricValue"),
             pdb_url=entry["pdbUrl"],
             cif_url=entry["cifUrl"],
+            bcif_url=entry.get("bcifUrl"),
             pae_doc_url=entry["paeDocUrl"],
             plddt_doc_url=entry["plddtDocUrl"],
             pae_image_url=entry["paeImageUrl"],
             msa_url=entry.get("msaUrl"),
+            am_annotations_url=entry.get("amAnnotationsUrl"),
+            am_annotations_hg19_url=entry.get("amAnnotationsHg19Url"),
+            am_annotations_hg38_url=entry.get("amAnnotationsHg38Url"),
+            sequence_checksum=entry.get("sequenceChecksum"),
             structure=structure,
             msa_a3m=msa_a3m,
             source_url=api_url,

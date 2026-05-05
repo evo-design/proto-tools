@@ -68,6 +68,7 @@ The submit path requires a contact email per EBI policy (`config.email`). Both p
 | `applications` | `list[InterProApp] \| None` | `None` | Submit-only — restrict iprscan5 to a subset of member databases. `None` runs the EBI default set. |
 | `include_go_terms` | `bool` | `True` | Include GO term cross-references in each row's `go_terms` list. |
 | `include_pathways` | `bool` | `True` | Include pathway IDs (Reactome, MetaCyc) in each row's `pathways` list. |
+| `sequence_type` | `Literal["protein", "nucleic"]` | `"protein"` | Submit-only — `"nucleic"` triggers server-side 6-frame translation. |
 
 `InterProApp` enumerates the 24 casings EBI's `parameterdetails` endpoint accepts: `PfamA`, `Panther`, `Gene3d`, `SuperFamily`, `SMART`, `PrositeProfiles`, `PrositePatterns`, `PRINTS`, `PIRSF`, `FunFam`, `HAMAP`, `CDD`, `NCBIfam`, `SFLD`, `Coils`, `MobiDBLite`, `Phobius`, `SignalP`, `SignalP_EUK`, `SignalP_GRAM_POSITIVE`, `SignalP_GRAM_NEGATIVE`, `AntiFam`, `PIRSR`, `TMHMM`. (Note `PfamA` not `Pfam`, `Gene3d` not `Gene3D`.)
 

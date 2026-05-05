@@ -82,14 +82,14 @@ All five tools share `assembly: Literal["GRCh38","GRCh37"]` (default `"GRCh38"`;
 
 ## Output Specification
 
-Every output carries `source_url: str` and `raw_payload: dict | list[dict]` alongside the typed `result`.
+Every output carries `source_url: str` and `raw_payload: dict | list[dict]` alongside the typed payload.
 
-| Tool | `result` type |
+| Tool | Output payload field |
 |---|---|
-| `ensembl-lookup` | `EnsemblGene` |
-| `ensembl-sequence` | `EnsemblSequence` |
-| `ensembl-overlap` | `list[EnsemblOverlapFeatureRecord]` |
-| `ensembl-xrefs` | `list[EnsemblXref]` |
+| `ensembl-lookup` | `result: EnsemblGene` |
+| `ensembl-sequence` | `results: list[EnsemblSequence]` (length 1 unless `multiple_sequences=True`) |
+| `ensembl-overlap` | `result: list[EnsemblOverlapFeatureRecord]` |
+| `ensembl-xrefs` | `result: list[EnsemblXref]` |
 | `ensembl-vep` | `consequences: list[EnsemblVEPConsequence]`, `num_consequences: int` |
 
 ## Quick Start Examples
@@ -114,7 +114,7 @@ out = run_ensembl_sequence(
     EnsemblSequenceInput(ensembl_id="ENST00000357654"),
     EnsemblSequenceConfig(sequence_type="protein"),
 )
-print(f"{out.result.id}: {len(out.result.seq)} aa")
+print(f"{out.results[0].id}: {len(out.results[0].seq)} aa")
 ```
 
 **Example 3: regulatory features overlapping BRCA1**

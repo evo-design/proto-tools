@@ -47,6 +47,138 @@ EnsemblOverlapFeature = Literal[
     "mane",
 ]
 
+# Ensembl gene/transcript biotypes — canonical set from
+# https://www.ensembl.org/info/genome/genebuild/biotypes.html
+# Stable across releases; protein_coding / lncRNA / pseudogene families are
+# the most common filters.
+EnsemblBiotype = Literal[
+    "protein_coding",
+    "lncRNA",
+    "lincRNA",  # legacy alias still served on older releases
+    "miRNA",
+    "snRNA",
+    "snoRNA",
+    "rRNA",
+    "Mt_rRNA",
+    "Mt_tRNA",
+    "tRNA",
+    "misc_RNA",
+    "ribozyme",
+    "scaRNA",
+    "sRNA",
+    "vault_RNA",
+    "Y_RNA",
+    "antisense_RNA",
+    "non_coding",
+    "processed_transcript",
+    "pseudogene",
+    "processed_pseudogene",
+    "transcribed_processed_pseudogene",
+    "transcribed_unitary_pseudogene",
+    "transcribed_unprocessed_pseudogene",
+    "unitary_pseudogene",
+    "unprocessed_pseudogene",
+    "translated_processed_pseudogene",
+    "translated_unprocessed_pseudogene",
+    "TR_C_gene",
+    "TR_D_gene",
+    "TR_J_gene",
+    "TR_V_gene",
+    "TR_J_pseudogene",
+    "TR_V_pseudogene",
+    "IG_C_gene",
+    "IG_D_gene",
+    "IG_J_gene",
+    "IG_V_gene",
+    "IG_C_pseudogene",
+    "IG_J_pseudogene",
+    "IG_V_pseudogene",
+    "IG_pseudogene",
+    "TEC",
+    "nonsense_mediated_decay",
+    "non_stop_decay",
+    "retained_intron",
+]
+
+# Sequence Ontology consequence terms used by Ensembl VEP and the overlap
+# variation filter. Source: https://www.ensembl.org/info/genome/variation/prediction/predicted_data.html
+EnsemblSOTerm = Literal[
+    "transcript_ablation",
+    "splice_acceptor_variant",
+    "splice_donor_variant",
+    "stop_gained",
+    "frameshift_variant",
+    "stop_lost",
+    "start_lost",
+    "transcript_amplification",
+    "feature_elongation",
+    "feature_truncation",
+    "inframe_insertion",
+    "inframe_deletion",
+    "missense_variant",
+    "protein_altering_variant",
+    "splice_region_variant",
+    "splice_donor_5th_base_variant",
+    "splice_donor_region_variant",
+    "splice_polypyrimidine_tract_variant",
+    "incomplete_terminal_codon_variant",
+    "start_retained_variant",
+    "stop_retained_variant",
+    "synonymous_variant",
+    "coding_sequence_variant",
+    "mature_miRNA_variant",
+    "5_prime_UTR_variant",
+    "3_prime_UTR_variant",
+    "non_coding_transcript_exon_variant",
+    "intron_variant",
+    "NMD_transcript_variant",
+    "non_coding_transcript_variant",
+    "coding_transcript_variant",
+    "upstream_gene_variant",
+    "downstream_gene_variant",
+    "TFBS_ablation",
+    "TFBS_amplification",
+    "TF_binding_site_variant",
+    "regulatory_region_ablation",
+    "regulatory_region_amplification",
+    "regulatory_region_variant",
+    "intergenic_variant",
+    "sequence_variant",
+]
+
+# Common Ensembl external-DB names accepted by /xrefs/id?external_db=...
+# Source: live API at /xrefs/id with no filter. Not exhaustive — there are
+# ~50 valid values across all dbs/assemblies; this covers the 27 most-used.
+EnsemblExternalDB = Literal[
+    "UniProtKB/Swiss-Prot",
+    "UniProtKB/TrEMBL",
+    "UniProtKB_all",
+    "HGNC",
+    "MGI",  # mouse
+    "RGD",  # rat
+    "ZFIN",  # zebrafish
+    "EntrezGene",
+    "RefSeq_mRNA",
+    "RefSeq_mRNA_predicted",
+    "RefSeq_ncRNA",
+    "RefSeq_ncRNA_predicted",
+    "RefSeq_peptide",
+    "RefSeq_peptide_predicted",
+    "RefSeq_genomic",
+    "CCDS",
+    "Pfam",
+    "InterPro",
+    "GO",
+    "PDB",
+    "STRING",
+    "Reactome",
+    "ArrayExpress",
+    "WikiGene",
+    "MIM_GENE",
+    "MIM_MORBID",
+    "ClinVar",
+]
+
 
 def build_session(tool_key: str) -> requests.Session:
     """Build an Ensembl-friendly HTTP session.

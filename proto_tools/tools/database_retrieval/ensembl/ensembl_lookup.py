@@ -4,6 +4,7 @@ Wraps Ensembl REST ``/lookup/`` — gene lookup by Ensembl gene ID or by
 gene symbol. ``expand=True`` includes the upstream transcript/exon hierarchy.
 """
 
+import csv
 import json
 import logging
 from pathlib import Path
@@ -70,8 +71,14 @@ class EnsemblLookupConfig(BaseConfig):
         assembly (EnsemblAssembly): Genome assembly. ``GRCh38`` (default)
             calls ``rest.ensembl.org``; ``GRCh37`` calls
             ``grch37.rest.ensembl.org``.
-        expand (bool): Expand transcripts/exons in the response. Defaults to
-            the upstream Ensembl REST default, ``False``.
+        expand (bool): Include transcripts, translations, and exons in the
+            response. Default ``False`` matches Ensembl REST.
+        mane (bool): Include MANE Select annotations (``/lookup/id`` only;
+            requires ``expand=True``).
+        phenotypes (bool): Include phenotype annotations on gene records
+            (``/lookup/id`` only).
+        utr (bool): Include UTR coordinates per transcript (``/lookup/id``
+            only; requires ``expand=True``).
     """
 
     species: EnsemblSpecies = ConfigField(
@@ -85,8 +92,28 @@ class EnsemblLookupConfig(BaseConfig):
     expand: bool = ConfigField(
         title="Expand Transcripts/Exons",
         default=False,
-        description="Include transcripts/exons in the response",
+        description="Include transcripts, translations, and exons in the response",
         advanced=True,
+    )
+    mane: bool = ConfigField(
+        title="MANE Annotations",
+        default=False,
+        description="Include MANE Select annotations (lookup-by-id only; requires expand=True)",
+        advanced=True,
+        depends_on={"field": "expand", "value": [True]},
+    )
+    phenotypes: bool = ConfigField(
+        title="Phenotype Annotations",
+        default=False,
+        description="Include phenotype annotations on gene records (lookup-by-id only)",
+        advanced=True,
+    )
+    utr: bool = ConfigField(
+        title="UTR Coordinates",
+        default=False,
+        description="Include UTR coordinates per transcript (lookup-by-id only; requires expand=True)",
+        advanced=True,
+        depends_on={"field": "expand", "value": [True]},
     )
 
 
@@ -106,7 +133,7 @@ class EnsemblLookupOutput(BaseToolOutput):
     @property
     def output_format_options(self) -> list[str]:
         """Return supported output formats."""
-        return ["json"]
+        return ["json", "csv"]
 
     @property
     def output_format_default(self) -> str:
@@ -114,10 +141,18 @@ class EnsemblLookupOutput(BaseToolOutput):
         return "json"
 
     def _export_output(self, export_path: Any, file_format: str) -> None:
+        path = Path(export_path).with_suffix(f".{file_format}")
         if file_format == "json":
-            path = Path(export_path).with_suffix(".json")
             with path.open("w", encoding="utf-8") as f:
                 json.dump(self.model_dump(mode="json"), f, indent=2)
+            return
+        if file_format == "csv":
+            row = self.result.model_dump(exclude={"Transcript"})
+            row["Transcript"] = json.dumps([t.model_dump() for t in self.result.Transcript], separators=(",", ":"))
+            with path.open("w", encoding="utf-8", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=list(row.keys()))
+                writer.writeheader()
+                writer.writerow(row)
             return
         raise ValueError(f"Unsupported format: {file_format}")
 
@@ -166,7 +201,14 @@ def run_ensembl_lookup(
     sym = (inputs.symbol or "").strip()
     if eid:
         url = f"{base}/lookup/id/{eid}"
-        params = {"object_type": "gene"}
+        params: dict[str, Any] = {"object_type": "gene"}
+        # mane / phenotypes / utr are accepted only by /lookup/id
+        if config.mane:
+            params["mane"] = "1"
+        if config.phenotypes:
+            params["phenotypes"] = "1"
+        if config.utr:
+            params["utr"] = "1"
     else:
         url = f"{base}/lookup/symbol/{config.species}/{sym}"
         params = {}

@@ -101,7 +101,7 @@ AlphaMissenseFetchOutput(
 | `alt` | `str \| None` | hg19/hg38 | Alternate allele. `None` in UniProt mode. |
 | `transcript_id` | `str \| None` | hg19/hg38 | GENCODE transcript ID (e.g. `"ENST00000445888.6"`). `None` in UniProt mode. |
 
-**Supported export formats:** `json`
+**Supported export formats:** `json`, `csv`
 
 ## Interpreting Results
 

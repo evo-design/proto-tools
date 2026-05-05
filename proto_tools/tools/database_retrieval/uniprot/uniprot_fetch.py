@@ -5,6 +5,7 @@ protein entries by accession or searching by gene name and organism with
 ranked result selection.
 """
 
+import csv
 import json
 import logging
 from pathlib import Path
@@ -61,10 +62,13 @@ class UniProtFetchInput(BaseToolInput):
     organism: str | None = InputField(
         default=None,
         description="Organism for search disambiguation",
+        depends_on={"field": "target_name", "not_null": True},
     )
     prefer_pdb_crossref: bool = InputField(
         default=False,
         description="When searching, prefer entries that have linked PDB structures",
+        advanced=True,
+        depends_on={"field": "target_name", "not_null": True},
     )
     max_candidates: int = InputField(
         default=5,
@@ -72,6 +76,7 @@ class UniProtFetchInput(BaseToolInput):
         le=25,
         description="Maximum number of search results to evaluate when ranking",
         advanced=True,
+        depends_on={"field": "target_name", "not_null": True},
     )
 
     @model_validator(mode="after")
@@ -114,7 +119,7 @@ class UniProtFetchOutput(BaseToolOutput):
     @property
     def output_format_options(self) -> list[str]:
         """Return the supported output format options."""
-        return ["json"]
+        return ["json", "csv"]
 
     @property
     def output_format_default(self) -> str:
@@ -122,10 +127,19 @@ class UniProtFetchOutput(BaseToolOutput):
         return "json"
 
     def _export_output(self, export_path: Any, file_format: str) -> None:
+        path = Path(export_path).with_suffix(f".{file_format}")
         if file_format == "json":
-            path = Path(export_path).with_suffix(".json")
             with path.open("w", encoding="utf-8") as f:
                 json.dump(self.model_dump(mode="json"), f, indent=2)
+            return
+        if file_format == "csv":
+            row = self.model_dump(exclude={"raw_entry"})
+            row["gene_names"] = ";".join(row["gene_names"])
+            row["pdb_crossrefs"] = ";".join(row["pdb_crossrefs"])
+            with path.open("w", encoding="utf-8", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=list(row.keys()))
+                writer.writeheader()
+                writer.writerow(row)
             return
         raise ValueError(f"Unsupported format: {file_format}")
 
@@ -139,17 +153,34 @@ class UniProtFetchConfig(BaseConfig):
             returns the full entry (~880 KB for human TP53); a targeted
             selection can shrink it ~1000x. Caveat: typed Output fields are
             only populated when the corresponding API field is included, so
-            callers using ``entry_type`` / ``gene_names`` / ``pdb_crossrefs``
-            must include ``"reviewed"`` / ``"gene_names"`` / ``"xref_pdb"``.
-            Search-mode ranking reads the same three fields. Full list:
+            callers using ``accession`` / ``sequence`` / ``entry_type`` /
+            ``gene_names`` / ``pdb_crossrefs`` must include
+            ``"accession"`` / ``"sequence"`` / ``"reviewed"`` /
+            ``"gene_names"`` / ``"xref_pdb"``. Search-mode ranking reads
+            ``reviewed`` / ``gene_names`` / ``xref_pdb``. Full list:
             https://www.uniprot.org/help/return_fields.
     """
 
     fields: list[str] | None = ConfigField(
         title="Response Fields",
         default=None,
-        description="If set, return only these UniProt fields; None returns the full entry",
+        description="Subset of UniProt fields to return; None = full entry. See www.uniprot.org/help/return_fields",
+        advanced=True,
     )
+
+    @model_validator(mode="after")
+    def warn_when_typed_fields_stripped(self) -> "UniProtFetchConfig":
+        """Warn when ``fields`` drops keys the typed Output reads."""
+        if self.fields is None:
+            return self
+        missing = {"accession", "sequence", "reviewed", "gene_names", "xref_pdb"} - set(self.fields)
+        if missing:
+            logger.warning(
+                "UniProtFetchConfig.fields omits %s — corresponding Output fields "
+                "(accession/sequence/entry_type/gene_names/pdb_crossrefs) may be empty",
+                sorted(missing),
+            )
+        return self
 
 
 # ============================================================================

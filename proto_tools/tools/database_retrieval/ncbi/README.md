@@ -71,28 +71,34 @@ All tools include automatic retry with exponential backoff and optional NCBI API
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `db` | `Literal["protein", "nuccore", "gene"]` | *required* | NCBI database to query |
+| `db` | `NCBIDatabase` | *required* | NCBI Entrez database (27 supported: `protein`, `nuccore`, `gene`, `pubmed`, `pmc`, `taxonomy`, `structure`, `snp`, `clinvar`, `genome`, `medgen`, `pccompound`, ...) |
 | `search_term` | `str` | *required* | NCBI search query (e.g., `lacI[Gene Name] AND Escherichia coli[Organism]`) |
 | `max_results` | `int` | `20` | Maximum number of IDs to return (1-10000; NCBI `retmax`). Default of 20 matches the NCBI API default. |
 | `retstart` | `int` | `0` | Sequential index of the first hit to return (NCBI `retstart`, 0-indexed). Use with `max_results` to paginate through large result sets. |
+| `sort` | `str \| None` | `None` | Db-specific sort key (e.g. `pub_date`, `relevance` on pubmed). |
+| `field` | `str \| None` | `None` | Restrict the search term to a single index field (db-dependent — e.g. `title`, `author` on pubmed). |
+| `datetype` | `Literal["mdat","pdat","edat"] \| None` | `None` | Date axis for `mindate`/`maxdate`/`reldate`: modification / publication / Entrez. |
+| `mindate` | `str \| None` | `None` | Lower date bound (`YYYY/MM/DD`, `YYYY/MM`, or `YYYY`); requires `datetype`. |
+| `maxdate` | `str \| None` | `None` | Upper date bound; requires `datetype`. |
+| `reldate` | `int \| None` | `None` | Records dated within the last N days; requires `datetype`. |
 
 ### `NCBIEsummaryInput`
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `db` | `Literal["protein", "nuccore", "gene"]` | *required* | NCBI database to query |
+| `db` | `NCBIDatabase` | *required* | NCBI Entrez database (27 supported: `protein`, `nuccore`, `gene`, `pubmed`, `pmc`, `taxonomy`, `structure`, `snp`, `clinvar`, `genome`, `medgen`, `pccompound`, ...) |
 | `identifier` | `str` | *required* | Accession or NCBI ID (e.g., `NP_000537.3`, `7157`) |
 
 ### `NCBIEfetchInput`
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `db` | `Literal["protein", "nuccore", "gene"]` | *required* | NCBI database to query |
+| `db` | `NCBISequenceDatabase` | *required* | Sequence database only: `protein`, `nuccore`, or `nucleotide` (other dbs accept the FASTA rettype but return empty bodies — silently). |
 | `identifier` | `str` | *required* | Accession or NCBI ID |
 | `return_format` | `Literal["fasta", "fasta_cds_na"]` | `"fasta"` | NCBI rettype: `fasta` for full sequences, `fasta_cds_na` for coding DNA sequences |
 | `seq_start` | `Optional[int]` | `None` | Start position for subsequence extraction (1-indexed, inclusive) |
 | `seq_stop` | `Optional[int]` | `None` | Stop position for subsequence extraction (1-indexed, inclusive) |
-| `strand` | `Optional[Literal["+", "-"]]` | `None` | Strand for nucleotide retrieval (`"+"` for sense, `"-"` for antisense) |
+| `strand` | `Optional[Literal["+", "-"]]` | `None` | Strand for nucleotide retrieval (`"+"` for sense, `"-"` for antisense). Nucleotide-only. |
 
 ### Sweep Priorities
 
@@ -107,7 +113,7 @@ All three tools share `NCBIFetchConfig`:
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `ncbi_api_key` | `Optional[str]` | `None` | NCBI API key for higher rate limits (10 req/sec vs 3 req/sec) |
-| `ncbi_email` | `Optional[str]` | `None` | Contact email (recommended by NCBI for tracking) |
+| `ncbi_email` | `Optional[str]` | `None` | Contact email; pair with API key for IP-block recovery |
 
 ## Output Specification
 
@@ -139,7 +145,7 @@ All three tools share `NCBIFetchConfig`:
 | `sequence` | `str` | Sequence string (amino acids or nucleotides) |
 | `accession` | `Optional[str]` | Accession extracted from header (e.g., `NP_000537.3`) |
 
-**Supported export formats:** `json`
+**Supported export formats:** `json`, `csv` (efetch also `fasta`)
 
 ## Interpreting Results
 

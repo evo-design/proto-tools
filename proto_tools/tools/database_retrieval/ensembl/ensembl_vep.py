@@ -4,10 +4,11 @@ Wraps Ensembl's Variant Effect Predictor REST endpoint (HGVS form):
 submits a notation, returns per-transcript consequence predictions.
 """
 
+import csv
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import quote
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
@@ -30,6 +31,37 @@ from proto_tools.utils import (
 logger = logging.getLogger(__name__)
 
 _REQUEST_TIMEOUT_SECONDS = 30
+
+# Snake-case field → VEP URL param. AlphaMissense / REVEL / CADD / Conservation /
+# Phenotypes / Blosum62 / MaxEntScan must be sent CamelCase; lowercase is silently ignored.
+_VEP_PARAM_MAP: dict[str, str] = {
+    "canonical": "canonical",
+    "mane": "mane",
+    "hgvs": "hgvs",
+    "protein": "protein",
+    "domains": "domains",
+    "numbers": "numbers",
+    "variant_class": "variant_class",
+    "sift": "sift",
+    "polyphen": "polyphen",
+    "appris": "appris",
+    "tsl": "tsl",
+    "ccds": "ccds",
+    "uniprot": "uniprot",
+    "xref_refseq": "xref_refseq",
+    "mirna": "mirna",
+    "pubmed": "pubmed",
+    "distance": "distance",
+    "pick": "pick",
+    "per_gene": "per_gene",
+    "alphamissense": "AlphaMissense",
+    "revel": "REVEL",
+    "cadd": "CADD",
+    "conservation": "Conservation",
+    "phenotypes": "Phenotypes",
+    "blosum62": "Blosum62",
+    "max_ent_scan": "MaxEntScan",
+}
 
 
 # ============================================================================
@@ -97,6 +129,39 @@ class EnsemblVEPConfig(BaseConfig):
         species (EnsemblSpecies): Species slug. Default ``homo_sapiens``.
         assembly (EnsemblAssembly): Genome assembly. ``GRCh38`` (default)
             or ``GRCh37``.
+        canonical (bool): Mark canonical Ensembl transcripts in each
+            consequence record.
+        mane (bool): Include MANE Select annotations (GRCh38 only).
+        hgvs (bool): Include HGVS notation per consequence.
+        protein (bool): Include Ensembl protein identifiers.
+        domains (bool): List overlapping protein domain names.
+        numbers (bool): Include affected exon/intron numbers.
+        variant_class (bool): Include Sequence Ontology variant class.
+        sift (Literal['b', 'p', 's'] | None): SIFT pathogenicity output —
+            ``b`` (both prediction + score), ``p`` (prediction only),
+            ``s`` (score only); ``None`` falls back to API default.
+        polyphen (Literal['b', 'p', 's'] | None): PolyPhen output level;
+            same value semantics as ``sift``.
+        alphamissense (bool): AlphaMissense missense pathogenicity scores.
+        revel (bool): REVEL ensemble pathogenicity scores.
+        cadd (bool): CADD deleteriousness scores.
+        appris (bool): Include APPRIS principal isoform tag (human/mouse only).
+        tsl (bool): Include transcript support level (human/mouse only).
+        ccds (bool): Include CCDS identifier per transcript.
+        uniprot (bool): Include UniProt accession for each transcript.
+        xref_refseq (bool): Include RefSeq xref IDs.
+        mirna (bool): Include overlapping miRNA targets.
+        pubmed (bool): Include PubMed citation IDs.
+        distance (int | None): Up/downstream distance (bp) used to assign
+            consequence terms. ``None`` keeps the API default (5000).
+        pick (bool): Return only one consequence per variant — Ensembl's
+            PICK heuristic (canonical, longest CDS, ...).
+        per_gene (bool): Return one consequence per gene (less aggressive
+            than ``pick``); incompatible with ``pick``.
+        conservation (bool): Include conservation scores from EPO alignments.
+        phenotypes (bool): Include overlapping phenotype/disease annotations.
+        blosum62 (bool): Include BLOSUM62 substitution score for missense.
+        max_ent_scan (bool): Include MaxEntScan splice-site scores.
     """
 
     species: EnsemblSpecies = ConfigField(title="Species", default="homo_sapiens", description="Species slug for VEP")
@@ -105,6 +170,178 @@ class EnsemblVEPConfig(BaseConfig):
         default="GRCh38",
         description="Genome assembly; GRCh37 routes to grch37.rest.ensembl.org",
     )
+    canonical: bool = ConfigField(
+        title="Canonical Transcripts",
+        default=False,
+        description="Mark canonical Ensembl transcripts in each consequence record",
+        advanced=True,
+    )
+    mane: bool = ConfigField(
+        title="MANE Select",
+        default=False,
+        description="Include MANE Select annotations (GRCh38 only)",
+        advanced=True,
+        depends_on={"field": "assembly", "value": ["GRCh38"]},
+    )
+    hgvs: bool = ConfigField(
+        title="HGVS Notation",
+        default=False,
+        description="Include HGVS notation per consequence",
+        advanced=True,
+    )
+    protein: bool = ConfigField(
+        title="Protein IDs",
+        default=False,
+        description="Include Ensembl protein identifiers",
+        advanced=True,
+    )
+    domains: bool = ConfigField(
+        title="Protein Domains",
+        default=False,
+        description="List overlapping protein domain names",
+        advanced=True,
+    )
+    numbers: bool = ConfigField(
+        title="Exon/Intron Numbers",
+        default=False,
+        description="Include affected exon/intron numbers per consequence",
+        advanced=True,
+    )
+    variant_class: bool = ConfigField(
+        title="Variant Class",
+        default=False,
+        description="Include Sequence Ontology variant classification",
+        advanced=True,
+    )
+    sift: Literal["b", "p", "s"] | None = ConfigField(
+        title="SIFT Output",
+        default=None,
+        description="SIFT output level: b=both, p=prediction, s=score; None = API default",
+        advanced=True,
+    )
+    polyphen: Literal["b", "p", "s"] | None = ConfigField(
+        title="PolyPhen Output",
+        default=None,
+        description="PolyPhen output level: b=both, p=prediction, s=score; None = API default",
+        advanced=True,
+    )
+    alphamissense: bool = ConfigField(
+        title="AlphaMissense Scores",
+        default=False,
+        description="AlphaMissense missense pathogenicity scores (human only)",
+        advanced=True,
+        depends_on={"field": "species", "value": ["homo_sapiens"]},
+    )
+    revel: bool = ConfigField(
+        title="REVEL Scores",
+        default=False,
+        description="REVEL ensemble pathogenicity scores (human only)",
+        advanced=True,
+        depends_on={"field": "species", "value": ["homo_sapiens"]},
+    )
+    cadd: bool = ConfigField(
+        title="CADD Scores",
+        default=False,
+        description="CADD deleteriousness scores (human only)",
+        advanced=True,
+        depends_on={"field": "species", "value": ["homo_sapiens"]},
+    )
+    appris: bool = ConfigField(
+        title="APPRIS Tag",
+        default=False,
+        description="APPRIS principal-isoform tag per transcript (human/mouse only)",
+        advanced=True,
+        depends_on={"field": "species", "value": ["homo_sapiens", "mus_musculus"]},
+    )
+    tsl: bool = ConfigField(
+        title="Transcript Support Level",
+        default=False,
+        description="Transcript support level (TSL) per transcript (human/mouse only)",
+        advanced=True,
+        depends_on={"field": "species", "value": ["homo_sapiens", "mus_musculus"]},
+    )
+    ccds: bool = ConfigField(
+        title="CCDS IDs",
+        default=False,
+        description="Include CCDS identifier per transcript (human/mouse only — CCDS is a human/mouse project)",
+        advanced=True,
+        depends_on={"field": "species", "value": ["homo_sapiens", "mus_musculus"]},
+    )
+    uniprot: bool = ConfigField(
+        title="UniProt Accessions",
+        default=False,
+        description="Include UniProt accession for each transcript",
+        advanced=True,
+    )
+    xref_refseq: bool = ConfigField(
+        title="RefSeq Xrefs",
+        default=False,
+        description="Include RefSeq cross-reference IDs per transcript",
+        advanced=True,
+    )
+    mirna: bool = ConfigField(
+        title="miRNA Targets",
+        default=False,
+        description="Include overlapping miRNA target sites",
+        advanced=True,
+    )
+    pubmed: bool = ConfigField(
+        title="PubMed Citations",
+        default=False,
+        description="Include PubMed citation IDs for each variant",
+        advanced=True,
+    )
+    distance: int | None = ConfigField(
+        title="Up/Downstream Distance (bp)",
+        default=None,
+        ge=0,
+        description="Bases up/downstream considered for consequence terms (None = API default 5000)",
+        advanced=True,
+    )
+    pick: bool = ConfigField(
+        title="Pick One Consequence",
+        default=False,
+        description="Collapse output to one consequence per variant via Ensembl PICK heuristic",
+        advanced=True,
+    )
+    per_gene: bool = ConfigField(
+        title="One Consequence per Gene",
+        default=False,
+        description="Collapse output to one consequence per gene; incompatible with pick",
+        advanced=True,
+        depends_on={"field": "pick", "value": [False]},
+    )
+    conservation: bool = ConfigField(
+        title="Conservation Scores",
+        default=False,
+        description="Conservation scores from EPO multi-species alignments",
+        advanced=True,
+    )
+    phenotypes: bool = ConfigField(
+        title="Phenotype Annotations",
+        default=False,
+        description="Overlapping phenotype/disease annotations from ClinVar/dbSNP/etc.",
+        advanced=True,
+    )
+    blosum62: bool = ConfigField(
+        title="BLOSUM62 Score",
+        default=False,
+        description="BLOSUM62 substitution score for missense changes",
+        advanced=True,
+    )
+    max_ent_scan: bool = ConfigField(
+        title="MaxEntScan Splice Scores",
+        default=False,
+        description="MaxEntScan splice donor/acceptor scores",
+        advanced=True,
+    )
+
+    @model_validator(mode="after")
+    def _check_pick_per_gene(self) -> "EnsemblVEPConfig":
+        """Reject ``pick`` and ``per_gene`` set together (Ensembl rejects this)."""
+        if self.pick and self.per_gene:
+            raise ValueError("Set either 'pick' or 'per_gene', not both")
+        return self
 
 
 class EnsemblVEPOutput(BaseToolOutput):
@@ -133,7 +370,7 @@ class EnsemblVEPOutput(BaseToolOutput):
     @property
     def output_format_options(self) -> list[str]:
         """Return supported output formats."""
-        return ["json"]
+        return ["json", "csv"]
 
     @property
     def output_format_default(self) -> str:
@@ -141,10 +378,26 @@ class EnsemblVEPOutput(BaseToolOutput):
         return "json"
 
     def _export_output(self, export_path: Any, file_format: str) -> None:
+        path = Path(export_path).with_suffix(f".{file_format}")
         if file_format == "json":
-            path = Path(export_path).with_suffix(".json")
             with path.open("w", encoding="utf-8") as f:
                 json.dump(self.model_dump(mode="json"), f, indent=2)
+            return
+        if file_format == "csv":
+            # One row per consequence; nested transcript_consequences and
+            # colocated_variants are JSON-encoded into single cells.
+            rows = []
+            for c in self.consequences:
+                d = c.model_dump()
+                d["transcript_consequences"] = json.dumps(d["transcript_consequences"], separators=(",", ":"))
+                d["colocated_variants"] = json.dumps(d["colocated_variants"], separators=(",", ":"))
+                rows.append(d)
+            with path.open("w", encoding="utf-8", newline="") as f:
+                if not rows:
+                    return
+                writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+                writer.writeheader()
+                writer.writerows(rows)
             return
         raise ValueError(f"Unsupported format: {file_format}")
 
@@ -193,11 +446,13 @@ def run_ensembl_vep(
 
     base = base_url_for(config.assembly)
     url = f"{base}/vep/{config.species}/hgvs/{quote(inputs.hgvs.strip(), safe='')}"
+    params = _build_vep_params(config)
 
     session = build_session("ensembl-vep")
     try:
         response = session.get(
             url,
+            params=params,
             headers={"Accept": "application/json"},
             timeout=_REQUEST_TIMEOUT_SECONDS,
         )
@@ -223,3 +478,22 @@ def run_ensembl_vep(
         )
     finally:
         session.close()
+
+
+# ============================================================================
+# Private Helpers
+# ============================================================================
+
+
+def _build_vep_params(config: EnsemblVEPConfig) -> dict[str, str]:
+    """Translate set flags into VEP query params (bool→"1"; str/int→str; None omitted)."""
+    params: dict[str, str] = {}
+    for field, api_name in _VEP_PARAM_MAP.items():
+        value = getattr(config, field)
+        if value is True:
+            params[api_name] = "1"
+        elif isinstance(value, str) and value:
+            params[api_name] = value
+        elif isinstance(value, int) and not isinstance(value, bool):
+            params[api_name] = str(value)
+    return params

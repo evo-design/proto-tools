@@ -67,6 +67,7 @@ from proto_tools.tools.database_retrieval.interproscan import (
 
 # NCBI Entrez tools
 from proto_tools.tools.database_retrieval.ncbi import (
+    NCBIDatabase,
     NCBIEfetchConfig,
     NCBIEfetchInput,
     NCBIEfetchOutput,
@@ -78,6 +79,7 @@ from proto_tools.tools.database_retrieval.ncbi import (
     NCBIEsummaryOutput,
     NCBIFastaRecord,
     NCBIFetchConfig,
+    NCBISequenceDatabase,
     run_ncbi_efetch,
     run_ncbi_esearch,
     run_ncbi_esummary,
@@ -187,6 +189,8 @@ __all__ = [
     "PubChemProperty",
     "run_pubchem_fetch",
     # NCBI Entrez tools
+    "NCBIDatabase",
+    "NCBISequenceDatabase",
     "NCBIFastaRecord",
     "NCBIFetchConfig",
     "NCBIEsearchConfig",

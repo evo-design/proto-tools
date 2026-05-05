@@ -91,7 +91,7 @@ _TP53_DBD_ENTRY = {
 
 def test_parse_direct_entry_parses_tp53_dbd():
     """The TP53 P53 DNA-binding-domain Pfam hit anchors the direct-lookup parser."""
-    rows, sequence_length = _parse_direct_entry(_TP53_DBD_ENTRY, include_go_terms=True, include_pathways=True)
+    rows, sequence_length = _parse_direct_entry(_TP53_DBD_ENTRY, include_go_terms=True)
     assert sequence_length == 393
     assert len(rows) == 1
     row = rows[0]
@@ -133,7 +133,7 @@ def test_parse_direct_entry_multi_fragment():
             }
         ],
     }
-    rows, _ = _parse_direct_entry(entry, include_go_terms=False, include_pathways=False)
+    rows, _ = _parse_direct_entry(entry, include_go_terms=False)
     assert [(r.start, r.end) for r in rows] == [(10, 50), (80, 120)]
     assert all(r.go_terms == [] for r in rows)
 
@@ -155,7 +155,7 @@ def test_parse_direct_entry_unknown_type_falls_back():
             }
         ],
     }
-    rows, _ = _parse_direct_entry(entry, include_go_terms=False, include_pathways=False)
+    rows, _ = _parse_direct_entry(entry, include_go_terms=False)
     assert rows[0].type == "unknown"
 
 

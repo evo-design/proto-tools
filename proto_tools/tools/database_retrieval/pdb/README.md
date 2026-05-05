@@ -108,12 +108,12 @@ PdbFetchFastaOutput(
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `chain_id` | `Optional[str]` | Chain identifier from FASTA header (e.g., "A", "B") |
+| `chain_ids` | `list[str]` | Author-assigned chain IDs sharing this sequence (e.g., `["A", "B"]` for a homodimer) |
 | `header` | `str` | Full FASTA header line |
 | `sequence` | `str` | Chain amino acid or nucleotide sequence |
 | `is_protein` | `bool` | True if protein chain, False if nucleic acid |
 
-**Supported export formats:** `json`
+**Supported export formats:** `json`, `csv`
 
 ## Interpreting Results
 
@@ -160,7 +160,7 @@ output = run_pdb_fetch_fasta(inputs, PdbFetchConfig())
 
 for chain in output.chains:
     chain_type = "protein" if chain.is_protein else "nucleotide"
-    print(f"Chain {chain.chain_id}: {chain_type}, {len(chain.sequence)} residues")
+    print(f"Chains {chain.chain_ids}: {chain_type}, {len(chain.sequence)} residues")
     print(f"  Sequence: {chain.sequence[:50]}...")
 ```
 
@@ -179,7 +179,7 @@ output = run_pdb_fetch_fasta(
 protein_chains = [c for c in output.chains if c.is_protein]
 print(f"Found {len(protein_chains)} protein chains:")
 for chain in protein_chains:
-    print(f"  Chain {chain.chain_id}: {len(chain.sequence)} residues")
+    print(f"  Chains {chain.chain_ids}: {len(chain.sequence)} residues")
 
 # Get unique protein sequences (deduplicate homo-oligomer chains)
 unique_seqs = list(set(c.sequence for c in protein_chains))

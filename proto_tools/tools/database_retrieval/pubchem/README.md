@@ -76,23 +76,24 @@ A shared `requests` session with retry/backoff handles transient HTTP failures.
 | `cid` | `int \| None` | `None` | PubChem Compound Identifier (e.g. `2244` for aspirin). Must be >= 1. |
 | `name` | `str \| None` | `None` | Common or systematic name (e.g. `"aspirin"`). URL-encoded automatically. |
 | `smiles` | `str \| None` | `None` | SMILES string (e.g. `"CC(=O)Oc1ccccc1C(=O)O"`). URL-encoded automatically. |
+| `inchi` | `str \| None` | `None` | Standard InChI string (e.g. `"InChI=1S/C9H8O4/..."`). Sent via POST. |
 | `inchikey` | `str \| None` | `None` | Standard InChIKey (e.g. `"BSYNRYMUTXBXSQ-UHFFFAOYSA-N"`). |
 
-**Validation rules:** Exactly one of `cid`, `name`, `smiles`, `inchikey` must be provided. The model_validator
-rejects calls supplying zero or more than one identifier.
+**Validation rules:** Exactly one of `cid`, `name`, `smiles`, `inchi`, `inchikey` must be provided. The
+model_validator rejects calls supplying zero or more than one identifier.
 
 ## Configuration
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `properties` | `list[PubChemProperty]` | 15 defaults (see below) | PubChem property names to request. |
+| `properties` | `list[PubChemProperty]` | 16 defaults (see below) | PubChem property names to request. |
 | `include_synonyms` | `bool` | `False` | If `True`, fetch the compound's synonyms (one extra HTTP call to `/synonyms/JSON`; up to 50 returned). |
 | `include_description` | `bool` | `False` | If `True`, fetch the compound's textual descriptions (one extra HTTP call to `/description/JSON`). |
 | `include_aids` | `bool` | `False` | If `True`, fetch the list of BioAssay IDs that tested this compound (one extra HTTP call to `/aids/JSON`; can return thousands of IDs). |
 
-**Default `properties` bundle (15 entries):** `MolecularFormula`, `MolecularWeight`, `SMILES`, `ConnectivitySMILES`,
-`InChI`, `InChIKey`, `IUPACName`, `ExactMass`, `TPSA`, `Complexity`, `Charge`, `HBondDonorCount`,
-`HBondAcceptorCount`, `RotatableBondCount`, `HeavyAtomCount`.
+**Default `properties` bundle (16 entries):** `Title`, `MolecularFormula`, `MolecularWeight`, `SMILES`,
+`ConnectivitySMILES`, `InChI`, `InChIKey`, `IUPACName`, `ExactMass`, `TPSA`, `Complexity`, `Charge`,
+`HBondDonorCount`, `HBondAcceptorCount`, `RotatableBondCount`, `HeavyAtomCount`.
 
 `PubChemProperty` is a `Literal` type covering the full PubChem property table (mass, descriptors, 2D/3D features,
 fingerprints). Override `properties` to request a different subset; properties that are not in the default bundle
@@ -105,6 +106,7 @@ will appear in `raw_property_record` even if no typed output field exists for th
 PubChemFetchOutput(
     cid: int,                              # Resolved PubChem CID
     all_matched_cids: list[int],           # All CIDs returned by the resolver
+    title: str | None,                     # Common compound name (e.g. "Aspirin")
     molecular_formula: str | None,         # Hill-system molecular formula
     molecular_weight: float | None,        # Average molecular weight (g/mol)
     smiles: str | None,                    # PubChem canonical SMILES (new "SMILES" property)
@@ -121,6 +123,8 @@ PubChemFetchOutput(
     rotatable_bond_count: int | None,      # Number of rotatable bonds
     heavy_atom_count: int | None,          # Number of non-hydrogen atoms
     synonyms: list[str],                   # Compound synonyms (empty if include_synonyms=False)
+    descriptions: list[str],               # Textual descriptions (empty if include_description=False)
+    bioassay_ids: list[int],               # BioAssay IDs that tested this compound (empty if include_aids=False)
     source_url: str,                       # URL of the property request
     raw_property_record: dict[str, Any],   # Complete property record from PubChem
 )
@@ -132,6 +136,7 @@ PubChemFetchOutput(
 |-------|------|-------------|
 | `cid` | `int` | Resolved PubChem CID (>= 1). |
 | `all_matched_cids` | `list[int]` | All CIDs returned by the resolver; length 1 for unambiguous queries, longer for ambiguous names. |
+| `title` | `str \| None` | Common compound name (e.g. `"Aspirin"`), distinct from the IUPAC systematic name in `iupac_name`. |
 | `molecular_formula` | `str \| None` | Molecular formula in Hill order (e.g. `"C9H8O4"` for aspirin). |
 | `molecular_weight` | `float \| None` | Average molecular weight in g/mol. PubChem returns this as a string; the wrapper parses it to `float`. |
 | `smiles` | `str \| None` | PubChem canonical SMILES with stereochemistry. Pulled from the new `SMILES` property (replaces the retired `IsomericSMILES`). |
@@ -149,9 +154,9 @@ PubChemFetchOutput(
 | `heavy_atom_count` | `int \| None` | Number of non-hydrogen atoms. |
 | `synonyms` | `list[str]` | Up to 50 synonyms; empty list when `include_synonyms=False`. |
 | `source_url` | `str` | URL of the PubChem property request (useful for debugging and citation). |
-| `raw_property_record` | `dict[str, Any]` | Complete property record from PubChem for advanced access (includes any properties requested beyond the 15 default fields). |
+| `raw_property_record` | `dict[str, Any]` | Complete property record from PubChem for advanced access (includes any properties requested beyond the 16 default fields). |
 
-**Supported export formats:** `json`
+**Supported export formats:** `json`, `csv`
 
 ## Interpreting Results
 
@@ -317,7 +322,7 @@ assert by_inchikey.cid == by_name.cid
   noticeably faster for very common compounds (which can have hundreds of synonyms)
 - For large lookup batches, prefer CID inputs over name/SMILES/InChIKey: CID resolution is skipped and you save one
   HTTP call per query
-- Use `raw_property_record` to access PubChem properties beyond the 15 typed defaults (e.g. `XLogP`, `Volume3D`,
+- Use `raw_property_record` to access PubChem properties beyond the 16 typed defaults (e.g. `Volume3D`, `PatentCount`,
   `Fingerprint2D`); request them via `properties` and read them out of the dict
 
 **Edge cases to watch for:**

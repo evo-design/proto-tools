@@ -4,6 +4,7 @@ Wraps the RCSB PDB REST API core entry endpoint for fetching title,
 experimental method, and resolution for a PDB accession.
 """
 
+import csv
 import json
 from pathlib import Path
 from typing import Any
@@ -59,7 +60,7 @@ class PdbFetchEntryOutput(BaseToolOutput):
     @property
     def output_format_options(self) -> list[str]:
         """Return the supported output format options."""
-        return ["json"]
+        return ["json", "csv"]
 
     @property
     def output_format_default(self) -> str:
@@ -67,10 +68,17 @@ class PdbFetchEntryOutput(BaseToolOutput):
         return "json"
 
     def _export_output(self, export_path: Any, file_format: str) -> None:
+        path = Path(export_path).with_suffix(f".{file_format}")
         if file_format == "json":
-            path = Path(export_path).with_suffix(".json")
             with path.open("w", encoding="utf-8") as f:
                 json.dump(self.model_dump(mode="json"), f, indent=2)
+            return
+        if file_format == "csv":
+            row = self.model_dump()
+            with path.open("w", encoding="utf-8", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=list(row.keys()))
+                writer.writeheader()
+                writer.writerow(row)
             return
         raise ValueError(f"Unsupported format: {file_format}")
 

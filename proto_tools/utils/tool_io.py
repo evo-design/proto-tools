@@ -26,6 +26,7 @@ def InputField(
     hidden: bool = False,
     advanced: bool = False,
     include_in_key: bool = True,
+    depends_on: dict[str, Any] | None = None,
     **kwargs: Any,
 ) -> Any:
     """Custom Field wrapper for tool Input classes.
@@ -41,13 +42,25 @@ def InputField(
         advanced (bool): If True, field appears in "Advanced" section of UI.
         include_in_key (bool): If False, field is excluded from tool cache key
             generation.
+        depends_on (dict[str, Any] | None): Conditional visibility — show
+            this field only when another field has a specific value or is
+            non-null. Same shape as ``ConfigField.depends_on``. Examples:
+            ``{"field": "db", "value": ["nuccore", "nucleotide"]}`` or
+            ``{"field": "datetype", "not_null": True}``.
         kwargs: All other standard Pydantic Field arguments (via ``**kwargs``).
     """
+    from proto_tools.utils.base_config import _normalize_depends_on
+
     json_schema_extra = kwargs.get("json_schema_extra", {})
     json_schema_extra["hidden"] = hidden
     json_schema_extra["advanced"] = advanced
     json_schema_extra["include_in_key"] = include_in_key
     json_schema_extra["_field_type"] = "InputField"
+    if depends_on is not None:
+        normalized = _normalize_depends_on(depends_on)
+        if "value" in normalized and "not_null" in normalized:
+            raise ValueError("depends_on cannot specify both 'value' and 'not_null'")
+        json_schema_extra["x-depends-on"] = normalized
     kwargs["json_schema_extra"] = json_schema_extra
     return Field(default, title=title, description=description, **kwargs)
 

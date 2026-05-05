@@ -18,9 +18,16 @@ from proto_tools.tools.database_retrieval.ncbi.esummary import (
     NCBIEsummaryOutput,
     run_ncbi_esummary,
 )
-from proto_tools.tools.database_retrieval.ncbi.shared_data_models import NCBIFastaRecord, NCBIFetchConfig
+from proto_tools.tools.database_retrieval.ncbi.shared_data_models import (
+    NCBIDatabase,
+    NCBIFastaRecord,
+    NCBIFetchConfig,
+    NCBISequenceDatabase,
+)
 
 __all__ = [
+    "NCBIDatabase",
+    "NCBISequenceDatabase",
     "NCBIFastaRecord",
     "NCBIFetchConfig",
     "NCBIEsearchConfig",
