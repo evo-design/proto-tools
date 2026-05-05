@@ -180,6 +180,8 @@ class ESMFoldConfig(StructurePredictionConfig):
             multiple structures. Complexes are automatically split into safe batches
             based on this limit. Must be at least 100. Default: 1200.
 
+        num_recycles (int): Recycling iterations through the structure module. Default 4.
+
         device (str): Device to run the model on (``"cuda"``, ``"cpu"``). Inherited
             from ``StructurePredictionConfig``. Default: ``"cuda"``.
 
@@ -205,7 +207,7 @@ class ESMFoldConfig(StructurePredictionConfig):
         title="Chain Linker",
         default="G" * 25,
         description="Sequence to link chains (default: 25 glycines)",
-        advanced=True,
+        hidden=True,
     )
     max_batch_residues: int = ConfigField(
         title="Max Batch Residues",
@@ -213,6 +215,13 @@ class ESMFoldConfig(StructurePredictionConfig):
         ge=100,
         description="Maximum total residues per inference batch (to prevent GPU memory overflow)",
         hidden=True,
+    )
+    num_recycles: int = ConfigField(
+        title="Recycling Iterations",
+        default=4,
+        ge=1,
+        description="Iterative refinement passes through ESMFold. Default 4; raise for hard targets",
+        advanced=True,
     )
 
 
@@ -333,6 +342,7 @@ def run_esmfold(
             "residue_idx_offset": config.residue_idx_offset,
             "chain_linker": config.chain_linker,
             "include_pae_matrix": config.include_pae_matrix,
+            "num_recycles": config.num_recycles,
         }
 
         # Call the inference script

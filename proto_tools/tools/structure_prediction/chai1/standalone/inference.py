@@ -29,6 +29,8 @@ class Chai1Model:
         num_diffn_timesteps: int = 200,
         num_diffn_samples: int = 5,
         num_trunk_samples: int = 1,
+        low_memory: bool = True,
+        recycle_msa_subsample: int = 0,
         seed: int | None = None,
         device: str = "cuda",
         verbose: bool = False,
@@ -45,6 +47,8 @@ class Chai1Model:
             num_diffn_timesteps: Number of diffusion timesteps
             num_diffn_samples: Number of diffusion samples
             num_trunk_samples: Number of trunk samples
+            low_memory: Stream features per sample to reduce peak GPU memory
+            recycle_msa_subsample: Stochastic MSA subsampling across recycles (0 disables)
             seed: Random seed for reproducibility
             device: Device to run on ('cuda' or 'cpu')
             verbose: Whether to print status messages
@@ -77,14 +81,14 @@ class Chai1Model:
             constraint_path=None,
             use_templates_server=False,
             template_hits_path=None,
-            recycle_msa_subsample=0,
+            recycle_msa_subsample=recycle_msa_subsample,
             num_trunk_recycles=num_trunk_recycles,
             num_diffn_timesteps=num_diffn_timesteps,
             num_diffn_samples=num_diffn_samples,
             num_trunk_samples=num_trunk_samples,
             device=self.device,
             seed=seed,
-            low_memory=True,
+            low_memory=low_memory,
         )
 
         # Get the best model by score
@@ -182,6 +186,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             num_diffn_timesteps=input_dict["num_diffn_timesteps"],
             num_diffn_samples=input_dict["num_diffn_samples"],
             num_trunk_samples=input_dict["num_trunk_samples"],
+            low_memory=input_dict["low_memory"],
+            recycle_msa_subsample=input_dict["recycle_msa_subsample"],
             seed=sampling_seed,
             device=input_dict["device"],
             verbose=input_dict["verbose"],

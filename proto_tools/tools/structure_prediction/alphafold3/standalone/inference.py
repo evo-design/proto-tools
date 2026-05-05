@@ -206,7 +206,13 @@ class AlphaFold3Model:
 
         self._loaded = True
 
-    def _build_cmd(self, input_json_path: str, output_dir: str) -> list[str]:
+    def _build_cmd(
+        self,
+        input_json_path: str,
+        output_dir: str,
+        num_recycles: int,
+        num_diffusion_samples: int,
+    ) -> list[str]:
         """Build the AlphaFold3 subprocess argv for whichever path is active."""
         assert self.model_dir is not None  # set by load()
 
@@ -214,6 +220,8 @@ class AlphaFold3Model:
             f"--json_path={input_json_path}",
             f"--output_dir={output_dir}",
             f"--model_dir={self.model_dir}",
+            f"--num_recycles={num_recycles}",
+            f"--num_diffusion_samples={num_diffusion_samples}",
             "--norun_data_pipeline",
         ]
 
@@ -256,6 +264,8 @@ class AlphaFold3Model:
         sif_path: str | None = None,
         verbose: bool = False,
         include_pae_matrix: bool = False,
+        num_recycles: int = 10,
+        num_diffusion_samples: int = 5,
     ) -> dict[str, Any]:
         """Run AlphaFold3 prediction.
 
@@ -271,6 +281,8 @@ class AlphaFold3Model:
             sif_path (str | None): Optional explicit override for the sif image path.
             verbose (bool): Whether to print progress messages.
             include_pae_matrix (bool): Attach the full per-residue PAE matrix.
+            num_recycles (int): Recycling iterations (AF3 --num_recycles, default 10).
+            num_diffusion_samples (int): Diffusion samples per seed (AF3 --num_diffusion_samples, default 5).
 
         Returns:
             dict[str, Any]: Dict with ``structure_pdb`` (path to generated PDB) and
@@ -296,7 +308,7 @@ class AlphaFold3Model:
         if counter > 1:
             logger.debug(f"Output dir existed, created new directory: {output_dir}")
 
-        run_cmds = self._build_cmd(input_json_path, output_dir)
+        run_cmds = self._build_cmd(input_json_path, output_dir, num_recycles, num_diffusion_samples)
 
         logger.debug("Executing AlphaFold3 (%s path)...", "sif" if self.sif_path else "env")
         logger.debug(f"  Input: {input_json_path}")
@@ -372,6 +384,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         sif_path=input_dict.get("sif_path"),
         verbose=input_dict["verbose"],
         include_pae_matrix=input_dict["include_pae_matrix"],
+        num_recycles=input_dict["num_recycles"],
+        num_diffusion_samples=input_dict["num_diffusion_samples"],
     )
 
 

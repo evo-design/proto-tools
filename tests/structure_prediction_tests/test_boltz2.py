@@ -20,6 +20,7 @@ from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 # Cro repressor from bacteriophage lambda. Short, well-folded test protein.
 _CRO_SEQUENCE = "MQTQNNSREKQAAALERLFLSCFLKDPVPKPLQEGTCDDVLCRELLNESETHLVQSIFRKESKVPGA"
 
+
 # ── Ligand YAML shape: CCD-prefer dispatch ─────────────────────────────────
 
 

@@ -39,6 +39,7 @@ class ESMFoldModel:
         device: str = "cuda",
         verbose: bool = False,
         include_pae_matrix: bool = False,
+        num_recycles: int = 4,
     ) -> list[dict[str, Any]]:
         """Run ESMFold structure prediction on protein sequences.
 
@@ -49,6 +50,7 @@ class ESMFoldModel:
             device: Device to run on
             verbose: Whether to print status messages
             include_pae_matrix: Attach the full per-residue PAE matrix.
+            num_recycles: Iterative refinement passes through ESMFold (training default 4).
 
         Returns:
             List of dicts with keys: pdb, avg_plddt, ptm
@@ -85,7 +87,7 @@ class ESMFoldModel:
             tokenized_inputs["position_ids"] = position_ids
 
             # Forward pass
-            outputs = self.model(**tokenized_inputs)
+            outputs = self.model(**tokenized_inputs, num_recycles=num_recycles)
 
             # Apply linker masking
             outputs["atom37_atom_exists"] = outputs["atom37_atom_exists"] * linker_masks[:, :, None]
@@ -308,6 +310,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             device=input_dict["device"],
             verbose=input_dict["verbose"],
             include_pae_matrix=input_dict["include_pae_matrix"],
+            num_recycles=input_dict["num_recycles"],
         )
         return {"results": results}
     raise ValueError(f"esmfold: unknown operation {operation!r}; valid: ['predict']")

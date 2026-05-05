@@ -39,30 +39,25 @@ class ViennaRNAModel:
         temperature: float = 37.0,
         use_dna_params: bool = False,
         no_lonely_pairs: bool = False,
+        dangles: int = 2,
+        circ: bool = False,
+        max_bp_span: int = -1,
         verbose: bool = False,
     ) -> dict[str, Any]:
         """Predict RNA secondary structures using ViennaRNA's MFE algorithm.
 
         Args:
-            sequences: List of RNA sequences to fold. Each sequence should
-                contain only valid RNA nucleotides (A, U, G, C) or DNA
-                nucleotides (A, T, G, C). Lowercase letters are also accepted.
-            temperature: Temperature in Celsius for energy calculations.
-                Default: 37.0 (physiological temperature).
-            use_dna_params: Whether to use DNA energy parameters instead of
-                RNA parameters. Default: False (use RNA_Turner2004 parameters).
-            no_lonely_pairs: Disallow lonely base pairs (helices of length 1).
-                Default: False.
-            verbose: Whether to print status messages during execution.
-                Default: False.
+            sequences: List of RNA sequences to fold.
+            temperature: Temperature in Celsius for energy calculations. Default 37.0.
+            use_dna_params: Use DNA energy parameters instead of RNA. Default False.
+            no_lonely_pairs: Disallow lonely base pairs (helices of length 1). Default False.
+            dangles: Dangling-end treatment (0/1/2/3). Default 2.
+            circ: Treat sequence as circular RNA. Default False.
+            max_bp_span: Max base-pair span in nt; -1 = no limit. Default -1.
+            verbose: Whether to print status messages.
 
         Returns:
-            Dictionary containing:
-                - results: List of dicts, each with:
-                    - sequence: The input sequence (normalized)
-                    - structure: Predicted structure in dot-bracket notation
-                    - mfe: Minimum free energy in kcal/mol
-                - metadata: Run information (num_sequences, parameters used)
+            Dict with `results` (per-sequence sequence/structure/mfe) and `metadata`.
 
         Raises:
             ValueError: If sequences contain invalid characters or list is empty.
@@ -91,6 +86,10 @@ class ViennaRNAModel:
         md = RNA.md()
         md.temperature = temperature
         md.noLP = 1 if no_lonely_pairs else 0
+        md.dangles = dangles
+        md.circ = 1 if circ else 0
+        if max_bp_span > 0:
+            md.max_bp_span = max_bp_span
 
         # Load appropriate energy parameters
         if use_dna_params:
@@ -143,6 +142,9 @@ class ViennaRNAModel:
                 "temperature": temperature,
                 "use_dna_params": use_dna_params,
                 "no_lonely_pairs": no_lonely_pairs,
+                "dangles": dangles,
+                "circ": circ,
+                "max_bp_span": max_bp_span,
             },
         }
 
