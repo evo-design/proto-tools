@@ -175,10 +175,12 @@ class ProGen3Model:
                 if r.sequence is not None:
                     seq = r.sequence
                 else:
-                    # compile_generation() returned None (e.g. truncated at
-                    # max_new_tokens before <eos>). Strip special tokens and
-                    # compile manually.
-                    stripped = re.sub(r"[^A-Z]", "", r.generation)
+                    # Fallback: longest leading uppercase-letter run. Truncate at the
+                    # first non-letter (direction marker, special) — past that is a
+                    # different protein, not a continuation. Non-canonical letters
+                    # (B/O/U/X/Z) are biologically real and folders handle them.
+                    match = re.match(r"[A-Z]*", r.generation)
+                    stripped = match.group(0) if match else ""
                     seq = aa_prompt + stripped if direction == "fwd" else stripped[::-1] + aa_prompt
                     logger.warning(
                         "compile_generation returned None for prompt '%s'; "
