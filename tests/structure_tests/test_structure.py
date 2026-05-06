@@ -265,6 +265,25 @@ def test_get_chain_sequence_invalid_chain(protein_from_pdb_file):
         protein_from_pdb_file.get_chain_sequence("INVALID_CHAIN_XYZ")
 
 
+def test_get_chain_waters_and_ligands_gfp():
+    """GFP chain A: 303 waters present, no ligands; default chain_id picks first chain."""
+    from proto_tools.entities.structures.examples import get_gfp_structure
+
+    gfp = get_gfp_structure()
+    waters = gfp.get_chain_waters("A")
+    assert len(waters) == 303
+    assert all(name == "HOH" for name, _ in waters)
+    assert gfp.get_chain_ligands("A") == []
+    assert gfp.get_chain_waters() == waters  # default == "A" (first chain)
+
+
+def test_get_chain_waters_and_ligands_invalid_chain(protein_from_pdb_file):
+    with pytest.raises(ValueError, match=r"Chain .* not found"):
+        protein_from_pdb_file.get_chain_waters("INVALID_CHAIN_XYZ")
+    with pytest.raises(ValueError, match=r"Chain .* not found"):
+        protein_from_pdb_file.get_chain_ligands("INVALID_CHAIN_XYZ")
+
+
 # ── Pydantic serialization ────────────────────────────────────────────────────
 
 

@@ -669,7 +669,7 @@ class Structure(BaseModel):
     # ============================================================================
 
     def get_chain_sequence(self, chain_id: str | None = None, remove_non_standard: bool = False) -> str:
-        """Extract the sequence of a specific chain from the structure.
+        """Extract the polymer sequence of a specific chain from the structure.
 
         Args:
             chain_id (str | None): Chain ID to extract (e.g., 'A'). If None, returns the first chain.
@@ -677,59 +677,50 @@ class Structure(BaseModel):
                 from the sequence. Default is False to preserve all residues.
 
         Returns:
-            str: One-letter amino acid sequence of the chain.
+            str: One-letter amino acid sequence of the chain. Polymer residues only;
+                waters and non-polymer ligands are excluded.
 
         Raises:
-            ValueError: If specified chain_id is not found or no chains exist.
+            ValueError: If chain_id is not found, the structure has no chains, or the
+                chain has no polymer residues.
 
         Examples:
-            >>> protein.get_chain_sequence()  # First chain, all residues
+            >>> protein.get_chain_sequence("A")
             'MVLSE-GEWQX'
-            >>> protein.get_chain_sequence("A")  # Chain A specifically
-            'MVLSE-GEWQX'
-            >>> protein.get_chain_sequence("A", remove_non_standard=True)  # Only standard residues
+            >>> protein.get_chain_sequence("A", remove_non_standard=True)
             'MVLSEGEWQ'
         """
-        sequences = self.get_chain_sequences(remove_non_standard=remove_non_standard)
-
-        if not sequences:
-            raise ValueError("No protein chains found in structure")
-
-        if chain_id is not None:
-            if chain_id not in sequences:
-                raise ValueError(f"Chain '{chain_id}' not found. Available chains: {list(sequences.keys())}")
-            return sequences[chain_id]
-
-        return next(iter(sequences.values()))
+        chain = self._get_chain(chain_id)
+        polymer = chain.get_polymer()
+        if not polymer:
+            raise ValueError(f"Chain '{chain.name}' has no polymer residues")
+        seq = polymer.make_one_letter_sequence()
+        if remove_non_standard:
+            seq = seq.replace("X", "").replace("-", "")
+        return seq
 
     def get_chain_sequences(self, remove_non_standard: bool = False) -> dict[str, str]:
-        """Extract the sequences of all chains in the structure.
+        """Extract the polymer sequences of all chains in the structure.
 
         Args:
             remove_non_standard (bool): If True, removes non-standard residues (X) and gaps (-)
                 from the sequences. Default is False to preserve all residues.
 
         Returns:
-            dict[str, str]: Dictionary mapping chain ID to sequence.
+            dict[str, str]: Dictionary mapping chain ID to sequence. Polymer residues only;
+                waters and non-polymer ligands are excluded.
 
         Examples:
             >>> protein.get_chain_sequences()
             {'A': 'MVLSE-GEWQX', 'B': 'ACDEFGHIK'}
-            >>>
-            >>> # Iterate over chains
-            >>> for chain_id, sequence in protein.get_chain_sequences().items():
-            ...     print(f"Chain {chain_id}: {len(sequence)} residues")
-            Chain A: 11 residues
-            Chain B: 9 residues
-            >>>
-            >>> # Remove non-standard residues
             >>> protein.get_chain_sequences(remove_non_standard=True)
             {'A': 'MVLSEGEWQ', 'B': 'ACDEFGHIK'}
         """
+        self.gemmi_struct.setup_entities()
         sequences = {}
         for model in self.gemmi_struct:
             for chain in model:
-                polymer = chain.whole()
+                polymer = chain.get_polymer()
                 if polymer:
                     seq = polymer.make_one_letter_sequence()
                     if remove_non_standard:
@@ -738,10 +729,13 @@ class Structure(BaseModel):
         return sequences
 
     def get_chain_ids(self) -> list[str]:
-        """Extract the IDs of all chains in the structure.
+        """Extract the IDs of all polymer chains in the structure.
+
+        Ligand-only and water-only chains are excluded; use :meth:`get_chain_types`
+        to enumerate every chain regardless of content.
 
         Returns:
-            list[str]: List of chain IDs.
+            list[str]: List of chain IDs that contain polymer residues.
         """
         return list(self.get_chain_sequences().keys())
 
@@ -772,9 +766,55 @@ class Structure(BaseModel):
 
         return chain_types
 
+    def get_chain_ligands(self, chain_id: str | None = None) -> list[tuple[str, int]]:
+        """Get ``(residue_name, seqid)`` pairs for non-polymer ligand residues in a chain.
+
+        Excludes waters (see :meth:`get_chain_waters`) and peptide-linked modifications,
+        which remain part of the polymer sequence.
+
+        Args:
+            chain_id (str | None): Chain ID. If None, uses the first chain.
+
+        Returns:
+            list[tuple[str, int]]: e.g. ``[('HEM', 154), ('ZN', 200)]``. Empty if none.
+
+        Raises:
+            ValueError: If ``chain_id`` is provided but not found.
+        """
+        chain = self._get_chain(chain_id)
+        return [(r.name, r.seqid.num) for r in chain.get_ligands()]  # type: ignore[misc]
+
+    def get_chain_waters(self, chain_id: str | None = None) -> list[tuple[str, int]]:
+        """Get ``(residue_name, seqid)`` pairs for water residues in a chain.
+
+        Args:
+            chain_id (str | None): Chain ID. If None, uses the first chain.
+
+        Returns:
+            list[tuple[str, int]]: e.g. ``[('HOH', 301), ('HOH', 302)]``. Empty if none.
+
+        Raises:
+            ValueError: If ``chain_id`` is provided but not found.
+        """
+        chain = self._get_chain(chain_id)
+        return [(r.name, r.seqid.num) for r in chain.get_waters()]  # type: ignore[misc]
+
+    def _get_chain(self, chain_id: str | None) -> gemmi.Chain:
+        """Return a chain by ID from the first model, or the first chain if ``chain_id`` is None."""
+        self.gemmi_struct.setup_entities()
+        chains = list(self.gemmi_struct[0])
+        if chain_id is None:
+            if not chains:
+                raise ValueError("Structure has no chains")
+            return chains[0]
+        for chain in chains:
+            if chain.name == chain_id:
+                return chain
+        raise ValueError(f"Chain '{chain_id}' not found. Available chains: {[c.name for c in chains]}")
+
     @property
     def num_chains(self) -> int:
-        """Number of chains in the structure."""
+        """Number of polymer chains in the structure (excludes ligand/water-only chains)."""
         return len(self.get_chain_sequences())
 
     # ============================================================================
@@ -784,20 +824,25 @@ class Structure(BaseModel):
     def get_residue_position_map(self) -> dict[str, list[tuple[str, int]]]:
         """Get a dictionary mapping chain IDs to lists of (residue_id, position) tuples.
 
+        Polymer residues only; waters and non-polymer ligands are excluded (matches
+        ``get_chain_sequences``). Use :meth:`get_chain_ligands` / :meth:`get_chain_waters`
+        for non-polymer residues.
+
         Returns:
             dict[str, list[tuple[str, int]]]: Chain ID to (one-letter code, position) mapping.
         """
         import gemmi
 
+        self.gemmi_struct.setup_entities()
         position_map: dict[str, list[tuple[str, int]]] = {}
         for model in self.gemmi_struct:
             for chain in model:
-                chain_id = chain.name
-                position_map[chain_id] = []
-                chain_sequence = chain.whole()
-                residue_id_list = gemmi.one_letter_code([residue.name for residue in chain_sequence])
-                position_list: list[int] = [residue.seqid.num for residue in chain_sequence]  # type: ignore[misc]
-                position_map[chain_id] = list(zip(residue_id_list, position_list, strict=False))
+                polymer = chain.get_polymer()
+                if not polymer:
+                    continue
+                residue_id_list = gemmi.one_letter_code([residue.name for residue in polymer])
+                position_list: list[int] = [residue.seqid.num for residue in polymer]  # type: ignore[misc]
+                position_map[chain.name] = list(zip(residue_id_list, position_list, strict=False))
         return position_map
 
     def get_chain_positions(self, chain_id: str) -> list[int]:
