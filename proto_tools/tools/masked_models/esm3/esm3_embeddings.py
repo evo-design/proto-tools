@@ -8,9 +8,9 @@ from typing import Any, Literal
 
 from proto_tools.tools.masked_models.projection import attach_projections
 from proto_tools.tools.masked_models.shared_data_models import (
-    MaskedModelConfig,
+    MaskedModelEmbeddingsConfig,
+    MaskedModelEmbeddingsOutput,
     MaskedModelInput,
-    MaskedModelOutput,
     SequenceEmbedding,
 )
 from proto_tools.tools.tool_registry import tool
@@ -28,14 +28,14 @@ ESM3EmbeddingsInput = MaskedModelInput
 
 
 # Output:
-class ESM3EmbeddingsOutput(MaskedModelOutput):
+class ESM3EmbeddingsOutput(MaskedModelEmbeddingsOutput):
     """Output from ESM3 protein language model embeddings/logits extraction.
 
     This class encapsulates the results of ESM3 inference, providing sequence
     embeddings, per-position logits, and attention masks for downstream analysis
     and visualization.
 
-    Inherits from ``MaskedModelOutput``.
+    Inherits from ``MaskedModelEmbeddingsOutput``.
 
     Attributes:
         results (list[SequenceEmbedding]): Per-sequence embedding results. Each
@@ -52,54 +52,46 @@ class ESM3EmbeddingsOutput(MaskedModelOutput):
 
 
 # Config:
-class ESM3EmbeddingsConfig(MaskedModelConfig):
-    """Configuration object for ESM3 protein language model embeddings extraction.
+class ESM3EmbeddingsConfig(MaskedModelEmbeddingsConfig):
+    """Configuration for ESM3 protein language model embedding extraction.
 
-    This class defines configuration parameters for running ESM3 inference to
-    extract protein sequence embeddings and logits. ESM3 is a generative protein
-    language model from EvolutionaryScale that can perform both embedding extraction
-    and structure prediction.
+    ESM3 is a generative protein language model from EvolutionaryScale that can perform
+    both embedding extraction and structure prediction.
 
-    Inherits from ``MaskedModelConfig``.
+    Inherits from ``MaskedModelEmbeddingsConfig``.
 
     Attributes:
-        model_checkpoint (Literal[ESM3_MODEL_CHECKPOINTS]): ESM3 model checkpoint to use. Currently available:
-
-            - ``"esm3_sm_open_v1"``: Small open-source ESM3 model (default)
-
-            Future versions may include additional model variants.
-            Default: ``"esm3_sm_open_v1"``.
-
+        model_checkpoint (ESM3_MODEL_CHECKPOINTS): ESM3 weights variant. Currently
+            ``"esm3_sm_open_v1"`` is the only public open-weights checkpoint.
         batch_size (int): Number of sequences to process in parallel. Larger batches
-            improve throughput but require more GPU memory. Optimal values depend on
-            GPU memory, model size, and sequence lengths. Typical values range from
-            1 (safest) to 128 (faster, more memory). Default: 1.
-
-        device (str): Device to run the model on. Options include ``"cuda"`` (NVIDIA GPU),
-            ``"cpu"`` (CPU execution), ``"mps"`` (Apple Metal), or specific GPU devices
-            like ``"cuda:0"``. Default: ``"cuda"``.
-
-        verbose: Whether to print status messages during model execution,
-            including loading progress and timing information. Default: ``False``.
-
-        return_logits (bool): Whether to include per-position logits in the output.
-            When ``True``, returns logits for each sequence. When ``False``, only
-            returns metrics (saves memory and serialization time). Default: ``False``.
-
-    Note:
-        The model is loaded on-demand for each call.
+            improve throughput but require more GPU memory.
+        device (str): Device to run the model on.
+        verbose (bool): Print status messages during model execution.
+        return_logits (bool): Include per-position logits in the output (large; disable
+            to save memory).
+        repr_layer (int): Transformer layer index for embeddings. ``-1`` returns the
+            post-norm last-block output (matches ESM2/ESMC ``-1`` semantics); other
+            indices select pre-norm per-block hiddens. Both are captured via a forward
+            hook on ``model.transformer`` since ``ESM3.forward`` discards them.
     """
 
-    model_checkpoint: Literal[ESM3_MODEL_CHECKPOINTS] = ConfigField(
+    model_checkpoint: ESM3_MODEL_CHECKPOINTS = ConfigField(
         title="ESM3 Model Checkpoint",
         default="esm3_sm_open_v1",
-        description="ESM3 model checkpoint to use",
+        description="ESM3 weights variant",
         reload_on_change=True,
     )
     return_logits: bool = ConfigField(
         title="Return Logits",
         default=False,
-        description="Whether to include per-position logits in the output. Disable to save memory.",
+        description="Include per-position logits in the output (large; disable to save memory)",
+        advanced=True,
+    )
+    repr_layer: int = ConfigField(
+        title="Representation Layer",
+        default=-1,
+        ge=-1,
+        description="Transformer layer index for embeddings; -1 returns post-norm output, others select pre-norm",
         advanced=True,
     )
 
@@ -187,6 +179,7 @@ def run_esm3_embeddings(
             "device": config.device,
             "verbose": config.verbose,
             "return_logits": config.return_logits,
+            "repr_layer": config.repr_layer,
         },
         instance=instance,
         config=config,

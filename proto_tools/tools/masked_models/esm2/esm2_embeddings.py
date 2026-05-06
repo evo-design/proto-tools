@@ -8,9 +8,9 @@ from typing import Any, Literal
 
 from proto_tools.tools.masked_models.projection import attach_projections
 from proto_tools.tools.masked_models.shared_data_models import (
-    MaskedModelConfig,
+    MaskedModelEmbeddingsConfig,
+    MaskedModelEmbeddingsOutput,
     MaskedModelInput,
-    MaskedModelOutput,
     SequenceEmbedding,
 )
 from proto_tools.tools.tool_registry import tool
@@ -35,14 +35,14 @@ ESM2EmbeddingsInput = MaskedModelInput
 
 
 # Output:
-class ESM2EmbeddingsOutput(MaskedModelOutput):
+class ESM2EmbeddingsOutput(MaskedModelEmbeddingsOutput):
     """Output from ESM2 protein language model inference.
 
     This class encapsulates the results of ESM2 inference, providing sequence
     embeddings, per-position logits, and attention masks for downstream analysis
     and visualization.
 
-    Inherits from ``MaskedModelOutput``.
+    Inherits from ``MaskedModelEmbeddingsOutput``.
 
     Attributes:
         results (list[SequenceEmbedding]): Per-sequence embedding results. Each
@@ -60,60 +60,58 @@ class ESM2EmbeddingsOutput(MaskedModelOutput):
 
 
 # Config:
-class ESM2EmbeddingsConfig(MaskedModelConfig):
-    """Configuration object for ESM2 protein language model.
+class ESM2EmbeddingsConfig(MaskedModelEmbeddingsConfig):
+    """Configuration for ESM2 protein language model embedding extraction.
 
-    This class defines configuration parameters for running ESM2 inference to
-    extract protein sequence embeddings and logits. ESM2 (Evolutionary Scale
-    Modeling 2) is a transformer-based protein language model trained on millions
-    of protein sequences.
+    ESM2 (Evolutionary Scale Modeling 2) is a transformer-based protein language model
+    trained on millions of protein sequences.
 
-    Inherits from ``MaskedModelConfig``.
+    Inherits from ``MaskedModelEmbeddingsConfig``.
 
     Attributes:
-        model_checkpoint (Literal[ESM2_MODEL_CHECKPOINTS]): Name of the ESM2 model variant to use. Options:
-
-            - ``"esm2_t6_8M_UR50D"``: 8M parameters, 6 layers (fastest, 320-dim embeddings)
-            - ``"esm2_t12_35M_UR50D"``: 35M parameters, 12 layers (480-dim embeddings)
-            - ``"esm2_t30_150M_UR50D"``: 150M parameters, 30 layers (640-dim embeddings)
-            - ``"esm2_t33_650M_UR50D"``: 650M parameters, 33 layers (1280-dim embeddings, default)
-            - ``"esm2_t36_3B_UR50D"``: 3B parameters, 36 layers (2560-dim embeddings)
-            - ``"esm2_t48_15B_UR50D"``: 15B parameters, 48 layers (5120-dim embeddings, best quality)
-
-            Larger models provide higher quality embeddings and better predictions
-            but require more GPU memory and inference time. The 650M model offers
-            a good balance of quality and speed. Default: ``"esm2_t33_650M_UR50D"``.
-
-        batch_size (int): Number of sequences to process in parallel. Larger batches
-            improve throughput but require more GPU memory. Optimal values depend on
-            GPU memory, model size, and sequence lengths. Typical values range from
-            1 (safest) to 128 (faster, more memory). Default: 1.
-
-        device (str): Device to run the model on. Options include ``"cuda"`` (NVIDIA GPU),
-            ``"cpu"`` (CPU execution), ``"mps"`` (Apple Metal), or specific GPU devices
-            like ``"cuda:0"``. Default: ``"cuda"``.
-
-        verbose: Whether to print status messages during model execution,
-            including loading progress and timing information. Default: ``False``.
-
-        return_logits (bool): Whether to include per-position logits in the output.
-            When ``True``, returns logits for each sequence. When ``False``, only
-            returns metrics (saves memory and serialization time). Default: ``False``.
+        model_checkpoint (ESM2_MODEL_CHECKPOINTS): ESM2 weights variant. Sizes range from
+            8M (320-dim, fastest) to 15B (5120-dim, highest quality). The 650M variant
+            offers a good speed/quality trade-off.
+        batch_size (int): Number of sequences to process in parallel. Larger batches improve
+            throughput but require more GPU memory.
+        device (str): Device to run the model on.
+        verbose (bool): Print status messages during model execution.
+        return_logits (bool): Include per-position logits in the output (large; disable to
+            save memory).
+        repr_layer (int): Transformer layer index for embeddings. ``-1`` selects the last
+            (top) layer; uses HuggingFace ``hidden_states`` indexing where ``0`` is the
+            embedding-layer output and ``N`` is transformer layer N.
+        truncation_seq_length (int): Truncate sequences exceeding this many residues. ESM2's
+            positional embeddings cap at 1024 tokens (1022 residues + BOS/EOS).
 
     Note:
         The model is loaded on-demand for each call.
     """
 
-    model_checkpoint: Literal[ESM2_MODEL_CHECKPOINTS] = ConfigField(
+    model_checkpoint: ESM2_MODEL_CHECKPOINTS = ConfigField(
         title="ESM2 Model Checkpoint",
         default="esm2_t33_650M_UR50D",
-        description="Name of the ESM2 model variant to use",
+        description="ESM2 weights variant; trade off speed vs embedding quality",
         reload_on_change=True,
     )
     return_logits: bool = ConfigField(
         title="Return Logits",
         default=False,
-        description="Whether to include per-position logits in the output. Disable to save memory.",
+        description="Include per-position logits in the output (large; disable to save memory)",
+        advanced=True,
+    )
+    repr_layer: int = ConfigField(
+        title="Representation Layer",
+        default=-1,
+        ge=-1,
+        description="Transformer layer index for embeddings (0=embedding output, N=layer N, -1=last)",
+        advanced=True,
+    )
+    truncation_seq_length: int = ConfigField(
+        title="Truncation Sequence Length",
+        default=1022,
+        ge=1,
+        description="Truncate sequences exceeding this many residues; ESM2's positional cap is 1022",
         advanced=True,
     )
 
@@ -204,6 +202,8 @@ def run_esm2_embeddings(
             "device": config.device,
             "verbose": config.verbose,
             "return_logits": config.return_logits,
+            "repr_layer": config.repr_layer,
+            "truncation_seq_length": config.truncation_seq_length,
         },
         instance=instance,
         config=config,

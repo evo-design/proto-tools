@@ -8,9 +8,9 @@ from typing import Any, Literal
 
 from proto_tools.tools.masked_models.projection import attach_projections
 from proto_tools.tools.masked_models.shared_data_models import (
-    MaskedModelConfig,
+    MaskedModelEmbeddingsConfig,
+    MaskedModelEmbeddingsOutput,
     MaskedModelInput,
-    MaskedModelOutput,
     SequenceEmbedding,
 )
 from proto_tools.tools.tool_registry import tool
@@ -28,13 +28,13 @@ ESMCEmbeddingsInput = MaskedModelInput
 
 
 # Output:
-class ESMCEmbeddingsOutput(MaskedModelOutput):
+class ESMCEmbeddingsOutput(MaskedModelEmbeddingsOutput):
     """Output from ESM C protein language model embeddings/logits extraction.
 
     This class encapsulates the results of ESM C inference, providing sequence
     embeddings, per-position logits, and attention masks for downstream analysis.
 
-    Inherits from ``MaskedModelOutput``.
+    Inherits from ``MaskedModelEmbeddingsOutput``.
 
     Attributes:
         results (list[SequenceEmbedding]): Per-sequence embedding results. Each
@@ -51,57 +51,51 @@ class ESMCEmbeddingsOutput(MaskedModelOutput):
 
 
 # Config:
-class ESMCEmbeddingsConfig(MaskedModelConfig):
-    """Configuration object for ESM C protein language model embeddings extraction.
+class ESMCEmbeddingsConfig(MaskedModelEmbeddingsConfig):
+    """Configuration for ESM C protein language model embedding extraction.
 
     ESM C (Cambrian) is an embedding-focused masked language model from
     EvolutionaryScale. Two open-weights variants are self-hostable; the 6B variant
     is API-only via Forge and not exposed here.
 
-    Inherits from ``MaskedModelConfig``.
+    Inherits from ``MaskedModelEmbeddingsConfig``.
 
     Attributes:
-        model_checkpoint (Literal[ESMC_MODEL_CHECKPOINTS]): ESM C checkpoint to use:
-
-            - ``"esmc_300m"`` (default): 300M-parameter model. Released under the
-              `Cambrian Open License Agreement
-              <https://www.evolutionaryscale.ai/policies/cambrian-open-license-agreement>`_
-              — commercial use permitted.
-            - ``"esmc_600m"``: 600M-parameter model. Released under the
-              `Cambrian Non-Commercial License Agreement
-              <https://www.evolutionaryscale.ai/policies/cambrian-non-commercial-license-agreement>`_
-              — research/internal use only; commercial use is **not** permitted.
-
-            Default: ``"esmc_300m"``.
-
+        model_checkpoint (ESMC_MODEL_CHECKPOINTS): ESM C weights variant. ``"esmc_300m"`` is
+            the Cambrian Open License (commercial use permitted with attribution);
+            ``"esmc_600m"`` is the Cambrian Non-Commercial License (research/internal only).
         batch_size (int): Number of sequences to process in parallel. Larger batches
-            improve throughput but require more GPU memory. Default: 1.
-
-        device (str): Device to run the model on. Options include ``"cuda"`` (NVIDIA GPU),
-            ``"cpu"`` (CPU execution), or specific GPU devices like ``"cuda:0"``.
-            Default: ``"cuda"``.
-
-        verbose (bool): Whether to print status messages during model execution.
-            Default: ``False``.
-
-        return_logits (bool): Whether to include per-position logits in the output.
-            When ``True``, returns logits for each sequence. When ``False``, only
-            returns embeddings (saves memory and serialization time). Default: ``False``.
+            improve throughput but require more GPU memory.
+        device (str): Device to run the model on.
+        verbose (bool): Print status messages during model execution.
+        return_logits (bool): Include per-position logits in the output (large; disable to
+            save memory).
+        repr_layer (int): Transformer layer index for embeddings. ``-1`` returns the
+            post-norm final-layer output (``outputs.embeddings``); other indices select
+            from pre-norm per-block ``outputs.hidden_states``. Range is checkpoint-
+            dependent (esmc_300m: 30 layers, esmc_600m: 36 layers).
 
     Note:
         The model is loaded on-demand for each call.
     """
 
-    model_checkpoint: Literal[ESMC_MODEL_CHECKPOINTS] = ConfigField(
+    model_checkpoint: ESMC_MODEL_CHECKPOINTS = ConfigField(
         title="ESM C Model Checkpoint",
         default="esmc_300m",
-        description="ESM C model checkpoint to use ('esmc_300m' open license, 'esmc_600m' non-commercial)",
+        description="ESM C weights variant ('esmc_300m' open license, 'esmc_600m' non-commercial)",
         reload_on_change=True,
     )
     return_logits: bool = ConfigField(
         title="Return Logits",
         default=False,
-        description="Whether to include per-position logits in the output. Disable to save memory.",
+        description="Include per-position logits in the output (large; disable to save memory)",
+        advanced=True,
+    )
+    repr_layer: int = ConfigField(
+        title="Representation Layer",
+        default=-1,
+        ge=-1,
+        description="Transformer layer index for embeddings; -1 returns post-norm output, others select pre-norm",
         advanced=True,
     )
 
@@ -177,6 +171,7 @@ def run_esmc_embeddings(
             "device": config.device,
             "verbose": config.verbose,
             "return_logits": config.return_logits,
+            "repr_layer": config.repr_layer,
         },
         instance=instance,
         config=config,

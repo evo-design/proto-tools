@@ -13,12 +13,13 @@ import sys
 from typing import Any, Literal
 
 import torch
-from standalone_helpers import move_model_to_device, set_torch_seed
+from standalone_helpers import move_model_to_device, serialize_output, set_torch_seed
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
 EVO1_MODEL_CHECKPOINTS = Literal[
+    "evo-1.5-8k-base",
     "evo-1-8k-base",
     "evo-1-131k-base",
     "evo-1-8k-crispr",
@@ -57,6 +58,8 @@ class Evo1Model:
         batch_size: int = 1,
         verbose: bool = False,
         seed: int | None = None,
+        cached_generation: bool = True,
+        force_prompt_threshold: int = 128,
     ) -> dict[str, Any]:
         """Sample DNA sequences autoregressively from prompts.
 
@@ -73,6 +76,9 @@ class Evo1Model:
                 are faster but use more memory.
             verbose: Whether to print progress.
             seed: Random seed for reproducibility.
+            cached_generation: Use the KV cache for autoregressive generation.
+            force_prompt_threshold: Tokens to prefill in parallel before
+                switching to autoregressive prompt forcing.
 
         Returns:
             Dictionary with keys "sequences" (List[str]) and "scores" (List[float]).
@@ -97,7 +103,8 @@ class Evo1Model:
                 temperature=temperature,
                 top_k=top_k,
                 top_p=top_p,
-                cached_generation=True,
+                cached_generation=cached_generation,
+                force_prompt_threshold=force_prompt_threshold,
                 batched=True,
                 prepend_bos=False,
                 device=self.device,
@@ -299,6 +306,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             batch_size=input_dict["batch_size"],
             verbose=input_dict["verbose"],
             seed=input_dict["seed"],
+            cached_generation=input_dict["cached_generation"],
+            force_prompt_threshold=input_dict["force_prompt_threshold"],
         )
     if operation == "score":
         result = _model.score(
@@ -343,4 +352,4 @@ if __name__ == "__main__":
     result = dispatch(input_data)
 
     with open(sys.argv[2], "w") as f:
-        json.dump(result, f)
+        json.dump(serialize_output(result), f)

@@ -188,7 +188,6 @@ class ProGen3Model:
         device: str = "cuda",
         verbose: bool = False,
         batch_size: int = 1,
-        reduction: str = "mean",
         seed: int | None = None,
     ) -> dict[str, Any]:
         """Score protein sequences using bidirectional likelihood.
@@ -202,7 +201,6 @@ class ProGen3Model:
             device (str): Device to run on.
             verbose (bool): Whether to log progress.
             batch_size (int): Batch size for scoring.
-            reduction (str): How to aggregate per-token log-likelihoods ("mean" or "sum").
             seed (int | None): Random seed. Scoring is deterministic given the
                 model state, but we still seed RNGs/cudnn flags so consecutive
                 calls in a persistent worker behave identically regardless of
@@ -211,6 +209,8 @@ class ProGen3Model:
         Returns:
             dict[str, Any]: Dict with "metrics" and "per_position_metrics" keys.
         """
+        import math
+
         if not self._loaded:
             self.load(device, verbose)
         elif self.device != device:
@@ -222,28 +222,23 @@ class ProGen3Model:
             batch_size * max(len(s) for s in sequences) * 2,
             65536,
         )
-        scorer = _PerPositionScorer(
-            self.model,
-            max_batch_tokens=max_batch_tokens,
-            reduction=reduction,
-        )
+        scorer = _PerPositionScorer(self.model, max_batch_tokens=max_batch_tokens)
 
         result = scorer.score_batch_with_positions(sequences)
 
+        # Derive log_likelihood (sum), avg_log_likelihood (mean), and perplexity
+        # (exp(-mean)) from the bidirectional per-position values so all three
+        # fields stay internally consistent with the per-position output.
         metrics = []
-        for i in range(len(sequences)):
-            ll = result["log_likelihood"][i]
-            ppl = result["perplexity"][i]
-            ll_val = ll.item() if hasattr(ll, "item") else float(ll)
-            ppl_val = ppl.item() if hasattr(ppl, "item") else float(ppl)
-
-            avg_ll = ll_val
-
+        for per_pos in result["per_position_metrics"]:
+            valid = [x for x in per_pos["log_likelihood"] if x is not None]
+            ll_sum = sum(valid)
+            ll_avg = ll_sum / len(valid)
             metrics.append(
                 {
-                    "log_likelihood": ll_val,
-                    "avg_log_likelihood": avg_ll,
-                    "perplexity": ppl_val,
+                    "log_likelihood": ll_sum,
+                    "avg_log_likelihood": ll_avg,
+                    "perplexity": math.exp(-ll_avg),
                 }
             )
 
@@ -260,14 +255,13 @@ class _PerPositionScorer:
     to return both reduced and per-position NLL values.
     """
 
-    def __init__(self, model: Any, max_batch_tokens: int = 65536, reduction: str = "mean") -> None:
+    def __init__(self, model: Any, max_batch_tokens: int = 65536) -> None:
         import torch
         from progen3.batch_preparer import ProGen3BatchPreparer
         from progen3.common import dist
 
         self.model = model
         self.max_batch_tokens = max_batch_tokens
-        self.reduction = reduction
         self.batch_preparer = ProGen3BatchPreparer()
         self._torch = torch
         self._dist = dist
@@ -306,8 +300,6 @@ class _PerPositionScorer:
 
         per_token_ll = -(nll * target_mask.to(nll)).detach()
         reduced_nll = (nll * target_mask.to(nll)).sum(dim=1)
-        if self.reduction == "mean":
-            reduced_nll = reduced_nll / target_mask.sum(dim=1)
 
         return -reduced_nll.detach(), per_token_ll, target_mask.detach()
 
@@ -431,7 +423,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             device=input_dict["device"],
             verbose=input_dict["verbose"],
             batch_size=input_dict["batch_size"],
-            reduction=input_dict["reduction"],
             seed=input_dict["seed"],
         )
     raise ValueError(f"progen3: unknown operation {operation!r}; valid: ['sample', 'score']")

@@ -37,6 +37,7 @@ PROGEN2_SEQUENCE_CHARS = PROGEN2_VOCAB[PROGEN2_FIRST_AA_TOKEN : PROGEN2_LAST_AA_
 PROGEN2_MODEL_CHECKPOINTS = Literal[
     "progen2-small",  # 151M parameters
     "progen2-medium",  # 754M parameters
+    "progen2-base",  # 754M parameters, trained on UniRef90
     "progen2-oas",  # 754M parameters, trained on OAS antibody sequences
     "progen2-large",  # 2B parameters
     "progen2-BFD90",  # 2B parameters, trained on BFD90
@@ -165,7 +166,7 @@ class ProGen2Model:
         top_p: float = 0.95,
         top_k: int = 0,
         max_length: int = 256,
-        num_return_sequences: int = 1,
+        num_samples: int = 1,
         truncate_at_stop: bool = True,
         strip_special_tokens: bool = True,
         prepend_prompt: bool = True,
@@ -183,7 +184,7 @@ class ProGen2Model:
             top_p: Nucleus sampling probability
             top_k: Top-k sampling (0 to disable)
             max_length: Maximum total sequence length
-            num_return_sequences: Sequences per prompt
+            num_samples: Independent samples drawn per prompt
             truncate_at_stop: Whether to stop at EOS tokens
             strip_special_tokens: Whether to remove start and stop tokens
             prepend_prompt: Whether to include prompt in output
@@ -229,21 +230,21 @@ class ProGen2Model:
                     max_length=max_length,
                     top_p=top_p,
                     top_k=top_k if top_k > 0 else None,
-                    num_return_sequences=num_return_sequences,
+                    num_return_sequences=num_samples,
                     pad_token_id=self.pad_token_id,
                     return_dict_in_generate=True,
                     output_scores=return_logits,
                 )
                 tokens_batch = output.sequences
 
-                # Stack scores into (batch * num_return, num_generated_tokens, vocab_size)
-                # output.scores is a tuple of tensors, each of shape (batch * num_return, vocab_size)
+                # Stack scores into (batch * num_samples, num_generated_tokens, vocab_size)
+                # output.scores is a tuple of tensors, each of shape (batch * num_samples, vocab_size)
                 stacked_logits = torch.stack(output.scores, dim=1) if return_logits and output.scores else None
 
-                # Decode: generate returns (batch * num_return_sequences, seq_len)
+                # Decode: generate returns (batch * num_samples, seq_len)
                 for prompt_idx, prompt in enumerate(batch_prompts):
-                    for seq_idx in range(num_return_sequences):
-                        flat_idx = prompt_idx * num_return_sequences + seq_idx
+                    for seq_idx in range(num_samples):
+                        flat_idx = prompt_idx * num_samples + seq_idx
                         token_ids = tokens_batch[flat_idx].tolist()
 
                         # Strip padding tokens
@@ -400,6 +401,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             top_p=input_dict["top_p"],
             top_k=input_dict["top_k"],
             max_length=input_dict["max_length"],
+            num_samples=input_dict["num_samples"],
             truncate_at_stop=input_dict["truncate_at_stop"],
             strip_special_tokens=input_dict["strip_special_tokens"],
             prepend_prompt=input_dict["prepend_prompt"],

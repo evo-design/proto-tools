@@ -83,6 +83,7 @@ For the sampling tool, chain sequences should contain `_` at positions to restor
 |-----------|------|---------|-------------|
 | `batch_size` | `int` | `1` | Sequences per GPU forward pass |
 | `device` | `str` | `"cuda"` | Device: `"cuda"`, `"cpu"`, `"mps"` |
+| `return_logits` | `bool` | `False` | Include per-position amino-acid logits in the output |
 
 ### Sampling Tool (`AbLangSampleConfig`)
 
@@ -90,6 +91,7 @@ For the sampling tool, chain sequences should contain `_` at positions to restor
 |-----------|------|---------|-------------|
 | `batch_size` | `int` | `1` | Sequences per forward pass |
 | `device` | `str` | `"cuda"` | Device: `"cuda"`, `"cpu"`, `"mps"` |
+| `align` | `bool` | `False` | Run ANARCI alignment first; enables extending unknown-length termini |
 
 ### Scoring Tool (`AbLangScoringConfig`)
 

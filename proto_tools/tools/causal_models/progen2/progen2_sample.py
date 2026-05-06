@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 PROGEN2_MODEL_CHECKPOINTS = Literal[
     "progen2-small",
     "progen2-medium",
+    "progen2-base",
     "progen2-oas",
     "progen2-large",
     "progen2-BFD90",
@@ -53,92 +54,54 @@ class ProGen2SampleOutput(CausalModelSampleOutput):
 
 # Config:
 class ProGen2SampleConfig(CausalModelSampleConfig):
-    """Configuration object for ProGen2 protein sequence sampling.
+    """Configuration for ProGen2 protein sequence sampling.
 
-    This class defines all configuration parameters for generating protein sequences
-    using the ProGen2 autoregressive language model. ProGen2 supports various model
-    sizes from 151M to 6B parameters, with specialized variants for antibody sequences
-    (OAS) and broader protein families (BFD90).
+    ProGen2 is an autoregressive protein language model with sizes from 151M to 6B
+    parameters and specialized variants for antibody (OAS) and broader protein
+    families (BFD90).
 
     Attributes:
-        prepend_prompt (bool): Whether to include the input prompt at the
-            start of each generated sequence. Default: ``True``.
-        batch_size (int): Number of sequences to process simultaneously.
-            Default: 1.
-        model_checkpoint (PROGEN2_MODEL_CHECKPOINTS): ProGen2 model checkpoint to use. Options:
-
-            - ``"progen2-small"``: 151M parameters (fastest)
-            - ``"progen2-medium"``: 754M parameters
-            - ``"progen2-oas"``: 754M parameters, trained on OAS antibody sequences
-            - ``"progen2-large"``: 2B parameters (default, good balance)
-            - ``"progen2-BFD90"``: 2B parameters, trained on BFD90
-            - ``"progen2-xlarge"``: 6B parameters (highest quality, slowest)
-
-            Default: ``"progen2-large"``.
-
-        local_path (str | None): Optional path to local model weights directory.
-            If provided, loads model from local filesystem instead of downloading
-            from HuggingFace. Useful for offline inference or custom model versions.
-            Default: ``None`` (download from HuggingFace hugohrban/).
-
-        temperature (float): Sampling temperature. Lower values produce more
-            deterministic sequences. Default: 0.2 (following ProGen2 defaults).
-
-        top_p (float): Nucleus sampling threshold. Default: 0.95
-            (following ProGen2 recommendations).
-
-        top_k (int): Limits sampling to the top-k most probable tokens at each
-            generation step. Set to 0 to disable (use top_p only).
-            Default: 0 (disabled).
-
+        prepend_prompt (bool): Include the input prompt at the start of each generated
+            sequence; when ``False``, only newly generated tokens are returned.
+        batch_size (int): Number of prompts to process simultaneously on GPU.
+        model_checkpoint (PROGEN2_MODEL_CHECKPOINTS): ProGen2 weights variant.
+            Sizes range from 151M (small) to 6B (xlarge).
+        local_path (str | None): Override the default download with a local weights directory.
+        temperature (float): Softmax temperature; lower values are more deterministic.
+        top_p (float): Nucleus sampling threshold over per-position token probabilities.
+        top_k (int): Top-k truncation; ``0`` disables and uses top-p only.
         max_length (int): Maximum total sequence length including prompt.
-            Generation stops when this length is reached or a stop token is encountered.
-            Must be at least 1. Default: 256.
-
-        truncate_at_stop (bool): Whether to truncate generated sequences at the
-            first stop token ('1' or '2'). If ``True``, returns clean protein
-            sequences. Default: ``True``.
-
-        strip_special_tokens (bool): Whether to remove the ProGen2 start and stop
-            tokens ('1' or '2') from the output. If ``True``, returns clean amino
-            acid sequences. Default: ``True``.
-
-        return_logits (bool): Whether to include per-position logits in the output.
-            When ``True``, returns logits for each sequence. When ``False``, only
-            returns metrics (saves memory and serialization time). Default: ``False``.
-
-    Note:
-        For detailed information on ProGen2, see:
-        - HuggingFace: https://huggingface.co/hugohrban/
-        - GitHub: https://github.com/hugohrban/ProGen2-finetuning
-        - Original GitHub: https://github.com/enijkamp/progen2
-        - Original paper: https://www.cell.com/cell-systems/fulltext/S2405-4712(23)00272-7
+        truncate_at_stop (bool): Truncate generated sequences at the first stop token.
+        strip_special_tokens (bool): Strip ProGen2 start/stop sentinel tokens (``1``/``2``)
+            from output.
+        return_logits (bool): Include per-position logits in the output.
+        num_samples (int): Independent samples drawn per prompt; raise for diversity.
     """
 
     temperature: float = ConfigField(
         title="Temperature",
         default=0.2,
         gt=0.0,
-        description="Sampling temperature controlling randomness of generation",
+        description="Softmax temperature for sampling; lower is more deterministic",
     )
     top_p: float = ConfigField(
         title="Top P",
         default=0.95,
         gt=0.0,
         le=1.0,
-        description="Nucleus sampling threshold",
+        description="Nucleus sampling threshold over per-position token probabilities",
         advanced=True,
     )
     model_checkpoint: PROGEN2_MODEL_CHECKPOINTS = ConfigField(
         default="progen2-large",
         title="Model Checkpoint",
-        description="ProGen2 model checkpoint to use",
+        description="ProGen2 weights variant",
         reload_on_change=True,
     )
     local_path: str | None = ConfigField(
         default=None,
         title="Local Model Path",
-        description="Path to local model weights (if None, downloads from HuggingFace)",
+        description="Override the default download with a local weights directory",
         hidden=True,
         reload_on_change=True,
     )
@@ -146,32 +109,38 @@ class ProGen2SampleConfig(CausalModelSampleConfig):
         default=0,
         ge=0,
         title="Top-k",
-        description="Top-k sampling limit. Set to 0 to disable.",
+        description="Top-k truncation; 0 disables and uses top-p only",
         advanced=True,
     )
     max_length: int = ConfigField(
         default=256,
         ge=1,
         title="Max Length",
-        description="Maximum total sequence length including prompt.",
+        description="Maximum total sequence length including prompt",
     )
     truncate_at_stop: bool = ConfigField(
         default=True,
         title="Truncate at Stop",
-        description="Whether to truncate sequences at stop tokens.",
+        description="Truncate generated sequences at the first stop token",
         advanced=True,
     )
     strip_special_tokens: bool = ConfigField(
         title="Strip Special Tokens",
         default=True,
-        description="Whether to strip start and stop tokens ('1' or '2')",
+        description="Strip ProGen2 start/stop sentinel tokens from output",
         advanced=True,
     )
     return_logits: bool = ConfigField(
         title="Return Logits",
         default=False,
-        description="Whether to include per-position logits in the output. Disable to save memory.",
+        description="Include per-position logits in the output (large; disable to save memory)",
         advanced=True,
+    )
+    num_samples: int = ConfigField(
+        title="Samples Per Prompt",
+        default=1,
+        ge=1,
+        description="Independent samples drawn per prompt; raise for diversity",
     )
 
 
@@ -264,6 +233,7 @@ def run_progen2_sample(
             "top_p": config.top_p,
             "top_k": config.top_k,
             "max_length": config.max_length,
+            "num_samples": config.num_samples,
             "truncate_at_stop": config.truncate_at_stop,
             "strip_special_tokens": config.strip_special_tokens,
             "prepend_prompt": config.prepend_prompt,

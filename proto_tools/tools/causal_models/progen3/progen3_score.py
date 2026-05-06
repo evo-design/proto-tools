@@ -48,28 +48,16 @@ class ProGen3ScoringConfig(CausalModelScoringConfig):
     robust score than unidirectional models.
 
     Attributes:
-        model_checkpoint (PROGEN3_MODEL_CHECKPOINTS): ProGen3 model checkpoint to use. Options include
-            ``"progen3-112m"`` (112M), ``"progen3-219m"`` (219M),
-            ``"progen3-339m"`` (339M), ``"progen3-762m"`` (762M),
-            ``"progen3-1b"`` (1B), ``"progen3-3b"`` (3B).
-            Default: ``"progen3-762m"``.
-
-        local_path (str | None): Optional path to local model weights directory.
-            If provided, loads model from local filesystem instead of
-            downloading from HuggingFace. Default: ``None``.
-
-        reduction (Literal["mean", "sum"]): How to aggregate per-token log-likelihoods.
-            ``"mean"`` averages over tokens, ``"sum"`` sums them.
-            Default: ``"mean"``.
+        model_checkpoint (PROGEN3_MODEL_CHECKPOINTS): ProGen3 weights variant. Sizes range
+            from 112M to 3B parameters.
+        local_path (str | None): Override HuggingFace download with a local weights directory.
         batch_size (int): Number of sequences to process simultaneously on GPU.
-            Larger batches improve throughput but use more GPU memory.
 
     Note:
-        - ProGen3 uses bidirectional scoring: averages forward + reverse passes
-        - Lower perplexity indicates higher model confidence
-        - Requires GPU with bfloat16 support (A100/H100 recommended)
-        - ``return_logits`` is not supported; ProGen3 returns per-position
-          metrics instead
+        - ProGen3 uses bidirectional scoring: averages forward + reverse passes.
+        - Lower perplexity indicates higher model confidence.
+        - Requires GPU with bfloat16 support (A100/H100 recommended).
+        - ``return_logits`` is not supported; ProGen3 returns per-position metrics instead.
     """
 
     @model_validator(mode="after")
@@ -81,21 +69,15 @@ class ProGen3ScoringConfig(CausalModelScoringConfig):
     model_checkpoint: PROGEN3_MODEL_CHECKPOINTS = ConfigField(
         title="Model Checkpoint",
         default="progen3-762m",
-        description="ProGen3 model checkpoint to use",
+        description="ProGen3 weights variant",
         reload_on_change=True,
     )
     local_path: str | None = ConfigField(
         title="Local Model Path",
         default=None,
-        description="Path to local model weights",
+        description="Override the default download with a local weights directory",
         hidden=True,
         reload_on_change=True,
-    )
-    reduction: Literal["mean", "sum"] = ConfigField(
-        title="Reduction",
-        default="mean",
-        description="How to aggregate per-token log-likelihoods: 'mean' or 'sum'",
-        advanced=True,
     )
 
 
@@ -166,7 +148,6 @@ def run_progen3_score(
             "device": config.device,
             "verbose": config.verbose,
             "batch_size": config.batch_size,
-            "reduction": config.reduction,
             "seed": config.seed,
         },
         instance=instance,

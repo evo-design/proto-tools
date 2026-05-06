@@ -71,7 +71,6 @@ def test_scoring_config_defaults():
     assert cfg.model_checkpoint == "progen3-762m"
     assert cfg.device == "cuda"
     assert cfg.batch_size == 1
-    assert cfg.reduction == "mean"
     assert cfg.local_path is None
 
 

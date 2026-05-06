@@ -1,7 +1,6 @@
 """AbLang sampling (restore) tool."""
 
 import logging
-from pathlib import Path
 from typing import Any
 
 from pydantic import Field
@@ -9,13 +8,14 @@ from pydantic import Field
 from proto_tools.entities.antibody import Antibody
 from proto_tools.tools.masked_models.ablang.ablang_embeddings import _resolve_model_choice
 from proto_tools.tools.masked_models.shared_data_models import (
-    MaskedModelConfig,
+    MaskedModelSampleConfig,
+    MaskedModelSampleOutput,
 )
 from proto_tools.tools.tool_registry import tool
+from proto_tools.utils import ConfigField
 from proto_tools.utils.tool_instance import ToolInstance
 from proto_tools.utils.tool_io import (
     BaseToolInput,
-    BaseToolOutput,
     InputField,
 )
 
@@ -42,7 +42,7 @@ class AbLangSampleInput(BaseToolInput):
     )
 
 
-class AbLangSampleConfig(MaskedModelConfig):
+class AbLangSampleConfig(MaskedModelSampleConfig):
     """Configuration for AbLang antibody sequence restoration.
 
     Controls the restoration of masked positions in antibody sequences
@@ -50,52 +50,45 @@ class AbLangSampleConfig(MaskedModelConfig):
     variant is selected automatically based on which chains are provided.
 
     Attributes:
-        batch_size (int): Number of sequences per forward pass. Default: ``1``.
-        device (str): Device to run on. Default: ``"cuda"``.
+        batch_size (int): Number of sequences per forward pass.
+        device (str): Device to run on.
+        align (bool): Run ANARCI alignment first; enables restoration of unknown numbers of
+            missing residues at chain termini.
+        return_logits (bool): Include per-position logits in the output (large; disable to
+            save memory). Triggers a second ``likelihood``-mode forward pass per batch.
     """
 
+    align: bool = ConfigField(
+        title="ANARCI-aligned Restore",
+        default=False,
+        description="Run ANARCI alignment first; enables extension of unknown-length termini",
+        advanced=True,
+    )
+    return_logits: bool = ConfigField(
+        title="Return Logits",
+        default=False,
+        description="Include per-position logits in the output (large; disable to save memory)",
+        advanced=True,
+    )
 
-class AbLangSampleOutput(BaseToolOutput):
+
+class AbLangSampleOutput(MaskedModelSampleOutput):
     """Output from AbLang antibody sequence restoration.
+
+    Inherits from ``MaskedModelSampleOutput``.
 
     Attributes:
         sequences (list[str]): Restored antibody sequences with masked
             positions replaced by model predictions.
+        logits (list[list[list[float]]] | None): Per-position logits for each restored
+            sequence. Shape is (num_sequences, seq_len, vocab_size=20). Only present if
+            ``return_logits=True`` in config.
     """
 
-    sequences: list[str] = Field(
-        description="Restored antibody sequences with masked positions filled in",
+    logits: list[list[list[float]]] | None = Field(
+        default=None,
+        description="Per-position amino acid logits. Shape: [num_sequences, seq_len, 20].",
     )
-
-    @property
-    def output_format_options(self) -> list[str]:
-        """Return the supported output format options."""
-        return ["fasta", "txt", "json"]
-
-    @property
-    def output_format_default(self) -> str:
-        """Return the default output format."""
-        return "fasta"
-
-    def _export_output(self, export_path: str | Path, file_format: str) -> None:
-        """Export restored sequences to the specified file format."""
-        path = Path(export_path).with_suffix(f".{file_format}")
-
-        if file_format == "fasta":
-            with open(path, "w") as f:
-                f.writelines(f">seq_{i}\n{seq}\n" for i, seq in enumerate(self.sequences))
-
-        elif file_format == "txt":
-            with open(path, "w") as f:
-                f.writelines(f"{seq}\n" for seq in self.sequences)
-
-        elif file_format == "json":
-            import json
-
-            with open(path, "w") as f:
-                json.dump(self.sequences, f, indent=2)
-        else:
-            raise ValueError(f"Unsupported format: {file_format}")
 
 
 # ============================================================================
@@ -138,6 +131,8 @@ def run_ablang_sample(
             "model_choice": model_choice,
             "device": config.device,
             "verbose": config.verbose,
+            "align": config.align,
+            "return_logits": config.return_logits,
         },
         instance=instance,
         config=config,
@@ -149,4 +144,5 @@ def run_ablang_sample(
             "num_sequences": len(sequences),
         },
         sequences=result["sequences"],
+        logits=result["logits"],
     )

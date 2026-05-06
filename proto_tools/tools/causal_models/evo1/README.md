@@ -40,6 +40,7 @@ Evo1 performs autoregressive generation: given a prompt DNA sequence, it predict
 
 | Checkpoint | Context Length | Description |
 |------------|--------------|-------------|
+| `evo-1.5-8k-base` | 8,192 | Updated 8k base model (Evo 1.5 release) |
 | `evo-1-8k-base` | 8,192 | General-purpose prokaryotic/phage DNA model |
 | `evo-1-131k-base` | 131,072 | Long-context variant for multi-gene regions |
 | `evo-1-8k-crispr` | 8,192 | Fine-tuned on CRISPR loci for CRISPR system generation |
@@ -57,12 +58,14 @@ Evo1 performs autoregressive generation: given a prompt DNA sequence, it predict
 
 | Parameter | Type | Default | Sweep Range | Description |
 |-----------|------|---------|-------------|-------------|
-| `model_name` | `str` | `"evo-1-8k-base"` | N/A | Evo1 model checkpoint to use (see Model Variants) |
-| `num_tokens` | `int` | `100` | `100 - 10000` | Number of tokens to generate per prompt |
-| `temperature` | `float` | `1.0` | `0.5 - 1.5` | Sampling temperature; lower = more conservative |
+| `model_name` | `str` | `"evo-1-8k-base"` | N/A | Evo1 weights variant (see Model Variants) |
+| `num_tokens` | `int` | `100` | `100 - 10000` | Number of new tokens to generate per prompt |
+| `temperature` | `float` | `1.0` | `0.5 - 1.5` | Softmax temperature; lower is more deterministic |
 | `top_k` | `int` | `4` | `1 - 20` | Top-k sampling; limits to k most likely tokens |
 | `top_p` | `float` | `1.0` | `0.8 - 1.0` | Nucleus sampling threshold |
-| `prepend_prompt` | `bool` | `False` | N/A | Whether to prepend prompt to generated sequence |
+| `prepend_prompt` | `bool` | `False` | N/A | Include input prompt at start of each generated sequence |
+| `cached_generation` | `bool` | `True` | N/A | Use the KV cache for autoregressive generation |
+| `force_prompt_threshold` | `int` | `128` | N/A | Tokens to prefill in parallel before switching to prompt forcing |
 | `batch_size` | `int` | `1` | N/A | Sequences per GPU forward pass |
 | `device` | `str` | `"cuda"` | N/A | Device to run on |
 

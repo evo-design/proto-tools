@@ -5,9 +5,8 @@ import json
 import pytest
 
 from proto_tools.tools.masked_models.shared_data_models import (
+    MaskedModelEmbeddingsOutput,
     MaskedModelInput,
-    MaskedModelOutput,
-    MaskedModelScoringInput,
     MaskedModelScoringMetrics,
     MaskedModelScoringOutput,
     Projection2D,
@@ -24,11 +23,6 @@ def test_input_string_normalized_to_list():
 def test_input_rejects_none_in_sequences():
     with pytest.raises(ValueError, match="cannot be None"):
         MaskedModelInput(sequences=["A", None])
-
-
-def test_scoring_input_rejects_empty():
-    with pytest.raises(ValueError, match="must not be empty"):
-        MaskedModelScoringInput(sequences=[])
 
 
 # ── MaskedModelScoringMetrics attribute access ──────────────────────────────
@@ -59,8 +53,8 @@ def test_sequence_embedding_round_trips_projection():
 # ── Export ──────────────────────────────────────────────────────────────────
 
 
-def _make_embedding_output() -> MaskedModelOutput:
-    return MaskedModelOutput(
+def _make_embedding_output() -> MaskedModelEmbeddingsOutput:
+    return MaskedModelEmbeddingsOutput(
         results=[
             SequenceEmbedding(mean_embedding=[0.1, 0.2, 0.3], attention_mask=[1, 1, 1]),
             SequenceEmbedding(mean_embedding=[0.4, 0.5, 0.6], attention_mask=[1, 1, 0]),
@@ -76,7 +70,7 @@ def test_embedding_export(fmt, tmp_path):
 
 def test_embedding_export_empty_warns():
     with pytest.warns(UserWarning, match="No embeddings"):
-        MaskedModelOutput(results=[])._export_output("/dev/null", "csv")
+        MaskedModelEmbeddingsOutput(results=[])._export_output("/dev/null", "csv")
 
 
 @pytest.mark.parametrize("fmt", ["csv", "json"])

@@ -51,13 +51,13 @@ class Evo2SampleOutput(CausalModelSampleOutput):
 
     Attributes:
         sequences (list[str]): Generated DNA sequences.
-        logits (list[Any] | None): Per-token logits for each generated sequence
+        logits (list[Any] | None): Per-position logits for each generated sequence
             (shape: [num_sequences, num_generated_tokens, vocab_size]).
         kv_caches (list[Evo2KVCacheRef] | None): Worker-local cache handles
             for continued generation inside the same persistent worker.
     """
 
-    logits: list[Any] | None = Field(default=None, description="Per-token logits for each generated sequence")
+    logits: list[Any] | None = Field(default=None, description="Per-position logits for each generated sequence")
     kv_caches: list[Evo2KVCacheRef] | None = Field(
         default=None, description="Worker-local KV cache handles for continued generation"
     )
@@ -68,51 +68,25 @@ class Evo2SampleConfig(CausalModelSampleConfig):
     """Configuration object for Evo2 DNA sequence sampling.
 
     Attributes:
-        prepend_prompt (bool): Whether to include the input prompt at the
-            start of each generated sequence. Default: ``True``.
+        prepend_prompt (bool): Include the input prompt at the start of each generated
+            sequence; when ``False``, only newly generated tokens are returned.
         temperature (float): Sampling temperature controlling randomness.
-            Default: 1.0.
-        top_p (float): Nucleus sampling threshold. Default: 1.0.
+        top_p (float): Nucleus sampling threshold over per-position token probabilities.
         batch_size (int): Number of sequences to process simultaneously.
-            Default: 1.
-        model_checkpoint (EVO2_MODEL_CHECKPOINTS): Evo2 model checkpoint to use.
-            Default: ``"evo2_7b"``.
-
-        local_path (str | None): Optional path to local model weights directory.
-            If provided, loads model from local filesystem instead of downloading
-            from Hugging Face. Default: ``None``.
-
-        top_k (int): Limits sampling to the top-k most probable tokens at each
-            generation step. Default: 4.
-
-        num_tokens (int): Number of new tokens to generate per sequence (does not
-            include the prompt tokens). Default: 32.
-
-        cached_generation (bool): Whether to use Vortex's internal per-call
-            KV cache during generation. Default: ``True``.
-
-        force_prompt_threshold (int | None): Optional number of tokens to
-            prefill in parallel before switching to autoregressive prompt forcing.
-            Default: ``None``.
-
-        max_seqlen (int | None): Optional maximum sequence length to generate.
-            Default: ``None``.
-
-        print_generation (bool): Whether to print generated tokens to console in
-            real-time as they are generated. Default: ``True``.
-
-        stop_at_eos (bool): Whether to stop generation when an end-of-sequence
-            (EOS) token is encountered. Default: ``True``.
-
-        old_kv_cache (Evo2KVCacheRef | None): Worker-local KV cache handle
-            returned by a previous persistent-worker generation call. Default:
-            ``None``.
-
-        return_kv_cache (bool): Whether to return worker-local KV cache handles
-            for continued generation. Default: ``False``.
-
-        return_logits (bool): Whether to include per-token logits in the output.
-            Default: ``False``.
+        model_checkpoint (EVO2_MODEL_CHECKPOINTS): Evo2 weights variant.
+        local_path (str | None): Override HuggingFace download with a local weights directory.
+        top_k (int): Limit sampling to the top-k most probable tokens at each step.
+        num_tokens (int): Number of new tokens to generate per prompt (excludes prompt).
+        cached_generation (bool): Use the model's per-call KV cache during generation.
+        force_prompt_threshold (int | None): Tokens to prefill in parallel before switching
+            to autoregressive prompt forcing.
+        max_seqlen (int | None): Maximum sequence length the KV cache will be sized for.
+        skip_special_tokens (bool): Filter EOS/PAD bytes from the detokenized output.
+        stop_at_eos (bool): Stop generation when an EOS (id=0) token is sampled.
+        old_kv_cache (Evo2KVCacheRef | None): Worker-local KV cache handle returned by a
+            previous persistent-worker generation call.
+        return_kv_cache (bool): Return worker-local KV cache handles for continued generation.
+        return_logits (bool): Include per-position logits in the output.
     """
 
     @model_validator(mode="after")
@@ -138,13 +112,13 @@ class Evo2SampleConfig(CausalModelSampleConfig):
     model_checkpoint: EVO2_MODEL_CHECKPOINTS = ConfigField(
         title="Model Checkpoint",
         default="evo2_7b",
-        description="Evo2 model checkpoint to use",
+        description="Evo2 weights variant",
         reload_on_change=True,
     )
     local_path: str | None = ConfigField(
         title="Local Checkpoint Path",
         default=None,
-        description="Optional path to local model weights",
+        description="Override the default download with a local weights directory",
         hidden=True,
         reload_on_change=True,
     )
@@ -156,47 +130,47 @@ class Evo2SampleConfig(CausalModelSampleConfig):
         hidden=True,
         include_in_key=False,
     )
-    # vortex sampling params
+    # Sampling params
     top_k: int = ConfigField(
         title="Top K",
         default=4,
         ge=1,
-        description="Limits sampling to the top-k most probable tokens at each generation step.",
+        description="Limit sampling to the top-k most probable tokens at each step",
     )
     num_tokens: int = ConfigField(
         title="Num Tokens",
         default=32,
         ge=1,
-        description="Number of tokens to generate (Does not include prompt)",
+        description="Number of new tokens to generate per prompt",
     )
     cached_generation: bool = ConfigField(
         title="Cached Generation",
         default=True,
-        description="Use Vortex's internal per-call KV cache. Worker-local handles require Return KV Cache.",
+        description="Use the model's per-call KV cache during generation",
         advanced=True,
     )
     force_prompt_threshold: int | None = ConfigField(
         title="Force Prompt Threshold",
         default=None,
-        description="Optional number of tokens to prefill in parallel before switching to prompt forcing.",
+        description="Tokens to prefill in parallel before switching to prompt forcing",
         hidden=True,
     )
     max_seqlen: int | None = ConfigField(
         title="Max Sequence Length",
         default=None,
-        description="Optional maximum sequence length to generate.",
+        description="Maximum sequence length the KV cache will be sized for",
         advanced=True,
     )
-    print_generation: bool = ConfigField(
-        title="Print Generation",
-        default=True,
-        description="Whether to print generation tokens",
-        hidden=True,
+    skip_special_tokens: bool = ConfigField(
+        title="Skip Special Tokens",
+        default=False,
+        description="Filter EOS/PAD bytes from the detokenized output",
+        advanced=True,
     )
     stop_at_eos: bool = ConfigField(
         title="Stop at EOS",
         default=True,
-        description="Whether to stop at end-of-sequence token",
+        description="Stop generation when an EOS (id=0) token is sampled",
         advanced=True,
     )
     old_kv_cache: Evo2KVCacheRef | None = ConfigField(
@@ -214,7 +188,7 @@ class Evo2SampleConfig(CausalModelSampleConfig):
     return_logits: bool = ConfigField(
         title="Return Logits",
         default=False,
-        description="Whether to include per-token logits in the output. Disable to save memory.",
+        description="Include per-position logits in the output (large; disable to save memory)",
         advanced=True,
     )
 
@@ -263,7 +237,7 @@ def run_evo2_sample(
     Returns:
         Evo2SampleOutput: Structured output containing:
             - ``sequences``: List of generated DNA sequences
-            - ``logits``: Optional per-token logits for each sequence
+            - ``logits``: Optional per-position logits for each sequence
             - ``kv_caches``: Optional worker-local KV cache handles for continuing generation
             - Metadata about generation parameters and execution mode
 
@@ -299,7 +273,7 @@ def run_evo2_sample(
             "cached_generation": config.cached_generation,
             "force_prompt_threshold": config.force_prompt_threshold,
             "max_seqlen": config.max_seqlen,
-            "print_generation": config.print_generation,
+            "skip_special_tokens": config.skip_special_tokens,
             "stop_at_eos": config.stop_at_eos,
             "old_kv_cache": config.old_kv_cache.model_dump() if config.old_kv_cache is not None else None,
             "return_kv_cache": config.return_kv_cache,
@@ -321,7 +295,7 @@ def run_evo2_sample(
         assert logits is not None
         logits = logits.cpu().tolist()
 
-    # Prepend prompts to generated sequences (vortex generate() returns only newly generated tokens)
+    # Prepend prompts since generation returns only newly-generated tokens.
     if config.prepend_prompt:
         result["sequences"] = [prompt + seq for prompt, seq in zip(inputs.prompts, result["sequences"], strict=False)]
 

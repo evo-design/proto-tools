@@ -21,6 +21,7 @@ from proto_tools.utils import (
 logger = logging.getLogger(__name__)
 
 EVO1_MODEL_CHECKPOINTS = Literal[
+    "evo-1.5-8k-base",
     "evo-1-8k-base",
     "evo-1-131k-base",
     "evo-1-8k-crispr",
@@ -46,20 +47,20 @@ class Evo1ScoringConfig(CausalModelScoringConfig):
     position and summing the log probabilities.
 
     Attributes:
-        model_name (EVO1_MODEL_CHECKPOINTS): Evo1 model checkpoint to use. Default: ``"evo-1-8k-base"``.
+        model_name (EVO1_MODEL_CHECKPOINTS): Evo1 weights variant.
         batch_size (int): Number of sequences to process simultaneously on GPU.
             Larger batches improve throughput but use more GPU memory.
-        return_logits (bool): Whether to include per-position logits in the output.
+        return_logits (bool): Include per-position logits in the output.
 
     Note:
-        - Evo1 uses byte-level tokenization with vocab_size=512
-        - DNA nucleotides: 'A'=65, 'C'=67, 'G'=71, 'T'=84, 'N'=78 (ASCII values)
+        - Evo1 uses byte-level tokenization with vocab_size=512.
+        - DNA nucleotides: 'A'=65, 'C'=67, 'G'=71, 'T'=84, 'N'=78 (ASCII values).
     """
 
     model_name: EVO1_MODEL_CHECKPOINTS = ConfigField(
         title="Model Name",
         default="evo-1-8k-base",
-        description="Evo1 model checkpoint to use",
+        description="Evo1 weights variant",
         reload_on_change=True,
     )
     timeout: int = ConfigField(

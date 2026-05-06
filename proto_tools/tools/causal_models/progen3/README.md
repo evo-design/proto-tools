@@ -100,7 +100,6 @@ Returns `log_likelihood`, `avg_log_likelihood`, and `perplexity` per sequence, p
 |-----------|------|---------|-------------|
 | `model_checkpoint` | `str` | `progen3-762m` | Model checkpoint to use |
 | `batch_size` | `int` | `1` | Sequences per GPU forward pass |
-| `reduction` | `str` | `mean` | How to aggregate per-token log-likelihoods: `mean` (per-token average) or `sum` (total) |
 
 ### Parameter Guides
 
@@ -155,7 +154,7 @@ Perplexity measures how "surprised" the model is by a sequence. Lower perplexity
 
 ### Log-likelihood
 
-Use `avg_log_likelihood` (per-token, length-normalized) when comparing sequences of different lengths. Use `log_likelihood` with `reduction="sum"` only when comparing sequences of the same length.
+Use `avg_log_likelihood` (per-token, length-normalized) when comparing sequences of different lengths. Use `log_likelihood` (the sum) only when comparing sequences of the same length.
 
 ### Bidirectional scoring
 
@@ -244,7 +243,7 @@ if per_pos:
 - **Bidirectional scoring is automatic**: no need to manually reverse sequences or run separate passes
 - **`max_new_tokens` excludes the prompt**: unlike ProGen2's `max_length`, ProGen3's `max_new_tokens` counts only newly generated tokens
 - **Empty prompt for unconditional generation**: pass `""` as a prompt, not `None`
-- **Scoring reduction matters**: use `mean` (default) for comparing sequences of different lengths; `sum` only for fixed-length comparisons
+- **Scoring length sensitivity**: prefer `avg_log_likelihood` for comparing sequences of different lengths; `log_likelihood` (the sum) only for fixed-length comparisons
 
 ## Seed Reproducibility
 

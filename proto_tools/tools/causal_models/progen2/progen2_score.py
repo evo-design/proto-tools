@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 PROGEN2_MODEL_CHECKPOINTS = Literal[
     "progen2-small",
     "progen2-medium",
+    "progen2-base",
     "progen2-oas",
     "progen2-large",
     "progen2-BFD90",
@@ -44,39 +45,29 @@ ProGen2ScoringOutput = CausalModelScoringOutput
 class ProGen2ScoringConfig(CausalModelScoringConfig):
     """Configuration for ProGen2 protein sequence scoring.
 
-    Computes autoregressive likelihood by computing P(x_t | x_{<t}) for each
-    position and summing the log probabilities. Uses batched processing.
+    Computes autoregressive likelihood ``P(sequence) = prod_t P(x_t | x_{<t})``.
 
     Attributes:
-        model_checkpoint (PROGEN2_MODEL_CHECKPOINTS): ProGen2 model checkpoint to use. Options include
-            ``"progen2-small"`` (151M), ``"progen2-medium"`` (754M),
-            ``"progen2-oas"`` (754M, antibody-specific), ``"progen2-large"`` (2B),
-            ``"progen2-BFD90"`` (2B), ``"progen2-xlarge"`` (6B).
-            Default: ``"progen2-large"``.
-
-        local_path (str | None): Optional path to local model weights directory.
-            If provided, loads model from local filesystem instead of downloading
-            from HuggingFace. Default: ``None``.
+        model_checkpoint (PROGEN2_MODEL_CHECKPOINTS): ProGen2 weights variant.
+        local_path (str | None): Override the default download with a local weights directory.
         batch_size (int): Number of sequences to process simultaneously on GPU.
-            Larger batches improve throughput but use more GPU memory.
-        return_logits (bool): Whether to include per-position logits in the output.
+        return_logits (bool): Include per-position logits in the output.
 
     Note:
-        - ProGen2 uses autoregressive scoring: P(sequence) = prod_t P(x_t | x_{<t})
-        - Metrics only count amino acid tokens, not special tokens (start, end, pad)
-        - The vocab includes 30 tokens (special tokens + amino acids)
+        - Metrics only count amino acid tokens, not special tokens (start, end, pad).
+        - The vocab includes 30 tokens (special tokens + amino acids).
     """
 
     model_checkpoint: PROGEN2_MODEL_CHECKPOINTS = ConfigField(
         title="Model Checkpoint",
         default="progen2-large",
-        description="ProGen2 model checkpoint to use",
+        description="ProGen2 weights variant",
         reload_on_change=True,
     )
     local_path: str | None = ConfigField(
         title="Local Model Path",
         default=None,
-        description="Path to local model weights",
+        description="Override the default download with a local weights directory",
         hidden=True,
         reload_on_change=True,
     )
