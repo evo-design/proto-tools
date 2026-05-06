@@ -178,6 +178,10 @@ class ProteinMPNNModel:
             chain=",".join(chain_ids),
         )
 
+        parsed_len = int(self.model._inputs["S"].shape[0])
+        if len(sequence) != parsed_len:
+            raise ValueError(f"Sequence length {len(sequence)} does not match structure ({parsed_len} residues).")
+
         # Score the sequence (model returns "score" (negative avg log likelihood), "logits")
         output = self.model.score(
             seq=sequence,
