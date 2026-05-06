@@ -43,6 +43,9 @@ from proto_tools.tools.inverse_folding.ligandmpnn import (
     run_ligandmpnn_sample,
 )
 from proto_tools.tools.inverse_folding.proteinmpnn import (
+    ProteinMPNNGradientConfig,
+    ProteinMPNNGradientInput,
+    ProteinMPNNGradientOutput,
     ProteinMPNNSampleConfig,
     ProteinMPNNSampleInput,
     ProteinMPNNSampleOutput,
@@ -50,6 +53,7 @@ from proto_tools.tools.inverse_folding.proteinmpnn import (
     ProteinMPNNScoringInput,
     ProteinMPNNScoringOutput,
     ProteinMPNNSequences,
+    run_proteinmpnn_gradient,
     run_proteinmpnn_sample,
     run_proteinmpnn_score,
 )
@@ -82,8 +86,12 @@ __all__ = [
     "run_esm_if1_sample",
     "run_esm_if1_score",
     # ProteinMPNN
+    "run_proteinmpnn_gradient",
     "run_proteinmpnn_sample",
     "run_proteinmpnn_score",
+    "ProteinMPNNGradientInput",
+    "ProteinMPNNGradientConfig",
+    "ProteinMPNNGradientOutput",
     "ProteinMPNNSampleInput",
     "ProteinMPNNSampleConfig",
     "ProteinMPNNSampleOutput",

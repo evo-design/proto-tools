@@ -1,5 +1,11 @@
 """ProteinMPNN backbone-conditioned sequence design."""
 
+from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_gradient import (
+    ProteinMPNNGradientConfig,
+    ProteinMPNNGradientInput,
+    ProteinMPNNGradientOutput,
+    run_proteinmpnn_gradient,
+)
 from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample import (
     ProteinMPNNSampleConfig,
     ProteinMPNNSampleInput,
@@ -22,6 +28,9 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
 
 __all__ = [
     "ALPHAFOLD_VOCAB",
+    "ProteinMPNNGradientConfig",
+    "ProteinMPNNGradientInput",
+    "ProteinMPNNGradientOutput",
     "ProteinMPNNSampleConfig",
     "ProteinMPNNSampleInput",
     "ProteinMPNNSampleOutput",
@@ -30,6 +39,7 @@ __all__ = [
     "ProteinMPNNScoringOutput",
     "ProteinMPNNSequences",
     "SequenceStructurePair",
+    "run_proteinmpnn_gradient",
     "run_proteinmpnn_sample",
     "run_proteinmpnn_score",
 ]

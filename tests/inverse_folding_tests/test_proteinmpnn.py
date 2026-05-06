@@ -11,9 +11,12 @@ import pytest
 
 from proto_tools.entities.structures.structure import Structure
 from proto_tools.tools.inverse_folding.proteinmpnn import (
+    ProteinMPNNGradientConfig,
+    ProteinMPNNGradientInput,
     ProteinMPNNSampleConfig,
     ProteinMPNNScoringConfig,
     ProteinMPNNScoringInput,
+    run_proteinmpnn_gradient,
     run_proteinmpnn_sample,
     run_proteinmpnn_score,
 )
@@ -31,6 +34,29 @@ from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
+_CANONICAL_AA = "ACDEFGHIKLMNPQRSTVWY"
+_SMALL_PDB = """ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00           N
+ATOM      2  CA  ALA A   1       1.458   0.000   0.000  1.00  0.00           C
+ATOM      3  C   ALA A   1       2.009   1.420   0.000  1.00  0.00           C
+ATOM      4  O   ALA A   1       1.246   2.390   0.000  1.00  0.00           O
+ATOM      5  N   GLY A   2       3.326   1.562   0.000  1.00  0.00           N
+ATOM      6  CA  GLY A   2       3.941   2.877   0.000  1.00  0.00           C
+ATOM      7  C   GLY A   2       5.449   2.831   0.000  1.00  0.00           C
+ATOM      8  O   GLY A   2       6.074   1.772   0.000  1.00  0.00           O
+ATOM      9  N   SER A   3       6.032   4.027   0.000  1.00  0.00           N
+ATOM     10  CA  SER A   3       7.476   4.180   0.000  1.00  0.00           C
+ATOM     11  C   SER A   3       8.064   5.572   0.000  1.00  0.00           C
+ATOM     12  O   SER A   3       7.337   6.562   0.000  1.00  0.00           O
+ATOM     13  N   VAL A   4       9.377   5.660   0.000  1.00  0.00           N
+ATOM     14  CA  VAL A   4      10.044   6.955   0.000  1.00  0.00           C
+ATOM     15  C   VAL A   4      11.548   6.820   0.000  1.00  0.00           C
+ATOM     16  O   VAL A   4      12.101   5.720   0.000  1.00  0.00           O
+ATOM     17  N   LEU A   5      12.207   7.978   0.000  1.00  0.00           N
+ATOM     18  CA  LEU A   5      13.655   8.068   0.000  1.00  0.00           C
+ATOM     19  C   LEU A   5      14.195   9.485   0.000  1.00  0.00           C
+ATOM     20  O   LEU A   5      13.424  10.440   0.000  1.00  0.00           O
+END
+"""
 
 
 _persistent_tool = make_persistent_fixture("proteinmpnn")
@@ -39,6 +65,10 @@ _persistent_tool = make_persistent_fixture("proteinmpnn")
 @pytest.fixture(scope="module")
 def pdb_structure():
     return Structure.from_file(TEST_PDB_FILE)
+
+
+def _small_structure() -> Structure:
+    return Structure(structure=_SMALL_PDB)
 
 
 @pytest.mark.uses_gpu
@@ -218,6 +248,71 @@ def test_proteinmpnn_score_vocab(pdb_structure: Structure):
 
     assert output.vocab == ALPHAFOLD_VOCAB
     assert output.scores[0].vocab == ALPHAFOLD_VOCAB
+
+
+def test_proteinmpnn_gradient_dispatch_contract(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        captured["toolkit"] = toolkit
+        captured["payload"] = payload
+        n = len(payload["logits"])
+        return {
+            "gradient": [[0.0] * 20] * n,
+            "loss": 0.5,
+            "metrics": {"avg_log_likelihood": -0.5, "perplexity": np.exp(0.5)},
+            "vocab": list(_CANONICAL_AA),
+        }
+
+    monkeypatch.setattr(
+        "proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_gradient.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+
+    result = run_proteinmpnn_gradient(
+        ProteinMPNNGradientInput(
+            logits=[[0.0] * 20] * 5,
+            structure=_small_structure(),
+            chains_to_redesign=["A"],
+            fixed_positions={"A": [1]},
+        ),
+        ProteinMPNNGradientConfig(use_ste=False, device="cpu"),
+    )
+
+    assert captured["toolkit"] == "proteinmpnn"
+    assert captured["payload"]["operation"] == "compute_gradient"
+    assert captured["payload"]["chain_ids"] == ["A"]
+    assert captured["payload"]["fixed_positions"] == {"A": [1]}
+    assert captured["payload"]["use_ste"] is False
+    assert captured["payload"]["compute_gradient"] is True
+    assert result.gradient == [[0.0] * 20] * 5
+
+
+@pytest.mark.uses_gpu
+@pytest.mark.slow
+def test_proteinmpnn_gradient_end_to_end():
+    """ProteinMPNN gradient returns finite non-zero gradients for a small backbone."""
+    result = run_proteinmpnn_gradient(
+        ProteinMPNNGradientInput(
+            logits=[[0.0] * 20] * 5,
+            structure=_small_structure(),
+            chains_to_redesign=["A"],
+            temperature=0.7,
+        ),
+        ProteinMPNNGradientConfig(seed=42),
+    )
+
+    validate_output(result)
+    assert result.tool_id == "proteinmpnn-gradient"
+    assert result.gradient is not None
+    assert len(result.gradient) == 5
+    assert all(len(row) == 20 for row in result.gradient)
+    assert all(np.isfinite(v) for row in result.gradient for v in row)
+    assert any(v != 0.0 for row in result.gradient for v in row)
+    assert result.loss > 0.0
+    assert result.metrics["avg_log_likelihood"] == pytest.approx(-result.loss, rel=1e-6)
+    assert result.metrics["perplexity"] == pytest.approx(np.exp(result.loss), rel=1e-6)
+    assert result.vocab == list(_CANONICAL_AA)
 
 
 @pytest.mark.uses_gpu
