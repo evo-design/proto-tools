@@ -145,6 +145,10 @@ class AlphaFoldDBMetrics(Metrics):
 class AlphaFoldDBFetchOutput(BaseToolOutput):
     """Output from AlphaFold DB fetch.
 
+    CSV export writes the structure, MSA, and raw record as sibling sidecar
+    files referenced by ``structure_path``, ``msa_path``, ``raw_path``
+    columns; see the README for the layout. JSON export is unchanged.
+
     Attributes:
         uniprot_accession (str): Primary UniProt accession that was looked up.
         entry_id (str): AlphaFold entry identifier (e.g. 'AF-P04637-F1').
@@ -244,21 +248,58 @@ class AlphaFoldDBFetchOutput(BaseToolOutput):
         return "json"
 
     def _export_output(self, export_path: Any, file_format: str) -> None:
-        path = Path(export_path).with_suffix(f".{file_format}")
+        base = Path(export_path)
         if file_format == "json":
-            with path.open("w", encoding="utf-8") as f:
+            with base.with_suffix(".json").open("w", encoding="utf-8") as f:
                 json.dump(self.model_dump(mode="json"), f, indent=2)
             return
         if file_format == "csv":
-            # Metadata-only CSV row; the parsed Structure / msa_a3m / raw_entry
-            # are excluded — use JSON export to preserve them.
-            row = self.model_dump(exclude={"structure", "msa_a3m", "raw_entry"})
-            with path.open("w", encoding="utf-8", newline="") as f:
-                writer = csv.DictWriter(f, fieldnames=list(row.keys()))
-                writer.writeheader()
-                writer.writerow(row)
+            self._write_csv_with_sidecars(base)
             return
         raise ValueError(f"Unsupported format: {file_format}")
+
+    def _write_csv_with_sidecars(self, base_path: Path) -> None:
+        """Write a metadata CSV plus blob sidecar files; see the class docstring."""
+        csv_path = base_path.with_suffix(".csv")
+        parent = csv_path.parent
+        stem = csv_path.stem
+
+        # __dict__.get avoids __getattr__'s ToolExecutionError on success=False outputs.
+        structure_basename = ""
+        structure_obj = self.__dict__.get("structure")
+        if structure_obj is not None:
+            ext = structure_obj.structure_format
+            sidecar = parent / f"{stem}.{ext}"
+            if ext == "pdb":
+                structure_obj.write_pdb(sidecar)
+            else:
+                structure_obj.write_cif(sidecar)
+            structure_basename = sidecar.name
+
+        msa_basename = ""
+        msa_text = self.__dict__.get("msa_a3m")
+        if msa_text:
+            sidecar = parent / f"{stem}.a3m"
+            sidecar.write_text(msa_text, encoding="utf-8")
+            msa_basename = sidecar.name
+
+        raw_basename = ""
+        raw = self.__dict__.get("raw_entry") or {}
+        if raw:
+            sidecar = parent / f"{stem}_raw.json"
+            with sidecar.open("w", encoding="utf-8") as f:
+                json.dump(raw, f, indent=2)
+            raw_basename = sidecar.name
+
+        row = self.model_dump(exclude={"structure", "msa_a3m", "raw_entry"})
+        row["structure_path"] = structure_basename
+        row["msa_path"] = msa_basename
+        row["raw_path"] = raw_basename
+
+        with csv_path.open("w", encoding="utf-8", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=list(row.keys()))
+            writer.writeheader()
+            writer.writerow(row)
 
 
 # ============================================================================
