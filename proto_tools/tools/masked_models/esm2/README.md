@@ -5,6 +5,8 @@
 ## Overview
 ESM2 (Evolutionary Scale Modeling 2) is Meta AI's [protein language model](https://www.evolutionaryscale.ai/blog/esm-cambrian) trained on millions of protein sequences from [UniRef](https://www.uniprot.org/help/uniref). It provides sequence embeddings, per-position amino acid logits, sequence mutation (sampling), and sequence scoring (MLM pseudo-perplexity). ESM2 offers multiple model sizes from 8M to 15B parameters, balancing quality and computational cost.
 
+This package also includes `esm2-gradient`, a relaxed-sequence gradient tool that computes the masked pseudo-log-likelihood objective over a continuous L×20 logits distribution and returns its gradient with respect to the input. It can be used as a differentiable structure-free pLM loss inside MCMC, gradient descent, or any optimization loop over relaxed protein sequences.
+
 ## Background
 
 **What are protein language models?**
@@ -32,6 +34,7 @@ Per-position logits indicate the model's confidence in each amino acid:
 | Tool | Description | Output |
 |------|-------------|--------|
 | `esm2-embedding` | Extract embeddings and logits | Embeddings, logits, attention masks |
+| `esm2-gradient` | Masked PLL gradient over relaxed logits | Gradient, loss, metrics, vocab |
 | `esm2-sample` | Mutate sequences using model | Modified sequences |
 | `esm2-score` | Score sequences via MLM pseudo-perplexity | Per-sequence metrics, optional logits |
 
@@ -62,6 +65,7 @@ ESM2 is a masked language model (similar to BERT) trained on protein sequences. 
 - **Embeddings**: Forward pass through the model produces per-position hidden states. Mean-pooling across positions yields a fixed-length sequence descriptor.
 - **Sampling**: Positions are selected by a decoding method (entropy, max_logit, or random), masked, and resampled from the model's predicted distribution at a given temperature.
 - **Scoring**: Each position is masked one at a time, and the model's log-probability of the true amino acid is recorded. Aggregated scores give pseudo-perplexity (lower = more "natural" sequence).
+- **Gradient**: A relaxed `(L, 20)` distribution is mixed against ESM2's per-residue token embeddings to form a soft input, each amino-acid position is masked in turn, and a per-chunk backward pass accumulates the gradient of the mean masked negative log-likelihood with respect to the input logits while keeping model parameters frozen. The optional Straight-Through Estimator runs the forward pass on hard one-hot tokens while gradients still flow through the soft probabilities.
 
 ## Input Parameters
 
@@ -82,6 +86,13 @@ ESM2 is a masked language model (similar to BERT) trained on protein sequences. 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `sequences` | `List[str]` | Protein sequences to score |
+
+### Gradient Tool
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `logits` | `List[List[float]]` | Relaxed sequence logits with shape `(L, 20)` in canonical amino-acid order `ACDEFGHIKLMNPQRSTVWY` |
+| `temperature` | `float \| null` | Optional softmax temperature. When set, applies `softmax(input / temperature)` before gradient computation. When `null` (default), input is used as-is — callers provide a pre-computed distribution |
 
 ## Configuration
 
@@ -136,6 +147,18 @@ Use `sampling_method="iterative_refinement"` for higher-coherence joint sampling
 | `verbose` | `bool` | `False` | Print progress messages |
 | `return_logits` | `bool` | `False` | Include per-position logits in output |
 
+### Gradient Tool (`ESM2GradientConfig`)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `model_checkpoint` | `str` | `"esm2_t33_650M_UR50D"` | Model variant to use |
+| `use_ste` | `bool` | `False` | When true, uses a Straight-Through Estimator: hard one-hot tokens in the forward pass with gradients flowing through soft probabilities. When false, uses soft blended embeddings directly |
+| `compute_gradient` | `bool` | `True` | When true, runs backward pass and returns the gradient. Set `False` for forward-only log-likelihood scoring (e.g. MCMC proposal ranking); `gradient` is `None` in the output |
+| `batch_size` | `int \| null` | `null` | AA positions per forward pass for batched PLL. `null` selects the backend default (32). Lower if OOM, higher for throughput |
+| `seed` | `int \| null` | `null` | Optional PyTorch random seed for reproducibility |
+| `device` | `str` | `"cuda"` | Device for inference |
+| `verbose` | `bool` | `False` | Print progress messages |
+
 ### Parameter Guides
 
 **Temperature guide for sampling:**
@@ -179,6 +202,15 @@ Use `sampling_method="iterative_refinement"` for higher-coherence joint sampling
 | `log_likelihood`, `avg_log_likelihood`, `perplexity` | `float` | Scalar metrics (attribute or mapping access) |
 | `logits` | `List[List[float]]?` | Optional per-position logits (shape `[seq_len, 20]`) |
 | `vocab` | `List[str]?` | Amino acid order (AA-only) |
+
+### ESM2GradientOutput
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `gradient` | `List[List[float]] \| null` | Gradient matrix with the same `(L, 20)` shape and amino-acid column order as the input logits. `null` when `compute_gradient=False` (forward-only scoring) |
+| `loss` | `float` | Mean negative log-likelihood over the L masked positions |
+| `metrics` | `dict[str, Any]` | Auxiliary metrics: `log_likelihood`, `avg_log_likelihood`, `perplexity`, `sequence_length`, `model_checkpoint`, and `objective` (`"masked_pll"`) |
+| `vocab` | `List[str]` | Amino-acid column ordering for both the input logits and the returned gradient — always canonical protein order `ACDEFGHIKLMNPQRSTVWY` |
 
 ## Interpreting Results
 
@@ -283,6 +315,45 @@ result = run_esm2_embeddings(inputs, config)
 print(f"Processed {len(result.results)} sequences")
 ```
 
+**Example 5: Masked-PLL gradient over a relaxed sequence**
+```python
+from proto_tools.tools.masked_models.esm2 import (
+    ESM2GradientInput, ESM2GradientConfig, run_esm2_gradient,
+)
+from proto_tools.utils import one_hot_protein_logits
+
+# Seed the relaxed distribution from a discrete sequence (sharpness=2.0
+# yields a biased-but-not-saturated softmax target).
+logits = one_hot_protein_logits("MVLSPADKTNVKAAW", sharpness=2.0)
+
+inputs = ESM2GradientInput(logits=logits, temperature=0.6)
+config = ESM2GradientConfig(model_checkpoint="esm2_t33_650M_UR50D")
+
+result = run_esm2_gradient(inputs, config)
+print(f"Mean NLL:    {result.loss:.3f}")
+print(f"Perplexity:  {result.metrics['perplexity']:.3f}")
+print(f"Grad shape:  {len(result.gradient)} x {len(result.gradient[0])}")
+# Step the relaxed sequence: logits ← logits − lr · gradient
+```
+
+**Example 6: Forward-only PLL scoring (no backward pass)**
+```python
+from proto_tools.tools.masked_models.esm2 import (
+    ESM2GradientInput, ESM2GradientConfig, run_esm2_gradient,
+)
+from proto_tools.utils import one_hot_protein_logits
+
+inputs = ESM2GradientInput(
+    logits=one_hot_protein_logits("MVLSPADKTNVKAAW", sharpness=2.0),
+    temperature=0.6,
+)
+config = ESM2GradientConfig(compute_gradient=False)  # skip backward pass
+
+result = run_esm2_gradient(inputs, config)
+assert result.gradient is None  # forward-only mode
+print(f"avg log-likelihood: {result.metrics['avg_log_likelihood']:.3f}")
+```
+
 ## Best Practices & Gotchas
 
 **Batch processing:**
@@ -300,6 +371,18 @@ print(f"Processed {len(result.results)} sequences")
 2. **Per-position**: Extract from hidden states for residue-level tasks.
 
 3. **Normalization**: Consider L2 normalizing embeddings for cosine similarity.
+
+**Gradient tool:**
+
+1. **Vocab order**: Input logits and the returned gradient share the canonical protein order `ACDEFGHIKLMNPQRSTVWY`. The tool maps to ESM2's tokenizer vocabulary internally.
+
+2. **`temperature=None` vs. `1.0`**: With `temperature=None` (default), input logits are used as the soft distribution as-is — pass an already-normalized distribution. With `temperature` set, `softmax(logits / temperature)` is applied before the forward pass.
+
+3. **STE vs. soft embeddings**: Set `use_ste=True` for stronger guidance toward discrete sequences (the forward sees hard one-hot tokens; gradients still flow through the soft probabilities). Leave `use_ste=False` for smooth optimization over the relaxed simplex.
+
+4. **Forward-only mode**: Set `compute_gradient=False` to skip the backward pass entirely; `gradient` will be `None` but `loss` and `metrics` are populated. Useful for ranking MCMC proposals without paying the backward cost.
+
+5. **Memory**: Gradient memory is dominated by the chunk size, not the sequence length — increase `batch_size` for shorter sequences, decrease on long inputs or smaller GPUs.
 
 **Common mistakes:**
 

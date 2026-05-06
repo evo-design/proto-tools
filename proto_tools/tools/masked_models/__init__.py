@@ -22,6 +22,9 @@ from proto_tools.tools.masked_models.esm2 import (
     ESM2EmbeddingsConfig,
     ESM2EmbeddingsInput,
     ESM2EmbeddingsOutput,
+    ESM2GradientConfig,
+    ESM2GradientInput,
+    ESM2GradientOutput,
     ESM2SampleConfig,
     ESM2SampleInput,
     ESM2SampleOutput,
@@ -29,6 +32,7 @@ from proto_tools.tools.masked_models.esm2 import (
     ESM2ScoringInput,
     ESM2ScoringOutput,
     run_esm2_embeddings,
+    run_esm2_gradient,
     run_esm2_sample,
     run_esm2_score,
 )
@@ -104,6 +108,11 @@ __all__ = [
     "ESM2EmbeddingsInput",
     "ESM2EmbeddingsConfig",
     "ESM2EmbeddingsOutput",
+    # ESM2 - Gradient
+    "run_esm2_gradient",
+    "ESM2GradientInput",
+    "ESM2GradientConfig",
+    "ESM2GradientOutput",
     # ESM2 - Sampling
     "run_esm2_sample",
     "ESM2SampleInput",

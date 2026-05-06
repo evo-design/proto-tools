@@ -553,6 +553,160 @@ class ESM2Model:
             "vocab": AMINO_ACIDS_LIST,  # Return AA-only vocab (20 tokens)
         }
 
+    def compute_gradient(
+        self,
+        logits_list: list[list[float]],
+        *,
+        temperature: float | None = None,
+        use_ste: bool = False,
+        seed: int | None = None,
+        backprop: bool = True,
+        batch_size: int | None = None,
+        device: str = "cuda",
+        verbose: bool = False,
+    ) -> dict[str, Any]:
+        """Chunked masked PLL gradient for relaxed ESM2 protein sequences.
+
+        Args:
+            logits_list: Input logits, shape ``(L, 20)`` in canonical amino-acid order.
+            temperature: Optional softmax temperature; ``None`` uses logits as-is.
+            use_ste: Use hard one-hot residues in the forward pass with soft gradients.
+            seed: Random seed for deterministic worker behavior.
+            backprop: If False, skip backward and return ``gradient=None``.
+            batch_size: AA positions per forward pass. Defaults to 32.
+            device: Execution device.
+            verbose: Log progress.
+
+        Returns:
+            Dictionary with ``gradient``, mean-NLL ``loss``, metrics, and vocab.
+        """
+        import torch.nn.functional as F
+
+        if not logits_list:
+            raise ValueError("esm2: compute_gradient requires at least one residue")
+        if any(len(row) != len(AMINO_ACIDS_LIST) for row in logits_list):
+            raise ValueError(f"esm2: compute_gradient expects L x {len(AMINO_ACIDS_LIST)} logits")
+
+        if not self._loaded:
+            self.load(device, verbose)
+        elif self.device != device:
+            self.to_device(device)
+
+        set_torch_seed(seed)
+
+        if batch_size is None:
+            batch_size = 32
+
+        embed_layer = self.model.get_input_embeddings()
+        cls_eos_probe = self.tokenizer("A", add_special_tokens=True, return_tensors="pt")["input_ids"][0]
+        if cls_eos_probe.numel() < 3:
+            raise ValueError("esm2: tokenizer did not produce expected BOS/residue/EOS layout")
+        cls_token_id = int(cls_eos_probe[0].item())
+        eos_token_id = int(cls_eos_probe[-1].item())
+        mask_token_id = int(self.tokenizer.mask_token_id)
+
+        with torch.set_grad_enabled(backprop):
+            seq_dist = torch.tensor(logits_list, device=self.device, dtype=torch.float32, requires_grad=backprop)
+            sequence_length = int(seq_dist.shape[0])
+
+            x = F.softmax(seq_dist / temperature, dim=-1) if temperature is not None else seq_dist
+            residue_aa_idx = x.argmax(dim=-1).detach()
+            residue_token_ids = self.amino_acid_token_ids[residue_aa_idx].detach()
+
+            if use_ste:
+                hard = F.one_hot(residue_aa_idx, num_classes=len(AMINO_ACIDS_LIST)).float()
+                x = hard + (x - x.detach())
+
+            residue_embeddings = x @ embed_layer.weight[self.amino_acid_token_ids]
+            special_ids = torch.tensor([cls_token_id, eos_token_id], device=self.device)
+            special_embeddings = embed_layer.weight[special_ids]
+
+            input_embeddings = torch.cat(
+                (special_embeddings[0:1], residue_embeddings, special_embeddings[1:2]),
+                dim=0,
+            ).unsqueeze(0)
+            token_ids = torch.cat(
+                (
+                    special_ids[0:1],
+                    residue_token_ids,
+                    special_ids[1:2],
+                ),
+                dim=0,
+            ).unsqueeze(0)
+            attention_mask = torch.ones_like(token_ids)
+
+            aa_positions = torch.arange(1, sequence_length + 1, device=self.device)
+            seq_len = input_embeddings.shape[1]
+            pos_idx = torch.arange(seq_len, device=self.device)
+            mask_emb = embed_layer.weight[mask_token_id].detach()
+
+            ie_grad = torch.zeros_like(input_embeddings) if backprop else None
+            total_loss_val = 0.0
+            for start in tqdm(
+                range(0, sequence_length, batch_size),
+                desc="ESM2 gradient",
+                unit="batch",
+                disable=not verbose,
+            ):
+                end = min(start + batch_size, sequence_length)
+                chunk_aa_pos = aa_positions[start:end]
+                chunk_len = end - start
+
+                chunk_masked = pos_idx.unsqueeze(0) == chunk_aa_pos.unsqueeze(1)
+                ie_chunk = input_embeddings.detach().requires_grad_(True) if backprop else input_embeddings
+                chunk_input = torch.where(
+                    chunk_masked.unsqueeze(-1),
+                    mask_emb.view(1, 1, -1).expand(chunk_len, seq_len, -1),
+                    ie_chunk.expand(chunk_len, -1, -1),
+                )
+                chunk_idx = torch.arange(chunk_len, device=self.device)
+                chunk_token_ids = token_ids.expand(chunk_len, -1).clone()
+                chunk_token_ids[chunk_idx, chunk_aa_pos] = mask_token_id
+
+                handle = embed_layer.register_forward_hook(lambda _m, _i, _o, ci=chunk_input: ci)
+                try:
+                    outputs = self.model(
+                        input_ids=chunk_token_ids,
+                        attention_mask=attention_mask.expand(chunk_len, -1),
+                    )
+                finally:
+                    handle.remove()
+                pred = outputs["logits"][chunk_idx, chunk_aa_pos, :]
+                labels = token_ids[0, chunk_aa_pos]
+                loss_sum = F.cross_entropy(pred, labels, reduction="sum")
+                total_loss_val += loss_sum.item()
+
+                if backprop:
+                    (loss_sum / sequence_length).backward()
+                    ie_chunk_grad = ie_chunk.grad
+                    if ie_chunk_grad is None:
+                        raise RuntimeError("esm2: missing input-embedding gradient")
+                    if ie_grad is None:
+                        raise RuntimeError("esm2: missing accumulated input-embedding gradient")
+                    ie_grad = ie_grad + ie_chunk_grad
+
+        mean_nll = total_loss_val / sequence_length
+        gradient_value: list[list[float]] | None = None
+        if backprop:
+            if ie_grad is None:
+                raise RuntimeError("esm2: missing accumulated input-embedding gradient")
+            (x_grad,) = torch.autograd.grad(input_embeddings, seq_dist, grad_outputs=ie_grad)
+            gradient_value = x_grad.detach().cpu().tolist()
+
+        return {
+            "gradient": gradient_value,
+            "loss": mean_nll,
+            "metrics": {
+                "log_likelihood": -total_loss_val,
+                "avg_log_likelihood": -mean_nll,
+                "perplexity": math.exp(mean_nll),
+                "sequence_length": sequence_length,
+                "model_checkpoint": self.model_checkpoint,
+                "objective": "masked_pll",
+            },
+            "vocab": AMINO_ACIDS_LIST,
+        }
+
     # ============================================================================
     # Helper Functions
     # ============================================================================
@@ -568,6 +722,7 @@ class ESM2Model:
         repo = "fredzzp/" + self.model_checkpoint
         try:
             self.model = AutoModelForMaskedLM.from_pretrained(repo).to(device).eval()
+            self.model.requires_grad_(False)
             self.tokenizer = AutoTokenizer.from_pretrained(repo)
         except OSError as e:
             raise RuntimeError(f"esm2: HF weight load from {repo!r} failed: {e}") from e
@@ -656,7 +811,21 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             return_logits=input_dict["return_logits"],
             seed=input_dict["seed"],
         )
-    raise ValueError(f"esm2: unknown operation {operation!r}; valid: ['embeddings', 'inference', 'sample', 'score']")
+    if operation == "compute_gradient":
+        return _model.compute_gradient(
+            logits_list=input_dict["logits"],
+            temperature=input_dict["temperature"],
+            use_ste=input_dict["use_ste"],
+            seed=input_dict["seed"],
+            backprop=input_dict.get("compute_gradient", True),
+            batch_size=input_dict.get("batch_size"),
+            device=input_dict["device"],
+            verbose=input_dict["verbose"],
+        )
+    raise ValueError(
+        f"esm2: unknown operation {operation!r}; valid: ['embeddings', 'inference', 'sample', 'score', "
+        "'compute_gradient']"
+    )
 
 
 def to_device(device: str) -> dict[str, Any]:
