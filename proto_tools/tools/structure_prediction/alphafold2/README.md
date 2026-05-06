@@ -2,6 +2,9 @@
 
 # AlphaFold2
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 AlphaFold2 predicts 3D protein structures from amino acid sequences using the original DeepMind model via the ColabDesign JAX wrapper. It supports structure prediction (`alphafold2-prediction`) with optional [multiple sequence alignment](https://en.wikipedia.org/wiki/Multiple_sequence_alignment) (MSA) generation via ColabFold search, and relaxed-sequence gradient computation (`alphafold2-binder`) for Germinal-style binder redesign against a frozen target structure.
@@ -27,6 +30,23 @@ AlphaFold2 uses a two-track architecture combining evolutionary and structural i
 4. **Ensemble averaging:** Multiple independently trained model parameter sets (1-5) can be averaged for higher confidence predictions.
 
 The model was trained on experimentally determined structures from the [Protein Data Bank](https://www.rcsb.org/) and achieves near-experimental accuracy for many protein families.
+
+## Tools
+
+### AlphaFold2 Binder (`alphafold2-binder`)
+
+Run one AlphaFold2/ColabDesign binder-design step.
+
+`compute_gradient=False` runs forward only (gradient=None); loss, metrics,
+and Structure are identical to gradient mode.
+
+### AlphaFold2 Structure Prediction (`alphafold2-prediction`)
+
+Predict protein 3D structures using AlphaFold2.
+
+Uses the original AlphaFold2 model via the ColabDesign JAX wrapper to predict
+3D structures of protein sequences. Supports optional MSA generation via
+ColabFold search for improved accuracy.
 
 ## Execution Modes
 

@@ -2,6 +2,9 @@
 
 # Ensembl
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 The `ensembl` toolkit wraps Ensembl's REST API for DNA-design context. Five tools share the toolkit, one per endpoint family — each with a concretely typed result so JSON Schema / MCP consumers see the real shape:
@@ -24,6 +27,28 @@ NCBI gives sequence; Ensembl gives **annotation**. Without it, DNA design collap
 - **Cross-references** (`xrefs`) connect Ensembl IDs to UniProt / NCBI / clinical resources, enabling cross-tool composition with `uniprot-fetch` and the rest of the database-retrieval stack.
 
 The Ensembl REST API is the canonical programmatic interface to the same data the Ensembl genome browser shows; rate-limited at 55,000 req/hour with `Retry-After` honored automatically by `proto-tools`' shared HTTP session.
+
+## Tools
+
+### Ensembl Lookup (`ensembl-lookup`)
+
+Fetch a gene record via Ensembl REST.
+
+### Ensembl Overlap (`ensembl-overlap`)
+
+Fetch overlapping features for a region from Ensembl REST.
+
+### Ensembl Sequence (`ensembl-sequence`)
+
+Fetch a sequence record from Ensembl REST.
+
+### Ensembl VEP (`ensembl-vep`)
+
+Submit an HGVS notation to Ensembl VEP and parse the consequence list.
+
+### Ensembl Xrefs (`ensembl-xrefs`)
+
+Fetch cross-references from Ensembl REST.
 
 ## How It Works
 

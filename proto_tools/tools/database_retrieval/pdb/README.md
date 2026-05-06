@@ -2,6 +2,9 @@
 
 # PDB
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 Two tools for retrieving data from the RCSB Protein Data Bank:
@@ -34,6 +37,21 @@ The PDB was established in 1971 and now contains over 220,000 structures. Key me
 - **Resolution** (for X-ray/cryo-EM): lower values indicate higher-quality atomic models (1.0-2.0 A is considered high resolution)
 - **Experimental method**: X-ray crystallography (most entries), cryo-EM (growing), NMR (small proteins), neutron diffraction (rare)
 - **Chain classification**: protein chains contain amino acids; nucleotide chains contain DNA/RNA bases
+
+## Tools
+
+### PDB Fetch Entry (`pdb-fetch-entry`)
+
+Fetch structure metadata from RCSB PDB.
+
+Returns title, experimental method, and resolution for a PDB accession.
+
+### PDB Fetch FASTA (`pdb-fetch-fasta`)
+
+Fetch chain sequences from RCSB PDB.
+
+Returns parsed chain sequences with automatic protein/nucleic acid
+classification based on amino acid composition.
 
 ## How It Works
 

@@ -2,6 +2,9 @@
 
 # Random Protein Sampling
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 Random Protein Sampling fills masked positions in protein sequences with random amino acids drawn from a configurable [codon scheme](https://en.wikipedia.org/wiki/Genetic_code). Different codon schemes produce different amino acid frequency distributions, mirroring the biases of real degenerate codon libraries used in experimental directed evolution.
@@ -35,6 +38,16 @@ Each scheme represents a degenerate codon pattern used in synthetic biology. The
 | `NRT` | 8 | 8 AAs | Purine/pyrimidine combination |
 
 In NNK/NNS schemes, amino acids encoded by more codons (e.g., Leu, Ser, Arg) appear more frequently than those with fewer codons (e.g., Met, Trp), matching real experimental library distributions.
+
+## Tools
+
+### Random Protein Sampling (`random-protein-sample`)
+
+Fill masked positions with random amino acids from a codon scheme.
+
+The `preprocess` hook on :class:`RandomProteinSampleConfig` applies
+the masking strategy before this function runs, so
+`inputs.sequences` already contain `_` at positions to sample.
 
 ## How It Works
 

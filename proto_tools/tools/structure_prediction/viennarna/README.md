@@ -2,6 +2,9 @@
 
 # ViennaRNA
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 ViennaRNA is a fast RNA secondary structure prediction tool that uses thermodynamic parameters to compute the [minimum free energy](https://en.wikipedia.org/wiki/Nucleic_acid_thermodynamics) (MFE) structure from nucleotide sequences.
@@ -26,6 +29,16 @@ ViennaRNA uses a dynamic programming algorithm based on the [nearest-neighbor](h
 - **Dangling ends:** Contributions from unpaired nucleotides adjacent to helices
 
 The algorithm finds the structure with the lowest total free energy (most stable).
+
+## Tools
+
+### ViennaRNA Secondary Structure Prediction (`viennarna-prediction`)
+
+Predict RNA secondary structures using ViennaRNA's MFE algorithm.
+
+This function uses ViennaRNA's minimum free energy (MFE) algorithm to
+predict the most thermodynamically stable secondary structure for each
+input RNA sequence.
 
 ## How It Works
 

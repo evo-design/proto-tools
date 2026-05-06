@@ -2,6 +2,9 @@
 
 # Evo1
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 Evo1 is a 7-billion parameter DNA language model built on the [StripedHyena](https://en.wikipedia.org/wiki/State_space_model#Deep_learning) architecture, trained on 2.7 million [prokaryotic](https://en.wikipedia.org/wiki/Prokaryote) and [phage](https://en.wikipedia.org/wiki/Bacteriophage) genomes from the OpenGenome dataset. This tool performs autoregressive DNA sequence generation from prompts and optionally scores generated sequences by mean log-probability.
 
@@ -15,6 +18,24 @@ Generative DNA models enable de novo design of biological sequences; genes, [ope
 
 **Scientific foundation:**
 Evo1 uses the StripedHyena architecture, a hybrid state-space/attention model that processes DNA at single-nucleotide resolution. Unlike transformer-only models, StripedHyena supports efficient long-range sequence modeling up to 131k tokens. The model is trained with a standard autoregressive (next-token prediction) objective on raw genomic DNA.
+
+## Tools
+
+### Evo1 Sampling (`evo1-sample`)
+
+Sample DNA sequences using the Evo1 language model.
+
+Uses the Evo1 model to autoregressively generate DNA sequences from
+prompt sequences. Supports multiple model checkpoints including
+CRISPR and transposon fine-tuned variants.
+
+### Evo1 Scoring (`evo1-score`)
+
+Score DNA sequences using Evo1 autoregressive language model.
+
+Computes the likelihood of DNA sequences using Evo1's autoregressive
+modeling. For each position t, computes log $P(x_t | x_{<t})$ and sums
+these to get the total log-likelihood.
 
 ## How It Works
 

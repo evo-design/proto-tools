@@ -2,6 +2,9 @@
 
 # AbLang
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 AbLang is an antibody-specific language model family from the Oxford Protein Informatics Group (OPIG), trained on antibody sequences from the Observed Antibody Space (OAS). Built on a BERT/MLM architecture, it provides antibody sequence embeddings, pseudo-log-likelihood scoring, and masked residue restoration. The tool wraps three model variants — ablang1-heavy, ablang1-light, and ablang2-paired — with automatic model routing based on which chains are provided on the `Antibody` input.
 
@@ -18,6 +21,24 @@ General protein language models like ESM2 are trained on diverse protein familie
 
 **Why paired models matter:**
 Heavy and light chains co-evolve to form functional antibodies. The paired model (`ablang2-paired`) processes both chains together, capturing inter-chain dependencies that single-chain models miss.
+
+## Tools
+
+### AbLang Embeddings (`ablang-embedding`)
+
+Extract antibody sequence embeddings using AbLang.
+
+### AbLang Gradient (`ablang-gradient`)
+
+Compute AbLang masked PLL gradient with respect to relaxed antibody logits.
+
+### AbLang Sampling (`ablang-sample`)
+
+Restore masked positions in antibody sequences using AbLang.
+
+### AbLang Scoring (`ablang-score`)
+
+Score antibody sequences using AbLang language model.
 
 ## Tool Catalog
 

@@ -2,6 +2,9 @@
 
 # NCBI Entrez
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 Three tools wrapping NCBI Entrez E-utilities for searching and retrieving biological sequences (protein, nucleotide, gene):
@@ -38,6 +41,23 @@ All are CPU-only tools that wrap the NCBI Entrez REST API.
 
 **Scientific foundation:**
 NCBI's Entrez [E-utilities](https://www.ncbi.nlm.nih.gov/books/NBK25501/) provide programmatic access to over 40 interconnected databases. The three tools here cover the most common workflow: search for identifiers (ESearch), get metadata (ESummary), and download sequences (EFetch). NCBI search syntax supports field-specific queries (e.g., `[Gene Name]`, `[Organism]`) and Boolean operators for precise retrieval.
+
+## Tools
+
+### NCBI Entrez EFetch (`ncbi-efetch`)
+
+Fetch sequences from NCBI Entrez databases.
+
+Retrieves FASTA records by accession or ID with optional subsequence
+extraction.
+
+### NCBI Entrez ESearch (`ncbi-esearch`)
+
+Search NCBI Entrez databases by query term.
+
+### NCBI Entrez ESummary (`ncbi-esummary`)
+
+Retrieve record summary metadata from NCBI Entrez.
 
 ## How It Works
 

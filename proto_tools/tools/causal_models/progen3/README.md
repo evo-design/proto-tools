@@ -2,6 +2,9 @@
 
 # ProGen3
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 ProGen3 is a Mixture-of-Experts (MoE) protein language model from Profluent, based on the Mixtral/Mistral architecture. It supports autoregressive protein sequence generation in both forward (N→C) and reverse (C→N) directions, as well as bidirectional sequence scoring that averages forward and reverse log-likelihoods for more robust evaluation.
@@ -13,6 +16,24 @@ ProGen3 is available in six sizes from 112M to 3B parameters, trained on large-s
 Protein language models learn the statistical patterns of natural protein sequences, capturing evolutionary constraints on amino acid usage. ProGen3's bidirectional scoring (averaging N→C and C→N likelihoods) provides a more robust assessment of sequence naturalness than unidirectional models, since protein function depends on the complete [3D structure](https://en.wikipedia.org/wiki/Protein_structure) rather than just the N-to-C reading frame.
 
 The [Mixture-of-Experts](https://en.wikipedia.org/wiki/Mixture_of_experts) architecture activates only a subset of parameters per token, allowing larger model capacity without proportionally increasing compute cost.
+
+## Tools
+
+### ProGen3 Sampling (`progen3-sample`)
+
+Generate protein sequences using ProGen3 autoregressive language model.
+
+Uses the ProGen3 Mixture-of-Experts protein language model to
+autoregressively generate protein sequences from prompt sequences.
+Supports forward (N→C) and reverse (C→N) generation via the
+`direction` config parameter.
+
+### ProGen3 Scoring (`progen3-score`)
+
+Score protein sequences using ProGen3 bidirectional language model.
+
+For each sequence, runs forward (N→C) and reverse (C→N) autoregressive
+passes and averages their log-likelihoods.
 
 ## Tool Catalog
 

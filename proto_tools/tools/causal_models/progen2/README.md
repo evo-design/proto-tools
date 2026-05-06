@@ -2,6 +2,9 @@
 
 # ProGen2
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 ProGen2 is Salesforce's autoregressive protein language model for de novo protein sequence generation and scoring. Unlike masked language models (ESM2/ESM3) that predict masked positions bidirectionally, ProGen2 generates proteins left-to-right from a prompt and provides autoregressive likelihood scoring. The tool supports local GPU execution via a standalone venv .
@@ -11,6 +14,24 @@ ProGen2 is Salesforce's autoregressive protein language model for de novo protei
 [Autoregressive](https://en.wikipedia.org/wiki/Autoregressive_model) protein language models like ProGen2 learn the statistical patterns of natural protein sequences from large databases ([UniRef](https://www.uniprot.org/help/uniref), BFD, [OAS](https://opig.stats.ox.ac.uk/webapps/oas/)). By training to predict each amino acid given the preceding context, the model implicitly captures local motifs, long-range dependencies (such as distal residue co-evolution), and sequence patterns characteristic of particular protein families
 
 This learned distribution enables two key applications: **generation** (sampling new sequences that follow natural protein statistics) and **scoring** (evaluating how "protein-like" a given sequence is under the model). Lower perplexity indicates a sequence is more consistent with the model's learned distribution of natural proteins.
+
+## Tools
+
+### ProGen2 Sampling (`progen2-sample`)
+
+Generate protein sequences using ProGen2 autoregressive language model.
+
+Uses the ProGen2 protein language model to autoregressively generate protein
+sequences from prompt sequences. Supports local GPU execution with various
+sampling strategies.
+
+### ProGen2 Scoring (`progen2-score`)
+
+Score protein sequences using ProGen2 autoregressive language model.
+
+Computes the likelihood of protein sequences using ProGen2's autoregressive
+modeling. For each position t, computes log $P(x_t | x_{<t})$ and sums
+these to get the total log-likelihood.
 
 ## Tool Catalog
 

@@ -2,6 +2,9 @@
 
 # Prodigal
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 Prodigal (Prokaryotic Dynamic Programming Genefinding Algorithm) is a fast, reliable gene prediction tool specifically designed for [prokaryotic](https://en.wikipedia.org/wiki/Prokaryote) genomes (bacteria and archaea). It identifies protein-coding genes using dynamic programming, including partial genes at sequence ends, and provides detailed annotations including ribosome binding sites and start codon types.
 
@@ -24,6 +27,17 @@ Prokaryotic genes are simpler than eukaryotic genes:
 **Meta vs single-genome mode:**
 - **Meta mode**: Uses pre-trained parameters, works on short contigs and mixed samples
 - **Single-genome mode**: Trains on input sequence, requires >100kb for reliable training
+
+## Tools
+
+### Prodigal ORF Prediction (`prodigal-prediction`)
+
+Predict genes in prokaryotic DNA sequences using Prodigal.
+
+Uses pyrodigal Python bindings for gene prediction in bacterial and archaeal
+genomes. Prodigal identifies protein-coding genes, including partial genes
+at sequence ends, and provides detailed annotations including ribosome binding
+sites and start codon types.
 
 ## How It Works
 

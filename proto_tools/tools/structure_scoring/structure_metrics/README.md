@@ -2,6 +2,9 @@
 
 # Structure Metrics
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 Structure Metrics computes structural quality metrics from PDB files, specifically the longest alpha helix length and radius of gyration. These metrics are used to flag structural artifacts such as unrealistically long helices or disordered/extended conformations in predicted protein structures.
 
@@ -22,6 +25,16 @@ These metrics provide fast, quantitative filters to catch these artifacts before
 **Scientific foundation:**
 - **Secondary structure assignment** uses the [DSSP](https://en.wikipedia.org/wiki/DSSP_(hydrogen_bond_estimation_algorithm))-like algorithm implemented in Biotite, which assigns helix, sheet, and coil states based on backbone geometry and hydrogen bonding patterns.
 - **Radius of gyration** is a standard biophysical metric used in [small-angle X-ray scattering](https://en.wikipedia.org/wiki/Small-angle_X-ray_scattering) (SAXS) and polymer physics. For globular proteins, it scales approximately as R_g ∝ N^(0.4) where N is the number of residues.
+
+## Tools
+
+### Structure Quality Metrics (`structure-metrics`)
+
+Compute structural quality metrics from PDB files.
+
+Computes secondary structure percentages, longest alpha helix, and radius of
+gyration for each input structure. Used to filter out disordered or artifactual
+predicted structures.
 
 ## How It Works
 

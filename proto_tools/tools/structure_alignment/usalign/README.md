@@ -2,6 +2,9 @@
 
 # USalign
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 USalign (Universal Structure alignment) extends TMalign to support monomers, multimers, and nucleic acid structures (`usalign-alignment`). It aligns two macromolecular structures using multimer-aware mode (`-mm 1 -ter 1`) and returns [TM-scores](https://en.wikipedia.org/wiki/Template_modeling_score) normalized by each structure's length. USalign is a compiled C++ binary that runs on CPU with no external dependencies.
@@ -23,6 +26,12 @@ USalign computes the TM-score for pairs of macromolecular structures, generalizi
 
 **Scientific foundation:**
 USalign unifies multiple structure alignment methods (TMalign, MMalign, RNAalign) into a single universal framework. For multimers, it uses an iterative chain mapping algorithm that finds the optimal correspondence between chains in the two structures, then computes TM-score over all aligned chains jointly. The TM-score threshold of 0.5 for fold similarity applies equally to monomers and multimers. For nucleic acids, backbone phosphorus atoms replace C-alpha atoms as alignment anchors.
+
+## Tools
+
+### USalign Structure Alignment (`usalign-alignment`)
+
+Run USalign on two PDB structures.
 
 ## How It Works
 

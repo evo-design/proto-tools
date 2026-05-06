@@ -2,6 +2,9 @@
 
 # ORFipy
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 ORFipy is a fast, flexible ORF (Open Reading Frame) prediction tool that identifies potential coding regions in DNA sequences based on start and stop codons. Unlike gene prediction tools like Prodigal, ORFipy performs simple ORF finding without machine learning - it reports all ORFs matching your criteria, making it ideal for exploratory analysis and custom filtering.
 
@@ -18,6 +21,15 @@ An [Open Reading Frame](https://en.wikipedia.org/wiki/Open_reading_frame) is a s
 - **Gene**: Biologically functional coding sequence (subset of ORFs)
 
 ORFipy finds ORFs; gene predictors like Prodigal use additional signals to distinguish real genes.
+
+## Tools
+
+### Orfipy ORF Prediction (`orfipy-prediction`)
+
+Predict open reading frames (ORFs) in DNA sequences using Orfipy.
+
+Uses Orfipy, a fast ORF prediction tool, to identify potential coding regions.
+Processing is batched but caching is handled per-sequence via cacheable=True.
 
 ## How It Works
 

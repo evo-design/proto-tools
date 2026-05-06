@@ -2,6 +2,9 @@
 
 # pDockQ2
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 pDockQ2 (Zhu et al. 2023) scores the interface quality of a predicted protein complex from AlphaFold-Multimer / AlphaFold3 / Chai-1 / Boltz-2 / Protenix outputs. It combines per-residue pLDDT and the PAE (Predicted Aligned Error) matrix into a single scalar in `[0, 1]`, where higher values indicate more reliably predicted interfaces. Commonly used as a filter gate in binder-design pipelines; a value above roughly `0.23` is typically treated as "acceptable" in published benchmarks.
@@ -25,6 +28,15 @@ These feed a sigmoid whose parameters were fit by Zhu et al. 2023 against ground
 **When NOT to use:**
 - The structure lacks an interchain PAE matrix (e.g. ESMFold single-chain prediction without PAE).
 - You need a physics-based interface score — use `pyrosetta-sap`, `pyrosetta-sasa`, or `pyrosetta-energy`.
+
+## Tools
+
+### pDockQ2 Interface Quality (`pdockq2`)
+
+Compute pDockQ2 (Zhu 2023) for a cofolded protein complex.
+
+Returns the mean per-chain `pmidockq` over chains in `target_chains`
+that contact `binder_chain`, plus per-chain debug rows.
 
 ## How It Works
 

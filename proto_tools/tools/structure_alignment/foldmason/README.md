@@ -2,6 +2,9 @@
 
 # FoldMason Toolkit
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 The FoldMason toolkit wraps the Steinegger Lab's multiple structure alignment tool (Gilchrist et al., *Science* 2026). Two sibling tools, both backed by the same FoldMason binary:
@@ -25,6 +28,19 @@ FoldMason aligns multiple protein structures by encoding each one as a sequence 
 
 **Scientific foundation:**
 FoldMason combines Foldseek's 3Di alphabet with a progressive multiple-alignment engine (`structuremsa`), augmented by neighborhood-aware scoring and optional iterative refinement. `msa2lddt` measures alignment quality column-by-column using LDDT, giving a fast, consistent metric across structurally diverse inputs.
+
+## Tools
+
+### FoldMason MSA (`foldmason-msa`)
+
+Run a FoldMason multiple structure alignment.
+
+Dispatches to the public FoldMason server (remote) or the local FoldMason
+CLI's `easy-msa` based on `config.search_mode`.
+
+### FoldMason Score MSA (`foldmason-score-msa`)
+
+Score a structural MSA with FoldMason msa2lddt.
 
 ## How It Works
 

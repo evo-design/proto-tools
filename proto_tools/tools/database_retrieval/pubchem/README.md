@@ -2,6 +2,9 @@
 
 # PubChem
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 `pubchem-fetch` resolves a small-molecule identifier (CID, name, SMILES, or InChIKey) against the PubChem PUG REST API
@@ -34,6 +37,16 @@ the [IUPAC InChI](https://www.inchi-trust.org/) library, and assigns each unique
 properties are derived directly from the standardized structure (TPSA via the Ertl algorithm, complexity via
 Bertz/Hendrickson/Ihlenfeldt). The PUG REST endpoint exposes both the resolution graph (name/SMILES/InChIKey to CID)
 and the property table; the database is updated continuously as new depositions arrive.
+
+## Tools
+
+### PubChem Fetch (`pubchem-fetch`)
+
+Fetch a compound record from PubChem.
+
+Resolves the input identifier to a PubChem CID (skipped when `inputs.cid`
+is given directly), then fetches the configured property bundle and
+optionally synonyms.
 
 ## How It Works
 

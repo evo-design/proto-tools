@@ -2,6 +2,9 @@
 
 # Unified Sequence Fetch
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 `sequence-fetch` retrieves DNA, RNA, protein, and structure data for named targets across [NCBI](https://www.ncbi.nlm.nih.gov/) Entrez, [UniProt](https://www.uniprot.org/), and [PDB](https://www.rcsb.org/). It supports ID-first resolution, name+organism fallback, and strict molecular type checks.
@@ -19,6 +22,23 @@ It fetches canonical molecular records from public databases: genomic DNA (`dna_
 
 **Scientific foundation:**
 The tool wraps source APIs rather than using an internal predictive model. NCBI retrieval uses Entrez E-utilities (`esearch`, `efetch`), protein-centric retrieval prefers UniProt when IDs are present, and structure retrieval uses RCSB PDB entry endpoints. Resolution is deterministic and priority-based: provided IDs first, then name+organism fallback.
+
+## Tools
+
+### Multi-source Sequence Fetch (`sequence-fetch`)
+
+Fetch DNA, RNA, protein, and structure records from NCBI, UniProt, and PDB.
+
+This tool resolves IDs and names across NCBI Entrez, UniProt, and PDB for
+sequence and structure retrieval.
+
+Routing priority (per request):
+    Protein: `uniprot_id` → `protein_id` / `preferred_accession` →
+        `pdb_id` → name search.
+    Genomic: `genomic_coordinates` → `preferred_accession` →
+        name search → gene-locus fallback.
+    `additional_ids` is consulted last; the key `"accession"` is
+    used as a generic fallback when no typed override is set.
 
 ## How It Works
 

@@ -2,6 +2,9 @@
 
 # Foldseek Toolkit
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 The Foldseek toolkit wraps the Steinegger Lab's structural search/alignment binary and the public Foldseek server (`search.foldseek.com`). Five sibling tools, all backed by the same Foldseek codebase:
@@ -30,6 +33,34 @@ Foldseek encodes each protein structure as a sequence over a structural alphabet
 
 **Scientific foundation:**
 Per Foldseek's GitHub README, "many of Foldseek's modules (subprograms) rely on MMseqs2." Foldseek inherits MMseqs2's sequence-search infrastructure to align over the 3Di structural alphabet. The default `3diaa` mode performs local Gotoh-Smith-Waterman alignment combining 3Di and amino-acid scores; `tmalign` runs full global TMalign on hit candidates; `lolalign` is the local LoL-aligner. Multimer search internally aligns each query chain, then scores chain-pair compatibility against candidate complexes.
+
+## Tools
+
+### Foldseek Cluster (`foldseek-cluster`)
+
+Cluster structures with Foldseek easy-cluster.
+
+### Foldseek Multimer Search (`foldseek-multimer-search`)
+
+Run a Foldseek multimer (complex) structural search.
+
+Dispatches to the public Foldseek-Multimer server (remote) or the local
+Foldseek CLI's `easy-multimersearch` based on `config.search_mode`.
+
+### Foldseek Multimer Cluster (`foldseek-multimercluster`)
+
+Cluster multimers with Foldseek easy-multimercluster.
+
+### Foldseek Reciprocal Best Hits (`foldseek-rbh`)
+
+Run a Foldseek reciprocal-best-hits search via the local CLI.
+
+### Foldseek Search (`foldseek-search`)
+
+Run a Foldseek structural search.
+
+Dispatches to the public server (remote) or the local Foldseek CLI based
+on `config.search_mode`.
 
 ## How It Works
 

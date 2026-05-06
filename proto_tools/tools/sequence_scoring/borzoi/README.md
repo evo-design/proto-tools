@@ -2,6 +2,9 @@
 
 # Borzoi
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 Borzoi is a deep learning model that predicts gene expression and regulatory activity from a 524,288 bp DNA sequence. As the successor to Enformer, Borzoi uses dilated residual convolutional blocks combined with attention to achieve a 2.7x longer context window (524 kb vs. 196 kb), higher output resolution (6,144 bins), and improved accuracy, particularly for RNA-seq coverage prediction.
@@ -23,6 +26,16 @@ Borzoi was trained to predict RNA-seq coverage directly from DNA sequence, rathe
 - **Higher output resolution**: 6,144 bins at 32 bp resolution provide finer spatial detail than Enformer
 
 The model also predicts [CAGE](https://en.wikipedia.org/wiki/Cap_analysis_of_gene_expression), [DNase-seq](https://en.wikipedia.org/wiki/DNase-Seq), [ATAC-seq](https://en.wikipedia.org/wiki/ATAC-seq), and [histone modification](https://en.wikipedia.org/wiki/Histone_modification) tracks, making it a general-purpose regulatory genomics predictor with improved long-range accuracy.
+
+## Tools
+
+### Borzoi Ensemble (`borzoi-ensemble`)
+
+Predict regulatory activity using all Borzoi replicates.
+
+### Borzoi Prediction (`borzoi-prediction`)
+
+Predict regulatory activity using a single Borzoi replicate.
 
 ## Tool Catalog
 

@@ -2,6 +2,9 @@
 
 # AlphaFold DB
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 `alphafold-db-fetch` retrieves an AlphaFold-predicted protein structure from the [AlphaFold Protein Structure Database](https://alphafold.ebi.ac.uk/) by UniProt accession. It returns a parsed `Structure` (PDB or mmCIF, with `b_factor_type=PLDDT` and per-residue pLDDT plus optional pAE on `structure.metrics`), drop-in compatible with every structure-consuming tool in proto-tools (TM-align, US-align, inverse folding, structure-scoring, structure-design conditioning), alongside rich metadata (entry ID, AFDB version, gene, organism, source URLs, full JSON record). This is a CPU-only tool that wraps the AlphaFold DB REST API.
@@ -20,6 +23,16 @@ The [AlphaFold Protein Structure Database](https://alphafold.ebi.ac.uk/) (AFDB) 
 
 **Scientific foundation:**
 AlphaFold2 (Jumper et al. 2021) predicts protein 3D structure from sequence using an attention-based neural network operating jointly on a multiple sequence alignment (MSA) and an evolving pair representation. AlphaFold DB (Varadi et al. 2022) industrialises this method to produce a predicted structure for every reference sequence in UniProt, with periodic version refreshes when the underlying model or pipeline is updated. AFDB serves only AlphaFold2 monomer predictions; complexes are produced by other pipelines (e.g. AlphaFold-Multimer, AlphaFold3) and are not part of this database.
+
+## Tools
+
+### AlphaFold DB Fetch (`alphafold-db-fetch`)
+
+Fetch a prediction record from AlphaFold DB.
+
+AFDB returns one record per isoform (TP53 has 9). Without `isoform` the
+canonical record (`AF-{accession}-F1`) is selected and a warning lists
+available alternatives.
 
 ## How It Works
 

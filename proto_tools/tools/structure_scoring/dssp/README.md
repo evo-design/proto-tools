@@ -2,6 +2,9 @@
 
 # DSSP Secondary Structure
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 DSSP assigns protein secondary structure from 3D coordinates using hydrogen-bond and geometry rules. It is an assignment program for structures with coordinates, not a sequence-based secondary-structure predictor. This module exposes `dssp-secondary-structure`, which reports helix, sheet, and loop percentages for a selected chain in each input structure.
@@ -28,6 +31,12 @@ DSSP identifies recurring hydrogen-bonding and geometric patterns in protein bac
 - Match pipelines that require DSSP-backed secondary-structure assignment.
 - Score designed binder chains for helix/sheet/loop composition.
 - Compare one chain's assigned secondary-structure composition across a batch of structures.
+
+## Tools
+
+### DSSP Secondary Structure (`dssp-secondary-structure`)
+
+Assign secondary structure with DSSP in a standalone tool environment.
 
 ## How It Works
 

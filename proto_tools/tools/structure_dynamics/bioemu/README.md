@@ -2,6 +2,9 @@
 
 # BioEmu
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 BioEmu generates protein conformational ensembles using a diffusion generative model trained on [molecular dynamics](https://en.wikipedia.org/wiki/Molecular_dynamics) (MD) simulation data. Given a protein sequence, it produces an ensemble of 3D backbone structures representing the [equilibrium distribution](https://en.wikipedia.org/wiki/Boltzmann_distribution) of conformations the protein adopts -- capturing folded states, alternative conformations, and conformational heterogeneity without running explicit MD simulations.
@@ -23,6 +26,12 @@ Traditional approaches to studying protein dynamics include:
 BioEmu takes a fundamentally different approach: it learns the equilibrium conformational distribution directly from MD training data using a score-based diffusion model. Given only a protein sequence, it generates an ensemble of backbone conformations that approximate the [Boltzmann distribution](https://en.wikipedia.org/wiki/Boltzmann_distribution) -- the thermodynamically correct distribution of states the protein visits at equilibrium.
 
 This makes BioEmu orders of magnitude faster than MD while capturing the same large-scale conformational heterogeneity (though it does not model explicit time-dependent dynamics or rare events).
+
+## Tools
+
+### BioEmu Conformational Ensemble Sampling (`bioemu-sample`)
+
+Generate protein conformational ensembles using BioEmu.
 
 ## Model Variants
 

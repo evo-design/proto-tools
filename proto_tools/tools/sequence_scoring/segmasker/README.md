@@ -2,6 +2,9 @@
 
 # Segmasker
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 Segmasker detects [low-complexity regions](https://en.wikipedia.org/wiki/Low_complexity_regions_in_proteins) in protein sequences using NCBI's SEG algorithm. Low-complexity regions are stretches of amino acids with biased composition (e.g., polyalanine runs, proline-rich regions, or glutamine repeats) that can cause spurious hits in homology searches and may indicate disordered or non-globular regions.
@@ -22,6 +25,16 @@ LCRs are common in eukaryotic proteomes (up to 20-25% of residues) and are assoc
 - **False positives in BLAST** -- LCRs match other LCRs regardless of evolutionary relationship
 
 In protein design, high low-complexity content often signals poor sequence quality, since natural globular proteins typically have low-complexity fractions below 0.1.
+
+## Tools
+
+### Segmasker Low-Complexity Detection (`segmasker-score`)
+
+Detect low-complexity regions in protein sequences using NCBI segmasker.
+
+Uses NCBI's segmasker tool to identify compositionally biased and low-complexity
+regions in protein sequences. Low-complexity regions are often masked before
+homology searches to reduce false positive matches.
 
 ## How It Works
 

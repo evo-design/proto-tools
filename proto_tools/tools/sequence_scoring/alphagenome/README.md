@@ -2,6 +2,9 @@
 
 # AlphaGenome
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 AlphaGenome is Google DeepMind's multi-task genomic foundation model that predicts diverse regulatory signals from DNA sequence. It takes long genomic context windows (up to 1 Mb) and outputs spatial prediction tracks for [RNA-seq](https://en.wikipedia.org/wiki/RNA-Seq), [ATAC-seq](https://en.wikipedia.org/wiki/ATAC-seq), [DNase-seq](https://en.wikipedia.org/wiki/DNase-Seq), [CAGE](https://en.wikipedia.org/wiki/Cap_analysis_of_gene_expression), [ChIP-seq](https://en.wikipedia.org/wiki/ChIP_sequencing), splice sites, and 3D contact maps. This wrapper provides six batched tools covering interval prediction, variant-effect prediction, raw sequence prediction, and three scoring modes (variant, interval, ISM).
@@ -20,6 +23,32 @@ Gene regulation is controlled by a complex interplay of [cis-regulatory elements
 - **Contact maps ([Hi-C](https://en.wikipedia.org/wiki/Hi-C_(genomic_analysis_technique)))** capture 3D chromatin organization
 
 AlphaGenome jointly predicts all of these signals from DNA sequence alone, leveraging long-range context (up to 1 Mb) to capture distal regulatory effects. This multi-task architecture allows it to model the relationships between regulatory layers -- for example, how a variant that disrupts a [CTCF](https://en.wikipedia.org/wiki/CTCF) binding site might alter both chromatin accessibility and 3D contact structure.
+
+## Tools
+
+### AlphaGenome Predict Intervals (`alphagenome-predict-intervals`)
+
+Predict genomic features for batched intervals using AlphaGenome.
+
+### AlphaGenome Predict Sequences (`alphagenome-predict-sequences`)
+
+Predict genomic features from batched raw DNA sequences using AlphaGenome.
+
+### AlphaGenome Predict Variants (`alphagenome-predict-variants`)
+
+Predict variant effects in batch using AlphaGenome.
+
+### AlphaGenome Score Intervals (`alphagenome-score-intervals`)
+
+Score genomic intervals in batch using AlphaGenome interval scorers.
+
+### AlphaGenome Score ISM Variants Batch (`alphagenome-score-ism-variants-batch`)
+
+Run batched in-silico mutagenesis using AlphaGenome variant scorers.
+
+### AlphaGenome Score Variants (`alphagenome-score-variants`)
+
+Score variant effects in batch using AlphaGenome variant scorers.
 
 ## Tool Catalog
 

@@ -2,6 +2,9 @@
 
 # PyRosetta Scoring Functions
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 > [!IMPORTANT]
 > **License:** PyRosetta is distributed under the [Rosetta Software License](https://www.rosettacommons.org/software/license-and-download). Free for academic and non-commercial use. Commercial users must obtain a license from [UW CoMotion](https://els2.comotion.uw.edu/product/pyrosetta). By using this tool, you accept these terms.
 
@@ -18,6 +21,71 @@ PyRosetta provides physics-based scoring of protein structures using the Rosetta
 **Rosetta Energy Scoring** evaluates protein structures using a physics-based [energy function](https://en.wikipedia.org/wiki/Force_field_(chemistry)) that combines van der Waals interactions, electrostatics, hydrogen bonding, solvation, and backbone torsion preferences. The score is reported in Rosetta Energy Units (REU). Lower (more negative) total energies indicate more favorable structures. [FastRelax](https://www.rosettacommons.org/docs/latest/scripting_documentation/RosettaScripts/Movers/movers_pages/FastRelaxMover) is optionally applied before scoring to resolve steric clashes and backbone strain.
 
 **Interface Analysis** quantifies the quality of protein-protein interfaces using Rosetta's `InterfaceAnalyzerMover` plus auxiliary residue-composition and surface-layer analyses. Seven metrics are emitted per complex: shape complementarity (`interface_sc`, 0-1), interface hydrogen-bond count (`interface_hbonds`), binding ΔG (`interface_dG`, in REU), buried SASA (`interface_dSASA`, Å²), interface packing statistic (`interface_packstat`, 0-1), interface-residue apolar fraction (`interface_hydrophobicity`, %), and binder surface apolar fraction (`surface_hydrophobicity`, 0-1).
+
+## Tools
+
+### PyRosetta Energy Score (`pyrosetta-energy`)
+
+Compute Rosetta energy scores using PyRosetta.
+
+Scores each protein structure using the specified Rosetta score function.
+To resolve steric clashes and strain before scoring, set
+`config.pre_relax_structures=True` — the framework's `Config.preprocess`
+hook then dispatches `pyrosetta-relax` and substitutes the relaxed
+structures before this function runs.
+
+Chain selection only filters the per-residue breakdown; the whole pose
+is always scored, so `total_energy`/`energy_terms` are always the
+full-complex values and selected-residue energies are in-complex
+contributions, not isolated-chain energies. See :class:`PyRosettaEnergyMetrics`
+for details.
+
+### PyRosetta Interface Analyzer (`pyrosetta-interface-analyzer`)
+
+Compute interface-quality metrics for two-chain complexes using PyRosetta.
+
+Runs Rosetta's `InterfaceAnalyzerMover` to compute shape complementarity,
+interface H-bond count, binding ΔG, buried SASA, and packing statistic;
+computes `interface_hydrophobicity` from interface-residue AA composition
+(binder residues with any atom within 4.0 Å of any target atom); and
+computes `surface_hydrophobicity` from `LayerSelector(pick_surface=True)`
+applied to the binder sub-pose.
+
+The interface for each complex is defined by the `target_chain` and
+`binder_chain` fields on the corresponding :class:`InterfaceStructureInput`.
+Chain-label validity is enforced at input construction. To analyze an
+already-relaxed pose, pass it in directly; to relax-then-analyze in one
+dispatch, set `config.pre_relax_structures=True`.
+
+### PyRosetta FastRelax (`pyrosetta-relax`)
+
+Run FastRelax on protein structures and return the relaxed coordinates.
+
+Designed for cofolding filter pipelines (Germinal-style binder design)
+where downstream geometric / energetic gates need to operate on a
+relaxed pose. The relaxed Structure chains cleanly into
+`run_pyrosetta_energy`, `run_pyrosetta_sap`, `run_pyrosetta_sasa`,
+or Structure-aware non-PyRosetta tools.
+
+### PyRosetta SAP Score (`pyrosetta-sap`)
+
+Compute Spatial Aggregation Propensity (SAP) scores using PyRosetta.
+
+SAP quantifies the aggregation propensity of a protein's surface by
+measuring exposed hydrophobicity. Higher scores indicate greater
+aggregation risk. Per-residue contributions identify which residues
+drive aggregation propensity.
+
+Chain selection controls which residues are scored, while the full
+structure is always used for SASA and burial context.
+
+### PyRosetta SASA (`pyrosetta-sasa`)
+
+Compute Solvent Accessible Surface Area (SASA) using PyRosetta.
+
+Calculates total and per-residue SASA using the SasaCalc module with
+a configurable probe radius. SASA measures the surface area of a protein
+accessible to solvent molecules.
 
 ## Tool Catalog
 

@@ -2,6 +2,9 @@
 
 # Protenix
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 Protenix is ByteDance's open-source reimplementation of AlphaFold3 that predicts 3D structures of biomolecular complexes using a [diffusion](https://en.wikipedia.org/wiki/Diffusion_model)-based architecture. It supports proteins, DNA, RNA, ligands, and their multi-chain complexes with optional post-translational modifications. Protenix is the first fully open-source model to match or exceed AlphaFold3 accuracy across diverse benchmarks.
@@ -23,6 +26,19 @@ Protenix uses a diffusion-based architecture (following the AlphaFold3 approach)
 - **Uses MSA information** (optional) from ColabFold search to capture evolutionary conservation signals
 
 The model architecture consists of a Pairformer module (iterative refinement of pair representations), followed by a diffusion module that denoises random 3D coordinates into the predicted structure. Multiple samples are generated and ranked by a confidence head.
+
+## Tools
+
+### Protenix Structure Prediction (`protenix-prediction`)
+
+Predict 3D structures using Protenix.
+
+Uses Protenix, an open-source reimplementation of AlphaFold3 by ByteDance
+Research, to predict 3D structures of proteins, DNA, RNA, ligands, and their
+complexes. Supports local GPU execution via isolated Python environments.
+
+All input complexes are batched into a single Protenix CLI call for efficiency,
+avoiding repeated model loading.
 
 ## Model Variants
 

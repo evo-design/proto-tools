@@ -2,6 +2,9 @@
 
 # PyHMMER
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 PyHMMER is a Python library binding to [HMMER3](http://hmmer.org/) for biological sequence analysis using [profile hidden Markov models](https://en.wikipedia.org/wiki/Hidden_Markov_model) (HMMs). It enables fast and sensitive domain annotation and homology detection, particularly for finding distant homologs that BLAST may miss. This module provides interfaces for *HMM Search* (searching HMM profiles against sequences), *HMM Scan* (searching sequences against an HMM database), *PHMMER* (protein sequence-protein sequence search), *NHMMER* (nucleotide sequence search), and *JackHMMER* (iterative protein sequence search).
 
@@ -23,6 +26,43 @@ HMMER uses profile HMMs built from [multiple sequence alignments](https://en.wik
 2. **[Forward-Backward Algorithm](https://en.wikipedia.org/wiki/Forward%E2%80%93backward_algorithm)**: Calculates the probability of a sequence given the model.
 3. **[Viterbi Algorithm](https://en.wikipedia.org/wiki/Viterbi_algorithm)**: Finds the most likely alignment path through the model.
 4. **E-value Calculation**: Uses [extreme value distribution](https://en.wikipedia.org/wiki/Generalized_extreme_value_distribution) theory to estimate statistical significance, accounting for database size.
+
+## Tools
+
+### PyHMMER Scan (`pyhmmer-hmmscan`)
+
+Search protein sequences against HMM database using PyHMMER.
+
+This function implements the hmmscan algorithm, searching protein sequences
+against an HMM database to identify domains and protein families within the
+query sequences. This is the reverse of hmmsearch and is useful for annotating
+proteins with known domain architectures.
+
+### PyHMMER Profile Search (`pyhmmer-hmmsearch`)
+
+Search HMM profile(s) against protein sequences using PyHMMER.
+
+This function implements the hmmsearch algorithm, searching one or more HMM
+profiles against protein sequences to identify sequences that match the
+profile(s). This is useful for finding proteins belonging to specific families
+or containing particular domains.
+
+### PyHMMER JackHMMER Search (`pyhmmer-jackhmmer`)
+
+Iteratively search protein sequences against protein database using PyHMMER.
+
+### PyHMMER NHMMER Search (`pyhmmer-nhmmer`)
+
+Search nucleotide sequences against nucleotide database using PyHMMER.
+
+### PyHMMER PHMMER Search (`pyhmmer-phmmer`)
+
+Search protein sequences against protein database using PyHMMER.
+
+This function implements the phmmer algorithm, which performs iterative
+protein-protein searches by building temporary HMM profiles from query
+sequences on-the-fly. This is useful for finding homologous sequences without
+requiring pre-built HMM profiles.
 
 ## Tool Catalog
 

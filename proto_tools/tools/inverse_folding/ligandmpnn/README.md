@@ -2,6 +2,9 @@
 
 # LigandMPNN
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 LigandMPNN is an inverse folding model that designs protein sequences conditioned on a backbone structure and its molecular context -- including bound ligands, metal ions, nucleic acids, and non-standard residues. It extends ProteinMPNN's message-passing neural network architecture to incorporate atomic-level information from the non-protein environment surrounding the design target.
@@ -24,6 +27,12 @@ LigandMPNN extends this by encoding the atomic coordinates and chemical identiti
 - **Non-standard residues** (modified amino acids, [post-translational modifications](https://en.wikipedia.org/wiki/Post-translational_modification))
 
 This context is critical for designing functional enzymes, metalloprotein binding sites, and protein-nucleic acid interfaces, where the sequence must be compatible with both the protein fold and its molecular partners.
+
+## Tools
+
+### LigandMPNN Sampling (`ligandmpnn-sample`)
+
+Sample protein sequences using LigandMPNN.
 
 ## Tool Catalog
 

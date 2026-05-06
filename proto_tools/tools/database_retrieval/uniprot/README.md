@@ -2,6 +2,9 @@
 
 # UniProt
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 `uniprot-fetch` retrieves protein entries from UniProt by accession ID or by searching with target name and organism. It returns the protein sequence, gene names, PDB cross-references, and the full UniProt JSON record. This is a CPU-only tool that wraps the UniProt REST API.
@@ -20,6 +23,16 @@
 
 **Scientific foundation:**
 UniProt integrates sequence data from [EMBL-Bank](https://www.ebi.ac.uk/ena/browser/home), protein structures from [PDB](https://www.rcsb.org/), and curated annotations from expert biocurators. Swiss-Prot entries undergo manual review including experimental evidence attribution, cross-referencing to literature, and standardized functional annotation. The database is updated biweekly with new sequences and annotations from the scientific community.
+
+## Tools
+
+### UniProt Fetch (`uniprot-fetch`)
+
+Fetch protein entries from UniProt.
+
+Supports direct entry lookup by accession or name+organism search with
+ranked result selection based on gene name match, reviewed status, and
+PDB cross-reference availability.
 
 ## How It Works
 

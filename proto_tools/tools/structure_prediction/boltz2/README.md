@@ -2,6 +2,9 @@
 
 # Boltz2
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 Boltz2 is a state-of-the-art multi-modal structure prediction model that predicts 3D structures of proteins, DNA, RNA, and ligands using a [diffusion](https://en.wikipedia.org/wiki/Diffusion_model)-based architecture with MSA integration. It provides the broadest molecular type support among current structure prediction tools.
@@ -31,6 +34,16 @@ Confidence metrics include:
 - **ipTM** (interface pTM): Confidence in inter-chain interfaces (0-1), primary metric for complexes.
 - **pLDDT** (predicted LDDT): Per-residue confidence scores.
 - **Specialized interface scores**: `ligand_iptm`, `protein_iptm` for specific interaction types.
+
+## Tools
+
+### Boltz2 Structure Prediction (`boltz2-prediction`)
+
+Predict 3D structures using Boltz2 multi-modal model.
+
+Uses Boltz2, a diffusion-based deep learning model, to predict 3D structures
+of proteins, DNA, RNA, ligands, and their complexes. Runs via local GPU
+execution in isolated Python environments.
 
 ## Execution Modes
 

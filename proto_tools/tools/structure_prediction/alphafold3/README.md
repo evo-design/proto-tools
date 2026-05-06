@@ -2,6 +2,9 @@
 
 # AlphaFold3
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 > [!IMPORTANT]
 > **AlphaFold3 model parameters are gated by DeepMind's Terms of Use.** They are NOT automatically downloaded by `setup.sh` and cannot be redistributed. To run this tool you must:
 >
@@ -43,6 +46,12 @@ Confidence metrics include:
 - **ipTM** (interface pTM): Confidence in inter-chain interfaces (0-1), where >0.8 indicates high-confidence interactions and <0.6 suggests likely failed prediction.
 - **PAE** (Predicted Aligned Error): Estimates error in relative positions between residue pairs; lower values indicate higher confidence.
 - **ranking_score**: Composite metric combining ipTM, pTM, disorder penalty, and clash penalty for ranking multiple predictions.
+
+## Tools
+
+### AlphaFold3 Structure Prediction (`alphafold3-prediction`)
+
+Predict protein 3D structures using AlphaFold3.
 
 ## Execution Modes
 

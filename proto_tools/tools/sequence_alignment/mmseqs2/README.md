@@ -2,6 +2,9 @@
 
 # MMseqs2
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 [MMseqs2](https://mmseqs.com/) (Many-against-Many sequence searching) is an ultra-fast tool for searching and clustering huge protein and nucleotide sequence sets. It performs BLAST-like searches at ~100× the speed while maintaining comparable sensitivity. The GPU build ([Kallenborn et al. 2024](https://doi.org/10.1038/s41592-025-02819-8)) brings further speedups on Turing+ NVIDIA GPUs.
@@ -35,6 +38,33 @@ MMseqs2 ([Steinegger & Söding 2017](https://doi.org/10.1038/nbt.3988)) is the s
 This dramatically reduces search space while preserving sensitivity comparable to BLAST.
 
 The GPU build ([Kallenborn et al. 2024](https://doi.org/10.1038/s41592-025-02819-8)) accelerates the prefilter and alignment stages on Turing+ NVIDIA GPUs. The ColabFold iterative pipeline ([Mirdita et al. 2022](https://doi.org/10.1038/s41592-022-01488-1)) layered on top adds profile-based re-search and forms the basis of `mmseqs2-homology-search`.
+
+## Tools
+
+### MMseqs2 Clustering (`mmseqs2-clustering`)
+
+Perform sequence clustering using MMseqs2.
+
+Groups similar sequences based on sequence identity threshold and returns
+per-sequence cluster assignments.
+
+### MMseqs2 Homology Search (`mmseqs2-homology-search`)
+
+Execute homology search against the configured registered dataset(s).
+
+### MMseqs2 Genome Search (`mmseqs2-search-genomes`)
+
+Execute nucleotide genome-to-genome search workflow.
+
+Implements the full MMseqs2 nucleotide search pipeline including database
+creation, indexing, searching, and result conversion.
+
+### MMseqs2 Protein Search (`mmseqs2-search-proteins`)
+
+Perform protein sequence search using MMseqs2.
+
+Searches query protein sequences against a target database and returns
+per-sequence results with all hits.
 
 ## How It Works
 

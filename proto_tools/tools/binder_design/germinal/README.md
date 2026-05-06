@@ -2,6 +2,9 @@
 
 # Germinal
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 Germinal is an end-to-end pipeline for de novo, epitope-targeted antibody design — both single-domain VHHs (nanobodies) and scFvs — introduced by [Mille-Fragoso et al. (2025)](https://www.biorxiv.org/content/10.1101/2025.09.19.677421). It combines [ColabDesign](https://github.com/sokrypton/ColabDesign) + AlphaFold2-Multimer hallucination with antibody language model gradients ([IgLM](https://github.com/Graylab/IgLM), [AbLang](https://github.com/oxpig/AbLang)), [AbMPNN](https://arxiv.org/abs/2310.19513) sequence redesign, and downstream structure validation against [Chai-1](https://github.com/chaidiscovery/chai-lab), [AlphaFold3](https://github.com/google-deepmind/alphafold3), or [Protenix](https://github.com/bytedance/Protenix) — followed by [PyRosetta](https://www.pyrosetta.org/)-based interface scoring and a multi-stage filter cascade.
@@ -22,6 +25,18 @@ Germinal builds on prior antibody hallucination work and adds four key advances:
 2. **Antibody language model gradient merging** — IgLM/AbLang likelihoods are merged into the hallucination gradient to bias designs toward natural antibody-like sequences (germline-like CDR distributions, framework conservation).
 3. **Multi-stage filter cascade** — designs flow through cheap structural filters (clashes, sc_rmsd, hotspot contacts, CDR interface fraction) before the expensive external structure-validation step, so most failed trajectories are killed early.
 4. **Independent structure-validation backend** — final designs are re-folded with a backend distinct from the AF2-Multimer used during hallucination (Chai-1, AF3, or Protenix), so the filter is not just measuring the hallucinator's self-consistency.
+
+## Tools
+
+### Germinal Antibody Design (`germinal-design`)
+
+Run a Germinal antibody-design campaign end-to-end.
+
+Spawns the upstream `run_germinal.py` (pinned commit) inside the tool's
+standalone env, parses the resulting `runs/<exp>/{accepted,redesign_candidates,trajectories}/`
+output trees, and returns a typed :class:`GerminalOutput`. Each call is one
+end-to-end campaign against a single target — Germinal's pipeline is
+stateful within a run so we do not fan out across targets.
 
 ## Tool Catalog
 

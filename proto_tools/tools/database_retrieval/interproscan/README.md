@@ -2,6 +2,9 @@
 
 # InterPro
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 `interproscan-fetch` retrieves protein domain annotations from [InterPro](https://www.ebi.ac.uk/interpro/) — the EMBL-EBI aggregator that integrates Pfam, SMART, PROSITE, Gene3D / CATH-Gene3D, Panther, PIRSF, and a dozen other member databases under unified InterPro IDs (`IPRxxxxxx`). Two access paths share the same Output schema: a fast direct lookup by UniProt accession, and a submit-and-poll path against EBI's iprscan5 service for novel sequences. Each domain row carries a 1-indexed inclusive `start` / `end`, a unified `type` label (`family` / `domain` / `repeat` / `active_site` / `conserved_site` / `homologous_superfamily` / `binding_site` / `ptm`), the parent InterPro accession when integrated, and optional GO / pathway cross-references.
@@ -23,6 +26,16 @@ UniProt's per-protein annotations are partial; InterPro is the reference catalog
 
 **Scientific foundation:**
 InterPro 2025 (Blum et al., *Nucleic Acids Res*) integrates 14 member databases into ~46,000 InterPro entries covering ~85% of UniProtKB. For a sequence, iprscan5 runs each member's HMM / profile / regex / structural model in parallel and returns matches with member-DB scores plus the parent InterPro grouping. The direct REST path (`/interpro/api/entry/all/protein/uniprot/{acc}/`) returns the pre-computed integration of those matches keyed by UniProt accession — the same data without the per-job submission cost.
+
+## Tools
+
+### InterProScan Fetch (`interproscan-fetch`)
+
+Fetch InterPro domain annotations.
+
+Dispatches to the direct lookup path when `inputs.uniprot_id` is set,
+or the iprscan5 submit-and-poll path when `inputs.sequence` is set.
+The input validator guarantees exactly one is populated.
 
 ## How It Works
 

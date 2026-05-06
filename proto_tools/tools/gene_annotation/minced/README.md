@@ -2,6 +2,9 @@
 
 # MinCED
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 MinCED (Mining CRISPRs in Environmental Datasets) is a tool for detecting [CRISPR](https://en.wikipedia.org/wiki/CRISPR) arrays in nucleotide sequences. It identifies repeat-spacer arrays using a heuristic [k-mer](https://en.wikipedia.org/wiki/K-mer) search algorithm derived from the CRISPR Recognition Tool (CRT), returning structured information about each array's repeats, spacers, and their genomic positions.
 
@@ -19,6 +22,17 @@ CRISPR arrays are the [adaptive immune](https://en.wikipedia.org/wiki/CRISPR#Imm
 
 **Scientific foundation:**
 CRISPR arrays have a characteristic structure: direct repeats of 23-47 nucleotides separated by unique spacers of 26-50 nucleotides. MinCED exploits this regularity by searching for repeated k-mers at consistent intervals, then extending and refining candidate arrays. The algorithm is based on CRT (CRISPR Recognition Tool), which uses a seed-and-extend approach analogous to BLAST but tuned for the specific repeat-spacer pattern of CRISPR loci.
+
+## Tools
+
+### MinCED CRISPR Array Detection (`minced-crispr`)
+
+Detect CRISPR arrays in nucleotide sequences using MinCED.
+
+Uses MinCED (Mining CRISPRs in Environmental Datasets) to identify
+CRISPR repeats and spacers in input nucleotide sequences. This is
+used as a Stage 1 filter in the Cas9 filtering pipeline to confirm
+that candidate sequences contain functional CRISPR loci.
 
 ## How It Works
 

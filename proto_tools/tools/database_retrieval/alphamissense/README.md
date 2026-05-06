@@ -2,6 +2,9 @@
 
 # AlphaMissense
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 `alphamissense-fetch` retrieves per-residue, per-substitution AlphaMissense pathogenicity scores for human proteins by UniProt accession. It returns the full set of single amino acid substitution predictions (typically ~7,000-20,000 per protein, one row per (position, alt_aa) pair), each with a pathogenicity score in [0, 1] and a discrete classification (`likely_benign` / `ambiguous` / `likely_pathogenic`). This is a CPU-only tool that issues a single HTTPS GET against the AlphaFold Protein Structure Database, which hosts the AlphaMissense CSVs.
@@ -20,6 +23,16 @@
 
 **Scientific foundation:**
 AlphaMissense is an adaptation of AlphaFold fine-tuned on human and primate variant population frequency databases, treating variants common in healthy populations as benign and rare variants as putatively pathogenic. By combining the structural context inherited from AlphaFold's structure-prediction pretraining with evolutionary conservation signal, it produces a calibrated pathogenicity score per substitution. Class thresholds are calibrated against ClinVar. Per the DeepMind announcement of Cheng et al. (2023, *Science*), AlphaMissense classifies 89% of all 71 million possible human missense variants, with 32% labeled likely pathogenic and 57% labeled likely benign at the default thresholds.
+
+## Tools
+
+### AlphaMissense Fetch (`alphamissense-fetch`)
+
+Fetch AlphaMissense pathogenicity scores for a UniProt accession.
+
+AlphaMissense covers all reviewed human UniProt proteins. Non-human accessions
+raise ValueError. Returns the full saturation grid (UniProt coords) or the
+SNV-accessible subset (genomic coords); filter the output client-side as needed.
 
 ## How It Works
 

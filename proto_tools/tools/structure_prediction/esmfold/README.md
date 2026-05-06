@@ -2,6 +2,9 @@
 
 # ESMFold
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 ESMFold is a fast protein structure prediction model from Meta AI that predicts 3D structures directly from amino acid sequences using a [language model](https://en.wikipedia.org/wiki/Language_model) approach, without requiring [multiple sequence alignments](https://en.wikipedia.org/wiki/Multiple_sequence_alignment).
@@ -32,6 +35,25 @@ Protein structure determines function. Knowing whether a designed protein will f
 ESMFold uses the ESM-2 protein language model to generate structure-aware embeddings, which are then processed through a structure prediction head based on AlphaFold2's architecture. The model learns protein structure from sequence patterns alone, without needing evolutionary information (MSAs). Confidence metrics include:
 - **pLDDT** (predicted Local Distance Difference Test): Per-residue confidence score (0-100), where >90 indicates high confidence, 70-90 is moderate, and <70 suggests disorder or low confidence.
 - **pTM** (predicted Template Modeling score): Overall structure accuracy (0-1), where >0.8 indicates high confidence in the global fold.
+
+## Tools
+
+### ESMFold Gradient (`esmfold-gradient`)
+
+Run one differentiable ESMFold confidence pass.
+
+This is the gradient counterpart to :func:`run_esmfold`: one target-chain
+logit matrix is relaxed into ESMFold's sequence pathway, all requested
+confidence terms are summed into a single weighted loss, and one backward
+pass returns `d(loss) / d(logits)`.
+
+### ESMFold Structure Prediction (`esmfold-prediction`)
+
+Predict protein 3D structures using ESMFold.
+
+Uses ESMFold, a fast transformer-based protein structure prediction model from
+Meta AI, to predict 3D structures without requiring multiple sequence alignments.
+Supports local GPU execution with automatic batching for memory efficiency.
 
 ## Execution Modes
 

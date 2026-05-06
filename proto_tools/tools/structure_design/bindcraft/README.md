@@ -2,6 +2,9 @@
 
 # BindCraft Binder Design
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 End-to-end de novo design of functional protein binders against a target by directly back-propagating through AlphaFold2. BindCraft hallucinates a binder backbone + sequence with a frozen target template, refines the sequence with ProteinMPNN, validates the redesigned complex with AlphaFold2, and filters the result through a battery of PyRosetta interface metrics — yielding accepted binders that have shown experimental hit rates of 10-100% in the original paper, with no MSA, no high-throughput screening, and no curated structural starting point required.
 
 ## Overview
@@ -32,6 +35,12 @@ For non-biologists, the four ideas BindCraft chains together are:
 2. **Hallucination.** The above process — optimising input logits against a structural objective — is called "hallucination". It produces a sequence and a backbone that, *in AF2's view*, satisfy the objective. The risk is that the hallucinated sequence may be designed *for AF2 specifically* and not actually fold the way AF2 thinks it does in the lab.
 3. **ProteinMPNN refinement.** To mitigate that risk, BindCraft hands the hallucinated backbone to ProteinMPNN, an inverse-folding model trained to produce sequences that physically fold into a given backbone. The interface residues that contact the target are typically held fixed (`mpnn_fix_interface=True`); the rest of the binder is redesigned for foldability. Several MPNN sequences are sampled per trajectory.
 4. **PyRosetta filtering.** Each MPNN-refined sequence is repredicted by AF2 multimer, the resulting complex is relaxed with PyRosetta, and a battery of physics-/geometry-based interface metrics (Rosetta dG, ΔSASA, shape complementarity, hotspot RMSD, hydrogen-bond satisfaction, …) is computed. A design is "accepted" only if it passes the upstream default filter thresholds (or your overrides).
+
+## Tools
+
+### BindCraft Binder Design (`bindcraft-design`)
+
+Run the BindCraft binder-design pipeline against a target.
 
 ## Tool Catalog
 

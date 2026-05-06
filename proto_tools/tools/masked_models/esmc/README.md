@@ -2,6 +2,9 @@
 
 # ESM C (Cambrian)
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 ESM C ("Cambrian") is EvolutionaryScale's [embedding-focused protein language model](https://www.evolutionaryscale.ai/blog/esm-cambrian). It ships in the same `esm` Python package as ESM3 and exposes only an embedding/logits interface — there is no sample/score interface. Two open-weights variants are wrapped here: `esmc_300m` (open commercial license) and `esmc_600m` (non-commercial only).
 
@@ -10,6 +13,17 @@ ESM C ("Cambrian") is EvolutionaryScale's [embedding-focused protein language mo
 ESM C is trained with the masked language modeling (MLM) objective: positions are randomly masked during training and the model learns to predict the original amino acid. The model exposes per-position logits over the 20 amino acids alongside its embeddings.
 
 Unlike ESM3, ESM C drops the structure-token track and generative head; only the embedding/logits interface is provided.
+
+## Tools
+
+### ESM C Embeddings (`esmc-embedding`)
+
+Extract protein sequence embeddings and logits using ESM C.
+
+Uses ESM C (Cambrian) from EvolutionaryScale to produce contextualized
+per-sequence embeddings and (optionally) per-position logits. Runs locally
+on GPU in an isolated Python environment shared with the ESM3 wrapper
+(both ship in the same `esm` package).
 
 ## Tool Catalog
 

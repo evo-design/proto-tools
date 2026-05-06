@@ -3,6 +3,9 @@
 # ColabFold Search
 
 > [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
+> [!NOTE]
 > **Deprecation in progress.** `colabfold-search` is being replaced by [`mmseqs2-homology-search`](../mmseqs2/README.md), a generalized successor that adds GPU-by-default execution, a dataset registry covering AF3/AlphaFast/Lightning-Boltz/Chai-1/Protenix protein and RNA databases, and a forward-compatible grouped input shape for paired multimer MSAs. The migration is phased per [#581](https://github.com/proto-bio/proto-tools/issues/581): structure-prediction wrappers will switch over one at a time, and this tool will be removed once every consumer is migrated. New code should target `mmseqs2-homology-search`.
 
 ## Overview
@@ -25,6 +28,22 @@ Multiple Sequence Alignments capture the evolutionary history of a protein famil
 - **Evolutionary rate**: The depth (number of homologs) of the MSA correlates with prediction confidence
 
 ColabFold uses MMSeqs2 (Many-against-Many sequence searching) for fast homology detection. MMSeqs2 is ~100x faster than BLAST with comparable sensitivity, making it practical to search databases with billions of sequences.
+
+## Tools
+
+### ColabFold MSA Search (`colabfold-search`)
+
+Generate MSAs for protein sequences using ColabFold search, with options.
+
+for online and local execution.
+
+Local Execution:
+Searches a local MMSeqs2 database to find homologous sequences and generates
+Multiple Sequence Alignments (MSAs).
+
+Online Execution:
+Uses the ColabFold online API to search for homologous sequences and generates
+Multiple Sequence Alignments (MSAs). Rate limited.
 
 ## How It Works
 

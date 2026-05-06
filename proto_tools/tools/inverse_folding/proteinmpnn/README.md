@@ -2,6 +2,9 @@
 
 # ProteinMPNN
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 ProteinMPNN is a deep learning model for protein sequence design given a protein backbone structure ("inverse folding"). It uses message passing neural networks to predict amino acid sequences that will fold into a target 3D structure. This module provides interfaces for *Sequence Sampling* (generating new sequences for a given backbone) and *Sequence Scoring* (evaluating how well a sequence fits a structure).
 
@@ -24,6 +27,24 @@ ProteinMPNN uses a [message passing neural network](https://en.wikipedia.org/wik
 2. **Message passing**: Information flows between connected residues over multiple rounds, allowing the model to learn long-range dependencies.
 3. **[Autoregressive](https://en.wikipedia.org/wiki/Autoregressive_model) decoding**: Sequences are generated one residue at a time, conditioned on previously generated residues and the full structural context.
 4. **Training**: The model was trained on ~19,000 protein structures from the [PDB](https://www.rcsb.org/) to maximize the probability of native sequences given their structures.
+
+## Tools
+
+### ProteinMPNN Gradient (`proteinmpnn-gradient`)
+
+Compute ProteinMPNN mean-NLL gradient with respect to relaxed sequence logits.
+
+### ProteinMPNN Sampling (`proteinmpnn-sample`)
+
+Sample protein sequences using ProteinMPNN.
+
+### ProteinMPNN Scoring (`proteinmpnn-score`)
+
+Score protein sequences using ProteinMPNN structure-conditioned model.
+
+Computes the likelihood of protein sequences given a 3D structure using
+ProteinMPNN's structure-conditioned language model. This evaluates how well
+a sequence "fits" a given protein structure.
 
 ## Tool Catalog
 

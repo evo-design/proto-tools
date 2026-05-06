@@ -2,6 +2,9 @@
 
 # SpliceTransformer
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 SpliceTransformer is a deep learning model for predicting [splice sites](https://en.wikipedia.org/wiki/RNA_splicing) with tissue-specific resolution. It identifies splice donors (5' splice sites) and acceptors (3' splice sites) across 15 human tissues, enabling analysis of [alternative splicing](https://en.wikipedia.org/wiki/Alternative_splicing) patterns and tissue-specific isoform usage. The model uses [transformer](https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)) architecture with long-range sequence context for accurate splice site prediction.
 
@@ -37,6 +40,17 @@ Different tissues express different splice isoforms:
 | 12 | Skin |
 | 13 | Spleen |
 | 14 | Stomach |
+
+## Tools
+
+### SpliceTransformer Splicing Prediction (`splice-transformer-prediction`)
+
+Predict splice sites in RNA/DNA sequences using SpliceTransformer.
+
+Uses SpliceTransformer, a transformer-based deep learning model, to predict
+splice acceptor and donor sites with tissue-specific probabilities. The model
+analyzes sequences with flanking context to identify canonical and alternative
+splicing patterns across 15 different human tissues.
 
 ## Execution Modes
 

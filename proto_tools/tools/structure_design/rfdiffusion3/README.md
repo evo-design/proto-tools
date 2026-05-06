@@ -2,6 +2,9 @@
 
 # RFdiffusion3
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 RFdiffusion3 is a [diffusion](https://en.wikipedia.org/wiki/Diffusion_model)-based generative model for de novo protein structure design. Unlike structure prediction tools that predict what a given sequence will fold into, RFdiffusion3 generates novel protein structures (and sequences) that satisfy specified constraints.
 
@@ -24,6 +27,24 @@ RFdiffusion3 uses a denoising diffusion process operating on all atoms (backbone
 2. **Flexible conditioning**: Supports diverse constraints (motifs, binders, symmetry, ligands)
 3. **Sequence co-design**: Generates compatible sequences alongside structures
 4. **Contig language**: Powerful specification system for complex design tasks
+
+## Tools
+
+### RFdiffusion3 Structure Design (`rfdiffusion3-design`)
+
+Design protein structures using RFdiffusion3.
+
+Uses RFdiffusion3, a diffusion-based generative model, to design novel
+protein structures under specified constraints. Unlike structure prediction,
+RFdiffusion3 generates both structure AND sequence, making it suitable for:
+
+- De novo protein design (unconditional generation)
+- Motif scaffolding (design around fixed structural motifs)
+- Protein binder design (design proteins that bind to targets)
+- Enzyme design (scaffold around catalytic sites)
+- Symmetric protein design (design homo-oligomers)
+
+Runs via local GPU execution in isolated Python environments.
 
 ## Execution Modes
 

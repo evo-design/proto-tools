@@ -2,6 +2,9 @@
 
 # Enformer
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 Enformer is a transformer-based deep learning model that predicts gene expression and chromatin accessibility directly from a 196,608 bp DNA sequence. It uses [self-attention](https://en.wikipedia.org/wiki/Attention_(machine_learning)) to capture long-range regulatory interactions up to ~100 kb away, enabling accurate prediction of how distal enhancers, silencers, and other regulatory elements influence gene expression.
@@ -23,6 +26,12 @@ Enformer addresses this by processing 196,608 bp of genomic context through a tr
 - **Transcription factor binding**: [ChIP-seq](https://en.wikipedia.org/wiki/ChIP_sequencing) for hundreds of TFs
 
 Each output track corresponds to a specific assay in a specific cell type or tissue. The 896 output bins (128 bp each) tile the central ~114 kb of the input window, providing spatial resolution of predicted regulatory activity.
+
+## Tools
+
+### Enformer Prediction (`enformer-prediction`)
+
+Predict regulatory activity with Enformer.
 
 ## Execution Modes
 

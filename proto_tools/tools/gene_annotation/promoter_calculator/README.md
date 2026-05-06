@@ -2,6 +2,9 @@
 
 # Salis Lab Promoter Calculator
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 The [Salis Lab Promoter Calculator](https://github.com/barricklab/promoter-calculator) is a 346-parameter biophysical + machine-learning model that predicts [sigma70 promoter](https://en.wikipedia.org/wiki/Sigma_factor) strength in *Escherichia coli*. It scans both strands of input DNA for canonical promoter elements -- the [-35 hexamer](https://en.wikipedia.org/wiki/Pribnow_box#%E2%88%9235_element), spacer, [-10 hexamer (Pribnow box)](https://en.wikipedia.org/wiki/Pribnow_box), [UP element](https://en.wikipedia.org/wiki/Promoter_(genetics)#UP_element), and discriminator -- and returns binding free energy (`dG_total`, kcal/mol) and transcription initiation rate (`Tx_rate`, arbitrary units) per candidate.
 
@@ -15,6 +18,16 @@ sigma70 is the housekeeping [sigma factor](https://en.wikipedia.org/wiki/Sigma_f
 
 **Scientific foundation:**
 The model combines a free-energy biophysical layer (per-element contributions: -10/-35 boxes, spacer length and composition, UP element, discriminator) with a regression learned on a [massively parallel reporter assay](https://en.wikipedia.org/wiki/Reporter_gene#Massively_parallel_reporter_assays) and validated across 22,132 bacterial promoters with diverse sequences.
+
+## Tools
+
+### Salis Lab Promoter Calculator (`promoter-calculator`)
+
+Predict E. coli sigma70 promoter strength on DNA sequences.
+
+Wraps the Salis Lab Promoter Calculator: a 346-parameter biophysical + ML
+model that scans both strands for canonical sigma70 elements (-35, spacer,
+-10, UP, discriminator) and predicts dG_total and Tx_rate per candidate.
 
 ## How It Works
 

@@ -2,6 +2,9 @@
 
 # MAFFT
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 MAFFT (Multiple Alignment using [Fast Fourier Transform](https://en.wikipedia.org/wiki/Fast_Fourier_transform)) is a widely used tool for [multiple sequence alignment](https://en.wikipedia.org/wiki/Multiple_sequence_alignment) (MSA). It offers various strategies ranging from fast approximate alignments for large datasets to highly accurate iterative methods for smaller sets of sequences. This module provides a standardized interface for performing MSA using MAFFT.
 
@@ -25,6 +28,16 @@ MAFFT uses several algorithmic approaches:
 2. **L-INS-i** (localpair): Local pairwise alignment with iterative refinement. Best for sequences with one alignable domain.
 3. **G-INS-i** (globalpair): Global pairwise alignment with iterative refinement. Best for sequences of similar length.
 4. **E-INS-i** (genafpair): Local alignment considering multiple conserved domains. Best for sequences with large unalignable regions.
+
+## Tools
+
+### MAFFT Alignment (`mafft-align`)
+
+Perform multiple sequence alignment using MAFFT.
+
+Aligns input sequences using MAFFT with the specified method and
+parameters. Returns aligned sequences with gap characters inserted
+to maximize alignment quality.
 
 ## How It Works
 

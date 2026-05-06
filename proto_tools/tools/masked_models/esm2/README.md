@@ -2,6 +2,9 @@
 
 # ESM2
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 ESM2 (Evolutionary Scale Modeling 2) is Meta AI's [protein language model](https://www.evolutionaryscale.ai/blog/esm-cambrian) trained on millions of protein sequences from [UniRef](https://www.uniprot.org/help/uniref). It provides sequence embeddings, per-position amino acid logits, sequence mutation (sampling), and sequence scoring (MLM pseudo-perplexity). ESM2 offers multiple model sizes from 8M to 15B parameters, balancing quality and computational cost.
 
@@ -28,6 +31,40 @@ Per-position logits indicate the model's confidence in each amino acid:
 - Low logits = tolerated or deleterious positions
 - Comparing wild-type vs mutant logits predicts variant effects
 - Logits are returned over 20 canonical amino acids in fixed order: `ACDEFGHIKLMNPQRSTVWY`
+
+## Tools
+
+### ESM2 Embeddings (`esm2-embedding`)
+
+Extract protein sequence embeddings and logits using ESM2.
+
+Uses ESM2 from Meta AI to extract contextualized embeddings and per-position
+logits for protein sequences. The model is automatically loaded on-demand.
+Supports local GPU execution via isolated Python environments.
+
+### ESM2 Gradient (`esm2-gradient`)
+
+Compute ESM2 masked PLL gradient with respect to relaxed protein logits.
+
+### ESM2 Sampling (`esm2-sample`)
+
+Sample masked positions in protein sequences using ESM2.
+
+The `preprocess` hook on :class:`ESM2SampleConfig` applies the masking
+strategy before this function runs, so `inputs.sequences` already
+contain `_` at positions to sample.
+
+### ESM2 Scoring (`esm2-score`)
+
+Score protein sequences using ESM2 language model.
+
+Computes MLM pseudo-perplexity by masking each position individually and
+computing $P(x_i | x_{-i})$. Uses batched processing for efficiency.
+
+Ambiguous amino acids (X, B, Z, etc.) are excluded from the perplexity
+calculation using the industry-standard exclusion strategy. Only positions
+with standard amino acids (20 canonical AAs) contribute to log-likelihood
+and perplexity metrics.
 
 ## Tool Catalog
 

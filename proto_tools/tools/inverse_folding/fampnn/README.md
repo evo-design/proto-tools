@@ -2,6 +2,9 @@
 
 # FAMPNN
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 FAMPNN (Full-Atom MPNN) is a deep learning model for protein sequence design that jointly models discrete amino acid identity and continuous sidechain conformation. Unlike backbone-only inverse folding models, FAMPNN generates both sequences and full-atom sidechain coordinates simultaneously using combined cross-entropy and diffusion loss. This module provides interfaces for *Sequence Sampling*, *Sidechain Packing*, *Mutation Scoring*, and *Exhaustive Mutation Scanning*.
 
@@ -22,6 +25,42 @@ FAMPNN uses a two-component architecture:
 1. **Iterative masked language modeling**: Sequence design via progressive unmasking (similar to MaskGIT), starting fully masked and revealing tokens iteratively.
 2. **Per-token Euclidean [diffusion](https://en.wikipedia.org/wiki/Diffusion_model)**: Sidechain coordinates generated via variance-exploding EDM in local backbone reference frames.
 3. **Predicted Sidechain Error (pSCE)**: A learned confidence metric predicting per-atom sidechain packing error in Angstroms.
+
+## Tools
+
+### FAMPNN Sidechain Packing (`fampnn-pack`)
+
+Pack protein sidechains using FAMPNN with per-atom confidence scores.
+
+Given a protein backbone and sequence, predicts sidechain coordinates using
+per-token Euclidean diffusion. Output PDB files contain per-atom predicted
+sidechain error (pSCE) in the B-factor column.
+
+### FAMPNN Sampling (`fampnn-sample`)
+
+Design protein sequences with full-atom sidechain co-generation using FAMPNN.
+
+FAMPNN iteratively unmasks sequence and sidechain tokens, jointly generating
+amino acid identities and sidechain conformations. The output includes
+full-atom PDB structures with predicted sidechain coordinates and per-residue
+confidence scores (pSCE).
+
+### FAMPNN Mutation Scoring (`fampnn-score`)
+
+Score protein mutations with full-atom sidechain context using FAMPNN.
+
+Evaluates mutation fitness by masking the mutated position's sequence and
+sidechain, then computing the conditional log-likelihood ratio of the mutant
+versus wild-type residue. FAMPNN's advantage is conditioning on the full-atom
+structure of surrounding residues.
+
+### FAMPNN Score All Mutations (`fampnn-score-all-mutations`)
+
+Score every possible single amino acid substitution at every position.
+
+For each position in the protein, masks that position and computes the
+log-likelihood ratio of each possible mutation relative to the wild-type
+residue. Useful for generating comprehensive mutational landscapes.
 
 ## Tool Catalog
 

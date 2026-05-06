@@ -2,6 +2,9 @@
 
 # BLAST
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 BLAST (Basic Local Alignment Search Tool) finds regions of similarity between biological sequences. It compares nucleotide or protein sequences to sequence databases and calculates the statistical significance of matches. This module provides a unified interface for both *Online BLAST* (querying NCBI servers remotely) and *Local BLAST+* (running searches against custom or downloaded databases on your own hardware), as well as utilities for creating custom BLAST databases.
 
@@ -23,6 +26,22 @@ BLAST uses a heuristic algorithm that seeks high-scoring segment pairs (HSPs). I
 1. **Seeding**: Breaks the query into short "words" (k-mers) and finds exact matches in the database.
 2. **Extension**: Extends these matches in both directions until the alignment score drops below a threshold.
 3. **Evaluation**: Calculates an [E-value](https://en.wikipedia.org/wiki/BLAST_(biotechnology)#Algorithm) (Expect value) based on the Karlin-Altschul statistics, representing the number of hits one can expect to see by chance.
+
+## Tools
+
+### Create BLAST Database (`blast-create-db`)
+
+Create a local BLAST database from a FASTA file.
+
+This is the standardized tool interface following the registry pattern.
+Returns structured output with database path.
+
+### BLAST Search (`blast-search`)
+
+Search sequences against BLAST databases.
+
+Dispatches to online (NCBI QBLAST) or local (BLAST+ CLI) search
+based on `config.search_mode`.
 
 ## Tool Catalog
 

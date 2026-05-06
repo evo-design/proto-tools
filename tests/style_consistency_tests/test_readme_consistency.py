@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from proto_tools.tools import ToolRegistry
+
 _TOOLS_DIR = Path(__file__).resolve().parent.parent.parent / "proto_tools" / "tools"
 
 # Directories that are not tool categories
@@ -20,37 +22,13 @@ _EXCLUDED_DIRS = frozenset(
     }
 )
 
-# Every tool README must contain these exact H2 sections.
+# Every tool README must contain these exact H2 sections. Anything else is
+# allowed; toolkits add whatever sections they need.
 _REQUIRED_SECTIONS = [
     "Overview",
     "Background",
-    "How It Works",
-    "Quick Start Examples",
-    "Best Practices & Gotchas",
-    "References",
-    "Related Tools",
+    "Tools",
 ]
-
-# H2 sections that must NOT appear (removed from the standard).
-_BANNED_SECTIONS = [
-    "When to Use",
-    "When Not to Use",
-]
-
-# Optional H2 sections that are allowed but not required.
-_OPTIONAL_SECTIONS = frozenset(
-    {
-        "Tool Catalog",
-        "Model Variants",
-        "Execution Modes",
-        "Input Parameters",
-        "Configuration",
-        "Output Specification",
-        "Interpreting Results",
-        "Important Parameters",
-        "Seed Reproducibility",
-    }
-)
 
 
 def _slugify(text: str) -> str:
@@ -211,19 +189,6 @@ def test_has_required_sections(readme: Path) -> None:
 
 
 @pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
-def test_only_recognized_sections(readme: Path) -> None:
-    """All H2 sections must be from the required or optional lists."""
-    text = readme.read_text()
-    h2_headings = re.findall(r"^## (.+)$", text, re.MULTILINE)
-
-    allowed = _OPTIONAL_SECTIONS | set(_REQUIRED_SECTIONS)
-    unrecognized = [h2 for h2 in h2_headings if h2 not in allowed]
-    assert not unrecognized, (
-        f"{_tool_id(readme)}/README.md has unrecognized H2 sections: {unrecognized}. Use one of: {sorted(allowed)}"
-    )
-
-
-@pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
 def test_no_duplicate_h2(readme: Path) -> None:
     """README should not have duplicate H2 headings."""
     text = readme.read_text()
@@ -234,17 +199,96 @@ def test_no_duplicate_h2(readme: Path) -> None:
     assert not duplicates, f"{_tool_id(readme)}/README.md has duplicate H2 sections: {duplicates}"
 
 
-@pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
-def test_no_banned_sections(readme: Path) -> None:
-    """README must not contain any banned H2 sections."""
-    text = readme.read_text()
-    h2_headings = re.findall(r"^## (.+)$", text, re.MULTILINE)
+def _toolkit_keys(readme: Path) -> list[str]:
+    """Return the registry keys of every tool whose source file lives in this toolkit dir."""
+    toolkit_dir = readme.parent
+    return sorted(spec.key for spec in ToolRegistry.list_all() if spec.source_file.parent == toolkit_dir)
 
-    found = [h2 for h2 in h2_headings if any(h2.startswith(b) for b in _BANNED_SECTIONS)]
-    assert not found, (
-        f"{_tool_id(readme)}/README.md has banned sections: {found}. "
-        f"These sections have been removed from the standard."
+
+def _tools_section_h3s(text: str) -> list[str]:
+    """Return the H3 heading text for every H3 inside the ``## Tools`` section.
+
+    Headings stop being collected at the next H2 or end of file.
+    """
+    in_section = False
+    headings: list[str] = []
+    for line in text.split("\n"):
+        h2 = re.match(r"^## (.+)$", line)
+        if h2:
+            in_section = h2.group(1).strip() == "Tools"
+            continue
+        if not in_section:
+            continue
+        h3 = re.match(r"^### (.+)$", line)
+        if h3:
+            headings.append(h3.group(1).strip())
+    return headings
+
+
+def _tools_section_h3_bodies(text: str) -> dict[str, str]:
+    """Map each H3 in the ``## Tools`` section to its body text (everything until the next H3/H2)."""
+    bodies: dict[str, str] = {}
+    in_section = False
+    current: str | None = None
+    buf: list[str] = []
+    for line in text.split("\n"):
+        h2 = re.match(r"^## (.+)$", line)
+        if h2:
+            if current is not None:
+                bodies[current] = "\n".join(buf).strip()
+                current = None
+                buf = []
+            in_section = h2.group(1).strip() == "Tools"
+            continue
+        if not in_section:
+            continue
+        h3 = re.match(r"^### (.+)$", line)
+        if h3:
+            if current is not None:
+                bodies[current] = "\n".join(buf).strip()
+            current = h3.group(1).strip()
+            buf = []
+            continue
+        if current is not None:
+            buf.append(line)
+    if current is not None:
+        bodies[current] = "\n".join(buf).strip()
+    return bodies
+
+
+@pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
+def test_tools_section_lists_all_tools(readme: Path) -> None:
+    """The ``## Tools`` section must contain one H3 per registered tool, each with a body.
+
+    Each H3 must reference the tool's registry key as inline code (e.g. ``### BLAST Search
+    (`blast-search`)``). H3 entries that don't correspond to a registered tool are rejected.
+    """
+    keys = _toolkit_keys(readme)
+    assert keys, f"{_tool_id(readme)} has no registered tools — toolkit may not export anything"
+
+    text = readme.read_text()
+    bodies = _tools_section_h3_bodies(text)
+    h3_keys: dict[str, str] = {}
+    for heading, body in bodies.items():
+        for match in re.finditer(r"`([^`]+)`", heading):
+            candidate = match.group(1)
+            if candidate in keys:
+                h3_keys[candidate] = body
+
+    missing = [k for k in keys if k not in h3_keys]
+    assert not missing, (
+        f"{_tool_id(readme)}/README.md `## Tools` section is missing H3 entries for: {missing}. "
+        f"Each tool needs its own H3 with the registry key in inline code, e.g. `` `{missing[0]}` ``."
     )
+
+    stray = [h for h in bodies if not any(c in keys for c in re.findall(r"`([^`]+)`", h))]
+    assert not stray, (
+        f"{_tool_id(readme)}/README.md `## Tools` section has H3 entries without a matching registered tool key: "
+        f"{stray}"
+    )
+
+    empty = [k for k, body in h3_keys.items() if not body]
+    assert not empty, f"{_tool_id(readme)}/README.md `## Tools` section H3s have no description body: {empty}"
 
 
 # ── Links ─────────────────────────────────────────────────────────────────

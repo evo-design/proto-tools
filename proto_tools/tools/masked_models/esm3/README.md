@@ -2,6 +2,9 @@
 
 # ESM3
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 ESM3 is EvolutionaryScale's next-generation [protein language model](https://www.evolutionaryscale.ai/blog/esm-cambrian) with sequence and structure modeling capabilities. This package's `esm3-sample` tool exposes masked sequence editing over supplied protein sequences. The open model (`esm3_sm_open_v1`) provides embeddings, logits, masked sampling, and scoring in a unified framework.
 
@@ -16,6 +19,37 @@ Protein language models (pLMs) learn the "grammar" of proteins from evolutionary
 
 **Why ESM3 over ESM2?**
 ESM3 is broader than ESM2 at the model-family level. In Proto Tools today, use `esm3-sample` for masked sequence editing and local refinement; for pure sequence embedding tasks, ESM2 is often faster.
+
+## Tools
+
+### ESM3 Embeddings (`esm3-embedding`)
+
+Extract protein sequence embeddings and logits using ESM3.
+
+Uses ESM3 open model from EvolutionaryScale to extract contextualized embeddings
+and per-position logits for protein sequences. The model is automatically
+loaded on-demand. Supports local GPU execution via isolated Python
+environments.
+
+### ESM3 Sampling (`esm3-sample`)
+
+Sample masked positions in protein sequences using ESM3.
+
+The `preprocess` hook on :class:`ESM3SampleConfig` applies the masking
+strategy before this function runs, so `inputs.sequences` already
+contain `_` at positions to sample.
+
+### ESM3 Scoring (`esm3-score`)
+
+Score protein sequences using ESM3 language model.
+
+Computes MLM pseudo-perplexity by masking each position individually and
+computing $P(x_i | x_{-i})$. Uses batched processing for efficiency.
+
+Ambiguous amino acids (X, B, Z, etc.) are excluded from the perplexity
+calculation using the industry-standard exclusion strategy. Only positions
+with standard amino acids (20 canonical AAs) contribute to log-likelihood
+and perplexity metrics.
 
 ## Tool Catalog
 

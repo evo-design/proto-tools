@@ -2,6 +2,9 @@
 
 # CRISPRtracrRNA
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 [CRISPRtracrRNA](https://github.com/BackofenLab/CRISPRtracrRNA) is a multi-evidence pipeline from the Backofen Lab that predicts [tracrRNA](https://en.wikipedia.org/wiki/Trans-activating_crRNA) sequences in nucleotide [CRISPR](https://en.wikipedia.org/wiki/CRISPR) loci. It combines covariance-model search, CRISPR array detection, cas-effector cassette detection, anti-repeat similarity, RNA-RNA interaction prediction, and terminator detection into a weighted multi-evidence ranking score.
@@ -16,6 +19,17 @@ For a [CRISPR-Cas9](https://en.wikipedia.org/wiki/CRISPR#Class_2) system to func
 
 **Scientific foundation:**
 Mitrofanov et al. (2022) — multi-evidence integration is more sensitive than covariance-model search alone, especially for divergent tracrRNA families and novel CRISPR-Cas systems.
+
+## Tools
+
+### CRISPRtracrRNA Prediction (`crispr-tracr-rna`)
+
+Predict tracrRNA sequences from nucleotide CRISPR loci.
+
+Uses the CRISPRtracrRNA tool from the Backofen Lab to predict tracrRNA
+sequences associated with CRISPR loci. This is used as a Stage 3 filter
+in the Cas9 filtering pipeline to confirm that candidate sequences
+contain functional tracrRNA binding sites.
 
 ## How It Works
 

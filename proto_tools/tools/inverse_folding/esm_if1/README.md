@@ -2,6 +2,9 @@
 
 # ESM-IF1 / ProteinDPO
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 ESM-IF1 is a language-model-based inverse folding model that designs protein sequences conditioned on backbone structure. It uses a GVP-GNN encoder to represent 3D structure and a Transformer decoder to autoregressively generate sequences. ProteinDPO is a fine-tuned variant aligned to experimental fitness data via Direct Preference Optimization, optimized for designing stable proteins.
@@ -22,6 +25,20 @@ ESM-IF1 (Hsu et al., 2022) takes a different architectural approach from message
 3. **Training on predicted structures**: Unlike ProteinMPNN (trained on ~19K experimental structures), ESM-IF1 was trained on 12M predicted structures from ESM, giving it broader coverage of protein fold space.
 
 [ProteinDPO](https://doi.org/10.1101/2024.05.20.595026) (Widatalla, Rafailov & Hie, 2024) fine-tunes ESM-IF1 using [Direct Preference Optimization](https://arxiv.org/abs/2305.18290) on experimental fitness data, aligning the model to prefer sequences with higher measured stability. This is analogous to RLHF in language models -- the model learns to generate sequences that score well on real experimental assays.
+
+## Tools
+
+### ESM-IF1 Sampling (`esm-if1-sample`)
+
+Sample protein sequences using ESM-IF1/ProteinDPO.
+
+### ESM-IF1 Scoring (`esm-if1-score`)
+
+Score protein sequences using ESM-IF1/ProteinDPO.
+
+Scores each sequence against its paired structure using the full complex
+structural context (score_sequence_in_complex). Returns average
+log-likelihood and perplexity.
 
 ## Tool Catalog
 

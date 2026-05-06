@@ -2,6 +2,9 @@
 
 # Evo2
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 Evo2 is Arc Institute's genome-scale DNA language model for sequence generation and scoring. Trained on billions of nucleotides spanning prokaryotic and eukaryotic genomes, Evo2 performs autoregressive generation of DNA from prompts and scores sequences by log-likelihood. The tool supports local CUDA GPU execution with KV caching for efficient long generations.
@@ -19,6 +22,24 @@ Genome-scale language models like Evo2 learn these patterns by training on diver
 - **Cross-kingdom sequence grammar** (from viral genomes to mammalian chromosomes)
 
 Evo2 uses byte-level tokenization (vocab_size=512), where each DNA base maps to its ASCII value (A=65, C=67, G=71, T=84, N=78). This allows the model to handle any genomic sequence without a specialized tokenizer.
+
+## Tools
+
+### Evo2 Sampling (`evo2-sample`)
+
+Sample DNA sequences using Evo2 language model.
+
+Uses the Evo2 7B parameter language model to autoregressively generate
+genomic DNA sequences from prompt sequences. Supports local GPU execution
+with advanced sampling strategies including nucleus sampling and KV caching.
+
+### Evo2 Scoring (`evo2-score`)
+
+Score DNA sequences using Evo2 autoregressive language model.
+
+Computes the likelihood of DNA sequences using Evo2's autoregressive
+modeling. For each position t, computes log $P(x_t | x_{<t})$ and sums
+these to get the total log-likelihood.
 
 ## Tool Catalog
 

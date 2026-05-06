@@ -2,6 +2,9 @@
 
 # TMalign
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 TMalign performs pairwise protein structure alignment using the [TM-score](https://en.wikipedia.org/wiki/Template_modeling_score) metric (`tmalign-alignment`). It aligns two monomeric protein structures and returns TM-scores normalized by the length of each chain, providing a length-independent measure of structural similarity. TMalign is a compiled C++ binary that runs on CPU with no external dependencies.
@@ -23,6 +26,12 @@ TM-score uses a length-dependent distance weighting scheme that emphasizes well-
 - **Length-independent:** Unlike RMSD, TM-score does not increase with protein size
 - **Fold discrimination:** TM-score > 0.5 reliably indicates the same fold (Zhang & Skolnick, 2004)
 - **Random baseline:** Expected TM-score for randomly related proteins is ~0.17
+
+## Tools
+
+### TMalign Structure Alignment (`tmalign-alignment`)
+
+Run TMalign on two PDB structures.
 
 ## How It Works
 

@@ -2,6 +2,9 @@
 
 # Random Nucleotide Sampling
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 Random Nucleotide Sampling fills masked positions in DNA or RNA sequences with random bases drawn from an [IUPAC ambiguity code](https://en.wikipedia.org/wiki/Nucleic_acid_notation#IUPAC_notation) substitution pool. It supports configurable masking strategies, automatic DNA/RNA detection, and all 15 IUPAC degenerate base codes for controlling the substitution alphabet.
@@ -39,6 +42,18 @@ The substitution scheme controls which bases can appear at masked positions:
 | `D` | A, G, T | Not C |
 | `H` | A, C, T | Not G |
 | `V` | A, C, G | Not T |
+
+## Tools
+
+### Random Nucleotide Sampling (`random-nucleotide-sample`)
+
+Fill masked positions with random nucleotides from an IUPAC scheme.
+
+The `preprocess` hook on :class:`RandomNucleotideSampleConfig` applies
+the masking strategy before this function runs, so
+`inputs.sequences` already contain `_` at positions to sample.
+
+For RNA sequences, sampled T bases are converted to U.
 
 ## How It Works
 

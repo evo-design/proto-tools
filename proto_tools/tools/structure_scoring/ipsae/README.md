@@ -2,6 +2,9 @@
 
 # IPSAE
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 IPSAE (Dunbrack 2025) is a comprehensive interface-quality scoring tool for cofolded protein complexes. Given a predicted structure with its PAE (Predicted Aligned Error) matrix, per-residue pLDDT, and CA coordinates, it computes five complementary interface metrics: **ipSAE**, **pDockQ2** (Zhu 2023), **LIS** (Kim 2024), **pDockQ** (Bryant 2022), and **ipTM**. The primary metric, ipSAE, uses an adaptive d0 normalization derived from the PAE matrix to better distinguish correct from incorrect interfaces compared to earlier PAE-based scores.
@@ -29,6 +32,15 @@ Protein structure predictors emit per-residue pLDDT and a pairwise PAE matrix as
 **When NOT to use:**
 - The structure lacks an interchain PAE matrix (e.g. single-chain predictions without PAE).
 - You need physics-based interface scoring -- use `pyrosetta-sap`, `pyrosetta-sasa`, or `pyrosetta-energy`.
+
+## Tools
+
+### IPSAE Interface Scoring (`ipsae-scoring`)
+
+Compute IPSAE interface metrics for a cofolded protein complex.
+
+Dispatches to the vendored DunbrackLab/IPSAE script via ToolInstance,
+writing temporary PDB + PAE JSON files and parsing the output.
 
 ## How It Works
 

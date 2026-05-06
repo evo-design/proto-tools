@@ -2,6 +2,9 @@
 
 # Chai1
 
+> [!NOTE]
+> **TODO:** This README still needs to be reviewed and quality checked
+
 ## Overview
 
 Chai1 is a multi-modal structure prediction model from Chai Discovery that predicts 3D structures of proteins, ligands, and glycans using a [diffusion](https://en.wikipedia.org/wiki/Diffusion_model)-based architecture. It excels at modeling protein-ligand complexes and can incorporate ESM embeddings for improved accuracy.
@@ -29,6 +32,16 @@ Confidence metrics include:
 - **pLDDT** (predicted Local Distance Difference Test): Per-residue confidence score (0-100), where >90 indicates high confidence, 70-90 is moderate, and <70 suggests low confidence.
 - **pTM** (predicted Template Modeling score): Overall structure accuracy (0-1), where >0.8 indicates high confidence in the global fold.
 - **ipTM** (interface pTM): Confidence in inter-chain interfaces (0-1), critical for multi-chain complexes.
+
+## Tools
+
+### Chai1 Structure Prediction (`chai1-prediction`)
+
+Predict 3D structures using Chai1 multi-modal model.
+
+Uses Chai1, a diffusion-based model, to predict 3D structures of proteins,
+ligands, glycans, and their complexes. Runs via local GPU execution in
+isolated Python environments.
 
 ## Execution Modes
 
