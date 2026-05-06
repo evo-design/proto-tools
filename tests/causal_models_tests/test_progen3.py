@@ -74,12 +74,6 @@ def test_scoring_config_defaults():
     assert cfg.local_path is None
 
 
-def test_scoring_config_rejects_return_logits():
-    """ProGen3 does not support return_logits."""
-    with pytest.raises(ValueError, match="ProGen3 does not support return_logits"):
-        ProGen3ScoringConfig(return_logits=True)
-
-
 def test_sample_config_rejects_invalid_temperature():
     """Temperature must be > 0."""
     with pytest.raises(ValidationError, match="greater than 0"):
@@ -233,6 +227,34 @@ def test_progen3_score_batch():
 
     assert result.success
     assert len(result.scores) == 3
+
+
+@pytest.mark.uses_gpu
+def test_progen3_score_return_logits():
+    """``return_logits=True`` populates per-position forward logits and the 34-token vocab."""
+    seq = "MKTLVIVTGASGAGK"
+    inputs = ProGen3ScoringInput(sequences=[seq])
+    config = ProGen3ScoringConfig(model_checkpoint=_SMALL_MODEL, return_logits=True)
+    result = run_progen3_score(inputs, config)
+
+    score = result.scores[0]
+    # Vocab: 6 specials + "1"/"2" + 26 AA letters
+    assert len(score.vocab) == 34
+    assert score.vocab[6:8] == ["1", "2"]
+    assert score.vocab[8] == "A" and score.vocab[33] == "Z"
+
+    assert score.logits is not None
+    # Tokenized layout: <bos> + "1" + L AAs + "2" + <eos> = L + 4 tokens
+    assert len(score.logits) == len(seq) + 4
+    assert len(score.logits[0]) == 34
+
+
+@pytest.mark.uses_gpu
+def test_progen3_score_logits_disabled_by_default():
+    """``logits`` is ``None`` when ``return_logits=False`` (default)."""
+    inputs = ProGen3ScoringInput(sequences=["MKTLVIVTGASGAGK"])
+    result = run_progen3_score(inputs, ProGen3ScoringConfig(model_checkpoint=_SMALL_MODEL))
+    assert result.scores[0].logits is None
 
 
 @pytest.mark.uses_gpu
