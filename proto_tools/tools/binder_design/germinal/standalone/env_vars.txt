@@ -1,0 +1,7 @@
+[passthrough]
+HF_TOKEN
+PROTO_GERMINAL_WEIGHTS_DIR
+
+[set]
+LD_LIBRARY_PATH=${VENV_PATH}/cuda_env/lib
+XLA_FLAGS=--xla_gpu_cuda_data_dir=${VENV_PATH}/cuda_env

@@ -2,6 +2,16 @@
 
 # Base classes and registry
 
+# Binder / antibody design tools
+from proto_tools.tools.binder_design import (
+    GerminalConfig,
+    GerminalDesign,
+    GerminalDesignMetrics,
+    GerminalInput,
+    GerminalOutput,
+    run_germinal_design,
+)
+
 # Causal model tools
 # Tool cache and I/O
 from proto_tools.tools.causal_models import (
@@ -630,6 +640,13 @@ __all__ = [
     "clear_cache",
     "clear_tool_cache",
     "get_cache_info",
+    # Binder / antibody design - Germinal
+    "GerminalConfig",
+    "GerminalDesign",
+    "GerminalDesignMetrics",
+    "GerminalInput",
+    "GerminalOutput",
+    "run_germinal_design",
     # Causal models - shared
     "CausalModelScoringMetrics",
     # Evo1

@@ -1,0 +1,17 @@
+# torch, jax, chai-lab, ablang2, iglm, rotary_embedding_torch, pyrosetta,
+# colabfold are installed by setup.sh, not here.
+hydra-core>=1.3,<1.4
+omegaconf>=2.3,<2.4
+pandas>=2.0
+biopython>=1.82
+scipy>=1.11
+mdtraj>=1.10
+dm-haiku==0.0.13
+dm-tree>=0.1.8
+ml-collections>=0.1.1
+optax>=0.2.2
+ipsae>=0.1.0
+cvxopt>=1.3.2
+joblib>=1.3.0
+tqdm>=4.66
+PyYAML>=6.0
