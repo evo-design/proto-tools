@@ -37,6 +37,10 @@ from .device import (
     resolve_jax_device,
 )
 from .memory import get_jax_memory_stats, get_pytorch_memory_stats
+
+# ``iterative_sampling`` imports torch at module level and is NOT re-exported
+# from the package init, so CI's slim test env (no torch) can import this
+# package. Standalones import the submodule directly.
 from .seeding import (
     enable_jax_compilation_cache,
     get_random_int,

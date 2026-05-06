@@ -224,21 +224,37 @@ class ESM3Model:
         self,
         sequences: list[str],
         temperature: float,
+        sampling_method: str = "single_pass",
+        top_p: float = 1.0,
+        num_steps: int = 20,
+        schedule: str = "cosine",
+        strategy: str = "random",
+        temperature_annealing: bool = True,
         batch_size: int = 1,
         device: str = "cuda",
         verbose: bool = False,
         return_logits: bool = False,
         seed: int | None = None,
     ) -> dict[str, Any]:
-        """Sample amino acids at masked positions ('_') in protein sequences.
+        """Sample amino acids at masked ('_') positions in protein sequences.
 
         Receives sequences with '_' at positions to be sampled, injects
         ``[MASK]`` tokens at those positions, runs a forward pass, and samples
         replacement amino acids from the model's predictions.
+        ``iterative_refinement`` dispatches to ESM3's ``model.batch_generate``,
+        with the five GenerationConfig knobs driving the decoding loop;
+        ``return_logits=True`` on that path runs a final forward over the
+        completed sequences.
 
         Args:
             sequences (list[str]): Protein sequences with '_' at positions to sample.
             temperature (float): Sampling temperature for amino acid selection.
+            sampling_method (str): "single_pass" or "iterative_refinement".
+            top_p (float): Nucleus threshold (iterative only); 1.0 disables.
+            num_steps (int): Refinement steps (iterative only).
+            schedule (str): Unmask schedule across rounds (iterative only).
+            strategy (str): Per-round commit selection (iterative only).
+            temperature_annealing (bool): Anneal toward 0 across rounds (iterative only).
             batch_size (int): Sequences per GPU forward pass.
             device (str): Device to run on.
             verbose (bool): Whether to print progress.
@@ -257,6 +273,21 @@ class ESM3Model:
 
         # Seed after load so each dispatch enters sampling with the same RNG state.
         set_torch_seed(seed)
+
+        if sampling_method == "iterative_refinement":
+            return self._sample_iterative(
+                sequences=sequences,
+                temperature=temperature,
+                top_p=top_p,
+                num_steps=num_steps,
+                schedule=schedule,
+                strategy=strategy,
+                temperature_annealing=temperature_annealing,
+                batch_size=batch_size,
+                device_obj=device_obj,
+                verbose=verbose,
+                return_logits=return_logits,
+            )
 
         # Record mask positions, replace '_' with the model's mask token
         mask_token = self.tokenizer.mask_token
@@ -322,6 +353,83 @@ class ESM3Model:
 
         return {
             "sequences": all_sampled,
+            "logits": all_logits if return_logits else None,
+        }
+
+    def _sample_iterative(
+        self,
+        sequences: list[str],
+        temperature: float,
+        top_p: float,
+        num_steps: int,
+        schedule: str,
+        strategy: str,
+        temperature_annealing: bool,
+        batch_size: int,
+        device_obj: torch.device,
+        verbose: bool,
+        return_logits: bool,
+    ) -> dict[str, Any]:
+        """Iterative refinement via ESM3 SDK ``batch_generate``.
+
+        Sequences are processed in chunks of ``batch_size``; each chunk runs
+        the SDK's iterative loop independently.
+        """
+        from esm.sdk.api import ESMProtein, GenerationConfig
+
+        mask_token = self.tokenizer.mask_token
+
+        if verbose:
+            logger.info(
+                "ESM3 iterative_refinement: %d sequences x %d steps, batch_size=%d (%s, %s)",
+                len(sequences),
+                num_steps,
+                batch_size,
+                schedule,
+                strategy,
+            )
+
+        sampled: list[str] = []
+        all_logits: list[torch.Tensor] = []
+
+        for start in range(0, len(sequences), batch_size):
+            batch_sequences = sequences[start : start + batch_size]
+            proteins = [ESMProtein(sequence=s.replace("_", mask_token)) for s in batch_sequences]
+            configs = [
+                GenerationConfig(
+                    track="sequence",
+                    num_steps=num_steps,
+                    schedule=schedule,
+                    strategy=strategy,
+                    temperature=temperature,
+                    temperature_annealing=temperature_annealing,
+                    top_p=top_p,
+                )
+                for _ in batch_sequences
+            ]
+            results = self.model.batch_generate(inputs=proteins, configs=configs)
+            batch_sampled = [r.sequence for r in results]
+            sampled.extend(batch_sampled)
+
+            if return_logits:
+                # Final forward on the completed chunk for per-position AA logits.
+                batch_inputs = self.tokenizer(
+                    batch_sampled,
+                    add_special_tokens=True,
+                    padding=True,
+                    truncation=False,
+                    return_tensors="pt",
+                )
+                input_ids = batch_inputs["input_ids"].to(device_obj)
+                attention_mask = batch_inputs["attention_mask"].to(device_obj)
+                with torch.inference_mode():
+                    outputs = self.model(sequence_tokens=input_ids, sequence_id=attention_mask.long())
+                    aa_logits = outputs.sequence_logits[:, 1:-1, :][:, :, self.amino_acid_token_ids]  # (B, L, 20)
+                for seq_idx, seq in enumerate(batch_sampled):
+                    all_logits.append(aa_logits[seq_idx, : len(seq)])
+
+        return {
+            "sequences": sampled,
             "logits": all_logits if return_logits else None,
         }
 
@@ -574,6 +682,12 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         return _model.sample(
             sequences=input_dict["sequences"],
             temperature=input_dict["temperature"],
+            sampling_method=input_dict["sampling_method"],
+            top_p=input_dict["top_p"],
+            num_steps=input_dict["num_steps"],
+            schedule=input_dict["schedule"],
+            strategy=input_dict["strategy"],
+            temperature_annealing=input_dict["temperature_annealing"],
             batch_size=input_dict["batch_size"],
             device=input_dict["device"],
             verbose=input_dict["verbose"],

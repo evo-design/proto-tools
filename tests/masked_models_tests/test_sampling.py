@@ -169,6 +169,41 @@ def test_protein_sample_fills_masks(
             assert len(logits[0]) == 20, f"Expected vocab size 20, got {len(logits[0])}"
 
 
+ITERATIVE_PROTEIN_SAMPLING_TOOLS = [
+    pytest.param(run_esm2_sample, ESM2SampleInput, ESM2SampleConfig, id="esm2", marks=pytest.mark.uses_gpu),
+    pytest.param(run_esm3_sample, ESM3SampleInput, ESM3SampleConfig, id="esm3", marks=pytest.mark.uses_gpu),
+]
+
+
+@pytest.mark.parametrize("run_fn, input_cls, config_cls", ITERATIVE_PROTEIN_SAMPLING_TOOLS)
+@pytest.mark.parametrize(
+    "sequences",
+    [
+        pytest.param(["MK_AY_AK_R"], id="multiple_masks"),
+        pytest.param(["MK_A", "MKTAY_AKQR_VQL"], id="variable_length_batch"),
+    ],
+)
+@pytest.mark.parametrize("return_logits", [False, True], ids=["no_logits", "with_logits"])
+def test_protein_sample_iterative_refinement(run_fn, input_cls, config_cls, sequences, return_logits):
+    """Iterative refinement satisfies the same length/validity invariants as single_pass.
+
+    Uses ``num_steps=3`` to keep GPU runtime modest; the algorithm doesn't
+    converge but every '_' must still be filled with a valid amino acid.
+    With ``return_logits=True`` we also assert the final-forward path
+    produces correctly-shaped per-position logits.
+    """
+    config = config_cls(sampling_method="iterative_refinement", num_steps=3, return_logits=return_logits)
+    result = run_fn(input_cls(sequences=sequences), config)
+    _validate_sample_output(sequences, result.sequences, "protein")
+
+    if return_logits:
+        assert result.logits is not None
+        assert len(result.logits) == len(sequences)
+        for seq, logits in zip(sequences, result.logits, strict=False):
+            assert len(logits) == len(seq), f"Expected {len(seq)} positions, got {len(logits)}"
+            assert len(logits[0]) == 20, f"Expected vocab size 20, got {len(logits[0])}"
+
+
 @pytest.mark.parametrize(
     "run_fn, input_cls, config_cls, entity_type, has_logits",
     NUCLEOTIDE_SAMPLING_TOOLS,

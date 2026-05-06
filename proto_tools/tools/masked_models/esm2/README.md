@@ -103,7 +103,13 @@ ESM2 is a masked language model (similar to BERT) trained on protein sequences. 
 |-----------|------|---------|-------------|
 | `model_checkpoint` | `str` | `"esm2_t33_650M_UR50D"` | Model variant to use |
 | `masking_strategy` | `MaskingStrategy` | random 30% | Composite — see fields below |
+| `sampling_method` | `Literal["single_pass", "iterative_refinement"]` | `"single_pass"` | `single_pass` fills every mask in one forward; `iterative_refinement` runs a MaskGIT-style loop |
 | `temperature` | `float` | `1.0` | Softmax temperature for sampling |
+| `top_p` | `float` | `1.0` | Nucleus threshold (iterative only); `1.0` disables |
+| `num_steps` | `int` | `20` | Iterative-refinement decoding steps (iterative only) |
+| `schedule` | `Literal["cosine", "linear"]` | `"cosine"` | Unmask schedule across rounds (iterative only) |
+| `strategy` | `Literal["random", "entropy"]` | `"random"` | Per-round commit selection (iterative only) |
+| `temperature_annealing` | `bool` | `True` | Anneal toward 0 across rounds (iterative only) |
 | `batch_size` | `int` | `1` | Sequences per GPU forward pass |
 | `device` | `str` | `"cuda"` | Device for inference |
 | `return_logits` | `bool` | `False` | Include per-position logits in output |
@@ -117,6 +123,8 @@ ESM2 is a masked language model (similar to BERT) trained on protein sequences. 
 | `mask_fraction` | `float \| None` | `None` | Fraction of designable positions to mask (default ~30%) |
 | `fixed_positions` | `list[int] \| None` | `None` | 1-indexed positions that must NOT be masked |
 | `temperature` | `float` | `1.0` | Temperature for position selection (separate from sampling temperature) |
+
+Use `sampling_method="iterative_refinement"` for higher-coherence joint sampling at multiple masked sites — slower (~num_steps× compute), but commits positions in rounds rather than independently.
 
 ### Scoring Tool (`ESM2ScoringConfig`)
 

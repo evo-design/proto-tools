@@ -77,7 +77,13 @@ All tools take a tool-specific input with one or more protein sequences:
 |-----------|------|---------|-------------|
 | `model_checkpoint` | `str` | `esm3_sm_open_v1` | Model variant |
 | `masking_strategy` | `MaskingStrategy` | random 30% | Composite — see fields below |
+| `sampling_method` | `Literal["single_pass", "iterative_refinement"]` | `"single_pass"` | `single_pass` fills every mask in one forward; `iterative_refinement` dispatches to ESM3's `model.batch_generate` |
 | `temperature` | `float` | `1.0` | Softmax temperature for per-position AA sampling |
+| `top_p` | `float` | `1.0` | Nucleus threshold (iterative only); `1.0` disables |
+| `num_steps` | `int` | `20` | Iterative-refinement decoding steps (iterative only) |
+| `schedule` | `Literal["cosine", "linear"]` | `"cosine"` | Unmask schedule across rounds (iterative only) |
+| `strategy` | `Literal["random", "entropy"]` | `"random"` | Per-round commit selection (iterative only) |
+| `temperature_annealing` | `bool` | `True` | Anneal toward 0 across rounds (iterative only) |
 | `batch_size` | `int` | `1` | Sequences per GPU forward pass |
 | `device` | `str` | `cuda` | Device |
 | `verbose` | `bool` | `False` | Print progress |
@@ -93,7 +99,7 @@ All tools take a tool-specific input with one or more protein sequences:
 | `fixed_positions` | `list[int] \| None` | `None` | 1-indexed positions that must NOT be masked |
 | `temperature` | `float` | `1.0` | Temperature for position selection (separate from sampling temperature) |
 
-Iterative-refinement decoding parameters (`top_p`, `num_steps`, `schedule`, `strategy`, `temperature_annealing`) are not currently exposed; the standalone runs single-pass logit sampling.
+Use `sampling_method="iterative_refinement"` for higher-coherence joint sampling at multiple masked sites — slower (~num_steps× compute), but commits positions in rounds rather than independently.
 
 ### Scoring Tool (`ESM3ScoringConfig`)
 

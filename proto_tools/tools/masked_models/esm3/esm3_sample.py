@@ -64,12 +64,19 @@ class ESM3SampleConfig(MaskedModelSampleConfig):
 
     Attributes:
         model_checkpoint (ESM3_MODEL_CHECKPOINTS): ESM3 weights variant.
-        masking_strategy (MaskingStrategy): Strategy for selecting positions to mask before
-            sampling.
-        temperature (float): Softmax temperature for per-position amino-acid sampling.
+        masking_strategy (MaskingStrategy): Positions to mask before sampling.
+        sampling_method (Literal["single_pass", "iterative_refinement"]): "single_pass"
+            fills every mask in one forward; "iterative_refinement" dispatches to
+            ``model.batch_generate`` and uses the five GenerationConfig knobs below.
+        temperature (float): Softmax temperature.
+        top_p (float): Nucleus threshold (iterative only).
+        num_steps (int): Refinement steps (iterative only).
+        schedule (Literal["cosine", "linear"]): Unmask schedule (iterative only).
+        strategy (Literal["random", "entropy"]): Per-round commit selection (iterative only).
+        temperature_annealing (bool): Anneal toward 0 across rounds (iterative only).
         batch_size (int): Sequences per GPU forward pass.
         device (str): Device to run on.
-        return_logits (bool): Include per-position logits in the output.
+        return_logits (bool): Include per-position logits.
     """
 
     masking_strategy: MaskingStrategy = ConfigField(
@@ -83,11 +90,55 @@ class ESM3SampleConfig(MaskedModelSampleConfig):
         description="ESM3 weights variant",
         reload_on_change=True,
     )
+    sampling_method: Literal["single_pass", "iterative_refinement"] = ConfigField(
+        title="Sampling Method",
+        default="single_pass",
+        description="'single_pass' samples every mask in one forward; 'iterative_refinement' uses batch_generate",
+        advanced=True,
+    )
     temperature: float = ConfigField(
         title="Sampling Temperature",
         default=1.0,
         gt=0.0,
         description="Softmax temperature for per-position amino-acid sampling",
+    )
+    top_p: float = ConfigField(
+        title="Top P",
+        default=1.0,
+        gt=0.0,
+        le=1.0,
+        description="Nucleus sampling threshold; 1.0 disables",
+        advanced=True,
+        depends_on={"sampling_method": ["iterative_refinement"]},
+    )
+    num_steps: int = ConfigField(
+        title="Num Steps",
+        default=20,
+        ge=1,
+        description="Iterative-refinement decoding steps; diminishing returns above 20",
+        advanced=True,
+        depends_on={"sampling_method": ["iterative_refinement"]},
+    )
+    schedule: Literal["cosine", "linear"] = ConfigField(
+        title="Unmask Schedule",
+        default="cosine",
+        description="Unmask schedule across rounds; 'cosine' fronts more commits late",
+        advanced=True,
+        depends_on={"sampling_method": ["iterative_refinement"]},
+    )
+    strategy: Literal["random", "entropy"] = ConfigField(
+        title="Unmask Strategy",
+        default="random",
+        description="Position-selection per round; 'entropy' commits the most-confident first",
+        advanced=True,
+        depends_on={"sampling_method": ["iterative_refinement"]},
+    )
+    temperature_annealing: bool = ConfigField(
+        title="Temperature Annealing",
+        default=True,
+        description="Anneal temperature toward 0 across rounds",
+        advanced=True,
+        depends_on={"sampling_method": ["iterative_refinement"]},
     )
     return_logits: bool = ConfigField(
         title="Return Logits",
@@ -152,6 +203,12 @@ def run_esm3_sample(
             "operation": "sample",
             "sequences": inputs.sequences,
             "temperature": config.temperature,
+            "sampling_method": config.sampling_method,
+            "top_p": config.top_p,
+            "num_steps": config.num_steps,
+            "schedule": config.schedule,
+            "strategy": config.strategy,
+            "temperature_annealing": config.temperature_annealing,
             "batch_size": config.batch_size,
             "model_checkpoint": config.model_checkpoint,
             "device": config.device,

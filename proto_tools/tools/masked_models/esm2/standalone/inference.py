@@ -160,21 +160,36 @@ class ESM2Model:
         self,
         sequences: list[str],
         temperature: float,
+        sampling_method: str = "single_pass",
+        top_p: float = 1.0,
+        num_steps: int = 20,
+        schedule: str = "cosine",
+        strategy: str = "random",
+        temperature_annealing: bool = True,
         batch_size: int = 1,
         device: str = "cuda",
         verbose: bool = False,
         return_logits: bool = False,
         seed: int | None = None,
     ) -> dict[str, Any]:
-        """Sample amino acids at masked positions ('_') in protein sequences.
+        """Sample amino acids at masked ('_') positions in protein sequences.
 
         Receives sequences with '_' at positions to be sampled, injects
         ``[MASK]`` tokens at those positions, runs a forward pass, and samples
         replacement amino acids from the model's predictions.
+        ``iterative_refinement`` runs the MaskGIT-style loop via
+        ``standalone_helpers.iterative_sampling``; ``return_logits=True`` on
+        that path triggers a final forward over the completed sequences.
 
         Args:
             sequences (list[str]): Protein sequences with '_' at positions to sample.
             temperature (float): Sampling temperature for amino acid selection.
+            sampling_method (str): "single_pass" or "iterative_refinement".
+            top_p (float): Nucleus threshold (iterative only); 1.0 disables.
+            num_steps (int): Refinement steps (iterative only).
+            schedule (str): Unmask schedule across rounds (iterative only).
+            strategy (str): Per-round commit selection (iterative only).
+            temperature_annealing (bool): Anneal toward 0 across rounds (iterative only).
             batch_size (int): Sequences per GPU forward pass.
             device (str): Device to run on.
             verbose (bool): Whether to print progress.
@@ -193,6 +208,21 @@ class ESM2Model:
             self.load(device, verbose)
         elif self.device != device:
             self.to_device(device)
+
+        if sampling_method == "iterative_refinement":
+            return self._sample_iterative(
+                sequences=sequences,
+                temperature=temperature,
+                top_p=top_p,
+                num_steps=num_steps,
+                schedule=schedule,
+                strategy=strategy,
+                temperature_annealing=temperature_annealing,
+                batch_size=batch_size,
+                device_obj=device_obj,
+                verbose=verbose,
+                return_logits=return_logits,
+            )
 
         # Record mask positions, replace '_' with the model's mask token
         mask_token = self.tokenizer.mask_token
@@ -261,6 +291,107 @@ class ESM2Model:
 
         return {
             "sequences": all_sampled,
+            "logits": all_logits if return_logits else None,
+        }
+
+    def _sample_iterative(
+        self,
+        sequences: list[str],
+        temperature: float,
+        top_p: float,
+        num_steps: int,
+        schedule: str,
+        strategy: str,
+        temperature_annealing: bool,
+        batch_size: int,
+        device_obj: torch.device,
+        verbose: bool,
+        return_logits: bool,
+    ) -> dict[str, Any]:
+        """Iterative refinement loop on top of HF ``EsmForMaskedLM``.
+
+        Sequences are processed in chunks of ``batch_size``; each chunk runs
+        the full ``num_steps`` loop as a single ``(B, L)`` tensor.
+        """
+        from standalone_helpers.iterative_sampling import iterative_sample
+
+        mask_token = self.tokenizer.mask_token
+        mask_token_id = int(self.tokenizer.mask_token_id)
+        valid_token_ids = [int(t) for t in self.amino_acid_token_ids.tolist()]
+        id_to_aa = {int(tid): aa for aa, tid in zip(AMINO_ACIDS_LIST, valid_token_ids, strict=True)}
+
+        if verbose:
+            logger.info(
+                "ESM2 iterative_refinement: %d sequences x %d steps, batch_size=%d (%s, %s)",
+                len(sequences),
+                num_steps,
+                batch_size,
+                schedule,
+                strategy,
+            )
+
+        sampled: list[str] = []
+        all_logits: list[torch.Tensor] = []
+
+        for start in range(0, len(sequences), batch_size):
+            batch_sequences = sequences[start : start + batch_size]
+            batch_inputs = self.tokenizer(
+                [s.replace("_", mask_token) for s in batch_sequences],
+                add_special_tokens=True,
+                padding=True,
+                truncation=False,
+                return_tensors="pt",
+            )
+            input_ids = batch_inputs["input_ids"].to(device_obj)
+            attention_mask = batch_inputs["attention_mask"].to(device_obj)
+
+            # Iterate over the BOS/EOS-stripped interior; EOS/pad slots aren't
+            # mask_token_id, so they stay inert. Allocate `full` once per chunk
+            # and mutate the interior in-place each step.
+            core_ids = input_ids[:, 1:-1].clone()  # (B, L-2)
+            full = input_ids.clone()
+
+            def forward_fn(
+                core: torch.Tensor,
+                full: torch.Tensor = full,
+                attention_mask: torch.Tensor = attention_mask,
+            ) -> Any:
+                full[:, 1:-1] = core
+                outputs = self.model(input_ids=full, attention_mask=attention_mask)
+                return outputs["logits"][:, 1:-1, :]  # (B, L-2, V)
+
+            finalized_core = iterative_sample(
+                forward_fn=forward_fn,
+                initial_tokens=core_ids,
+                mask_token_id=mask_token_id,
+                valid_token_ids=valid_token_ids,
+                num_steps=num_steps,
+                schedule=schedule,
+                strategy=strategy,
+                temperature=temperature,
+                top_p=top_p,
+                temperature_annealing=temperature_annealing,
+            )
+
+            # Overlay sampled AA letters at originally-`_` positions; non-AA chars (e.g. 'X') are preserved.
+            for seq_idx, orig_seq in enumerate(batch_sequences):
+                chars = list(orig_seq)
+                for pos, c in enumerate(orig_seq):
+                    if c == "_":
+                        chars[pos] = id_to_aa[int(finalized_core[seq_idx, pos].item())]
+                sampled.append("".join(chars))
+
+            if return_logits:
+                # Final forward on the completed chunk for per-position AA logits.
+                full[:, 1:-1] = finalized_core
+                with torch.inference_mode():
+                    outputs = self.model(input_ids=full, attention_mask=attention_mask)
+                    aa_logits = outputs["logits"][:, 1:-1, :][:, :, self.amino_acid_token_ids]  # (B, L-2, 20)
+                for seq_idx, orig_seq in enumerate(batch_sequences):
+                    all_logits.append(aa_logits[seq_idx, : len(orig_seq)])
+
+        return {
+            "sequences": sampled,
             "logits": all_logits if return_logits else None,
         }
 
@@ -504,6 +635,12 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         return _model.sample(
             sequences=input_dict["sequences"],
             temperature=input_dict["temperature"],
+            sampling_method=input_dict["sampling_method"],
+            top_p=input_dict["top_p"],
+            num_steps=input_dict["num_steps"],
+            schedule=input_dict["schedule"],
+            strategy=input_dict["strategy"],
+            temperature_annealing=input_dict["temperature_annealing"],
             batch_size=input_dict["batch_size"],
             device=input_dict["device"],
             verbose=input_dict["verbose"],
