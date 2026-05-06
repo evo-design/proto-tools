@@ -6,6 +6,15 @@
 
 ESMFold is a fast protein structure prediction model from Meta AI that predicts 3D structures directly from amino acid sequences using a [language model](https://en.wikipedia.org/wiki/Language_model) approach, without requiring [multiple sequence alignments](https://en.wikipedia.org/wiki/Multiple_sequence_alignment).
 
+This package also includes `esmfold-gradient`, a differentiable confidence tool that runs ESMFold over a relaxed `(L, 20)` logits distribution for one designated target chain in a complex and returns the gradient of a weighted confidence loss (pLDDT, pTM, pAE) with respect to those input logits. It can be used as a structure-aware loss inside MCMC, gradient descent, or any optimization loop over relaxed protein sequences.
+
+## Tool Catalog
+
+| Tool | Description | Output |
+|------|-------------|--------|
+| `esmfold-prediction` | Predict 3D structure from sequence | Structure(s), pLDDT, pTM, optional PAE |
+| `esmfold-gradient` | Differentiable confidence loss + gradient over relaxed logits | Gradient, weighted loss, per-term metrics, predicted structure |
+
 ## Background
 
 **What does this tool measure/predict?**
@@ -51,14 +60,31 @@ Unlike AlphaFold2, ESMFold does not require multiple sequence alignments (MSAs),
 - **Single conformation:** Predicts one structure, not conformational ensembles or dynamic regions
 - **MSA-free tradeoff:** Slightly lower accuracy than AlphaFold2 for well-characterized protein families
 
+**Differentiable confidence (gradient tool):**
+
+The gradient tool replaces the discrete embedding lookup for one designated *target chain* with a soft mixture of amino-acid embeddings drawn from a relaxed `(L, 20)` distribution. The relaxed mixture is injected at two stages — into ESM-2's word embeddings and into ESMFold's own AA embedding layer — and the rest of the pipeline (ESM-2 stack, structure module trunk, confidence heads) runs as usual under autograd. A weighted combination of `1 − pLDDT`, `1 − pTM`, and `pAE / 31.75` produces a single scalar loss; one backward pass returns ∂loss / ∂logits while ESMFold's parameters stay frozen. Optional soft/hard mixing knobs (and a Straight-Through Estimator) let callers trade smoothness for guidance toward discrete sequences.
+
 ## Input Parameters
+
+### Prediction Tool
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `complexes` | `List[StructurePredictionComplex]` | *required* | Complexes to predict. Accepts `StructurePredictionComplex` objects, sequence strings for single-chain complexes, or lists of sequence strings for multi-chain complexes. Total residues per complex must be <=2,400. |
 | `msas` | `Dict[str, MSA] \| None` | `None` | Hidden advanced field inherited from shared structure inputs. ESMFold does not require MSAs and normally leaves this unset. |
 
+### Gradient Tool
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `logits` | `List[List[float]]` | *required* | Relaxed target-chain logits with shape `(L, 20)` in canonical amino-acid order `ACDEFGHIKLMNPQRSTVWY` |
+| `temperature` | `float` | `1.0` | Softmax temperature applied to logits before they are mixed into the relaxed embedding |
+| `chains` | `List[str]` | *required* | Complete protein-chain sequences for the complex. Each sequence listed in `target_chain_indices` is replaced by the hard decode of `logits` before folding, but its length must equal `len(logits)` |
+| `target_chain_indices` | `List[int]` | `[0]` | Zero-based chain indices that receive the relaxed input logits. Must reference distinct, in-bounds chains; gradients are summed through the shared logits tensor when more than one target chain is selected |
+
 ## Configuration
+
+### Prediction Tool (`ESMFoldConfig`)
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -66,6 +92,17 @@ Unlike AlphaFold2, ESMFold does not require multiple sequence alignments (MSAs),
 | `chain_linker` | `str` | `"G" * 25` | Internal glycine linker sequence used to connect chains before prediction; removed/relabelled in the output structure. |
 | `max_batch_residues` | `int` | `1200` | Maximum total residues per inference batch; lower this if GPU memory is tight. |
 | `device` | `str` | `"cuda"` | Execution device, inherited from `StructurePredictionConfig`. |
+
+### Gradient Tool (`ESMFoldGradientConfig`)
+
+Inherits every field above from `ESMFoldConfig` and adds:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `loss_weights` | `dict[str, float]` | `{"plddt": 1.0}` | Non-negative weights for the confidence loss terms. Valid keys: `plddt` (uses `1 − avg_pLDDT`), `ptm` (uses `1 − pTM`), `pae` (uses `avg_PAE / 31.75`). Terms with weight `0.0` are skipped; if all weights are zero, the gradient short-circuits to a zero-gradient + `loss=0.0` forward pass. |
+| `soft` | `float` | `1.0` | Blend between hard argmax one-hot (`0.0`) and full softmax probabilities (`1.0`) for the relaxed target sequence |
+| `hard` | `float` | `0.0` | Straight-Through Estimator coefficient — `1.0` runs the forward pass on hard one-hot tokens while gradients still flow through soft probabilities |
+| `compute_gradient` | `bool` | `True` | When `True`, runs the backward pass and returns the gradient. Set `False` for forward-only confidence scoring; `gradient` is `None` in the output |
 
 ### Parameter Guides
 
@@ -82,6 +119,8 @@ Unlike AlphaFold2, ESMFold does not require multiple sequence alignments (MSAs),
 3. **`max_batch_residues`**: Tune for available GPU memory when batching many candidates.
 
 ## Output Specification
+
+### ESMFoldOutput (Prediction)
 
 ```python
 # Return type: ESMFoldOutput
@@ -119,6 +158,16 @@ ESMFoldMetrics(
 | `structure.per_residue_plddt` | `list[float] \| None` | `0.0 - 1.0` each | Identifies flexible/disordered regions vs well-folded domains |
 | `structure.structure_pdb` | `str` | n/a | Predicted coordinates as PDB text |
 | `structure.structure_cif` | `str` | n/a | Predicted coordinates as mmCIF text |
+
+### ESMFoldGradientOutput
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `gradient` | `List[List[float]] \| None` | Gradient matrix with the same `(L, 20)` shape and amino-acid column order as the input logits. `None` when `compute_gradient=False` |
+| `loss` | `float` | Scalar weighted confidence loss (sum of `loss_weights[k] * loss_terms[k]` over enabled terms) |
+| `metrics` | `dict[str, Any]` | `avg_plddt`, `ptm`, `avg_pae`, optional `pae_matrix`, plus per-term unweighted losses (`loss_plddt`, `loss_ptm`, `loss_pae`) for whichever terms had non-zero weight |
+| `vocab` | `List[str]` | Amino-acid column ordering for the input logits and returned gradient — always canonical protein order `ACDEFGHIKLMNPQRSTVWY` |
+| `structure` | `Structure` | Predicted ESMFold complex structure for the hard-decoded sequence (same `Structure` type as `esmfold-prediction` returns) |
 
 ## Interpreting Results
 
@@ -168,6 +217,35 @@ dimer_inputs = ESMFoldInput(
 result_dimer = run_esmfold(dimer_inputs, config)
 ```
 
+**Differentiable confidence gradient over a relaxed target chain:**
+```python
+from proto_tools.tools.structure_prediction.esmfold import (
+    ESMFoldGradientInput, ESMFoldGradientConfig, run_esmfold_gradient,
+)
+from proto_tools.utils import one_hot_protein_logits
+
+# Seed a relaxed target-chain distribution from a discrete sequence
+target_seq = "MKTAYIAKQR"
+logits = one_hot_protein_logits(target_seq, sharpness=2.0)
+
+inputs = ESMFoldGradientInput(
+    logits=logits,
+    chains=[target_seq],          # length must equal len(logits)
+    target_chain_indices=[0],     # which chains receive the relaxed distribution
+)
+config = ESMFoldGradientConfig(
+    loss_weights={"plddt": 1.0, "ptm": 0.5},
+    num_recycles=1,
+)
+
+result = run_esmfold_gradient(inputs, config)
+print(f"weighted loss: {result.loss:.3f}")
+print(f"avg pLDDT:    {result.metrics['avg_plddt']:.3f}")
+print(f"loss_plddt:   {result.metrics['loss_plddt']:.3f}")
+print(f"grad shape:   ({len(result.gradient)}, {len(result.gradient[0])})")
+# Step the relaxed sequence: logits ← logits − lr · gradient
+```
+
 ## Best Practices & Gotchas
 
 **Parameter tuning:**
@@ -192,6 +270,22 @@ result_dimer = run_esmfold(dimer_inputs, config)
 - **Highly repetitive sequences:** May produce extended or disordered structures with low confidence
 - **Non-standard amino acids:** Replace with 'X' (unknown) or closest standard amino acid; ESMFold will predict but confidence may be lower
 - **Large complexes approaching 2,400 residues:** May run out of GPU memory; reduce chain count, shorten sequences, or lower `max_batch_residues`
+
+**Gradient tool:**
+
+1. **Vocab order**: Input logits and the returned gradient share the canonical protein order `ACDEFGHIKLMNPQRSTVWY`. The tool maps to ESM-2 and OpenFold token indices internally.
+
+2. **Target chain length**: `len(logits)` must equal the length of every chain referenced in `target_chain_indices`. Non-target chains can have any length (they fold normally with their fixed sequences).
+
+3. **Repeated target chains**: For homomers where multiple chain occurrences share the same designed sequence, list each occurrence in `target_chain_indices` once — gradients sum through the shared logits tensor.
+
+4. **`soft` / `hard` mixing**: Default (`soft=1.0`, `hard=0.0`) uses pure soft probabilities — best for smooth optimization over the relaxed simplex. Set `hard=1.0` for the Straight-Through Estimator (forward sees argmax tokens, backward flows through soft probs) when the relaxed forward diverges too far from the discrete fold.
+
+5. **Loss weights**: Provide a `dict[str, float]` over `{"plddt", "ptm", "pae"}`. Setting all weights to `0.0` short-circuits to a forward-only discrete pass with `loss=0.0` and a zero gradient — a useful sanity check.
+
+6. **Forward-only mode**: Set `compute_gradient=False` to skip the backward pass; `gradient` will be `None` but `loss`, `metrics`, and the predicted `structure` are still returned.
+
+7. **Memory**: A single ESMFold gradient pass is dominated by the structure-module trunk activations. Long target chains (>500 residues) on a single 24 GB GPU may need `num_recycles=1` and a single `target_chain_index`.
 
 ## References
 
