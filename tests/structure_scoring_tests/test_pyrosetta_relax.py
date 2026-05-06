@@ -31,9 +31,10 @@ def test_relax_input_normalizes_single_structure():
     assert isinstance(inp.inputs[0], ScoringStructureInput)
 
 
-def test_relax_input_accepts_dict_with_chain_ids():
-    inp = PyRosettaRelaxInput(inputs=[{"structure": TEST_PDB, "chain_ids": ["A"]}])
-    assert inp.inputs[0].chain_ids == ["A"]
+def test_relax_input_accepts_dict_with_chains_to_score():
+    inp = PyRosettaRelaxInput(inputs=[{"structure": TEST_PDB, "chains_to_score": ["A"]}])
+    assert inp.inputs[0].chains_to_score is not None
+    assert inp.inputs[0].chains_to_score.chains == ["A"]
 
 
 def test_relax_forwards_bindcraft_fastrelax_options(monkeypatch):

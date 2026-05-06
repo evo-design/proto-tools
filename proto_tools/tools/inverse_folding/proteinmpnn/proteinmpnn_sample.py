@@ -79,13 +79,13 @@ class ProteinMPNNSequences(DesignedSequences):
     Attributes:
         sequences (list[str]): Designed protein sequences.
         perplexity (list[float]): Per-sequence perplexity values.
-        sequence_recovery (list[float]): Per-sequence fraction of designed
+        sequence_recovery (list[float]): Per-sequence fraction of chains_to_redesign
             residues matching the PDB prompt reference (0.0-1.0).
     """
 
     perplexity: list[float] = Field(description="Perplexity of the sequence from the ProteinMPNN model")
     sequence_recovery: list[float] = Field(
-        description="Per-sequence fraction of designed residues matching the PDB prompt reference (0.0-1.0)",
+        description="Per-sequence fraction of chains_to_redesign residues matching the PDB prompt reference (0.0-1.0)",
     )
 
 
@@ -125,7 +125,7 @@ def run_proteinmpnn_sample(
 
     Args:
         inputs (ProteinMPNNSampleInput): ProteinMPNNSampleInput containing a list of structure inputs,
-            each with optional chain_ids/fixed_positions constraints.
+            each with optional ``chains_to_redesign`` and ``fixed_positions`` selections.
         config (ProteinMPNNSampleConfig): Configuration for sampling (temperature, batch_size, etc.).
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -157,10 +157,10 @@ def run_proteinmpnn_sample(
             input_dict = {
                 "operation": "sample",
                 "pdb_contents": inp.structure_pdb,
-                "chain_ids": inp.chain_ids,
+                "chain_ids": inp.chain_ids_to_redesign,
                 "batch_size": chunk,
                 "temperature": config.temperature,
-                "fixed_positions": inp.fixed_positions,
+                "fixed_positions": inp.fixed_positions.chains if inp.fixed_positions is not None else None,
                 "excluded_amino_acids": config.excluded_amino_acids,
                 "seed": base_seed + chunk_idx,
                 "device": config.device,

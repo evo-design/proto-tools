@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, PrivateAttr, model_validator
 
 from proto_tools.transforms.masking.maskers import MASKERS, Masker, MaskingMethod
 from proto_tools.utils import ConfigField
+from proto_tools.utils.sequence import validate_positions_list
 
 logger = logging.getLogger(__name__)
 
@@ -303,6 +304,26 @@ class MaskingStrategy(BaseModel):
     )
 
     # -- Validators ------------------------------------------------------------
+
+    @model_validator(mode="before")
+    @classmethod
+    def _validate_fixed_positions(cls, data: Any) -> Any:
+        """Coerce [] to None; otherwise validate via the shared 1-indexed positions helper."""
+        if isinstance(data, dict):
+            positions = data.get("fixed_positions")
+            if isinstance(positions, list):
+                if not positions:
+                    data = {**data, "fixed_positions": None}
+                else:
+                    data = {
+                        **data,
+                        "fixed_positions": validate_positions_list(
+                            positions,
+                            label="fixed_positions",
+                            logger_obj=logger,
+                        ),
+                    }
+        return data
 
     @model_validator(mode="after")
     def _validate_mutation_spec(self) -> Any:

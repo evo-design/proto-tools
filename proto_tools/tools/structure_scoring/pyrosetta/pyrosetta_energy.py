@@ -62,7 +62,7 @@ class PyRosettaEnergyMetrics(Metrics):
 
     ``total_energy`` and ``energy_terms`` are always computed on the full pose,
     regardless of any chain selection on the input (the full structure is
-    required for the physics to be meaningful). A ``chain_ids`` selection only
+    required for the physics to be meaningful). A ``chains_to_score`` selection only
     filters which residues appear in ``per_residue``; each entry still reflects
     that residue's contribution within the full complex. To score a chain as
     if it were isolated, extract it into its own Structure first.
@@ -76,7 +76,7 @@ class PyRosettaEnergyMetrics(Metrics):
             Always the whole-pose terms. Declared as a real field (not a metric)
             because it's a named-term breakdown, not a scalar quantity.
         per_residue (list[ResidueEnergy]): Per-residue energy breakdown, filtered
-            to the selected chains when ``chain_ids`` is set. Declared as a
+            to the selected chains when ``chains_to_score`` is set. Declared as a
             real field because each entry carries chain/residue identifiers
             alongside the energy value.
     """

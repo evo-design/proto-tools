@@ -33,6 +33,7 @@ from proto_tools.utils.sequence import (
     return_invalid_nucleotide_chars,
     return_invalid_protein_chars,
     return_invalid_rna_chars,
+    validate_positions_list,
 )
 from proto_tools.utils.system_info import (
     capture_parent_env,
@@ -77,6 +78,7 @@ __all__ = [
     "return_invalid_nucleotide_chars",
     "return_invalid_protein_chars",
     "return_invalid_rna_chars",
+    "validate_positions_list",
     "validate_smiles",
     "DNA_NUCLEOTIDES",
     "RNA_NUCLEOTIDES",

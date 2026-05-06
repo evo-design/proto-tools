@@ -29,8 +29,8 @@ def test_sasa_input_normalizes_single_structure():
 
 
 def test_sasa_input_rejects_invalid_chain():
-    with pytest.raises(ValueError, match="not found in structure"):
-        PyRosettaSASAInput(inputs=[{"structure": TEST_PDB, "chain_ids": ["Z"]}])
+    with pytest.raises(ValueError, match="not in structure"):
+        PyRosettaSASAInput(inputs=[{"structure": TEST_PDB, "chains_to_score": ["Z"]}])
 
 
 # ── Integration ───────────────────────────────────────────────────────────────
@@ -60,7 +60,9 @@ def test_run_pyrosetta_sasa_on_pdb():
 def test_run_pyrosetta_sasa_chain_selection_filters_residues():
     """Chain A selection should return fewer residues and different SASA than whole complex."""
     whole = run_pyrosetta_sasa(PyRosettaSASAInput(inputs=[TEST_CIF_MULTICHAIN]))
-    chain_a = run_pyrosetta_sasa(PyRosettaSASAInput(inputs=[{"structure": TEST_CIF_MULTICHAIN, "chain_ids": ["A"]}]))
+    chain_a = run_pyrosetta_sasa(
+        PyRosettaSASAInput(inputs=[{"structure": TEST_CIF_MULTICHAIN, "chains_to_score": ["A"]}])
+    )
 
     assert whole.success and chain_a.success
 

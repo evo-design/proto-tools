@@ -57,7 +57,7 @@ class PyRosettaSASAMetrics(Metrics):
 
     Metrics documented in ``metric_spec``:
         total_sasa (float): Total solvent accessible surface area in Å². When
-            ``chain_ids`` is set on the input, this is the sum over the selected
+            ``chains_to_score`` is set on the input, this is the sum over the selected
             residues only, not the whole-pose SASA. (Contrast with
             ``pyrosetta-energy``, whose ``total_energy`` is always the whole-pose
             total regardless of chain selection — SASA can be meaningfully

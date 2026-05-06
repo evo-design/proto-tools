@@ -112,7 +112,7 @@ def run_esm_if1_sample(
     """Sample protein sequences using ESM-IF1/ProteinDPO.
 
     Args:
-        inputs (ESMIF1SampleInput): Structure inputs with optional chain/fixed position constraints.
+        inputs (ESMIF1SampleInput): Structure inputs with optional chain/fixed_positions position constraints.
         config (ESMIF1SampleConfig): Configuration including weights variant, temperature, etc.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -138,14 +138,14 @@ def run_esm_if1_sample(
             input_dict = {
                 "operation": "sample",
                 "pdb_contents": inp.structure_pdb,
-                "chain_ids": inp.chain_ids,
+                "chain_ids": inp.chain_ids_to_redesign,
                 "batch_size": chunk,
                 "temperature": config.temperature,
                 "seed": base_seed + chunk_idx,
                 "device": config.device,
                 "weights_variant": config.weights_variant,
                 "verbose": config.verbose,
-                "fixed_positions": inp.fixed_positions,
+                "fixed_positions": inp.fixed_positions.chains if inp.fixed_positions is not None else None,
             }
             result = ToolInstance.dispatch(
                 "esm_if1",

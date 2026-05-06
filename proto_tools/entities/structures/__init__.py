@@ -1,6 +1,11 @@
 """Macromolecular structure representations and format conversion."""
 
 from proto_tools.entities.structures.examples import GFP_CIF_PATH, get_gfp_structure
+from proto_tools.entities.structures.selection import (
+    ChainSelection,
+    ResidueSelection,
+    StructureInputBase,
+)
 from proto_tools.entities.structures.structure import BFactorType, Structure
 from proto_tools.entities.structures.structure_ensemble import StructureEnsemble
 from proto_tools.entities.structures.utils import (
@@ -38,6 +43,10 @@ __all__ = [
     "Structure",
     "BFactorType",
     "StructureEnsemble",
+    # Selection
+    "ChainSelection",
+    "ResidueSelection",
+    "StructureInputBase",
     # Examples
     "GFP_CIF_PATH",
     "get_gfp_structure",

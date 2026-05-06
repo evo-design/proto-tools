@@ -32,27 +32,27 @@ def cif_structure():
 @pytest.mark.uses_gpu
 def test_ligandmpnn_sample_simple(cif_structure: Structure):
     """Basic LigandMPNN sampling with a single structure."""
-    inp = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=cif_structure, chain_ids=["A"])])
+    inp = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=cif_structure, chains_to_redesign=["A"])])
     config = LigandMPNNSampleConfig(num_sequences_per_structure=2, temperature=0.1, seed=42)
 
     output = run_ligandmpnn_sample(inp, config)
 
     validate_output(output)
 
-    designed = output.designed_sequences[0]
-    assert len(designed.sequences) == 2
-    assert all(isinstance(sequence, str) for sequence in designed.sequences)
-    assert all(len(seq) > 0 for seq in designed.sequences)
-    assert len(designed.sequence_recovery) == 2
-    assert len(designed.ligand_interface_sequence_recovery) == 2
-    assert all(0.0 <= r <= 1.0 for r in designed.sequence_recovery)
-    assert all(0.0 <= r <= 1.0 for r in designed.ligand_interface_sequence_recovery)
+    designs = output.designed_sequences[0]
+    assert len(designs.sequences) == 2
+    assert all(isinstance(sequence, str) for sequence in designs.sequences)
+    assert all(len(seq) > 0 for seq in designs.sequences)
+    assert len(designs.sequence_recovery) == 2
+    assert len(designs.ligand_interface_sequence_recovery) == 2
+    assert all(0.0 <= r <= 1.0 for r in designs.sequence_recovery)
+    assert all(0.0 <= r <= 1.0 for r in designs.ligand_interface_sequence_recovery)
 
 
 @pytest.mark.uses_gpu
 def test_ligandmpnn_sample_chunked_batching(cif_structure: Structure):
     """Chunked batching produces the correct number of sequences."""
-    inp = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=cif_structure, chain_ids=["A"])])
+    inp = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=cif_structure, chains_to_redesign=["A"])])
     config = LigandMPNNSampleConfig(
         num_sequences_per_structure=6,
         batch_size=2,
@@ -62,12 +62,12 @@ def test_ligandmpnn_sample_chunked_batching(cif_structure: Structure):
     output = run_ligandmpnn_sample(inp, config)
     assert output.success, f"Chunked batching failed: {output}"
 
-    designed = output.designed_sequences[0]
-    assert len(designed.sequences) == 6
-    assert all(isinstance(seq, str) for seq in designed.sequences)
-    assert all(len(seq) > 0 for seq in designed.sequences)
-    assert len(designed.sequence_recovery) == 6
-    assert len(designed.ligand_interface_sequence_recovery) == 6
+    designs = output.designed_sequences[0]
+    assert len(designs.sequences) == 6
+    assert all(isinstance(seq, str) for seq in designs.sequences)
+    assert all(len(seq) > 0 for seq in designs.sequences)
+    assert len(designs.sequence_recovery) == 6
+    assert len(designs.ligand_interface_sequence_recovery) == 6
 
 
 @pytest.mark.uses_gpu
@@ -75,8 +75,8 @@ def test_ligandmpnn_sample_multiple_structures(cif_structure: Structure):
     """Sampling with multiple input structures."""
     inp = InverseFoldingInput(
         inputs=[
-            InverseFoldingStructureInput(structure=cif_structure, chain_ids=["A"]),
-            InverseFoldingStructureInput(structure=cif_structure, chain_ids=["A"]),
+            InverseFoldingStructureInput(structure=cif_structure, chains_to_redesign=["A"]),
+            InverseFoldingStructureInput(structure=cif_structure, chains_to_redesign=["A"]),
         ]
     )
     config = LigandMPNNSampleConfig(num_sequences_per_structure=3, temperature=0.1, seed=42)
@@ -86,9 +86,9 @@ def test_ligandmpnn_sample_multiple_structures(cif_structure: Structure):
     validate_output(output)
 
     assert len(output.designed_sequences) == 2
-    for designed in output.designed_sequences:
-        assert len(designed.sequences) == 3
-        assert all(isinstance(sequence, str) for sequence in designed.sequences)
+    for designs in output.designed_sequences:
+        assert len(designs.sequences) == 3
+        assert all(isinstance(sequence, str) for sequence in designs.sequences)
 
 
 # ── Benchmarks ──────────────────────────────────────────────────────────────
@@ -99,7 +99,9 @@ def test_ligandmpnn_sample_multiple_structures(cif_structure: Structure):
 @pytest.mark.uses_gpu
 def test_ligandmpnn_sample_benchmark(request: pytest.FixtureRequest, cif_structure: Structure) -> None:
     """Benchmark ligandmpnn-sample: 50 designs of renin chain A (~217 aa) at batch_size=16 (cold + warm)."""
-    inputs = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=cif_structure, chain_ids=["A"])])
+    inputs = InverseFoldingInput(
+        inputs=[InverseFoldingStructureInput(structure=cif_structure, chains_to_redesign=["A"])]
+    )
     config = LigandMPNNSampleConfig(
         num_sequences_per_structure=50,
         batch_size=16,

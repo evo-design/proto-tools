@@ -54,13 +54,13 @@ def test_esm_if1_sample_simple(pdb_structure: Structure):
     validate_output(output)
     assert output.tool_id == "esm-if1-sample"
 
-    designed = output.designed_sequences[0]
-    assert len(designed.sequences) == 1
-    assert isinstance(designed.sequences[0], str)
-    assert len(designed.sequences[0]) > 0
-    assert len(designed.log_likelihoods) == 1
-    assert isinstance(designed.log_likelihoods[0], float)
-    assert np.isfinite(designed.log_likelihoods[0])
+    designs = output.designed_sequences[0]
+    assert len(designs.sequences) == 1
+    assert isinstance(designs.sequences[0], str)
+    assert len(designs.sequences[0]) > 0
+    assert len(designs.log_likelihoods) == 1
+    assert isinstance(designs.log_likelihoods[0], float)
+    assert np.isfinite(designs.log_likelihoods[0])
 
 
 @pytest.mark.uses_gpu
@@ -75,13 +75,13 @@ def test_esm_if1_sample_multiple(pdb_structure: Structure):
     output = run_esm_if1_sample(inp, config)
     assert output.success, f"Failed to sample: {output}"
 
-    designed = output.designed_sequences[0]
-    assert len(designed.sequences) == 3
-    assert all(isinstance(seq, str) for seq in designed.sequences)
-    assert all(len(seq) > 0 for seq in designed.sequences)
-    assert len(designed.log_likelihoods) == 3
-    assert all(isinstance(ll, float) for ll in designed.log_likelihoods)
-    assert all(np.isfinite(ll) for ll in designed.log_likelihoods)
+    designs = output.designed_sequences[0]
+    assert len(designs.sequences) == 3
+    assert all(isinstance(seq, str) for seq in designs.sequences)
+    assert all(len(seq) > 0 for seq in designs.sequences)
+    assert len(designs.log_likelihoods) == 3
+    assert all(isinstance(ll, float) for ll in designs.log_likelihoods)
+    assert all(np.isfinite(ll) for ll in designs.log_likelihoods)
 
 
 @pytest.mark.uses_gpu
@@ -97,11 +97,11 @@ def test_esm_if1_sample_chunked_batching(pdb_structure: Structure):
     output = run_esm_if1_sample(inp, config)
     assert output.success, f"Chunked batching failed: {output}"
 
-    designed = output.designed_sequences[0]
-    assert len(designed.sequences) == 4
-    assert all(isinstance(seq, str) for seq in designed.sequences)
-    assert all(len(seq) > 0 for seq in designed.sequences)
-    assert len(designed.log_likelihoods) == 4
+    designs = output.designed_sequences[0]
+    assert len(designs.sequences) == 4
+    assert all(isinstance(seq, str) for seq in designs.sequences)
+    assert all(len(seq) > 0 for seq in designs.sequences)
+    assert len(designs.log_likelihoods) == 4
 
 
 @pytest.mark.uses_gpu
@@ -115,7 +115,7 @@ def test_esm_if1_sample_fixed_positions(pdb_structure: Structure):
         inputs=[
             InverseFoldingStructureInput(
                 structure=pdb_structure,
-                chain_ids=["A"],
+                chains_to_redesign=["A"],
                 fixed_positions={"A": fixed_pos},
             )
         ]
@@ -128,9 +128,9 @@ def test_esm_if1_sample_fixed_positions(pdb_structure: Structure):
     output = run_esm_if1_sample(inp, config)
     assert output.success, f"Fixed positions sampling failed: {output}"
 
-    designed = output.designed_sequences[0]
-    assert len(designed.sequences) == 2
-    for seq in designed.sequences:
+    designs = output.designed_sequences[0]
+    assert len(designs.sequences) == 2
+    for seq in designs.sequences:
         for pos in fixed_pos:
             assert seq[pos - 1] == native_seq[pos - 1], (
                 f"Position {pos}: expected '{native_seq[pos - 1]}', got '{seq[pos - 1]}'"
@@ -150,10 +150,10 @@ def test_esm_if1_sample_dpo_weights(pdb_structure: Structure):
     output = run_esm_if1_sample(inp, config)
     assert output.success, f"Failed to sample with DPO weights: {output}"
 
-    designed = output.designed_sequences[0]
-    assert len(designed.sequences) == 1
-    assert isinstance(designed.sequences[0], str)
-    assert len(designed.sequences[0]) > 0
+    designs = output.designed_sequences[0]
+    assert len(designs.sequences) == 1
+    assert isinstance(designs.sequences[0], str)
+    assert len(designs.sequences[0]) > 0
 
 
 # ============================================================================

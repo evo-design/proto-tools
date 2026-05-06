@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import logging
 from collections import Counter
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import Field, model_validator
 
-from proto_tools.entities.structures import Structure
+from proto_tools.entities.structures import ChainSelection, StructureInputBase
 
 if TYPE_CHECKING:
     from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_relax import PyRosettaRelaxConfig
@@ -23,85 +22,67 @@ logger = logging.getLogger(__name__)
 MAX_CHAINS_FOR_PDB = 62
 
 
-class ScoringStructureInput(BaseModel):
+class ScoringStructureInput(StructureInputBase):
     """Bundles a structure with optional chain selection for scoring.
 
-    Base input model for structure scoring tools. Wraps a protein structure
-    with optional chain filtering. Chain IDs are validated against and exposed
-    using the structure's native chain labels (including multi-character
-    mmCIF labels like ``"Heavy"``); the tool layer internally shortens them
-    to fit PDB format when dispatching to PyRosetta and restores the originals
-    in the output.
+    Base input model for PyRosetta-backed scoring tools (energy, SAP, SASA) and
+    structure refinement (relax). Wraps a protein structure with an optional
+    chain selection. Chain IDs are validated against and exposed using the
+    structure's native chain labels (including multi-character mmCIF labels
+    like ``"Heavy"``); the tool layer internally shortens them to fit PDB
+    format when dispatching to PyRosetta and restores the originals in the
+    output.
 
     Attributes:
-        structure (Structure): The protein structure. Accepts file path, PDB content
-            string, or Structure object.
-        chain_ids (list[str] | None): Optional list of chain IDs to include in
-            scoring. If None, all chains are included.
+        structure (Structure): Protein structure (file path, PDB string,
+            ``Structure``, or ``Structure.model_dump`` dict).
+        chains_to_score (ChainSelection | None): Chains to include in scoring. ``None``
+            means include every chain. Accepts shorthand ``"A"`` or
+            ``["A", "B"]`` at construction.
 
     Examples:
         >>> inp = ScoringStructureInput(structure="/path/to/protein.pdb")
         >>> inp = ScoringStructureInput(
         ...     structure="/path/to/complex.pdb",
-        ...     chain_ids=["A", "B"],
+        ...     chains_to_score=["A", "B"],
         ... )
         >>> inp = ScoringStructureInput(
         ...     structure="/path/to/antibody.cif",
-        ...     chain_ids=["Heavy", "Light"],
+        ...     chains_to_score=["Heavy", "Light"],
         ... )
     """
 
-    structure: Structure = Field(description="Protein structure (file path, PDB string, or Structure object).")
-    chain_ids: list[str] | None = Field(
+    chains_to_score: ChainSelection | None = Field(
         default=None,
-        description="Chain IDs to include in scoring. If None, all chains.",
+        description="Chains to include in scoring. None = include every chain.",
     )
 
-    @model_validator(mode="before")
-    @classmethod
-    def resolve_and_validate(cls, data: Any) -> Any:
-        """Load structure, validate chain IDs, and reject structures with too many chains."""
-        if isinstance(data, (str, Path, Structure)):
-            data = {"structure": data}
-
-        if isinstance(data, dict):
-            structure = data.get("structure")
-            chain_ids = data.get("chain_ids")
-        else:
-            structure = getattr(data, "structure", None)
-            chain_ids = getattr(data, "chain_ids", None)
-
-        if isinstance(structure, (str, Path)):
-            resolved_structure = Structure(structure=str(structure))
-        elif isinstance(structure, Structure):
-            resolved_structure = structure
-        elif isinstance(structure, dict):
-            # JSON round-trip case: model_dump serializes a Structure as a dict.
-            resolved_structure = Structure(**structure)
-        else:
-            raise ValueError(f"Unsupported structure type: {type(structure)}")
-
-        available_chains = set(resolved_structure.get_chain_ids())
-
-        if len(available_chains) > MAX_CHAINS_FOR_PDB:
+    @model_validator(mode="after")
+    def _reject_too_many_chains(self) -> ScoringStructureInput:
+        # PyRosetta runs on PDB-format poses, which cap chain IDs at 62 unique
+        # single-character labels. Reject up front so a clearer error is raised
+        # before the tool layer attempts the gemmi shortening.
+        n_chains = len(self.structure.get_chain_ids())
+        if n_chains > MAX_CHAINS_FOR_PDB:
             raise ValueError(
-                f"Structure has {len(available_chains)} chains, but PyRosetta scoring "
+                f"Structure has {n_chains} chains, but PyRosetta scoring "
                 f"requires PDB format which supports at most {MAX_CHAINS_FOR_PDB} "
-                f"single-character chain IDs."
+                f"single-character chain IDs.",
             )
+        return self
 
-        if chain_ids is not None:
-            requested_chains = set(chain_ids)
-            if not requested_chains.issubset(available_chains):
-                missing = requested_chains - available_chains
-                raise ValueError(f"Chain IDs {missing} not found in structure. Available chains: {available_chains}")
+    @property
+    def chain_ids_to_score(self) -> list[str] | None:
+        """Resolved list of chain IDs to score, or None if every chain is included.
 
-        result = {"structure": resolved_structure, "chain_ids": chain_ids}
-        if isinstance(data, dict):
-            for k, v in data.items():
-                if k not in result:
-                    result[k] = v
-        return result
+        Returns:
+            list[str] | None: Explicit list of chain IDs when ``chains_to_score`` is set;
+                ``None`` when no selection was provided (signals "all chains" to
+                the dispatch helpers downstream).
+        """
+        if self.chains_to_score is None:
+            return None
+        return list(self.chains_to_score.chains)
 
 
 # ============================================================================
@@ -116,10 +97,10 @@ def prepare_pdb_and_chain_maps(
     arbitrary-length chain labels. For CIF structures with multi-character
     chain labels, ``Structure.to_pdb_with_chain_mapping()`` emits a shortened
     PDB plus a mmCIF→PDB chain ID map. This helper applies that conversion to
-    every input, translates the user's ``chain_ids`` into the PDB namespace
-    (which is what PyRosetta sees), and returns a parallel list of reverse
-    (PDB→mmCIF) maps so per-residue output chain IDs can be restored to their
-    original labels.
+    every input, translates the user's ``chains_to_score`` chain selection into the PDB
+    namespace (which is what PyRosetta sees), and returns a parallel list of
+    reverse (PDB→mmCIF) maps so per-residue output chain IDs can be restored
+    to their original labels.
 
     Args:
         inputs (list[ScoringStructureInput]): Scoring inputs to prepare.
@@ -139,8 +120,8 @@ def prepare_pdb_and_chain_maps(
     for inp in inputs:
         pdb_content, mmcif_to_pdb = inp.structure.to_pdb_with_chain_mapping()
         pdb_contents.append(pdb_content)
-        if inp.chain_ids is not None:
-            pdb_chain_ids_list.append([mmcif_to_pdb[c] for c in inp.chain_ids])
+        if inp.chains_to_score is not None:
+            pdb_chain_ids_list.append([mmcif_to_pdb[c] for c in inp.chains_to_score.chains])
         else:
             pdb_chain_ids_list.append(None)
         pdb_to_mmcif_maps.append({v: k for k, v in mmcif_to_pdb.items()})
@@ -179,7 +160,7 @@ def relax_inputs_via_pyrosetta(
 
     Used by the ``preprocess`` hook on scoring tool configs (energy, SAP, SASA)
     to opt into FastRelax preprocessing without re-implementing FastRelax. One
-    dispatch handles the whole batch; ``chain_ids`` on each input are preserved
+    dispatch handles the whole batch; ``chains_to_score`` on each input is preserved
     unchanged because ``run_pyrosetta_relax`` restores original chain labels on
     the returned ``Structure`` (via :meth:`Structure.with_renamed_chains`).
 
@@ -188,7 +169,7 @@ def relax_inputs_via_pyrosetta(
         relax_config (PyRosettaRelaxConfig): How to relax.
 
     Returns:
-        list[ScoringStructureInput]: New inputs with the same ``chain_ids``,
+        list[ScoringStructureInput]: New inputs with the same ``chains_to_score`` selection,
             pointing at the relaxed structures (chain labels match input).
 
     Raises:
@@ -213,7 +194,7 @@ def relax_inputs_via_pyrosetta(
     return [
         ScoringStructureInput(
             structure=relax_result.relax.relaxed_structure,
-            chain_ids=inp.chain_ids,
+            chains_to_score=inp.chains_to_score,
         )
         for inp, relax_result in zip(inputs, relax_out.results, strict=True)
     ]

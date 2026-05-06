@@ -29,8 +29,8 @@ def test_energy_input_normalizes_single_structure():
 
 
 def test_energy_input_rejects_invalid_chain():
-    with pytest.raises(ValueError, match="not found in structure"):
-        PyRosettaEnergyInput(inputs=[{"structure": TEST_PDB, "chain_ids": ["Z"]}])
+    with pytest.raises(ValueError, match="not in structure"):
+        PyRosettaEnergyInput(inputs=[{"structure": TEST_PDB, "chains_to_score": ["Z"]}])
 
 
 # ── Integration ───────────────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ def test_run_pyrosetta_energy_chain_selection_filters_residues():
     no_relax = PyRosettaEnergyConfig()
     whole = run_pyrosetta_energy(PyRosettaEnergyInput(inputs=[TEST_CIF_MULTICHAIN]), no_relax)
     chain_a = run_pyrosetta_energy(
-        PyRosettaEnergyInput(inputs=[{"structure": TEST_CIF_MULTICHAIN, "chain_ids": ["A"]}]),
+        PyRosettaEnergyInput(inputs=[{"structure": TEST_CIF_MULTICHAIN, "chains_to_score": ["A"]}]),
         no_relax,
     )
 

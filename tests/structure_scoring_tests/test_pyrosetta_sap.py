@@ -34,14 +34,15 @@ def test_sap_input_accepts_bare_path():
     assert isinstance(inp.inputs[0].structure, Structure)
 
 
-def test_sap_input_accepts_dict_with_chain_ids():
-    inp = PyRosettaSAPInput(inputs=[{"structure": TEST_PDB, "chain_ids": ["A"]}])
-    assert inp.inputs[0].chain_ids == ["A"]
+def test_sap_input_accepts_dict_with_chains_to_score():
+    inp = PyRosettaSAPInput(inputs=[{"structure": TEST_PDB, "chains_to_score": ["A"]}])
+    assert inp.inputs[0].chains_to_score is not None
+    assert inp.inputs[0].chains_to_score.chains == ["A"]
 
 
 def test_sap_input_rejects_invalid_chain():
-    with pytest.raises(ValueError, match="not found in structure"):
-        PyRosettaSAPInput(inputs=[{"structure": TEST_PDB, "chain_ids": ["Z"]}])
+    with pytest.raises(ValueError, match="not in structure"):
+        PyRosettaSAPInput(inputs=[{"structure": TEST_PDB, "chains_to_score": ["Z"]}])
 
 
 # ── Integration ───────────────────────────────────────────────────────────────
@@ -72,7 +73,9 @@ def test_run_pyrosetta_sap_on_pdb():
 def test_run_pyrosetta_sap_chain_selection_changes_score():
     """Chain A score should differ from whole-complex score on a multi-chain structure."""
     whole = run_pyrosetta_sap(PyRosettaSAPInput(inputs=[TEST_CIF_MULTICHAIN]))
-    chain_a = run_pyrosetta_sap(PyRosettaSAPInput(inputs=[{"structure": TEST_CIF_MULTICHAIN, "chain_ids": ["A"]}]))
+    chain_a = run_pyrosetta_sap(
+        PyRosettaSAPInput(inputs=[{"structure": TEST_CIF_MULTICHAIN, "chains_to_score": ["A"]}])
+    )
 
     assert whole.success and chain_a.success
     assert whole.results[0].sap_score != chain_a.results[0].sap_score, (

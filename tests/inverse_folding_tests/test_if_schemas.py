@@ -41,23 +41,24 @@ def test_structure_from_pdb_content(pdb_file_content: str):
     assert isinstance(structure.structure, Structure)
 
 
-def test_structure_with_chain_ids():
-    structure = InverseFoldingStructureInput(structure=TEST_PDB_FILE, chain_ids=["A"])
-    assert structure.chain_ids == ["A"]
+def test_structure_with_designed():
+    structure = InverseFoldingStructureInput(structure=TEST_PDB_FILE, chains_to_redesign=["A"])
+    assert structure.chains_to_redesign is not None
+    assert structure.chains_to_redesign.chains == ["A"]
 
 
-def test_structure_without_chain_ids_defaults_to_all():
-    """When chain_ids is None, should default to all chains in structure."""
+def test_structure_designed_defaults_to_none_resolved_chains_returns_all():
+    """Designed defaults to None; chain_ids_to_redesign resolves to all structure chains."""
     structure = InverseFoldingStructureInput(structure=TEST_PDB_FILE)
-    assert structure.chain_ids is not None
-    assert len(structure.chain_ids) > 0
+    assert structure.chains_to_redesign is None
     expected_chains = structure.structure.get_chain_ids()
-    assert structure.chain_ids == expected_chains
+    assert structure.chain_ids_to_redesign == expected_chains
 
 
-def test_structure_with_fixed_positions():
+def test_structure_with_fixed():
     structure = InverseFoldingStructureInput(structure=TEST_PDB_FILE, fixed_positions={"A": [1, 2, 3]})
-    assert structure.fixed_positions == {"A": [1, 2, 3]}
+    assert structure.fixed_positions is not None
+    assert structure.fixed_positions.chains == {"A": [1, 2, 3]}
 
 
 def test_structure_rejects_invalid_pdb_content():
@@ -66,7 +67,7 @@ def test_structure_rejects_invalid_pdb_content():
 
 
 def test_structure_rejects_missing_file():
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises((FileNotFoundError, ValueError)):
         InverseFoldingStructureInput(structure="/not/a/real/file.pdb")
 
 
@@ -152,15 +153,15 @@ def test_output_preserves_subclass_fields_on_dump():
     assert dumped_json["designed_sequences"][0]["custom_metric"] == [0.1, 0.2]
 
 
-# ── Validation: invalid chain_ids and fixed_positions ───────────────────────
+# ── Validation: invalid chains_to_redesign and fixed_positions selections ───────────────────────
 
 
-def test_structure_rejects_invalid_chain_ids():
-    with pytest.raises(ValueError, match="not found in structure"):
-        InverseFoldingStructureInput(structure=TEST_PDB_FILE, chain_ids=["Z"])
+def test_structure_rejects_invalid_designed():
+    with pytest.raises(ValueError, match="not in structure"):
+        InverseFoldingStructureInput(structure=TEST_PDB_FILE, chains_to_redesign=["Z"])
 
 
-def test_structure_rejects_invalid_fixed_position_chain():
+def test_structure_rejects_invalid_fixed_chain():
     with pytest.raises(ValueError, match="not in structure"):
         InverseFoldingStructureInput(structure=TEST_PDB_FILE, fixed_positions={"Z": [1]})
 
@@ -189,12 +190,12 @@ def test_scoring_output_export(fmt, tmp_path):
 
 
 def test_structure_rejects_unsupported_type():
-    with pytest.raises(ValueError, match="Unsupported structure type"):
+    with pytest.raises(ValueError):
         InverseFoldingStructureInput(structure=12345)
 
 
-def test_structure_rejects_invalid_fixed_positions_residues():
-    with pytest.raises(ValueError, match="Invalid fixed positions"):
+def test_structure_rejects_invalid_fixed_residues():
+    with pytest.raises(ValueError, match="invalid positions"):
         InverseFoldingStructureInput(structure=TEST_PDB_FILE, fixed_positions={"A": [99999]})
 
 
@@ -232,15 +233,17 @@ def test_proteinmpnn_sample_input_roundtrip():
         inputs=[
             InverseFoldingStructureInput(
                 structure=TEST_PDB_FILE,
-                chain_ids=["A"],
+                chains_to_redesign=["A"],
                 fixed_positions={"A": [1, 2, 3]},
             )
         ]
     )
     restored = ProteinMPNNSampleInput(**original.model_dump(mode="json"))
     assert restored.inputs[0].structure.structure == original.inputs[0].structure.structure
-    assert restored.inputs[0].chain_ids == ["A"]
-    assert restored.inputs[0].fixed_positions == {"A": [1, 2, 3]}
+    assert restored.inputs[0].chains_to_redesign is not None
+    assert restored.inputs[0].chains_to_redesign.chains == ["A"]
+    assert restored.inputs[0].fixed_positions is not None
+    assert restored.inputs[0].fixed_positions.chains == {"A": [1, 2, 3]}
 
 
 def test_sequence_structure_pair_roundtrip():

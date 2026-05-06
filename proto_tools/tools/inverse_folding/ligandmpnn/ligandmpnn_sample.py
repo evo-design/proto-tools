@@ -98,14 +98,14 @@ class LigandMPNNSequences(DesignedSequences):
 
     Attributes:
         sequences (list[str]): Designed amino acid sequences.
-        sequence_recovery (list[float]): Per-sequence fraction of designed
+        sequence_recovery (list[float]): Per-sequence fraction of chains_to_redesign
             residues matching the input structure's reference sequence (0.0-1.0).
         ligand_interface_sequence_recovery (list[float]): Per-sequence recovery
             restricted to residues at the ligand interface (0.0-1.0).
     """
 
     sequence_recovery: list[float] = Field(
-        description="Per-sequence fraction of designed residues matching the reference (0.0-1.0)",
+        description="Per-sequence fraction of chains_to_redesign residues matching the reference (0.0-1.0)",
     )
     ligand_interface_sequence_recovery: list[float] = Field(
         description="Per-sequence recovery restricted to ligand-interface residues (0.0-1.0)",
@@ -149,7 +149,7 @@ def run_ligandmpnn_sample(
 
     Args:
         inputs (LigandMPNNSampleInput): LigandMPNNSampleInput containing a list of structure inputs,
-            and optional chain_ids/fixed_positions constraints.
+            each with optional ``chains_to_redesign`` and ``fixed_positions`` selections.
         config (LigandMPNNSampleConfig): Configuration for sampling (temperature, batch_size, etc.).
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -178,10 +178,10 @@ def run_ligandmpnn_sample(
             input_dict = {
                 "operation": "sample",
                 "pdb_contents": inp.structure_pdb,
-                "chain_ids": inp.chain_ids,
+                "chain_ids": inp.chain_ids_to_redesign,
                 "batch_size": chunk,
                 "temperature": config.temperature,
-                "fixed_positions": inp.fixed_positions,
+                "fixed_positions": inp.fixed_positions.chains if inp.fixed_positions is not None else None,
                 "excluded_amino_acids": config.excluded_amino_acids,
                 "seed": base_seed + chunk_idx,
                 "device": config.device,

@@ -508,3 +508,31 @@ def test_method_mask_fraction(method):
             expected_masks,
             fixed_positions=_E2E_FIXED_POSITIONS,
         )
+
+
+# ── fixed_positions validation (shared helper) ────────────────────────────────
+
+
+def test_masking_strategy_rejects_zero_position():
+    """Position 0 is invalid because positions are 1-indexed; reject at construction."""
+    with pytest.raises(ValidationError, match=r"positions must be >= 1.*1-indexed"):
+        MaskingStrategy(fixed_positions=[0, 1])
+
+
+def test_masking_strategy_rejects_negative_position():
+    with pytest.raises(ValidationError, match=r"positions must be >= 1.*1-indexed"):
+        MaskingStrategy(fixed_positions=[-1, 5])
+
+
+def test_masking_strategy_coerces_empty_fixed_positions_to_none():
+    """[] is semantically equivalent to None for this nullable field."""
+    strategy = MaskingStrategy(fixed_positions=[])
+    assert strategy.fixed_positions is None
+
+
+def test_masking_strategy_dedups_fixed_positions(caplog: pytest.LogCaptureFixture):
+    """Duplicate positions are dropped silently; a warning is emitted."""
+    with caplog.at_level("WARNING"):
+        strategy = MaskingStrategy(fixed_positions=[1, 1, 2, 3, 2])
+    assert strategy.fixed_positions == [1, 2, 3]
+    assert any("dropped 2 duplicate position(s)" in rec.message for rec in caplog.records)

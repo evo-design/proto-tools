@@ -12,7 +12,12 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field, SerializeAsAny, model_validator
 
-from proto_tools.entities.structures import Structure
+from proto_tools.entities.structures import (
+    ChainSelection,
+    ResidueSelection,
+    Structure,
+    StructureInputBase,
+)
 from proto_tools.utils import (
     BaseConfig,
     BaseToolInput,
@@ -38,139 +43,91 @@ class SequenceStructurePair(BaseModel):
     structure: Structure = Field(description="Structure to score the sequence against")
 
 
-class InverseFoldingStructureInput(BaseModel):
-    """Bundles a structure with its per-structure design constraints.
+class InverseFoldingStructureInput(StructureInputBase):
+    """Bundles a structure with per-structure design constraints.
 
-    This model groups a protein structure with its associated chain IDs and fixed
-    positions. The structure is automatically loaded and validated on construction.
+    Pairs a protein structure with optional chain and residue selections that
+    govern how the inverse-folding model treats each position. Structure
+    resolution and selection-against-structure validation are inherited from
+    :class:`StructureInputBase`.
 
     Attributes:
-        structure (Structure): The protein structure. Accepts file path, PDB content string,
-            Structure object, or a dict in the shape produced by ``Structure.model_dump(mode='json')``
-            (for HTTP/JSON round-trips). Automatically converted to Structure.
-        chain_ids (list[str] | None): Optional list of chain IDs to design. If None, all chains in the
-            structure are designed.
-        fixed_positions (dict[str, list[int]] | None): Optional dictionary mapping chain IDs to residue positions
-            to keep fixed during design. Positions are 1-indexed.
+        structure (Structure): Protein structure. Accepts a file path, raw
+            PDB/CIF content string, ``Structure`` object, or a dict in the shape
+            produced by ``Structure.model_dump(mode='json')``.
+        chains_to_redesign (ChainSelection | None): Chains to redesign. ``None`` means
+            redesign every chain in the structure. Accepts shorthand ``"A"`` or
+            ``["A", "B"]`` at construction.
+        fixed_positions (ResidueSelection | None): Per-chain positions whose residue
+            identity is held fixed during design (1-indexed). Accepts shorthand
+            ``{"A": [1, 2, 3]}`` at construction.
 
     Examples:
         >>> # Simple structure from file (auto-loaded)
         >>> inp = InverseFoldingStructureInput(structure="/path/to/protein.pdb")
-        >>> inp.structure_pdb  # Access PDB string directly
+        >>> inp.structure_pdb  # access PDB string directly
 
-        >>> # With chain selection and fixed positions
+        >>> # With chain selection and fixed positions (positions are 1-indexed)
         >>> inp = InverseFoldingStructureInput(
         ...     structure="/path/to/protein.pdb",
-        ...     chain_ids=["A", "B"],
+        ...     chains_to_redesign=["A", "B"],
         ...     fixed_positions={"A": [1, 2, 3], "B": [10, 11]},
         ... )
     """
 
-    structure: Structure = Field(description="Protein structure (auto-loaded from file path or PDB string).")
-    chain_ids: list[str] | None = Field(
+    chains_to_redesign: ChainSelection | None = Field(
         default=None,
-        description="Chain IDs to design. If None, all chains in the structure are designed.",
+        description="Chains to redesign. None = redesign every chain in the structure.",
     )
-    fixed_positions: dict[str, list[int]] | None = Field(
+    fixed_positions: ResidueSelection | None = Field(
         default=None,
-        description="Dictionary mapping chain IDs to residue positions to keep fixed (1-indexed).",
+        description="Per-chain positions whose residue identity is held fixed (1-indexed).",
     )
 
-    @model_validator(mode="before")
-    @classmethod
-    def resolve_and_validate(cls, data: Any) -> Any:
-        """Load structure, default chain_ids, and validate constraints."""
-        if isinstance(data, dict):
-            structure = data.get("structure")
-            chain_ids = data.get("chain_ids")
-            fixed_positions = data.get("fixed_positions")
-        else:
-            # Handle object-like input
-            structure = getattr(data, "structure", None)
-            chain_ids = getattr(data, "chain_ids", None)
-            fixed_positions = getattr(data, "fixed_positions", None)
+    @property
+    def chain_ids_to_redesign(self) -> list[str]:
+        """Resolved list of chain IDs to design (defaults to every chain in ``structure``).
 
-        # 1. Load structure if it's a string or Path
-
-        if isinstance(structure, Structure):
-            resolved_structure = structure
-        elif isinstance(structure, (str, Path)):
-            from proto_tools.entities.structures.utils import SUPPORTED_EXTENSIONS
-
-            if str(structure).lower().endswith(SUPPORTED_EXTENSIONS):
-                resolved_structure = Structure.from_file(structure)
-            else:
-                resolved_structure = Structure(structure=str(structure))
-        elif isinstance(structure, dict):
-            resolved_structure = Structure(**structure)
-        else:
-            raise ValueError(f"Unsupported structure type: {type(structure)}")
-
-        available_chains = set(resolved_structure.get_chain_ids())
-
-        # 2. Default chain_ids to all chains if None
-        if chain_ids is None:
-            resolved_chain_ids = resolved_structure.get_chain_ids()
-        else:
-            resolved_chain_ids = chain_ids
-            # Validate chain_ids exist in structure
-            requested_chains = set(resolved_chain_ids)
-            if not requested_chains.issubset(available_chains):
-                missing = requested_chains - available_chains
-                raise ValueError(f"Chain IDs {missing} not found in structure. Available chains: {available_chains}")
-
-        # 3. Validate fixed_positions if provided
-        if fixed_positions is not None:
-            for chain_id, positions in fixed_positions.items():
-                if chain_id not in available_chains:
-                    raise ValueError(
-                        f"Fixed positions chain '{chain_id}' not in structure. Available chains: {available_chains}"
-                    )
-                chain_positions = resolved_structure.get_chain_positions(chain_id)
-                invalid = set(positions) - set(chain_positions)
-                if invalid:
-                    raise ValueError(
-                        f"Invalid fixed positions {invalid} for chain '{chain_id}'. Valid positions: {chain_positions}"
-                    )
-
-        result = {
-            "structure": resolved_structure,
-            "chain_ids": resolved_chain_ids,
-            "fixed_positions": fixed_positions,
-        }
-        # Pass through extra keys for subclasses (e.g., fixed_sidechain_positions)
-        if isinstance(data, dict):
-            for k, v in data.items():
-                if k not in result:
-                    result[k] = v
-        return result
+        Returns:
+            list[str]: Chain IDs the model should redesign. When ``chains_to_redesign`` is
+                ``None``, returns every chain ID in the input structure.
+        """
+        if self.chains_to_redesign is not None:
+            return list(self.chains_to_redesign.chains)
+        return self.structure.get_chain_ids()
 
     @property
     def structure_pdb(self) -> str:
-        """Get the PDB string of the structure."""
+        """PDB string of the structure (delegates to ``Structure.structure_pdb``)."""
         return self.structure.structure_pdb
 
 
 class InverseFoldingInput(BaseToolInput):
     """Tool input for inverse folding sampling operations.
 
-    Wraps a list of InverseFoldingStructureInput objects for use with the ToolRegistry.
+    Wraps a list of :class:`InverseFoldingStructureInput` for use with the
+    ``ToolRegistry``.
 
     Attributes:
-        inputs (list[InverseFoldingStructureInput]): List of InverseFoldingStructureInput objects, each
-            containing a structure and optional chain_ids/fixed_positions constraints.
+        inputs (list[InverseFoldingStructureInput]): Per-structure inputs, each
+            containing a structure plus optional ``chains_to_redesign`` and ``fixed_positions``
+            selections.
 
     Examples:
         >>> sampling_input = InverseFoldingInput(
         ...     inputs=[
         ...         InverseFoldingStructureInput(structure="/path/to/protein1.pdb"),
-        ...         InverseFoldingStructureInput(structure="/path/to/protein2.pdb"),
+        ...         InverseFoldingStructureInput(
+        ...             structure="/path/to/protein2.pdb",
+        ...             chains_to_redesign=["A"],
+        ...             fixed_positions={"A": [1, 2, 3]},
+        ...         ),
         ...     ]
         ... )
     """
 
     inputs: list[InverseFoldingStructureInput] = InputField(
-        description="List of inverse folding inputs, each containing a structure and constraints."
+        description="Per-structure inputs, each containing a structure and optional selections.",
     )
 
 
@@ -178,7 +135,8 @@ class InverseFoldingConfig(BaseConfig):
     """Base configuration for inverse folding models.
 
     Contains model hyperparameters for sequence generation. Structure-specific
-    constraints (chain_ids, fixed_positions) are specified in InverseFoldingInput.
+    selections (``chains_to_redesign``, ``fixed_positions``) are specified on each
+    :class:`InverseFoldingStructureInput` in :class:`InverseFoldingInput`.
 
     Attributes:
         num_sequences_per_structure (int): Total number of sequences to generate

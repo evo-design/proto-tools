@@ -81,14 +81,14 @@ def test_proteinmpnn_sample_chunked_batching(pdb_structure: Structure):
     output = run_proteinmpnn_sample(inp, config)
     assert output.success, f"Chunked batching failed: {output}"
 
-    designed = output.designed_sequences[0]
-    assert len(designed.sequences) == 6
-    assert all(isinstance(seq, str) for seq in designed.sequences)
-    assert all(len(seq) > 0 for seq in designed.sequences)
-    assert len(designed.perplexity) == 6
-    assert all(isinstance(p, float) for p in designed.perplexity)
-    assert len(designed.sequence_recovery) == 6
-    assert all(isinstance(s, float) for s in designed.sequence_recovery)
+    designs = output.designed_sequences[0]
+    assert len(designs.sequences) == 6
+    assert all(isinstance(seq, str) for seq in designs.sequences)
+    assert all(len(seq) > 0 for seq in designs.sequences)
+    assert len(designs.perplexity) == 6
+    assert all(isinstance(p, float) for p in designs.perplexity)
+    assert len(designs.sequence_recovery) == 6
+    assert all(isinstance(s, float) for s in designs.sequence_recovery)
 
 
 @pytest.mark.uses_gpu

@@ -209,8 +209,10 @@ def run_fampnn_pack(
                 "model_variant": config.model_variant,
                 "device": config.device,
                 "verbose": config.verbose,
-                "fixed_positions": inp.fixed_positions,
-                "fixed_sidechain_positions": inp.fixed_sidechain_positions,
+                "fixed_positions": inp.fixed_positions.chains if inp.fixed_positions is not None else None,
+                "fixed_sidechain_positions": (
+                    inp.fixed_sidechain_positions.chains if inp.fixed_sidechain_positions is not None else None
+                ),
             }
             result = ToolInstance.dispatch(
                 "fampnn",

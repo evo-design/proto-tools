@@ -9,6 +9,7 @@ from typing import Any
 
 from pydantic import Field
 
+from proto_tools.entities.structures import ResidueSelection
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedSequences,
     InverseFoldingConfig,
@@ -26,28 +27,28 @@ from proto_tools.utils.progress import progress_bar
 
 
 class FAMPNNStructureInput(InverseFoldingStructureInput):
-    """FAMPNN structure input with optional sidechain position constraints.
+    """FAMPNN structure input with optional sidechain-conditioning selection.
 
-    Extends InverseFoldingStructureInput with fixed_sidechain_positions for
+    Extends :class:`InverseFoldingStructureInput` with ``fixed_sidechain_positions`` for
     conditioning on known sidechain conformations during design/packing.
 
-    FAMPNN introduces fixed_sidechain_positions as a separate constraint from
-    fixed_positions (dict[str, list[int]] | None):
-    - fixed_positions: Residue positions whose amino acid identity is kept fixed
-      during sequence design (the model will not redesign these positions).
-    - fixed_sidechain_positions: Residue positions whose sidechain atom
-      coordinates are used as structural context (the model conditions on their
-      3D geometry).
+    FAMPNN distinguishes two kinds of fixed-residue constraints:
+
+    - ``fixed_positions`` (inherited): residue positions whose amino acid identity is kept
+      fixed during sequence design (the model will not redesign these positions).
+    - ``fixed_sidechain_positions``: residue positions whose sidechain atom coordinates
+      are used as structural context (the model conditions on their 3D geometry).
 
     Attributes:
-        fixed_sidechain_positions (dict[str, list[int]] | None): Optional dictionary mapping chain IDs to
-            residue positions whose sidechain coordinates should be used as
-            context during sampling/packing. Positions are 1-indexed.
+        fixed_sidechain_positions (ResidueSelection | None): Per-chain residue positions
+            whose sidechain coordinates condition the model during
+            sampling/packing (1-indexed). Accepts shorthand ``{"A": [1, 2]}`` at
+            construction.
     """
 
-    fixed_sidechain_positions: dict[str, list[int]] | None = Field(
+    fixed_sidechain_positions: ResidueSelection | None = Field(
         default=None,
-        description="Chain IDs to residue positions with known sidechain coordinates to condition on (1-indexed).",
+        description="Per-chain positions whose sidechain coordinates condition the model (1-indexed).",
     )
 
 
@@ -58,8 +59,9 @@ class FAMPNNSampleInput(BaseToolInput):
     """Input for FAMPNN sequence sampling.
 
     Attributes:
-        inputs (list[FAMPNNStructureInput]): List of FAMPNN structure inputs, each containing a structure
-            and optional chain_ids/fixed_positions/fixed_sidechain_positions.
+        inputs (list[FAMPNNStructureInput]): Per-structure inputs, each
+            containing a structure and optional ``chains_to_redesign`` / ``fixed_positions`` /
+            ``fixed_sidechain_positions`` selections.
     """
 
     inputs: list[FAMPNNStructureInput] = InputField(description="List of structure inputs for sequence design.")
@@ -198,7 +200,7 @@ def run_fampnn_sample(
 
     Args:
         inputs (FAMPNNSampleInput): FAMPNNSampleInput containing structure inputs with optional
-            chain_ids, fixed_positions, and fixed_sidechain_positions.
+            ``chains_to_redesign``, ``fixed_positions``, and ``fixed_sidechain_positions`` selections.
         config (FAMPNNSampleConfig): Configuration for sampling (temperature, num_steps, etc.).
         instance (Any): Optional ToolInstance for persistent execution.
 
@@ -223,7 +225,7 @@ def run_fampnn_sample(
             input_dict = {
                 "operation": "sample",
                 "pdb_contents": inp.structure_pdb,
-                "chain_ids": inp.chain_ids,
+                "chain_ids": inp.chain_ids_to_redesign,
                 "num_sequences": chunk,
                 "temperature": config.temperature,
                 "num_steps": config.num_steps,
@@ -236,8 +238,10 @@ def run_fampnn_sample(
                 "model_variant": config.model_variant,
                 "device": config.device,
                 "verbose": config.verbose,
-                "fixed_positions": inp.fixed_positions,
-                "fixed_sidechain_positions": inp.fixed_sidechain_positions,
+                "fixed_positions": inp.fixed_positions.chains if inp.fixed_positions is not None else None,
+                "fixed_sidechain_positions": (
+                    inp.fixed_sidechain_positions.chains if inp.fixed_sidechain_positions is not None else None
+                ),
             }
             result = ToolInstance.dispatch(
                 "fampnn",

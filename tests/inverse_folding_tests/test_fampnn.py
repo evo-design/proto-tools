@@ -92,19 +92,21 @@ def test_fampnn_score_all_mutations_config_defaults():
 
 
 def test_fampnn_structure_input_with_sidechain_positions(pdb_structure):
-    """FAMPNNStructureInput accepts fixed_sidechain_positions."""
+    """FAMPNNStructureInput accepts a fixed_sidechain_positions selection."""
     chain_ids = pdb_structure.get_chain_ids()
     first_chain = chain_ids[0]
     positions = pdb_structure.get_chain_positions(first_chain)[:5]
 
     inp = FAMPNNStructureInput(
         structure=pdb_structure,
-        chain_ids=[first_chain],
+        chains_to_redesign=[first_chain],
         fixed_positions={first_chain: positions},
         fixed_sidechain_positions={first_chain: positions},
     )
-    assert inp.fixed_sidechain_positions == {first_chain: positions}
-    assert inp.fixed_positions == {first_chain: positions}
+    assert inp.fixed_sidechain_positions is not None
+    assert inp.fixed_sidechain_positions.chains == {first_chain: positions}
+    assert inp.fixed_positions is not None
+    assert inp.fixed_positions.chains == {first_chain: positions}
 
 
 def test_fampnn_pack_input_schema(pdb_structure):
@@ -169,17 +171,17 @@ def test_fampnn_sample_simple(pdb_structure):
     validate_output(output)
     assert output.tool_id == "fampnn-sample"
 
-    designed = output.designed_sequences[0]
-    assert len(designed.sequences) == 2
-    assert all(isinstance(seq, str) for seq in designed.sequences)
-    assert all(len(seq) > 0 for seq in designed.sequences)
+    designs = output.designed_sequences[0]
+    assert len(designs.sequences) == 2
+    assert all(isinstance(seq, str) for seq in designs.sequences)
+    assert all(len(seq) > 0 for seq in designs.sequences)
     # FAMPNN-specific: PDB strings and pSCE
-    assert len(designed.output_pdb_strings) == 2
-    assert all(isinstance(pdb, str) for pdb in designed.output_pdb_strings)
-    assert all("ATOM" in pdb for pdb in designed.output_pdb_strings)
-    assert len(designed.psce) == 2
-    assert all(isinstance(psce, list) for psce in designed.psce)
-    assert all(isinstance(v, float) for psce in designed.psce for v in psce)
+    assert len(designs.output_pdb_strings) == 2
+    assert all(isinstance(pdb, str) for pdb in designs.output_pdb_strings)
+    assert all("ATOM" in pdb for pdb in designs.output_pdb_strings)
+    assert len(designs.psce) == 2
+    assert all(isinstance(psce, list) for psce in designs.psce)
+    assert all(isinstance(v, float) for psce in designs.psce for v in psce)
 
 
 @pytest.mark.uses_gpu
@@ -196,10 +198,10 @@ def test_fampnn_sample_chunked_batching(pdb_structure):
     output = run_fampnn_sample(inp, config)
     assert output.success, f"Chunked batching failed: {output}"
 
-    designed = output.designed_sequences[0]
-    assert len(designed.sequences) == 4
-    assert len(designed.output_pdb_strings) == 4
-    assert len(designed.psce) == 4
+    designs = output.designed_sequences[0]
+    assert len(designs.sequences) == 4
+    assert len(designs.output_pdb_strings) == 4
+    assert len(designs.psce) == 4
 
 
 @pytest.mark.uses_gpu
@@ -215,10 +217,10 @@ def test_fampnn_sample_seq_only(pdb_structure):
     output = run_fampnn_sample(inp, config)
     assert output.success, f"seq_only sampling failed: {output}"
 
-    designed = output.designed_sequences[0]
-    assert len(designed.sequences) == 1
-    assert isinstance(designed.sequences[0], str)
-    assert len(designed.sequences[0]) > 0
+    designs = output.designed_sequences[0]
+    assert len(designs.sequences) == 1
+    assert isinstance(designs.sequences[0], str)
+    assert len(designs.sequences[0]) > 0
 
 
 @pytest.mark.uses_gpu
@@ -239,8 +241,8 @@ def test_fampnn_sample_multiple_structures(pdb_structure):
     assert output.success
 
     assert len(output.designed_sequences) == 2
-    for designed in output.designed_sequences:
-        assert len(designed.sequences) == 2
+    for designs in output.designed_sequences:
+        assert len(designs.sequences) == 2
 
 
 @pytest.mark.uses_gpu
@@ -255,7 +257,7 @@ def test_fampnn_sample_with_fixed_positions(pdb_structure):
         inputs=[
             FAMPNNStructureInput(
                 structure=pdb_structure,
-                chain_ids=[first_chain],
+                chains_to_redesign=[first_chain],
                 fixed_positions={first_chain: fixed_pos},
             )
         ]

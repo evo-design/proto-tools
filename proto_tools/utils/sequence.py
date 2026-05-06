@@ -3,6 +3,7 @@
 Sequence validation, detection, and ID resolution utilities.
 """
 
+import logging
 from typing import Literal, get_args
 
 # ============================================================================
@@ -83,6 +84,52 @@ def resolve_sequence_ids(sequences: list[str], ids: list[str] | None) -> list[st
             )
         return ids
     return [f"seq_{i}" for i in range(len(sequences))]
+
+
+def validate_positions_list(
+    positions: list[int],
+    *,
+    label: str = "positions",
+    logger_obj: logging.Logger | None = None,
+) -> list[int]:
+    """Validate a 1-indexed positions list and return it deduped.
+
+    Args:
+        positions (list[int]): Candidate 1-indexed positions.
+        label (str): Prefix for error / warning messages, typically the field name.
+        logger_obj (logging.Logger | None): When provided, dedup actions log a
+            warning here. ``None`` suppresses the warning.
+
+    Returns:
+        list[int]: Deduped, order-preserving copy of ``positions``.
+
+    Raises:
+        ValueError: If ``positions`` is empty or contains a value ``< 1``.
+    """
+    if not positions:
+        raise ValueError(f"{label}: position list cannot be empty")
+    # bool is a subclass of int in Python, so [True, False] would otherwise
+    # slip through and get reported as "got invalid [False]" — reject up front.
+    bool_values = [p for p in positions if isinstance(p, bool)]
+    if bool_values:
+        raise ValueError(
+            f"{label}: positions must be int, not bool; got {bool_values}",
+        )
+    invalid = [p for p in positions if p < 1]
+    if invalid:
+        raise ValueError(
+            f"{label}: positions must be >= 1 (1-indexed); got invalid {invalid}",
+        )
+    unique = list(dict.fromkeys(positions))
+    if logger_obj is not None and len(unique) < len(positions):
+        logger_obj.warning(
+            "%s: dropped %d duplicate position(s) (%d -> %d unique).",
+            label,
+            len(positions) - len(unique),
+            len(positions),
+            len(unique),
+        )
+    return unique
 
 
 # ============================================================================
