@@ -528,6 +528,9 @@ from proto_tools.tools.structure_prediction import (
     Chain,
     ChainModification,
     ESMFoldConfig,
+    ESMFoldGradientConfig,
+    ESMFoldGradientInput,
+    ESMFoldGradientOutput,
     ESMFoldInput,
     ESMFoldOutput,
     ProtenixConfig,
@@ -545,6 +548,7 @@ from proto_tools.tools.structure_prediction import (
     run_boltz2,
     run_chai1,
     run_esmfold,
+    run_esmfold_gradient,
     run_protenix,
     run_viennarna,
 )
@@ -818,6 +822,10 @@ __all__ = [
     "ESMFoldInput",
     "ESMFoldConfig",
     "ESMFoldOutput",
+    "run_esmfold_gradient",
+    "ESMFoldGradientInput",
+    "ESMFoldGradientConfig",
+    "ESMFoldGradientOutput",
     # Structure prediction - Protenix
     "run_protenix",
     "ProtenixInput",

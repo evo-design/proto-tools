@@ -19,7 +19,16 @@ from proto_tools.tools.structure_prediction.alphafold3 import (
 from proto_tools.tools.structure_prediction.boltz2 import Boltz2Config, Boltz2Input, Boltz2Output, run_boltz2
 from proto_tools.tools.structure_prediction.chai1 import Chai1Config, Chai1Input, Chai1Output, run_chai1
 from proto_tools.tools.structure_prediction.dispatch import predict_structures
-from proto_tools.tools.structure_prediction.esmfold import ESMFoldConfig, ESMFoldInput, ESMFoldOutput, run_esmfold
+from proto_tools.tools.structure_prediction.esmfold import (
+    ESMFoldConfig,
+    ESMFoldGradientConfig,
+    ESMFoldGradientInput,
+    ESMFoldGradientOutput,
+    ESMFoldInput,
+    ESMFoldOutput,
+    run_esmfold,
+    run_esmfold_gradient,
+)
 from proto_tools.tools.structure_prediction.protenix import ProtenixConfig, ProtenixInput, ProtenixOutput, run_protenix
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
@@ -67,6 +76,10 @@ __all__ = [
     "ESMFoldInput",
     "ESMFoldConfig",
     "ESMFoldOutput",
+    "run_esmfold_gradient",
+    "ESMFoldGradientInput",
+    "ESMFoldGradientConfig",
+    "ESMFoldGradientOutput",
     # Protenix
     "run_protenix",
     "ProtenixInput",
