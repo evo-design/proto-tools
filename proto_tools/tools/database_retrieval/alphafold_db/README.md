@@ -127,6 +127,18 @@ AlphaFoldDBFetchOutput(
 
 **Supported export formats:** `json`, `csv`
 
+**CSV export layout:** The `structure`, `msa_a3m`, and `raw_entry` fields are blob-shaped and don't fit in a CSV cell, so CSV export writes a *manifest CSV* alongside *sidecar files* in the same directory:
+
+```python
+output.export(name="result", export_path="/dir", file_format="csv")
+# /dir/result.csv          metadata row + structure_path / msa_path / raw_path columns
+# /dir/result.{pdb,cif}    structure body, when include_structure=True
+# /dir/result.a3m          MSA, when include_msa=True
+# /dir/result_raw.json     full upstream record, always when raw_entry is non-empty
+```
+
+The CSV row gains three relative-path columns (`structure_path`, `msa_path`, `raw_path`) holding basenames pointing at the sidecars; values are empty strings when the corresponding field was not populated. JSON export is unchanged (already lossless).
+
 ## Interpreting Results
 
 **pLDDT confidence tiers (per-residue and global):**

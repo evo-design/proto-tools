@@ -3,6 +3,10 @@
 Tests for the AlphaFold DB fetch tool.
 """
 
+import csv
+import json
+import tempfile
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -17,10 +21,12 @@ from proto_tools.tools.database_retrieval import (
     run_uniprot_fetch,
 )
 from proto_tools.tools.database_retrieval.alphafold_db.alphafold_db_fetch import (
+    AlphaFoldDBFetchOutput,
     _fetch_pae,
     _fetch_plddt,
     _fetch_prediction,
 )
+from proto_tools.tools.tool_registry import _make_error_output
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 
 
@@ -73,8 +79,191 @@ def test_fetch_prediction_returns_none_on_404():
 
 
 # ---------------------------------------------------------------------------
+# CSV manifest + sidecar export tests (mock-only, no live API)
+# ---------------------------------------------------------------------------
+
+_FAKE_PDB_BODY = (
+    "HEADER    TEST                                    01-JAN-26   FAKE              \n"
+    "ATOM      1  CA  MET A   1      11.111  22.222  33.333  1.00 91.20           C  \n"
+    "TER       2      MET A   1                                                      \n"
+    "END                                                                             \n"
+)
+
+
+def _make_structure(structure_format: str = "pdb") -> Structure:
+    pdb_struct = Structure(
+        structure=_FAKE_PDB_BODY,
+        structure_format="pdb",
+        b_factor_type=BFactorType.PLDDT,
+        source="alphafold-db-fetch",
+    )
+    if structure_format == "pdb":
+        return pdb_struct
+    return Structure(
+        structure=pdb_struct.structure_cif,
+        structure_format="cif",
+        b_factor_type=BFactorType.PLDDT,
+        source="alphafold-db-fetch",
+    )
+
+
+# Sentinel so callers can pass ``structure=None`` explicitly to omit it.
+_DEFAULT = object()
+
+
+def _make_full_output(
+    *,
+    structure=_DEFAULT,
+    msa_a3m: str | None = ">P04637\nMEEPQSDPSVE\n",
+    raw_entry: dict | None = None,
+) -> AlphaFoldDBFetchOutput:
+    """Build a fully populated success Output for export-tests."""
+    output = AlphaFoldDBFetchOutput(
+        uniprot_accession="P04637",
+        entry_id="AF-P04637-F1",
+        sequence="MEEPQSDPSVE",
+        sequence_length=11,
+        sequence_start=1,
+        sequence_end=11,
+        latest_version=4,
+        pdb_url="https://example/file.pdb",
+        cif_url="https://example/file.cif",
+        pae_doc_url="https://example/pae.json",
+        plddt_doc_url="https://example/plddt.json",
+        pae_image_url="https://example/pae.png",
+        structure=_make_structure() if structure is _DEFAULT else structure,
+        msa_a3m=msa_a3m,
+        source_url="https://example/api",
+        raw_entry={"modelEntityId": "AF-P04637-F1", "extra": "value"} if raw_entry is None else raw_entry,
+    )
+    output.success = True
+    return output
+
+
+def _read_csv_row(csv_path: Path) -> dict[str, str]:
+    with csv_path.open(encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 1
+    return rows[0]
+
+
+@pytest.mark.parametrize("structure_format", ["pdb", "cif"])
+def test_csv_export_writes_manifest_with_basename_path_columns(structure_format):
+    """Happy path: 3 sidecars written; structure suffix follows ``structure_format``; paths are basenames."""
+    output = _make_full_output(structure=_make_structure(structure_format=structure_format))
+    with tempfile.TemporaryDirectory() as tmp:
+        output.export(name="result", export_path=tmp, file_format="csv")
+        d = Path(tmp)
+        assert {p.name for p in d.iterdir()} == {
+            "result.a3m",
+            f"result.{structure_format}",
+            "result.csv",
+            "result_raw.json",
+        }
+        row = _read_csv_row(d / "result.csv")
+        assert row["structure_path"] == f"result.{structure_format}"
+        assert row["msa_path"] == "result.a3m"
+        assert row["raw_path"] == "result_raw.json"
+        for col in ("structure_path", "msa_path", "raw_path"):
+            assert "/" not in row[col] and "\\" not in row[col]
+
+
+@pytest.mark.parametrize(
+    "kwargs,absent_file,empty_col",
+    [
+        ({"structure": None}, "result.pdb", "structure_path"),
+        ({"msa_a3m": None}, "result.a3m", "msa_path"),
+        ({"raw_entry": {}}, "result_raw.json", "raw_path"),
+    ],
+)
+def test_csv_export_omits_sidecar_when_field_unset(kwargs, absent_file, empty_col):
+    """Sidecars are written only when their field is populated; the column stays empty otherwise."""
+    output = _make_full_output(**kwargs)
+    with tempfile.TemporaryDirectory() as tmp:
+        output.export(name="result", export_path=tmp, file_format="csv")
+        assert not (Path(tmp) / absent_file).exists()
+        assert _read_csv_row(Path(tmp) / "result.csv")[empty_col] == ""
+
+
+def test_csv_export_round_trips_blob_bodies():
+    """Sidecar contents equal the source fields exactly (PDB / A3M byte-for-byte; raw_entry JSON-equal)."""
+    output = _make_full_output()
+    with tempfile.TemporaryDirectory() as tmp:
+        output.export(name="result", export_path=tmp, file_format="csv")
+        d = Path(tmp)
+        assert (d / "result.pdb").read_text(encoding="utf-8") == output.structure.structure
+        assert (d / "result.a3m").read_text(encoding="utf-8") == output.msa_a3m
+        with (d / "result_raw.json").open(encoding="utf-8") as f:
+            assert json.load(f) == output.raw_entry
+
+
+def test_csv_export_on_failed_output_writes_metadata_only():
+    """Failed outputs (success=False) export without crashing; no sidecars, empty path columns."""
+    failed = _make_error_output(
+        output_class=AlphaFoldDBFetchOutput,
+        key="alphafold-db-fetch",
+        start_time=0.0,
+        exception=ValueError("no prediction"),
+        traceback_str="",
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        failed.export(name="result", export_path=tmp, file_format="csv")
+        d = Path(tmp)
+        assert sorted(p.name for p in d.iterdir()) == ["result.csv"]
+        row = _read_csv_row(d / "result.csv")
+        assert row["structure_path"] == row["msa_path"] == row["raw_path"] == ""
+
+
+def test_json_export_unchanged_after_sidecar_addition():
+    """Regression guard: JSON export still emits one inline file with all blobs."""
+    output = _make_full_output()
+    with tempfile.TemporaryDirectory() as tmp:
+        output.export(name="result", export_path=tmp, file_format="json")
+        d = Path(tmp)
+        assert sorted(p.name for p in d.iterdir()) == ["result.json"]
+        payload = json.loads((d / "result.json").read_text(encoding="utf-8"))
+        assert payload["msa_a3m"] == output.msa_a3m
+        assert payload["raw_entry"] == output.raw_entry
+        assert payload["structure"] is not None
+
+
+# ---------------------------------------------------------------------------
 # Integration tests
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+def test_alphafold_db_fetch_csv_export_against_live_api_yields_usable_sidecars():
+    """Live AFDB fetch + CSV export: each sidecar re-parses to match the manifest row."""
+    output = run_alphafold_db_fetch(
+        AlphaFoldDBFetchInput(uniprot_id="P04637"),
+        AlphaFoldDBFetchConfig(include_msa=True),
+    )
+    assert output.success
+
+    with tempfile.TemporaryDirectory() as tmp:
+        output.export(name="tp53", export_path=tmp, file_format="csv")
+        d = Path(tmp)
+        assert {p.name for p in d.iterdir()} == {"tp53.csv", "tp53.pdb", "tp53.a3m", "tp53_raw.json"}
+
+        row = _read_csv_row(d / "tp53.csv")
+        assert row["entry_id"] == "AF-P04637-F1"
+        assert row["structure_path"] == "tp53.pdb"
+        assert row["msa_path"] == "tp53.a3m"
+        assert row["raw_path"] == "tp53_raw.json"
+
+        rehydrated = Structure(
+            structure=(d / "tp53.pdb").read_text(encoding="utf-8"),
+            structure_format="pdb",
+            b_factor_type=BFactorType.PLDDT,
+            source="alphafold-db-fetch",
+        )
+        chain_seqs = rehydrated.get_chain_sequences()
+        assert chain_seqs[next(iter(chain_seqs))] == row["sequence"]
+
+        a3m_lines = (d / "tp53.a3m").read_text(encoding="utf-8").splitlines()
+        a3m_query = "".join(c for c in a3m_lines[1] if c.isalpha() and c.isupper())
+        assert a3m_query == row["sequence"]
 
 
 @pytest.mark.integration
