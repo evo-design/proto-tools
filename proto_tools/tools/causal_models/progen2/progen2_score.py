@@ -165,7 +165,7 @@ def run_progen2_score(
         config=config,
     )
 
-    logits = result.get("logits")
+    logits = result["logits"]
 
     scores = [
         CausalModelScoringMetrics(
