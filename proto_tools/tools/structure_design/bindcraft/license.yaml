@@ -1,0 +1,11 @@
+code:
+  spdx: MIT
+  url: https://github.com/martinpacesa/BindCraft/blob/main/LICENSE
+weights:
+  spdx: CC-BY-4.0
+  url: https://github.com/google-deepmind/alphafold#model-parameters-license
+commercial_use: restricted
+redistribution: false
+attribution_required: true
+notes: 'BindCraft (martinpacesa/BindCraft) is MIT; ColabDesign (sokrypton/ColabDesign, pinned e31a56fe) is also MIT. The dominant weights are AF2 parameters (CC-BY-4.0, shared with the alphafold2 toolkit). The pipeline requires PyRosetta for its filtering stage — PyRosetta is free for academic/non-profit/government use only, commercial users must obtain a separate license from UW CoMotion (https://www.pyrosetta.org/home/licensing-pyrosetta), and PyRosetta forbids redistribution. ProteinMPNN weights bundled via ColabDesign are MIT.'
+last_updated: '2026-05-06'

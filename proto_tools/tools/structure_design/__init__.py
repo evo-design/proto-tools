@@ -1,5 +1,13 @@
 """Structure design and generation tools."""
 
+from proto_tools.tools.structure_design.bindcraft import (
+    BindCraftConfig,
+    BindCraftDesign,
+    BindCraftInput,
+    BindCraftMetrics,
+    BindCraftOutput,
+    run_bindcraft_design,
+)
 from proto_tools.tools.structure_design.rfdiffusion3 import (
     RFdiffusion3Config,
     RFdiffusion3DesignSpec,
@@ -16,4 +24,10 @@ __all__ = [
     "RFdiffusion3Output",
     "RFdiffusion3DesignSpec",
     "RFdiffusion3Structure",
+    "run_bindcraft_design",
+    "BindCraftInput",
+    "BindCraftConfig",
+    "BindCraftOutput",
+    "BindCraftDesign",
+    "BindCraftMetrics",
 ]

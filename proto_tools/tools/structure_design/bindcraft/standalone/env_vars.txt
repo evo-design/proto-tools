@@ -1,0 +1,25 @@
+# Environment variables for BindCraft (binder design)
+#
+# Lines starting with # are comments and will be ignored.
+# Variables listed under [passthrough] are inherited from the parent environment.
+# Variables under [set] are set to specific values in the subprocess.
+#
+# AlphaFold2 weights are SHARED with the alphafold2 toolkit — setup.sh resolves
+# them via proto_resolve_weights_dir alphafold2 so a user with AF2 already
+# installed does not re-download. PROTO_HOME and PROTO_MODEL_CACHE are forwarded
+# automatically by persistent_worker.py.
+
+[passthrough]
+# JAX runtime knobs (let users override preallocation for tight-memory hosts)
+JAX_PLATFORMS
+XLA_PYTHON_CLIENT_PREALLOCATE
+XLA_PYTHON_CLIENT_ALLOCATOR
+# Per-tool weights override (lets users point BindCraft at an external AF2 weights dir)
+PROTO_BINDCRAFT_WEIGHTS_DIR
+# Shared with alphafold2 — same weights, both vars resolve to the same dir
+PROTO_ALPHAFOLD2_WEIGHTS_DIR
+
+[set]
+# CUDA libs for JAX (installed via proto_install_cuda_toolkit in setup.sh)
+LD_LIBRARY_PATH=${VENV_PATH}/cuda_env/lib
+XLA_FLAGS=--xla_gpu_cuda_data_dir=${VENV_PATH}/cuda_env

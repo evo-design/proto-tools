@@ -487,11 +487,17 @@ from proto_tools.tools.structure_alignment import (
 
 # Structure design tools
 from proto_tools.tools.structure_design import (
+    BindCraftConfig,
+    BindCraftDesign,
+    BindCraftInput,
+    BindCraftMetrics,
+    BindCraftOutput,
     RFdiffusion3Config,
     RFdiffusion3DesignSpec,
     RFdiffusion3Input,
     RFdiffusion3Output,
     RFdiffusion3Structure,
+    run_bindcraft_design,
     run_rfdiffusion3,
 )
 
@@ -1086,6 +1092,13 @@ __all__ = [
     "RFdiffusion3Output",
     "RFdiffusion3DesignSpec",
     "RFdiffusion3Structure",
+    # Structure design - BindCraft
+    "run_bindcraft_design",
+    "BindCraftInput",
+    "BindCraftConfig",
+    "BindCraftOutput",
+    "BindCraftDesign",
+    "BindCraftMetrics",
     # Masked models - shared
     "MaskedModelScoringMetrics",
     "MaskingStrategy",
