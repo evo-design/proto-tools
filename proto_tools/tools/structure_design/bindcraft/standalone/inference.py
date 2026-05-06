@@ -13,7 +13,7 @@ from typing import Any
 from standalone_helpers import get_jax_memory_stats, get_subprocess_device_env, resolve_weights_dir
 
 # ============================================================================
-# Resolved at import time — point at the BindCraft repo cloned by setup.sh
+# Paths
 # ============================================================================
 
 _VENV_PATH = os.environ.get("TOOL_VENV_PATH") or os.environ.get("VIRTUAL_ENV") or os.environ.get("VENV_PATH")
@@ -27,11 +27,8 @@ _DEFAULT_FILTERS_PATH = Path(__file__).parent / "default_filters.json"
 
 
 # ============================================================================
-# Upstream final_design_stats.csv → BindCraftMetrics field map
+# final_design_stats.csv Average_* columns → BindCraftMetrics field names
 # ============================================================================
-# Mirrors `Average_*` columns the upstream filter check evaluates against.
-# Keys are the raw CSV headers; values are the snake_case names used in
-# proto_tools' BindCraftMetrics.metric_spec.
 
 _METRIC_COLUMN_MAP: dict[str, str] = {
     "Average_pLDDT": "avg_plddt",
@@ -110,12 +107,7 @@ def _build_target_settings(payload: dict[str, Any], work_dir: Path) -> dict[str,
 
 
 def _build_advanced_settings(payload: dict[str, Any]) -> dict[str, Any]:
-    """Build BindCraft's advanced_settings.json from the dispatch payload.
-
-    Pulls all upstream knobs (51 user-facing + 10 hardcoded internals) from
-    ``advanced_settings`` and injects the three infrastructure paths
-    (af_params_dir, dssp_path, dalphaball_path).
-    """
+    """Build BindCraft's advanced_settings.json from the dispatch payload."""
     advanced: dict[str, Any] = dict(payload["advanced_settings"])
     af2_weights = resolve_weights_dir("alphafold2")
     if not af2_weights:
@@ -123,10 +115,7 @@ def _build_advanced_settings(payload: dict[str, Any]) -> dict[str, Any]:
             "AlphaFold2 weights directory could not be resolved. "
             "Re-run setup.sh or set PROTO_ALPHAFOLD2_WEIGHTS_DIR / PROTO_BINDCRAFT_WEIGHTS_DIR."
         )
-    # ColabDesign's get_model_haiku_params() looks for params at
-    # ``{data_dir}/params/params_{model}.npz``. Our setup.sh writes the
-    # weights to ``{af2_weights}/params/*.npz`` (matching the alphafold2
-    # toolkit), so af_params_dir is the parent — not the params/ subdir.
+    # af_params_dir is the parent of params/, not params/ itself — ColabDesign appends `/params/`.
     advanced["af_params_dir"] = str(af2_weights)
     advanced["dssp_path"] = str(_BINDCRAFT_DIR / "functions" / "dssp")
     advanced["dalphaball_path"] = str(_BINDCRAFT_DIR / "functions" / "DAlphaBall.gcc")
@@ -134,7 +123,7 @@ def _build_advanced_settings(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _build_filters(payload: dict[str, Any]) -> dict[str, Any]:
-    """Load upstream default_filters.json and merge per-metric overrides on top."""
+    """Load default filters and merge per-metric overrides on top."""
     base: dict[str, Any] = json.loads(_DEFAULT_FILTERS_PATH.read_text())
     overrides = payload.get("filter_overrides") or {}
     base.update(overrides)
@@ -147,11 +136,7 @@ def _build_filters(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _row_to_metrics(row: dict[str, str]) -> dict[str, float]:
-    """Extract metric columns from a final_design_stats.csv row.
-
-    Skips empty / sentinel-missing entries (some metrics may not be set,
-    e.g. when an upstream filter step short-circuits).
-    """
+    """Extract metric columns from a final_design_stats.csv row, skipping missing entries."""
     out: dict[str, float] = {}
     for csv_col, metric_key in _METRIC_COLUMN_MAP.items():
         val = row.get(csv_col, "")
@@ -180,8 +165,7 @@ def _parse_interface_aas(s: str) -> dict[str, int]:
     """Parse a Python-dict-as-string or JSON dict cell into {aa: count}."""
     if not s:
         return {}
-    # CSV cells from upstream are stringified Python dicts (single quotes).
-    # JSON requires double quotes — flip them, then parse.
+    # CSV cells are stringified Python dicts (single quotes); flip to JSON.
     try:
         return {str(k): int(v) for k, v in json.loads(s.replace("'", '"')).items()}
     except (TypeError, ValueError, json.JSONDecodeError):
@@ -189,19 +173,13 @@ def _parse_interface_aas(s: str) -> dict[str, int]:
 
 
 def _resolve_accepted_pdb(designs_dir: Path, design_name: str) -> Path | None:
-    """Find the accepted PDB for a design.
-
-    Upstream stores the best-model PDB at ``Accepted/{design_name}_model{N}.pdb``
-    where N is the AF2 model index (1-5) chosen by best pLDDT. The CSV row
-    only carries the design_name (without the model suffix), so we glob for it.
-    """
+    """Find the accepted PDB for a design under Accepted/{design_name}_model{N}.pdb."""
     accepted_dir = designs_dir / "Accepted"
     if not accepted_dir.is_dir():
         return None
     matches = sorted(accepted_dir.glob(f"{design_name}_model*.pdb"))
     if matches:
         return matches[0]
-    # Fallback: some pipelines may write the file without the model suffix.
     direct = accepted_dir / f"{design_name}.pdb"
     return direct if direct.exists() else None
 
@@ -212,7 +190,6 @@ def _count_trajectories(designs_dir: Path) -> int:
     if not stats_csv.exists():
         return 0
     with stats_csv.open() as f:
-        # Subtract 1 for the header row; clamp at zero.
         return max(0, sum(1 for _ in f) - 1)
 
 
@@ -228,8 +205,6 @@ def _parse_outputs(designs_dir: Path) -> dict[str, Any]:
                     continue
                 pdb_path = _resolve_accepted_pdb(designs_dir, design_name)
                 if pdb_path is None:
-                    # No PDB on disk — skip; the row may be a header artifact
-                    # or a rejected-design footer in some upstream variants.
                     continue
                 designs.append(
                     {
@@ -243,9 +218,7 @@ def _parse_outputs(designs_dir: Path) -> dict[str, Any]:
                     }
                 )
     n_trajectories = _count_trajectories(designs_dir)
-    # If trajectory_stats.csv is missing or empty, fall back to the accepted
-    # count so the report is monotonically sane (you can't have accepted more
-    # designs than you ran trajectories for).
+    # Floor at len(designs) — can't have accepted more designs than trajectories run.
     n_trajectories = max(n_trajectories, len(designs))
     return {
         "designs": designs,
@@ -260,13 +233,7 @@ def _parse_outputs(designs_dir: Path) -> dict[str, Any]:
 
 
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
-    """Entry point for ToolInstance.dispatch.
-
-    Materializes BindCraft's three JSON settings files in a temp dir, invokes
-    ``bindcraft.py`` as a subprocess, and parses ``final_design_stats.csv`` +
-    ``Accepted/*.pdb`` back into the design list expected by
-    ``run_bindcraft_design``.
-    """
+    """Materialize settings, invoke bindcraft.py, parse outputs."""
     operation = input_dict["operation"]
     if operation != "design":
         raise ValueError(f"Unknown BindCraft operation: {operation}")
@@ -290,8 +257,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         filters_path.write_text(json.dumps(filters, indent=2))
 
         env = get_subprocess_device_env(input_dict.get("device", "cuda"))
-        # PYTHONHASHSEED gives the bindcraft.py subprocess deterministic hash randomization
-        # when a seed is supplied (matters for set/dict iteration in upstream's design loop).
+        # Deterministic hash randomization for the design loop's set/dict iteration.
         seed = input_dict.get("seed")
         if seed is not None:
             env["PYTHONHASHSEED"] = str(seed)
@@ -307,9 +273,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             str(filters_path),
         ]
 
-        # cwd = the BindCraft repo; bindcraft.py uses os.path.dirname(__file__) for
-        # asset resolution (functions/, settings_*/), so launching from elsewhere
-        # works, but staying in-repo avoids any hidden relative-path surprises.
         verbose = bool(input_dict.get("verbose", False))
         try:
             subprocess.run(
@@ -335,11 +298,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
 
 def to_device(device: str) -> dict[str, Any]:
-    """DeviceManager callback. CLI subprocess flows manage GPU per call.
-
-    Returns:
-        dict[str, Any]: Status dict noting the passthrough.
-    """
+    """DeviceManager passthrough — CLI subprocess manages GPU per call."""
     return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
 
 

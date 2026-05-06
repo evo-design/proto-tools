@@ -1,21 +1,4 @@
-# BindCraft binder-design dependencies
-#
-# Tracking upstream BindCraft commit:
-#   https://github.com/martinpacesa/BindCraft @ 7cd4ace1b7407adf66a50dfefa47de2270f5e4a9
-#
-# Pinning policy: every package is pinned to a specific version. JAX and
-# ColabDesign are installed by setup.sh (JAX via proto_install_jax,
-# ColabDesign from BindCraft's pinned git ref). PyRosetta ships from the
-# rosettacommons conda channel and is also installed by setup.sh.
-#
-# Removed from upstream's conda list because nothing in BindCraft @ 7cd4ace
-# or ColabDesign @ e31a56fe imports them: pdbfixer, flax, seaborn, fsspec,
-# py3dmol. (py3dmol is referenced only in colabdesign/{af,rf,mpnn}/examples
-# notebooks, not in the runtime.)
-#
-# BindCraft's own constraints (from install_bindcraft.sh): numpy<2.0.0,
-# jax>=0.4 and <=0.6.0. Versions below satisfy those bounds.
-
+# jax, colabdesign, pyrosetta are installed by setup.sh, not here.
 numpy==1.26.4
 pandas==2.2.3
 biopython==1.84
