@@ -95,6 +95,8 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 ## Available Tools 🔬
 
 <pre>
+<a href="proto_tools/tools/binder_design/">binder_design/</a>                  # De novo antibody / binder design pipelines
+└── <a href="proto_tools/tools/binder_design/germinal/">germinal/</a>
 <a href="proto_tools/tools/causal_models/">causal_models/</a>                 # Autoregressive sequence models
 ├── <a href="proto_tools/tools/causal_models/evo1/">evo1/</a>
 ├── <a href="proto_tools/tools/causal_models/evo2/">evo2/</a>
