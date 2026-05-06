@@ -124,6 +124,8 @@ class GerminalDesignMetrics(Metrics):
 # Input
 # ============================================================================
 _HOTSPOT_PATTERN = re.compile(r"^[A-Za-z]\d+$")
+# Hydra dotpath: lowercase identifier segments joined by '.', optional leading '+' (append).
+_OVERRIDE_KEY_PATTERN = re.compile(r"\+?[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)*")
 
 
 class GerminalInput(BaseToolInput):
@@ -348,6 +350,17 @@ class GerminalConfig(BaseConfig):
         include_in_key=False,
     )
     # verbose, timeout, seed inherited from BaseConfig.
+
+    @field_validator("germinal_overrides", mode="after")
+    @classmethod
+    def _validate_override_keys(cls, v: dict[str, Any]) -> dict[str, Any]:
+        """Reject Hydra-structural directives that would redirect the run dir or output."""
+        for key in v:
+            if not _OVERRIDE_KEY_PATTERN.fullmatch(key):
+                raise ValueError(f"germinal_overrides key {key!r} is not a valid Hydra dotpath")
+            if key.startswith(("hydra.", "hydra/")):
+                raise ValueError(f"germinal_overrides key {key!r}: 'hydra.*' overrides are not permitted")
+        return v
 
 
 # ============================================================================

@@ -18,11 +18,9 @@ from proto_tools.tools.binder_design import (
     run_germinal_design,
 )
 from proto_tools.tools.tool_registry import ToolRegistry
-from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
-_persistent_tool = make_persistent_fixture("germinal")
 TEST_PDB = Path(__file__).parent.parent / "dummy_data" / "pdl1.pdb"
 
 
@@ -45,6 +43,19 @@ def test_germinal_input_rejects_unknown_hotspot_chain():
     """Every hotspot chain must appear in target_chain (also exercises the multi-chain split)."""
     with pytest.raises(ValueError, match="Hotspot chains"):
         GerminalInput(target_pdb=str(TEST_PDB), target_chain="A,C", hotspots=["B37"])
+
+
+def test_germinal_config_rejects_hydra_structural_overrides():
+    """germinal_overrides must reject 'hydra.*' keys (would let users redirect run_dir/output)."""
+    with pytest.raises(ValueError, match="hydra"):
+        GerminalConfig(germinal_overrides={"hydra.run.dir": "x"})
+    with pytest.raises(ValueError, match="hydra"):
+        GerminalConfig(germinal_overrides={"hydra/job": "x"})
+    with pytest.raises(ValueError, match="not a valid"):
+        GerminalConfig(germinal_overrides={"weights iptm": 1.0})  # space in key
+    # Legitimate keys still pass.
+    cfg = GerminalConfig(germinal_overrides={"logits_steps": 50, "weights_iptm": 1.0, "+new_key": 1})
+    assert cfg.germinal_overrides == {"logits_steps": 50, "weights_iptm": 1.0, "+new_key": 1}
 
 
 # ── Source-fidelity: metric names must track upstream Germinal CSV columns ──
