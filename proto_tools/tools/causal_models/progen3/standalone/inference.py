@@ -13,6 +13,20 @@ logger = getLogger(__name__)
 
 HUGGINGFACE_REPO_PREFIX = "Profluent-Bio"
 
+# Tokenizer order (vocab size 34): 0-5 specials (<pad>, <bos>, <eos>, <bos_glm>,
+# <eos_span>, <mask>), 6-7 direction markers ("1", "2"), 8-33 amino acid letters A-Z.
+PROGEN3_VOCAB: list[str] = [
+    "<pad>",
+    "<bos>",
+    "<eos>",
+    "<bos_glm>",
+    "<eos_span>",
+    "<mask>",
+    "1",
+    "2",
+    *list("ABCDEFGHIJKLMNOPQRSTUVWXYZ"),
+]
+
 
 class ProGen3Model:
     """ProGen3 model wrapper for protein sequence generation and scoring."""
@@ -188,6 +202,7 @@ class ProGen3Model:
         device: str = "cuda",
         verbose: bool = False,
         batch_size: int = 1,
+        return_logits: bool = False,
         seed: int | None = None,
     ) -> dict[str, Any]:
         """Score protein sequences using bidirectional likelihood.
@@ -201,13 +216,19 @@ class ProGen3Model:
             device (str): Device to run on.
             verbose (bool): Whether to log progress.
             batch_size (int): Batch size for scoring.
+            return_logits (bool): Whether to include forward-pass per-position logits in
+                the output. Only the forward (N→C) pass is returned, matching the
+                evo/progen2 convention; bidirectional info is already exposed via
+                ``per_position_metrics``.
             seed (int | None): Random seed. Scoring is deterministic given the
                 model state, but we still seed RNGs/cudnn flags so consecutive
                 calls in a persistent worker behave identically regardless of
                 call order.
 
         Returns:
-            dict[str, Any]: Dict with "metrics" and "per_position_metrics" keys.
+            dict[str, Any]: Dict with ``metrics``, ``per_position_metrics``, optional
+                ``logits`` (per-sequence tensor of shape ``(tokenized_len, vocab_size)``
+                when ``return_logits=True``), and ``vocab``.
         """
         import math
 
@@ -224,7 +245,7 @@ class ProGen3Model:
         )
         scorer = _PerPositionScorer(self.model, max_batch_tokens=max_batch_tokens)
 
-        result = scorer.score_batch_with_positions(sequences)
+        result = scorer.score_batch_with_positions(sequences, return_logits=return_logits)
 
         # Derive log_likelihood (sum), avg_log_likelihood (mean), and perplexity
         # (exp(-mean)) from the bidirectional per-position values so all three
@@ -245,6 +266,8 @@ class ProGen3Model:
         return {
             "metrics": metrics,
             "per_position_metrics": result["per_position_metrics"],
+            "logits": result.get("logits"),
+            "vocab": PROGEN3_VOCAB,
         }
 
 
@@ -267,14 +290,15 @@ class _PerPositionScorer:
         self._dist = dist
         self.model.eval()
 
-    def _log_likelihoods_with_positions(self, model_forward_kwargs: dict[str, Any]) -> tuple[Any, Any, Any]:
+    def _log_likelihoods_with_positions(self, model_forward_kwargs: dict[str, Any]) -> tuple[Any, Any, Any, Any]:
         """Compute both aggregate and per-position log-likelihoods.
 
         Returns:
-            tuple: (reduced_ll, per_token_ll, target_mask) where:
+            tuple: ``(reduced_ll, per_token_ll, target_mask, raw_logits)`` where:
                 - reduced_ll: shape [batch], aggregate LL per sequence
                 - per_token_ll: shape [batch, seq_len-1], per-token LL
                 - target_mask: shape [batch, seq_len-1], bool mask for valid tokens
+                - raw_logits: shape [batch, seq_len, vocab_size], pre-shift forward logits
         """
         torch = self._torch
         nn = torch.nn
@@ -301,32 +325,33 @@ class _PerPositionScorer:
         per_token_ll = -(nll * target_mask.to(nll)).detach()
         reduced_nll = (nll * target_mask.to(nll)).sum(dim=1)
 
-        return -reduced_nll.detach(), per_token_ll, target_mask.detach()
+        return -reduced_nll.detach(), per_token_ll, target_mask.detach(), output.logits.detach()
 
-    def score_batch_with_positions(self, sequences: list[str]) -> dict[str, Any]:
+    def score_batch_with_positions(self, sequences: list[str], return_logits: bool = False) -> dict[str, Any]:
         """Score sequences and return aggregate + per-position metrics."""
         torch = self._torch
         dist = self._dist
         device = dist.get_device()
 
         with torch.no_grad():
-            return self._score_batch_impl(sequences, device)
+            return self._score_batch_impl(sequences, device, return_logits=return_logits)
 
-    def _score_batch_impl(self, sequences: list[str], device: Any) -> dict[str, Any]:
+    def _score_batch_impl(self, sequences: list[str], device: Any, return_logits: bool = False) -> dict[str, Any]:
         """Internal implementation for score_batch_with_positions."""
         kwargs_fwd = self.batch_preparer.get_batch_kwargs(
             sequences,
             device=device,
             reverse=False,
         )
-        reduced_fwd, per_pos_fwd, mask_fwd = self._log_likelihoods_with_positions(kwargs_fwd)
+        reduced_fwd, per_pos_fwd, mask_fwd, logits_fwd = self._log_likelihoods_with_positions(kwargs_fwd)
 
         kwargs_rev = self.batch_preparer.get_batch_kwargs(
             sequences,
             device=device,
             reverse=True,
         )
-        reduced_rev, per_pos_rev, mask_rev = self._log_likelihoods_with_positions(kwargs_rev)
+        # Reverse-pass logits aren't returned (matches evo/progen2 forward-only convention).
+        reduced_rev, per_pos_rev, mask_rev, _ = self._log_likelihoods_with_positions(kwargs_rev)
 
         scores: dict[str, Any] = {"log_likelihood": [], "perplexity": []}
         all_per_position: list[dict[str, list[float | None]]] = []
@@ -385,6 +410,18 @@ class _PerPositionScorer:
             )
 
         scores["per_position_metrics"] = all_per_position
+
+        if return_logits:
+            # Per-sequence forward logits sliced to the unpadded tokenized length;
+            # bf16 → float32 because numpy-backed serialization has no bf16 dtype.
+            pad_id = self.model.config.pad_token_id
+            labels_fwd = kwargs_fwd["labels"]
+            all_logits = []
+            for i in range(len(sequences)):
+                length = int((labels_fwd[i] != pad_id).sum().item())
+                all_logits.append(logits_fwd[i, :length, : len(PROGEN3_VOCAB)].float().cpu())
+            scores["logits"] = all_logits
+
         return scores
 
 
@@ -423,6 +460,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             device=input_dict["device"],
             verbose=input_dict["verbose"],
             batch_size=input_dict["batch_size"],
+            return_logits=input_dict["return_logits"],
             seed=input_dict["seed"],
         )
     raise ValueError(f"progen3: unknown operation {operation!r}; valid: ['sample', 'score']")

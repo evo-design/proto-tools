@@ -3,8 +3,6 @@
 import logging
 from typing import Any, Literal
 
-from pydantic import model_validator
-
 from proto_tools.tools.causal_models.shared_data_models import (
     CausalModelScoringConfig,
     CausalModelScoringInput,
@@ -44,27 +42,21 @@ class ProGen3ScoringConfig(CausalModelScoringConfig):
     """Configuration for ProGen3 protein sequence scoring.
 
     ProGen3 computes bidirectional autoregressive likelihood by averaging
-    forward (N→C) and reverse (C→N) log-likelihoods. This gives a more
-    robust score than unidirectional models.
+    forward (N→C) and reverse (C→N) log-likelihoods.
 
     Attributes:
         model_checkpoint (PROGEN3_MODEL_CHECKPOINTS): ProGen3 weights variant. Sizes range
             from 112M to 3B parameters.
         local_path (str | None): Override HuggingFace download with a local weights directory.
         batch_size (int): Number of sequences to process simultaneously on GPU.
+        return_logits (bool): Whether to include forward-pass per-position logits in the
+            output. Reverse-pass info is already exposed via ``per_position_metrics``
+            (forward/reverse/bidirectional log-likelihoods).
 
     Note:
-        - ProGen3 uses bidirectional scoring: averages forward + reverse passes.
         - Lower perplexity indicates higher model confidence.
         - Requires GPU with bfloat16 support (A100/H100 recommended).
-        - ``return_logits`` is not supported; ProGen3 returns per-position metrics instead.
     """
-
-    @model_validator(mode="after")
-    def _validate_no_logits(self) -> Any:
-        if self.return_logits:
-            raise ValueError("ProGen3 does not support return_logits; use per_position_metrics instead")
-        return self
 
     model_checkpoint: PROGEN3_MODEL_CHECKPOINTS = ConfigField(
         title="Model Checkpoint",
@@ -110,9 +102,8 @@ def run_progen3_score(
 ) -> ProGen3ScoringOutput:
     """Score protein sequences using ProGen3 bidirectional language model.
 
-    Computes the likelihood of protein sequences using ProGen3's
-    bidirectional scoring. For each sequence, computes the forward (N→C)
-    and reverse (C→N) autoregressive log-likelihoods and averages them.
+    For each sequence, runs forward (N→C) and reverse (C→N) autoregressive
+    passes and averages their log-likelihoods.
 
     Args:
         inputs (ProGen3ScoringInput): Validated input containing protein sequences to score.
@@ -120,21 +111,20 @@ def run_progen3_score(
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        ProGen3ScoringOutput: Contains a ``CausalModelScoringMetrics`` for each input
-            sequence with:
+        ProGen3ScoringOutput: A ``CausalModelScoringMetrics`` per sequence with:
 
-            - ``log_likelihood``, ``avg_log_likelihood``, ``perplexity`` (access via
-              attribute ``score.perplexity`` or mapping ``score["perplexity"]``)
+            - ``log_likelihood``, ``avg_log_likelihood``, ``perplexity``
+            - ``forward_log_likelihood_pp``, ``reverse_log_likelihood_pp``,
+              ``log_likelihood_pp``: per-position lists (forward / reverse / bidirectional).
+            - ``logits``: forward-pass logits ``(tokenized_len, vocab_size=34)``
+              when ``config.return_logits=True``, else ``None``.
+            - ``vocab``: 34-token vocab (specials + AA letters); always populated.
 
     Examples:
         >>> inputs = ProGen3ScoringInput(sequences=["MVLSPADKTN", "MKTLLILAVVAA"])
         >>> config = ProGen3ScoringConfig(model_checkpoint="progen3-762m")
         >>> result = run_progen3_score(inputs, config)
         >>> print(f"Perplexity: {result.scores[0]['perplexity']}")
-
-    Note:
-        - Lower perplexity indicates higher model confidence in the sequence
-        - Bidirectional scoring is more robust than unidirectional
     """
     logger.debug(f"Using local venv for ProGen3 scoring: {config.model_checkpoint}")
 
@@ -148,19 +138,22 @@ def run_progen3_score(
             "device": config.device,
             "verbose": config.verbose,
             "batch_size": config.batch_size,
+            "return_logits": config.return_logits,
             "seed": config.seed,
         },
         instance=instance,
         config=config,
     )
 
-    per_position_list = result.get("per_position_metrics", [None] * len(result["metrics"]))
+    logits_list = result["logits"]
     scores = [
         CausalModelScoringMetrics(
             **metrics,
-            **{f"{k}_pp": v for k, v in (per_pos or {}).items()},
+            **{f"{k}_pp": v for k, v in per_pos.items()},
+            logits=logits_list[i] if logits_list is not None else None,
+            vocab=result["vocab"],
         )
-        for metrics, per_pos in zip(result["metrics"], per_position_list, strict=True)
+        for i, (metrics, per_pos) in enumerate(zip(result["metrics"], result["per_position_metrics"], strict=True))
     ]
 
     return ProGen3ScoringOutput(scores=scores)
