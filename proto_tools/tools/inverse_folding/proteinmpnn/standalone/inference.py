@@ -16,11 +16,14 @@ os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 logger = getLogger(__name__)
 
 DEFAULT_TEMPERATURE = 1.0
+CANONICAL_VOCAB: list[str] = list("ACDEFGHIKLMNPQRSTVWY")
 
 # Alphabet ordering for logits interpretation
 ALPHAFOLD_VOCAB: list[str] = list(
     "ARNDCQEGHILKMFPSTWYVX"
 )  # ColabDesign autoconverts to Alphafold alphabet for ProteinMPNN scoring
+ALPHAFOLD_AA_VOCAB: list[str] = ALPHAFOLD_VOCAB[:20]
+CANONICAL_TO_ALPHAFOLD_INDICES: list[int] = [CANONICAL_VOCAB.index(aa) for aa in ALPHAFOLD_AA_VOCAB]
 
 # Maps model_choice to ColabDesign's (model_name, weights) parameters.
 # v_48_002/010/020/030 are the same architecture trained at different noise levels;
@@ -202,6 +205,118 @@ class ProteinMPNNModel:
             "vocab": ALPHAFOLD_VOCAB,
         }
 
+    def compute_gradient(
+        self,
+        pdb_structure: str,
+        chain_ids: list[str],
+        logits_list: list[list[float]],
+        *,
+        temperature: float | None = None,
+        use_ste: bool = True,
+        fixed_positions: dict[str, list[int]] | None = None,
+        seed: int | None = None,
+        device: str = "cuda",
+        model_choice: str = "proteinmpnn",
+        verbose: bool = False,
+        backprop: bool = True,
+    ) -> dict[str, Any]:
+        """Compute ProteinMPNN mean-NLL gradient for relaxed sequence logits.
+
+        The public gradient contract uses canonical amino-acid order
+        ``ACDEFGHIKLMNPQRSTVWY``. ColabDesign's ProteinMPNN wrapper scores in
+        AlphaFold order internally, so this method maps both the relaxed context
+        and returned gradient at the boundary.
+        """
+        if not logits_list:
+            raise ValueError("proteinmpnn: compute_gradient requires at least one residue")
+        if any(len(row) != len(CANONICAL_VOCAB) for row in logits_list):
+            raise ValueError(f"proteinmpnn: compute_gradient expects L x {len(CANONICAL_VOCAB)} logits")
+
+        import jax
+        import jax.numpy as jnp
+        import numpy as np
+        from colabdesign.shared.utils import copy_dict
+        from standalone_helpers import set_jax_seed
+
+        key = set_jax_seed(seed)
+        if key is None:
+            raise ValueError(
+                "proteinmpnn: compute_gradient requires an explicit int seed (jax.random.PRNGKey rejects None)"
+            )
+
+        # Lazy load the model (reload if model_choice changed)
+        if not self._loaded or self._model_choice != model_choice:
+            self.load(device, model_choice, verbose)
+        elif self.device != device:
+            self.to_device(device)
+
+        fix_pos = (
+            ",".join(f"{chain}{idx}" for chain, positions in fixed_positions.items() for idx in positions)
+            if fixed_positions is not None
+            else None
+        )
+        self.model.prep_inputs(
+            pdb_structure,
+            fix_pos=fix_pos,
+            chain=",".join(chain_ids),
+        )
+
+        parsed_len = int(self.model._inputs["S"].shape[0])
+        if len(logits_list) != parsed_len:
+            raise ValueError(f"Logits length {len(logits_list)} does not match structure ({parsed_len} residues).")
+
+        base_inputs = copy_dict(self.model._inputs)
+        base_inputs.pop("S", None)
+        raw_logits = jnp.asarray(logits_list, dtype=jnp.float32)
+        canonical_to_af = jnp.asarray(CANONICAL_TO_ALPHAFOLD_INDICES, dtype=jnp.int32)
+
+        def _loss_fn(logits: Any) -> Any:
+            x = jax.nn.softmax(logits / temperature, axis=-1) if temperature is not None else logits
+            aa_idx = jnp.argmax(x, axis=-1)
+            hard_canonical = jax.nn.one_hot(aa_idx, len(CANONICAL_VOCAB))
+            context_canonical = hard_canonical + (x - jax.lax.stop_gradient(x)) if use_ste else x
+
+            context_af = context_canonical[:, canonical_to_af]
+            labels_af = hard_canonical[:, canonical_to_af]
+
+            output = self.model._score(**base_inputs, key=key, S=context_af)
+            log_probs = jax.nn.log_softmax(output["logits"], axis=-1)[..., :20]
+            per_position_nll = -(labels_af * log_probs).sum(axis=-1)
+
+            mask = jnp.asarray(base_inputs["mask"], dtype=per_position_nll.dtype)
+            if "fix_pos" in base_inputs:
+                mask = mask.at[jnp.asarray(base_inputs["fix_pos"])].set(0.0)
+            return (per_position_nll * mask).sum() / (mask.sum() + 1e-8)
+
+        if backprop:
+            loss_value, gradient = jax.value_and_grad(_loss_fn)(raw_logits)
+            gradient_value: list[list[float]] | None = np.asarray(gradient).tolist()
+        else:
+            loss_value = _loss_fn(raw_logits)
+            gradient_value = None
+
+        mean_nll = float(loss_value)
+        mask = np.asarray(base_inputs["mask"], dtype=np.float32)
+        if "fix_pos" in base_inputs:
+            mask[np.asarray(base_inputs["fix_pos"], dtype=int)] = 0.0
+        effective_length = float(mask.sum())
+
+        self.unload()
+        return {
+            "gradient": gradient_value,
+            "loss": mean_nll,
+            "metrics": {
+                "log_likelihood": -mean_nll * effective_length,
+                "avg_log_likelihood": -mean_nll,
+                "perplexity": float(math.exp(mean_nll)),
+                "sequence_length": parsed_len,
+                "effective_sequence_length": effective_length,
+                "model_choice": model_choice,
+                "objective": "autoregressive_nll",
+            },
+            "vocab": CANONICAL_VOCAB,
+        }
+
     def load(self, device: str, model_choice: str = "proteinmpnn", verbose: bool = False) -> None:
         """Load ProteinMPNN model to device.
 
@@ -246,6 +361,7 @@ class ProteinMPNNModel:
 
         # params is a dict pytree; move_model_to_device handles via device_put
         self.params = move_model_to_device(self.params, self.device, device)
+        self.model._model.params = self.params
         self.device = device
 
     def unload(self) -> None:
@@ -259,6 +375,7 @@ class ProteinMPNNModel:
             logger.info("Unloading ProteinMPNN to CPU")
 
         self.params = move_model_to_device(self.params, self.device, "cpu")
+        self.model._model.params = self.params
         self.device = "cpu"
 
 
@@ -313,7 +430,23 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 verbose=input_dict["verbose"],
                 return_logits=input_dict["return_logits"],
             )
-        raise ValueError(f"proteinmpnn: unknown operation {operation!r}; valid: ['sample', 'score']")
+        if operation == "compute_gradient":
+            return _model.compute_gradient(
+                pdb_structure=pdb_structure,  # type: ignore[arg-type]
+                chain_ids=input_dict["chain_ids"],
+                logits_list=input_dict["logits"],
+                temperature=input_dict["temperature"],
+                use_ste=input_dict["use_ste"],
+                fixed_positions=input_dict.get("fixed_positions"),
+                seed=input_dict["seed"],
+                device=input_dict["device"],
+                model_choice=model_choice,
+                verbose=input_dict["verbose"],
+                backprop=input_dict.get("compute_gradient", True),
+            )
+        raise ValueError(
+            f"proteinmpnn: unknown operation {operation!r}; valid: ['sample', 'score', 'compute_gradient']"
+        )
 
 
 def to_device(device: str) -> dict[str, Any]:
