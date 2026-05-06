@@ -27,22 +27,17 @@ _BINDCRAFT_FIXTURE_PDB = (
     Path(__file__).resolve().parents[2] / "structure_prediction" / "alphafold2" / "example_input_fixture.pdb"
 )
 
-# Upstream parity (martinpacesa/BindCraft @ 7cd4ace, default_4stage_multimer.json):
-# 51 user-facing ConfigFields below + 10 internal toggles hardcoded in dispatch.
 _USER_FACING_UPSTREAM_KEYS: frozenset[str] = frozenset(
     {
-        # Algorithm selection
         "design_algorithm",
         "use_multimer_design",
         "omit_AAs",
         "force_reject_AA",
-        # Iteration counts
         "soft_iterations",
         "temporary_iterations",
         "hard_iterations",
         "greedy_iterations",
         "greedy_percentage",
-        # Loss weights
         "weights_plddt",
         "weights_pae_intra",
         "weights_pae_inter",
@@ -52,24 +47,20 @@ _USER_FACING_UPSTREAM_KEYS: frozenset[str] = frozenset(
         "weights_iptm",
         "weights_rg",
         "weights_termini_loss",
-        # Loss toggles
         "random_helicity",
         "use_i_ptm_loss",
         "use_rg_loss",
         "use_termini_distance_loss",
-        # Contact geometry
         "intra_contact_distance",
         "inter_contact_distance",
         "intra_contact_number",
         "inter_contact_number",
-        # Template masking / prediction modifiers
         "rm_template_seq_design",
         "rm_template_seq_predict",
         "rm_template_sc_design",
         "rm_template_sc_predict",
         "predict_initial_guess",
         "predict_bigbang",
-        # MPNN refinement
         "enable_mpnn",
         "mpnn_fix_interface",
         "num_seqs",
@@ -78,7 +69,6 @@ _USER_FACING_UPSTREAM_KEYS: frozenset[str] = frozenset(
         "backbone_noise",
         "model_path",
         "mpnn_weights",
-        # AF2 validation / beta-protein optimisation
         "num_recycles_design",
         "num_recycles_validation",
         "optimise_beta",
@@ -86,7 +76,6 @@ _USER_FACING_UPSTREAM_KEYS: frozenset[str] = frozenset(
         "optimise_beta_extra_temp",
         "optimise_beta_recycles_design",
         "optimise_beta_recycles_valid",
-        # Stopping / monitoring
         "max_trajectories",
         "enable_rejection_check",
         "acceptance_rate",
@@ -94,8 +83,7 @@ _USER_FACING_UPSTREAM_KEYS: frozenset[str] = frozenset(
     }
 )
 
-# Upstream knobs not surfaced to users: file-output toggles whose artifacts
-# proto-tools never returns, plus the standard sample_models flag.
+# File-output toggles whose artifacts proto-tools never returns, plus sample_models.
 _HARDCODED_INTERNAL_SETTINGS: dict[str, Any] = {
     "sample_models": True,
     "save_design_animations": False,
