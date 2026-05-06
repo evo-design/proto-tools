@@ -50,6 +50,7 @@ class ESMCModel:
         device: str = "cuda",
         verbose: bool = False,
         return_logits: bool = False,
+        repr_layer: int = -1,
     ) -> dict[str, torch.Tensor]:
         """Run ESM C inference on protein sequences.
 
@@ -60,6 +61,9 @@ class ESMCModel:
             device: Device to run on.
             verbose: Whether to print progress.
             return_logits: Whether to return per-position amino-acid logits.
+            repr_layer: Hidden-state layer index for embeddings. ``-1`` returns the
+                final post-norm representation (model output ``embeddings``); other
+                indices select from ``hidden_states``.
 
         Returns:
             Dictionary with mean_embeddings, attention_masks, and optionally logits.
@@ -98,8 +102,9 @@ class ESMCModel:
             with torch.inference_mode():
                 outputs = self.model(sequence_tokens=input_ids)
 
-                # Strip BOS/EOS to align with ESM3 wrapper convention
-                embeddings = outputs.embeddings[:, 1:-1, :]
+                # -1 = post-norm last layer; other indices = pre-norm per-block.
+                source = outputs.embeddings if repr_layer == -1 else outputs.hidden_states[repr_layer]
+                embeddings = source[:, 1:-1, :]  # strip BOS/EOS
                 attention_mask = attention_mask_raw[:, 1:-1]
 
                 # Mean-pool over valid (non-pad) positions
@@ -202,6 +207,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             device=input_dict["device"],
             verbose=input_dict["verbose"],
             return_logits=input_dict["return_logits"],
+            repr_layer=input_dict["repr_layer"],
         )
     raise ValueError(f"esmc: unknown operation {operation!r}; valid: ['embeddings', 'inference']")
 

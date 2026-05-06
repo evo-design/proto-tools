@@ -57,6 +57,7 @@ ESM C uses a transformer encoder trained with the MLM objective on a large prote
 | `device` | `str` | `cuda` | `cuda`, `cpu`, or `mps` |
 | `verbose` | `bool` | `False` | Print progress |
 | `return_logits` | `bool` | `False` | Include per-position logits over the 20 amino acids |
+| `repr_layer` | `int` | `-1` | Transformer layer index for embeddings; `-1` returns post-norm output, others select pre-norm |
 
 ## Output Specification
 

@@ -6,11 +6,12 @@ from typing import Any
 from proto_tools.entities.antibody import Antibody, AntibodyLogits
 from proto_tools.tools.masked_models.projection import attach_projections
 from proto_tools.tools.masked_models.shared_data_models import (
-    MaskedModelConfig,
-    MaskedModelOutput,
+    MaskedModelEmbeddingsConfig,
+    MaskedModelEmbeddingsOutput,
     SequenceEmbedding,
 )
 from proto_tools.tools.tool_registry import tool
+from proto_tools.utils import ConfigField
 from proto_tools.utils.tool_instance import ToolInstance
 from proto_tools.utils.tool_io import BaseToolInput, InputField
 
@@ -51,7 +52,7 @@ class AbLangEmbeddingsInput(BaseToolInput):
     )
 
 
-class AbLangEmbeddingsConfig(MaskedModelConfig):
+class AbLangEmbeddingsConfig(MaskedModelEmbeddingsConfig):
     """Configuration for AbLang antibody embedding extraction.
 
     AbLang provides antibody-specific language model embeddings trained on
@@ -61,15 +62,23 @@ class AbLangEmbeddingsConfig(MaskedModelConfig):
 
     Attributes:
         batch_size (int): Number of sequences to process per forward pass.
-            Default: ``1``.
-        device (str): Device to run on. Default: ``"cuda"``.
+        device (str): Device to run on.
+        return_logits (bool): Include per-position amino-acid logits in output (large; disable
+            to save memory).
     """
 
+    return_logits: bool = ConfigField(
+        title="Return Logits",
+        default=False,
+        description="Include per-position amino-acid logits in the output (large; disable to save memory)",
+        advanced=True,
+    )
 
-class AbLangEmbeddingsOutput(MaskedModelOutput):
+
+class AbLangEmbeddingsOutput(MaskedModelEmbeddingsOutput):
     """Output from AbLang antibody embedding extraction.
 
-    Inherits from ``MaskedModelOutput``.
+    Inherits from ``MaskedModelEmbeddingsOutput``.
 
     Attributes:
         results (list[SequenceEmbedding]): Per-sequence embedding results. Each
@@ -122,16 +131,18 @@ def run_ablang_embeddings(
             "model_choice": model_choice,
             "device": config.device,
             "verbose": config.verbose,
+            "return_logits": config.return_logits,
         },
         instance=instance,
         config=config,
     )
 
+    logits_list = outputs["logits"]
     results = [
         SequenceEmbedding(
             mean_embedding=outputs["mean_embeddings"][i],
             attention_mask=outputs["attention_masks"][i],
-            logits=None,
+            logits=logits_list[i] if logits_list is not None else None,
         )
         for i in range(len(sequences))
     ]

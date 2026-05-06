@@ -64,39 +64,40 @@ class AbLangGradientConfig(BaseConfig):
     """Configuration for the AbLang masked PLL gradient tool.
 
     Attributes:
-        use_ste (bool): When ``True``, uses a Straight-Through Estimator: hard one-hot
-            tokens in the forward pass with gradients flowing through soft probabilities.
-            When ``False`` (default), uses soft blended embeddings directly.
-        compute_gradient (bool): Run backward pass and return gradient; ``False`` for
+        use_ste (bool): Straight-Through Estimator: hard one-hot in the forward pass with
+            gradients flowing through soft probabilities. When ``False``, uses soft blended
+            embeddings directly.
+        compute_gradient (bool): Run backward pass and return gradient. Set ``False`` for
             forward-only log-likelihood scoring (e.g. MCMC proposal ranking).
-        batch_size (int | None): AA positions per forward pass for batched PLL.
-            ``None`` (default) auto-selects: 8 for paired/scFv, 32 for single-chain.
-        device (str): Execution device for the model, for example 'cuda' or 'cpu'.
+        batch_size (int | None): AA positions per forward pass for batched PLL. ``None`` auto-
+            selects a per-model default (lower if OOM, higher for throughput).
+        device (str): Device to run the model on.
     """
 
     use_ste: bool = ConfigField(
         title="Straight-Through Estimator",
         default=False,
-        description="Hard one-hot forward pass with soft-probability gradients.",
+        description="Hard one-hot forward pass with soft-probability gradients",
+        advanced=True,
     )
     compute_gradient: bool = ConfigField(
         title="Compute Gradient",
         default=True,
-        description="Run backward pass and return gradient; set False for forward-only log-likelihood.",
+        description="Run backward pass and return gradient; set False for forward-only log-likelihood",
         advanced=True,
     )
     batch_size: int | None = ConfigField(
         title="PLL Batch Size",
         default=None,
         gt=0,
-        description="AA positions per forward pass. None for auto (8 paired, 32 single-chain).",
+        description="AA positions per forward pass. Lower if OOM, higher for throughput",
         advanced=True,
         include_in_key=False,
     )
     device: str = ConfigField(
         title="Device",
         default="cuda",
-        description="Execution device for the model, for example 'cuda' or 'cpu'.",
+        description="Device to run the model on",
         hidden=True,
         include_in_key=False,
     )

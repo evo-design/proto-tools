@@ -53,19 +53,14 @@ class Evo2ScoringConfig(CausalModelScoringConfig):
     position and summing the log probabilities. Uses batched processing.
 
     Attributes:
-        model_checkpoint (EVO2_MODEL_CHECKPOINTS): Evo2 model checkpoint to use. Currently available:
-            ``"evo2_7b"`` (7B parameters), ``"evo2_40b"`` (40B parameters),
-            and base/specialized variants. Default: ``"evo2_7b"``.
-
-        local_path (str | None): Optional path to local model weights directory.
-            If provided, loads model from local filesystem instead of downloading.
-            Default: ``None``.
-        return_logits (bool): Whether to include per-position logits in the output.
+        model_checkpoint (EVO2_MODEL_CHECKPOINTS): Evo2 weights variant.
+        local_path (str | None): Override HuggingFace download with a local weights directory.
+        prepend_bos (bool): Prepend a beginning-of-sequence token before scoring.
+        return_logits (bool): Include per-position logits in the output.
 
     Note:
-        - Evo2 uses byte-level tokenization with vocab_size=512
-        - DNA nucleotides: 'A'=65, 'C'=67, 'G'=71, 'T'=84, 'N'=78 (ASCII values)
-        - Evo2 is a large model; batch_size tuning may be needed for memory
+        - Evo2 uses byte-level tokenization with vocab_size=512.
+        - Evo2 is a large model; batch_size tuning may be needed for memory.
     """
 
     @model_validator(mode="after")
@@ -81,15 +76,21 @@ class Evo2ScoringConfig(CausalModelScoringConfig):
     model_checkpoint: EVO2_MODEL_CHECKPOINTS = ConfigField(
         title="Model Checkpoint",
         default="evo2_7b",
-        description="Evo2 model checkpoint to use",
+        description="Evo2 weights variant",
         reload_on_change=True,
     )
     local_path: str | None = ConfigField(
         title="Local Checkpoint Path",
         default=None,
-        description="Optional path to local model weights",
+        description="Override HuggingFace download with a local weights directory",
         hidden=True,
         reload_on_change=True,
+    )
+    prepend_bos: bool = ConfigField(
+        title="Prepend BOS",
+        default=False,
+        description="Prepend a beginning-of-sequence token before scoring",
+        advanced=True,
     )
     timeout: int = ConfigField(
         title="Timeout",
@@ -184,6 +185,7 @@ def run_evo2_score(
             "verbose": config.verbose,
             "batch_size": config.batch_size,
             "return_logits": config.return_logits,
+            "prepend_bos": config.prepend_bos,
             "seed": config.seed,
         },
         instance=instance,

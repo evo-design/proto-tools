@@ -94,18 +94,29 @@ ESM2 is a masked language model (similar to BERT) trained on protein sequences. 
 | `device` | `str` | `"cuda"` | Device: `"cuda"`, `"cpu"`, `"mps"` |
 | `verbose` | `bool` | `False` | Print progress messages |
 | `return_logits` | `bool` | `False` | Include per-position logits in output |
+| `repr_layer` | `int` | `-1` | Transformer layer index for embeddings (`-1` = last) |
+| `truncation_seq_length` | `int` | `1022` | Truncate sequences exceeding this many residues (ESM2 cap is 1022) |
 
 ### Sampling Tool (`ESM2SampleConfig`)
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `model_checkpoint` | `str` | `"esm2_t33_650M_UR50D"` | Model variant to use |
-| `temperature` | `float` | 1.0 | Sampling temperature (lower = conservative) |
-| `decoding_method` | `str` | `"entropy"` | Position selection: `"entropy"`, `"max_logit"`, `"random"` |
-| `num_mutations` | `int` | 1 | Positions to mutate per iteration |
+| `masking_strategy` | `MaskingStrategy` | random 30% | Composite — see fields below |
+| `temperature` | `float` | `1.0` | Softmax temperature for sampling |
 | `batch_size` | `int` | `1` | Sequences per GPU forward pass |
 | `device` | `str` | `"cuda"` | Device for inference |
 | `return_logits` | `bool` | `False` | Include per-position logits in output |
+
+**`MaskingStrategy` fields** (nested, controls which positions to mask):
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `method` | `Literal["random", "entropy", "max-logit"]` | `"random"` | Position-selection scoring method |
+| `num_mutations` | `int \| None` | `None` | Exact number of positions to mask |
+| `mask_fraction` | `float \| None` | `None` | Fraction of designable positions to mask (default ~30%) |
+| `fixed_positions` | `list[int] \| None` | `None` | 1-indexed positions that must NOT be masked |
+| `temperature` | `float` | `1.0` | Temperature for position selection (separate from sampling temperature) |
 
 ### Scoring Tool (`ESM2ScoringConfig`)
 

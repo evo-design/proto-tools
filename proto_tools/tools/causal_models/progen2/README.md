@@ -16,7 +16,7 @@ This learned distribution enables two key applications: **generation** (sampling
 
 | Tool Key | Description | Output |
 |----------|-------------|--------|
-| `progen2-sample` | Autoregressive protein generation from prompts | Generated sequences, optional per-token logits |
+| `progen2-sample` | Autoregressive protein generation from prompts | Generated sequences, optional per-position logits |
 | `progen2-score` | Autoregressive likelihood scoring | Per-sequence metrics (log-likelihood, perplexity), optional logits |
 
 ## Model Variants
@@ -24,8 +24,9 @@ This learned distribution enables two key applications: **generation** (sampling
 | Checkpoint | Parameters | Training Data | Use Case |
 |------------|-----------|---------------|----------|
 | `progen2-small` | 151M | UniRef90 | Fast prototyping, testing |
-| `progen2-medium` | 764M | UniRef90 | Balanced speed/quality |
-| `progen2-oas` | 151M | OAS (antibodies) | Antibody sequence generation |
+| `progen2-medium` | 754M | UniRef90 | Balanced speed/quality |
+| `progen2-base` | 754M | UniRef90 | Base checkpoint (alt to medium) |
+| `progen2-oas` | 754M | OAS (antibodies) | Antibody sequence generation |
 | `progen2-large` | 2.7B | UniRef90 | Production use (default) |
 | `progen2-BFD90` | 2.7B | BFD90 | Broader protein diversity |
 | `progen2-xlarge` | 6.4B | UniRef90 | Highest quality, slowest |
@@ -78,8 +79,9 @@ This learned distribution enables two key applications: **generation** (sampling
 | `truncate_at_stop` | `bool` | `True` | Truncate at stop tokens (`1` or `2`) |
 | `strip_special_tokens` | `bool` | `True` | Remove special tokens from output |
 | `prepend_prompt` | `bool` | `True` | Include prompt in output sequence |
+| `num_samples` | `int` | `1` | Independent samples drawn per prompt |
 | `batch_size` | `int` | `1` | Sequences per GPU forward pass |
-| `return_logits` | `bool` | `False` | Include per-token logits in output |
+| `return_logits` | `bool` | `False` | Include per-position logits in output |
 
 ### Scoring (`ProGen2ScoringConfig`)
 

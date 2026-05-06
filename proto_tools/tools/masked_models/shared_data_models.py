@@ -73,29 +73,26 @@ class MaskedModelInput(BaseToolInput):
         return sum(len(seq) for seq in self.sequences)
 
 
-class MaskedModelConfig(BaseConfig):
-    """Base configuration for masked language model tools.
-
-    Provides common configuration parameters shared across all masked protein
-    language model tools, including batch processing, device management, and
-    execution settings.
+class MaskedModelEmbeddingsConfig(BaseConfig):
+    """Base configuration for masked language model embedding tools.
 
     Attributes:
         batch_size (int): Number of sequences to process simultaneously on GPU.
             Larger batches improve throughput but use more GPU memory.
-        device (str): Device to run the model on (e.g., ``"cuda"``, ``"cpu"``).
+        device (str): Device to run the model on.
     """
 
     batch_size: int = ConfigField(
         title="Batch Size",
         default=1,
         ge=1,
-        description="Number of sequences to process simultaneously on GPU",
+        description="Sequences per GPU forward pass; raise for throughput, lower if OOM",
+        advanced=True,
     )
     device: str = ConfigField(
         title="Device",
         default="cuda",
-        description="Device to run the model on (e.g., 'cuda', 'cpu')",
+        description="Device to run the model on",
         hidden=True,
         include_in_key=False,
     )
@@ -147,7 +144,7 @@ class SequenceEmbedding(BaseModel):
     )
 
 
-class MaskedModelOutput(BaseToolOutput):
+class MaskedModelEmbeddingsOutput(BaseToolOutput):
     """Base output for masked language model embedding tools.
 
     Contains per-sequence embedding results bundled as ``SequenceEmbedding``
@@ -204,32 +201,73 @@ class MaskedModelOutput(BaseToolOutput):
 
 
 # ============================================================================
-# Scoring Schemas
+# Sampling Schemas
 # ============================================================================
-class MaskedModelScoringInput(BaseToolInput):
-    """Input for masked model sequence scoring tools.
+class MaskedModelSampleConfig(BaseConfig):
+    """Base configuration for masked language model sampling tools.
 
     Attributes:
-        sequences (list[str]): Protein sequences to score. Can be provided as a single
-            string or a list of strings.
+        batch_size (int): Number of sequences to process simultaneously on GPU.
+            Larger batches improve throughput but use more GPU memory.
+        device (str): Device to run the model on.
     """
 
-    sequences: list[str] = InputField(
-        description="Protein sequences to score",
-        examples=["MVLSPADKTNVKAAW", ["MVLSP", "GGGS"]],
+    batch_size: int = ConfigField(
+        title="Batch Size",
+        default=1,
+        ge=1,
+        description="Sequences per GPU forward pass; raise for throughput, lower if OOM",
+        advanced=True,
+    )
+    device: str = ConfigField(
+        title="Device",
+        default="cuda",
+        description="Device to run the model on",
+        hidden=True,
+        include_in_key=False,
     )
 
-    @field_validator("sequences", mode="before")
-    @classmethod
-    def normalize_sequences(cls, v: Any) -> Any:
-        """Convert single string to list of strings."""
-        if isinstance(v, str):
-            return [v]
-        if not v:
-            raise ValueError("sequences must not be empty")
-        return v
+
+class MaskedModelSampleOutput(BaseToolOutput):
+    """Base output for masked language model sampling tools.
+
+    Attributes:
+        sequences (list[str]): Sampled or restored protein sequences.
+    """
+
+    sequences: list[str] = Field(
+        description="Sampled/restored protein sequences",
+    )
+
+    @property
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
+        return ["fasta", "txt", "json"]
+
+    @property
+    def output_format_default(self) -> str:
+        """Return the default output format."""
+        return "fasta"
+
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
+        path = Path(export_path).with_suffix(f".{file_format}")
+
+        if file_format == "fasta":
+            with open(path, "w") as f:
+                f.writelines(f">seq_{i}\n{seq}\n" for i, seq in enumerate(self.sequences))
+        elif file_format == "txt":
+            with open(path, "w") as f:
+                f.writelines(f"{seq}\n" for seq in self.sequences)
+        elif file_format == "json":
+            with open(path, "w") as f:
+                json.dump(self.sequences, f, indent=2)
+        else:
+            raise ValueError(f"Unsupported format: {file_format}")
 
 
+# ============================================================================
+# Scoring Schemas
+# ============================================================================
 class MaskedModelScoringConfig(BaseConfig):
     """Base configuration for masked model sequence scoring.
 
@@ -239,13 +277,16 @@ class MaskedModelScoringConfig(BaseConfig):
             if encountering out-of-memory errors.
         device (str): Device to run the model on.
         verbose (bool): Whether to print status messages.
+        return_logits (bool): Include per-position logits in the output (large; disable to
+            save memory).
     """
 
     batch_size: int = ConfigField(
         title="Batch Size",
         default=1,
         ge=1,
-        description="Number of sequences to process simultaneously on GPU",
+        description="Sequences per GPU forward pass; raise for throughput, lower if OOM",
+        advanced=True,
     )
     device: str = ConfigField(
         title="Device",
@@ -253,6 +294,12 @@ class MaskedModelScoringConfig(BaseConfig):
         description="Device to run the model on",
         hidden=True,
         include_in_key=False,
+    )
+    return_logits: bool = ConfigField(
+        title="Return Logits",
+        default=False,
+        description="Include per-position logits in the output (large; disable to save memory)",
+        advanced=True,
     )
 
 

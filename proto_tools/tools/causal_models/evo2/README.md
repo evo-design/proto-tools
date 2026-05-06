@@ -85,15 +85,16 @@ Evo2 uses byte-level tokenization (vocab_size=512), where each DNA base maps to 
 | `top_k` | `int` | `4` | Top-k sampling limit |
 | `top_p` | `float` | `1.0` | Nucleus sampling threshold |
 | `prepend_prompt` | `bool` | `True` | Include prompt in output sequence |
-| `cached_generation` | `bool` | `True` | Use Vortex's internal per-call KV cache |
+| `cached_generation` | `bool` | `True` | Use the model's per-call KV cache |
 | `force_prompt_threshold` | `Optional[int]` | `None` | Prefill tokens before prompt forcing |
 | `max_seqlen` | `Optional[int]` | `None` | Max sequence length for KV cache |
+| `skip_special_tokens` | `bool` | `False` | Filter EOS/PAD bytes from detokenized output |
 | `stop_at_eos` | `bool` | `True` | Stop at end-of-sequence token |
 | `old_kv_cache` | `Optional[Evo2KVCacheRef]` | `None` | Worker-local KV cache handle from a previous persistent-worker call |
 | `return_kv_cache` | `bool` | `False` | Return worker-local KV cache handles for continued generation |
 | `batch_size` | `int` | `1` | Sequences per GPU forward pass |
 | `device` | `str` | `cuda` | Device to run the model on |
-| `return_logits` | `bool` | `False` | Include per-token logits in output |
+| `return_logits` | `bool` | `False` | Include per-position logits in output |
 
 ### Scoring (`Evo2ScoringConfig`)
 
@@ -101,6 +102,7 @@ Evo2 uses byte-level tokenization (vocab_size=512), where each DNA base maps to 
 |-----------|------|---------|-------------|
 | `model_checkpoint` | `str` | `evo2_7b` | Model checkpoint to use |
 | `local_path` | `Optional[str]` | `None` | Local weights path |
+| `prepend_bos` | `bool` | `False` | Prepend a beginning-of-sequence token before scoring |
 | `batch_size` | `int` | `1` | Sequences per GPU forward pass |
 | `device` | `str` | `cuda` | Device to run the model on |
 | `return_logits` | `bool` | `False` | Include per-position logits |
@@ -123,7 +125,7 @@ Evo2 uses byte-level tokenization (vocab_size=512), where each DNA base maps to 
 | Field | Type | Description |
 |-------|------|-------------|
 | `sequences` | `List[str]` | Generated DNA sequences |
-| `logits` | `Optional[List]` | Per-token logits (if requested) |
+| `logits` | `Optional[List]` | Per-position logits (if requested) |
 | `kv_caches` | `Optional[List[Evo2KVCacheRef]]` | Worker-local KV cache handles for continued generation |
 
 Export formats: `fasta`, `txt`, `json`

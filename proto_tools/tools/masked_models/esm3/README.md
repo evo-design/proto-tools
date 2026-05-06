@@ -69,19 +69,31 @@ All tools take a tool-specific input with one or more protein sequences:
 | `device` | `str` | `cuda` | `cuda`, `cpu`, or `mps` |
 | `verbose` | `bool` | `False` | Print progress |
 | `return_logits` | `bool` | `False` | Include per-position logits |
+| `repr_layer` | `int` | `-1` | Transformer layer index for embeddings; `-1` returns post-norm output, others select pre-norm |
 
 ### Sampling Tool (`ESM3SampleConfig`)
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `model_checkpoint` | `str` | `esm3_sm_open_v1` | Model variant |
-| `temperature` | `float` | `1.0` | Sampling temperature |
-| `decoding_method` | `str` | `entropy` | Position selection method |
-| `num_mutations` | `int` | `1` | Mutations per iteration |
+| `masking_strategy` | `MaskingStrategy` | random 30% | Composite — see fields below |
+| `temperature` | `float` | `1.0` | Softmax temperature for per-position AA sampling |
 | `batch_size` | `int` | `1` | Sequences per GPU forward pass |
 | `device` | `str` | `cuda` | Device |
 | `verbose` | `bool` | `False` | Print progress |
 | `return_logits` | `bool` | `False` | Include per-position logits |
+
+**`MaskingStrategy` fields** (nested, controls which positions to mask):
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `method` | `Literal["random", "entropy", "max-logit"]` | `"random"` | Position-selection scoring method |
+| `num_mutations` | `int \| None` | `None` | Exact number of positions to mask |
+| `mask_fraction` | `float \| None` | `None` | Fraction of designable positions to mask (default ~30%) |
+| `fixed_positions` | `list[int] \| None` | `None` | 1-indexed positions that must NOT be masked |
+| `temperature` | `float` | `1.0` | Temperature for position selection (separate from sampling temperature) |
+
+Iterative-refinement decoding parameters (`top_p`, `num_steps`, `schedule`, `strategy`, `temperature_annealing`) are not currently exposed; the standalone runs single-pass logit sampling.
 
 ### Scoring Tool (`ESM3ScoringConfig`)
 

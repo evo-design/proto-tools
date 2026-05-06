@@ -13,6 +13,9 @@ proto_install_pytorch
 echo "Installing dependencies from requirements.txt..."
 uv pip install -r requirements.txt
 
+# bioconda::anarci pulls HMMER + germline DBs; needed for ablang's align=True path.
+"$MAMBA_BIN" install -p "$VENV_PATH" -c conda-forge -c bioconda -y anarci
+
 # Pre-fetch ~825 MB of ablang weights into PROTO_MODEL_CACHE and symlink the
 # cache into ablang2's hardcoded $(dirname ablang2.__file__)/model-weights-<name>
 # lookup path. Bypasses ablang2.download_model's brittle requests.get (no

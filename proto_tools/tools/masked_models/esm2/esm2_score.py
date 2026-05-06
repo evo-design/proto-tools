@@ -8,11 +8,12 @@ from typing import Any, Literal
 
 from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelInput,
+    MaskedModelScoringConfig,
     MaskedModelScoringMetrics,
     MaskedModelScoringOutput,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import BaseConfig, ConfigField, ToolInstance
+from proto_tools.utils import ConfigField, ToolInstance
 
 logger = logging.getLogger(__name__)
 
@@ -35,61 +36,32 @@ ESM2ScoringOutput = MaskedModelScoringOutput
 
 
 # Config:
-class ESM2ScoringConfig(BaseConfig):
+class ESM2ScoringConfig(MaskedModelScoringConfig):
     """Configuration for ESM2 sequence scoring.
 
     Computes true MLM pseudo-perplexity by masking each position individually and
     computing P(x_i | x_{-i}). Uses batched processing for efficiency.
 
     Attributes:
-        model_checkpoint (Literal[ESM2_MODEL_CHECKPOINTS]): ESM2 model checkpoint to use. Options include
-            ``"esm2_t6_8M_UR50D"`` through ``"esm2_t48_15B_UR50D"``.
-            Default: ``"esm2_t33_650M_UR50D"``.
-
-        batch_size (int): Number of masked variants per GPU forward pass. Larger
-            batches improve throughput but use more memory. Default: ``1``.
-
-        device (str): Device to run the model on. Options include ``"cuda"``,
-            ``"cpu"``, ``"mps"``, or specific GPU devices like ``"cuda:0"``.
-            Default: ``"cuda"``.
-
-        verbose (bool): Whether to print status messages during scoring.
-            Default: ``False``.
-
-        return_logits (bool): Whether to include per-position logits in the output.
-            When ``True``, returns logits for each sequence. When ``False``, only
-            returns metrics (saves memory and serialization time). Default: ``False``.
+        model_checkpoint (ESM2_MODEL_CHECKPOINTS): ESM2 weights variant.
+        batch_size (int): Masked variants per forward pass, pooled across all input sequences.
+            Larger batches improve throughput but use more memory.
+        device (str): Device to run the model on.
+        verbose (bool): Print status messages during scoring.
+        return_logits (bool): Include per-position logits in the output (large; disable to
+            save memory).
 
     Note:
-        - Logits represent P(aa | context with position i masked) for each position
-        - The 20 amino acids in vocab are: ACDEFGHIKLMNPQRSTVWY
-        - Ambiguous amino acids (X, B, Z) are excluded from perplexity calculation
+        - Logits represent P(aa | context with position i masked) for each position.
+        - The 20 amino acids in vocab are: ACDEFGHIKLMNPQRSTVWY.
+        - Ambiguous amino acids (X, B, Z) are excluded from perplexity calculation.
     """
 
-    model_checkpoint: Literal[ESM2_MODEL_CHECKPOINTS] = ConfigField(
+    model_checkpoint: ESM2_MODEL_CHECKPOINTS = ConfigField(
         title="ESM2 Model Checkpoint",
         default="esm2_t33_650M_UR50D",
-        description="ESM2 model checkpoint to use",
+        description="ESM2 weights variant; trade off speed vs scoring fidelity",
         reload_on_change=True,
-    )
-    batch_size: int = ConfigField(
-        title="Batch Size",
-        default=1,
-        ge=1,
-        description="Number of sequences to process simultaneously on GPU",
-    )
-    device: str = ConfigField(
-        title="Device",
-        default="cuda",
-        description="Device to run the model on",
-        hidden=True,
-        include_in_key=False,
-    )
-    return_logits: bool = ConfigField(
-        title="Return Logits",
-        default=False,
-        description="Whether to include per-position logits in the output. Disable to save memory.",
-        advanced=True,
     )
 
 

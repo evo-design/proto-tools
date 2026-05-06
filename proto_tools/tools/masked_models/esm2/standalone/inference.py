@@ -48,6 +48,8 @@ class ESM2Model:
         device: str = "cuda",
         verbose: bool = False,
         return_logits: bool = False,
+        repr_layer: int = -1,
+        truncation_seq_length: int = 1022,
     ) -> dict[str, torch.Tensor]:
         """Run ESM2 inference on protein sequences.
 
@@ -58,6 +60,10 @@ class ESM2Model:
             device: Device to run on
             verbose: Whether to print progress
             return_logits: Whether to return logits
+            repr_layer: Hidden-state layer index for embeddings. ``-1`` is the
+                last (top) layer.
+            truncation_seq_length: Truncate sequences exceeding this many
+                residues; ESM2's positional embedding cap is 1022.
 
         Returns:
             Dictionary with mean_embeddings, attention_masks, and optionally logits
@@ -73,6 +79,9 @@ class ESM2Model:
             raise ValueError("esm2: __call__ requires at least one input sequence")
         if any(len(seq) == 0 for seq in sequences):
             raise ValueError("esm2: __call__ does not support empty sequences")
+
+        # Apply truncation up front so downstream sizing reflects the truncated lengths.
+        sequences = [seq[:truncation_seq_length] for seq in sequences]
 
         # Get the max sequence length
         max_seq_len = max(len(seq) for seq in sequences)
@@ -106,8 +115,8 @@ class ESM2Model:
                     output_hidden_states=True,
                 )
 
-                # Extract embeddings
-                embeddings = batch_outputs["hidden_states"][-1][:, 1:-1, :]  # Remove special tokens
+                # Extract embeddings from the requested hidden layer
+                embeddings = batch_outputs["hidden_states"][repr_layer][:, 1:-1, :]  # Remove special tokens
 
                 # Extract attention mask
                 attention_mask = batch_inputs["attention_mask"][:, 1:-1]
@@ -488,6 +497,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             device=input_dict["device"],
             verbose=input_dict["verbose"],
             return_logits=input_dict["return_logits"],
+            repr_layer=input_dict["repr_layer"],
+            truncation_seq_length=input_dict["truncation_seq_length"],
         )
     if operation == "sample":
         return _model.sample(

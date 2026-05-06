@@ -355,8 +355,13 @@ class AbLangModel:
         batch_size: int = 1,
         device: str = "cuda",
         verbose: bool = False,
+        return_logits: bool = False,
     ) -> dict[str, Any]:
-        """Extract sequence embeddings (768-dim for ablang1, 480-dim for ablang2)."""
+        """Extract sequence embeddings (768-dim for ablang1, 480-dim for ablang2).
+
+        When ``return_logits=True``, also runs AbLang's ``likelihood`` mode and
+        returns per-residue amino-acid logits restricted to the 20 standard AAs.
+        """
         self._ensure_loaded(device, verbose)
 
         if not sequences:
@@ -367,6 +372,7 @@ class AbLangModel:
 
         all_mean_embeddings: list[Any] = []
         all_attention_masks: list[list[int]] = []
+        all_logits: list[Any] | None = [] if return_logits else None
 
         for i in range(0, len(sequences), batch_size):
             batch = sequences[i : i + batch_size]
@@ -382,10 +388,31 @@ class AbLangModel:
             all_mean_embeddings.extend(mean_embeddings)
             all_attention_masks.extend(attention_masks)
 
+            if all_logits is not None:
+                all_logits.extend(self._per_position_aa_logits(formatted))
+
         return {
             "mean_embeddings": all_mean_embeddings,
             "attention_masks": all_attention_masks,
+            "logits": all_logits,
         }
+
+    def _per_position_aa_logits(self, formatted: list[Any]) -> list[list[list[float]]]:
+        """Run a likelihood-mode forward pass and return per-residue AA-only logits.
+
+        Doubles inference time vs the primary forward pass. Rows include
+        format-time special tokens; columns map to ``STANDARD_AMINO_ACIDS``.
+        Both ablang1 and ablang2 vocabs share AA IDs 1-20.
+        """
+        raw_logits = self.model.likelihood(formatted) if self._is_ablang1 else self.model(formatted, mode="likelihood")
+        if self._ablang_vocab is None:
+            raise RuntimeError("ablang: vocabulary unavailable after load")
+        aa_cols = [self._ablang_vocab[aa] for aa in STANDARD_AMINO_ACIDS]
+        out: list[list[list[float]]] = []
+        for arr in raw_logits:
+            arr_list = arr.tolist() if hasattr(arr, "tolist") else list(arr)
+            out.append([[row[c] for c in aa_cols] for row in arr_list])
+        return out
 
     # ========================================================================
     # Scoring
@@ -398,8 +425,13 @@ class AbLangModel:
         batch_size: int = 1,
         device: str = "cuda",
         verbose: bool = False,
+        return_logits: bool = False,
     ) -> dict[str, Any]:
-        """Score antibody sequences using pseudo-log-likelihood or confidence."""
+        """Score antibody sequences using pseudo-log-likelihood or confidence.
+
+        When ``return_logits=True``, also runs AbLang's ``likelihood`` mode and
+        returns per-residue AA-only logits alongside the scalar metrics.
+        """
         self._ensure_loaded(device, verbose)
 
         if not sequences:
@@ -414,6 +446,7 @@ class AbLangModel:
             )
 
         all_metrics: list[dict[str, float]] = []
+        all_logits: list[Any] | None = [] if return_logits else None
 
         for i in range(0, len(sequences), batch_size):
             batch = sequences[i : i + batch_size]
@@ -435,7 +468,14 @@ class AbLangModel:
                     m["perplexity"] = math.exp(-score_val)
                 all_metrics.append(m)
 
-        return {"metrics": all_metrics}
+            if all_logits is not None:
+                all_logits.extend(self._per_position_aa_logits(formatted))
+
+        return {
+            "metrics": all_metrics,
+            "logits": all_logits,
+            "vocab": list(STANDARD_AMINO_ACIDS) if return_logits else None,
+        }
 
     # ========================================================================
     # Sampling / Restore
@@ -447,11 +487,20 @@ class AbLangModel:
         batch_size: int = 1,
         device: str = "cuda",
         verbose: bool = False,
+        align: bool = False,
+        return_logits: bool = False,
     ) -> dict[str, Any]:
         """Restore masked (_) positions in antibody sequences.
 
         The user-facing API uses ``_`` as the standard mask token. This method
         converts ``_`` to ``*`` (ablang's native mask token) before processing.
+
+        When ``align=True``, the AbLang/AbLang2 ``restore`` method runs ANARCI
+        first, letting it extend unknown-length termini. ANARCI is bundled in
+        the env via ``bioconda::anarci``.
+
+        When ``return_logits=True``, runs an additional ``likelihood`` mode pass
+        on the restored sequences and returns per-residue AA-only logits.
         """
         self._ensure_loaded(device, verbose)
 
@@ -462,19 +511,35 @@ class AbLangModel:
         sequences = [seq.replace("_", "*") for seq in sequences]
 
         if verbose:
-            logger.info(f"Restoring masked positions in {len(sequences)} sequences (batch_size={batch_size})")
+            logger.info(
+                "Restoring masked positions in %d sequences (batch_size=%d, align=%s)",
+                len(sequences),
+                batch_size,
+                align,
+            )
 
         restored_sequences: list[str] = []
+        all_logits: list[Any] | None = [] if return_logits else None
+
         for i in range(0, len(sequences), batch_size):
             batch = sequences[i : i + batch_size]
             formatted = self._format_sequences(batch)
 
-            restored = self.model.restore(formatted) if self._is_ablang1 else self.model(formatted, mode="restore")
+            if self._is_ablang1:
+                restored = self.model.restore(formatted, align=align)
+            else:
+                restored = self.model(formatted, mode="restore", align=align)
 
             # Strip <> special tokens and padding dashes from library output
-            restored_sequences.extend(str(s).replace("<", "").replace(">", "").replace("-", "") for s in restored)
+            restored_clean = [str(s).replace("<", "").replace(">", "").replace("-", "") for s in restored]
+            restored_sequences.extend(restored_clean)
 
-        return {"sequences": restored_sequences}
+            if all_logits is not None:
+                # Re-format the restored sequences and run a likelihood pass on them so
+                # logits reflect the final filled-in positions, not the masked input.
+                all_logits.extend(self._per_position_aa_logits(self._format_sequences(restored_clean)))
+
+        return {"sequences": restored_sequences, "logits": all_logits}
 
     # ========================================================================
     # Gradient
@@ -694,6 +759,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             batch_size=input_dict["batch_size"],
             device=input_dict["device"],
             verbose=input_dict["verbose"],
+            return_logits=input_dict["return_logits"],
         )
     if operation == "score":
         return _model.score(
@@ -702,6 +768,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             batch_size=input_dict["batch_size"],
             device=input_dict["device"],
             verbose=input_dict["verbose"],
+            return_logits=input_dict["return_logits"],
         )
     if operation == "sample":
         return _model.sample(
@@ -709,6 +776,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             batch_size=input_dict["batch_size"],
             device=input_dict["device"],
             verbose=input_dict["verbose"],
+            align=input_dict["align"],
+            return_logits=input_dict["return_logits"],
         )
     if operation == "compute_gradient":
         return _model.compute_gradient(

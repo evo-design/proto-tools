@@ -26,6 +26,7 @@ from proto_tools.utils import (
 logger = logging.getLogger(__name__)
 
 EVO1_MODEL_CHECKPOINTS = Literal[
+    "evo-1.5-8k-base",
     "evo-1-8k-base",
     "evo-1-131k-base",
     "evo-1-8k-crispr",
@@ -61,40 +62,57 @@ class Evo1SampleConfig(CausalModelSampleConfig):
     """Configuration for Evo1 DNA sequence sampling.
 
     Attributes:
-        prepend_prompt (bool): Whether to include the input prompt at the
-            start of each generated sequence.
-        model_name (EVO1_MODEL_CHECKPOINTS): Evo1 model checkpoint to use.
-        top_k (int): Number of top tokens to consider for sampling.
-        num_tokens (int): Number of tokens to generate per prompt.
-
-    Note:
-        Inherits temperature, top_p, prepend_prompt, batch_size, and device
-        from CausalModelSampleConfig. Overrides prepend_prompt default to
-        ``False`` (Evo1 does not prepend by default).
+        prepend_prompt (bool): Prepend the input prompt to each generated sequence;
+            when ``False`` (the default), only newly generated tokens are returned.
+        temperature (float): Softmax temperature; lower values are more deterministic.
+        top_p (float): Nucleus sampling threshold over per-position token probabilities.
+        batch_size (int): Number of prompts to process simultaneously on GPU.
+        model_name (EVO1_MODEL_CHECKPOINTS): Evo1 weights variant; ``evo-1-8k-*`` variants
+            use an 8,192-token context, ``evo-1-131k-base`` extends to 131,072 tokens, and
+            ``-crispr``/``-transposon`` are domain fine-tunes.
+        top_k (int): Limit sampling to the top-k most probable tokens at each step.
+            Defaults to ``4`` (one per DNA base).
+        num_tokens (int): Number of new tokens to generate per prompt (excludes prompt).
+        cached_generation (bool): Use the KV cache for autoregressive generation.
+        force_prompt_threshold (int): Number of tokens to prefill in parallel before
+            switching to autoregressive prompt forcing; lower values reduce peak memory.
     """
 
     prepend_prompt: bool = ConfigField(
         title="Prepend Prompt",
         default=False,
-        description="Whether to prepend the input prompt to the generated sequence",
+        description="Include the input prompt at the start of each generated sequence",
     )
     model_name: EVO1_MODEL_CHECKPOINTS = ConfigField(
         title="Model Name",
         default="evo-1-8k-base",
-        description="Evo1 model checkpoint to use",
+        description="Evo1 weights variant",
         reload_on_change=True,
     )
     top_k: int = ConfigField(
         title="Top K",
         default=4,
         ge=1,
-        description="Number of top tokens to consider for sampling",
+        description="Limit sampling to the top-k most probable tokens at each step",
     )
     num_tokens: int = ConfigField(
         title="Number of Tokens",
         default=100,
         ge=1,
-        description="Number of tokens to generate per prompt",
+        description="Number of new tokens to generate per prompt",
+    )
+    cached_generation: bool = ConfigField(
+        title="Cached Generation",
+        default=True,
+        description="Use the KV cache for autoregressive generation",
+        advanced=True,
+    )
+    force_prompt_threshold: int = ConfigField(
+        title="Force Prompt Threshold",
+        default=128,
+        ge=1,
+        description="Tokens to prefill in parallel before switching to prompt forcing",
+        hidden=True,
     )
     timeout: int = ConfigField(
         title="Timeout",
@@ -170,6 +188,8 @@ def run_evo1_sample(
             "device": config.device,
             "verbose": config.verbose,
             "seed": config.seed,
+            "cached_generation": config.cached_generation,
+            "force_prompt_threshold": config.force_prompt_threshold,
         },
         instance=instance,
         config=config,

@@ -405,6 +405,49 @@ def test_ablang_score_paired():
 
 
 @pytest.mark.uses_gpu
+def test_ablang_score_return_logits():
+    """``return_logits=True`` populates per-position AA logits and vocab; default leaves them ``None``."""
+    inputs = AbLangScoringInput(antibodies=[Antibody(heavy_chain=VH_SEQ), Antibody(heavy_chain=VH_SEQ[:50])])
+
+    default = run_ablang_score(inputs, AbLangScoringConfig())
+    validate_output(default)
+    assert all(s.logits is None and s.vocab is None for s in default.scores)
+
+    with_logits = run_ablang_score(inputs, AbLangScoringConfig(return_logits=True))
+    validate_output(with_logits)
+    assert with_logits.vocab is not None and len(with_logits.vocab) == 20
+    for score in with_logits.scores:
+        assert score.logits is not None
+        assert all(len(row) == 20 for row in score.logits)
+        assert all(math.isfinite(v) for row in score.logits for v in row)
+        assert score.vocab == list(PROTEIN_AMINO_ACIDS)
+
+
+@pytest.mark.uses_gpu
+def test_ablang_sample_return_logits():
+    """``return_logits=True`` returns per-position AA logits over the restored sequences."""
+    masked = [
+        Antibody(heavy_chain=VH_SEQ[:4] + "_" + VH_SEQ[5:]),
+        Antibody(heavy_chain=VH_SEQ[:50]),
+    ]
+    inputs = AbLangSampleInput(antibodies=masked)
+
+    default = run_ablang_sample(inputs, AbLangSampleConfig())
+    validate_output(default)
+    assert default.logits is None
+
+    with_logits = run_ablang_sample(inputs, AbLangSampleConfig(return_logits=True))
+    validate_output(with_logits)
+    assert with_logits.logits is not None
+    assert len(with_logits.logits) == len(masked)
+    for restored, seq_logits in zip(with_logits.sequences, with_logits.logits, strict=True):
+        # Restored output rows include format-time special tokens; AA columns are 20.
+        assert all(len(row) == 20 for row in seq_logits)
+        assert all(math.isfinite(v) for row in seq_logits for v in row)
+        assert len(seq_logits) >= len(restored)
+
+
+@pytest.mark.uses_gpu
 def test_ablang_score_confidence_mode():
     """Test confidence scoring returns finite scores for all chain configurations."""
     for ab in [

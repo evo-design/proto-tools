@@ -37,6 +37,9 @@ class ESM3Model:
         self.amino_acid_token_ids: Any = None
         self.device: str | None = None
         self.model: Any = None
+        # Captured by the TransformerStack forward hook (per call); ESM3.forward drops these.
+        self._captured_post_norm: torch.Tensor | None = None
+        self._captured_hiddens: list[torch.Tensor] = []
 
     def __call__(
         self,
@@ -45,6 +48,7 @@ class ESM3Model:
         device: str = "cuda",
         verbose: bool = False,
         return_logits: bool = True,
+        repr_layer: int = -1,
     ) -> dict[str, torch.Tensor]:
         """Run ESM3 inference on protein sequences.
 
@@ -55,6 +59,8 @@ class ESM3Model:
             device: Device to run on
             verbose: Whether to print progress
             return_logits: Whether to return logits
+            repr_layer: Transformer layer index. ``-1`` returns post-norm output;
+                ``N`` returns pre-norm of block N (matches ESM2/ESMC).
 
         Returns:
             Dictionary with mean_embeddings, attention_masks, and optionally logits
@@ -94,15 +100,28 @@ class ESM3Model:
             # Move the inputs to the correct device
             batch_inputs = {k: v.to(device) for k, v in batch_inputs.items()}
 
-            # Forward pass; sequence_id isolates pad tokens from attention
+            # Reset hook captures; sequence_id isolates pad tokens from attention.
+            self._captured_post_norm = None
+            self._captured_hiddens = []
             with torch.inference_mode():
                 batch_outputs = self.model(
                     sequence_tokens=batch_inputs["input_ids"],
                     sequence_id=batch_inputs["attention_mask"].long(),
                 )
 
-                # Append the embeddings
-                embeddings = batch_outputs.embeddings[:, 1:-1, :]  # Remove special tokens
+                # -1: post-norm last (matches ESM2/ESMC -1 semantic).
+                # N:  pre-norm of block N from per-block hiddens.
+                if repr_layer == -1:
+                    layer_out = self._captured_post_norm
+                    if layer_out is None:
+                        raise RuntimeError("esm3: TransformerStack hook did not capture post-norm output")
+                else:
+                    if not self._captured_hiddens:
+                        raise RuntimeError("esm3: TransformerStack hook did not capture hiddens")
+                    if repr_layer >= len(self._captured_hiddens):
+                        raise IndexError(f"esm3: repr_layer={repr_layer} >= {len(self._captured_hiddens)} blocks")
+                    layer_out = self._captured_hiddens[repr_layer]
+                embeddings = layer_out[:, 1:-1, :]  # strip BOS/EOS
                 attention_mask = batch_inputs["attention_mask"][:, 1:-1]
 
                 # Average over embeddings
@@ -273,10 +292,11 @@ class ESM3Model:
                 return_tensors="pt",
             )
             input_ids = batch_inputs["input_ids"].to(device_obj)
+            attention_mask = batch_inputs["attention_mask"].to(device_obj)
 
-            # Forward pass
+            # Forward pass; sequence_id isolates pad tokens from attention.
             with torch.inference_mode():
-                outputs = self.model(sequence_tokens=input_ids)
+                outputs = self.model(sequence_tokens=input_ids, sequence_id=attention_mask.long())
                 # AA logits: remove BOS/EOS, keep only standard amino acids
                 aa_logits = outputs.sequence_logits[:, 1:-1, :][:, :, self.amino_acid_token_ids]
 
@@ -486,6 +506,15 @@ class ESM3Model:
             [self.tokenizer.get_vocab()[aa] for aa in AMINO_ACIDS_LIST],
             device=device,
         )
+
+        # TransformerStack returns (post_norm, pre_norm_last, hiddens); ESM3.forward
+        # discards positions 0 and 2. Capture them so repr_layer can pick any layer.
+        def _capture(_module: Any, _inputs: Any, outputs: Any) -> None:
+            self._captured_post_norm = outputs[0] if len(outputs) >= 1 else None
+            self._captured_hiddens = list(outputs[2]) if len(outputs) >= 3 else []
+
+        self.model.transformer.register_forward_hook(_capture)
+
         self.device = device
         self._loaded = True
 
@@ -539,6 +568,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             device=input_dict["device"],
             verbose=input_dict["verbose"],
             return_logits=input_dict["return_logits"],
+            repr_layer=input_dict["repr_layer"],
         )
     if operation == "sample":
         return _model.sample(

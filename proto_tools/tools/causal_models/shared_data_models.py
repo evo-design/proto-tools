@@ -63,7 +63,7 @@ class CausalModelScoringConfig(BaseConfig):
         title="Batch Size",
         default=1,
         ge=1,
-        description="Number of sequences to process simultaneously on GPU",
+        description="Sequences per GPU forward pass; raise for throughput, lower if OOM",
         advanced=True,
     )
     device: str = ConfigField(
@@ -76,7 +76,7 @@ class CausalModelScoringConfig(BaseConfig):
     return_logits: bool = ConfigField(
         title="Return Logits",
         default=False,
-        description="Whether to include per-position logits in the output",
+        description="Include per-position logits in the output (large; disable to save memory)",
         advanced=True,
     )
 
@@ -251,21 +251,21 @@ class CausalModelSampleConfig(BaseConfig):
         title="Temperature",
         default=1.0,
         gt=0.0,
-        description="Sampling temperature controlling randomness",
+        description="Softmax temperature for sampling; lower is more deterministic",
     )
     top_p: float = ConfigField(
         title="Top P",
         default=1.0,
         gt=0.0,
         le=1.0,
-        description="Nucleus sampling threshold",
+        description="Nucleus sampling cutoff over per-position token probabilities",
         advanced=True,
     )
     batch_size: int = ConfigField(
         title="Batch Size",
         default=1,
         ge=1,
-        description="Number of prompts to process simultaneously on GPU",
+        description="Prompts per GPU forward pass; raise for throughput, lower if OOM",
         advanced=True,
     )
     device: str = ConfigField(

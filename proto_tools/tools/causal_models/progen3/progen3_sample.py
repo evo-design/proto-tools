@@ -1,7 +1,4 @@
-"""proto_tools/tools/causal_models/progen3/progen3_sample.py.
-
-ProGen3 sampling tool.
-"""
+"""ProGen3 sampling tool."""
 
 import logging
 from typing import Any, Literal
@@ -49,63 +46,30 @@ class ProGen3SampleConfig(CausalModelSampleConfig):
 
     Attributes:
         batch_size (int): Number of sequences to process simultaneously.
-            Default: 1.
-        model_checkpoint (PROGEN3_MODEL_CHECKPOINTS): ProGen3 model checkpoint to use. Options:
-
-            - ``"progen3-112m"``: 112M parameters (fastest)
-            - ``"progen3-219m"``: 219M parameters
-            - ``"progen3-339m"``: 339M parameters
-            - ``"progen3-762m"``: 762M parameters
-            - ``"progen3-1b"``: 1B parameters
-            - ``"progen3-3b"``: 3B parameters (highest quality, slowest)
-
-            Default: ``"progen3-762m"``.
-
-        local_path (str | None): Optional path to local model weights directory.
-            If provided, loads model from local filesystem instead of downloading
-            from HuggingFace. Default: ``None``.
-
-        direction (PROGEN3_DIRECTION): Generation direction. ``"forward"``
-            generates N→C (left to right), ``"reverse"`` generates C→N
-            (right to left). Default: ``"forward"``.
-
-        temperature (float): Scales the randomness of sampling:
-
-            - ``< 1.0``: More deterministic (recommended for proteins)
-            - ``1.0``: Standard sampling
-            - ``> 1.0``: More random and diverse
-
-            Default: 0.2 (following ProGen3 defaults).
-
-        top_p (float): Nucleus sampling parameter. Smallest set of tokens whose
-            cumulative probability mass is at least ``top_p``.
-            Default: 0.95.
-
-        max_new_tokens (int): Maximum number of new tokens to generate per prompt.
-            Does not include prompt tokens. Default: 256.
-
-        min_new_tokens (int): Minimum number of new tokens to generate per prompt.
-            Generation will not stop before this many tokens. Default: 1.
-
+        model_checkpoint (PROGEN3_MODEL_CHECKPOINTS): ProGen3 weights variant. Sizes range
+            from 112M (fastest) to 3B (highest quality).
+        local_path (str | None): Override HuggingFace download with a local weights directory.
+        direction (PROGEN3_DIRECTION): ``"forward"`` generates N→C, ``"reverse"`` generates C→N.
+        temperature (float): Softmax temperature; lower values are more deterministic, higher
+            values increase diversity.
+        top_p (float): Nucleus sampling threshold over per-position token probabilities.
+        max_new_tokens (int): Maximum new tokens to generate per prompt (excludes prompt).
+        min_new_tokens (int): Minimum new tokens to generate per prompt before stopping is allowed.
         num_sequences (int): Number of sequences to generate per prompt.
-            Default: 1.
-
-        prepend_prompt (bool): Whether to include the input prompt residues in the
-            output sequence. If ``True`` (default), returned sequences include
-            both the prompt and newly generated residues. If ``False``, only
-            newly generated residues are returned.
+        prepend_prompt (bool): If ``True``, returned sequences include the prompt and newly
+            generated residues; if ``False``, only the newly generated residues.
     """
 
     model_checkpoint: PROGEN3_MODEL_CHECKPOINTS = ConfigField(
         default="progen3-762m",
         title="Model Checkpoint",
-        description="ProGen3 model checkpoint to use",
+        description="ProGen3 weights variant",
         reload_on_change=True,
     )
     local_path: str | None = ConfigField(
         default=None,
         title="Local Model Path",
-        description="Path to local model weights (if None, downloads from HuggingFace)",
+        description="Override the default download with a local weights directory",
         hidden=True,
         reload_on_change=True,
     )
@@ -118,33 +82,34 @@ class ProGen3SampleConfig(CausalModelSampleConfig):
         default=0.2,
         gt=0.0,
         title="Temperature",
-        description="Scales the randomness of sampling.",
+        description="Softmax temperature for sampling; lower is more deterministic",
     )
     top_p: float = ConfigField(
         default=0.95,
         gt=0.0,
         le=1.0,
         title="Top-p",
-        description="Nucleus sampling parameter.",
+        description="Nucleus sampling cutoff over per-position token probabilities",
+        advanced=True,
     )
     max_new_tokens: int = ConfigField(
         default=256,
         ge=1,
         title="Max New Tokens",
-        description="Maximum number of new tokens to generate per prompt.",
+        description="Maximum number of new tokens to generate per prompt",
     )
     min_new_tokens: int = ConfigField(
         default=1,
         ge=1,
         title="Min New Tokens",
-        description="Minimum number of new tokens to generate per prompt.",
+        description="Minimum number of new tokens to generate per prompt",
         advanced=True,
     )
     num_sequences: int = ConfigField(
         default=1,
         ge=1,
         title="Num Sequences",
-        description="Number of sequences to generate per prompt.",
+        description="Number of sequences to generate per prompt",
     )
 
 

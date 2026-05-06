@@ -6,7 +6,7 @@ from typing import Any, Literal
 from proto_tools.entities.antibody import Antibody
 from proto_tools.tools.masked_models.ablang.ablang_embeddings import _resolve_model_choice
 from proto_tools.tools.masked_models.shared_data_models import (
-    MaskedModelConfig,
+    MaskedModelScoringConfig,
     MaskedModelScoringMetrics,
     MaskedModelScoringOutput,
 )
@@ -38,7 +38,7 @@ class AbLangScoringInput(BaseToolInput):
 AbLangScoringOutput = MaskedModelScoringOutput
 
 
-class AbLangScoringConfig(MaskedModelConfig):
+class AbLangScoringConfig(MaskedModelScoringConfig):
     """Configuration for AbLang antibody sequence scoring.
 
     Computes pseudo-log-likelihood scores by masking each position individually
@@ -46,19 +46,20 @@ class AbLangScoringConfig(MaskedModelConfig):
     based on which chains are provided on each ``Antibody``.
 
     Attributes:
-        batch_size (int): Number of sequences per forward pass. Default: ``1``.
-        device (str): Device to run on. Default: ``"cuda"``.
-        scoring_mode (Literal["pseudo_log_likelihood", "confidence"]): Scoring method to use:
-
-            - ``"pseudo_log_likelihood"``: Mask each position individually for
-              true MLM scoring (slower but accurate, default)
-            - ``"confidence"``: Single forward pass confidence score (faster)
+        batch_size (int): Number of sequences per forward pass.
+        device (str): Device to run on.
+        return_logits (bool): Include per-position logits in the output (large; disable to
+            save memory). Triggers a second ``likelihood``-mode forward pass per batch.
+        scoring_mode (Literal["pseudo_log_likelihood", "confidence"]): Scoring method.
+            ``"pseudo_log_likelihood"`` masks each position individually (accurate, O(L) passes);
+            ``"confidence"`` is a single-pass confidence proxy (faster, less accurate).
     """
 
     scoring_mode: Literal["pseudo_log_likelihood", "confidence"] = ConfigField(
         title="Scoring Mode",
         default="pseudo_log_likelihood",
-        description="Scoring method: 'pseudo_log_likelihood' (accurate, slower) or 'confidence' (fast)",
+        description="Per-position masked PLL (accurate, O(L) passes) vs single-pass confidence proxy",
+        advanced=True,
     )
 
 
@@ -103,11 +104,21 @@ def run_ablang_score(
             "device": config.device,
             "verbose": config.verbose,
             "scoring_mode": config.scoring_mode,
+            "return_logits": config.return_logits,
         },
         instance=instance,
         config=config,
     )
 
-    sequence_scores = [MaskedModelScoringMetrics(**metrics) for metrics in result["metrics"]]
+    logits_per_seq = result.get("logits")
+    vocab = result.get("vocab")
+    sequence_scores = [
+        MaskedModelScoringMetrics(
+            **metrics,
+            logits=logits_per_seq[i] if logits_per_seq is not None else None,
+            vocab=vocab,
+        )
+        for i, metrics in enumerate(result["metrics"])
+    ]
 
     return AbLangScoringOutput(scores=sequence_scores)

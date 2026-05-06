@@ -91,8 +91,8 @@ class Evo2Model:
         cached_generation: bool = True,
         force_prompt_threshold: int | None = None,
         max_seqlen: int | None = None,
-        print_generation: bool = True,
         verbose: bool = False,
+        skip_special_tokens: bool = False,
         stop_at_eos: bool = True,
         old_kv_cache: dict[str, Any] | None = None,
         batch_size: int = 1,
@@ -116,8 +116,8 @@ class Evo2Model:
             max_seqlen: Maximum sequence length to generate. Determines the max size
                 of the cache if larger. Otherwise automatically determined using
                 prompt length + max_tokens.
-            print_generation: Whether to print generation tokens
             verbose: Whether to print verbose output
+            skip_special_tokens: Whether to filter EOS/PAD bytes from the detokenized output
             stop_at_eos: Whether to stop at end-of-sequence token
             old_kv_cache: Resolved KV cache state to continue generation from
             batch_size: Number of sequences per GPU forward pass. Larger batches
@@ -202,8 +202,9 @@ class Evo2Model:
                     cached_generation=cached_generation,
                     force_prompt_threshold=force_prompt_threshold,
                     max_seqlen=max_seqlen,
-                    print_generation=print_generation,
+                    print_generation=False,
                     verbose=verbose,
+                    skip_special_tokens=skip_special_tokens,
                     stop_at_eos=stop_at_eos,
                     inference_params_dict=current_old_kv_cache,
                 )
@@ -268,6 +269,7 @@ class Evo2Model:
         verbose: bool = False,
         batch_size: int = 1,
         return_logits: bool = False,
+        prepend_bos: bool = False,
         seed: int | None = None,
     ) -> dict[str, Any]:
         """Score DNA sequences by computing logits and metrics via forward pass.
@@ -282,6 +284,7 @@ class Evo2Model:
             batch_size: Number of sequences per GPU forward pass. Larger batches
                 are faster but use more memory.
             return_logits: Whether to include logits in the output
+            prepend_bos: Prepend a beginning-of-sequence token before scoring.
             seed: Random seed. Scoring is deterministic given the model state,
                 but we still seed RNGs/cudnn flags so consecutive calls in a
                 persistent worker behave identically regardless of call order.
@@ -299,10 +302,13 @@ class Evo2Model:
         if not sequences:
             raise ValueError("evo2: cannot score empty sequence list")
 
+        # chr(0) tokenizes to vortex's eod_id (BOS).
+        scoring_sequences = [chr(0) + seq for seq in sequences] if prepend_bos else sequences
+
         # Batch processing logic
         all_logits = []
         all_metrics = []
-        batches = [sequences[i : i + batch_size] for i in range(0, len(sequences), batch_size)]
+        batches = [scoring_sequences[i : i + batch_size] for i in range(0, len(scoring_sequences), batch_size)]
 
         with torch.inference_mode():
             for batch_idx, batch_sequences in enumerate(
@@ -675,10 +681,10 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             device=input_dict["device"],
             num_tokens=input_dict["num_tokens"],
             cached_generation=input_dict["cached_generation"],
-            force_prompt_threshold=input_dict.get("force_prompt_threshold"),
+            force_prompt_threshold=input_dict["force_prompt_threshold"],
             max_seqlen=max_seqlen,
-            print_generation=input_dict["print_generation"],
             verbose=input_dict["verbose"],
+            skip_special_tokens=input_dict["skip_special_tokens"],
             stop_at_eos=input_dict["stop_at_eos"],
             old_kv_cache=old_kv_cache,
             batch_size=input_dict["batch_size"],
@@ -700,6 +706,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             verbose=input_dict["verbose"],
             batch_size=input_dict["batch_size"],
             return_logits=input_dict["return_logits"],
+            prepend_bos=input_dict["prepend_bos"],
             seed=input_dict["seed"],
         )
     raise ValueError(f"evo2: unknown operation {operation!r}; valid: ['release_kv_caches', 'sample', 'score']")

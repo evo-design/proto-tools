@@ -3,15 +3,15 @@
 ESM2 sampling tool.
 """
 
-import json
 import logging
-from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import Field
 
 from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelInput,
+    MaskedModelSampleConfig,
+    MaskedModelSampleOutput,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.transforms.masking import (
@@ -20,8 +20,6 @@ from proto_tools.transforms.masking import (
     build_position_score_fn,
 )
 from proto_tools.utils import (
-    BaseConfig,
-    BaseToolOutput,
     ConfigField,
     ToolInstance,
 )
@@ -45,13 +43,10 @@ ESM2SampleInput = MaskedModelInput
 
 
 # Output:
-class ESM2SampleOutput(BaseToolOutput):
+class ESM2SampleOutput(MaskedModelSampleOutput):
     """Output from ESM2 protein sequence sampling.
 
-    This class encapsulates the results of ESM2 masked sequence sampling,
-    providing mutated/refined protein sequences and optionally the logits. ESM2 is
-    a masked language model for filling selected positions in an existing
-    sequence.
+    Inherits from ``MaskedModelSampleOutput``.
 
     Attributes:
         sequences (list[str]): Sampled or mutated protein sequences. Each sequence
@@ -63,88 +58,46 @@ class ESM2SampleOutput(BaseToolOutput):
             if return_logits=True in config.
     """
 
-    sequences: list[str] = Field(description="Sampled/mutated protein sequences")
     logits: list[list[list[float]]] | None = Field(
         default=None,
         description="Per-position amino acid logits. Shape: [num_sequences, seq_len, 20].",
     )
 
-    @property
-    def output_format_options(self) -> list[str]:
-        """Return the supported output format options."""
-        return ["fasta", "txt", "json"]
-
-    @property
-    def output_format_default(self) -> str:
-        """Return the default output format."""
-        return "fasta"
-
-    def _export_output(self, export_path: str | Path, file_format: str) -> None:
-        path = Path(export_path).with_suffix(f".{file_format}")
-
-        if file_format == "fasta":
-            with open(path, "w") as f:
-                f.writelines(f">seq_{i}\n{seq}\n" for i, seq in enumerate(self.sequences))
-
-        elif file_format == "txt":
-            with open(path, "w") as f:
-                f.writelines(f"{seq}\n" for seq in self.sequences)
-
-        elif file_format == "json":
-            with open(path, "w") as f:
-                json.dump(self.sequences, f, indent=2)
-        else:
-            raise ValueError(f"Unsupported format: {file_format}")
-
 
 # Config:
-class ESM2SampleConfig(BaseConfig):
+class ESM2SampleConfig(MaskedModelSampleConfig):
     """Configuration for ESM2 protein sequence sampling.
 
     Attributes:
-        model_checkpoint (Literal[ESM2_MODEL_CHECKPOINTS]): ESM2 model variant. Default: ``"esm2_t33_650M_UR50D"``.
-        temperature (float): Sampling temperature (< 1.0 conservative, > 1.0 diverse). Default: 1.0.
-        masking_strategy (MaskingStrategy): Controls which positions to mask for sampling. Default: random 30%.
-        batch_size (int): Sequences per GPU forward pass. Default: 1.
-        device (str): Device to run on. Default: ``"cuda"``.
-        return_logits (bool): Whether to include per-position logits. Default: ``False``.
+        model_checkpoint (ESM2_MODEL_CHECKPOINTS): ESM2 weights variant.
+        temperature (float): Sampling temperature; ``< 1.0`` is conservative, ``> 1.0`` is diverse.
+        masking_strategy (MaskingStrategy): Strategy for selecting positions to mask before sampling.
+        batch_size (int): Sequences per GPU forward pass.
+        device (str): Device to run on.
+        return_logits (bool): Include per-position logits in the output.
     """
 
     masking_strategy: MaskingStrategy = ConfigField(
         title="Masking Strategy",
         default_factory=MaskingStrategy,
-        description="Controls which positions to mask for sampling. Default: random 30%.",
+        description="Strategy for selecting positions to mask for resampling",
     )
-    model_checkpoint: Literal[ESM2_MODEL_CHECKPOINTS] = ConfigField(
+    model_checkpoint: ESM2_MODEL_CHECKPOINTS = ConfigField(
         title="ESM2 Model Checkpoint",
         default="esm2_t33_650M_UR50D",
-        description="Name of the ESM2 model variant to use",
+        description="ESM2 weights variant; trade off speed vs sample quality",
         reload_on_change=True,
     )
     temperature: float = ConfigField(
         title="Sampling Temperature",
         default=1.0,
-        description="Sampling temperature for amino acid selection",
-        advanced=True,
-    )
-    batch_size: int = ConfigField(
-        title="Batch Size",
-        default=1,
-        ge=1,
-        description="Number of sequences to process simultaneously on GPU",
-        advanced=True,
-    )
-    device: str = ConfigField(
-        title="Device",
-        default="cuda",
-        description="Device to run on",
-        hidden=True,
-        include_in_key=False,
+        gt=0.0,
+        description="Softmax temperature for per-position amino-acid sampling",
     )
     return_logits: bool = ConfigField(
         title="Return Logits",
         default=False,
-        description="Whether to include per-position logits in the output. Disable to save memory.",
+        description="Include per-position logits in the output (large; disable to save memory)",
         advanced=True,
     )
 
