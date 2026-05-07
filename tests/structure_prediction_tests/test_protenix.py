@@ -299,7 +299,7 @@ def test_protenix_holds_runner_across_calls():
 
 @pytest.mark.uses_gpu
 def test_protenix_pae_surface():
-    """avg_pae always emitted; pae_matrix square + self-consistent only when flag set."""
+    """avg_pae always emitted; pae square + self-consistent only when flag set."""
     complexes = [StructurePredictionComplex(chains=[Chain(sequence=_CRO_SEQUENCE, entity_type="protein")])]
     inputs = ProtenixInput(complexes=complexes)
     base = {
@@ -316,9 +316,9 @@ def test_protenix_pae_surface():
     off_m, on_m = off.structures[0].metrics, on.structures[0].metrics
     for m in (off_m, on_m):
         assert m["avg_pae"] is not None and m["avg_pae"] >= 0.0
-    assert "pae_matrix" not in off_m.model_dump(exclude_none=True)
+    assert "pae" not in off_m.model_dump(exclude_none=True)
 
-    pae = on_m["pae_matrix"]
+    pae = on_m["pae"]
     n = len(_CRO_SEQUENCE)
     assert pae is not None and len(pae) == n and all(len(row) == n for row in pae)
     # 2-decimal upstream rounding loosens the consistency tolerance vs Boltz2.

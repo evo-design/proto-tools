@@ -129,7 +129,7 @@ def _extract_structure_and_scores(
     alphafold3_scores["avg_plddt"] = float(np.mean(full_metrics["atom_plddts"]))
     alphafold3_scores["avg_pae"] = float(np.mean(np.array(full_metrics["pae"])))
     if include_pae_matrix:
-        alphafold3_scores["pae_matrix"] = full_metrics["pae"]
+        alphafold3_scores["pae"] = full_metrics["pae"]
     alphafold3_scores["ptm"] = summary_metrics.get("ptm")
     alphafold3_scores["iptm"] = summary_metrics.get("iptm")
     alphafold3_scores["ranking_score"] = summary_metrics.get("ranking_score")

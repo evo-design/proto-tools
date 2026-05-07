@@ -185,7 +185,7 @@ class Boltz2Model:
         with np.load(pae_file) as npz:
             pae_array = npz["pae"]
         metrics["avg_pae"] = float(pae_array.mean())
-        metrics["pae_matrix"] = pae_array.astype(float).tolist() if include_pae_matrix else None
+        metrics["pae"] = pae_array.astype(float).tolist() if include_pae_matrix else None
 
         return {
             "structure_cif_output": cif_file.read_text(),

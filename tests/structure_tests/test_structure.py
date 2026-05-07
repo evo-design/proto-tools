@@ -708,11 +708,11 @@ def test_chain_selection_keeps_requested_chains_and_metadata(
     [("select_chain", "B"), ("select_chains", "A,C")],
 )
 def test_chain_selection_metrics_are_deep_copied(method_name, chain_ids, three_chain_structure):
-    three_chain_structure.add_metric("pae_matrix", [[0.0]])
+    three_chain_structure.add_metric("pae", [[0.0]])
     selected = getattr(three_chain_structure, method_name)(chain_ids)
-    selected.add_metric("pae_matrix", [[1.0]])
-    assert three_chain_structure.metrics["pae_matrix"] == [[0.0]]
-    assert selected.metrics["pae_matrix"] == [[1.0]]
+    selected.add_metric("pae", [[1.0]])
+    assert three_chain_structure.metrics["pae"] == [[0.0]]
+    assert selected.metrics["pae"] == [[1.0]]
 
 
 @pytest.mark.parametrize(

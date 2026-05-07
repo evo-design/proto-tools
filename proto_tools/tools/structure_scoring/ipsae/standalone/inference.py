@@ -23,7 +23,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"ipsae: unknown operation {operation!r}; valid: ['score']")
 
     pdb_content: str = input_dict["pdb_content"]
-    pae_matrix: list[list[float]] = input_dict["pae_matrix"]
+    pae: list[list[float]] = input_dict["pae"]
     plddt: list[float] | None = input_dict.get("plddt")
     pae_cutoff: float = float(input_dict.get("pae_cutoff", 10))
     dist_cutoff: float = float(input_dict.get("dist_cutoff", 10))
@@ -41,7 +41,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         with open(pdb_path, "w") as f:
             f.write(pdb_content)
 
-        pae_json: dict[str, Any] = {"pae": pae_matrix}
+        pae_json: dict[str, Any] = {"pae": pae}
         if plddt is not None:
             pae_json["plddt"] = plddt
         with open(pae_path, "w") as f:

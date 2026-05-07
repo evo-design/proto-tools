@@ -72,7 +72,7 @@ The tool wraps the AlphaFold DB prediction API in a single HTTP flow:
 |-----------|------|---------|-------------|
 | `structure_format` | `Literal["pdb", "cif"]` | `"pdb"` | Structure file format to download |
 | `include_structure` | `bool` | `True` | Download the structure file and per-residue pLDDT into `output.structure`. Set to `False` for metadata-only probes (saves ~100-500 KB per call) |
-| `include_pae` | `bool` | `False` | Also download the pAE matrix into `output.structure.metrics["pae_matrix"]`. Off by default because pAE files are large for long proteins. No-op when `include_structure=False` |
+| `include_pae` | `bool` | `False` | Also download the pAE matrix into `output.structure.metrics["pae"]`. Off by default because pAE files are large for long proteins. No-op when `include_structure=False` |
 | `include_msa` | `bool` | `False` | Download the A3M MSA used as input to prediction; off by default because A3M files can be hundreds of KB to several MB for highly conserved proteins |
 
 ## Output Specification
@@ -105,7 +105,7 @@ AlphaFoldDBFetchOutput(
     sequence_checksum: Optional[str],       # CRC64 checksum of the predicted sequence
     structure: Optional[Structure],         # Parsed Structure (b_factor_type=PLDDT,
                                             #   metrics=AlphaFoldDBMetrics with avg_plddt,
-                                            #   plddt_per_residue, pae_matrix); None
+                                            #   plddt_per_residue, pae); None
                                             #   when include_structure=False
     msa_a3m: Optional[str],                 # A3M MSA contents; None when include_msa=False or no msaUrl
     source_url: str,                        # AFDB API URL used for the metadata lookup
@@ -134,7 +134,7 @@ AlphaFoldDBFetchOutput(
 | `am_annotations_hg19_url` | `Optional[str]` | AlphaMissense annotations on GRCh37 |
 | `am_annotations_hg38_url` | `Optional[str]` | AlphaMissense annotations on GRCh38 |
 | `sequence_checksum` | `Optional[str]` | CRC64 checksum of the predicted sequence |
-| `structure` | `Optional[Structure]` | Parsed [`Structure`](../../../entities/structures/structure.py) — PDB or mmCIF body in `structure.structure_format`, `b_factor_type=BFactorType.PLDDT`, `source="alphafold-db-fetch"`, with an `AlphaFoldDBMetrics` `metrics` container exposing `avg_plddt`, `plddt_per_residue`, and (when `include_pae=True`) `pae_matrix`. `None` when `include_structure=False`. Drop-in compatible with every structure-consuming tool in proto-tools (TM-align, US-align, inverse folding, structure-scoring, structure-design conditioning) |
+| `structure` | `Optional[Structure]` | Parsed [`Structure`](../../../entities/structures/structure.py) — PDB or mmCIF body in `structure.structure_format`, `b_factor_type=BFactorType.PLDDT`, `source="alphafold-db-fetch"`, with an `AlphaFoldDBMetrics` `metrics` container exposing `avg_plddt`, `plddt_per_residue`, and (when `include_pae=True`) `pae`. `None` when `include_structure=False`. Drop-in compatible with every structure-consuming tool in proto-tools (TM-align, US-align, inverse folding, structure-scoring, structure-design conditioning) |
 | `msa_a3m` | `Optional[str]` | A3M-format MSA contents used as input to prediction; `None` when `include_msa=False` or when the entry has no associated `msaUrl` |
 | `raw_entry` | `Dict[str, Any]` | Complete AFDB JSON record for advanced programmatic access |
 
@@ -210,7 +210,7 @@ low_conf = [i + 1 for i, score in enumerate(plddt) if score < 70]
 print(f"{len(low_conf)} residues with pLDDT < 70 (out of {output.sequence_length})")
 
 # Mean pAE between residue blocks (rough inter-domain confidence indicator)
-pae = output.structure.metrics["pae_matrix"]
+pae = output.structure.metrics["pae"]
 n = len(pae)
 print(f"pAE matrix: {n} x {n}, mean = {sum(sum(r) for r in pae) / (n * n):.2f} angstrom")
 ```

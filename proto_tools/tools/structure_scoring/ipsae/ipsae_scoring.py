@@ -112,7 +112,7 @@ class IPSAEScoringInput(BaseToolInput):
     Attributes:
         structure (Structure): Cofolded complex with per-residue pLDDT in the
             B-factor column and the PAE matrix attached at
-            ``structure.metrics['pae_matrix']`` as a square ``list[list[float]]``.
+            ``structure.metrics['pae']`` as a square ``list[list[float]]``.
         binder_chain (str): Single-character chain ID of the binder.
         target_chains (list[str]): Target chain ID(s).
     """
@@ -142,12 +142,12 @@ class IPSAEScoringInput(BaseToolInput):
         missing = {self.binder_chain, *self.target_chains} - available
         if missing:
             raise ValueError(f"Chain ID(s) {sorted(missing)} not found in structure. Available: {sorted(available)}")
-        pae = self.structure.metrics.get("pae_matrix")
+        pae = self.structure.metrics.get("pae")
         if pae is None:
-            raise ValueError("structure.metrics['pae_matrix'] is missing; attach the PAE matrix before scoring")
+            raise ValueError("structure.metrics['pae'] is missing; attach the PAE matrix before scoring")
         pae_arr = np.asarray(pae)
         if pae_arr.ndim != 2 or pae_arr.shape[0] != pae_arr.shape[1]:
-            raise ValueError(f"pae_matrix must be a square 2D matrix, got shape {pae_arr.shape}")
+            raise ValueError(f"pae must be a square 2D matrix, got shape {pae_arr.shape}")
         return self
 
 
@@ -214,7 +214,7 @@ def example_input() -> Any:
     n_a, n_b = 21, 30
     n = n_a + n_b
     pae = [[0.0 if i == j else (3.0 if (i < n_a) == (j < n_a) else 6.0) for j in range(n)] for i in range(n)]
-    structure = Structure.from_file(fixture, b_factor_type=BFactorType.PLDDT, metrics={"pae_matrix": pae})
+    structure = Structure.from_file(fixture, b_factor_type=BFactorType.PLDDT, metrics={"pae": pae})
     return IPSAEScoringInput(structure=structure, binder_chain="A", target_chains=["B"])
 
 
@@ -252,11 +252,11 @@ def run_ipsae_scoring(
     binder_chain = inputs.binder_chain
     target_chains = inputs.target_chains
 
-    pae_matrix = structure.metrics.get("pae_matrix")
-    if pae_matrix is None:
-        raise ValueError("structure.metrics['pae_matrix'] is missing")
+    pae = structure.metrics.get("pae")
+    if pae is None:
+        raise ValueError("structure.metrics['pae'] is missing")
 
-    pae_list = pae_matrix if isinstance(pae_matrix, list) else [list(row) for row in pae_matrix]
+    pae_list = pae if isinstance(pae, list) else [list(row) for row in pae]
 
     plddt = structure.per_residue_plddt
     plddt_list = [float(v) * 100.0 for v in plddt] if plddt is not None else None
@@ -268,7 +268,7 @@ def run_ipsae_scoring(
         {
             "operation": "score",
             "pdb_content": structure.structure_pdb,
-            "pae_matrix": pae_list,
+            "pae": pae_list,
             "plddt": plddt_list,
             "pae_cutoff": config.pae_cutoff,
             "dist_cutoff": config.distance_cutoff,

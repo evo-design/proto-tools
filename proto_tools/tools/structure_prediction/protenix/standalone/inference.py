@@ -323,12 +323,12 @@ class ProtenixModel:
             raise FileNotFoundError(f"protenix: full_data file not found: {full_data_file}")
         with open(full_data_file) as f:
             full_data = json.load(f)
-        pae_matrix = full_data["token_pair_pae"]
-        pae_array = np.asarray(pae_matrix, dtype=float)
+        pae = full_data["token_pair_pae"]
+        pae_array = np.asarray(pae, dtype=float)
 
         metrics_out = best_metrics or {}
         metrics_out["avg_pae"] = float(pae_array.mean())
-        metrics_out["pae_matrix"] = pae_matrix if include_pae_matrix else None
+        metrics_out["pae"] = pae if include_pae_matrix else None
 
         return {
             "structure_cif_output": best_cif.read_text(),

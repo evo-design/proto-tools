@@ -66,7 +66,7 @@ class AlphaFold3Metrics(Metrics):
     Metrics documented in ``metric_spec``:
         avg_plddt (float): Average predicted LDDT score (0-100). Always present.
         avg_pae (float): Average predicted aligned error. Always present.
-        pae_matrix (list[list[float]]): Full per-residue PAE matrix in Å. Present when include_pae_matrix=True.
+        pae (list[list[float]]): Full per-residue PAE matrix in Å. Present when include_pae_matrix=True.
         ptm (float): Predicted TM-score (0-1). Depends on model output.
         iptm (float): Interface predicted TM-score (0-1). Depends on model output.
         ranking_score (float): AlphaFold3 ranking score. Depends on model output.
@@ -75,7 +75,7 @@ class AlphaFold3Metrics(Metrics):
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
         "avg_plddt": {"availability": "always", "type": "float", "min": 0.0, "max": 100.0},
         "avg_pae": {"availability": "always", "type": "float", "min": 0.0, "max": None},
-        "pae_matrix": {
+        "pae": {
             "availability": "when include_pae_matrix=True",
             "type": "list[list[float]]",
             "min": 0.0,

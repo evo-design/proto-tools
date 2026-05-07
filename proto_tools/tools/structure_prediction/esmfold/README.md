@@ -187,7 +187,7 @@ ESMFoldMetrics(
 |-------|------|-------------|
 | `gradient` | `List[List[float]] \| None` | Gradient matrix with the same `(L, 20)` shape and amino-acid column order as the input logits. `None` when `compute_gradient=False` |
 | `loss` | `float` | Scalar weighted confidence loss (sum of `loss_weights[k] * loss_terms[k]` over enabled terms) |
-| `metrics` | `dict[str, Any]` | `avg_plddt`, `ptm`, `avg_pae`, optional `pae_matrix`, plus per-term unweighted losses (`loss_plddt`, `loss_ptm`, `loss_pae`) for whichever terms had non-zero weight |
+| `metrics` | `dict[str, Any]` | `avg_plddt`, `ptm`, `avg_pae`, optional `pae`, plus per-term unweighted losses (`loss_plddt`, `loss_ptm`, `loss_pae`) for whichever terms had non-zero weight |
 | `vocab` | `List[str]` | Amino-acid column ordering for the input logits and returned gradient — always canonical protein order `ACDEFGHIKLMNPQRSTVWY` |
 | `structure` | `Structure` | Predicted ESMFold complex structure for the hard-decoded sequence (same `Structure` type as `esmfold-prediction` returns) |
 

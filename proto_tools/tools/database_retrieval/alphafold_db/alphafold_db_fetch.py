@@ -71,7 +71,7 @@ class AlphaFoldDBFetchConfig(BaseConfig):
             pLDDT, gene, sequence) — saves ~100-500 KB per call, meaningful
             for batch sweeps.
         include_pae (bool): If True, also fetch the PAE (predicted aligned
-            error) matrix and attach it to ``output.structure.metrics["pae_matrix"]``.
+            error) matrix and attach it to ``output.structure.metrics["pae"]``.
             Disabled by default — PAE files can be tens of MB for long proteins.
             No-op when ``include_structure=False``.
         include_msa (bool): If True, fetch the A3M MSA used as input to the
@@ -110,7 +110,7 @@ class AlphaFoldDBMetrics(Metrics):
     """Per-structure metrics emitted by AlphaFold DB fetch.
 
     Attached to ``Structure.metrics`` when ``include_structure=True``. Uses the
-    same ``avg_plddt`` / ``pae_matrix`` keys as the structure-prediction tools
+    same ``avg_plddt`` / ``pae`` keys as the structure-prediction tools
     (ESMFold, AlphaFold2, AlphaFold3) so a downstream tool reading
     ``s.metrics["avg_plddt"]`` composes uniformly across DB-fetched and
     predicted structures.
@@ -120,7 +120,7 @@ class AlphaFoldDBMetrics(Metrics):
             (sourced from AlphaFold DB's ``globalMetricValue`` field).
         plddt_per_residue (list[float]): Per-residue pLDDT scores (0-100), one
             entry per residue in the structure. Always present.
-        pae_matrix (list[list[float]]): NxN predicted aligned error matrix in
+        pae (list[list[float]]): NxN predicted aligned error matrix in
             angstroms. Present when ``include_pae=True``.
     """
 
@@ -132,7 +132,7 @@ class AlphaFoldDBMetrics(Metrics):
             "min": 0.0,
             "max": 100.0,
         },
-        "pae_matrix": {
+        "pae": {
             "availability": "when include_pae=True",
             "type": "list[list[float]]",
             "min": 0.0,
@@ -189,7 +189,7 @@ class AlphaFoldDBFetchOutput(BaseToolOutput):
             body in ``structure_format``, ``b_factor_type=BFactorType.PLDDT``)
             with an :class:`AlphaFoldDBMetrics` ``metrics`` container carrying
             ``avg_plddt``, ``plddt_per_residue``, and (when ``include_pae=True``)
-            ``pae_matrix``. None when ``include_structure=False``.
+            ``pae``. None when ``include_structure=False``.
         msa_a3m (str | None): A3M-format MSA contents used as input to the
             AlphaFold prediction. None when ``include_msa`` is False or when the
             entry has no associated MSA URL.
@@ -374,14 +374,14 @@ def run_alphafold_db_fetch(
             structure_url = entry["pdbUrl"] if config.structure_format == "pdb" else entry["cifUrl"]
             structure_text = _fetch_text(structure_url, session)
             plddt_per_residue = _fetch_plddt(entry["plddtDocUrl"], session)
-            pae_matrix: list[list[float]] | None = None
+            pae: list[list[float]] | None = None
             if config.include_pae:
-                pae_matrix = _fetch_pae(entry["paeDocUrl"], session)
+                pae = _fetch_pae(entry["paeDocUrl"], session)
 
             metrics = AlphaFoldDBMetrics(
                 avg_plddt=entry.get("globalMetricValue"),
                 plddt_per_residue=plddt_per_residue,
-                pae_matrix=pae_matrix,
+                pae=pae,
             )
             structure = Structure(
                 structure=structure_text,
