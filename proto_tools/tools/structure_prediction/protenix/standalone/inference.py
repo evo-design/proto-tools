@@ -2,8 +2,6 @@
 
 import json
 import os
-import shutil
-import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -126,12 +124,20 @@ def cleanup_corrupted_checkpoints(checkpoint_dir: Path, model_name: str) -> None
 
 
 class ProtenixModel:
-    """Protenix model for biomolecular structure prediction."""
+    """Protenix model for biomolecular structure prediction.
+
+    Holds the upstream ``InferenceRunner`` across calls; rebuilds only when a
+    weight-affecting config field changes (``model_name``, kernel, ``n_cycle``,
+    ``n_step``, ``n_sample``, ``use_msa``). Per-call inputs (seeds, JSON paths,
+    output dirs) are mutated on ``runner.configs`` directly.
+    """
 
     def __init__(self) -> None:
         """Initialize Protenix model wrapper."""
         self._loaded = False
-        self.protenix_executable: str | None = None
+        self.runner: Any = None
+        self.device: str | None = None
+        self._cache_key: tuple[Any, ...] | None = None
 
     def __call__(
         self,
@@ -151,7 +157,9 @@ class ProtenixModel:
         Args:
             input_json_path: Path to input JSON file (list of job dicts)
             output_dir: Directory to write output to
-            device: Device for subprocess environment
+            device: Device string (e.g. ``"cuda:0"``); protenix's ``init_env`` binds to
+                ``cuda:0`` of whatever the parent worker made visible via
+                ``CUDA_VISIBLE_DEVICES``.
             model_name: Protenix model variant to use
             seeds: Comma-separated seed values
             num_diffusion_samples: Number of diffusion samples per seed
@@ -164,11 +172,6 @@ class ProtenixModel:
             List of dicts, each containing structure_cif_output and metrics,
             in the same order as the input jobs.
         """
-        if not self._loaded:
-            self.load()
-
-        # Validate and cleanup corrupted checkpoints before running inference
-        # PROTENIX_ROOT_DIR is always set by dispatch() via resolve_weights_dir()
         protenix_root = os.environ.get("PROTENIX_ROOT_DIR")
         if not protenix_root:
             raise RuntimeError(
@@ -177,65 +180,59 @@ class ProtenixModel:
         checkpoint_dir = Path(protenix_root) / "checkpoint"
         cleanup_corrupted_checkpoints(checkpoint_dir, model_name)
 
-        logger.debug("\n=== Protenix Prediction ===")
-        logger.debug(f"Input JSON path: {input_json_path}")
-        logger.debug(f"Output directory: {output_dir}")
-
-        # Build the command
-        cmd = [
-            self.protenix_executable,
-            "pred",
-            "-i",
-            input_json_path,
-            "-o",
-            output_dir,
-            "-n",
-            model_name,
-            "-s",
-            seeds,
-            "-e",
-            str(num_diffusion_samples),  # --sample
-            "-p",
-            str(num_diffusion_steps),  # --step
-            "-c",
-            str(num_pairformer_cycles),  # --cycle
-            "-d",
-            "bf16",  # --dtype
-        ]
+        log = logger.info if verbose else logger.debug
+        log(f"Protenix prediction: model={model_name}, input={input_json_path}, output={output_dir}, device={device}")
 
         kernel = "cuequivariance" if _cuequivariance_available() else "torch"
-        cmd.extend(["--trimul_kernel", kernel, "--triatt_kernel", kernel])
+        new_key = (model_name, kernel, num_pairformer_cycles, num_diffusion_steps, num_diffusion_samples, use_msa)
 
-        if not use_msa:
-            cmd.append("--use_msa=false")
+        from configs.configs_inference import inference_configs  # type: ignore[import-not-found]
+        from runner.batch_inference import preprocess_input  # type: ignore[import-not-found]
+        from runner.inference import infer_predict  # type: ignore[import-not-found]
 
-        logger.debug(f"Running Protenix command: {' '.join(cmd)}")  # type: ignore[arg-type]
+        os.makedirs(output_dir, exist_ok=True)
 
-        # Get subprocess environment with correct CUDA_VISIBLE_DEVICES
-        from standalone_helpers import get_subprocess_device_env
-
-        env = get_subprocess_device_env(device)
-
-        # Run Protenix CLI with working directory set to the parent of output_dir
-        # This ensures ./esm_embeddings/ is created in the temp dir, not the repo root
-        working_dir = str(Path(output_dir).parent)
-
-        try:
-            subprocess.run(
-                cmd,  # type: ignore[arg-type]
-                check=True,
-                text=True,
-                env=env,
-                encoding="utf-8",
-                stdout=sys.stdout if verbose else subprocess.PIPE,
-                stderr=sys.stderr if verbose else subprocess.PIPE,
-                cwd=working_dir,
+        if not self._loaded or self._cache_key != new_key:
+            # init_basics() reads inference_configs["dump_dir"] at runner construction
+            # and os.makedirs() it; subsequent calls re-point via runner.dump_dir below.
+            inference_configs["dump_dir"] = output_dir
+            self.load(
+                model_name=model_name,
+                num_pairformer_cycles=num_pairformer_cycles,
+                num_diffusion_steps=num_diffusion_steps,
+                num_diffusion_samples=num_diffusion_samples,
+                use_msa=use_msa,
+                kernel=kernel,
             )
-        except subprocess.CalledProcessError as e:
-            stderr_tail = " | ".join((e.stderr or "").strip().splitlines()[-10:]) or "<no stderr>"
-            raise RuntimeError(f"protenix: failed (exit {e.returncode}): {stderr_tail}") from e
+        # Catches both cache-hit device changes and "cuda" vs "cuda:0" label mismatch post-load.
+        if self.device != device:
+            self.to_device(device)
 
-        logger.debug("Protenix prediction completed")
+        # Re-point the held runner at this call's output_dir; dumper.base_dir
+        # was baked in at construction and won't follow configs mutations.
+        self.runner.dump_dir = output_dir
+        self.runner.error_dir = os.path.join(output_dir, "ERR")
+        self.runner.dumper.base_dir = output_dir
+
+        seeds_list = [int(s.strip()) for s in seeds.split(",") if s.strip()]
+
+        # protenix writes ./esm_embeddings/ relative to cwd.
+        working_dir = str(Path(output_dir).parent)
+        prev_cwd = os.getcwd()
+        os.chdir(working_dir)
+        try:
+            processed_json = preprocess_input(
+                input_json=input_json_path,
+                out_dir=output_dir,
+                use_msa=use_msa,
+            )
+            configs = self.runner.configs
+            configs["input_json_path"] = processed_json
+            configs["seeds"] = seeds_list
+            configs["dump_dir"] = output_dir
+            infer_predict(self.runner, configs)
+        finally:
+            os.chdir(prev_cwd)
 
         # Check for protenix error directory (protenix exits 0 even on failure)
         err_dir = Path(output_dir) / "ERR"
@@ -317,18 +314,69 @@ class ProtenixModel:
             "metrics": best_metrics or {},
         }
 
-    def load(self) -> None:
-        """Find and validate the Protenix executable."""
-        logger.debug("Initializing Protenix")
+    def load(
+        self,
+        *,
+        model_name: str,
+        num_pairformer_cycles: int,
+        num_diffusion_steps: int,
+        num_diffusion_samples: int,
+        use_msa: bool,
+        kernel: str,
+    ) -> None:
+        """Build and hold an ``InferenceRunner`` for the given config combo."""
+        from runner.batch_inference import get_default_runner
 
-        # First try to find protenix in the current venv's bin directory
-        venv_protenix = Path(sys.executable).parent / "protenix"
-        exe = str(venv_protenix) if venv_protenix.exists() else shutil.which("protenix")
-        if not exe:
-            raise ImportError("protenix: 'protenix' executable not found in current environment")
-        self.protenix_executable = exe
+        logger.debug(f"Loading Protenix runner: model={model_name}, kernel={kernel}")
+
+        if self.runner is not None:
+            self.unload()
+
+        # InferenceRunner.__init__ runs init_env + init_model + load_checkpoint.
+        self.runner = get_default_runner(
+            seeds=[0],  # placeholder; real seeds are injected per-call into runner.configs
+            n_cycle=num_pairformer_cycles,
+            n_step=num_diffusion_steps,
+            n_sample=num_diffusion_samples,
+            dtype="bf16",
+            model_name=model_name,
+            use_msa=use_msa,
+            trimul_kernel=kernel,
+            triatt_kernel=kernel,
+        )
+        self.device = str(self.runner.device)
+        self._cache_key = (
+            model_name,
+            kernel,
+            num_pairformer_cycles,
+            num_diffusion_steps,
+            num_diffusion_samples,
+            use_msa,
+        )
         self._loaded = True
-        logger.debug(f"Protenix initialized. Using executable: {self.protenix_executable}")
+
+    def to_device(self, device: str) -> None:
+        """Move the held runner's model between devices."""
+        import torch
+        from standalone_helpers import move_model_to_device
+
+        if self.device == device:
+            return
+
+        self.runner.model = move_model_to_device(self.runner.model, self.device, device)
+        self.runner.device = torch.device(device)  # match upstream init_env's torch.device type
+        self.device = device
+
+    def unload(self) -> None:
+        """Move the held runner's model back to CPU. Does not reset ``_loaded``."""
+        import torch
+        from standalone_helpers import move_model_to_device
+
+        if self.device == "cpu" or self.runner is None:
+            return
+        self.runner.model = move_model_to_device(self.runner.model, self.device, "cpu")
+        self.runner.device = torch.device("cpu")
+        self.device = "cpu"
 
 
 # ============================================================================
@@ -371,17 +419,29 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             verbose=input_dict["verbose"],
         )
         return {"results": results}
-    raise ValueError(f"protenix: unknown operation {operation!r}; valid: ['predict']")
+    if operation == "introspect_loaded":
+        return {
+            "loaded": _model._loaded,
+            "device": _model.device,
+            "cache_key": list(_model._cache_key) if _model._cache_key is not None else None,
+            "runner_id": id(_model.runner) if _model.runner is not None else None,
+        }
+    raise ValueError(f"protenix: unknown operation {operation!r}; valid: ['predict', 'introspect_loaded']")
 
 
 def to_device(device: str) -> dict[str, Any]:
-    """Passthrough for CLI tool - Protenix naturally unloads after each call."""
-    return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
+    """Move model to specified device (called by DeviceManager)."""
+    global _model
+    if _model is not None and _model._loaded:
+        _model.to_device(device)
+    return {"success": True, "device": device}
 
 
 def get_memory_stats() -> dict[str, Any]:
-    """CLI tool, no persistent GPU state to report."""
-    return {"available": False, "framework": "cli", "reason": "CLI tool, no persistent GPU state"}
+    """Report GPU memory usage (called by DeviceManager for monitoring)."""
+    from standalone_helpers import get_pytorch_memory_stats
+
+    return get_pytorch_memory_stats(device=0)  # type: ignore[no-any-return]
 
 
 if __name__ == "__main__":

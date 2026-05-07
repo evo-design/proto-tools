@@ -14,6 +14,7 @@ from proto_tools.tools.structure_prediction import (
     StructurePredictionComplex,
     run_protenix,
 )
+from proto_tools.utils import ToolInstance
 from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
@@ -257,6 +258,40 @@ def test_protenix_mini_models_with_msa(model_name):
     assert output.success
     assert len(output.structures) == 1
     assert output.structures[0].metrics["avg_plddt"] > 0.0
+
+
+@pytest.mark.uses_gpu
+@pytest.mark.slow
+def test_protenix_holds_runner_across_calls():
+    """Two calls inside persist_tool reuse the held InferenceRunner (no rebuild)."""
+    complexes = [StructurePredictionComplex(chains=[Chain(sequence=_CRO_SEQUENCE, entity_type="protein")])]
+    inputs = ProtenixInput(complexes=complexes)
+    config = ProtenixConfig(
+        model_name="protenix_tiny_default_v0.5.0",
+        use_msa=False,
+        num_diffusion_samples=1,
+        num_diffusion_steps=20,
+        seeds=[0],
+        verbose=False,
+    )
+
+    introspect_payload = {
+        "operation": "introspect_loaded",
+        "model_name": config.model_name,
+    }
+
+    with ToolInstance.persist_tool("protenix"):
+        run_protenix(inputs, config)
+        info1 = ToolInstance.dispatch("protenix", introspect_payload, config=config)
+
+        run_protenix(inputs, config)
+        info2 = ToolInstance.dispatch("protenix", introspect_payload, config=config)
+
+    assert info1["loaded"] and info2["loaded"]
+    assert info1["runner_id"] is not None
+    # Same Python object across calls — proves the runner wasn't rebuilt.
+    assert info1["runner_id"] == info2["runner_id"]
+    assert info1["cache_key"] == info2["cache_key"]
 
 
 # ── Benchmark ─────────────────────────────────────────────────────────────────
