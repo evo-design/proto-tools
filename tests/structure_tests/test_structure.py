@@ -4,6 +4,7 @@ Tests for the Structure entity.
 """
 
 import warnings
+from io import StringIO
 from pathlib import Path
 
 import gemmi
@@ -1305,3 +1306,32 @@ def test_backbone_rmsd_self_is_zero(pdl1_complex):
 def test_backbone_rmsd_per_chain(pdl1_complex):
     """Per-chain RMSD against self is also zero."""
     assert pdl1_complex.backbone_rmsd(pdl1_complex, chain_id="A") == pytest.approx(0.0, abs=1e-3)
+
+
+def test_ca_rmsd_no_superposition_translation_recovers_offset(pdl1_complex):
+    """A pure rigid translation produces RMSD equal to the translation magnitude (and backbone_rmsd cancels it)."""
+    from biotite.structure.io.pdb import PDBFile
+
+    array = pdb_file_to_atomarray(StringIO(pdl1_complex.structure_pdb))
+    array.coord = array.coord + np.array([0.0, 0.0, 5.0], dtype=np.float32)
+    out = StringIO()
+    pdb = PDBFile()
+    pdb.set_structure(array)  # type: ignore[no-untyped-call]
+    pdb.write(out)
+    translated = Structure(structure=out.getvalue())
+
+    assert pdl1_complex.ca_rmsd_no_superposition(translated) == pytest.approx(5.0, abs=1e-3)
+    assert pdl1_complex.backbone_rmsd(translated) == pytest.approx(0.0, abs=1e-3)
+
+
+def test_ca_rmsd_no_superposition_different_chain_ids(pdl1_complex):
+    """Pairs CA atoms across chains with different labels in each structure."""
+    renamed = pdl1_complex.with_renamed_chains({"A": "X", "B": "Y"})
+    assert pdl1_complex.ca_rmsd_no_superposition(renamed, self_chain_id="A", other_chain_id="X") == pytest.approx(
+        0.0, abs=1e-6
+    )
+
+
+def test_ca_rmsd_no_superposition_empty_chain_returns_inf(pdl1_complex):
+    """Returns inf when one side has zero CA atoms (e.g. unknown chain id)."""
+    assert pdl1_complex.ca_rmsd_no_superposition(pdl1_complex, self_chain_id="ZZ", other_chain_id="A") == float("inf")
