@@ -237,18 +237,15 @@ class ProtenixConfig(MSAStructurePredictionConfig):
             docking tasks such as antibody-antigen complexes.
             Default: ``[0]``.
 
-        num_diffusion_samples (int): Number of independent structure samples to generate
-            per seed. Only the best sample (by ranking score) is returned. Higher values
-            explore more of the conformational space but increase computation time.
-            Must be at least 1. Default: 5.
+        num_diffusion_samples (int): Independent structure samples per seed; only the
+            best by ranking score is returned. Higher = more thorough but slower.
+            Default 5 (matches upstream).
 
-        num_diffusion_steps (int): Number of denoising steps in the diffusion process.
-            Higher values produce more refined structures but are slower. Typical range:
-            100-500. Must be at least 1. Default: 200.
+        num_diffusion_steps (int): Denoising steps in the diffusion process. Higher =
+            more refined but slower. Default 200 (matches upstream).
 
-        num_pairformer_cycles (int): Number of Pairformer recycling iterations through
-            the model. Higher values produce more refined structures but increase
-            computation time. Typical range: 3-20. Must be at least 0. Default: 10.
+        num_pairformer_cycles (int): Pairformer refinement passes through the model.
+            Higher = more refined but slower. Default 10 (matches upstream).
 
         use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
             for protein chains using ColabFold search. Inherited from
@@ -282,9 +279,7 @@ class ProtenixConfig(MSAStructurePredictionConfig):
     seeds: list[int] = ConfigField(
         title="Seeds",
         default=[0],
-        description=(
-            "Random seeds for structure sampling. Each seed produces num_diffusion_samples independent samples."
-        ),
+        description="Random seeds for sampling; each seed produces num_diffusion_samples independent samples.",
         advanced=True,
     )
 
@@ -292,7 +287,7 @@ class ProtenixConfig(MSAStructurePredictionConfig):
         title="Number of Diffusion Samples",
         default=5,
         ge=1,
-        description="Number of independent structure samples per seed (only the best is returned)",
+        description="Structure samples per seed; best by ranking score is kept. Higher = more thorough but slower.",
         advanced=True,
     )
 
@@ -300,7 +295,7 @@ class ProtenixConfig(MSAStructurePredictionConfig):
         title="Number of Diffusion Steps",
         default=200,
         ge=1,
-        description="Number of denoising steps in the diffusion process (higher=more refined but slower)",
+        description="Denoising steps in the diffusion process. Higher = more refined but slower.",
         advanced=True,
     )
 
@@ -308,7 +303,7 @@ class ProtenixConfig(MSAStructurePredictionConfig):
         title="Number of Pairformer Cycles",
         default=10,
         ge=0,
-        description="Number of Pairformer recycling iterations (higher=more refined but slower)",
+        description="Pairformer refinement passes through the model. Higher = more refined but slower.",
         advanced=True,
     )
 
@@ -316,8 +311,9 @@ class ProtenixConfig(MSAStructurePredictionConfig):
         title="Timeout",
         default=1200,
         ge=1,
-        description="Maximum execution time in seconds (base models need ~10-15 min on slower GPUs)",
+        description="Maximum execution time in seconds (base models typically need 10-15 min on slower GPUs).",
         hidden=True,
+        include_in_key=False,
     )
 
 

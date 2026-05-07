@@ -230,7 +230,7 @@ class ESMFoldConfig(StructurePredictionConfig):
         title="Recycling Iterations",
         default=4,
         ge=1,
-        description="Iterative refinement passes through ESMFold; raise for hard targets",
+        description="Iterative refinement passes through ESMFold. Higher = more accurate but slower.",
         advanced=True,
     )
 

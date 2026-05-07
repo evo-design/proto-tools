@@ -82,9 +82,9 @@ Boltz2 uses a sophisticated pipeline:
 | `use_msa` | `bool` | `True` | Whether to generate and use MSAs for protein chains using ColabFold search |
 | `colabfold_search_config.search_mode` | `str` | `"remote"` | MSA search mode; `"remote"` uses ColabFold API, `"local"` uses local databases |
 | `colabfold_search_config.use_metagenomic` | `bool` | `False` | Include metagenomic sequences in MSA search for improved coverage |
-| `recycling_steps` | `int` | `10` | Iterative refinement passes; more = better quality but slower |
+| `recycling_steps` | `int` | `3` | Iterative refinement passes; more = better quality but slower |
 | `sampling_steps` | `int` | `200` | Denoising steps; more = finer structures but slower |
-| `diffusion_samples` | `int` | `25` | Independent structure samples; best is returned by confidence |
+| `diffusion_samples` | `int` | `1` | Independent structure samples; best is returned by confidence |
 | `num_workers` | `int` | `min(cpu_count, 4)` | CPU workers for parallel processing |
 | `devices` | `str` | `"0"` | GPU device IDs (e.g., "0" or "0,1" for multi-GPU) |
 
@@ -183,8 +183,8 @@ inputs = Boltz2PredictionInput(
     ]
 )
 config = Boltz2PredictionConfig(
-    recycling_steps=10,
-    diffusion_samples=25,
+    recycling_steps=10,  # higher than default for quality
+    diffusion_samples=10,  # higher than default for conformational diversity
 )
 result = run_boltz2_prediction(inputs, config)
 
