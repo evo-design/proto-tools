@@ -512,17 +512,17 @@ class ESMFoldModel:
             # Create 2D mask for valid (i, j) residue pairs
             pae_mask = residue_mask.unsqueeze(-1) * residue_mask.unsqueeze(-2)  # (1, seq_len, seq_len)
             avg_pae = float((pae * pae_mask).sum() / pae_mask.sum().clamp(min=1))
-            pae_matrix = pae[0].tolist() if include_pae_matrix else None
+            pae = pae[0].tolist() if include_pae_matrix else None
         else:
             avg_pae = None
-            pae_matrix = None
+            pae = None
 
         return {
             "pdb": pdb_output,
             "avg_plddt": float(avg_plddt),
             "ptm": float(ptm) if ptm is not None else None,
             "avg_pae": avg_pae,
-            "pae_matrix": pae_matrix,
+            "pae": pae,
         }
 
     # ============================================================================
@@ -643,7 +643,7 @@ def _metrics_with_losses(result: dict[str, Any], loss_terms: dict[str, float]) -
         "avg_plddt": result["avg_plddt"],
         "ptm": result["ptm"],
         "avg_pae": result["avg_pae"],
-        "pae_matrix": result.get("pae_matrix"),
+        "pae": result.get("pae"),
     }
     metrics.update({f"loss_{key}": value for key, value in loss_terms.items()})
     return metrics

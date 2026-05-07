@@ -156,12 +156,12 @@ class PDockQ2Input(BaseToolInput):
         if plddt is None:
             raise ValueError("structure.per_residue_plddt is None; set b_factor_type to PLDDT or NORMALIZED_PLDDT")
 
-        pae = self.structure.metrics.get("pae_matrix")
+        pae = self.structure.metrics.get("pae")
         if pae is None:
-            raise ValueError("structure.metrics['pae_matrix'] is missing; attach the PAE matrix before scoring")
+            raise ValueError("structure.metrics['pae'] is missing; attach the PAE matrix before scoring")
         pae_arr = np.asarray(pae, dtype=float)
         if pae_arr.ndim != 2 or pae_arr.shape[0] != pae_arr.shape[1]:
-            raise ValueError(f"structure.metrics['pae_matrix'] must be a square matrix, got shape {pae_arr.shape}")
+            raise ValueError(f"structure.metrics['pae'] must be a square matrix, got shape {pae_arr.shape}")
         if pae_arr.shape[0] != len(plddt):
             raise ValueError(f"PAE shape {pae_arr.shape} does not match residue count {len(plddt)}")
         return self
@@ -218,7 +218,7 @@ def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     fixture = Path(__file__).parent / "example_input_fixture.pdb"
     pae = json.loads((Path(__file__).parent / "example_input_fixture_pae.json").read_text())
-    structure = Structure.from_file(fixture, b_factor_type=BFactorType.PLDDT, metrics={"pae_matrix": pae})
+    structure = Structure.from_file(fixture, b_factor_type=BFactorType.PLDDT, metrics={"pae": pae})
     return PDockQ2Input(structure=structure, binder_chain="A", target_chains=["B"])
 
 
@@ -261,7 +261,7 @@ def run_pdockq2(
     if per_residue_plddt is None:
         raise ValueError("structure.per_residue_plddt is None; cannot score pDockQ2")
     plddt_100 = np.asarray(per_residue_plddt, dtype=float) * 100.0
-    pae = np.asarray(structure.metrics["pae_matrix"], dtype=float)
+    pae = np.asarray(structure.metrics["pae"], dtype=float)
 
     chain_ids, ca_coords_list = _collect_ca_per_residue(structure)
     ca_coords = np.stack(ca_coords_list, axis=0)

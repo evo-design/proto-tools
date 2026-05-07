@@ -125,7 +125,7 @@ def test_boltz2_ccd_vs_smiles_input_equivalent_predictions():
 
 @pytest.mark.uses_gpu
 def test_boltz2_pae_surface():
-    """avg_pae always emitted; pae_matrix square + self-consistent only when flag set."""
+    """avg_pae always emitted; pae square + self-consistent only when flag set."""
     inputs = Boltz2Input(complexes=[_CRO_SEQUENCE])
     base = {"use_msa": False, "sampling_steps": 50, "diffusion_samples": 1, "seed": 42}
 
@@ -136,10 +136,10 @@ def test_boltz2_pae_surface():
     # avg_pae is "always" availability — must be present in both runs and inside [0, 32).
     for m in (off_m, on_m):
         assert m["avg_pae"] is not None and 0.0 <= m["avg_pae"] < 32.0
-    # pae_matrix is gated; default-off must not appear in the dump.
-    assert "pae_matrix" not in off_m.model_dump(exclude_none=True)
+    # pae is gated; default-off must not appear in the dump.
+    assert "pae" not in off_m.model_dump(exclude_none=True)
 
-    pae = on_m["pae_matrix"]
+    pae = on_m["pae"]
     n = len(_CRO_SEQUENCE)
     assert pae is not None and len(pae) == n and all(len(row) == n for row in pae)
     # avg_pae must equal the matrix mean when both come from the same call.

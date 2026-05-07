@@ -97,15 +97,16 @@ def _extract_metrics(aux: dict[str, Any] | None, include_pae_matrix: bool = Fals
             if scalar is not None:
                 metrics[dst_key] = scalar
 
-    # Full per-residue PAE matrix lives under `pae_matrix` to avoid colliding
-    # with ColabDesign's scalar `aux["losses"]["pae"]` loss term below.
-    if include_pae_matrix:
-        metrics["pae_matrix"] = serialize_output(aux["pae"])
-
+    # Skip "pae" in the losses loop so it doesn't collide with the matrix below.
     for key, value in aux.get("losses", {}).items():
+        if key == "pae":
+            continue
         scalar = _metric_value(value)
         if scalar is not None:
             metrics[key] = scalar
+
+    if include_pae_matrix:
+        metrics["pae"] = serialize_output(aux["pae"])
 
     return metrics
 
@@ -461,7 +462,7 @@ class AlphaFold2Model:
             "ptm": metrics["ptm"],
             "iptm": metrics.get("iptm"),
             "avg_pae": metrics["avg_pae"],
-            "pae_matrix": metrics.get("pae_matrix"),
+            "pae": metrics.get("pae"),
         }
 
     # -------------------------------------------------------------------------

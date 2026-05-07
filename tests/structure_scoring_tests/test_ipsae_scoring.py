@@ -32,9 +32,9 @@ def test_binder_in_target_chains_rejected():
         IPSAEScoringInput(structure=_bundled_structure(), binder_chain="A", target_chains=["A", "B"])
 
 
-def test_missing_pae_matrix_rejected():
+def test_missing_pae_rejected():
     """Structure without a PAE matrix must raise."""
-    with pytest.raises(ValidationError, match="pae_matrix"):
+    with pytest.raises(ValidationError, match="pae"):
         IPSAEScoringInput(structure=_bundled_structure(with_pae=False), binder_chain="A", target_chains=["B"])
 
 

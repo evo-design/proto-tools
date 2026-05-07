@@ -73,7 +73,7 @@ class Boltz2Metrics(Metrics):
         chains_ptm (list[float]): Per-chain pTM scores. Always present.
         pair_chains_iptm (list[list[float]]): Pairwise chain ipTM scores. Always present.
         avg_pae (float): Mean of the per-token PAE matrix in Å. Always present.
-        pae_matrix (list[list[float]]): Full per-token PAE matrix in Å. Present when include_pae_matrix=True.
+        pae (list[list[float]]): Full per-token PAE matrix in Å. Present when include_pae_matrix=True.
         ligand_iptm (float): Ligand interface pTM. Depends on complex composition.
         protein_iptm (float): Protein interface pTM. Depends on complex composition.
         complex_plddt (float): Complex predicted LDDT. Depends on complex composition.
@@ -89,7 +89,7 @@ class Boltz2Metrics(Metrics):
         "chains_ptm": {"availability": "always", "type": "list[float]", "min": 0.0, "max": 1.0},
         "pair_chains_iptm": {"availability": "always", "type": "list[list[float]]", "min": 0.0, "max": 1.0},
         "avg_pae": {"availability": "always", "type": "float", "min": 0.0, "max": 32.0},
-        "pae_matrix": {
+        "pae": {
             "availability": "when include_pae_matrix=True",
             "type": "list[list[float]]",
             "min": 0.0,
@@ -158,7 +158,7 @@ class Boltz2Config(MSAStructurePredictionConfig):
             MSA generation, model loading, and prediction progress. Inherited from
             ``StructurePredictionConfig``. Default: ``False``.
 
-        include_pae_matrix (bool): Attach ``pae_matrix`` (``avg_pae`` always emitted). Default: ``False``.
+        include_pae_matrix (bool): Attach ``pae`` (``avg_pae`` always emitted). Default: ``False``.
 
         timeout (int): Maximum execution time in seconds. Default: 1200.
 
@@ -448,7 +448,7 @@ def run_boltz2_on_complex(
         "chains_ptm": formatted_metrics["chains_ptm"],
         "pair_chains_iptm": formatted_metrics["pair_chains_iptm"],
         "avg_pae": float(formatted_metrics["avg_pae"]),
-        "pae_matrix": formatted_metrics["pae_matrix"],
+        "pae": formatted_metrics["pae"],
     }
     for metric in ("ligand_iptm", "protein_iptm", "complex_plddt", "complex_iplddt", "complex_pde", "complex_ipde"):
         if metric in formatted_metrics:

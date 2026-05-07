@@ -60,7 +60,7 @@ writing temporary PDB + PAE JSON files and parsing the output.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `structure` | `Structure` | *Required* | Cofolded complex. `b_factor_type` must be `PLDDT` or `NORMALIZED_PLDDT`. PAE matrix must be attached at `structure.metrics["pae_matrix"]` as a square `list[list[float]]` whose dimension matches the total residue count. |
+| `structure` | `Structure` | *Required* | Cofolded complex. `b_factor_type` must be `PLDDT` or `NORMALIZED_PLDDT`. PAE matrix must be attached at `structure.metrics["pae"]` as a square `list[list[float]]` whose dimension matches the total residue count. |
 | `binder_chain` | `str` | *Required* | Single-character chain ID of the binder. |
 | `target_chains` | `list[str]` | *Required* | Target chain ID(s). Single-character entries; comma-separated strings are accepted and normalized. |
 
@@ -125,7 +125,7 @@ from proto_tools.tools.structure_scoring.ipsae import (
 structure = Structure.from_file(
     "complex.pdb",
     b_factor_type=BFactorType.PLDDT,
-    metrics={"pae_matrix": my_pae_matrix},  # list[list[float]], N x N
+    metrics={"pae": my_pae},  # list[list[float]], N x N
 )
 
 inputs = IPSAEScoringInput(

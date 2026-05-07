@@ -305,7 +305,7 @@ def test_alphafold_db_fetch_full_p04637_record():
     assert output.structure.metrics["avg_plddt"] == pytest.approx(output.mean_plddt, abs=1e-6)
 
     # PAE and MSA are opt-in
-    assert "pae_matrix" not in output.structure.metrics
+    assert "pae" not in output.structure.metrics
     assert output.msa_a3m is None
 
     # Spec contract: every always-available metric is present, typed, and in-range
@@ -321,14 +321,14 @@ def test_alphafold_db_fetch_with_pae_returns_square_matrix():
     )
     assert output.success
     assert output.structure is not None
-    pae_matrix = output.structure.metrics["pae_matrix"]
+    pae = output.structure.metrics["pae"]
     n = output.sequence_length
-    assert len(pae_matrix) == n
-    assert all(len(row) == n for row in pae_matrix)
+    assert len(pae) == n
+    assert all(len(row) == n for row in pae)
     # Diagonal entries are conventionally near-zero (a residue's error against itself)
-    assert all(pae_matrix[i][i] < 5.0 for i in range(0, n, 50))
+    assert all(pae[i][i] < 5.0 for i in range(0, n, 50))
 
-    # With include_pae=True, pae_matrix is now also a spec-validated metric
+    # With include_pae=True, pae is now also a spec-validated metric
     assert_metrics_in_spec(output)
 
 
