@@ -6,7 +6,7 @@
 > **TODO:** This README still needs to be reviewed and quality checked
 
 ## Overview
-ProteinMPNN is a deep learning model for protein sequence design given a protein backbone structure ("inverse folding"). It uses message passing neural networks to predict amino acid sequences that will fold into a target 3D structure. This module provides interfaces for *Sequence Sampling* (generating new sequences for a given backbone) and *Sequence Scoring* (evaluating how well a sequence fits a structure).
+ProteinMPNN is a deep learning model for protein sequence design given a protein backbone structure ("inverse folding"). It uses message passing neural networks to predict amino acid sequences that will fold into a target 3D structure. This module provides interfaces for *Sequence Sampling* (generating new sequences for a given backbone), *Sequence Scoring* (evaluating how well a sequence fits a structure), and *Relaxed-Sequence Gradients* (differentiating ProteinMPNN's perplexity objective with respect to a continuous `(L, 20)` distribution for use as a structure-conditioned loss in MCMC or gradient descent).
 
 ## Background
 
@@ -52,6 +52,7 @@ a sequence "fits" a given protein structure.
 |------|-------|--------|----------|
 | `proteinmpnn-sample` | Structure(s) | Designed sequences + metrics | Design new sequences for a target fold |
 | `proteinmpnn-score` | Sequence + Structure pairs | Perplexity + logits | Evaluate sequence-structure compatibility |
+| `proteinmpnn-gradient` | Logits `(L, 20)` + Structure | Mean NLL + gradient w.r.t. logits | Differentiable structure-conditioned objective for MCMC / gradient descent over relaxed sequences |
 
 ## Execution Modes
 
@@ -81,6 +82,16 @@ ProteinMPNN runs on GPU (recommended) or CPU:
 |-----------|------|-------------|
 | `sequence_structure_pairs` | `List[SequenceStructurePair]` | List of (sequence, structure) pairs to score |
 
+### Gradient (`proteinmpnn-gradient`)
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `logits` | `List[List[float]]` | Relaxed sequence logits with shape `(L, 20)` in canonical amino-acid order `ACDEFGHIKLMNPQRSTVWY` |
+| `structure` | `Structure` | Backbone structure to condition ProteinMPNN on |
+| `chains_to_redesign` | `ChainSelection \| None` | Chains to score. `None` = all chains in the structure |
+| `fixed_positions` | `ResidueSelection \| None` | Per-chain 1-indexed positions excluded from the perplexity objective |
+| `temperature` | `float \| null` | Optional softmax temperature; applies `softmax(input / T)` before evaluating. `None` = use logits as-is |
+
 ## Configuration
 
 ### Sampling Configuration (`ProteinMPNNSampleConfig`)
@@ -103,6 +114,15 @@ ProteinMPNN runs on GPU (recommended) or CPU:
 |-----------|------|---------|-------------|
 | `fixed_positions` | `Optional[Dict[str, List[int]]]` | `None` | Positions to exclude from perplexity calculation |
 | `seed` | `int` | `42` | Random seed |
+| `device` | `str` | `"cuda"` | Device for inference |
+
+### Gradient Configuration (`ProteinMPNNGradientConfig`)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `model_choice` | `Literal["proteinmpnn", "v_48_002", "v_48_010", "v_48_030", "abmpnn", "soluble"]` | `"proteinmpnn"` | Weights: `proteinmpnn` (=v_48_020), `v_48_{002,010,030}` noise variants, `abmpnn`, `soluble` |
+| `use_ste` | `bool` | `True` | Straight-Through Estimator: hard one-hot in forward, soft probabilities in backward. When `False`, soft blended embeddings flow forward (smoother but biased) |
+| `compute_gradient` | `bool` | `True` | Run backward pass and return gradient. Set `False` for forward-only NLL scoring (e.g. MCMC proposal ranking); `gradient` is `None` in the output |
 | `device` | `str` | `"cuda"` | Device for inference |
 
 ### Parameter Guides
@@ -148,6 +168,15 @@ Each `InverseFoldingScoringMetrics` contains:
 |-------|------|-------------|
 | `log_likelihood`, `avg_log_likelihood`, `perplexity` | `float` | Scalar metrics (attribute or mapping access) |
 | `logits` | `Optional[List[List[float]]]` | Per-position logits array of shape `(seq_length, vocab_size)` |
+
+### Gradient Output (`ProteinMPNNGradientOutput`)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `loss` | `float` | Mean negative log-likelihood over ProteinMPNN-scored positions |
+| `gradient` | `List[List[float]] \| None` | Gradient of `loss` w.r.t. input `logits`, shape `(L, 20)`. `None` when `compute_gradient=False` |
+| `metrics` | `Dict[str, Any]` | `log_likelihood`, `avg_log_likelihood`, `perplexity`, `sequence_length`, `model_choice`, `objective` |
+| `vocab` | `List[str]` | Canonical amino-acid column ordering for `logits` and `gradient` |
 
 ## Interpreting Results
 
