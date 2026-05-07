@@ -9,9 +9,9 @@
 
 LigandMPNN is an inverse folding model that designs protein sequences conditioned on a backbone structure and its molecular context -- including bound ligands, metal ions, nucleic acids, and non-standard residues. It extends ProteinMPNN's message-passing neural network architecture to incorporate atomic-level information from the non-protein environment surrounding the design target.
 
-- **Tool key**: `ligandmpnn-sample`
+- **Tool keys**: `ligandmpnn-sample`, `ligandmpnn-score`
 - **Input**: Protein structures (PDB/CIF) with optional chain and position constraints
-- **Output**: Designed amino acid sequences with per-sequence metrics
+- **Output**: Designed sequences and sequence-structure scores
 - **Execution**: GPU required
 
 ## Background
@@ -34,11 +34,16 @@ This context is critical for designing functional enzymes, metalloprotein bindin
 
 Sample protein sequences using LigandMPNN.
 
+### LigandMPNN Scoring (`ligandmpnn-score`)
+
+Score sequence-structure compatibility with LigandMPNN.
+
 ## Tool Catalog
 
 | Tool Key | Status | Description |
 |----------|--------|-------------|
 | `ligandmpnn-sample` | Available | Sample protein sequences conditioned on structure + ligand context |
+| `ligandmpnn-score` | Available | Score sequences against structures with ligand context |
 
 ## Execution Modes
 
@@ -57,6 +62,8 @@ Sample protein sequences using LigandMPNN.
 
 ## Input Parameters
 
+### Sampling Input
+
 `InverseFoldingInput` wraps a list of `InverseFoldingStructureInput` objects:
 
 | Field | Type | Description |
@@ -68,10 +75,27 @@ Each `InverseFoldingStructureInput` contains:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `structure` | `Structure \| str \| Path` | (required) | Protein structure. Accepts file path, PDB content string, or Structure object. |
-| `chain_ids` | `Optional[List[str]]` | `None` (all chains) | Chains to redesign. Non-listed chains provide structural context but are not designed. |
+| `chains_to_redesign` | `Optional[List[str]]` | `None` (all chains) | Chains to redesign. Non-listed chains provide structural context but are not designed. |
 | `fixed_positions` | `Optional[Dict[str, List[int]]]` | `None` | Residue positions to keep fixed per chain (1-indexed). Fixed residues retain their native identity. |
 
+### Scoring Input
+
+`LigandMPNNScoringInput` wraps `SequenceStructurePair` entries:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `sequence_structure_pairs` | `List[SequenceStructurePair]` | Sequence and structure pairs to score |
+
+Each `SequenceStructurePair` contains:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `sequence` | `str` | Amino acid sequence to score. Length must match the protein residues parsed from the structure. |
+| `structure` | `Structure` | Structure context for the sequence |
+
 ## Configuration
+
+### Sampling Configuration
 
 | Parameter | Type | Default | Range | Description |
 |-----------|------|---------|-------|-------------|
@@ -83,9 +107,22 @@ Each `InverseFoldingStructureInput` contains:
 | `ligand_mpnn_use_atom_context` | `bool` | `True` | -- | Encode ligand atom context in graph (ligand-aware variants only) |
 | `ligand_mpnn_use_side_chain_context` | `bool` | `False` | -- | Condition on fixed-residue sidechain atoms |
 | `ligand_mpnn_cutoff_for_score` | `float` | `8.0` | > 0.0 | Ligand-residue distance cutoff (A) for ligand-interface recovery score |
-| `seed` | `int` | `42` | any int | Random seed for reproducibility |
+| `seed` | `int \| None` | `None` | any int | Random seed; a random integer is generated when unset |
 | `device` | `str` | `"cuda"` | `"cuda"`, `"cpu"` | Inference device |
-| `verbose` | `bool` | `False` | -- | Print status messages during execution |
+| `verbose` | `int` | `0` | 0-3 | Verbosity level |
+
+### Scoring Configuration
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `fixed_positions` | `Optional[Dict[str, List[int]]]` | `None` | Residues excluded from score aggregation |
+| `return_logits` | `bool` | `False` | Include per-position logits |
+| `model_type` | `"ligand_mpnn"` | `"ligand_mpnn"` | LigandMPNN model type to load |
+| `scoring_mode` | `"single_aa" \| "autoregressive"` | `"single_aa"` | Single-position or autoregressive sequence-conditioned probabilities |
+| `seed` | `int \| None` | `None` | Random seed for decoding order |
+| `device` | `str` | `"cuda"` | Inference device |
+
+`single_aa` scores each position conditioned on the backbone and all other sequence positions. `autoregressive` scores one seed-determined decoding order.
 
 ### Parameter Guides
 
@@ -117,6 +154,8 @@ When used in optimization loops:
 
 ## Output Specification
 
+### Sampling Output
+
 `InverseFoldingOutput` contains:
 
 | Field | Type | Description |
@@ -133,6 +172,12 @@ Each `LigandMPNNSequences` contains:
 
 Export formats: `fasta`, `json`
 
+### Scoring Output
+
+`LigandMPNNScoringOutput` contains one `InverseFoldingScoringMetrics` per input pair with `log_likelihood`, `avg_log_likelihood`, `perplexity`, and optional `logits`/`vocab`.
+
+Export formats: `csv`, `json`
+
 ## Interpreting Results
 
 - **Sequence recovery**: Compare designed sequences to the native sequence at each position. Recovery rates of 40-55% are typical for well-designed backbones.
@@ -144,35 +189,36 @@ Export formats: `fasta`, `json`
 
 **Basic sampling from a PDB file:**
 ```python
-from proto_tools.tools.inverse_folding.ligandmpnn import run_ligandmpnn_sample
-from proto_tools.tools.inverse_folding.shared_data_models import (
-    InverseFoldingConfig, InverseFoldingInput, InverseFoldingStructureInput,
+from proto_tools import (
+    InverseFoldingStructureInput,
+    LigandMPNNSampleConfig,
+    LigandMPNNSampleInput,
+    run_ligandmpnn_sample,
 )
 
-inputs = InverseFoldingInput(
+inputs = LigandMPNNSampleInput(
     inputs=[
         InverseFoldingStructureInput(structure="/path/to/enzyme_with_ligand.pdb")
     ]
 )
-config = InverseFoldingConfig(num_sequences_per_structure=10, temperature=0.2)
+config = LigandMPNNSampleConfig(num_sequences_per_structure=10, temperature=0.2)
 result = run_ligandmpnn_sample(inputs, config)
 
 for seq in result.designed_sequences[0].sequences:
     print(seq)
 ```
 
-**Designing specific chains with fixed active-site residues:**
+**Fixing active-site residues:**
 ```python
-inputs = InverseFoldingInput(
+inputs = LigandMPNNSampleInput(
     inputs=[
         InverseFoldingStructureInput(
-            structure="/path/to/homodimer_with_cofactor.pdb",
-            chain_ids=["A"],
+            structure="/path/to/enzyme_with_cofactor.pdb",
             fixed_positions={"A": [45, 67, 89, 112, 134]},
         )
     ]
 )
-config = InverseFoldingConfig(
+config = LigandMPNNSampleConfig(
     num_sequences_per_structure=50,
     temperature=0.3,
     excluded_amino_acids=["C"],
@@ -185,18 +231,45 @@ print(f"First sequence: {result.designed_sequences[0].sequences[0][:50]}...")
 
 **Multiple structures in one call:**
 ```python
-inputs = InverseFoldingInput(
+inputs = LigandMPNNSampleInput(
     inputs=[
         InverseFoldingStructureInput(structure="/path/to/structure1.pdb"),
         InverseFoldingStructureInput(structure="/path/to/structure2.pdb"),
         InverseFoldingStructureInput(structure="/path/to/structure3.pdb"),
     ]
 )
-config = InverseFoldingConfig(num_sequences_per_structure=5, temperature=0.1)
+config = LigandMPNNSampleConfig(num_sequences_per_structure=5, temperature=0.1)
 result = run_ligandmpnn_sample(inputs, config)
 
 for i, designs in enumerate(result.designed_sequences):
     print(f"Structure {i}: {len(designs.sequences)} sequences designed")
+```
+
+**Scoring a sequence against a structure:**
+```python
+from proto_tools import (
+    LigandMPNNScoringConfig,
+    LigandMPNNScoringInput,
+    SequenceStructurePair,
+    run_ligandmpnn_score,
+)
+from proto_tools.entities.structures import Structure
+
+structure = Structure.from_file("/path/to/enzyme_with_ligand.pdb")
+sequence = "".join(
+    structure.get_chain_sequence(chain)
+    for chain in structure.get_chain_ids()
+)
+score_inputs = LigandMPNNScoringInput(
+    sequence_structure_pairs=[
+        SequenceStructurePair(sequence=sequence, structure=structure)
+    ]
+)
+score_result = run_ligandmpnn_score(
+    score_inputs,
+    LigandMPNNScoringConfig(scoring_mode="single_aa", seed=42),
+)
+print(score_result.scores[0].perplexity)
 ```
 
 **Accessing per-sequence metrics:**
@@ -219,11 +292,11 @@ result.export("/path/to/output_dir", file_format="json")
 
 - **Include ligands in your PDB.** LigandMPNN's advantage over ProteinMPNN is ligand-aware design. If your PDB does not contain HETATM records for ligands/ions, LigandMPNN reduces to ProteinMPNN and you should use ProteinMPNN directly (it is faster).
 - **Fix catalytic residues.** For enzymes, always fix known catalytic residues using `fixed_positions`. LigandMPNN respects ligand context but does not guarantee catalytic geometry without explicit constraints.
+- **Use one design constraint mode.** LigandMPNN accepts chain-based design (`chains_to_redesign`) or residue-based fixed positions (`fixed_positions`) in a single request, not both.
 - **Temperature 0.1 is a safe default.** Start with the default and increase only if you need more diversity. Very high temperatures (>0.5) produce sequences that may not fold.
 - **GPU is required.** LigandMPNN runs on GPU via CUDA. CPU execution is technically possible but impractically slow for typical batch sizes.
-- **Chain IDs must exist in the structure.** If you specify `chain_ids` that are not present in the PDB, validation will raise an error with the available chains listed.
+- **Chain IDs must exist in the structure.** If you specify `chains_to_redesign` values that are not present in the PDB, validation will raise an error with the available chains listed.
 - **Positions are 1-indexed.** Fixed positions follow biological convention (first residue = position 1), not 0-indexed.
-- **For scoring, use `proteinmpnn-score`.** No LigandMPNN scoring tool is registered; use `proteinmpnn-score` for protein-only contexts.
 
 ## References
 
@@ -236,7 +309,7 @@ result.export("/path/to/output_dir", file_format="json")
 **Often used together:**
 - **ESMFold** (`esmfold-prediction`) -- Validate that designed sequences fold into the target structure
 - **AlphaFold** (`alphafold3-prediction`) -- Higher-accuracy structure validation, especially for complexes
-- **ProteinMPNN scoring** (`proteinmpnn-score`) -- Score designed sequence-structure compatibility
+- **ProteinMPNN scoring** (`proteinmpnn-score`) -- Faster protein-only sequence-structure scoring
 - **Segmasker** (`segmasker-score`) -- Filter designs with excessive low-complexity content
 
 **Alternatives:**

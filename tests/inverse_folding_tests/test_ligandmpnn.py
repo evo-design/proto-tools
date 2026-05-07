@@ -1,6 +1,6 @@
 """tests/inverse_folding_tests/test_ligandmpnn.py.
 
-Tests for LigandMPNN sampling.
+Tests for LigandMPNN sampling and scoring.
 """
 
 import json
@@ -12,9 +12,14 @@ import pytest
 from proto_tools.entities.structures.structure import Structure
 from proto_tools.tools.inverse_folding import (
     InverseFoldingInput,
+    InverseFoldingScoringMetrics,
     InverseFoldingStructureInput,
     LigandMPNNSampleConfig,
+    LigandMPNNScoringConfig,
+    LigandMPNNScoringInput,
+    SequenceStructurePair,
     run_ligandmpnn_sample,
+    run_ligandmpnn_score,
 )
 from proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample import (
     example_input as ligandmpnn_example_input,
@@ -116,6 +121,71 @@ def test_ligandmpnn_sample_multiple_structures(cif_structure: Structure):
     for designs in output.designed_sequences:
         assert len(designs.sequences) == 3
         assert all(isinstance(sequence, str) for sequence in designs.sequences)
+
+
+def test_ligandmpnn_score_dispatch_contract(monkeypatch):
+    captured = {}
+    structure = ligandmpnn_example_input().inputs[0].structure
+    sequence = structure.get_chain_sequence("A")
+    vocab = list("ACDEFGHIKLMNPQRSTVWYX")
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        captured["toolkit"] = toolkit
+        captured["payload"] = payload
+        return {
+            "metrics": {"log_likelihood": -10.0, "avg_log_likelihood": -1.0, "perplexity": math.e},
+            "logits": [[0.0] * len(vocab)] * len(sequence),
+            "vocab": vocab,
+        }
+
+    monkeypatch.setattr(
+        "proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_score.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+
+    output = run_ligandmpnn_score(
+        LigandMPNNScoringInput(
+            sequence_structure_pairs=[SequenceStructurePair(sequence=sequence, structure=structure)]
+        ),
+        LigandMPNNScoringConfig(
+            fixed_positions={"A": [1]},
+            seed=42,
+            device="cpu",
+            return_logits=True,
+            scoring_mode="autoregressive",
+        ),
+    )
+
+    assert output.tool_id == "ligandmpnn-score"
+    assert isinstance(output.scores[0], InverseFoldingScoringMetrics)
+    assert output.scores[0].logits is not None
+    assert captured["toolkit"] == "ligandmpnn"
+    payload = captured["payload"]
+    assert payload["operation"] == "score"
+    assert payload["sequence"] == sequence
+    assert payload["fixed_positions"] == {"A": [1]}
+    assert payload["return_logits"] is True
+    assert payload["scoring_mode"] == "autoregressive"
+
+
+@pytest.mark.uses_gpu
+def test_ligandmpnn_score():
+    structure = ligandmpnn_example_input().inputs[0].structure
+    sequence = structure.get_chain_sequence("A")
+    inputs = LigandMPNNScoringInput(
+        sequence_structure_pairs=[SequenceStructurePair(sequence=sequence, structure=structure)]
+    )
+    output = run_ligandmpnn_score(inputs, LigandMPNNScoringConfig(seed=42, return_logits=True))
+
+    validate_output(output)
+    assert output.tool_id == "ligandmpnn-score"
+    assert len(output.scores) == 1
+    score = output.scores[0]
+    assert score.logits is not None
+    assert len(score.logits) == len(sequence)
+    assert len(score.logits[0]) == len(score.vocab)
+    assert math.isclose(score.log_likelihood, score.avg_log_likelihood * len(sequence), rel_tol=1e-5)
+    assert math.isclose(score.perplexity, math.exp(-score.avg_log_likelihood), rel_tol=1e-5)
 
 
 # ── Benchmarks ──────────────────────────────────────────────────────────────

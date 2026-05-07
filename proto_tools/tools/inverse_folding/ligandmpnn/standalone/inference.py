@@ -2,12 +2,14 @@
 
 import gc
 import json
+import math
 import os
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import torch
 from standalone_helpers import get_logger, move_model_to_device, serialize_output
 
@@ -15,8 +17,28 @@ logger = get_logger(__name__)
 
 DEFAULT_TEMPERATURE = 0.1
 
-# Alphabet ordering for logits interpretation (standard MPNN)
-MPNN_VOCAB = "ACDEFGHIKLMNPQRSTVWYX"
+SCORING_CAUSALITY = {
+    "single_aa": "conditional_minus_self",
+    "autoregressive": "auto_regressive",
+}
+
+
+def _fixed_residues(fixed_positions: dict[str, list[int]] | None) -> list[str] | None:
+    if not fixed_positions:
+        return None
+    return [f"{chain}{pos}" for chain, positions in fixed_positions.items() for pos in positions]
+
+
+def _sequence_tokens(sequence: str) -> tuple[list[str], list[int]]:
+    from atomworks.constants import DICT_THREE_TO_ONE  # type: ignore[import-not-found]
+    from mpnn.transforms.feature_aggregation.token_encodings import MPNN_TOKEN_ENCODING
+
+    vocab = [DICT_THREE_TO_ONE[MPNN_TOKEN_ENCODING.idx_to_token[idx]] for idx in range(MPNN_TOKEN_ENCODING.n_tokens)]
+    token_by_letter = {letter: idx for idx, letter in enumerate(vocab)}
+    try:
+        return vocab, [token_by_letter[aa] for aa in sequence]
+    except KeyError as exc:
+        raise ValueError(f"ligandmpnn: unsupported residue {exc.args[0]!r}") from exc
 
 
 class LigandMPNNModel:
@@ -80,10 +102,7 @@ class LigandMPNNModel:
         if not self._loaded or self.device != device or self._model_type != model_type:
             self.load(device, verbose, model_type=model_type)
 
-        # Build fixed_residues list from fixed_positions dict
-        fixed_residues = None
-        if fixed_positions:
-            fixed_residues = [f"{chain}{pos}" for chain, positions in fixed_positions.items() for pos in positions]
+        fixed_residues = _fixed_residues(fixed_positions)
 
         # Build input dict for Foundry engine
         # NOTE: Cannot mix residue-based (fixed_residues) and chain-based (designed_chains)
@@ -126,6 +145,119 @@ class LigandMPNNModel:
 
         self.unload()
         return {"sequences": sequences, "metrics": metrics}
+
+    def score(
+        self,
+        pdb_structure: str,
+        chain_ids: list[str],
+        sequence: str,
+        fixed_positions: dict[str, list[int]] | None = None,
+        seed: int | None = None,
+        device: str = "cuda",
+        verbose: bool = False,
+        model_type: str = "ligand_mpnn",
+        return_logits: bool = False,
+        scoring_mode: str = "single_aa",
+    ) -> dict[str, Any]:
+        """Score a sequence against a structure."""
+        from mpnn.collate.feature_collator import FeatureCollator
+        from mpnn.pipelines.mpnn import build_mpnn_transform_pipeline
+        from mpnn.utils.inference import MPNNInferenceInput
+
+        if seed is None:
+            raise ValueError("ligandmpnn: score requires an explicit int seed")
+        if scoring_mode not in SCORING_CAUSALITY:
+            raise ValueError(f"ligandmpnn: scoring_mode must be one of {sorted(SCORING_CAUSALITY)}")
+
+        if not self._loaded or self.device != device or self._model_type != model_type:
+            self.load(device, verbose, model_type=model_type)
+
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+        elif torch.backends.mps.is_available():
+            torch.mps.manual_seed(seed)
+
+        input_dict = {
+            "structure_path": pdb_structure,
+            "name": "score",
+            "seed": seed,
+            "batch_size": 1,
+            "number_of_batches": 1,
+            "temperature": 1.0,
+            "decode_type": "teacher_forcing",
+            "causality_pattern": SCORING_CAUSALITY[scoring_mode],
+            "initialize_sequence_embedding_with_ground_truth": True,
+            "features_to_return": {
+                "input_features": ["S", "mask_for_loss"],
+                "decoder_features": ["logits", "log_probs"],
+            },
+        }
+        fixed_residues = _fixed_residues(fixed_positions)
+        if fixed_residues:
+            input_dict["fixed_residues"] = fixed_residues
+        else:
+            input_dict["designed_chains"] = chain_ids
+
+        inference_input = MPNNInferenceInput.from_atom_array_and_dict(input_dict=input_dict)
+        input_dict = inference_input.input_dict
+        pipeline = build_mpnn_transform_pipeline(
+            model_type=self._engine.model_type,
+            is_inference=True,
+            minimal_return=True,
+            device=self._engine.device,
+        )
+        network_input = FeatureCollator()(
+            [
+                pipeline(
+                    {
+                        "atom_array": inference_input.atom_array.copy(),
+                        "structure_noise": input_dict["structure_noise"],
+                        "decode_type": input_dict["decode_type"],
+                        "causality_pattern": input_dict["causality_pattern"],
+                        "initialize_sequence_embedding_with_ground_truth": input_dict[
+                            "initialize_sequence_embedding_with_ground_truth"
+                        ],
+                        "atomize_side_chains": input_dict["atomize_side_chains"],
+                        "repeat_sample_num": input_dict["repeat_sample_num"],
+                        "features_to_return": input_dict["features_to_return"],
+                    }
+                )
+            ]
+        )
+
+        vocab, token_ids = _sequence_tokens(sequence)
+        parsed_len = int(network_input["input_features"]["S"].shape[1])
+        if len(token_ids) != parsed_len:
+            raise ValueError(f"Sequence length {len(sequence)} does not match structure ({parsed_len} residues).")
+
+        target = torch.tensor([token_ids], dtype=network_input["input_features"]["S"].dtype, device=self._engine.device)
+        network_input["input_features"]["S"] = target
+
+        with torch.no_grad():
+            output = self._engine.model(network_input)
+
+        mask = output["input_features"]["mask_for_loss"][0].bool()
+        log_probs = output["decoder_features"]["log_probs"][0]
+        selected = log_probs[torch.arange(parsed_len, device=log_probs.device), target[0]][mask]
+        effective_length = int(mask.sum().item())
+        if effective_length == 0:
+            raise ValueError("ligandmpnn: no residues available to score")
+
+        log_likelihood = float(selected.sum().item())
+        avg_log_likelihood = log_likelihood / effective_length
+
+        self.unload()
+        return {
+            "logits": output["decoder_features"]["logits"][0] if return_logits else None,
+            "metrics": {
+                "log_likelihood": log_likelihood,
+                "avg_log_likelihood": avg_log_likelihood,
+                "perplexity": float(math.exp(-avg_log_likelihood)),
+            },
+            "vocab": vocab,
+        }
 
     def load(self, device: str = "cuda", verbose: bool = False, model_type: str = "ligand_mpnn") -> None:
         """Load the LigandMPNN model via Foundry.
@@ -231,7 +363,20 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 ligand_mpnn_use_side_chain_context=input_dict["ligand_mpnn_use_side_chain_context"],
                 ligand_mpnn_cutoff_for_score=input_dict["ligand_mpnn_cutoff_for_score"],
             )
-        raise ValueError(f"ligandmpnn: unknown operation {operation!r}; valid: ['sample']")
+        if operation == "score":
+            return _model.score(
+                pdb_structure=pdb_structure,  # type: ignore[arg-type]
+                chain_ids=input_dict["chain_ids"],
+                sequence=input_dict["sequence"],
+                fixed_positions=input_dict.get("fixed_positions"),
+                seed=input_dict["seed"],
+                device=input_dict["device"],
+                verbose=input_dict["verbose"],
+                model_type=input_dict["model_type"],
+                return_logits=input_dict["return_logits"],
+                scoring_mode=input_dict["scoring_mode"],
+            )
+        raise ValueError(f"ligandmpnn: unknown operation {operation!r}; valid: ['sample', 'score']")
 
 
 def to_device(device: str) -> dict[str, Any]:
