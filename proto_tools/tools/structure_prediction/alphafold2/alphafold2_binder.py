@@ -161,8 +161,7 @@ class AlphaFold2BinderConfig(BaseConfig):
         title="Number of Recycles",
         default=3,
         ge=0,
-        le=48,
-        description="Number of recycling iterations (higher=more refined but slower).",
+        description="Recycling iterations through the model. Higher = more accurate but slower.",
         advanced=True,
     )
     # No reload_on_change: inference.py:_get_model caches one AF2 model per
@@ -361,7 +360,7 @@ def example_input() -> AlphaFold2BinderInput:
     input_class=AlphaFold2BinderInput,
     config_class=AlphaFold2BinderConfig,
     output_class=AlphaFold2BinderOutput,
-    description="AF2 binder design against a fixed target: loss + predicted Structure, optionally the gradient w.r.t. logits (base or Germinal backend)",
+    description="AF2 binder design against a fixed target. Returns loss, Structure, and optionally gradient.",
     uses_gpu=True,
     example_input=example_input,
     cacheable=False,

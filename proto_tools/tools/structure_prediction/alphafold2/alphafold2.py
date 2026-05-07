@@ -189,8 +189,7 @@ class AlphaFold2Config(MSAStructurePredictionConfig):
         title="Number of Recycles",
         default=3,
         ge=0,
-        le=48,
-        description="Number of recycling iterations (higher=more refined but slower)",
+        description="Recycling iterations through the model. Higher = more accurate but slower.",
         advanced=True,
     )
     model_num: int = ConfigField(
@@ -198,7 +197,7 @@ class AlphaFold2Config(MSAStructurePredictionConfig):
         default=1,
         ge=1,
         le=5,
-        description="Which AlphaFold2 model parameter set to use (1-5)",
+        description="Which of AlphaFold2's 5 trained parameter sets to use.",
         advanced=True,
         reload_on_change=True,
     )
@@ -207,7 +206,7 @@ class AlphaFold2Config(MSAStructurePredictionConfig):
         default=1,
         ge=1,
         le=5,
-        description="Number of model parameter sets to run and average (higher=better but slower)",
+        description="Number of parameter sets to run and average. Higher = more accurate but slower.",
     )
 
     @model_validator(mode="after")

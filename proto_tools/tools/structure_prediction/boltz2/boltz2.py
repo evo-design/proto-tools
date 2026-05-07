@@ -126,21 +126,22 @@ class Boltz2Config(MSAStructurePredictionConfig):
 
     Attributes:
         recycling_steps (int): Iterative refinement passes through the model.
-            Default 10; raise for hard targets, lower for speed.
+            Higher = more accurate but slower. Default 3 (matches upstream).
 
         sampling_steps (int): Denoising steps in the diffusion process.
-            Default 200; typical range 100-500.
+            Higher = more refined but slower. Default 200 (matches upstream).
 
         diffusion_samples (int): Independent structure samples per complex; the
-            best by confidence is returned; lower for faster runs.
+            best by confidence is returned. Default 1 (matches upstream).
 
-        step_scale (float): Diffusion step size; lower = more sample diversity.
+        step_scale (float): Diffusion step size (typical range 1.0-2.0). Lower =
+            more sample diversity. Default 1.5 (matches upstream).
 
-        max_msa_seqs (int): Cap on MSA depth fed into the model; reduces memory
-            on deep MSAs.
+        max_msa_seqs (int): Maximum number of MSA sequences fed into the model.
+            Lower to reduce GPU memory on deep MSAs. Default 8192.
 
-        subsample_msa (bool): Stochastically subsample MSA each call for diversity.
-            Default True.
+        subsample_msa (bool): Randomly subsample the MSA on each run for sample
+            diversity (loses determinism). Default False.
 
         num_workers (int): Number of CPU workers for parallel processing during
             prediction. Automatically set to the minimum of available CPU cores or 4.
@@ -166,57 +167,58 @@ class Boltz2Config(MSAStructurePredictionConfig):
 
     recycling_steps: int = ConfigField(
         title="Number of Recycling Steps",
-        default=10,
+        default=3,
         ge=0,
-        description="Iterative refinement passes. High-quality setting; lower (e.g. 3) for faster runs",
+        description="Iterative refinement passes through the model. Higher = more accurate but slower.",
         advanced=True,
     )
     sampling_steps: int = ConfigField(
         title="Number of Sampling Steps",
         default=200,
         ge=1,
-        description="Denoising steps in the diffusion process; raise for refinement",
+        description="Denoising steps in the diffusion process. Higher = more refined but slower.",
         advanced=True,
     )
     diffusion_samples: int = ConfigField(
         title="Number of Diffusion Samples",
-        default=25,
+        default=1,
         ge=1,
-        description="Independent samples per complex; best by confidence kept. Lower (e.g. 1) for faster runs",
+        description="Structure samples per complex; best by confidence is kept. Higher = more thorough but slower.",
         advanced=True,
     )
     step_scale: float = ConfigField(
         title="Diffusion Step Scale",
         default=1.5,
         gt=0.0,
-        description="Diffusion step size (range 1.0-2.0); lower = more sample diversity",
+        description="Diffusion step size (typical range 1.0-2.0). Lower values produce more sample diversity.",
         advanced=True,
     )
     max_msa_seqs: int = ConfigField(
         title="Max MSA Sequences",
         default=8192,
         ge=1,
-        description="Cap on MSA depth fed into the model; lower for memory savings on deep MSAs",
+        description="Maximum number of MSA sequences fed into the model. Lower this to reduce GPU memory on deep MSAs.",
         advanced=True,
     )
     subsample_msa: bool = ConfigField(
         title="Subsample MSA",
-        default=True,
-        description="Stochastically subsample MSA each call for diversity. Default True",
+        default=False,
+        description="Randomly subsample the MSA on each run for sample diversity (loses determinism).",
         advanced=True,
     )
     num_workers: int = ConfigField(
         title="Number of Workers",
         default=min(os.cpu_count() or 4, 4),
         ge=1,
-        description="Number of workers for prediction",
+        description="Number of dataloader workers for prediction.",
         hidden=True,
+        include_in_key=False,
     )
     timeout: int = ConfigField(
         title="Timeout",
         default=1200,
         ge=1,
-        description="Maximum execution time in seconds",
+        description="Maximum execution time in seconds.",
         hidden=True,
         include_in_key=False,
     )
@@ -325,7 +327,7 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config, instance: Any = None) 
 
     Example:
         >>> inputs = Boltz2Input(complexes=[["MVLSPADKTNVKAAW", "GSSGSSGSS"]])
-        >>> config = Boltz2Config(recycling_steps=10, sampling_steps=200, diffusion_samples=25, verbose=True)
+        >>> config = Boltz2Config(recycling_steps=3, sampling_steps=200, diffusion_samples=1, verbose=True)
         >>> result = run_boltz2(inputs, config)
         >>> print(f"Confidence: {result.structures[0].confidence_score:.2f}")
 

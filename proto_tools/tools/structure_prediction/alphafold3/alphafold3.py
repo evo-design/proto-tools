@@ -197,14 +197,14 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
         title="Recycling Iterations",
         default=10,
         ge=1,
-        description="Recycling iterations; raise for hard targets, lower for speed",
+        description="Recycling iterations through the model. Higher = more accurate but slower.",
         advanced=True,
     )
     num_diffusion_samples: int = ConfigField(
         title="Diffusion Samples per Seed",
         default=5,
         ge=1,
-        description="Diffusion samples per seed; total candidates = seeds * samples",
+        description="Diffusion samples per seed; best by ranking score is kept. Total = len(seeds) x samples.",
         advanced=True,
     )
 
