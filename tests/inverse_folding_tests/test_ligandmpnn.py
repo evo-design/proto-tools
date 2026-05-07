@@ -3,6 +3,8 @@
 Tests for LigandMPNN sampling.
 """
 
+import json
+import math
 from pathlib import Path
 
 import pytest
@@ -13,6 +15,9 @@ from proto_tools.tools.inverse_folding import (
     InverseFoldingStructureInput,
     LigandMPNNSampleConfig,
     run_ligandmpnn_sample,
+)
+from proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample import (
+    example_input as ligandmpnn_example_input,
 )
 from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
@@ -44,9 +49,31 @@ def test_ligandmpnn_sample_simple(cif_structure: Structure):
     assert all(isinstance(sequence, str) for sequence in designs.sequences)
     assert all(len(seq) > 0 for seq in designs.sequences)
     assert len(designs.sequence_recovery) == 2
+    assert designs.ligand_interface_sequence_recovery is not None
     assert len(designs.ligand_interface_sequence_recovery) == 2
     assert all(0.0 <= r <= 1.0 for r in designs.sequence_recovery)
     assert all(0.0 <= r <= 1.0 for r in designs.ligand_interface_sequence_recovery)
+
+
+@pytest.mark.uses_gpu
+def test_ligandmpnn_sample_no_ligand(cif_structure: Structure):
+    """#704: mixed batch maps no-ligand to None per-instance and round-trips strict JSON."""
+    inp = InverseFoldingInput(
+        inputs=[
+            InverseFoldingStructureInput(structure=cif_structure, chains_to_redesign=["A"]),
+            ligandmpnn_example_input().inputs[0],  # example_input_fixture.pdb has zero HETATM
+        ]
+    )
+    config = LigandMPNNSampleConfig(num_sequences_per_structure=2, seed=0)
+    output = run_ligandmpnn_sample(inp, config)
+    assert output.success
+
+    with_ligand, without_ligand = output.designed_sequences
+    assert with_ligand.ligand_interface_sequence_recovery is not None
+    assert all(0.0 <= r <= 1.0 for r in with_ligand.ligand_interface_sequence_recovery)
+    assert without_ligand.ligand_interface_sequence_recovery is None
+    assert all(math.isfinite(r) for d in (with_ligand, without_ligand) for r in d.sequence_recovery)
+    json.dumps(output.model_dump(mode="json"), allow_nan=False)
 
 
 @pytest.mark.uses_gpu

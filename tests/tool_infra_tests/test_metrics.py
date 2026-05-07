@@ -165,6 +165,20 @@ def test_validate_list_metric_tolerates_none_gaps():
     m.validate_against_spec()
 
 
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_validate_rejects_non_finite_scalar(bad: float):
+    m = _SampleMetrics(perplexity=bad, log_likelihood=-1.0, per_position=[-1.0])
+    with pytest.raises(AssertionError, match=r"perplexity.*not finite"):
+        m.validate_against_spec()
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_validate_rejects_non_finite_list_element(bad: float):
+    m = _SampleMetrics(perplexity=2.0, log_likelihood=-1.0, per_position=[-1.0, bad])
+    with pytest.raises(AssertionError, match=r"per_position.*index 1.*not finite"):
+        m.validate_against_spec()
+
+
 def test_validate_nested_list_bounds():
     _MatrixMetrics(matrix=[[0.1, 0.5], [0.2, 0.9]]).validate_against_spec()
     with pytest.raises(AssertionError, match="matrix"):

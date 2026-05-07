@@ -220,8 +220,8 @@ def test_approx_equal_skips_metadata():
 
 @pytest.mark.parametrize(
     "a_val,b_val,should_pass",
-    [(1.0, 1.0 + 1e-6, True), (1.0, 2.0, False), (float("nan"), float("nan"), True)],
-    ids=["within-tolerance", "beyond-tolerance", "nan-equal"],
+    [(1.0, 1.0 + 1e-6, True), (1.0, 2.0, False)],
+    ids=["within-tolerance", "beyond-tolerance"],
 )
 def test_approx_equal_float(a_val, b_val, should_pass):
     if should_pass:

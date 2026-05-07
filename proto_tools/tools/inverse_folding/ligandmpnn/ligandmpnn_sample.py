@@ -4,6 +4,7 @@ LigandMPNN sampling tool.
 """
 
 import logging
+import math
 from pathlib import Path
 from typing import Any, Literal
 
@@ -23,9 +24,7 @@ from proto_tools.utils.progress import progress_bar
 logger = logging.getLogger(__name__)
 
 LigandMPNNModelType = Literal[
-    "protein_mpnn",
     "ligand_mpnn",
-    "soluble_mpnn",
     "per_residue_label_membrane_mpnn",
     "global_label_membrane_mpnn",
 ]
@@ -62,7 +61,7 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
     model_type: LigandMPNNModelType = ConfigField(
         title="Model Type",
         default="ligand_mpnn",
-        description="LigandMPNN variant: ligand-aware, protein-only, soluble, or membrane (per-residue/global)",
+        description="LigandMPNN variant: ligand-aware or membrane (per-residue/global)",
         reload_on_change=True,
         advanced=True,
     )
@@ -100,15 +99,17 @@ class LigandMPNNSequences(DesignedSequences):
         sequences (list[str]): Designed amino acid sequences.
         sequence_recovery (list[float]): Per-sequence fraction of chains_to_redesign
             residues matching the input structure's reference sequence (0.0-1.0).
-        ligand_interface_sequence_recovery (list[float]): Per-sequence recovery
-            restricted to residues at the ligand interface (0.0-1.0).
+        ligand_interface_sequence_recovery (list[float] | None): Per-sequence recovery
+            restricted to ligand-interface residues (0.0-1.0); ``None`` when the input
+            structure has no ligand.
     """
 
     sequence_recovery: list[float] = Field(
         description="Per-sequence fraction of chains_to_redesign residues matching the reference (0.0-1.0)",
     )
-    ligand_interface_sequence_recovery: list[float] = Field(
-        description="Per-sequence recovery restricted to ligand-interface residues (0.0-1.0)",
+    ligand_interface_sequence_recovery: list[float] | None = Field(
+        default=None,
+        description="Per-sequence recovery restricted to ligand-interface residues (0.0-1.0); None when no ligand",
     )
 
 
@@ -170,7 +171,8 @@ def run_ligandmpnn_sample(
     ):
         all_seqs: list[str] = []
         all_recovery: list[float] = []
-        all_interface_recovery: list[float] = []
+        # Foundry returns NaN here when the structure has no ligand interface; surface that as None.
+        all_interface_recovery: list[float] | None = []
         remaining = config.num_sequences_per_structure
         chunk_idx = 0
         while remaining > 0:
@@ -199,7 +201,12 @@ def run_ligandmpnn_sample(
             )
             all_seqs.extend(result["sequences"])
             all_recovery.extend(m["sequence_recovery"] for m in result["metrics"])
-            all_interface_recovery.extend(m["ligand_interface_sequence_recovery"] for m in result["metrics"])
+            chunk_interface = [m["ligand_interface_sequence_recovery"] for m in result["metrics"]]
+            if all_interface_recovery is not None:
+                if any(v is None or (isinstance(v, float) and math.isnan(v)) for v in chunk_interface):
+                    all_interface_recovery = None
+                else:
+                    all_interface_recovery.extend(chunk_interface)
             chunk_idx += 1
             remaining -= chunk  # type: ignore[operator]
         designed_sequences.append(

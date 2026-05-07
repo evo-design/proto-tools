@@ -369,6 +369,8 @@ def _check_scalar_in_spec(name: str, value: Any, spec: MetricSpec) -> None:
         raise AssertionError(f"Metric {name!r} has type {type(value).__name__} but spec declares 'int'")
     if not isinstance(value, (int, float)):
         return  # non-numeric reached via legacy path; nothing to bound-check
+    if isinstance(value, float) and not math.isfinite(value):
+        raise AssertionError(f"Metric {name!r}={value} is not finite (NaN/Inf rejected by spec)")
     min_v = spec.get("min")
     max_v = spec.get("max")
     if min_v is not None and value < min_v:
@@ -432,6 +434,10 @@ def _check_list_in_spec(name: str, value: Any, spec: MetricSpec) -> None:
         if expect_inner_list:
             raise AssertionError(
                 f"Metric {name!r} element at index {i} is {type(entry).__name__} but spec expects inner list"
+            )
+        if isinstance(entry, float) and not math.isfinite(entry):
+            raise AssertionError(
+                f"Metric {name!r} element at index {i} = {entry} is not finite (NaN/Inf rejected by spec)"
             )
         if min_v is not None and entry < min_v:
             raise AssertionError(f"Metric {name!r} element at index {i} = {entry} below declared min {min_v}")
@@ -763,11 +769,6 @@ def _approx_equal_values(a: Any, b: Any, rtol: float, atol: float, path: str) ->
         raise AssertionError(f"Type mismatch at {path}: {type(a).__name__} != {type(b).__name__}")
 
     if isinstance(a, float):
-        # Treat ``nan`` vs ``nan`` as equal: tools deliberately emit ``nan`` for
-        # undefined metrics (e.g. ligand_interface_sequence_recovery when there
-        # is no interface). ``math.isclose`` would otherwise reject it.
-        if math.isnan(a) and math.isnan(b):
-            return
         if not math.isclose(a, b, rel_tol=rtol, abs_tol=atol):
             raise AssertionError(f"Float mismatch at {path}: {a} != {b} (rtol={rtol}, atol={atol})")
     elif isinstance(a, dict):
