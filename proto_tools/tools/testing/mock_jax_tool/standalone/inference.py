@@ -8,7 +8,6 @@ ProteinMPNN, Flax, Haiku, etc.).
 """
 
 import json
-import logging
 import os
 import sys
 from typing import Any
@@ -21,12 +20,13 @@ import jax
 import jax.numpy as jnp
 from standalone_helpers import (
     get_jax_memory_stats,
+    get_logger,
     move_model_to_device,
     resolve_jax_device,
     set_jax_seed,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # ============================================================================

@@ -10,7 +10,9 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import get_jax_memory_stats, get_subprocess_device_env, resolve_weights_dir
+from standalone_helpers import get_jax_memory_stats, get_logger, get_subprocess_device_env, resolve_weights_dir
+
+logger = get_logger(__name__)
 
 # ============================================================================
 # Paths

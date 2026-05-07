@@ -5,7 +5,6 @@ from __future__ import annotations
 import csv as _csv
 import hashlib
 import json
-import logging
 import os
 import re
 import shutil
@@ -15,7 +14,9 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from standalone_helpers import get_logger
+
+logger = get_logger(__name__)
 
 # Typed Config threshold fields → filter YAML keys (shape: {value, operator}).
 _TYPED_FILTER_KEY_MAP: dict[str, str] = {

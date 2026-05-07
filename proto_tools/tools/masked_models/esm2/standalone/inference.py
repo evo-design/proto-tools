@@ -1,16 +1,15 @@
 """Local ESM2 inference implementation."""
 
 import json
-import logging
 import math
 import sys
 from typing import Any, Literal
 
 import torch
-from standalone_helpers import AMINO_ACIDS_LIST, move_model_to_device, serialize_output, set_torch_seed
+from standalone_helpers import AMINO_ACIDS_LIST, get_logger, move_model_to_device, serialize_output, set_torch_seed
 from tqdm import tqdm
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 ESM2_MODEL_CHECKPOINTS = Literal[
     "esm2_t6_8M_UR50D",
     "esm2_t12_35M_UR50D",

@@ -1,7 +1,6 @@
 """Standalone inference entry point for Splice Transformer RNA splicing prediction."""
 
 import json
-import logging
 import os
 import sys
 from pathlib import Path
@@ -9,9 +8,9 @@ from typing import Any
 
 import numpy as np
 import torch
-from standalone_helpers import move_model_to_device, serialize_output
+from standalone_helpers import get_logger, move_model_to_device, serialize_output
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _STANDALONE_DIR = Path(__file__).resolve().parent
 if str(_STANDALONE_DIR) not in sys.path:

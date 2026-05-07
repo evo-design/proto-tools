@@ -373,10 +373,12 @@ def test_oneshot_injects_tool_env_path():
     """_run_oneshot() should set TOOL_VENV_PATH in the subprocess env."""
     inst = _make_fake_instance()
 
-    with patch(
-        "proto_tools.utils.tool_instance.subprocess.run",
-    ) as mock_run:
-        mock_run.return_value = MagicMock()
+    fake_proc = MagicMock()
+    fake_proc.stderr = MagicMock()
+    fake_proc.stderr.__iter__ = lambda self: iter([])
+    fake_proc.wait.return_value = 0  # success; output.json read will fail and we suppress
+
+    with patch("proto_tools.utils.tool_instance.subprocess.Popen", return_value=fake_proc) as mock_popen:
         # Will fail on output read, but we only care about the env arg
         with contextlib.suppress(Exception):
             inst._run_oneshot(
@@ -384,7 +386,7 @@ def test_oneshot_injects_tool_env_path():
                 script_path=Path("/fake/inference.py"),
             )
 
-        env = mock_run.call_args.kwargs["env"]
+        env = mock_popen.call_args.kwargs["env"]
         assert env["TOOL_VENV_PATH"] == str(inst.env_path)
 
 
@@ -992,11 +994,15 @@ def test_oneshot_timeout_raises():
     """_run_oneshot() should convert subprocess.TimeoutExpired to TimeoutError."""
     inst = _make_fake_instance()
 
+    # After the Popen refactor, _run_oneshot calls Popen() then proc.wait(timeout=...).
+    # Mock Popen to return a fake proc whose wait() raises TimeoutExpired.
+    fake_proc = MagicMock()
+    fake_proc.stderr = MagicMock()
+    fake_proc.stderr.__iter__ = lambda self: iter([])  # drain thread sees EOF immediately
+    fake_proc.wait.side_effect = subprocess.TimeoutExpired(cmd="x", timeout=10)
+
     with (
-        patch(
-            "proto_tools.utils.tool_instance.subprocess.run",
-            side_effect=subprocess.TimeoutExpired(cmd="x", timeout=10),
-        ),
+        patch("proto_tools.utils.tool_instance.subprocess.Popen", return_value=fake_proc),
         pytest.raises(TimeoutError, match="timed out after 10s"),
     ):
         inst._run_oneshot(
@@ -1585,6 +1591,154 @@ def test_run_oneshot_reads_output(tmp_path: Path):
         script_path=script,
     )
     assert result == {"echo": {"hello": "world"}}
+
+
+def _make_oneshot_instance(toolkit: str, script: Path) -> ToolInstance:
+    """Build a real-execution ToolInstance pointed at the current Python."""
+    inst = ToolInstance.__new__(ToolInstance)
+    inst.toolkit = toolkit
+    inst.device = "cpu"
+    inst.env_path = Path(sys.executable).parent.parent
+    inst.script_path = script
+    inst._tool_env_vars = {"passthrough": [], "set": []}
+    inst._env_ready = True
+    return inst
+
+
+def test_run_oneshot_demuxes_tagged_log_lines(tmp_path: Path):
+    """One-shot must demux subprocess worker.* log records onto the parent's namespace.
+
+    Regression lock: at verbose < 2 a naive ``subprocess.run`` path would silently
+    drop tagged JSON lines. The Popen + drain thread refactor delivers them live
+    to ``proto_tools.worker.{toolkit}.*``.
+
+    The script is placed under a ``standalone/`` directory so the bootstrap's
+    ``_copy_standalone_helpers`` copies the helpers package into it; the package
+    init then triggers ``install()`` and the ``from standalone_helpers import
+    get_logger`` import resolves.
+    """
+    standalone_dir = tmp_path / "standalone"
+    standalone_dir.mkdir()
+    script = standalone_dir / "tagged_emitter.py"
+    script.write_text(
+        textwrap.dedent("""\
+        import json, sys
+        from standalone_helpers import get_logger
+
+        logger = get_logger("demo")
+
+        def main():
+            input_path, output_path = sys.argv[1], sys.argv[2]
+            with open(input_path) as f:
+                data = json.load(f)
+            logger.info(data["msg"], update_status=True)
+            with open(output_path, "w") as f:
+                json.dump({"ok": True}, f)
+        if __name__ == "__main__":
+            main()
+        """)
+    )
+
+    captured: list[logging.LogRecord] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            captured.append(record)
+
+    parent = logging.getLogger("proto_tools.worker.oneshot_test")
+    parent.addHandler(_Capture())
+    parent.setLevel(logging.DEBUG)
+
+    inst = _make_oneshot_instance("oneshot_test", script)
+    sentinel = "ONESHOT_TAGGED_xyz"
+    try:
+        # verbose=1 so the toolkit logger admits INFO records (level=0 sets WARNING).
+        result = inst._run_oneshot({"msg": sentinel}, script_path=script, verbose=1)
+    finally:
+        parent.handlers = [h for h in parent.handlers if not isinstance(h, _Capture)]
+
+    assert result == {"ok": True}
+    matches = [r for r in captured if sentinel in r.getMessage()]
+    assert matches, f"sentinel not re-emitted; captured names={[r.name for r in captured]}"
+    record = matches[0]
+    assert record.name.startswith("proto_tools.worker.oneshot_test")
+    assert getattr(record, "update_status", False) is True
+
+
+def test_run_oneshot_buffers_raw_lines_for_crash_context(tmp_path: Path):
+    """On non-zero exit, raw stderr lines must surface via CalledProcessError.stderr."""
+    script = tmp_path / "raw_failer.py"
+    script.write_text(
+        textwrap.dedent("""\
+        import sys
+        sys.stderr.write("CRASH_CONTEXT_SENTINEL_xyz\\n")
+        sys.stderr.flush()
+        sys.exit(7)
+        """)
+    )
+    inst = _make_oneshot_instance("test_fail", script)
+
+    with pytest.raises(subprocess.CalledProcessError) as excinfo:
+        inst._run_oneshot({}, script_path=script)
+
+    assert excinfo.value.returncode == 7
+    assert "CRASH_CONTEXT_SENTINEL_xyz" in (excinfo.value.stderr or "")
+
+
+def test_run_oneshot_level_3_tees_raw_stderr_to_parent(tmp_path: Path, capfd):
+    """At verbose=3, untagged subprocess stderr must be teed to the parent's stderr."""
+    script = tmp_path / "raw_emitter.py"
+    script.write_text(
+        textwrap.dedent("""\
+        import json, sys
+        def main():
+            input_path, output_path = sys.argv[1], sys.argv[2]
+            sys.stderr.write("LEVEL3_RAW_TEE_xyz\\n")
+            sys.stderr.flush()
+            with open(output_path, "w") as f:
+                json.dump({"ok": True}, f)
+        if __name__ == "__main__":
+            main()
+        """)
+    )
+    inst = _make_oneshot_instance("test_tee", script)
+
+    result = inst._run_oneshot({}, script_path=script, verbose=3)
+    assert result == {"ok": True}
+
+    captured = capfd.readouterr()
+    assert "LEVEL3_RAW_TEE_xyz" in captured.err
+
+
+def test_run_oneshot_level_2_does_not_tee_raw_stderr(tmp_path: Path, capfd, monkeypatch):
+    """At verbose=2 (debug), untagged subprocess stderr is hidden; only level 3 tees.
+
+    Clears ``PROTO_WORKER_VERBOSE`` because the session-scoped
+    ``_force_verbose_tools`` fixture sets it to 3 for debugging visibility,
+    which would otherwise force ``effective_verbose = max(2, 3) = 3``.
+    """
+    monkeypatch.delenv("PROTO_WORKER_VERBOSE", raising=False)
+    script = tmp_path / "raw_emitter_v2.py"
+    script.write_text(
+        textwrap.dedent("""\
+        import json, sys
+        def main():
+            input_path, output_path = sys.argv[1], sys.argv[2]
+            sys.stderr.write("LEVEL2_NO_TEE_xyz\\n")
+            sys.stderr.flush()
+            with open(output_path, "w") as f:
+                json.dump({"ok": True}, f)
+        if __name__ == "__main__":
+            main()
+        """)
+    )
+    inst = _make_oneshot_instance("test_no_tee", script)
+
+    result = inst._run_oneshot({}, script_path=script, verbose=2)
+    assert result == {"ok": True}
+
+    captured = capfd.readouterr()
+    assert "LEVEL2_NO_TEE_xyz" not in captured.err
 
 
 # ── env_vars.txt loading tests ─────────────────────────────────────────────

@@ -1,13 +1,12 @@
 """Chai1 inference implementation."""
 
-import logging
 import sys
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import get_random_int, set_torch_seed
+from standalone_helpers import get_logger, get_random_int, set_torch_seed
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class Chai1Model:

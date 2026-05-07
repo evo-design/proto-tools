@@ -5,7 +5,6 @@ import math
 import os
 import sys
 import tempfile
-from logging import getLogger
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +12,9 @@ from typing import Any
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
-logger = getLogger(__name__)
+from standalone_helpers import get_logger
+
+logger = get_logger(__name__)
 
 DEFAULT_TEMPERATURE = 1.0
 CANONICAL_VOCAB: list[str] = list("ACDEFGHIKLMNPQRSTVWY")

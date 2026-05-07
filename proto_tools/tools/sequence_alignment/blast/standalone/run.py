@@ -13,6 +13,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from standalone_helpers import get_logger
+
+logger = get_logger(__name__)
+
 
 def _find_binary(name: str) -> str:
     """Find a BLAST+ binary in the venv's bin/ directory."""

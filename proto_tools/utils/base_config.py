@@ -100,7 +100,8 @@ class BaseConfig(BaseModel):
     """Base configuration class for consistent behavior across all configs (tools, constraints, and generators).
 
     Attributes:
-        verbose (bool): Whether to print status messages.
+        verbose (int): Verbosity level (0=quiet, 1=info, 2=debug, 3=raw subprocess stderr).
+            ``True`` is coerced to ``1`` and ``False`` to ``0``.
         device (str): Device to run the tool on.
         timeout (int): Maximum execution time in seconds.
         seed (int | None): Random seed. When set, tools run reproducibly up to small
@@ -140,10 +141,12 @@ class BaseConfig(BaseModel):
         validate_default=True,  # Validate default values
     )
 
-    verbose: bool = ConfigField(
+    verbose: int = ConfigField(
         title="Verbose",
-        default=False,
-        description="Whether to print status messages",
+        default=0,
+        ge=0,
+        le=3,
+        description="Verbosity level (0=quiet, 1=info, 2=debug, 3=raw subprocess stderr). True→1, False→0.",
         hidden=True,
         include_in_key=False,
     )

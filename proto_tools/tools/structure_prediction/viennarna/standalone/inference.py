@@ -9,7 +9,9 @@ import logging
 import sys
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from standalone_helpers import get_logger
+
+logger = get_logger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 

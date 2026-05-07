@@ -28,9 +28,9 @@ from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import AMINO_ACIDS_LIST, get_jax_memory_stats, resolve_jax_device, serialize_output
+from standalone_helpers import AMINO_ACIDS_LIST, get_jax_memory_stats, get_logger, resolve_jax_device, serialize_output
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # AlphaFold restypes order (3-letter codes sorted alphabetically: ALA, ARG, ASN, ...).
 # Differs from AMINO_ACIDS_LIST which is sorted by 1-letter code (A, C, D, ...).

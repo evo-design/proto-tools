@@ -8,6 +8,10 @@ import stat
 import tarfile
 from pathlib import Path
 
+from standalone_helpers import get_logger
+
+logger = get_logger(__name__)
+
 URLS = {
     ("Darwin", "arm64"): "https://github.com/soedinglab/MMseqs2/releases/download/18-8cc5c/mmseqs-osx-universal.tar.gz",
     (

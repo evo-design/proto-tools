@@ -1,7 +1,6 @@
 """Boltz2 inference implementation."""
 
 import json
-import logging
 import os
 import shutil
 import subprocess
@@ -10,8 +9,9 @@ from pathlib import Path
 from typing import Any
 
 import torch
+from standalone_helpers import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _prepare_output_values(value: Any) -> Any:

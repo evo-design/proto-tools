@@ -5,10 +5,11 @@ following the ``PROTO_HOME`` / ``PROTO_MODEL_CACHE`` / ``PROTO_{TOOL}_WEIGHTS_DI
 precedence documented in ``notes/storage.md``.
 """
 
-import logging
 import os
 
-logger = logging.getLogger(__name__)
+from .proto_logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def resolve_weights_dir(toolkit: str) -> str | None:

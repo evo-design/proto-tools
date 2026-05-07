@@ -11,13 +11,12 @@ import json
 import os
 import sys
 import tempfile
-from logging import getLogger
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import get_random_int, serialize_output, set_torch_seed
+from standalone_helpers import get_logger, get_random_int, serialize_output, set_torch_seed
 
-logger = getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class FAMPNNModel:

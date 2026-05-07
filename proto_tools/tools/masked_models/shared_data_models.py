@@ -276,7 +276,8 @@ class MaskedModelScoringConfig(BaseConfig):
             Larger batches improve throughput but use more GPU memory; reduce
             if encountering out-of-memory errors.
         device (str): Device to run the model on.
-        verbose (bool): Whether to print status messages.
+        verbose (int): Verbosity level (0=quiet, 1=info, 2=debug, 3=raw subprocess stderr).
+            ``True`` is coerced to ``1`` and ``False`` to ``0``.
         return_logits (bool): Include per-position logits in the output (large; disable to
             save memory).
     """

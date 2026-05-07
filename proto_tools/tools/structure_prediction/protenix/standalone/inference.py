@@ -1,7 +1,6 @@
 """Protenix inference implementation."""
 
 import json
-import logging
 import os
 import shutil
 import subprocess
@@ -10,7 +9,9 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from standalone_helpers import get_logger
+
+logger = get_logger(__name__)
 
 
 def _cuequivariance_available() -> bool:

@@ -6,6 +6,10 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from standalone_helpers import get_logger
+
+logger = get_logger(__name__)
+
 
 def _find_dssp_binary() -> str:
     """Find DSSP in the tool venv, accepting either modern or legacy binary names."""

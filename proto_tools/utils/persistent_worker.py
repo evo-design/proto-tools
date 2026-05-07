@@ -4,19 +4,20 @@ Manages a subprocess that stays alive between calls, communicating via
 stdin/stdout JSON-line protocol. This avoids reloading models on every call.
 """
 
+import collections
 import contextlib
 import json
 import logging
 import os
-import re
 import select
 import signal
 import subprocess
+import sys
 import tempfile
 import threading
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 
 logger = logging.getLogger(__name__)
 
@@ -25,51 +26,147 @@ logger = logging.getLogger(__name__)
 # Helper Functions
 # ============================================================================
 
+# Default per-worker bounded stderr buffer size, used by _crash_context. Override via PROTO_WORKER_STDERR_BUFFER_LINES.
+_DEFAULT_STDERR_BUFFER_LINES = 20
 
-def _normalize_progress_line(line: str) -> str:
-    """Normalize progress bar lines to detect and skip similar consecutive lines.
 
-    Detects common progress bar patterns and normalizes variable parts:
-    - Progress bar visualizations: |███████▊  |, [=====>    ], etc.
-    - Percentages: 5%, 100%
-    - Ratios: 123/456, 1234 of 5678
-    - Time estimates: [00:00<00:04], 1:23 elapsed
-    - Rates: 980.92it/s, 1.2MB/s, 45.3%
-    - Additional trailing info after common separators
+def _verbose_to_log_level(verbose: int) -> int:
+    """Map the 0-3 ``verbose`` scale to a stdlib logging level for console handlers.
+
+    | verbose | log level |
+    | 0       | WARNING   |
+    | 1       | INFO      |
+    | 2       | DEBUG     |
+    | 3       | DEBUG     | (raw subprocess stderr also teed)
+    """
+    if verbose <= 0:
+        return logging.WARNING
+    if verbose == 1:
+        return logging.INFO
+    return logging.DEBUG
+
+
+def _apply_verbose_to_console_handlers(verbose: int) -> None:
+    """Set every console ``StreamHandler`` reachable from ``proto_tools`` to the verbose-mapped level.
+
+    Filters live on the *handlers*, not on the originating logger, so file
+    handlers and :class:`SpinnerFromLogsHandler` continue to receive records at
+    every level. Walks ``proto_tools`` and ``root`` since ``setup_logging``
+    attaches its console handler to root.
+    """
+    target_level = _verbose_to_log_level(verbose)
+    for logger_name in ("proto_tools", ""):
+        for h in logging.getLogger(logger_name).handlers:
+            if type(h) is logging.StreamHandler:
+                h.setLevel(target_level)
+
+
+def _stderr_buffer_lines() -> int:
+    """Read ``PROTO_WORKER_STDERR_BUFFER_LINES`` as a positive int, else default."""
+    raw = os.environ.get("PROTO_WORKER_STDERR_BUFFER_LINES")
+    if raw is None:
+        return _DEFAULT_STDERR_BUFFER_LINES
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return _DEFAULT_STDERR_BUFFER_LINES
+    return max(1, n)
+
+
+# ============================================================================
+# Subprocess stderr demultiplexing (shared by PersistentWorker and one-shot)
+# ============================================================================
+# Tagged lines (``\x00LOG\x00<json>``) are demuxed by `_reemit_tagged_line`; untagged lines hit `_handle_raw_stderr_line` (ring buffer + optional raw_tee at verbose level 3). See notes/logging.md for the full architecture.
+
+
+def _handle_raw_stderr_line(line: str, buffer: "collections.deque[str]", raw_tee: bool) -> None:
+    r"""Handle one untagged stderr line: ring buffer + optional tee to parent stderr.
+
+    Progress-bar lines (tqdm-style ``\r<frame1>\r...<final>\n``) keep only the
+    last ``\r``-separated segment so the final completion state survives. A
+    followup PR will replace this with milestone detection.
 
     Args:
-        line (str): Raw stderr line from a tool subprocess.
-
-    Returns the normalized line template for similarity comparison.
+        line (str): The raw line read from the subprocess's stderr.
+        buffer (collections.deque[str]): Bounded ring buffer to append to.
+        raw_tee (bool): If True, mirror the line to the parent's ``sys.stderr``.
     """
-    normalized = line
+    if "\r" in line:
+        line = line.rsplit("\r", 1)[-1]
+    text = line.rstrip()
+    if not text:
+        return
+    buffer.append(text)
+    if raw_tee:
+        sys.stderr.write(line)
+        sys.stderr.flush()
 
-    # Normalize progress bar visualizations (|███|, [===>], etc.)
-    normalized = re.sub(r"[\|\[\(\{][^\|\]\)\}]*[\|\]\)\}]", "|BAR|", normalized)
 
-    # Normalize percentages
-    normalized = re.sub(r"\d+\.?\d*%", "N%", normalized)
+def _reemit_tagged_line(
+    parent_logger: logging.Logger,
+    line: str,
+    buffer: "collections.deque[str]",
+) -> None:
+    r"""Parse one ``\x00LOG\x00<json>\n`` line and re-emit it on the parent logger.
 
-    # Normalize count ratios
-    normalized = re.sub(r"\d+/\d+", "N/N", normalized)
-    normalized = re.sub(r"\d+\s+of\s+\d+", "N of N", normalized)
+    On JSON parse failure, the line is treated as untagged via
+    :func:`_handle_raw_stderr_line` with ``raw_tee=False`` (defensive fallback;
+    a malformed tag is almost certainly noise that happened to start with the
+    sentinel — don't show it to the user even at verbose level 2).
 
-    # Normalize time estimates ([HH:MM<HH:MM], <1:23, elapsed: 0:45)
-    normalized = re.sub(r"\[\d+:\d+(?::\d+)?<\d+:\d+(?::\d+)?\]", "[T<T]", normalized)
-    normalized = re.sub(r"<\d+:\d+(?::\d+)?", "<T", normalized)
-    normalized = re.sub(r"elapsed:\s*\d+:\d+(?::\d+)?", "elapsed: T", normalized)
+    Args:
+        parent_logger (logging.Logger): Logger under which to re-emit
+            (typically ``logging.getLogger("proto_tools.worker.{toolkit}")``).
+        line (str): The raw tagged line, including the ``\x00LOG\x00`` prefix.
+        buffer (collections.deque[str]): Ring buffer for the malformed-line
+            fallback path.
+    """
+    from proto_tools.utils.logging_config import _TAG_PREFIX
 
-    # Normalize rates (it/s, MB/s) and sizes (1.2MB, 500KB)
-    normalized = re.sub(r"\d+\.?\d*\s*[A-Za-z]+/s", "N/s", normalized)
-    normalized = re.sub(r"\d+\.?\d*\s*[KMGT]?B\b", "NB", normalized)
+    try:
+        payload = json.loads(line[len(_TAG_PREFIX) :])
+    except (json.JSONDecodeError, ValueError):
+        _handle_raw_stderr_line(line, buffer, raw_tee=False)
+        return
+    record_name: str = payload.get("name", "unknown")
+    # Strip subprocess-side "worker." prefix; parent_logger is already proto_tools.worker.{toolkit}, so the suffix re-attaches as proto_tools.worker.{toolkit}.{name}.
+    suffix = record_name.removeprefix("worker.")
+    target = parent_logger.getChild(suffix) if suffix else parent_logger
+    level_name: str = payload.get("level", "INFO")
+    # Map level name to int via attribute lookup (str→int via getLevelName is deprecated).
+    level_attr = getattr(logging, level_name, None)
+    level = level_attr if isinstance(level_attr, int) else logging.INFO
+    msg: str = payload.get("msg", "")
+    update_status = bool(payload.get("update_status", False))
+    target.log(level, "%s", msg, extra={"update_status": update_status})
 
-    # Strip trailing info after separators in detected progress bars
-    if "N%" in normalized or "N/N" in normalized or "|BAR|" in normalized:
-        normalized = re.sub(r"(N%.*?N/s.*?),.*$", r"\1", normalized)
-        normalized = re.sub(r"(N%.*?N/s.*?)\s+[-|]\s+.*$", r"\1", normalized)
 
-    # Normalize remaining standalone numbers
-    return re.sub(r"\b\d+\.?\d*\b", "N", normalized)
+def _drain_subprocess_stderr(
+    stream: IO[str],
+    parent_logger: logging.Logger,
+    buffer: "collections.deque[str]",
+    raw_tee: bool,
+) -> None:
+    """Read ``stream`` until EOF, demuxing each line to the appropriate path.
+
+    Used by :meth:`PersistentWorker._drain_stderr` (long-lived worker) and by
+    :meth:`ToolInstance._run_oneshot` (ephemeral subprocess) so both subprocess
+    modes produce the same parent-side records and ring-buffer state.
+
+    Args:
+        stream (IO[str]): Subprocess stderr (text-mode pipe).
+        parent_logger (logging.Logger): Logger under which to re-emit tagged
+            records (children created via ``getChild``).
+        buffer (collections.deque[str]): Bounded ring buffer for untagged lines.
+        raw_tee (bool): If True, untagged lines are mirrored to parent stderr.
+    """
+    from proto_tools.utils.logging_config import _TAG_PREFIX
+
+    for line in stream:
+        if line.startswith(_TAG_PREFIX):
+            _reemit_tagged_line(parent_logger, line, buffer)
+            continue
+        _handle_raw_stderr_line(line, buffer, raw_tee)
 
 
 # ============================================================================
@@ -366,6 +463,13 @@ class PersistentWorker:
         Device string (``"cpu"``, ``"cuda"``, ``"cuda:0"``, etc.).
     tool_env_vars : dict | None
         Parsed env_vars.txt contents for this tool.
+    verbose : int
+        Effective verbosity on the 0-3 scale (already merged with
+        ``PROTO_WORKER_VERBOSE`` by the caller). Drives both the parent-side
+        log level on ``proto_tools.worker.{toolkit}`` and whether untagged
+        subprocess stderr is teed to the parent's ``sys.stderr``. Latched at
+        construction time so the drain thread never races a mid-run env-var
+        toggle.
     """
 
     def __init__(
@@ -375,6 +479,7 @@ class PersistentWorker:
         script_path: Path,
         device: str = "cpu",
         tool_env_vars: dict[str, list[str]] | None = None,
+        verbose: int = 0,
     ) -> None:
         """Initialize PersistentWorker."""
         self.toolkit = toolkit
@@ -382,10 +487,12 @@ class PersistentWorker:
         self.script_path = script_path
         self.device = device
         self.tool_env_vars = tool_env_vars
+        self._verbose = verbose
         self._process: subprocess.Popen | None = None  # type: ignore[type-arg]
         self._lock = threading.Lock()
         self._stderr_thread: threading.Thread | None = None
-        self._stderr_lines: list[str] = []
+        # Bounded ring buffer for crash context; size from PROTO_WORKER_STDERR_BUFFER_LINES (default 20).
+        self._stderr_lines: collections.deque[str] = collections.deque(maxlen=_stderr_buffer_lines())
 
     @property
     def alive(self) -> bool:
@@ -395,33 +502,25 @@ class PersistentWorker:
     def _crash_context(self) -> str:
         """Return ``"process exit=X; last stderr: Y"`` for embedding in error messages."""
         exit_code = self._process.poll() if self._process is not None else "no-process"
-        stderr_tail = " | ".join(self._stderr_lines[-20:]) or "<no stderr>"
+        # Buffer is a bounded deque (default 20 lines); join the whole thing.
+        stderr_tail = " | ".join(self._stderr_lines) or "<no stderr>"
         return f"process exit={exit_code}; last stderr: {stderr_tail}"
 
     def _drain_stderr(self) -> None:
-        """Background thread: read stderr lines from the worker process.
+        """Drain this worker's stderr via the shared :func:`_drain_subprocess_stderr` helper.
 
-        Skips consecutive duplicate and similar lines to reduce log noise from
-        progress bars and repeated status messages.
+        Applies ``self._verbose`` to the ``proto_tools`` console StreamHandler so
+        records visible in the terminal match the documented level mapping
+        (0=WARNING, 1=INFO, 2=DEBUG, 3=DEBUG+raw_tee). The toolkit logger stays
+        at DEBUG so all records still propagate to file handlers and to
+        :class:`SpinnerFromLogsHandler` for spinner takeover.
         """
         if self._process is None or self._process.stderr is None:
             return
-        prev_line: str | None = None
-        prev_normalized: str | None = None
-        for line in self._process.stderr:
-            text = line.rstrip()  # Strip all trailing whitespace
-            if text:
-                self._stderr_lines.append(text)
-                # Fast path: skip exact duplicates
-                if text == prev_line:
-                    continue
-                # Slow path: normalize and check for progress bar similarity
-                normalized = _normalize_progress_line(text)
-                if normalized == prev_normalized:
-                    continue
-                logger.debug("[%s worker stderr] %s", self.toolkit, text)
-                prev_line = text
-                prev_normalized = normalized
+        parent_logger = logging.getLogger(f"proto_tools.worker.{self.toolkit}")
+        _apply_verbose_to_console_handlers(self._verbose)
+        raw_tee = self._verbose >= 3
+        _drain_subprocess_stderr(self._process.stderr, parent_logger, self._stderr_lines, raw_tee)
 
     def start(self) -> None:
         """Spawn the worker subprocess if not already running."""
@@ -510,11 +609,13 @@ class PersistentWorker:
                         f"{self.toolkit} worker timed out waiting for response to request {request_id} after {timeout}s"
                     )
 
-            # Read header, skipping non-protocol lines (warnings/logs).
-            # Header is either PROTO_LENGTH:<n> (pipe payload) or PROTO_FILE:<path>
-            # (large payload written to a temp file by the worker).
-            prev_stdout_line: str | None = None
-            prev_stdout_normalized: str | None = None
+            # Read header, skipping non-protocol lines (rare; libraries that
+            # write to stdout instead of stderr). Header is either
+            # PROTO_LENGTH:<n> (pipe payload) or PROTO_FILE:<path> (large
+            # payload written to a temp file by the worker). proto_tools own
+            # logs route to stderr via _ParentBridgeHandler, so anything on
+            # stdout other than a protocol header is third-party noise we
+            # silently skip.
             while True:
                 header_line = self._process.stdout.readline()
                 if not header_line:
@@ -522,19 +623,9 @@ class PersistentWorker:
                         f"{self.toolkit} worker closed stdout before responding to request {request_id} "
                         f"({self._crash_context()})"
                     )
-
                 header_line = header_line.strip()
                 if header_line.startswith(("PROTO_LENGTH:", "PROTO_FILE:")):
                     break
-                # Non-protocol line (warning/log); skip duplicates / progress bars
-                if header_line == prev_stdout_line:
-                    continue
-                normalized = _normalize_progress_line(header_line)
-                if normalized == prev_stdout_normalized:
-                    continue
-                logger.debug("[%s worker stdout] %s", self.toolkit, header_line)
-                prev_stdout_line = header_line
-                prev_stdout_normalized = normalized
 
             # Branch on header type
             if header_line.startswith("PROTO_FILE:"):

@@ -1,14 +1,13 @@
 """Enformer standalone inference implementation for venv execution."""
 
 import json
-import logging
 import sys
 from typing import Any, cast
 
 import torch
-from standalone_helpers import serialize_output, set_torch_seed
+from standalone_helpers import get_logger, serialize_output, set_torch_seed
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 ENFORMER_CONTEXT = 196_608
 ENFORMER_OUTPUT = 896

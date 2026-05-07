@@ -9,10 +9,10 @@ from pathlib import Path
 from typing import Any, Literal
 
 import torch
-from standalone_helpers import move_model_to_device, serialize_output, set_torch_seed
+from standalone_helpers import get_logger, move_model_to_device, serialize_output, set_torch_seed
 from tqdm import tqdm
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Suppress vortex library INFO logs
 logging.getLogger("vortex").setLevel(logging.ERROR)

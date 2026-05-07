@@ -10,6 +10,10 @@ Used by the shared install_binary.py utility during venv setup.
 import stat
 from pathlib import Path
 
+from standalone_helpers import get_logger
+
+logger = get_logger(__name__)
+
 _VERSION = "0.4.2"
 _BASE_URL = f"https://github.com/ctSkennerton/minced/releases/download/{_VERSION}"
 

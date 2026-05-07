@@ -5,6 +5,10 @@ from collections.abc import Callable
 
 import torch
 
+from .proto_logging import get_logger
+
+logger = get_logger(__name__)
+
 
 def _cosine_schedule(t: torch.Tensor) -> torch.Tensor:
     """Cosine schedule: t in [0, 1] -> fraction still masked."""

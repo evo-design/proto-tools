@@ -6,14 +6,13 @@ import math
 import os
 import sys
 import tempfile
-from logging import getLogger
 from pathlib import Path
 from typing import Any
 
 import torch
-from standalone_helpers import move_model_to_device, serialize_output, set_torch_seed
+from standalone_helpers import get_logger, move_model_to_device, serialize_output, set_torch_seed
 
-logger = getLogger(__name__)
+logger = get_logger(__name__)
 
 DEFAULT_TEMPERATURE = 0.1
 

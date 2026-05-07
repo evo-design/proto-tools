@@ -7,13 +7,14 @@ to avoid dependency conflicts with the main proto-language environment.
 """
 
 import json
-import logging
 import shutil
 import sys
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from standalone_helpers import get_logger
+
+logger = get_logger(__name__)
 
 
 class ColabFoldRemoteSearchWrapper:

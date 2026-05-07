@@ -893,7 +893,7 @@ class StructurePredictionOutput(BaseToolOutput):
 def _preprocess_structure_prediction_msas(
     inputs: StructurePredictionInput,
     colabfold_search_config: Any,
-    verbose: bool = False,
+    verbose: int = 0,
 ) -> StructurePredictionInput:
     """Generate MSAs for all unique protein sequences and attach to inputs.
 
@@ -904,7 +904,7 @@ def _preprocess_structure_prediction_msas(
     Args:
         inputs (StructurePredictionInput): Structure prediction input containing complexes.
         colabfold_search_config (Any): ColabFold search configuration.
-        verbose (bool): Whether to log progress.
+        verbose (int): Verbosity level (truthy = log progress); see :class:`BaseConfig`.
 
     Returns:
         StructurePredictionInput: Updated inputs with ``msas`` field populated.

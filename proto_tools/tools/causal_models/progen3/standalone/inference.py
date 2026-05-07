@@ -4,12 +4,11 @@ import json
 import os
 import re
 import sys
-from logging import getLogger
 from typing import Any
 
-from standalone_helpers import serialize_output, set_torch_seed
+from standalone_helpers import get_logger, serialize_output, set_torch_seed
 
-logger = getLogger(__name__)
+logger = get_logger(__name__)
 
 HUGGINGFACE_REPO_PREFIX = "Profluent-Bio"
 
