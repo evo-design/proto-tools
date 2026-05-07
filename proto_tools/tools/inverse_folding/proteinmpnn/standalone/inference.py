@@ -308,10 +308,7 @@ class ProteinMPNNModel:
             gradient_value = None
 
         mean_nll = float(loss_value)
-        mask = np.asarray(base_inputs["mask"], dtype=np.float32)
-        if "fix_pos" in base_inputs:
-            mask[np.asarray(base_inputs["fix_pos"], dtype=int)] = 0.0
-        effective_length = float(mask.sum())
+        effective_length = _effective_score_length(base_inputs)
 
         self.unload()
         return {
