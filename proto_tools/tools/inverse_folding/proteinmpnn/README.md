@@ -169,6 +169,8 @@ Each `InverseFoldingScoringMetrics` contains:
 | `log_likelihood`, `avg_log_likelihood`, `perplexity` | `float` | Scalar metrics (attribute or mapping access) |
 | `logits` | `Optional[List[List[float]]]` | Per-position logits array of shape `(seq_length, vocab_size)` |
 
+When `fixed_positions` is set, likelihood metrics are computed over non-fixed scored positions.
+
 ### Gradient Output (`ProteinMPNNGradientOutput`)
 
 | Field | Type | Description |

@@ -56,7 +56,7 @@ class ProteinMPNNScoringConfig(BaseConfig):
     Attributes:
         fixed_positions (dict[str, list[int]] | None): Dictionary mapping chain
             IDs to fixed positions in the sequence. If None, no positions will be fixed.
-            In scoring, fixed positions will not be utilized in perplexity calculation.
+            In scoring, fixed positions are excluded from average and total likelihood metrics.
             NOTE: Positions should match positions in the structure (generally 1-indexed).
 
         device (str): Device to run the model on. Options include ``"cuda"`` (NVIDIA GPU),
@@ -80,7 +80,7 @@ class ProteinMPNNScoringConfig(BaseConfig):
     fixed_positions: dict[str, list[int]] | None = ConfigField(
         title="Fixed Positions",
         default=None,
-        description="Dictionary mapping chain IDs to fixed positions in the sequence. If None, no positions will be fixed",
+        description="Dictionary mapping chain IDs to fixed positions excluded from scoring metrics",
         examples=[{"A": [1, 2, 3]}, {"A": [10, 20], "B": [5]}],
     )
 
