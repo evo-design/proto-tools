@@ -43,7 +43,6 @@ class LigandMPNNScoringConfig(BaseConfig):
         fixed_positions (dict[str, list[int]] | None): Residues excluded from score aggregation.
         device (str): Device to run the model on.
         return_logits (bool): Whether to include per-position logits.
-        model_type (Literal['ligand_mpnn']): LigandMPNN model type to load.
         scoring_mode (LigandMPNNScoringMode): Single-position or autoregressive scoring mode.
     """
 
@@ -65,13 +64,6 @@ class LigandMPNNScoringConfig(BaseConfig):
         title="Return Logits",
         default=False,
         description="Whether to include per-position logits in the output.",
-        advanced=True,
-    )
-    model_type: Literal["ligand_mpnn"] = ConfigField(
-        title="Model Type",
-        default="ligand_mpnn",
-        description="LigandMPNN model type to load.",
-        reload_on_change=True,
         advanced=True,
     )
     scoring_mode: LigandMPNNScoringMode = ConfigField(
@@ -134,7 +126,7 @@ def run_ligandmpnn_score(
                 "device": config.device,
                 "return_logits": config.return_logits,
                 "verbose": config.verbose,
-                "model_type": config.model_type,
+                "model_type": "ligand_mpnn",
                 "scoring_mode": config.scoring_mode,
             },
             instance=instance,

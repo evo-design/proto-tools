@@ -117,7 +117,6 @@ Each `SequenceStructurePair` contains:
 |-----------|------|---------|-------------|
 | `fixed_positions` | `Optional[Dict[str, List[int]]]` | `None` | Residues excluded from score aggregation |
 | `return_logits` | `bool` | `False` | Include per-position logits |
-| `model_type` | `"ligand_mpnn"` | `"ligand_mpnn"` | LigandMPNN model type to load |
 | `scoring_mode` | `"single_aa" \| "autoregressive"` | `"single_aa"` | Single-position or autoregressive sequence-conditioned probabilities |
 | `seed` | `int \| None` | `None` | Random seed for decoding order |
 | `device` | `str` | `"cuda"` | Inference device |
