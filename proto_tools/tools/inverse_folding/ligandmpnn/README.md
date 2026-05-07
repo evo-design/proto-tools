@@ -79,7 +79,7 @@ Each `InverseFoldingStructureInput` contains:
 | `batch_size` | `Optional[int]` | `None` | >= 1 | Max sequences per GPU forward pass (defaults to `num_sequences_per_structure`) |
 | `temperature` | `float` | `0.1` | 0.0-1.0 | Sampling temperature controlling sequence diversity |
 | `excluded_amino_acids` | `Optional[List[str]]` | `None` | Any standard AAs | Amino acids forbidden in designed positions. Common: `["C"]` to avoid disulfides. |
-| `model_type` | `Literal[...]` | `"ligand_mpnn"` | five variants | Model variant: `protein_mpnn`, `ligand_mpnn` (default), `soluble_mpnn`, `per_residue_label_membrane_mpnn`, `global_label_membrane_mpnn` |
+| `model_type` | `Literal[...]` | `"ligand_mpnn"` | three variants | `ligand_mpnn` (default) or membrane variants (`per_residue_label_membrane_mpnn`, `global_label_membrane_mpnn`) |
 | `ligand_mpnn_use_atom_context` | `bool` | `True` | -- | Encode ligand atom context in graph (ligand-aware variants only) |
 | `ligand_mpnn_use_side_chain_context` | `bool` | `False` | -- | Condition on fixed-residue sidechain atoms |
 | `ligand_mpnn_cutoff_for_score` | `float` | `8.0` | > 0.0 | Ligand-residue distance cutoff (A) for ligand-interface recovery score |

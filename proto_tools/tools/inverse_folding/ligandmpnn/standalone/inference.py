@@ -62,9 +62,8 @@ class LigandMPNNModel:
                 expects an int).
             device: Device to run on ('cuda' or 'cpu').
             verbose: Whether to print status messages.
-            model_type: LigandMPNN variant to load ('protein_mpnn',
-                'ligand_mpnn', 'soluble_mpnn', 'per_residue_label_membrane_mpnn',
-                'global_label_membrane_mpnn').
+            model_type: LigandMPNN variant to load ('ligand_mpnn',
+                'per_residue_label_membrane_mpnn', 'global_label_membrane_mpnn').
             ligand_mpnn_use_atom_context: Encode ligand atom context.
             ligand_mpnn_use_side_chain_context: Condition on sidechain atoms of
                 fixed residues.
@@ -134,9 +133,8 @@ class LigandMPNNModel:
         Args:
             device: Device to load the model on.
             verbose: Whether to print status messages.
-            model_type: LigandMPNN variant ('protein_mpnn', 'ligand_mpnn',
-                'soluble_mpnn', 'per_residue_label_membrane_mpnn',
-                'global_label_membrane_mpnn').
+            model_type: LigandMPNN variant ('ligand_mpnn',
+                'per_residue_label_membrane_mpnn', 'global_label_membrane_mpnn').
         """
         if verbose:
             logger.info(f"Loading LigandMPNN model_type={model_type} on {device}")
