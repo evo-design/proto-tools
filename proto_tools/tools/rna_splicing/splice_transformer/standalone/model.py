@@ -8,6 +8,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from axial_positional_embedding import AxialPositionalEmbedding
 from sinkhorn_transformer import SinkhornTransformer
+from standalone_helpers import get_logger
+
+logger = get_logger(__name__)
 
 
 class ResBlock(nn.Module):  # type: ignore[misc]

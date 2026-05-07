@@ -247,6 +247,12 @@ Here is the standalone from {reference_tool} to use as a structural template:
 Structure:
 - Module docstring
 - Imports (json, sys, os at top; heavy imports inside functions)
+- **Module-level logger** (REQUIRED — see "Logger Convention" below):
+  ```python
+  from standalone_helpers import get_logger
+
+  logger = get_logger(__name__)
+  ```
 - Model class with lazy loading pattern:
   - `__init__`: set `self._loaded = False`
   - `load(device)`: import heavy deps, load model weights
@@ -258,9 +264,31 @@ Structure:
   - Returns JSON-serializable dict
 - `if __name__ == "__main__":` block reading/writing JSON files
 
+#### Logger Convention (enforced by `tests/style_consistency_tests/test_standalone_logger_consistency.py`)
+
+**Every `.py` file under `proto_tools/tools/*/*/standalone/`** — `inference.py`, `run.py`, `binary_config.py`, `model.py`, helper modules, etc. — must declare a module-level logger:
+
+```python
+from standalone_helpers import get_logger
+
+logger = get_logger(__name__)
+```
+
+Why: standalones run inside isolated micromamba subprocesses where `proto_tools` is NOT importable. `get_logger` is shipped via `standalone_helpers/proto_logging.py` (auto-copied at worker startup). Records emitted through it are bridged back to the parent process for re-emission under `proto_tools.worker.{toolkit}.*`. Plain `logging.getLogger(__name__)` produces a logger outside the bridge namespace and its records are silently dropped.
+
+`__init__.py` is the only exemption (no log calls there). The consistency test enforces this on every other `.py` file in the standalone tree.
+
+For status updates that should drive the parent's spinner subtitle (and never clutter console output), use the dedicated method:
+
+```python
+logger.update_status("Loading checkpoint")  # spinner subtitle update; not shown in console
+logger.info("...")                           # normal log line
+```
+
 **If the tool has file-format conversion helpers** (e.g., writing MSA to Parquet, converting complexes to YAML/FASTA), implement them as plain-type functions in `helpers.py` at the tool directory level. These functions must be self-contained (no `proto_tools` imports) and take only plain types (str, list, dict). The tool layer imports and wraps them with typed signatures. The deployment service mounts them via `add_local_file()`. This ensures a single source of truth across tool and service layers. See esmfold, chai1, boltz2 for examples.
 
 CRITICAL RULES:
+- Every `.py` file in `standalone/` (except `__init__.py`) MUST declare `logger = get_logger(__name__)` from `standalone_helpers` — see "Logger Convention" above. Plain `logging.getLogger(__name__)` is forbidden and enforced by a consistency test.
 - Heavy imports (torch, model libraries) ONLY inside methods, never at module level
 - The dispatch() function is the entry point for both persistent-worker and one-shot execution
 - All tensor/array outputs must be converted to Python lists via serialize_output() from standalone_helpers

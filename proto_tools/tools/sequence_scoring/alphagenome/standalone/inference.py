@@ -1,7 +1,6 @@
 """AlphaGenome standalone inference implementation for venv execution."""
 
 import json
-import logging
 import os
 import sys
 from pathlib import Path
@@ -14,8 +13,9 @@ from alphagenome.models import interval_scorers as interval_scorers_lib
 from alphagenome.models import variant_scorers as variant_scorers_lib
 from alphagenome.protos import dna_model_pb2
 from alphagenome_research.model import dna_model
+from standalone_helpers import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _safe_tidy_scores(scores: Any) -> list[Any]:

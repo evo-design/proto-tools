@@ -7,7 +7,6 @@ References:
 
 import gzip
 import json
-import logging
 import os
 import re
 import shutil
@@ -17,9 +16,9 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 import gemmi
-from standalone_helpers import set_torch_seed
+from standalone_helpers import get_logger, set_torch_seed
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class RFdiffusion3Model:

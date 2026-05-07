@@ -9,14 +9,13 @@ but exercises the full subprocess device routing path.
 """
 
 import json
-import logging
 import subprocess
 import sys
 from typing import Any
 
-from standalone_helpers import get_subprocess_device_env
+from standalone_helpers import get_logger, get_subprocess_device_env
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # ============================================================================

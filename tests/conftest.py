@@ -1342,7 +1342,17 @@ def _route_tests_to_cloud(request):
 
 @pytest.fixture(scope="session", autouse=True)
 def _force_verbose_tools():
-    """Force verbose=True on all tool configs so subprocess stderr streams into test logs."""
+    """Force max-verbose (level 3) on every tool config and worker subprocess so test logs capture everything for debugging.
+
+    Sets:
+        - ``BaseConfig.verbose`` field default to ``3`` (raw subprocess stderr teed).
+        - ``PROTO_WORKER_VERBOSE=3`` so the drain thread tees untagged stderr.
+        - ``PROTO_ENV_VERBOSE=1`` so env-setup subprocesses are also chatty.
+
+    Tests that need to assert behavior at lower verbose levels (e.g.
+    ``test_run_oneshot_level_2_does_not_tee_raw_stderr``) must clear the
+    ``PROTO_WORKER_VERBOSE`` env var locally with monkeypatch.
+    """
     from proto_tools.utils.base_config import BaseConfig
 
     all_classes = {BaseConfig} | _all_subclasses(BaseConfig)
@@ -1352,13 +1362,15 @@ def _force_verbose_tools():
         fi = cls.model_fields.get("verbose")
         if fi is not None:
             originals[cls] = fi.default
-            fi.default = True
+            fi.default = 3
 
     for cls in all_classes:
         cls.model_rebuild(force=True)
 
     old_env_verbose = os.environ.get("PROTO_ENV_VERBOSE")
+    old_worker_verbose = os.environ.get("PROTO_WORKER_VERBOSE")
     os.environ["PROTO_ENV_VERBOSE"] = "1"
+    os.environ["PROTO_WORKER_VERBOSE"] = "3"
 
     yield
 
@@ -1373,6 +1385,11 @@ def _force_verbose_tools():
         os.environ.pop("PROTO_ENV_VERBOSE", None)
     else:
         os.environ["PROTO_ENV_VERBOSE"] = old_env_verbose
+
+    if old_worker_verbose is None:
+        os.environ.pop("PROTO_WORKER_VERBOSE", None)
+    else:
+        os.environ["PROTO_WORKER_VERBOSE"] = old_worker_verbose
 
 
 @pytest.fixture(scope="session", autouse=True)

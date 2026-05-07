@@ -6,14 +6,13 @@ Based on the ProGen2-finetuning repository: https://github.com/hugohrban/ProGen2
 
 import json
 import sys
-from logging import getLogger
 from typing import Any, Literal
 
 import torch
-from standalone_helpers import move_model_to_device, serialize_output, set_torch_seed
+from standalone_helpers import get_logger, move_model_to_device, serialize_output, set_torch_seed
 from tqdm import tqdm
 
-logger = getLogger(__name__)
+logger = get_logger(__name__)
 
 HUGGINGFACE_REPO_PREFIX = "hugohrban"
 # Tokenizer: 0=pad, 1=bos, 2=eos, 3='1', 4='2', 5-29=A..Z (no J). logits[t,j] -> PROGEN2_VOCAB[j].

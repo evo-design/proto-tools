@@ -13,6 +13,7 @@ Inside tool standalone directories, helpers can be imported either via the
 package entry point::
 
     from standalone_helpers import get_subprocess_device_env, set_torch_seed
+    from standalone_helpers import get_logger
 
 or from specific submodules::
 
@@ -22,6 +23,15 @@ or from specific submodules::
 This file and the submodules are copied by the worker bootstrap. The source
 tree is tracked by git, but the copies in ``tools/*/standalone/`` are not.
 """
+
+import os
+
+# Bridge install must happen before any submodule's module-level get_logger call so their loggers are ProtoLogger instances.
+from .proto_logging import get_logger, install
+
+# Gated on TOOL_VENV_PATH so parent-side imports of this package don't attach the bridge to the parent's logger tree.
+if os.environ.get("TOOL_VENV_PATH"):
+    install()
 
 from .compression import (
     _COMPRESS_MIN_SIZE,
@@ -56,6 +66,8 @@ from .serialization import (
 from .weights import resolve_weights_dir
 
 __all__ = [
+    # logging
+    "get_logger",
     # compression
     "_COMPRESS_MIN_SIZE",
     "_COMPRESSED_ARRAY_SENTINEL",

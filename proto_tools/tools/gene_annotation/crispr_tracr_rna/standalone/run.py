@@ -13,7 +13,6 @@ Usage (called by ToolInstance, not directly):
 
 import csv
 import json
-import logging
 import math
 import os
 import subprocess
@@ -23,7 +22,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from standalone_helpers import get_logger
+
+logger = get_logger(__name__)
 
 
 # =============================================================================

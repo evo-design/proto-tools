@@ -52,7 +52,10 @@ When a code change alters behavior documented in this file, any `SKILL.md`, or `
 
 | Code area | Update in |
 |---|---|
-| `utils/persistent_worker.py` | `notes/tool-environments.md` |
+| `utils/persistent_worker.py` | `notes/tool-environments.md`, `notes/logging.md` (drain thread / tagged-stream demux) |
+| `utils/logging_config.py` | `notes/logging.md` (parent-side: ProtoLogger, spinner handler, install entry points) |
+| `utils/standalone_helpers_source/standalone_helpers/proto_logging.py` | `notes/logging.md` (subprocess-side bridge: ProtoLogger, _BridgeHandler, install, get_logger) |
+| `utils/_worker_bootstrap.py` | `notes/logging.md` (bridge install via `import standalone_helpers`) |
 | `utils/compute_deps.py` | `notes/tool-environments.md` (compatibility matrices) |
 | `utils/tool_instance.py` | Docstrings (reference pages auto-generated) |
 | `utils/device_manager.py` | Docstrings (reference pages auto-generated) |
@@ -221,7 +224,7 @@ Google style everywhere. Enforced by ruff D rules (Google convention) and `tests
 - Never catch exceptions inside tool functions; the `@tool` decorator handles all error wrapping
 - All biological coordinates are **1-indexed, inclusive**
 - `batch_size` defaults to `1` (prevents OOM). The tool layer owns the batching loop. **Exception**: inverse folding tools default `batch_size` to `num_sequences_per_structure`
-- Use `logging.getLogger(__name__)`, never `print()`
+- Use `logging.getLogger(__name__)`, never `print()`. Loggers under the `proto_tools.*` namespace are auto-routed: from inside a worker subprocess they're serialized as JSON-tagged stderr lines and re-emitted by the parent on `proto_tools.worker.{toolkit}.*`, where standard `logging` filtering applies. Pass `update_status=True` on a log call to make that record take over the spinner subtitle (e.g. `logger.info("Sampling chain A", update_status=True)`). See `notes/logging.md` for the full architecture.
 - Config: `extra="forbid"` | Input: `extra="forbid"` | Output: `extra="ignore"`
 - Follow the `__init__.py` export chain: tool → category → `tools/__init__.py` → package `__init__.py`
 - Every tool directory must include an `examples/example.ipynb` notebook. Include a `cite.bib` when wrapping a published model or tool; omit it for simple algorithmic utilities with no paper to cite
@@ -289,6 +292,7 @@ result = run_{tool}({Tool}Input(...), {Tool}Config(...))
 |---|---|
 | `notes/storage.md` | `PROTO_HOME`, `PROTO_MODEL_CACHE`, shared weights, per-tool overrides, storage layout |
 | `notes/tool-environments.md` | Standalone env setup, compute deps, GCC/nvcc, caches, binaries, `to_device()` protocol |
+| `notes/logging.md` | Worker logging architecture, `update_status=True` spinner takeover, int verbosity levels, third-party progress bar handling |
 | `utils/device_manager.py` | DeviceManager API (auto-generated reference pages from docstrings) |
 | `utils/tool_instance.py` | ToolInstance API (auto-generated reference pages from docstrings) |
 | `notes/testing.md` | Test structure, assertions, markers, naming conventions |

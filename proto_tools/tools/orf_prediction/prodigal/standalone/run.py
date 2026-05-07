@@ -15,6 +15,9 @@ from multiprocessing.pool import ThreadPool
 from typing import Any
 
 import pyrodigal
+from standalone_helpers import get_logger
+
+logger = get_logger(__name__)
 
 
 # =============================================================================

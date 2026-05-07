@@ -4,14 +4,13 @@ import json
 import logging
 import math
 import sys
-from logging import getLogger
 from typing import Any, Literal
 
 import torch
-from standalone_helpers import AMINO_ACIDS_LIST, serialize_output, set_torch_seed
+from standalone_helpers import AMINO_ACIDS_LIST, get_logger, serialize_output, set_torch_seed
 from tqdm import tqdm
 
-logger = getLogger(__name__)
+logger = get_logger(__name__)
 
 # Suppress esm library INFO logs
 logging.getLogger("esm").setLevel(logging.ERROR)

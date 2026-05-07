@@ -18,6 +18,7 @@ import pytest
 from proto_tools.utils.persistent_worker import (
     PersistentWorker,
     _build_subprocess_env,
+    _handle_raw_stderr_line,
     _parse_env_vars_file,
 )
 from proto_tools.utils.proto_home import get_proto_home
@@ -134,7 +135,7 @@ def legacy_script(tmp_path: Path) -> Path:
     return script
 
 
-def _make_worker(script_path: Path) -> PersistentWorker:
+def _make_worker(script_path: Path, verbose: int = 0) -> PersistentWorker:
     """Create a PersistentWorker using the current Python (no venv needed)."""
     # Use the current Python's directory as a fake venv
     python_dir = Path(sys.executable).parent
@@ -144,6 +145,7 @@ def _make_worker(script_path: Path) -> PersistentWorker:
         env_path=fake_venv,
         script_path=script_path,
         device="cpu",
+        verbose=verbose,
     )
 
 
@@ -199,6 +201,150 @@ def test_error_handling(error_script: Path):
             worker.send({"anything": True})
     finally:
         worker.stop()
+
+
+# ── _drain_stderr: tagged demux + raw handling ──────────────────────────────
+
+
+@pytest.fixture
+def stderr_emitter_script(tmp_path: Path) -> Path:
+    """Standalone whose dispatch() writes a sentinel line to stderr."""
+    script = tmp_path / "stderr_emitter.py"
+    script.write_text(
+        textwrap.dedent("""\
+        import sys
+
+        def dispatch(input_dict):
+            sys.stderr.write(input_dict["msg"] + "\\n")
+            sys.stderr.flush()
+            return {"ok": True}
+        """)
+    )
+    return script
+
+
+def _wait_for_drain(worker: PersistentWorker, timeout: float = 2.0) -> None:
+    """Stop the worker and join its drain thread for deterministic capture."""
+    worker.stop()
+    if worker._stderr_thread is not None:
+        worker._stderr_thread.join(timeout=timeout)
+
+
+def test_drain_handle_raw_line_collapses_progress_bar_to_last_frame():
+    r"""``\r``-separated frames in one captured line keep only the last segment."""
+    import collections as _c
+
+    buf: _c.deque[str] = _c.deque(maxlen=20)
+    line = "\rstep 25%\rstep 50%\rstep 75%\rstep 100%\n"
+    _handle_raw_stderr_line(line, buf, raw_tee=False)
+    assert list(buf) == ["step 100%"]
+
+
+def test_drain_handle_raw_line_skips_blank_after_collapse():
+    r"""A line that's just a bare ``\r`` should produce no ring buffer entry."""
+    import collections as _c
+
+    buf: _c.deque[str] = _c.deque(maxlen=20)
+    _handle_raw_stderr_line("\r", buf, raw_tee=False)
+    assert list(buf) == []
+
+
+def test_drain_handle_raw_line_tees_to_parent_when_raw_tee_true(capfd):
+    """Raw lines should be teed to ``sys.stderr`` when ``raw_tee`` is True."""
+    import collections as _c
+
+    buf: _c.deque[str] = _c.deque(maxlen=20)
+    _handle_raw_stderr_line("plain stderr line\n", buf, raw_tee=True)
+    captured = capfd.readouterr()
+    assert "plain stderr line" in captured.err
+
+
+def test_drain_handle_raw_line_quiet_when_raw_tee_false(capfd):
+    """``raw_tee=False`` must keep the ring buffer populated but not write to stderr."""
+    import collections as _c
+
+    buf: _c.deque[str] = _c.deque(maxlen=20)
+    sentinel = "QUIET_RAW_LINE_xyz"
+    _handle_raw_stderr_line(f"{sentinel}\n", buf, raw_tee=False)
+    captured = capfd.readouterr()
+    assert sentinel not in captured.err
+    assert sentinel in buf[-1]
+
+
+def test_stderr_lines_buffer_is_bounded(monkeypatch: pytest.MonkeyPatch):
+    """The per-worker stderr buffer must respect PROTO_WORKER_STDERR_BUFFER_LINES."""
+    monkeypatch.setenv("PROTO_WORKER_STDERR_BUFFER_LINES", "5")
+    # Construct via the proper init so the buffer reads the env var.
+    worker = PersistentWorker(toolkit="test", env_path=Path("/fake"), script_path=Path("/fake/script.py"), device="cpu")
+    for i in range(20):
+        _handle_raw_stderr_line(f"line {i}\n", worker._stderr_lines, raw_tee=False)
+    assert len(worker._stderr_lines) == 5
+    # FIFO eviction: only the last 5 survived.
+    assert list(worker._stderr_lines) == [f"line {i}" for i in range(15, 20)]
+
+
+def test_stderr_lines_buffer_default_size(monkeypatch: pytest.MonkeyPatch):
+    """Default buffer size is 20 lines when the env var is unset."""
+    monkeypatch.delenv("PROTO_WORKER_STDERR_BUFFER_LINES", raising=False)
+    worker = PersistentWorker(toolkit="test", env_path=Path("/fake"), script_path=Path("/fake/script.py"), device="cpu")
+    assert worker._stderr_lines.maxlen == 20
+
+
+def test_stderr_lines_buffer_invalid_env_falls_back_to_default(monkeypatch: pytest.MonkeyPatch):
+    """Malformed env var should fall back to the default rather than crash."""
+    monkeypatch.setenv("PROTO_WORKER_STDERR_BUFFER_LINES", "not_an_int")
+    worker = PersistentWorker(toolkit="test", env_path=Path("/fake"), script_path=Path("/fake/script.py"), device="cpu")
+    assert worker._stderr_lines.maxlen == 20
+
+
+def test_drain_reemits_tagged_lines_under_worker_namespace(stderr_emitter_script: Path, monkeypatch):
+    """A standalone emitting via the bridge handler should re-emit on proto_tools.worker.{toolkit}.*."""
+    # Capture parent-side records on the worker namespace.
+    captured: list[logging.LogRecord] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            captured.append(record)
+
+    parent = logging.getLogger("proto_tools.worker.test")
+    handler = _Capture()
+    parent.addHandler(handler)
+    parent.setLevel(logging.DEBUG)
+
+    # Standalone that emits a tagged log line via the bridge. Uses the producer
+    # convention: ``from standalone_helpers import get_logger`` (the bootstrap
+    # copies ``standalone_helpers/`` into the standalone dir, triggers
+    # ``install()`` via the package init, and adds the dir to ``sys.path``).
+    # The script must live under a ``standalone/`` directory for the helpers
+    # copy to fire — see ``_copy_standalone_helpers``.
+    standalone_dir = stderr_emitter_script.parent / "standalone"
+    standalone_dir.mkdir(exist_ok=True)
+    script_with_log = standalone_dir / "tagged_emitter.py"
+    script_with_log.write_text(
+        textwrap.dedent("""\
+        from standalone_helpers import get_logger
+
+        logger = get_logger("demo.module")
+
+        def dispatch(input_dict):
+            logger.info(input_dict["msg"], update_status=True)
+            return {"ok": True}
+        """)
+    )
+    # verbose=1 so the toolkit logger admits INFO records (level=0 sets WARNING).
+    worker = _make_worker(script_with_log, verbose=1)
+    sentinel = "TAGGED_REEMIT_xyz"
+    try:
+        worker.send({"msg": sentinel})
+    finally:
+        _wait_for_drain(worker)
+        parent.removeHandler(handler)
+
+    matches = [r for r in captured if sentinel in r.getMessage()]
+    assert matches, f"sentinel not re-emitted; captured names: {[r.name for r in captured]}"
+    record = matches[0]
+    assert record.name.startswith("proto_tools.worker.test")
+    assert getattr(record, "update_status", False) is True
 
 
 # ── Legacy dispatch ──────────────────────────────────────────────────────────

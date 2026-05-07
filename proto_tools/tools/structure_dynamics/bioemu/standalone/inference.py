@@ -1,7 +1,6 @@
 """Standalone BioEmu inference implementation."""
 
 import json
-import logging
 import os
 import sys
 import tempfile
@@ -9,9 +8,9 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from standalone_helpers import set_torch_seed
+from standalone_helpers import get_logger, set_torch_seed
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class BioEmuModel:

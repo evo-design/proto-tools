@@ -1,13 +1,24 @@
-"""proto_tools/utils/logging_config.py.
+r"""proto_tools/utils/logging_config.py.
 
-Provides centralized logging setup with file and console handlers,
-automatic log directory management, suppression of noisy third-party loggers,
-and integration with Python's warnings system.
+Parent-side logging setup for proto_tools.
 
-Logging auto-configures on first tool invocation: if no handlers exist on the
-``proto_tools`` logger or the root logger, a minimal stderr console handler
-at INFO level is added automatically.  Downstream library consumers who
-configure their own logging are never affected.
+- **Library auto-configure**: adds a stderr console handler if none exists,
+  silences noisy third-party loggers.
+- **Spinner takeover**: :class:`SpinnerFromLogsHandler` is attached to the
+  ``proto_tools`` namespace by :func:`install_spinner_handler` so any record
+  flagged ``update_status=True`` (from parent-side wrapper code or re-emitted
+  from a worker subprocess) updates the active spinner subtitle.
+- **Logger class**: :func:`install_logger_class` registers :class:`ProtoLogger`
+  globally so every ``logging.getLogger("proto_tools.X")`` accepts the
+  ``update_status=True`` kwarg.
+
+The subprocess-side bridge lives in
+``standalone_helpers/proto_logging.py`` (copied into each tool's micromamba
+venv at worker startup). It writes ``\\x00LOG\\x00<json>\\n`` lines on stderr;
+:data:`_TAG_PREFIX` here is the parent-side counterpart and must match the
+producer constant. The drain thread in
+``proto_tools/utils/persistent_worker.py`` demultiplexes those lines and
+re-emits them under ``proto_tools.worker.{toolkit}.{name}``.
 """
 
 from __future__ import annotations
@@ -20,10 +31,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-# ============================================================================
-# Library best practice: NullHandler prevents "No handlers found" warnings
-# when proto_tools is imported as a library without explicit logging config.
-# ============================================================================
+# NullHandler prevents "No handlers found" warnings when proto_tools is imported as a library without explicit logging config.
 logging.getLogger("proto_tools").addHandler(logging.NullHandler())
 
 
@@ -78,39 +86,40 @@ def _auto_configure_logging() -> None:
 
     pt_logger = logging.getLogger("proto_tools")
 
-    # Someone already configured handlers on the proto_tools logger
-    real_handlers = [h for h in pt_logger.handlers if not isinstance(h, logging.NullHandler)]
+    # SpinnerFromLogsHandler doesn't emit normal console output, so its presence shouldn't suppress auto-configure of a stderr handler.
+    real_handlers = [h for h in pt_logger.handlers if not isinstance(h, (logging.NullHandler, SpinnerFromLogsHandler))]
     if real_handlers:
         return
 
-    # Downstream application configured the root logger — our messages
-    # will propagate there automatically via the NullHandler
+    # Root logger already configured downstream - our messages propagate via NullHandler.
     if logging.getLogger().handlers:
         return
 
-    # No one configured logging — add minimal stderr handler
+    # No one configured logging - add minimal stderr handler
     handler = logging.StreamHandler(sys.stderr)
     handler.setLevel(logging.INFO)
     handler.setFormatter(SelectiveLevelFormatter("%(message)s"))
+    handler.addFilter(_drop_update_status_records)
     pt_logger.addHandler(handler)
-    pt_logger.setLevel(logging.INFO)
+    pt_logger.setLevel(logging.DEBUG)
 
     _suppress_noisy_loggers()
+
+
+def _drop_update_status_records(record: logging.LogRecord) -> bool:
+    """Filter for console handlers: drop records flagged ``update_status=True``.
+
+    These records are spinner-subtitle updates; SpinnerFromLogsHandler picks
+    them up via the ``proto_tools`` namespace, but they should never clutter
+    console output. File handlers don't install this filter, so they capture
+    everything as an audit trail.
+    """
+    return not getattr(record, "update_status", False)
 
 
 # ============================================================================
 # Formatting
 # ============================================================================
-class BioToolsOnlyFilter(logging.Filter):
-    """Filter to only allow logs from proto_tools project packages."""
-
-    def filter(self, record: Any) -> Any:
-        """Filter log records to exclude noisy third-party messages."""
-        # Include logs from proto_tools and tests
-        allowed_prefixes = ("proto_tools", "tests")
-        return record.name.startswith(allowed_prefixes)
-
-
 class SelectiveLevelFormatter(logging.Formatter):
     """Formatter that shows level prefix only for WARNING and above."""
 
@@ -193,7 +202,7 @@ def setup_logging(
             while WARNING/ERROR/CRITICAL include the level prefix (e.g., "WARNING: message").
         log_file_header (str | None): Optional header text to write at the top of the log file before logging starts.
     """
-    # Mark as explicitly configured — prevents auto-configure from running
+    # Mark as explicitly configured - prevents auto-configure from running
     _state["auto_configured"] = True
 
     # Parse levels (supports case-insensitive strings)
@@ -251,12 +260,13 @@ def setup_logging(
         # Use SelectiveLevelFormatter: shows level prefix only for WARNING and above
         console_formatter = SelectiveLevelFormatter("%(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
-    # Console handler (stderr — safe from subprocess IPC on stdout)
+    # Console handler (stderr - safe from subprocess IPC on stdout)
     console_handler = None
     if log_to_console:
         console_handler = logging.StreamHandler(sys.stderr)
         console_handler.setLevel(console_level or level)
         console_handler.setFormatter(console_formatter)
+        console_handler.addFilter(_drop_update_status_records)
         root_logger.addHandler(console_handler)
 
     # File handler (timestamped or custom filename)
@@ -280,8 +290,8 @@ def setup_logging(
 
         file_handler.setLevel(file_level or logging.DEBUG)
         file_handler.setFormatter(file_formatter)
-        # Add filter to only log proto_tools messages to file
-        file_handler.addFilter(BioToolsOnlyFilter())
+        # Handler is attached to the proto_tools logger, which only sees
+        # proto_tools.* records via propagation, so no extra filter is needed.
         root_logger.addHandler(file_handler)
 
     # Suppress noisy third-party loggers
@@ -323,3 +333,134 @@ def get_logger(name: str) -> logging.Logger:
     if not name.startswith("proto_tools"):
         name = f"proto_tools.{name}"
     return logging.getLogger(name)
+
+
+# ============================================================================
+# Structured worker logging: ProtoLogger, spinner handler
+# ============================================================================
+
+# Sentinel that prefixes every JSON-tagged stderr line emitted by the producer
+# side (``standalone_helpers.proto_logging._BridgeHandler``). Picked to be
+# vanishingly unlikely to appear in free-form text output (NUL byte + literal
+# "LOG" + NUL byte). Must match the producer constant.
+_TAG_PREFIX = "\x00LOG\x00"
+
+
+class ProtoLogger(logging.Logger):
+    """``logging.Logger`` subclass that accepts an ``update_status`` keyword.
+
+    The standard ``logging`` API doesn't allow arbitrary kwargs on log methods;
+    only ``exc_info``, ``extra``, ``stack_info``, ``stacklevel`` are honored.
+    This subclass adds ``update_status`` by overriding ``_log`` (which all
+    public methods forward kwargs to) and translating the flag into the
+    standard ``extra`` dict so it lands as a ``LogRecord`` attribute.
+
+    Example:
+        >>> logger = logging.getLogger("proto_tools.bioemu.sampler")
+        >>> logger.info("Sampling chain A", update_status=True)
+    """
+
+    def _log(  # type: ignore[override]
+        self,
+        level: int,
+        msg: object,
+        args: Any,
+        exc_info: Any = None,
+        extra: dict[str, Any] | None = None,
+        stack_info: bool = False,
+        stacklevel: int = 1,
+        update_status: bool = False,
+    ) -> None:
+        """Override of ``Logger._log`` that recognizes ``update_status``."""
+        if update_status:
+            extra = {**(extra or {}), "update_status": True}
+        super()._log(
+            level,
+            msg,
+            args,
+            exc_info=exc_info,
+            extra=extra,
+            stack_info=stack_info,
+            stacklevel=stacklevel,
+        )
+
+    def update_status(self, msg: object, *args: Any) -> None:
+        """Emit a status record that updates the spinner subtitle and is captured by file handlers but never shown on console.
+
+        Use this for phase-transition messages inside long-running tools
+        ("Loading weights", "Moving to GPU", "Folding 1 complex"). The console
+        StreamHandler installs a Filter that drops these records, so they never
+        clutter terminal output regardless of verbose level. File handlers
+        (configured via ``setup_logging(log_to_file=True)``) still capture
+        them as a complete audit trail.
+        """
+        if self.isEnabledFor(logging.INFO):
+            self._log(logging.INFO, msg, args, update_status=True)
+
+
+class SpinnerFromLogsHandler(logging.Handler):
+    """Calls ``set_substatus`` for log records flagged with ``update_status=True``.
+
+    Attached to the ``proto_tools`` namespace on the parent. Sees both the
+    re-emitted records from worker subprocesses (under
+    ``proto_tools.worker.*``) and direct records from parent-side wrapper
+    code (under ``proto_tools.tools.*``, ``proto_tools.utils.*``, etc.) since
+    both propagate up to ``proto_tools``. ``set_substatus`` is a no-op when no
+    spinner is active, so this handler is safe to leave permanently attached.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:
+        """Update the active spinner subtitle if the record is flagged."""
+        if not getattr(record, "update_status", False):
+            return
+        try:
+            from proto_tools.utils.progress import set_substatus
+
+            set_substatus(record.getMessage())
+        except Exception:
+            self.handleError(record)
+
+
+def install_logger_class() -> None:
+    """Make new loggers ``ProtoLogger`` instances; idempotent.
+
+    Called from ``proto_tools/__init__.py`` so any subsequent
+    ``logging.getLogger("proto_tools.X")`` returns a ``ProtoLogger`` and the
+    ``update_status=True`` kwarg works on every log call.
+    """
+    if logging.getLoggerClass() is not ProtoLogger:
+        logging.setLoggerClass(ProtoLogger)
+
+
+def install_spinner_handler() -> None:
+    """Attach :class:`SpinnerFromLogsHandler` to the ``proto_tools`` namespace.
+
+    Called on the parent side (when ``TOOL_VENV_PATH`` is unset) so that any
+    ``logger.info(..., update_status=True)`` call from either parent-side
+    wrapper code or a re-emitted worker record updates the active spinner
+    subtitle. Idempotent.
+
+    Also bumps the ``proto_tools`` logger level so INFO records flow through;
+    without this, root's default WARNING would drop INFO before the handler
+    runs. The handler itself filters on ``update_status`` so non-flagged
+    records still don't touch the spinner.
+    """
+    pt_logger = logging.getLogger("proto_tools")
+    if not any(isinstance(h, SpinnerFromLogsHandler) for h in pt_logger.handlers):
+        pt_logger.addHandler(SpinnerFromLogsHandler())
+    if pt_logger.level == logging.NOTSET or pt_logger.level > logging.INFO:
+        pt_logger.setLevel(logging.INFO)
+
+
+def verbose_level_from_env() -> int:
+    """Read ``PROTO_WORKER_VERBOSE`` as an int on the 0-3 scale.
+
+    Returns 0 when unset or unparsable. Clamped to ``[0, 3]`` so the consumer
+    can rely on the value as a direct level comparator.
+    """
+    raw = os.environ.get("PROTO_WORKER_VERBOSE", "0")
+    try:
+        level = int(raw)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(level, 3))

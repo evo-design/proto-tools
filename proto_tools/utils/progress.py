@@ -3,8 +3,9 @@
 Provides ``progress_bar()`` as a drop-in ``tqdm`` replacement that shows an
 animated dots spinner in the description prefix.  Infrastructure code calls
 ``set_substatus()`` to update the description as phases change (env setup →
-subprocess launch → inference).  A ``contextvars.ContextVar`` bridge connects
-the two without any direct coupling.
+subprocess launch → inference).  A process-wide active-bar stack connects
+the two without any direct coupling, and stays visible across thread
+boundaries (worker drain threads call ``set_substatus`` too).
 
 Styles are registered in ``SPINNER_STYLES`` — add new entries there
 to create new animation patterns.
@@ -12,6 +13,7 @@ to create new animation patterns.
 
 from __future__ import annotations
 
+import contextlib
 import contextvars
 import logging
 import os
@@ -140,16 +142,36 @@ def _in_notebook() -> bool:
 
 
 # ============================================================================
-# Context variable bridge
+# Active progress bar registry
 # ============================================================================
-_active_bar: contextvars.ContextVar[_NotebookProgressBar | _AnimatedProgressBar | None] = contextvars.ContextVar(
-    "_active_bar", default=None
-)
+# Process-wide stack of active bars. We use a lock-protected module-level list
+# instead of a ContextVar so worker drain threads (which run in their own
+# threading.Thread without inheriting the main thread's context) can still
+# resolve the current bar from ``set_substatus``. Nested ``progress_bar()``
+# blocks push/pop on the stack so the innermost bar wins.
+_active_bars: list[_NotebookProgressBar | _AnimatedProgressBar] = []
+_active_bars_lock = threading.Lock()
+
+
+def _push_active_bar(bar: _NotebookProgressBar | _AnimatedProgressBar) -> None:
+    with _active_bars_lock:
+        _active_bars.append(bar)
+
+
+def _pop_active_bar(bar: _NotebookProgressBar | _AnimatedProgressBar) -> None:
+    """Remove ``bar`` from the active stack (idempotent; safe under nesting)."""
+    with _active_bars_lock, contextlib.suppress(ValueError):
+        _active_bars.remove(bar)
+
+
+def _current_active_bar() -> _NotebookProgressBar | _AnimatedProgressBar | None:
+    with _active_bars_lock:
+        return _active_bars[-1] if _active_bars else None
 
 
 def has_active_progress_bar() -> bool:
-    """Check if a progress bar is currently active in the current context."""
-    return _active_bar.get() is not None
+    """Check if a progress bar is currently active anywhere in this process."""
+    return _current_active_bar() is not None
 
 
 _current_tool_function: contextvars.ContextVar[str | None] = contextvars.ContextVar(
@@ -186,6 +208,18 @@ def reset_current_tool_function(token: contextvars.Token[str | None]) -> None:
 # Notebook-friendly interval (slower to avoid flooding widget updates)
 _NOTEBOOK_INTERVAL = 0.3
 
+# Fixed display width (chars) for the description text. Substatus messages are
+# padded with spaces if shorter and truncated with an ellipsis if longer, so
+# the bar never shifts horizontally as the substatus changes length.
+_DESC_DISPLAY_WIDTH = 40
+
+
+def _format_desc_for_display(message: str, width: int = _DESC_DISPLAY_WIDTH) -> str:
+    """Pad or truncate a substatus message to a fixed display width."""
+    if len(message) > width:
+        return message[: width - 1] + "…"
+    return message.ljust(width)
+
 
 # ============================================================================
 # Notebook progress bar (tqdm.auto widget with spinner thread)
@@ -211,7 +245,7 @@ class _NotebookProgressBar(tqdm_auto):  # type: ignore[type-arg]
         self._base_desc = kwargs.get("desc", "") or ""
         self._style = SPINNER_STYLES.get(spinner_style, SPINNER_STYLES["dots"])
         self._stop_event = threading.Event()
-        self._token = _active_bar.set(self)
+        _push_active_bar(self)
         super().__init__(*args, **kwargs)
 
         if not show_bar and hasattr(self, "container") and hasattr(self.container, "children"):
@@ -229,17 +263,21 @@ class _NotebookProgressBar(tqdm_auto):  # type: ignore[type-arg]
         while not self._stop_event.is_set():
             frame = frames[idx % len(frames)]
             try:
-                self.set_description(f"{frame} {self._base_desc}", refresh=True)
+                self.set_description(f"{frame} {_format_desc_for_display(self._base_desc)}", refresh=True)
             except Exception:
                 break
             idx += 1
             self._stop_event.wait(_NOTEBOOK_INTERVAL)
 
-    def _set_base_desc(self, message: str) -> None:
-        """Update the description text (spinner keeps animating).
+    def _set_substatus(self, message: str) -> None:
+        """Update the description text shown next to the spinner (bar position unchanged).
+
+        The displayed text is padded/truncated to a fixed width by
+        :func:`_format_desc_for_display`, so the rest of the bar stays in a
+        stable column regardless of message length.
 
         Args:
-            message (str): New description text.
+            message (str): Substatus text (e.g. ``"Loading checkpoint"``).
         """
         self._base_desc = message
 
@@ -261,8 +299,8 @@ class _NotebookProgressBar(tqdm_auto):  # type: ignore[type-arg]
         self._spinner_thread.join(timeout=1.0)
         completed = self.total is not None and self.n >= self.total
         icon = "\u2714" if completed else "\u2718"
-        self.set_description(f"{icon} {self._base_desc}", refresh=True)
-        _active_bar.reset(self._token)
+        self.set_description(f"{icon} {_format_desc_for_display(self._base_desc)}", refresh=True)
+        _pop_active_bar(self)
         super().close()
 
 
@@ -273,8 +311,10 @@ class _AnimatedProgressBar(tqdm):  # type: ignore[type-arg]
     """tqdm progress bar with animated spinner in the description prefix.
 
     A background daemon thread cycles through spinner frames, updating the
-    description via ``set_description()``.  The base description can be changed
-    at any time via ``_set_base_desc()`` (called by ``set_substatus()``).
+    description via ``set_description()``. ``set_substatus()`` replaces the
+    description text; :func:`_format_desc_for_display` pads/truncates it to a
+    fixed width so the bar never shifts horizontally as substatus length
+    changes.
     """
 
     def __init__(self, *args: Any, spinner_style: str = "dots", **kwargs: Any) -> None:  # noqa: D417
@@ -288,7 +328,7 @@ class _AnimatedProgressBar(tqdm):  # type: ignore[type-arg]
         self._base_desc = kwargs.pop("desc", "") or ""
         self._style = SPINNER_STYLES.get(spinner_style, SPINNER_STYLES["dots"])
         self._stop_event = threading.Event()
-        self._token = _active_bar.set(self)
+        _push_active_bar(self)
 
         super().__init__(*args, desc=self._base_desc, **kwargs)  # type: ignore[call-overload]
 
@@ -303,17 +343,21 @@ class _AnimatedProgressBar(tqdm):  # type: ignore[type-arg]
         while not self._stop_event.is_set():
             frame = frames[idx % len(frames)]
             try:
-                self.set_description(f"{frame} {self._base_desc}", refresh=True)
+                self.set_description(f"{frame} {_format_desc_for_display(self._base_desc)}", refresh=True)
             except Exception:
                 break
             idx += 1
             self._stop_event.wait(interval)
 
-    def _set_base_desc(self, message: str) -> None:
-        """Update the base description (the text after the spinner prefix).
+    def _set_substatus(self, message: str) -> None:
+        """Update the description text shown next to the spinner (bar position unchanged).
+
+        The displayed text is padded/truncated to a fixed width by
+        :func:`_format_desc_for_display`, so the rest of the bar stays in a
+        stable column regardless of message length.
 
         Args:
-            message (str): New description text.
+            message (str): Substatus text (e.g. ``"Loading checkpoint"``).
         """
         self._base_desc = message
 
@@ -335,8 +379,8 @@ class _AnimatedProgressBar(tqdm):  # type: ignore[type-arg]
         self._spinner_thread.join(timeout=1.0)
         completed = self.total is not None and self.n >= self.total
         icon = "\033[32m\u2714\033[0m" if completed else "\033[31m\u2718\033[0m"
-        self.set_description(f"{icon} {self._base_desc}", refresh=True)
-        _active_bar.reset(self._token)
+        self.set_description(f"{icon} {_format_desc_for_display(self._base_desc)}", refresh=True)
+        _pop_active_bar(self)
         super().close()
 
 
@@ -400,9 +444,9 @@ def set_substatus(message: str, style: str | None = None) -> None:
         set_substatus("Starting subprocess")
         set_substatus("Running inference", style="kitt")
     """
-    bar = _active_bar.get(None)
+    bar = _current_active_bar()
     if bar is not None:
-        bar._set_base_desc(message)
+        bar._set_substatus(message)
         if style is not None:
             bar._set_style(style)
     else:

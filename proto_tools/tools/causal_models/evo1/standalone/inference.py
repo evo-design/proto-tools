@@ -8,15 +8,14 @@ Usage (called by ToolInstance, not directly):
 """
 
 import json
-import logging
 import sys
 from typing import Any, Literal
 
 import torch
-from standalone_helpers import move_model_to_device, serialize_output, set_torch_seed
+from standalone_helpers import get_logger, move_model_to_device, serialize_output, set_torch_seed
 from tqdm import tqdm
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 EVO1_MODEL_CHECKPOINTS = Literal[
     "evo-1.5-8k-base",

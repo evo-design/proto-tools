@@ -8,6 +8,10 @@ import json
 import sys
 from typing import Any
 
+from standalone_helpers import get_logger
+
+logger = get_logger(__name__)
+
 
 # =============================================================================
 # Implementation

@@ -15,6 +15,10 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from standalone_helpers import get_logger
+
+logger = get_logger(__name__)
+
 
 # =============================================================================
 # Parsing Utilities

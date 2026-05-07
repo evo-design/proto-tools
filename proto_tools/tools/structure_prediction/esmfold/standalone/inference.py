@@ -14,9 +14,9 @@ from contextlib import contextmanager
 from typing import Any
 
 import torch
-from standalone_helpers import AMINO_ACIDS_LIST, move_model_to_device, serialize_output
+from standalone_helpers import AMINO_ACIDS_LIST, get_logger, move_model_to_device, serialize_output
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 # Suppress transformers logging
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
@@ -91,6 +91,7 @@ class ESMFoldModel:
             tokenized_inputs["position_ids"] = position_ids
 
             # Forward pass
+            logger.update_status(f"Folding {len(batch_data)} complex(es), num_recycles={num_recycles}")
             outputs = self.model(**tokenized_inputs, num_recycles=num_recycles)
 
             # Apply linker masking
@@ -536,8 +537,7 @@ class ESMFoldModel:
                 "esmfold: transformers not importable; ensure ESMFold dependencies are installed"
             ) from None
 
-        if verbose:
-            logger.info(f"Loading ESMFold model: facebook/esmfold_v1 on {device}")
+        logger.update_status(f"Loading ESMFold model: facebook/esmfold_v1 on {device}")
 
         repo = "facebook/esmfold_v1"
         try:
@@ -546,6 +546,7 @@ class ESMFoldModel:
         except OSError as e:
             raise RuntimeError(f"esmfold: HF weight load from {repo!r} failed: {e}") from e
 
+        logger.update_status(f"Moving ESMFold to {device} (fp16)")
         self.model = self.model.to(device)
         self.model.esm = self.model.esm.half()
         self.model.requires_grad_(False)

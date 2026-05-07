@@ -28,15 +28,10 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-# Responses larger than this (in bytes) are written to a temp file instead of
-# being sent through the pipe.  With line-buffered text mode, flush() writes
-# the entire payload in one call. If it exceeds the OS pipe buffer (~1 MB on
-# Linux), the write blocks until the reader drains, risking deadlock.  100 MB
-# stays well above the pipe buffer while keeping file I/O overhead negligible.
+# Threshold above which response payloads spill to a temp file instead of the pipe (Linux pipe buffer is ~1 MB; 100 MB leaves ample headroom).
 _FILE_FALLBACK_THRESHOLD = 100_000_000
 
-# Commands accepted by the worker dispatch loop; kept in sync with the if/elif
-# chain in the dispatcher so error messages don't drift.
+# Commands accepted by the worker dispatch loop; keep in sync with the if/elif chain below.
 _VALID_COMMANDS = ("to_device", "get_memory_stats")
 
 
@@ -70,8 +65,7 @@ def _copy_standalone_helpers(script_path: str) -> None:
         target = standalone_dir / name
         if not source.exists():
             continue
-        # When copying the new package, remove any stale single-file copy
-        # left from before the package refactor so it doesn't shadow on sys.path.
+        # Remove any stale single-file standalone_helpers.py copy so it doesn't shadow the package on sys.path.
         if source.is_dir():
             stale_py = standalone_dir / f"{name}.py"
             if stale_py.exists():
@@ -100,13 +94,39 @@ def _remove_bootstrap_dir_from_sys_path() -> None:
     sys.path[:] = [entry for entry in sys.path if Path(entry or ".").resolve() != bootstrap_dir]
 
 
-def _load_module(script_path: str) -> Any:
-    """Import a standalone script as a Python module."""
-    path = Path(script_path).resolve()
-    # Add standalone dir to sys.path so `from standalone_helpers import ...` works
-    standalone_dir = str(path.parent)
+def _prepend_standalone_dir_to_sys_path(script_path: str) -> None:
+    """Idempotently put the script's parent dir on sys.path so ``standalone_helpers`` resolves."""
+    standalone_dir = str(Path(script_path).resolve().parent)
     if standalone_dir not in sys.path:
         sys.path.insert(0, standalone_dir)
+
+
+def _install_subprocess_logging_bridge() -> None:
+    """Trigger ``standalone_helpers.proto_logging.install`` for this subprocess.
+
+    Imports ``standalone_helpers``; the package ``__init__`` gates ``install()``
+    on ``TOOL_VENV_PATH`` so this is a no-op when the bootstrap is imported by
+    parent-side code. Caller must have placed the standalone dir on ``sys.path``
+    via :func:`_prepend_standalone_dir_to_sys_path` first.
+
+    Failures here degrade the worker to "untagged stderr only": the worker still
+    runs, but ``logger.info(..., update_status=True)`` calls won't reach the
+    parent. We write a clear warning to stderr so the failure is visible at
+    verbose level >= 3 and surfaces in crash context buffers.
+    """
+    try:
+        import standalone_helpers  # noqa: F401  # import side effect: install()
+    except Exception as exc:
+        sys.stderr.write(f"[worker] logging bridge install failed: {type(exc).__name__}: {exc}\n")
+
+
+def _load_module(script_path: str) -> Any:
+    """Import a standalone script as a Python module.
+
+    Caller must have placed the standalone dir on ``sys.path`` via
+    :func:`_prepend_standalone_dir_to_sys_path` first.
+    """
+    path = Path(script_path).resolve()
     spec = importlib.util.spec_from_file_location("_standalone_module", path)
     if spec is None or spec.loader is None:
         raise ImportError(f"Cannot load module from {path}")
@@ -231,6 +251,12 @@ def main() -> None:
     # Copy standalone helpers to the tool's directory if not present
     _copy_standalone_helpers(script_path)
     _remove_bootstrap_dir_from_sys_path()
+
+    # Put the standalone dir on sys.path once; both the bridge install and the module load assume this.
+    _prepend_standalone_dir_to_sys_path(script_path)
+
+    # Install the worker logging bridge (via standalone_helpers) before loading the standalone module.
+    _install_subprocess_logging_bridge()
 
     module = _load_module(script_path)
 

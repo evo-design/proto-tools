@@ -8,14 +8,15 @@ Usage (called by ToolInstance, not directly):
 """
 
 import json
-import logging
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from standalone_helpers import get_logger
+
+logger = get_logger(__name__)
 
 
 # =============================================================================

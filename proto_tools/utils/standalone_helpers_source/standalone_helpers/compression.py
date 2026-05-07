@@ -9,6 +9,10 @@ lives on the parent side in ``proto_tools.utils.compressed_array``.
 
 from typing import Any
 
+from .proto_logging import get_logger
+
+logger = get_logger(__name__)
+
 _COMPRESSED_ARRAY_SENTINEL = "__compressed_array__"
 _COMPRESS_MIN_SIZE = 1000
 

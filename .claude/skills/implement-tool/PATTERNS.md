@@ -217,7 +217,13 @@ import sys
 import os
 from typing import Any
 
-from standalone_helpers import serialize_output, set_torch_seed  # + get_random_int if a downstream sampler needs a concrete int
+from standalone_helpers import get_logger, serialize_output, set_torch_seed  # + get_random_int if a downstream sampler needs a concrete int
+
+# REQUIRED: every .py file under standalone/ uses get_logger from standalone_helpers
+# (plain logging.getLogger lands outside the worker bridge and is silently dropped).
+# Use logger.update_status("...") for spinner subtitle updates.
+logger = get_logger(__name__)
+
 
 # Model class with lazy loading
 class {ToolName}Model:
@@ -447,7 +453,11 @@ import json
 import subprocess
 import sys
 
-from standalone_helpers import get_subprocess_device_env  # Auto-copied by worker bootstrap
+from standalone_helpers import get_logger, get_subprocess_device_env  # Auto-copied by worker bootstrap
+
+# REQUIRED: every .py file under standalone/ uses get_logger from standalone_helpers
+# (plain logging.getLogger lands outside the worker bridge and is silently dropped).
+logger = get_logger(__name__)
 
 
 def run_operation(

@@ -7,6 +7,10 @@ framework-specific glue.
 
 from typing import Any
 
+from .proto_logging import get_logger
+
+logger = get_logger(__name__)
+
 
 def get_pytorch_memory_stats(device: int | str = 0) -> dict[str, Any]:
     """Helper for PyTorch tools to report GPU memory stats.

@@ -7,7 +7,6 @@ worker protocols.
 """
 
 import json
-import logging
 import sys
 from typing import Any
 
@@ -15,9 +14,9 @@ import torch
 import torch.nn as nn
 
 # Import standalone helpers (auto-copied by worker bootstrap)
-from standalone_helpers import get_pytorch_memory_stats, move_model_to_device, set_torch_seed
+from standalone_helpers import get_logger, get_pytorch_memory_stats, move_model_to_device, set_torch_seed
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # ============================================================================

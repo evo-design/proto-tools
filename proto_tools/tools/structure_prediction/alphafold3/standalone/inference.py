@@ -16,7 +16,6 @@ Worker protocol implementation for ToolInstance integration.
 """
 
 import json
-import logging
 import os
 import subprocess
 import sys
@@ -25,10 +24,10 @@ from typing import Any
 import numpy as np
 from Bio import PDB
 
-logger = logging.getLogger(__name__)
-
 # Import from auto-copied standalone_helpers
-from standalone_helpers import get_subprocess_device_env, resolve_weights_dir
+from standalone_helpers import get_logger, get_subprocess_device_env, resolve_weights_dir
+
+logger = get_logger(__name__)
 
 
 class AlphaFold3ExecutionError(Exception):

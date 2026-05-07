@@ -11,12 +11,13 @@ Three related concerns live together here:
    with proper GPU memory cleanup, for both PyTorch and JAX.
 """
 
-import logging
 import os
 from collections.abc import Callable
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from .proto_logging import get_logger
+
+logger = get_logger(__name__)
 
 
 # ============================================================================

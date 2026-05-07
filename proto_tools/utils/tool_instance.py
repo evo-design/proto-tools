@@ -17,22 +17,22 @@ marked ``reload_on_change=True`` in the tool's Config class.
 
 Usage::
 
-    # Default — safe, no leak (device comes from config → input_dict)
+    # Default - safe, no leak (device comes from config → input_dict)
     result = ToolInstance.dispatch("esm2", {"device": "cuda", ...})
 
-    # Auto-persist everything (recommended) — all tools auto-cached
+    # Auto-persist everything (recommended) - all tools auto-cached
     with ToolInstance.persist():
         run_esmfold(inputs, config)       # auto-cached on first call
         run_esm2_score(inputs2, config2)  # also auto-cached
         run_esmfold(inputs3, config)      # reuses cached worker
     # everything cleaned up on exit
 
-    # Tool-specific persistence — named instances / multi-GPU
+    # Tool-specific persistence - named instances / multi-GPU
     with ToolInstance.persist_tool("esmfold"):
         for i in range(500):
             output = run_esmfold(inputs, config)  # reuses worker
 
-    # Manual persistence — power user
+    # Manual persistence - power user
     tool = ToolInstance.get("esmfold")
     output = run_esmfold(inputs, config)
     tool.shutdown()  # also evicts from cache
@@ -45,6 +45,7 @@ Usage::
 """
 
 import atexit
+import collections
 import contextvars
 import datetime
 import hashlib
@@ -65,7 +66,15 @@ from typing import Any, ClassVar
 from proto_tools.utils._worker_bootstrap import _copy_standalone_helpers as copy_standalone_helpers
 from proto_tools.utils.base_config import DEFAULT_TIMEOUT, BaseConfig
 from proto_tools.utils.device_manager import DeviceManager
-from proto_tools.utils.persistent_worker import PersistentWorker, _build_subprocess_env, _parse_env_vars_file
+from proto_tools.utils.logging_config import verbose_level_from_env
+from proto_tools.utils.persistent_worker import (
+    PersistentWorker,
+    _apply_verbose_to_console_handlers,
+    _build_subprocess_env,
+    _drain_subprocess_stderr,
+    _parse_env_vars_file,
+    _stderr_buffer_lines,
+)
 from proto_tools.utils.progress import get_current_tool_function, has_active_progress_bar, progress_bar, set_substatus
 from proto_tools.utils.tool_io import MissingAssetError
 
@@ -275,11 +284,11 @@ class ToolInstance:
             if key in cache:
                 logger.debug("Returning cached ToolInstance for key=%r", key)
                 return cache[key]
-        # Create outside lock — __init__ is lightweight now (no venv build)
+        # Create outside lock - __init__ is lightweight now (no venv build)
         new_inst = cls(toolkit)
         with _lock:
             cache = _active_cache()
-            # Double-check — another thread may have created it
+            # Double-check - another thread may have created it
             if key in cache:
                 logger.debug("Returning cached ToolInstance for key=%r", key)
                 return cache[key]
@@ -363,10 +372,10 @@ class ToolInstance:
             timeout = config.timeout
             reload_on = type(config).reload_fields()
         else:
-            verbose = False
+            verbose = 0
             timeout = DEFAULT_TIMEOUT
             reload_on = None
-        # Path 1: caller passed a ToolInstance object directly — use as-is.
+        # Path 1: caller passed a ToolInstance object directly - use as-is.
         if isinstance(instance, ToolInstance):
             logger.debug("dispatch(%s): using provided ToolInstance", toolkit)
             return instance.run(
@@ -376,7 +385,7 @@ class ToolInstance:
                 timeout=timeout,
                 reload_on=reload_on,
             )
-        # Path 2: string reference — must resolve, or be inside persist mode.
+        # Path 2: string reference - must resolve, or be inside persist mode.
         # Raises ValueError otherwise (strings are references, not creation requests).
         if isinstance(instance, str):
             resolved = _resolve_instance_or_raise(instance, toolkit)
@@ -398,7 +407,7 @@ class ToolInstance:
                 timeout=timeout,
                 reload_on=reload_on,
             )
-        # Path 3: instance is None — toolkit-keyed default.
+        # Path 3: instance is None - toolkit-keyed default.
         cached = _lookup_instance(toolkit)
         if cached is not None:
             logger.debug("dispatch(%s): reusing cached instance (key=%r)", toolkit, toolkit)
@@ -418,7 +427,7 @@ class ToolInstance:
                 timeout=timeout,
                 reload_on=reload_on,
             )
-        # Path 4: no cached instance — ephemeral one-shot subprocess.
+        # Path 4: no cached instance - ephemeral one-shot subprocess.
         logger.debug("dispatch(%s): no cached instance, running one-shot", toolkit)
         return cls._oneshot(
             toolkit,
@@ -435,7 +444,7 @@ class ToolInstance:
         input_dict: dict[str, Any],
         *,
         script_path: Path | str | None = None,
-        verbose: bool = False,
+        verbose: int = 0,
         timeout: int | None = None,
     ) -> dict[str, Any]:
         """Run a tool in an ephemeral subprocess — no caching, no worker.
@@ -447,7 +456,7 @@ class ToolInstance:
             toolkit (str): Model-level folder name (e.g. ``"esm2"``).
             input_dict (dict[str, Any]): JSON-serializable input for the standalone script.
             script_path (Path | str | None): Override the default standalone script.
-            verbose (bool): Whether to print status messages.
+            verbose (int): Verbosity level on the 0/1/2/3 scale; see :class:`BaseConfig`.
             timeout (int | None): Maximum execution time in seconds.
         """
         inst = cls(toolkit)
@@ -749,7 +758,7 @@ class ToolInstance:
         input_dict: dict[str, Any],
         *,
         script_path: Path | str | None = None,
-        verbose: bool = False,
+        verbose: int = 0,
         timeout: int | None = None,
         reload_on: set[str] | None = None,
     ) -> dict[str, Any]:
@@ -758,7 +767,7 @@ class ToolInstance:
         Args:
             input_dict (dict[str, Any]): JSON-serializable input for the standalone script.
             script_path (Path | str | None): Override the default standalone script.
-            verbose (bool): Whether to log progress.
+            verbose (int): Verbosity level on the 0/1/2/3 scale; see :class:`BaseConfig`.
             timeout (int | None): Maximum seconds to wait.
             reload_on (set[str] | None): Config field names whose value changes should
                 trigger a persistent worker restart.
@@ -917,7 +926,7 @@ class ToolInstance:
                 return {"available": False, "error": str(e)}
 
     # ------------------------------------------------------------------
-    # Warmup timeout — per-config first-run detection
+    # Warmup timeout - per-config first-run detection
     # ------------------------------------------------------------------
     def _config_marker_path(self, reload_params: dict[str, Any]) -> Path:
         """Return the marker file path for a specific reload-param combination.
@@ -995,7 +1004,7 @@ class ToolInstance:
         input_dict: dict[str, Any],
         *,
         script_path: Path | None = None,
-        verbose: bool = False,  # noqa: ARG002 — required by tool interface
+        verbose: int = 0,
         timeout: int | None = None,
         reload_on: set[str] | None = None,
     ) -> dict[str, Any]:
@@ -1009,7 +1018,10 @@ class ToolInstance:
         Args:
             input_dict (dict[str, Any]): JSON-serializable input for the standalone script.
             script_path (Path | None): Override the default standalone script.
-            verbose (bool): Whether to log progress.
+            verbose (int): Verbosity level on the 0/1/2/3 scale. ``PROTO_WORKER_VERBOSE``
+                env var acts as a global ceiling override (``max(verbose, env)``).
+                Effective level >= 3 makes the worker's drain thread mirror untagged
+                subprocess stderr to the parent's ``sys.stderr``.
             timeout (int | None): Maximum seconds to wait.
             reload_on (set[str] | None): Config field names that trigger worker restart on change.
         """
@@ -1050,10 +1062,10 @@ class ToolInstance:
             device = input_dict.get("device", "cpu")
             device_manager = DeviceManager.get_instance()
 
-            # Eviction callback — sends to_device directly to avoid lock ordering deadlock
+            # Eviction callback - sends to_device directly to avoid lock ordering deadlock
             def eviction_callback(action: str) -> None:
                 if action == "cpu":
-                    # gpu_only tools can't be offloaded to CPU — kill the worker
+                    # gpu_only tools can't be offloaded to CPU - kill the worker
                     # so the next dispatch spawns a fresh subprocess on GPU.
                     if self._gpu_only:
                         worker = self._worker
@@ -1107,12 +1119,15 @@ class ToolInstance:
             input_dict["device"] = allocated_device
 
             set_substatus("Starting worker")
+            # Latch effective verbose (max of config.verbose and PROTO_WORKER_VERBOSE) on the worker.
+            effective_verbose = max(int(verbose), verbose_level_from_env())
             self._worker = PersistentWorker(
                 toolkit=self.toolkit,
                 env_path=self.env_path,
                 script_path=sp,
                 device=self.device,
                 tool_env_vars=self._tool_env_vars,
+                verbose=effective_verbose,
             )
         else:
             device_manager = DeviceManager.get_instance()
@@ -1156,26 +1171,41 @@ class ToolInstance:
         input_dict: dict[str, Any],
         *,
         script_path: Path | None = None,
-        verbose: bool = False,
+        verbose: int = 0,
         timeout: int | None = None,
     ) -> dict[str, Any]:
         """Run in an ephemeral subprocess (no persistent worker).
 
-        Writes *input_dict* to a temp JSON file, invokes the venv's Python
-        on *script_path* with the input/output paths as arguments, reads the
+        Writes *input_dict* to a temp JSON file, invokes the venv's Python on
+        *script_path* with the input/output paths as arguments, reads the
         output JSON, and converts ``subprocess.TimeoutExpired`` to
         ``TimeoutError``.
+
+        Subprocess stderr is always piped and demultiplexed by a daemon drain
+        thread that calls :func:`proto_tools.utils.persistent_worker._drain_subprocess_stderr`.
+        Tagged JSON log lines flow back to the parent's
+        ``proto_tools.worker.{toolkit}.*`` logger; untagged lines accumulate in
+        a bounded ring buffer used for crash context, and are also teed to the
+        parent's stderr at verbose level >= 3.
+
+        stdout is ``DEVNULL`` at levels 0/1/2 (one-shot uses files for IPC, not
+        stdout), and inherited (``None``) at level 3 so library prints surface.
 
         Args:
             input_dict (dict[str, Any]): JSON-serializable input for the standalone script.
             script_path (Path | None): Override the default standalone script.
-            verbose (bool): Whether to log progress.
+            verbose (int): Verbosity level on the 0-3 scale; see :class:`BaseConfig`.
+                ``PROTO_WORKER_VERBOSE`` env var acts as a global ceiling override.
             timeout (int | None): Maximum seconds to wait.
         """
         self._ensure_env()
         sp = script_path or self.script_path
         copy_standalone_helpers(sp)  # type: ignore[arg-type]
         device = input_dict.get("device", self.device)
+        # Effective level = max(per-call config, env-var ceiling).
+        effective_verbose = max(int(verbose), verbose_level_from_env())
+        inherit_stdout = effective_verbose >= 3
+        raw_tee = effective_verbose >= 3
         with tempfile.TemporaryDirectory() as tmp:
             input_path = Path(tmp) / "input.json"
             output_path = Path(tmp) / "output.json"
@@ -1192,7 +1222,7 @@ class ToolInstance:
             env["TOOL_VENV_PATH"] = str(self.env_path)
             python_exe = str(self.env_path / "bin" / "python")
 
-            if verbose:
+            if effective_verbose >= 1:
                 logger.info(
                     "Running %s (one-shot) with device=%s",
                     sp.name,
@@ -1213,28 +1243,50 @@ class ToolInstance:
                 show_bar=False,
                 disable=not show_spinner,
             )
+
+            ring_buffer: collections.deque[str] = collections.deque(maxlen=_stderr_buffer_lines())
+            parent_logger = logging.getLogger(f"proto_tools.worker.{self.toolkit}")
+            _apply_verbose_to_console_handlers(effective_verbose)
+            cmd = [python_exe, str(sp), str(input_path), str(output_path)]
+
             try:
-                subprocess.run(
-                    [python_exe, str(sp), str(input_path), str(output_path)],
+                proc = subprocess.Popen(
+                    cmd,
                     env=env,
                     text=True,
-                    check=True,
-                    timeout=effective_timeout,
-                    stdout=None if verbose else subprocess.PIPE,
-                    stderr=None if verbose else subprocess.PIPE,
+                    bufsize=1,  # line-buffered so the drain thread sees lines promptly
+                    stdout=None if inherit_stdout else subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,  # always PIPE so the drain thread can demux tagged JSON
                 )
+                assert proc.stderr is not None  # PIPE guarantees this
+                drain_thread = threading.Thread(
+                    target=_drain_subprocess_stderr,
+                    args=(proc.stderr, parent_logger, ring_buffer, raw_tee),
+                    daemon=True,
+                )
+                drain_thread.start()
+
+                try:
+                    rc = proc.wait(timeout=effective_timeout)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    with suppress(Exception):
+                        proc.wait(timeout=5)
+                    raise TimeoutError(f"{self.toolkit}: timed out after {effective_timeout}s") from None
+                finally:
+                    drain_thread.join(timeout=2)
+
+                if rc != 0:
+                    tail = " | ".join(ring_buffer) or "<no stderr>"
+                    logger.error(
+                        "Tool %s failed (exit %d):\n%s",
+                        self.toolkit,
+                        rc,
+                        tail,
+                    )
+                    raise subprocess.CalledProcessError(rc, cmd, stderr=tail)
+
                 pbar.update(1)
-            except subprocess.CalledProcessError as e:
-                tail = self._stderr_tail(e.stderr or e.stdout or "")
-                logger.error(
-                    "Tool %s failed (exit %d):\n%s",
-                    self.toolkit,
-                    e.returncode,
-                    tail,
-                )
-                raise
-            except subprocess.TimeoutExpired:
-                raise TimeoutError(f"{self.toolkit}: timed out after {effective_timeout}s") from None
             finally:
                 pbar.close()
 
@@ -1290,7 +1342,7 @@ class ToolInstance:
         mamba_root.mkdir(parents=True, exist_ok=True)
         lock = FileLock(mamba_root / ".install.lock", timeout=300)
         with lock:
-            # Re-check after acquiring lock — another process may have installed it
+            # Re-check after acquiring lock - another process may have installed it
             if mamba_bin.exists():
                 return mamba_bin
 
@@ -1363,7 +1415,7 @@ class ToolInstance:
             raise RuntimeError(f"Failed to download/extract micromamba from all sources: {last_err}")
 
     # ============================================================================
-    # Foundation environment — shared system tools for all standalone envs
+    # Foundation environment - shared system tools for all standalone envs
     # ============================================================================
 
     @staticmethod
@@ -1413,12 +1465,12 @@ class ToolInstance:
 
         from filelock import FileLock
 
-        # Only create parent dir — micromamba create needs the prefix to not
+        # Only create parent dir - micromamba create needs the prefix to not
         # exist (or be a valid conda env). The lock file lives in the parent.
         foundation_path.parent.mkdir(parents=True, exist_ok=True)
         lock = FileLock(foundation_path.parent / ".foundation_env.lock", timeout=600)
         with lock:
-            # Re-check after acquiring lock — another process may have created it
+            # Re-check after acquiring lock - another process may have created it
             if marker.exists():
                 return foundation_path
 
@@ -1429,7 +1481,7 @@ class ToolInstance:
             set_substatus("Setting up foundation environment (git, curl, gcc)")
 
             mamba_env = {**os.environ, "MAMBA_ROOT_PREFIX": str(mamba_root)}
-            # Pin to MIN_FOUNDATION_GCC as a floor — keeps the installed env at
+            # Pin to MIN_FOUNDATION_GCC as a floor - keeps the installed env at
             # least as new as the threshold we accept on the host, so behavior
             # matches whether tools fall through to the host or use this env.
             gcc_pin = f"gcc>={MIN_FOUNDATION_GCC}"
@@ -1723,7 +1775,7 @@ class ToolInstance:
             resolved = spec.source_file.parent.name
             logger.debug("normalized tool_key %r to toolkit %r", identifier, resolved)
             return resolved
-        # Already a toolkit — or invalid, in which case _validate_toolkit or
+        # Already a toolkit - or invalid, in which case _validate_toolkit or
         # _resolve_env_def will surface a clear error downstream.
         return identifier
 
@@ -1775,7 +1827,7 @@ class ToolInstance:
         local_setup = standalone_dir / "setup.sh"
 
         if marker.is_file():
-            # Catch any stray env-def file alongside the marker — silently
+            # Catch any stray env-def file alongside the marker - silently
             # falling back to the shared dir would mask migration mistakes.
             stray_env_def_files = [
                 name
@@ -1833,7 +1885,7 @@ class ToolInstance:
         python_version_file = self.setup_script.parent / "python_version.txt"
         if python_version_file.exists():
             h.update(python_version_file.read_bytes())
-            # Include the resolved version too — ensures the hash differs across
+            # Include the resolved version too - ensures the hash differs across
             # platforms when keyed-form overrides are in use, even if the file
             # content is identical (matters when PROTO_HOME is on shared storage).
             h.update(self._get_python_version().encode())
@@ -1967,11 +2019,11 @@ class ToolInstance:
         )
 
         # Run setup.sh directly (not via micromamba run, which overwrites PATH
-        # and strips conda prefix — breaking access to git, curl, gcc, etc.)
+        # and strips conda prefix - breaking access to git, curl, gcc, etc.)
         subprocess.run(["chmod", "+x", str(self.setup_script)], check=True)
 
         # Ensure foundation environment (provides git, curl, gcc, g++).
-        # Returns None when the host already provides these — see
+        # Returns None when the host already provides these - see
         # foundation_env.host_has_foundation_tools for the contract.
         foundation_path = self._ensure_foundation_env()
 

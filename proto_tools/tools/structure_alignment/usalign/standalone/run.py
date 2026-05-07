@@ -15,6 +15,10 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from standalone_helpers import get_logger
+
+logger = get_logger(__name__)
+
 
 def run_usalign_alignment(pdb_text_1: str, pdb_text_2: str) -> dict[str, Any]:
     """Run USalign on two PDB text blobs and parse TM-scores.

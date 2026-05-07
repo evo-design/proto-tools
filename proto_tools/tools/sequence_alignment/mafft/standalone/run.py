@@ -34,6 +34,9 @@ from typing import Any
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
+from standalone_helpers import get_logger
+
+logger = get_logger(__name__)
 
 # MAFFT alignment method flags
 ALIGNMENT_METHOD_FLAGS = {

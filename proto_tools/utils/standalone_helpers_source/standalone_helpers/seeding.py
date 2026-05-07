@@ -6,12 +6,13 @@ subsequent runs on the same shape skip the (sometimes minutes-long)
 XLA/Triton autotuning step.
 """
 
-import logging
 import os
 import random
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from .proto_logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def get_random_int() -> int:

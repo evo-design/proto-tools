@@ -1,7 +1,6 @@
 """Local AbLang inference: embeddings, scoring, sampling, and masked PLL gradient."""
 
 import json
-import logging
 import math
 import os
 import shutil
@@ -9,9 +8,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import serialize_output
+from standalone_helpers import get_logger, serialize_output
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 STANDARD_AMINO_ACIDS = "ACDEFGHIKLMNPQRSTVWY"
 

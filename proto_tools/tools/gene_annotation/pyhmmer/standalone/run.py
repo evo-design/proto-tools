@@ -14,6 +14,9 @@ from typing import Any
 import pyhmmer
 import pyhmmer.easel
 import pyhmmer.plan7
+from standalone_helpers import get_logger
+
+logger = get_logger(__name__)
 
 # ============================================================================
 # Helpers
