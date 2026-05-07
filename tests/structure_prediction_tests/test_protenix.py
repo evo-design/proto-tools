@@ -294,6 +294,39 @@ def test_protenix_holds_runner_across_calls():
     assert info1["cache_key"] == info2["cache_key"]
 
 
+# ── PAE matrix surfacing (#520) ─────────────────────────────────────────────
+
+
+@pytest.mark.uses_gpu
+def test_protenix_pae_surface():
+    """avg_pae always emitted; pae_matrix square + self-consistent only when flag set."""
+    complexes = [StructurePredictionComplex(chains=[Chain(sequence=_CRO_SEQUENCE, entity_type="protein")])]
+    inputs = ProtenixInput(complexes=complexes)
+    base = {
+        "model_name": "protenix_tiny_default_v0.5.0",
+        "use_msa": False,
+        "num_diffusion_samples": 1,
+        "num_diffusion_steps": 20,
+        "seeds": [0],
+    }
+
+    off = run_protenix(inputs, ProtenixConfig(**base))
+    on = run_protenix(inputs, ProtenixConfig(**base, include_pae_matrix=True))
+
+    off_m, on_m = off.structures[0].metrics, on.structures[0].metrics
+    for m in (off_m, on_m):
+        assert m["avg_pae"] is not None and m["avg_pae"] >= 0.0
+    assert "pae_matrix" not in off_m.model_dump(exclude_none=True)
+
+    pae = on_m["pae_matrix"]
+    n = len(_CRO_SEQUENCE)
+    assert pae is not None and len(pae) == n and all(len(row) == n for row in pae)
+    # 2-decimal upstream rounding loosens the consistency tolerance vs Boltz2.
+    expected = sum(sum(row) for row in pae) / (n * n)
+    assert on_m["avg_pae"] == pytest.approx(expected, abs=1e-2)
+    assert_metrics_in_spec(on)
+
+
 # ── Benchmark ─────────────────────────────────────────────────────────────────
 
 

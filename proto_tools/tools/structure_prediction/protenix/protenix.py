@@ -144,6 +144,8 @@ class ProtenixMetrics(Metrics):
         iptm (float): Interface predicted TM-score (0-1). Always present.
         avg_plddt (float): Average predicted LDDT score (0-1). Always present.
         gpde (float): Global predicted distance error. Always present.
+        avg_pae (float): Mean of the per-token PAE matrix in Å. Always present.
+        pae_matrix (list[list[float]]): Full per-token PAE matrix in Å. Present when include_pae_matrix=True.
         chain_ptm (list[float]): Per-chain pTM scores. Depends on model output.
         chain_plddt (list[float]): Per-chain pLDDT scores. Depends on model output.
         chain_pair_iptm (list[list[float]]): Pairwise chain ipTM. Depends on model output.
@@ -156,6 +158,13 @@ class ProtenixMetrics(Metrics):
         "iptm": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
         "avg_plddt": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
         "gpde": {"availability": "always", "type": "float", "min": 0.0, "max": None},
+        "avg_pae": {"availability": "always", "type": "float", "min": 0.0, "max": None},
+        "pae_matrix": {
+            "availability": "when include_pae_matrix=True",
+            "type": "list[list[float]]",
+            "min": 0.0,
+            "max": None,
+        },
         "chain_ptm": {"availability": "depends on model output", "type": "list[float]", "min": 0.0, "max": 1.0},
         "chain_plddt": {"availability": "depends on model output", "type": "list[float]", "min": 0.0, "max": 1.0},
         "chain_pair_iptm": {
@@ -252,7 +261,7 @@ class ProtenixConfig(MSAStructurePredictionConfig):
         device: Device to run the model on (e.g., ``"cuda"``, ``"cpu"``). Inherited
             from ``StructurePredictionConfig``. Default: ``"cuda"``.
 
-        include_pae_matrix (bool): Inherited; unused by Protenix. Default: ``False``.
+        include_pae_matrix (bool): Attach ``pae_matrix`` (``avg_pae`` always emitted). Default: ``False``.
 
         verbose: Whether to print status messages during execution including
             MSA generation, model loading, and prediction progress. Inherited from
@@ -433,6 +442,7 @@ def run_protenix(
             "num_diffusion_steps": config.num_diffusion_steps,
             "num_pairformer_cycles": config.num_pairformer_cycles,
             "use_msa": config.use_msa,
+            "include_pae_matrix": config.include_pae_matrix,
         }
 
         # Call the inference script (single batched call)
@@ -467,6 +477,8 @@ def run_protenix(
             iptm=_maybe_float("iptm"),
             avg_plddt=_maybe_float("plddt", scale=1 / 100.0),
             gpde=_maybe_float("gpde"),
+            avg_pae=_maybe_float("avg_pae"),
+            pae_matrix=raw_metrics.get("pae_matrix"),
             chain_ptm=raw_metrics.get("chain_ptm"),
             chain_plddt=raw_metrics.get("chain_plddt"),
             chain_pair_iptm=raw_metrics.get("chain_pair_iptm"),
