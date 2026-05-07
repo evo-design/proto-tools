@@ -203,6 +203,7 @@ module = [
     "pyrosetta.*",
     "scipy.*",
     "umap.*",
+    "hydra.*",
     # Local sibling imports in standalone dirs (resolved at runtime via sys.path)
     "inference.*",
     "model.*",

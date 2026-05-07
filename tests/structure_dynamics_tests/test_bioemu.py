@@ -16,6 +16,7 @@ from proto_tools.tools.structure_dynamics.bioemu import (
 from proto_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionComplex,
 )
+from proto_tools.utils import ToolInstance
 from tests.conftest import benchmark_twice
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -238,6 +239,32 @@ def test_bioemu_sample_end_to_end():
         assert isinstance(structure, Structure)
         assert structure.structure_pdb is not None
         assert len(structure.structure_pdb) > 0
+
+
+@pytest.mark.uses_gpu
+def test_bioemu_holds_score_model_across_calls():
+    """Two calls inside persist_tool reuse the held score_model (no on-disk reload)."""
+    sequence = "MKTAYIAKQRQISFVKSHFSRQLE"
+    inputs = BioEmuInput(
+        complexes=[StructurePredictionComplex(chains=[{"sequence": sequence, "entity_type": "protein"}])]
+    )
+    config = BioEmuConfig(num_samples=2, batch_size=2, seed=0, verbose=False)
+
+    # Echo reload_on_change fields so the framework doesn't restart the worker.
+    introspect_payload = {"operation": "introspect_loaded", "model_name": config.model_name}
+
+    with ToolInstance.persist_tool("bioemu"):
+        run_bioemu(inputs, config)
+        info1 = ToolInstance.dispatch("bioemu", introspect_payload, config=config)
+
+        run_bioemu(inputs, config)
+        info2 = ToolInstance.dispatch("bioemu", introspect_payload, config=config)
+
+    assert info1["loaded"] and info2["loaded"]
+    assert info1["model_name"] == info2["model_name"] == "bioemu-v1.1"
+    # Same Python object across calls — proves the score_model wasn't recreated.
+    assert info1["model_id"] is not None
+    assert info1["model_id"] == info2["model_id"]
 
 
 # ── Benchmark ─────────────────────────────────────────────────────────────────

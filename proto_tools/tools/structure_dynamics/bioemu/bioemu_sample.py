@@ -202,14 +202,12 @@ class BioEmuConfig(StructurePredictionConfig):
         default="dpm",
         description="Diffusion sampler algorithm (dpm = 50 deterministic steps; heun = stochastic)",
         advanced=True,
-        reload_on_change=True,
     )
     denoiser_config: str | None = ConfigField(
         title="Denoiser Config Path",
         default=None,
         description="Path to a custom denoiser/steering YAML; overrides denoiser_type when set",
         hidden=True,
-        reload_on_change=True,
         examples=["physical_steering.yaml"],
     )
     msa_host_url: str | None = ConfigField(
