@@ -129,7 +129,7 @@ Each `LigandMPNNSequences` contains:
 |-------|------|-------------|
 | `sequences` | `List[str]` | Designed amino acid sequences (length = `num_sequences_per_structure`) |
 | `sequence_recovery` | `List[float]` | Per-sequence fraction of designed residues matching the reference sequence (0.0-1.0) |
-| `ligand_interface_sequence_recovery` | `List[float]` | Per-sequence recovery restricted to ligand-interface residues (0.0-1.0) |
+| `ligand_interface_sequence_recovery` | `List[float] \| None` | Per-sequence recovery restricted to ligand-interface residues (0.0-1.0); `None` when the input structure has no ligand |
 
 Export formats: `fasta`, `json`
 
@@ -138,7 +138,7 @@ Export formats: `fasta`, `json`
 - **Sequence recovery**: Compare designed sequences to the native sequence at each position. Recovery rates of 40-55% are typical for well-designed backbones.
 - **Ligand contact positions**: Positions near the ligand often show higher conservation across samples, reflecting the model's learned binding-site preferences.
 - **Diversity across samples**: At low temperature (0.1), most samples will be very similar. Increased diversity at higher temperatures is expected and useful for library generation.
-- **Recovery metrics**: `sequence_recovery` and `ligand_interface_sequence_recovery` are aligned with `sequences` (parallel lists). Both are floats in `[0.0, 1.0]` — fraction of designed residues matching the input structure's reference sequence (overall vs. restricted to ligand-interface residues).
+- **Recovery metrics**: `sequence_recovery` and `ligand_interface_sequence_recovery` are aligned with `sequences` (parallel lists). Both are floats in `[0.0, 1.0]` — fraction of designed residues matching the input structure's reference sequence (overall vs. restricted to ligand-interface residues). When the input structure has no ligand, `ligand_interface_sequence_recovery` is `None` (the whole list, not per-element) — guard with `if designs.ligand_interface_sequence_recovery is not None:` before iterating.
 
 ## Quick Start Examples
 
@@ -203,8 +203,10 @@ for i, designs in enumerate(result.designed_sequences):
 ```python
 result = run_ligandmpnn_sample(inputs, config)
 designs = result.designed_sequences[0]
+interface = designs.ligand_interface_sequence_recovery  # None when input has no ligand
 for i, seq in enumerate(designs.sequences):
-    print(f"Seq {i}: {seq[:30]}... | recovery={designs.sequence_recovery[i]:.3f} | interface={designs.ligand_interface_sequence_recovery[i]:.3f}")
+    iface_str = f"{interface[i]:.3f}" if interface is not None else "N/A (no ligand)"
+    print(f"Seq {i}: {seq[:30]}... | recovery={designs.sequence_recovery[i]:.3f} | interface={iface_str}")
 ```
 
 **Export results:**
