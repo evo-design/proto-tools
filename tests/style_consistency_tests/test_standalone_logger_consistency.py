@@ -1,13 +1,19 @@
 """Consistency checks for standalone-script logger usage.
 
-Standalone scripts run in isolated micromamba subprocesses. They are loaded
-via ``importlib.util.spec_from_file_location`` so ``__name__`` is
-``_standalone_module``, *not* a child of ``proto_tools.``. To get records
-through to the parent's structured-logging bridge, every standalone must use
-``standalone_helpers.get_logger`` (which produces ``worker.{name}`` loggers
-that the bridge handler picks up). Plain ``logging.getLogger(__name__)`` or
-``getLogger(__name__)`` would land outside the bridge namespace and the
-records would be silently dropped.
+Worker-runtime standalones (``inference.py``, ``run.py``, etc.) are loaded
+inside the worker subprocess that ``ToolInstance`` spawns; ``standalone_helpers/``
+is staged into the standalone dir alongside them by ``_copy_standalone_helpers``,
+so they can ``from standalone_helpers import get_logger`` and route records
+through the parent's structured-logging bridge.
+
+``binary_config.py`` is the exception: it runs in the **setup-time subprocess**
+that ``setup.sh`` invokes via ``python utils/install_binary.py <toolkit>``,
+which executes ``install_binary._load_tool_config`` *before* any bridge staging.
+``standalone_helpers`` isn't on ``sys.path`` in that subprocess, and there's no
+parent drain thread to demultiplex tagged records anyway — setup.sh's stderr is
+mirrored to ``PROTO_ENV_LOG_DIR`` directly. ``binary_config.py`` files therefore
+don't use the bridge at all (they fall back to stdlib ``logging`` if they need
+to log, and most don't log).
 
 This module enforces the convention with three parametrized rules applied to
 every ``.py`` file under ``proto_tools/tools/*/*/standalone/``:
@@ -16,14 +22,14 @@ every ``.py`` file under ``proto_tools/tools/*/*/standalone/``:
    ``getLogger(__name__)``** at module level.
 2. **Every standalone must declare a module-level
    ``logger = get_logger(__name__)``** so future log calls are uniform — no
-   "I have to add the import first" friction. This applies to all standalone
-   scripts including ``binary_config.py`` shims and CLI runners.
+   "I have to add the import first" friction.
 3. **The logger initializer must be ``get_logger``** imported from
    ``standalone_helpers`` (or ``standalone_helpers.proto_logging``).
 
-Files exempted from rules 2 and 3 are listed in ``_EXEMPT``. New entries
-require justification (typically: upstream-vendored code we shouldn't fork).
-Rule 1 has no exemptions.
+Files exempted from all three rules are listed in ``_EXEMPT`` and split by
+reason: ``_SETUP_TIME_EXEMPT`` (every ``binary_config.py``, see above) and
+``_VENDORED_EXEMPT`` (upstream-vendored code we shouldn't fork). New
+``_VENDORED_EXEMPT`` entries require justification.
 """
 
 from __future__ import annotations
@@ -55,14 +61,22 @@ def _discover_standalone_scripts() -> list[Path]:
     return sorted(s for s in set(scripts) if s.name != "__init__.py" and "standalone_helpers" not in s.parts)
 
 
+_ALL_SCRIPTS = _discover_standalone_scripts()
+
+# binary_config.py runs at setup time in a subprocess that loads it via
+# install_binary._load_tool_config — before standalone_helpers/ is staged into
+# the standalone dir, and without a parent drain thread to demux tagged records.
+# Records here flow through setup.sh's stderr to PROTO_ENV_LOG_DIR, not the bridge.
+_SETUP_TIME_EXEMPT: set[Path] = {p for p in _ALL_SCRIPTS if p.name == "binary_config.py"}
+
 # Standalone files imported verbatim from upstream third-party projects (we don't fork-and-edit; new entries require justification).
-_EXEMPT: set[Path] = {
+_VENDORED_EXEMPT: set[Path] = {
     # Upstream ipsae script copied verbatim; uses its own print-based output.
     _TOOLS_DIR / "structure_scoring" / "ipsae" / "standalone" / "ipsae.py",
 }
 
+_EXEMPT: set[Path] = _SETUP_TIME_EXEMPT | _VENDORED_EXEMPT
 
-_ALL_SCRIPTS = _discover_standalone_scripts()
 _ID = lambda p: str(p.relative_to(_TOOLS_DIR))  # noqa: E731
 
 

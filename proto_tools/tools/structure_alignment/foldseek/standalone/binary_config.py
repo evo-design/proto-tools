@@ -10,10 +10,6 @@ import stat
 import tarfile
 from pathlib import Path
 
-from standalone_helpers import get_logger
-
-logger = get_logger(__name__)
-
 URLS = {
     ("Darwin", "arm64"): "https://mmseqs.com/foldseek/foldseek-osx-universal.tar.gz",
     ("Darwin", "x86_64"): "https://mmseqs.com/foldseek/foldseek-osx-universal.tar.gz",

@@ -12,10 +12,6 @@ import stat
 import tarfile
 from pathlib import Path
 
-from standalone_helpers import get_logger
-
-logger = get_logger(__name__)
-
 URLS = {
     (
         "Darwin",

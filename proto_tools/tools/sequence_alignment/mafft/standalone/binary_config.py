@@ -13,10 +13,6 @@ import stat
 import tarfile
 from pathlib import Path
 
-from standalone_helpers import get_logger
-
-logger = get_logger(__name__)
-
 # Official MAFFT pre-compiled binaries (version 7.526) and source (7.525)
 # From https://mafft.cbrc.jp/alignment/software/
 URLS = {
