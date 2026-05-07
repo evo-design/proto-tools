@@ -151,6 +151,7 @@ class ProtenixModel:
         num_pairformer_cycles: int = 10,
         use_msa: bool = True,
         verbose: bool = False,
+        include_pae_matrix: bool = False,
     ) -> list[dict[str, Any]]:
         """Run Protenix structure prediction on one or more complexes.
 
@@ -167,6 +168,7 @@ class ProtenixModel:
             num_pairformer_cycles: Number of Pairformer recycling iterations
             use_msa: Whether to use MSA features
             verbose: Whether to print status messages
+            include_pae_matrix: Attach the full per-token PAE matrix.
 
         Returns:
             List of dicts, each containing structure_cif_output and metrics,
@@ -248,25 +250,28 @@ class ProtenixModel:
 
         job_names = [job["name"] for job in input_data]
 
-        return [self._extract_job_output(output_dir, job_name, seeds) for job_name in job_names]
+        return [self._extract_job_output(output_dir, job_name, seeds, include_pae_matrix) for job_name in job_names]
 
-    def _extract_job_output(self, output_dir: str, job_name: str, seeds: str) -> dict[str, Any]:
+    def _extract_job_output(
+        self, output_dir: str, job_name: str, seeds: str, include_pae_matrix: bool
+    ) -> dict[str, Any]:
         """Extract structure and metrics for a single job from Protenix output.
 
-        Protenix output structure:
-            <output_dir>/<job_name>/<seed>/<job_name>_<seed>_sample_N.cif
-            <output_dir>/<job_name>/<seed>/<job_name>_<seed>_summary_confidence_sample_N.json
-
-        Selects the best sample across all seeds by ranking_score.
+        Selects the best sample by ranking_score, then attaches PAE pulled from
+        ``<job>_full_data_sample_N.json`` (always written; ``load()`` sets
+        ``need_atom_confidence=True``).
 
         Args:
             output_dir: Directory containing Protenix prediction outputs
             job_name: Name of the prediction job
             seeds: Comma-separated seed string
+            include_pae_matrix: Attach the full per-token PAE matrix.
 
         Returns:
             Dictionary containing structure_cif_output and metrics
         """
+        import numpy as np
+
         # Protenix saves outputs to output_dir/{job_name}/seed_{seed}/predictions/
         job_dir = Path(output_dir) / job_name
 
@@ -284,6 +289,7 @@ class ProtenixModel:
 
         best_cif = None
         best_metrics = None
+        best_rank: int | None = None
         best_ranking_score = -1.0
 
         # Search for all CIF files matching the pattern {job_name}_sample_*.cif
@@ -303,15 +309,30 @@ class ProtenixModel:
                     best_ranking_score = ranking_score
                     best_cif = cif_file
                     best_metrics = metrics
+                    best_rank = sample_idx
             elif best_cif is None:
                 best_cif = cif_file
+                best_rank = sample_idx
 
-        if best_cif is None:
+        if best_cif is None or best_rank is None:
             raise FileNotFoundError(f"protenix: no structure output found for job {job_name!r} in {predictions_dir}")
+
+        # token_pair_pae: already serialized as list[list[float]] by upstream save_json.
+        full_data_file = predictions_dir / f"{job_name}_full_data_sample_{best_rank}.json"
+        if not full_data_file.exists():
+            raise FileNotFoundError(f"protenix: full_data file not found: {full_data_file}")
+        with open(full_data_file) as f:
+            full_data = json.load(f)
+        pae_matrix = full_data["token_pair_pae"]
+        pae_array = np.asarray(pae_matrix, dtype=float)
+
+        metrics_out = best_metrics or {}
+        metrics_out["avg_pae"] = float(pae_array.mean())
+        metrics_out["pae_matrix"] = pae_matrix if include_pae_matrix else None
 
         return {
             "structure_cif_output": best_cif.read_text(),
-            "metrics": best_metrics or {},
+            "metrics": metrics_out,
         }
 
     def load(
@@ -333,6 +354,7 @@ class ProtenixModel:
             self.unload()
 
         # InferenceRunner.__init__ runs init_env + init_model + load_checkpoint.
+        # need_atom_confidence=True makes the dumper write the full_data JSON we read for PAE.
         self.runner = get_default_runner(
             seeds=[0],  # placeholder; real seeds are injected per-call into runner.configs
             n_cycle=num_pairformer_cycles,
@@ -343,6 +365,7 @@ class ProtenixModel:
             use_msa=use_msa,
             trimul_kernel=kernel,
             triatt_kernel=kernel,
+            need_atom_confidence=True,
         )
         self.device = str(self.runner.device)
         self._cache_key = (
@@ -417,6 +440,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             num_pairformer_cycles=input_dict["num_pairformer_cycles"],
             use_msa=input_dict["use_msa"],
             verbose=input_dict["verbose"],
+            include_pae_matrix=input_dict["include_pae_matrix"],
         )
         return {"results": results}
     if operation == "introspect_loaded":

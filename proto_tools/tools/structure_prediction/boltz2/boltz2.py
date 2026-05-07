@@ -72,6 +72,8 @@ class Boltz2Metrics(Metrics):
         iptm (float): Interface predicted TM-score. Always present.
         chains_ptm (list[float]): Per-chain pTM scores. Always present.
         pair_chains_iptm (list[list[float]]): Pairwise chain ipTM scores. Always present.
+        avg_pae (float): Mean of the per-token PAE matrix in Å. Always present.
+        pae_matrix (list[list[float]]): Full per-token PAE matrix in Å. Present when include_pae_matrix=True.
         ligand_iptm (float): Ligand interface pTM. Depends on complex composition.
         protein_iptm (float): Protein interface pTM. Depends on complex composition.
         complex_plddt (float): Complex predicted LDDT. Depends on complex composition.
@@ -86,6 +88,13 @@ class Boltz2Metrics(Metrics):
         "iptm": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
         "chains_ptm": {"availability": "always", "type": "list[float]", "min": 0.0, "max": 1.0},
         "pair_chains_iptm": {"availability": "always", "type": "list[list[float]]", "min": 0.0, "max": 1.0},
+        "avg_pae": {"availability": "always", "type": "float", "min": 0.0, "max": 32.0},
+        "pae_matrix": {
+            "availability": "when include_pae_matrix=True",
+            "type": "list[list[float]]",
+            "min": 0.0,
+            "max": 32.0,
+        },
         "ligand_iptm": {"availability": "depends on complex composition", "type": "float", "min": 0.0, "max": 1.0},
         "protein_iptm": {"availability": "depends on complex composition", "type": "float", "min": 0.0, "max": 1.0},
         "complex_plddt": {"availability": "depends on complex composition", "type": "float", "min": 0.0, "max": 1.0},
@@ -149,7 +158,7 @@ class Boltz2Config(MSAStructurePredictionConfig):
             MSA generation, model loading, and prediction progress. Inherited from
             ``StructurePredictionConfig``. Default: ``False``.
 
-        include_pae_matrix (bool): Inherited; unused by Boltz2. Default: ``False``.
+        include_pae_matrix (bool): Attach ``pae_matrix`` (``avg_pae`` always emitted). Default: ``False``.
 
         timeout (int): Maximum execution time in seconds. Default: 1200.
 
@@ -417,6 +426,7 @@ def run_boltz2_on_complex(
             "device": config.device,
             "verbose": config.verbose,
             "seed": config.seed,
+            "include_pae_matrix": config.include_pae_matrix,
         }
 
         # Call the inference script
@@ -437,6 +447,8 @@ def run_boltz2_on_complex(
         "iptm": float(formatted_metrics["iptm"]),
         "chains_ptm": formatted_metrics["chains_ptm"],
         "pair_chains_iptm": formatted_metrics["pair_chains_iptm"],
+        "avg_pae": float(formatted_metrics["avg_pae"]),
+        "pae_matrix": formatted_metrics["pae_matrix"],
     }
     for metric in ("ligand_iptm", "protein_iptm", "complex_plddt", "complex_iplddt", "complex_pde", "complex_ipde"):
         if metric in formatted_metrics:

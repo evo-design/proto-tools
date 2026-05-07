@@ -55,6 +55,7 @@ class Boltz2Model:
         num_workers: int = 4,
         seed: int | None = None,
         verbose: bool = False,
+        include_pae_matrix: bool = False,
     ) -> dict[str, Any]:
         """Run Boltz2 structure prediction.
 
@@ -72,6 +73,7 @@ class Boltz2Model:
             seed: Random seed forwarded to the boltz CLI as ``--seed``. None
                 leaves the boltz default (unseeded) in place.
             verbose: Whether to print status messages
+            include_pae_matrix: Attach the full per-residue PAE matrix.
 
         Returns:
             Dictionary containing structure_cif_output and metrics
@@ -141,18 +143,21 @@ class Boltz2Model:
         sys.stdout.flush()
 
         # Extract the output
-        return self._extract_boltz_output(output_dir, input_yaml_path)
+        return self._extract_boltz_output(output_dir, input_yaml_path, include_pae_matrix)
 
-    def _extract_boltz_output(self, output_dir: str, input_path: str) -> dict[str, Any]:
+    def _extract_boltz_output(self, output_dir: str, input_path: str, include_pae_matrix: bool) -> dict[str, Any]:
         """Extract structure and metrics from Boltz prediction outputs.
 
         Args:
             output_dir: Directory containing Boltz prediction outputs
             input_path: Path to input YAML file
+            include_pae_matrix: Attach the full per-residue PAE matrix.
 
         Returns:
             Dictionary containing structure_cif_output and metrics
         """
+        import numpy as np
+
         input_name = Path(input_path).stem
         prediction_dir = Path(output_dir) / f"boltz_results_{input_name}" / "predictions" / input_name
 
@@ -172,6 +177,15 @@ class Boltz2Model:
         cif_file = prediction_dir / f"{input_name}_model_0.cif"
         if not cif_file.exists():
             raise FileNotFoundError(f"boltz2: structure file not found: {cif_file}")
+
+        # pae_*.npz: (N_token, N_token) float in [0, 32) Å, always written by upstream.
+        pae_file = prediction_dir / f"pae_{input_name}_model_0.npz"
+        if not pae_file.exists():
+            raise FileNotFoundError(f"boltz2: PAE file not found: {pae_file}")
+        with np.load(pae_file) as npz:
+            pae_array = npz["pae"]
+        metrics["avg_pae"] = float(pae_array.mean())
+        metrics["pae_matrix"] = pae_array.astype(float).tolist() if include_pae_matrix else None
 
         return {
             "structure_cif_output": cif_file.read_text(),
@@ -221,6 +235,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             num_workers=input_dict["num_workers"],
             seed=input_dict["seed"],
             verbose=input_dict["verbose"],
+            include_pae_matrix=input_dict["include_pae_matrix"],
         )
     raise ValueError(f"boltz2: unknown operation {operation!r}; valid: ['predict']")
 
