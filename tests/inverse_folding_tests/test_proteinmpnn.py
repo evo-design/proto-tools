@@ -190,6 +190,10 @@ def test_proteinmpnn_score(pdb_structure: Structure):
 
     assert len(output.scores) == 2
     assert all(isinstance(score, InverseFoldingScoringMetrics) for score in output.scores)
+    scored_len = len(original_sequence) - len(fixed_positions["A"])
+    assert all(
+        np.isclose(score.log_likelihood, score.avg_log_likelihood * scored_len, rtol=1e-5) for score in output.scores
+    )
 
     # Original sequence should have lower perplexity than the modified one
     assert output.scores[0].perplexity < output.scores[1].perplexity

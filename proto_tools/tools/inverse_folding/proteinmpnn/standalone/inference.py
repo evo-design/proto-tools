@@ -8,6 +8,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 # JAX memory settings - prevent preallocation
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
@@ -37,6 +39,13 @@ _MODEL_CONFIG: dict[str, tuple[str, str]] = {
     "abmpnn": ("abmpnn", "original"),
     "soluble": ("v_48_020", "soluble"),
 }
+
+
+def _effective_score_length(inputs: dict[str, Any]) -> float:
+    mask = np.asarray(inputs["mask"], dtype=np.float32).copy()
+    if "fix_pos" in inputs:
+        mask[np.asarray(inputs["fix_pos"], dtype=int)] = 0.0
+    return float(mask.sum())
 
 
 class ProteinMPNNModel:
@@ -193,8 +202,11 @@ class ProteinMPNNModel:
         )
 
         neg_avg_ll = float(output["score"])
+        effective_length = _effective_score_length(self.model._inputs)
+        if effective_length == 0:
+            raise ValueError("proteinmpnn: no residues available to score")
         metrics = {
-            "log_likelihood": -neg_avg_ll * len(sequence),
+            "log_likelihood": -neg_avg_ll * effective_length,
             "avg_log_likelihood": -neg_avg_ll,
             "perplexity": float(math.exp(neg_avg_ll)),
         }
@@ -235,7 +247,6 @@ class ProteinMPNNModel:
 
         import jax
         import jax.numpy as jnp
-        import numpy as np
         from colabdesign.shared.utils import copy_dict
         from standalone_helpers import set_jax_seed
 
