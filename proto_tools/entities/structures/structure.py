@@ -1218,6 +1218,43 @@ class Structure(BaseModel):
         ca_self_sup, _ = superimpose(ca_other, ca_self)
         return float(_biotite_rmsd(ca_other, ca_self_sup))
 
+    def ca_rmsd_no_superposition(
+        self,
+        other: Structure,
+        *,
+        self_chain_id: str | None = None,
+        other_chain_id: str | None = None,
+    ) -> float:
+        """CA-atom RMSD in the current coordinate frame (no superposition).
+
+        CA atoms are paired by array index. If lengths differ, only the first
+        ``min(len_self, len_other)`` CA atoms are compared.
+
+        Args:
+            other (Structure): Other structure to compare against.
+            self_chain_id (str | None): Chain on ``self``. ``None`` uses all chains.
+            other_chain_id (str | None): Chain on ``other``. ``None`` uses all chains.
+
+        Returns:
+            float: RMSD in Angstroms, or ``inf`` if either chain has zero CA atoms.
+        """
+        self_array = self._get_atom_array(self_chain_id)
+        other_array = other._get_atom_array(other_chain_id)
+        ca_self = self_array[self_array.atom_name == "CA"]
+        ca_other = other_array[other_array.atom_name == "CA"]
+        min_len = min(len(ca_self), len(ca_other))
+        if min_len == 0:
+            return float("inf")
+        if len(ca_self) != len(ca_other):
+            logging.getLogger(__name__).warning(
+                "CA atom count mismatch (%d vs %d); RMSD computed on first %d atoms",
+                len(ca_self),
+                len(ca_other),
+                min_len,
+            )
+        delta = ca_self.coord[:min_len] - ca_other.coord[:min_len]
+        return float(np.sqrt(np.mean(np.sum(delta * delta, axis=1))))
+
     # ============================================================================
     # Visualization
     # ============================================================================
