@@ -165,6 +165,7 @@ def test_ligandmpnn_score_dispatch_contract(monkeypatch):
     assert payload["sequence"] == sequence
     assert payload["fixed_positions"] == {"A": [1]}
     assert payload["return_logits"] is True
+    assert payload["model_type"] == "ligand_mpnn"
     assert payload["scoring_mode"] == "autoregressive"
 
 
