@@ -162,22 +162,18 @@ class FoldmasonScoreMSAOutput(BaseToolOutput):
 # ============================================================================
 
 
-_EXAMPLE_PDB = """\
-HEADER    EXAMPLE STRUCTURE
-ATOM      1  N   MET A   1      11.104  13.207  10.300  1.00 20.00           N
-ATOM      2  CA  MET A   1      11.804  14.247  11.040  1.00 20.00           C
-ATOM      3  C   MET A   1      13.304  14.011  10.940  1.00 20.00           C
-ATOM      4  O   MET A   1      13.804  13.001  10.440  1.00 20.00           O
-END
-"""
-
-_EXAMPLE_MSA = ">structure_0\nM\n>structure_1\nM\n"
+# Shared 65-residue fixture; the AA MSA is the fixture's own sequence aligned
+# to itself (two identical copies, so no gaps).
+_EXAMPLE_PDB_PATH = str(Path(__file__).parents[1] / "example_input_fixture.pdb")
+_EXAMPLE_AA_SEQUENCE = "MRKKLDLKKFVEDKNQEYAARALGLSQKLIEEVLKRGLPVYVETNKDGNIKVYITQDGITQPFPP"
+_EXAMPLE_MSA = f">structure_0\n{_EXAMPLE_AA_SEQUENCE}\n>structure_1\n{_EXAMPLE_AA_SEQUENCE}\n"
 
 
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
+    pdb_text = Path(_EXAMPLE_PDB_PATH).read_text()
     return FoldmasonScoreMSAInput(
-        structures=[_EXAMPLE_PDB, _EXAMPLE_PDB],
+        structures=[pdb_text, pdb_text],
         aa_msa_fasta=_EXAMPLE_MSA,
     )
 

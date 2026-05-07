@@ -203,19 +203,14 @@ class FoldseekMultimerClusterOutput(BaseToolOutput):
 # ============================================================================
 
 
-_EXAMPLE_PDB = """\
-HEADER    EXAMPLE COMPLEX
-ATOM      1  CA  MET A   1      11.000  13.000  10.000  1.00 20.00           C
-ATOM      2  CA  ALA A   2      12.000  14.000  11.000  1.00 20.00           C
-ATOM      3  CA  MET B   1      21.000  23.000  20.000  1.00 20.00           C
-ATOM      4  CA  ALA B   2      22.000  24.000  21.000  1.00 20.00           C
-END
-"""
+# Shared 2-chain HIV-1 protease (1HSG) fixture; foldseek rejects too-short multimers.
+_EXAMPLE_PDB_PATH = str(Path(__file__).parents[1] / "example_multimer_input_fixture.pdb")
 
 
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return FoldseekMultimerClusterInput(structures=[_EXAMPLE_PDB, _EXAMPLE_PDB])
+    pdb_text = Path(_EXAMPLE_PDB_PATH).read_text()
+    return FoldseekMultimerClusterInput(structures=[pdb_text, pdb_text])
 
 
 @tool(

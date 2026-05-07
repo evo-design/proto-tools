@@ -10,11 +10,19 @@ import stat
 import tarfile
 from pathlib import Path
 
+# Pinned to the v10 tagged GitHub release (Jan 2025). The mmseqs.com tarballs
+# are continuous master-HEAD builds and currently ship a regression that heap-
+# corrupts inside easy-multimercluster on mixed-chain-count input sets; v10
+# handles the same inputs cleanly. Tracked upstream:
+# https://github.com/steineggerlab/foldseek/issues/584
+_FOLDSEEK_RELEASE_TAG = "10-941cd33"
+_RELEASE_URL = f"https://github.com/steineggerlab/foldseek/releases/download/{_FOLDSEEK_RELEASE_TAG}"
+
 URLS = {
-    ("Darwin", "arm64"): "https://mmseqs.com/foldseek/foldseek-osx-universal.tar.gz",
-    ("Darwin", "x86_64"): "https://mmseqs.com/foldseek/foldseek-osx-universal.tar.gz",
-    ("Linux", "x86_64"): "https://mmseqs.com/foldseek/foldseek-linux-avx2.tar.gz",
-    ("Linux", "arm64"): "https://mmseqs.com/foldseek/foldseek-linux-arm64.tar.gz",
+    ("Darwin", "arm64"): f"{_RELEASE_URL}/foldseek-osx-universal.tar.gz",
+    ("Darwin", "x86_64"): f"{_RELEASE_URL}/foldseek-osx-universal.tar.gz",
+    ("Linux", "x86_64"): f"{_RELEASE_URL}/foldseek-linux-avx2.tar.gz",
+    ("Linux", "arm64"): f"{_RELEASE_URL}/foldseek-linux-arm64.tar.gz",
 }
 
 

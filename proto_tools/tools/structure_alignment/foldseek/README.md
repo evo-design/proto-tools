@@ -256,7 +256,7 @@ afdb = run_alphafold_db_fetch(
     AlphaFoldDBFetchConfig(structure_format="pdb"),
 )
 output = run_foldseek_search(
-    FoldseekSearchInput(structure_text=afdb.structure_text),
+    FoldseekSearchInput(structure_text=afdb.structure.structure_pdb),
     FoldseekSearchConfig(databases=["pdb100"]),
 )
 for hit in sorted(output.hits, key=lambda h: h.evalue)[:5]:

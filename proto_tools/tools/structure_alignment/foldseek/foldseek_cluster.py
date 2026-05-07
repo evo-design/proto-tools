@@ -234,19 +234,14 @@ class FoldseekClusterOutput(BaseToolOutput):
 # ============================================================================
 
 
-_EXAMPLE_PDB = """\
-HEADER    EXAMPLE STRUCTURE
-ATOM      1  N   MET A   1      11.104  13.207  10.300  1.00 20.00           N
-ATOM      2  CA  MET A   1      11.804  14.247  11.040  1.00 20.00           C
-ATOM      3  C   MET A   1      13.304  14.011  10.940  1.00 20.00           C
-ATOM      4  O   MET A   1      13.804  13.001  10.440  1.00 20.00           O
-END
-"""
+# Shared 65-residue fixture; foldseek rejects too-short structures.
+_EXAMPLE_PDB_PATH = str(Path(__file__).parents[1] / "example_input_fixture.pdb")
 
 
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return FoldseekClusterInput(structures=[_EXAMPLE_PDB, _EXAMPLE_PDB])
+    pdb_text = Path(_EXAMPLE_PDB_PATH).read_text()
+    return FoldseekClusterInput(structures=[pdb_text, pdb_text])
 
 
 @tool(
