@@ -249,6 +249,7 @@ def test_sequence_fetch_export_fasta(tmp_path):
     assert "MEEPQ" in content
 
 
+@pytest.mark.skip_ci
 @pytest.mark.integration
 def test_sequence_fetch_dna_genomic_by_name():
     """Fetch lacI genomic DNA from NCBI by gene name."""
@@ -276,6 +277,7 @@ def test_sequence_fetch_dna_genomic_by_name():
     assert seq.length > 500
 
 
+@pytest.mark.skip_ci
 @pytest.mark.integration
 def test_sequence_fetch_premrna_minus_strand_no_double_rc():
     """Regression: pre-mRNA on minus-strand must NOT double reverse-complement.
