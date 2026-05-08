@@ -177,6 +177,7 @@ def example_input() -> ProteinMPNNGradientInput:
     uses_gpu=True,
     example_input=example_input,
     cacheable=False,
+    generative=True,
 )
 def run_proteinmpnn_gradient(
     inputs: ProteinMPNNGradientInput,

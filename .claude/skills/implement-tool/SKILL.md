@@ -158,7 +158,7 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
    - Input class extending `BaseToolInput` (or shared base) with `Field()` — `extra="forbid"`
    - Config class extending `BaseConfig` (or shared base) with `ConfigField()` — `extra="forbid"`. Use `reload_on_change=True` on fields that require worker restart (model checkpoint, etc.). Use `include_in_key=False` on fields that don't affect computation results (device, verbose, timeout are already excluded on `BaseConfig`; tool-level overrides of `device` must also set `include_in_key=False`). `include_in_key` defaults to `True`
    - Output class extending `BaseToolOutput` (or shared base) with `Field()` — `extra="forbid"`
-   - `@tool()` decorator with all 9 required kwargs: key, label, category, input_class, config_class, output_class, description, uses_gpu, example_input (plus optional `device_count`)
+   - `@tool()` decorator with all 9 required kwargs: key, label, category, input_class, config_class, output_class, description, uses_gpu, example_input (plus optional `device_count`, `cacheable`, and `generative`)
    - `run_*()` function that calls `ToolInstance.dispatch()`
    - If category has shared data models, use type aliases (e.g., `ToolInput = InverseFoldingInput`)
    - **Metrics**: if the tool emits scalar metric-like values (plDDT, perplexity, scores, etc.), route them through a `Metrics` subclass (from `proto_tools/utils/tool_io.py`). Prefer a shared per-category class (`MaskedModelScoringMetrics`, `InverseFoldingScoringMetrics`, `CausalModelScoringMetrics`, etc.) when the metric set matches siblings. Otherwise declare a per-tool `<Tool>Metrics(Metrics)` subclass in the tool file with a `metric_spec: ClassVar[dict[str, MetricSpec]]` documenting type/range for each metric. Verification lives in each tool's e2e test via `assert_metrics_in_spec(result)` (helper at `tests/tool_infra_tests/_metric_helpers.py`).
@@ -295,6 +295,7 @@ CRITICAL RULES:
 - Match the operation names used in the contract's ToolInstance.dispatch() calls
 - Device handling: accept device from input_dict, pass to model.load()
 - Seed handling: pass `config.seed` (raw `Optional[int]`) through the dispatch dict. In inference.py, call `set_torch_seed(seed)` unconditionally — the helper's None-check gates the expensive cuDNN flags. For any downstream sampler that needs a concrete int, do `sampling_seed = seed if seed is not None else get_random_int()` using the helper from `standalone_helpers`.
+- `generative=True`: set this on sampling, gradient, or design tools whose repeated unseeded calls should produce diversified outputs. This is metadata for non-cacheable tools; for `cacheable=True` tools it also skips cache/dedup until `config.seed` is set. Do not set it merely because the tool accepts a seed.
 - Audit hardcoded values in the reference/research code (chain IDs, model paths, default parameters, assumed dimensions). If a value could vary across valid inputs, parameterize it — accept it from the dispatch input dict rather than hardcoding. For example, `chain_id="A"` should come from the input, not be a constant.
 
 ### Required Device Management Protocol Functions
@@ -716,6 +717,7 @@ CRITICAL RULES:
    - [ ] `@tool()` has all 9 kwargs: key, label, category, input_class, config_class, output_class, description, uses_gpu, example_input
    - [ ] `@tool()`: `uses_gpu=True` matches Config `device="cuda"` override
    - [ ] `@tool()`: Optional `device_count` specifies expected device allocation ("1", "1-2", ">=1", etc.)
+   - [ ] `@tool()`: `generative=True` is set for diversified unseeded sampling/gradient/design outputs; for `cacheable=True` tools, seeded calls remain cacheable
    - [ ] No try/except wrapping tool logic
    - [ ] Google-style docstrings with Attributes (for classes) and Args/Returns/Examples (for functions)
    - [ ] `__init__.py` exports at all 4 levels

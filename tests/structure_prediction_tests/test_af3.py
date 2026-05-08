@@ -113,6 +113,17 @@ def test_af3_ligand_and_nucleic_acids(mock_af3_inference):
     assert sequences[2]["ligand"]["ccdCodes"] == ["EOH"]
 
 
+def test_af3_common_seed_overrides_model_seeds(mock_af3_inference):
+    """The common BaseConfig.seed drives AlphaFold3 modelSeeds when supplied."""
+    complexes = [StructurePredictionComplex(chains=[Chain(sequence="MVLSPADKTN", entity_type="protein")])]
+    inputs = AlphaFold3Input(complexes=complexes)
+    config = AlphaFold3Config(name="test_seed", use_msa=False, seed=123, seeds=[0, 1])
+
+    result = run_alphafold3(inputs, config)
+    assert result.success
+    assert mock_af3_inference["input_json"]["modelSeeds"] == [123]
+
+
 def test_af3_rna_entity(mock_af3_inference):
     """RNA chains are correctly formatted in the AF3 JSON dialect."""
     chains = [

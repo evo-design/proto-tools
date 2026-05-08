@@ -112,6 +112,7 @@ def example_input() -> AbLangSampleInput:
     iterable_input_field="antibodies",
     iterable_output_field="sequences",
     cacheable=True,
+    generative=True,
 )
 def run_ablang_sample(
     inputs: AbLangSampleInput,

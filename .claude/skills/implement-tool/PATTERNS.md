@@ -577,7 +577,7 @@ def run_{tool_key_snake}(inputs, config) -> Output:
 ```
 
 No separate imports needed — caching is built into the `@tool()` decorator.
-Generative tools (e.g., samplers) should NOT set `cacheable=True`.
+Set `generative=True` on sampling, gradient, or design tools whose unseeded calls should diversify. For `cacheable=True` tools, unseeded calls skip cache/dedup and seeded calls remain cacheable; for `cacheable=False` tools, `generative=True` is metadata only.
 
 ---
 

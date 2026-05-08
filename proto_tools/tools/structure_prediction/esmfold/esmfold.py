@@ -568,6 +568,7 @@ def run_esmfold(
     uses_gpu=True,
     example_input=example_gradient_input,
     cacheable=False,
+    generative=True,
 )
 def run_esmfold_gradient(
     inputs: ESMFoldGradientInput,

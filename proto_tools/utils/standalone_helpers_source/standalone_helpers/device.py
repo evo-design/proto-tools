@@ -13,7 +13,7 @@ Three related concerns live together here:
 
 import os
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from .proto_logging import get_logger
 
@@ -333,7 +333,8 @@ def move_model_to_device(
 
         # Free GPU memory when moving off CUDA device (GC + clear JIT caches)
         if old_device != "cpu" and old_device.startswith("cuda"):
-            jax.clear_caches()
+            clear_caches = cast(Callable[[], None], jax.clear_caches)
+            clear_caches()
             gc.collect()
 
         return model_or_params

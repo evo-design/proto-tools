@@ -34,6 +34,59 @@ def test_all_tools_have_example_input(tool_spec):
     )
 
 
+@pytest.mark.parametrize(
+    "tool_key",
+    [
+        "ablang-gradient",
+        "ablang-sample",
+        "alphafold2-binder",
+        "bindcraft-design",
+        "bioemu-sample",
+        "esm-if1-sample",
+        "esm2-gradient",
+        "esm2-sample",
+        "esm3-sample",
+        "esmfold-gradient",
+        "evo1-sample",
+        "evo2-sample",
+        "fampnn-pack",
+        "fampnn-sample",
+        "germinal-design",
+        "ligandmpnn-sample",
+        "progen2-sample",
+        "progen3-sample",
+        "proteinmpnn-gradient",
+        "proteinmpnn-sample",
+        "random-nucleotide-sample",
+        "random-protein-sample",
+        "rfdiffusion3-design",
+    ],
+)
+def test_diversified_tools_are_generative(tool_key):
+    """Tools with diversified unseeded outputs should advertise that contract."""
+    assert ToolRegistry.get(tool_key).generative is True
+
+
+@pytest.mark.parametrize(
+    "tool_key",
+    [
+        "alphafold2-prediction",
+        "alphafold3-prediction",
+        "blast-search",
+        "boltz2-prediction",
+        "chai1-prediction",
+        "ligandmpnn-score",
+        "proteinmpnn-score",
+        "protenix-prediction",
+        "pyhmmer-hmmsearch",
+        "pyrosetta-relax",
+    ],
+)
+def test_seeded_non_sampling_tools_are_not_generative(tool_key):
+    """Seeded prediction, scoring, search, and relax tools stay cacheable."""
+    assert ToolRegistry.get(tool_key).generative is False
+
+
 # ── Mock data models ─────────────────────────────────────────────────────────
 class MockToolInput(BaseToolInput):
     """Mock input for testing."""
@@ -882,7 +935,7 @@ def test_tool_wrapper_dedup_iterable_items(clean_registry, items, expected_dispa
 
 
 def test_tool_wrapper_dedup_skipped_without_cacheable(clean_registry):
-    """@tool should NOT dedup when cacheable=False (generative tools)."""
+    """Non-cacheable iterable tools should not dedup identical inputs."""
     received_items = []
 
     @clean_registry.register(
@@ -892,7 +945,7 @@ def test_tool_wrapper_dedup_skipped_without_cacheable(clean_registry):
         input_class=MockIterableInput,
         config_class=MockToolConfig,
         output_class=MockIterableOutput,
-        description="Generative tool without cache",
+        description="Non-cacheable iterable tool",
         iterable_input_field="items",
         iterable_output_field="results",
         cacheable=False,
@@ -1095,6 +1148,85 @@ def test_non_cacheable_tool_skips_cache_logic(clean_registry, _setup_cache):
 
     spec.function(inputs, config)
     assert call_count == 2  # no caching
+
+
+def test_generative_unseeded_whole_output_skips_cache(clean_registry, _setup_cache):
+    """Unseeded generative tools run every call even when cacheable=True."""
+    call_count = 0
+
+    @clean_registry.register(
+        key="generative-whole-cache",
+        label="Generative Whole Cache",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="Generative whole-output cache test",
+        cacheable=True,
+        generative=True,
+    )
+    def run_tool(inputs, config=None, instance=None):
+        nonlocal call_count
+        call_count += 1
+        return MockToolOutput(result=f"processed_{inputs.input_data}_{call_count}")
+
+    spec = clean_registry.get("generative-whole-cache")
+    assert spec.generative is True
+    inputs = MockToolInput(input_data="test")
+
+    unseeded_config = MockToolConfig(param1="v")
+    result1 = spec.function(inputs, unseeded_config)
+    result2 = spec.function(inputs, unseeded_config)
+    assert call_count == 2
+    assert result1.result == "processed_test_1"
+    assert result2.result == "processed_test_2"
+
+    seeded_config = MockToolConfig(param1="v", seed=123)
+    result3 = spec.function(inputs, seeded_config)
+    result4 = spec.function(inputs, seeded_config)
+    assert call_count == 3
+    assert result3.result == "processed_test_3"
+    assert result4.result == "processed_test_3"
+
+
+def test_generative_unseeded_iterable_skips_cache_and_dedup(clean_registry, _setup_cache):
+    """Unseeded generative iterable tools skip both cache lookup and dedup."""
+    received_batches = []
+
+    @clean_registry.register(
+        key="generative-iter-cache",
+        label="Generative Iter Cache",
+        category="test",
+        input_class=MockIterableInput,
+        config_class=MockToolConfig,
+        output_class=MockIterableOutput,
+        description="Generative iterable cache test",
+        iterable_input_field="items",
+        iterable_output_field="results",
+        cacheable=True,
+        generative=True,
+    )
+    def run_tool(inputs, config=None, instance=None):
+        received_batches.append(list(inputs.items))
+        call_idx = len(received_batches)
+        return MockIterableOutput(results=[f"out_{call_idx}_{item}" for item in inputs.items])
+
+    spec = clean_registry.get("generative-iter-cache")
+    inputs = MockIterableInput(items=["a", "a"])
+
+    unseeded_config = MockToolConfig(param1="v")
+    result1 = spec.function(inputs, unseeded_config)
+    result2 = spec.function(inputs, unseeded_config)
+    assert received_batches == [["a", "a"], ["a", "a"]]
+    assert result1.results == ["out_1_a", "out_1_a"]
+    assert result2.results == ["out_2_a", "out_2_a"]
+
+    seeded_config = MockToolConfig(param1="v", seed=123)
+    result3 = spec.function(inputs, seeded_config)
+    result4 = spec.function(inputs, seeded_config)
+    assert received_batches == [["a", "a"], ["a", "a"], ["a"]]
+    assert result3.results == ["out_3_a", "out_3_a"]
+    assert result4.results == ["out_3_a", "out_3_a"]
 
 
 def test_cacheable_on_toolspec(clean_registry):

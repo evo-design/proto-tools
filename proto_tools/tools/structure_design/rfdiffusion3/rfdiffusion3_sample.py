@@ -751,6 +751,7 @@ def example_input() -> Any:
     iterable_input_field="design_specs",
     iterable_output_field="output_structures",
     cacheable=True,
+    generative=True,
 )
 def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, instance: Any = None) -> RFdiffusion3Output:
     """Design protein structures using RFdiffusion3.

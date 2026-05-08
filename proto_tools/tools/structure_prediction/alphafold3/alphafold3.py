@@ -110,10 +110,11 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
     Attributes:
         name (str): Name of the folding job. Default: ``"af3_job"``.
 
-        seeds (list[int]): Seeds to use for AlphaFold3. Default: ``[0]``.
-            Note: AlphaFold3 will do five diffusion samples per seed, so this often can be
-            set to a single seed. More seeds are required for complex docking tasks,
-            such as antibody-antigen docking.
+        seeds (list[int]): Seeds to use for AlphaFold3 when the common
+            ``BaseConfig.seed`` field is unset. Default: ``[0]``. Note:
+            AlphaFold3 will do five diffusion samples per seed, so this often
+            can be set to a single seed. More seeds are required for complex
+            docking tasks, such as antibody-antigen docking.
 
         output_dir (str | None): Path prefix for the AlphaFold3 output directory.
             Appends ``_af3_results`` to the provided string. If ``None`` (default),
@@ -168,7 +169,7 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
     seeds: list[int] = ConfigField(
         title="AlphaFold3 Seeds",
         default=[0],
-        description="Seeds to use for AlphaFold3",
+        description="Seeds to use for AlphaFold3 when the common seed field is unset.",
         advanced=True,
     )
 
@@ -270,6 +271,7 @@ def run_alphafold3(
 ) -> AlphaFold3Output:
     """Predict protein 3D structures using AlphaFold3."""
     output_structures: list[Structure] = []
+    model_seeds = [config.seed] if config.seed is not None else config.seeds
 
     with _config_overrides_env(config.model_dir):
         for comp_idx, comp in progress_bar(
@@ -281,7 +283,7 @@ def run_alphafold3(
             input_json = _create_input_json_from_complex(
                 comp,
                 f"{config.name}_{comp_idx}",
-                config.seeds,
+                model_seeds,
             )
 
             with tempfile.TemporaryDirectory() as temp_dir:

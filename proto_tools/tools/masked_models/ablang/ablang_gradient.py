@@ -119,6 +119,7 @@ def example_input() -> AbLangGradientInput:
     uses_gpu=True,
     example_input=example_input,
     cacheable=False,
+    generative=True,
 )
 def run_ablang_gradient(
     inputs: AbLangGradientInput,

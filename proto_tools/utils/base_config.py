@@ -13,6 +13,7 @@ from pydantic import Field as PydanticField
 from proto_tools.utils.tool_io import BaseToolInput, _extra_dict
 
 DEFAULT_TIMEOUT = 600  # seconds
+RANDOM_SEED_UPPER_BOUND = 2**31
 
 
 def _normalize_depends_on(depends_on: dict[str, Any]) -> dict[str, Any]:
@@ -105,8 +106,9 @@ class BaseConfig(BaseModel):
         device (str): Device to run the tool on.
         timeout (int): Maximum execution time in seconds.
         seed (int | None): Random seed. When set, tools run reproducibly up to small
-            GPU float noise (see ``BaseToolOutput.approx_equal``). When None, tools
-            take their fast non-deterministic path.
+            GPU float noise (see ``BaseToolOutput.approx_equal``), and the seed
+            participates in cache keys. When None, cacheable generative tools
+            skip cache until seeded.
 
     Properties:
         devices_per_instance: Number of GPUs each worker needs. Default is
@@ -188,7 +190,7 @@ class BaseConfig(BaseModel):
         default=None,
         ge=0,
         lt=2**32,
-        description="Random seed for reproducible results.",
+        description="Random seed for reproducible results. Some cacheable tools gate cache on this field.",
         advanced=True,
         include_in_key=True,
     )
@@ -200,7 +202,7 @@ class BaseConfig(BaseModel):
         Use as a fallback when downstream code requires a concrete int seed:
         ``config.seed if config.seed is not None else config.get_random_int()``.
         """
-        return random.randint(0, 2**31 - 1)  # noqa: S311 — not for cryptographic use
+        return random.randint(0, RANDOM_SEED_UPPER_BOUND - 1)  # noqa: S311 -- not for cryptographic use
 
     @property
     def devices_per_instance(self) -> int:

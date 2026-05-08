@@ -176,6 +176,7 @@ def example_input() -> Any:
     output_class=ESM2SampleOutput,
     description="Sample masked positions in protein sequences using ESM2 language model",
     uses_gpu=True,
+    generative=True,
     example_input=example_input,
     iterable_input_field="sequences",
     iterable_output_field="sequences",

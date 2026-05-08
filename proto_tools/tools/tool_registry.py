@@ -95,6 +95,9 @@ class ToolSpec(BaseModel):
             of results (for ToolPool fan-out).
         cacheable (bool): Whether this tool's results should be cached in the
             program-scoped cache.
+        generative (bool): Whether repeated unseeded calls intentionally
+            diversify outputs. For cacheable tools, unseeded calls skip
+            cache/dedup until seeded.
         post_process_iterable (Callable[[list[Any]], None] | None): Optional in-place
             hook invoked on the stitched ``iterable_output_field`` list after cache
             reconciliation and dedup expansion. Use for batch-level post-processing
@@ -153,6 +156,11 @@ class ToolSpec(BaseModel):
         default=False,
         exclude=True,
         description="Whether this tool's results should be cached in the program-scoped cache",
+    )
+    generative: bool = Field(
+        default=False,
+        exclude=True,
+        description="Whether unseeded calls intentionally diversify outputs",
     )
     post_process_iterable: Callable[[list[Any]], None] | None = Field(
         default=None,
@@ -269,6 +277,7 @@ class ToolRegistry:
         iterable_input_field: str | None = None,
         iterable_output_field: str | None = None,
         cacheable: bool = False,
+        generative: bool = False,
         post_process_iterable: Callable[[list[Any]], None] | None = None,
     ) -> Callable[[Callable[..., BaseToolOutput]], Callable[..., BaseToolOutput]]:
         """Decorator to register a tool function and wrap execution with metadata tracking.
@@ -302,6 +311,9 @@ class ToolRegistry:
                 results for ToolPool fan-out and per-item caching.
             cacheable (bool): Whether this tool's results should be cached in the
                 program-scoped cache.
+            generative (bool): Whether repeated unseeded calls intentionally
+                diversify outputs. When true, unseeded cacheable calls skip
+                result cache lookup/storage and iterable dedup.
             post_process_iterable (Callable[[list[Any]], None] | None): Optional
                 in-place hook invoked on the stitched ``iterable_output_field``
                 list after cache reconciliation. Required when a derived field
@@ -389,11 +401,12 @@ class ToolRegistry:
                 last_traceback = ""
                 warning_list = []
 
-                # Resolve the spec once so runtime-mutable flags (``gpu_only``)
-                # can be monkeypatched by tests. Fall back to the decorator's
-                # captured value if the spec is missing (defensive).
+                # Prefer registry metadata so runtime spec edits are honored.
                 spec = cls._registry.get(key)
-                effective_gpu_only = spec.gpu_only if spec is not None else gpu_only
+                cache_enabled = spec.cacheable if spec is not None else cacheable
+                gpu_only_flag = spec.gpu_only if spec is not None else gpu_only
+                generative_tool = spec.generative if spec is not None else generative
+                runtime_cacheable = cache_enabled and (not generative_tool or config.seed is not None)
 
                 # Validate device allocation against tool requirements.
                 # device="cloud" delegates all resource allocation to the registered
@@ -410,7 +423,7 @@ class ToolRegistry:
                                 "proto-tools[cloud] and call "
                                 "proto_tools.cloud.use_api_backend()."
                             )
-                    elif effective_gpu_only and device_str == "cpu":
+                    elif gpu_only_flag and device_str == "cpu":
                         raise ValueError(
                             f"Tool {key!r} is gpu_only and rejects device='cpu'; use 'cuda', 'cuda:N', or 'cudaxN'"
                         )
@@ -431,7 +444,7 @@ class ToolRegistry:
                 strip = None
                 whole_cache_key = None
 
-                if cacheable and spec and spec.iterable_input_field:
+                if runtime_cacheable and spec and spec.iterable_input_field:
                     assert spec.iterable_output_field is not None  # validated at registration
                     # Iterable path: dedup then strip cached items
                     original_items = list(getattr(inputs, spec.iterable_input_field))
@@ -476,7 +489,7 @@ class ToolRegistry:
                     if strip is not None and strip.uncached_items:
                         inputs = inputs.model_copy(update={spec.iterable_input_field: strip.uncached_items})
 
-                elif cacheable:
+                elif runtime_cacheable:
                     # Whole-output path: check full cache
                     cache = _program_tool_cache.get()
                     if cache is not None:
@@ -526,7 +539,7 @@ class ToolRegistry:
                         return _post_dispatch_cache_and_expand(
                             key,
                             spec,
-                            cacheable,
+                            runtime_cacheable,
                             result,
                             strip,
                             deduped,
@@ -558,7 +571,7 @@ class ToolRegistry:
                         return _post_dispatch_cache_and_expand(
                             key,
                             spec,
-                            cacheable,
+                            runtime_cacheable,
                             dispatched,
                             strip,
                             deduped,
@@ -583,7 +596,7 @@ class ToolRegistry:
 
                                 # Execute the tool function (ContextVar is read by
                                 # ``ToolInstance.dispatch`` / ``_run_persistent``).
-                                _inv_token = _current_tool_invocation.set({"key": key, "gpu_only": effective_gpu_only})
+                                _inv_token = _current_tool_invocation.set({"key": key, "gpu_only": gpu_only_flag})
                                 try:
                                     result = func(inputs, config, instance)
                                 finally:
@@ -616,7 +629,7 @@ class ToolRegistry:
                                 result = _post_dispatch_cache_and_expand(
                                     key,
                                     spec,
-                                    cacheable,
+                                    runtime_cacheable,
                                     result,
                                     strip,
                                     deduped,
@@ -692,6 +705,7 @@ class ToolRegistry:
                 iterable_input_field=iterable_input_field,
                 iterable_output_field=iterable_output_field,
                 cacheable=cacheable,
+                generative=generative,
                 post_process_iterable=post_process_iterable,
             )
             return wrapper

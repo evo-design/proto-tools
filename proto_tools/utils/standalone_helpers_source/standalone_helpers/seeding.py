@@ -8,11 +8,14 @@ XLA/Triton autotuning step.
 
 import os
 import random
-from typing import Any
+from collections.abc import Callable
+from typing import Any, cast
 
 from .proto_logging import get_logger
 
 logger = get_logger(__name__)
+
+RANDOM_SEED_UPPER_BOUND = 2**31
 
 
 def get_random_int() -> int:
@@ -21,7 +24,7 @@ def get_random_int() -> int:
     Use as a fallback when downstream code requires a concrete int seed:
     ``seed if seed is not None else get_random_int()``.
     """
-    return random.randint(0, 2**31 - 1)  # noqa: S311 — not for cryptographic use
+    return random.randint(0, RANDOM_SEED_UPPER_BOUND - 1)  # noqa: S311 -- not for cryptographic use
 
 
 def set_torch_seed(seed: int | None) -> None:
@@ -160,6 +163,7 @@ def enable_jax_compilation_cache(toolkit: str) -> str | None:
         cache_dir = Path(venv_path) / "jax_cache"
 
     cache_dir.mkdir(parents=True, exist_ok=True)
-    jax.config.update("jax_compilation_cache_dir", str(cache_dir))
+    config_update = cast(Callable[[str, str], None], jax.config.update)
+    config_update("jax_compilation_cache_dir", str(cache_dir))
     logger.info("JAX compilation cache for %s enabled at %s", toolkit, cache_dir)
     return str(cache_dir)

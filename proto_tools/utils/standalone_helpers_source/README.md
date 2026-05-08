@@ -17,8 +17,11 @@ and `setup.sh` scripts.
   - `compression.py` — `compress_array`, `is_compressed_array` (large-array IPC wire format)
   - `__init__.py` — re-exports every public name for backward compat
 
-  Imported by standalone scripts via `from standalone_helpers import ...` (package entry point) or
-  `from standalone_helpers.seeding import ...` (specific submodule).
+Imported by standalone scripts via `from standalone_helpers import ...` (package entry point) or
+`from standalone_helpers.seeding import ...` (specific submodule).
+
+Standalone worker environments receive this copied helper package and may not
+have the full `proto_tools` package importable.
 
 - **`standalone_helpers.sh`** — Bash helper functions for `setup.sh` scripts.
   Sourced via `source standalone_helpers.sh`. Provides `proto_install_pytorch`,

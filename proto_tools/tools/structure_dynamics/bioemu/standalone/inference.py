@@ -4,12 +4,11 @@ import json
 import os
 import sys
 import tempfile
-import time
 from pathlib import Path
 from typing import Any
 
 import torch
-from standalone_helpers import get_logger, set_torch_seed
+from standalone_helpers import get_logger, get_random_int, set_torch_seed
 
 logger = get_logger(__name__)
 
@@ -115,7 +114,7 @@ class BioEmuModel:
             # against the int truncation falling to 0 for sequences ≳316aa.
             adjusted_batch_size = max(1, min(int(batch_size * (100 / len(sequence)) ** 2), num_samples))
 
-            base_seed = seed if seed is not None else time.time_ns()
+            base_seed = seed if seed is not None else get_random_int()
 
             existing_num_samples = count_samples_in_output_dir(output_path)
             for start_idx in tqdm(
@@ -291,7 +290,6 @@ def run_bioemu_batch(input_data: dict[str, Any]) -> dict[str, Any]:
                 output_dir if len(sequences) == 1 else str(Path(output_dir) / f"complex_{seq_idx}")
             )
 
-        # Derive a distinct but reproducible seed for each sequence
         per_seq_seed = seed + seq_idx if seed is not None else None
 
         try:

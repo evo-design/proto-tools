@@ -290,6 +290,7 @@ def example_input() -> Any:
     output_class=BioEmuOutput,
     description="Protein conformational ensemble sampling using BioEmu",
     uses_gpu=True,
+    generative=True,
     example_input=example_input,
     iterable_input_field="complexes",
     iterable_output_field="ensembles",

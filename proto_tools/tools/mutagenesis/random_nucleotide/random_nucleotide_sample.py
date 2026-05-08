@@ -190,6 +190,7 @@ def example_input() -> Any:
     iterable_input_field="sequences",
     iterable_output_field="sequences",
     cacheable=False,
+    generative=True,
 )
 def run_random_nucleotide_sample(
     inputs: RandomNucleotideSampleInput,
