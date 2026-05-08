@@ -68,6 +68,7 @@ def test_accession_from_header_empty():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skip_ci
 @pytest.mark.integration
 def test_ncbi_esearch_protein():
     """Search NCBI protein database for lacI."""
@@ -80,6 +81,7 @@ def test_ncbi_esearch_protein():
     assert len(output.ids) > 0
 
 
+@pytest.mark.skip_ci
 @pytest.mark.integration
 def test_ncbi_efetch_fasta():
     """Fetch protein FASTA from NCBI by accession."""
