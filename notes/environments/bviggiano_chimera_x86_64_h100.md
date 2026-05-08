@@ -1,6 +1,6 @@
 # Linux x86_64 Environment Report
 
-![Pass Rate](https://img.shields.io/badge/pass_rate-94%25-brightgreen) ![Passed](https://img.shields.io/badge/passed-49-brightgreen) ![Failed](https://img.shields.io/badge/failed-3-red) ![Skipped](https://img.shields.io/badge/skipped-3-lightgrey)
+![Pass Rate](https://img.shields.io/badge/pass_rate-96%25-brightgreen) ![Passed](https://img.shields.io/badge/passed-50-brightgreen) ![Failed](https://img.shields.io/badge/failed-2-red) ![Skipped](https://img.shields.io/badge/skipped-3-lightgrey)
 
 ## Platform
 
@@ -8,7 +8,7 @@
 |----------|-------|
 | **OS** | Linux Linux 5.15.0-176-generic |
 | **Architecture** | x86_64 |
-| **Hostname** | `GPUC960` |
+| **Hostname** | `GPU71E4` |
 | **Python** | 3.14.4 |
 | **RAM** | 1007.4 GB |
 | **GPU** | 1x NVIDIA H100 80GB HBM3 |
@@ -17,23 +17,24 @@
 
 ## Git
 
-- **Commit**: `e347546d1f64`
-- **Branch**: `fix-foldmason-foldseek-notebooks-2026-05-06`
-- **Dirty**: Yes
+- **Commit**: `ecb1d6060109`
+- **Branch**: `chore/refresh-env-report-proteinmpnn`
+- **Dirty**: No
 
 ## Environment Variables
 
 ### Parent Process Environment
 
 ```
-AI_AGENT=claude-code_2-1-132_agent
+AI_AGENT=claude-code_2-1-133_agent
 BLASTDB=/common_datasets/external/databases/blast
 BROWSER=/home/bviggiano/.vscode-server/cli/servers/Stable-8b640eef5a6c6089c029249d48efa5c99adf7d51/server/bin/helpers/browser.sh
 BUNDLED_DEBUGPY_PATH=/home/bviggiano/.vscode-server/extensions/ms-python.debugpy-2026.6.0-linux-x64/bundled/libs/debugpy
 CLAUDECODE=1
 CLAUDE_CODE_ENTRYPOINT=cli
-CLAUDE_CODE_EXECPATH=/home/bviggiano/.local/share/claude/versions/2.1.132
-CLAUDE_CODE_SSE_PORT=34497
+CLAUDE_CODE_EXECPATH=/home/bviggiano/.local/share/claude/versions/2.1.133
+CLAUDE_CODE_SSE_PORT=23985
+CLAUDE_EFFORT=xhigh
 COLORTERM=truecolor
 CONDA_DEFAULT_ENV=proto-tools
 CONDA_EXE=/home/bviggiano/miniforge3/bin/conda
@@ -45,8 +46,8 @@ CONDA_SHLVL=2
 COREPACK_ENABLE_AUTO_PIN=0
 DISABLE_PANDERA_IMPORT_WARNING=True
 GIT_EDITOR=true
-GK_GL_ADDR=http://127.0.0.1:39179
-GK_GL_PATH=/tmp/gitkraken/gitlens/gitlens-ipc-server-543904-39179.json
+GK_GL_ADDR=http://127.0.0.1:39849
+GK_GL_PATH=/tmp/gitkraken/gitlens/gitlens-ipc-server-1327380-39849.json
 HOME=/home/bviggiano
 LANG=C.UTF-8
 LD_LIBRARY_PATH=/usr/local/cuda/lib64
@@ -65,25 +66,25 @@ PWD=/home/bviggiano/main/codebases/proto-bio/proto-tools
 PYDEVD_DISABLE_FILE_VALIDATION=1
 PYTEST_RUNNING=1
 PYTEST_VERSION=9.0.3
-PYTHONSTARTUP=/home/bviggiano/.vscode-server/data/User/workspaceStorage/7a355660d41045acafc2f380bf7e296d/ms-python.python/pythonrc.py
+PYTHONSTARTUP=/home/bviggiano/.vscode-server/data/User/workspaceStorage/606b48bbf88196b292aff26cc9961831/ms-python.python/pythonrc.py
 PYTHON_BASIC_REPL=1
 RCLONE_CONFIG=/large_storage/rclone/etc/rclone.conf
 SHELL=/bin/bash
 SHLVL=2
-SLURM_JOB_ID=2289143
+SLURM_JOB_ID=2290692
 TERM=xterm-256color
 TERM_PROGRAM=vscode
 TERM_PROGRAM_VERSION=1.119.0
 USER=bviggiano
-VSCODE_DEBUGPY_ADAPTER_ENDPOINTS=/home/bviggiano/.vscode-server/extensions/ms-python.debugpy-2026.6.0-linux-x64/.noConfigDebugAdapterEndpoints/endpoint-c9e54c1c794d1f2c.txt
-VSCODE_GIT_IPC_HANDLE=/tmp/vscode-git-d439488ff3.sock
-VSCODE_IPC_HOOK_CLI=/tmp/vscode-ipc-88aa9887-641f-43e3-8d6c-8aa4589acebd.sock
+VSCODE_DEBUGPY_ADAPTER_ENDPOINTS=/home/bviggiano/.vscode-server/extensions/ms-python.debugpy-2026.6.0-linux-x64/.noConfigDebugAdapterEndpoints/endpoint-1e8e4f814d451fc8.txt
+VSCODE_GIT_IPC_HANDLE=/tmp/vscode-git-2e22fcc75c.sock
+VSCODE_IPC_HOOK_CLI=/tmp/vscode-ipc-68eb0521-3803-49f9-9783-12095e63840d.sock
 VSCODE_PYTHON_AUTOACTIVATE_GUARD=1
 XDG_DATA_DIRS=/usr/local/share:/usr/share:/var/lib/snapd/desktop
 XLA_PYTHON_CLIENT_ALLOCATOR=platform
 XLA_PYTHON_CLIENT_PREALLOCATE=false
 XML_CATALOG_FILES=file:///home/bviggiano/miniforge3/etc/xml/catalog file:///etc/xml/catalog
-_=/home/bviggiano/miniforge3/envs/proto-tools/bin/python
+_=/home/bviggiano/miniforge3/envs/proto-tools/bin/pytest
 _CE_CONDA=
 _CE_M=
 _CONDA_EXE=/home/bviggiano/miniforge3/bin/conda
@@ -93,16 +94,16 @@ _CONDA_ROOT=/home/bviggiano/miniforge3
 ### Subprocess Environment (passed to tools)
 
 ```
-CONDA_PREFIX=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/foldseek_env
+CONDA_PREFIX=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/proteinmpnn_env
 DETECTED_COMPUTE_PLATFORM=cuda
 DETECTED_CUDA_VERSION=12
 DETECTED_DRIVER_VERSION=560
 HF_HOME=/large_storage/hielab/bviggiano/proto_cache/proto_model_cache/huggingface
 HOME=/home/bviggiano
 LANG=C.UTF-8
-LD_LIBRARY_PATH=/usr/local/cuda/lib64:/home/bviggiano/miniforge3/envs/proto-tools/lib
+LD_LIBRARY_PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/proteinmpnn_env/cuda_env/lib:/usr/local/cuda/lib64:/home/bviggiano/miniforge3/envs/proto-tools/lib
 LOGNAME=bviggiano
-PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/foldseek_env/bin:/home/bviggiano/miniforge3/envs/proto-tools/bin:/home/bviggiano/miniforge3/condabin:/home/bviggiano/.vscode-server/data/Use...
+PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/proteinmpnn_env/bin:/usr/local/cuda/bin:/home/bviggiano/miniforge3/envs/proto-tools/bin:/home/bviggiano/miniforge3/condabin:/home/bviggiano/...
 PIP_CACHE_DIR=/large_storage/hielab/bviggiano/proto_cache/pip_cache
 PIP_DEFAULT_TIMEOUT=300
 PROTO_ALPHAFOLD3_WEIGHTS_DIR=/large_storage/hielab/brk/models/af3_weights
@@ -117,7 +118,7 @@ TORCH_HOME=/large_storage/hielab/bviggiano/proto_cache/proto_model_cache/torch
 USER=bviggiano
 UV_CACHE_DIR=/large_storage/hielab/bviggiano/proto_cache/uv_cache
 UV_HTTP_TIMEOUT=300
-VIRTUAL_ENV=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/foldseek_env
+VIRTUAL_ENV=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/proteinmpnn_env
 XLA_PYTHON_CLIENT_ALLOCATOR=platform
 XLA_PYTHON_CLIENT_PREALLOCATE=false
 ```
@@ -148,14 +149,14 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
 | `promoter-calculator` | no | ✅ | 22.9s | `c2fad93` | ✅ Pass |
 | `pyhmmer-hmmscan` | no | ✅ | 18.7s | `c2fad93` | ✅ Pass |
 
-### Inverse Folding (3/4)
+### Inverse Folding (4/4)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
 |------|--------------|----------------------|----------|-----------|--------|
 | `esm-if1-sample` | yes | ✅ | 65.3s | `c2fad93` | ✅ Pass |
 | `fampnn-pack` | yes | ✅ | 97.0s | `c2fad93` | ✅ Pass |
 | `ligandmpnn-sample` | yes | ✅ | 157.8s | `c2fad93` | ✅ Pass |
-| `proteinmpnn-gradient` | yes | ✅ | 71.8s | `c2fad93` | ❌ Fail |
+| `proteinmpnn-gradient` | yes | ✅ | 112.2s | `ecb1d60` | ✅ Pass |
 
 ### Masked Models (4/4)
 
@@ -289,20 +290,8 @@ E   assert False
 E    +  where False = GerminalOutput(tool_id, execution_time, timestamp, success, warnings, errors, metadata, designs, pipeline_stats, num_accepted, num_designs).success
 ```
 
-### ❌ `proteinmpnn-gradient`
-
-**Test**: `tests/tool_infra_tests/test_env_report.py::test_tool_env_report[proteinmpnn-gradient]`
-
-```
-tests/tool_infra_tests/test_env_report.py:78: in test_tool_env_report
-    assert result.success, f"Tool {spec.key} failed: {result.errors}"
-E   AssertionError: Tool proteinmpnn-gradient failed: ["CalledProcessError: Command '['/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/proteinmpnn_env/bin/python', '/large_storage/hielab/bviggiano/codebases/proto-bio/proto-tools/proto_tools/tools/inverse_folding/proteinmpnn/standalone/inference.py', '/tmp/tmpmgvlcdu4/input.json', '/tmp/tmpmgvlcdu4/output.json']' returned non-zero exit status 1.", 'Traceback (most recent call last):\n  File "/large_storage/hielab/bviggiano/codebases/proto-bio/proto-tools/proto_tools/tools/tool_registry.py", line 588, in _wrapper_body\n    result = func(inputs, config, instance)\n  File "/large_storage/hielab/bviggiano/codebases/proto-bio/proto-tools/proto_tools/tools/inverse_folding/proteinmpnn/proteinmpnn_gradient.py", line 190, in run_proteinmpnn_gradient\n    result = ToolInstance.dispatch(\n        "proteinmpnn",\n    ...<15 lines>...\n        config=config,\n    )\n  File "/large_storage/hielab/bviggiano/codebases/proto-bio/proto-tools/proto_tools/utils/tool_instance.py", line 432, in dispatch\n    return cls._oneshot(\n           ~~~~~~~~~~~~^\n        toolkit,\n        ^^^^^^^^\n    ...<3 lines>...\n        timeout=timeout,\n        ^^^^^^^^^^^^^^^^\n    )\n    ^\n  File "/large_storage/hielab/bviggiano/codebases/proto-bio/proto-tools/proto_tools/utils/tool_instance.py", line 471, in _oneshot\n    return inst._run_oneshot(\n           ~~~~~~~~~~~~~~~~~^\n        leased_input,\n        ^^^^^^^^^^^^^\n    ...<2 lines>...\n        timeout=timeout,\n        ^^^^^^^^^^^^^^^^\n    )\n    ^\n  File "/large_storage/hielab/bviggiano/codebases/proto-bio/proto-tools/proto_tools/utils/tool_instance.py", line 1287, in _run_oneshot\n    raise subprocess.CalledProcessError(rc, cmd, stderr=tail)\nsubprocess.CalledProcessError: Command \'[\'/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/proteinmpnn_env/bin/python\', \'/large_storage/hielab/bviggiano/codebases/proto-bio/proto-tools/proto_tools/tools/inverse_folding/proteinmpnn/standalone/inference.py\', \'/tmp/tmpmgvlcdu4/input.json\', \'/tmp/tmpmgvlcdu4/output.json\']\' returned non-zero exit status 1.\n']
-E   assert False
-E    +  where False = ProteinMPNNGradientOutput(tool_id, execution_time, timestamp, success, warnings, errors, metadata, gradient, metrics).success
-```
-
 ---
-*Generated at 2026-05-07 11:22:45 by `pytest --env-report`*
+*Generated at 2026-05-08 10:07:27 by `pytest --env-report`*
 
 <!-- env-report-data
 [
@@ -765,13 +754,13 @@ E    +  where False = ProteinMPNNGradientOutput(tool_id, execution_time, timesta
     "tool_key": "proteinmpnn-gradient",
     "category": "inverse_folding",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[proteinmpnn-gradient]",
-    "status": "failed",
-    "duration_seconds": 71.75,
+    "status": "passed",
+    "duration_seconds": 112.22,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/proteinmpnn_env",
     "env_status": "success",
-    "error_message": "tests/tool_infra_tests/test_env_report.py:78: in test_tool_env_report\n    assert result.success, f\"Tool {spec.key} failed: {result.errors}\"\nE   AssertionError: Tool proteinmpnn-gradient failed: [\"CalledProcessError: Command '['/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/proteinmpnn_env/bin/python', '/large_storage/hielab/bviggiano/codebases/proto-bio/proto-tools/proto_tools/tools/inverse_folding/proteinmpnn/standalone/inference.py', '/tmp/tmpmgvlcdu4/input.json', '/tmp/tmpmgvlcdu4/output.json']' returned non-zero exit status 1.\", 'Traceback (most recent call last):\\n  File \"/large_storage/hielab/bviggiano/codebases/proto-bio/proto-tools/proto_tools/tools/tool_registry.py\", line 588, in _wrapper_body\\n    result = func(inputs, config, instance)\\n  File \"/large_storage/hielab/bviggiano/codebases/proto-bio/proto-tools/proto_tools/tools/inverse_folding/proteinmpnn/proteinmpnn_gradient.py\", line 190, in run_proteinmpnn_gradient\\n    result = ToolInstance.dispatch(\\n        \"proteinmpnn\",\\n    ...<15 lines>...\\n        config=config,\\n    )\\n  File \"/large_storage/hielab/bviggiano/codebases/proto-bio/proto-tools/proto_tools/utils/tool_instance.py\", line 432, in dispatch\\n    return cls._oneshot(\\n           ~~~~~~~~~~~~^\\n        toolkit,\\n        ^^^^^^^^\\n    ...<3 lines>...\\n        timeout=timeout,\\n        ^^^^^^^^^^^^^^^^\\n    )\\n    ^\\n  File \"/large_storage/hielab/bviggiano/codebases/proto-bio/proto-tools/proto_tools/utils/tool_instance.py\", line 471, in _oneshot\\n    return inst._run_oneshot(\\n           ~~~~~~~~~~~~~~~~~^\\n        leased_input,\\n        ^^^^^^^^^^^^^\\n    ...<2 lines>...\\n        timeout=timeout,\\n        ^^^^^^^^^^^^^^^^\\n    )\\n    ^\\n  File \"/large_storage/hielab/bviggiano/codebases/proto-bio/proto-tools/proto_tools/utils/tool_instance.py\", line 1287, in _run_oneshot\\n    raise subprocess.CalledProcessError(rc, cmd, stderr=tail)\\nsubprocess.CalledProcessError: Command \\'[\\'/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/proteinmpnn_env/bin/python\\', \\'/large_storage/hielab/bviggiano/codebases/proto-bio/proto-tools/proto_tools/tools/inverse_folding/proteinmpnn/standalone/inference.py\\', \\'/tmp/tmpmgvlcdu4/input.json\\', \\'/tmp/tmpmgvlcdu4/output.json\\']\\' returned non-zero exit status 1.\\n']\nE   assert False\nE    +  where False = ProteinMPNNGradientOutput(tool_id, execution_time, timestamp, success, warnings, errors, metadata, gradient, metrics).success",
-    "git_commit": "c2fad93fa119",
+    "error_message": null,
+    "git_commit": "ecb1d6060109",
     "git_dirty": false
   },
   {
