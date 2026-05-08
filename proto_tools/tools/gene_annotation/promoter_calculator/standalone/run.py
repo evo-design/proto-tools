@@ -68,16 +68,11 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
 
 # =============================================================================
-# Device / memory protocol (CPU-only tool)
+# Device protocol (CPU-only tool)
 # =============================================================================
 def to_device(device: str) -> dict[str, Any]:
     """No-op for CPU tools — workers unload between calls."""
     return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
-
-
-def get_memory_stats() -> dict[str, Any]:
-    """No persistent state for this CPU tool."""
-    return {"available": False, "framework": "cpu", "note": "CPU tool"}
 
 
 # =============================================================================
