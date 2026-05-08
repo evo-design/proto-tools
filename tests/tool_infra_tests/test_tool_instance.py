@@ -58,7 +58,7 @@ def _make_fake_instance(
     else:
         inst.env_path = Path(tempfile.mkdtemp(prefix="test_toolinstance_"))
     inst.script_path = Path("/fake/inference.py")
-    inst._tool_env_vars = {"passthrough": [], "set": []}
+    inst._tool_env_vars = {"passthrough": [], "set": [], "no_passthrough": []}
     inst._env_ready = True
     inst._cache_keys = set()
     inst._instance_lock = threading.Lock()
@@ -1274,7 +1274,7 @@ def test_failure_writes_status_and_raises(tmp_path: Path):
     inst.setup_script = tmp_path / "setup.sh"
     inst.setup_script.write_text("#!/bin/bash\nexit 1\n")
     (tmp_path / "python_version.txt").write_text("default: 3.12\n")
-    inst._tool_env_vars = {"passthrough": [], "set": []}
+    inst._tool_env_vars = {"passthrough": [], "set": [], "no_passthrough": []}
 
     def _create_env_dir(*args, **kwargs):
         """Simulate 'python -m venv' creating the directory."""
@@ -1583,7 +1583,7 @@ def test_run_oneshot_reads_output(tmp_path: Path):
     python_dir = Path(sys.executable).parent
     inst.env_path = python_dir.parent
     inst.script_path = script
-    inst._tool_env_vars = {"passthrough": [], "set": []}
+    inst._tool_env_vars = {"passthrough": [], "set": [], "no_passthrough": []}
     inst._env_ready = True
 
     result = inst._run_oneshot(
@@ -1600,7 +1600,7 @@ def _make_oneshot_instance(toolkit: str, script: Path) -> ToolInstance:
     inst.device = "cpu"
     inst.env_path = Path(sys.executable).parent.parent
     inst.script_path = script
-    inst._tool_env_vars = {"passthrough": [], "set": []}
+    inst._tool_env_vars = {"passthrough": [], "set": [], "no_passthrough": []}
     inst._env_ready = True
     return inst
 
@@ -1754,7 +1754,7 @@ def test_init_loads_env_vars():
 def test_init_empty_env_vars_for_tool_without_file():
     """Tools without env_vars.txt should get empty lists."""
     inst = ToolInstance("tmalign")
-    assert inst._tool_env_vars == {"passthrough": [], "set": []}
+    assert inst._tool_env_vars == {"passthrough": [], "set": [], "no_passthrough": []}
 
 
 # ── _run_setup_script (PROTO_ENV_VERBOSE / PROTO_ENV_LOG_DIR) ──────────────

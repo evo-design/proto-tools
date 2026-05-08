@@ -6,6 +6,7 @@ stdin/stdout JSON-line protocol. This avoids reloading models on every call.
 
 import collections
 import contextlib
+import functools
 import json
 import logging
 import os
@@ -232,14 +233,66 @@ _SYSTEM_PATH_DIRS = [
 _CUDA_BIN_DIR = "/usr/local/cuda/bin"
 
 
+# Fallback locations searched if ldconfig is unavailable or doesn't list libcuda.
+_DRIVER_LIB_FALLBACK_DIRS = (
+    "/usr/lib64",
+    "/usr/lib/x86_64-linux-gnu",
+    "/usr/lib/aarch64-linux-gnu",
+    "/usr/lib/wsl/lib",
+    "/lib64",
+)
+
+
+@functools.lru_cache(maxsize=1)
+def _find_driver_lib_dir() -> str | None:
+    """Locate the host directory containing ``libcuda.so.1`` (NVIDIA driver lib).
+
+    Pip-bundled CUDA wheels never ship the driver lib (it must come from the
+    installed driver). When ``[no_passthrough] LD_LIBRARY_PATH`` strips the
+    parent's value to avoid ABI-shadowing pip-bundled libs, this helper finds
+    just the driver dir so subprocesses can still ``dlopen`` it.
+
+    Probes in order: ``ldconfig -p`` (canonical on bare metal), parent
+    ``LD_LIBRARY_PATH`` entries (catches apptainer/singularity-style containers
+    where the driver is bind-mounted under ``/.singularity.d/libs/`` or
+    ``/usr/local/nvidia/lib*``), then hardcoded fallback dirs.
+
+    Returns:
+        str | None: Absolute path to the driver-lib directory, or ``None`` if
+            not found.
+    """
+    try:
+        out = subprocess.check_output(["ldconfig", "-p"], text=True, stderr=subprocess.DEVNULL, timeout=2)
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        out = ""
+    for line in out.splitlines():
+        if "libcuda.so.1" not in line or "=>" not in line:
+            continue
+        _, lib_path = line.rsplit("=>", 1)
+        p = Path(lib_path.strip())
+        if p.exists():
+            return str(p.parent)
+
+    for entry in os.environ.get("LD_LIBRARY_PATH", "").split(":"):
+        if entry and (Path(entry) / "libcuda.so.1").exists():
+            return entry
+
+    for candidate in _DRIVER_LIB_FALLBACK_DIRS:
+        if (Path(candidate) / "libcuda.so.1").exists():
+            return candidate
+
+    return None
+
+
 def _parse_env_vars_file(
     path: Path | None,
 ) -> dict[str, list[str]]:
     """Parse a ``standalone/env_vars.txt`` file.
 
-    Returns a dict with ``"passthrough"`` and ``"set"`` keys, each
-    mapping to a list of variable names (passthrough) or ``KEY=VALUE``
-    strings (set).  Missing or empty files return empty lists.
+    Returns a dict with ``"passthrough"``, ``"set"``, and ``"no_passthrough"``
+    keys.  ``passthrough`` and ``no_passthrough`` map to variable names;
+    ``set`` maps to ``KEY=VALUE`` strings.  Missing or empty files return
+    empty lists for all sections.
 
     Args:
         path (Path | None): Path to the ``env_vars.txt`` file, or None.
@@ -253,9 +306,22 @@ def _parse_env_vars_file(
         [set]
         MY_VAR=${VENV_PATH}/data
 
+        [no_passthrough]
+        LD_LIBRARY_PATH
+
+    ``[no_passthrough]`` blocks the parent process's value for the named
+    var from leaking into the subprocess: the whitelisted parent copy
+    is skipped, and for ``LD_LIBRARY_PATH`` neither the parent's value
+    nor ``$CONDA_PREFIX/lib`` get appended.  The host directory holding
+    ``libcuda.so.1`` is still appended (driver libs are never bundled
+    in pip wheels), so opting out doesn't break GPU access on hosts
+    that rely on the system driver.  ``[set]`` values still apply.
+    Use this for tools whose pip-bundled libs (e.g. JAX's RPATH'd
+    CUDA wheels) get ABI-shadowed by the parent's libs.
+
     Lines starting with ``#`` are comments.  Blank lines are ignored.
     """
-    result: dict[str, list[str]] = {"passthrough": [], "set": []}
+    result: dict[str, list[str]] = {"passthrough": [], "set": [], "no_passthrough": []}
     if path is None or not path.exists():
         return result
 
@@ -298,8 +364,13 @@ def _build_subprocess_env(
 
     env: dict[str, str] = {}
 
+    # Vars in [no_passthrough] don't inherit anything from the parent.
+    no_passthrough = set((tool_env_vars or {}).get("no_passthrough", []))
+
     # Copy only whitelisted vars from parent
     for var in _BASE_PASSTHROUGH:
+        if var in no_passthrough:
+            continue
         val = os.environ.get(var)
         if val is not None:
             env[var] = val
@@ -412,24 +483,42 @@ def _build_subprocess_env(
         env["VIRTUAL_ENV"] = str(Path(tool_env_path))
 
     # Build LD_LIBRARY_PATH: tool [set] > parent LD > conda/lib
+    # (parent LD and conda /lib are skipped if LD_LIBRARY_PATH is in [no_passthrough];
+    # in that case just the host driver-lib dir is appended so libcuda.so.1 still resolves)
     ld_parts: list[str] = []
+    ld_no_passthrough = "LD_LIBRARY_PATH" in no_passthrough
 
     # Tool-specific [set] LD_LIBRARY_PATH goes first (already in env from step 6)
     existing_ld = env.get("LD_LIBRARY_PATH", "")
     if existing_ld:
         ld_parts.extend(existing_ld.split(":"))
 
-    # Parent LD_LIBRARY_PATH (NVIDIA driver, CUDA, module-loaded libs, MKL, etc.)
-    parent_ld = os.environ.get("LD_LIBRARY_PATH", "")
-    for p in parent_ld.split(":"):
-        if p and p not in ld_parts:
-            ld_parts.append(p)
+    if not ld_no_passthrough:
+        # Parent LD_LIBRARY_PATH (NVIDIA driver, CUDA, module-loaded libs, MKL, etc.)
+        parent_ld = os.environ.get("LD_LIBRARY_PATH", "")
+        for p in parent_ld.split(":"):
+            if p and p not in ld_parts:
+                ld_parts.append(p)
 
-    # Conda shared libs (libgomp, libstdc++, etc.), may not be in parent LD
-    if parent_conda_prefix:
-        conda_lib = str(Path(parent_conda_prefix) / "lib")
-        if conda_lib not in ld_parts:
-            ld_parts.append(conda_lib)
+        # Conda shared libs (libgomp, libstdc++, etc.), may not be in parent LD
+        if parent_conda_prefix:
+            conda_lib = str(Path(parent_conda_prefix) / "lib")
+            if conda_lib not in ld_parts:
+                ld_parts.append(conda_lib)
+    else:
+        # libcuda.so.1 (host driver lib) is never in pip wheels; append just its dir.
+        driver_dir = _find_driver_lib_dir()
+        if driver_dir:
+            if driver_dir not in ld_parts:
+                ld_parts.append(driver_dir)
+        else:
+            logger.warning(
+                "Could not locate libcuda.so.1 via ldconfig, parent LD_LIBRARY_PATH, "
+                "or fallback dirs %s; subprocess may fail to load the CUDA driver. "
+                "This is expected on hosts where pip-bundled CUDA wheels are "
+                "self-sufficient (e.g. Modal).",
+                list(_DRIVER_LIB_FALLBACK_DIRS),
+            )
 
     if ld_parts:
         env["LD_LIBRARY_PATH"] = ":".join(ld_parts)

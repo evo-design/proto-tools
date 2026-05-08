@@ -103,15 +103,16 @@ Proto-tools writes `register_envs: false` to `PROTO_HOME/.micromamba/condarc` so
 
 ## env_vars.txt
 
-Each tool's `standalone/env_vars.txt` supports two sections:
+Each tool's `standalone/env_vars.txt` supports three sections:
 - `[passthrough]`: Variable names copied from the parent environment (e.g., `HF_TOKEN`)
 - `[set]`: Literal `KEY=VALUE` assignments, with `${VENV_PATH}` interpolation
+- `[no_passthrough]`: Variable names whose parent value is **blocked** from leaking into the subprocess. For `LD_LIBRARY_PATH` this also skips the `$CONDA_PREFIX/lib` append; the host directory containing `libcuda.so.1` is still added so GPU init works. `[set]` entries still apply. Use this for tools whose pip-bundled libs (e.g. JAX's RPATH'd CUDA wheels) get ABI-shadowed by the parent's libs.
 
 **Auto-set environment variables** (always injected by `_build_subprocess_env()`):
 - `CONDA_PREFIX`: set to the **tool env path** (not the parent conda env) so uv/pip install into the correct environment
 - `VIRTUAL_ENV`: set to the **tool env path** for uv >=0.10 compatibility
 - `PATH`: `tool_env/bin` > `cuda/bin` (GPU) > parent PATH entries > system dirs
-- `LD_LIBRARY_PATH`: tool-specific `[set]` paths > parent `LD_LIBRARY_PATH` entries > `$CONDA_PREFIX/lib`
+- `LD_LIBRARY_PATH`: tool-specific `[set]` paths > parent `LD_LIBRARY_PATH` entries > `$CONDA_PREFIX/lib` (the latter two are skipped when `LD_LIBRARY_PATH` is in `[no_passthrough]`; in that case just the host's `libcuda.so.1` dir is appended)
 
 ## Foundation Environment (git, curl, gcc, g++)
 

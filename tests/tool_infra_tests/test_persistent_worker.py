@@ -546,45 +546,53 @@ def test_serialize_tensor_like(tmp_path: Path):
 # ── _parse_env_vars_file ─────────────────────────────────────────────────────
 
 
+_EMPTY_RESULT = {"passthrough": [], "set": [], "no_passthrough": []}
+
+
 def test_parse_env_vars_none_path():
     result = _parse_env_vars_file(None)
-    assert result == {"passthrough": [], "set": []}
+    assert result == _EMPTY_RESULT
 
 
 def test_parse_env_vars_missing_file(tmp_path: Path):
     result = _parse_env_vars_file(tmp_path / "nonexistent.txt")
-    assert result == {"passthrough": [], "set": []}
+    assert result == _EMPTY_RESULT
 
 
 def test_parse_env_vars_empty_file(tmp_path: Path):
     f = tmp_path / "env_vars.txt"
     f.write_text("")
     result = _parse_env_vars_file(f)
-    assert result == {"passthrough": [], "set": []}
+    assert result == _EMPTY_RESULT
 
 
-def test_parse_env_vars_passthrough_section(tmp_path: Path):
+@pytest.mark.parametrize(
+    "section_text, expected",
+    [
+        ("[passthrough]\nHF_TOKEN\nHF_HOME\n", {"passthrough": ["HF_TOKEN", "HF_HOME"]}),
+        ("[set]\nMY_VAR=${VENV_PATH}/data\n", {"set": ["MY_VAR=${VENV_PATH}/data"]}),
+        ("[no_passthrough]\nLD_LIBRARY_PATH\nHF_TOKEN\n", {"no_passthrough": ["LD_LIBRARY_PATH", "HF_TOKEN"]}),
+    ],
+    ids=["passthrough", "set", "no_passthrough"],
+)
+def test_parse_env_vars_single_section(tmp_path: Path, section_text: str, expected: dict[str, list[str]]):
+    """Each section parses correctly in isolation; other sections stay empty."""
     f = tmp_path / "env_vars.txt"
-    f.write_text("[passthrough]\nHF_TOKEN\nHF_HOME\n")
+    f.write_text(section_text)
     result = _parse_env_vars_file(f)
-    assert result["passthrough"] == ["HF_TOKEN", "HF_HOME"]
-    assert result["set"] == []
+    assert result == {**_EMPTY_RESULT, **expected}
 
 
-def test_parse_env_vars_set_section(tmp_path: Path):
+def test_parse_env_vars_all_sections(tmp_path: Path):
+    """All three sections in one file land in their own buckets."""
     f = tmp_path / "env_vars.txt"
-    f.write_text("[set]\nMY_VAR=${VENV_PATH}/data\n")
+    f.write_text("[passthrough]\nHF_TOKEN\n\n[set]\nFOO=${VENV_PATH}/bar\n\n[no_passthrough]\nLD_LIBRARY_PATH\n")
     result = _parse_env_vars_file(f)
-    assert result["set"] == ["MY_VAR=${VENV_PATH}/data"]
-    assert result["passthrough"] == []
-
-
-def test_parse_env_vars_both_sections(tmp_path: Path):
-    f = tmp_path / "env_vars.txt"
-    f.write_text("[passthrough]\nHF_TOKEN\n\n[set]\nFOO=${VENV_PATH}/bar\n")
-    result = _parse_env_vars_file(f)
-    assert result["passthrough"] == ["HF_TOKEN"]
-    assert result["set"] == ["FOO=${VENV_PATH}/bar"]
+    assert result == {
+        "passthrough": ["HF_TOKEN"],
+        "set": ["FOO=${VENV_PATH}/bar"],
+        "no_passthrough": ["LD_LIBRARY_PATH"],
+    }
 
 
 def test_parse_env_vars_comments_and_blank_lines(tmp_path: Path):
@@ -600,7 +608,7 @@ def test_parse_env_vars_unknown_section_warns(tmp_path: Path, caplog):
     with caplog.at_level(logging.WARNING):
         result = _parse_env_vars_file(f)
     assert "Unknown section" in caplog.text
-    assert result == {"passthrough": [], "set": []}
+    assert result == _EMPTY_RESULT
 
 
 # ── _build_subprocess_env (whitelist-based) ──────────────────────────────────
@@ -792,6 +800,32 @@ def test_ld_library_path_via_set_directive(monkeypatch, tmp_path: Path, conda_pr
     assert ld_parts[1] == f"{tmp_path}/cuda_env/lib64"
     # Conda lib present only when CONDA_PREFIX set
     assert ("/opt/conda/lib" in ld_parts) == expect_conda_lib
+
+
+def test_no_passthrough_blocks_whitelisted_var(monkeypatch):
+    """[no_passthrough] also blocks whitelisted vars (e.g. HTTP_PROXY) from parent."""
+    monkeypatch.setenv("HTTP_PROXY", "http://proxy:8080")
+    tool_env_vars = {"passthrough": [], "set": [], "no_passthrough": ["HTTP_PROXY"]}
+
+    env = _build_subprocess_env(device="cpu", tool_env_vars=tool_env_vars)
+
+    assert "HTTP_PROXY" not in env
+
+
+def test_no_passthrough_blocks_parent_ld_library_path(monkeypatch, tmp_path: Path):
+    """[no_passthrough] LD_LIBRARY_PATH must not let parent's value leak into the subprocess."""
+    from proto_tools.utils.persistent_worker import _find_driver_lib_dir
+
+    _find_driver_lib_dir.cache_clear()
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/usr/local/cuda/lib64:/opt/nvidia/lib64")
+    monkeypatch.delenv("CONDA_PREFIX", raising=False)
+    tool_env_vars = {"passthrough": [], "set": [], "no_passthrough": ["LD_LIBRARY_PATH"]}
+
+    env = _build_subprocess_env(device="cuda", tool_env_path=tmp_path, tool_env_vars=tool_env_vars)
+
+    ld = env.get("LD_LIBRARY_PATH", "")
+    assert "/usr/local/cuda/lib64" not in ld
+    assert "/opt/nvidia/lib64" not in ld
 
 
 @pytest.mark.parametrize(
