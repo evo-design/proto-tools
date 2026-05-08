@@ -4,8 +4,6 @@ import json
 import math
 import os
 import sys
-import tempfile
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -61,7 +59,7 @@ class ProteinMPNNModel:
 
     def sample(
         self,
-        pdb_structure: str,
+        pdb_path: str,
         chain_ids: list[str],
         batch_size: int,
         temperature: float | None = DEFAULT_TEMPERATURE,
@@ -77,7 +75,7 @@ class ProteinMPNNModel:
         """Sample protein sequences from the ProteinMPNN model.
 
         Args:
-            pdb_structure: Path to PDB file or PDB content string
+            pdb_path: Path to PDB file containing the structure.
             chain_ids: List of chain IDs to design
             batch_size: Number of sequences to generate
             temperature: Sampling temperature
@@ -113,7 +111,7 @@ class ProteinMPNNModel:
 
         # Load the PDB file
         self.model.prep_inputs(
-            pdb_structure,
+            pdb_path,
             fix_pos=fix_pos,
             chain=",".join(chain_ids),
             rm_aa=",".join(excluded_amino_acids) if excluded_amino_acids else None,
@@ -139,7 +137,7 @@ class ProteinMPNNModel:
 
     def score(
         self,
-        pdb_structure: str,
+        pdb_path: str,
         chain_ids: list[str],
         sequence: str,
         fixed_positions: dict[str, list[int]] | None = None,
@@ -152,7 +150,7 @@ class ProteinMPNNModel:
         """Score a protein sequence against a structure.
 
         Args:
-            pdb_structure: Path to PDB file or PDB content string
+            pdb_path: Path to PDB file containing the structure.
             chain_ids: List of chain IDs
             sequence: Sequence to score
             fixed_positions: Dict mapping chain IDs to fixed positions
@@ -186,7 +184,7 @@ class ProteinMPNNModel:
 
         # Prepare input
         self.model.prep_inputs(
-            pdb_structure,
+            pdb_path,
             fix_pos=fix_pos,
             chain=",".join(chain_ids),
         )
@@ -220,7 +218,7 @@ class ProteinMPNNModel:
 
     def compute_gradient(
         self,
-        pdb_structure: str,
+        pdb_path: str,
         chain_ids: list[str],
         logits_list: list[list[float]],
         *,
@@ -268,7 +266,7 @@ class ProteinMPNNModel:
             else None
         )
         self.model.prep_inputs(
-            pdb_structure,
+            pdb_path,
             fix_pos=fix_pos,
             chain=",".join(chain_ids),
         )
@@ -400,62 +398,51 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if _model is None:
         _model = ProteinMPNNModel()
 
-    # Handle pdb_contents -> temp file
-    pdb_contents = input_dict.get("pdb_contents")
-    pdb_structure = input_dict.get("pdb_structure")
-
-    with tempfile.TemporaryDirectory() as temp_dir:
-        if pdb_contents and not pdb_structure:
-            pdb_path = Path(temp_dir) / "input.pdb"
-            pdb_path.write_text(pdb_contents)
-            pdb_structure = str(pdb_path)
-
-        operation = input_dict["operation"]
-        model_choice = input_dict["model_choice"]
-        if operation == "sample":
-            return _model.sample(
-                pdb_structure=pdb_structure,  # type: ignore[arg-type]
-                chain_ids=input_dict["chain_ids"],
-                batch_size=input_dict["batch_size"],
-                temperature=input_dict["temperature"],
-                fixed_positions=input_dict.get("fixed_positions"),
-                excluded_amino_acids=input_dict.get("excluded_amino_acids"),
-                seed=input_dict["seed"],
-                device=input_dict["device"],
-                model_choice=model_choice,
-                verbose=input_dict["verbose"],
-                return_logits=input_dict["return_logits"],
-                backbone_noise=input_dict["backbone_noise"],
-            )
-        if operation == "score":
-            return _model.score(
-                pdb_structure=pdb_structure,  # type: ignore[arg-type]
-                chain_ids=input_dict["chain_ids"],
-                sequence=input_dict["sequence"],
-                fixed_positions=input_dict.get("fixed_positions"),
-                seed=input_dict["seed"],
-                device=input_dict["device"],
-                model_choice=model_choice,
-                verbose=input_dict["verbose"],
-                return_logits=input_dict["return_logits"],
-            )
-        if operation == "compute_gradient":
-            return _model.compute_gradient(
-                pdb_structure=pdb_structure,  # type: ignore[arg-type]
-                chain_ids=input_dict["chain_ids"],
-                logits_list=input_dict["logits"],
-                temperature=input_dict["temperature"],
-                use_ste=input_dict["use_ste"],
-                fixed_positions=input_dict.get("fixed_positions"),
-                seed=input_dict["seed"],
-                device=input_dict["device"],
-                model_choice=model_choice,
-                verbose=input_dict["verbose"],
-                backprop=input_dict.get("compute_gradient", True),
-            )
-        raise ValueError(
-            f"proteinmpnn: unknown operation {operation!r}; valid: ['sample', 'score', 'compute_gradient']"
+    pdb_path = input_dict["pdb_path"]
+    operation = input_dict["operation"]
+    model_choice = input_dict["model_choice"]
+    if operation == "sample":
+        return _model.sample(
+            pdb_path=pdb_path,
+            chain_ids=input_dict["chain_ids"],
+            batch_size=input_dict["batch_size"],
+            temperature=input_dict["temperature"],
+            fixed_positions=input_dict.get("fixed_positions"),
+            excluded_amino_acids=input_dict.get("excluded_amino_acids"),
+            seed=input_dict["seed"],
+            device=input_dict["device"],
+            model_choice=model_choice,
+            verbose=input_dict["verbose"],
+            return_logits=input_dict["return_logits"],
+            backbone_noise=input_dict["backbone_noise"],
         )
+    if operation == "score":
+        return _model.score(
+            pdb_path=pdb_path,
+            chain_ids=input_dict["chain_ids"],
+            sequence=input_dict["sequence"],
+            fixed_positions=input_dict.get("fixed_positions"),
+            seed=input_dict["seed"],
+            device=input_dict["device"],
+            model_choice=model_choice,
+            verbose=input_dict["verbose"],
+            return_logits=input_dict["return_logits"],
+        )
+    if operation == "compute_gradient":
+        return _model.compute_gradient(
+            pdb_path=pdb_path,
+            chain_ids=input_dict["chain_ids"],
+            logits_list=input_dict["logits"],
+            temperature=input_dict["temperature"],
+            use_ste=input_dict["use_ste"],
+            fixed_positions=input_dict.get("fixed_positions"),
+            seed=input_dict["seed"],
+            device=input_dict["device"],
+            model_choice=model_choice,
+            verbose=input_dict["verbose"],
+            backprop=input_dict.get("compute_gradient", True),
+        )
+    raise ValueError(f"proteinmpnn: unknown operation {operation!r}; valid: ['sample', 'score', 'compute_gradient']")
 
 
 def to_device(device: str) -> dict[str, Any]:

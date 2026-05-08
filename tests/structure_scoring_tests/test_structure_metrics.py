@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from proto_tools.entities.structures import Structure
 from proto_tools.tools.structure_scoring.structure_metrics import (
     StructureMetricsConfig,
     StructureMetricsInput,
@@ -18,24 +19,41 @@ from tests.tool_infra_tests.test_export_functionality import (
     validate_output,
 )
 
+_FIXTURE_PDB = (
+    Path(__file__).parent.parent.parent
+    / "proto_tools"
+    / "tools"
+    / "structure_scoring"
+    / "structure_metrics"
+    / "example_input_fixture.pdb"
+)
+
+
 # ── Input validation ─────────────────────────────────────────────────────────
 
 
-def test_input_single_path_normalized_to_list():
-    inp = StructureMetricsInput(pdb_paths="/path/to/structure.pdb")
-    assert isinstance(inp.pdb_paths, list)
-    assert len(inp.pdb_paths) == 1
-    assert inp.pdb_paths[0] == "/path/to/structure.pdb"
+def test_input_single_path_wrapped_in_list():
+    inp = StructureMetricsInput(structures=str(_FIXTURE_PDB))
+    assert isinstance(inp.structures, list)
+    assert len(inp.structures) == 1
+    assert isinstance(inp.structures[0], Structure)
 
 
 def test_input_list_of_paths_preserved():
-    inp = StructureMetricsInput(pdb_paths=["/path/a.pdb", "/path/b.pdb"])
-    assert len(inp.pdb_paths) == 2
+    inp = StructureMetricsInput(structures=[str(_FIXTURE_PDB), str(_FIXTURE_PDB)])
+    assert len(inp.structures) == 2
+    assert all(isinstance(s, Structure) for s in inp.structures)
 
 
-def test_input_path_objects_converted_to_strings():
-    inp = StructureMetricsInput(pdb_paths=[Path("/path/to/structure.pdb")])
-    assert isinstance(inp.pdb_paths[0], str)
+def test_input_path_object_coerced_to_structure():
+    inp = StructureMetricsInput(structures=[_FIXTURE_PDB])
+    assert isinstance(inp.structures[0], Structure)
+
+
+def test_input_structure_object_passes_through():
+    s = Structure.from_file(_FIXTURE_PDB)
+    inp = StructureMetricsInput(structures=[s])
+    assert inp.structures[0].structure == s.structure
 
 
 # ── Config ───────────────────────────────────────────────────────────────────
@@ -61,12 +79,10 @@ def test_config_extra_fields_rejected():
 )
 def test_structure_metrics_model_dump(longest_alpha_helix, gyration_radius):
     m = StructureQualityMetrics(
-        pdb_path="/path/test.pdb",
         longest_alpha_helix=longest_alpha_helix,
         gyration_radius=gyration_radius,
     )
     d = m.model_dump()
-    assert d["pdb_path"] == "/path/test.pdb"
     assert d["longest_alpha_helix"] == longest_alpha_helix
     assert d["gyration_radius"] == gyration_radius
 
@@ -80,12 +96,10 @@ def sample_output():
         metadata={"num_structures": 2},
         metrics=[
             StructureQualityMetrics(
-                pdb_path="/path/a.pdb",
                 longest_alpha_helix=15,
                 gyration_radius=28.3,
             ),
             StructureQualityMetrics(
-                pdb_path="/path/b.pdb",
                 longest_alpha_helix=45,
                 gyration_radius=52.1,
             ),
@@ -134,7 +148,7 @@ END
     pdb_path = tmp_path / "test.pdb"
     pdb_path.write_text(pdb_content)
 
-    result = run_structure_metrics(StructureMetricsInput(pdb_paths=[str(pdb_path)]))
+    result = run_structure_metrics(StructureMetricsInput(structures=[str(pdb_path)]))
     assert_metrics_in_spec(result)
 
     assert isinstance(result, StructureMetricsOutput)
@@ -159,12 +173,12 @@ def test_structure_metrics_benchmark(request: pytest.FixtureRequest, tmp_path: P
     import time
 
     # 50 distinct paths so the @tool dedup doesn't collapse them to one compute.
-    pdb_paths = []
+    structure_paths = []
     for i in range(50):
         p = tmp_path / f"renin_{i:03d}.pdb"
         shutil.copyfile(_BENCH_RENIN_PDB, p)
-        pdb_paths.append(str(p))
-    inputs = StructureMetricsInput(pdb_paths=pdb_paths)
+        structure_paths.append(str(p))
+    inputs = StructureMetricsInput(structures=structure_paths)
     runner = lambda: run_structure_metrics(inputs)  # noqa: E731
 
     t0 = time.perf_counter()

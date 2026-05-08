@@ -76,9 +76,9 @@ def test_config_rejects_model_num_and_ensemble_together():
 
 
 def test_gradient_input_requires_20_columns():
-    AlphaFold2BinderInput(logits=[[0.0] * 20, [1.0] * 20], target_pdb="/t.pdb", temperature=0.75)
+    AlphaFold2BinderInput(logits=[[0.0] * 20, [1.0] * 20], target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, temperature=0.75)
     with pytest.raises(ValidationError, match="20 columns"):
-        AlphaFold2BinderInput(logits=[[0.0] * 19], target_pdb="/t.pdb", temperature=1.0)
+        AlphaFold2BinderInput(logits=[[0.0] * 19], target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, temperature=1.0)
 
 
 def test_gradient_config_rejects_bad_loss_weights():
@@ -100,6 +100,9 @@ def test_gradient_dispatch_contract(monkeypatch):
 
     def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured.update(toolkit=toolkit, payload=payload)
+        # target_pdb is a tempfile that the wrapper cleans up after dispatch returns;
+        # snapshot its content here while it still exists.
+        captured["target_pdb_content"] = Path(payload["target_pdb"]).read_text()
         return {
             "gradient": [[0.1] * 20] * 2,
             "loss": 1.25,
@@ -132,7 +135,10 @@ def test_gradient_dispatch_contract(monkeypatch):
     payload = captured["payload"]
     assert payload["operation"] == "compute_gradient"
     assert payload["temperature"] == 0.8
-    assert payload["target_pdb"] == str(_GRADIENT_EXAMPLE_PDB_PATH)
+    # target_pdb is materialized to a tempfile (path is local-to-runtime, not the
+    # caller's input path). The dispatch sees a real PDB-shaped file at that path.
+    assert payload["target_pdb"].endswith(".pdb")
+    assert captured["target_pdb_content"].strip().startswith(("ATOM", "HEADER"))
     assert payload["backend"] == "base"
     assert payload["soft"] == 1.0
     assert payload["recycle_mode"] == "last"

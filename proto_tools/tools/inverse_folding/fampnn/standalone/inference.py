@@ -690,73 +690,66 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if _model is None:
         _model = FAMPNNModel()
 
-    pdb_contents = input_dict.get("pdb_contents")
+    pdb_path = input_dict["pdb_path"]
+    operation = input_dict["operation"]
 
-    with tempfile.TemporaryDirectory() as temp_dir:
-        pdb_path = input_dict.get("pdb_path")
-        if pdb_contents and not pdb_path:
-            pdb_path = str(Path(temp_dir) / "input.pdb")
-            Path(pdb_path).write_text(pdb_contents)
-
-        operation = input_dict["operation"]
-
-        if operation == "sample":
-            return _model.sample(
-                pdb_path=pdb_path,  # type: ignore[arg-type]
-                chain_ids=input_dict.get("chain_ids"),
-                fixed_positions=input_dict.get("fixed_positions"),
-                fixed_sidechain_positions=input_dict.get("fixed_sidechain_positions"),
-                num_sequences=input_dict["num_sequences"],
-                temperature=input_dict["temperature"],
-                num_steps=input_dict["num_steps"],
-                seq_only=input_dict["seq_only"],
-                repack_last=input_dict["repack_last"],
-                psce_threshold=input_dict["psce_threshold"],
-                scn_diffusion_steps=input_dict["scn_diffusion_steps"],
-                scn_step_scale=input_dict["scn_step_scale"],
-                seed=input_dict["seed"],
-                model_variant=input_dict["model_variant"],
-                device=input_dict["device"],
-                verbose=input_dict["verbose"],
-            )
-        if operation == "pack":
-            return _model.pack(
-                pdb_path=pdb_path,  # type: ignore[arg-type]
-                fixed_positions=input_dict.get("fixed_positions"),
-                fixed_sidechain_positions=input_dict.get("fixed_sidechain_positions"),
-                num_samples=input_dict["num_samples"],
-                scn_diffusion_steps=input_dict["scn_diffusion_steps"],
-                scn_step_scale=input_dict["scn_step_scale"],
-                seed=input_dict["seed"],
-                model_variant=input_dict["model_variant"],
-                device=input_dict["device"],
-                verbose=input_dict["verbose"],
-            )
-        if operation == "score_all_mutations":
-            return _model.score_all_mutations(
-                pdb_path=pdb_path,  # type: ignore[arg-type]
-                batch_size=input_dict["batch_size"],
-                seed=input_dict["seed"],
-                model_variant=input_dict["model_variant"],
-                device=input_dict["device"],
-                verbose=input_dict["verbose"],
-            )
-        if operation == "score_mutations":
-            return _model.score_mutations(
-                pdb_path=pdb_path,  # type: ignore[arg-type]
-                mutations=input_dict["mutations"],
-                batch_size=input_dict["batch_size"],
-                seq_only=input_dict["seq_only"],
-                scn_diffusion_steps=input_dict["scn_diffusion_steps"],
-                scn_step_scale=input_dict["scn_step_scale"],
-                seed=input_dict["seed"],
-                model_variant=input_dict["model_variant"],
-                device=input_dict["device"],
-                verbose=input_dict["verbose"],
-            )
-        raise ValueError(
-            f"fampnn: unknown operation {operation!r}; valid: ['sample', 'pack', 'score_all_mutations', 'score_mutations']"
+    if operation == "sample":
+        return _model.sample(
+            pdb_path=pdb_path,
+            chain_ids=input_dict.get("chain_ids"),
+            fixed_positions=input_dict.get("fixed_positions"),
+            fixed_sidechain_positions=input_dict.get("fixed_sidechain_positions"),
+            num_sequences=input_dict["num_sequences"],
+            temperature=input_dict["temperature"],
+            num_steps=input_dict["num_steps"],
+            seq_only=input_dict["seq_only"],
+            repack_last=input_dict["repack_last"],
+            psce_threshold=input_dict["psce_threshold"],
+            scn_diffusion_steps=input_dict["scn_diffusion_steps"],
+            scn_step_scale=input_dict["scn_step_scale"],
+            seed=input_dict["seed"],
+            model_variant=input_dict["model_variant"],
+            device=input_dict["device"],
+            verbose=input_dict["verbose"],
         )
+    if operation == "pack":
+        return _model.pack(
+            pdb_path=pdb_path,
+            fixed_positions=input_dict.get("fixed_positions"),
+            fixed_sidechain_positions=input_dict.get("fixed_sidechain_positions"),
+            num_samples=input_dict["num_samples"],
+            scn_diffusion_steps=input_dict["scn_diffusion_steps"],
+            scn_step_scale=input_dict["scn_step_scale"],
+            seed=input_dict["seed"],
+            model_variant=input_dict["model_variant"],
+            device=input_dict["device"],
+            verbose=input_dict["verbose"],
+        )
+    if operation == "score_all_mutations":
+        return _model.score_all_mutations(
+            pdb_path=pdb_path,
+            batch_size=input_dict["batch_size"],
+            seed=input_dict["seed"],
+            model_variant=input_dict["model_variant"],
+            device=input_dict["device"],
+            verbose=input_dict["verbose"],
+        )
+    if operation == "score_mutations":
+        return _model.score_mutations(
+            pdb_path=pdb_path,
+            mutations=input_dict["mutations"],
+            batch_size=input_dict["batch_size"],
+            seq_only=input_dict["seq_only"],
+            scn_diffusion_steps=input_dict["scn_diffusion_steps"],
+            scn_step_scale=input_dict["scn_step_scale"],
+            seed=input_dict["seed"],
+            model_variant=input_dict["model_variant"],
+            device=input_dict["device"],
+            verbose=input_dict["verbose"],
+        )
+    raise ValueError(
+        f"fampnn: unknown operation {operation!r}; valid: ['sample', 'pack', 'score_all_mutations', 'score_mutations']"
+    )
 
 
 def to_device(device: str) -> dict[str, Any]:

@@ -206,6 +206,9 @@ def test_dispatch_payload_carries_user_config_plus_overrides(monkeypatch: pytest
     def fake_dispatch(toolkit, payload, **kwargs):  # type: ignore[no-untyped-def]
         captured["toolkit"] = toolkit
         captured["payload"] = payload
+        # target_pdb is a tempfile that the wrapper cleans up after dispatch returns;
+        # snapshot its content here while it still exists.
+        captured["target_pdb_content"] = Path(payload["target_pdb"]).read_text()
         return {"designs": [], "pipeline_stats": {}}
 
     monkeypatch.setattr(
@@ -233,8 +236,10 @@ def test_dispatch_payload_carries_user_config_plus_overrides(monkeypatch: pytest
 
     assert captured["toolkit"] == "germinal"
     payload = captured["payload"]
-    # Input fields flow through
-    assert payload["target_pdb"] == str(TEST_PDB)
+    # Input fields flow through. target_pdb is materialized to a tempfile by the
+    # wrapper; we assert content shape rather than the original input path.
+    assert payload["target_pdb"].endswith(".pdb")
+    assert "ATOM" in captured["target_pdb_content"]
     assert payload["target_chain"] == "A"
     assert payload["binder_chain"] == "B"
     assert payload["hotspots"] == ["A56", "A66"]

@@ -187,23 +187,24 @@ def run_proteinmpnn_gradient(
     chain_ids = inputs.chain_ids_to_redesign
     seed = config.seed if config.seed is not None else config.get_random_int()
     logger.debug("Using local worker for ProteinMPNN gradient: %s", config.model_choice)
-    result = ToolInstance.dispatch(
-        "proteinmpnn",
-        {
-            "operation": "compute_gradient",
-            "pdb_contents": inputs.structure.structure_pdb,
-            "chain_ids": chain_ids,
-            "logits": inputs.logits,
-            "temperature": inputs.temperature,
-            "use_ste": config.use_ste,
-            "compute_gradient": config.compute_gradient,
-            "fixed_positions": inputs.fixed_positions.chains if inputs.fixed_positions is not None else None,
-            "model_choice": config.model_choice,
-            "seed": seed,
-            "device": config.device,
-            "verbose": config.verbose,
-        },
-        instance=instance,
-        config=config,
-    )
+    with inputs.structure.temp_file() as pdb_path:
+        result = ToolInstance.dispatch(
+            "proteinmpnn",
+            {
+                "operation": "compute_gradient",
+                "pdb_path": str(pdb_path),
+                "chain_ids": chain_ids,
+                "logits": inputs.logits,
+                "temperature": inputs.temperature,
+                "use_ste": config.use_ste,
+                "compute_gradient": config.compute_gradient,
+                "fixed_positions": inputs.fixed_positions.chains if inputs.fixed_positions is not None else None,
+                "model_choice": config.model_choice,
+                "seed": seed,
+                "device": config.device,
+                "verbose": config.verbose,
+            },
+            instance=instance,
+            config=config,
+        )
     return ProteinMPNNGradientOutput(**result)

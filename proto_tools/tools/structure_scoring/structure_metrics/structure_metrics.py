@@ -31,9 +31,6 @@ class StructureQualityMetrics(Metrics):
         helix_pct (float): Percentage of residues in alpha helices (0-100).
         sheet_pct (float): Percentage of residues in beta sheets (0-100).
         loop_pct (float): Percentage of residues in loops/coil (0-100).
-
-    Attributes:
-        pdb_path (str): Path to the PDB file that produced these metrics.
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
@@ -74,26 +71,25 @@ class StructureQualityMetrics(Metrics):
         },
     }
 
-    pdb_path: str = Field(description="Path to the PDB file analyzed")
-
 
 # Input:
 class StructureMetricsInput(BaseToolInput):
     """Input for structure quality metrics computation.
 
     Attributes:
-        pdb_paths (list[str]): List of paths to PDB files to analyze.
+        structures (list[Structure]): Structures to analyze. Accepts file paths,
+            raw PDB/CIF content strings, or ``Structure`` objects per item.
     """
 
-    pdb_paths: list[str] = InputField(description="List of PDB file paths to compute structure metrics for")
+    structures: list[Structure] = InputField(description="Structures to compute structure metrics for")
 
-    @field_validator("pdb_paths", mode="before")
+    @field_validator("structures", mode="before")
     @classmethod
-    def normalize_paths(cls, value: Any) -> list[str]:
-        """Normalize a single path to a list."""
-        if isinstance(value, str):
+    def _wrap_single_in_list(cls, value: Any) -> list[Any]:
+        """Wrap a single Structure / path / dict input in a list; per-item Structure coercion handles paths and content."""
+        if isinstance(value, (str, Path, Structure, dict)):
             return [value]
-        return [str(p) for p in value]
+        return list(value)
 
 
 # Output:
@@ -102,7 +98,7 @@ class StructureMetricsOutput(BaseToolOutput):
 
     Attributes:
         metrics (list[StructureQualityMetrics]): Per-structure quality metrics,
-            index-aligned with ``inputs.pdb_paths``.
+            index-aligned with ``inputs.structures``.
     """
 
     metrics: list[StructureQualityMetrics] = Field(
@@ -147,7 +143,7 @@ class StructureMetricsConfig(BaseConfig):
 # ============================================================================
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return StructureMetricsInput(pdb_paths=[str(Path(__file__).parent / "example_input_fixture.pdb")])
+    return StructureMetricsInput(structures=[Structure.from_file(Path(__file__).parent / "example_input_fixture.pdb")])
 
 
 @tool(
@@ -159,7 +155,7 @@ def example_input() -> Any:
     output_class=StructureMetricsOutput,
     description="Compute structural quality metrics (SS percentages, longest helix, gyration radius) from PDB files",
     example_input=example_input,
-    iterable_input_field="pdb_paths",
+    iterable_input_field="structures",
     iterable_output_field="metrics",
     cacheable=True,
 )
@@ -168,27 +164,25 @@ def run_structure_metrics(
     config: StructureMetricsConfig,  # noqa: ARG001
     instance: Any = None,  # noqa: ARG001
 ) -> StructureMetricsOutput:
-    """Compute structural quality metrics from PDB files.
+    """Compute structural quality metrics from PDB structures.
 
     Computes secondary structure percentages, longest alpha helix, and radius of
     gyration for each input structure. Used to filter out disordered or artifactual
     predicted structures.
 
     Args:
-        inputs (StructureMetricsInput): PDB file paths to analyze.
+        inputs (StructureMetricsInput): Structures to analyze.
         config (StructureMetricsConfig): No parameters needed.
         instance (Any): Unused (no standalone dispatch).
 
     Returns:
-        StructureMetricsOutput: Per-structure quality metrics.
+        StructureMetricsOutput: Per-structure quality metrics, index-aligned with inputs.structures.
     """
     metrics = []
-    for pdb_path in inputs.pdb_paths:
-        struct = Structure.from_file(pdb_path)
+    for struct in inputs.structures:
         ss = struct.secondary_structure_percentages()
         metrics.append(
             StructureQualityMetrics(
-                pdb_path=str(pdb_path),
                 longest_alpha_helix=struct.longest_alpha_helix(),
                 gyration_radius=struct.gyration_radius(),
                 helix_pct=ss["helix"],
@@ -198,6 +192,6 @@ def run_structure_metrics(
         )
 
     return StructureMetricsOutput(
-        metadata={"num_structures": len(inputs.pdb_paths)},
+        metadata={"num_structures": len(inputs.structures)},
         metrics=metrics,
     )

@@ -132,8 +132,10 @@ class GerminalInput(BaseToolInput):
     """Input for Germinal antibody design.
 
     Attributes:
-        target_pdb (str): Target structure as a PDB file path or PDB-format
-            string. Must include a chain matching ``target_chain``.
+        target_pdb (Structure): Target structure. Accepts a file path, raw
+            PDB/CIF content string, ``Structure`` object, or a dict in the
+            shape produced by ``Structure.model_dump(mode='json')``. Must
+            include a chain matching ``target_chain``.
         target_chain (str): Chain ID(s) of the target. Single letter (e.g.
             ``"A"``) or comma-separated for multi-chain targets (e.g. ``"A,B"``).
         binder_chain (str): Chain ID assigned to the designed binder. Default
@@ -151,7 +153,7 @@ class GerminalInput(BaseToolInput):
             ``hotspot_residue`` field in ``configs/target/*.yaml``.
     """
 
-    target_pdb: str = InputField(description="Target PDB file path or PDB-format string")
+    target_pdb: Structure = InputField(description="Target structure")
     target_chain: str = InputField(
         default="A",
         description="Target chain ID(s); comma-separated for multi-chain targets",
@@ -509,7 +511,7 @@ def example_input() -> GerminalInput:
     """Minimal valid input: PD-L1 target with three published epitope hotspots."""
     repo_root = Path(__file__).resolve().parents[4]  # germinal -> binder_design -> tools -> proto_tools -> repo
     return GerminalInput(
-        target_pdb=str(repo_root / "tests" / "dummy_data" / "pdl1.pdb"),
+        target_pdb=Structure.from_file(repo_root / "tests" / "dummy_data" / "pdl1.pdb"),
         target_chain="A",
         binder_chain="B",
         hotspots=["A56", "A66", "A115"],
@@ -577,36 +579,38 @@ def run_germinal_design(
         config.structure_model,
     )
 
-    input_data: dict[str, Any] = {
-        # Target
-        "target_pdb": inputs.target_pdb,
-        "target_chain": inputs.target_chain,
-        "binder_chain": inputs.binder_chain,
-        "hotspots": inputs.hotspots,
-        "target_name": inputs.target_name,
-        "hotspot_residue": inputs.hotspot_residue,
-        # Mode + stopping criteria + backend
-        "design_type": config.design_type,
-        "max_trajectories": config.max_trajectories,
-        "max_hallucinated_trajectories": config.max_hallucinated_trajectories,
-        "max_passing_designs": config.max_passing_designs,
-        "structure_model": config.structure_model,
-        # Optional filter thresholds (None means preset wins)
-        "plddt_threshold": config.plddt_threshold,
-        "iptm_threshold": config.iptm_threshold,
-        "ipae_threshold": config.ipae_threshold,
-        "ptm_threshold": config.ptm_threshold,
-        "pdockq2_threshold": config.pdockq2_threshold,
-        # Escape hatches
-        "germinal_overrides": config.germinal_overrides,
-        "filter_overrides": config.filter_overrides,
-        # Execution
-        "device": config.device,
-        "output_dir": config.output_dir,
-        "seed": config.seed,
-        "verbose": config.verbose,
-    }
-    output_data = ToolInstance.dispatch("germinal", input_data, instance=instance, config=config)
+    # Materialize the target Structure to a tempfile for the standalone to read.
+    with inputs.target_pdb.temp_file() as target_pdb_path:
+        input_data: dict[str, Any] = {
+            # Target
+            "target_pdb": str(target_pdb_path),
+            "target_chain": inputs.target_chain,
+            "binder_chain": inputs.binder_chain,
+            "hotspots": inputs.hotspots,
+            "target_name": inputs.target_name,
+            "hotspot_residue": inputs.hotspot_residue,
+            # Mode + stopping criteria + backend
+            "design_type": config.design_type,
+            "max_trajectories": config.max_trajectories,
+            "max_hallucinated_trajectories": config.max_hallucinated_trajectories,
+            "max_passing_designs": config.max_passing_designs,
+            "structure_model": config.structure_model,
+            # Optional filter thresholds (None means preset wins)
+            "plddt_threshold": config.plddt_threshold,
+            "iptm_threshold": config.iptm_threshold,
+            "ipae_threshold": config.ipae_threshold,
+            "ptm_threshold": config.ptm_threshold,
+            "pdockq2_threshold": config.pdockq2_threshold,
+            # Escape hatches
+            "germinal_overrides": config.germinal_overrides,
+            "filter_overrides": config.filter_overrides,
+            # Execution
+            "device": config.device,
+            "output_dir": config.output_dir,
+            "seed": config.seed,
+            "verbose": config.verbose,
+        }
+        output_data = ToolInstance.dispatch("germinal", input_data, instance=instance, config=config)
 
     designs = [
         GerminalDesign(

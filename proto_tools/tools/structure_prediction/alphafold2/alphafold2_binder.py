@@ -64,7 +64,9 @@ class AlphaFold2BinderInput(GradientInput):
     Attributes:
         logits (list[list[float]]): Inherited — relaxed sequence logits (L x 20).
         temperature (float): Inherited — softmax temperature.
-        target_pdb (str): Target+binder template PDB (file path or PDB-format string).
+        target_pdb (Structure): Target+binder template PDB. Accepts a file path,
+            raw PDB/CIF content string, ``Structure`` object, or a dict in the
+            shape produced by ``Structure.model_dump(mode='json')``.
         target_chain (str): Chain ID(s) of the frozen target in the PDB.
         target_hotspot (str | None): Comma-separated hotspot residue indices on the target.
         binder_chain (str): Binder chain ID in the template PDB.
@@ -72,8 +74,8 @@ class AlphaFold2BinderInput(GradientInput):
             for loss focus (e.g. CDR loops). Germinal backend only.
     """
 
-    target_pdb: str = InputField(
-        description="Target+binder template PDB (file path or PDB-format string).",
+    target_pdb: Structure = InputField(
+        description="Target+binder template PDB.",
     )
     target_chain: str = InputField(
         default="A",
@@ -348,7 +350,7 @@ def example_input() -> AlphaFold2BinderInput:
     """Minimal valid input — short VHH-like binder with biased logits and PD-L1 template."""
     return AlphaFold2BinderInput(
         logits=one_hot_protein_logits("EVQLVESG", sharpness=2.0),
-        target_pdb=str(_BINDER_FIXTURE_PDB),
+        target_pdb=Structure.from_file(_BINDER_FIXTURE_PDB),
         binder_chain="B",
     )
 
@@ -380,47 +382,50 @@ def run_alphafold2_binder(
         config.model_num,
         config.compute_gradient,
     )
-    result = ToolInstance.dispatch(
-        "alphafold2",
-        {
-            "operation": "compute_gradient",
-            "logits": inputs.logits,
-            "temperature": inputs.temperature,
-            "soft": config.soft,
-            "hard": config.hard,
-            "target_pdb": inputs.target_pdb,
-            "target_chain": inputs.target_chain,
-            "target_hotspot": inputs.target_hotspot,
-            "binder_chain": inputs.binder_chain,
-            "design_positions": inputs.design_positions,
-            "bias_redesign": config.bias_redesign,
-            # ColabDesign's prep_inputs(rm_aa=...) expects a comma-separated string.
-            "omit_aas": ",".join(config.omit_aas) if config.omit_aas else None,
-            "num_recycles": config.num_recycles,
-            "recycle_mode": config.recycle_mode,
-            "model_num": config.model_num,
-            "sample_models": config.sample_models,
-            "use_multimer": config.use_multimer,
-            "rm_target_seq": config.rm_target_seq,
-            "rm_target_sc": config.rm_target_sc,
-            "rm_template_ic": config.rm_template_ic,
-            "starting_binder_seq": config.starting_binder_seq,
-            "loss_weights": config.loss_weights,
-            "intra_contact_num": config.intra_contact_num,
-            "intra_contact_cutoff": config.intra_contact_cutoff,
-            "inter_contact_num": config.inter_contact_num,
-            "inter_contact_cutoff": config.inter_contact_cutoff,
-            "framework_contact_offset": config.framework_contact_offset,
-            "seed": config.seed,
-            "include_pae_matrix": config.include_pae_matrix,
-            "backend": config.backend,
-            "compute_gradient": config.compute_gradient,
-            "device": config.device,
-            "verbose": config.verbose,
-        },
-        instance=instance,
-        config=config,
-    )
+    # Materialize the target Structure to a tempfile on the local filesystem so
+    # the standalone (ColabDesign) can read it as a path. Auto-cleans on exit.
+    with inputs.target_pdb.temp_file() as target_pdb_path:
+        result = ToolInstance.dispatch(
+            "alphafold2",
+            {
+                "operation": "compute_gradient",
+                "logits": inputs.logits,
+                "temperature": inputs.temperature,
+                "soft": config.soft,
+                "hard": config.hard,
+                "target_pdb": str(target_pdb_path),
+                "target_chain": inputs.target_chain,
+                "target_hotspot": inputs.target_hotspot,
+                "binder_chain": inputs.binder_chain,
+                "design_positions": inputs.design_positions,
+                "bias_redesign": config.bias_redesign,
+                # ColabDesign's prep_inputs(rm_aa=...) expects a comma-separated string.
+                "omit_aas": ",".join(config.omit_aas) if config.omit_aas else None,
+                "num_recycles": config.num_recycles,
+                "recycle_mode": config.recycle_mode,
+                "model_num": config.model_num,
+                "sample_models": config.sample_models,
+                "use_multimer": config.use_multimer,
+                "rm_target_seq": config.rm_target_seq,
+                "rm_target_sc": config.rm_target_sc,
+                "rm_template_ic": config.rm_template_ic,
+                "starting_binder_seq": config.starting_binder_seq,
+                "loss_weights": config.loss_weights,
+                "intra_contact_num": config.intra_contact_num,
+                "intra_contact_cutoff": config.intra_contact_cutoff,
+                "inter_contact_num": config.inter_contact_num,
+                "inter_contact_cutoff": config.inter_contact_cutoff,
+                "framework_contact_offset": config.framework_contact_offset,
+                "seed": config.seed,
+                "include_pae_matrix": config.include_pae_matrix,
+                "backend": config.backend,
+                "compute_gradient": config.compute_gradient,
+                "device": config.device,
+                "verbose": config.verbose,
+            },
+            instance=instance,
+            config=config,
+        )
 
     metrics = result["metrics"]
     return AlphaFold2BinderOutput(

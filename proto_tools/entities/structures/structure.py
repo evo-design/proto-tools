@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import math
+import tempfile
+from collections.abc import Iterator
 from enum import Enum
 from io import StringIO
 from pathlib import Path
@@ -663,6 +666,35 @@ class Structure(BaseModel):
             filepath (Path | str): Path where to save the PDB file.
         """
         Path(filepath).write_text(self.structure_pdb)
+
+    @contextlib.contextmanager
+    def temp_file(self, file_format: Literal["pdb", "cif"] = "pdb") -> Iterator[Path]:
+        """Yield a Path to a tempfile containing this structure's content. Auto-cleans on exit.
+
+        Use this to materialize a Structure on the local filesystem when an
+        underlying tool / binary needs a file path rather than a content string.
+        Wraps a ``tempfile.TemporaryDirectory()`` so the file is removed on
+        context exit even if the caller raises.
+
+        Args:
+            file_format (Literal["pdb", "cif"]): Output format. Defaults to ``"pdb"``.
+
+        Yields:
+            Path: Path to the materialized tempfile.
+
+        Examples:
+            >>> with structure.temp_file() as path:
+            ...     run_some_binary(input_path=str(path))
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / f"input.{file_format}"
+            if file_format == "pdb":
+                self.write_pdb(path)
+            elif file_format == "cif":
+                self.write_cif(path)
+            else:
+                raise ValueError(f"Unsupported file_format: {file_format!r} (expected 'pdb' or 'cif')")
+            yield path
 
     # ============================================================================
     # Chain Related

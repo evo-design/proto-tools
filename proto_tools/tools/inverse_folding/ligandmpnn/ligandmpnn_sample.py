@@ -175,40 +175,42 @@ def run_ligandmpnn_sample(
         all_interface_recovery: list[float] | None = []
         remaining = config.num_sequences_per_structure
         chunk_idx = 0
-        while remaining > 0:
-            chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
-            input_dict = {
-                "operation": "sample",
-                "pdb_contents": inp.structure_pdb,
-                "chain_ids": inp.chain_ids_to_redesign,
-                "batch_size": chunk,
-                "temperature": config.temperature,
-                "fixed_positions": inp.fixed_positions.chains if inp.fixed_positions is not None else None,
-                "excluded_amino_acids": config.excluded_amino_acids,
-                "seed": base_seed + chunk_idx,
-                "device": config.device,
-                "verbose": config.verbose,
-                "model_type": config.model_type,
-                "ligand_mpnn_use_atom_context": config.ligand_mpnn_use_atom_context,
-                "ligand_mpnn_use_side_chain_context": config.ligand_mpnn_use_side_chain_context,
-                "ligand_mpnn_cutoff_for_score": config.ligand_mpnn_cutoff_for_score,
-            }
-            result = ToolInstance.dispatch(
-                "ligandmpnn",
-                input_dict,
-                instance=instance,
-                config=config,
-            )
-            all_seqs.extend(result["sequences"])
-            all_recovery.extend(m["sequence_recovery"] for m in result["metrics"])
-            chunk_interface = [m["ligand_interface_sequence_recovery"] for m in result["metrics"]]
-            if all_interface_recovery is not None:
-                if any(v is None or (isinstance(v, float) and math.isnan(v)) for v in chunk_interface):
-                    all_interface_recovery = None
-                else:
-                    all_interface_recovery.extend(chunk_interface)
-            chunk_idx += 1
-            remaining -= chunk  # type: ignore[operator]
+        # Materialize the Structure to a tempfile once per input — reused across chunks.
+        with inp.structure.temp_file() as pdb_path:
+            while remaining > 0:
+                chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
+                input_dict = {
+                    "operation": "sample",
+                    "pdb_path": str(pdb_path),
+                    "chain_ids": inp.chain_ids_to_redesign,
+                    "batch_size": chunk,
+                    "temperature": config.temperature,
+                    "fixed_positions": inp.fixed_positions.chains if inp.fixed_positions is not None else None,
+                    "excluded_amino_acids": config.excluded_amino_acids,
+                    "seed": base_seed + chunk_idx,
+                    "device": config.device,
+                    "verbose": config.verbose,
+                    "model_type": config.model_type,
+                    "ligand_mpnn_use_atom_context": config.ligand_mpnn_use_atom_context,
+                    "ligand_mpnn_use_side_chain_context": config.ligand_mpnn_use_side_chain_context,
+                    "ligand_mpnn_cutoff_for_score": config.ligand_mpnn_cutoff_for_score,
+                }
+                result = ToolInstance.dispatch(
+                    "ligandmpnn",
+                    input_dict,
+                    instance=instance,
+                    config=config,
+                )
+                all_seqs.extend(result["sequences"])
+                all_recovery.extend(m["sequence_recovery"] for m in result["metrics"])
+                chunk_interface = [m["ligand_interface_sequence_recovery"] for m in result["metrics"]]
+                if all_interface_recovery is not None:
+                    if any(v is None or (isinstance(v, float) and math.isnan(v)) for v in chunk_interface):
+                        all_interface_recovery = None
+                    else:
+                        all_interface_recovery.extend(chunk_interface)
+                chunk_idx += 1
+                remaining -= chunk  # type: ignore[operator]
         designed_sequences.append(
             LigandMPNNSequences(
                 sequences=all_seqs,

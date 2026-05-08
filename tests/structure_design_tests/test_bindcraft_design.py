@@ -78,6 +78,9 @@ def test_dispatch_payload_carries_user_config_plus_hardcoded_internals(monkeypat
     def fake_dispatch(toolkit, payload, **kwargs):  # type: ignore[no-untyped-def]
         captured["toolkit"] = toolkit
         captured["payload"] = payload
+        # target_pdb is a tempfile that the wrapper cleans up after dispatch returns;
+        # snapshot its content here while it still exists.
+        captured["target_pdb_content"] = Path(payload["target_pdb"]).read_text()
         return {"designs": [], "n_trajectories_run": 0, "n_designs_accepted": 0}
 
     monkeypatch.setattr(
@@ -101,7 +104,10 @@ def test_dispatch_payload_carries_user_config_plus_hardcoded_internals(monkeypat
     assert captured["toolkit"] == "bindcraft"
     payload = captured["payload"]
     assert payload["operation"] == "design"
-    assert payload["target_pdb"] == str(_FIXTURE_PDB)
+    # target_pdb is materialized to a tempfile by the wrapper; assert content shape
+    # rather than the original input path.
+    assert payload["target_pdb"].endswith(".pdb")
+    assert "ATOM" in captured["target_pdb_content"]
     assert payload["binder_lengths"] == [60, 70]
     assert payload["filter_overrides"] == {"Average_pLDDT": {"threshold": 0.5}}
 

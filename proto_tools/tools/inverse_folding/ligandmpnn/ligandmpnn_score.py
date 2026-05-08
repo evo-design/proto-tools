@@ -114,24 +114,25 @@ def run_ligandmpnn_score(
         unit="pair",
         disable=not config.verbose,
     ):
-        result = ToolInstance.dispatch(
-            "ligandmpnn",
-            {
-                "operation": "score",
-                "pdb_contents": pair.structure.structure_pdb,
-                "chain_ids": pair.structure.get_chain_ids(),
-                "sequence": pair.sequence,
-                "seed": seed,
-                "fixed_positions": config.fixed_positions,
-                "device": config.device,
-                "return_logits": config.return_logits,
-                "verbose": config.verbose,
-                "model_type": "ligand_mpnn",
-                "scoring_mode": config.scoring_mode,
-            },
-            instance=instance,
-            config=config,
-        )
+        with pair.structure.temp_file() as pdb_path:
+            result = ToolInstance.dispatch(
+                "ligandmpnn",
+                {
+                    "operation": "score",
+                    "pdb_path": str(pdb_path),
+                    "chain_ids": pair.structure.get_chain_ids(),
+                    "sequence": pair.sequence,
+                    "seed": seed,
+                    "fixed_positions": config.fixed_positions,
+                    "device": config.device,
+                    "return_logits": config.return_logits,
+                    "verbose": config.verbose,
+                    "model_type": "ligand_mpnn",
+                    "scoring_mode": config.scoring_mode,
+                },
+                instance=instance,
+                config=config,
+            )
         scores.append(
             InverseFoldingScoringMetrics(
                 **result["metrics"],

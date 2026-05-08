@@ -210,7 +210,9 @@ class BindCraftInput(BaseToolInput):
     """Target specification for one BindCraft binder-design run.
 
     Attributes:
-        target_pdb (str): Target structure (file path or PDB-format string).
+        target_pdb (Structure): Target structure. Accepts a file path, raw
+            PDB/CIF content string, ``Structure`` object, or a dict in the
+            shape produced by ``Structure.model_dump(mode='json')``.
         target_chain (str): Chain ID(s) of the frozen target (comma-separated for
             multi-chain). Maps to BindCraft's ``chains``.
         target_hotspot_residues (str | None): Comma-separated 1-indexed residue
@@ -224,8 +226,8 @@ class BindCraftInput(BaseToolInput):
             (whichever comes first).
     """
 
-    target_pdb: str = InputField(
-        description="Target structure (file path or PDB-format string).",
+    target_pdb: Structure = InputField(
+        description="Target structure.",
     )
     target_chain: str = InputField(
         default="A",
@@ -826,7 +828,7 @@ class BindCraftOutput(BaseToolOutput):
 def example_input() -> BindCraftInput:
     """Minimal valid input — small target with a single hotspot for one-off sampling."""
     return BindCraftInput(
-        target_pdb=str(_BINDCRAFT_FIXTURE_PDB),
+        target_pdb=Structure.from_file(_BINDCRAFT_FIXTURE_PDB),
         target_chain="A",
         target_hotspot_residues="56",
         binder_lengths=(60, 70),
@@ -867,25 +869,27 @@ def run_bindcraft_design(
     """
     logger.debug("Dispatching BindCraft design pipeline (target_chain=%s)", inputs.target_chain)
 
-    payload: dict[str, Any] = {
-        "operation": "design",
-        "target_pdb": inputs.target_pdb,
-        "target_chain": inputs.target_chain,
-        "target_hotspot_residues": inputs.target_hotspot_residues,
-        "binder_lengths": list(inputs.binder_lengths),
-        "binder_name": inputs.binder_name,
-        "number_of_final_designs": inputs.number_of_final_designs,
-        "advanced_settings": {
-            **{key: getattr(config, key) for key in _USER_FACING_UPSTREAM_KEYS},
-            **_HARDCODED_INTERNAL_SETTINGS,
-        },
-        "filter_overrides": config.filter_overrides,
-        "seed": config.seed,
-        "device": config.device,
-        "verbose": config.verbose,
-    }
+    # Materialize the target Structure to a tempfile for the standalone to read.
+    with inputs.target_pdb.temp_file() as target_pdb_path:
+        payload: dict[str, Any] = {
+            "operation": "design",
+            "target_pdb": str(target_pdb_path),
+            "target_chain": inputs.target_chain,
+            "target_hotspot_residues": inputs.target_hotspot_residues,
+            "binder_lengths": list(inputs.binder_lengths),
+            "binder_name": inputs.binder_name,
+            "number_of_final_designs": inputs.number_of_final_designs,
+            "advanced_settings": {
+                **{key: getattr(config, key) for key in _USER_FACING_UPSTREAM_KEYS},
+                **_HARDCODED_INTERNAL_SETTINGS,
+            },
+            "filter_overrides": config.filter_overrides,
+            "seed": config.seed,
+            "device": config.device,
+            "verbose": config.verbose,
+        }
 
-    result = ToolInstance.dispatch("bindcraft", payload, instance=instance, config=config)
+        result = ToolInstance.dispatch("bindcraft", payload, instance=instance, config=config)
 
     designs: list[BindCraftDesign] = []
     for raw in result["designs"]:

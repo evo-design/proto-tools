@@ -130,22 +130,23 @@ def run_esm_if1_score(
         unit="pair",
         total=len(inputs.sequence_structure_pairs),
     ):
-        input_dict = {
-            "operation": "score",
-            "pdb_contents": pair.structure.structure_pdb,
-            "chain_ids": pair.structure.get_chain_ids(),
-            "sequence": pair.sequence,
-            "seed": config.seed,
-            "device": config.device,
-            "weights_variant": config.weights_variant,
-            "verbose": config.verbose,
-        }
-        result = ToolInstance.dispatch(
-            "esm_if1",
-            input_dict,
-            instance=instance,
-            config=config,
-        )
+        with pair.structure.temp_file() as pdb_path:
+            input_dict = {
+                "operation": "score",
+                "pdb_path": str(pdb_path),
+                "chain_ids": pair.structure.get_chain_ids(),
+                "sequence": pair.sequence,
+                "seed": config.seed,
+                "device": config.device,
+                "weights_variant": config.weights_variant,
+                "verbose": config.verbose,
+            }
+            result = ToolInstance.dispatch(
+                "esm_if1",
+                input_dict,
+                instance=instance,
+                config=config,
+            )
         scores.append(InverseFoldingScoringMetrics(**result["metrics"]))
 
     return ESMIF1ScoringOutput(scores=scores)

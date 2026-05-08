@@ -5,8 +5,6 @@ import json
 import math
 import os
 import sys
-import tempfile
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -57,7 +55,7 @@ class LigandMPNNModel:
 
     def sample(
         self,
-        pdb_structure: str,
+        pdb_path: str,
         chain_ids: list[str],
         batch_size: int,
         temperature: float = DEFAULT_TEMPERATURE,
@@ -74,7 +72,7 @@ class LigandMPNNModel:
         """Sample protein sequences using LigandMPNN.
 
         Args:
-            pdb_structure: Path to PDB file containing the structure.
+            pdb_path: Path to PDB file containing the structure.
             chain_ids: List of chain IDs to design.
             batch_size: Number of sequences to generate.
             temperature: Sampling temperature (default: 0.1).
@@ -109,7 +107,7 @@ class LigandMPNNModel:
         # design constraints in the same input. If fixed_residues is provided, we omit
         # designed_chains - the designable scope is implicitly defined by unfixed residues.
         input_dict = {
-            "structure_path": pdb_structure,
+            "structure_path": pdb_path,
             "name": "design",
             "seed": seed,
             "batch_size": batch_size,
@@ -148,7 +146,7 @@ class LigandMPNNModel:
 
     def score(
         self,
-        pdb_structure: str,
+        pdb_path: str,
         chain_ids: list[str],
         sequence: str,
         fixed_positions: dict[str, list[int]] | None = None,
@@ -180,7 +178,7 @@ class LigandMPNNModel:
             torch.mps.manual_seed(seed)
 
         input_dict = {
-            "structure_path": pdb_structure,
+            "structure_path": pdb_path,
             "name": "score",
             "seed": seed,
             "batch_size": 1,
@@ -336,47 +334,38 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             checkpoint_path=input_dict.get("checkpoint_path"),
         )
 
-    # Handle pdb_contents -> temp file
-    pdb_contents = input_dict.get("pdb_contents")
-    pdb_structure = input_dict.get("pdb_structure")
-
-    with tempfile.TemporaryDirectory() as temp_dir:
-        if pdb_contents and not pdb_structure:
-            pdb_path = Path(temp_dir) / "input.pdb"
-            pdb_path.write_text(pdb_contents)
-            pdb_structure = str(pdb_path)
-
-        operation = input_dict["operation"]
-        if operation == "sample":
-            return _model.sample(
-                pdb_structure=pdb_structure,  # type: ignore[arg-type]
-                chain_ids=input_dict["chain_ids"],
-                batch_size=input_dict["batch_size"],
-                temperature=input_dict["temperature"],
-                fixed_positions=input_dict.get("fixed_positions"),
-                excluded_amino_acids=input_dict.get("excluded_amino_acids"),
-                seed=input_dict["seed"],
-                device=input_dict["device"],
-                verbose=input_dict["verbose"],
-                model_type=input_dict["model_type"],
-                ligand_mpnn_use_atom_context=input_dict["ligand_mpnn_use_atom_context"],
-                ligand_mpnn_use_side_chain_context=input_dict["ligand_mpnn_use_side_chain_context"],
-                ligand_mpnn_cutoff_for_score=input_dict["ligand_mpnn_cutoff_for_score"],
-            )
-        if operation == "score":
-            return _model.score(
-                pdb_structure=pdb_structure,  # type: ignore[arg-type]
-                chain_ids=input_dict["chain_ids"],
-                sequence=input_dict["sequence"],
-                fixed_positions=input_dict.get("fixed_positions"),
-                seed=input_dict["seed"],
-                device=input_dict["device"],
-                verbose=input_dict["verbose"],
-                model_type=input_dict["model_type"],
-                return_logits=input_dict["return_logits"],
-                scoring_mode=input_dict["scoring_mode"],
-            )
-        raise ValueError(f"ligandmpnn: unknown operation {operation!r}; valid: ['sample', 'score']")
+    pdb_path = input_dict["pdb_path"]
+    operation = input_dict["operation"]
+    if operation == "sample":
+        return _model.sample(
+            pdb_path=pdb_path,
+            chain_ids=input_dict["chain_ids"],
+            batch_size=input_dict["batch_size"],
+            temperature=input_dict["temperature"],
+            fixed_positions=input_dict.get("fixed_positions"),
+            excluded_amino_acids=input_dict.get("excluded_amino_acids"),
+            seed=input_dict["seed"],
+            device=input_dict["device"],
+            verbose=input_dict["verbose"],
+            model_type=input_dict["model_type"],
+            ligand_mpnn_use_atom_context=input_dict["ligand_mpnn_use_atom_context"],
+            ligand_mpnn_use_side_chain_context=input_dict["ligand_mpnn_use_side_chain_context"],
+            ligand_mpnn_cutoff_for_score=input_dict["ligand_mpnn_cutoff_for_score"],
+        )
+    if operation == "score":
+        return _model.score(
+            pdb_path=pdb_path,
+            chain_ids=input_dict["chain_ids"],
+            sequence=input_dict["sequence"],
+            fixed_positions=input_dict.get("fixed_positions"),
+            seed=input_dict["seed"],
+            device=input_dict["device"],
+            verbose=input_dict["verbose"],
+            model_type=input_dict["model_type"],
+            return_logits=input_dict["return_logits"],
+            scoring_mode=input_dict["scoring_mode"],
+        )
+    raise ValueError(f"ligandmpnn: unknown operation {operation!r}; valid: ['sample', 'score']")
 
 
 def to_device(device: str) -> dict[str, Any]:

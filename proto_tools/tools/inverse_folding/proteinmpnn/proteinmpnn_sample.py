@@ -152,34 +152,36 @@ def run_proteinmpnn_sample(
         all_seqs, all_perp, all_seq_recovery = [], [], []
         remaining = config.num_sequences_per_structure
         chunk_idx = 0
-        while remaining > 0:
-            chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
-            input_dict = {
-                "operation": "sample",
-                "pdb_contents": inp.structure_pdb,
-                "chain_ids": inp.chain_ids_to_redesign,
-                "batch_size": chunk,
-                "temperature": config.temperature,
-                "fixed_positions": inp.fixed_positions.chains if inp.fixed_positions is not None else None,
-                "excluded_amino_acids": config.excluded_amino_acids,
-                "seed": base_seed + chunk_idx,
-                "device": config.device,
-                "model_choice": config.model_choice,
-                "verbose": config.verbose,
-                "return_logits": False,
-                "backbone_noise": config.backbone_noise,
-            }
-            result = ToolInstance.dispatch(
-                "proteinmpnn",
-                input_dict,
-                instance=instance,
-                config=config,
-            )
-            all_seqs.extend(result["seq"])
-            all_perp.extend(np.exp(result["score"]).tolist())
-            all_seq_recovery.extend(result["seqid"])
-            chunk_idx += 1
-            remaining -= chunk  # type: ignore[operator]
+        # Materialize the Structure to a tempfile once per input — reused across chunks.
+        with inp.structure.temp_file() as pdb_path:
+            while remaining > 0:
+                chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
+                input_dict = {
+                    "operation": "sample",
+                    "pdb_path": str(pdb_path),
+                    "chain_ids": inp.chain_ids_to_redesign,
+                    "batch_size": chunk,
+                    "temperature": config.temperature,
+                    "fixed_positions": inp.fixed_positions.chains if inp.fixed_positions is not None else None,
+                    "excluded_amino_acids": config.excluded_amino_acids,
+                    "seed": base_seed + chunk_idx,
+                    "device": config.device,
+                    "model_choice": config.model_choice,
+                    "verbose": config.verbose,
+                    "return_logits": False,
+                    "backbone_noise": config.backbone_noise,
+                }
+                result = ToolInstance.dispatch(
+                    "proteinmpnn",
+                    input_dict,
+                    instance=instance,
+                    config=config,
+                )
+                all_seqs.extend(result["seq"])
+                all_perp.extend(np.exp(result["score"]).tolist())
+                all_seq_recovery.extend(result["seqid"])
+                chunk_idx += 1
+                remaining -= chunk  # type: ignore[operator]
         designed_sequences.append(
             ProteinMPNNSequences(
                 sequences=all_seqs,

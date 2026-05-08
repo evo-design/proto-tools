@@ -133,30 +133,32 @@ def run_esm_if1_sample(
         all_seqs, all_lls = [], []
         remaining = config.num_sequences_per_structure
         chunk_idx = 0
-        while remaining > 0:
-            chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
-            input_dict = {
-                "operation": "sample",
-                "pdb_contents": inp.structure_pdb,
-                "chain_ids": inp.chain_ids_to_redesign,
-                "batch_size": chunk,
-                "temperature": config.temperature,
-                "seed": base_seed + chunk_idx,
-                "device": config.device,
-                "weights_variant": config.weights_variant,
-                "verbose": config.verbose,
-                "fixed_positions": inp.fixed_positions.chains if inp.fixed_positions is not None else None,
-            }
-            result = ToolInstance.dispatch(
-                "esm_if1",
-                input_dict,
-                instance=instance,
-                config=config,
-            )
-            all_seqs.extend(result["sequences"])
-            all_lls.extend(result["log_likelihoods"])
-            chunk_idx += 1
-            remaining -= chunk  # type: ignore[operator]
+        # Materialize the Structure to a tempfile once per input — reused across chunks.
+        with inp.structure.temp_file() as pdb_path:
+            while remaining > 0:
+                chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
+                input_dict = {
+                    "operation": "sample",
+                    "pdb_path": str(pdb_path),
+                    "chain_ids": inp.chain_ids_to_redesign,
+                    "batch_size": chunk,
+                    "temperature": config.temperature,
+                    "seed": base_seed + chunk_idx,
+                    "device": config.device,
+                    "weights_variant": config.weights_variant,
+                    "verbose": config.verbose,
+                    "fixed_positions": inp.fixed_positions.chains if inp.fixed_positions is not None else None,
+                }
+                result = ToolInstance.dispatch(
+                    "esm_if1",
+                    input_dict,
+                    instance=instance,
+                    config=config,
+                )
+                all_seqs.extend(result["sequences"])
+                all_lls.extend(result["log_likelihoods"])
+                chunk_idx += 1
+                remaining -= chunk  # type: ignore[operator]
         designed_sequences.append(
             ESMIF1Sequences(
                 sequences=all_seqs,

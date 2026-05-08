@@ -220,40 +220,42 @@ def run_fampnn_sample(
         all_seqs, all_pdbs, all_psce = [], [], []
         remaining = config.num_sequences_per_structure
         chunk_idx = 0
-        while remaining > 0:
-            chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
-            input_dict = {
-                "operation": "sample",
-                "pdb_contents": inp.structure_pdb,
-                "chain_ids": inp.chain_ids_to_redesign,
-                "num_sequences": chunk,
-                "temperature": config.temperature,
-                "num_steps": config.num_steps,
-                "seq_only": config.seq_only,
-                "repack_last": config.repack_last,
-                "psce_threshold": config.psce_threshold,
-                "scn_diffusion_steps": config.scn_diffusion_steps,
-                "scn_step_scale": config.scn_step_scale,
-                "seed": base_seed + chunk_idx,
-                "model_variant": config.model_variant,
-                "device": config.device,
-                "verbose": config.verbose,
-                "fixed_positions": inp.fixed_positions.chains if inp.fixed_positions is not None else None,
-                "fixed_sidechain_positions": (
-                    inp.fixed_sidechain_positions.chains if inp.fixed_sidechain_positions is not None else None
-                ),
-            }
-            result = ToolInstance.dispatch(
-                "fampnn",
-                input_dict,
-                instance=instance,
-                config=config,
-            )
-            all_seqs.extend(result["sequences"])
-            all_pdbs.extend(result["pdb_strings"])
-            all_psce.extend(result["psce"])
-            chunk_idx += 1
-            remaining -= chunk  # type: ignore[operator]
+        # Materialize the Structure to a tempfile once per input — reused across chunks.
+        with inp.structure.temp_file() as pdb_path:
+            while remaining > 0:
+                chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
+                input_dict = {
+                    "operation": "sample",
+                    "pdb_path": str(pdb_path),
+                    "chain_ids": inp.chain_ids_to_redesign,
+                    "num_sequences": chunk,
+                    "temperature": config.temperature,
+                    "num_steps": config.num_steps,
+                    "seq_only": config.seq_only,
+                    "repack_last": config.repack_last,
+                    "psce_threshold": config.psce_threshold,
+                    "scn_diffusion_steps": config.scn_diffusion_steps,
+                    "scn_step_scale": config.scn_step_scale,
+                    "seed": base_seed + chunk_idx,
+                    "model_variant": config.model_variant,
+                    "device": config.device,
+                    "verbose": config.verbose,
+                    "fixed_positions": inp.fixed_positions.chains if inp.fixed_positions is not None else None,
+                    "fixed_sidechain_positions": (
+                        inp.fixed_sidechain_positions.chains if inp.fixed_sidechain_positions is not None else None
+                    ),
+                }
+                result = ToolInstance.dispatch(
+                    "fampnn",
+                    input_dict,
+                    instance=instance,
+                    config=config,
+                )
+                all_seqs.extend(result["sequences"])
+                all_pdbs.extend(result["pdb_strings"])
+                all_psce.extend(result["psce"])
+                chunk_idx += 1
+                remaining -= chunk  # type: ignore[operator]
 
         designed_sequences.append(
             FAMPNNSequences(

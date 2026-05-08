@@ -198,24 +198,25 @@ def run_proteinmpnn_score(
         unit="pair",
         disable=not config.verbose,
     ):
-        input_dict = {
-            "operation": "score",
-            "pdb_contents": sequence_structure_pair.structure.structure_pdb,
-            "chain_ids": sequence_structure_pair.structure.get_chain_ids(),
-            "sequence": sequence_structure_pair.sequence,
-            "seed": seed,
-            "fixed_positions": config.fixed_positions,
-            "device": config.device,
-            "model_choice": config.model_choice,
-            "return_logits": config.return_logits,
-            "verbose": config.verbose,
-        }
-        result = ToolInstance.dispatch(
-            "proteinmpnn",
-            input_dict,
-            instance=instance,
-            config=config,
-        )
+        with sequence_structure_pair.structure.temp_file() as pdb_path:
+            input_dict = {
+                "operation": "score",
+                "pdb_path": str(pdb_path),
+                "chain_ids": sequence_structure_pair.structure.get_chain_ids(),
+                "sequence": sequence_structure_pair.sequence,
+                "seed": seed,
+                "fixed_positions": config.fixed_positions,
+                "device": config.device,
+                "model_choice": config.model_choice,
+                "return_logits": config.return_logits,
+                "verbose": config.verbose,
+            }
+            result = ToolInstance.dispatch(
+                "proteinmpnn",
+                input_dict,
+                instance=instance,
+                config=config,
+            )
         scores.append(
             InverseFoldingScoringMetrics(
                 **result["metrics"],

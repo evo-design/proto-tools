@@ -6,6 +6,7 @@ Tests for the Structure entity.
 import warnings
 from io import StringIO
 from pathlib import Path
+from typing import Any
 
 import gemmi
 import numpy as np
@@ -239,6 +240,49 @@ def test_write_and_round_trip(protein_from_pdb_file, tmp_path, write_method, suf
     content = out.read_text()
     assert content_check(content)
     Structure.from_file(out)
+
+
+@pytest.mark.parametrize(
+    "file_format,suffix,content_check",
+    [
+        ("pdb", ".pdb", lambda c: "ATOM" in c),
+        ("cif", ".cif", lambda c: "data_" in c or "_atom_site" in c),
+    ],
+)
+def test_temp_file_yields_path_to_materialized_content(protein_from_pdb_file, file_format, suffix, content_check):
+    with protein_from_pdb_file.temp_file(file_format) as path:
+        assert path.exists()
+        assert path.suffix == suffix
+        content_on_disk = path.read_text()
+        assert content_check(content_on_disk)
+        # Round-trip: the materialized file should parse back into a Structure.
+        Structure.from_file(path)
+        # Capture the path so we can check post-context cleanup below.
+        materialized = path
+    assert not materialized.exists()
+    assert not materialized.parent.exists()
+
+
+def test_temp_file_default_format_is_pdb(protein_from_pdb_file):
+    with protein_from_pdb_file.temp_file() as path:
+        assert path.suffix == ".pdb"
+        assert "ATOM" in path.read_text()
+
+
+def test_temp_file_rejects_unknown_format(protein_from_pdb_file):
+    with pytest.raises(ValueError, match="Unsupported file_format"):
+        with protein_from_pdb_file.temp_file("mmcif"):  # type: ignore[arg-type]
+            pass
+
+
+def test_temp_file_cleans_up_on_exception(protein_from_pdb_file):
+    captured: dict[str, Any] = {}
+    with pytest.raises(RuntimeError, match="boom"):
+        with protein_from_pdb_file.temp_file() as path:
+            captured["path"] = path
+            assert path.exists()
+            raise RuntimeError("boom")
+    assert not captured["path"].exists()
 
 
 # ── Sequence extraction ───────────────────────────────────────────────────────

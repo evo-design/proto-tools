@@ -226,25 +226,26 @@ def run_fampnn_score(
         unit="structure",
         disable=not config.verbose,
     ):
-        input_dict = {
-            "operation": "score_mutations",
-            "pdb_contents": inp.structure.structure_pdb,
-            "mutations": inp.mutations,
-            "batch_size": config.batch_size,
-            "seq_only": config.seq_only,
-            "scn_diffusion_steps": config.scn_diffusion_steps,
-            "scn_step_scale": config.scn_step_scale,
-            "seed": config.seed,
-            "model_variant": config.model_variant,
-            "device": config.device,
-            "verbose": config.verbose,
-        }
-        result = ToolInstance.dispatch(
-            "fampnn",
-            input_dict,
-            instance=instance,
-            config=config,
-        )
+        with inp.structure.temp_file() as pdb_path:
+            input_dict = {
+                "operation": "score_mutations",
+                "pdb_path": str(pdb_path),
+                "mutations": inp.mutations,
+                "batch_size": config.batch_size,
+                "seq_only": config.seq_only,
+                "scn_diffusion_steps": config.scn_diffusion_steps,
+                "scn_step_scale": config.scn_step_scale,
+                "seed": config.seed,
+                "model_variant": config.model_variant,
+                "device": config.device,
+                "verbose": config.verbose,
+            }
+            result = ToolInstance.dispatch(
+                "fampnn",
+                input_dict,
+                instance=instance,
+                config=config,
+            )
         results.append(
             MutationScoreResult(
                 mutations=result["mutations"],

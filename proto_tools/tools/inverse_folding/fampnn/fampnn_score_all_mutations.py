@@ -184,21 +184,22 @@ def run_fampnn_score_all_mutations(
         unit="structure",
         disable=not config.verbose,
     ):
-        input_dict = {
-            "operation": "score_all_mutations",
-            "pdb_contents": structure.structure_pdb,
-            "batch_size": config.batch_size,
-            "seed": config.seed,
-            "model_variant": config.model_variant,
-            "device": config.device,
-            "verbose": config.verbose,
-        }
-        result = ToolInstance.dispatch(
-            "fampnn",
-            input_dict,
-            instance=instance,
-            config=config,
-        )
+        with structure.temp_file() as pdb_path:
+            input_dict = {
+                "operation": "score_all_mutations",
+                "pdb_path": str(pdb_path),
+                "batch_size": config.batch_size,
+                "seed": config.seed,
+                "model_variant": config.model_variant,
+                "device": config.device,
+                "verbose": config.verbose,
+            }
+            result = ToolInstance.dispatch(
+                "fampnn",
+                input_dict,
+                instance=instance,
+                config=config,
+            )
         results.append(AllMutationsScoreResult(scores=result["scores"]))
 
     return FAMPNNScoreAllMutationsOutput(results=results)

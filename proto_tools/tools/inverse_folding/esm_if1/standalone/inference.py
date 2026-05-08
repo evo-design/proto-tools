@@ -5,8 +5,6 @@ import json
 import math
 import os
 import sys
-import tempfile
-from pathlib import Path
 from typing import Any
 
 import torch
@@ -30,7 +28,7 @@ class ESMIF1Model:
 
     def _load_structure(
         self,
-        pdb_structure: str,
+        pdb_path: str,
         chain_ids: list[str],
     ) -> Any:
         """Load structure and extract coords for the complex.
@@ -42,7 +40,7 @@ class ESMIF1Model:
         import esm.inverse_folding.multichain_util
         import esm.inverse_folding.util
 
-        structure = esm.inverse_folding.util.load_structure(pdb_structure)
+        structure = esm.inverse_folding.util.load_structure(pdb_path)
         structure = biotite.structure.array([atom for atom in structure if not atom.hetero])
         all_coords, all_native_seqs = esm.inverse_folding.multichain_util.extract_coords_from_complex(structure)
         target_chain = chain_ids[0] if chain_ids else next(iter(all_coords.keys()))
@@ -107,7 +105,7 @@ class ESMIF1Model:
 
     def sample(
         self,
-        pdb_structure: str,
+        pdb_path: str,
         chain_ids: list[str],
         batch_size: int,
         temperature: float = DEFAULT_TEMPERATURE,
@@ -120,7 +118,7 @@ class ESMIF1Model:
         """Sample sequences using ESM-IF autoregressive decoder.
 
         Args:
-            pdb_structure: Path to PDB file containing the structure.
+            pdb_path: Path to PDB file containing the structure.
             chain_ids: List of chain IDs. First chain is the target for design.
             batch_size: Number of sequences to generate.
             temperature: Sampling temperature (default: 0.1).
@@ -141,7 +139,7 @@ class ESMIF1Model:
 
         import esm.inverse_folding.multichain_util
 
-        all_coords, all_native_seqs, target_chain = self._load_structure(pdb_structure, chain_ids)
+        all_coords, all_native_seqs, target_chain = self._load_structure(pdb_path, chain_ids)
 
         sequences = []
         log_likelihoods = []
@@ -182,7 +180,7 @@ class ESMIF1Model:
 
     def score(
         self,
-        pdb_structure: str,
+        pdb_path: str,
         chain_ids: list[str],
         sequence: str,
         seed: int | None = None,
@@ -197,7 +195,7 @@ class ESMIF1Model:
         --no_mutations path, equivalent to LigandMPNN default scoring).
 
         Args:
-            pdb_structure: Path to PDB file containing the structure.
+            pdb_path: Path to PDB file containing the structure.
             chain_ids: List of chain IDs. First chain is the target for scoring.
             sequence: Protein sequence to score.
             seed: Random seed.
@@ -215,7 +213,7 @@ class ESMIF1Model:
 
         import esm.inverse_folding.multichain_util
 
-        all_coords, _all_native_seqs, target_chain = self._load_structure(pdb_structure, chain_ids)
+        all_coords, _all_native_seqs, target_chain = self._load_structure(pdb_path, chain_ids)
 
         set_torch_seed(seed)
         # Score the sequence in the complex context
@@ -317,40 +315,31 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if _model is None:
         _model = ESMIF1Model()
 
-    # Handle pdb_contents -> temp file
-    pdb_contents = input_dict.get("pdb_contents")
-    pdb_structure = input_dict.get("pdb_structure")
-
-    with tempfile.TemporaryDirectory() as temp_dir:
-        if pdb_contents and not pdb_structure:
-            pdb_path = Path(temp_dir) / "input.pdb"
-            pdb_path.write_text(pdb_contents)
-            pdb_structure = str(pdb_path)
-
-        operation = input_dict["operation"]
-        if operation == "sample":
-            return _model.sample(
-                pdb_structure=pdb_structure,  # type: ignore[arg-type]
-                chain_ids=input_dict["chain_ids"],
-                batch_size=input_dict["batch_size"],
-                temperature=input_dict["temperature"],
-                seed=input_dict["seed"],
-                device=input_dict["device"],
-                weights_variant=input_dict["weights_variant"],
-                verbose=input_dict["verbose"],
-                fixed_positions=input_dict.get("fixed_positions"),
-            )
-        if operation == "score":
-            return _model.score(
-                pdb_structure=pdb_structure,  # type: ignore[arg-type]
-                chain_ids=input_dict["chain_ids"],
-                sequence=input_dict["sequence"],
-                seed=input_dict["seed"],
-                device=input_dict["device"],
-                weights_variant=input_dict["weights_variant"],
-                verbose=input_dict["verbose"],
-            )
-        raise ValueError(f"esm-if1: unknown operation {operation!r}; valid: ['sample', 'score']")
+    pdb_path = input_dict["pdb_path"]
+    operation = input_dict["operation"]
+    if operation == "sample":
+        return _model.sample(
+            pdb_path=pdb_path,
+            chain_ids=input_dict["chain_ids"],
+            batch_size=input_dict["batch_size"],
+            temperature=input_dict["temperature"],
+            seed=input_dict["seed"],
+            device=input_dict["device"],
+            weights_variant=input_dict["weights_variant"],
+            verbose=input_dict["verbose"],
+            fixed_positions=input_dict.get("fixed_positions"),
+        )
+    if operation == "score":
+        return _model.score(
+            pdb_path=pdb_path,
+            chain_ids=input_dict["chain_ids"],
+            sequence=input_dict["sequence"],
+            seed=input_dict["seed"],
+            device=input_dict["device"],
+            weights_variant=input_dict["weights_variant"],
+            verbose=input_dict["verbose"],
+        )
+    raise ValueError(f"esm-if1: unknown operation {operation!r}; valid: ['sample', 'score']")
 
 
 def to_device(device: str) -> dict[str, Any]:
