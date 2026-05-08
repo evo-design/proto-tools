@@ -18,6 +18,15 @@ from proto_tools.tools.database_retrieval.alphamissense import (
     run_alphamissense_fetch,
 )
 
+# CCD lookup
+from proto_tools.tools.database_retrieval.ccd_lookup import (
+    CcdEnrichment,
+    CcdLookupConfig,
+    CcdLookupInput,
+    CcdLookupOutput,
+    run_ccd_lookup,
+)
+
 # Ensembl REST tools (lookup / sequence / overlap / xrefs + VEP)
 from proto_tools.tools.database_retrieval.ensembl import (
     EnsemblAssembly,
@@ -142,6 +151,12 @@ __all__ = [
     "AlphaMissenseFetchOutput",
     "AlphaMissensePrediction",
     "run_alphamissense_fetch",
+    # CCD lookup
+    "CcdEnrichment",
+    "CcdLookupConfig",
+    "CcdLookupInput",
+    "CcdLookupOutput",
+    "run_ccd_lookup",
     # Ensembl REST tools (lookup / sequence / overlap / xrefs + VEP)
     "EnsemblAssembly",
     "EnsemblExon",

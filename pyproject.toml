@@ -157,7 +157,12 @@ strict = true
 warn_unreachable = true
 enable_error_code = ["redundant-expr", "truthy-bool", "ignore-without-code", "deprecated"]
 explicit_package_bases = true
-exclude = [".*standalone/standalone_helpers\\.py$"]
+exclude = [
+    ".*standalone/standalone_helpers\\.py$",
+    # ccd_lookup standalone uses rdkit/pdbeccdutils/gemmi (only available in
+    # the tool's micromamba env); their stubs are incomplete or missing.
+    ".*ccd_lookup/standalone/run\\.py$",
+]
 
 [[tool.mypy.overrides]]
 module = [
@@ -181,6 +186,9 @@ module = [
     "pyrodigal.*",
     "mdtraj.*",
     "RNA.*",
+    "rdkit.*",
+    "pdbeccdutils.*",
+    "gemmi.*",
     # Tool-specific model packages (installed in standalone envs, not on PyPI)
     "standalone_helpers.*",
     "ablang2.*",

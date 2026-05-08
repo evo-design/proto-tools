@@ -1,0 +1,11 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/PDBeurope/ccdutils/blob/master/LICENSE
+weights:
+  spdx: CC0-1.0
+  url: https://www.wwpdb.org/about/usage-policies
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: pdbeccdutils (PDBeurope/ccdutils) is Apache-2.0. The bundled wwPDB Chemical Component Dictionary data (`components.cif.gz`, ~70 MB) is dedicated to the public domain under CC0 1.0 per the wwPDB usage policies; attribution to the wwPDB is encouraged but not required. Optional UniChem cross-references and RCSB PDB usage queries hit external public APIs (EMBL-EBI UniChem, RCSB Search) whose own usage policies apply at request time.
+last_updated: '2026-05-08'

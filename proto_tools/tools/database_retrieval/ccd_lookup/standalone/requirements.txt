@@ -1,0 +1,7 @@
+pdbeccdutils>=0.8.5
+gemmi>=0.6.5
+rdkit>=2023.9.6
+Pillow>=10.0.0
+scipy>=1.11.0
+networkx>=3.1
+requests>=2.31.0
