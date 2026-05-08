@@ -97,6 +97,10 @@ Regardless of either flag, the combined output is always written to `<env_path>/
 
 Both variables default to off — setup output stays quiet unless a caller opts in. See `tests/tool_infra_tests/test_tool_instance.py::test_run_setup_script_*` for the behavior contract.
 
+## Conda Environment Registration
+
+Proto-tools writes `register_envs: false` to `PROTO_HOME/.micromamba/condarc` so micromamba-managed tool environments do not appear in the user's global `conda env list`. During micromamba setup, `ToolInstance` also removes existing registry entries under the current `PROTO_HOME/proto_tool_envs/` and `PROTO_HOME/.foundation_env/` roots from `~/.conda/environments.txt`; unrelated conda environments are left untouched.
+
 ## env_vars.txt
 
 Each tool's `standalone/env_vars.txt` supports two sections:

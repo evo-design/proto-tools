@@ -1321,6 +1321,86 @@ class ToolInstance:
         return get_proto_home() / ".micromamba"
 
     @staticmethod
+    def _configure_micromamba_root(mamba_root: Path) -> None:
+        """Configure proto-tools' private micromamba root."""
+        condarc = mamba_root / "condarc"
+        desired = "register_envs: false"
+        try:
+            mamba_root.mkdir(parents=True, exist_ok=True)
+            if condarc.exists():
+                existing = condarc.read_text()
+                lines = existing.splitlines()
+                found = False
+                updated_lines = []
+                for line in lines:
+                    if line.lstrip().startswith("register_envs:"):
+                        updated_lines.append(desired)
+                        found = True
+                    else:
+                        updated_lines.append(line)
+                if not found:
+                    updated_lines.append(desired)
+                content = "\n".join(updated_lines) + "\n"
+            else:
+                existing = ""
+                content = f"{desired}\n"
+
+            if content != existing:
+                condarc.write_text(content)
+        except OSError as e:
+            logger.warning("Could not configure micromamba root at %s: %s", mamba_root, e)
+
+    @staticmethod
+    def _is_managed_env_registration(path: Path, managed_roots: tuple[Path, ...]) -> bool:
+        """Return whether ``path`` is under a proto-tools managed env root."""
+        try:
+            resolved = path.expanduser().resolve(strict=False)
+        except OSError:
+            return False
+        return any(resolved == root or root in resolved.parents for root in managed_roots)
+
+    @staticmethod
+    def _cleanup_registered_micromamba_envs() -> None:
+        """Remove proto-tools managed envs from conda's global registry."""
+        registry = Path.home() / ".conda" / "environments.txt"
+        if not registry.exists():
+            return
+
+        managed_roots = (
+            ToolInstance._get_tool_envs_root().resolve(strict=False),
+            ToolInstance._get_foundation_env_path().resolve(strict=False),
+        )
+        try:
+            lines = registry.read_text().splitlines(keepends=True)
+        except OSError as e:
+            logger.warning("Could not read conda environment registry at %s: %s", registry, e)
+            return
+
+        kept = []
+        removed = 0
+        for line in lines:
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#"):
+                env_path = Path(stripped)
+                if ToolInstance._is_managed_env_registration(env_path, managed_roots):
+                    removed += 1
+                    continue
+            kept.append(line)
+
+        if removed == 0:
+            return
+
+        tmp_registry = registry.with_name(f"{registry.name}.{os.getpid()}.tmp")
+        try:
+            tmp_registry.write_text("".join(kept))
+            tmp_registry.replace(registry)
+            logger.info("Removed %d proto-tools env registrations from %s", removed, registry)
+        except OSError as e:
+            logger.warning("Could not update conda environment registry at %s: %s", registry, e)
+            with suppress(OSError):
+                tmp_registry.unlink()
+
+    @staticmethod
     def _ensure_micromamba() -> Path:
         """Ensure micromamba is installed, download if missing.
 
@@ -1334,6 +1414,8 @@ class ToolInstance:
         mamba_bin = mamba_root / "bin" / "micromamba"
 
         if mamba_bin.exists():
+            ToolInstance._configure_micromamba_root(mamba_root)
+            ToolInstance._cleanup_registered_micromamba_envs()
             return mamba_bin
 
         # File lock prevents concurrent downloads from parallel processes
@@ -1343,6 +1425,8 @@ class ToolInstance:
         lock = FileLock(mamba_root / ".install.lock", timeout=300)
         with lock:
             # Re-check after acquiring lock - another process may have installed it
+            ToolInstance._configure_micromamba_root(mamba_root)
+            ToolInstance._cleanup_registered_micromamba_envs()
             if mamba_bin.exists():
                 return mamba_bin
 
