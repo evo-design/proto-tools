@@ -347,20 +347,6 @@ def test_output_export_invalid_format(tmp_path):
         output._export_output(tmp_path / "results", "xlsx")
 
 
-# ── Create BLAST DB validation ─────────────────────────────────────────────
-
-
-def test_create_db_input_validates_path(tmp_path):
-    fasta = tmp_path / "test.fasta"
-    fasta.write_text(">s1\nATG\n")
-    assert CreateBlastDbInput(fasta=str(fasta)).fasta == str(fasta)
-
-
-def test_create_db_input_rejects_missing_file():
-    with pytest.raises(ValueError, match="FASTA file not found"):
-        CreateBlastDbInput(fasta="/nonexistent/file.fasta")
-
-
 # ---------------------------------------------------------------------------
 # Integration tests
 # ---------------------------------------------------------------------------

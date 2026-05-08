@@ -56,16 +56,6 @@ def test_hmmsearch_input_list_sequences():
     assert inputs.sequences == sequence_list
 
 
-def test_hmmsearch_input_missing_hmm_file():
-    with pytest.raises(ValueError, match="HMM file not found"):
-        PyHmmsearchInput(hmm="/nonexistent/test.hmm", sequences=SAMPLE_SEQUENCES)
-
-
-def test_hmmsearch_input_empty_hmm_path():
-    with pytest.raises(ValueError, match="HMM path is not a file"):
-        PyHmmsearchInput(hmm="", sequences=SAMPLE_SEQUENCES)
-
-
 def test_hmmsearch_input_empty_sequences():
     with pytest.raises(ValueError, match="At least one sequence is required"):
         PyHmmsearchInput(hmm=str(TEST_HMM_FILE), sequences=[])

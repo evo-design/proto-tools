@@ -6,8 +6,6 @@ PyHMMER hmmscan tool: search protein sequences against an HMM database.
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import field_validator
-
 from proto_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
     PyHmmerConfig,
     PyHmmerInput,
@@ -40,17 +38,6 @@ class PyHmmscanInput(PyHmmerInput):
     """
 
     hmm_db: str | Path = InputField(description="Path to HMM database file")
-
-    @field_validator("hmm_db", mode="before")
-    @classmethod
-    def validate_hmm_db_file(cls, value: str | Path) -> str:
-        """Validate HMM database file exists and return path as string."""
-        hmm_db_path = Path(value)
-        if not hmm_db_path.exists():
-            raise ValueError(f"HMM database file not found: {value}")
-        if not hmm_db_path.is_file():
-            raise ValueError(f"HMM database path is not a file: {value}")
-        return str(hmm_db_path)
 
 
 # Output:
