@@ -9,7 +9,7 @@ Closes [#543](https://github.com/proto-bio/proto-tools/issues/543) (paired MSA s
 `colabfold-search` has three load-bearing limitations:
 
 1. **Protein only.** AF3 RNA inference is blocked — no path to pull RNA MSAs from `rnacentral` / `rfam` / `nt`.
-2. **Hardcoded DB assumptions.** Paths like `CHIMERA_COLABFOLD_DB_LOCATION = "/large_storage/hielab/brk/databases/colabfold"` and a single `database_name` field. No on-demand download, no platform portability, no way for a structure predictor to declare which DB(s) it wants.
+2. **Hardcoded DB assumptions.** Cluster-specific absolute paths baked into module-level constants and a single `database_name` field. No on-demand download, no platform portability, no way for a structure predictor to declare which DB(s) it wants.
 3. **Unpaired only.** Multimer predictors (AF3, Boltz-2, Chai-1, Protenix) want paired MSAs for interface coevolution signal; `colabfold-search` cannot produce them. #543's WIP branch proves out the surface but leaves the local GPU path + predictor plumbing open.
 
 All three are one design away from each other: a **dataset registry** that holds per-dataset metadata (molecule type, URLs, index recipe, pairing support, MMseqs2 flags) + a **generalized tool** that takes a registry key and produces grouped paired/unpaired MSAs.
@@ -137,7 +137,7 @@ The registry should hold every database any consumer might want — keeping thin
 
 | Name | Type | Pairing | Source | Size (FASTA / padded) |
 |---|---|---|---|---|
-| `uniref90-2022-05` | protein | (templates only) | `gs://alphafold-databases/v3.0` or HF `RomeroLab-Duke/af3-mmseqs-db` | ~70 GB / ~120 GB |
+| `uniref90-2022-05` | protein | (templates only) | HF `RomeroLab-Duke/af3-mmseqs-db` (also published by DeepMind in the AF3 release) | ~70 GB / ~120 GB |
 | `mgnify-2022-05` | protein | ✗ | same | ~60 GB / ~110 GB |
 | `small-bfd` | protein | ✗ | same | ~14 GB / ~25 GB |
 | `uniprot-2021-04` | protein | ✓ (paired MSA) | same | ~95 GB / ~165 GB |
@@ -149,7 +149,7 @@ Full BFD (~270 GB / ~1.8 TB) is intentionally **not** in the launch set: AF3, Al
 
 | Name | Type | Source | Size (FASTA / indexed) |
 |---|---|---|---|
-| `rnacentral-active-90-80` | rna | AlphaFast HF / AF3 GCS | ~30 GB / ~30 GB |
+| `rnacentral-active-90-80` | rna | AlphaFast HF mirror | ~30 GB / ~30 GB |
 | `rfam-14-9-90-80` | rna | same | tiny / tiny |
 | `nt-rna-2023-02-23-90-80` | dna→rna | same | ~30 GB / ~30 GB |
 
@@ -161,9 +161,9 @@ Not all entries materialize at launch — each is just a `DatasetEntry` literal 
 
 ## Bulk Provisioning
 
-The primary audience is **end users** who want to pre-fetch one or several datasets instead of waiting on a ~2-hour lazy download the first time they run a structure predictor. The *same* entrypoint is what our Modal deployment (planned) will use during image build — serverless containers cannot do a 100 GB lazy download at cold start, but the volume-build step is just the user CLI invoked from a Modal image recipe. One code path, two consumers. CI cache-warmup jobs are the third natural consumer.
+The primary audience is **end users** who want to pre-fetch one or several datasets instead of waiting on a ~2-hour lazy download the first time they run a structure predictor. The *same* entrypoint is what container-based deployments use during image build — serverless containers cannot do a 100 GB lazy download at cold start, but the volume-build step is just the user CLI invoked from the deployment's image recipe. One code path, two consumers. CI cache-warmup jobs are the third natural consumer.
 
-**Interface**: a Python CLI that wraps `DatasetManager.ensure()` for one or many entries, exposed as both a console script (`proto-tools provision …`) for users and an importable function (`proto_tools.tools.sequence_alignment.databases.provision_datasets([...])`) for Modal / CI. Not a bash script — reusing the registry directly avoids duplicating URL lists and index recipes between the user path and the deployment path, which is exactly the duplication that bit us with `setup_databases.sh` vs. hardcoded Chimera DB paths today.
+**Interface**: a Python CLI that wraps `DatasetManager.ensure()` for one or many entries, exposed as both a console script (`proto-tools provision …`) for users and an importable function (`proto_tools.tools.sequence_alignment.databases.provision_datasets([...])`) for container-image builds / CI. Not a bash script — reusing the registry directly avoids duplicating URL lists and index recipes between the user path and the deployment path, which is exactly the duplication that bit us with `setup_databases.sh` vs. hardcoded cluster DB paths today.
 
 ```bash
 # One dataset
@@ -172,7 +172,7 @@ proto-tools provision uniref30-2302
 # Multiple, explicit
 proto-tools provision uniref30-2302 rnacentral rfam
 
-# All registered (CI / Modal image build)
+# All registered (CI / container image build)
 proto-tools provision --all
 
 # Filter by molecule type
@@ -192,29 +192,21 @@ proto-tools provision --all --dry-run
 - Exits non-zero if `sum(total_disk_bytes)` exceeds free space on the `$PROTO_MODEL_CACHE` filesystem (with 20% safety margin). `--force` to override.
 - Sequential per-dataset (they're large enough that parallel downloads fight for bandwidth). Parallelism *within* a dataset comes for free via aria2c's `--max-connection-per-server=8`.
 - Idempotent: rerun is a no-op when `.downloaded` / `.indexed` / `.paired_indexed` markers are all present.
-- Emits a structured JSON summary at the end (entries attempted, completed, skipped, failed) for consumption by CI / Modal build logs.
+- Emits a structured JSON summary at the end (entries attempted, completed, skipped, failed) for consumption by CI / container build logs.
 
-**Modal deployment hook** (future, when we wire up the hosted version) — the same `provision_datasets` function the user-facing CLI wraps, invoked at image build:
+**Container deployment hook** (future, when we wire up the hosted version) — the same `provision_datasets` function the user-facing CLI wraps, invoked at image build, with `PROTO_MODEL_CACHE` pointed at the persistent volume mount:
 
 ```python
 from proto_tools.tools.sequence_alignment.databases import provision_datasets
 
-# In the Modal image definition
-image = (
-    modal.Image.debian_slim()
-    .pip_install("proto_tools[mmseqs2-homology-search]")
-    .run_function(
-        lambda: provision_datasets(
-            ["uniref30-2302", "colabfold-envdb-202108", "rnacentral", "rfam"],
-            include_paired=True,
-        ),
-        volumes={"/cache": db_volume},
-        env={"PROTO_MODEL_CACHE": "/cache"},
-    )
+# Run during the container image build, with PROTO_MODEL_CACHE set to the volume mount.
+provision_datasets(
+    ["uniref30-2302", "colabfold-envdb-202108", "rnacentral", "rfam"],
+    include_paired=True,
 )
 ```
 
-The volume persists across container starts, so the download cost is paid once per Modal app revision, not per request. `provision_datasets()` is just `DatasetManager.ensure(name)` loops — identical code path whether invoked by the user CLI, a Modal image builder, a CI warmup job, or lazy first-use on a dev machine. **No separate "deployment mode" code, and no duplicated URL/index knowledge between a shell setup script and the Python tool.**
+The persistent volume carries the materialized DBs across container starts, so the download cost is paid once per image revision, not per request. `provision_datasets()` is just `DatasetManager.ensure(name)` loops — identical code path whether invoked by the user CLI, a deployment image builder, a CI warmup job, or lazy first-use on a dev machine. **No separate "deployment mode" code, and no duplicated URL/index knowledge between a shell setup script and the Python tool.**
 
 ## `mmseqs2-homology-search` Tool Surface
 
