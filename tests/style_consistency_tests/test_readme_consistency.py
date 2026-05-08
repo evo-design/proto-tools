@@ -383,7 +383,8 @@ def test_all_links_reachable(readme: Path) -> None:
     # - bio-pro.mintlify.app: our own docs site, assume it's up
     # - doi.org: permanent academic identifiers, never break but resolver is slow
     # - proteininformationresource.org: valid PIR database, intermittently slow in CI
-    _SKIP_DOMAINS = {"bio-pro.mintlify.app", "doi.org", "proteininformationresource.org"}
+    # - www.ensembl.org: genome browser homepage, intermittently slow in CI
+    _SKIP_DOMAINS = {"bio-pro.mintlify.app", "doi.org", "proteininformationresource.org", "www.ensembl.org"}
     # TODO: Remove when public
     _SKIP_URL_PREFIXES = ("https://github.com/proto-bio/proto-tools",)
 
