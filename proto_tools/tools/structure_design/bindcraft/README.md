@@ -255,7 +255,7 @@ BindCraftOutput(
 | `dSASA` | float | 0+ | Å² | Buried surface area at the interface. |
 | `dG_per_dSASA` | float | — | REU/Å² | Binding energy normalised by interface area. |
 | `interface_sasa_pct` | float | 0-100 | percent | Fraction of binder surface buried at the interface. |
-| `interface_hydrophobicity` | float | 0.0-1.0 | fraction | Hydrophobic fraction at the interface. |
+| `interface_hydrophobicity` | float | 0-100 | percent | Hydrophobic percentage at the interface. |
 | `surface_hydrophobicity` | float | 0.0-1.0 | fraction | Hydrophobic fraction over the whole binder surface. |
 | `shape_complementarity` | float | 0.0-1.0 | fraction | Lawrence-Colman shape complementarity at the interface. |
 | `packstat` | float | 0.0-1.0 | fraction | Rosetta interface packing statistic. |

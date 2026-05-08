@@ -134,7 +134,7 @@ class BindCraftMetrics(Metrics):
         "dSASA": {"type": "float", "min": 0.0, "unit": "Å^2"},
         "dG_per_dSASA": {"type": "float", "unit": "REU/Å^2"},
         "interface_sasa_pct": {"type": "float", "min": 0.0, "max": 100.0, "unit": "percent"},
-        "interface_hydrophobicity": {"type": "float", "min": 0.0, "max": 1.0, "unit": "fraction"},
+        "interface_hydrophobicity": {"type": "float", "min": 0.0, "max": 100.0, "unit": "percent"},
         "surface_hydrophobicity": {"type": "float", "min": 0.0, "max": 1.0, "unit": "fraction"},
         "shape_complementarity": {"type": "float", "min": 0.0, "max": 1.0, "unit": "fraction"},
         "packstat": {"type": "float", "min": 0.0, "max": 1.0, "unit": "fraction"},
@@ -339,6 +339,9 @@ class BindCraftConfig(BaseConfig):
             of the upstream default filters at dispatch time. Keys are upstream metric
             names (e.g. ``"Average_pLDDT"``); values are upstream filter dicts
             (e.g. ``{"threshold": 0.85, "higher": True}``).
+        timeout (int): Maximum execution time in seconds. Defaults to 14400 (4 hours)
+            since BindCraft trajectories take minutes-to-hours each. Bump explicitly for
+            full Nature-paper-scale campaigns (100+ accepted designs).
     """
 
     design_algorithm: Literal["2stage", "3stage", "4stage", "greedy", "mcmc"] = ConfigField(
@@ -727,11 +730,46 @@ class BindCraftConfig(BaseConfig):
         hidden=True,
         include_in_key=False,
     )
+    # BindCraft trajectories are minutes-to-hours each.
+    timeout: int = ConfigField(
+        title="Timeout",
+        default=14400,
+        ge=1,
+        description="Maximum execution time in seconds. Default 4h covers typical calls; bump for full campaigns.",
+        hidden=True,
+        include_in_key=False,
+    )
 
     @property
     def devices_per_instance(self) -> int:
         """BindCraft uses one GPU per design run (sequential trajectories)."""
         return 1
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "BindCraftConfig":
+        """Cheapest path through the BindCraft pipeline for smoke testing.
+
+        Caps trajectories at 1 and slashes per-trajectory iteration counts
+        relative to the upstream-matched production defaults. Used by the
+        parametrized env-report and smoke-test infrastructure; production
+        callers never invoke this. Acceptance is best-effort — the env-report
+        only verifies execution end-to-end.
+
+        Args:
+            **kwargs (Any): Field values passed to the config constructor.
+                Take precedence over the cheap-mode defaults set here.
+
+        Returns:
+            BindCraftConfig: Config with cheap-mode iteration counts applied.
+        """
+        kwargs.setdefault("max_trajectories", 1)
+        kwargs.setdefault("soft_iterations", 10)
+        kwargs.setdefault("temporary_iterations", 5)
+        kwargs.setdefault("hard_iterations", 2)
+        kwargs.setdefault("greedy_iterations", 2)
+        kwargs.setdefault("num_seqs", 2)
+        kwargs.setdefault("max_mpnn_sequences", 1)
+        return super().minimal(**kwargs)  # type: ignore[return-value]
 
 
 # ============================================================================

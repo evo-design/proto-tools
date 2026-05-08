@@ -1,6 +1,6 @@
 # Linux x86_64 Environment Report
 
-![Pass Rate](https://img.shields.io/badge/pass_rate-96%25-brightgreen) ![Passed](https://img.shields.io/badge/passed-50-brightgreen) ![Failed](https://img.shields.io/badge/failed-2-red) ![Skipped](https://img.shields.io/badge/skipped-3-lightgrey)
+![Pass Rate](https://img.shields.io/badge/pass_rate-98%25-brightgreen) ![Passed](https://img.shields.io/badge/passed-51-brightgreen) ![Failed](https://img.shields.io/badge/failed-1-red) ![Skipped](https://img.shields.io/badge/skipped-3-lightgrey)
 
 ## Platform
 
@@ -17,9 +17,9 @@
 
 ## Git
 
-- **Commit**: `ecb1d6060109`
-- **Branch**: `chore/refresh-env-report-proteinmpnn`
-- **Dirty**: No
+- **Commit**: `f3deaf2d382d`
+- **Branch**: `fix/bindcraft-interface-hydrophobicity-spec`
+- **Dirty**: Yes
 
 ## Environment Variables
 
@@ -94,16 +94,16 @@ _CONDA_ROOT=/home/bviggiano/miniforge3
 ### Subprocess Environment (passed to tools)
 
 ```
-CONDA_PREFIX=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/proteinmpnn_env
+CONDA_PREFIX=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/bindcraft_env
 DETECTED_COMPUTE_PLATFORM=cuda
 DETECTED_CUDA_VERSION=12
 DETECTED_DRIVER_VERSION=560
 HF_HOME=/large_storage/hielab/bviggiano/proto_cache/proto_model_cache/huggingface
 HOME=/home/bviggiano
 LANG=C.UTF-8
-LD_LIBRARY_PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/proteinmpnn_env/cuda_env/lib:/usr/local/cuda/lib64:/home/bviggiano/miniforge3/envs/proto-tools/lib
+LD_LIBRARY_PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/bindcraft_env/cuda_env/lib:/usr/local/cuda/lib64:/home/bviggiano/miniforge3/envs/proto-tools/lib
 LOGNAME=bviggiano
-PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/proteinmpnn_env/bin:/usr/local/cuda/bin:/home/bviggiano/miniforge3/envs/proto-tools/bin:/home/bviggiano/miniforge3/condabin:/home/bviggiano/...
+PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/bindcraft_env/bin:/usr/local/cuda/bin:/home/bviggiano/miniforge3/envs/proto-tools/bin:/home/bviggiano/miniforge3/condabin:/home/bviggiano/.v...
 PIP_CACHE_DIR=/large_storage/hielab/bviggiano/proto_cache/pip_cache
 PIP_DEFAULT_TIMEOUT=300
 PROTO_ALPHAFOLD3_WEIGHTS_DIR=/large_storage/hielab/brk/models/af3_weights
@@ -118,7 +118,8 @@ TORCH_HOME=/large_storage/hielab/bviggiano/proto_cache/proto_model_cache/torch
 USER=bviggiano
 UV_CACHE_DIR=/large_storage/hielab/bviggiano/proto_cache/uv_cache
 UV_HTTP_TIMEOUT=300
-VIRTUAL_ENV=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/proteinmpnn_env
+VIRTUAL_ENV=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/bindcraft_env
+XLA_FLAGS=--xla_gpu_cuda_data_dir=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/bindcraft_env/cuda_env
 XLA_PYTHON_CLIENT_ALLOCATOR=platform
 XLA_PYTHON_CLIENT_PREALLOCATE=false
 ```
@@ -214,11 +215,11 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
 | `tmalign-alignment` | no | ✅ | 27.3s | `c2fad93` | ✅ Pass |
 | `usalign-alignment` | no | ✅ | 36.5s | `c2fad93` | ✅ Pass |
 
-### Structure Design (1/2)
+### Structure Design (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
 |------|--------------|----------------------|----------|-----------|--------|
-| `bindcraft-design` | yes | ✅ | 2709.7s | `c2fad93` | ❌ Fail |
+| `bindcraft-design` | yes | ✅ | 348.1s | `f3deaf2` ✱ | ✅ Pass |
 | `rfdiffusion3-design` | yes | ✅ | 175.4s | `c2fad93` | ✅ Pass |
 
 ### Structure Dynamics (1/1)
@@ -262,22 +263,6 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
 
 ## Failure Details
 
-### ❌ `bindcraft-design`
-
-**Test**: `tests/tool_infra_tests/test_env_report.py::test_tool_env_report[bindcraft-design]`
-
-```
-tests/tool_infra_tests/test_env_report.py:79: in test_tool_env_report
-    assert_metrics_in_spec(result)
-tests/tool_infra_tests/_metric_helpers.py:62: in assert_metrics_in_spec
-    metrics.validate_against_spec()
-proto_tools/utils/tool_io.py:348: in validate_against_spec
-    _check_scalar_in_spec(name, value, value_spec)
-proto_tools/utils/tool_io.py:377: in _check_scalar_in_spec
-    raise AssertionError(f"Metric {name!r}={value} above declared max {max_v}")
-E   AssertionError: Metric 'interface_hydrophobicity'=47.22 above declared max 1.0
-```
-
 ### ❌ `germinal-design`
 
 **Test**: `tests/tool_infra_tests/test_env_report.py::test_tool_env_report[germinal-design]`
@@ -291,7 +276,7 @@ E    +  where False = GerminalOutput(tool_id, execution_time, timestamp, success
 ```
 
 ---
-*Generated at 2026-05-08 10:07:27 by `pytest --env-report`*
+*Generated at 2026-05-08 11:16:03 by `pytest --env-report`*
 
 <!-- env-report-data
 [
@@ -585,14 +570,14 @@ E    +  where False = GerminalOutput(tool_id, execution_time, timestamp, success
     "tool_key": "bindcraft-design",
     "category": "structure_design",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[bindcraft-design]",
-    "status": "failed",
-    "duration_seconds": 2709.68,
+    "status": "passed",
+    "duration_seconds": 348.06,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/bindcraft_env",
     "env_status": "success",
-    "error_message": "tests/tool_infra_tests/test_env_report.py:79: in test_tool_env_report\n    assert_metrics_in_spec(result)\ntests/tool_infra_tests/_metric_helpers.py:62: in assert_metrics_in_spec\n    metrics.validate_against_spec()\nproto_tools/utils/tool_io.py:348: in validate_against_spec\n    _check_scalar_in_spec(name, value, value_spec)\nproto_tools/utils/tool_io.py:377: in _check_scalar_in_spec\n    raise AssertionError(f\"Metric {name!r}={value} above declared max {max_v}\")\nE   AssertionError: Metric 'interface_hydrophobicity'=47.22 above declared max 1.0",
-    "git_commit": "c2fad93fa119",
-    "git_dirty": false
+    "error_message": null,
+    "git_commit": "f3deaf2d382d",
+    "git_dirty": true
   },
   {
     "tool_key": "random-nucleotide-sample",
