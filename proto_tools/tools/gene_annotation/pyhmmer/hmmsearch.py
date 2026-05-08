@@ -6,8 +6,6 @@ PyHMMER hmmsearch tool: search HMM profiles against protein sequences.
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import field_validator
-
 from proto_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
     PyHmmerConfig,
     PyHmmerInput,
@@ -41,17 +39,6 @@ class PyHmmsearchInput(PyHmmerInput):
     """
 
     hmm: str | Path = InputField(description="Path to HMM file")
-
-    @field_validator("hmm", mode="before")
-    @classmethod
-    def validate_hmm_file(cls, value: str | Path) -> str:
-        """Validate HMM file exists and return path as string."""
-        hmm_path = Path(value)
-        if not hmm_path.exists():
-            raise ValueError(f"HMM file not found: {value}")
-        if not hmm_path.is_file():
-            raise ValueError(f"HMM path is not a file: {value}")
-        return str(hmm_path)
 
 
 # Output:

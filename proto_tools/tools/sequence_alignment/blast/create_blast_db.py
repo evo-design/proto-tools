@@ -37,14 +37,6 @@ class CreateBlastDbInput(BaseToolInput):
         description="Path to the input FASTA file containing sequences to create a BLAST database from"
     )
 
-    @field_validator("fasta")
-    @classmethod
-    def validate_fasta(cls, v: str) -> str:
-        """Validate that FASTA file exists."""
-        if not Path(v).exists():
-            raise ValueError(f"FASTA file not found: {v}")
-        return v
-
 
 # Output:
 class CreateBlastDbOutput(BaseToolOutput):

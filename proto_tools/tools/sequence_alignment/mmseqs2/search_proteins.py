@@ -151,14 +151,6 @@ class Mmseqs2SearchProteinsInput(BaseToolInput):
             raise ValueError("All items in query_sequences list must be strings")
         return v
 
-    @field_validator("mmseqs_db")
-    @classmethod
-    def validate_mmseqs_db(cls, v: str) -> str:
-        """Validate that MMseqs2 database exists."""
-        if not Path(v).exists():
-            raise ValueError(f"MMseqs2 database not found: {v}")
-        return v
-
 
 # Output:
 class Mmseqs2SearchProteinsOutput(BaseToolOutput):
