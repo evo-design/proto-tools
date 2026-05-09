@@ -1,6 +1,7 @@
 """ESM-2 protein masked language model."""
 
 from proto_tools.tools.masked_models.esm2.esm2_embeddings import (
+    ESM2_MAX_SEQ_LENGTH,
     ESM2EmbeddingsConfig,
     ESM2EmbeddingsInput,
     ESM2EmbeddingsOutput,
@@ -26,6 +27,8 @@ from proto_tools.tools.masked_models.esm2.esm2_score import (
 )
 
 __all__ = [
+    # Shared
+    "ESM2_MAX_SEQ_LENGTH",
     # Tools layer - embeddings
     "ESM2EmbeddingsInput",
     "ESM2EmbeddingsConfig",

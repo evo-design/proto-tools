@@ -32,6 +32,9 @@ Per-position logits indicate the model's confidence in each amino acid:
 - Comparing wild-type vs mutant logits predicts variant effects
 - Logits are returned over 20 canonical amino acids in fixed order: `ACDEFGHIKLMNPQRSTVWY`
 
+**Sequence length limit:**
+ESM-2's positional encoding caps inputs at 1022 residues. Longer inputs raise a `ValueError` rather than being silently truncated; chunk longer proteins yourself before invoking any ESM-2 tool. The same 1022 cap applies to the `L` dimension of `esm2-gradient` input logits.
+
 ## Tools
 
 ### ESM2 Embeddings (`esm2-embedding`)
@@ -143,7 +146,6 @@ ESM2 is a masked language model (similar to BERT) trained on protein sequences. 
 | `verbose` | `bool` | `False` | Print progress messages |
 | `return_logits` | `bool` | `False` | Include per-position logits in output |
 | `repr_layer` | `int` | `-1` | Transformer layer index for embeddings (`-1` = last) |
-| `truncation_seq_length` | `int` | `1022` | Truncate sequences exceeding this many residues (ESM2 cap is 1022) |
 
 ### Sampling Tool (`ESM2SampleConfig`)
 
@@ -427,9 +429,11 @@ print(f"avg log-likelihood: {result.metrics['avg_log_likelihood']:.3f}")
 
 2. **Empty sequences**: ESM2 tools require at least one non-empty sequence.
 
-3. **Wrong vocab indices**: Tool logits are AA-only in order `ACDEFGHIKLMNPQRSTVWY` (no special tokens).
+3. **Length cap (1022 residues)**: ESM-2's positional embeddings cap inputs at 1022 residues. Over-length sequences (or `esm2-gradient` logits with `L > 1022`) raise a `ValueError`.
 
-4. **Mixing checkpoints**: Embeddings from different model sizes are NOT comparable.
+4. **Wrong vocab indices**: Tool logits are AA-only in order `ACDEFGHIKLMNPQRSTVWY` (no special tokens).
+
+5. **Mixing checkpoints**: Embeddings from different model sizes are NOT comparable.
 
 ## References
 

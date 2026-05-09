@@ -6,6 +6,8 @@ ESM2 embeddings tool.
 import logging
 from typing import Any, Literal
 
+from pydantic import field_validator
+
 from proto_tools.tools.masked_models.projection import attach_projections
 from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelEmbeddingsConfig,
@@ -27,11 +29,31 @@ ESM2_MODEL_CHECKPOINTS = Literal[
     "esm2_t48_15B_UR50D",
 ]
 
+ESM2_MAX_SEQ_LENGTH = 1022
+
+
 # ============================================================================
 # Data Models
 # ============================================================================
 # Input:
-ESM2EmbeddingsInput = MaskedModelInput
+class ESM2EmbeddingsInput(MaskedModelInput):
+    """ESM-2 embedding input.
+
+    Attributes:
+        sequences (list[str]): Protein sequence(s) to process. Each must be ≤ 1022
+            residues (ESM-2's positional-encoding cap); over-length inputs raise
+            ``ValueError``.
+    """
+
+    @field_validator("sequences")
+    @classmethod
+    def _validate_max_length(cls, sequences: list[str]) -> list[str]:
+        for idx, seq in enumerate(sequences):
+            if len(seq) > ESM2_MAX_SEQ_LENGTH:
+                raise ValueError(
+                    f"esm2: supports sequences up to {ESM2_MAX_SEQ_LENGTH} residues; input {idx} has length {len(seq)}."
+                )
+        return sequences
 
 
 # Output:
@@ -81,11 +103,10 @@ class ESM2EmbeddingsConfig(MaskedModelEmbeddingsConfig):
         repr_layer (int): Transformer layer index for embeddings. ``-1`` selects the last
             (top) layer; uses HuggingFace ``hidden_states`` indexing where ``0`` is the
             embedding-layer output and ``N`` is transformer layer N.
-        truncation_seq_length (int): Truncate sequences exceeding this many residues. ESM2's
-            positional embeddings cap at 1024 tokens (1022 residues + BOS/EOS).
 
     Note:
-        The model is loaded on-demand for each call.
+        The model is loaded on-demand for each call. ESM-2's positional encoding caps inputs
+        at 1022 residues; longer sequences raise ``ValueError`` rather than being truncated.
     """
 
     model_checkpoint: ESM2_MODEL_CHECKPOINTS = ConfigField(
@@ -105,13 +126,6 @@ class ESM2EmbeddingsConfig(MaskedModelEmbeddingsConfig):
         default=-1,
         ge=-1,
         description="Transformer layer index for embeddings (0=embedding output, N=layer N, -1=last)",
-        advanced=True,
-    )
-    truncation_seq_length: int = ConfigField(
-        title="Truncation Sequence Length",
-        default=1022,
-        ge=1,
-        description="Truncate sequences exceeding this many residues; ESM2's positional cap is 1022",
         advanced=True,
     )
 
@@ -203,7 +217,6 @@ def run_esm2_embeddings(
             "verbose": config.verbose,
             "return_logits": config.return_logits,
             "repr_layer": config.repr_layer,
-            "truncation_seq_length": config.truncation_seq_length,
         },
         instance=instance,
         config=config,

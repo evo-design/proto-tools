@@ -6,7 +6,7 @@ ESM2 sampling tool.
 import logging
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelInput,
@@ -35,11 +35,31 @@ ESM2_MODEL_CHECKPOINTS = Literal[
     "esm2_t48_15B_UR50D",
 ]
 
+ESM2_MAX_SEQ_LENGTH = 1022
+
+
 # ============================================================================
 # Data Models
 # ============================================================================
 # Input:
-ESM2SampleInput = MaskedModelInput
+class ESM2SampleInput(MaskedModelInput):
+    """ESM-2 sampling input.
+
+    Attributes:
+        sequences (list[str]): Protein sequence(s) with ``_`` at positions to sample.
+            Each must be ≤ 1022 residues (ESM-2's positional-encoding cap);
+            over-length inputs raise ``ValueError``.
+    """
+
+    @field_validator("sequences")
+    @classmethod
+    def _validate_max_length(cls, sequences: list[str]) -> list[str]:
+        for idx, seq in enumerate(sequences):
+            if len(seq) > ESM2_MAX_SEQ_LENGTH:
+                raise ValueError(
+                    f"esm2: supports sequences up to {ESM2_MAX_SEQ_LENGTH} residues; input {idx} has length {len(seq)}."
+                )
+        return sequences
 
 
 # Output:

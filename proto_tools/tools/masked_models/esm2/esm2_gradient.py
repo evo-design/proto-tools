@@ -20,6 +20,8 @@ from proto_tools.utils.tool_io import InputField
 
 logger = logging.getLogger(__name__)
 
+ESM2_MAX_SEQ_LENGTH = 1022
+
 
 class ESM2GradientInput(BaseToolInput):
     """Input for the ESM2 gradient tool.
@@ -27,6 +29,8 @@ class ESM2GradientInput(BaseToolInput):
     Attributes:
         logits (list[list[float]]): Relaxed protein sequence state with shape
             ``(L, 20)`` in canonical amino-acid order ``ACDEFGHIKLMNPQRSTVWY``.
+            ``L`` must be ≤ 1022 (ESM-2's positional-encoding cap); over-length
+            inputs raise ``ValueError``.
         temperature (float | None): Optional softmax temperature. When set, applies
             ``softmax(input / temperature)`` before computing the gradient. When
             ``None`` (default), the input is used as-is.
@@ -46,9 +50,13 @@ class ESM2GradientInput(BaseToolInput):
     @field_validator("logits")
     @classmethod
     def validate_logits(cls, logits: list[list[float]]) -> list[list[float]]:
-        """Ensure logits are a non-empty rectangular ``L x 20`` matrix."""
+        """Ensure logits are a non-empty rectangular ``L x 20`` matrix within the cap."""
         if not logits:
             raise ValueError("logits must contain at least one position")
+        if len(logits) > ESM2_MAX_SEQ_LENGTH:
+            raise ValueError(
+                f"esm2: supports sequences up to {ESM2_MAX_SEQ_LENGTH} residues; input has length {len(logits)}."
+            )
 
         expected_width = len(PROTEIN_AMINO_ACIDS)
         for idx, row in enumerate(logits):
