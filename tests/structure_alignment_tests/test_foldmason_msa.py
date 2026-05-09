@@ -162,7 +162,7 @@ def test_remote_mode_submits_polls_and_parses_json():
 
 
 def test_remote_submit_raises_on_missing_ticket_id():
-    """Server response without an `id` field is a real schema regression → ValueError surfaces via .errors."""
+    """Server response without an `id` field is a real schema regression and raises."""
     inputs = FoldmasonMSAInput(structures=[_TINY_PDB, _TINY_PDB])
     config = FoldmasonMSAConfig()
 
@@ -178,10 +178,8 @@ def test_remote_submit_raises_on_missing_ticket_id():
         "proto_tools.tools.structure_alignment.foldmason.foldmason_msa.build_http_session",
         return_value=fake_session,
     ):
-        output = run_foldmason_msa(inputs, config)
-
-    assert not output.success
-    assert any("no ticket ID" in e for e in output.errors)
+        with pytest.raises(Exception, match="no ticket ID"):
+            run_foldmason_msa(inputs, config)
 
 
 # ── Validation tests ─────────────────────────────────────────────────────────

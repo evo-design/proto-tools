@@ -365,11 +365,9 @@ def test_alphafold_db_fetch_cif_format():
 
 @pytest.mark.integration
 def test_alphafold_db_fetch_unknown_accession_returns_failure():
-    """A nonexistent accession surfaces as a failed Output with a clear error."""
-    output = run_alphafold_db_fetch(AlphaFoldDBFetchInput(uniprot_id="Q0Q0Q0"), AlphaFoldDBFetchConfig())
-    assert output.success is False
-    assert output.tool_id == "alphafold-db-fetch"
-    assert any("AlphaFold DB has no prediction" in err for err in output.errors)
+    """A nonexistent accession raises with a clear error."""
+    with pytest.raises(Exception, match="AlphaFold DB has no prediction"):
+        run_alphafold_db_fetch(AlphaFoldDBFetchInput(uniprot_id="Q0Q0Q0"), AlphaFoldDBFetchConfig())
 
 
 @pytest.mark.integration
@@ -489,13 +487,12 @@ def test_alphafold_db_fetch_isoform_selects_non_canonical():
 
 @pytest.mark.integration
 def test_alphafold_db_fetch_invalid_isoform_fails_loudly():
-    """Asking for an isoform that doesn't exist surfaces a clear error."""
-    output = run_alphafold_db_fetch(
-        AlphaFoldDBFetchInput(uniprot_id="P04637", isoform=99),
-        AlphaFoldDBFetchConfig(),
-    )
-    assert output.success is False
-    assert any("Isoform 99 not available" in err for err in output.errors)
+    """Asking for an isoform that doesn't exist raises a clear error."""
+    with pytest.raises(Exception, match="Isoform 99 not available"):
+        run_alphafold_db_fetch(
+            AlphaFoldDBFetchInput(uniprot_id="P04637", isoform=99),
+            AlphaFoldDBFetchConfig(),
+        )
 
 
 @pytest.mark.integration

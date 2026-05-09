@@ -49,13 +49,12 @@ def test_validator_rejects_whitespace_only_input():
 
 
 def test_run_surfaces_missing_email_for_sequence_path():
-    """Sequence path with no config.email surfaces as output.success=False (decorator wraps the ValueError)."""
-    output = run_interproscan_fetch(
-        InterProScanFetchInput(sequence="MKTILV"),
-        InterProScanFetchConfig(),
-    )
-    assert output.success is False
-    assert any("email" in err.lower() for err in output.errors)
+    """Sequence path with no config.email raises a ValueError mentioning email."""
+    with pytest.raises(Exception, match=r"(?i)email"):
+        run_interproscan_fetch(
+            InterProScanFetchInput(sequence="MKTILV"),
+            InterProScanFetchConfig(),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -457,10 +456,9 @@ def test_extract_xref_ids_handles_diverse_shapes(raw, expected):
 
 @pytest.mark.integration
 def test_direct_lookup_unknown_accession_surfaces_failure():
-    """An unknown UniProt accession yields output.success=False with a descriptive error."""
-    output = run_interproscan_fetch(InterProScanFetchInput(uniprot_id="Q99999999"))
-    assert output.success is False
-    assert any("no entries" in err.lower() or "not found" in err.lower() for err in output.errors)
+    """An unknown UniProt accession raises with a descriptive error."""
+    with pytest.raises(Exception, match=r"(?i)no entries|not found"):
+        run_interproscan_fetch(InterProScanFetchInput(uniprot_id="Q99999999"))
 
 
 @pytest.mark.integration

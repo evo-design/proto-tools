@@ -9,6 +9,7 @@ For personal discoveries (debugging patterns, tool quirks found during a session
 - `sherlock-setup.md`: Stanford Sherlock cluster-specific setup (temporary, for beta testers)
 - `storage.md`: `PROTO_HOME`, `PROTO_MODEL_CACHE`, shared weights, per-tool overrides, storage layout
 - `tool-environments.md`: Standalone env setup, compute deps, GCC/nvcc, caches, binaries, `to_device()` protocol
+- `error-handling.md`: `@tool` raise-vs-capture policy, `PROTO_CAPTURE_ERRORS`, `MissingAssetError` carve-out
 - `testing.md`: Test structure, assertions, markers, naming conventions
 - `environments/`: Machine-generated Markdown compatibility reports (see `environments/README.md`)
 

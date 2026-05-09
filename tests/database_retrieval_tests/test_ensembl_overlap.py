@@ -127,9 +127,8 @@ def test_rejects_non_dict_element():
         "proto_tools.tools.database_retrieval.ensembl.ensembl_overlap.build_session",
         return_value=session,
     ):
-        out = run_ensembl_overlap(EnsemblOverlapInput(ensembl_id="ENSG00000012048"))
-    assert out.success is False
-    assert any("payload[0] is non-dict" in err for err in out.errors)
+        with pytest.raises(Exception, match=r"payload\[0\] is non-dict"):
+            run_ensembl_overlap(EnsemblOverlapInput(ensembl_id="ENSG00000012048"))
 
 
 def test_rejects_non_list_payload():
@@ -139,9 +138,8 @@ def test_rejects_non_list_payload():
         "proto_tools.tools.database_retrieval.ensembl.ensembl_overlap.build_session",
         return_value=session,
     ):
-        out = run_ensembl_overlap(EnsemblOverlapInput(ensembl_id="ENSG00000012048"))
-    assert out.success is False
-    assert any("non-list" in err for err in out.errors)
+        with pytest.raises(Exception, match="non-list"):
+            run_ensembl_overlap(EnsemblOverlapInput(ensembl_id="ENSG00000012048"))
 
 
 # ---------------------------------------------------------------------------

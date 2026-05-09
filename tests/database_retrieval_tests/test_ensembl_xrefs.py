@@ -71,9 +71,8 @@ def test_rejects_non_list_payload():
         "proto_tools.tools.database_retrieval.ensembl.ensembl_xrefs.build_session",
         return_value=session,
     ):
-        out = run_ensembl_xrefs(EnsemblXrefsInput(ensembl_id="ENSG00000012048"))
-    assert out.success is False
-    assert any("non-list" in err for err in out.errors)
+        with pytest.raises(Exception, match="non-list"):
+            run_ensembl_xrefs(EnsemblXrefsInput(ensembl_id="ENSG00000012048"))
 
 
 def test_wraps_corrupt_json_with_context():
@@ -90,9 +89,8 @@ def test_wraps_corrupt_json_with_context():
         "proto_tools.tools.database_retrieval.ensembl.ensembl_xrefs.build_session",
         return_value=session,
     ):
-        out = run_ensembl_xrefs(EnsemblXrefsInput(ensembl_id="ENSG00000012048"))
-    assert out.success is False
-    assert any("non-JSON" in err for err in out.errors)
+        with pytest.raises(Exception, match="non-JSON"):
+            run_ensembl_xrefs(EnsemblXrefsInput(ensembl_id="ENSG00000012048"))
 
 
 # ---------------------------------------------------------------------------

@@ -223,13 +223,12 @@ def test_workflow_name_to_smiles_to_inchikey_roundtrip_converges():
 
 @pytest.mark.integration
 def test_pubchem_fetch_unknown_name_returns_failure():
-    """An unresolvable name produces a clean failure with a descriptive error message."""
-    output = run_pubchem_fetch(PubChemFetchInput(name="notacompoundxyz123def"), PubChemFetchConfig())
-    assert output.success is False
-    assert output.tool_id == "pubchem-fetch"
-    assert any("PubChem returned no CIDs" in err for err in output.errors)
-    # Error message includes which identifier was tried, for debuggability
-    assert any("name='notacompoundxyz123def'" in err for err in output.errors)
+    """An unresolvable name raises with a descriptive error message identifying the input."""
+    with pytest.raises(
+        Exception,
+        match=r"PubChem returned no CIDs.*name='notacompoundxyz123def'|name='notacompoundxyz123def'.*PubChem returned no CIDs",
+    ):
+        run_pubchem_fetch(PubChemFetchInput(name="notacompoundxyz123def"), PubChemFetchConfig())
 
 
 @pytest.mark.integration

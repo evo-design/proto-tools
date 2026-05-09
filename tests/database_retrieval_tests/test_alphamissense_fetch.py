@@ -134,11 +134,9 @@ def test_alphamissense_fetch_client_side_filter_at_hotspots():
     ids=["fake-accession", "non-human"],
 )
 def test_alphamissense_fetch_returns_failure_when_no_data(uniprot_id, reason):
-    """Both bogus accessions and non-human accessions surface as a failure with a clear error."""
-    output = run_alphamissense_fetch(AlphaMissenseFetchInput(uniprot_id=uniprot_id), AlphaMissenseFetchConfig())
-    assert output.success is False, f"unexpected success for {reason}: {uniprot_id}"
-    assert output.tool_id == "alphamissense-fetch"
-    assert any("AlphaMissense has no predictions" in err for err in output.errors)
+    """Both bogus accessions and non-human accessions raise with a clear error."""
+    with pytest.raises(Exception, match="AlphaMissense has no predictions"):
+        run_alphamissense_fetch(AlphaMissenseFetchInput(uniprot_id=uniprot_id), AlphaMissenseFetchConfig())
 
 
 @pytest.mark.integration

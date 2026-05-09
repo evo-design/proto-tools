@@ -351,8 +351,8 @@ def test_tool_registry_decorator_populates_metadata(clean_registry):
     assert result.result == "Processed test"
 
 
-def test_tool_registry_decorator_handles_exceptions(clean_registry):
-    """Test that decorator handles exceptions and returns error output."""
+def test_tool_registry_decorator_raises_by_default(clean_registry):
+    """By default the wrapper re-raises exceptions to the caller."""
 
     @clean_registry.register(
         key="failing-tool",
@@ -366,20 +366,66 @@ def test_tool_registry_decorator_handles_exceptions(clean_registry):
     def failing_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
         raise ValueError("Something went wrong!")
 
-    # Get the registered function and call it
+    spec = clean_registry.get("failing-tool")
+    inputs = MockToolInput(input_data="test")
+    config = MockToolConfig(param1="value1", param2=5)
+
+    with pytest.raises(ValueError, match="Something went wrong!"):
+        spec.function(inputs, config)
+
+
+def test_tool_registry_decorator_captures_under_env_var(clean_registry, capture_errors):
+    """With PROTO_CAPTURE_ERRORS=1, the wrapper packs exceptions into success=False output."""
+
+    @clean_registry.register(
+        key="failing-tool",
+        label="Failing Tool",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="Tool that raises an exception",
+    )
+    def failing_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
+        raise ValueError("Something went wrong!")
+
     spec = clean_registry.get("failing-tool")
     inputs = MockToolInput(input_data="test")
     config = MockToolConfig(param1="value1", param2=5)
 
     result = spec.function(inputs, config)
 
-    # Verify error output was created
     assert result.tool_id == "failing-tool"
     assert result.execution_time is not None
     assert result.success is False
     assert result.timestamp is not None
     assert len(result.errors) == 2
     assert "Something went wrong!" in result.errors[0]
+
+
+def test_missing_asset_error_always_raises(clean_registry, capture_errors):
+    """MissingAssetError raises even when the env var enables capture."""
+    from proto_tools.utils.tool_io import MissingAssetError
+
+    @clean_registry.register(
+        key="missing-asset-tool",
+        label="Missing Asset Tool",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="Tool that signals an unprovisioned asset",
+    )
+    def missing_asset_tool(inputs, config, instance=None):
+        raise MissingAssetError(toolkit="fake-toolkit", asset_kind="weights")
+
+    spec = clean_registry.get("missing-asset-tool")
+    inputs = MockToolInput(input_data="test")
+    config = MockToolConfig(param1="v")
+
+    # MissingAssetError must still raise even with capture_errors fixture set, so the conftest skip hook works.
+    with pytest.raises(MissingAssetError):
+        spec.function(inputs, config)
 
 
 def test_tool_registry_decorator_captures_warnings(clean_registry):
@@ -412,7 +458,7 @@ def test_tool_registry_decorator_captures_warnings(clean_registry):
     assert any("This is a warning!" in w for w in result.warnings)
 
 
-def test_tool_output_error_access_raises_exception(clean_registry):
+def test_tool_output_error_access_raises_exception(clean_registry, capture_errors):
     """Test that accessing unset fields on failed output raises ToolExecutionError."""
     from proto_tools.utils.tool_io import ToolExecutionError
 
@@ -428,7 +474,7 @@ def test_tool_output_error_access_raises_exception(clean_registry):
     def error_access_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
         raise RuntimeError("Tool execution failed")
 
-    # Get the registered function and call it
+    # Capture mode is needed to obtain a success=False output that __getattr__ inspects.
     spec = clean_registry.get("error-access-tool")
     inputs = MockToolInput(input_data="test")
     config = MockToolConfig(param1="value1", param2=5)
@@ -596,20 +642,6 @@ def test_retryable_error_succeeds_after_retries(clean_registry, fast_retry):
     assert call_count == 3
 
 
-def test_non_retryable_error_not_retried(clean_registry, fast_retry):
-    call_count = 0
-
-    def tool(inputs, config, instance=None):
-        nonlocal call_count
-        call_count += 1
-        raise ValueError("Bad input")
-
-    result = _register_and_run(clean_registry, "no-retry", tool)
-    assert result.success is False
-    assert call_count == 1
-    assert "Bad input" in result.errors[0]
-
-
 def test_try_dispatch_intercepts_tool_call(clean_registry):
     """_try_dispatch intercepts tool calls before local execution."""
     original = ToolRegistry._try_dispatch
@@ -646,26 +678,7 @@ def test_try_dispatch_none_falls_through(clean_registry):
         ToolRegistry._try_dispatch = original
 
 
-def test_try_dispatch_exception_returns_error_output(clean_registry):
-    """_try_dispatch raising returns a structured error output."""
-    original = ToolRegistry._try_dispatch
-
-    ToolRegistry._try_dispatch = classmethod(
-        lambda cls, key, inputs, config: (_ for _ in ()).throw(RuntimeError("remote down"))
-    )
-    try:
-        result = _register_and_run(
-            clean_registry,
-            "dispatch-error",
-            lambda inputs, config, instance=None: MockToolOutput(result="local"),
-        )
-        assert result.success is False
-        assert "remote down" in result.errors[0]
-    finally:
-        ToolRegistry._try_dispatch = original
-
-
-def test_retries_exhaust_with_meaningful_traceback(clean_registry, fast_retry):
+def test_retries_exhaust_raises_by_default(clean_registry, fast_retry):
     call_count = 0
 
     def tool(inputs, config, instance=None):
@@ -673,7 +686,20 @@ def test_retries_exhaust_with_meaningful_traceback(clean_registry, fast_retry):
         call_count += 1
         raise ConnectionError("connection refused")
 
-    result = _register_and_run(clean_registry, "retry-exhaust", tool)
+    with pytest.raises(ConnectionError, match="connection refused"):
+        _register_and_run(clean_registry, "retry-exhaust", tool)
+    assert call_count == 1 + MAX_RETRIES
+
+
+def test_retries_exhaust_captured_under_env_var(clean_registry, fast_retry, capture_errors):
+    call_count = 0
+
+    def tool(inputs, config, instance=None):
+        nonlocal call_count
+        call_count += 1
+        raise ConnectionError("connection refused")
+
+    result = _register_and_run(clean_registry, "retry-exhaust-captured", tool)
     assert result.success is False
     assert call_count == 1 + MAX_RETRIES
     assert "connection refused" in result.errors[0]
@@ -682,10 +708,7 @@ def test_retries_exhaust_with_meaningful_traceback(clean_registry, fast_retry):
 
 
 def test_timeout_error_not_retried(clean_registry, fast_retry):
-    """TimeoutError from ToolInstance/PersistentWorker means the tool exceeded its.
-
-    configured timeout; retrying with the same limit would just time out again.
-    """
+    """TimeoutError from ToolInstance/PersistentWorker raises immediately without retry."""
     call_count = 0
 
     def tool(inputs, config, instance=None):
@@ -693,10 +716,9 @@ def test_timeout_error_not_retried(clean_registry, fast_retry):
         call_count += 1
         raise TimeoutError("worker timed out after 300s")
 
-    result = _register_and_run(clean_registry, "timeout-no-retry", tool)
-    assert result.success is False
+    with pytest.raises(TimeoutError, match="worker timed out"):
+        _register_and_run(clean_registry, "timeout-no-retry", tool)
     assert call_count == 1
-    assert "worker timed out" in result.errors[0]
 
 
 # ── Device count validation ──────────────────────────────────────────────────

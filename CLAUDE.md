@@ -59,6 +59,7 @@ When a code change alters behavior documented in this file, any `SKILL.md`, or `
 | `utils/compute_deps.py` | `notes/tool-environments.md` (compatibility matrices) |
 | `utils/base_config.py` (`seed`) | CLAUDE.md (Rules When Implementing Tools), `BaseConfig` docstring |
 | `tools/tool_registry.py` (`cacheable`, `generative`) | CLAUDE.md (Rules When Implementing Tools), `ToolRegistry` docstrings |
+| `tools/tool_registry.py` (`_should_capture_errors`, `_make_error_output_or_raise`) | `notes/error-handling.md`, CLAUDE.md (Rules When Implementing Tools, env var section) |
 | `utils/tool_instance.py` | Docstrings (reference pages auto-generated) |
 | `utils/device_manager.py` | Docstrings (reference pages auto-generated) |
 | `utils/tool_io.py`, `tools/tool_registry.py` | CLAUDE.md (Universal Tool Pattern, Key File Paths) |
@@ -236,7 +237,7 @@ Google style everywhere. Enforced by ruff D rules (Google convention) and `tests
 
 - Use `ConfigField()` for Config fields, `Field()` for Input and Output fields; never mix them. `ConfigField` supports `reload_on_change=True` (triggers worker restart) and `include_in_key=False` (excludes from cache key). `include_in_key` defaults to `True`; set it to `False` for fields that don't affect computation (device, verbose, timeout, already excluded on `BaseConfig`)
 - `seed=None` remains cacheable by default. Set `generative=True` on sampling, gradient, or design tools whose repeated unseeded calls should produce diversified outputs; for `cacheable=True` tools this skips cache and iterable dedup until the caller supplies `config.seed`. Do not set `generative=True` merely because a tool accepts or forwards a seed.
-- Never catch exceptions inside tool functions; the `@tool` decorator handles all error wrapping
+- Never catch exceptions inside tool functions. The `@tool` decorator **raises** by default; set `PROTO_CAPTURE_ERRORS=1` to opt in to packing exceptions into `success=False` outputs. `MissingAssetError` always raises regardless of the env var (the pytest skip hook in `tests/conftest.py` depends on it). See `notes/error-handling.md`.
 - All biological coordinates are **1-indexed, inclusive**
 - `batch_size` defaults to `1` (prevents OOM). The tool layer owns the batching loop. **Exception**: inverse folding tools default `batch_size` to `num_sequences_per_structure`
 - Use `logging.getLogger(__name__)`, never `print()`. Loggers under the `proto_tools.*` namespace are auto-routed: from inside a worker subprocess they're serialized as JSON-tagged stderr lines and re-emitted by the parent on `proto_tools.worker.{toolkit}.*`, where standard `logging` filtering applies. Pass `update_status=True` on a log call to make that record take over the spinner subtitle (e.g. `logger.info("Sampling chain A", update_status=True)`). See `notes/logging.md` for the full architecture.
@@ -277,6 +278,7 @@ Flat functions only (no test classes). See `notes/testing.md` for full conventio
 - **Generally use `--all` when running tests** to include integration and slow tests
 - Test logs saved to `logs/`. Every `pytest` run creates a `logs/pytest_*.log` file. To monitor a running test, tail the latest log file (`ls -t logs/ | head -1`) rather than relying on stdout (which buffers). Check logs before re-running tests
 - **`PROTO_HOME`** controls where all persistent data lives: model weights, tool envs, and micromamba (defaults to `~/.proto/`). **`PROTO_MODEL_CACHE`** overrides just the model weights location. Per-tool override: `PROTO_{TOOL}_WEIGHTS_DIR`. All configured via environment variables. See `notes/storage.md`.
+- **`PROTO_CAPTURE_ERRORS=1`** switches `@tool` to capture mode, where exceptions are packed into `success=False` outputs instead of raising. See `notes/error-handling.md`.
 
 ## Using proto-tools with Claude Code
 
@@ -307,6 +309,7 @@ result = run_{tool}({Tool}Input(...), {Tool}Config(...))
 |---|---|
 | `notes/storage.md` | `PROTO_HOME`, `PROTO_MODEL_CACHE`, shared weights, per-tool overrides, storage layout |
 | `notes/tool-environments.md` | Standalone env setup, compute deps, GCC/nvcc, caches, binaries, `to_device()` protocol |
+| `notes/error-handling.md` | `@tool` raise-vs-capture policy, `PROTO_CAPTURE_ERRORS`, `MissingAssetError` carve-out |
 | `notes/logging.md` | Worker logging architecture, `update_status=True` spinner takeover, int verbosity levels, third-party progress bar handling |
 | `utils/device_manager.py` | DeviceManager API (auto-generated reference pages from docstrings) |
 | `utils/tool_instance.py` | ToolInstance API (auto-generated reference pages from docstrings) |

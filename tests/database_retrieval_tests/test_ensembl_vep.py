@@ -86,9 +86,8 @@ def test_run_ensembl_vep_wraps_corrupt_json():
         "proto_tools.tools.database_retrieval.ensembl.ensembl_vep.build_session",
         return_value=session,
     ):
-        out = run_ensembl_vep(EnsemblVEPInput(hgvs="9:g.22125504G>C"))
-    assert out.success is False
-    assert any("non-JSON" in err for err in out.errors)
+        with pytest.raises(Exception, match="non-JSON"):
+            run_ensembl_vep(EnsemblVEPInput(hgvs="9:g.22125504G>C"))
 
 
 def test_run_ensembl_vep_rejects_non_list_payload():
@@ -104,9 +103,8 @@ def test_run_ensembl_vep_rejects_non_list_payload():
         "proto_tools.tools.database_retrieval.ensembl.ensembl_vep.build_session",
         return_value=session,
     ):
-        out = run_ensembl_vep(EnsemblVEPInput(hgvs="9:g.22125504G>C"))
-    assert out.success is False
-    assert any("non-list" in err for err in out.errors)
+        with pytest.raises(Exception, match="non-list"):
+            run_ensembl_vep(EnsemblVEPInput(hgvs="9:g.22125504G>C"))
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +126,6 @@ def test_vep_hgvs_genomic_live():
 
 @pytest.mark.integration
 def test_vep_invalid_hgvs_surfaces_failure():
-    """Malformed HGVS yields a 400 from the server, surfaced as output.success=False."""
-    out = run_ensembl_vep(EnsemblVEPInput(hgvs="not-a-real-hgvs"))
-    assert out.success is False
+    """Malformed HGVS yields a 400 from the server, surfaced as a raised exception."""
+    with pytest.raises(Exception):
+        run_ensembl_vep(EnsemblVEPInput(hgvs="not-a-real-hgvs"))

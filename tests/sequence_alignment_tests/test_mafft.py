@@ -419,16 +419,13 @@ def test_mafft_default_sequence_ids_when_not_provided():
 
 @pytest.mark.integration
 def test_mafft_sequence_ids_length_mismatch_fails():
-    """Test that mismatched ID count returns error output."""
-    # Validation happens at resolve_sequence_ids call time in run_mafft_align
-    # ToolRegistry decorator catches exceptions and returns error output
+    """Test that mismatched ID count raises an error."""
     inputs = MafftInput(
         sequences=["MVLS", "AVLS"],
         sequence_ids=["only_one"],
     )
-    result = run_mafft_align(inputs, MafftConfig())
-    assert result.success is False
-    assert any("ids length" in err for err in result.errors)
+    with pytest.raises(Exception, match="ids length"):
+        run_mafft_align(inputs, MafftConfig())
 
 
 # ── Benchmark ─────────────────────────────────────────────────────────────────

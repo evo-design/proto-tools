@@ -88,12 +88,27 @@ class _StubProtoClient:
         _StubProtoClient.last_instance = self
 
 
+class _FakeProtoAuthError(Exception):
+    """Stand-in for ``proto_client.errors.ProtoAuthError`` (401/403)."""
+
+    def __init__(self, message: str, *, status_code: int, request_id: str | None = None) -> None:
+        super().__init__(message)
+        self.message = message
+        self.status_code = status_code
+        self.request_id = request_id
+
+
 @pytest.fixture
 def fake_proto_client(monkeypatch):
-    """Install a fake ``proto_client`` module in ``sys.modules``."""
+    """Install a fake ``proto_client`` module + stub key so use_api_backend() can construct a client."""
     fake_module = types.ModuleType("proto_client")
     fake_module.ProtoClient = _StubProtoClient  # type: ignore[attr-defined]
+    fake_errors = types.ModuleType("proto_client.errors")
+    fake_errors.ProtoAuthError = _FakeProtoAuthError  # type: ignore[attr-defined]
+    fake_module.errors = fake_errors  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "proto_client", fake_module)
+    monkeypatch.setitem(sys.modules, "proto_client.errors", fake_errors)
+    monkeypatch.setenv("PROTO_API_KEY", "test-stub-key")
     _StubProtoClient.last_instance = None
     yield _StubProtoClient
     _StubProtoClient.last_instance = None
@@ -238,19 +253,28 @@ def test_use_api_backend_without_proto_client_raises(monkeypatch):
 # ─ failure handling ──────────────────────────────────────────────────────────
 
 
-def test_sdk_failure_surfaces_as_not_implemented(fake_proto_client, clean_registry):
-    """SDK/network failures are re-raised as NotImplementedError with a user-facing message."""
+def test_transport_error_propagates_to_caller(fake_proto_client, clean_registry):
+    """Non-auth SDK failures (network, 5xx, etc.) propagate unchanged — not buried as the placeholder."""
     use_api_backend()
-    original = RuntimeError("server returned 500")
-    fake_proto_client.last_instance.tools.raise_on_run = original
+    fake_proto_client.last_instance.tools.raise_on_run = ConnectionError("network down")
 
-    spec = _register_cloud_tool(clean_registry, "failing-tool")
+    spec = _register_cloud_tool(clean_registry, "transport-failing-tool")
 
-    # The @tool wrapper captures the NotImplementedError into the output's errors list.
-    result = spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
+    with pytest.raises(ConnectionError, match="network down"):
+        spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
 
-    assert result.success is False
-    assert any("coming soon" in err for err in result.errors)
+
+def test_real_tool_failure_propagates_to_caller(fake_proto_client, clean_registry):
+    """A RuntimeError from proto-client (failed/cancelled job) propagates with the original message."""
+    use_api_backend()
+    fake_proto_client.last_instance.tools.raise_on_run = RuntimeError(
+        "Job fc-1 failed: ValueError: chain 'A' not present"
+    )
+
+    spec = _register_cloud_tool(clean_registry, "failing-cloud-tool")
+
+    with pytest.raises(RuntimeError, match="chain 'A'"):
+        spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
 
 
 def test_unexpected_result_type_raises(fake_proto_client, clean_registry):
@@ -259,12 +283,9 @@ def test_unexpected_result_type_raises(fake_proto_client, clean_registry):
     fake_proto_client.last_instance.tools.output_to_return = {"result": "ok"}
 
     spec = _register_cloud_tool(clean_registry, "type-check-tool")
-    result = spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
 
-    # TypeError is caught by the @tool wrapper like any other unexpected exception,
-    # but it is NOT wrapped in "coming soon" (it's a developer-facing bug).
-    assert result.success is False
-    assert any("expected _CloudOutput" in err for err in result.errors)
+    with pytest.raises(Exception, match="expected _CloudOutput"):
+        spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
 
 
 # ─ disable ───────────────────────────────────────────────────────────────────

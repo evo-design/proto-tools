@@ -277,15 +277,14 @@ def test_resolve_gpu_db_stem_rejects_padded_data_without_dbtype(tmp_path):
 
 
 def test_run_protein_search_use_gpu_without_padded_db_fails(tmp_path):
-    """End-to-end: ``use_gpu=True`` with no padded DB returns success=False with remediation."""
+    """End-to-end: ``use_gpu=True`` with no padded DB raises with remediation message."""
     fasta = tmp_path / "tiny.faa"
     fasta.write_text(">seq_0\nMKTL\n")
-    output = run_mmseqs2_search_proteins(
-        Mmseqs2SearchProteinsInput(query_sequences=["MKTL"], mmseqs_db=str(fasta)),
-        Mmseqs2SearchProteinsConfig(use_gpu=True),
-    )
-    assert output.success is False
-    assert any("GPU-padded MMseqs2 DB" in e and "makepaddedseqdb" in e for e in output.errors)
+    with pytest.raises(Exception, match=r"(?s)GPU-padded MMseqs2 DB.*makepaddedseqdb"):
+        run_mmseqs2_search_proteins(
+            Mmseqs2SearchProteinsInput(query_sequences=["MKTL"], mmseqs_db=str(fasta)),
+            Mmseqs2SearchProteinsConfig(use_gpu=True),
+        )
 
 
 def test_search_proteins_devices_per_instance_reflects_use_gpu():
