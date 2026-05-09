@@ -351,7 +351,16 @@ class GerminalConfig(BaseConfig):
         hidden=True,
         include_in_key=False,
     )
-    # verbose, timeout, seed inherited from BaseConfig.
+    # Germinal trajectories are minutes-to-hours each.
+    timeout: int = ConfigField(
+        title="Timeout",
+        default=14400,
+        ge=1,
+        description="Maximum execution time in seconds. Default 4h covers typical calls; bump for full campaigns.",
+        hidden=True,
+        include_in_key=False,
+    )
+    # verbose, seed inherited from BaseConfig.
 
     @field_validator("germinal_overrides", mode="after")
     @classmethod

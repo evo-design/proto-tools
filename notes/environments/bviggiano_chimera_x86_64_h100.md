@@ -1,6 +1,6 @@
 # Linux x86_64 Environment Report
 
-![Pass Rate](https://img.shields.io/badge/pass_rate-98%25-brightgreen) ![Passed](https://img.shields.io/badge/passed-51-brightgreen) ![Failed](https://img.shields.io/badge/failed-1-red) ![Skipped](https://img.shields.io/badge/skipped-3-lightgrey)
+![Pass Rate](https://img.shields.io/badge/pass_rate-100%25-brightgreen) ![Passed](https://img.shields.io/badge/passed-52-brightgreen) ![Failed](https://img.shields.io/badge/failed-0-red) ![Skipped](https://img.shields.io/badge/skipped-3-lightgrey)
 
 ## Platform
 
@@ -8,7 +8,7 @@
 |----------|-------|
 | **OS** | Linux Linux 5.15.0-176-generic |
 | **Architecture** | x86_64 |
-| **Hostname** | `GPU708E` |
+| **Hostname** | `GPU71E4` |
 | **Python** | 3.14.4 |
 | **RAM** | 1007.4 GB |
 | **GPU** | 1x NVIDIA H100 80GB HBM3 |
@@ -17,8 +17,8 @@
 
 ## Git
 
-- **Commit**: `2cc329ce228c`
-- **Branch**: `env-report-and-notebook-updates`
+- **Commit**: `e41655254aaa`
+- **Branch**: `main`
 - **Dirty**: No
 
 ## Environment Variables
@@ -26,10 +26,15 @@
 ### Parent Process Environment
 
 ```
+AI_AGENT=claude-code_2-1-138_agent
 BLASTDB=/common_datasets/external/databases/blast
 BROWSER=/home/bviggiano/.vscode-server/cli/servers/Stable-8b640eef5a6c6089c029249d48efa5c99adf7d51/server/bin/helpers/browser.sh
 BUNDLED_DEBUGPY_PATH=/home/bviggiano/.vscode-server/extensions/ms-python.debugpy-2026.6.0-linux-x64/bundled/libs/debugpy
-CLAUDE_CODE_SSE_PORT=48932
+CLAUDECODE=1
+CLAUDE_CODE_ENTRYPOINT=cli
+CLAUDE_CODE_EXECPATH=/home/bviggiano/.local/share/claude/versions/2.1.138
+CLAUDE_CODE_SSE_PORT=31235
+CLAUDE_EFFORT=xhigh
 COLORTERM=truecolor
 CONDA_DEFAULT_ENV=proto-tools
 CONDA_EXE=/home/bviggiano/miniforge3/bin/conda
@@ -38,11 +43,14 @@ CONDA_PREFIX_1=/home/bviggiano/miniforge3
 CONDA_PROMPT_MODIFIER=(proto-tools) 
 CONDA_PYTHON_EXE=/home/bviggiano/miniforge3/bin/python
 CONDA_SHLVL=2
+COREPACK_ENABLE_AUTO_PIN=0
 DISABLE_PANDERA_IMPORT_WARNING=True
-GK_GL_ADDR=http://127.0.0.1:45631
+GIT_EDITOR=true
+GK_GL_ADDR=http://127.0.0.1:44571
+GK_GL_PATH=/tmp/gitkraken/gitlens/gitlens-ipc-server-2171079-44571.json
 HOME=/home/bviggiano
 LANG=C.UTF-8
-LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/lib64
+LD_LIBRARY_PATH=/usr/local/cuda/lib64
 LESSCLOSE=/usr/bin/lesspipe %s %s
 LESSOPEN=| /usr/bin/lesspipe %s
 LOGNAME=bviggiano
@@ -50,28 +58,27 @@ LS_COLORS=rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd
 MAMBA_EXE=/home/bviggiano/miniforge3/bin/mamba
 MAMBA_ROOT_PREFIX=/home/bviggiano/.local/share/mamba
 MOTD_SHOWN=pam
-PATH=/home/bviggiano/.local/bin:/home/bviggiano/bin:/usr/local/cuda/bin:/home/bviggiano/.local/bin:/home/bviggiano/bin:/usr/local/cuda/bin:/home/bviggiano/miniforge3/envs/proto-tools/bin:/home/bviggiano/mi...
+NoDefaultCurrentDirectoryInExePath=1
+PATH=/home/bviggiano/miniforge3/envs/proto-tools/bin:/home/bviggiano/miniforge3/condabin:/home/bviggiano/.vscode-server/data/User/globalStorage/github.copilot-chat/debugCommand:/home/bviggiano/.vscode-serv...
 PROTO_ALPHAFOLD3_WEIGHTS_DIR=/large_storage/hielab/brk/models/af3_weights
 PROTO_HOME=/large_storage/hielab/bviggiano/proto_cache
 PWD=/home/bviggiano/main/codebases/evo-design/proto-tools
 PYDEVD_DISABLE_FILE_VALIDATION=1
 PYTEST_RUNNING=1
 PYTEST_VERSION=9.0.3
-PYTHONSTARTUP=/home/bviggiano/.vscode-server/data/User/workspaceStorage/abc792b6d27887651aa0ec9850dc3cb1/ms-python.python/pythonrc.py
+PYTHONSTARTUP=/home/bviggiano/.vscode-server/data/User/workspaceStorage/606b48bbf88196b292aff26cc9961831/ms-python.python/pythonrc.py
 PYTHON_BASIC_REPL=1
 RCLONE_CONFIG=/large_storage/rclone/etc/rclone.conf
 SHELL=/bin/bash
-SHLVL=3
-SLURM_JOB_ID=2298035
-TERM=screen
-TERM_PROGRAM=tmux
-TERM_PROGRAM_VERSION=3.2a
-TMUX=/tmp/tmux-10249/default,3469875,1
-TMUX_PANE=%1
+SHLVL=2
+SLURM_JOB_ID=2308582
+TERM=xterm-256color
+TERM_PROGRAM=vscode
+TERM_PROGRAM_VERSION=1.119.0
 USER=bviggiano
-VSCODE_DEBUGPY_ADAPTER_ENDPOINTS=/home/bviggiano/.vscode-server/extensions/ms-python.debugpy-2026.6.0-linux-x64/.noConfigDebugAdapterEndpoints/endpoint-c6f2f77237fe1ef7.txt
-VSCODE_GIT_IPC_HANDLE=/tmp/vscode-git-8f790ce8c6.sock
-VSCODE_IPC_HOOK_CLI=/tmp/vscode-ipc-9a891007-1939-4008-8df0-672ea690b444.sock
+VSCODE_DEBUGPY_ADAPTER_ENDPOINTS=/home/bviggiano/.vscode-server/extensions/ms-python.debugpy-2026.6.0-linux-x64/.noConfigDebugAdapterEndpoints/endpoint-d147cb5319870bc3.txt
+VSCODE_GIT_IPC_HANDLE=/tmp/vscode-git-2e22fcc75c.sock
+VSCODE_IPC_HOOK_CLI=/tmp/vscode-ipc-7da7e2b3-5fff-4eb1-93ae-7b184731ad74.sock
 VSCODE_PYTHON_AUTOACTIVATE_GUARD=1
 XDG_DATA_DIRS=/usr/local/share:/usr/share:/var/lib/snapd/desktop
 XLA_PYTHON_CLIENT_ALLOCATOR=platform
@@ -87,16 +94,16 @@ _CONDA_ROOT=/home/bviggiano/miniforge3
 ### Subprocess Environment (passed to tools)
 
 ```
-CONDA_PREFIX=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/progen3_env
+CONDA_PREFIX=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/germinal_env
 DETECTED_COMPUTE_PLATFORM=cuda
 DETECTED_CUDA_VERSION=12
 DETECTED_DRIVER_VERSION=560
 HF_HOME=/large_storage/hielab/bviggiano/proto_cache/proto_model_cache/huggingface
 HOME=/home/bviggiano
 LANG=C.UTF-8
-LD_LIBRARY_PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/progen3_env/cuda_env/lib:/usr/local/cuda/lib64:/home/bviggiano/miniforge3/envs/proto-tools/lib
+LD_LIBRARY_PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/germinal_env/cuda_env/lib:/usr/local/cuda/lib64:/home/bviggiano/miniforge3/envs/proto-tools/lib
 LOGNAME=bviggiano
-PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/progen3_env/bin:/usr/local/cuda/bin:/home/bviggiano/.local/bin:/home/bviggiano/bin:/home/bviggiano/miniforge3/envs/proto-tools/bin:/home/bvi...
+PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/germinal_env/bin:/usr/local/cuda/bin:/home/bviggiano/miniforge3/envs/proto-tools/bin:/home/bviggiano/miniforge3/condabin:/home/bviggiano/.vs...
 PIP_CACHE_DIR=/large_storage/hielab/bviggiano/proto_cache/pip_cache
 PIP_DEFAULT_TIMEOUT=300
 PROTO_ALPHAFOLD3_WEIGHTS_DIR=/large_storage/hielab/brk/models/af3_weights
@@ -111,18 +118,19 @@ TORCH_HOME=/large_storage/hielab/bviggiano/proto_cache/proto_model_cache/torch
 USER=bviggiano
 UV_CACHE_DIR=/large_storage/hielab/bviggiano/proto_cache/uv_cache
 UV_HTTP_TIMEOUT=300
-VIRTUAL_ENV=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/progen3_env
+VIRTUAL_ENV=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/germinal_env
+XLA_FLAGS=--xla_gpu_cuda_data_dir=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/germinal_env/cuda_env
 XLA_PYTHON_CLIENT_ALLOCATOR=platform
 XLA_PYTHON_CLIENT_PREALLOCATE=false
 ```
 
 ## Results by Category
 
-### Binder Design (0/1)
+### Binder Design (1/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
 |------|--------------|----------------------|----------|-----------|--------|
-| `germinal-design` | yes | ✅ | 3771.6s | `2cc329c` | ❌ Fail |
+| `germinal-design` | yes | ✅ | 613.0s | `e416552` | ✅ Pass |
 
 ### Causal Models (4/4)
 
@@ -253,40 +261,8 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
 | `mock-pytorch-multi-gpu-tool-run` | yes | - | - | `2cc329c` | ⏭️ Skip |
 | `mock-pytorch-tool-run` | yes | ✅ | 87.5s | `2cc329c` | ✅ Pass |
 
-## Failure Details
-
-### ❌ `germinal-design`
-
-**Test**: `tests/tool_infra_tests/test_env_report.py::test_tool_env_report[germinal-design]`
-
-```
-tests/tool_infra_tests/test_env_report.py:77: in test_tool_env_report
-    result = spec.function(inputs, config)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-proto_tools/tools/tool_registry.py:385: in wrapper
-    return _wrapper_body(inputs, config, instance)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-proto_tools/tools/tool_registry.py:677: in _wrapper_body
-    return _make_error_output_or_raise(
-proto_tools/tools/tool_registry.py:1119: in _make_error_output_or_raise
-    raise exception
-proto_tools/tools/tool_registry.py:611: in _wrapper_body
-    result = func(inputs, config, instance)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-proto_tools/tools/binder_design/germinal/germinal_design.py:614: in run_germinal_design
-    output_data = ToolInstance.dispatch("germinal", input_data, instance=instance, config=config)
-                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-proto_tools/utils/tool_instance.py:432: in dispatch
-    return cls._oneshot(
-proto_tools/utils/tool_instance.py:471: in _oneshot
-    return inst._run_oneshot(
-proto_tools/utils/tool_instance.py:1275: in _run_oneshot
-    raise TimeoutError(f"{self.toolkit}: timed out after {effective_timeout}s") from None
-E   TimeoutError: germinal: timed out after 3600s
-```
-
 ---
-*Generated at 2026-05-09 02:06:58 by `pytest --env-report`*
+*Generated at 2026-05-09 12:16:36 by `pytest --env-report`*
 
 <!-- env-report-data
 [
@@ -957,13 +933,13 @@ E   TimeoutError: germinal: timed out after 3600s
     "tool_key": "germinal-design",
     "category": "binder_design",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[germinal-design]",
-    "status": "failed",
-    "duration_seconds": 3771.55,
+    "status": "passed",
+    "duration_seconds": 612.99,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/germinal_env",
     "env_status": "success",
-    "error_message": "tests/tool_infra_tests/test_env_report.py:77: in test_tool_env_report\n    result = spec.function(inputs, config)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nproto_tools/tools/tool_registry.py:385: in wrapper\n    return _wrapper_body(inputs, config, instance)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nproto_tools/tools/tool_registry.py:677: in _wrapper_body\n    return _make_error_output_or_raise(\nproto_tools/tools/tool_registry.py:1119: in _make_error_output_or_raise\n    raise exception\nproto_tools/tools/tool_registry.py:611: in _wrapper_body\n    result = func(inputs, config, instance)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nproto_tools/tools/binder_design/germinal/germinal_design.py:614: in run_germinal_design\n    output_data = ToolInstance.dispatch(\"germinal\", input_data, instance=instance, config=config)\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nproto_tools/utils/tool_instance.py:432: in dispatch\n    return cls._oneshot(\nproto_tools/utils/tool_instance.py:471: in _oneshot\n    return inst._run_oneshot(\nproto_tools/utils/tool_instance.py:1275: in _run_oneshot\n    raise TimeoutError(f\"{self.toolkit}: timed out after {effective_timeout}s\") from None\nE   TimeoutError: germinal: timed out after 3600s",
-    "git_commit": "2cc329ce228c",
+    "error_message": null,
+    "git_commit": "e41655254aaa",
     "git_dirty": false
   },
   {
