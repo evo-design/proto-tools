@@ -74,7 +74,7 @@ ENTRY = DatasetEntry(
         ],
         output_files=[
             "uniref30_mini_db.dbtype",
-            "uniref30_mini_db.idx",
+            "uniref30_mini_db.index",
             "uniref30_mini_db_h",
             "uniref30_mini_db_seq",
         ],
