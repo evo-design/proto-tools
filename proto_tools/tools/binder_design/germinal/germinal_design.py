@@ -364,6 +364,21 @@ class GerminalConfig(BaseConfig):
                 raise ValueError(f"germinal_overrides key {key!r}: 'hydra.*' overrides are not permitted")
         return v
 
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> GerminalConfig:
+        """Smoke-test config: 2 trajectories, 1 passing design.
+
+        Args:
+            **kwargs (Any): Field values; take precedence over the smoke defaults.
+
+        Returns:
+            GerminalConfig: Smoke-test config.
+        """
+        kwargs.setdefault("max_trajectories", 2)
+        kwargs.setdefault("max_hallucinated_trajectories", 1)
+        kwargs.setdefault("max_passing_designs", 1)
+        return super().minimal(**kwargs)  # type: ignore[return-value]
+
 
 # ============================================================================
 # Output
