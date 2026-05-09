@@ -40,3 +40,9 @@ def _restore_logger_state() -> Generator[None, None, None]:
         worker_logger.propagate = worker_propagate
         pt_logger.level = pt_level
         worker_logger.level = worker_level
+
+
+@pytest.fixture
+def capture_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Set PROTO_CAPTURE_ERRORS=1 for tests that exercise the capture-mode path."""
+    monkeypatch.setenv("PROTO_CAPTURE_ERRORS", "1")

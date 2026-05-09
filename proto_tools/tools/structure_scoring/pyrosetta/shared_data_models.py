@@ -171,9 +171,6 @@ def relax_inputs_via_pyrosetta(
     Returns:
         list[ScoringStructureInput]: New inputs with the same ``chains_to_score`` selection,
             pointing at the relaxed structures (chain labels match input).
-
-    Raises:
-        RuntimeError: If the relax dispatch fails.
     """
     # Lazy import to break the circular dependency: pyrosetta_relax imports
     # from this module, and we'd otherwise import it back here.
@@ -188,8 +185,6 @@ def relax_inputs_via_pyrosetta(
         ),
         relax_config,
     )
-    if not relax_out.success:
-        raise RuntimeError(f"FastRelax preprocess failed: {relax_out.errors}")
 
     return [
         ScoringStructureInput(

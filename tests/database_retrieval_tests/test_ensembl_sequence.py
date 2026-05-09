@@ -92,9 +92,8 @@ def test_wraps_corrupt_json_with_context():
         "proto_tools.tools.database_retrieval.ensembl.ensembl_sequence.build_session",
         return_value=session,
     ):
-        out = run_ensembl_sequence(EnsemblSequenceInput(ensembl_id="ENST00000357654"))
-    assert out.success is False
-    assert any("non-JSON" in err for err in out.errors)
+        with pytest.raises(Exception, match="non-JSON"):
+            run_ensembl_sequence(EnsemblSequenceInput(ensembl_id="ENST00000357654"))
 
 
 # ---------------------------------------------------------------------------

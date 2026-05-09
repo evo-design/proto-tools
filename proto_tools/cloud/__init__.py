@@ -16,13 +16,16 @@ Example::
 """
 
 import logging
+import os
 from typing import Any
 
+from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.utils.base_config import BaseConfig
 from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 logger = logging.getLogger(__name__)
 
+# TODO: remove once cloud is generally available — drop _NOT_READY_MSG, the API-key precheck in use_api_backend(), and the ProtoAuthError catch in _route_to_cloud, so all SDK exceptions propagate.
 _NOT_READY_MSG = (
     "\n"
     "  ┌─────────────────────────────────────────────────────────────┐\n"
@@ -59,15 +62,22 @@ def use_api_backend(
     Raises:
         ImportError: If ``proto-client`` is not installed. Install with
             ``pip install proto-tools[cloud]``.
+        NotImplementedError: If no API key is configured (neither
+            ``api_key`` kwarg nor ``PROTO_API_KEY`` env var). The
+            placeholder message documents that cloud isn't generally
+            available yet.
     """
     try:
         from proto_client import ProtoClient
+        from proto_client.errors import ProtoAuthError
     except ImportError as exc:
         raise ImportError(
             "device='cloud' requires proto-client. Install with `pip install proto-tools[cloud]`."
         ) from exc
 
-    from proto_tools.tools.tool_registry import ToolRegistry
+    # API-key gate: no key configured → user-facing placeholder. Auth failures from a configured-but-invalid key are caught below.
+    if not client_kwargs.get("api_key") and not os.environ.get("PROTO_API_KEY"):
+        raise NotImplementedError(_NOT_READY_MSG)
 
     client = ProtoClient(**client_kwargs)
 
@@ -77,11 +87,10 @@ def use_api_backend(
         inputs: BaseToolInput,
         config: BaseConfig | None,
     ) -> BaseToolOutput | None:
-        if config is None or getattr(config, "device", None) != "cloud":
+        if config is None or config.device != "cloud":
             return None
         output_class = ToolRegistry.get(key).output_model
-        # device='cloud' is the routing signal for this client; the server picks
-        # its own physical device, so strip it before sending.
+        # device='cloud' is the routing signal for this client; the server picks its own physical device, so strip it before sending.
         config_payload = config.model_dump(exclude_none=True)
         config_payload.pop("device", None)
         try:
@@ -93,15 +102,16 @@ def use_api_backend(
                 timeout=timeout,
                 output_model=output_class,
             )
-        except Exception as exc:
-            logger.debug("Cloud dispatch for %r failed: %s", key, exc, exc_info=True)
+        except ProtoAuthError as exc:
+            # Invalid / unauthorized key — surface the user-facing placeholder. All other SDK exceptions propagate.
+            logger.debug("Cloud auth error for %r: %s", key, exc, exc_info=True)
             raise NotImplementedError(_NOT_READY_MSG) from exc
-        else:
-            # SDK swaps in the validated instance when output_model is passed; widen for the type checker.
-            result: Any = response.result
-            if not isinstance(result, output_class):
-                raise TypeError(f"Tool {key!r} returned {type(result).__name__}, expected {output_class.__name__}")
-            return result
+
+        # SDK swaps in the validated instance when output_model is passed; widen for the type checker.
+        result: Any = response.result
+        if not isinstance(result, output_class):
+            raise TypeError(f"Tool {key!r} returned {type(result).__name__}, expected {output_class.__name__}")
+        return result
 
     setattr(ToolRegistry, "_try_dispatch", classmethod(_route_to_cloud))  # noqa: B010
     global _enabled  # noqa: PLW0603 — module-level on/off flag
@@ -110,7 +120,6 @@ def use_api_backend(
 
 def disable_api_backend() -> None:
     """Restore default local dispatch. Primarily for tests."""
-    from proto_tools.tools.tool_registry import ToolRegistry
 
     def _noop(
         _cls: type,

@@ -511,9 +511,17 @@ class BaseToolOutput(BaseModel, ABC):
         tool_id (str | None): Unique tool identifier (e.g., ``"blast-search"``).
         execution_time (float | None): Execution time in seconds.
         timestamp (datetime): Execution timestamp.
-        success (bool | None): Whether execution succeeded.
+        success (bool | None): Whether execution succeeded. ``True`` for any
+            successful call. ``False`` only when the tool *failed* and
+            ``PROTO_CAPTURE_ERRORS=1`` is set; on the default raise path
+            failures raise instead of returning an output. See
+            ``notes/error-handling.md``.
         warnings (list[str]): Non-fatal warnings generated during execution.
-        errors (list[str]): Fatal error messages generated during execution.
+        errors (list[str]): Fatal error messages. Populated only when the
+            tool *failed* and the wrapper is in capture mode; empty on
+            success and on the default raise path. Each entry is
+            ``"TypeName: message"`` followed by the formatted traceback.
+            See ``notes/error-handling.md``.
         metadata (dict[str, Any]): Additional tool-specific metadata.
 
     Example:
@@ -533,7 +541,10 @@ class BaseToolOutput(BaseModel, ABC):
     )
     execution_time: float | None = Field(default=None, description="Execution time in seconds", ge=0.0)
     timestamp: datetime = Field(default_factory=datetime.now, description="Execution timestamp")
-    success: bool | None = Field(default=None, description="Whether execution succeeded")
+    success: bool | None = Field(
+        default=None,
+        description="Whether execution succeeded. False only under PROTO_CAPTURE_ERRORS=1.",
+    )
 
     # Optional metadata fields
     warnings: list[str] = Field(
@@ -542,7 +553,7 @@ class BaseToolOutput(BaseModel, ABC):
     )
     errors: list[str] = Field(
         default_factory=list,
-        description="Fatal error messages generated during execution",
+        description="Fatal error messages, populated only under PROTO_CAPTURE_ERRORS=1.",
     )
     metadata: dict[str, Any] = Field(default_factory=dict, description="Additional tool-specific metadata")
 

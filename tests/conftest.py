@@ -1399,6 +1399,23 @@ def _cleanup_tool_instances():
     ToolInstance.clear_all()
 
 
+@pytest.fixture(autouse=True)
+def _default_raise_mode(monkeypatch):
+    """Run every test in default raise mode unless it explicitly opts into capture.
+
+    If ``PROTO_CAPTURE_ERRORS`` leaks in from the developer shell or CI
+    environment, every ``pytest.raises(...)`` assertion would fail with
+    "DID NOT RAISE" because the ``@tool`` wrapper would be capturing
+    instead of raising. Clearing the var here guarantees the suite tests
+    the documented default behaviour.
+
+    Tests that need capture mode override this by calling
+    ``monkeypatch.setenv("PROTO_CAPTURE_ERRORS", "1")`` (or using the
+    ``capture_errors`` fixture in ``tool_infra_tests/test_tool_registry.py``).
+    """
+    monkeypatch.delenv("PROTO_CAPTURE_ERRORS", raising=False)
+
+
 # ============================================================================
 # Persistent tool fixture factory
 # ============================================================================

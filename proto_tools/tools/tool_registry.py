@@ -10,6 +10,7 @@ import contextlib
 import difflib
 import inspect
 import logging
+import os
 import re
 import time
 import traceback
@@ -41,6 +42,15 @@ RETRY_DELAY = 2.0  # Base delay in seconds (exponential backoff: 2s, 4s, 8s)
 # TimeoutError excluded: retrying with the same limit would just time out again
 _RETRYABLE_EXCEPTIONS = (ConnectionError,)
 
+# Set PROTO_CAPTURE_ERRORS=1 to capture tool exceptions into success=False outputs instead of raising.
+_CAPTURE_ERRORS_ENV_VAR = "PROTO_CAPTURE_ERRORS"
+
+
+def _should_capture_errors() -> bool:
+    """Whether tool exceptions should be captured into the output instead of raised."""
+    return os.environ.get(_CAPTURE_ERRORS_ENV_VAR, "0") == "1"
+
+
 from proto_tools.utils import BaseConfig
 from proto_tools.utils.device import (
     parse_device_string,
@@ -61,7 +71,7 @@ from proto_tools.utils.tool_cache import (
     deduplicate_items,
 )
 from proto_tools.utils.tool_instance import ToolInstance
-from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, MissingAssetError
 
 
 class ToolSpec(BaseModel):
@@ -557,7 +567,7 @@ class ToolRegistry:
                             type(e).__name__,
                             e,
                         )
-                        return _make_error_output(
+                        return _make_error_output_or_raise(
                             output_class,
                             key,
                             start_time,
@@ -654,7 +664,7 @@ class ToolRegistry:
                                 time.sleep(delay)
 
                         except Exception as e:
-                            # Non-retryable error; return immediately
+                            # Non-retryable error; raise (or capture per policy)
                             filtered_warnings = [
                                 w
                                 for w in warning_list
@@ -664,7 +674,7 @@ class ToolRegistry:
                             _re_emit_warnings(filtered_warnings)
 
                             logger.error(f"Tool {key}: failed with {type(e).__name__}: {e}")
-                            return _make_error_output(
+                            return _make_error_output_or_raise(
                                 output_class,
                                 key,
                                 start_time,
@@ -679,7 +689,7 @@ class ToolRegistry:
                         f"Tool {key}: failed after {1 + MAX_RETRIES} attempts with "
                         f"{type(last_exception).__name__}: {last_exception}"
                     )
-                    return _make_error_output(
+                    return _make_error_output_or_raise(
                         output_class,
                         key,
                         start_time,
@@ -1073,6 +1083,40 @@ def _make_error_output(
         warnings=warning_strings or [],
         errors=[f"{type(exception).__name__}: {exception}", traceback_str],
     )
+
+
+def _make_error_output_or_raise(
+    output_class: type[BaseToolOutput],
+    key: str,
+    start_time: float,
+    exception: Exception,
+    traceback_str: str,
+    warning_strings: list[str] | None = None,
+) -> BaseToolOutput:
+    """Capture or re-raise a tool exception based on the active capture policy.
+
+    ``MissingAssetError`` always re-raises (the pytest skip hook depends on it).
+    Otherwise the env var decides: capture into a ``success=False`` output, or re-raise.
+
+    Args:
+        output_class (type[BaseToolOutput]): Output model class for the failed tool.
+        key (str): Tool registry key.
+        start_time (float): Execution start timestamp from ``time.time()``.
+        exception (Exception): The exception raised by the tool.
+        traceback_str (str): Formatted traceback string.
+        warning_strings (list[str] | None): Warnings captured during execution.
+
+    Returns:
+        BaseToolOutput: Structured error output, when capture is enabled.
+
+    Raises:
+        Exception: The original exception, when capture is disabled.
+    """
+    if isinstance(exception, MissingAssetError):
+        raise exception
+    if _should_capture_errors():
+        return _make_error_output(output_class, key, start_time, exception, traceback_str, warning_strings)
+    raise exception
 
 
 def _post_dispatch_cache_and_expand(

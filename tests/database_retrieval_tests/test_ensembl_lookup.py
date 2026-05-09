@@ -156,9 +156,8 @@ def test_wraps_corrupt_json_with_context():
         "proto_tools.tools.database_retrieval.ensembl.ensembl_lookup.build_session",
         return_value=session,
     ):
-        out = run_ensembl_lookup(EnsemblLookupInput(ensembl_id="ENSG00000012048"))
-    assert out.success is False
-    assert any("non-JSON" in err and "ENSG00000012048" in err for err in out.errors)
+        with pytest.raises(Exception, match=r"non-JSON.*ENSG00000012048|ENSG00000012048.*non-JSON"):
+            run_ensembl_lookup(EnsemblLookupInput(ensembl_id="ENSG00000012048"))
 
 
 def test_rejects_non_dict_payload():
@@ -168,9 +167,8 @@ def test_rejects_non_dict_payload():
         "proto_tools.tools.database_retrieval.ensembl.ensembl_lookup.build_session",
         return_value=session,
     ):
-        out = run_ensembl_lookup(EnsemblLookupInput(ensembl_id="ENSG00000012048"))
-    assert out.success is False
-    assert any("non-dict" in err for err in out.errors)
+        with pytest.raises(Exception, match="non-dict"):
+            run_ensembl_lookup(EnsemblLookupInput(ensembl_id="ENSG00000012048"))
 
 
 # ---------------------------------------------------------------------------
@@ -211,6 +209,6 @@ def test_lookup_id_grch37_routes_to_alt_host():
 
 @pytest.mark.integration
 def test_unknown_id_surfaces_failure():
-    """An unknown Ensembl ID propagates the upstream HTTPError as output.success=False."""
-    out = run_ensembl_lookup(EnsemblLookupInput(ensembl_id="ENSGBOGUS00000000"))
-    assert out.success is False
+    """An unknown Ensembl ID propagates the upstream HTTPError as a raised exception."""
+    with pytest.raises(Exception):
+        run_ensembl_lookup(EnsemblLookupInput(ensembl_id="ENSGBOGUS00000000"))
