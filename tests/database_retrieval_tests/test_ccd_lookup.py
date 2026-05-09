@@ -88,8 +88,11 @@ def test_output_export_json_writes_ligands_and_enrichments(tmp_path):
 
 
 # ── Integration tests (require pdbeccdutils env + components.cif) ───────────
+# Skipped in CI: each loads the ~700 MB CCD bundle (SMILES paths re-parse for
+# indexing), which blows past the GH runner wall-clock budget.
 
 
+@pytest.mark.skip_ci
 @pytest.mark.integration
 def test_ccd_lookup_offline_enrichment_full_pass():
     """One batch covers every offline path: CCD codes, parent codes, SMILES, no-match, order, defaults."""
@@ -128,6 +131,7 @@ def test_ccd_lookup_offline_enrichment_full_pass():
     assert all(e.pdb_structures is None for e in result.enrichments)
 
 
+@pytest.mark.skip_ci
 @pytest.mark.integration
 def test_ccd_lookup_include_cross_references_unichem():
     """include_cross_references=True maps ATP to the canonical external compound IDs."""
@@ -144,6 +148,7 @@ def test_ccd_lookup_include_cross_references_unichem():
     assert "DB00171" in xrefs["drugbank"]
 
 
+@pytest.mark.skip_ci
 @pytest.mark.integration
 def test_ccd_lookup_garbage_input_returns_placeholder_fragment():
     """End-to-end: garbage input yields a None-ccd_code placeholder without crashing."""
@@ -154,6 +159,7 @@ def test_ccd_lookup_garbage_input_returns_placeholder_fragment():
     assert result.ligands.fragments[0].ccd_code is None
 
 
+@pytest.mark.skip_ci
 @pytest.mark.integration
 def test_ccd_lookup_include_pdb_usage_rcsb():
     """include_pdb_usage=True returns 4-character PDB codes; HEM appears in thousands of entries."""
