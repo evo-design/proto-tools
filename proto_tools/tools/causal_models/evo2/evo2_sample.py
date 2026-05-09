@@ -122,7 +122,7 @@ class Evo2SampleConfig(CausalModelSampleConfig):
         hidden=True,
         reload_on_change=True,
     )
-    timeout: int = ConfigField(
+    timeout: int | None = ConfigField(
         title="Timeout",
         default=1800,
         ge=1,

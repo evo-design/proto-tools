@@ -161,7 +161,7 @@ class Boltz2Config(MSAStructurePredictionConfig):
 
         include_pae_matrix (bool): Attach ``pae`` (``avg_pae`` always emitted). Default: ``False``.
 
-        timeout (int): Maximum execution time in seconds. Default: 1200.
+        timeout (int | None): Maximum execution time in seconds. ``None`` waits indefinitely. Default: 1200.
 
     """
 
@@ -214,7 +214,7 @@ class Boltz2Config(MSAStructurePredictionConfig):
         hidden=True,
         include_in_key=False,
     )
-    timeout: int = ConfigField(
+    timeout: int | None = ConfigField(
         title="Timeout",
         default=1200,
         ge=1,

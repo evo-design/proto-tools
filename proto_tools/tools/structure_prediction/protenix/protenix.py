@@ -264,8 +264,8 @@ class ProtenixConfig(MSAStructurePredictionConfig):
             MSA generation, model loading, and prediction progress. Inherited from
             ``StructurePredictionConfig``. Default: ``False``.
 
-        timeout (int): Maximum execution time in seconds. Base models need
-            ~10-15 minutes on slower GPUs. Default: 1200.
+        timeout (int | None): Maximum execution time in seconds. Base models need
+            ~10-15 minutes on slower GPUs. ``None`` waits indefinitely. Default: 1200.
 
     """
 
@@ -307,7 +307,7 @@ class ProtenixConfig(MSAStructurePredictionConfig):
         advanced=True,
     )
 
-    timeout: int = ConfigField(
+    timeout: int | None = ConfigField(
         title="Timeout",
         default=1200,
         ge=1,

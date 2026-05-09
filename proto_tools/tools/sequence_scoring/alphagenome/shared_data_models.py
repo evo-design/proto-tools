@@ -276,8 +276,8 @@ class AlphaGenomePredictConfig(BaseConfig):
         ontology_terms (list[str] | None): Optional ontology term filters.
         organism (Literal['human', 'mouse']): Organism for predictions.
         device (str): Device to run inference on.
-        timeout (int): Maximum execution time in seconds. AlphaGenome JAX
-            compilation is slow on first run.
+        timeout (int | None): Maximum execution time in seconds. AlphaGenome JAX
+            compilation is slow on first run. ``None`` waits indefinitely.
     """
 
     model_version: str = ConfigField(
@@ -311,11 +311,11 @@ class AlphaGenomePredictConfig(BaseConfig):
         hidden=True,
         include_in_key=False,
     )
-    timeout: int = ConfigField(
+    timeout: int | None = ConfigField(
         title="Timeout",
         default=1800,
         ge=1,
-        description="Maximum execution time in seconds (AlphaGenome JAX compilation is slow on first run)",
+        description="Maximum execution time in seconds (JAX compilation is slow on first run). None = no cap.",
         hidden=True,
     )
 

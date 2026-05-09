@@ -92,7 +92,7 @@ class Evo2ScoringConfig(CausalModelScoringConfig):
         description="Prepend a beginning-of-sequence token before scoring",
         advanced=True,
     )
-    timeout: int = ConfigField(
+    timeout: int | None = ConfigField(
         title="Timeout",
         default=1800,
         ge=1,

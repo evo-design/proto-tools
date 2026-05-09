@@ -104,7 +104,7 @@ class BaseConfig(BaseModel):
         verbose (int): Verbosity level (0=quiet, 1=info, 2=debug, 3=raw subprocess stderr).
             ``True`` is coerced to ``1`` and ``False`` to ``0``.
         device (str): Device to run the tool on.
-        timeout (int): Maximum execution time in seconds.
+        timeout (int | None): Maximum execution time in seconds. ``None`` waits indefinitely.
         seed (int | None): Random seed. When set, tools run reproducibly up to small
             GPU float noise (see ``BaseToolOutput.approx_equal``), and the seed
             participates in cache keys. When None, cacheable generative tools
@@ -120,6 +120,9 @@ class BaseConfig(BaseModel):
             separate ``use_gpu`` flag toggling real GPU work. ``ToolPool``
             reads this at dispatch time to group devices into worker slots
             (``0`` short-circuits to a single direct call).
+
+    Methods:
+        effective_timeout: Timeout the framework enforces. Override when the cap depends on other fields.
 
     Example:
         >>> class MyToolConfig(BaseConfig):
@@ -176,11 +179,11 @@ class BaseConfig(BaseModel):
         include_in_key=False,
     )
 
-    timeout: int = ConfigField(
+    timeout: int | None = ConfigField(
         title="Timeout",
         default=DEFAULT_TIMEOUT,
         ge=1,
-        description="Maximum execution time in seconds",
+        description="Maximum execution time in seconds. None waits indefinitely.",
         hidden=True,
         include_in_key=False,
     )
@@ -260,6 +263,14 @@ class BaseConfig(BaseModel):
             BaseConfig: An instance of the config with minimal-cost defaults applied.
         """
         return cls(**kwargs)
+
+    def effective_timeout(self) -> int | None:
+        """Return the timeout the framework enforces. Override when the cap depends on other fields.
+
+        Returns:
+            int | None: Effective timeout in seconds, or None for no cap.
+        """
+        return self.timeout
 
     def preprocess(self, inputs: BaseToolInput) -> BaseToolInput:
         """Transform inputs before tool execution. Override in subclasses."""

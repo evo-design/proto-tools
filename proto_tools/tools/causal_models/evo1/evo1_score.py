@@ -63,7 +63,7 @@ class Evo1ScoringConfig(CausalModelScoringConfig):
         description="Evo1 weights variant",
         reload_on_change=True,
     )
-    timeout: int = ConfigField(
+    timeout: int | None = ConfigField(
         title="Timeout",
         default=1800,
         ge=1,

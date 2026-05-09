@@ -114,7 +114,7 @@ class Evo1SampleConfig(CausalModelSampleConfig):
         description="Tokens to prefill in parallel before switching to prompt forcing",
         hidden=True,
     )
-    timeout: int = ConfigField(
+    timeout: int | None = ConfigField(
         title="Timeout",
         default=1800,
         ge=1,

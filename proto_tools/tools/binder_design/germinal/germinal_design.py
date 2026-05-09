@@ -351,12 +351,12 @@ class GerminalConfig(BaseConfig):
         hidden=True,
         include_in_key=False,
     )
-    # Germinal trajectories are minutes-to-hours each.
-    timeout: int = ConfigField(
+    # Germinal campaigns run hours-to-days; truncating mid-run wastes compute (default: no cap).
+    timeout: int | None = ConfigField(
         title="Timeout",
-        default=14400,
+        default=None,
         ge=1,
-        description="Maximum execution time in seconds. Default 4h covers typical calls; bump for full campaigns.",
+        description="Maximum execution time in seconds. None (default) waits indefinitely.",
         hidden=True,
         include_in_key=False,
     )

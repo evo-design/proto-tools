@@ -1052,6 +1052,27 @@ def test_dispatch_reads_timeout_from_config(mock_init: MagicMock, mock_oneshot: 
 
 @patch.object(ToolInstance, "_oneshot")
 @patch.object(ToolInstance, "__init__", return_value=None)
+def test_dispatch_uses_effective_timeout_override(mock_init: MagicMock, mock_oneshot: MagicMock):
+    """dispatch() should call config.effective_timeout(), letting tools relax the cap conditionally."""
+    from proto_tools.utils.base_config import BaseConfig
+
+    class _FlagConfig(BaseConfig):
+        big_db: bool = False
+
+        def effective_timeout(self) -> int | None:
+            return None if self.big_db else self.timeout
+
+    mock_oneshot.return_value = {"result": "ok"}
+    ToolInstance.dispatch("esm2", {"op": "score"}, config=_FlagConfig(big_db=True, timeout=60))
+    assert mock_oneshot.call_args.kwargs["timeout"] is None
+
+    mock_oneshot.reset_mock()
+    ToolInstance.dispatch("esm2", {"op": "score"}, config=_FlagConfig(big_db=False, timeout=60))
+    assert mock_oneshot.call_args.kwargs["timeout"] == 60
+
+
+@patch.object(ToolInstance, "_oneshot")
+@patch.object(ToolInstance, "__init__", return_value=None)
 def test_dispatch_defaults_timeout_to_600(mock_init: MagicMock, mock_oneshot: MagicMock):
     """dispatch() should default timeout to 600 when not in input_dict."""
     mock_oneshot.return_value = {"result": "ok"}
@@ -1154,12 +1175,12 @@ def test_warmup_timeout_is_at_least_configured():
 
 
 def test_warmup_with_none_timeout():
-    """When timeout=None, warmup should still apply the WARMUP_TIMEOUT."""
+    """When timeout=None, the caller has opted out of any cap — even on first run."""
     inst = _make_fake_instance(needs_warmup=True)
     params = {"model_name": "some_model"}
 
     result = inst._apply_warmup_timeout(None, params)
-    assert result == 3600
+    assert result is None
 
 
 def test_no_params_defaults_to_empty():
@@ -1207,10 +1228,11 @@ def test_persistent_warmup_on_config_change():
 
         inst._run_persistent(
             {"device": "cpu", "model_checkpoint": "esm2_t36_3B_UR50D"},
+            timeout=600,
             reload_on={"model_checkpoint"},
         )
 
-        # New config should have used warmup timeout (3600)
+        # New config triggers warmup; configured 600 should be bumped to WARMUP (3600).
         call_args = new_worker.send.call_args
         assert call_args.kwargs.get("timeout") == 3600 or call_args[1].get("timeout") == 3600
 

@@ -339,9 +339,7 @@ class BindCraftConfig(BaseConfig):
             of the upstream default filters at dispatch time. Keys are upstream metric
             names (e.g. ``"Average_pLDDT"``); values are upstream filter dicts
             (e.g. ``{"threshold": 0.85, "higher": True}``).
-        timeout (int): Maximum execution time in seconds. Defaults to 14400 (4 hours)
-            since BindCraft trajectories take minutes-to-hours each. Bump explicitly for
-            full Nature-paper-scale campaigns (100+ accepted designs).
+        timeout (int | None): Maximum execution time in seconds. ``None`` (default) waits indefinitely.
     """
 
     design_algorithm: Literal["2stage", "3stage", "4stage", "greedy", "mcmc"] = ConfigField(
@@ -730,12 +728,12 @@ class BindCraftConfig(BaseConfig):
         hidden=True,
         include_in_key=False,
     )
-    # BindCraft trajectories are minutes-to-hours each.
-    timeout: int = ConfigField(
+    # BindCraft campaigns run hours-to-days; truncating mid-run wastes compute (default: no cap).
+    timeout: int | None = ConfigField(
         title="Timeout",
-        default=14400,
+        default=None,
         ge=1,
-        description="Maximum execution time in seconds. Default 4h covers typical calls; bump for full campaigns.",
+        description="Maximum execution time in seconds. None (default) waits indefinitely.",
         hidden=True,
         include_in_key=False,
     )

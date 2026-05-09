@@ -367,10 +367,10 @@ class ToolInstance:
                 ``_instances`` and no persist context is active.
         """
         toolkit = cls._normalize_toolkit(toolkit)
-        # Derive execution parameters from config
+        # Read effective_timeout() so tools can derive the cap from other fields.
         if config is not None:
             verbose = config.verbose
-            timeout = config.timeout
+            timeout = config.effective_timeout()
             reload_on = type(config).reload_fields()
         else:
             verbose = 0
@@ -970,6 +970,8 @@ class ToolInstance:
         timeout (60 minutes or the configured timeout, whichever is
         larger) to allow time for downloads.
 
+        ``timeout=None`` is preserved as-is (no warm-up extension).
+
         Args:
             timeout (int | None): The configured timeout in seconds, or None for no timeout.
             reload_params (dict[str, Any] | None): Current reload_on_change field values.
@@ -977,10 +979,13 @@ class ToolInstance:
         Returns:
             int | None: The effective timeout to use (extended on first run).
         """
+        # Honor explicit opt-out: no warm-up extension when the user asked for no cap.
+        if timeout is None:
+            return None
         WARMUP_TIMEOUT = 3600  # 60 minutes
         params = reload_params or {}
         if self._needs_warmup(params):
-            effective_timeout = WARMUP_TIMEOUT if timeout is None else max(WARMUP_TIMEOUT, timeout)
+            effective_timeout = max(WARMUP_TIMEOUT, timeout)
             if params:
                 config_desc = ", ".join(f"{k}={v!r}" for k, v in sorted(params.items()))
                 logger.info(
@@ -990,9 +995,9 @@ class ToolInstance:
                     config_desc,
                 )
             logger.debug(
-                "Using extended warm-up timeout: %ds (configured: %s)",
+                "Using extended warm-up timeout: %ds (configured: %ds)",
                 effective_timeout,
-                f"{timeout}s" if timeout is not None else "None",
+                timeout,
             )
             return effective_timeout
         return timeout

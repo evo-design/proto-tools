@@ -267,7 +267,7 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
         sensitivity (float | None): MMseqs2 ``-s`` override; ignored under
             ``use_gpu=True``. ``None`` uses the dataset's registered default.
         num_threads (int | None): CPU threads; ``None`` auto-detects all cores.
-        timeout (int): Subprocess timeout in seconds.
+        timeout (int | None): Subprocess timeout in seconds. ``None`` waits indefinitely.
 
     Note:
         A3M files are written to a per-call temporary directory and parsed
@@ -310,7 +310,7 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
         hidden=True,
         include_in_key=False,
     )
-    timeout: int = ConfigField(
+    timeout: int | None = ConfigField(
         title="Timeout",
         default=3600,
         ge=1,
@@ -489,8 +489,9 @@ def run_mmseqs2_homology_search(
     # Inner colabfold_search timeout fires 30s before the framework's outer
     # ToolInstance timeout so the standalone returns a structured error with
     # explicit subprocess cleanup instead of being hard-killed mid-call.
+    # When the outer timeout is unbounded (None), the inner is also unbounded.
     _OUTER_TIMEOUT_GRACE_S = 30
-    inner_timeout = max(1, config.timeout - _OUTER_TIMEOUT_GRACE_S)
+    inner_timeout = None if config.timeout is None else max(1, config.timeout - _OUTER_TIMEOUT_GRACE_S)
 
     # A3M files are intermediates: the standalone writes them, the tool layer
     # parses them into in-memory MSA objects, then the tempdir auto-cleans.

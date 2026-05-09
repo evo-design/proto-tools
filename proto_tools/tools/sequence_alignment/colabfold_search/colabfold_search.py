@@ -303,8 +303,8 @@ class ColabfoldSearchConfig(BaseConfig):
             CLI tokens appended after the typed flags (e.g.
             ``["--max-accept", "500"]``). Power-user escape hatch for flags
             not exposed as typed fields above.
-        timeout (int): Subprocess timeout in seconds. Full database searches
-            can take more than 10 minutes.
+        timeout (int | None): Subprocess timeout in seconds. Full database searches
+            can take more than 10 minutes. ``None`` waits indefinitely.
     """
 
     search_mode: Literal["local", "remote"] = ConfigField(
@@ -371,7 +371,7 @@ class ColabfoldSearchConfig(BaseConfig):
         advanced=True,
         depends_on={"search_mode": ["local"]},
     )
-    timeout: int = ConfigField(
+    timeout: int | None = ConfigField(
         title="Timeout",
         default=3600,
         ge=1,
@@ -492,6 +492,12 @@ class ColabfoldSearchConfig(BaseConfig):
         real GPU signal is the ``use_gpu`` flag, not the device field.
         """
         return 1 if self.use_gpu else 0
+
+    def effective_timeout(self) -> int | None:
+        """Drop the cap when ``use_metagenomic_db=True`` and the user did not set timeout (envdb/SPIRE searches run for hours)."""
+        if self.use_metagenomic_db and "timeout" not in self.model_fields_set:
+            return None
+        return self.timeout
 
 
 # ============================================================================

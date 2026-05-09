@@ -165,7 +165,7 @@ class Chai1Config(MSAStructurePredictionConfig):
         verbose: Whether to print status messages during execution. Inherited
             from ``StructurePredictionConfig``. Default: ``False``.
 
-        timeout (int): Maximum execution time in seconds. Default: 1200.
+        timeout (int | None): Maximum execution time in seconds. ``None`` waits indefinitely. Default: 1200.
 
     Note:
         Chai1 has a maximum total sequence length of 2,048 residues per complex.
@@ -221,7 +221,7 @@ class Chai1Config(MSAStructurePredictionConfig):
         description="Randomly subsample the MSA across recycles for diversity. 0 disables.",
         advanced=True,
     )
-    timeout: int = ConfigField(
+    timeout: int | None = ConfigField(
         title="Timeout",
         default=1200,
         ge=1,
