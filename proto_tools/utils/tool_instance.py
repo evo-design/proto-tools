@@ -54,6 +54,7 @@ import logging
 import os
 import platform
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -1257,6 +1258,7 @@ class ToolInstance:
                     bufsize=1,  # line-buffered so the drain thread sees lines promptly
                     stdout=None if inherit_stdout else subprocess.DEVNULL,
                     stderr=subprocess.PIPE,  # always PIPE so the drain thread can demux tagged JSON
+                    start_new_session=True,  # own process group so timeouts can SIGKILL grandchildren
                 )
                 assert proc.stderr is not None  # PIPE guarantees this
                 drain_thread = threading.Thread(
@@ -1269,9 +1271,16 @@ class ToolInstance:
                 try:
                     rc = proc.wait(timeout=effective_timeout)
                 except subprocess.TimeoutExpired:
-                    proc.kill()
-                    with suppress(Exception):
-                        proc.wait(timeout=5)
+                    # killpg, not proc.kill, so grandchildren don't orphan with live CUDA handles.
+                    with suppress(OSError):
+                        os.killpg(proc.pid, signal.SIGTERM)
+                    try:
+                        proc.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        with suppress(OSError):
+                            os.killpg(proc.pid, signal.SIGKILL)
+                        with suppress(Exception):
+                            proc.wait(timeout=5)
                     raise TimeoutError(f"{self.toolkit}: timed out after {effective_timeout}s") from None
                 finally:
                     drain_thread.join(timeout=2)

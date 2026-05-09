@@ -6,6 +6,7 @@ Tests for ToolInstance.
 import contextlib
 import hashlib
 import logging
+import signal
 import subprocess
 import sys
 import tempfile
@@ -991,18 +992,18 @@ def test_reload_fields_excludes_non_reload():
 
 
 def test_oneshot_timeout_raises():
-    """_run_oneshot() should convert subprocess.TimeoutExpired to TimeoutError."""
+    """_run_oneshot() should SIGTERM/SIGKILL the process group and raise TimeoutError."""
     inst = _make_fake_instance()
 
-    # After the Popen refactor, _run_oneshot calls Popen() then proc.wait(timeout=...).
-    # Mock Popen to return a fake proc whose wait() raises TimeoutExpired.
     fake_proc = MagicMock()
+    fake_proc.pid = 12345
     fake_proc.stderr = MagicMock()
     fake_proc.stderr.__iter__ = lambda self: iter([])  # drain thread sees EOF immediately
     fake_proc.wait.side_effect = subprocess.TimeoutExpired(cmd="x", timeout=10)
 
     with (
         patch("proto_tools.utils.tool_instance.subprocess.Popen", return_value=fake_proc),
+        patch("proto_tools.utils.tool_instance.os.killpg") as mock_killpg,
         pytest.raises(TimeoutError, match="timed out after 10s"),
     ):
         inst._run_oneshot(
@@ -1010,6 +1011,11 @@ def test_oneshot_timeout_raises():
             script_path=Path("/fake/inference.py"),
             timeout=10,
         )
+
+    # SIGTERM first, then SIGKILL escalation when the SIGTERM wait also times out.
+    sent_signals = [call.args[1] for call in mock_killpg.call_args_list]
+    assert sent_signals == [signal.SIGTERM, signal.SIGKILL]
+    assert all(call.args[0] == 12345 for call in mock_killpg.call_args_list)
 
 
 def test_persistent_timeout_raises():
