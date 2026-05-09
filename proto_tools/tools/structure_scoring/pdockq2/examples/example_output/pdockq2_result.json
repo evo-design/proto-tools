@@ -1,0 +1,23 @@
+{
+  "primary_metric": "pdockq2",
+  "interfaces": [
+    {
+      "chain_id": "A",
+      "neighbor_chains": "B",
+      "if_plddt": 90.0,
+      "norm_pae": 0.6561145276741607,
+      "pmidockq": 0.17272667063218383
+    },
+    {
+      "chain_id": "B",
+      "neighbor_chains": "A",
+      "if_plddt": 70.0,
+      "norm_pae": 0.6561145276741607,
+      "pmidockq": 0.07340252212319355
+    }
+  ],
+  "pdockq2": 0.07340252212319355,
+  "avg_interface_plddt": 70.0,
+  "avg_interface_pae": 0.6561145276741607,
+  "num_interface_contacts": 7
+}

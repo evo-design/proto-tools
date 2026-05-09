@@ -1,15 +1,15 @@
 [
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":1,
     "residue_name":"MET",
-    "sap_score":2.0780254751
+    "sap_score":2.2002649754
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":2,
     "residue_name":"ARG",
@@ -17,7 +17,7 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":3,
     "residue_name":"LYS",
@@ -25,23 +25,23 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":4,
     "residue_name":"LYS",
-    "sap_score":0.0871799737
+    "sap_score":0.0303678885
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":5,
     "residue_name":"LEU",
-    "sap_score":2.7271006554
+    "sap_score":2.2408114001
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":6,
     "residue_name":"ASP",
@@ -49,15 +49,15 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":7,
     "residue_name":"LEU",
-    "sap_score":1.2026176304
+    "sap_score":0.8339562193
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":8,
     "residue_name":"LYS",
@@ -65,7 +65,7 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":9,
     "residue_name":"LYS",
@@ -73,23 +73,23 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":10,
     "residue_name":"PHE",
-    "sap_score":3.1259842962
+    "sap_score":2.4467857629
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":11,
     "residue_name":"VAL",
-    "sap_score":0.697279226
+    "sap_score":0.6724280342
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":12,
     "residue_name":"GLU",
@@ -97,7 +97,7 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":13,
     "residue_name":"ASP",
@@ -105,15 +105,15 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":14,
     "residue_name":"LYS",
-    "sap_score":0.4610006101
+    "sap_score":0.2841610909
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":15,
     "residue_name":"ASN",
@@ -121,7 +121,7 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":16,
     "residue_name":"GLN",
@@ -129,7 +129,7 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":17,
     "residue_name":"GLU",
@@ -137,23 +137,23 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":18,
     "residue_name":"TYR",
-    "sap_score":3.5522142872
+    "sap_score":3.0113726985
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":19,
     "residue_name":"ALA",
-    "sap_score":0.1349010579
+    "sap_score":0.0919121057
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":20,
     "residue_name":"ALA",
@@ -161,7 +161,7 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":21,
     "residue_name":"ARG",
@@ -169,23 +169,23 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":22,
     "residue_name":"ALA",
-    "sap_score":0.8861758113
+    "sap_score":0.6194468588
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":23,
     "residue_name":"LEU",
-    "sap_score":1.5217285305
+    "sap_score":0.9012601674
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":24,
     "residue_name":"GLY",
@@ -193,15 +193,15 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":25,
     "residue_name":"LEU",
-    "sap_score":1.3089534491
+    "sap_score":0.8957004361
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":26,
     "residue_name":"SER",
@@ -209,7 +209,7 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":27,
     "residue_name":"GLN",
@@ -217,7 +217,7 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":28,
     "residue_name":"LYS",
@@ -225,23 +225,23 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":29,
     "residue_name":"LEU",
-    "sap_score":2.8446077481
+    "sap_score":2.4690181501
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":30,
     "residue_name":"ILE",
-    "sap_score":0.3585900087
+    "sap_score":0.2386332098
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":31,
     "residue_name":"GLU",
@@ -249,7 +249,7 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":32,
     "residue_name":"GLU",
@@ -257,23 +257,23 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":33,
     "residue_name":"VAL",
-    "sap_score":1.0055583864
+    "sap_score":0.6920642667
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":34,
     "residue_name":"LEU",
-    "sap_score":1.6759181246
+    "sap_score":1.5675977981
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":35,
     "residue_name":"LYS",
@@ -281,7 +281,7 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":36,
     "residue_name":"ARG",
@@ -289,7 +289,7 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":37,
     "residue_name":"GLY",
@@ -297,47 +297,47 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":38,
     "residue_name":"LEU",
-    "sap_score":0.4883958697
+    "sap_score":0.4590893053
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":39,
     "residue_name":"PRO",
-    "sap_score":1.6198480576
+    "sap_score":1.3627468348
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":40,
     "residue_name":"VAL",
-    "sap_score":0.5178887825
+    "sap_score":0.2835994037
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":41,
     "residue_name":"TYR",
-    "sap_score":2.1000966057
+    "sap_score":1.495264289
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":42,
     "residue_name":"VAL",
-    "sap_score":1.8205509037
+    "sap_score":1.4093487561
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":43,
     "residue_name":"GLU",
@@ -345,15 +345,15 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":44,
     "residue_name":"THR",
-    "sap_score":0.3558124006
+    "sap_score":0.360084869
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":45,
     "residue_name":"ASN",
@@ -361,7 +361,7 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":46,
     "residue_name":"LYS",
@@ -369,7 +369,7 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":47,
     "residue_name":"ASP",
@@ -377,7 +377,7 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":48,
     "residue_name":"GLY",
@@ -385,7 +385,7 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":49,
     "residue_name":"ASN",
@@ -393,15 +393,15 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":50,
     "residue_name":"ILE",
-    "sap_score":3.2490422428
+    "sap_score":2.949349001
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":51,
     "residue_name":"LYS",
@@ -409,39 +409,39 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":52,
     "residue_name":"VAL",
-    "sap_score":0.64936639
+    "sap_score":0.3526652288
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":53,
     "residue_name":"TYR",
-    "sap_score":0.0777326487
+    "sap_score":0.02440162
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":54,
     "residue_name":"ILE",
-    "sap_score":1.8773374632
+    "sap_score":1.3896613512
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":55,
     "residue_name":"THR",
-    "sap_score":0.5137649924
+    "sap_score":0.3834349364
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":56,
     "residue_name":"GLN",
@@ -449,7 +449,7 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":57,
     "residue_name":"ASP",
@@ -457,7 +457,7 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":58,
     "residue_name":"GLY",
@@ -465,15 +465,15 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":59,
     "residue_name":"ILE",
-    "sap_score":2.9540572912
+    "sap_score":2.9582063705
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":60,
     "residue_name":"THR",
@@ -481,42 +481,42 @@
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":61,
     "residue_name":"GLN",
-    "sap_score":0.0301279984
+    "sap_score":0.0233287625
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":62,
     "residue_name":"PRO",
-    "sap_score":2.0016091913
+    "sap_score":1.4105129018
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":63,
     "residue_name":"PHE",
-    "sap_score":3.4434081241
+    "sap_score":3.043287538
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":64,
     "residue_name":"PRO",
-    "sap_score":2.3040688038
+    "sap_score":2.0205111206
   },
   {
     "structure_index":0,
-    "sap_score_total":50.6193351746,
+    "sap_score_total":42.0781211853,
     "chain_id":"A",
     "residue_index":65,
     "residue_name":"PRO",
-    "sap_score":2.9483755529
+    "sap_score":2.9568656683
   }
 ]

@@ -33,6 +33,8 @@ TOOLS_DIR = Path(__file__).parent
 IGNORED_WARNING_SUBSTRINGS = [
     "get_autocast_gpu_dtype",
     "get_autocast_dtype",
+    # ResourceWarning for unclosed subprocess pipe fds — reaped by the OS, no impact on tool output.
+    "unclosed file",
 ]
 
 # Retry configuration for transient failures (network drops, subprocess crashes)

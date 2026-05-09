@@ -433,13 +433,13 @@ Create `tools/{category}/{toolkit}/examples/example.ipynb` with:
 
 1. **Markdown title cell** with tool name, brief description, and link to paper
 2. **Import cell** with exact imports from `proto_tools.tools.{category}.{toolkit}`
-3. **API reference cells** with markdown tables documenting Input/Config/Output fields
+3. **API reference cells** that call `display_api_reference("{tool_key}", "input"/"config"/"output", "run_{tool_key_snake}")` to auto-render Input/Config/Output tables — never hand-write these tables (hand-written tables drift from the schema and require manual `\|` escaping for `X | None` types, which renders inconsistently across viewers)
 4. **Execution cells** showing realistic usage with example data
 5. **Export cell** demonstrating `result.export()`
 
 Follow the pattern in existing notebooks (e.g., `tools/causal_models/evo2/examples/example.ipynb`). Key conventions:
-- Use `proto-language` kernel with Python 3.12
-- Include API reference tables with Field, Type, Default, Description columns
+- Kernelspec must be `{"name": "python3", "display_name": "proto-tools"}` — every example notebook ships with this exact metadata so `run_example_notebooks.py` resolves the kernel from the `proto-tools` conda env. Never set custom names like `proto-language` or `bio-programming`; they'll fail with `NoSuchKernel` outside the original author's machine.
+- Use `display_api_reference()` for every Input/Config/Output table (see step 3 above) — `proto_tools.utils.notebook_docs` introspects the live Pydantic schema, so the table stays in sync with the code automatically.
 - Use realistic biological data (real sequences, not lorem ipsum)
 - Show result inspection (printing key fields, accessing metrics)
 

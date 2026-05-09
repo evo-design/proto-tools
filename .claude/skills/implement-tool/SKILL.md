@@ -529,15 +529,16 @@ Create a Jupyter notebook (.ipynb JSON) with these cells:
 
 1. **Markdown title cell** — Tool name, brief description, paper link
 2. **Code: Imports** — Exact imports from proto_tools.tools.{category}.{toolkit}
-3. **Markdown: Input API Reference** — Table with Field, Type, Default, Description
-4. **Markdown: Config API Reference** — Same table format
-5. **Markdown: Output API Reference** — Same table format
+3. **Code: Input API Reference** — Call `display_api_reference("{tool_key}", "input", "run_{tool_key_snake}")` to auto-render the table. Never hand-write the table.
+4. **Code: Config API Reference** — Same pattern with `"config"`.
+5. **Code: Output API Reference** — Same pattern with `"output"`.
 6. **Code: Basic Usage** — Minimal working example with realistic biological data
 7. **Code: Advanced Usage** — Example with non-default config parameters
 8. **Code: Export** — Demonstrate result.export()
 
 Notebook metadata:
-- kernel: proto-language, Python 3.12
+- kernelspec must be exactly `{"name": "python3", "display_name": "proto-tools"}`. Custom names like `proto-language` or `bio-programming` raise `NoSuchKernel` outside the original author's machine.
+- `language_info.name` is `"python"`.
 - Use realistic biological data (real protein sequences, not placeholder text)
 - Include comments explaining each step
 - Show output inspection (printing key fields)
