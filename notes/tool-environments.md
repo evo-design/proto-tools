@@ -276,6 +276,8 @@ Tools needing external binaries must use `utils/install_binary.py`; never raw `c
 
 See blast or mmseqs for the standard pattern. For platform-independent tools (e.g., Java JARs), use the same URL for all platform keys.
 
+The downloader streams chunks with a per-read socket timeout, validates the final size against `Content-Length` so silent truncation surfaces as a retryable error, and retries with exponential backoff (see `_MAX_DOWNLOAD_RETRIES`, `_INITIAL_RETRY_DELAY_SECONDS`, `_BACKOFF_MULTIPLIER`, `_MAX_RETRY_DELAY_SECONDS`, `_SOCKET_TIMEOUT_SECONDS` in `install_binary.py`).
+
 ## Compile-from-Source Tools
 
 Tools distributed as C/C++ source compile during `setup.sh`. No `binary_config.py` or `requirements.txt` needed; just check for the compiler (`g++`), clone the source, compile into the venv's `bin/`, and clean up. Use `BUILD_DIR` (not `TMPDIR`) for the temporary clone directory. See TMalign/USalign (`tools/structure_alignment/`) as canonical examples.

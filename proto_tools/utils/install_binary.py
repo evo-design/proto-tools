@@ -17,13 +17,17 @@ import sys
 import tarfile
 import tempfile
 import time
+import urllib.error
 import urllib.request
 import warnings
 from pathlib import Path
 from typing import Any
 
-_MAX_DOWNLOAD_RETRIES = 3
-_RETRY_DELAY_SECONDS = 5
+_MAX_DOWNLOAD_RETRIES = 5
+_INITIAL_RETRY_DELAY_SECONDS = 5.0
+_BACKOFF_MULTIPLIER = 2.0
+_MAX_RETRY_DELAY_SECONDS = 60.0
+_SOCKET_TIMEOUT_SECONDS = 60.0
 
 # Canonical architecture names. Tool binary_config.py files should use these
 # in their URLS dicts. Raw platform.machine() values are normalized to these
@@ -75,10 +79,11 @@ def _load_tool_config(config_path: Path) -> Any:
 
 
 def _download_with_progress(url: str, dest: Path) -> None:
-    """Download a file with a tqdm progress bar, falling back to simple logging.
+    """Stream a URL to ``dest`` with a progress bar; raise if truncated.
 
-    Validates that the downloaded file size matches the Content-Length header
-    to detect truncated downloads (e.g., from flaky CI network connections).
+    A per-read socket timeout makes stalled connections fail fast so the
+    retry loop in ``install_binary`` can take over. Compares the final size
+    to ``Content-Length`` so silent truncation surfaces as a retryable error.
 
     Args:
         url (str): URL to download from.
@@ -87,39 +92,41 @@ def _download_with_progress(url: str, dest: Path) -> None:
     try:
         from tqdm import tqdm
 
-        response = urllib.request.urlopen(url)  # noqa: S310 -- URL from trusted config
+        tqdm_cls: Any = tqdm
+    except ImportError:
+        tqdm_cls = None
+
+    with urllib.request.urlopen(url, timeout=_SOCKET_TIMEOUT_SECONDS) as response:  # noqa: S310 -- URL from trusted config
         total = int(response.headers.get("Content-Length", 0))
         downloaded = 0
+        last_pct = -1
+        pbar = (
+            tqdm_cls(total=total, unit="B", unit_scale=True, desc="  Downloading", file=sys.stdout)
+            if tqdm_cls
+            else None
+        )
 
-        with (
-            tqdm(total=total, unit="B", unit_scale=True, desc="  Downloading", file=sys.stdout) as pbar,
-            open(dest, "wb") as f,
-        ):
-            while True:
-                chunk = response.read(8192)
-                if not chunk:
-                    break
-                f.write(chunk)
-                downloaded += len(chunk)
-                pbar.update(len(chunk))
-    except ImportError:
-        # Fallback: simple percentage-based progress
-        def _reporthook(block_num: Any, block_size: Any, total_size: Any) -> None:
-            dl = block_num * block_size
-            if total_size > 0:
-                pct = min(100, dl * 100 / total_size)
-                mb = dl / (1024 * 1024)
-                mb_total = total_size / (1024 * 1024)
-                print(f"\r  Downloading: {mb:.1f}/{mb_total:.1f} MB ({pct:.0f}%)", end="", flush=True)
+        with open(dest, "wb") as f:
+            try:
+                while chunk := response.read(8192):
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if pbar is not None:
+                        pbar.update(len(chunk))
+                    elif total > 0:
+                        pct = int(downloaded * 100 / total)
+                        if pct != last_pct:
+                            mb, mb_total = downloaded / 1024 / 1024, total / 1024 / 1024
+                            print(f"\r  Downloading: {mb:.1f}/{mb_total:.1f} MB ({pct}%)", end="", flush=True)
+                            last_pct = pct
+            finally:
+                if pbar is not None:
+                    pbar.close()
+                elif last_pct >= 0:
+                    print()
 
-        urllib.request.urlretrieve(url, dest, _reporthook)  # noqa: S310 -- URL from trusted config
-        downloaded = dest.stat().st_size
-        total = downloaded  # urlretrieve raises on network errors; trust actual size
-        print()  # newline after progress
-
-    # Validate download integrity
-    if total > 0 and downloaded != total:
-        raise OSError(f"Download incomplete from {url}: got {downloaded}/{total} bytes; check network and retry")
+    if total and downloaded != total:
+        raise OSError(f"Download truncated from {url}: got {downloaded}/{total} bytes")
 
 
 def install_binary(toolkit: str) -> None:
@@ -161,7 +168,7 @@ def install_binary(toolkit: str) -> None:
 
     print(f"Installing {toolkit} for {key[0]}/{key[1]}...")
 
-    last_error = None
+    last_error: BaseException | None = None
     for attempt in range(1, _MAX_DOWNLOAD_RETRIES + 1):
         try:
             with tempfile.TemporaryDirectory() as tmp:
@@ -184,14 +191,14 @@ def install_binary(toolkit: str) -> None:
             return
         except (OSError, EOFError, tarfile.TarError, urllib.error.URLError) as exc:  # noqa: PERF203 -- retry loop
             last_error = exc
+            # Leading \n breaks out of the progress bar's trailing \r so this line survives in CI logs.
+            print(f"\n  Download attempt {attempt}/{_MAX_DOWNLOAD_RETRIES} failed: {exc}", flush=True)
             if attempt < _MAX_DOWNLOAD_RETRIES:
-                print(
-                    f"  Download attempt {attempt}/{_MAX_DOWNLOAD_RETRIES} failed: {exc}\n"
-                    f"  Retrying in {_RETRY_DELAY_SECONDS}s..."
+                delay = min(
+                    _INITIAL_RETRY_DELAY_SECONDS * _BACKOFF_MULTIPLIER ** (attempt - 1), _MAX_RETRY_DELAY_SECONDS
                 )
-                time.sleep(_RETRY_DELAY_SECONDS)
-            else:
-                print(f"  Download attempt {attempt}/{_MAX_DOWNLOAD_RETRIES} failed: {exc}")
+                print(f"  Retrying in {delay:.0f}s...", flush=True)
+                time.sleep(delay)
 
     raise RuntimeError(f"Failed to download {toolkit} after {_MAX_DOWNLOAD_RETRIES} attempts. Last error: {last_error}")
 
