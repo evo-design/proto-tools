@@ -28,8 +28,6 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # Input:
 ProteinMPNNSampleInput = InverseFoldingInput
-# Output:
-ProteinMPNNSampleOutput = InverseFoldingOutput
 
 
 # Config:
@@ -86,6 +84,21 @@ class ProteinMPNNSequences(DesignedSequences):
     perplexity: list[float] = Field(description="Perplexity of the sequence from the ProteinMPNN model")
     sequence_recovery: list[float] = Field(
         description="Per-sequence fraction of chains_to_redesign residues matching the PDB prompt reference (0.0-1.0)",
+    )
+
+
+class ProteinMPNNSampleOutput(InverseFoldingOutput):
+    """Output of the ProteinMPNN sampling tool.
+
+    Narrows ``designed_sequences`` to the ProteinMPNN subclass so cloud
+    (the cloud runtime) dispatch's JSON roundtrip reconstructs ``ProteinMPNNSequences`` —
+    the parent's ``list[SerializeAsAny[DesignedSequences]]`` would otherwise
+    drop subclass fields (``perplexity``, ``sequence_recovery``) on inbound
+    ``model_validate``, since ``SerializeAsAny`` only affects serialization.
+    """
+
+    designed_sequences: list[ProteinMPNNSequences] = Field(  # type: ignore[assignment]
+        description="ProteinMPNN-designed sequences with per-sequence perplexity and recovery metrics.",
     )
 
 
@@ -190,4 +203,4 @@ def run_proteinmpnn_sample(
                 sequence_recovery=all_seq_recovery,
             )
         )
-    return ProteinMPNNSampleOutput(designed_sequences=designed_sequences)  # type: ignore[arg-type]
+    return ProteinMPNNSampleOutput(designed_sequences=designed_sequences)
