@@ -88,14 +88,7 @@ class ProteinMPNNSequences(DesignedSequences):
 
 
 class ProteinMPNNSampleOutput(InverseFoldingOutput):
-    """Output of the ProteinMPNN sampling tool.
-
-    Narrows ``designed_sequences`` to the ProteinMPNN subclass so cloud
-    (Modal) dispatch's JSON roundtrip reconstructs ``ProteinMPNNSequences`` —
-    the parent's ``list[SerializeAsAny[DesignedSequences]]`` would otherwise
-    drop subclass fields (``perplexity``, ``sequence_recovery``) on inbound
-    ``model_validate``, since ``SerializeAsAny`` only affects serialization.
-    """
+    """Output of the ProteinMPNN sampling tool."""
 
     designed_sequences: list[ProteinMPNNSequences] = Field(  # type: ignore[assignment]
         description="ProteinMPNN-designed sequences with per-sequence perplexity and recovery metrics.",
