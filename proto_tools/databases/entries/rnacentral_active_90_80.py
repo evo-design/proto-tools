@@ -5,7 +5,7 @@ Built locally as an MMseqs2 nucleotide DB with a search-type-3 k-mer
 index (no GPU padded variant — AlphaFast uses CPU for RNA search).
 """
 
-from proto_tools.tools.sequence_alignment.databases.registry import (
+from proto_tools.databases.registry import (
     DatasetEntry,
     DatasetRegistry,
     DownloadSpec,

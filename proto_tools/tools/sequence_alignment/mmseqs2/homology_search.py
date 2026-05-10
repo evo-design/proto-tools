@@ -19,7 +19,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from proto_tools.tools.sequence_alignment.databases import DatasetEntry, DatasetRegistry, get_dataset_dir
+from proto_tools.databases import DatasetEntry, DatasetRegistry, get_dataset_dir
 from proto_tools.tools.sequence_alignment.msas import MSA
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -658,7 +658,7 @@ def _auto_provision(name: str, cache_dir: Path) -> None:
 
     import fcntl
 
-    from proto_tools.tools.sequence_alignment.databases import DatasetRegistry
+    from proto_tools.databases import DatasetRegistry
     from proto_tools.tools.sequence_alignment.mmseqs2.setup_databases import provision
     from proto_tools.utils.tool_instance import ToolInstance
 

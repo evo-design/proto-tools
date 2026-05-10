@@ -4,7 +4,7 @@ Tiny DB (~10 MB FASTA). Curated noncoding RNA families; high-precision
 seed alignments. Source from the AF3 mirror.
 """
 
-from proto_tools.tools.sequence_alignment.databases.registry import (
+from proto_tools.databases.registry import (
     DatasetEntry,
     DatasetRegistry,
     DownloadSpec,

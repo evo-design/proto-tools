@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from proto_tools.tools.sequence_alignment.databases import DatasetRegistry, dataset_slug, get_dataset_dir
+from proto_tools.databases import DatasetRegistry, dataset_slug, get_dataset_dir
 from proto_tools.tools.sequence_alignment.mmseqs2 import (
     Mmseqs2HomologySearchConfig,
     Mmseqs2HomologySearchInput,

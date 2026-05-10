@@ -190,7 +190,7 @@ class DatasetRegistry:
     """Lookup API over the set of registered dataset entries.
 
     Entries self-register at import time by calling :meth:`register` from
-    ``proto_tools.tools.sequence_alignment.databases.entries.*`` modules.
+    ``proto_tools.databases.entries.*`` modules.
     """
 
     _entries: ClassVar[dict[str, DatasetEntry]] = {}

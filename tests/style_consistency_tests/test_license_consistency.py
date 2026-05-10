@@ -81,8 +81,7 @@ def _discover_toolkit_dirs() -> list[Path]:
             if toolkit_dir.name.startswith("_"):
                 continue
             # Real toolkits ship a README.md; this filter excludes shared-helper
-            # subdirs like sequence_alignment/databases/ that live under a
-            # category but don't register any @tool.
+            # subdirs that live under a category but don't register any @tool.
             if not (toolkit_dir / "README.md").is_file():
                 continue
             toolkits.append(toolkit_dir)

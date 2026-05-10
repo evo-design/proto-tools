@@ -48,9 +48,9 @@ def _default_output_dir() -> Path:
 # (not $PROTO_HOME/colabfold_search/) so it survives `_default_output_dir`
 # cleanup, and uses a dataset-scoped subdir (not tool-scoped) so the future
 # `mmseqs2-homology-search` tool reads the same files without redownloading.
-# See proto_tools/tools/sequence_alignment/databases/.
+# See proto_tools/databases/.
 def _default_msa_db_dir() -> Path:
-    from proto_tools.tools.sequence_alignment.databases import get_dataset_dir
+    from proto_tools.databases import get_dataset_dir
 
     return get_dataset_dir("uniref30-2302")
 

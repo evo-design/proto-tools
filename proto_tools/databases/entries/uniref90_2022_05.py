@@ -5,7 +5,7 @@ Source FASTA from the AlphaFold 3 database mirror at
 an MMseqs2 GPU-padded DB the same way AlphaFast does it.
 """
 
-from proto_tools.tools.sequence_alignment.databases.registry import (
+from proto_tools.databases.registry import (
     DatasetEntry,
     DatasetRegistry,
     DownloadSpec,

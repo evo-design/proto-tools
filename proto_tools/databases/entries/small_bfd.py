@@ -5,7 +5,7 @@ BFD entry (~270 GB / ~1.8 TB); ``small-bfd`` is what AF3 / AlphaFast /
 Lightning-Boltz use by default. Source FASTA from the AF3 database mirror.
 """
 
-from proto_tools.tools.sequence_alignment.databases.registry import (
+from proto_tools.databases.registry import (
     DatasetEntry,
     DatasetRegistry,
     DownloadSpec,

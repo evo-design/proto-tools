@@ -1,6 +1,6 @@
 """MGnify clusters (release 2022_05) — metagenomic protein DB for AF3."""
 
-from proto_tools.tools.sequence_alignment.databases.registry import (
+from proto_tools.databases.registry import (
     DatasetEntry,
     DatasetRegistry,
     DownloadSpec,
