@@ -6,7 +6,7 @@ ColabFold workflow (UniRef30 alone produces usable MSAs); pulling envdb
 deepens MSAs at the cost of ~110 GB download + ~650 GB indexed.
 """
 
-from proto_tools.tools.sequence_alignment.databases.registry import (
+from proto_tools.databases.registry import (
     DatasetEntry,
     DatasetRegistry,
     DownloadSpec,

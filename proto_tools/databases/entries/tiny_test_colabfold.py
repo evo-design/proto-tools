@@ -12,7 +12,7 @@ Auto-provisions on first dispatch so smoke tests don't need a separate
 script uses the same source tarball and rename pattern.
 """
 
-from proto_tools.tools.sequence_alignment.databases.registry import (
+from proto_tools.databases.registry import (
     DatasetEntry,
     DatasetRegistry,
     DownloadSpec,

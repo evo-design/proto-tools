@@ -18,7 +18,7 @@ All three are one design away from each other: a **dataset registry** that holds
 
 **In scope:**
 
-- Dataset registry at `proto_tools/tools/sequence_alignment/databases/` (shared with `colabfold-search` from day 1 — see [Dataset Registry](#dataset-registry))
+- Dataset registry at `proto_tools/databases/` (shared with `colabfold-search` from day 1 — see [Dataset Registry](#dataset-registry))
 - `mmseqs2-homology-search` tool at `proto_tools/tools/sequence_alignment/mmseqs2/` (one of four tools in the unified `mmseqs2` toolkit alongside `mmseqs2-search-proteins`, `mmseqs2-search-genomes`, `mmseqs2-clustering`)
 - GPU-accelerated by default (MMseqs2-GPU, same engine as AlphaFast)
 - Protein + nucleotide (RNA/DNA) support via registry-driven MMseqs2 flags
@@ -34,14 +34,14 @@ All three are one design away from each other: a **dataset registry** that holds
 
 ## Dataset Registry
 
-Lives at `proto_tools/tools/sequence_alignment/databases/` — shared between `colabfold-search` (today) and `mmseqs2-homology-search` (planned). Scoped to `sequence_alignment/` rather than the top-level `proto_tools/databases/` because all current and planned consumers live under that category; lift to top-level when a structural-database or clustering-database consumer appears.
+Lives at `proto_tools/databases/` — top-level package, shared across tool categories. Initial consumers (`colabfold-search`, `mmseqs2-homology-search`) all live under `sequence_alignment/`, but datasets are cross-cutting domain data — siblings to `entities/` rather than children of any single tool category.
 
 **Status:** schema + `DatasetRegistry` + `get_dataset_dir()` helper + the `uniref30-2302` entry landed in the colabfold-search rmtree-fix PR. `DatasetManager.ensure()` / `provision_datasets()` / CLI / remaining entries ship with `mmseqs2-homology-search`.
 
 ### Schema
 
 ```python
-# proto_tools/tools/sequence_alignment/databases/registry.py
+# proto_tools/databases/registry.py
 
 class DatasetEntry(BaseModel):
     """One searchable homology database."""
@@ -95,8 +95,8 @@ class MmseqsFlags(BaseModel):
 
 ### Registry storage
 
-- Entries declared as module-level `DatasetEntry(…)` literals in `proto_tools/tools/sequence_alignment/databases/entries/`, one file per dataset (`uniref30_2302.py`, `rnacentral.py`, `rfam.py`, `colabfold_envdb_202108.py`, `bfd.py`, `mgnify.py`, `nt.py`, …). Each module calls `DatasetRegistry.register(ENTRY)` at import time.
-- `proto_tools/tools/sequence_alignment/databases/__init__.py` exposes `DatasetRegistry.get(name)`, `.list_all()`, `.by_molecule_type(type)`, `get_dataset_dir(name)`, `get_databases_root()`. In a follow-up PR it also exposes `DatasetManager.ensure(name, …)` and `provision_datasets(names, …)`.
+- Entries declared as module-level `DatasetEntry(…)` literals in `proto_tools/databases/entries/`, one file per dataset (`uniref30_2302.py`, `rnacentral.py`, `rfam.py`, `colabfold_envdb_202108.py`, `bfd.py`, `mgnify.py`, `nt.py`, …). Each module calls `DatasetRegistry.register(ENTRY)` at import time.
+- `proto_tools/databases/__init__.py` exposes `DatasetRegistry.get(name)`, `.list_all()`, `.by_molecule_type(type)`, `get_dataset_dir(name)`, `get_databases_root()`. In a follow-up PR it also exposes `DatasetManager.ensure(name, …)` and `provision_datasets(names, …)`.
 - No remote manifest, no auto-discovery. Adding a dataset = one PR.
 
 ### On-disk layout
@@ -163,7 +163,7 @@ Not all entries materialize at launch — each is just a `DatasetEntry` literal 
 
 The primary audience is **end users** who want to pre-fetch one or several datasets instead of waiting on a ~2-hour lazy download the first time they run a structure predictor. The *same* entrypoint is what container-based deployments use during image build — serverless containers cannot do a 100 GB lazy download at cold start, but the volume-build step is just the user CLI invoked from the deployment's image recipe. One code path, two consumers. CI cache-warmup jobs are the third natural consumer.
 
-**Interface**: a Python CLI that wraps `DatasetManager.ensure()` for one or many entries, exposed as both a console script (`proto-tools provision …`) for users and an importable function (`proto_tools.tools.sequence_alignment.databases.provision_datasets([...])`) for container-image builds / CI. Not a bash script — reusing the registry directly avoids duplicating URL lists and index recipes between the user path and the deployment path, which is exactly the duplication that bit us with `setup_databases.sh` vs. hardcoded cluster DB paths today.
+**Interface**: a Python CLI that wraps `DatasetManager.ensure()` for one or many entries, exposed as both a console script (`proto-tools provision …`) for users and an importable function (`proto_tools.databases.provision_datasets([...])`) for container-image builds / CI. Not a bash script — reusing the registry directly avoids duplicating URL lists and index recipes between the user path and the deployment path, which is exactly the duplication that bit us with `setup_databases.sh` vs. hardcoded cluster DB paths today.
 
 ```bash
 # One dataset
@@ -185,7 +185,7 @@ proto-tools provision uniref30-2302 --include-paired
 proto-tools provision --all --dry-run
 ```
 
-(`python -m proto_tools.tools.sequence_alignment.databases.provision …` works identically; the console script is added as a `[project.scripts]` entry in `pyproject.toml` for user-facing ergonomics.)
+(`python -m proto_tools.databases.provision …` works identically; the console script is added as a `[project.scripts]` entry in `pyproject.toml` for user-facing ergonomics.)
 
 **Behavior:**
 
@@ -197,7 +197,7 @@ proto-tools provision --all --dry-run
 **Container deployment hook** (future, when we wire up the hosted version) — the same `provision_datasets` function the user-facing CLI wraps, invoked at image build, with `PROTO_MODEL_CACHE` pointed at the persistent volume mount:
 
 ```python
-from proto_tools.tools.sequence_alignment.databases import provision_datasets
+from proto_tools.databases import provision_datasets
 
 # Run during the container image build, with PROTO_MODEL_CACHE set to the volume mount.
 provision_datasets(
@@ -311,7 +311,7 @@ Each predictor owns its own "grouped input → `Mmseqs2HomologySearchInput`" bui
 Phased so nothing breaks mid-flight:
 
 1. **Registry + tool land, `colabfold-search` migrates its DB default.**
-   PR 1 (landed): `sequence_alignment/databases/` registry schema + `uniref30-2302` entry + `get_dataset_dir()` helper; `colabfold-search` default `msa_db_dir` wired to the registry.
+   PR 1 (landed): `proto_tools/databases/` registry schema + `uniref30-2302` entry + `get_dataset_dir()` helper; `colabfold-search` default `msa_db_dir` wired to the registry.
    PR 2: `DatasetManager.ensure()` + `provision_datasets()` + `proto-tools provision` CLI (registry gets materialization machinery).
    PR 3: `mmseqs2-homology-search` tool (protein + unpaired only initially, for smoke testing against UniRef30).
    PR 4: paired MSA local path (tax index + pair writer). Closes #543 *infrastructurally* (but no predictor consumes it yet).
@@ -335,7 +335,7 @@ Each phase is independently revertable.
 - **Versioning.** `uniref30-2302` has a date in the name; future versions → new entry (`uniref30-2403`). Don't mutate. Predictors pin exact versions in `preferred_datasets`.
 - **GPU fallback UX.** `use_gpu=True` on a CPU-only host → hard error or warn-and-fall-back? → Lean toward **hard error** with clear suggestion (`use_gpu=False`). No silent slowness.
 - **Backward-compat shim for `colabfold-search` callers outside this repo.** proto-language + MCP consumers hit it by `tool_key`. Keep the tool registered (warning on use) through one full release cycle.
-- **When to lift the registry to top-level `proto_tools/databases/`.** Currently at `proto_tools/tools/sequence_alignment/databases/` since all consumers (present and planned) live under that category. Trigger for the lift: a structural-database (PDB, AlphaFold DB) consumer or a clustering-DB consumer appears. Until then, keeping it under sequence_alignment avoids overpromoting a registry that might invite non-homology datasets.
+- ~~**When to lift the registry to top-level `proto_tools/databases/`.**~~ Resolved: lifted in #805. Original framing scoped under `sequence_alignment/` until a non-homology consumer appeared; in practice the move was done preemptively to keep import paths clean as Pfam-A (pyhmmer) and other cross-category consumers came online.
 
 ## Related
 

@@ -4,7 +4,7 @@ Sequence-only PDB index used to identify candidate template structures
 during AF3's structure-prediction pipeline. Tiny (~10 MB).
 """
 
-from proto_tools.tools.sequence_alignment.databases.registry import (
+from proto_tools.databases.registry import (
     DatasetEntry,
     DatasetRegistry,
     DownloadSpec,

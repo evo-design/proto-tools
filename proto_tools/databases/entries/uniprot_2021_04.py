@@ -1,6 +1,6 @@
 """UniProt full (release 2021_04) — paired-MSA + template DB for AF3."""
 
-from proto_tools.tools.sequence_alignment.databases.registry import (
+from proto_tools.databases.registry import (
     DatasetEntry,
     DatasetRegistry,
     DownloadSpec,

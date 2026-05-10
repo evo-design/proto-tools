@@ -7,7 +7,7 @@ triggers registration of every entry.
 
 # All entries below are import-for-side-effect: each module registers itself
 # with DatasetRegistry at import time.
-from proto_tools.tools.sequence_alignment.databases.entries import (
+from proto_tools.databases.entries import (
     colabfold_envdb_202108,  # noqa: F401
     mgnify_2022_05,  # noqa: F401
     nt_rna_2023_02_23_90_80,  # noqa: F401

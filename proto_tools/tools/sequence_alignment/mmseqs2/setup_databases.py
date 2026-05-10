@@ -1,7 +1,7 @@
 """Provision MMseqs2 databases for proto-tools.
 
 User-invoked CLI; no auto-download anywhere else in the codebase. Reads
-the registry entries in ``proto_tools.tools.sequence_alignment.databases``
+the registry entries in ``proto_tools.databases``
 to know what URLs to fetch, what indexing commands to run, and where on
 disk each dataset belongs (``$PROTO_MODEL_CACHE/databases/<name>/`` by
 default). Idempotent: re-runs skip already-provisioned datasets and
@@ -46,7 +46,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from proto_tools.tools.sequence_alignment.databases import (
+from proto_tools.databases import (
     DatasetEntry,
     DatasetRegistry,
     DownloadSpec,
@@ -244,7 +244,7 @@ def provision(name: str, workdir: Path | None = None, *, force: bool = False) ->
 
 def _list_available() -> None:
     """Print available datasets and presets."""
-    print("Datasets (registered in proto_tools.tools.sequence_alignment.databases):\n")
+    print("Datasets (registered in proto_tools.databases):\n")
     print(f"  {'name':<32} {'type':<8} {'size (download / indexed)':<32}")
     print(f"  {'-' * 32} {'-' * 8} {'-' * 32}")
     for key in DatasetRegistry.list_all():

@@ -4,7 +4,7 @@ RNA-only filtered subset of NCBI nt, clustered. Used as a deeper fallback
 when RNAcentral + Rfam don't produce enough homologs. ~30 GB FASTA.
 """
 
-from proto_tools.tools.sequence_alignment.databases.registry import (
+from proto_tools.databases.registry import (
     DatasetEntry,
     DatasetRegistry,
     DownloadSpec,

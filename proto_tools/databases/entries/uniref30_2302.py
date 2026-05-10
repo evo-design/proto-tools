@@ -1,6 +1,6 @@
 """UniRef30 release 2302 — primary protein MSA database for AF2/AF3/Chai-1/Protenix/Boltz-2."""
 
-from proto_tools.tools.sequence_alignment.databases.registry import (
+from proto_tools.databases.registry import (
     DatasetEntry,
     DatasetRegistry,
     DownloadSpec,
