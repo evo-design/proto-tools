@@ -1,12 +1,4 @@
-"""UniRef30 release 2302 — primary protein MSA database for AF2/AF3/Chai-1/Protenix/Boltz-2.
-
-Mirrors the files produced by
-``proto_tools/tools/sequence_alignment/colabfold_search/setup_databases.sh``
-when invoked with defaults — the official ColabFold tarball from
-``opendata.mmseqs.org`` plus the companion taxonomy tarball, followed by
-``mmseqs createindex`` and ``mmseqs makepaddedseqdb`` (GPU support) and
-``mmseqs createbintaxmapping`` (taxonomy lookup for paired MSAs).
-"""
+"""UniRef30 release 2302 — primary protein MSA database for AF2/AF3/Chai-1/Protenix/Boltz-2."""
 
 from proto_tools.tools.sequence_alignment.databases.registry import (
     DatasetEntry,
@@ -43,16 +35,12 @@ ENTRY = DatasetEntry(
                 description="Extract main MMseqs2 DB tarball",
             ),
             IndexStep(
-                command=["tar", "-xzvf", "uniref30_2302_newtaxonomy.tar.gz"],
-                description="Extract companion taxonomy tarball",
-            ),
-            IndexStep(
                 command=["mmseqs", "createindex", "uniref30_2302_db", "tmp_createindex", "--remove-tmp-files", "1"],
-                description="Build MMseqs2 sequence index (.idx) for CPU search",
+                description="Build MMseqs2 sequence index for search",
             ),
             IndexStep(
-                command=["mmseqs", "makepaddedseqdb", "uniref30_2302_db", "uniref30_2302_db.idx_pad"],
-                description="Build GPU padded-sequence DB (.idx_pad) for MMseqs2-GPU",
+                command=["tar", "-xzvf", "uniref30_2302_newtaxonomy.tar.gz"],
+                description="Extract rebuilt taxonomy mapping (overwrites stale tarball mapping)",
             ),
             IndexStep(
                 command=["mmseqs", "createbintaxmapping", "uniref30_2302_db_mapping", "uniref30_2302_db_mapping.bin"],
@@ -61,12 +49,10 @@ ENTRY = DatasetEntry(
         ],
         output_files=[
             "uniref30_2302_db.dbtype",
-            "uniref30_2302_db.idx",
             "uniref30_2302_db_h",
             "uniref30_2302_db_seq",
         ],
         paired_output_files=[
-            "uniref30_2302_db.idx_pad",
             "uniref30_2302_db_mapping.bin",
         ],
     ),
