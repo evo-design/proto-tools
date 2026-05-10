@@ -212,6 +212,7 @@ def test_input_rejects_unsafe_structure_ids(bad_id):
 
 
 @pytest.mark.integration
+@pytest.mark.skip_ci  # downloads foldmason binary from mmseqs.com; upstream is flaky in GH Actions
 def test_foldmason_msa_local_with_real_fixtures():
     """Local end-to-end: align 3 real PDBs via the foldmason binary, verify MSA shape + Newick leaves."""
     structures = [

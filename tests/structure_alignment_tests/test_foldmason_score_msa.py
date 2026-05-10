@@ -163,6 +163,7 @@ def test_input_rejects_unsafe_structure_ids(bad_id):
 
 
 @pytest.mark.integration
+@pytest.mark.skip_ci  # downloads foldmason binary from mmseqs.com; upstream is flaky in GH Actions
 def test_foldmason_score_msa_chained_after_local_msa():
     """End-to-end: build an MSA with foldmason-msa local, then score it with foldmason-score-msa."""
     structures = [
