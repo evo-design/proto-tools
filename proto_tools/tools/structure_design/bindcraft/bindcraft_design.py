@@ -739,7 +739,7 @@ class BindCraftConfig(BaseConfig):
     )
 
     @property
-    def devices_per_instance(self) -> int:
+    def gpus_per_instance(self) -> int:
         """BindCraft uses one GPU per design run (sequential trajectories)."""
         return 1
 

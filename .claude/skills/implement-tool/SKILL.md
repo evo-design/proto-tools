@@ -171,6 +171,7 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
 - No try/except — `@tool` decorator handles errors
 - Use `logging.getLogger(__name__)`, never `print()`
 - Output must implement `output_format_options`, `output_format_default`, `_export_output()`
+- **`cpus_per_instance` opt-in**: `BaseConfig.cpus_per_instance` defaults to `None` — every CPU tool stays off ToolPool's CPU scheduler and runs as a single direct call. **Most CPU tools should leave this alone.** Only opt in (override to a positive int) when per-call work is heavy enough to amortize spinning up N persistent worker subprocesses — each holds its own venv in RAM and pays a startup tax, so cheap tools (short per-item compute, internal threading, network IO) lose more than they gain. The canonical opt-in is PyRosetta (heavy `init`, multi-second per pose, embarrassingly parallel poses → `cpus_per_instance = 1`). GPU tools (`gpus_per_instance > 0`) ignore `cpus_per_instance` entirely.
 
 **Inherited field audit:** When reusing a shared base config (e.g., `InverseFoldingConfig`) or base input, enumerate every inherited field and verify the target model can implement it. For each unsupported field, either implement support (e.g., logit masking for `excluded_amino_acids`) or override the field with a validator that raises `ValueError("'{field_name}' is not supported by {tool_display_name}")` when a non-default value is provided. Do not silently inherit fields that the model ignores.
 

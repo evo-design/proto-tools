@@ -934,6 +934,33 @@ def test_set_vars(tmp_path: Path, set_line, var, expected_suffix):
         assert env[var] == set_line.split("=", 1)[1]
 
 
+# ── env_overrides (caller-supplied final layer) ─────────────────────────────
+
+
+def test_env_overrides_applied_to_subprocess_env(monkeypatch):
+    """Caller-supplied env_overrides land in the built env."""
+    env = _build_subprocess_env(
+        device="cpu",
+        env_overrides={
+            "OMP_NUM_THREADS": "4",
+            "MKL_NUM_THREADS": "4",
+            "OPENBLAS_NUM_THREADS": "4",
+            "NUMEXPR_NUM_THREADS": "4",
+        },
+    )
+    assert env["OMP_NUM_THREADS"] == "4"
+    assert env["MKL_NUM_THREADS"] == "4"
+    assert env["OPENBLAS_NUM_THREADS"] == "4"
+    assert env["NUMEXPR_NUM_THREADS"] == "4"
+
+
+def test_env_overrides_win_over_passthrough(monkeypatch):
+    """env_overrides applied after _BASE_PASSTHROUGH overrides whitelisted vars."""
+    monkeypatch.setenv("HOME", "/home/parent")
+    env = _build_subprocess_env(device="cpu", env_overrides={"HOME": "/home/override"})
+    assert env["HOME"] == "/home/override"
+
+
 # ── Compute environment injection ───────────────────────────────────────────
 
 

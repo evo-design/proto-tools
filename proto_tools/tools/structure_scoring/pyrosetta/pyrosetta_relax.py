@@ -189,6 +189,11 @@ class PyRosettaRelaxConfig(BaseConfig):
         advanced=True,
     )
 
+    @property
+    def cpus_per_instance(self) -> int | None:
+        """Opt in to ToolPool CPU fan-out — PyRosetta runs single-threaded per pose."""
+        return 1
+
 
 class PyRosettaRelaxOutput(BaseToolOutput):
     """Output from PyRosetta FastRelax.

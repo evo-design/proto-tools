@@ -505,6 +505,7 @@ if __name__ == "__main__":
 - Accept `device` parameter in operation functions
 - Call `env = get_subprocess_device_env(device)` before subprocess calls
 - Pass `env=env` to `subprocess.run()` or `subprocess.Popen()`
+- **`cpus_per_instance` defaults to `None`** — CLI tools, even single-threaded ones, do NOT opt in to ToolPool CPU fan-out by default. The single direct call is the right answer for most CLIs because (a) tools that take `--threads` / `-num_threads` already handle their own parallelism within one subprocess, (b) cheap CLIs don't have enough per-call work to amortize spinning up N persistent workers, and (c) network-bound CLIs would multiply rate-limited requests. Leave the default unless you can answer "yes" to all of: "is per-call work heavy enough to amortize subprocess startup?", "is the tool truly single-threaded per call?", and "are items embarrassingly parallel?". PyRosetta is the only opt-in in the repo today.
 
 ---
 
@@ -517,6 +518,11 @@ GPU tools should include `batch_size: int = ConfigField(default=1, ...)` in thei
 - The standalone `inference.py` implements the batching loop (chunking inputs, iterating)
 - Generators and constraints pass `batch_size` through to tool configs — they never batch themselves
 - Higher `batch_size` = more GPU memory, higher throughput
+
+**ToolPool CPU fan-out interaction:**
+- The default `cpus_per_instance = None` means CPU tools run as a single direct call regardless of `pool.cpus`. This is the right answer for tools that batch internally — one subprocess processes all items, the standalone's batching loop runs efficiently in-process, no per-item IPC overhead.
+- Opt in to fan-out (override `cpus_per_instance` to a positive int) only when per-call work is heavy enough to amortize N worker subprocesses spinning up. The repo's only opt-in is PyRosetta (heavy `init`, multi-second per pose, independent poses).
+- GPU tools are unaffected — `cpus_per_instance` is ignored when `gpus_per_instance > 0`.
 
 ---
 

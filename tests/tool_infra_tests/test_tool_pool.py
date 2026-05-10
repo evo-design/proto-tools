@@ -18,6 +18,7 @@ from proto_tools.utils.tool_pool import (
     ToolPool,
     WorkItem,
     _active_pool,
+    _compute_worker_layout,
     _pool_executing,
     get_active_pool,
     is_pool_executing,
@@ -211,7 +212,7 @@ def test_contextvar_no_pool_by_default():
 
 def test_contextvar_pool_set_and_cleared():
     """Pool should be visible after set, gone after reset."""
-    pool = ToolPool(devices=["cuda:0"])
+    pool = ToolPool(gpus=["cuda:0"])
     token = _active_pool.set(pool)
     assert get_active_pool() is pool
     _active_pool.reset(token)
@@ -246,14 +247,96 @@ def test_contextvar_propagates_to_worker_threads():
 
 def test_contextvar_nesting_raises_error():
     """Nested ToolPool contexts should raise RuntimeError."""
-    pool = ToolPool(devices=["cuda:0"])
+    pool = ToolPool(gpus=["cuda:0"])
     token = _active_pool.set(pool)
     try:
-        pool2 = ToolPool(devices=["cuda:1"])
+        pool2 = ToolPool(gpus=["cuda:1"])
         with pytest.raises(RuntimeError, match="cannot be nested"):
             pool2.__enter__()
     finally:
         _active_pool.reset(token)
+
+
+# ── gpus / cpus argument resolution ──────────────────────────────────────────
+
+
+def test_gpus_int_takes_first_n_visible():
+    """gpus=N resolves to the first N visible GPU device strings."""
+    with patch("proto_tools.utils.tool_pool.number_of_available_gpus", return_value=4):
+        pool = ToolPool(gpus=2, cpus=1)
+        assert pool._resolve_gpus() == ["cuda:0", "cuda:1"]
+
+
+def test_gpus_int_zero_skips_detection():
+    """gpus=0 returns an empty list and never queries available GPUs."""
+    with patch("proto_tools.utils.tool_pool.number_of_available_gpus") as mock_n:
+        pool = ToolPool(gpus=0, cpus=1)
+        assert pool._resolve_gpus() == []
+        mock_n.assert_not_called()
+
+
+def test_gpus_int_too_many_raises():
+    """gpus=N where N > visible raises RuntimeError."""
+    with patch("proto_tools.utils.tool_pool.number_of_available_gpus", return_value=2):
+        pool = ToolPool(gpus=4, cpus=1)
+        with pytest.raises(RuntimeError, match="requested gpus=4 but only 2 are visible"):
+            pool._resolve_gpus()
+
+
+def test_gpus_all_resolves_to_visible_set():
+    """gpus='all' (default) returns every visible GPU."""
+    with patch("proto_tools.utils.tool_pool.number_of_available_gpus", return_value=3):
+        pool = ToolPool(cpus=1)  # gpus defaults to "all"
+        assert pool._resolve_gpus() == ["cuda:0", "cuda:1", "cuda:2"]
+
+
+def test_gpus_negative_raises():
+    """gpus=-1 raises ValueError."""
+    pool = ToolPool(gpus=-1, cpus=1)
+    with pytest.raises(ValueError, match="gpus must be >= 0"):
+        pool._resolve_gpus()
+
+
+def test_cpus_negative_raises_at_init():
+    """Passing cpus < 1 raises ValueError immediately at construction."""
+    with pytest.raises(ValueError, match="cpus must be >= 1"):
+        ToolPool(gpus=0, cpus=0)
+
+
+def test_cpus_default_capped_at_four():
+    """Default cpus resolves to min(_detect_cpus(), 4)."""
+    with patch("proto_tools.utils.tool_pool._detect_cpus", return_value=64):
+        pool = ToolPool(gpus=0)  # cpus=None → default
+        assert pool.cpus == 4
+
+
+def test_cpu_only_pool_enters_without_gpus():
+    """gpus=0 enters cleanly on a 0-GPU host (no GPU validation runs)."""
+    with patch("proto_tools.utils.tool_pool.number_of_available_gpus") as mock_n:
+        pool = ToolPool(gpus=0, cpus=4)
+        try:
+            pool.__enter__()
+            assert pool._gpu_devices == []
+            assert pool.cpus == 4
+            mock_n.assert_not_called()
+        finally:
+            pool.__exit__(None, None, None)
+
+
+def test_no_parallelism_warning(caplog):
+    """gpus=0 + cpus=1 logs a warning that the pool will short-circuit everything."""
+    import logging
+
+    with (
+        patch("proto_tools.utils.tool_pool.number_of_available_gpus", return_value=0),
+        caplog.at_level(logging.WARNING, logger="proto_tools.utils.tool_pool"),
+    ):
+        pool = ToolPool(gpus=0, cpus=1)
+        try:
+            pool.__enter__()
+            assert any("no parallelism" in rec.message for rec in caplog.records)
+        finally:
+            pool.__exit__(None, None, None)
 
 
 # ── Parallel dispatch tests ─────────────────────────────────────────────────
@@ -263,8 +346,8 @@ def test_dispatch_items_split_across_devices(clean_registry):
     """Items should be split across available devices."""
     func, _call_log = _register_mock_tool(clean_registry)
 
-    pool = ToolPool(devices=["cuda:0", "cuda:1"])
-    pool._devices = ["cuda:0", "cuda:1"]
+    pool = ToolPool(gpus=["cuda:0", "cuda:1"])
+    pool._gpu_devices = ["cuda:0", "cuda:1"]
 
     inputs = MockInput(items=["a", "b", "c", "d"])
     config = MockConfig(device="cuda")
@@ -279,8 +362,8 @@ def test_dispatch_results_reassembled_in_order(clean_registry):
     """Output items must match original input order."""
     func, _call_log = _register_mock_tool(clean_registry)
 
-    pool = ToolPool(devices=["cuda:0", "cuda:1", "cuda:2"])
-    pool._devices = ["cuda:0", "cuda:1", "cuda:2"]
+    pool = ToolPool(gpus=["cuda:0", "cuda:1", "cuda:2"])
+    pool._gpu_devices = ["cuda:0", "cuda:1", "cuda:2"]
 
     items = [f"item_{i}" for i in range(10)]
     inputs = MockInput(items=items)
@@ -296,8 +379,8 @@ def test_dispatch_config_device_overridden_per_worker(clean_registry):
     """Each worker should get config.device set to its assigned device."""
     func, call_log = _register_mock_tool(clean_registry)
 
-    pool = ToolPool(devices=["cuda:0", "cuda:1"])
-    pool._devices = ["cuda:0", "cuda:1"]
+    pool = ToolPool(gpus=["cuda:0", "cuda:1"])
+    pool._gpu_devices = ["cuda:0", "cuda:1"]
 
     inputs = MockInput(items=["a", "b", "c", "d"])
     config = MockConfig(device="cuda")
@@ -312,8 +395,8 @@ def test_dispatch_worker_instance_names(clean_registry):
     """Worker instance names should encode the device."""
     func, call_log = _register_mock_tool(clean_registry)
 
-    pool = ToolPool(devices=["cuda:0", "cuda:1"])
-    pool._devices = ["cuda:0", "cuda:1"]
+    pool = ToolPool(gpus=["cuda:0", "cuda:1"])
+    pool._gpu_devices = ["cuda:0", "cuda:1"]
 
     inputs = MockInput(items=["a", "b"])
     config = MockConfig(device="cuda")
@@ -329,8 +412,8 @@ def test_dispatch_single_item_skips_pool(clean_registry):
     """Single-item inputs should bypass pool overhead."""
     func, call_log = _register_mock_tool(clean_registry)
 
-    pool = ToolPool(devices=["cuda:0", "cuda:1"])
-    pool._devices = ["cuda:0", "cuda:1"]
+    pool = ToolPool(gpus=["cuda:0", "cuda:1"])
+    pool._gpu_devices = ["cuda:0", "cuda:1"]
 
     inputs = MockInput(items=["only_one"])
     config = MockConfig(device="cuda")
@@ -342,7 +425,7 @@ def test_dispatch_single_item_skips_pool(clean_registry):
     assert call_log[0]["instance"] is None  # Direct call, no worker name
 
 
-def test_dispatch_devices_per_instance_grouping(clean_registry):
+def test_dispatch_gpus_per_instance_grouping(clean_registry):
     """Multi-GPU tools should group devices."""
     _, call_log = _register_mock_tool(clean_registry)
 
@@ -350,7 +433,7 @@ def test_dispatch_devices_per_instance_grouping(clean_registry):
         device: str = ConfigField(default="cuda", hidden=True)
 
         @property
-        def devices_per_instance(self) -> int:
+        def gpus_per_instance(self) -> int:
             return 2
 
     # Re-register with MultiGPUConfig
@@ -376,8 +459,8 @@ def test_dispatch_devices_per_instance_grouping(clean_registry):
             success=True,
         )
 
-    pool = ToolPool(devices=["cuda:0", "cuda:1", "cuda:2", "cuda:3"])
-    pool._devices = ["cuda:0", "cuda:1", "cuda:2", "cuda:3"]
+    pool = ToolPool(gpus=["cuda:0", "cuda:1", "cuda:2", "cuda:3"])
+    pool._gpu_devices = ["cuda:0", "cuda:1", "cuda:2", "cuda:3"]
 
     inputs = MockInput(items=["a", "b", "c", "d"])
     config = MultiGPUConfig(device="cuda")
@@ -392,14 +475,16 @@ def test_dispatch_devices_per_instance_grouping(clean_registry):
     assert len(result.results) == 4
 
 
-def test_dispatch_devices_per_instance_zero_bypasses_pool(clean_registry):
-    """CPU-mode tools (devices_per_instance=0) bypass GPU partitioning.
+def test_dispatch_gpus_per_instance_zero_bypasses_pool(clean_registry):
+    """CPU-opt-out tools (gpus_per_instance=0 + cpus_per_instance=None) bypass partitioning.
 
     Regression for #575: ToolPool._parallel_dispatch crashed with
     `ValueError: range() arg 3 must not be zero` when a tool's config returned
-    devices_per_instance=0 (e.g. colabfold-search with use_gpu=False) and the
+    gpus_per_instance=0 (e.g. colabfold-search with use_gpu=False) and the
     pool was dispatched with >=2 input items. The fix short-circuits to a
-    single direct call mirroring the n_items<=1 path.
+    single direct call mirroring the n_items<=1 path. With the cpus_per_instance
+    default of 1, the explicit None opt-out (mirroring colabfold-search,
+    mmseqs2-*, etc. in production) is required to reach the short-circuit branch.
     """
     _, call_log = _register_mock_tool(clean_registry)
 
@@ -407,8 +492,13 @@ def test_dispatch_devices_per_instance_zero_bypasses_pool(clean_registry):
         device: str = ConfigField(default="cuda", hidden=True)
 
         @property
-        def devices_per_instance(self) -> int:
+        def gpus_per_instance(self) -> int:
             return 0
+
+        @property
+        def cpus_per_instance(self) -> int | None:
+            """Opt out of CPU fan-out — internally threaded (same as colabfold-search)."""
+            return None
 
     clean_registry._registry.clear()
 
@@ -432,8 +522,8 @@ def test_dispatch_devices_per_instance_zero_bypasses_pool(clean_registry):
             success=True,
         )
 
-    pool = ToolPool(devices=["cuda:0", "cuda:1"])
-    pool._devices = ["cuda:0", "cuda:1"]
+    pool = ToolPool(gpus=["cuda:0", "cuda:1"])
+    pool._gpu_devices = ["cuda:0", "cuda:1"]
 
     inputs = MockInput(items=["a", "b", "c"])
     config = CPUOnlyConfig()
@@ -452,8 +542,8 @@ def test_dispatch_pool_receives_pre_deduped_items(clean_registry):
     """Pool should receive already-deduped items from @tool wrapper."""
     func, call_log = _register_mock_tool(clean_registry)
 
-    pool = ToolPool(devices=["cuda:0", "cuda:1"])
-    pool._devices = ["cuda:0", "cuda:1"]
+    pool = ToolPool(gpus=["cuda:0", "cuda:1"])
+    pool._gpu_devices = ["cuda:0", "cuda:1"]
 
     inputs = MockInput(items=["a", "b", "c"])
     config = MockConfig(device="cuda")
@@ -494,8 +584,8 @@ def test_dispatch_collects_warnings_and_errors(clean_registry):
             success=True,
         )
 
-    pool = ToolPool(devices=["cuda:0", "cuda:1"])
-    pool._devices = ["cuda:0", "cuda:1"]
+    pool = ToolPool(gpus=["cuda:0", "cuda:1"])
+    pool._gpu_devices = ["cuda:0", "cuda:1"]
 
     inputs = MockInput(items=["a", "b", "c", "d"])
     config = MockConfig(device="cuda")
@@ -514,7 +604,7 @@ def test_dispatch_persistence_entered():
     with patch("proto_tools.utils.tool_instance.ToolInstance.persist") as mock_persist:
         mock_ctx = MagicMock()
         mock_persist.return_value = mock_ctx
-        pool = ToolPool(devices=["cuda:0"])
+        pool = ToolPool(gpus=["cuda:0"])
         # Patch GPU validation
         with patch("proto_tools.utils.tool_pool.determine_visible_devices"):
             pool.__enter__()
@@ -705,39 +795,234 @@ def test_toolspec_iterable_fields_excluded_from_serialization(clean_registry):
     assert "iterable_output_field" not in serialized
 
 
-# ── devices_per_instance tests ──────────────────────────────────────────────
+# ── CPU fan-out tests ───────────────────────────────────────────────────────
 
 
-def test_devices_per_instance_derived_from_device_string():
-    """Default devices_per_instance is derived from the device field via parse_device_string.
+def test_compute_worker_layout_gpu_path():
+    """GPU path: groups devices into gpus_per_instance-sized slots."""
+
+    class GpuConfig(BaseConfig):
+        device: str = ConfigField(default="cuda", hidden=True)
+
+        @property
+        def gpus_per_instance(self) -> int:
+            return 2
+
+    slots = _compute_worker_layout(
+        "tool",
+        GpuConfig(),
+        gpu_devices=["cuda:0", "cuda:1", "cuda:2", "cuda:3"],
+        cpus_budget=4,
+    )
+    assert len(slots) == 2
+    assert slots[0].device_id == "cuda:0,cuda:1"
+    assert slots[0].device_override == "cuda:0,cuda:1"
+    assert slots[0].worker_name == "tool-pool-cuda_0_cuda_1"
+    assert slots[0].env_overrides is None
+    assert slots[1].device_id == "cuda:2,cuda:3"
+
+
+def test_compute_worker_layout_cpu_short_circuit():
+    """Default cpus_per_instance is None → empty slots (single direct call)."""
+    cfg = BaseConfig(device="cpu")  # default cpus_per_instance is None
+    slots = _compute_worker_layout("tool", cfg, gpu_devices=[], cpus_budget=8)
+    assert slots == []
+
+
+def test_compute_worker_layout_cpu_fanout():
+    """gpus_per_instance==0 + cpus_per_instance==N → N CPU worker slots."""
+
+    class CpuFanoutConfig(BaseConfig):
+        device: str = ConfigField(default="cpu", hidden=True)
+
+        @property
+        def cpus_per_instance(self) -> int | None:
+            return 1
+
+    slots = _compute_worker_layout("pyrosetta-relax", CpuFanoutConfig(), gpu_devices=[], cpus_budget=4)
+    assert len(slots) == 4
+    for i, slot in enumerate(slots):
+        assert slot.device_id == f"cpu#{i}"
+        assert slot.device_override == "cpu"
+        assert slot.worker_name == f"pyrosetta-relax-pool-cpu-{i}"
+        assert slot.env_overrides == {
+            "OMP_NUM_THREADS": "1",
+            "MKL_NUM_THREADS": "1",
+            "OPENBLAS_NUM_THREADS": "1",
+            "NUMEXPR_NUM_THREADS": "1",
+        }
+
+
+def test_compute_worker_layout_cpu_fanout_with_thread_budget():
+    """cpus_per_instance=2 with cpus=8 → 4 workers, each gets OMP=2."""
+
+    class CpuMultiThreadConfig(BaseConfig):
+        device: str = ConfigField(default="cpu", hidden=True)
+
+        @property
+        def cpus_per_instance(self) -> int | None:
+            return 2
+
+    slots = _compute_worker_layout("tool", CpuMultiThreadConfig(), gpu_devices=[], cpus_budget=8)
+    assert len(slots) == 4
+    assert all(
+        slot.env_overrides
+        == {  # type: ignore[comparison-overlap]
+            "OMP_NUM_THREADS": "2",
+            "MKL_NUM_THREADS": "2",
+            "OPENBLAS_NUM_THREADS": "2",
+            "NUMEXPR_NUM_THREADS": "2",
+        }
+        for slot in slots
+    )
+
+
+def test_dispatch_cpu_fanout_partitions_items(clean_registry):
+    """CPU fan-out: cpus_per_instance=1 + cpus=4 → 4 partitions."""
+    _, call_log = _register_mock_tool(clean_registry)
+
+    class CpuFanoutConfig(BaseConfig):
+        device: str = ConfigField(default="cpu", hidden=True)
+
+        @property
+        def cpus_per_instance(self) -> int | None:
+            return 1
+
+    clean_registry._registry.clear()
+
+    @clean_registry.register(
+        key="cpu-fanout-process",
+        label="CPU Fanout",
+        category="testing",
+        input_class=MockInput,
+        config_class=CpuFanoutConfig,
+        output_class=MockOutput,
+        description="CPU fan-out test",
+        iterable_input_field="items",
+        iterable_output_field="results",
+    )
+    def run_cpu_fanout(inputs, config=None, instance=None):
+        call_log.append(
+            {
+                "items": list(inputs.items),
+                "device": config.device,
+                "instance": instance,
+                "thread": threading.current_thread().name,
+            }
+        )
+        return MockOutput(
+            results=[f"processed_{item}" for item in inputs.items],
+            tool_id="cpu-fanout-process",
+            execution_time=0.01,
+            success=True,
+        )
+
+    pool = ToolPool(gpus=0, cpus=4)
+    pool._gpu_devices = []  # __enter__ would set this; we're calling _parallel_dispatch directly
+
+    inputs = MockInput(items=["a", "b", "c", "d", "e", "f", "g", "h"])
+    config = CpuFanoutConfig()
+
+    with patch("proto_tools.utils.tool_pool.ToolInstance.get") as mock_get:
+        result = pool._parallel_dispatch("cpu-fanout-process", run_cpu_fanout, inputs, config)
+
+    # Four parallel calls, each with 2 items, each on device="cpu"
+    assert len(call_log) == 4
+    assert all(c["device"] == "cpu" for c in call_log)
+    assert all(c["instance"] is not None and c["instance"].startswith("cpu-fanout-process-pool-cpu-") for c in call_log)
+    # 8 items distributed evenly
+    items_per_call = sorted(len(c["items"]) for c in call_log)
+    assert items_per_call == [2, 2, 2, 2]
+    # Pre-create-with-env path: ToolInstance.get was called once per partition with env_overrides
+    assert mock_get.call_count == 4
+    for call in mock_get.call_args_list:
+        kwargs = call.kwargs
+        assert kwargs["env_overrides"]["OMP_NUM_THREADS"] == "1"
+    # All 8 results returned in original order
+    assert result.results == [f"processed_{item}" for item in ["a", "b", "c", "d", "e", "f", "g", "h"]]
+
+
+def test_dispatch_cpu_short_circuit_preserved(clean_registry):
+    """Tools that explicitly opt out via cpus_per_instance=None short-circuit to a single call."""
+    _, call_log = _register_mock_tool(clean_registry)
+
+    class CpuOptOutConfig(BaseConfig):
+        device: str = ConfigField(default="cpu", hidden=True)
+
+        @property
+        def cpus_per_instance(self) -> int | None:
+            """Opt out — internal threading."""
+            return None
+
+    clean_registry._registry.clear()
+
+    @clean_registry.register(
+        key="mmseqs-style",
+        label="Mmseqs Style",
+        category="testing",
+        input_class=MockInput,
+        config_class=CpuOptOutConfig,
+        output_class=MockOutput,
+        description="Internal-threading CPU tool",
+        iterable_input_field="items",
+        iterable_output_field="results",
+    )
+    def run_mmseqs_style(inputs, config=None, instance=None):
+        call_log.append({"items": list(inputs.items), "instance": instance})
+        return MockOutput(
+            results=[f"processed_{item}" for item in inputs.items],
+            tool_id="mmseqs-style",
+            execution_time=0.01,
+            success=True,
+        )
+
+    pool = ToolPool(gpus=0, cpus=8)
+    pool._gpu_devices = []
+
+    inputs = MockInput(items=["a", "b", "c", "d"])
+    config = CpuOptOutConfig()
+    result = pool._parallel_dispatch("mmseqs-style", run_mmseqs_style, inputs, config)
+
+    # Single direct call with all items — no fan-out, no per-worker instance
+    assert len(call_log) == 1
+    assert call_log[0]["instance"] is None
+    assert call_log[0]["items"] == ["a", "b", "c", "d"]
+    assert result.results == ["processed_a", "processed_b", "processed_c", "processed_d"]
+
+
+# ── gpus_per_instance tests ──────────────────────────────────────────────
+
+
+def test_gpus_per_instance_derived_from_device_string():
+    """Default gpus_per_instance is derived from the device field via parse_device_string.
 
     - cpu → 0 (no pool partitioning, single direct call)
     - cuda / cuda:N → 1
     - cudaxN / cuda:0,cuda:1 → N
     - cloud → 1 (cloud dispatch is handled before pool partitioning)
     """
-    assert BaseConfig().devices_per_instance == 0  # default device='cpu'
-    assert BaseConfig(device="cpu").devices_per_instance == 0
-    assert BaseConfig(device="cuda").devices_per_instance == 1
-    assert BaseConfig(device="cuda:0").devices_per_instance == 1
-    assert BaseConfig(device="cudax2").devices_per_instance == 2
-    assert BaseConfig(device="cudax4").devices_per_instance == 4
-    assert BaseConfig(device="cuda:0,cuda:1").devices_per_instance == 2
-    assert BaseConfig(device="cloud").devices_per_instance == 1
+    assert BaseConfig().gpus_per_instance == 0  # default device='cpu'
+    assert BaseConfig(device="cpu").gpus_per_instance == 0
+    assert BaseConfig(device="cuda").gpus_per_instance == 1
+    assert BaseConfig(device="cuda:0").gpus_per_instance == 1
+    assert BaseConfig(device="cudax2").gpus_per_instance == 2
+    assert BaseConfig(device="cudax4").gpus_per_instance == 4
+    assert BaseConfig(device="cuda:0,cuda:1").gpus_per_instance == 2
+    assert BaseConfig(device="cloud").gpus_per_instance == 1
 
 
-def test_devices_per_instance_override():
-    """Subclasses can override devices_per_instance based on config values."""
+def test_gpus_per_instance_override():
+    """Subclasses can override gpus_per_instance based on config values."""
 
     class MultiGPU(BaseConfig):
         model_name: str = ConfigField(default="small")
 
         @property
-        def devices_per_instance(self) -> int:
+        def gpus_per_instance(self) -> int:
             return 2 if self.model_name == "large" else 1
 
-    assert MultiGPU(model_name="small").devices_per_instance == 1
-    assert MultiGPU(model_name="large").devices_per_instance == 2
+    assert MultiGPU(model_name="small").gpus_per_instance == 1
+    assert MultiGPU(model_name="large").gpus_per_instance == 2
 
 
 # ── Error propagation tests ─────────────────────────────────────────────────
@@ -771,8 +1056,8 @@ def test_local_partition_failure_preserves_other_results(clean_registry):
             success=True,
         )
 
-    pool = ToolPool(devices=["cuda:0", "cuda:1"])
-    pool._devices = ["cuda:0", "cuda:1"]
+    pool = ToolPool(gpus=["cuda:0", "cuda:1"])
+    pool._gpu_devices = ["cuda:0", "cuda:1"]
 
     inputs = MockInput(items=["a", "b", "c", "d"])
     config = MockConfig(device="cuda")
@@ -806,8 +1091,8 @@ def test_all_partitions_fail(clean_registry):
     def run_all_fail(inputs, config=None, instance=None):
         raise RuntimeError("everything is broken")
 
-    pool = ToolPool(devices=["cuda:0", "cuda:1"])
-    pool._devices = ["cuda:0", "cuda:1"]
+    pool = ToolPool(gpus=["cuda:0", "cuda:1"])
+    pool._gpu_devices = ["cuda:0", "cuda:1"]
 
     inputs = MockInput(items=["a", "b", "c", "d"])
     config = MockConfig(device="cuda")
@@ -826,8 +1111,8 @@ def test_all_succeed_unchanged(clean_registry):
     """Regression: happy path is unaffected by error propagation changes."""
     func, call_log = _register_mock_tool(clean_registry)
 
-    pool = ToolPool(devices=["cuda:0", "cuda:1"])
-    pool._devices = ["cuda:0", "cuda:1"]
+    pool = ToolPool(gpus=["cuda:0", "cuda:1"])
+    pool._gpu_devices = ["cuda:0", "cuda:1"]
 
     inputs = MockInput(items=["a", "b", "c", "d"])
     config = MockConfig(device="cuda")
@@ -866,7 +1151,7 @@ def test_gpu_fanout_items_land_on_different_gpus():
             [0.0, 0.0, 0.0, 1.0],
         ]
 
-        with ToolPool(devices=["cuda:0", "cuda:1"]):
+        with ToolPool(gpus=["cuda:0", "cuda:1"]):
             result = run_mock_pytorch_tool(
                 MockPyTorchToolInput(data_items=data_items),
                 MockPyTorchToolConfig(memory_mb=64),
@@ -908,7 +1193,7 @@ def test_gpu_fanout_results_in_original_order():
             [0.0, 6.0, 0.0, 0.0],
         ]
 
-        with ToolPool(devices=["cuda:0", "cuda:1"]):
+        with ToolPool(gpus=["cuda:0", "cuda:1"]):
             result = run_mock_pytorch_tool(
                 MockPyTorchToolInput(data_items=data_items),
                 MockPyTorchToolConfig(memory_mb=64),
@@ -955,7 +1240,7 @@ def test_gpu_fanout_persistence_across_pool_calls():
             [0.0, 1.0, 0.0, 0.0],
         ]
 
-        with ToolPool(devices=["cuda:0", "cuda:1"]):
+        with ToolPool(gpus=["cuda:0", "cuda:1"]):
             # Cold call: pays model loading on both GPUs
             t0 = time.time()
             result1 = run_mock_pytorch_tool(
@@ -998,7 +1283,7 @@ def test_gpu_fanout_single_item_bypasses_pool():
     ToolInstance.clear_all()
 
     try:
-        with ToolPool(devices=["cuda:0", "cuda:1"]):
+        with ToolPool(gpus=["cuda:0", "cuda:1"]):
             result = run_mock_pytorch_tool(
                 MockPyTorchToolInput(data_items=[[1.0, 2.0, 3.0, 4.0]]),
                 MockPyTorchToolConfig(memory_mb=64),
@@ -1006,6 +1291,153 @@ def test_gpu_fanout_single_item_bypasses_pool():
 
         assert result.success
         assert len(result.results) == 1
+    finally:
+        ToolInstance.clear_all()
+        DeviceManager.reset_instance()
+
+
+# ---------------------------------------------------------------------------
+# Integration tests (CPU fan-out — real subprocesses, no GPU required)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.uses_cpu(4)
+@pytest.mark.slow
+def test_cpu_fanout_items_land_on_different_workers():
+    """cpus=4 with 8 items should run across 4 distinct subprocesses."""
+    from proto_tools.tools.testing.mock_cpu_tool import (
+        MockCPUToolConfig,
+        MockCPUToolInput,
+        run_mock_cpu_tool,
+    )
+    from proto_tools.utils.device_manager import DeviceManager
+    from proto_tools.utils.tool_instance import ToolInstance
+
+    DeviceManager.reset_instance()
+    ToolInstance.clear_all()
+
+    try:
+        with ToolPool(gpus=0, cpus=4):
+            result = run_mock_cpu_tool(
+                MockCPUToolInput(items=list(range(8))),
+                MockCPUToolConfig(),
+            )
+
+        assert result.success, f"ToolPool call failed: {result.errors}"
+        assert len(result.results) == 8
+
+        worker_ids = {r.process_unique_id for r in result.results}
+        assert len(worker_ids) == 4, (
+            f"Expected 4 distinct worker subprocesses for cpus=4, got {len(worker_ids)}: {worker_ids}"
+        )
+    finally:
+        ToolInstance.clear_all()
+        DeviceManager.reset_instance()
+
+
+@pytest.mark.uses_cpu(4)
+@pytest.mark.slow
+def test_cpu_fanout_omp_pinning():
+    """Each CPU worker subprocess should observe OMP_NUM_THREADS == cpus_per_instance."""
+    from proto_tools.tools.testing.mock_cpu_tool import (
+        MockCPUToolConfig,
+        MockCPUToolInput,
+        run_mock_cpu_tool,
+    )
+    from proto_tools.utils.device_manager import DeviceManager
+    from proto_tools.utils.tool_instance import ToolInstance
+
+    DeviceManager.reset_instance()
+    ToolInstance.clear_all()
+
+    try:
+        with ToolPool(gpus=0, cpus=4):
+            result = run_mock_cpu_tool(
+                MockCPUToolInput(items=list(range(8))),
+                MockCPUToolConfig(),  # default cpus_per_instance=1
+            )
+
+        assert result.success
+        observed = {r.omp_num_threads for r in result.results}
+        assert observed == {"1"}, (
+            f"Every worker should see OMP_NUM_THREADS=1 (cpus_per_instance default); got {observed}"
+        )
+    finally:
+        ToolInstance.clear_all()
+        DeviceManager.reset_instance()
+
+
+@pytest.mark.uses_cpu(2)
+@pytest.mark.slow
+def test_cpu_fanout_persistence_across_pool_calls():
+    """Second dispatch in the same pool should reuse the warm worker subprocesses."""
+    from proto_tools.tools.testing.mock_cpu_tool import (
+        MockCPUToolConfig,
+        MockCPUToolInput,
+        run_mock_cpu_tool,
+    )
+    from proto_tools.utils.device_manager import DeviceManager
+    from proto_tools.utils.tool_instance import ToolInstance
+
+    DeviceManager.reset_instance()
+    ToolInstance.clear_all()
+
+    try:
+        with ToolPool(gpus=0, cpus=2):
+            result1 = run_mock_cpu_tool(
+                MockCPUToolInput(items=[1, 2, 3, 4]),
+                MockCPUToolConfig(),
+            )
+            result2 = run_mock_cpu_tool(
+                MockCPUToolInput(items=[5, 6, 7, 8]),
+                MockCPUToolConfig(),
+            )
+
+        assert result1.success and result2.success
+        workers_call_1 = {r.process_unique_id for r in result1.results}
+        workers_call_2 = {r.process_unique_id for r in result2.results}
+        assert workers_call_1 == workers_call_2, (
+            "Warm workers should be reused across dispatches; "
+            f"call 1 used {workers_call_1}, call 2 used {workers_call_2}"
+        )
+    finally:
+        ToolInstance.clear_all()
+        DeviceManager.reset_instance()
+
+
+@pytest.mark.uses_cpu(4)
+@pytest.mark.slow
+def test_cpu_fanout_explicit_opt_out_short_circuits():
+    """A subclass with cpus_per_instance=None should run a single direct call."""
+    from proto_tools.tools.testing.mock_cpu_tool import (
+        MockCPUToolConfig,
+        MockCPUToolInput,
+        run_mock_cpu_tool,
+    )
+    from proto_tools.utils.device_manager import DeviceManager
+    from proto_tools.utils.tool_instance import ToolInstance
+
+    class OptOutConfig(MockCPUToolConfig):
+        @property
+        def cpus_per_instance(self) -> int | None:
+            """Opt out of fan-out — mirrors mmseqs2 / colabfold-search in production."""
+            return None
+
+    DeviceManager.reset_instance()
+    ToolInstance.clear_all()
+
+    try:
+        with ToolPool(gpus=0, cpus=4):
+            result = run_mock_cpu_tool(
+                MockCPUToolInput(items=[1, 2, 3, 4]),
+                OptOutConfig(),
+            )
+
+        assert result.success
+        worker_ids = {r.process_unique_id for r in result.results}
+        assert len(worker_ids) == 1, (
+            f"Opt-out should short-circuit to a single worker; got {len(worker_ids)}: {worker_ids}"
+        )
     finally:
         ToolInstance.clear_all()
         DeviceManager.reset_instance()

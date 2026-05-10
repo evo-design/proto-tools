@@ -12,6 +12,13 @@ from proto_tools.tools.testing.mock_cli_tool import (
     MockCLIToolOutput,
     run_mock_cli_tool,
 )
+from proto_tools.tools.testing.mock_cpu_tool import (
+    MockCPUToolConfig,
+    MockCPUToolInput,
+    MockCPUToolOutput,
+    MockCPUToolResult,
+    run_mock_cpu_tool,
+)
 from proto_tools.tools.testing.mock_jax_multi_gpu_tool import (
     MockJAXMultiGPUToolConfig,
     MockJAXMultiGPUToolInput,
@@ -47,6 +54,11 @@ __all__ = [
     "MockCLIToolInput",
     "MockCLIToolOutput",
     "run_mock_cli_tool",
+    "MockCPUToolConfig",
+    "MockCPUToolInput",
+    "MockCPUToolOutput",
+    "MockCPUToolResult",
+    "run_mock_cpu_tool",
     "MockJAXMultiGPUToolConfig",
     "MockJAXMultiGPUToolInput",
     "MockJAXMultiGPUToolOutput",

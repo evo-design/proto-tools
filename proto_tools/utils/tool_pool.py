@@ -16,13 +16,37 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from proto_tools.utils.device import (
     determine_visible_devices,
     number_of_available_gpus,
 )
 from proto_tools.utils.tool_instance import ToolInstance, _persist_mode
+
+# Type alias for the ``gpus`` argument on ToolPool.
+GpuSpec = int | list[str] | Literal["all"]
+
+# Conservative default; pass ``ToolPool(cpus=N)`` to override.
+_DEFAULT_CPU_CAP = 4
+
+
+def _detect_cpus() -> int:
+    """Return the number of CPUs this process can use (always ``>= 1``).
+
+    Prefers ``os.sched_getaffinity(0)`` (Linux/cgroup-aware: returns the
+    Slurm/Kubernetes-allocated cores), falling back to ``os.cpu_count()`` on
+    platforms where ``sched_getaffinity`` is unavailable (macOS, Windows).
+    Both branches floor at ``1`` for symmetry — the kernel won't permit a
+    running process to have an empty affinity set, but downstream callers
+    (ToolPool budget math, the ``uses_cpu(n)`` test gate) rely on a positive
+    value, so the floor keeps the contract honest.
+    """
+    try:
+        return len(os.sched_getaffinity(0)) or 1
+    except AttributeError:
+        return os.cpu_count() or 1
+
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +145,132 @@ class WorkerAssignment:
     total_cost: float = 0.0
 
 
+@dataclass
+class WorkerSlot:
+    """Layout for one parallel worker invocation in a dispatch.
+
+    Captures everything that varies per worker — what to call its cache key,
+    what to set ``config.device`` to inside its partition, and any per-worker
+    env vars to inject into its subprocess. Both GPU and CPU fan-out paths
+    produce a list of WorkerSlots so the rest of ``_parallel_dispatch`` can
+    treat them uniformly.
+
+    Attributes:
+        device_id (str): Human-readable label used for logging and partial-
+            failure messages. ``"cuda:0,cuda:1"`` for GPU groups,
+            ``"cpu#0"`` / ``"cpu#1"`` / ... for CPU workers.
+        worker_name (str): ``ToolInstance`` cache key. Stable across
+            dispatches within the pool so workers stay warm.
+        device_override (str): Value to set on ``config.device`` for this
+            worker's partition (e.g. ``"cuda:0,cuda:1"`` or ``"cpu"``).
+        env_overrides (dict[str, str] | None): Per-worker subprocess env vars
+            (e.g. ``OMP_NUM_THREADS`` for CPU workers). Forwarded to
+            ``ToolInstance.get(env_overrides=...)`` before the partition runs.
+    """
+
+    device_id: str
+    worker_name: str
+    device_override: str
+    env_overrides: dict[str, str] | None = None
+
+
+def _compute_worker_layout(
+    tool_key: str,
+    config: Any,
+    gpu_devices: list[str],
+    cpus_budget: int,
+) -> list[WorkerSlot]:
+    """Compute the worker layout for one dispatch.
+
+    Returns the list of worker slots to fan out across:
+
+    - **GPU mode** (``gpus_per_instance > 0``): groups ``gpu_devices`` into
+      slots of ``gpus_per_instance`` (e.g. 4 GPUs with gpi=2 → 2 slots).
+      Trailing devices that don't form a complete group are logged and
+      dropped, except when no complete group fits at all (1 GPU with gpi=2)
+      in which case all remaining devices form a single slot.
+    - **CPU fan-out mode** (``gpus_per_instance == 0`` and the tool has
+      explicitly opted in via ``cpus_per_instance == N`` for some positive
+      int): produces ``max(1, cpus_budget // cpus_per_instance)`` slots,
+      each pinned to ``device="cpu"`` with
+      ``OMP/MKL/OPENBLAS/NUMEXPR_NUM_THREADS`` set to ``cpus_per_instance``
+      to prevent oversubscription. PyRosetta is the canonical opt-in.
+    - **Short-circuit** (``gpus_per_instance == 0`` and
+      ``cpus_per_instance is None`` — the default for any ``BaseConfig``
+      subclass that doesn't override): returns an empty list. The caller
+      runs a single direct call; the tool stays off the pool's CPU
+      scheduler (the default for every CPU tool unless it explicitly opts in).
+
+    Args:
+        tool_key (str): Tool registry key, used to derive worker names.
+        config (Any): Tool config — read for ``gpus_per_instance`` and
+            ``cpus_per_instance``.
+        gpu_devices (list[str]): Resolved GPU device strings from the pool.
+        cpus_budget (int): Total CPU budget the pool has to spend.
+
+    Returns:
+        list[WorkerSlot]: One slot per planned worker; empty list signals
+            short-circuit to a single direct call.
+    """
+    gpi = config.gpus_per_instance
+
+    if gpi > 0:
+        slots: list[WorkerSlot] = []
+        for i in range(0, len(gpu_devices), gpi):
+            group = gpu_devices[i : i + gpi]
+            if len(group) == gpi:
+                device_str = ",".join(group)
+                slots.append(
+                    WorkerSlot(
+                        device_id=device_str,
+                        worker_name=f"{tool_key}-pool-{device_str.replace(':', '_').replace(',', '_')}",
+                        device_override=device_str,
+                    )
+                )
+        leftover = len(gpu_devices) - len(slots) * gpi
+        if leftover > 0:
+            logger.warning(
+                "ToolPool: %d device(s) unused (gpus_per_instance=%d, total=%d)",
+                leftover,
+                gpi,
+                len(gpu_devices),
+            )
+        # Edge case: not enough devices for even one full group → use what we have
+        if gpu_devices and not slots:
+            device_str = ",".join(gpu_devices)
+            slots.append(
+                WorkerSlot(
+                    device_id=device_str,
+                    worker_name=f"{tool_key}-pool-{device_str.replace(':', '_').replace(',', '_')}",
+                    device_override=device_str,
+                )
+            )
+        return slots
+
+    # gpi == 0: CPU mode
+    cpi = config.cpus_per_instance
+    if cpi is None:
+        # Short-circuit — tool wants single direct call.
+        return []
+
+    n_workers = max(1, cpus_budget // cpi)
+    cpu_thread_env = {
+        "OMP_NUM_THREADS": str(cpi),
+        "MKL_NUM_THREADS": str(cpi),
+        "OPENBLAS_NUM_THREADS": str(cpi),
+        "NUMEXPR_NUM_THREADS": str(cpi),
+    }
+    return [
+        WorkerSlot(
+            device_id=f"cpu#{i}",
+            worker_name=f"{tool_key}-pool-cpu-{i}",
+            device_override="cpu",
+            env_overrides=cpu_thread_env,
+        )
+        for i in range(n_workers)
+    ]
+
+
 # ============================================================================
 # LPT Scheduling
 # ============================================================================
@@ -196,64 +346,113 @@ class ToolPool:
 
     Usage::
 
-        # Auto-detect all visible GPUs (default)
+        # Default: all visible GPUs, modest CPU cap (min(_detect_cpus(), 4))
         with ToolPool():
             result = run_boltz2(inputs, config)
 
-        # Explicit local GPUs
-        with ToolPool(devices=["cuda:0", "cuda:1", "cuda:2", "cuda:3"]):
+        # CPU-only fan-out (e.g. PyRosetta on a CPU node)
+        with ToolPool(gpus=0, cpus=16):
+            result = run_pyrosetta_relax(inputs, config)
+
+        # Specific GPUs by name
+        with ToolPool(gpus=["cuda:0", "cuda:1", "cuda:2", "cuda:3"]):
             result = run_esmfold(ESMFoldInput(complexes=all_100), ESMFoldConfig())
+
+        # Take the first N visible GPUs
+        with ToolPool(gpus=2):
+            result = run_boltz2(inputs, config)
 
     The pool intercepts ``@tool``-decorated function calls transparently.
     Only tools that declare ``iterable_input_field`` / ``iterable_output_field``
     on their ``@tool()`` decorator are parallelized; other tools pass through
     to normal single-worker execution (but still benefit from persistence).
 
-    Multi-GPU tools override ``BaseConfig.devices_per_instance`` (a
+    Multi-GPU tools override ``BaseConfig.gpus_per_instance`` (a
     ``@property``, not a field) to tell the pool how many GPUs each worker
     needs.  The pool groups its device list into slots of that size, e.g.
-    4 GPUs with ``devices_per_instance == 2`` yields 2 workers on
+    4 GPUs with ``gpus_per_instance == 2`` yields 2 workers on
     ``cuda:0,cuda:1`` and ``cuda:2,cuda:3``.
+
+    CPU-bound tools default to ``cpus_per_instance == None`` — the pool
+    dispatches a single direct call and ``pool.cpus`` is ignored. Tools
+    where per-call work is heavy enough to amortize subprocess startup
+    (PyRosetta is the canonical case) opt in by overriding to a positive
+    integer; the pool then spawns ``max(1, pool.cpus // cpus_per_instance)``
+    worker subprocesses for them.
     """
 
     def __init__(
         self,
-        devices: list[str] | str | None = None,
+        gpus: GpuSpec = "all",
+        cpus: int | None = None,
     ):
-        """Args:.
+        """Initialize a ToolPool with the given GPU and CPU resource budget.
 
-        devices: Device strings for the pool. Accepts a list
-            (e.g. ``["cuda:0", "cuda:1"]``), a single string
-            (e.g. ``"cuda:0"``), or ``None`` to auto-detect all
-            visible GPUs.
+        Args:
+            gpus (GpuSpec): GPUs available to the pool. Accepts:
+
+                - ``"all"`` (default): every visible GPU.
+                - ``int N``: the first N visible GPUs (errors if N exceeds visible).
+                - ``list[str]``: explicit device strings (e.g.
+                  ``["cuda:0", "cuda:2"]``); validated against the visible set.
+                - ``0``: explicit CPU-only mode; no GPU detection runs.
+            cpus (int | None): Total CPU budget for CPU fan-out. ``None`` (default)
+                resolves to ``min(_detect_cpus(), 4)`` — a conservative cap that
+                won't blow up memory on many-core nodes. Pass an explicit integer
+                for full control. Must be ``>= 1``.
         """
-        if isinstance(devices, str):
-            devices = [devices]
-
-        self._devices_arg = devices
+        if cpus is not None and cpus < 1:
+            raise ValueError(f"cpus must be >= 1, got {cpus}")
+        self._gpus_arg: GpuSpec = gpus
+        self.cpus: int = cpus if cpus is not None else min(_detect_cpus(), _DEFAULT_CPU_CAP)
         self._persist_ctx: contextlib.AbstractContextManager[None] | None = None
         self._token: contextvars.Token[ToolPool | None] | None = None
+
+    def _resolve_gpus(self) -> list[str]:
+        """Resolve ``gpus_arg`` to a concrete list of device strings."""
+        gpus = self._gpus_arg
+        if isinstance(gpus, list):
+            devices = list(gpus)
+            if devices:
+                determine_visible_devices(devices)  # type: ignore[arg-type]
+            return devices
+        if gpus == "all":
+            n = number_of_available_gpus()
+            return [f"cuda:{i}" for i in range(n)]
+        if isinstance(gpus, int):
+            if gpus < 0:
+                raise ValueError(f"gpus must be >= 0, got {gpus}")
+            if gpus == 0:
+                return []
+            visible = number_of_available_gpus()
+            if gpus > visible:
+                cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "(unset)")
+                raise RuntimeError(
+                    f"ToolPool requested gpus={gpus} but only {visible} are visible "
+                    f"(CUDA_VISIBLE_DEVICES={cuda_visible})"
+                )
+            return [f"cuda:{i}" for i in range(gpus)]
+        raise TypeError(f"gpus must be 'all', a non-negative int, or a list of device strings; got {gpus!r}")
 
     def __enter__(self) -> "ToolPool":
         if _active_pool.get() is not None:
             raise RuntimeError("ToolPool contexts cannot be nested")
 
-        # Resolve local devices
-        if self._devices_arg is not None:
-            self._devices: list[str] = list(self._devices_arg)
-            if self._devices:
-                determine_visible_devices(self._devices)  # type: ignore[arg-type]
-        else:
-            n = number_of_available_gpus()
-            if n == 0:
-                cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "(unset)")
-                raise RuntimeError(
-                    f"ToolPool requires at least one GPU but none detected "
-                    f"(CUDA_VISIBLE_DEVICES={cuda_visible}); pass devices=[...] or check nvidia-smi"
-                )
-            self._devices = [f"cuda:{i}" for i in range(n)]
+        # Resolve gpus
+        self._gpu_devices: list[str] = self._resolve_gpus()
 
-        logger.info("ToolPool entering with devices: %s", self._devices)
+        if not self._gpu_devices and self.cpus == 1:
+            logger.warning(
+                "ToolPool entering with no GPUs and cpus=1 — pool will short-circuit "
+                "every dispatch to a single direct call (no parallelism). Set gpus= "
+                "or cpus= explicitly to enable fan-out."
+            )
+
+        logger.info(
+            "ToolPool entering: gpus=%s cpus=%d",
+            self._gpu_devices,
+            self.cpus,
+        )
 
         # Enter persistence context for local workers
         self._persist_ctx = ToolInstance.persist()
@@ -315,12 +514,11 @@ class ToolPool:
             finally:
                 _pool_executing.reset(token)
 
-        # CPU-mode short-circuit: a tool whose config returns
-        # ``devices_per_instance == 0`` (e.g. colabfold-search with use_gpu=False,
-        # mmseqs2 remote-only mode) is declaring it doesn't need any of the pool's
-        # devices. Partitioning across GPUs would be meaningless, so dispatch as a
-        # single call and let the tool's own batching handle the items.
-        if config.devices_per_instance == 0:
+        # Build the worker layout. Empty list = tool didn't opt in to fan-out
+        # (gpus_per_instance==0 and cpus_per_instance is None) → single direct call.
+        slots = _compute_worker_layout(tool_key, config, list(self._gpu_devices), self.cpus)
+
+        if not slots:
             token = _pool_executing.set(True)
             try:
                 return func(inputs, config)
@@ -333,37 +531,17 @@ class ToolPool:
             WorkItem(original_index=i, item=item, cost=input_cls.item_cost(item)) for i, item in enumerate(items)
         ]
 
-        local_devices = list(self._devices)
-
-        # Group local devices by devices_per_instance
-        dpi = config.devices_per_instance
-        device_groups: list[str] = []
-        if local_devices:
-            for i in range(0, len(local_devices), dpi):
-                group = local_devices[i : i + dpi]
-                if len(group) == dpi:
-                    device_groups.append(",".join(group))
-            leftover = len(local_devices) - len(device_groups) * dpi
-            if leftover > 0:
-                logger.warning(
-                    "ToolPool: %d device(s) unused (devices_per_instance=%d, total=%d)",
-                    leftover,
-                    dpi,
-                    len(local_devices),
-                )
-            # If no complete groups possible, use all local devices as one group
-            if local_devices and not device_groups:
-                device_groups = [",".join(local_devices)]
-
-        # Build DeviceCapability list for local groups
-        capabilities = [DeviceCapability(device_id=dg) for dg in device_groups]
+        # Build DeviceCapability list (one per slot — labels carry across to LPT)
+        capabilities = [DeviceCapability(device_id=slot.device_id) for slot in slots]
+        slot_by_device_id = {slot.device_id: slot for slot in slots}
 
         logger.info(
-            "ToolPool dispatching %s: %d items (%d local, devices_per_instance=%d)",
+            "ToolPool dispatching %s: %d items across %d worker slot(s) (gpus_per_instance=%d, cpus_per_instance=%s)",
             tool_key,
             n_items,
-            len(work_items),
-            dpi,
+            len(slots),
+            config.gpus_per_instance,
+            config.cpus_per_instance,
         )
 
         # Execute local partitions via LPT
@@ -373,32 +551,42 @@ class ToolPool:
         last_result = None
         output_model = spec.output_model
 
-        if work_items and capabilities:
+        if work_items:
             assignments = lpt_schedule(work_items, capabilities)
             active_assignments = [a for a in assignments if a.items]
 
             def _run_local_partition(assignment: WorkerAssignment) -> tuple[list[tuple[int, Any]], Any]:
-                """Run a single partition on a local device."""
+                """Run a single partition on a local worker."""
                 pool_token = _pool_executing.set(True)
                 # A ToolPool is inherently a persist context: partition workers are
-                # named per-device and must be reusable across dispatch calls.
-                # Force _persist_mode on for this partition's execution so the
+                # named per-slot and must be reusable across dispatch calls. Force
+                # _persist_mode on for this partition's execution so the
                 # named-instance kwarg passed to ``func`` auto-creates under its
                 # key (idempotent if the caller already entered ``with pool:``).
                 persist_token = _persist_mode.set(True)
                 try:
-                    device_id = assignment.device.device_id
+                    slot = slot_by_device_id[assignment.device.device_id]
+                    # Pre-create the ToolInstance with this slot's env_overrides so
+                    # the worker subprocess inherits OMP/MKL pinning before its
+                    # first request. Idempotent: if the slot already created it
+                    # earlier, the cached instance is returned and env stays put.
+                    if slot.env_overrides is not None:
+                        ToolInstance.get(
+                            tool_key,
+                            instance_name=slot.worker_name,
+                            env_overrides=slot.env_overrides,
+                        )
+
                     partition_items = [wi.item for wi in assignment.items]
                     partition_input = inputs.model_copy(update={iterable_input_field: partition_items})
-                    worker_name = f"{tool_key}-pool-{device_id.replace(':', '_').replace(',', '_')}"
-                    config_copy = config.model_copy(update={"device": device_id})
-                    result = func(partition_input, config_copy, instance=worker_name)
+                    config_copy = config.model_copy(update={"device": slot.device_override})
+                    result = func(partition_input, config_copy, instance=slot.worker_name)
 
                     output_items = getattr(result, iterable_output_field, [])  # type: ignore[arg-type]
                     if len(output_items) != len(assignment.items):
                         input_indices = [wi.original_index for wi in assignment.items]
                         raise RuntimeError(
-                            f"ToolPool: {tool_key} on {device_id} returned {len(output_items)} "
+                            f"ToolPool: {tool_key} on {slot.device_id} returned {len(output_items)} "
                             f"{iterable_output_field} but expected {len(assignment.items)} "
                             f"(input indices {input_indices})"
                         )
