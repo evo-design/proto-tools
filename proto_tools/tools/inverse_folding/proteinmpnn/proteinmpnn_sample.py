@@ -88,7 +88,12 @@ class ProteinMPNNSequences(DesignedSequences):
 
 
 class ProteinMPNNSampleOutput(InverseFoldingOutput):
-    """Output of the ProteinMPNN sampling tool."""
+    """Output of the ProteinMPNN sampling tool.
+
+    Attributes:
+        designed_sequences (list[ProteinMPNNSequences]): ProteinMPNN-designed sequences
+            with per-sequence perplexity and recovery metrics.
+    """
 
     designed_sequences: list[ProteinMPNNSequences] = Field(  # type: ignore[assignment]
         description="ProteinMPNN-designed sequences with per-sequence perplexity and recovery metrics.",
