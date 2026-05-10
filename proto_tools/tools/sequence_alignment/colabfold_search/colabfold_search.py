@@ -482,7 +482,7 @@ class ColabfoldSearchConfig(BaseConfig):
         return self
 
     @property
-    def devices_per_instance(self) -> int:
+    def gpus_per_instance(self) -> int:
         """Number of GPUs the configured search uses.
 
         Returns 1 when ``use_gpu=True`` (MMseqs2-GPU is invoked with ``--gpu 1``),

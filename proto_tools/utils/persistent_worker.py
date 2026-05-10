@@ -347,6 +347,7 @@ def _build_subprocess_env(
     device: str = "cpu",
     tool_env_path: Path | str | None = None,
     tool_env_vars: dict[str, list[str]] | None = None,
+    env_overrides: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Build a clean env dict for subprocess execution.
 
@@ -359,6 +360,13 @@ def _build_subprocess_env(
         device (str): Target device (``"cpu"``, ``"cuda"``, ``"cuda:0"``, etc.).
         tool_env_path (Path | str | None): Path to the tool's isolated venv.
         tool_env_vars (dict[str, list[str]] | None): Parsed env_vars.txt contents.
+        env_overrides (dict[str, str] | None): Caller-supplied env vars applied
+            as the final layer, after every other source. Takes precedence over
+            passthroughs, ``env_vars.txt``, and tool-cache defaults. Used by
+            ToolPool's CPU fan-out path to pin per-worker
+            ``OMP_NUM_THREADS`` / ``MKL_NUM_THREADS`` / etc., but available to
+            any caller that needs to override a specific variable for one
+            worker subprocess.
     """
     from proto_tools.utils.system_info import capture_subprocess_env
 
@@ -525,6 +533,10 @@ def _build_subprocess_env(
     else:
         env.pop("LD_LIBRARY_PATH", None)
 
+    # Caller-supplied overrides (applied last so they win over every other source).
+    if env_overrides:
+        env.update(env_overrides)
+
     # Capture for environment reporting
     capture_subprocess_env(env)
 
@@ -559,6 +571,11 @@ class PersistentWorker:
         subprocess stderr is teed to the parent's ``sys.stderr``. Latched at
         construction time so the drain thread never races a mid-run env-var
         toggle.
+    env_overrides : dict | None
+        Caller-supplied env vars applied as the final layer when the worker
+        subprocess is spawned. Used by ToolPool's CPU fan-out path to pin
+        per-worker thread budgets (``OMP_NUM_THREADS`` etc.); harmless to
+        any other caller.
     """
 
     def __init__(
@@ -569,6 +586,7 @@ class PersistentWorker:
         device: str = "cpu",
         tool_env_vars: dict[str, list[str]] | None = None,
         verbose: int = 0,
+        env_overrides: dict[str, str] | None = None,
     ) -> None:
         """Initialize PersistentWorker."""
         self.toolkit = toolkit
@@ -577,6 +595,7 @@ class PersistentWorker:
         self.device = device
         self.tool_env_vars = tool_env_vars
         self._verbose = verbose
+        self._env_overrides = env_overrides
         self._process: subprocess.Popen | None = None  # type: ignore[type-arg]
         self._lock = threading.Lock()
         self._stderr_thread: threading.Thread | None = None
@@ -622,6 +641,7 @@ class PersistentWorker:
             self.device,
             tool_env_path=self.env_path,
             tool_env_vars=self.tool_env_vars,
+            env_overrides=self._env_overrides,
         )
         env["TOOL_VENV_PATH"] = str(self.env_path)
 

@@ -262,6 +262,7 @@ class ToolInstance:
         toolkit: str,
         *,
         instance_name: str | None = None,
+        env_overrides: dict[str, str] | None = None,
     ) -> "ToolInstance":
         """Return (or create) a ToolInstance for *toolkit*.
 
@@ -277,6 +278,11 @@ class ToolInstance:
             instance_name (str | None): Explicit cache key. When None, the instance
                 is cached under *toolkit* so that different operations on the same
                 model share one worker.
+            env_overrides (dict[str, str] | None): Per-instance env vars passed
+                to the worker subprocess on spawn. Only applied when this call
+                actually creates the instance — if the cache already holds an
+                instance for ``key``, its existing overrides are kept. Used by
+                ToolPool's CPU fan-out to pin per-worker thread budgets.
         """
         toolkit = cls._normalize_toolkit(toolkit)
         key = instance_name if instance_name is not None else toolkit
@@ -286,7 +292,7 @@ class ToolInstance:
                 logger.debug("Returning cached ToolInstance for key=%r", key)
                 return cache[key]
         # Create outside lock - __init__ is lightweight now (no venv build)
-        new_inst = cls(toolkit)
+        new_inst = cls(toolkit, env_overrides=env_overrides)
         with _lock:
             cache = _active_cache()
             # Double-check - another thread may have created it
@@ -490,6 +496,7 @@ class ToolInstance:
         toolkit: str,
         *,
         instance_name: str | None = None,
+        env_overrides: dict[str, str] | None = None,
     ) -> Generator["ToolInstance", None, None]:
         """Context manager that caches a persistent worker for its duration.
 
@@ -507,11 +514,14 @@ class ToolInstance:
                 Accepts either a toolkit or a registered tool_key; tool_keys are
                 normalized to their toolkit.
             instance_name (str | None): Explicit cache key. When None, uses toolkit.
+            env_overrides (dict[str, str] | None): Per-instance env vars passed
+                to the worker subprocess on spawn. Only applied when this call
+                creates the instance.
         """
         toolkit = cls._normalize_toolkit(toolkit)
         if instance_name is not None:
             # Named: always cache under the given name
-            inst = cls.get(toolkit, instance_name=instance_name)
+            inst = cls.get(toolkit, instance_name=instance_name, env_overrides=env_overrides)
             try:
                 yield inst
             finally:
@@ -521,7 +531,7 @@ class ToolInstance:
             with _lock:
                 cache = _active_cache()
                 if toolkit not in cache:
-                    inst = cls(toolkit)
+                    inst = cls(toolkit, env_overrides=env_overrides)
                     cache[toolkit] = inst
                     if not hasattr(inst, "_cache_keys"):
                         inst._cache_keys = set()
@@ -545,7 +555,7 @@ class ToolInstance:
                     "to give it a unique cache key.",
                     toolkit,
                 )
-                inst = cls(toolkit)
+                inst = cls(toolkit, env_overrides=env_overrides)
                 try:
                     yield inst
                 finally:
@@ -647,13 +657,17 @@ class ToolInstance:
     # ------------------------------------------------------------------
     # Init
     # ------------------------------------------------------------------
-    def __init__(self, toolkit: str) -> None:
+    def __init__(self, toolkit: str, *, env_overrides: dict[str, str] | None = None) -> None:
         """Initialize ToolInstance.
 
         Args:
             toolkit (str): Either a toolkit (folder name like ``"pyrosetta"``)
                 or a registered tool_key (``"pyrosetta-energy"``). Tool keys are
                 auto-normalized to their toolkit via the registry.
+            env_overrides (dict[str, str] | None): Per-instance env vars
+                forwarded to the worker subprocess on spawn (final layer,
+                wins over every other source). Used by ToolPool's CPU
+                fan-out to pin ``OMP_NUM_THREADS`` etc. per worker.
         """
         # Accept either a toolkit or a tool_key for ergonomic flexibility.
         toolkit = self._normalize_toolkit(toolkit)
@@ -669,6 +683,7 @@ class ToolInstance:
         self.setup_script = env_def_dir / "setup.sh"
         self.script_path = self._find_script(toolkit)
         self._tool_env_vars = _parse_env_vars_file(env_def_dir / "env_vars.txt")
+        self._env_overrides = env_overrides
 
         self._env_ready = False
         self._cache_keys: set[str] = set()
@@ -1134,6 +1149,7 @@ class ToolInstance:
                 device=self.device,
                 tool_env_vars=self._tool_env_vars,
                 verbose=effective_verbose,
+                env_overrides=self._env_overrides,
             )
         else:
             device_manager = DeviceManager.get_instance()

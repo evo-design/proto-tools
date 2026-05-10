@@ -737,7 +737,10 @@ def pytest_configure(config):
     global _benchmark_report_collector  # noqa: PLW0603 -- test infrastructure
 
     config.addinivalue_line("markers", "uses_gpu: mark test as requiring GPU")
-    config.addinivalue_line("markers", "uses_cpu: mark test as CPU-only")
+    config.addinivalue_line(
+        "markers",
+        "uses_cpu: mark test as CPU-only. Optional arg: @pytest.mark.uses_cpu(n) skips unless n CPUs are visible",
+    )
     config.addinivalue_line(
         "markers",
         "include_in_env_report: Include test in --env-report. "
@@ -1052,10 +1055,11 @@ def pytest_collection_modifyitems(config, items):
         items[:] = selected
         config.hook.pytest_deselected(items=deselected)
 
-    # Auto-mark all tests as CPU-only unless explicitly marked as GPU
+    # Auto-mark CPU tests — skip if already tagged (uses_gpu or explicit uses_cpu(n))
+    # so we don't stack a zero-arg duplicate on top of an explicit count.
     for item in items:
-        # If no GPU marker found, mark as CPU
-        if not any(mark.name == "uses_gpu" for mark in item.iter_markers()):
+        markers = list(item.iter_markers())
+        if not any(m.name == "uses_gpu" for m in markers) and not any(m.name == "uses_cpu" for m in markers):
             item.add_marker(pytest.mark.uses_cpu)
 
     # Skip tests marked with skip_ci when running in GitHub Actions or --skip-ci is specified
@@ -1176,6 +1180,16 @@ def pytest_collection_modifyitems(config, items):
             required = marker.args[0] if marker.args else 1
             if visible_gpus < required:
                 item.add_marker(pytest.mark.skip(reason=f"Requires {required} GPUs, only {visible_gpus} visible"))
+
+    # Skip uses_cpu(n) tests when fewer than n CPUs are visible. Bare uses_cpu = count=1.
+    from proto_tools.utils.tool_pool import _detect_cpus
+
+    visible_cpus = _detect_cpus()
+    for item in items:
+        for marker in item.iter_markers("uses_cpu"):
+            required = marker.args[0] if marker.args else 1
+            if visible_cpus < required:
+                item.add_marker(pytest.mark.skip(reason=f"Requires {required} CPUs, only {visible_cpus} visible"))
 
 
 @pytest.fixture(scope="session", autouse=True)

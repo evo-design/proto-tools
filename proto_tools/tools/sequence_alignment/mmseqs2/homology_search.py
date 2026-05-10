@@ -396,7 +396,7 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
         return self
 
     @property
-    def devices_per_instance(self) -> int:
+    def gpus_per_instance(self) -> int:
         """Number of GPUs the configured search uses (1 if GPU, else 0)."""
         return 1 if self.use_gpu else 0
 

@@ -136,6 +136,28 @@ class {ToolName}Config(BaseConfig):
     # Note: verbose, timeout, and device are inherited from BaseConfig.
     # Only redeclare them if you need to override the default value.
 
+    # --- ToolPool resource declarations (properties, not fields) ---
+    # `cpus_per_instance` defaults to None on BaseConfig: ToolPool dispatches
+    # a single direct call and pool.cpus is ignored. KEEP this default for
+    # most CPU tools — short per-item compute, internal threading, or
+    # network IO all lose more than they gain from fan-out.
+    #
+    # OPT IN by overriding to a positive integer ONLY when:
+    #   - per-call work is heavy enough to amortize subprocess startup
+    #     (each worker holds its own venv in RAM)
+    #   - the tool is single-threaded (or N-threaded) per call
+    #   - items are embarrassingly parallel (no shared state across items)
+    # Canonical opt-in: PyRosetta (heavy init, multi-second per pose).
+    #
+    # @property
+    # def cpus_per_instance(self) -> int | None:
+    #     """Opt in to ToolPool CPU fan-out — {reason: heavy init, single-threaded per call}."""
+    #     return 1
+    #
+    # `gpus_per_instance` is auto-derived from the device string. Override
+    # only when GPU need is decoupled from device (e.g. a use_gpu flag, or
+    # a model-variant-dependent count); see ColabfoldSearchConfig for the pattern.
+
 class {ToolName}Output(BaseToolOutput):
     """Output from {ToolName}.
 

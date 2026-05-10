@@ -208,11 +208,11 @@ def test_determine_visible_devices_multi_explicit_verbose():
 def test_determine_visible_devices_invalid_index_exceeds_gpus():
     """Test that device index exceeding available GPUs raises ValueError."""
     # This test assumes system has fewer than 100 GPUs.
-    # Error message depends on whether any GPUs exist at all.
-    with pytest.raises(ValueError, match=r"exceeds|no GPUs detected"):
+    # Error message depends on whether any GPUs exist at all and on parent CUDA_VISIBLE_DEVICES.
+    with pytest.raises(ValueError, match=r"out of range|exceeds|no GPUs detected|>= visible GPU count"):
         determine_visible_devices("cuda:100")
 
-    with pytest.raises(ValueError, match=r"exceeds|no GPUs detected"):
+    with pytest.raises(ValueError, match=r"out of range|exceeds|no GPUs detected|>= visible GPU count"):
         determine_visible_devices("cuda:50,51")
 
 
@@ -455,7 +455,7 @@ def test_determine_visible_devices_list_deduplicates(monkeypatch):
 
 def test_determine_visible_devices_list_invalid_index():
     """List with an out-of-range CUDA index raises ValueError."""
-    with pytest.raises(ValueError, match=r"exceeds|no GPUs"):
+    with pytest.raises(ValueError, match=r"out of range|exceeds|no GPUs|>= visible GPU count"):
         determine_visible_devices(["cuda:0", "cuda:100"])
 
 
@@ -479,7 +479,7 @@ def test_determine_visible_devices_list_int_entries():
 
 def test_determine_visible_devices_list_int_invalid():
     """List with out-of-range int raises ValueError."""
-    with pytest.raises(ValueError, match=r"exceeds|no GPUs"):
+    with pytest.raises(ValueError, match=r"out of range|exceeds|no GPUs|>= visible GPU count"):
         determine_visible_devices([100])
 
 

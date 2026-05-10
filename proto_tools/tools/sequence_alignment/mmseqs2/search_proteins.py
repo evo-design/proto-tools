@@ -337,7 +337,7 @@ class Mmseqs2SearchProteinsConfig(BaseConfig):
     )
 
     @property
-    def devices_per_instance(self) -> int:
+    def gpus_per_instance(self) -> int:
         """Per-call GPU need: 1 when ``use_gpu`` is set, 0 otherwise."""
         return 1 if self.use_gpu else 0
 

@@ -131,6 +131,11 @@ class PyRosettaSAPConfig(BaseConfig):
             return inputs
         return inputs.model_copy(update={"inputs": relax_inputs_via_pyrosetta(inputs.inputs, self.relax_config)})
 
+    @property
+    def cpus_per_instance(self) -> int | None:
+        """Opt in to ToolPool CPU fan-out — PyRosetta runs single-threaded per pose."""
+        return 1
+
 
 class PyRosettaSAPOutput(BaseToolOutput):
     """Output from PyRosetta SAP scoring.

@@ -60,6 +60,7 @@ def _make_fake_instance(
         inst.env_path = Path(tempfile.mkdtemp(prefix="test_toolinstance_"))
     inst.script_path = Path("/fake/inference.py")
     inst._tool_env_vars = {"passthrough": [], "set": [], "no_passthrough": []}
+    inst._env_overrides = None
     inst._env_ready = True
     inst._cache_keys = set()
     inst._instance_lock = threading.Lock()

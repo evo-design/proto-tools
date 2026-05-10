@@ -287,10 +287,10 @@ def test_run_protein_search_use_gpu_without_padded_db_fails(tmp_path):
         )
 
 
-def test_search_proteins_devices_per_instance_reflects_use_gpu():
+def test_search_proteins_gpus_per_instance_reflects_use_gpu():
     """Per-call GPU need: 1 when ``use_gpu``, 0 otherwise."""
-    assert Mmseqs2SearchProteinsConfig().devices_per_instance == 0
-    assert Mmseqs2SearchProteinsConfig(use_gpu=True).devices_per_instance == 1
+    assert Mmseqs2SearchProteinsConfig().gpus_per_instance == 0
+    assert Mmseqs2SearchProteinsConfig(use_gpu=True).gpus_per_instance == 1
 
 
 def test_standalone_dispatch_rejects_unknown_operation():

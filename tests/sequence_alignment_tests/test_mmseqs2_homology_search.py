@@ -111,13 +111,13 @@ def test_use_gpu_default_true() -> None:
     """GPU is on by default."""
     cfg = Mmseqs2HomologySearchConfig()
     assert cfg.use_gpu is True
-    assert cfg.devices_per_instance == 1
+    assert cfg.gpus_per_instance == 1
 
 
-def test_devices_per_instance_zero_when_cpu() -> None:
+def test_gpus_per_instance_zero_when_cpu() -> None:
     """CPU-mode config reports zero GPU usage."""
     cfg = Mmseqs2HomologySearchConfig(use_gpu=False)
-    assert cfg.devices_per_instance == 0
+    assert cfg.gpus_per_instance == 0
 
 
 def test_missing_dataset_dir_gives_provisioning_hint(tmp_path: Path) -> None:

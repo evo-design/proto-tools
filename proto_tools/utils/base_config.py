@@ -111,15 +111,17 @@ class BaseConfig(BaseModel):
             skip cache until seeded.
 
     Properties:
-        devices_per_instance: Number of GPUs each worker needs. Default is
+        gpus_per_instance: Number of GPUs each worker needs. Default is
             derived from the ``device`` field via :func:`parse_device_string`
             (``cpu`` → 0, ``cuda`` / ``cuda:N`` → 1, ``cudaxN`` / multi → N,
             ``cloud`` → 1). Override in tool configs where GPU need is
             decoupled from the device string — e.g. a large checkpoint that
             needs 2 GPUs regardless of input device, or a tool with a
             separate ``use_gpu`` flag toggling real GPU work. ``ToolPool``
-            reads this at dispatch time to group devices into worker slots
-            (``0`` short-circuits to a single direct call).
+            reads this at dispatch time to group devices into worker slots.
+        cpus_per_instance: Per-instance CPU consumption — drives ToolPool's
+            CPU fan-out. See the property's own docstring below for full
+            semantics.
 
     Methods:
         effective_timeout: Timeout the framework enforces. Override when the cap depends on other fields.
@@ -135,7 +137,7 @@ class BaseConfig(BaseModel):
                 checkpoint: str = ConfigField(default="7b")
 
                 @property
-                def devices_per_instance(self) -> int:
+                def gpus_per_instance(self) -> int:
                     return 4 if self.checkpoint == "40b" else 1
     """
 
@@ -208,16 +210,17 @@ class BaseConfig(BaseModel):
         return random.randint(0, RANDOM_SEED_UPPER_BOUND - 1)  # noqa: S311 -- not for cryptographic use
 
     @property
-    def devices_per_instance(self) -> int:
+    def gpus_per_instance(self) -> int:
         """Number of GPUs each ToolPool worker needs for this configuration.
 
         ToolPool reads this at dispatch time to group its device list into
-        worker slots. For example, with ``devices=["cuda:0", "cuda:1",
-        "cuda:2", "cuda:3"]`` and ``devices_per_instance == 2``, ToolPool
+        worker slots. For example, with ``gpus=["cuda:0", "cuda:1",
+        "cuda:2", "cuda:3"]`` and ``gpus_per_instance == 2``, ToolPool
         creates 2 workers: one on ``cuda:0,cuda:1`` and one on
         ``cuda:2,cuda:3``. A return of ``0`` declares the tool doesn't use
-        the pool's GPUs at all (CPU-only); ToolPool then bypasses partitioning
-        and dispatches as a single direct call.
+        the pool's GPUs at all (CPU-only); ToolPool then either fans out
+        across CPU workers (if ``cpus_per_instance`` is a positive int) or
+        dispatches as a single direct call (if ``cpus_per_instance`` is ``None``).
 
         Default is derived from ``self.device`` via :func:`parse_device_string`:
             - ``"cpu"`` → 0 (no GPUs needed)
@@ -228,12 +231,43 @@ class BaseConfig(BaseModel):
         Override in subclasses when GPU need is decoupled from the device
         string — e.g. a model whose large checkpoint needs 4 GPUs regardless
         of input device, or a tool that toggles real GPU use via a separate
-        config flag (see ``ColabfoldSearchConfig.devices_per_instance``).
+        config flag (see ``ColabfoldSearchConfig.gpus_per_instance``).
         """
         from proto_tools.utils.device import parse_device_string
 
         spec = parse_device_string(self.device)
         return 0 if spec.kind == "cpu" else spec.count
+
+    @property
+    def cpus_per_instance(self) -> int | None:
+        """Per-instance CPU consumption — drives ToolPool's CPU fan-out.
+
+        Read by ToolPool only when ``gpus_per_instance == 0`` (CPU mode):
+
+            - ``None`` (default): no fan-out. ToolPool dispatches a single
+              direct call with all items and ``pool.cpus`` is ignored — the
+              tool stays off the pool's CPU scheduler. This is the safe
+              default: spinning up N persistent worker subprocesses (each
+              holding its own venv in RAM, each paying a startup tax) only
+              pays off when per-call work is heavy enough to amortize that
+              cost. For most CPU tools — short per-item compute, internal
+              threading (mmseqs2 ``--threads``, mafft), or network IO
+              against rate-limited services (NCBI, UniProt, RCSB) — the
+              single direct call is the right answer.
+            - Positive int N: opt in to fan-out. ToolPool spawns
+              ``max(1, pool.cpus // N)`` independent worker subprocesses,
+              partitions items via LPT, and pins each worker's
+              OMP/MKL/OPENBLAS/NUMEXPR thread budgets to N. Override only
+              when (a) per-call work is heavy enough to amortize subprocess
+              startup, (b) the tool is single-threaded (or N-threaded) per
+              call, and (c) items are embarrassingly parallel.
+
+        Canonical opt-in: PyRosetta (heavy ``init``, multi-second per pose,
+        independent poses). Most other CPU tools should leave the default.
+
+        When ``gpus_per_instance > 0`` this property is ignored.
+        """
+        return None
 
     @classmethod
     def minimal(cls, **kwargs: Any) -> "BaseConfig":

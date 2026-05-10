@@ -56,7 +56,7 @@ Run the BindCraft binder-design pipeline against a target.
 | Quick scan | 5 | 50 | 40/20/3/8 | ~2-4 h | Methods exploration, hotspot/length sweep |
 | Production | 100 (default) | `False` (unlimited, default) | 75/45/5/15 (upstream defaults) | ~24-72 h | Real binder-design campaign |
 
-GPU memory: AF2 multimer needs ~32-40 GB minimum and benefits from 80 GB for binders/targets in the 200-500 residue range. The pipeline is sequential per trajectory (`devices_per_instance=1`) — to parallelise across GPUs, run multiple `bindcraft-design` instances concurrently via `ToolPool`.
+GPU memory: AF2 multimer needs ~32-40 GB minimum and benefits from 80 GB for binders/targets in the 200-500 residue range. The pipeline is sequential per trajectory (`gpus_per_instance=1`) — to parallelise across GPUs, run multiple `bindcraft-design` instances concurrently via `ToolPool`.
 
 ## How It Works
 

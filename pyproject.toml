@@ -101,7 +101,7 @@ addopts = [
 markers = [
     "asyncio: mark test as requiring asyncio",
     "uses_gpu: mark test as requiring GPU. Optional arg: @pytest.mark.uses_gpu(n) skips unless n GPUs are visible",
-    "uses_cpu: mark test as CPU-only",
+    "uses_cpu: mark test as CPU-only. Optional arg: @pytest.mark.uses_cpu(n) skips unless n CPUs are visible (matches the count ToolPool's _detect_cpus would see)",
     "slow: Slow tests that may take several minutes",
     "integration: Integration tests",
     "skip_ci: Skip test in GitHub Actions CI",
