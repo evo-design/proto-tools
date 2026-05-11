@@ -13,6 +13,7 @@ from proto_tools.tools.inverse_folding.esm_if1 import (
     ESMIF1SampleConfig,
     ESMIF1ScoringConfig,
     ESMIF1ScoringInput,
+    ESMIF1ScoringPair,
     run_esm_if1_sample,
     run_esm_if1_score,
 )
@@ -20,13 +21,15 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
     InverseFoldingScoringMetrics,
     InverseFoldingStructureInput,
-    SequenceStructurePair,
 )
 from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
+MULTICHAIN_PDB_FILE = (
+    Path(__file__).parents[2] / "proto_tools" / "tools" / "structure_scoring" / "ipsae" / "example_input_fixture.pdb"
+)
 
 _persistent_tool = make_persistent_fixture("esm_if1")
 
@@ -166,7 +169,7 @@ def test_esm_if1_score(pdb_structure: Structure):
 
     inp = ESMIF1ScoringInput(
         sequence_structure_pairs=[
-            SequenceStructurePair(sequence=original_sequence, structure=pdb_structure),
+            ESMIF1ScoringPair(sequence=original_sequence, structure=pdb_structure),
         ]
     )
     config = ESMIF1ScoringConfig()
@@ -186,7 +189,7 @@ def test_esm_if1_score_fields(pdb_structure: Structure):
 
     inp = ESMIF1ScoringInput(
         sequence_structure_pairs=[
-            SequenceStructurePair(sequence=original_sequence, structure=pdb_structure),
+            ESMIF1ScoringPair(sequence=original_sequence, structure=pdb_structure),
         ]
     )
     config = ESMIF1ScoringConfig()
@@ -206,6 +209,105 @@ def test_esm_if1_score_fields(pdb_structure: Structure):
         np.exp(-score.avg_log_likelihood),
         rtol=1e-5,
     )
+
+
+# ============================================================================
+# Multi-chain scoring tests
+# ============================================================================
+@pytest.fixture(scope="module")
+def multichain_structure():
+    """2-chain complex fixture (chain A: 21 aa, chain B: 30 aa)."""
+    return Structure.from_file(MULTICHAIN_PDB_FILE)
+
+
+@pytest.mark.uses_gpu
+def test_esm_if1_score_multichain(multichain_structure: Structure):
+    """Score each chain of a 2-chain complex separately within the complex context."""
+    chain_ids = multichain_structure.get_chain_ids()
+    assert chain_ids == ["A", "B"], f"Fixture changed shape: chains={chain_ids}"
+
+    pairs = [
+        ESMIF1ScoringPair(
+            sequence=multichain_structure.get_chain_sequence(chain),
+            structure=multichain_structure,
+            target_chain=chain,
+        )
+        for chain in chain_ids
+    ]
+    output = run_esm_if1_score(ESMIF1ScoringInput(sequence_structure_pairs=pairs), ESMIF1ScoringConfig())
+    assert output.success, f"Failed to score multi-chain complex: {output}"
+    assert len(output.scores) == 2
+    for score in output.scores:
+        assert isinstance(score, InverseFoldingScoringMetrics)
+        assert score.avg_log_likelihood <= 0
+        assert score.perplexity >= 1.0
+        assert np.isfinite(score.avg_log_likelihood)
+
+
+@pytest.mark.uses_gpu
+def test_esm_if1_score_multichain_context_matters(multichain_structure: Structure):
+    """The complex context conditions the score: chain A scored in A+B differs from chain A scored alone.
+
+    This is the bug-coverage test for #824. With the pre-fix wrapper, the
+    "in complex" call crashed with a shape mismatch on multi-chain inputs;
+    if both calls returned the same number, the wrapper would be ignoring
+    the other chains' coordinates instead of conditioning on them.
+    """
+    target_chain = "A"
+    target_seq = multichain_structure.get_chain_sequence(target_chain)
+    chain_a_only = multichain_structure.select_chain(target_chain)
+
+    inp = ESMIF1ScoringInput(
+        sequence_structure_pairs=[
+            ESMIF1ScoringPair(sequence=target_seq, structure=multichain_structure, target_chain=target_chain),
+            ESMIF1ScoringPair(sequence=target_seq, structure=chain_a_only, target_chain=target_chain),
+        ]
+    )
+    output = run_esm_if1_score(inp, ESMIF1ScoringConfig())
+    assert output.success, f"Failed to score: {output}"
+
+    ll_in_complex = output.scores[0].avg_log_likelihood
+    ll_alone = output.scores[1].avg_log_likelihood
+    assert np.isfinite(ll_in_complex) and np.isfinite(ll_alone)
+    assert not np.isclose(ll_in_complex, ll_alone), (
+        f"Multi-chain context appears ignored: chain A scored in A+B ({ll_in_complex}) "
+        f"matches chain A scored alone ({ll_alone})."
+    )
+
+
+def test_esm_if1_score_multichain_requires_target_chain(multichain_structure: Structure):
+    """Multi-chain structure without target_chain raises a clear ValueError before dispatch."""
+    chain_b_seq = multichain_structure.get_chain_sequence("B")
+    inp = ESMIF1ScoringInput(
+        sequence_structure_pairs=[
+            ESMIF1ScoringPair(sequence=chain_b_seq, structure=multichain_structure),
+        ]
+    )
+    with pytest.raises(ValueError, match=r"target_chain.*required for multi-chain"):
+        run_esm_if1_score(inp, ESMIF1ScoringConfig())
+
+
+def test_esm_if1_score_length_validation(multichain_structure: Structure):
+    """Sequence length must match the target chain; mismatch raises before dispatch."""
+    chain_a_seq = multichain_structure.get_chain_sequence("A")  # length 21
+    inp = ESMIF1ScoringInput(
+        sequence_structure_pairs=[
+            ESMIF1ScoringPair(sequence=chain_a_seq, structure=multichain_structure, target_chain="B"),
+        ]
+    )
+    with pytest.raises(ValueError, match="does not match target chain"):
+        run_esm_if1_score(inp, ESMIF1ScoringConfig())
+
+
+def test_esm_if1_score_unknown_target_chain(multichain_structure: Structure):
+    """Naming a chain that isn't in the structure raises a clear error."""
+    inp = ESMIF1ScoringInput(
+        sequence_structure_pairs=[
+            ESMIF1ScoringPair(sequence="AAA", structure=multichain_structure, target_chain="Z"),
+        ]
+    )
+    with pytest.raises(ValueError, match="not in the structure's chains"):
+        run_esm_if1_score(inp, ESMIF1ScoringConfig())
 
 
 # ── Benchmarks ──────────────────────────────────────────────────────────────
@@ -244,7 +346,7 @@ def test_esm_if1_score_benchmark(request: pytest.FixtureRequest, pdb_structure: 
     """Benchmark esm-if1-score on 50 sequence-structure pairs against renin (cold + warm)."""
     target_len = len(pdb_structure.get_chain_sequence("A"))
     sequences = random_protein_sequences(n=50, length=target_len, seed=1)
-    pairs = [SequenceStructurePair(sequence=s, structure=pdb_structure) for s in sequences]
+    pairs = [ESMIF1ScoringPair(sequence=s, structure=pdb_structure) for s in sequences]
 
     inputs = ESMIF1ScoringInput(sequence_structure_pairs=pairs)
     config = ESMIF1ScoringConfig()

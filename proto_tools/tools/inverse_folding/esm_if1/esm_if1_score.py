@@ -7,10 +7,12 @@ import logging
 from pathlib import Path
 from typing import Any, Literal
 
+from pydantic import BaseModel, ConfigDict, Field
+
+from proto_tools.entities.structures import Structure
 from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingScoringMetrics,
     InverseFoldingScoringOutput,
-    SequenceStructurePair,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseConfig, ConfigField
@@ -24,15 +26,48 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # Data Models
 # ============================================================================
+class ESMIF1ScoringPair(BaseModel):
+    """Sequence-structure pair for ESM-IF1 scoring.
+
+    Unlike ProteinMPNN/LigandMPNN scoring (which scores the full multi-chain
+    sequence against the full structure), ESM-IF1 scores a single chain at a
+    time within its multi-chain structural context. ``sequence`` is therefore
+    just the target chain's sequence, never the concatenation of every chain.
+
+    Attributes:
+        sequence (str): Target chain sequence to score. Length must equal the
+            number of residues in the chain identified by ``target_chain``.
+        structure (Structure): Protein structure providing the (optionally
+            multi-chain) coordinate context.
+        target_chain (str | None): Chain ID within ``structure`` whose sequence
+            is being scored. ``None`` is permitted only for single-chain
+            structures, in which case the sole chain is used. For multi-chain
+            structures this field is required.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    sequence: str = Field(description="Target chain sequence to score")
+    structure: Structure = Field(description="Structure providing the (multi-chain) coordinate context")
+    target_chain: str | None = Field(
+        default=None,
+        description=(
+            "Chain ID within the structure whose sequence is scored. Required for multi-chain "
+            "structures; defaults to the sole chain for single-chain structures."
+        ),
+    )
+
+
 class ESMIF1ScoringInput(BaseToolInput):
     """Input for ESM-IF1/ProteinDPO scoring.
 
     Attributes:
-        sequence_structure_pairs (list[SequenceStructurePair]): List of sequence-structure pairs to score.
-            Each pair contains a sequence and a structure to score the sequence against.
+        sequence_structure_pairs (list[ESMIF1ScoringPair]): List of pairs to score.
+            Each pair contains a target chain sequence, a structure, and the chain ID
+            within that structure whose sequence is being scored.
     """
 
-    sequence_structure_pairs: list[SequenceStructurePair] = InputField(
+    sequence_structure_pairs: list[ESMIF1ScoringPair] = InputField(
         description="List of sequence-structure pairs to score"
     )
 
@@ -71,15 +106,15 @@ class ESMIF1ScoringConfig(BaseConfig):
 # ============================================================================
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    from proto_tools.entities.structures import Structure
-
     structure = Structure.from_file(str(Path(__file__).parents[1] / "example_input_fixture.pdb"))
-    sequence = "".join(structure.get_chain_sequence(chain) for chain in structure.get_chain_ids())
+    target_chain = structure.get_chain_ids()[0]
+    sequence = structure.get_chain_sequence(target_chain)
     return ESMIF1ScoringInput(
         sequence_structure_pairs=[
-            SequenceStructurePair(
+            ESMIF1ScoringPair(
                 sequence=sequence,
                 structure=structure,
+                target_chain=target_chain,
             )
         ]
     )
@@ -131,11 +166,22 @@ def run_esm_if1_score(
         unit="pair",
         total=len(inputs.sequence_structure_pairs),
     ):
+        chain_ids = pair.structure.get_chain_ids()
+        target_chain = _resolve_target_chain(pair.target_chain, chain_ids)
+        expected_len = len(pair.structure.get_chain_sequence(target_chain))
+        if len(pair.sequence) != expected_len:
+            raise ValueError(
+                f"esm-if1-score: sequence length {len(pair.sequence)} does not match target chain "
+                f"{target_chain!r} length {expected_len}. ESM-IF1 scores one chain at a time; "
+                f"`sequence` must be the residues of `target_chain` only, not the multi-chain concatenation."
+            )
+
         with pair.structure.temp_file() as pdb_path:
             input_dict = {
                 "operation": "score",
                 "pdb_path": str(pdb_path),
-                "chain_ids": pair.structure.get_chain_ids(),
+                "chain_ids": chain_ids,
+                "target_chain": target_chain,
                 "sequence": pair.sequence,
                 "seed": config.seed,
                 "device": config.device,
@@ -151,3 +197,32 @@ def run_esm_if1_score(
         scores.append(InverseFoldingScoringMetrics(**result["metrics"]))
 
     return ESMIF1ScoringOutput(scores=scores)
+
+
+def _resolve_target_chain(target_chain: str | None, chain_ids: list[str]) -> str:
+    """Pick the target chain for scoring, validating against the structure's chains.
+
+    Args:
+        target_chain (str | None): User-supplied chain ID, or ``None``.
+        chain_ids (list[str]): Chain IDs present in the structure.
+
+    Returns:
+        str: The resolved chain ID to score.
+
+    Raises:
+        ValueError: If ``target_chain`` is ``None`` for a multi-chain structure,
+            or if it names a chain not present in the structure.
+    """
+    if target_chain is None:
+        if len(chain_ids) != 1:
+            raise ValueError(
+                f"esm-if1-score: `target_chain` is required for multi-chain structures "
+                f"(structure has chains {chain_ids}). Set `target_chain` on ESMIF1ScoringPair "
+                f"to the chain whose sequence you want to score."
+            )
+        return chain_ids[0]
+    if target_chain not in chain_ids:
+        raise ValueError(
+            f"esm-if1-score: `target_chain={target_chain!r}` is not in the structure's chains {chain_ids}."
+        )
+    return target_chain
