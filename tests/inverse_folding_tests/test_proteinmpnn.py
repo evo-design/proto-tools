@@ -292,6 +292,48 @@ def test_proteinmpnn_gradient_dispatch_contract(monkeypatch):
     assert result.gradient == [[0.0] * 20] * 5
 
 
+def test_proteinmpnn_sample_seeds_distinct_across_inputs(monkeypatch):
+    """Per-input seed should differ — previously every input got base_seed + 0."""
+    captured_seeds: list[int] = []
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        captured_seeds.append(payload["seed"])
+        bs = payload["batch_size"]
+        return {"seq": ["A" * 5] * bs, "score": [-1.0] * bs, "seqid": [1.0] * bs}
+
+    monkeypatch.setattr(
+        "proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+
+    structure = _small_structure()
+    run_proteinmpnn_sample(
+        InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=structure) for _ in range(3)]),
+        ProteinMPNNSampleConfig(num_sequences_per_structure=1, batch_size=1, seed=42, device="cpu"),
+    )
+
+    assert len(captured_seeds) == 3
+    assert len(set(captured_seeds)) == 3
+
+    # Same base seed → same per-input seed stream (deterministic given config.seed).
+    captured_seeds_again: list[int] = []
+
+    def fake_dispatch_again(toolkit, payload, *, instance=None, config=None):
+        captured_seeds_again.append(payload["seed"])
+        bs = payload["batch_size"]
+        return {"seq": ["A" * 5] * bs, "score": [-1.0] * bs, "seqid": [1.0] * bs}
+
+    monkeypatch.setattr(
+        "proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample.ToolInstance.dispatch",
+        fake_dispatch_again,
+    )
+    run_proteinmpnn_sample(
+        InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=structure) for _ in range(3)]),
+        ProteinMPNNSampleConfig(num_sequences_per_structure=1, batch_size=1, seed=42, device="cpu"),
+    )
+    assert captured_seeds == captured_seeds_again
+
+
 @pytest.mark.uses_gpu
 @pytest.mark.slow
 def test_proteinmpnn_gradient_end_to_end():
