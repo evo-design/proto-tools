@@ -565,6 +565,8 @@ class BaseToolOutput(BaseModel, ABC):
         use_enum_values=True,
         validate_default=True,
         str_strip_whitespace=True,
+        # Surface subclass-narrowing bugs at the construction site.
+        revalidate_instances="subclass-instances",
         json_schema_extra={
             "examples": [
                 {

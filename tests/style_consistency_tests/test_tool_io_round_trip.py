@@ -17,8 +17,10 @@ the same way Pydantic would have.
 
 from __future__ import annotations
 
+from typing import Annotated, Any, get_args, get_origin
+
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, SerializeAsAny, ValidationError
 
 from proto_tools.tools.tool_registry import ToolRegistry
 
@@ -63,3 +65,57 @@ def test_tool_config_round_trips_through_dict(tool_key: str) -> None:
         "Likely cause: a @field_validator(mode='before') on a nested BaseModel field "
         "doesn't accept the dict shape Pydantic produces from model_dump."
     )
+
+
+# ── Polymorphic output safety ─────────────────────────────────────────────────
+
+
+def _all_subclasses(cls: type) -> set[type]:
+    """Return every transitive subclass of ``cls``."""
+    seen: set[type] = set()
+    stack = list(cls.__subclasses__())
+    while stack:
+        sub = stack.pop()
+        if sub in seen:
+            continue
+        seen.add(sub)
+        stack.extend(sub.__subclasses__())
+    return seen
+
+
+def _serialize_as_any_inner(annotation: Any) -> type[BaseModel] | None:
+    """Return the inner BaseModel type if ``annotation`` contains ``SerializeAsAny[T]``."""
+    if get_origin(annotation) is Annotated:
+        args = get_args(annotation)
+        if any(isinstance(meta, SerializeAsAny) for meta in args[1:]):
+            inner = args[0]
+            if isinstance(inner, type) and issubclass(inner, BaseModel):
+                return inner
+        # Recurse into the bare type carried by Annotated[T, ...].
+        return _serialize_as_any_inner(args[0])
+    for arg in get_args(annotation):
+        found = _serialize_as_any_inner(arg)
+        if found is not None:
+            return found
+    return None
+
+
+@pytest.mark.parametrize("tool_key", _TOOL_KEYS)
+def test_tool_output_does_not_drop_subclass_fields_on_validate(tool_key: str) -> None:
+    """Output ``SerializeAsAny[T]`` fields must be narrowed when T has subclasses with extras."""
+    spec = ToolRegistry.get(tool_key)
+    assert spec is not None, f"Registry returned None for tool_key={tool_key!r}"
+
+    for field_name, field_info in spec.output_model.model_fields.items():
+        inner = _serialize_as_any_inner(field_info.annotation)
+        if inner is None:
+            continue
+        risky = sorted(
+            (s.__name__ for s in _all_subclasses(inner) if set(s.model_fields) - set(inner.model_fields)),
+        )
+        assert not risky, (
+            f"{tool_key!r}: {spec.output_model.__name__}.{field_name} is "
+            f"SerializeAsAny[{inner.__name__}], but these subclasses declare extra fields "
+            f"that model_validate will drop on the inbound JSON path: {risky}. "
+            f"Narrow {field_name} on the concrete output class to the specific subclass type."
+        )
