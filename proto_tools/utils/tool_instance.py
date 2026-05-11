@@ -1783,7 +1783,7 @@ class ToolInstance:
         if tools_dir is None:
             tools_dir = Path(__file__).parent.parent / "tools"
 
-        for standalone_dir in tools_dir.rglob("standalone"):
+        for standalone_dir in list(tools_dir.rglob("standalone")):
             if not standalone_dir.is_dir():
                 continue
             if cls._has_valid_standalone(standalone_dir):

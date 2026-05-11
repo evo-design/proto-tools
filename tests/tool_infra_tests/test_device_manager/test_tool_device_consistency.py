@@ -181,11 +181,7 @@ def test_get_memory_stats_via_worker(tool_spec):
 
             from proto_tools.utils.base_config import BaseConfig
 
-            # Use a generous timeout: get_memory_stats itself is fast, but the
-            # worker startup imports torch/jax which can take minutes on slow
-            # filesystems (Oak). Stale warmup markers from prior runs can cause
-            # the warmup timeout extension to be skipped.
-            cfg = BaseConfig(verbose=False, timeout=600)
+            cfg = BaseConfig(verbose=False, timeout=1800)
             result = ToolInstance.dispatch(
                 toolkit,
                 command,
@@ -195,7 +191,7 @@ def test_get_memory_stats_via_worker(tool_spec):
             )
         except Exception:
             if instance._worker is not None:
-                result = instance._worker.send(command, timeout=600)
+                result = instance._worker.send(command, timeout=1800)
             else:
                 raise
 

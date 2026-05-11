@@ -69,7 +69,6 @@ def test_evo2_sample_tool(model_checkpoint="evo2_7b"):
         top_p=1.0,
         cached_generation=True,
         verbose=False,
-        print_generation=False,
     )
 
     result = run_evo2_sample(inputs=inputs, config=config)
@@ -106,7 +105,6 @@ def test_evo2_sample_prompt_handling(prompt, model_checkpoint):
         num_tokens=50,
         temperature=1.0,
         verbose=False,
-        print_generation=False,
     )
 
     result = run_evo2_sample(inputs=inputs, config=config)
@@ -131,7 +129,6 @@ def test_evo2_sample_prepend_prompt(model_checkpoint):
             num_tokens=50,
             prepend_prompt=True,
             verbose=False,
-            print_generation=False,
         ),
     )
     assert result_with.sequences[0].startswith(prompt)
@@ -143,7 +140,6 @@ def test_evo2_sample_prepend_prompt(model_checkpoint):
             num_tokens=50,
             prepend_prompt=False,
             verbose=False,
-            print_generation=False,
         ),
     )
     assert not result_without.sequences[0].startswith(prompt)
@@ -165,7 +161,6 @@ def test_evo2_sample_batched_tool(model_checkpoint):
         temperature=1.0,
         batch_size=2,
         verbose=False,
-        print_generation=False,
     )
 
     result = run_evo2_sample(inputs=inputs, config=config)

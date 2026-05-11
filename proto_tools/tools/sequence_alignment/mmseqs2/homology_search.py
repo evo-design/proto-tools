@@ -473,7 +473,7 @@ def run_mmseqs2_homology_search(
     if entry.auto_provision and not _is_provisioned(entry, cache_dir, require_idx_pad=config.use_gpu):
         # Tiny in-tree fixture entries build themselves on first dispatch so
         # CI / smoke tests don't need a separate provisioning step.
-        _auto_provision(dataset_name, cache_dir)
+        _auto_provision(dataset_name, cache_dir, require_idx_pad=config.use_gpu)
     _check_dataset_provisioned(dataset_name, entry, cache_dir, require_idx_pad=config.use_gpu)
 
     flat_queries = inputs.all_queries()
@@ -632,7 +632,7 @@ def _is_provisioned(entry: DatasetEntry, cache_dir: Path, *, require_idx_pad: bo
     return True
 
 
-def _auto_provision(name: str, cache_dir: Path) -> None:
+def _auto_provision(name: str, cache_dir: Path, *, require_idx_pad: bool) -> None:
     """Provision an ``auto_provision=True`` entry by running its download + index recipe.
 
     Reuses the standalone env's ``mmseqs`` binary (built lazily via
@@ -644,7 +644,9 @@ def _auto_provision(name: str, cache_dir: Path) -> None:
     download + index steps so parallel pytest-xdist workers (or any other
     concurrent caller) serialize cleanly instead of racing on ``mmseqs mvdb``
     / ``tar`` against a half-written cache dir. The second arrival blocks,
-    then re-checks ``_is_provisioned`` and skips its own work.
+    then re-checks ``_is_provisioned`` and skips its own work. The re-check
+    uses the caller's ``require_idx_pad`` so a partial cpu-only provision
+    on disk doesn't fool a use_gpu=True caller into skipping the rebuild.
 
     Refuses to run under GitHub Actions (``GITHUB_ACTIONS=true``) so CI
     runners never silently pull fixture tarballs from the public mirror.
@@ -657,9 +659,15 @@ def _auto_provision(name: str, cache_dir: Path) -> None:
         )
 
     import fcntl
+    import subprocess
 
     from proto_tools.databases import DatasetRegistry
-    from proto_tools.tools.sequence_alignment.mmseqs2.setup_databases import provision
+    from proto_tools.tools.sequence_alignment.mmseqs2.setup_databases import (
+        _is_provisioned as _setup_db_is_provisioned,
+    )
+    from proto_tools.tools.sequence_alignment.mmseqs2.setup_databases import (
+        provision,
+    )
     from proto_tools.utils.tool_instance import ToolInstance
 
     instance = ToolInstance("mmseqs2")
@@ -673,10 +681,23 @@ def _auto_provision(name: str, cache_dir: Path) -> None:
 
     with open(lock_path, "w") as lock_file:
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-        # Re-check after acquiring the lock — a sibling worker may have just
-        # finished provisioning while we were waiting.
-        if _is_provisioned(DatasetRegistry.get(name), cache_dir, require_idx_pad=False):
+        entry = DatasetRegistry.get(name)
+        if _is_provisioned(entry, cache_dir, require_idx_pad=require_idx_pad):
             logger.info("Auto-provision skipped for %r: another worker already provisioned it", name)
+            return
+
+        if require_idx_pad and entry.gpu_padded_marker and _setup_db_is_provisioned(entry, cache_dir):
+            mmseqs_bin = env_bin / "mmseqs"
+            logger.info(
+                "Auto-provision fast-path for %r: building missing GPU-padded index (%s) only",
+                name,
+                entry.gpu_padded_marker,
+            )
+            subprocess.run(  # noqa: S603 — args from trusted registry + env-resolved bin
+                [str(mmseqs_bin), "makepaddedseqdb", entry.db_prefix, entry.gpu_padded_marker],
+                cwd=cache_dir,
+                check=True,
+            )
             return
 
         # The mmseqs env carries the ``mmseqs`` binary; the download step inside
@@ -699,7 +720,7 @@ def _auto_provision(name: str, cache_dir: Path) -> None:
         original_path = os.environ.get("PATH", "")
         os.environ["PATH"] = f"{path_prefix}{os.pathsep}{original_path}"
         try:
-            provision(name)
+            provision(name, force=True)
         finally:
             os.environ["PATH"] = original_path
 

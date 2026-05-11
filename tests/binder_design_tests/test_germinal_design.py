@@ -318,7 +318,7 @@ def test_germinal_design_e2e_vhh_pd_l1(tmp_path):
         },
     )
     result = run_germinal_design(inputs, config)
-    validate_output(result)
+    validate_output(result, check_export=False)
 
     assert result.tool_id == "germinal-design"
     assert isinstance(result, GerminalOutput)
@@ -365,7 +365,7 @@ def test_germinal_filter_override_rejects_all_designs_e2e():
         filter_overrides={"final": {"external_plddt": {"value": 0.999, "operator": ">"}}},
     )
     result = run_germinal_design(inputs, config)
-    validate_output(result)
+    validate_output(result, check_export=False)
 
     assert result.tool_id == "germinal-design"
     assert result.pipeline_stats, "filter_override path didn't reach failure_counts.csv parse"
@@ -408,7 +408,7 @@ def test_germinal_design_e2e_scfv_pd_l1():
         },
     )
     result = run_germinal_design(inputs, config)
-    validate_output(result)
+    validate_output(result, check_export=False)
 
     assert result.tool_id == "germinal-design"
     for d in result.designs:

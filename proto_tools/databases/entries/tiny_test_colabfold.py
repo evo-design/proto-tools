@@ -71,6 +71,10 @@ ENTRY = DatasetEntry(
                 command=["mv", "-f", "sprot2503_mapping", "uniref30_mini_db_mapping"],
                 description="Rename taxonomy mapping file",
             ),
+            IndexStep(
+                command=["mmseqs", "makepaddedseqdb", "uniref30_mini_db", "uniref30_mini_db.idx_pad"],
+                description="Build GPU-padded sequence DB",
+            ),
         ],
         output_files=[
             "uniref30_mini_db.dbtype",

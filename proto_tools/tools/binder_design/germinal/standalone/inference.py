@@ -241,11 +241,15 @@ class GerminalRunner:
         assert self.af_params_dir is not None
 
         overlay_stem = f"{d['design_type']}_{target_name}"
+        run_dir = workdir / "runs" / target_name
         cmd: list[str] = [
             sys.executable,
             "run_germinal.py",
             f"hydra.searchpath=[file://{workdir / 'configs'}]",
-            f"hydra.run.dir={workdir / 'runs' / target_name}",
+            f"hydra.run.dir={run_dir}",
+            f"project_dir={workdir}",
+            "results_dir=runs",
+            "run_config=",
             f"target={target_name}",
             f"run={d['design_type']}",
             f"filter/initial={overlay_stem}",
@@ -294,10 +298,10 @@ class GerminalRunner:
 
             for pdb in sorted(structures_dir.glob("*.pdb")):
                 design_id = pdb.stem
-                if design_id in seen:
+                if design_id in seen or design_id not in metrics_by_id:
                     continue
                 seen.add(design_id)
-                row = metrics_by_id.get(design_id, {})
+                row = metrics_by_id[design_id]
                 seq_h, seq_l = self._extract_binder_sequences(pdb, d["binder_chain"], d["design_type"])
                 traj_idx, mpnn_idx = self._parse_design_indices(design_id)
                 designs.append(
