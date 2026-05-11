@@ -3,11 +3,9 @@
 Tests for Boltz2.
 """
 
-from pathlib import Path
-
 import pytest
 
-from proto_tools.entities.structures import Structure, is_valid_structure
+from proto_tools.entities.structures import is_valid_structure
 from proto_tools.tools.structure_prediction import (
     Boltz2Config,
     Boltz2Input,
@@ -21,32 +19,6 @@ from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 
 # Cro repressor from bacteriophage lambda. Short, well-folded test protein.
 _CRO_SEQUENCE = "MQTQNNSREKQAAALERLFLSCFLKDPVPKPLQEGTCDDVLCRELLNESETHLVQSIFRKESKVPGA"
-
-
-def test_boltz2_seed_sensitive_unrolls_per_complex(monkeypatch):
-    """End-to-end smoke: multi-item dispatch through the boltz2 wrapper yields distinct per-complex seeds.
-
-    Framework-level unroll semantics are covered in test_tool_registry; this
-    verifies the boltz2 wrapper threads the derived seed through to the
-    per-complex dispatch as expected.
-    """
-    pdb = (
-        Path(__file__).resolve().parents[2]
-        / "proto_tools/tools/structure_prediction/boltz2/examples/example_output/mfng_ligand_complex/structure_0.pdb"
-    ).read_text()
-    captured: list[int | None] = []
-
-    def fake(*, config, sp_complex, msas, instance):
-        captured.append(config.seed)
-        return Structure(structure=pdb, source="boltz2-fake")
-
-    monkeypatch.setattr("proto_tools.tools.structure_prediction.boltz2.boltz2.run_boltz2_on_complex", fake)
-
-    inputs = Boltz2Input(
-        complexes=[StructurePredictionComplex(chains=[Chain(sequence=_CRO_SEQUENCE, entity_type="protein")])] * 3
-    )
-    run_boltz2(inputs, Boltz2Config(use_msa=False, seed=42, device="cpu"))
-    assert len(set(captured)) == 3, f"expected pairwise-distinct seeds, got {captured}"
 
 
 # ── Ligand YAML shape: CCD-prefer dispatch ─────────────────────────────────

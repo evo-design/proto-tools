@@ -11,8 +11,9 @@ auto-selects the strategy:
 - **Non-iterable tools** → whole-output cache (hash full inputs + config).
 
 Cacheable tools registered as ``seed_sensitive=True`` skip cache/dedup while
-``config.seed is None``. Seeded calls remain cacheable; for iterable inputs,
-multi-item dispatches unroll with per-item-derived seeds.
+``config.seed is None``. Seeded calls remain cacheable. The framework does
+not unroll multi-item dispatches — each tool is responsible for advancing
+its own RNG state per item within a batched call.
 
 Each Program instance maintains its own isolated cache using Python's
 contextvars.

@@ -83,40 +83,6 @@ def test_relax_forwards_bindcraft_fastrelax_options(monkeypatch):
     assert payload["seed"] == 7
 
 
-def test_relax_seed_sensitive_unrolls_multi_input_dispatch_with_per_item_seeds(monkeypatch):
-    captured_seeds: list[int | None] = []
-    captured_counts: list[int] = []
-
-    def fake_dispatch(toolkit, input_data, *, instance=None, config=None):
-        assert toolkit == "pyrosetta"
-        captured_seeds.append(input_data["seed"])
-        captured_counts.append(len(input_data["pdb_contents"]))
-        return {
-            "results": [
-                {
-                    "relaxed_pdb": input_data["pdb_contents"][0],
-                    "total_score": -1.0,
-                    "relax_cycles": input_data["relax_cycles"],
-                    "dropped_residues": [],
-                }
-            ]
-        }
-
-    monkeypatch.setattr(relax_module.ToolInstance, "dispatch", staticmethod(fake_dispatch))
-
-    result = run_pyrosetta_relax(
-        PyRosettaRelaxInput(inputs=[TEST_PDB, TEST_PDB]),
-        PyRosettaRelaxConfig(relax_cycles=1, seed=42),
-    )
-
-    assert result.success
-    assert len(result.results) == 2
-    assert captured_counts == [1, 1]
-    assert len(captured_seeds) == 2
-    assert all(seed is not None for seed in captured_seeds)
-    assert captured_seeds[0] != captured_seeds[1]
-
-
 # ── Integration ───────────────────────────────────────────────────────────────
 
 

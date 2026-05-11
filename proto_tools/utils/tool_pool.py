@@ -496,7 +496,6 @@ class ToolPool:
             config (Any): Tool configuration.
         """
         from proto_tools.tools.tool_registry import ToolRegistry
-        from proto_tools.utils.iterable_dispatch import unroll_per_item_seed
 
         # Look up ToolSpec
         spec = ToolRegistry.get(tool_key)
@@ -509,10 +508,6 @@ class ToolPool:
         # Extract items
         items = list(getattr(inputs, iterable_input_field))
         n_items = len(items)
-
-        # Pre-derive once so partitions slice by original_index (layout-stable across partition counts).
-        needs_unroll = spec.seed_sensitive and n_items > 1
-        per_item_seeds: list[int] | None = config.derive_per_item_seeds(n_items) if needs_unroll else None
 
         # Single-item / empty: no collision risk, skip pool overhead.
         if n_items <= 1:
@@ -529,18 +524,6 @@ class ToolPool:
         if not slots:
             token = _pool_executing.set(True)
             try:
-                if needs_unroll:
-                    # No fan-out slots but still need per-item seeds.
-                    return unroll_per_item_seed(
-                        spec.function,
-                        inputs,
-                        config,
-                        None,
-                        iterable_input_field,
-                        iterable_output_field,
-                        seeds=per_item_seeds,
-                        skip_seed_sensitive_cache=config.seed is None,
-                    )
                 return func(inputs, config)
             finally:
                 _pool_executing.reset(token)
@@ -599,29 +582,6 @@ class ToolPool:
 
                     partition_items = [wi.item for wi in assignment.items]
                     partition_input = inputs.model_copy(update={iterable_input_field: partition_items})
-
-                    if needs_unroll:
-                        # Slice seeds by original_index so the assignment is stable across partition counts.
-                        assert per_item_seeds is not None
-                        partition_seeds = [per_item_seeds[wi.original_index] for wi in assignment.items]
-                        result = unroll_per_item_seed(
-                            spec.function,
-                            partition_input,
-                            config,
-                            slot.worker_name,
-                            iterable_input_field,
-                            iterable_output_field,
-                            seeds=partition_seeds,
-                            extra_config_update={"device": slot.device_override},
-                            skip_seed_sensitive_cache=config.seed is None,
-                        )
-                        indexed = [
-                            (wi.original_index, item)
-                            for wi, item in zip(
-                                assignment.items, getattr(result, iterable_output_field, []), strict=True
-                            )
-                        ]
-                        return indexed, result
 
                     config_copy = config.model_copy(update={"device": slot.device_override})
                     result = func(partition_input, config_copy, instance=slot.worker_name)

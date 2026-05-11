@@ -65,7 +65,7 @@ def test_sample_config_defaults():
 
 
 def test_sample_dispatches_one_sequence_per_prompt(monkeypatch):
-    """Seed-sensitive unroll keeps a one-to-one prompt/output mapping."""
+    """Multi-prompt input goes through a single dispatch carrying the full batch."""
     captured_payloads = []
 
     def fake_dispatch(toolkit, payload, *, instance=None, config=None):
@@ -73,8 +73,7 @@ def test_sample_dispatches_one_sequence_per_prompt(monkeypatch):
         assert config is not None
         assert instance is None
         captured_payloads.append(payload)
-        aa_prompt = payload["prompts"][0][1:]
-        return {"sequences": [f"{aa_prompt}G"]}
+        return {"sequences": [f"{p[1:]}G" for p in payload["prompts"]]}
 
     monkeypatch.setattr(
         "proto_tools.tools.causal_models.progen3.progen3_sample.ToolInstance.dispatch",
@@ -87,7 +86,7 @@ def test_sample_dispatches_one_sequence_per_prompt(monkeypatch):
     )
 
     assert result.sequences == ["AAAAG", "CCCCG"]
-    assert [payload["prompts"] for payload in captured_payloads] == [["1AAAA"], ["1CCCC"]]
+    assert [payload["prompts"] for payload in captured_payloads] == [["1AAAA", "1CCCC"]]
 
 
 def test_scoring_config_defaults():

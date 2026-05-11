@@ -6,7 +6,6 @@ import pytest
 from pydantic import ValidationError
 
 from proto_tools.entities.structures import Structure
-from proto_tools.tools.structure_scoring.pyrosetta import pyrosetta_interface_analyzer as interface_module
 from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_interface_analyzer import (
     InterfaceStructureInput,
     PyRosettaInterfaceAnalyzerConfig,
@@ -58,45 +57,6 @@ def test_interface_analyzer_input_accepts_multiple_structures():
     assert inp.inputs[0].binder_chain == "B"
     assert inp.inputs[1].target_chain == "B"
     assert inp.inputs[1].binder_chain == "A"
-
-
-def test_interface_analyzer_seed_sensitive_unrolls_multi_input_dispatch_with_per_item_seeds(monkeypatch):
-    captured_seeds: list[int | None] = []
-    captured_counts: list[int] = []
-
-    def fake_dispatch(toolkit, input_data, *, instance=None, config=None):
-        assert toolkit == "pyrosetta"
-        captured_seeds.append(input_data["seed"])
-        captured_counts.append(len(input_data["pdb_contents"]))
-        return {
-            "results": [
-                {
-                    "interface_sc": 0.5,
-                    "interface_hbonds": 1,
-                    "interface_dG": -3.0,
-                    "interface_dSASA": 120.0,
-                    "interface_packstat": 0.6,
-                    "interface_hydrophobicity": 40.0,
-                    "surface_hydrophobicity": 0.3,
-                    "delta_unsat_hbonds": None,
-                    "dropped_residues": [],
-                }
-            ]
-        }
-
-    monkeypatch.setattr(interface_module.ToolInstance, "dispatch", staticmethod(fake_dispatch))
-
-    result = run_pyrosetta_interface_analyzer(
-        PyRosettaInterfaceAnalyzerInput(inputs=[TEST_PDB, TEST_PDB]),
-        PyRosettaInterfaceAnalyzerConfig(seed=42),
-    )
-
-    assert result.success
-    assert len(result.results) == 2
-    assert captured_counts == [1, 1]
-    assert len(captured_seeds) == 2
-    assert all(seed is not None for seed in captured_seeds)
-    assert captured_seeds[0] != captured_seeds[1]
 
 
 # ── Integration ───────────────────────────────────────────────────────────────
