@@ -10,12 +10,13 @@ import contextlib
 import difflib
 import inspect
 import logging
+import math
 import os
 import re
 import time
 import traceback
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, MutableMapping
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
@@ -1177,7 +1178,45 @@ def _post_dispatch_cache_and_expand(
         if cache is not None:
             cache.set(key, whole_cache_key, result)
 
+    _warn_on_non_finite_output(result, key)
     return result
+
+
+def _find_non_finite_paths(obj: Any, _path: str = "", _paths: list[str] | None = None) -> list[str]:
+    """Return JSONPath strings for each non-finite float in *obj*; does not mutate.
+
+    Args:
+        obj (Any): Value to walk.
+        _path (str): Internal — JSONPath prefix.
+        _paths (list[str] | None): Internal — accumulator.
+
+    Returns:
+        list[str]: JSONPath of each non-finite location.
+    """
+    if _paths is None:
+        _paths = []
+    if isinstance(obj, float):
+        if not math.isfinite(obj):
+            _paths.append(_path or "<root>")
+        return _paths
+    if isinstance(obj, MutableMapping):
+        for k, v in obj.items():
+            sub_path = f"{_path}.{k}" if _path else str(k)
+            _find_non_finite_paths(v, sub_path, _paths)
+        return _paths
+    if isinstance(obj, (list, tuple)):
+        for i, v in enumerate(obj):
+            sub_path = f"{_path}[{i}]"
+            _find_non_finite_paths(v, sub_path, _paths)
+        return _paths
+    return _paths
+
+
+def _warn_on_non_finite_output(result: BaseToolOutput, tool_key: str) -> None:
+    """Log one WARNING if *result* contains non-finite floats; do not mutate."""
+    paths = _find_non_finite_paths(result.model_dump())
+    if paths:
+        logger.warning("tool %s: non-finite floats in output at paths=%s", tool_key, paths)
 
 
 def _re_emit_warnings(warning_list: list[warnings.WarningMessage]) -> None:

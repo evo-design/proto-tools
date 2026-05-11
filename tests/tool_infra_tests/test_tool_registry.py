@@ -3,6 +3,8 @@
 Tests for ToolRegistry.
 """
 
+import logging
+import math
 import time
 
 import pytest
@@ -1645,3 +1647,72 @@ def test_post_process_iterable_optional(clean_registry, _setup_cache):
     spec = _register_cacheable_iterable(clean_registry, "no-post-process", run_tool)
     result = spec.function(MockIterableInput(items=["a", "b", "c"]), MockToolConfig(param1="v"))
     assert result.results == ["out_a", "out_b", "out_c"]
+
+
+# ── @tool boundary: non-finite-float warning ──
+
+
+class _NanFloatOutput(MockToolOutputBase):
+    """Mock output exposing scalar / list / nested-dict float fields for NaN tests."""
+
+    score: float | None = Field(default=None)
+    scores: list[float | None] = Field(default_factory=list)
+    nested: dict[str, list[float | None]] = Field(default_factory=dict)
+
+
+def _register_nan_tool(clean_registry, key, output):
+    @clean_registry.register(
+        key=key,
+        label="nan-test",
+        category="testing",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=_NanFloatOutput,
+        description="returns a fixed output for non-finite warning tests",
+    )
+    def _run(inputs, config=None, instance=None):
+        return output
+
+    return _run
+
+
+def test_non_finite_floats_trigger_warning_and_propagate(clean_registry, caplog):
+    """NaN/Inf in tool output are LEFT INTACT but produce a WARNING naming the paths."""
+    output = _NanFloatOutput(score=float("nan"), scores=[1.0, float("inf"), -2.0])
+    run = _register_nan_tool(clean_registry, "nan-scalar", output)
+
+    with caplog.at_level(logging.WARNING, logger="proto_tools.tools.tool_registry"):
+        result = run(MockToolInput(input_data="x"), MockToolConfig(param1="v"))
+
+    assert math.isnan(result.score)
+    assert math.isinf(result.scores[1])
+    assert result.scores[0] == 1.0
+    assert result.scores[2] == -2.0
+    assert any("nan-scalar" in r.message and "score" in r.message for r in caplog.records)
+
+
+def test_finite_output_passes_through_silently(clean_registry, caplog):
+    """All-finite outputs trigger no warning and no value changes."""
+    output = _NanFloatOutput(score=2.5, scores=[1.0, 3.0])
+    run = _register_nan_tool(clean_registry, "nan-clean", output)
+
+    with caplog.at_level(logging.WARNING, logger="proto_tools.tools.tool_registry"):
+        result = run(MockToolInput(input_data="x"), MockToolConfig(param1="v"))
+
+    assert result.score == 2.5
+    assert result.scores == [1.0, 3.0]
+    assert not any("non-finite" in r.message for r in caplog.records)
+
+
+def test_non_finite_in_nested_container_surfaced(clean_registry, caplog):
+    """Recursion through nested dict[str, list[float]] finds deep non-finite values."""
+    output = _NanFloatOutput(nested={"a": [1.0, float("-inf")], "b": [float("nan")]})
+    run = _register_nan_tool(clean_registry, "nan-nested", output)
+
+    with caplog.at_level(logging.WARNING, logger="proto_tools.tools.tool_registry"):
+        result = run(MockToolInput(input_data="x"), MockToolConfig(param1="v"))
+
+    assert math.isinf(result.nested["a"][1])
+    assert math.isnan(result.nested["b"][0])
+    msgs = " ".join(r.message for r in caplog.records)
+    assert "nested.a[1]" in msgs and "nested.b[0]" in msgs
