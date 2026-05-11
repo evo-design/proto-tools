@@ -99,6 +99,7 @@ def test_fetch_synonyms_404_returns_empty_list():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skip_ci
 @pytest.mark.integration
 @pytest.mark.parametrize(
     "input_kwargs",
@@ -166,6 +167,7 @@ def test_pubchem_fetch_smiles_canonicalization_roundtrip():
     assert output.smiles != non_canonical
 
 
+@pytest.mark.skip_ci
 @pytest.mark.integration
 def test_pubchem_fetch_with_synonyms():
     """Enabling synonyms triggers the second HTTP call and returns up to 50 synonyms."""
