@@ -17,5 +17,5 @@ LD_LIBRARY_PATH=${VENV_PATH}/cuda_env/lib
 CUDA_ROOT=${VENV_PATH}/cuda_env
 # Force pure-Python protobuf to prevent XLA descriptor conflict between
 # TensorFlow and JAX — both register xla/xla_data.proto, causing SIGABRT
-# with the C++ implementation. (#276)
+# with the C++ implementation.
 PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python

@@ -77,8 +77,8 @@ def test_duplicate_sequence_ids_rejected() -> None:
 
 
 def test_paired_group_rejected_in_phase_3() -> None:
-    """Phase 3 rejects paired groups with a pointer to issue 543."""
-    with pytest.raises(ValidationError, match=r"issues/543"):
+    """Phase 3 rejects paired groups with a clear error message."""
+    with pytest.raises(ValidationError, match=r"Paired-MSA queries .* are not yet supported"):
         Mmseqs2HomologySearchInput(
             queries=[
                 [

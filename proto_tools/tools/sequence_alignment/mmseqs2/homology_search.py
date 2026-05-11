@@ -78,9 +78,8 @@ class Mmseqs2HomologySearchInput(BaseToolInput):
     - A list of queries is a *paired* group — multiple chains whose MSAs
       should be row-synchronized by taxonomy.
 
-    Phase 3 supports singleton groups only. Paired groups are validator-rejected
-    with a pointer to issue #543; full support lands when the paired-MSA local
-    path is implemented.
+    Phase 3 supports singleton groups only. Paired groups are validator-rejected;
+    full support lands when the paired-MSA local path is implemented.
 
     Attributes:
         queries (list[Mmseqs2HomologySearchQuery | list[Mmseqs2HomologySearchQuery]]):
@@ -128,12 +127,11 @@ class Mmseqs2HomologySearchInput(BaseToolInput):
 
     @model_validator(mode="after")
     def _reject_paired_groups_in_phase_3(self) -> Any:
-        """Phase 3: reject paired groups; full support lands in #543."""
+        """Phase 3: reject paired groups; full support lands with the paired-MSA local path."""
         for i, group in enumerate(self.queries):
             if isinstance(group, list) and len(group) >= 2:
                 raise ValueError(
                     f"Paired-MSA queries (group #{i} has {len(group)} chains) are not yet supported. "
-                    "Track in https://github.com/proto-bio/proto-tools/issues/543. "
                     "For unpaired multimer search, pass each chain as a singleton (top-level) entry."
                 )
         return self
@@ -368,7 +366,7 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
                 f"Phase 3 only supports datasets with a3m_adapter='colabfold' (UniRef30, "
                 f"ColabFoldDB envdb). Got: {unsupported}. AF3-style protein and RNA "
                 "datasets are registered and provisionable but not yet searchable — "
-                "tracked for Phase 4 of the mmseqs2-homology-search rollout (#581)."
+                "tracked for Phase 4 of the mmseqs2-homology-search rollout."
             )
         return self
 

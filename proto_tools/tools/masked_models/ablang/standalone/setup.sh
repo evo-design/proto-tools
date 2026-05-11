@@ -19,8 +19,8 @@ uv pip install -r requirements.txt
 # Pre-fetch ~825 MB of ablang weights into PROTO_MODEL_CACHE and symlink the
 # cache into ablang2's hardcoded $(dirname ablang2.__file__)/model-weights-<name>
 # lookup path. Bypasses ablang2.download_model's brittle requests.get (no
-# retries, blew up in #606) and keeps weights outside the env so they survive
-# rebuilds. ablang2's lookup follows symlinks, so the staging is transparent.
+# retries) and keeps weights outside the env so they survive rebuilds.
+# ablang2's lookup follows symlinks, so the staging is transparent.
 # curl is on PATH via the host or the foundation env.
 proto_resolve_weights_dir ablang
 ABLANG_PKG_DIR=$(python -c "import ablang2, os; print(os.path.dirname(ablang2.__file__))")

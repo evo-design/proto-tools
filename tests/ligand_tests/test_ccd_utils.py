@@ -297,8 +297,8 @@ def test_inchikey_cache_contains_known_ccd_entries():
     """InChIKey cache is populated for common biology-relevant ligands.
 
     Validates the cache build correctly emits InChIKey entries (regression guard
-    for the InChIKey 2nd-tier lookup added in PR for #550). Asserts a minimum
-    number of probed CCDs were actually found — without this counter, the test
+    for the InChIKey 2nd-tier lookup). Asserts a minimum number of probed CCDs
+    were actually found — without this counter, the test
     would silently pass if all probes happened to be ambiguity-filtered out.
     """
     from rdkit import Chem

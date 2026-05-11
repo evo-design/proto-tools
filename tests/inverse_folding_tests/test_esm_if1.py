@@ -248,8 +248,8 @@ def test_esm_if1_score_multichain(multichain_structure: Structure):
 def test_esm_if1_score_multichain_context_matters(multichain_structure: Structure):
     """The complex context conditions the score: chain A scored in A+B differs from chain A scored alone.
 
-    This is the bug-coverage test for #824. With the pre-fix wrapper, the
-    "in complex" call crashed with a shape mismatch on multi-chain inputs;
+    Bug-coverage test: with the pre-fix wrapper, the "in complex" call
+    crashed with a shape mismatch on multi-chain inputs;
     if both calls returned the same number, the wrapper would be ignoring
     the other chains' coordinates instead of conditioning on them.
     """

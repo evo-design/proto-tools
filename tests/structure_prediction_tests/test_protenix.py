@@ -294,7 +294,7 @@ def test_protenix_holds_runner_across_calls():
     assert info1["cache_key"] == info2["cache_key"]
 
 
-# ── PAE matrix surfacing (#520) ─────────────────────────────────────────────
+# ── PAE matrix surfacing ────────────────────────────────────────────────────
 
 
 @pytest.mark.uses_gpu

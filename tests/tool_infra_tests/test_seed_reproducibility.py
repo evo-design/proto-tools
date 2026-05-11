@@ -96,9 +96,9 @@ _SEED_EXCLUDED_KEYS: frozenset[str] = frozenset(
 #   - https://github.com/chaidiscovery/chai-lab/issues/228
 #   - https://github.com/chaidiscovery/chai-lab/issues/246
 # - alphagenome-predict-variants: second dispatch crashes the persistent
-#   worker (see #413). The tool is marked ``gpu_only=True`` so the eviction
-#   round-trip test handles it via worker restart, but the persistent seed
-#   test has no eviction to trigger that path.
+#   worker. The tool is marked ``gpu_only=True`` so the eviction round-trip
+#   test handles it via worker restart, but the persistent seed test has no
+#   eviction to trigger that path.
 _SEED_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {
         "chai1-prediction",

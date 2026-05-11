@@ -62,7 +62,7 @@ def test_ligandmpnn_sample_simple(cif_structure: Structure):
 
 @pytest.mark.uses_gpu
 def test_ligandmpnn_sample_no_ligand(cif_structure: Structure):
-    """#704: mixed batch maps no-ligand to None per-instance and round-trips strict JSON."""
+    """Mixed batch maps no-ligand to None per-instance and round-trips strict JSON."""
     inp = InverseFoldingInput(
         inputs=[
             InverseFoldingStructureInput(structure=cif_structure, chains_to_redesign=["A"]),

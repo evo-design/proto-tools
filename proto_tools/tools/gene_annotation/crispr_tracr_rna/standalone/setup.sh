@@ -86,7 +86,7 @@ patches = [
     ('modules/candidate_ranking.py',
      'header, info_lines = lines[0]',
      'if not lines:\n            return\n        header, info_lines = lines[0]', 'if not lines'),
-    # Fix fasta36 arg order: -m8 before positional args (macOS Rosetta compat, #93)
+    # Fix fasta36 arg order: -m8 before positional args (macOS Rosetta compat)
     ('modules/anti_repeat_search.py', ' -m 8', '', '-m8'),
     ('modules/anti_repeat_search.py', 'fasta36 ', 'fasta36 -m8 ', 'fasta36 -m8'),
 ]

@@ -120,7 +120,7 @@ def test_boltz2_ccd_vs_smiles_input_equivalent_predictions():
     )
 
 
-# ── PAE matrix surfacing (#520) ─────────────────────────────────────────────
+# ── PAE matrix surfacing ────────────────────────────────────────────────────
 
 
 @pytest.mark.uses_gpu

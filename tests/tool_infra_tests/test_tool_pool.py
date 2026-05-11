@@ -478,7 +478,7 @@ def test_dispatch_gpus_per_instance_grouping(clean_registry):
 def test_dispatch_gpus_per_instance_zero_bypasses_pool(clean_registry):
     """CPU-opt-out tools (gpus_per_instance=0 + cpus_per_instance=None) bypass partitioning.
 
-    Regression for #575: ToolPool._parallel_dispatch crashed with
+    Regression: ToolPool._parallel_dispatch previously crashed with
     `ValueError: range() arg 3 must not be zero` when a tool's config returned
     gpus_per_instance=0 (e.g. colabfold-search with use_gpu=False) and the
     pool was dispatched with >=2 input items. The fix short-circuits to a
