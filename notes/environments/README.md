@@ -19,7 +19,7 @@ pytest --env-report -k "bioemu"
 ```
 
 The `--env-report` flag:
-1. Auto-discovers all tools from `ToolRegistry` and runs each tool's `example_input()` — one test per tool directory (standalone environment)
+1. Auto-discovers all standalone-environment tools from `ToolRegistry` and runs each representative tool's `example_input()` — one test per standalone tool directory
 2. Cleans tool envs for fresh rebuilds (with `-k`, only cleans envs for selected tools)
 3. Skips GPU tools if no GPU is available, skips multi-GPU tools if insufficient GPUs
 4. Captures parent process and subprocess environment variables
@@ -27,7 +27,7 @@ The `--env-report` flag:
 
 ## How It Works
 
-Tests are defined in `tests/tool_infra_tests/test_env_report.py`. A single parametrized test function auto-discovers tools via `ToolRegistry.list_all()` — no manual markers needed. When a new tool is added to the registry with an `example_input`, it's automatically included in env-report runs.
+Tests are defined in `tests/tool_infra_tests/test_env_report.py`. A single parametrized test function auto-discovers tools via `ToolRegistry.list_all()` — no manual markers needed. When a new standalone-environment tool is added to the registry with an `example_input`, its tool directory is automatically included in env-report runs.
 
 Config overrides for self-contained testing:
 - `verbose=True` on all tools for diagnostic logging

@@ -184,7 +184,6 @@ def test_scoring_output_has_correct_format_options():
 
 
 @pytest.mark.uses_gpu
-@pytest.mark.include_in_env_report(category="causal_models")
 def test_progen3_sample_forward():
     """Forward (N->C) generation expands to the right of the prompt."""
     inputs = ProGen3SampleInput(prompts=["MKTL"])
