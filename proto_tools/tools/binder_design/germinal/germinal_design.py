@@ -554,7 +554,7 @@ def example_input() -> GerminalInput:
     uses_gpu=True,
     example_input=example_input,
     cacheable=False,
-    generative=True,
+    seed_sensitive=True,
 )
 def run_germinal_design(
     inputs: GerminalInput,

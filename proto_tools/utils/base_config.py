@@ -107,7 +107,7 @@ class BaseConfig(BaseModel):
         timeout (int | None): Maximum execution time in seconds. ``None`` waits indefinitely.
         seed (int | None): Random seed. When set, tools run reproducibly up to small
             GPU float noise (see ``BaseToolOutput.approx_equal``), and the seed
-            participates in cache keys. When None, cacheable generative tools
+            participates in cache keys. When None, cacheable seed-sensitive tools
             skip cache until seeded.
 
     Properties:
@@ -208,6 +208,12 @@ class BaseConfig(BaseModel):
         ``config.seed if config.seed is not None else config.get_random_int()``.
         """
         return random.randint(0, RANDOM_SEED_UPPER_BOUND - 1)  # noqa: S311 -- not for cryptographic use
+
+    def derive_per_item_seeds(self, n_items: int) -> list[int]:
+        """Return ``n_items`` distinct seeds derived from ``self.seed`` (or a fresh random base when unseeded)."""
+        base = self.seed if self.seed is not None else self.get_random_int()
+        rng = random.Random(base)  # noqa: S311 -- non-cryptographic
+        return [rng.randint(0, RANDOM_SEED_UPPER_BOUND - 1) for _ in range(n_items)]
 
     @property
     def gpus_per_instance(self) -> int:

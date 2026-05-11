@@ -10,9 +10,9 @@ auto-selects the strategy:
   (strip cached items, dispatch uncached only, stitch results back).
 - **Non-iterable tools** → whole-output cache (hash full inputs + config).
 
-Cacheable tools registered as ``generative=True`` skip cache lookup and storage
-while ``config.seed is None`` so unseeded sampling calls can diversify. Seeded
-calls remain cacheable because ``BaseConfig.seed`` participates in the cache key.
+Cacheable tools registered as ``seed_sensitive=True`` skip cache/dedup while
+``config.seed is None``. Seeded calls remain cacheable; for iterable inputs,
+multi-item dispatches unroll with per-item-derived seeds.
 
 Each Program instance maintains its own isolated cache using Python's
 contextvars.

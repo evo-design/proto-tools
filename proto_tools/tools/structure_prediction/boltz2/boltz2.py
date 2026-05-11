@@ -246,6 +246,7 @@ def example_input() -> Any:
     iterable_input_field="complexes",
     iterable_output_field="structures",
     cacheable=True,
+    seed_sensitive=True,
 )
 def run_boltz2(inputs: Boltz2Input, config: Boltz2Config, instance: Any = None) -> Boltz2Output:
     """Predict 3D structures using Boltz2 multi-modal model.

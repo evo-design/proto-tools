@@ -252,6 +252,7 @@ def example_input() -> Any:
     iterable_input_field="complexes",
     iterable_output_field="structures",
     cacheable=True,
+    seed_sensitive=True,
 )
 def run_chai1(inputs: Chai1Input, config: Chai1Config, instance: Any = None) -> Chai1Output:
     """Predict 3D structures using Chai1 multi-modal model.

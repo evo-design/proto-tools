@@ -887,7 +887,7 @@ def example_input() -> BindCraftInput:
     uses_gpu=True,
     example_input=example_input,
     cacheable=False,
-    generative=True,
+    seed_sensitive=True,
 )
 def run_bindcraft_design(
     inputs: BindCraftInput,

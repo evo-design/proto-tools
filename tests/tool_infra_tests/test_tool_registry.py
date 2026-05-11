@@ -39,6 +39,7 @@ def test_all_tools_have_example_input(tool_spec):
 @pytest.mark.parametrize(
     "tool_key",
     [
+        # Sampling / gradient / design — outputs depend on seed
         "ablang-gradient",
         "ablang-sample",
         "alphafold2-binder",
@@ -62,31 +63,26 @@ def test_all_tools_have_example_input(tool_spec):
         "random-nucleotide-sample",
         "random-protein-sample",
         "rfdiffusion3-design",
+        # Diffusion-based structure predictors
+        "alphafold2-prediction",
+        "alphafold3-prediction",
+        "boltz2-prediction",
+        "chai1-prediction",
+        "protenix-prediction",
     ],
 )
-def test_diversified_tools_are_generative(tool_key):
-    """Tools with diversified unseeded outputs should advertise that contract."""
-    assert ToolRegistry.get(tool_key).generative is True
+def test_tool_is_seed_sensitive(tool_key):
+    """Tool advertises that outputs depend on config.seed."""
+    assert ToolRegistry.get(tool_key).seed_sensitive is True
 
 
 @pytest.mark.parametrize(
     "tool_key",
-    [
-        "alphafold2-prediction",
-        "alphafold3-prediction",
-        "blast-search",
-        "boltz2-prediction",
-        "chai1-prediction",
-        "ligandmpnn-score",
-        "proteinmpnn-score",
-        "protenix-prediction",
-        "pyhmmer-hmmsearch",
-        "pyrosetta-relax",
-    ],
+    ["blast-search", "ligandmpnn-score", "proteinmpnn-score", "pyhmmer-hmmsearch", "pyrosetta-relax"],
 )
-def test_seeded_non_sampling_tools_are_not_generative(tool_key):
-    """Seeded prediction, scoring, search, and relax tools stay cacheable."""
-    assert ToolRegistry.get(tool_key).generative is False
+def test_tool_is_not_seed_sensitive(tool_key):
+    """Deterministic scoring, search, and relax tools stay cacheable across calls."""
+    assert ToolRegistry.get(tool_key).seed_sensitive is False
 
 
 # ── Mock data models ─────────────────────────────────────────────────────────
@@ -1206,28 +1202,28 @@ def test_non_cacheable_tool_skips_cache_logic(clean_registry, _setup_cache):
     assert call_count == 2  # no caching
 
 
-def test_generative_unseeded_whole_output_skips_cache(clean_registry, _setup_cache):
-    """Unseeded generative tools run every call even when cacheable=True."""
+def test_seed_sensitive_unseeded_whole_output_skips_cache(clean_registry, _setup_cache):
+    """Unseeded seed-sensitive tools run every call even when cacheable=True."""
     call_count = 0
 
     @clean_registry.register(
-        key="generative-whole-cache",
-        label="Generative Whole Cache",
+        key="seed-sensitive-whole-cache",
+        label="Seed Sensitive Whole Cache",
         category="test",
         input_class=MockToolInput,
         config_class=MockToolConfig,
         output_class=MockToolOutput,
-        description="Generative whole-output cache test",
+        description="Seed-sensitive whole-output cache test",
         cacheable=True,
-        generative=True,
+        seed_sensitive=True,
     )
     def run_tool(inputs, config=None, instance=None):
         nonlocal call_count
         call_count += 1
         return MockToolOutput(result=f"processed_{inputs.input_data}_{call_count}")
 
-    spec = clean_registry.get("generative-whole-cache")
-    assert spec.generative is True
+    spec = clean_registry.get("seed-sensitive-whole-cache")
+    assert spec.seed_sensitive is True
     inputs = MockToolInput(input_data="test")
 
     unseeded_config = MockToolConfig(param1="v")
@@ -1245,44 +1241,195 @@ def test_generative_unseeded_whole_output_skips_cache(clean_registry, _setup_cac
     assert result4.result == "processed_test_3"
 
 
-def test_generative_unseeded_iterable_skips_cache_and_dedup(clean_registry, _setup_cache):
-    """Unseeded generative iterable tools skip both cache lookup and dedup."""
-    received_batches = []
+def test_seed_sensitive_iterable_unroll_and_bypass(clean_registry, _setup_cache):
+    """Multi-item dispatch unrolls with per-item seeds; single-item dispatch passes seed through.
+
+    Covers four invariants of the seed_sensitive iterable contract:
+    distinct per-item seeds, output diversification, per-derived-seed cache hits
+    on repeat, and the n<=1 bypass (no unroll, seed unchanged).
+    """
+    received_seeds: list[int | None] = []
 
     @clean_registry.register(
-        key="generative-iter-cache",
-        label="Generative Iter Cache",
+        key="seed-sensitive-iter",
+        label="Seed Sensitive Iter",
         category="test",
         input_class=MockIterableInput,
         config_class=MockToolConfig,
         output_class=MockIterableOutput,
-        description="Generative iterable cache test",
+        description="Seed-sensitive iterable test",
         iterable_input_field="items",
         iterable_output_field="results",
         cacheable=True,
-        generative=True,
+        seed_sensitive=True,
     )
     def run_tool(inputs, config=None, instance=None):
-        received_batches.append(list(inputs.items))
-        call_idx = len(received_batches)
-        return MockIterableOutput(results=[f"out_{call_idx}_{item}" for item in inputs.items])
+        received_seeds.append(config.seed)
+        return MockIterableOutput(results=[f"out_seed{config.seed}_{item}" for item in inputs.items])
 
-    spec = clean_registry.get("generative-iter-cache")
-    inputs = MockIterableInput(items=["a", "a"])
+    spec = clean_registry.get("seed-sensitive-iter")
+    seeded = MockToolConfig(param1="v", seed=123)
 
-    unseeded_config = MockToolConfig(param1="v")
-    result1 = spec.function(inputs, unseeded_config)
-    result2 = spec.function(inputs, unseeded_config)
-    assert received_batches == [["a", "a"], ["a", "a"]]
-    assert result1.results == ["out_1_a", "out_1_a"]
-    assert result2.results == ["out_2_a", "out_2_a"]
+    # Multi-item: unrolls with distinct derived seeds; identical items diversify.
+    result = spec.function(MockIterableInput(items=["a", "a"]), seeded)
+    assert len(received_seeds) == 2
+    assert received_seeds[0] != received_seeds[1]
+    assert result.results[0] != result.results[1]
+    derived = list(received_seeds)
 
-    seeded_config = MockToolConfig(param1="v", seed=123)
-    result3 = spec.function(inputs, seeded_config)
-    result4 = spec.function(inputs, seeded_config)
-    assert received_batches == [["a", "a"], ["a", "a"], ["a"]]
-    assert result3.results == ["out_3_a", "out_3_a"]
-    assert result4.results == ["out_3_a", "out_3_a"]
+    # Repeat: per-item cache hit, no new invocations.
+    received_seeds.clear()
+    assert spec.function(MockIterableInput(items=["a", "a"]), seeded).results == result.results
+    assert received_seeds == []
+
+    # Single-item: bypass — seed passes through unchanged, no derivation.
+    received_seeds.clear()
+    spec.function(MockIterableInput(items=["b"]), seeded)
+    assert received_seeds == [123]
+
+    # Unseeded: fresh random base, disjoint from the seeded stream.
+    received_seeds.clear()
+    spec.function(MockIterableInput(items=["c", "c"]), MockToolConfig(param1="v"))
+    assert len(received_seeds) == 2
+    assert set(received_seeds).isdisjoint(derived)
+
+
+def test_seed_sensitive_unseeded_iterable_unroll_skips_inner_cache(clean_registry, _setup_cache):
+    """Originally unseeded unrolls do not store random per-item cache entries."""
+    call_count = 0
+
+    @clean_registry.register(
+        key="seed-sensitive-unseeded-cache",
+        label="Seed Sensitive Unseeded Cache",
+        category="test",
+        input_class=MockIterableInput,
+        config_class=MockToolConfig,
+        output_class=MockIterableOutput,
+        description="Seed-sensitive iterable cache test",
+        iterable_input_field="items",
+        iterable_output_field="results",
+        cacheable=True,
+        seed_sensitive=True,
+    )
+    def run_tool(inputs, config=None, instance=None):
+        nonlocal call_count
+        call_count += 1
+        return MockIterableOutput(results=[f"out_{inputs.items[0]}_{config.seed}_{call_count}"])
+
+    spec = clean_registry.get("seed-sensitive-unseeded-cache")
+    spec.function(MockIterableInput(items=["a", "a"]), MockToolConfig(param1="v"))
+    assert call_count == 2
+    assert _setup_cache.get_info()["total_entries"] == 0
+
+    seeded = MockToolConfig(param1="v", seed=123)
+    spec.function(MockIterableInput(items=["a", "a"]), seeded)
+    assert call_count == 4
+    assert _setup_cache.get_info()["total_entries"] == 2
+
+    spec.function(MockIterableInput(items=["a", "a"]), seeded)
+    assert call_count == 4
+
+
+def test_seed_sensitive_unroll_preserves_aggregated_failure_success(clean_registry, _setup_cache):
+    """A failed per-item output keeps the stitched unroll result at ``success=False``."""
+
+    @clean_registry.register(
+        key="seed-sensitive-aggregate-success",
+        label="Seed Sensitive Aggregate Success",
+        category="test",
+        input_class=MockIterableInput,
+        config_class=MockToolConfig,
+        output_class=MockIterableOutput,
+        description="Seed-sensitive iterable success aggregation test",
+        iterable_input_field="items",
+        iterable_output_field="results",
+        cacheable=False,
+        seed_sensitive=True,
+    )
+    def run_tool(inputs, config=None, instance=None):
+        item = inputs.items[0]
+        return MockIterableOutput(results=[item], success=item != "bad")
+
+    spec = clean_registry.get("seed-sensitive-aggregate-success")
+    result = spec.function(MockIterableInput(items=["ok", "bad"]), MockToolConfig(param1="v", seed=123))
+    assert result.results == ["ok", "bad"]
+    assert result.success is False
+
+
+class _MockIterableWithCompanion(MockToolOutputBase):
+    """Output with a primary iterable and a parallel per-item companion list."""
+
+    results: list[str] = Field(description="Primary iterable")
+    scores: list[float] = Field(default_factory=list, description="Parallel per-item scores")
+
+
+def test_seed_sensitive_unroll_stitches_companion_lists(clean_registry, _setup_cache):
+    """Parallel per-item lists (logits / scores / psce) are stitched, not inherited from the last call."""
+
+    @clean_registry.register(
+        key="seed-sensitive-companion",
+        label="Seed Sensitive Companion",
+        category="test",
+        input_class=MockIterableInput,
+        config_class=MockToolConfig,
+        output_class=_MockIterableWithCompanion,
+        description="Seed-sensitive iterable with a companion list",
+        iterable_input_field="items",
+        iterable_output_field="results",
+        cacheable=False,
+        seed_sensitive=True,
+    )
+    def run_tool(inputs, config=None, instance=None):
+        item = inputs.items[0]
+        return _MockIterableWithCompanion(
+            results=[f"r_{item}_{config.seed}"],
+            scores=[float(config.seed or 0)],
+        )
+
+    spec = clean_registry.get("seed-sensitive-companion")
+    out = spec.function(MockIterableInput(items=["a", "b", "c"]), MockToolConfig(param1="v", seed=42))
+    assert len(out.results) == 3
+    assert len(out.scores) == 3, "scores should be stitched across all N per-item calls"
+    assert len(set(out.scores)) == 3, "each score should reflect its own derived seed, not the last call's"
+
+
+class _ConfigWithSeedAwarePreprocess(MockToolConfig):
+    """Mock config whose ``preprocess`` records the seed it saw."""
+
+    def preprocess(self, inputs):  # type: ignore[override]
+        seeds_seen.append(self.seed)
+        return inputs
+
+
+seeds_seen: list[int | None] = []
+
+
+def test_seed_sensitive_unroll_preprocesses_with_derived_seed(clean_registry, _setup_cache):
+    """``preprocess`` is deferred to per-item recursive calls so masking sees the derived seed."""
+
+    @clean_registry.register(
+        key="seed-sensitive-preprocess",
+        label="Seed Sensitive Preprocess",
+        category="test",
+        input_class=MockIterableInput,
+        config_class=_ConfigWithSeedAwarePreprocess,
+        output_class=MockIterableOutput,
+        description="Seed-sensitive iterable with a seed-using preprocess",
+        iterable_input_field="items",
+        iterable_output_field="results",
+        cacheable=False,
+        seed_sensitive=True,
+    )
+    def run_tool(inputs, config=None, instance=None):
+        return MockIterableOutput(results=[f"r_{inputs.items[0]}_{config.seed}"])
+
+    seeds_seen.clear()
+    spec = clean_registry.get("seed-sensitive-preprocess")
+    spec.function(MockIterableInput(items=["a", "b", "c"]), _ConfigWithSeedAwarePreprocess(param1="v", seed=42))
+    # Outer preprocess was skipped (no entry with seed=42); each per-item recursive call ran preprocess with its derived seed.
+    assert 42 not in seeds_seen, f"outer preprocess should be skipped when unrolling; saw seeds {seeds_seen}"
+    assert len(seeds_seen) == 3, f"expected 3 per-item preprocess calls, got {len(seeds_seen)}: {seeds_seen}"
+    assert len(set(seeds_seen)) == 3, "each per-item preprocess should see a distinct derived seed"
 
 
 def test_cacheable_on_toolspec(clean_registry):

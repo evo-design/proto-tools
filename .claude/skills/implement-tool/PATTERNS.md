@@ -583,7 +583,7 @@ def run_{tool_key_snake}(inputs, config) -> Output:
 ```
 
 No separate imports needed — caching is built into the `@tool()` decorator.
-Set `generative=True` on sampling, gradient, or design tools whose unseeded calls should diversify. For `cacheable=True` tools, unseeded calls skip cache/dedup and seeded calls remain cacheable; for `cacheable=False` tools, `generative=True` is metadata only.
+Set `seed_sensitive=True` when outputs depend on `config.seed`. For cacheable tools, unseeded calls skip cache/dedup and iterable multi-item dispatches auto-unroll with per-item-derived seeds. For non-cacheable tools, it's metadata only.
 
 ---
 
