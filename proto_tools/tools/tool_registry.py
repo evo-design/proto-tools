@@ -1178,7 +1178,9 @@ def _post_dispatch_cache_and_expand(
         if cache is not None:
             cache.set(key, whole_cache_key, result)
 
-    _warn_on_non_finite_output(result, key)
+    paths = _find_non_finite_paths(result.model_dump())
+    if paths:
+        logger.warning("tool %s: non-finite floats in output at paths=%s", key, paths)
     return result
 
 
@@ -1210,13 +1212,6 @@ def _find_non_finite_paths(obj: Any, _path: str = "", _paths: list[str] | None =
             _find_non_finite_paths(v, sub_path, _paths)
         return _paths
     return _paths
-
-
-def _warn_on_non_finite_output(result: BaseToolOutput, tool_key: str) -> None:
-    """Log one WARNING if *result* contains non-finite floats; do not mutate."""
-    paths = _find_non_finite_paths(result.model_dump())
-    if paths:
-        logger.warning("tool %s: non-finite floats in output at paths=%s", tool_key, paths)
 
 
 def _re_emit_warnings(warning_list: list[warnings.WarningMessage]) -> None:
