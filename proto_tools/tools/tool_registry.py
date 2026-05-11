@@ -547,7 +547,8 @@ class ToolRegistry:
                     if pool is not None and not is_pool_executing() and spec and spec.iterable_input_field is not None:
                         result = pool._parallel_dispatch(key, func, inputs, config)
                         result.tool_id = key
-                        result.success = True
+                        if result.success is None:
+                            result.success = True
                         result.execution_time = time.time() - start_time
                         return _post_dispatch_cache_and_expand(
                             key,
@@ -579,7 +580,8 @@ class ToolRegistry:
                         )
                     if dispatched is not None:
                         dispatched.tool_id = key
-                        dispatched.success = True
+                        if dispatched.success is None:
+                            dispatched.success = True
                         dispatched.execution_time = time.time() - start_time
                         return _post_dispatch_cache_and_expand(
                             key,

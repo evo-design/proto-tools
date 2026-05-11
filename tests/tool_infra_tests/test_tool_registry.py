@@ -680,6 +680,38 @@ def test_try_dispatch_none_falls_through(clean_registry):
         ToolRegistry._try_dispatch = original
 
 
+def test_try_dispatch_preserves_explicit_failure_signal(clean_registry):
+    """Dispatched outputs with ``success=False`` must not be silently flipped to True.
+
+    Regression: the wrapper unconditionally overwrote the dispatch path's explicit
+    failure signal, so consumers hit ``AttributeError`` instead of the
+    ``ToolExecutionError`` raised by ``BaseToolOutput.__getattr__``.
+    """
+    from proto_tools.utils.tool_io import ToolExecutionError
+
+    original = ToolRegistry._try_dispatch
+
+    failure_output = MockToolOutput.model_construct(
+        tool_id="dispatch-preserves-failure",
+        success=False,
+        errors=["simulated dispatch failure"],
+        warnings=[],
+    )
+    ToolRegistry._try_dispatch = classmethod(lambda cls, key, inputs, config: failure_output)
+    try:
+        result = _register_and_run(
+            clean_registry,
+            "dispatch-preserves-failure",
+            lambda inputs, config, instance=None: MockToolOutput(result="local"),
+        )
+        assert result.success is False
+        assert "simulated dispatch failure" in result.errors
+        with pytest.raises(ToolExecutionError, match="simulated dispatch failure"):
+            _ = result.result
+    finally:
+        ToolRegistry._try_dispatch = original
+
+
 def test_retries_exhaust_raises_by_default(clean_registry, fast_retry):
     call_count = 0
 
