@@ -256,7 +256,8 @@ class InverseFoldingOutput(BaseToolOutput):
             input structure. The order matches the input structures order.
     """
 
-    # SerializeAsAny so subclass-only fields (e.g. ProteinMPNNSequences.perplexity) survive model_dump().
+    # SerializeAsAny covers model_dump only; concrete tools must also narrow this
+    # field to their XSequences subclass for model_validate. See ProteinMPNNSampleOutput.
     designed_sequences: list[SerializeAsAny[DesignedSequences]] = Field(
         description="List of sequences predicted for the input structures"
     )

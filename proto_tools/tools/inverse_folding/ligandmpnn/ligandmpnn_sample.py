@@ -35,8 +35,6 @@ LigandMPNNModelType = Literal[
 # ============================================================================
 # Input:
 LigandMPNNSampleInput = InverseFoldingInput
-# Output:
-LigandMPNNSampleOutput = InverseFoldingOutput
 
 
 # Config:
@@ -110,6 +108,19 @@ class LigandMPNNSequences(DesignedSequences):
     ligand_interface_sequence_recovery: list[float] | None = Field(
         default=None,
         description="Per-sequence recovery restricted to ligand-interface residues (0.0-1.0); None when no ligand",
+    )
+
+
+class LigandMPNNSampleOutput(InverseFoldingOutput):
+    """Output of the LigandMPNN sampling tool.
+
+    Attributes:
+        designed_sequences (list[LigandMPNNSequences]): LigandMPNN-designed sequences with
+            per-sequence recovery and optional ligand-interface recovery.
+    """
+
+    designed_sequences: list[LigandMPNNSequences] = Field(  # type: ignore[assignment]
+        description="LigandMPNN-designed sequences with per-sequence recovery and optional ligand-interface recovery.",
     )
 
 
@@ -220,4 +231,4 @@ def run_ligandmpnn_sample(
             )
         )
 
-    return LigandMPNNSampleOutput(designed_sequences=designed_sequences)  # type: ignore[arg-type]
+    return LigandMPNNSampleOutput(designed_sequences=designed_sequences)
