@@ -90,7 +90,7 @@ def test_splice_transformer_prediction_benchmark(request: pytest.FixtureRequest)
     rights = random_dna_sequences(n=16, length=CONTEXT_LENGTH, seed=2)
 
     inputs = SpliceTransformerInput(target_seqs=targets, left_contexts=lefts, right_contexts=rights)
-    config = SpliceTransformerConfig(device="cuda")
+    config = SpliceTransformerConfig()
 
     result = benchmark_twice(request, "splice_transformer", lambda: run_splice_transformer(inputs, config))
     validate_output(result)
