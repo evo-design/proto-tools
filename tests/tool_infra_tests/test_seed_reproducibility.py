@@ -21,9 +21,18 @@ def test_cache_key_with_seed():
     """Seed appears in cache key when set, absent when None."""
     assert '"seed": 42' in BaseConfig(seed=42).cache_key()
     assert '"seed": 43' in BaseConfig(seed=43).cache_key()
-    assert "seed" not in BaseConfig().cache_key()
+    assert '"seed":' not in BaseConfig().cache_key()
     # Two None-seed configs produce the same cache key
     assert BaseConfig().cache_key() == BaseConfig().cache_key()
+
+
+def test_derive_per_item_seeds():
+    """Distinct + reproducible per base seed; unseeded falls back to a fresh random base."""
+    a = BaseConfig(seed=42).derive_per_item_seeds(5)
+    assert a == BaseConfig(seed=42).derive_per_item_seeds(5)  # reproducible
+    assert len(set(a)) == 5  # pairwise distinct
+    assert a != BaseConfig(seed=99).derive_per_item_seeds(5)  # base-seed sensitive
+    assert len(set(BaseConfig().derive_per_item_seeds(5))) == 5  # unseeded fallback still distinct
 
 
 # ============================================================================
@@ -227,3 +236,47 @@ def test_all_tools_seed_reproducibility_persistent(spec: ToolSpec, tmp_path):
         assert_metrics_in_spec(r2)
 
         r1.approx_equal(r2)
+
+
+# ============================================================================
+# Extensive per-input seed distinctness (seed_sensitive iterable tools)
+# ============================================================================
+
+# Known-broken seed_sensitive iterable tools — outputs identical across distinct per-item seeds.
+_PER_INPUT_DIVERSITY_EXCLUDED_KEYS: frozenset[str] = frozenset()
+
+
+@pytest.mark.extensive
+@pytest.mark.parametrize("spec", _build_seed_test_params())
+def test_all_tools_per_input_seed_distinct(spec: ToolSpec, tmp_path):
+    """N identical inputs to a seed-sensitive iterable tool → N distinct outputs.
+
+    Scoped to ``seed_sensitive=True`` iterable tools — those whose contract says
+    "different seeds produce different outputs". Non-seed-sensitive tools
+    (scoring, embedding) are deterministic on input and would falsely fail.
+    """
+    if spec.iterable_input_field is None:
+        pytest.skip(f"{spec.key} has no iterable input field")
+    if not spec.seed_sensitive:
+        pytest.skip(f"{spec.key} is not seed-sensitive — same-input/different-seed is not expected to diverge")
+    if spec.key in _PER_INPUT_DIVERSITY_EXCLUDED_KEYS:
+        pytest.skip(f"{spec.key} excluded from per-input seed diversity test")
+
+    inputs, config = build_inputs_and_config(spec, tmp_path, {"seed": 42})
+
+    items = list(getattr(inputs, spec.iterable_input_field))
+    if not items:
+        pytest.skip(f"{spec.key} example_input has no iterable items")
+    duplicated_items = [items[0], items[0]]
+    inputs_dup = inputs.model_copy(update={spec.iterable_input_field: duplicated_items})
+
+    result = spec.function(inputs_dup, config)
+    assert result.success, f"{spec.key} failed: {result.errors}"
+
+    out_items = getattr(result, spec.iterable_output_field)
+    assert len(out_items) == 2, f"{spec.key} returned {len(out_items)} items, expected 2"
+
+    slice_a = result.model_copy(update={spec.iterable_output_field: [out_items[0]]})
+    slice_b = result.model_copy(update={spec.iterable_output_field: [out_items[1]]})
+    with pytest.raises(AssertionError):
+        slice_a.approx_equal(slice_b)

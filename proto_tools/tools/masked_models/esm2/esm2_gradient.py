@@ -148,7 +148,7 @@ def example_input() -> ESM2GradientInput:
     uses_gpu=True,
     example_input=example_input,
     cacheable=False,
-    generative=True,
+    seed_sensitive=True,
 )
 def run_esm2_gradient(
     inputs: ESM2GradientInput,

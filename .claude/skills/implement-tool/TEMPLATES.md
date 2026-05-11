@@ -234,7 +234,7 @@ def example_input():
     device_count="1",  # Optional: Device count requirement ("1", "1-2", ">=1", "<=2"). Defaults to "1"
     example_input=example_input,  # Factory returning minimal valid input for parametrized tests
     # cacheable=True,  # Optional: enable wrapper cache
-    # generative=True,  # Optional: diversified unseeded sampling/gradient/design outputs
+    # seed_sensitive=True,  # Optional: outputs depend on config.seed (sampling/gradient/design/diffusion)
 )
 def run_{tool_key_snake}(
     inputs: {ToolName}Input, config: {ToolName}Config

@@ -59,6 +59,7 @@ from proto_tools.utils.device import (
     parse_device_string,
     validate_device_allocation,
 )
+from proto_tools.utils.iterable_dispatch import unroll_per_item_seed
 from proto_tools.utils.progress import (
     reset_current_tool_function,
     set_current_tool_function,
@@ -108,9 +109,8 @@ class ToolSpec(BaseModel):
             of results (for ToolPool fan-out).
         cacheable (bool): Whether this tool's results should be cached in the
             program-scoped cache.
-        generative (bool): Whether repeated unseeded calls intentionally
-            diversify outputs. For cacheable tools, unseeded calls skip
-            cache/dedup until seeded.
+        seed_sensitive (bool): Outputs depend on ``config.seed``; iterable
+            multi-item dispatches unroll with per-item-derived seeds.
         post_process_iterable (Callable[[list[Any]], None] | None): Optional in-place
             hook invoked on the stitched ``iterable_output_field`` list after cache
             reconciliation and dedup expansion. Use for batch-level post-processing
@@ -170,10 +170,10 @@ class ToolSpec(BaseModel):
         exclude=True,
         description="Whether this tool's results should be cached in the program-scoped cache",
     )
-    generative: bool = Field(
+    seed_sensitive: bool = Field(
         default=False,
         exclude=True,
-        description="Whether unseeded calls intentionally diversify outputs",
+        description="Whether this tool's outputs depend on the random seed",
     )
     post_process_iterable: Callable[[list[Any]], None] | None = Field(
         default=None,
@@ -290,7 +290,7 @@ class ToolRegistry:
         iterable_input_field: str | None = None,
         iterable_output_field: str | None = None,
         cacheable: bool = False,
-        generative: bool = False,
+        seed_sensitive: bool = False,
         post_process_iterable: Callable[[list[Any]], None] | None = None,
     ) -> Callable[[Callable[..., BaseToolOutput]], Callable[..., BaseToolOutput]]:
         """Decorator to register a tool function and wrap execution with metadata tracking.
@@ -324,9 +324,8 @@ class ToolRegistry:
                 results for ToolPool fan-out and per-item caching.
             cacheable (bool): Whether this tool's results should be cached in the
                 program-scoped cache.
-            generative (bool): Whether repeated unseeded calls intentionally
-                diversify outputs. When true, unseeded cacheable calls skip
-                result cache lookup/storage and iterable dedup.
+            seed_sensitive (bool): Outputs depend on ``config.seed``; iterable
+                multi-item dispatches unroll with per-item-derived seeds.
             post_process_iterable (Callable[[list[Any]], None] | None): Optional
                 in-place hook invoked on the stitched ``iterable_output_field``
                 list after cache reconciliation. Required when a derived field
@@ -372,6 +371,8 @@ class ToolRegistry:
                 inputs: BaseToolInput,
                 config: BaseConfig | None = None,
                 instance: "str | ToolInstance | None" = None,
+                *,
+                _skip_seed_sensitive_cache: bool = False,
             ) -> BaseToolOutput:
                 """Wrapper that tracks execution and populates metadata.
 
@@ -385,7 +386,7 @@ class ToolRegistry:
                 """
                 _func_token = set_current_tool_function(func.__name__)
                 try:
-                    return _wrapper_body(inputs, config, instance)
+                    return _wrapper_body(inputs, config, instance, _skip_seed_sensitive_cache)
                 finally:
                     reset_current_tool_function(_func_token)
 
@@ -393,6 +394,7 @@ class ToolRegistry:
                 inputs: BaseToolInput,
                 config: BaseConfig | None,
                 instance: "str | ToolInstance | None",
+                skip_seed_sensitive_cache: bool,
             ) -> BaseToolOutput:
                 # Auto-configure logging if no handlers exist (one-time, O(1) after first call)
                 from proto_tools.utils.logging_config import _auto_configure_logging
@@ -418,8 +420,21 @@ class ToolRegistry:
                 spec = cls._registry.get(key)
                 cache_enabled = spec.cacheable if spec is not None else cacheable
                 gpu_only_flag = spec.gpu_only if spec is not None else gpu_only
-                generative_tool = spec.generative if spec is not None else generative
-                runtime_cacheable = cache_enabled and (not generative_tool or config.seed is not None)
+                seed_sensitive_tool = spec.seed_sensitive if spec is not None else seed_sensitive
+                # Unroll multi-item dispatch on seed-sensitive tools so identical items diversify.
+                needs_unroll = (
+                    seed_sensitive_tool
+                    and spec is not None
+                    and spec.iterable_input_field is not None
+                    and spec.iterable_output_field is not None
+                    and len(getattr(inputs, spec.iterable_input_field)) > 1
+                )
+                runtime_cacheable = (
+                    cache_enabled
+                    and (not seed_sensitive_tool or config.seed is not None)
+                    and not needs_unroll
+                    and not skip_seed_sensitive_cache
+                )
 
                 # Validate device allocation against tool requirements.
                 # device="cloud" delegates all resource allocation to the registered
@@ -533,7 +548,9 @@ class ToolRegistry:
                 )
 
                 with auto_persist_ctx:
-                    inputs = config.preprocess(inputs)
+                    # When unrolling, defer preprocess to per-item recursive calls so masking sees the derived seed.
+                    if not needs_unroll:
+                        inputs = config.preprocess(inputs)
 
                     # --- Dispatch (pool or local) ---
 
@@ -561,38 +578,40 @@ class ToolRegistry:
                             whole_cache_key,
                         )
 
-                    # Extension point: try external dispatch before local execution
-                    try:
-                        dispatched = cls._try_dispatch(key, inputs, config)
-                    except Exception as e:
-                        logger.error(
-                            "Tool %s: _try_dispatch raised %s: %s",
-                            key,
-                            type(e).__name__,
-                            e,
-                        )
-                        return _make_error_output_or_raise(
-                            output_class,
-                            key,
-                            start_time,
-                            e,
-                            traceback.format_exc(),
-                        )
-                    if dispatched is not None:
-                        dispatched.tool_id = key
-                        if dispatched.success is None:
-                            dispatched.success = True
-                        dispatched.execution_time = time.time() - start_time
-                        return _post_dispatch_cache_and_expand(
-                            key,
-                            spec,
-                            runtime_cacheable,
-                            dispatched,
-                            strip,
-                            deduped,
-                            original_items,
-                            whole_cache_key,
-                        )
+                    # Extension point: try external dispatch before local execution.
+                    # Skipped when unrolling so each per-item recursive call hits _try_dispatch with its derived seed.
+                    if not needs_unroll:
+                        try:
+                            dispatched = cls._try_dispatch(key, inputs, config)
+                        except Exception as e:
+                            logger.error(
+                                "Tool %s: _try_dispatch raised %s: %s",
+                                key,
+                                type(e).__name__,
+                                e,
+                            )
+                            return _make_error_output_or_raise(
+                                output_class,
+                                key,
+                                start_time,
+                                e,
+                                traceback.format_exc(),
+                            )
+                        if dispatched is not None:
+                            dispatched.tool_id = key
+                            if dispatched.success is None:
+                                dispatched.success = True
+                            dispatched.execution_time = time.time() - start_time
+                            return _post_dispatch_cache_and_expand(
+                                key,
+                                spec,
+                                runtime_cacheable,
+                                dispatched,
+                                strip,
+                                deduped,
+                                original_items,
+                                whole_cache_key,
+                            )
 
                     # Carry per-invocation flags (key, gpu_only) to ToolInstance so
                     # the eviction callback can restart the worker instead of
@@ -613,14 +632,30 @@ class ToolRegistry:
                                 # ``ToolInstance.dispatch`` / ``_run_persistent``).
                                 _inv_token = _current_tool_invocation.set({"key": key, "gpu_only": gpu_only_flag})
                                 try:
-                                    result = func(inputs, config, instance)
+                                    if needs_unroll:
+                                        # Pass spec.function (the wrapper) so per-item dispatches cache by derived seed.
+                                        assert spec is not None
+                                        assert spec.iterable_input_field is not None
+                                        assert spec.iterable_output_field is not None
+                                        result = unroll_per_item_seed(
+                                            spec.function,
+                                            inputs,
+                                            config,
+                                            instance,
+                                            spec.iterable_input_field,
+                                            spec.iterable_output_field,
+                                            skip_seed_sensitive_cache=config.seed is None,
+                                        )
+                                    else:
+                                        result = func(inputs, config, instance)
                                 finally:
                                     _current_tool_invocation.reset(_inv_token)
 
                                 # Populate metadata fields
                                 result.tool_id = key
                                 result.execution_time = time.time() - start_time
-                                result.success = True
+                                if result.success is None:
+                                    result.success = True
 
                                 # Add captured warnings to the result (filtered)
                                 if warning_list:
@@ -720,7 +755,7 @@ class ToolRegistry:
                 iterable_input_field=iterable_input_field,
                 iterable_output_field=iterable_output_field,
                 cacheable=cacheable,
-                generative=generative,
+                seed_sensitive=seed_sensitive,
                 post_process_iterable=post_process_iterable,
             )
             return wrapper

@@ -58,7 +58,7 @@ When a code change alters behavior documented in this file, any `SKILL.md`, or `
 | `utils/_worker_bootstrap.py` | `notes/logging.md` (bridge install via `import standalone_helpers`) |
 | `utils/compute_deps.py` | `notes/tool-environments.md` (compatibility matrices) |
 | `utils/base_config.py` (`seed`) | CLAUDE.md (Rules When Implementing Tools), `BaseConfig` docstring |
-| `tools/tool_registry.py` (`cacheable`, `generative`) | CLAUDE.md (Rules When Implementing Tools), `ToolRegistry` docstrings |
+| `tools/tool_registry.py` (`cacheable`, `seed_sensitive`) | CLAUDE.md (Rules When Implementing Tools), `ToolRegistry` docstrings |
 | `tools/tool_registry.py` (`_should_capture_errors`, `_make_error_output_or_raise`) | `notes/error-handling.md`, CLAUDE.md (Rules When Implementing Tools, env var section) |
 | `utils/tool_instance.py` | Docstrings (reference pages auto-generated) |
 | `utils/device_manager.py` | Docstrings (reference pages auto-generated) |
@@ -144,7 +144,7 @@ def run_{tool_key_snake}(inputs: ToolInput, config: ToolConfig, instance: Any = 
 - **Config** (`BaseConfig`): parameters (evalue, threads, temperature). Uses `extra="forbid"`. **Optional at call time**; the `@tool` wrapper defaults `None` to `config_class()`. Inner function takes non-optional `config` since the wrapper guarantees it. All config fields must have defaults. `BaseConfig.seed` is the only standard random seed field and participates in cache keys when set.
 - **Output** (`BaseToolOutput`): results + auto-populated metadata (tool_id, execution_time, success, errors). Uses `extra="ignore"` with warnings for unexpected fields so computed-field JSON round-trips can validate cleanly.
 - **Metrics** (`Metrics`): standardized container for scalar metric values emitted by the tool (plDDT, perplexity, SASA, etc.). Subclass `Metrics` (per-tool or per-category) and declare a `metric_spec: ClassVar[dict[str, MetricSpec]]` mapping each metric name to its type/range. Access values via attribute (`m.plddt`) or mapping (`m["plddt"]`). See `Metrics` / `MetricSpec` in `utils/tool_io.py` for the contract and the `implement-tool` SKILL.md for usage.
-- **`@tool()`**: handles error catching, timing, metadata, registry, default config, device allocation validation, and cache policy. Set `generative=True` on tools whose repeated unseeded calls should produce diversified outputs; for `cacheable=True` tools this skips cache/dedup until `config.seed` is set.
+- **`@tool()`**: handles error catching, timing, metadata, registry, default config, device allocation validation, and cache policy. Set `seed_sensitive=True` on tools whose outputs depend on `config.seed`; cacheable unseeded calls skip cache/dedup, and iterable multi-item dispatches unroll with per-item-derived seeds.
 - **`example_input`**: callable factory returning a minimal valid `Input`. Must be a public named function (not a lambda).
 - **`device_count`** (optional): expected device allocation ("1", "1-2", ">=1"). Defaults to "1".
 - **`gpus_per_instance`**: a `@property` on `BaseConfig` (not a field) that tells `ToolPool` how many GPUs each worker needs. Default is derived from the `device` string (`cpu` → 0, `cuda`/`cuda:N` → 1, `cudaxN`/multi → N, `cloud` → 1). Override only when GPU need is decoupled from the device string (e.g. a separate `use_gpu` toggle, or model-variant-dependent count). `0` declares "no GPUs" and hands scheduling to `cpus_per_instance`.
@@ -237,7 +237,7 @@ Google style everywhere. Enforced by ruff D rules (Google convention) and `tests
 ## Rules When Implementing Tools
 
 - Use `ConfigField()` for Config fields, `Field()` for Input and Output fields; never mix them. `ConfigField` supports `reload_on_change=True` (triggers worker restart) and `include_in_key=False` (excludes from cache key). `include_in_key` defaults to `True`; set it to `False` for fields that don't affect computation (device, verbose, timeout, already excluded on `BaseConfig`)
-- `seed=None` remains cacheable by default. Set `generative=True` on sampling, gradient, or design tools whose repeated unseeded calls should produce diversified outputs; for `cacheable=True` tools this skips cache and iterable dedup until the caller supplies `config.seed`. Do not set `generative=True` merely because a tool accepts or forwards a seed.
+- `seed=None` remains cacheable by default. Set `seed_sensitive=True` when outputs depend on `config.seed`: cacheable unseeded calls skip cache/dedup, and iterable multi-item dispatches auto-unroll with per-item-derived seeds. Do not set it for tools that accept but ignore the seed.
 - Never catch exceptions inside tool functions. The `@tool` decorator **raises** by default; set `PROTO_CAPTURE_ERRORS=1` to opt in to packing exceptions into `success=False` outputs. `MissingAssetError` always raises regardless of the env var (the pytest skip hook in `tests/conftest.py` depends on it). See `notes/error-handling.md`.
 - All biological coordinates are **1-indexed, inclusive**
 - `batch_size` defaults to `1` (prevents OOM). The tool layer owns the batching loop. **Exception**: inverse folding tools default `batch_size` to `num_sequences_per_structure`
