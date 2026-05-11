@@ -60,6 +60,9 @@ def test_all_tools_have_example_input(tool_spec):
         "progen3-sample",
         "proteinmpnn-gradient",
         "proteinmpnn-sample",
+        # PyRosetta protocols whose outputs depend on Rosetta's process-global RNG
+        "pyrosetta-interface-analyzer",
+        "pyrosetta-relax",
         "random-nucleotide-sample",
         "random-protein-sample",
         "rfdiffusion3-design",
@@ -78,10 +81,10 @@ def test_tool_is_seed_sensitive(tool_key):
 
 @pytest.mark.parametrize(
     "tool_key",
-    ["blast-search", "ligandmpnn-score", "proteinmpnn-score", "pyhmmer-hmmsearch", "pyrosetta-relax"],
+    ["blast-search", "ligandmpnn-score", "proteinmpnn-score", "pyhmmer-hmmsearch", "pyrosetta-energy"],
 )
 def test_tool_is_not_seed_sensitive(tool_key):
-    """Deterministic scoring, search, and relax tools stay cacheable across calls."""
+    """Deterministic scoring and search tools stay cacheable across calls."""
     assert ToolRegistry.get(tool_key).seed_sensitive is False
 
 

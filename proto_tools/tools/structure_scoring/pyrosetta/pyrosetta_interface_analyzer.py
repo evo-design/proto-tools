@@ -347,6 +347,7 @@ def example_input() -> Any:
     iterable_input_field="inputs",
     iterable_output_field="results",
     cacheable=True,
+    seed_sensitive=True,
 )
 def run_pyrosetta_interface_analyzer(
     inputs: PyRosettaInterfaceAnalyzerInput,
