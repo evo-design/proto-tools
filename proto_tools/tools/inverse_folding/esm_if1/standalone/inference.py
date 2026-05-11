@@ -30,8 +30,16 @@ class ESMIF1Model:
         self,
         pdb_path: str,
         chain_ids: list[str],
+        target_chain: str | None = None,
     ) -> Any:
         """Load structure and extract coords for the complex.
+
+        Args:
+            pdb_path: Path to PDB file containing the structure.
+            chain_ids: Chain IDs present in the structure.
+            target_chain: Chain ID to designate as the target. When ``None``,
+                falls back to the first entry of ``chain_ids`` (used by the
+                sample path, which treats the first chain as the design target).
 
         Returns:
             Tuple of (all_coords, all_native_seqs, target_chain).
@@ -43,7 +51,13 @@ class ESMIF1Model:
         structure = esm.inverse_folding.util.load_structure(pdb_path)
         structure = biotite.structure.array([atom for atom in structure if not atom.hetero])
         all_coords, all_native_seqs = esm.inverse_folding.multichain_util.extract_coords_from_complex(structure)
-        target_chain = chain_ids[0] if chain_ids else next(iter(all_coords.keys()))
+        if target_chain is None:
+            target_chain = chain_ids[0] if chain_ids else next(iter(all_coords.keys()))
+        if target_chain not in all_coords:
+            raise ValueError(
+                f"esm-if1: target_chain {target_chain!r} not found in structure coords "
+                f"(available chains: {list(all_coords.keys())})"
+            )
         return all_coords, all_native_seqs, target_chain
 
     def _sample_with_fixed_positions(
@@ -182,6 +196,7 @@ class ESMIF1Model:
         self,
         pdb_path: str,
         chain_ids: list[str],
+        target_chain: str,
         sequence: str,
         seed: int | None = None,
         device: str = "cuda",
@@ -190,14 +205,16 @@ class ESMIF1Model:
     ) -> dict[str, Any]:
         """Score a sequence against a structure using the score_complex approach.
 
-        Uses score_sequence_in_complex to score the full sequence with
-        multi-chain structural context (matching ProteinDPO score_complex.py
-        --no_mutations path, equivalent to LigandMPNN default scoring).
+        Uses score_sequence_in_complex to score one chain's sequence within the
+        full multi-chain structural context (matching ProteinDPO score_complex.py
+        --no_mutations path).
 
         Args:
             pdb_path: Path to PDB file containing the structure.
-            chain_ids: List of chain IDs. First chain is the target for scoring.
-            sequence: Protein sequence to score.
+            chain_ids: Chain IDs present in the structure.
+            target_chain: Chain ID whose sequence is being scored.
+            sequence: Target-chain-only sequence to score. Must have length equal
+                to the number of residues in ``target_chain``.
             seed: Random seed.
             device: Device to run on.
             weights_variant: 'esmif' for vanilla or 'protein_dpo' for DPO weights.
@@ -213,7 +230,7 @@ class ESMIF1Model:
 
         import esm.inverse_folding.multichain_util
 
-        all_coords, _all_native_seqs, target_chain = self._load_structure(pdb_path, chain_ids)
+        all_coords, _all_native_seqs, target_chain = self._load_structure(pdb_path, chain_ids, target_chain)
 
         set_torch_seed(seed)
         # Score the sequence in the complex context
@@ -333,6 +350,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         return _model.score(
             pdb_path=pdb_path,
             chain_ids=input_dict["chain_ids"],
+            target_chain=input_dict["target_chain"],
             sequence=input_dict["sequence"],
             seed=input_dict["seed"],
             device=input_dict["device"],
