@@ -45,7 +45,7 @@ class ProGen3SampleConfig(CausalModelSampleConfig):
     forward (N→C) and reverse (C→N) autoregressive generation.
 
     Attributes:
-        batch_size (int): Number of sequences to process simultaneously.
+        batch_size (int): Number of prompts to process simultaneously on GPU.
         model_checkpoint (PROGEN3_MODEL_CHECKPOINTS): ProGen3 weights variant. Sizes range
             from 112M (fastest) to 3B (highest quality).
         local_path (str | None): Override HuggingFace download with a local weights directory.
@@ -55,7 +55,6 @@ class ProGen3SampleConfig(CausalModelSampleConfig):
         top_p (float): Nucleus sampling threshold over per-position token probabilities.
         max_new_tokens (int): Maximum new tokens to generate per prompt (excludes prompt).
         min_new_tokens (int): Minimum new tokens to generate per prompt before stopping is allowed.
-        num_sequences (int): Number of sequences to generate per prompt.
         prepend_prompt (bool): If ``True``, returned sequences include the prompt and newly
             generated residues; if ``False``, only the newly generated residues.
     """
@@ -104,12 +103,6 @@ class ProGen3SampleConfig(CausalModelSampleConfig):
         title="Min New Tokens",
         description="Minimum number of new tokens to generate per prompt",
         advanced=True,
-    )
-    num_sequences: int = ConfigField(
-        default=1,
-        ge=1,
-        title="Num Sequences",
-        description="Number of sequences to generate per prompt",
     )
 
 
@@ -200,7 +193,6 @@ def run_progen3_sample(
             "top_p": config.top_p,
             "max_new_tokens": config.max_new_tokens,
             "min_new_tokens": config.min_new_tokens,
-            "num_sequences": config.num_sequences,
             "batch_size": config.batch_size,
             "device": config.device,
             "verbose": config.verbose,
@@ -235,7 +227,6 @@ def run_progen3_sample(
             "temperature": config.temperature,
             "top_p": config.top_p,
             "max_new_tokens": config.max_new_tokens,
-            "num_sequences": config.num_sequences,
             "prepend_prompt": config.prepend_prompt,
         },
         sequences=sequences,

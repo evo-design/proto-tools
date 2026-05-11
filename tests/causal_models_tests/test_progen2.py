@@ -55,6 +55,32 @@ def test_progen2_sample_config_validation(config_kwargs, match):
         ProGen2SampleConfig(**config_kwargs)
 
 
+def test_progen2_sample_dispatches_one_sequence_per_prompt(monkeypatch):
+    """Seed-sensitive unroll keeps a one-to-one prompt/output mapping."""
+    captured_payloads = []
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        assert toolkit == "progen2"
+        assert config is not None
+        assert instance is None
+        captured_payloads.append(payload)
+        prompt = payload["prompts"][0]
+        return {"sequences": [f"{prompt}_sample"], "logits": None}
+
+    monkeypatch.setattr(
+        "proto_tools.tools.causal_models.progen2.progen2_sample.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+
+    result = run_progen2_sample(
+        ProGen2SampleInput(prompts=["1AAAA", "1CCCC"]),
+        ProGen2SampleConfig(seed=7),
+    )
+
+    assert result.sequences == ["1AAAA_sample", "1CCCC_sample"]
+    assert [payload["prompts"] for payload in captured_payloads] == [["1AAAA"], ["1CCCC"]]
+
+
 # ---------------------------------------------------------------------------
 # Integration tests
 # ---------------------------------------------------------------------------

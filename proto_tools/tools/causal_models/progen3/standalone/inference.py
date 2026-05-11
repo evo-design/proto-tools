@@ -112,7 +112,6 @@ class ProGen3Model:
         top_p: float = 0.95,
         max_new_tokens: int = 256,
         min_new_tokens: int = 1,
-        num_sequences: int = 1,
         batch_size: int = 1,
         device: str = "cuda",
         verbose: bool = False,
@@ -126,7 +125,6 @@ class ProGen3Model:
             top_p (float): Nucleus sampling parameter.
             max_new_tokens (int): Maximum new tokens to generate.
             min_new_tokens (int): Minimum new tokens to generate.
-            num_sequences (int): Number of sequences per prompt.
             batch_size (int): Batch size for generation.
             device (str): Device to run on.
             verbose (bool): Whether to log progress.
@@ -165,7 +163,7 @@ class ProGen3Model:
             results = list(
                 generator.generate(
                     prompt=prompt,
-                    num_sequences=num_sequences,
+                    num_sequences=1,
                     min_new_tokens=min_new_tokens,
                     max_new_tokens=max_new_tokens,
                 )
@@ -449,7 +447,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             top_p=input_dict["top_p"],
             max_new_tokens=input_dict["max_new_tokens"],
             min_new_tokens=input_dict["min_new_tokens"],
-            num_sequences=input_dict["num_sequences"],
             batch_size=input_dict["batch_size"],
             device=input_dict["device"],
             verbose=input_dict["verbose"],

@@ -111,9 +111,8 @@ Returns `log_likelihood`, `avg_log_likelihood`, and `perplexity` per sequence, p
 | `top_p` | `float` | `0.95` | Nucleus sampling threshold |
 | `max_new_tokens` | `int` | `256` | Max new tokens to generate (excludes prompt) |
 | `min_new_tokens` | `int` | `1` | Min new tokens before stopping |
-| `num_sequences` | `int` | `1` | Sequences to generate per prompt |
 | `prepend_prompt` | `bool` | `True` | Include prompt residues in output sequence |
-| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
+| `batch_size` | `int` | `1` | Prompts per GPU forward pass |
 
 ### Scoring (`ProGen3ScoringConfig`)
 
@@ -209,10 +208,9 @@ print(result.sequences[0])
 ```
 
 ```python
-# Example 3: Batch generation with diversity
+# Example 3: Batch generation
 inputs = ProGen3SampleInput(prompts=["MKTL", "MVLS", ""])
 config = ProGen3SampleConfig(
-    num_sequences=3,
     temperature=0.5,
     max_new_tokens=150,
 )

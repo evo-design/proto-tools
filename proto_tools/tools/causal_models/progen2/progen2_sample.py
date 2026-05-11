@@ -44,7 +44,7 @@ class ProGen2SampleOutput(CausalModelSampleOutput):
     Attributes:
         sequences (list[str]): Generated protein sequences.
         logits (list[list[list[float]]] | None): Per-position logits for each
-            generated sequence (shape: [num_sequences, generated_len, vocab_size]).
+            generated sequence (shape: [n_outputs, generated_len, vocab_size]).
     """
 
     logits: list[list[list[float]]] | None = Field(
@@ -75,7 +75,6 @@ class ProGen2SampleConfig(CausalModelSampleConfig):
         strip_special_tokens (bool): Strip ProGen2 start/stop sentinel tokens (``1``/``2``)
             from output.
         return_logits (bool): Include per-position logits in the output.
-        num_samples (int): Independent samples drawn per prompt; raise for diversity.
     """
 
     temperature: float = ConfigField(
@@ -135,12 +134,6 @@ class ProGen2SampleConfig(CausalModelSampleConfig):
         default=False,
         description="Include per-position logits in the output (large; disable to save memory)",
         advanced=True,
-    )
-    num_samples: int = ConfigField(
-        title="Samples Per Prompt",
-        default=1,
-        ge=1,
-        description="Independent samples drawn per prompt; raise for diversity",
     )
 
 
@@ -234,7 +227,6 @@ def run_progen2_sample(
             "top_p": config.top_p,
             "top_k": config.top_k,
             "max_length": config.max_length,
-            "num_samples": config.num_samples,
             "truncate_at_stop": config.truncate_at_stop,
             "strip_special_tokens": config.strip_special_tokens,
             "prepend_prompt": config.prepend_prompt,

@@ -165,7 +165,6 @@ class ProGen2Model:
         top_p: float = 0.95,
         top_k: int = 0,
         max_length: int = 256,
-        num_samples: int = 1,
         truncate_at_stop: bool = True,
         strip_special_tokens: bool = True,
         prepend_prompt: bool = True,
@@ -183,7 +182,6 @@ class ProGen2Model:
             top_p: Nucleus sampling probability
             top_k: Top-k sampling (0 to disable)
             max_length: Maximum total sequence length
-            num_samples: Independent samples drawn per prompt
             truncate_at_stop: Whether to stop at EOS tokens
             strip_special_tokens: Whether to remove start and stop tokens
             prepend_prompt: Whether to include prompt in output
@@ -229,45 +227,35 @@ class ProGen2Model:
                     max_length=max_length,
                     top_p=top_p,
                     top_k=top_k if top_k > 0 else None,
-                    num_return_sequences=num_samples,
+                    num_return_sequences=1,
                     pad_token_id=self.pad_token_id,
                     return_dict_in_generate=True,
                     output_scores=return_logits,
                 )
                 tokens_batch = output.sequences
 
-                # Stack scores into (batch * num_samples, num_generated_tokens, vocab_size)
-                # output.scores is a tuple of tensors, each of shape (batch * num_samples, vocab_size)
                 stacked_logits = torch.stack(output.scores, dim=1) if return_logits and output.scores else None
 
-                # Decode: generate returns (batch * num_samples, seq_len)
                 for prompt_idx, prompt in enumerate(batch_prompts):
-                    for seq_idx in range(num_samples):
-                        flat_idx = prompt_idx * num_samples + seq_idx
-                        token_ids = tokens_batch[flat_idx].tolist()
+                    token_ids = tokens_batch[prompt_idx].tolist()
+                    token_ids = [t for t in token_ids if t != self.pad_token_id]
+                    seq = self.tokenizer.decode(token_ids)
 
-                        # Strip padding tokens
-                        token_ids = [t for t in token_ids if t != self.pad_token_id]
-                        seq = self.tokenizer.decode(token_ids)
+                    if truncate_at_stop:
+                        seq = self._truncate_at_terminals(seq)
 
-                        if truncate_at_stop:
-                            seq = self._truncate_at_terminals(seq)
+                    if not prepend_prompt and seq.startswith(prompt):
+                        seq = seq[len(prompt) :]
 
-                        # Be careful removing prompt if generation modified it or if special tokens overlap
-                        if not prepend_prompt and seq.startswith(prompt):
-                            seq = seq[len(prompt) :]
+                    if strip_special_tokens:
+                        seq = seq.lstrip(PROGEN2_START_TOKEN).rstrip(PROGEN2_END_TOKEN)
 
-                        if strip_special_tokens:
-                            seq = seq.lstrip(PROGEN2_START_TOKEN).rstrip(PROGEN2_END_TOKEN)
+                    all_sequences.append(seq)
 
-                        all_sequences.append(seq)
-
-                        # Collect logits for this sequence
-                        # Note: model outputs 32 logits but tokenizer has 30 tokens
-                        if stacked_logits is not None:
-                            all_logits.append(stacked_logits[flat_idx, :, : len(PROGEN2_VOCAB)].float().cpu())
-                        else:
-                            all_logits.append(None)
+                    if stacked_logits is not None:
+                        all_logits.append(stacked_logits[prompt_idx, :, : len(PROGEN2_VOCAB)].float().cpu())
+                    else:
+                        all_logits.append(None)
 
         return {
             "sequences": all_sequences,
@@ -400,7 +388,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             top_p=input_dict["top_p"],
             top_k=input_dict["top_k"],
             max_length=input_dict["max_length"],
-            num_samples=input_dict["num_samples"],
             truncate_at_stop=input_dict["truncate_at_stop"],
             strip_special_tokens=input_dict["strip_special_tokens"],
             prepend_prompt=input_dict["prepend_prompt"],

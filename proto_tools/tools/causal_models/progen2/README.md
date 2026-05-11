@@ -100,8 +100,7 @@ these to get the total log-likelihood.
 | `truncate_at_stop` | `bool` | `True` | Truncate at stop tokens (`1` or `2`) |
 | `strip_special_tokens` | `bool` | `True` | Remove special tokens from output |
 | `prepend_prompt` | `bool` | `True` | Include prompt in output sequence |
-| `num_samples` | `int` | `1` | Independent samples drawn per prompt |
-| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
+| `batch_size` | `int` | `1` | Prompts per GPU forward pass |
 | `return_logits` | `bool` | `False` | Include per-position logits in output |
 
 ### Scoring (`ProGen2ScoringConfig`)
@@ -185,7 +184,7 @@ result = run_progen2_sample(inputs, config)
 print(f"Generated: {result.sequences[0]}")
 ```
 
-**Example 2: Batch generation with diversity**
+**Example 2: Batch generation**
 ```python
 from proto_tools.tools.causal_models.progen2 import (
     run_progen2_sample, ProGen2SampleInput, ProGen2SampleConfig
