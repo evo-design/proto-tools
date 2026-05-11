@@ -155,7 +155,17 @@ class FAMPNNSequences(DesignedSequences):
     psce: list[list[float]] = Field(description="Per-residue predicted sidechain error (Angstroms)")
 
 
-FAMPNNSampleOutput = InverseFoldingOutput
+class FAMPNNSampleOutput(InverseFoldingOutput):
+    """Output of the FAMPNN sampling tool.
+
+    Attributes:
+        designed_sequences (list[FAMPNNSequences]): FAMPNN-designed sequences with
+            full-atom sidechain coordinates and per-residue pSCE.
+    """
+
+    designed_sequences: list[FAMPNNSequences] = Field(  # type: ignore[assignment]
+        description="FAMPNN-designed sequences with full-atom sidechain coordinates and per-residue pSCE.",
+    )
 
 
 # ============================================================================
@@ -266,4 +276,4 @@ def run_fampnn_sample(
             )
         )
 
-    return FAMPNNSampleOutput(designed_sequences=designed_sequences)  # type: ignore[arg-type]
+    return FAMPNNSampleOutput(designed_sequences=designed_sequences)

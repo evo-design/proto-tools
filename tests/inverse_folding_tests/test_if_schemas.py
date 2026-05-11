@@ -136,23 +136,6 @@ def test_output_iter():
     assert list(output) == [DesignedSequences(sequences=["MVLSP", "GGGS"])]
 
 
-def test_output_preserves_subclass_fields_on_dump():
-    """Subclass-only fields must survive model_dump() on a polymorphic list.
-
-    Without `SerializeAsAny`, Pydantic serializes list items against the
-    declared base type (`DesignedSequences`), silently dropping fields
-    like `perplexity` / `sequence_recovery` on the HTTP/Modal boundary.
-    """
-    subclass_item = _MockDesignedSequences(sequences=["MVLSP", "GGGS"], custom_metric=[0.1, 0.2])
-    output = InverseFoldingOutput(designed_sequences=[subclass_item])
-    dumped = output.model_dump()
-    assert dumped["designed_sequences"][0]["sequences"] == ["MVLSP", "GGGS"]
-    assert dumped["designed_sequences"][0]["custom_metric"] == [0.1, 0.2]
-    # mode="json" is the path taken by the HTTP/Modal serializer.
-    dumped_json = output.model_dump(mode="json")
-    assert dumped_json["designed_sequences"][0]["custom_metric"] == [0.1, 0.2]
-
-
 # ── Validation: invalid chains_to_redesign and fixed_positions selections ───────────────────────
 
 
@@ -252,3 +235,91 @@ def test_sequence_structure_pair_roundtrip():
     restored = SequenceStructurePair(**original.model_dump(mode="json"))
     assert restored.sequence == "MVLSP"
     assert restored.structure.structure == original.structure.structure
+
+
+# ── Subclass-field roundtrip for inverse-folding sample outputs ────────────────
+
+
+def _proteinmpnn_payload():
+    from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample import (
+        ProteinMPNNSampleOutput,
+        ProteinMPNNSequences,
+    )
+
+    item = ProteinMPNNSequences(
+        sequences=["MVLSP", "GGGSA"],
+        perplexity=[1.5, 1.8],
+        sequence_recovery=[0.42, 0.31],
+    )
+    return ProteinMPNNSampleOutput, ProteinMPNNSequences, item
+
+
+def _fampnn_payload():
+    from proto_tools.tools.inverse_folding.fampnn.fampnn_sample import (
+        FAMPNNSampleOutput,
+        FAMPNNSequences,
+    )
+
+    item = FAMPNNSequences(
+        sequences=["MVLSP"],
+        output_pdb_strings=["ATOM 1 ..."],
+        psce=[[0.12, 0.34, 0.56, 0.78, 0.90]],
+    )
+    return FAMPNNSampleOutput, FAMPNNSequences, item
+
+
+def _ligandmpnn_payload():
+    from proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample import (
+        LigandMPNNSampleOutput,
+        LigandMPNNSequences,
+    )
+
+    item = LigandMPNNSequences(
+        sequences=["MVLSP", "GGGSA"],
+        sequence_recovery=[0.40, 0.55],
+        ligand_interface_sequence_recovery=[0.20, 0.35],
+    )
+    return LigandMPNNSampleOutput, LigandMPNNSequences, item
+
+
+def _esm_if1_payload():
+    from proto_tools.tools.inverse_folding.esm_if1.esm_if1_sample import (
+        ESMIF1SampleOutput,
+        ESMIF1Sequences,
+    )
+
+    item = ESMIF1Sequences(
+        sequences=["MVLSP"],
+        log_likelihoods=[-12.34],
+    )
+    return ESMIF1SampleOutput, ESMIF1Sequences, item
+
+
+@pytest.mark.parametrize(
+    ("payload_factory", "expected_extras"),
+    [
+        pytest.param(_proteinmpnn_payload, ("perplexity", "sequence_recovery"), id="proteinmpnn"),
+        pytest.param(_fampnn_payload, ("output_pdb_strings", "psce"), id="fampnn"),
+        pytest.param(
+            _ligandmpnn_payload,
+            ("sequence_recovery", "ligand_interface_sequence_recovery"),
+            id="ligandmpnn",
+        ),
+        pytest.param(_esm_if1_payload, ("log_likelihoods",), id="esm_if1"),
+    ],
+)
+def test_sample_output_polymorphism_roundtrip(payload_factory, expected_extras):
+    """Concrete XSampleOutput must reconstruct its XSequences subclass on model_validate."""
+    output_cls, item_cls, original_item = payload_factory()
+    original = output_cls(designed_sequences=[original_item])
+    restored = output_cls.model_validate(original.model_dump(mode="json"))
+    restored_item = restored.designed_sequences[0]
+
+    assert isinstance(restored_item, item_cls), (
+        f"{output_cls.__name__}.designed_sequences[0] roundtripped as "
+        f"{type(restored_item).__name__} instead of {item_cls.__name__}"
+    )
+    for name in expected_extras:
+        assert getattr(restored_item, name) == getattr(original_item, name), (
+            f"{output_cls.__name__}: model_validate dropped subclass field {name!r}"
+        )

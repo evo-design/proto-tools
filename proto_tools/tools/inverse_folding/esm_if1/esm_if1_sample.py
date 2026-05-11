@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 # Data Models
 # ============================================================================
 ESMIF1SampleInput = InverseFoldingInput
-ESMIF1SampleOutput = InverseFoldingOutput
 
 
 class ESMIF1SampleConfig(InverseFoldingConfig):
@@ -70,6 +69,19 @@ class ESMIF1Sequences(DesignedSequences):
     """
 
     log_likelihoods: list[float] = Field(description="Average log likelihood of each designed sequence under the model")
+
+
+class ESMIF1SampleOutput(InverseFoldingOutput):
+    """Output of the ESM-IF1 sampling tool.
+
+    Attributes:
+        designed_sequences (list[ESMIF1Sequences]): ESM-IF1/ProteinDPO-designed sequences
+            with per-sequence average log-likelihoods.
+    """
+
+    designed_sequences: list[ESMIF1Sequences] = Field(  # type: ignore[assignment]
+        description="ESM-IF1/ProteinDPO-designed sequences with per-sequence average log-likelihoods.",
+    )
 
 
 # ============================================================================
@@ -167,4 +179,4 @@ def run_esm_if1_sample(
             )
         )
 
-    return ESMIF1SampleOutput(designed_sequences=designed_sequences)  # type: ignore[arg-type]
+    return ESMIF1SampleOutput(designed_sequences=designed_sequences)
