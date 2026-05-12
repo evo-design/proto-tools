@@ -45,7 +45,8 @@ class ProGen3SampleConfig(CausalModelSampleConfig):
     forward (N→C) and reverse (C→N) autoregressive generation.
 
     Attributes:
-        batch_size (int): Number of prompts to process simultaneously on GPU.
+        batch_size (int): Maximum number of same-length prompts to process
+            simultaneously on GPU.
         model_checkpoint (PROGEN3_MODEL_CHECKPOINTS): ProGen3 weights variant. Sizes range
             from 112M (fastest) to 3B (highest quality).
         local_path (str | None): Override HuggingFace download with a local weights directory.
@@ -89,6 +90,13 @@ class ProGen3SampleConfig(CausalModelSampleConfig):
         le=1.0,
         title="Top-p",
         description="Nucleus sampling cutoff over per-position token probabilities",
+        advanced=True,
+    )
+    batch_size: int = ConfigField(
+        default=1,
+        ge=1,
+        title="Batch Size",
+        description="Same-length prompts per GPU forward pass; raise for throughput, lower if OOM",
         advanced=True,
     )
     max_new_tokens: int = ConfigField(

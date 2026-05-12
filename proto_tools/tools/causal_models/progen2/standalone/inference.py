@@ -8,7 +8,6 @@ import json
 import sys
 from typing import Any, Literal
 
-import torch
 from standalone_helpers import get_logger, move_model_to_device, serialize_output, set_torch_seed
 from tqdm import tqdm
 
@@ -115,6 +114,8 @@ class ProGen2Model:
     def unload(self, verbose: bool = False) -> None:
         """Unload model to free GPU memory."""
         if self._loaded and self.device != "cpu":
+            import torch
+
             if verbose:
                 logger.info(f"Unloading {self.__class__.__name__} from GPU")
             self.model = self.model.to("cpu")
@@ -126,8 +127,10 @@ class ProGen2Model:
         self,
         sequences: list[str],
         pad_left: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor, list[int]]:
+    ) -> tuple[Any, Any, list[int]]:
         """Tokenize and pad sequences into a batch with attention mask."""
+        import torch
+
         if not sequences:
             raise ValueError("progen2: cannot prepare empty batch")
         assert self.pad_token_id is not None, "Model not loaded; call load() first"
@@ -152,7 +155,6 @@ class ProGen2Model:
     def _truncate_at_terminals(self, sequence: str) -> str:
         """Truncate sequence at the first terminal token ('1' or '2') after position 0."""
         terminals = [PROGEN2_START_TOKEN, PROGEN2_END_TOKEN]
-        # Start search from index 1 to avoid catching the start token if it exists at index 0.
         indices = [sequence.find(t, 1) for t in terminals]
         valid_indices = [i for i in indices if i != -1]
         if valid_indices:
@@ -198,6 +200,8 @@ class ProGen2Model:
                 - "sequences": List of generated strings
                 - "logits": List of logits tensors (if return_logits=True), else None
         """
+        import torch
+
         # Lazy load.
         if not self._loaded:
             self.load(device, verbose)
@@ -212,7 +216,7 @@ class ProGen2Model:
 
         # Batch processing logic
         all_sequences: list[str] = []
-        all_logits: list[torch.Tensor | None] = []
+        all_logits: list[Any | None] = []
         batches = [prompts[i : i + batch_size] for i in range(0, len(prompts), batch_size)]
 
         with torch.no_grad():
@@ -295,6 +299,8 @@ class ProGen2Model:
                 - "metrics": List of metric dicts with log_likelihood, avg_log_likelihood, perplexity
                 - "vocab": Vocabulary list
         """
+        import torch
+
         # Lazy load on first call or device change
         if not self._loaded:
             self.load(device, verbose)
@@ -312,7 +318,7 @@ class ProGen2Model:
         ]
 
         # Batch processing logic
-        all_logits: list[torch.Tensor] = []
+        all_logits: list[Any] = []
         all_metrics: list[dict[str, float]] = []
         batches = [normalized_seqs[i : i + batch_size] for i in range(0, len(normalized_seqs), batch_size)]
 

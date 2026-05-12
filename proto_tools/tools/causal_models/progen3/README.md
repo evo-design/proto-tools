@@ -70,6 +70,10 @@ Generates protein sequences autoregressively from a prompt:
 3. Special tokens and direction markers are stripped from the output
 4. If `prepend_prompt=False`, prompt residues are removed
 
+Prompts with the same tokenized prefix length are grouped into GPU generation
+batches up to `batch_size`. Prompts with different tokenized lengths are split
+into separate generation batches so padding is never treated as model context.
+
 The `direction` config controls generation direction:
 - `direction="forward"` (default): N→C generation, extending from the N-terminus
 - `direction="reverse"`: C→N generation, extending from the C-terminus
@@ -112,7 +116,7 @@ Returns `log_likelihood`, `avg_log_likelihood`, and `perplexity` per sequence, p
 | `max_new_tokens` | `int` | `256` | Max new tokens to generate (excludes prompt) |
 | `min_new_tokens` | `int` | `1` | Min new tokens before stopping |
 | `prepend_prompt` | `bool` | `True` | Include prompt residues in output sequence |
-| `batch_size` | `int` | `1` | Prompts per GPU forward pass |
+| `batch_size` | `int` | `1` | Same-length prompts per GPU forward pass |
 
 ### Scoring (`ProGen3ScoringConfig`)
 
