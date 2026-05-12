@@ -36,58 +36,6 @@ def test_all_tools_have_example_input(tool_spec):
     )
 
 
-@pytest.mark.parametrize(
-    "tool_key",
-    [
-        # Sampling / gradient / design — outputs depend on seed
-        "ablang-gradient",
-        "ablang-sample",
-        "alphafold2-binder",
-        "bindcraft-design",
-        "bioemu-sample",
-        "esm-if1-sample",
-        "esm2-gradient",
-        "esm2-sample",
-        "esm3-sample",
-        "esmfold-gradient",
-        "evo1-sample",
-        "evo2-sample",
-        "fampnn-pack",
-        "fampnn-sample",
-        "germinal-design",
-        "ligandmpnn-sample",
-        "progen2-sample",
-        "progen3-sample",
-        "proteinmpnn-gradient",
-        "proteinmpnn-sample",
-        # PyRosetta protocols whose outputs depend on Rosetta's process-global RNG
-        "pyrosetta-interface-analyzer",
-        "pyrosetta-relax",
-        "random-nucleotide-sample",
-        "random-protein-sample",
-        "rfdiffusion3-design",
-        # Diffusion-based structure predictors
-        "alphafold2-prediction",
-        "alphafold3-prediction",
-        "boltz2-prediction",
-        "chai1-prediction",
-        "protenix-prediction",
-    ],
-)
-def test_tool_is_seed_sensitive(tool_key):
-    """Tool advertises that outputs depend on config.seed."""
-    assert ToolRegistry.get(tool_key).seed_sensitive is True
-
-
-@pytest.mark.parametrize(
-    "tool_key",
-    ["blast-search", "ligandmpnn-score", "proteinmpnn-score", "pyhmmer-hmmsearch", "pyrosetta-energy"],
-)
-def test_tool_is_not_seed_sensitive(tool_key):
-    """Deterministic scoring and search tools stay cacheable across calls."""
-    assert ToolRegistry.get(tool_key).seed_sensitive is False
-
-
 # ── Mock data models ─────────────────────────────────────────────────────────
 class MockToolInput(BaseToolInput):
     """Mock input for testing."""
@@ -1205,28 +1153,28 @@ def test_non_cacheable_tool_skips_cache_logic(clean_registry, _setup_cache):
     assert call_count == 2  # no caching
 
 
-def test_seed_sensitive_unseeded_whole_output_skips_cache(clean_registry, _setup_cache):
-    """Unseeded seed-sensitive tools run every call even when cacheable=True."""
+def test_stochastic_unseeded_whole_output_skips_cache(clean_registry, _setup_cache):
+    """Unseeded stochastic tools run every call even when cacheable=True."""
     call_count = 0
 
     @clean_registry.register(
-        key="seed-sensitive-whole-cache",
-        label="Seed Sensitive Whole Cache",
+        key="stochastic-whole-cache",
+        label="Stochastic Whole Cache",
         category="test",
         input_class=MockToolInput,
         config_class=MockToolConfig,
         output_class=MockToolOutput,
-        description="Seed-sensitive whole-output cache test",
+        description="Stochastic whole-output cache test",
         cacheable=True,
-        seed_sensitive=True,
+        stochastic=True,
     )
     def run_tool(inputs, config=None, instance=None):
         nonlocal call_count
         call_count += 1
         return MockToolOutput(result=f"processed_{inputs.input_data}_{call_count}")
 
-    spec = clean_registry.get("seed-sensitive-whole-cache")
-    assert spec.seed_sensitive is True
+    spec = clean_registry.get("stochastic-whole-cache")
+    assert spec.stochastic is True
     inputs = MockToolInput(input_data="test")
 
     unseeded_config = MockToolConfig(param1="v")

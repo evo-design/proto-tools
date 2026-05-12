@@ -153,14 +153,18 @@ _SEED_NON_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
 
 
 def _build_seed_test_params() -> list:
-    """Build pytest parametrize params for seed reproducibility across all tools.
+    """Build pytest parametrize params for seed reproducibility across stochastic tools.
 
+    Filtered to ``stochastic=True`` tools — same-seed-same-output is only
+    meaningful where the tool's algorithm actually consumes the seed.
     Unlike env-report tests, this does NOT deduplicate by directory — seed
     behavior is per-tool, not per-environment.
     """
     params = []
 
     for spec in sorted(ToolRegistry.list_all(), key=lambda s: s.key):
+        if not spec.stochastic:
+            continue
         if spec.category in EXCLUDED_CATEGORIES:
             continue
         if spec.key in _SEED_EXCLUDED_KEYS:

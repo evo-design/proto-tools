@@ -10,10 +10,12 @@ auto-selects the strategy:
   (strip cached items, dispatch uncached only, stitch results back).
 - **Non-iterable tools** → whole-output cache (hash full inputs + config).
 
-Cacheable tools registered as ``seed_sensitive=True`` skip cache/dedup while
-``config.seed is None``. Seeded calls remain cacheable. The framework does
-not unroll multi-item dispatches — each tool is responsible for advancing
-its own RNG state per item within a batched call.
+Cacheable tools registered as ``stochastic=True`` skip cache/dedup while
+``config.seed is None``. Seeded stochastic calls remain cacheable but use
+the whole-call cache rather than per-item cache (so duplicate iterable
+items reach the tool and diverge via per-item RNG advancement). The
+framework does not unroll multi-item dispatches — each tool is responsible
+for advancing its own RNG state per item within a batched call.
 
 Each Program instance maintains its own isolated cache using Python's
 contextvars.

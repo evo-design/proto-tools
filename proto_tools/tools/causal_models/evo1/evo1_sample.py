@@ -141,7 +141,7 @@ def example_input() -> Any:
     output_class=Evo1SampleOutput,
     description="Sample DNA sequences using Evo1 language model",
     uses_gpu=True,
-    seed_sensitive=True,
+    stochastic=True,
     example_input=example_input,
     iterable_input_field="prompts",
     iterable_output_field="sequences",

@@ -170,7 +170,7 @@ def example_input() -> Any:
     output_class=ESM3SampleOutput,
     description="Sample masked positions in protein sequences using ESM3 language model",
     uses_gpu=True,
-    seed_sensitive=True,
+    stochastic=True,
     example_input=example_input,
     iterable_input_field="sequences",
     iterable_output_field="sequences",

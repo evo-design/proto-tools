@@ -106,11 +106,17 @@ class ToolSpec(BaseModel):
             of items (for ToolPool fan-out).
         iterable_output_field (str | None): Output field name containing the iterable list
             of results (for ToolPool fan-out).
-        cacheable (bool): Whether this tool's results should be cached in the
-            program-scoped cache.
-        seed_sensitive (bool): Outputs depend on ``config.seed``. Cacheable
-            unseeded calls skip cache/dedup so repeat dispatches advance the
-            RNG naturally.
+        cacheable (bool): Declares that this tool's output is a
+            deterministic function of (input, config), making it eligible
+            for the program-scoped cache and the framework's iterable
+            optimizations (dedup, ``post_process_iterable``). Does not
+            command caching: actual caching depends on an active program
+            cache and (for stochastic tools) a seed being set.
+        stochastic (bool): Outputs depend on ``config.seed``. Three runtime
+            effects: (1) unseeded calls skip the cache; (2) iterable
+            dispatches skip dedup so duplicate items reach the tool and
+            diverge via per-item RNG advancement; (3) cacheable seeded
+            calls use the whole-call cache rather than per-item cache.
         post_process_iterable (Callable[[list[Any]], None] | None): Optional in-place
             hook invoked on the stitched ``iterable_output_field`` list after cache
             reconciliation and dedup expansion. Use for batch-level post-processing
@@ -168,9 +174,16 @@ class ToolSpec(BaseModel):
     cacheable: bool = Field(
         default=False,
         exclude=True,
-        description="Whether this tool's results should be cached in the program-scoped cache",
+        description=(
+            "Declares that this tool's output is a deterministic function of "
+            "(input, config), making it eligible for the program-scoped cache "
+            "and the framework's iterable optimizations (dedup, "
+            "post_process_iterable). Does not command caching: actual "
+            "caching depends on an active program cache and (for stochastic "
+            "tools) a seed being set."
+        ),
     )
-    seed_sensitive: bool = Field(
+    stochastic: bool = Field(
         default=False,
         exclude=True,
         description="Whether this tool's outputs depend on the random seed",
@@ -290,7 +303,7 @@ class ToolRegistry:
         iterable_input_field: str | None = None,
         iterable_output_field: str | None = None,
         cacheable: bool = False,
-        seed_sensitive: bool = False,
+        stochastic: bool = False,
         post_process_iterable: Callable[[list[Any]], None] | None = None,
     ) -> Callable[[Callable[..., BaseToolOutput]], Callable[..., BaseToolOutput]]:
         """Decorator to register a tool function and wrap execution with metadata tracking.
@@ -322,11 +335,19 @@ class ToolRegistry:
                 items for ToolPool fan-out and per-item caching.
             iterable_output_field (str | None): Output field name containing the iterable list of
                 results for ToolPool fan-out and per-item caching.
-            cacheable (bool): Whether this tool's results should be cached in the
-                program-scoped cache.
-            seed_sensitive (bool): Outputs depend on ``config.seed``. Cacheable
-                unseeded calls skip cache/dedup so repeat dispatches advance the
-                RNG naturally.
+            cacheable (bool): Declares that this tool's output is a
+                deterministic function of (input, config), making it
+                eligible for the program-scoped cache and the framework's
+                iterable optimizations (dedup, ``post_process_iterable``).
+                Does not command caching: actual caching depends on an
+                active program cache and (for stochastic tools) a seed
+                being set.
+            stochastic (bool): Outputs depend on ``config.seed``. Three
+                runtime effects: (1) unseeded calls skip the cache; (2)
+                iterable dispatches skip dedup so duplicate items reach the
+                tool and diverge via per-item RNG advancement; (3) cacheable
+                seeded calls use the whole-call cache rather than per-item
+                cache.
             post_process_iterable (Callable[[list[Any]], None] | None): Optional
                 in-place hook invoked on the stitched ``iterable_output_field``
                 list after cache reconciliation. Required when a derived field
@@ -418,9 +439,9 @@ class ToolRegistry:
                 spec = cls._registry.get(key)
                 cache_enabled = spec.cacheable if spec is not None else cacheable
                 gpu_only_flag = spec.gpu_only if spec is not None else gpu_only
-                seed_sensitive_tool = spec.seed_sensitive if spec is not None else seed_sensitive
-                # Unseeded calls to seed-sensitive tools skip cache so repeat dispatches advance RNG.
-                runtime_cacheable = cache_enabled and (not seed_sensitive_tool or config.seed is not None)
+                stochastic_tool = spec.stochastic if spec is not None else stochastic
+                # Unseeded calls to stochastic tools skip cache so repeat dispatches advance RNG.
+                runtime_cacheable = cache_enabled and (not stochastic_tool or config.seed is not None)
 
                 # Validate device allocation against tool requirements.
                 # device="cloud" delegates all resource allocation to the registered
@@ -458,9 +479,11 @@ class ToolRegistry:
                 strip = None
                 whole_cache_key = None
 
-                if runtime_cacheable and spec and spec.iterable_input_field:
+                if runtime_cacheable and spec and spec.iterable_input_field and not stochastic_tool:
                     assert spec.iterable_output_field is not None  # validated at registration
-                    # Iterable path: dedup then strip cached items
+                    # Iterable path (deterministic only): dedup then strip cached items.
+                    # Stochastic iterables fall through to the whole-call cache branch
+                    # below so duplicates reach the tool and diverge via per-item RNG.
                     original_items = list(getattr(inputs, spec.iterable_input_field))
                     if len(original_items) > 1:
                         deduped = deduplicate_items(original_items, key_fn=_serialize_for_cache_key)
@@ -555,6 +578,7 @@ class ToolRegistry:
                             key,
                             spec,
                             runtime_cacheable,
+                            stochastic_tool,
                             result,
                             strip,
                             deduped,
@@ -588,6 +612,7 @@ class ToolRegistry:
                             key,
                             spec,
                             runtime_cacheable,
+                            stochastic_tool,
                             dispatched,
                             strip,
                             deduped,
@@ -647,6 +672,7 @@ class ToolRegistry:
                                     key,
                                     spec,
                                     runtime_cacheable,
+                                    stochastic_tool,
                                     result,
                                     strip,
                                     deduped,
@@ -722,7 +748,7 @@ class ToolRegistry:
                 iterable_input_field=iterable_input_field,
                 iterable_output_field=iterable_output_field,
                 cacheable=cacheable,
-                seed_sensitive=seed_sensitive,
+                stochastic=stochastic,
                 post_process_iterable=post_process_iterable,
             )
             return wrapper
@@ -1130,6 +1156,7 @@ def _post_dispatch_cache_and_expand(
     key: str,
     spec: ToolSpec | None,
     is_cacheable: bool,
+    stochastic_tool: bool,
     result: BaseToolOutput,
     strip: CacheStripResult | None,
     deduped: Any | None,
@@ -1145,16 +1172,19 @@ def _post_dispatch_cache_and_expand(
         key (str): Tool registry key.
         spec (ToolSpec | None): Tool specification from the registry.
         is_cacheable (bool): Whether the tool supports caching.
+        stochastic_tool (bool): Whether the tool is registered ``stochastic=True``.
+            Stochastic iterables skip per-item cache / dedup expansion and use
+            the whole-call cache instead.
         result (BaseToolOutput): Tool output to post-process.
         strip (CacheStripResult | None): Cache strip result with cached/uncached item info.
         deduped (Any | None): Deduplication result mapping original to unique indices.
         original_items (list[Any] | None): Original input items before dedup/strip.
         whole_cache_key (str | None): Cache key for whole-output caching path.
     """
-    if is_cacheable and spec and spec.iterable_input_field:
+    if is_cacheable and spec and spec.iterable_input_field and not stochastic_tool:
         assert spec.iterable_output_field is not None  # validated at registration
         output_field = spec.iterable_output_field
-        # Iterable cache store + stitch
+        # Per-item cache store + stitch (deterministic iterable only)
         computed_items = getattr(result, output_field, [])
         if strip is not None and strip.cached_results:
             cache_store_items(key, strip.cache_keys, computed_items)
@@ -1171,16 +1201,19 @@ def _post_dispatch_cache_and_expand(
             expanded = [unique_results[uid] for _, uid in deduped.index_map]
             setattr(result, output_field, expanded)
 
-        # Run after store + stitch + dedup so the hook always sees the full
-        # request batch, never the per-item cached subset.
-        if spec.post_process_iterable is not None:
-            spec.post_process_iterable(getattr(result, output_field))
-
     elif is_cacheable and whole_cache_key is not None:
-        # Whole-output cache store
+        # Whole-output cache store (non-iterable OR stochastic iterable)
         cache = _program_tool_cache.get()
         if cache is not None:
             cache.set(key, whole_cache_key, result)
+
+    # Run post_process_iterable for any cacheable iterable, regardless of which
+    # cache path was taken. Deterministic iterables see the full stitched
+    # batch after dedup expand; stochastic iterables see the natural batch
+    # (no dedup happened).
+    if is_cacheable and spec is not None and spec.iterable_input_field and spec.post_process_iterable is not None:
+        assert spec.iterable_output_field is not None
+        spec.post_process_iterable(getattr(result, spec.iterable_output_field))
 
     paths = _find_non_finite_paths(result.model_dump())
     if paths:

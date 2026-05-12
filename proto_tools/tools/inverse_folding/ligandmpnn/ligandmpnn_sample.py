@@ -151,7 +151,7 @@ def example_input() -> Any:
     iterable_input_field="inputs",
     iterable_output_field="designed_sequences",
     cacheable=True,
-    seed_sensitive=True,
+    stochastic=True,
 )
 def run_ligandmpnn_sample(
     inputs: LigandMPNNSampleInput,
