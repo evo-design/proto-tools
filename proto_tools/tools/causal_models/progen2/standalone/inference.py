@@ -32,6 +32,7 @@ PROGEN2_VOCAB: list[str] = [
 PROGEN2_FIRST_AA_TOKEN = 5
 PROGEN2_LAST_AA_TOKEN = 29
 PROGEN2_SEQUENCE_CHARS = PROGEN2_VOCAB[PROGEN2_FIRST_AA_TOKEN : PROGEN2_LAST_AA_TOKEN + 1]  # Amino acid chars only
+PROGEN2_TERMINAL_TOKENS = PROGEN2_START_TOKEN + PROGEN2_END_TOKEN
 
 PROGEN2_MODEL_CHECKPOINTS = Literal[
     "progen2-small",  # 151M parameters
@@ -248,7 +249,7 @@ class ProGen2Model:
                         seq = seq[len(prompt) :]
 
                     if strip_special_tokens:
-                        seq = seq.lstrip(PROGEN2_START_TOKEN).rstrip(PROGEN2_END_TOKEN)
+                        seq = seq.strip(PROGEN2_TERMINAL_TOKENS)
 
                     all_sequences.append(seq)
 
