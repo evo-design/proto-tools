@@ -156,7 +156,7 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
 2. Write the core tool file `proto_tools/tools/{category}/{toolkit}/{tool_key_snake}.py` with:
    - Proper imports
    - Input class extending `BaseToolInput` (or shared base) with `Field()` — `extra="forbid"`
-   - Config class extending `BaseConfig` (or shared base) with `ConfigField()` — `extra="forbid"`. Use `reload_on_change=True` on fields that require worker restart (model checkpoint, etc.). Use `include_in_key=False` on fields that don't affect computation results (device, verbose, timeout are already excluded on `BaseConfig`; tool-level overrides of `device` must also set `include_in_key=False`). `include_in_key` defaults to `True`
+   - Config class extending `BaseConfig` (or shared base) with `ConfigField()` — `extra="forbid"`. Use `reload_on_change=True` on fields that require worker restart (model checkpoint, etc.). Use `include_in_key=False` on fields that don't affect computation results (device, verbose, timeout are already excluded on `BaseConfig`; tool-level overrides of `device` must also set `include_in_key=False`). `include_in_key` defaults to `True`. Use `xor_group="<slug>"` to mark mutually exclusive sibling fields (renders as a segmented picker in proto-ui — see "Mutual-exclusion fields (XOR groups)" below)
    - Output class extending `BaseToolOutput` (or shared base) with `Field()` — `extra="forbid"`
    - `@tool()` decorator with all 9 required kwargs: key, label, category, input_class, config_class, output_class, description, uses_gpu, example_input (plus optional `device_count`, `cacheable`, and `seed_sensitive`)
    - `run_*()` function that calls `ToolInstance.dispatch()`
@@ -174,6 +174,25 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
 - **`cpus_per_instance` opt-in**: `BaseConfig.cpus_per_instance` defaults to `None` — every CPU tool stays off ToolPool's CPU scheduler and runs as a single direct call. **Most CPU tools should leave this alone.** Only opt in (override to a positive int) when per-call work is heavy enough to amortize spinning up N persistent worker subprocesses — each holds its own venv in RAM and pays a startup tax, so cheap tools (short per-item compute, internal threading, network IO) lose more than they gain. The canonical opt-in is PyRosetta (heavy `init`, multi-second per pose, embarrassingly parallel poses → `cpus_per_instance = 1`). GPU tools (`gpus_per_instance > 0`) ignore `cpus_per_instance` entirely.
 
 **Inherited field audit:** When reusing a shared base config (e.g., `InverseFoldingConfig`) or base input, enumerate every inherited field and verify the target model can implement it. For each unsupported field, either implement support (e.g., logit masking for `excluded_amino_acids`) or override the field with a validator that raises `ValueError("'{field_name}' is not supported by {tool_display_name}")` when a non-default value is provided. Do not silently inherit fields that the model ignores.
+
+## Mutual-exclusion fields (XOR groups)
+
+For "pick one" siblings: make each `Optional` with `default=None`, tag with the same `xor_group="<slug>"`, and add a `@model_validator(mode="after")` to enforce at runtime (the schema flag alone doesn't validate). proto-ui renders the group as a segmented picker that clears the inactive side on switch.
+
+```python
+mmseqs_db: str | None = InputField(default=None, xor_group="target",
+    description="Target DB (path/slug/AssetRef).")
+target_sequences: list[str] | None = InputField(default=None, xor_group="target",
+    description="Inline target protein sequences.")
+
+@model_validator(mode="after")
+def exactly_one_target(self) -> "Mmseqs2SearchProteinsInput":
+    if (self.mmseqs_db is None) == (self.target_sequences is None):
+        raise ValueError("provide exactly one of `mmseqs_db` or `target_sequences`")
+    return self
+```
+
+For string fields that accept a path **or** an uploaded file: mention `AssetRef` in the `description`. proto-ui routes those to its upload picker; the gateway rewrites uploaded AssetRefs to a worker-side path before the tool runs.
 
 ## Code Style Conventions
 

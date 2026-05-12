@@ -133,6 +133,12 @@ class {ToolName}Config(BaseConfig):
         advanced=True,
     )
 
+    # --- Mutually exclusive fields (XOR group) ---
+    # Tag siblings with the same `xor_group` slug + add a `@model_validator` to
+    # enforce at runtime. See SKILL.md "Mutual-exclusion fields" for the pattern.
+    # exact_count: int | None = ConfigField(default=None, ge=1, xor_group="amount", ...)
+    # fraction: float | None = ConfigField(default=None, gt=0, le=1, xor_group="amount", ...)
+
     # Note: verbose, timeout, and device are inherited from BaseConfig.
     # Only redeclare them if you need to override the default value.
 
