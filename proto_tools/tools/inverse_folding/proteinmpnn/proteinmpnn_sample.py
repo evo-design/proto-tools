@@ -124,7 +124,7 @@ def example_input() -> Any:
     output_class=ProteinMPNNSampleOutput,
     description="Sample protein sequences using ProteinMPNN",
     uses_gpu=True,
-    seed_sensitive=True,
+    stochastic=True,
     example_input=example_input,
     iterable_input_field="inputs",
     iterable_output_field="designed_sequences",

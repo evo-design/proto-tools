@@ -131,7 +131,7 @@ def example_input() -> ProGen3SampleInput:
     output_class=ProGen3SampleOutput,
     description="Sample protein sequences using ProGen3 language model",
     uses_gpu=True,
-    seed_sensitive=True,
+    stochastic=True,
     example_input=example_input,
     iterable_input_field="prompts",
     iterable_output_field="sequences",

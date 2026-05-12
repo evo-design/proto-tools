@@ -19,6 +19,24 @@ from proto_tools.tools.testing.mock_cpu_tool import (
     MockCPUToolResult,
     run_mock_cpu_tool,
 )
+from proto_tools.tools.testing.mock_iterable_deterministic import (
+    MockIterableDeterministicConfig,
+    MockIterableDeterministicInput,
+    MockIterableDeterministicOutput,
+    run_mock_iterable_deterministic,
+)
+from proto_tools.tools.testing.mock_iterable_stochastic import (
+    MockIterableStochasticConfig,
+    MockIterableStochasticInput,
+    MockIterableStochasticOutput,
+    run_mock_iterable_stochastic,
+)
+from proto_tools.tools.testing.mock_iterable_stochastic_serial import (
+    MockIterableStochasticSerialConfig,
+    MockIterableStochasticSerialInput,
+    MockIterableStochasticSerialOutput,
+    run_mock_iterable_stochastic_serial,
+)
 from proto_tools.tools.testing.mock_jax_multi_gpu_tool import (
     MockJAXMultiGPUToolConfig,
     MockJAXMultiGPUToolInput,
@@ -59,6 +77,18 @@ __all__ = [
     "MockCPUToolOutput",
     "MockCPUToolResult",
     "run_mock_cpu_tool",
+    "MockIterableDeterministicConfig",
+    "MockIterableDeterministicInput",
+    "MockIterableDeterministicOutput",
+    "run_mock_iterable_deterministic",
+    "MockIterableStochasticConfig",
+    "MockIterableStochasticInput",
+    "MockIterableStochasticOutput",
+    "run_mock_iterable_stochastic",
+    "MockIterableStochasticSerialConfig",
+    "MockIterableStochasticSerialInput",
+    "MockIterableStochasticSerialOutput",
+    "run_mock_iterable_stochastic_serial",
     "MockJAXMultiGPUToolConfig",
     "MockJAXMultiGPUToolInput",
     "MockJAXMultiGPUToolOutput",

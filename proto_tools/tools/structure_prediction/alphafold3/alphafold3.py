@@ -263,7 +263,7 @@ def _config_overrides_env(model_dir: str | None) -> Iterator[None]:
     iterable_input_field="complexes",
     iterable_output_field="structures",
     cacheable=True,
-    seed_sensitive=True,
+    stochastic=True,
 )
 def run_alphafold3(
     inputs: AlphaFold3Input,

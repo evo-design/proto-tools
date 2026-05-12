@@ -366,7 +366,7 @@ def example_input() -> AlphaFold2BinderInput:
     uses_gpu=True,
     example_input=example_input,
     cacheable=False,
-    seed_sensitive=True,
+    stochastic=True,
 )
 def run_alphafold2_binder(
     inputs: AlphaFold2BinderInput,

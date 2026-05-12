@@ -338,7 +338,7 @@ def example_input() -> Any:
     iterable_input_field="complexes",
     iterable_output_field="structures",
     cacheable=True,
-    seed_sensitive=True,
+    stochastic=True,
 )
 def run_protenix(
     inputs: ProtenixInput,
