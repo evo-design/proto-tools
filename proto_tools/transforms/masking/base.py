@@ -261,12 +261,14 @@ class MaskingStrategy(BaseModel):
     num_mutations: int | None = ConfigField(
         default=None,
         ge=1,
+        xor_group="mask_amount",
         description="Exact number of positions to mask per sequence.",
     )
     mask_fraction: float | None = ConfigField(
         default=None,
         gt=0.0,
         le=1.0,
+        xor_group="mask_amount",
         description="Fraction of designable positions to mask (e.g. 0.15 for ~15%).",
     )
 

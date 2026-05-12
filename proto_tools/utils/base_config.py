@@ -47,6 +47,7 @@ def ConfigField(
     reload_on_change: bool = False,
     include_in_key: bool = True,
     depends_on: dict[str, Any] | None = None,
+    xor_group: str | None = None,
     **kwargs: Any,
 ) -> Any:
     """Custom Field wrapper that automatically adds metadata flags to json_schema_extra.
@@ -69,6 +70,9 @@ def ConfigField(
             Use ``{"field": "x", "not_null": True}`` to show when the
             target field is not None. ``value`` and ``not_null`` are
             mutually exclusive.
+        xor_group (str | None): Mutual-exclusion group name; emitted as
+            ``x-xor-group`` in JSON schema. Enforce at runtime with a
+            ``@model_validator`` on the Config class.
         kwargs: All other standard Pydantic Field arguments (via ``**kwargs``).
 
     Usage:
@@ -91,6 +95,9 @@ def ConfigField(
         if "value" in normalized and "not_null" in normalized:
             raise ValueError("depends_on cannot specify both 'value' and 'not_null'")
         json_schema_extra["x-depends-on"] = normalized
+
+    if xor_group is not None:
+        json_schema_extra["x-xor-group"] = xor_group
 
     kwargs["json_schema_extra"] = json_schema_extra
 
