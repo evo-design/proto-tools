@@ -220,6 +220,28 @@ def test_progen3_sample_reverse():
     assert seq.endswith("RYTE"), "Reverse generation should expand to the left of the prompt"
 
 
+@pytest.mark.uses_gpu
+def test_progen3_sample_same_length_batch():
+    """Same-length prompts are batched and returned in prompt order."""
+    prompts = ["MKTL", "GAVG", "RYTE"]
+    result = run_progen3_sample(
+        ProGen3SampleInput(prompts=prompts),
+        ProGen3SampleConfig(
+            model_checkpoint=_SMALL_MODEL,
+            batch_size=len(prompts),
+            max_new_tokens=8,
+            seed=7,
+        ),
+    )
+
+    assert result.success
+    assert len(result.sequences) == len(prompts)
+    for prompt, sequence in zip(prompts, result.sequences, strict=True):
+        assert sequence.startswith(prompt)
+        assert len(sequence) > len(prompt)
+        assert sequence.isalpha() and sequence.isupper()
+
+
 # ── Scoring tests ──────────────────────────────────────────────────────────
 
 

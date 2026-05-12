@@ -4,6 +4,8 @@ import json
 import os
 import re
 import sys
+from collections import defaultdict
+from copy import deepcopy
 from typing import Any
 
 from standalone_helpers import get_logger, serialize_output, set_torch_seed
@@ -125,7 +127,8 @@ class ProGen3Model:
             top_p (float): Nucleus sampling parameter.
             max_new_tokens (int): Maximum new tokens to generate.
             min_new_tokens (int): Minimum new tokens to generate.
-            batch_size (int): Batch size for generation.
+            batch_size (int): Maximum number of same-length prompts per
+                generation batch.
             device (str): Device to run on.
             verbose (bool): Whether to log progress.
             seed (int | None): Random seed for reproducibility.
@@ -152,48 +155,130 @@ class ProGen3Model:
             top_p=top_p,
         )
 
-        all_sequences = []
-        all_prompts = []
-        all_directions = []
+        prompt_infos = [self._prepare_generation_prompt(generator, idx, prompt) for idx, prompt in enumerate(prompts)]
+        outputs: dict[int, dict[str, str]] = {}
 
-        for prompt in prompts:
-            direction = "fwd" if prompt.startswith("1") else "rev"
-            aa_prompt = prompt[1:]
+        for chunk_start in range(0, len(prompt_infos), batch_size):
+            chunk = prompt_infos[chunk_start : chunk_start + batch_size]
+            grouped: dict[tuple[int, int], list[dict[str, Any]]] = defaultdict(list)
+            for info in chunk:
+                grouped[(info["num_input_tokens"], info["end_token_id"])].append(info)
 
-            results = list(
-                generator.generate(
-                    prompt=prompt,
-                    num_sequences=1,
-                    min_new_tokens=min_new_tokens,
-                    max_new_tokens=max_new_tokens,
-                )
-            )
-            for r in results:
-                if r.sequence is not None:
-                    seq = r.sequence
-                else:
-                    # Fallback: longest leading uppercase-letter run. Truncate at the
-                    # first non-letter (direction marker, special) — past that is a
-                    # different protein, not a continuation. Non-canonical letters
-                    # (B/O/U/X/Z) are biologically real and folders handle them.
-                    match = re.match(r"[A-Z]*", r.generation)
-                    stripped = match.group(0) if match else ""
-                    seq = aa_prompt + stripped if direction == "fwd" else stripped[::-1] + aa_prompt
-                    logger.warning(
-                        "compile_generation returned None for prompt '%s'; "
-                        "falling back to manual compilation (%d residues)",
-                        prompt,
-                        len(stripped),
-                    )
-                all_sequences.append(seq)
-                all_prompts.append(aa_prompt)
-                all_directions.append(direction)
+            for group in grouped.values():
+                if verbose:
+                    logger.info(f"Generating ProGen3 batch with {len(group)} prompt(s)")
+                for info, generated in zip(
+                    group,
+                    self._generate_batch(
+                        generator,
+                        group,
+                        min_new_tokens=min_new_tokens,
+                        max_new_tokens=max_new_tokens,
+                    ),
+                    strict=True,
+                ):
+                    outputs[info["index"]] = generated
+
+        generated_outputs = [outputs[i] for i in range(len(prompt_infos))]
 
         return {
-            "sequences": all_sequences,
-            "prompts": all_prompts,
-            "directions": all_directions,
+            "sequences": [output["sequence"] for output in generated_outputs],
+            "prompts": [output["prompt"] for output in generated_outputs],
+            "directions": [output["direction"] for output in generated_outputs],
         }
+
+    def _prepare_generation_prompt(self, generator: Any, index: int, raw_prompt: str) -> dict[str, Any]:
+        """Prepare one prompt for generation."""
+        from progen3.batch_preparer import assert_valid_instance, is_glm_instance
+        from progen3.generator import parse_directed_prompt
+
+        prompt, direction = parse_directed_prompt(raw_prompt)
+        assert_valid_instance(prompt)
+
+        generation_kwargs = generator.batch_preparer.get_generation_kwargs(prompt, direction == "rev")
+        input_encoding = {key: value.squeeze(0) for key, value in generation_kwargs.items()}
+
+        end_token = "<eos_span>" if is_glm_instance(prompt) else "<eos>"
+        end_token_id = generator.batch_preparer.tokenizer.token_to_id(end_token)
+
+        return {
+            "index": index,
+            "raw_prompt": raw_prompt,
+            "prompt": prompt,
+            "aa_prompt": raw_prompt[1:],
+            "direction": direction,
+            "input_encoding": input_encoding,
+            "num_input_tokens": len(input_encoding["input_ids"]),
+            "end_token_id": end_token_id,
+        }
+
+    def _generate_batch(
+        self,
+        generator: Any,
+        prompt_infos: list[dict[str, Any]],
+        *,
+        min_new_tokens: int,
+        max_new_tokens: int,
+    ) -> list[dict[str, str]]:
+        """Generate one same-length prompt batch."""
+        import torch
+        from progen3.common import dist
+        from progen3.common.dist import generate
+        from progen3.generator import compile_generation
+
+        input_encoding = {
+            key: torch.stack([info["input_encoding"][key] for info in prompt_infos]).to(device=dist.get_device())
+            for key in ("input_ids", "sequence_ids", "position_ids")
+        }
+        num_input_tokens = prompt_infos[0]["num_input_tokens"]
+
+        gen_config = deepcopy(generator.default_gen_config)
+        gen_config.eos_token_id = prompt_infos[0]["end_token_id"]
+        # Mirror upstream: generated token limits include completion terminators.
+        gen_config.max_new_tokens = max_new_tokens + 2
+        gen_config.min_new_tokens = min_new_tokens + 2
+        gen_config.num_return_sequences = 1
+
+        cached_length = num_input_tokens - 1
+        key_value_cache = None
+        if cached_length > 0:
+            with torch.no_grad():
+                cached_encoding = {key: value[:, :cached_length] for key, value in input_encoding.items()}
+                key_value_cache = self.model(**cached_encoding, use_cache=True, return_dict=True).past_key_values
+            torch.cuda.empty_cache()
+
+        outputs = generate(self.model, **input_encoding, generation_config=gen_config, past_key_values=key_value_cache)
+
+        completions = outputs.sequences[:, num_input_tokens:].tolist()
+        decoded_completions = generator.batch_preparer.tokenizer.decode_batch(
+            completions,
+            skip_special_tokens=False,
+        )
+
+        generated = []
+        for info, decoded_completion in zip(prompt_infos, decoded_completions, strict=True):
+            sequence = compile_generation(info["prompt"], decoded_completion, info["direction"])
+            if sequence is None:
+                match = re.match(r"[A-Z]*", decoded_completion)
+                stripped = match.group(0) if match else ""
+                sequence = (
+                    info["aa_prompt"] + stripped if info["direction"] == "fwd" else stripped[::-1] + info["aa_prompt"]
+                )
+                logger.warning(
+                    "compile_generation returned None for prompt '%s'; "
+                    "falling back to manual compilation (%d residues)",
+                    info["raw_prompt"],
+                    len(stripped),
+                )
+            generated.append(
+                {
+                    "sequence": sequence,
+                    "prompt": info["aa_prompt"],
+                    "direction": info["direction"],
+                }
+            )
+
+        return generated
 
     def score(
         self,
