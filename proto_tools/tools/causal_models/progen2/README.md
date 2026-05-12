@@ -62,8 +62,8 @@ these to get the total log-likelihood.
 1. The prompt sequence is tokenized using ProGen2's 30-token vocabulary (5 special tokens + 25 amino acids). The start token `1` is prepended automatically if absent.
 2. At each step, the model predicts a probability distribution over the next token given all preceding tokens.
 3. The next token is sampled from this distribution according to the temperature, top-k, and top-p settings.
-4. Generation continues until `max_length` is reached or a stop token (`2`) is encountered.
-5. Output sequences are optionally truncated at stop tokens and stripped of special tokens.
+4. Generation continues until `max_length` is reached.
+5. Output sequences are optionally truncated at terminal tokens (`1` or `2`) and stripped of terminal sentinels.
 
 **Scoring (`progen2-score`):**
 1. The full sequence is passed through the model in a single forward pass.

@@ -3,6 +3,8 @@
 Tests for ProGen2.
 """
 
+import types
+
 import numpy as np
 import pytest
 
@@ -78,6 +80,45 @@ def test_progen2_sample_dispatches_one_sequence_per_prompt(monkeypatch):
 
     assert result.sequences == ["1AAAA_sample", "1CCCC_sample"]
     assert [payload["prompts"] for payload in captured_payloads] == [["1AAAA", "1CCCC"]]
+
+
+@pytest.mark.parametrize("terminal_token_id", [3, 4], ids=["start-token", "end-token"])
+def test_progen2_standalone_sample_strips_generated_terminal_tokens(terminal_token_id):
+    """Sampling strips ProGen2 terminal sentinels from either output edge."""
+    import torch
+
+    from proto_tools.tools.causal_models.progen2.standalone.inference import (
+        PROGEN2_VOCAB,
+        ProGen2Model,
+    )
+
+    captured_generate_kwargs = {}
+
+    class FakeTokenizer:
+        def encode_batch(self, sequences):
+            return [types.SimpleNamespace(ids=[3, 5, 7]) for _ in sequences]
+
+        def decode(self, token_ids):
+            return "".join(PROGEN2_VOCAB[token_id] for token_id in token_ids)
+
+    class FakeModel:
+        def generate(self, input_ids, **kwargs):
+            captured_generate_kwargs.update(kwargs)
+            return types.SimpleNamespace(
+                sequences=torch.tensor([[3, 5, 7, terminal_token_id]], dtype=torch.long), scores=()
+            )
+
+    model = ProGen2Model()
+    model._loaded = True
+    model.device = "cpu"
+    model.model = FakeModel()
+    model.tokenizer = FakeTokenizer()
+    model.pad_token_id = 0
+
+    result = model.sample(["1AC"], device="cpu")
+
+    assert result["sequences"] == ["AC"]
+    assert "bad_words_ids" not in captured_generate_kwargs
 
 
 # ---------------------------------------------------------------------------
