@@ -65,6 +65,44 @@ def _write_fasta(
         f.writelines(f">{seq_id}\n{seq}\n" for seq_id, seq in zip(ids, sequences, strict=False))
 
 
+def _is_mmseqs_db_stem(path: str) -> bool:
+    """Both the stem file AND its ``<stem>.dbtype`` companion exist (guards against stale companions)."""
+    return Path(path).exists() and Path(f"{path}.dbtype").exists()
+
+
+def _is_fasta(path: str) -> bool:
+    """First non-whitespace line starts with `>`."""
+    p = Path(path)
+    if not p.is_file():
+        return False
+    with p.open() as f:
+        for line in f:
+            stripped = line.strip()
+            if stripped:
+                return stripped.startswith(">")
+    return False
+
+
+def _resolve_to_mmseqs_db(
+    mmseqs: str,
+    user_path: str,
+    *,
+    temp_db_path: str,
+    label: str,
+) -> tuple[str, bool]:
+    """Sniff ``user_path``; return ``(db_stem, built_here)``. DB stem → as-is; FASTA → ``createdb``; else raise."""
+    if _is_mmseqs_db_stem(user_path):
+        return user_path, False
+    if not Path(user_path).exists():
+        raise FileNotFoundError(f"{label}: path {user_path!r} does not exist.")
+    if _is_fasta(user_path):
+        _run_cmd([mmseqs, "createdb", user_path, temp_db_path], f"mmseqs createdb ({label})")
+        return temp_db_path, True
+    raise RuntimeError(
+        f"{label}: {user_path!r} is neither a FASTA file nor an MMseqs2 DB stem (no `<stem>.dbtype` companion)."
+    )
+
+
 # ============================================================================
 # Operation — protein_search
 # ============================================================================
@@ -75,8 +113,9 @@ def run_protein_search(input_data: dict[str, Any]) -> dict[str, Any]:
 
     Args:
         input_data: Dict with keys: sequences, sequence_ids, mmseqs_db,
-            threads, split, sensitivity, evalue, min_seq_id, coverage,
-            cov_mode, max_seqs, m8_columns, use_gpu (optional).
+            target_sequences (mutually exclusive with mmseqs_db), threads,
+            split, sensitivity, evalue, min_seq_id, coverage, cov_mode,
+            max_seqs, m8_columns, use_gpu (optional).
 
     Returns:
         Dict with keys: stdout (raw tab-separated m8 output)
@@ -94,6 +133,15 @@ def run_protein_search(input_data: dict[str, Any]) -> dict[str, Any]:
             input_data.get("sequence_ids"),
         )
 
+        # Inline target_sequences → temp FASTA (easy-search auto-detects).
+        target_sequences = input_data.get("target_sequences")
+        if target_sequences is not None:
+            target_path = str(tmp_path / "target.faa")
+            _write_fasta(target_sequences, target_path, prefix="target")
+            mmseqs_db = target_path
+        else:
+            mmseqs_db = input_data["mmseqs_db"]
+
         results_dir = tmp_path / "results"
         results_dir.mkdir()
         m8_path = str(results_dir / "mmseqs_results.m8")
@@ -102,7 +150,7 @@ def run_protein_search(input_data: dict[str, Any]) -> dict[str, Any]:
             mmseqs,
             "easy-search",
             query_fasta,
-            input_data["mmseqs_db"],
+            mmseqs_db,
             m8_path,
             str(results_dir),
             "--split",
@@ -147,41 +195,41 @@ def run_protein_search(input_data: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
-    """Run MMseqs2 genome-to-genome nucleotide search and return raw m8 output.
-
-    Args:
-        input_data: Dict with keys: query_sequences, query_ids, target_sequences,
-            target_ids, search_type, threads, sensitivity, evalue, min_seq_id,
-            coverage, cov_mode, max_seqs, strand, m8_columns.
-
-    Returns:
-        Dict with keys: stdout (raw tab-separated m8 output)
-    """
+    """Run MMseqs2 nucleotide search; target is inline ``target_sequences`` or a FASTA/DB ``target_db`` path."""
     mmseqs = _find_binary()
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
 
+        # Query is always inline (the @tool framework iterates over query_genomes).
         query_fasta = str(tmp_path / "query_genomes.fna")
-        target_fasta = str(tmp_path / "target_genomes.fna")
-        _write_fasta(
-            input_data["query_sequences"],
-            query_fasta,
-            input_data.get("query_ids"),
-        )
-        _write_fasta(
-            input_data["target_sequences"],
-            target_fasta,
-            input_data.get("target_ids"),
-            prefix="target",
-        )
-
+        _write_fasta(input_data["query_sequences"], query_fasta, input_data.get("query_ids"))
         query_db = str(tmp_path / "query_db")
-        target_db = str(tmp_path / "target_db")
+
+        # Target: inline → write FASTA + createdb; path → sniff helper (handles createdb for FASTA paths).
+        target_sequences = input_data.get("target_sequences")
+        target_db_path: str
+        target_db_size: int | None
+        target_db_built_here: bool
+        if target_sequences is not None:
+            target_fasta = str(tmp_path / "target_genomes.fna")
+            _write_fasta(target_sequences, target_fasta, input_data.get("target_ids"), prefix="target")
+            target_db_path = str(tmp_path / "target_db")
+            _run_cmd([mmseqs, "createdb", target_fasta, target_db_path], "mmseqs createdb (target)")
+            target_db_size = len(target_sequences)
+            target_db_built_here = True
+        else:
+            target_db_path, target_db_built_here = _resolve_to_mmseqs_db(
+                mmseqs,
+                input_data["target_db"],
+                temp_db_path=str(tmp_path / "target_db"),
+                label="mmseqs2-search-genomes target_db",
+            )
+            target_db_size = None  # leave threads at cpu_count; the cap only matters for tiny DBs where it trips other mmseqs edge cases
+
         mmseqs_tmp = str(tmp_path / "mmseqs_tmp")
         res_dir = str(tmp_path / "results")
         results_m8 = str(tmp_path / "mmseqs_results.m8")
-
         Path(mmseqs_tmp).mkdir()
         Path(res_dir).mkdir()
 
@@ -194,48 +242,39 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
         max_seqs = str(input_data["max_seqs"])
         strand = str(input_data["strand"])
 
-        # Threads: 0 means "let mmseqs auto-detect" (binary default behavior).
-        # When the caller passes a positive value, cap it at the target DB size:
-        # mmseqs splits the target DB into chunks proportional to thread count
-        # and crashes with "World Size: <threads> dbSize: <num_target_seqs>" if
-        # there aren't enough chunks per worker.
+        # Cap threads at target DB size to avoid the chunking bug ("World Size: <threads> dbSize: <n>").
+        # When the user supplied a pre-built DB we don't know the size, so trust the caller.
         requested_threads = int(input_data["threads"])
-        target_db_size = len(input_data["target_sequences"])
-        if requested_threads <= 0:
-            # Pick a small safe value capped at target DB size; mmseqs's own
-            # auto-detect would still hit the chunking bug on tiny test DBs.
+        if target_db_size is None:
+            effective_threads = requested_threads if requested_threads > 0 else (os.cpu_count() or 1)
+        elif requested_threads <= 0:
             effective_threads = max(1, min((os.cpu_count() or 1), target_db_size))
         else:
             effective_threads = max(1, min(requested_threads, target_db_size))
         threads = str(effective_threads)
 
-        _run_cmd(
-            [mmseqs, "createdb", query_fasta, query_db],
-            "mmseqs createdb (query)",
-        )
-        _run_cmd(
-            [mmseqs, "createdb", target_fasta, target_db],
-            "mmseqs createdb (target)",
-        )
-        _run_cmd(
-            [
-                mmseqs,
-                "createindex",
-                target_db,
-                mmseqs_tmp,
-                "--search-type",
-                search_type,
-                "--threads",
-                threads,
-            ],
-            "mmseqs createindex",
-        )
+        _run_cmd([mmseqs, "createdb", query_fasta, query_db], "mmseqs createdb (query)")
+        # createindex is optional (search computes it on-the-fly); only run for DBs we built here.
+        if target_db_built_here:
+            _run_cmd(
+                [
+                    mmseqs,
+                    "createindex",
+                    target_db_path,
+                    mmseqs_tmp,
+                    "--search-type",
+                    search_type,
+                    "--threads",
+                    threads,
+                ],
+                "mmseqs createindex",
+            )
         _run_cmd(
             [
                 mmseqs,
                 "search",
                 query_db,
-                target_db,
+                target_db_path,
                 res_dir,
                 mmseqs_tmp,
                 "--search-type",
@@ -267,7 +306,7 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
                 mmseqs,
                 "convertalis",
                 query_db,
-                target_db,
+                target_db_path,
                 res_dir,
                 results_m8,
                 "--format-output",
@@ -288,92 +327,63 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_clustering(input_data: dict[str, Any]) -> dict[str, Any]:
-    """Run MMseqs2 clustering workflow and return cluster assignments.
-
-    Args:
-        input_data: Dict with keys: sequences, sequence_ids, min_seq_id,
-            coverage, cov_mode, evalue, cluster_mode, max_seqs, sensitivity.
-
-    Returns:
-        Dict with keys: cluster_assignments (dict mapping member_id -> representative_id)
-    """
+    """Run ``mmseqs cluster`` on inline sequences, a FASTA path, or a pre-built DB stem; return cluster_assignments."""
     mmseqs = _find_binary()
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
-
-        input_fasta = str(tmp_path / "input.faa")
-        _write_fasta(
-            input_data["sequences"],
-            input_fasta,
-            input_data.get("sequence_ids"),
-        )
-
-        db_dir = tmp_path / "mmseqs_db"
         res_dir = tmp_path / "mmseqs_results"
         mmseqs_tmp = tmp_path / "tmp"
-        db_dir.mkdir()
         res_dir.mkdir()
         mmseqs_tmp.mkdir()
 
-        min_seq_id = str(input_data["min_seq_id"])
-        coverage = str(input_data["coverage"])
-        cov_mode = str(input_data["cov_mode"])
-        evalue = str(input_data["evalue"])
-        cluster_mode = str(input_data["cluster_mode"])
-        max_seqs = str(input_data["max_seqs"])
-        sensitivity = str(input_data["sensitivity"])
+        # `mmseqs cluster` requires a pre-built DB. easy-cluster would always run createdb (verified upstream).
+        db_dir = tmp_path / "mmseqs_db"
+        db_dir.mkdir()
+        temp_db = str(db_dir / "seqs")
+        sequences = input_data.get("sequences")
+        if sequences is not None:
+            input_fasta = str(tmp_path / "input.faa")
+            _write_fasta(sequences, input_fasta, input_data.get("sequence_ids"))
+            _run_cmd([mmseqs, "createdb", input_fasta, temp_db], "mmseqs createdb")
+            seqs_db = temp_db
+        else:
+            seqs_db, _ = _resolve_to_mmseqs_db(
+                mmseqs,
+                input_data["mmseqs_db"],
+                temp_db_path=temp_db,
+                label="mmseqs2-clustering mmseqs_db",
+            )
 
-        _run_cmd(
-            [mmseqs, "createdb", input_fasta, str(db_dir / "seqs")],
-            "mmseqs createdb",
-        )
         _run_cmd(
             [
                 mmseqs,
                 "cluster",
-                str(db_dir / "seqs"),
+                seqs_db,
                 str(res_dir / "clusters"),
                 str(mmseqs_tmp),
                 "--min-seq-id",
-                min_seq_id,
+                str(input_data["min_seq_id"]),
                 "-c",
-                coverage,
+                str(input_data["coverage"]),
                 "--cov-mode",
-                cov_mode,
+                str(input_data["cov_mode"]),
                 "-e",
-                evalue,
+                str(input_data["evalue"]),
                 "--cluster-mode",
-                cluster_mode,
+                str(input_data["cluster_mode"]),
                 "--max-seqs",
-                max_seqs,
+                str(input_data["max_seqs"]),
                 "-s",
-                sensitivity,
+                str(input_data["sensitivity"]),
                 *(str(arg) for arg in input_data.get("extra_args", [])),
             ],
             "mmseqs cluster",
         )
-        _run_cmd(
-            [
-                mmseqs,
-                "createsubdb",
-                str(res_dir / "clusters"),
-                str(db_dir / "seqs"),
-                str(res_dir / "rep_seqs"),
-            ],
-            "mmseqs createsubdb",
-        )
 
         clusters_tsv = str(res_dir / "clusters.tsv")
         _run_cmd(
-            [
-                mmseqs,
-                "createtsv",
-                str(db_dir / "seqs"),
-                str(db_dir / "seqs"),
-                str(res_dir / "clusters"),
-                clusters_tsv,
-            ],
+            [mmseqs, "createtsv", seqs_db, seqs_db, str(res_dir / "clusters"), clusters_tsv],
             "mmseqs createtsv",
         )
 
@@ -384,8 +394,7 @@ def run_clustering(input_data: dict[str, Any]) -> dict[str, Any]:
                 if line.strip():
                     parts = line.split("\t")
                     if len(parts) >= 2:
-                        representative, member = parts[0], parts[1]
-                        cluster_assignments[member] = representative
+                        cluster_assignments[parts[1]] = parts[0]
 
     return {"cluster_assignments": cluster_assignments}
 

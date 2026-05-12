@@ -27,6 +27,7 @@ def InputField(
     advanced: bool = False,
     include_in_key: bool = True,
     depends_on: dict[str, Any] | None = None,
+    xor_group: str | None = None,
     **kwargs: Any,
 ) -> Any:
     """Custom Field wrapper for tool Input classes.
@@ -47,6 +48,9 @@ def InputField(
             non-null. Same shape as ``ConfigField.depends_on``. Examples:
             ``{"field": "db", "value": ["nuccore", "nucleotide"]}`` or
             ``{"field": "datetype", "not_null": True}``.
+        xor_group (str | None): Mutual-exclusion group name; emitted as
+            ``x-xor-group`` in JSON schema. Enforce at runtime with a
+            ``@model_validator`` on the Input class.
         kwargs: All other standard Pydantic Field arguments (via ``**kwargs``).
     """
     from proto_tools.utils.base_config import _normalize_depends_on
@@ -61,6 +65,8 @@ def InputField(
         if "value" in normalized and "not_null" in normalized:
             raise ValueError("depends_on cannot specify both 'value' and 'not_null'")
         json_schema_extra["x-depends-on"] = normalized
+    if xor_group is not None:
+        json_schema_extra["x-xor-group"] = xor_group
     kwargs["json_schema_extra"] = json_schema_extra
     return Field(default, title=title, description=description, **kwargs)
 

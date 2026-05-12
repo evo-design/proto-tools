@@ -12,7 +12,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -125,9 +125,10 @@ class Mmseqs2SearchProteinsInput(BaseToolInput):
             sequences) to search.
         sequence_ids (list[str] | None): Optional list of sequence identifiers.
             If not provided, sequences are assigned sequential IDs (seq_0, seq_1, ...).
-        mmseqs_db (str): Path to the target database for searching. Can be:
-            - Path to a FASTA file (MMseqs2 will create a temporary database)
-            - Path to a pre-built MMseqs2 database (created with ``mmseqs createdb``)
+        mmseqs_db (str | None): Target DB (path/slug/AssetRef). Mutually
+            exclusive with ``target_sequences``.
+        target_sequences (list[str] | None): Inline target sequences.
+            Mutually exclusive with ``mmseqs_db``.
     """
 
     query_sequences: list[str] = InputField(
@@ -137,7 +138,16 @@ class Mmseqs2SearchProteinsInput(BaseToolInput):
         default=None,
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )
-    mmseqs_db: str = InputField(description="Path to target database (FASTA file or MMseqs2 database)")
+    mmseqs_db: str | None = InputField(
+        default=None,
+        xor_group="target",
+        description="Target DB (path/slug/AssetRef). Mutually exclusive with `target_sequences`.",
+    )
+    target_sequences: list[str] | None = InputField(
+        default=None,
+        xor_group="target",
+        description="Inline target protein sequences. Mutually exclusive with `mmseqs_db`.",
+    )
 
     @field_validator("query_sequences", mode="before")
     @classmethod
@@ -150,6 +160,27 @@ class Mmseqs2SearchProteinsInput(BaseToolInput):
         if not all(isinstance(item, str) for item in v):
             raise ValueError("All items in query_sequences list must be strings")
         return v
+
+    @field_validator("target_sequences", mode="before")
+    @classmethod
+    def validate_target_sequences(cls, v: Any) -> Any:
+        """Validate target sequences when provided inline."""
+        if v is None:
+            return v
+        if not isinstance(v, list):
+            raise ValueError(f"target_sequences must be a list, got {type(v)}")
+        if not v:
+            raise ValueError("target_sequences list cannot be empty")
+        if not all(isinstance(item, str) for item in v):
+            raise ValueError("All items in target_sequences list must be strings")
+        return v
+
+    @model_validator(mode="after")
+    def exactly_one_target(self) -> Mmseqs2SearchProteinsInput:
+        """Enforce the xor_group='target' constraint at runtime."""
+        if (self.mmseqs_db is None) == (self.target_sequences is None):
+            raise ValueError("mmseqs2-search-proteins: provide exactly one of `mmseqs_db` or `target_sequences`.")
+        return self
 
 
 # Output:
@@ -349,7 +380,7 @@ def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return Mmseqs2SearchProteinsInput(
         query_sequences=["MKTL"],
-        mmseqs_db=str(Path(__file__).parent / "examples" / "example.fasta"),
+        target_sequences=["MKTL", "ARND"],
     )
 
 
@@ -404,23 +435,28 @@ def run_mmseqs2_search_proteins(
     sequence_ids = resolve_sequence_ids(sequences, inputs.sequence_ids)
     num_sequences = len(sequences)
 
-    # GPU mode requires the easy-search target to be a GPU-padded MMseqs2 DB
-    # built via ``mmseqs makepaddedseqdb`` (the upstream wiki shows
-    # ``mmseqs easy-search <query> <padded_db> <result> <tmp> --gpu 1``).
-    # Resolve the padded stem now so we pass *it*, not the user's original DB,
-    # to easy-search.
-    mmseqs_db_for_dispatch = inputs.mmseqs_db
-    if config.use_gpu:
-        padded_stem = _resolve_gpu_db_stem(inputs.mmseqs_db)
-        if padded_stem is None:
+    # GPU mode needs a pre-built padded DB; inline targets are CPU-only.
+    mmseqs_db_for_dispatch: str | None = None
+    if inputs.target_sequences is not None:
+        if config.use_gpu:
             raise ValueError(
-                f"mmseqs2-search-proteins: use_gpu=True requires a GPU-padded MMseqs2 DB "
-                f"alongside {inputs.mmseqs_db!r}. Build one with:\n"
-                f"  mmseqs createdb <fasta> <db>     # only if your input is a FASTA file\n"
-                f"  mmseqs makepaddedseqdb <db> <db>.idx_pad\n"
-                f"or set use_gpu=False."
+                "mmseqs2-search-proteins: use_gpu=True requires a pre-built GPU-padded "
+                "MMseqs2 DB; inline `target_sequences` aren't supported in GPU mode."
             )
-        mmseqs_db_for_dispatch = padded_stem
+    else:
+        # XOR validator guarantees mmseqs_db is non-None here; explicit check is for mypy narrowing.
+        mmseqs_db_for_dispatch = inputs.mmseqs_db
+        if config.use_gpu and inputs.mmseqs_db is not None:
+            padded_stem = _resolve_gpu_db_stem(inputs.mmseqs_db)
+            if padded_stem is None:
+                raise ValueError(
+                    f"mmseqs2-search-proteins: use_gpu=True requires a GPU-padded MMseqs2 DB "
+                    f"alongside {inputs.mmseqs_db!r}. Build one with:\n"
+                    f"  mmseqs createdb <fasta> <db>     # only if your input is a FASTA file\n"
+                    f"  mmseqs makepaddedseqdb <db> <db>.idx_pad\n"
+                    f"or set use_gpu=False."
+                )
+            mmseqs_db_for_dispatch = padded_stem
 
     output_data = ToolInstance.dispatch(
         "mmseqs2",
@@ -430,6 +466,7 @@ def run_mmseqs2_search_proteins(
             "sequences": sequences,
             "sequence_ids": sequence_ids,
             "mmseqs_db": mmseqs_db_for_dispatch,
+            "target_sequences": inputs.target_sequences,
             "threads": config.threads,
             "split": config.split,
             "sensitivity": config.sensitivity,

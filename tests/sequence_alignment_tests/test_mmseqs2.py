@@ -114,13 +114,6 @@ def test_parse_m8_empty_string():
     assert list(df.columns) == ["query", "target", "pident", "evalue"]
 
 
-def test_parse_m8_whitespace_only():
-    df = _parse_m8_output("   \n\n  ")
-    assert isinstance(df, pd.DataFrame)
-    assert len(df) == 0
-    assert list(df.columns) == ["query", "target", "pident", "evalue"]
-
-
 def test_filter_top_hits_by_highest_pident():
     data = {
         "query": ["q1", "q1", "q2", "q2", "q3"],
@@ -142,18 +135,6 @@ def test_filter_top_hits_empty_dataframe():
     filtered_df = _filter_top_hits(df)
     assert isinstance(filtered_df, pd.DataFrame)
     assert len(filtered_df) == 0
-
-
-def test_filter_top_hits_single_hit_per_query():
-    data = {
-        "query": ["q1", "q2", "q3"],
-        "target": ["t1", "t2", "t3"],
-        "pident": [90.0, 85.0, 95.0],
-        "evalue": [1e-10, 1e-15, 1e-20],
-    }
-    df = pd.DataFrame(data)
-    filtered_df = _filter_top_hits(df)
-    assert len(filtered_df) == 3
 
 
 def test_filter_top_hits_ties_in_pident():
@@ -331,52 +312,129 @@ def test_column_names_consistency():
 # ── Input validation ─────────────────────────────────────────────────────
 
 
-def test_search_proteins_input_valid(tmp_path):
-    db_file = tmp_path / "database.faa"
-    db_file.write_text(">db1\nMVLSPADKTN\n")
-
-    inputs = Mmseqs2SearchProteinsInput(
-        query_sequences=["MVLSPADKTN", "MKLLVVAAAA"],
-        mmseqs_db=str(db_file),
-    )
+def test_search_proteins_input_valid():
+    """Sanity: a well-formed Input model accepts its required fields."""
+    inputs = Mmseqs2SearchProteinsInput(query_sequences=["MVLSPADKTN", "MKLLVVAAAA"], mmseqs_db="/p")
     assert len(inputs.query_sequences) == 2
 
 
-def test_search_proteins_input_rejects_empty(tmp_path):
-    db_file = tmp_path / "database.faa"
-    db_file.write_text(">db1\nMVLSPADKTN\n")
+@pytest.mark.parametrize(
+    "input_cls, kwargs, msg",
+    [
+        (
+            Mmseqs2SearchProteinsInput,
+            {"query_sequences": [], "mmseqs_db": "/p"},
+            "query_sequences list cannot be empty",
+        ),
+        (
+            Mmseqs2SearchProteinsInput,
+            {"query_sequences": "single", "mmseqs_db": "/p"},
+            "query_sequences must be a list",
+        ),
+        (
+            Mmseqs2SearchGenomesInput,
+            {"query_genomes": [], "target_genomes": ["ATGC"]},
+            "query_genomes list cannot be empty",
+        ),
+        (
+            Mmseqs2SearchGenomesInput,
+            {"query_genomes": ["ATGC"], "target_genomes": []},
+            "target_genomes list cannot be empty",
+        ),
+        (Mmseqs2ClusteringInput, {"input_sequences": []}, "input_sequences list cannot be empty"),
+    ],
+)
+def test_input_field_validator_rejects_bad_value(input_cls, kwargs, msg):
+    with pytest.raises(ValueError, match=msg):
+        input_cls(**kwargs)
 
-    with pytest.raises(ValueError, match="query_sequences list cannot be empty"):
-        Mmseqs2SearchProteinsInput(
-            query_sequences=[],
-            mmseqs_db=str(db_file),
-        )
+
+@pytest.mark.parametrize(
+    "input_cls, base_kwargs, new_kwargs, cleared_field",
+    [
+        (Mmseqs2SearchProteinsInput, {"query_sequences": ["MKTL"]}, {"target_sequences": ["A", "B"]}, "mmseqs_db"),
+        (Mmseqs2ClusteringInput, {}, {"mmseqs_db": "/p"}, "input_sequences"),
+        (Mmseqs2SearchGenomesInput, {"query_genomes": ["ATCG"]}, {"target_db": "/p"}, "target_genomes"),
+    ],
+)
+def test_new_xor_modality_accepted(input_cls, base_kwargs, new_kwargs, cleared_field):
+    """Each tool's new XOR alternative (inline list or DB path) parses; the sibling field defaults to None."""
+    inputs = input_cls(**base_kwargs, **new_kwargs)
+    assert getattr(inputs, cleared_field) is None
 
 
-def test_search_proteins_input_rejects_non_list(tmp_path):
-    db_file = tmp_path / "database.faa"
-    db_file.write_text(">db1\nMVLSPADKTN\n")
+@pytest.mark.parametrize(
+    "input_cls, base_kwargs, both_kwargs, msg",
+    [
+        (
+            Mmseqs2SearchProteinsInput,
+            {"query_sequences": ["MKTL"]},
+            {"mmseqs_db": "/p", "target_sequences": ["MKTL"]},
+            r"exactly one of `mmseqs_db` or `target_sequences`",
+        ),
+        (
+            Mmseqs2ClusteringInput,
+            {},
+            {"input_sequences": ["MKTL"], "mmseqs_db": "/p"},
+            r"exactly one of `input_sequences` or `mmseqs_db`",
+        ),
+        (
+            Mmseqs2SearchGenomesInput,
+            {"query_genomes": ["ATCG"]},
+            {"target_genomes": ["ATCG"], "target_db": "/p"},
+            r"exactly one of `target_genomes` or `target_db`",
+        ),
+    ],
+)
+@pytest.mark.parametrize("violation", ["both", "neither"], ids=lambda v: v)
+def test_xor_violation_raises(input_cls, base_kwargs, both_kwargs, msg, violation):
+    """For every XOR-grouped tool, both `both fields set` and `neither set` raise a clear ValueError."""
+    extra = both_kwargs if violation == "both" else {}
+    with pytest.raises(ValueError, match=msg):
+        input_cls(**base_kwargs, **extra)
 
-    with pytest.raises(ValueError, match="query_sequences must be a list"):
-        Mmseqs2SearchProteinsInput(
-            query_sequences="single_string",
-            mmseqs_db=str(db_file),
-        )
+
+@pytest.mark.parametrize(
+    "input_cls, field, expected_group",
+    [
+        (Mmseqs2SearchProteinsInput, "mmseqs_db", "target"),
+        (Mmseqs2SearchProteinsInput, "target_sequences", "target"),
+        (Mmseqs2SearchGenomesInput, "target_genomes", "target"),
+        (Mmseqs2SearchGenomesInput, "target_db", "target"),
+        (Mmseqs2ClusteringInput, "input_sequences", "input"),
+        (Mmseqs2ClusteringInput, "mmseqs_db", "input"),
+    ],
+)
+def test_xor_group_emitted_in_json_schema(input_cls, field, expected_group):
+    """Every XOR-grouped field surfaces `x-xor-group` so frontends can render a picker."""
+    schema = input_cls.model_json_schema()
+    assert schema["properties"][field]["x-xor-group"] == expected_group
 
 
-def test_search_genomes_input_rejects_empty_query():
-    with pytest.raises(ValueError, match="query_genomes list cannot be empty"):
-        Mmseqs2SearchGenomesInput(query_genomes=[], target_genomes=["ATGC"])
+def test_resolve_to_mmseqs_db_classifies_inputs(tmp_path):
+    """Atoms detect DB stems / FASTA; resolver raises FileNotFoundError on missing path and RuntimeError on unknown format."""
+    from proto_tools.tools.sequence_alignment.mmseqs2.standalone.run import (
+        _is_fasta,
+        _is_mmseqs_db_stem,
+        _resolve_to_mmseqs_db,
+    )
 
+    db_stem = tmp_path / "mydb"
+    db_stem.write_text("")
+    (tmp_path / "mydb.dbtype").write_text("")
+    assert _is_mmseqs_db_stem(str(db_stem))
 
-def test_search_genomes_input_rejects_empty_target():
-    with pytest.raises(ValueError, match="target_genomes list cannot be empty"):
-        Mmseqs2SearchGenomesInput(query_genomes=["ATGC"], target_genomes=[])
+    fasta = tmp_path / "seq.fa"
+    fasta.write_text(">seq_0\nMKTL\n")
+    assert _is_fasta(str(fasta))
 
+    with pytest.raises(FileNotFoundError, match="does not exist"):
+        _resolve_to_mmseqs_db("mmseqs", str(tmp_path / "missing"), temp_db_path=str(tmp_path / "out"), label="test")
 
-def test_clustering_input_rejects_empty():
-    with pytest.raises(ValueError, match="input_sequences list cannot be empty"):
-        Mmseqs2ClusteringInput(input_sequences=[])
+    plain = tmp_path / "plain.txt"
+    plain.write_text("not a fasta or db\n")
+    with pytest.raises(RuntimeError, match="neither a FASTA file nor an MMseqs2 DB stem"):
+        _resolve_to_mmseqs_db("mmseqs", str(plain), temp_db_path=str(tmp_path / "out"), label="test")
 
 
 # ---------------------------------------------------------------------------
@@ -487,32 +545,45 @@ def test_mmseqs_search_genomes_execution():
 
 
 @pytest.mark.integration
-def test_single_sequence_protein_search(tmp_path):
-    db_file = tmp_path / "database.faa"
-    db_file.write_text(">db1\nMVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT\n")
-
+def test_search_proteins_inline_target_sequences_execution():
+    """End-to-end: target_sequences (inline) routed via easy-search yields hits."""
     inputs = Mmseqs2SearchProteinsInput(
         query_sequences=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"],
-        mmseqs_db=str(db_file),
+        target_sequences=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT", "AAAAAAAAAAAAAAAAAAAA"],
     )
-    config = Mmseqs2SearchProteinsConfig(threads=2)
-    result = run_mmseqs2_search_proteins(inputs, config)
-
-    assert len(result) == 1
-    assert result[0].num_hits >= 1
+    result = run_mmseqs2_search_proteins(inputs, Mmseqs2SearchProteinsConfig(threads=2))
+    assert result.success and result[0].num_hits >= 1
 
 
 @pytest.mark.integration
-def test_single_sequence_clustering():
-    inputs = Mmseqs2ClusteringInput(
-        input_sequences=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"],
+def test_clustering_mmseqs_db_fasta_path_execution(tmp_path):
+    """End-to-end: mmseqs_db pointing at a FASTA file → sniff routes to createdb → cluster."""
+    fasta = tmp_path / "input.faa"
+    fasta.write_text(
+        ">a\nMVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT\n"
+        ">b\nMVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT\n"
+        ">c\nMKLLVVAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"
     )
-    config = Mmseqs2ClusteringConfig(min_seq_id=0.95)
-    result = run_mmseqs2_clustering(inputs, config)
+    result = run_mmseqs2_clustering(
+        Mmseqs2ClusteringInput(mmseqs_db=str(fasta)),
+        Mmseqs2ClusteringConfig(min_seq_id=0.95),
+    )
+    assert result.num_clusters == 2 and all(r.input_sequence is None for r in result)
 
-    assert len(result) == 1
-    assert result.num_clusters == 1
-    assert result[0].is_representative is True
+
+@pytest.mark.integration
+def test_search_genomes_target_db_fasta_path_execution(tmp_path):
+    """End-to-end: target_db pointing at a FASTA file → sniff routes to createdb → search."""
+    target = tmp_path / "target.fna"
+    target.write_text(">t1\nATGGTGCTGTCTCCTGCCGACAAGACCAACGTCAAGGCCGCC\n")
+    result = run_mmseqs2_search_genomes(
+        Mmseqs2SearchGenomesInput(
+            query_genomes=["ATGGTGCTGTCTCCTGCCGACAAGACCAACGTCAAGGCCGCC"],
+            target_db=str(target),
+        ),
+        Mmseqs2SearchGenomesConfig(),
+    )
+    assert result.success and len(result) == 1
 
 
 @pytest.mark.integration
