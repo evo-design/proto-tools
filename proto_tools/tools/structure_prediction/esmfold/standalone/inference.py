@@ -78,8 +78,8 @@ class ESMFoldModel:
                 logger.info(f"Long sequence detected ({max_seq_len} residues), enabling trunk chunking (chunk_size=64)")
             self.model.trunk.set_chunk_size(64)
 
-        # Use progress bar for batch processing
-        with torch.inference_mode(), _allow_tf32():
+        # Forward-only path; avoid inference tensors.
+        with torch.no_grad(), _allow_tf32():
             # Tokenize all sequences
             tokenized_inputs = self.tokenizer(
                 linked_sequences, return_tensors="pt", padding=True, add_special_tokens=False
@@ -159,7 +159,8 @@ class ESMFoldModel:
             self.model.trunk.set_chunk_size(64)
 
         if all(weight == 0.0 for weight in loss_weights.values()):
-            with torch.inference_mode(), _allow_tf32():
+            # Forward-only path; avoid inference tensors.
+            with torch.no_grad(), _allow_tf32():
                 outputs = self._run_discrete_forward(
                     complex_data,
                     residue_idx_offset=residue_idx_offset,
@@ -176,7 +177,8 @@ class ESMFoldModel:
                 "pdb": result["pdb"],
             }
 
-        with torch.set_grad_enabled(compute_gradient), _allow_tf32():
+        # Differentiable path; tensors must be saved for backward.
+        with torch.inference_mode(False), torch.set_grad_enabled(compute_gradient), _allow_tf32():
             relaxed_probs = _relaxed_amino_acid_probs(logits, temperature=temperature, soft=soft, hard=hard)
             outputs = self._run_relaxed_forward(
                 complex_data,
