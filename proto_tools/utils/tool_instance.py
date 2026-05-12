@@ -1048,8 +1048,10 @@ class ToolInstance:
         """
         self._ensure_env()
         sp = script_path or self.script_path
-        reload_keys = reload_on or set()
-        reload_params = {k: input_dict.get(k) for k in reload_keys}
+        # ``reload_on is None`` = caller isn't driving reload tracking; don't
+        # compare against or overwrite the tracked state. Empty set still tracks.
+        track_reload = reload_on is not None
+        reload_params = {k: input_dict.get(k) for k in (reload_on or set())} if track_reload else None
 
         # Latch gpu_only so the eviction callback can see it later.
         _invocation = _current_tool_invocation.get() or {}
@@ -1058,10 +1060,11 @@ class ToolInstance:
 
         if self._worker is not None:
             script_changed = self._worker.script_path != sp
-            params_changed = reload_params != self._reload_params
+            params_changed = reload_params is not None and reload_params != self._reload_params
             if script_changed or params_changed:
                 if params_changed:
-                    changed = {k for k in reload_keys if self._reload_params.get(k) != reload_params.get(k)}
+                    assert reload_params is not None
+                    changed = {k for k in (reload_on or set()) if self._reload_params.get(k) != reload_params.get(k)}
                     logger.info(
                         "Config changed (%s) for %s, restarting worker",
                         ", ".join(
@@ -1073,7 +1076,9 @@ class ToolInstance:
                 self._worker.stop()
                 self._worker = None
 
-        self._reload_params = reload_params
+        if track_reload:
+            assert reload_params is not None
+            self._reload_params = reload_params
 
         # Get instance name for DeviceManager (use first cache key if available)
         instance_name = next(iter(self._cache_keys)) if self._cache_keys else self.toolkit
@@ -1179,7 +1184,8 @@ class ToolInstance:
         set_substatus(f"Running {self.toolkit}")
         try:
             result = self._worker.send(input_dict, timeout=effective_timeout)
-            self._mark_warmup_complete(reload_params)
+            if reload_params is not None:
+                self._mark_warmup_complete(reload_params)
             return result
         except Exception:
             # Don't mark complete on failure

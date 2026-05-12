@@ -908,6 +908,36 @@ def test_persistent_worker_no_restart_same_reload_params():
     assert result == {"result": "ok"}
 
 
+def test_persistent_worker_no_restart_when_reload_on_unspecified():
+    """``reload_on=None`` dispatches must not disturb tracked reload state.
+
+    Otherwise the next config-bearing dispatch sees ``{}`` vs the previously
+    tracked dict, declares a config change, and restarts the worker — wiping
+    any worker-local state held in the subprocess.
+    """
+    inst = _make_fake_instance(device="cpu")
+    tracked = {"model_checkpoint": "esm2_t33_650M_UR50D"}
+    inst._reload_params = dict(tracked)
+
+    mock_worker = MagicMock()
+    mock_worker.script_path = inst.script_path
+    mock_worker.send.return_value = {"result": "ok"}
+    inst._worker = mock_worker
+
+    # Simulates release_kv_caches: dispatched with no config → reload_on=None.
+    result = inst._run_persistent(
+        {"operation": "release_kv_caches", "kv_caches": []},
+        reload_on=None,
+    )
+
+    mock_worker.stop.assert_not_called()
+    assert inst._reload_params == tracked, (
+        "reload_on=None dispatch must leave tracked reload state untouched; "
+        "otherwise the next sample call triggers a spurious worker restart."
+    )
+    assert result == {"result": "ok"}
+
+
 @patch.object(ToolInstance, "__init__", return_value=None)
 def test_dispatch_derives_reload_on_from_config(mock_init: MagicMock):
     """dispatch() should derive reload_on from config's reload_fields()."""
