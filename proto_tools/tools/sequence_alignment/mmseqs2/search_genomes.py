@@ -7,7 +7,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from proto_tools.tools.sequence_alignment.mmseqs2.search_proteins import (
     DEFAULT_COV_MODE,
@@ -50,10 +50,12 @@ class Mmseqs2SearchGenomesInput(BaseToolInput):
             to use as queries.
         query_ids (list[str] | None): Optional list of query identifiers.
             If not provided, sequences are assigned sequential IDs (seq_0, seq_1, ...).
-        target_genomes (list[str]): List of nucleotide sequence strings to search
-            against.
-        target_ids (list[str] | None): Optional list of target identifiers.
-            If not provided, sequences are assigned sequential IDs (target_0, target_1, ...).
+        target_genomes (list[str] | None): Inline target genomes.
+            Mutually exclusive with ``target_db``.
+        target_db (str | None): Target FASTA or MMseqs2 DB stem
+            (path/slug/AssetRef). Mutually exclusive with ``target_genomes``.
+        target_ids (list[str] | None): Optional IDs for inline targets
+            (defaults to target_0, target_1, ...).
     """
 
     query_genomes: list[str] = InputField(description="List of query genome sequences (nucleotide)")
@@ -61,7 +63,16 @@ class Mmseqs2SearchGenomesInput(BaseToolInput):
         default=None,
         description="Optional query identifiers (defaults to seq_0, seq_1, ...)",
     )
-    target_genomes: list[str] = InputField(description="List of target genome sequences to search against")
+    target_genomes: list[str] | None = InputField(
+        default=None,
+        xor_group="target",
+        description="Inline target genome sequences. Mutually exclusive with `target_db`.",
+    )
+    target_db: str | None = InputField(
+        default=None,
+        xor_group="target",
+        description="Target FASTA or MMseqs2 DB stem (path/slug/AssetRef). Mutually exclusive with `target_genomes`.",
+    )
     target_ids: list[str] | None = InputField(
         default=None,
         description="Optional target identifiers (defaults to target_0, target_1, ...)",
@@ -82,7 +93,9 @@ class Mmseqs2SearchGenomesInput(BaseToolInput):
     @field_validator("target_genomes", mode="before")
     @classmethod
     def validate_target_genomes(cls, v: Any) -> Any:
-        """Validate target genomes input."""
+        """Validate target genomes input when provided inline."""
+        if v is None:
+            return v
         if not isinstance(v, list):
             raise ValueError(f"target_genomes must be a list, got {type(v)}")
         if not v:
@@ -90,6 +103,13 @@ class Mmseqs2SearchGenomesInput(BaseToolInput):
         if not all(isinstance(item, str) for item in v):
             raise ValueError("All items in target_genomes list must be strings")
         return v
+
+    @model_validator(mode="after")
+    def exactly_one_target(self) -> Mmseqs2SearchGenomesInput:
+        """Enforce the xor_group='target' constraint at runtime."""
+        if (self.target_genomes is None) == (self.target_db is None):
+            raise ValueError("mmseqs2-search-genomes: provide exactly one of `target_genomes` or `target_db`.")
+        return self
 
 
 # Output:
@@ -318,9 +338,10 @@ def run_mmseqs2_search_genomes(
         ...     print(f"Found {r.num_hits} hits")
     """
     query_sequences = inputs.query_genomes
-    target_sequences = inputs.target_genomes
     query_ids = resolve_sequence_ids(query_sequences, inputs.query_ids)
-    target_ids = resolve_sequence_ids(target_sequences, inputs.target_ids)
+    target_ids = (
+        resolve_sequence_ids(inputs.target_genomes, inputs.target_ids) if inputs.target_genomes is not None else None
+    )
     num_queries = len(query_sequences)
 
     output_data = ToolInstance.dispatch(
@@ -330,8 +351,9 @@ def run_mmseqs2_search_genomes(
             "operation": "genome_search",
             "query_sequences": query_sequences,
             "query_ids": query_ids,
-            "target_sequences": target_sequences,
+            "target_sequences": inputs.target_genomes,
             "target_ids": target_ids,
+            "target_db": inputs.target_db,
             # search_type is hardcoded: this tool only does nucleotide-vs-nucleotide.
             "search_type": SEARCH_TYPE_NUCLEOTIDE,
             "threads": config.threads,
@@ -349,11 +371,8 @@ def run_mmseqs2_search_genomes(
         config=config,
     )
 
-    # Parse results
     raw_output = output_data["stdout"]
     df = _parse_m8_output(raw_output)
-
-    # Build per-sequence results
     results = _build_sequence_search_results(query_sequences, query_ids, df)
 
     return Mmseqs2SearchGenomesOutput(
@@ -367,7 +386,7 @@ def run_mmseqs2_search_genomes(
             "max_seqs": config.max_seqs,
             "strand": config.strand,
             "num_queries": num_queries,
-            "num_targets": len(target_sequences),
+            "num_targets": len(inputs.target_genomes) if inputs.target_genomes is not None else None,
         },
         results=results,
     )

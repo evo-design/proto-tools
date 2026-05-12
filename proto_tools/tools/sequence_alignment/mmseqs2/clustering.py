@@ -7,7 +7,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from proto_tools.tools.sequence_alignment.mmseqs2.search_proteins import (
     DEFAULT_CLUSTER_COVERAGE,
@@ -62,13 +62,17 @@ class Mmseqs2ClusterResult(BaseModel):
 
     Attributes:
         sequence_id (str): Identifier of the input sequence.
-        input_sequence (str): The original input sequence.
+        input_sequence (str | None): Original input sequence; ``None`` when
+            the caller used ``mmseqs_db``.
         cluster_id (str): Identifier of the cluster (usually the representative's ID).
         is_representative (bool): Whether this sequence is the cluster representative.
     """
 
     sequence_id: str = Field(description="Input sequence identifier")
-    input_sequence: str = Field(description="The original input sequence")
+    input_sequence: str | None = Field(
+        default=None,
+        description="The original input sequence (only when `input_sequences` is provided inline)",
+    )
     cluster_id: str = Field(description="Cluster identifier (representative sequence ID)")
     is_representative: bool = Field(default=False, description="Whether this sequence is the cluster representative")
 
@@ -78,14 +82,23 @@ class Mmseqs2ClusteringInput(BaseToolInput):
     """Input object for MMseqs2 sequence clustering.
 
     Attributes:
-        input_sequences (list[str]): List of sequence strings (protein or nucleotide)
-            for clustering.
-        sequence_ids (list[str] | None): Optional list of sequence identifiers.
-            If not provided, sequences are assigned sequential IDs (seq_0, seq_1, ...).
+        input_sequences (list[str] | None): Inline sequences to cluster.
+            Mutually exclusive with ``mmseqs_db``.
+        mmseqs_db (str | None): Pre-built MMseqs2 DB (path/slug/AssetRef).
+            Mutually exclusive with ``input_sequences``.
+        sequence_ids (list[str] | None): Optional IDs for inline sequences
+            (defaults to seq_0, seq_1, ...).
     """
 
-    input_sequences: list[str] = InputField(
-        description="List of sequences to cluster",
+    input_sequences: list[str] | None = InputField(
+        default=None,
+        xor_group="input",
+        description="Inline sequences to cluster. Mutually exclusive with `mmseqs_db`.",
+    )
+    mmseqs_db: str | None = InputField(
+        default=None,
+        xor_group="input",
+        description="Pre-built MMseqs2 DB to cluster (path/slug/AssetRef). Mutually exclusive with `input_sequences`.",
     )
     sequence_ids: list[str] | None = InputField(
         default=None,
@@ -95,7 +108,9 @@ class Mmseqs2ClusteringInput(BaseToolInput):
     @field_validator("input_sequences", mode="before")
     @classmethod
     def validate_input_sequences(cls, v: Any) -> Any:
-        """Validate input sequences."""
+        """Validate input sequences when provided inline."""
+        if v is None:
+            return v
         if not isinstance(v, list):
             raise ValueError(f"input_sequences must be a list, got {type(v)}")
         if not v:
@@ -103,6 +118,13 @@ class Mmseqs2ClusteringInput(BaseToolInput):
         if not all(isinstance(item, str) for item in v):
             raise ValueError("All items in input_sequences list must be strings")
         return v
+
+    @model_validator(mode="after")
+    def exactly_one_input(self) -> Mmseqs2ClusteringInput:
+        """Enforce the xor_group='input' constraint at runtime."""
+        if (self.input_sequences is None) == (self.mmseqs_db is None):
+            raise ValueError("mmseqs2-clustering: provide exactly one of `input_sequences` or `mmseqs_db`.")
+        return self
 
 
 # Output:
@@ -300,8 +322,7 @@ def run_mmseqs2_clustering(
         ...     print(f"Seq {i}: cluster={r.cluster_id}, rep={r.is_representative}")
     """
     sequences = inputs.input_sequences
-    sequence_ids = resolve_sequence_ids(sequences, inputs.sequence_ids)
-    num_sequences = len(sequences)
+    sequence_ids = resolve_sequence_ids(sequences, inputs.sequence_ids) if sequences is not None else None
 
     output_data = ToolInstance.dispatch(
         "mmseqs2",
@@ -310,6 +331,7 @@ def run_mmseqs2_clustering(
             "operation": "clustering",
             "sequences": sequences,
             "sequence_ids": sequence_ids,
+            "mmseqs_db": inputs.mmseqs_db,
             "min_seq_id": config.min_seq_id,
             "coverage": config.coverage,
             "cov_mode": config.cov_mode,
@@ -323,22 +345,31 @@ def run_mmseqs2_clustering(
         config=config,
     )
 
-    # Parse cluster assignments
-    cluster_assignments = output_data["cluster_assignments"]
+    cluster_assignments: dict[str, str] = output_data["cluster_assignments"]
 
-    # Build per-sequence results
-    results = []
-    for seq, seq_id in zip(sequences, sequence_ids, strict=False):
-        cluster_id = cluster_assignments.get(seq_id, seq_id)
-        is_rep = seq_id == cluster_id
-        results.append(
-            Mmseqs2ClusterResult(
-                sequence_id=seq_id,
-                input_sequence=seq,
-                cluster_id=cluster_id,
-                is_representative=is_rep,
+    results: list[Mmseqs2ClusterResult] = []
+    if sequences is not None and sequence_ids is not None:
+        for seq, seq_id in zip(sequences, sequence_ids, strict=False):
+            cluster_id = cluster_assignments.get(seq_id, seq_id)
+            results.append(
+                Mmseqs2ClusterResult(
+                    sequence_id=seq_id,
+                    input_sequence=seq,
+                    cluster_id=cluster_id,
+                    is_representative=(seq_id == cluster_id),
+                )
             )
-        )
+        num_sequences = len(sequences)
+    else:
+        for member_id, cluster_id in cluster_assignments.items():
+            results.append(
+                Mmseqs2ClusterResult(
+                    sequence_id=member_id,
+                    cluster_id=cluster_id,
+                    is_representative=(member_id == cluster_id),
+                )
+            )
+        num_sequences = len(results)
 
     return Mmseqs2ClusteringOutput(
         metadata={
