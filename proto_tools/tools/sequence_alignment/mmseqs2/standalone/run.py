@@ -4,8 +4,8 @@ Routes the four operations exposed by this toolkit to the right helper:
 
 - ``protein_search`` — ``mmseqs easy-search``; optional ``--gpu 1`` when the
   payload sets ``use_gpu`` and the target DB has a ``*.idx_pad`` index.
-- ``genome_search`` — full ``createdb`` + ``createindex`` + ``search`` +
-  ``convertalis`` workflow for nucleotide-vs-nucleotide search. CPU only.
+- ``genome_search`` — ``createdb`` + ``search`` + ``convertalis`` workflow
+  for nucleotide-vs-nucleotide search. CPU only.
 - ``clustering`` — ``mmseqs cluster`` greedy set-cover. CPU only.
 - ``homology_search`` — ColabFold-style iterative MSA pipeline; GPU by default
   via the upstream ``colabfold_search`` CLI shipped with this env.
@@ -210,16 +210,14 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
         target_sequences = input_data.get("target_sequences")
         target_db_path: str
         target_db_size: int | None
-        target_db_built_here: bool
         if target_sequences is not None:
             target_fasta = str(tmp_path / "target_genomes.fna")
             _write_fasta(target_sequences, target_fasta, input_data.get("target_ids"), prefix="target")
             target_db_path = str(tmp_path / "target_db")
             _run_cmd([mmseqs, "createdb", target_fasta, target_db_path], "mmseqs createdb (target)")
             target_db_size = len(target_sequences)
-            target_db_built_here = True
         else:
-            target_db_path, target_db_built_here = _resolve_to_mmseqs_db(
+            target_db_path, _ = _resolve_to_mmseqs_db(
                 mmseqs,
                 input_data["target_db"],
                 temp_db_path=str(tmp_path / "target_db"),
@@ -254,21 +252,6 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
         threads = str(effective_threads)
 
         _run_cmd([mmseqs, "createdb", query_fasta, query_db], "mmseqs createdb (query)")
-        # createindex is optional (search computes it on-the-fly); only run for DBs we built here.
-        if target_db_built_here:
-            _run_cmd(
-                [
-                    mmseqs,
-                    "createindex",
-                    target_db_path,
-                    mmseqs_tmp,
-                    "--search-type",
-                    search_type,
-                    "--threads",
-                    threads,
-                ],
-                "mmseqs createindex",
-            )
         _run_cmd(
             [
                 mmseqs,
