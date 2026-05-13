@@ -10,6 +10,7 @@ from typing import Any
 
 from pydantic import Field
 
+from proto_tools.entities.structures import Structure
 from proto_tools.tools.inverse_folding.fampnn.fampnn_sample import (
     FAMPNNStructureInput,
 )
@@ -95,15 +96,13 @@ class FAMPNNPackingResult(BaseToolOutput):
     """Output for FAMPNN sidechain packing.
 
     Attributes:
-        packed_structures (list[list[str]]): List of lists of PDB strings with packed sidechain
+        packed_structures (list[list[Structure]]): Packed structures with sidechain
             coordinates. Outer list corresponds to input structures, inner list
-            to packing samples. B-factor column contains per-atom pSCE.
+            to packing samples. B-factor column carries per-atom pSCE.
         psce (list[list[list[float]]]): Per-residue predicted sidechain error (Angstroms) for each sample.
     """
 
-    packed_structures: list[list[str]] = Field(
-        description="PDB strings with packed sidechains (outer=structures, inner=samples)"
-    )
+    packed_structures: list[list[Structure]] = Field(description="Packed structures (outer=inputs, inner=samples)")
     psce: list[list[list[float]]] = Field(
         description="Per-residue pSCE for each sample (outer=structures, inner=samples)"
     )
@@ -123,15 +122,13 @@ class FAMPNNPackingResult(BaseToolOutput):
         path.mkdir(parents=True, exist_ok=True)
 
         if file_format == "pdb":
-            for i, pdb_list in enumerate(self.packed_structures):
-                for j, pdb_str in enumerate(pdb_list):
-                    out_file = path / f"packed_{i}_sample_{j}.pdb"
-                    out_file.write_text(pdb_str)
+            for i, struct_list in enumerate(self.packed_structures):
+                for j, struct in enumerate(struct_list):
+                    struct.write_pdb(path / f"packed_{i}_sample_{j}.pdb")
         elif file_format == "json":
-            for i, (pdb_list, psce_list) in enumerate(zip(self.packed_structures, self.psce, strict=False)):
-                out_file = path / f"packed_{i}.json"
-                with open(out_file, "w") as f:
-                    json.dump({"pdb_strings": pdb_list, "psce": psce_list}, f, indent=2)
+            for i, (struct_list, psce_list) in enumerate(zip(self.packed_structures, self.psce, strict=False)):
+                with open(path / f"packed_{i}.json", "w") as f:
+                    json.dump({"pdb_strings": [s.structure for s in struct_list], "psce": psce_list}, f, indent=2)
         else:
             raise ValueError(f"Unsupported format: {file_format}")
 
@@ -228,7 +225,9 @@ def run_fampnn_pack(
                 chunk_idx += 1
                 remaining -= chunk
 
-        all_packed.append(struct_pdbs)
+        all_packed.append(
+            [Structure(structure=pdb, structure_format="pdb", source="fampnn-pack") for pdb in struct_pdbs]
+        )
         all_psce.append(struct_psce)
 
     return FAMPNNPackingResult(

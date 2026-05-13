@@ -165,14 +165,14 @@ Contains `FAMPNNSequences` objects (one per input structure):
 | Field | Type | Description |
 |-------|------|-------------|
 | `sequences` | `List[str]` | Designed amino acid sequences |
-| `output_pdb_strings` | `List[str]` | PDB strings with designed sequences and sidechain coordinates |
+| `structures` | `List[Structure]` | Designed structures with packed sidechain coordinates. B-factor column carries per-atom pSCE. |
 | `psce` | `List[List[float]]` | Per-residue predicted sidechain error (Angstroms) |
 
 ### Packing Output (`FAMPNNPackingResult`)
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `packed_structures` | `List[List[str]]` | PDB strings (outer=structures, inner=samples) |
+| `packed_structures` | `List[List[Structure]]` | Packed structures (outer=inputs, inner=samples). B-factor column carries per-atom pSCE. |
 | `psce` | `List[List[List[float]]]` | Per-residue pSCE for each sample |
 
 ### Scoring Output (`FAMPNNScoreOutput`)
@@ -270,8 +270,7 @@ config = FAMPNNPackConfig(num_samples_per_structure=3)
 result = run_fampnn_pack(inputs, config)
 
 # Save best packing
-with open("packed.pdb", "w") as f:
-    f.write(result.packed_structures[0][0])
+result.packed_structures[0][0].write_pdb("packed.pdb")
 ```
 
 ## Best Practices & Gotchas
