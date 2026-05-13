@@ -13,6 +13,7 @@ from proto_tools.databases.entries import (
     nt_rna_2023_02_23_90_80,  # noqa: F401
     pdb_seqres_2022_09_28,  # noqa: F401
     rfam_14_9_90_80,  # noqa: F401
+    rfam_15_1,  # noqa: F401
     rnacentral_active_90_80,  # noqa: F401
     small_bfd,  # noqa: F401
     tiny_test_colabfold,  # noqa: F401
