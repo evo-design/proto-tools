@@ -255,14 +255,16 @@ def _proteinmpnn_payload():
 
 
 def _fampnn_payload():
+    from proto_tools.entities.structures import Structure
     from proto_tools.tools.inverse_folding.fampnn.fampnn_sample import (
         FAMPNNSampleOutput,
         FAMPNNSequences,
     )
 
+    pdb = "ATOM      1  N   MET A   1       0.000   0.000   0.000  1.00  0.00           N\nEND\n"
     item = FAMPNNSequences(
         sequences=["MVLSP"],
-        output_pdb_strings=["ATOM 1 ..."],
+        structures=[Structure(structure=pdb, structure_format="pdb")],
         psce=[[0.12, 0.34, 0.56, 0.78, 0.90]],
     )
     return FAMPNNSampleOutput, FAMPNNSequences, item
@@ -299,7 +301,7 @@ def _esm_if1_payload():
     ("payload_factory", "expected_extras"),
     [
         pytest.param(_proteinmpnn_payload, ("perplexity", "sequence_recovery"), id="proteinmpnn"),
-        pytest.param(_fampnn_payload, ("output_pdb_strings", "psce"), id="fampnn"),
+        pytest.param(_fampnn_payload, ("structures", "psce"), id="fampnn"),
         pytest.param(
             _ligandmpnn_payload,
             ("sequence_recovery", "ligand_interface_sequence_recovery"),

@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import Field
 
-from proto_tools.entities.structures import ResidueSelection
+from proto_tools.entities.structures import ResidueSelection, Structure
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedSequences,
     InverseFoldingConfig,
@@ -146,12 +146,12 @@ class FAMPNNSequences(DesignedSequences):
 
     Attributes:
         sequences (list[str]): Designed amino acid sequences.
-        output_pdb_strings (list[str]): PDB-format strings with designed sequence and
-            packed sidechain coordinates. B-factor column contains per-atom pSCE.
+        structures (list[Structure]): Designed structures with packed sidechain
+            coordinates. B-factor column carries per-atom pSCE.
         psce (list[list[float]]): Per-residue predicted sidechain error (mean over atoms) in Angstroms.
     """
 
-    output_pdb_strings: list[str] = Field(description="PDB strings with designed sequences and sidechain coordinates")
+    structures: list[Structure] = Field(description="Designed structures with packed sidechain coordinates")
     psce: list[list[float]] = Field(description="Per-residue predicted sidechain error (Angstroms)")
 
 
@@ -271,7 +271,9 @@ def run_fampnn_sample(
         designed_sequences.append(
             FAMPNNSequences(
                 sequences=all_seqs,
-                output_pdb_strings=all_pdbs,
+                structures=[
+                    Structure(structure=pdb, structure_format="pdb", source="fampnn-sample") for pdb in all_pdbs
+                ],
                 psce=all_psce,
             )
         )

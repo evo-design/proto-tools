@@ -176,9 +176,9 @@ def test_fampnn_sample_simple(pdb_structure):
     assert all(isinstance(seq, str) for seq in designs.sequences)
     assert all(len(seq) > 0 for seq in designs.sequences)
     # FAMPNN-specific: PDB strings and pSCE
-    assert len(designs.output_pdb_strings) == 2
-    assert all(isinstance(pdb, str) for pdb in designs.output_pdb_strings)
-    assert all("ATOM" in pdb for pdb in designs.output_pdb_strings)
+    assert len(designs.structures) == 2
+    assert all(s.structure_format == "pdb" for s in designs.structures)
+    assert all("ATOM" in s.structure for s in designs.structures)
     assert len(designs.psce) == 2
     assert all(isinstance(psce, list) for psce in designs.psce)
     assert all(isinstance(v, float) for psce in designs.psce for v in psce)
@@ -200,7 +200,7 @@ def test_fampnn_sample_chunked_batching(pdb_structure):
 
     designs = output.designed_sequences[0]
     assert len(designs.sequences) == 4
-    assert len(designs.output_pdb_strings) == 4
+    assert len(designs.structures) == 4
     assert len(designs.psce) == 4
 
 
@@ -287,9 +287,9 @@ def test_fampnn_pack_simple(pdb_structure):
 
     assert len(output.packed_structures) == 1
     assert len(output.packed_structures[0]) == 1
-    pdb_str = output.packed_structures[0][0]
-    assert isinstance(pdb_str, str)
-    assert "ATOM" in pdb_str
+    struct = output.packed_structures[0][0]
+    assert struct.structure_format == "pdb"
+    assert "ATOM" in struct.structure
 
     # pSCE should be present
     assert len(output.psce) == 1
@@ -484,8 +484,8 @@ def test_fampnn_sample_benchmark(request: pytest.FixtureRequest, benchmark_pdb_s
     target_len = len(benchmark_pdb_structure.get_chain_sequence("A"))
     for seq in designs.sequences:
         assert len(seq) == target_len
-    assert len(designs.output_pdb_strings) == 20
-    assert all("ATOM" in pdb for pdb in designs.output_pdb_strings)
+    assert len(designs.structures) == 20
+    assert all("ATOM" in s.structure for s in designs.structures)
 
 
 @pytest.mark.benchmark("fampnn-pack")
@@ -505,8 +505,8 @@ def test_fampnn_pack_benchmark(request: pytest.FixtureRequest, benchmark_pdb_str
     assert result.tool_id == "fampnn-pack"
     assert len(result.packed_structures) == 1
     assert len(result.packed_structures[0]) == 20
-    for pdb_str in result.packed_structures[0]:
-        assert "ATOM" in pdb_str
+    for struct in result.packed_structures[0]:
+        assert "ATOM" in struct.structure
     assert len(result.psce[0]) == 20
 
 
