@@ -443,12 +443,52 @@ class ToolRegistry:
                 # Unseeded calls to stochastic tools skip cache so repeat dispatches advance RNG.
                 runtime_cacheable = cache_enabled and (not stochastic_tool or config.seed is not None)
 
+                deduped = None
+                original_items = None
+                strip = None
+                whole_cache_key = None
+
+                def _finish_dispatched(dispatched: BaseToolOutput) -> BaseToolOutput:
+                    dispatched.tool_id = key
+                    if dispatched.success is None:
+                        dispatched.success = True
+                    dispatched.execution_time = time.time() - start_time
+                    return _post_dispatch_cache_and_expand(
+                        key,
+                        spec,
+                        runtime_cacheable,
+                        stochastic_tool,
+                        dispatched,
+                        strip,
+                        deduped,
+                        original_items,
+                        whole_cache_key,
+                    )
+
                 # Validate device allocation against tool requirements.
                 # device="cloud" delegates all resource allocation to the registered
                 # cloud backend, so local validation is skipped.
                 if hasattr(config, "device"):
                     device_str = str(config.device)
                     if device_str == "cloud":
+                        try:
+                            dispatched = cls._try_dispatch(key, inputs, config)
+                        except Exception as e:
+                            logger.error(
+                                "Tool %s: _try_dispatch raised %s: %s",
+                                key,
+                                type(e).__name__,
+                                e,
+                            )
+                            return _make_error_output_or_raise(
+                                output_class,
+                                key,
+                                start_time,
+                                e,
+                                traceback.format_exc(),
+                            )
+                        if dispatched is not None:
+                            return _finish_dispatched(dispatched)
                         from proto_tools.cloud import is_api_backend_enabled
 
                         if not is_api_backend_enabled():
@@ -458,11 +498,15 @@ class ToolRegistry:
                                 "proto-tools[cloud] and call "
                                 "proto_tools.cloud.use_api_backend()."
                             )
-                    elif gpu_only_flag and device_str == "cpu":
+                        raise RuntimeError(
+                            f"Tool {key!r} called with device='cloud' but the configured "
+                            "remote execution backend did not handle the call."
+                        )
+                    if gpu_only_flag and device_str == "cpu":
                         raise ValueError(
                             f"Tool {key!r} is gpu_only and rejects device='cpu'; use 'cuda', 'cuda:N', or 'cudaxN'"
                         )
-                    elif device_str != "cpu" and not uses_gpu:
+                    if device_str != "cpu" and not uses_gpu:
                         logger.warning(
                             "Tool %s does not use a GPU but device=%r was requested; "
                             "the tool will run on CPU regardless",
@@ -474,11 +518,6 @@ class ToolRegistry:
                         validate_device_allocation(device_spec.count, device_count, key)
 
                 # --- Dedup + Cache (cacheable tools only) ---
-                deduped = None
-                original_items = None
-                strip = None
-                whole_cache_key = None
-
                 if runtime_cacheable and spec and spec.iterable_input_field and not stochastic_tool:
                     assert spec.iterable_output_field is not None  # validated at registration
                     # Iterable path (deterministic only): dedup then strip cached items.
@@ -604,21 +643,7 @@ class ToolRegistry:
                             traceback.format_exc(),
                         )
                     if dispatched is not None:
-                        dispatched.tool_id = key
-                        if dispatched.success is None:
-                            dispatched.success = True
-                        dispatched.execution_time = time.time() - start_time
-                        return _post_dispatch_cache_and_expand(
-                            key,
-                            spec,
-                            runtime_cacheable,
-                            stochastic_tool,
-                            dispatched,
-                            strip,
-                            deduped,
-                            original_items,
-                            whole_cache_key,
-                        )
+                        return _finish_dispatched(dispatched)
 
                     # Carry per-invocation flags (key, gpu_only) to ToolInstance so
                     # the eviction callback can restart the worker instead of

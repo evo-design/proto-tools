@@ -39,6 +39,13 @@ class _CloudOutput(MockToolOutputBase):
     result: str = Field(description="Result payload")
 
 
+class _PreprocessConfig(_CloudConfig):
+    local_path: str | None = ConfigField(default=None, hidden=True)
+
+    def preprocess(self, inputs: BaseToolInput) -> BaseToolInput:
+        raise AssertionError("cloud dispatch should not run local preprocess")
+
+
 @dataclass
 class _StubResponse:
     """Stand-in for proto_client.models.JobStatusResponse."""
@@ -195,6 +202,66 @@ def test_use_api_backend_routes_device_cloud(fake_proto_client, clean_registry):
     assert call["poll_interval"] == 0.25
     assert call["timeout"] == 5.0
     assert call["output_model"] is _CloudOutput
+
+
+def test_device_cloud_dispatches_before_preprocess(fake_proto_client, clean_registry):
+    """device='cloud' sends the original request instead of running local preprocess first."""
+    expected = _CloudOutput(result="from-api")
+    use_api_backend()
+    fake_proto_client.last_instance.tools.output_to_return = expected
+
+    clean_registry.register(
+        key="preprocess-tool",
+        label="preprocess-tool",
+        category="test",
+        input_class=_CloudInput,
+        config_class=_PreprocessConfig,
+        output_class=_CloudOutput,
+        description="preprocess-tool",
+    )(lambda inputs, config, instance=None: _CloudOutput(result="local"))
+    spec = clean_registry.get("preprocess-tool")
+
+    result = spec.function(_CloudInput(payload="raw"), _PreprocessConfig(device="cloud"))
+
+    assert result.result == "from-api"
+    call = fake_proto_client.last_instance.tools.calls[0]
+    assert call["inputs"] == {"payload": "raw"}
+    assert "local_path" not in call["config"]
+
+
+def test_device_cloud_uses_custom_dispatch_without_proto_client_backend(clean_registry):
+    """Other ToolRegistry dispatch hooks can handle device='cloud' without proto_tools.cloud."""
+    original_dispatch = ToolRegistry._try_dispatch
+
+    clean_registry.register(
+        key="custom-cloud-tool",
+        label="custom-cloud-tool",
+        category="test",
+        input_class=_CloudInput,
+        config_class=_PreprocessConfig,
+        output_class=_CloudOutput,
+        description="custom-cloud-tool",
+    )(lambda inputs, config, instance=None: _CloudOutput(result="local"))
+    spec = clean_registry.get("custom-cloud-tool")
+    seen: dict[str, Any] = {}
+
+    def _custom_dispatch(cls, key, inputs, config):
+        del cls
+        seen["key"] = key
+        seen["inputs"] = inputs.model_dump()
+        seen["config"] = config.model_dump(exclude_none=True)
+        return _CloudOutput(result="custom")
+
+    ToolRegistry._try_dispatch = classmethod(_custom_dispatch)
+    try:
+        result = spec.function(_CloudInput(payload="raw"), _PreprocessConfig(device="cloud"))
+    finally:
+        ToolRegistry._try_dispatch = original_dispatch
+
+    assert result.result == "custom"
+    assert seen["key"] == "custom-cloud-tool"
+    assert seen["inputs"] == {"payload": "raw"}
+    assert seen["config"]["device"] == "cloud"
 
 
 def test_device_cpu_falls_through_to_local(fake_proto_client, clean_registry):

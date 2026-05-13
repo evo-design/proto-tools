@@ -2,7 +2,8 @@
 
 When a tool is called with ``config.device == "cloud"``,
 ``ToolRegistry._try_dispatch`` routes the call to Proto's remote
-execution service via ``proto-client`` instead of running locally.
+execution service via ``proto-client`` before local preprocessing or
+worker setup runs.
 
 Enable with :func:`use_api_backend` (requires the ``cloud`` extra:
 ``pip install proto-tools[cloud]``).
