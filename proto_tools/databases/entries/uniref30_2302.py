@@ -39,6 +39,10 @@ ENTRY = DatasetEntry(
                 description="Build MMseqs2 sequence index for search",
             ),
             IndexStep(
+                command=["mmseqs", "makepaddedseqdb", "uniref30_2302_db", "uniref30_2302_db.idx_pad"],
+                description="Build GPU-padded sequence DB for MMseqs2-GPU homology search",
+            ),
+            IndexStep(
                 command=["tar", "-xzvf", "uniref30_2302_newtaxonomy.tar.gz"],
                 description="Extract rebuilt taxonomy mapping (overwrites stale tarball mapping)",
             ),
@@ -51,6 +55,8 @@ ENTRY = DatasetEntry(
             "uniref30_2302_db.dbtype",
             "uniref30_2302_db_h",
             "uniref30_2302_db_seq",
+            "uniref30_2302_db.idx_pad",
+            "uniref30_2302_db.idx_pad.dbtype",
         ],
         paired_output_files=[
             "uniref30_2302_db_mapping.bin",
