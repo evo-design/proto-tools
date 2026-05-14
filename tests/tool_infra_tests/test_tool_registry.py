@@ -1655,3 +1655,117 @@ def test_non_finite_in_nested_container_surfaced(clean_registry, caplog):
     assert math.isnan(result.nested["b"][0])
     msgs = " ".join(r.message for r in caplog.records)
     assert "nested.a[1]" in msgs and "nested.b[0]" in msgs
+
+
+# ── Iterable timeout scaling ─────────────────────────────────────────────────
+
+
+def test_iterable_dispatch_scales_config_timeout_by_item_count(clean_registry):
+    """A multi-item iterable dispatch scales config.timeout by item count."""
+    seen_timeouts: list[int | None] = []
+
+    def run_fn(inputs, config, instance=None):
+        seen_timeouts.append(config.timeout)
+        return AnotherMockToolOutput(processed_data=list(inputs.sequences), count=len(inputs.sequences))
+
+    decorated = clean_registry.register(
+        key="mock-iterable-timeout",
+        label="Mock",
+        category="testing",
+        input_class=AnotherMockToolInput,
+        config_class=AnotherMockToolConfig,
+        output_class=AnotherMockToolOutput,
+        description="mock",
+        iterable_input_field="sequences",
+        iterable_output_field="processed_data",
+    )(run_fn)
+
+    config = AnotherMockToolConfig(timeout=100)
+    decorated(AnotherMockToolInput(sequences=["a", "b", "c", "d", "e"]), config)
+    assert seen_timeouts == [500], "5 items x 100s base should give a 500s effective timeout"
+
+
+def test_single_item_iterable_dispatch_does_not_scale_timeout(clean_registry):
+    """A single-item iterable dispatch leaves config.timeout untouched."""
+    seen_timeouts: list[int | None] = []
+
+    def run_fn(inputs, config, instance=None):
+        seen_timeouts.append(config.timeout)
+        return AnotherMockToolOutput(processed_data=list(inputs.sequences), count=len(inputs.sequences))
+
+    decorated = clean_registry.register(
+        key="mock-iterable-timeout-singleton",
+        label="Mock",
+        category="testing",
+        input_class=AnotherMockToolInput,
+        config_class=AnotherMockToolConfig,
+        output_class=AnotherMockToolOutput,
+        description="mock",
+        iterable_input_field="sequences",
+        iterable_output_field="processed_data",
+    )(run_fn)
+
+    config = AnotherMockToolConfig(timeout=100)
+    decorated(AnotherMockToolInput(sequences=["a"]), config)
+    assert seen_timeouts == [100]
+
+
+def test_iterable_dispatch_no_scaling_when_timeout_none(clean_registry):
+    """``timeout=None`` means wait forever — never scale a None into a number."""
+    seen_timeouts: list[int | None] = []
+
+    def run_fn(inputs, config, instance=None):
+        seen_timeouts.append(config.timeout)
+        return AnotherMockToolOutput(processed_data=list(inputs.sequences), count=len(inputs.sequences))
+
+    decorated = clean_registry.register(
+        key="mock-iterable-timeout-none",
+        label="Mock",
+        category="testing",
+        input_class=AnotherMockToolInput,
+        config_class=AnotherMockToolConfig,
+        output_class=AnotherMockToolOutput,
+        description="mock",
+        iterable_input_field="sequences",
+        iterable_output_field="processed_data",
+    )(run_fn)
+
+    config = AnotherMockToolConfig(timeout=None)
+    decorated(AnotherMockToolInput(sequences=["a", "b", "c"]), config)
+    assert seen_timeouts == [None]
+
+
+def test_iterable_dispatch_respects_effective_timeout_override(clean_registry):
+    """When ``effective_timeout()`` returns None (e.g. colabfold's metagenomic gate), do not scale."""
+    seen_effective: list[int | None] = []
+
+    class UnboundedConfig(AnotherMockToolConfig):
+        unbounded: bool = ConfigField(default=False, description="If True, effective_timeout returns None")
+
+        def effective_timeout(self) -> int | None:
+            if self.unbounded and "timeout" not in self.model_fields_set:
+                return None
+            return self.timeout
+
+    def run_fn(inputs, config, instance=None):
+        seen_effective.append(config.effective_timeout())
+        return AnotherMockToolOutput(processed_data=list(inputs.sequences), count=len(inputs.sequences))
+
+    decorated = clean_registry.register(
+        key="mock-iterable-effective-timeout",
+        label="Mock",
+        category="testing",
+        input_class=AnotherMockToolInput,
+        config_class=UnboundedConfig,
+        output_class=AnotherMockToolOutput,
+        description="mock",
+        iterable_input_field="sequences",
+        iterable_output_field="processed_data",
+    )(run_fn)
+
+    config = UnboundedConfig(unbounded=True)
+    decorated(AnotherMockToolInput(sequences=["a", "b", "c"]), config)
+    assert seen_effective == [None], (
+        "effective_timeout() override returning None must be honored — scaling must not "
+        "fire model_copy and contaminate model_fields_set"
+    )

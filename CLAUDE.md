@@ -234,6 +234,7 @@ Google style everywhere. Enforced by ruff D rules (Google convention) and `tests
   ```
 - **Pydantic classes**: Always include `Attributes:` section with full descriptions. These intentionally duplicate the short `Field(description=...)` / `ConfigField(description=...)` strings; field descriptions are short tooltips for the frontend UI, while docstring descriptions are longer developer-facing explanations.
 - **No dev-process notes in comments or docstrings.** Don't reference issues, PRs, branches, prior code, past incidents, or "we used to / now we" framings unless explicitly asked. Don't justify present behavior with the history that led to it. Describe current behavior only — the rationale belongs in the PR description and commit message, not in the source. This is stricter than the global "no implementation history" rule and applies to *every* file in this repo.
+- **Comments are one line.** Prefer a single short line that says what the next chunk does. No multi-line comment blocks justifying a design decision, recapping the bug it fixes, or explaining why an earlier shape was rejected. The chosen design lives in the code; the discarded designs live in the PR conversation. Same rule for docstrings on internal helpers — one summary line unless the function genuinely takes structured `Args:` / `Returns:` sections.
 
 ## Rules When Implementing Tools
 
