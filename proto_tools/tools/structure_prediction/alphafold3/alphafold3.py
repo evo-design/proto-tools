@@ -272,18 +272,30 @@ def run_alphafold3(
 ) -> AlphaFold3Output:
     """Predict protein 3D structures using AlphaFold3."""
     output_structures: list[Structure] = []
-    model_seeds = [config.seed] if config.seed is not None else config.seeds
+
+    # Seeded: single seed; unseeded: fresh random seeds, count taken from config.seeds for AF3 seed-averaging.
+    if config.seed is not None:
+        base_seeds = [config.seed]
+    else:
+        n_seeds = max(len(config.seeds), 1)
+        base_seeds = [config.get_random_int() for _ in range(n_seeds)]
 
     with _config_overrides_env(config.model_dir):
-        for comp_idx, comp in progress_bar(
-            enumerate(inputs.complexes),
-            desc="Folding structures (AlphaFold3)",
-            unit="complex",
-            total=len(inputs.complexes),
+        for dispatch_idx, comp in enumerate(
+            progress_bar(
+                inputs.complexes,
+                desc="Folding structures (AlphaFold3)",
+                unit="complex",
+                total=len(inputs.complexes),
+            )
         ):
+            # Shift seeds per complex so duplicate inputs get non-overlapping seed slices.
+            step = len(base_seeds)
+            model_seeds = [s + dispatch_idx * step for s in base_seeds]
+
             input_json = _create_input_json_from_complex(
                 comp,
-                f"{config.name}_{comp_idx}",
+                f"{config.name}_{dispatch_idx}",
                 model_seeds,
             )
 
@@ -291,7 +303,7 @@ def run_alphafold3(
                 # Determine output directory
                 if config.output_dir is None:
                     # Create inside temp directory for auto-cleanup
-                    output_dir = os.path.join(temp_dir, f"{config.name}_{comp_idx}_af3_results")
+                    output_dir = os.path.join(temp_dir, f"{config.name}_{dispatch_idx}_af3_results")
                 else:
                     # Create at specified path (persists after execution)
                     output_dir = f"{config.output_dir}_af3_results"
@@ -305,7 +317,7 @@ def run_alphafold3(
                     input_json = _assign_msas_to_input_json(input_json, inputs.msas, input_dir, config.verbose)  # type: ignore[arg-type]
 
                 # Write input JSON to file for worker protocol
-                input_json_path = os.path.join(input_dir, f"{config.name}_{comp_idx}.json")
+                input_json_path = os.path.join(input_dir, f"{config.name}_{dispatch_idx}.json")
                 with open(input_json_path, "w") as f:
                     json.dump(input_json, f, indent=2)
 

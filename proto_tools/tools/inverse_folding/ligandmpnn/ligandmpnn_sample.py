@@ -173,6 +173,8 @@ def run_ligandmpnn_sample(
     designed_sequences = []
 
     base_seed = config.seed if config.seed is not None else config.get_random_int()
+    # Advances across every dispatch (inputs x chunks) so duplicate items get distinct seeds.
+    dispatch_idx = 0
 
     # Local venv execution
     for inp in progress_bar(
@@ -186,7 +188,6 @@ def run_ligandmpnn_sample(
         # Foundry returns NaN here when the structure has no ligand interface; surface that as None.
         all_interface_recovery: list[float] | None = []
         remaining = config.num_sequences_per_structure
-        chunk_idx = 0
         # Materialize the Structure to a tempfile once per input — reused across chunks.
         with inp.structure.temp_file() as pdb_path:
             while remaining > 0:
@@ -199,7 +200,7 @@ def run_ligandmpnn_sample(
                     "temperature": config.temperature,
                     "fixed_positions": inp.fixed_positions.chains if inp.fixed_positions is not None else None,
                     "excluded_amino_acids": config.excluded_amino_acids,
-                    "seed": base_seed + chunk_idx,
+                    "seed": base_seed + dispatch_idx,
                     "device": config.device,
                     "verbose": config.verbose,
                     "model_type": config.model_type,
@@ -221,7 +222,7 @@ def run_ligandmpnn_sample(
                         all_interface_recovery = None
                     else:
                         all_interface_recovery.extend(chunk_interface)
-                chunk_idx += 1
+                dispatch_idx += 1
                 remaining -= chunk  # type: ignore[operator]
         designed_sequences.append(
             LigandMPNNSequences(

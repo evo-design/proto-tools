@@ -488,19 +488,31 @@ class AbLangModel:
         verbose: bool = False,
         align: bool = False,
         return_logits: bool = False,
+        temperature: float = 1.0,
+        seed: int | None = None,
     ) -> dict[str, Any]:
-        """Restore masked (_) positions in antibody sequences.
+        """Fill masked (_) positions in antibody sequences.
 
         The user-facing API uses ``_`` as the standard mask token. This method
         converts ``_`` to ``*`` (ablang's native mask token) before processing.
 
-        When ``align=True``, the AbLang/AbLang2 ``restore`` method runs ANARCI
-        first, letting it extend unknown-length termini. ANARCI is bundled in
-        the env via ``bioconda::anarci``.
+        With ``temperature > 0`` (the default), this runs the underlying AbLang
+        model in ``likelihood`` mode to get per-position amino-acid logits,
+        applies temperature-scaled softmax, and draws one amino acid per
+        masked position via ``torch.multinomial``. The seed (when set) makes
+        the draws reproducible.
+
+        With ``temperature == 0``, this falls back to the library's
+        ``restore`` mode (pure argmax decoding), giving deterministic
+        most-likely-residue restoration. ``align=True`` also forces this
+        path because the ANARCI spread-of-variants logic is incompatible
+        with single-pass stochastic sampling.
 
         When ``return_logits=True``, runs an additional ``likelihood`` mode pass
-        on the restored sequences and returns per-residue AA-only logits.
+        on the filled-in sequences and returns per-residue AA-only logits.
         """
+        import torch
+
         self._ensure_loaded(device, verbose)
 
         if not sequences:
@@ -509,12 +521,20 @@ class AbLangModel:
         # Convert standard mask token (_) to ablang's native mask token (*)
         sequences = [seq.replace("_", "*") for seq in sequences]
 
+        if seed is not None:
+            torch.manual_seed(seed)
+
+        use_sampling = temperature > 0 and not align
+
         if verbose:
+            mode_name = "sampling" if use_sampling else "restore"
             logger.info(
-                "Restoring masked positions in %d sequences (batch_size=%d, align=%s)",
+                "Filling masked positions in %d sequences via %s (batch_size=%d, align=%s, temperature=%g)",
                 len(sequences),
+                mode_name,
                 batch_size,
                 align,
+                temperature,
             )
 
         restored_sequences: list[str] = []
@@ -524,7 +544,9 @@ class AbLangModel:
             batch = sequences[i : i + batch_size]
             formatted = self._format_sequences(batch)
 
-            if self._is_ablang1:
+            if use_sampling:
+                restored = self._sample_at_mask_positions(formatted, temperature, n_seqs=len(batch))
+            elif self._is_ablang1:
                 restored = self.model.restore(formatted, align=align)
             else:
                 restored = self.model(formatted, mode="restore", align=align)
@@ -534,11 +556,50 @@ class AbLangModel:
             restored_sequences.extend(restored_clean)
 
             if all_logits is not None:
-                # Re-format the restored sequences and run a likelihood pass on them so
+                # Re-format the filled sequences and run a likelihood pass on them so
                 # logits reflect the final filled-in positions, not the masked input.
                 all_logits.extend(self._per_position_aa_logits(self._format_sequences(restored_clean)))
 
         return {"sequences": restored_sequences, "logits": all_logits}
+
+    def _sample_at_mask_positions(self, formatted: list[Any], temperature: float, n_seqs: int) -> list[str]:
+        """Sample at masked positions using temperature-scaled multinomial.
+
+        Mirrors the library's ``AbRestore.restore(align=False)`` flow but
+        replaces the final ``torch.argmax`` with a ``torch.multinomial`` draw
+        from the temperature-scaled softmax over the 20 amino-acid tokens.
+        Mask tokens (==23 in both ablang1 and ablang2 vocabs) are the only
+        positions whose tokens get rewritten; everything else passes through.
+        """
+        import torch
+
+        if self._is_ablang1:
+            tokens = self.model.tokenizer(formatted, pad=True, device=self.model.used_device)
+        else:
+            tokens = self.model.tokenizer(formatted, pad=True, w_extra_tkns=False, device=self.model.used_device)
+
+        with torch.no_grad():
+            predictions = self.model.AbLang(tokens)[:, :, 1:21]  # AA columns only
+
+        scaled = predictions / temperature
+        probs = torch.softmax(scaled, dim=-1)
+
+        batch_n, seq_len, num_aa = probs.shape
+        flat_probs = probs.reshape(-1, num_aa)
+        sampled_flat = torch.multinomial(flat_probs, num_samples=1).squeeze(-1)
+        sampled = sampled_flat.reshape(batch_n, seq_len) + 1  # vocab IDs 1-20
+
+        mask_token_id = 23  # ablang1 and ablang2 both use 23
+        restored_tokens = torch.where(tokens == mask_token_id, sampled, tokens)
+
+        decoded = self.model.tokenizer(restored_tokens, mode="decode")
+
+        # ablang2 paired returns heavy and light separately; rejoin with '|'
+        # to match the library's restore() output convention.
+        if not self._is_ablang1 and len(decoded) > n_seqs:
+            decoded = [f"{heavy}|{light}" for heavy, light in zip(decoded[:n_seqs], decoded[n_seqs:], strict=True)]
+
+        return list(decoded)
 
     # ========================================================================
     # Gradient
@@ -777,6 +838,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             verbose=input_dict["verbose"],
             align=input_dict["align"],
             return_logits=input_dict["return_logits"],
+            temperature=input_dict.get("temperature", 1.0),
+            seed=input_dict.get("seed"),
         )
     if operation == "compute_gradient":
         return _model.compute_gradient(

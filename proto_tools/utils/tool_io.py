@@ -751,7 +751,7 @@ class BaseToolOutput(BaseModel, ABC):
         are compared exactly; floating-point outputs (scores, coordinates, pLDDT) use
         the ``rtol`` and ``atol`` defaults below, calibrated to these observed noise
         floors. Tools that drift further are excluded via the ``_SEED_*_EXCLUDED_KEYS``
-        sets in ``tests/tool_infra_tests/test_seed_reproducibility.py``.
+        sets in ``tests/seed_tests/test_seed_reproducibility.py``.
 
         Args:
             other (BaseToolOutput): The other output to compare against.

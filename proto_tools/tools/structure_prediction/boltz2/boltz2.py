@@ -340,15 +340,20 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config, instance: Any = None) 
         - Higher ``recycling_steps`` and ``sampling_steps`` improve quality but increase runtime
         - Supports both local and remote ColabFold search modes when ``use_msa=True``
     """
+    base_seed = config.seed if config.seed is not None else config.get_random_int()
+    # Advance the seed per complex so duplicate inputs get distinct seeds.
     results = [
         run_boltz2_on_complex(
             config=config,
             sp_complex=comp,
             msas=inputs.msas,
             instance=instance,
+            seed=base_seed + dispatch_idx,
         )
-        for comp in progress_bar(
-            inputs.complexes, desc="Folding structures (Boltz-2)", unit="complex", total=len(inputs.complexes)
+        for dispatch_idx, comp in enumerate(
+            progress_bar(
+                inputs.complexes, desc="Folding structures (Boltz-2)", unit="complex", total=len(inputs.complexes)
+            )
         )
     ]
     return Boltz2Output(structures=results)
@@ -365,6 +370,7 @@ def run_boltz2_on_complex(
     sp_complex: Any,
     msas: dict[str, Any] | None = None,
     instance: Any = None,
+    seed: int | None = None,
 ) -> Structure:
     """Run Boltz2 structure prediction on a single complex. This function is wrapped.
 
@@ -375,7 +381,11 @@ def run_boltz2_on_complex(
         sp_complex (Any): StructurePredictionComplex instance containing chain information
         msas (dict[str, Any] | None): Pre-computed MSAs keyed by protein sequence
         instance (Any): Optional ToolInstance for persistent execution
+        seed (int | None): Per-complex seed to pass to the standalone. When ``None``,
+            falls back to ``config.seed`` (preserves legacy single-complex behavior).
     """
+    if seed is None:
+        seed = config.seed
     if config.verbose:
         logger.info("Using local GPU for Boltz2 structure prediction...")
 
@@ -428,7 +438,7 @@ def run_boltz2_on_complex(
             "num_workers": config.num_workers,
             "device": config.device,
             "verbose": config.verbose,
-            "seed": config.seed,
+            "seed": seed,
             "include_pae_matrix": config.include_pae_matrix,
         }
 

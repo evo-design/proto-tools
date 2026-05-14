@@ -221,6 +221,8 @@ def run_fampnn_sample(
     designed_sequences = []
 
     base_seed = config.seed if config.seed is not None else config.get_random_int()
+    # Advances across every dispatch (inputs x chunks) so duplicate items get distinct seeds.
+    dispatch_idx = 0
 
     for inp in progress_bar(
         inputs.inputs,
@@ -230,7 +232,6 @@ def run_fampnn_sample(
     ):
         all_seqs, all_pdbs, all_psce = [], [], []
         remaining = config.num_sequences_per_structure
-        chunk_idx = 0
         # Materialize the Structure to a tempfile once per input — reused across chunks.
         with inp.structure.temp_file() as pdb_path:
             while remaining > 0:
@@ -247,7 +248,7 @@ def run_fampnn_sample(
                     "psce_threshold": config.psce_threshold,
                     "scn_diffusion_steps": config.scn_diffusion_steps,
                     "scn_step_scale": config.scn_step_scale,
-                    "seed": base_seed + chunk_idx,
+                    "seed": base_seed + dispatch_idx,
                     "model_variant": config.model_variant,
                     "device": config.device,
                     "verbose": config.verbose,
@@ -265,7 +266,7 @@ def run_fampnn_sample(
                 all_seqs.extend(result["sequences"])
                 all_pdbs.extend(result["pdb_strings"])
                 all_psce.extend(result["psce"])
-                chunk_idx += 1
+                dispatch_idx += 1
                 remaining -= chunk  # type: ignore[operator]
 
         designed_sequences.append(

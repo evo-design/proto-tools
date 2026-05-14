@@ -566,10 +566,26 @@ echo "{tool_display_name} setup complete!"
 
 ---
 
+## Iterable cardinality (1:1) — [Phase 2: Contract]
+
+When `@tool()` declares both `iterable_input_field` and `iterable_output_field`, `len(output.{iterable_output_field})` must equal `len(inputs.{iterable_input_field})` and correspond by position. Per-item cache stitching, duplicate dedup, and the diversification test all assume this.
+
+If the tool produces N samples per input (`num_sequences_per_structure`, `num_designs`, `n_batches * diffusion_batch_size`, etc.), **bundle the N samples inside a per-input wrapper** — don't flatten. The wrapper is the iterable element.
+
+| Tool | N comes from | Wrapper |
+|---|---|---|
+| `proteinmpnn-sample` | `num_sequences_per_structure` | `ProteinMPNNSequences` (parallel `list[str]` / `list[float]`) |
+| `ligandmpnn-sample` | `num_sequences_per_structure` | `LigandMPNNSequences` (extends `DesignedSequences`) |
+| `rfdiffusion3-design` | `n_batches * diffusion_batch_size` | `RFdiffusion3Designs` (`spec_key` + `list[RFdiffusion3Structure]`) |
+
+Point `iterable_output_field` at the wrapper list, not the flattened inner samples. Drop fields from the inner item that are constant within a bundle (they live on the wrapper).
+
+---
+
 ## Caching Patterns — [Phase 2: Contract]
 
 Add `cacheable=True` to the `@tool()` decorator. The wrapper auto-selects strategy:
-- **Iterable tools** (have `iterable_input_field`) → per-item cache (strip/stitch)
+- **Iterable tools** (have `iterable_input_field`) → per-item cache (strip/stitch). Requires the 1:1 cardinality contract above.
 - **Non-iterable tools** → whole-output cache
 
 ```python
