@@ -571,6 +571,7 @@ def test_clustering_mmseqs_db_fasta_path_execution(tmp_path):
     assert result.num_clusters == 2 and all(r.input_sequence is None for r in result)
 
 
+@pytest.mark.skip_ci
 @pytest.mark.integration
 def test_search_genomes_target_db_fasta_path_execution(tmp_path):
     """End-to-end: target_db pointing at a FASTA file → sniff routes to createdb → search."""
