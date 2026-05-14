@@ -28,6 +28,26 @@ _REQUIRED_SECTIONS = [
     "Overview",
     "Background",
     "Tools",
+    "Toolkit Notes",
+]
+
+# Overview section length cap (characters of body text, excluding the heading).
+_OVERVIEW_MAX_CHARS = 500
+
+# READMEs containing this marker are exempt from QC-gated checks
+# (Overview length, Toolkit Notes presence + guide links). Drop the marker
+# once the README has been reviewed and quality-checked end-to-end.
+_QC_PENDING_MARKER = "This README still needs to be reviewed and quality checked"
+
+# Proto-docs guide paths that every ``## Toolkit Notes`` section must link to.
+# The check uses substring match on the path so any host (live domain or
+# Mintlify staging) and any badge syntax (shields.io HTML or plain markdown
+# link) satisfies it, as long as all four paths are present in the section.
+_TOOLKIT_NOTES_REQUIRED_GUIDE_PATHS = [
+    "/tools/guides/tool-persistence",
+    "/tools/guides/device-management",
+    "/tools/guides/parallel-execution",
+    "/tools/guides/cloud-inference",
 ]
 
 
@@ -180,10 +200,15 @@ def test_has_doc_badge(readme: Path) -> None:
 
 @pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
 def test_has_required_sections(readme: Path) -> None:
-    """README must contain all required H2 sections (exact match)."""
-    text = readme.read_text()
-    h2_headings = re.findall(r"^## (.+)$", text, re.MULTILINE)
+    """README must contain all required H2 sections (exact match).
 
+    Skipped for READMEs that still contain the QC-pending marker.
+    """
+    text = readme.read_text()
+    if _QC_PENDING_MARKER in text:
+        pytest.skip(f"{_tool_id(readme)}/README.md still has QC-pending marker; skipping section check")
+
+    h2_headings = re.findall(r"^## (.+)$", text, re.MULTILINE)
     missing = [req for req in _REQUIRED_SECTIONS if req not in h2_headings]
     assert not missing, f"{_tool_id(readme)}/README.md is missing required sections: {missing}"
 
@@ -197,6 +222,58 @@ def test_no_duplicate_h2(readme: Path) -> None:
     seen: set[str] = set()
     duplicates = [h2 for h2 in h2_headings if h2 in seen or seen.add(h2)]  # type: ignore[func-returns-value]
     assert not duplicates, f"{_tool_id(readme)}/README.md has duplicate H2 sections: {duplicates}"
+
+
+@pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
+def test_overview_within_char_limit(readme: Path) -> None:
+    """Overview section body must be at most ``_OVERVIEW_MAX_CHARS`` characters.
+
+    Skipped for READMEs that still contain the QC-pending marker.
+    """
+    text = readme.read_text()
+    if _QC_PENDING_MARKER in text:
+        pytest.skip(f"{_tool_id(readme)}/README.md still has QC-pending marker; skipping length check")
+
+    match = re.search(r"^## Overview\s*\n(.*?)(?=^## |\Z)", text, re.MULTILINE | re.DOTALL)
+    assert match, f"{_tool_id(readme)}/README.md has no '## Overview' section to measure"
+
+    body = match.group(1).strip()
+    assert len(body) <= _OVERVIEW_MAX_CHARS, (
+        f"{_tool_id(readme)}/README.md Overview is {len(body)} chars "
+        f"(limit {_OVERVIEW_MAX_CHARS}). Trim it, or add the QC-pending marker "
+        f"'{_QC_PENDING_MARKER}' near the top while it is still being edited."
+    )
+
+
+@pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
+def test_toolkit_notes_links_required_guides(readme: Path) -> None:
+    """``## Toolkit Notes`` must link to all four proto-docs guides.
+
+    Tool Persistence, Device Management, Parallel Execution, and Cloud Inference
+    apply to every tool at runtime, so the toolkit-level notes section must
+    surface them as visible badges/links.
+
+    Skipped only for READMEs that still carry the QC-pending marker; missing
+    section or missing guides are hard failures.
+    """
+    text = readme.read_text()
+    if _QC_PENDING_MARKER in text:
+        pytest.skip(f"{_tool_id(readme)}/README.md still has QC-pending marker; skipping toolkit-notes guide check")
+
+    match = re.search(r"^## Toolkit Notes\s*\n(.*?)(?=^## |\Z)", text, re.MULTILINE | re.DOTALL)
+    assert match, (
+        f"{_tool_id(readme)}/README.md has no '## Toolkit Notes' section. "
+        f"Add the section with badge/link references to all four proto-docs guides: "
+        f"Tool Persistence, Device Management, Parallel Execution, Cloud Inference."
+    )
+
+    section = match.group(1)
+    missing = [path for path in _TOOLKIT_NOTES_REQUIRED_GUIDE_PATHS if path not in section]
+    assert not missing, (
+        f"{_tool_id(readme)}/README.md '## Toolkit Notes' is missing required guide links: {missing}. "
+        f"Add badge/link references to all four proto-docs guides: Tool Persistence, "
+        f"Device Management, Parallel Execution, and Cloud Inference."
+    )
 
 
 def _toolkit_keys(readme: Path) -> list[str]:
@@ -256,12 +333,29 @@ def _tools_section_h3_bodies(text: str) -> dict[str, str]:
     return bodies
 
 
+# Per-tool subsection contract for polished READMEs. Each H3 tool entry must
+# follow the three-section pattern: an overview paragraph directly under the
+# H3, then `#### Applications`, then `#### Usage Tips`.
+_REQUIRED_TOOL_H4S = ("Applications", "Usage Tips")
+
+# Pattern used to detect whether a README has begun the migration to the
+# polished three-section template. See `_skip_subsection_check` below.
+_POLISHED_H4_RE = re.compile(r"^#### (Applications|Usage Tips)\s*$", re.MULTILINE)
+
+
 @pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
 def test_tools_section_lists_all_tools(readme: Path) -> None:
     """The ``## Tools`` section must contain one H3 per registered tool, each with a body.
 
     Each H3 must reference the tool's registry key as inline code (e.g. ``### BLAST Search
     (`blast-search`)``). H3 entries that don't correspond to a registered tool are rejected.
+
+    Polished READMEs (those that have started using ``#### Applications`` or
+    ``#### Usage Tips`` H4s under any tool) must additionally follow the three-section
+    pattern under every H3: an overview paragraph directly under the header, then
+    ``#### Applications`` and ``#### Usage Tips`` H4 subsections in that order, each
+    with a non-empty body. READMEs that have not started the migration are exempted
+    from the three-section check; see the TODO note below.
     """
     keys = _toolkit_keys(readme)
     assert keys, f"{_tool_id(readme)} has no registered tools — toolkit may not export anything"
@@ -289,6 +383,43 @@ def test_tools_section_lists_all_tools(readme: Path) -> None:
 
     empty = [k for k, body in h3_keys.items() if not body]
     assert not empty, f"{_tool_id(readme)}/README.md `## Tools` section H3s have no description body: {empty}"
+
+    # TODO(#782): Remove this skip clause once every tool README has been migrated
+    # to the polished three-section template (`#### Applications` + `#### Usage Tips`
+    # under each tool H3). Tracking issue:
+    #   https://github.com/evo-design/proto-tools/issues/782
+    # Until then, READMEs whose `## Tools` section contains no `#### Applications`
+    # or `#### Usage Tips` H4 anywhere are skipped from the three-section pattern
+    # check below, so unfinished migrations don't generate a wave of failures. The
+    # basic H3 / registered-tool / non-empty-body checks above always run.
+    if not any(_POLISHED_H4_RE.search(body) for body in h3_keys.values()):
+        return
+
+    pattern_issues: list[str] = []
+    for key, body in h3_keys.items():
+        h4_matches = list(re.finditer(r"^#### (.+)$", body, re.MULTILINE))
+        h4_names = [m.group(1).strip() for m in h4_matches]
+
+        if h4_names != list(_REQUIRED_TOOL_H4S):
+            pattern_issues.append(f"  `{key}`: expected H4s {list(_REQUIRED_TOOL_H4S)}, got {h4_names}")
+            continue
+
+        first_h4_offset = h4_matches[0].start()
+        overview_text = body[:first_h4_offset].strip()
+        if not overview_text:
+            pattern_issues.append(f"  `{key}`: missing overview paragraph before `#### {h4_names[0]}`")
+
+        for i, m in enumerate(h4_matches):
+            section_start = m.end()
+            section_end = h4_matches[i + 1].start() if i + 1 < len(h4_matches) else len(body)
+            section_body = body[section_start:section_end].strip()
+            if not section_body:
+                pattern_issues.append(f"  `{key}`: `#### {h4_names[i]}` has no body")
+
+    assert not pattern_issues, (
+        f"{_tool_id(readme)}/README.md tool entries don't follow the three-section pattern "
+        f"(overview paragraph, `#### Applications`, `#### Usage Tips`):\n" + "\n".join(pattern_issues)
+    )
 
 
 # ── Links ─────────────────────────────────────────────────────────────────
