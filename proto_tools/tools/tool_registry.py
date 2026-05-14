@@ -645,6 +645,15 @@ class ToolRegistry:
                     if dispatched is not None:
                         return _finish_dispatched(dispatched)
 
+                    # Scale effective_timeout() by the iterable batch size.
+                    if spec is not None and spec.iterable_input_field is not None:
+                        effective = config.effective_timeout()
+                        if effective is not None:
+                            items = getattr(inputs, spec.iterable_input_field, None)
+                            n_items = len(items) if items is not None else 1
+                            if n_items > 1:
+                                config = config.model_copy(update={"timeout": effective * n_items})
+
                     # Carry per-invocation flags (key, gpu_only) to ToolInstance so
                     # the eviction callback can restart the worker instead of
                     # attempting an in-process CPU offload when the tool is gpu_only.
