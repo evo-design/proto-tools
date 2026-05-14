@@ -1,0 +1,9 @@
+code:
+  spdx: Custom (Open-Source PyMOL Copyright Notice)
+  url: https://github.com/schrodinger/pymol-open-source/blob/master/LICENSE
+  text: 'Open-Source PyMOL is made available under a custom permissive notice from Schrodinger, LLC. The notice permits free use, copying, modification, distribution, and display of the Open-Source PyMOL source code, provided the copyright notice and permission notice are included.'
+commercial_use: 'yes'
+redistribution: true
+attribution_required: true
+notes: This toolkit installs the conda-forge pymol-open-source package and uses PyMOL only as an alignment backend.
+last_updated: '2026-05-13'

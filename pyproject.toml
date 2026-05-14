@@ -175,6 +175,7 @@ module = [
     # Installed but missing library stubs or py.typed marker
     "biotite.*",
     "py3Dmol.*",
+    "pymol.*",
     "pandas.*",
     "yaml.*",
     "huggingface_hub.*",
