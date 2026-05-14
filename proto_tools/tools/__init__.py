@@ -495,6 +495,10 @@ from proto_tools.tools.structure_alignment import (
     FoldseekSearchConfig,
     FoldseekSearchInput,
     FoldseekSearchOutput,
+    PyMOLRMSDConfig,
+    PyMOLRMSDInput,
+    PyMOLRMSDMetrics,
+    PyMOLRMSDOutput,
     TMalignConfig,
     TMalignInput,
     TMalignMetrics,
@@ -510,6 +514,7 @@ from proto_tools.tools.structure_alignment import (
     run_foldseek_multimercluster,
     run_foldseek_rbh,
     run_foldseek_search,
+    run_pymol_rmsd_alignment,
     run_tmalign,
     run_usalign,
 )
@@ -924,6 +929,12 @@ __all__ = [
     "FoldseekRBHInput",
     "FoldseekRBHConfig",
     "FoldseekRBHOutput",
+    # Structure alignment - PyMOL RMSD
+    "run_pymol_rmsd_alignment",
+    "PyMOLRMSDInput",
+    "PyMOLRMSDConfig",
+    "PyMOLRMSDMetrics",
+    "PyMOLRMSDOutput",
     # Structure alignment - TMalign
     "run_tmalign",
     "TMalignInput",
