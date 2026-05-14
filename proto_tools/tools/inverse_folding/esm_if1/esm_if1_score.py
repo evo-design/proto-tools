@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.inverse_folding.shared_data_models import (
@@ -21,6 +21,39 @@ from proto_tools.utils.tool_instance import ToolInstance
 from proto_tools.utils.tool_io import BaseToolInput, InputField
 
 logger = logging.getLogger(__name__)
+
+# Three-letter residue codes biotite's ProteinSequence.convert_letter_3to1 can
+# convert. Mirrors the standalone's filter so wrapper-side length validation
+# matches the count the model will actually consume.
+_KNOWN_AA_3LETTER: frozenset[str] = frozenset(
+    {
+        "ALA",
+        "ARG",
+        "ASN",
+        "ASP",
+        "CYS",
+        "GLU",
+        "GLN",
+        "GLY",
+        "HIS",
+        "ILE",
+        "LEU",
+        "LYS",
+        "MET",
+        "PHE",
+        "PRO",
+        "SER",
+        "THR",
+        "TRP",
+        "TYR",
+        "VAL",
+        "ASX",
+        "GLX",
+        "UNK",
+        "SEC",
+        "MSE",
+    }
+)
 
 
 # ============================================================================
@@ -56,6 +89,20 @@ class ESMIF1ScoringPair(BaseModel):
             "structures; defaults to the sole chain for single-chain structures."
         ),
     )
+
+    @model_validator(mode="after")
+    def validate_sequence_length_matches_target_chain(self) -> "ESMIF1ScoringPair":
+        """Reject if ``sequence`` length differs from the model-visible length of ``target_chain``."""
+        chain_ids = self.structure.get_chain_ids()
+        target = _resolve_target_chain(self.target_chain, chain_ids)
+        expected = _model_visible_chain_length(self.structure, target)
+        if len(self.sequence) != expected:
+            raise ValueError(
+                f"esm-if1-score: sequence length {len(self.sequence)} does not match target chain "
+                f"{target!r} length {expected}. ESM-IF1 scores one chain at a time; `sequence` must "
+                f"cover only the residues the model sees (standard amino acids plus MSE/SEC/UNK)."
+            )
+        return self
 
 
 class ESMIF1ScoringInput(BaseToolInput):
@@ -104,6 +151,13 @@ class ESMIF1ScoringConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def _model_visible_chain_length(structure: Structure, target_chain: str) -> int:
+    """Count residues in ``target_chain`` that the standalone's filter will keep."""
+    structure.gemmi_struct.setup_entities()
+    chain = structure.gemmi_struct[0][target_chain]
+    return sum(1 for res in chain.get_polymer() if res.name in _KNOWN_AA_3LETTER)
+
+
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     structure = Structure.from_file(str(Path(__file__).parents[1] / "example_input_fixture.pdb"))
@@ -168,13 +222,6 @@ def run_esm_if1_score(
     ):
         chain_ids = pair.structure.get_chain_ids()
         target_chain = _resolve_target_chain(pair.target_chain, chain_ids)
-        expected_len = len(pair.structure.get_chain_sequence(target_chain))
-        if len(pair.sequence) != expected_len:
-            raise ValueError(
-                f"esm-if1-score: sequence length {len(pair.sequence)} does not match target chain "
-                f"{target_chain!r} length {expected_len}. ESM-IF1 scores one chain at a time; "
-                f"`sequence` must be the residues of `target_chain` only, not the multi-chain concatenation."
-            )
 
         with pair.structure.temp_file() as pdb_path:
             input_dict = {

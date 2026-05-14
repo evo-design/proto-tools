@@ -47,9 +47,18 @@ class ESMIF1Model:
         import biotite.structure
         import esm.inverse_folding.multichain_util
         import esm.inverse_folding.util
+        from biotite.sequence import ProteinSequence
+
+        def _is_known_aa(res_name: str) -> bool:
+            try:
+                ProteinSequence.convert_letter_3to1(res_name)
+                return True
+            except KeyError:
+                return False
 
         structure = esm.inverse_folding.util.load_structure(pdb_path)
-        structure = biotite.structure.array([atom for atom in structure if not atom.hetero])
+        # Drop residues biotite cannot convert to a 1-letter code.
+        structure = biotite.structure.array([atom for atom in structure if _is_known_aa(atom.res_name)])
         all_coords, all_native_seqs = esm.inverse_folding.multichain_util.extract_coords_from_complex(structure)
         if target_chain is None:
             target_chain = chain_ids[0] if chain_ids else next(iter(all_coords.keys()))

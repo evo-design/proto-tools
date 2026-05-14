@@ -276,38 +276,87 @@ def test_esm_if1_score_multichain_context_matters(multichain_structure: Structur
 
 
 def test_esm_if1_score_multichain_requires_target_chain(multichain_structure: Structure):
-    """Multi-chain structure without target_chain raises a clear ValueError before dispatch."""
+    """Multi-chain structure without target_chain raises a clear ValueError at pair construction."""
     chain_b_seq = multichain_structure.get_chain_sequence("B")
-    inp = ESMIF1ScoringInput(
-        sequence_structure_pairs=[
-            ESMIF1ScoringPair(sequence=chain_b_seq, structure=multichain_structure),
-        ]
-    )
     with pytest.raises(ValueError, match=r"target_chain.*required for multi-chain"):
-        run_esm_if1_score(inp, ESMIF1ScoringConfig())
+        ESMIF1ScoringPair(sequence=chain_b_seq, structure=multichain_structure)
 
 
 def test_esm_if1_score_length_validation(multichain_structure: Structure):
-    """Sequence length must match the target chain; mismatch raises before dispatch."""
+    """Sequence length must match the target chain; mismatch raises at pair construction."""
     chain_a_seq = multichain_structure.get_chain_sequence("A")  # length 21
-    inp = ESMIF1ScoringInput(
-        sequence_structure_pairs=[
-            ESMIF1ScoringPair(sequence=chain_a_seq, structure=multichain_structure, target_chain="B"),
+    with pytest.raises(ValueError, match="does not match target chain"):
+        ESMIF1ScoringPair(sequence=chain_a_seq, structure=multichain_structure, target_chain="B")
+
+
+def test_esm_if1_score_mse_treated_as_methionine():
+    """MSE (selenomethionine) counts as M in the chain length, matching the standalone."""
+    pdb = "\n".join(
+        [
+            "ATOM      1  N   MET A   1      -8.901   4.127  -0.555  1.00 30.00           N",
+            "ATOM      2  CA  MET A   1      -8.608   3.135  -1.618  1.00 30.00           C",
+            "ATOM      3  C   MET A   1      -7.117   2.964  -1.897  1.00 30.00           C",
+            "ATOM      4  O   MET A   1      -6.634   1.849  -1.972  1.00 30.00           O",
+            "HETATM    5  N   MSE A   2      -6.379   4.073  -2.041  1.00 30.00           N",
+            "HETATM    6  CA  MSE A   2      -4.923   4.075  -2.305  1.00 30.00           C",
+            "HETATM    7  C   MSE A   2      -4.633   3.541  -3.713  1.00 30.00           C",
+            "HETATM    8  O   MSE A   2      -5.531   3.124  -4.444  1.00 30.00           O",
+            "ATOM      9  N   GLY A   3      -3.348   3.560  -4.085  1.00 30.00           N",
+            "ATOM     10  CA  GLY A   3      -2.913   3.062  -5.394  1.00 30.00           C",
+            "ATOM     11  C   GLY A   3      -3.424   3.948  -6.524  1.00 30.00           C",
+            "ATOM     12  O   GLY A   3      -3.793   5.105  -6.317  1.00 30.00           O",
+            "END",
+            "",
         ]
     )
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".pdb", mode="w", delete=False) as f:
+        f.write(pdb)
+        path = f.name
+    structure = Structure.from_file(path)
+    # Length-3 sequence (matching the model-visible count) must validate.
+    pair = ESMIF1ScoringPair(sequence="MMG", structure=structure, target_chain="A")
+    assert pair.sequence == "MMG"
+    # Length-2 (treating MSE as dropped) must NOT validate — MSE is model-visible.
     with pytest.raises(ValueError, match="does not match target chain"):
-        run_esm_if1_score(inp, ESMIF1ScoringConfig())
+        ESMIF1ScoringPair(sequence="MG", structure=structure, target_chain="A")
+
+
+def test_esm_if1_score_ligand_dropped_from_chain_length():
+    """A HETATM ligand residue (e.g. HEM) the model can't decode is dropped from the count."""
+    pdb = "\n".join(
+        [
+            "ATOM      1  N   MET A   1      -8.901   4.127  -0.555  1.00 30.00           N",
+            "ATOM      2  CA  MET A   1      -8.608   3.135  -1.618  1.00 30.00           C",
+            "ATOM      3  C   MET A   1      -7.117   2.964  -1.897  1.00 30.00           C",
+            "ATOM      4  O   MET A   1      -6.634   1.849  -1.972  1.00 30.00           O",
+            "ATOM      5  N   ALA A   2      -6.379   4.073  -2.041  1.00 30.00           N",
+            "ATOM      6  CA  ALA A   2      -4.923   4.075  -2.305  1.00 30.00           C",
+            "ATOM      7  C   ALA A   2      -4.633   3.541  -3.713  1.00 30.00           C",
+            "ATOM      8  O   ALA A   2      -5.531   3.124  -4.444  1.00 30.00           O",
+            "HETATM    9  N   HEM A   3       7.000   5.000   5.000  1.00 30.00           N",
+            "HETATM   10  CA  HEM A   3       8.000   5.000   5.000  1.00 30.00           C",
+            "HETATM   11  C   HEM A   3       9.000   5.000   5.000  1.00 30.00           C",
+            "HETATM   12  O   HEM A   3      10.000   5.000   5.000  1.00 30.00           O",
+            "END",
+            "",
+        ]
+    )
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".pdb", mode="w", delete=False) as f:
+        f.write(pdb)
+        path = f.name
+    structure = Structure.from_file(path)
+    pair = ESMIF1ScoringPair(sequence="MA", structure=structure, target_chain="A")
+    assert pair.sequence == "MA"
 
 
 def test_esm_if1_score_unknown_target_chain(multichain_structure: Structure):
-    """Naming a chain that isn't in the structure raises a clear error."""
-    inp = ESMIF1ScoringInput(
-        sequence_structure_pairs=[
-            ESMIF1ScoringPair(sequence="AAA", structure=multichain_structure, target_chain="Z"),
-        ]
-    )
+    """Naming a chain that isn't in the structure raises a clear error at pair construction."""
     with pytest.raises(ValueError, match="not in the structure's chains"):
-        run_esm_if1_score(inp, ESMIF1ScoringConfig())
+        ESMIF1ScoringPair(sequence="AAA", structure=multichain_structure, target_chain="Z")
 
 
 # ── Benchmarks ──────────────────────────────────────────────────────────────
