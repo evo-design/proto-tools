@@ -242,7 +242,6 @@ def example_input() -> Any:
     iterable_input_field="complexes",
     iterable_output_field="structures",
     cacheable=True,
-    stochastic=True,
 )
 def run_alphafold2(
     inputs: AlphaFold2Input,

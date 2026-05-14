@@ -318,10 +318,20 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config, instance: Any = None) -> 
         - ESM embeddings generally improve prediction quality
         - Does not support DNA or RNA (use Boltz2 for nucleic acids)
     """
+    base_seed = config.seed if config.seed is not None else config.get_random_int()
+    # Advance the seed per complex so duplicate inputs get distinct seeds.
     results = [
-        run_chai1_on_complex(comp=comp, config=config, msas=inputs.msas, instance=instance)
-        for comp in progress_bar(
-            inputs.complexes, desc="Folding structures (Chai-1)", unit="complex", total=len(inputs.complexes)
+        run_chai1_on_complex(
+            comp=comp,
+            config=config,
+            msas=inputs.msas,
+            instance=instance,
+            seed=base_seed + dispatch_idx,
+        )
+        for dispatch_idx, comp in enumerate(
+            progress_bar(
+                inputs.complexes, desc="Folding structures (Chai-1)", unit="complex", total=len(inputs.complexes)
+            )
         )
     ]
     return Chai1Output(
@@ -345,11 +355,22 @@ def run_chai1_on_complex(
     config: Chai1Config,
     msas: dict[str, Any] | None = None,
     instance: Any = None,
+    seed: int | None = None,
 ) -> Structure:
     """Run Chai1 structure prediction on a single complex. This function is wrapped.
 
     by ``run_chai1`` to sequentially predict all complexes in the input.
+
+    Args:
+        comp (StructurePredictionComplex): The complex to fold.
+        config (Chai1Config): Chai1 configuration.
+        msas (dict[str, Any] | None): Pre-computed MSAs keyed by protein sequence.
+        instance (Any): Optional ToolInstance for persistent execution.
+        seed (int | None): Per-complex seed forwarded to the standalone. When ``None``,
+            falls back to ``config.seed`` (preserves legacy single-complex behavior).
     """
+    if seed is None:
+        seed = config.seed
     # Local GPU execution via venv subprocess
     logger.debug("Using local GPU for Chai1 structure prediction...")
 
@@ -400,7 +421,7 @@ def run_chai1_on_complex(
             "num_trunk_samples": config.num_trunk_samples,
             "low_memory": config.low_memory,
             "recycle_msa_subsample": config.recycle_msa_subsample,
-            "seed": config.seed,
+            "seed": seed,
             "include_pae_matrix": config.include_pae_matrix,
         }
 

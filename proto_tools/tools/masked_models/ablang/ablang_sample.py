@@ -43,21 +43,33 @@ class AbLangSampleInput(BaseToolInput):
 
 
 class AbLangSampleConfig(MaskedModelSampleConfig):
-    """Configuration for AbLang antibody sequence restoration.
+    """Configuration for AbLang antibody sequence sampling.
 
-    Controls the restoration of masked positions in antibody sequences
-    using AbLang's learned antibody language model distribution. The model
+    Controls how masked positions in antibody sequences are filled in by
+    AbLang's learned antibody language model distribution. The model
     variant is selected automatically based on which chains are provided.
 
     Attributes:
         batch_size (int): Number of sequences per forward pass.
         device (str): Device to run on.
+        temperature (float): Softmax temperature for per-position amino-acid
+            sampling. ``temperature == 0`` selects greedy argmax decoding
+            (equivalent to ablang's native ``restore`` mode). ``temperature == 1``
+            samples from the unscaled model distribution; higher values flatten
+            the distribution toward uniform, lower values sharpen toward greedy.
         align (bool): Run ANARCI alignment first; enables restoration of unknown numbers of
-            missing residues at chain termini.
+            missing residues at chain termini. Forces greedy decoding (ANARCI's
+            spread-of-variants logic is incompatible with stochastic sampling).
         return_logits (bool): Include per-position logits in the output (large; disable to
             save memory). Triggers a second ``likelihood``-mode forward pass per batch.
     """
 
+    temperature: float = ConfigField(
+        title="Temperature",
+        default=1.0,
+        ge=0.0,
+        description="Softmax temperature for amino-acid sampling. 0 = greedy argmax (ablang restore); >0 = stochastic.",
+    )
     align: bool = ConfigField(
         title="ANARCI-aligned Restore",
         default=False,
@@ -96,7 +108,9 @@ class AbLangSampleOutput(MaskedModelSampleOutput):
 # ============================================================================
 def example_input() -> AbLangSampleInput:
     """Minimal valid input for testing and examples."""
-    return AbLangSampleInput(antibodies=[Antibody(heavy_chain="EVQL_ESGGGLVQPGG")])
+    # Several mask positions so stochastic sampling produces visibly diverse
+    # outputs (a single mask + 20-token vocab makes collision likely in 3 draws).
+    return AbLangSampleInput(antibodies=[Antibody(heavy_chain="EVQL_E_GG_LVQ_GG")])
 
 
 @tool(
@@ -134,6 +148,8 @@ def run_ablang_sample(
             "verbose": config.verbose,
             "align": config.align,
             "return_logits": config.return_logits,
+            "temperature": config.temperature,
+            "seed": config.seed,
         },
         instance=instance,
         config=config,

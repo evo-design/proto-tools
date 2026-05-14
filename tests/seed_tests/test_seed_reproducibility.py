@@ -73,14 +73,14 @@ def test_masking_strategy_seeded():
 #   ~1-2 mÅ even with the same seed. Upstream:
 #   - https://github.com/bytedance/Protenix/issues/116
 #   - https://github.com/bytedance/Protenix/issues/119
-# - alphafold2-binder: same JAX bfloat16 / CUDA autotune root cause as
-#   alphafold2-prediction (see _SEED_NON_PERSISTENT_EXCLUDED_KEYS), but
-#   gradient backprop amplifies the drift beyond tolerances even within a
-#   single persistent worker (~12% relative error on gradient values).
+# - alphafold2-binder: JAX bfloat16 / CUDA autotune drift (ColabDesign's
+#   default ``global_config.bfloat16=True``) amplified by gradient backprop
+#   beyond tolerances even within a single persistent worker (~12% relative
+#   error on gradient values).
 # - alphafold3-prediction: AF3 honours the seed via ``modelSeeds`` →
 #   ``jax.random.PRNGKey(seed)`` in run_alphafold.py, but the diffusion +
-#   pairformer stack hits the same JAX/CUDA autotune + bfloat16 reduction-order
-#   non-determinism as AF2. ~7 mÅ atomic-coordinate drift between runs (same
+#   pairformer stack hits JAX/CUDA autotune + bfloat16 reduction-order
+#   non-determinism. ~7 mÅ atomic-coordinate drift between runs (same
 #   seed) — across both persistent and non-persistent variants. Mitigations
 #   like ``XLA_FLAGS=--xla_gpu_deterministic_ops=true`` would slow inference
 #   2-5x without a guarantee of bit-exact reproducibility.
@@ -133,15 +133,10 @@ _SEED_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
 #   7-bit mantissa, 0.4-1.4% relative). The forward pass passes ``PRNGKey=None``
 #   so it's mathematically deterministic, but JAX/CUDA autotune doesn't
 #   guarantee bit-exact behaviour across processes.
-# - alphafold2-prediction: same root cause as alphagenome (JAX bfloat16 via
-#   ColabDesign's default ``global_config.bfloat16=True``), amplified through
-#   AF2's recycling loop into wholly different structural basins. Persistent
-#   variant passes (single worker = consistent autotune).
 _SEED_NON_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {
         "progen3-sample",
         "progen3-score",
-        "alphafold2-prediction",
         "alphagenome-predict-intervals",
         "alphagenome-predict-sequences",
         "alphagenome-predict-variants",

@@ -10,6 +10,7 @@ from proto_tools.tools.structure_design.bindcraft import (
 )
 from proto_tools.tools.structure_design.rfdiffusion3 import (
     RFdiffusion3Config,
+    RFdiffusion3Designs,
     RFdiffusion3DesignSpec,
     RFdiffusion3Input,
     RFdiffusion3Output,
@@ -23,6 +24,7 @@ __all__ = [
     "RFdiffusion3Config",
     "RFdiffusion3Output",
     "RFdiffusion3DesignSpec",
+    "RFdiffusion3Designs",
     "RFdiffusion3Structure",
     "run_bindcraft_design",
     "BindCraftInput",

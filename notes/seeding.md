@@ -45,7 +45,8 @@ Different seeds produce different outputs.
 - **Language model samplers**: Evo1-sample, Evo2-sample, ProGen2-sample, ProGen3-sample, ESM2-sample, ESM3-sample, AbLang-sample
 - **Gradient / interpretability tools**: ESM2-gradient, AbLang-gradient, ESMFold-gradient, ProteinMPNN-gradient
 - **Inverse folding samplers**: ProteinMPNN-sample, LigandMPNN-sample, ESM-IF1-sample, FaMPNN-sample, FaMPNN-pack
-- **Iterative / diffusion structure predictors**: AlphaFold2-prediction, AlphaFold2-binder, AlphaFold3-prediction, Boltz2-prediction, Chai1-prediction, Protenix-prediction
+- **Iterative / diffusion structure predictors**: AlphaFold2-binder, AlphaFold3-prediction, Boltz2-prediction, Chai1-prediction, Protenix-prediction
+- **Deterministic predictors** (no `stochastic` flag): AlphaFold2-prediction. The seed only varies output when the supplied MSA exceeds `num_msa=512` rows (via cluster subsampling); single-sequence and shallow-MSA inputs are a pure function of sequence + recycle count.
 - **Design tools**: Bindcraft-design, Germinal-design, RFDiffusion3-design
 - **Structure dynamics**: BioEmu-sample
 - **Monte Carlo scoring**: PyRosetta-relax, PyRosetta-interface-analyzer
@@ -304,10 +305,12 @@ behavior described above with no tool changes needed.
 | ProteinMPNN-sample | JAX `sample_parallel`, key splits per item |
 | ESM-IF1-sample | Autoregressive sampling loop with `set_torch_seed` once |
 | FaMPNN-sample, FaMPNN-pack | Diffusion denoising loop with seed set once |
-| AlphaFold2, AlphaFold2-binder | JAX key-splitting via ColabDesign across recycles |
+| AlphaFold2-binder | JAX key-splitting via ColabDesign across recycles |
+| AlphaFold3-prediction, Boltz2-prediction, Chai1-prediction | `dispatch_idx` advances `model_seeds` (AF3) or per-complex `seed` (Boltz2/Chai1) across the per-input loop so duplicate complexes diverge |
 | BioEmu | Explicit per-sequence seed `seed + seq_idx` |
 | PyRosetta-relax, PyRosetta-interface-analyzer | `rg().set_seed(seed)` before per-pose loop; FastRelax / repacking advance RNG |
 | random-protein-sample, random-nucleotide-sample | Single `random.Random(seed)` object advances per item |
+| RFdiffusion3-design | Subprocess folds `spec_key` into its per-design RNG path; output bundled per spec for 1:1 iterable cardinality |
 
 ### Tools that violate the contract
 
@@ -327,9 +330,6 @@ the framework correctly passes the duplicates through.
 The internal SDK behavior for these tools is undetermined from source.
 The diversification test resolves them empirically when it runs.
 
-- Chai1
-- Protenix
-- RFDiffusion3
 - LigandMPNN-sample
 
 ### ESMFold
@@ -375,7 +375,7 @@ They are not enabled by `--all` or `--slow`. This matches the existing
 pattern for combinatorial tests that fan out across every registered
 tool.
 
-`tests/tool_infra_tests/test_seed_diversification.py` parameterizes
+`tests/seed_tests/test_seed_diversification.py` parameterizes
 across all `stochastic=True` tools and asserts:
 
 - `[i1, i1, i1] + seed=2` produces three pairwise-distinct outputs
@@ -384,11 +384,11 @@ across all `stochastic=True` tools and asserts:
   reproducibility — running the same call twice gives the same triple).
 - `seed=None` repeat calls produce different results (cache must skip).
 
-`tests/tool_infra_tests/test_seed_reproducibility.py` filters its
+`tests/seed_tests/test_seed_reproducibility.py` filters its
 parametrization to `stochastic=True` tools — same-seed-same-output is
 meaningful only there.
 
-`tests/tool_infra_tests/test_stochastic_iterable_routing.py` exercises
+`tests/seed_tests/test_stochastic_iterable_routing.py` exercises
 the framework's cache / dedup / routing using three pure-CPU mock tools
 in `proto_tools/tools/testing/`:
 

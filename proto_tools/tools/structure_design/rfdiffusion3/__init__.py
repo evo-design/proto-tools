@@ -2,6 +2,7 @@
 
 from proto_tools.tools.structure_design.rfdiffusion3.rfdiffusion3_sample import (
     RFdiffusion3Config,
+    RFdiffusion3Designs,
     RFdiffusion3DesignSpec,
     RFdiffusion3Input,
     RFdiffusion3Output,
@@ -15,5 +16,6 @@ __all__ = [
     "RFdiffusion3Config",
     "RFdiffusion3Output",
     "RFdiffusion3DesignSpec",
+    "RFdiffusion3Designs",
     "RFdiffusion3Structure",
 ]

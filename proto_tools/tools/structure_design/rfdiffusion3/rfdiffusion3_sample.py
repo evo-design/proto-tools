@@ -11,12 +11,14 @@ Example:
     >>> inputs = RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(length="100")])
     >>> config = RFdiffusion3Config(diffusion_batch_size=4)
     >>> result = run_rfdiffusion3(inputs, config)
-    >>> print(f"Designed {len(result.output_structures)} structures")
+    >>> n_designs = sum(len(b) for b in result.designed_structures)
+    >>> print(f"Designed {n_designs} structures across {len(result)} input specs")
 """
 
 import json
 import logging
 import tempfile
+from collections import defaultdict
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, Literal
@@ -262,6 +264,34 @@ class RFdiffusion3DesignSpec(BaseModel):
             raise ValueError(
                 "At least one design parameter (contig, length, symmetry, "
                 "select_*, partial_t, etc.) or **kwargs must be provided"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_selections_require_input_structure(self) -> Any:
+        """Reject ``contig``, ``unindex``, and ``select_*`` fields without ``input_structure``."""
+        # Upstream rfd3 resolves all of these against an atom array built from
+        # input_structure. ``contig`` is not a substitute — even chain-referencing
+        # contigs fail without input. ``length`` is the only way to design without
+        # an atom source (unconditional generation, no per-residue constraints).
+        requires_input = (
+            "contig",
+            "unindex",
+            "select_fixed_atoms",
+            "select_unfixed_sequence",
+            "select_hotspots",
+            "select_buried",
+            "select_partially_buried",
+            "select_exposed",
+            "select_hbond_donor",
+            "select_hbond_acceptor",
+        )
+        offending = [name for name in requires_input if getattr(self, name) is not None]
+        if offending and self.input_structure is None:
+            raise ValueError(
+                f"Fields {offending} require 'input_structure' (PDB/CIF) to resolve "
+                "against an atom array. For unconditional design with no per-residue "
+                "constraints, use 'length' instead."
             )
         return self
 
@@ -632,7 +662,12 @@ class RFdiffusion3Config(BaseConfig):
 
 
 class RFdiffusion3Structure(BaseModel):
-    """Represents a single designed structure from RFdiffusion3.
+    """A single designed structure from RFdiffusion3.
+
+    One per generated design. Multiple ``RFdiffusion3Structure``s are bundled
+    inside an ``RFdiffusion3Designs`` (one bundle per input spec). The
+    bundle's position in ``RFdiffusion3Output.designed_structures`` matches
+    the position of the originating spec in ``RFdiffusion3Input.design_specs``.
 
     Attributes:
         structure (Structure): The designed 3D structure containing
@@ -641,64 +676,99 @@ class RFdiffusion3Structure(BaseModel):
         sequence (str): The designed amino acid sequence in single-letter code.
             For multi-chain designs, chains are separated by ``/``.
 
-        spec_key (str): Identifier of the input specification that produced
-            this design (e.g., ``"spec-0"``).
-
-        design_index (int): Index of this design within its batch.
-            Combined with spec_key uniquely identifies the design.
-
         metadata (dict[str, Any]): Additional metadata from RFdiffusion3 output,
             including sampled contig, chain info, and any logged metrics.
     """
 
     structure: Structure = Field(description="The designed 3D structure")
     sequence: str = Field(description="The designed amino acid sequence")
-    spec_key: str = Field(description="Identifier of the input spec that produced this design")
-    design_index: int = Field(ge=0, description="Index of this design within its batch")
     metadata: dict[str, Any] = Field(
         default_factory=dict,
         description="Additional metadata from RFdiffusion3 output",
     )
 
 
-class RFdiffusion3Output(BaseToolOutput):
-    """Output from RFdiffusion3 structure design.
+class RFdiffusion3Designs(BaseModel):
+    """All designs produced for a single input spec.
 
-    This class encapsulates the results of RFdiffusion3 structure design, containing
-    one or more designed structures with their sequences and metadata.
+    Bundling N designs into one wrapper preserves the framework's 1:1
+    cardinality between ``iterable_input_field`` and ``iterable_output_field``
+    even though RFdiffusion3 fans out (N = ``n_batches * diffusion_batch_size``
+    designs per spec). Mirrors the per-input bundling pattern used by
+    ``ProteinMPNNSequences``.
 
     Attributes:
-        output_structures (list[RFdiffusion3Structure]): List of designed
-            structures. Each structure includes 3D coordinates, sequence,
-            and metadata. The number of structures depends on the configuration
-            (n_batches * diffusion_batch_size * num_specs).
+        spec_key (str): Identifier of the input specification that produced
+            these designs (e.g. ``"spec-0"``). For ``raw_json`` callers this
+            is the user-supplied key; otherwise it is positional
+            (``f"spec-{i}"`` from ``RFdiffusion3Input.to_json_spec``).
 
-    Note:
-        This class supports list-like operations for convenient access:
-        indexing (``output[0]``), iteration (``for struct in output``),
-        and length (``len(output)``).
+        structures (list[RFdiffusion3Structure]): The designs generated for
+            this spec, in the order RFdiffusion3 emitted them. List length
+            equals ``n_batches * diffusion_batch_size``.
     """
 
-    output_structures: list[RFdiffusion3Structure] = Field(
+    spec_key: str = Field(description="Identifier of the input spec that produced these designs")
+    structures: list[RFdiffusion3Structure] = Field(
         default_factory=list,
-        description="List of designed structures",
+        description="Designs generated for this spec",
     )
 
     def __len__(self) -> int:
-        """Get the number of designed structures."""
-        return len(self.output_structures)
+        """Get the number of designs for this spec."""
+        return len(self.structures)
 
     def __getitem__(self, index: int) -> RFdiffusion3Structure:
-        """Get a designed structure by index."""
-        return self.output_structures[index]
+        """Get one designed structure within this bundle by index."""
+        return self.structures[index]
 
     def __iter__(self) -> Iterator[RFdiffusion3Structure]:  # type: ignore[override]
-        """Iterate over designed structures."""
-        return iter(self.output_structures)
+        """Iterate over the designs in this bundle."""
+        return iter(self.structures)
+
+
+class RFdiffusion3Output(BaseToolOutput):
+    """Output from RFdiffusion3 structure design.
+
+    Designs are grouped into ``RFdiffusion3Designs`` bundles — one per input
+    spec — so the field cardinality matches ``RFdiffusion3Input.design_specs``
+    1:1, consistent with the framework's iterable-tool contract.
+
+    Attributes:
+        designed_structures (list[RFdiffusion3Designs]): One bundle per input
+            spec. Total design count is
+            ``len(design_specs) * n_batches * diffusion_batch_size``.
+
+    Note:
+        This class supports list-like operations that iterate over the
+        per-spec bundles: ``output[i]`` returns the i-th bundle,
+        ``for designs in output`` walks bundles, ``len(output)`` is the
+        number of bundles. To walk every individual design, use
+        ``for bundle in output: for s in bundle: ...``.
+    """
+
+    designed_structures: list[RFdiffusion3Designs] = Field(
+        default_factory=list,
+        description="Per-spec bundles of designed structures",
+    )
+
+    def __len__(self) -> int:
+        """Get the number of per-spec design bundles."""
+        return len(self.designed_structures)
+
+    def __getitem__(self, index: int) -> RFdiffusion3Designs:
+        """Get the design bundle for the i-th input spec."""
+        return self.designed_structures[index]
+
+    def __iter__(self) -> Iterator[RFdiffusion3Designs]:  # type: ignore[override]
+        """Iterate over per-spec design bundles."""
+        return iter(self.designed_structures)
 
     def __repr__(self) -> str:
         """Get string representation."""
-        return f"RFdiffusion3Output(output_structures=[{len(self.output_structures)} structures])"
+        n_bundles = len(self.designed_structures)
+        n_designs = sum(len(b) for b in self.designed_structures)
+        return f"RFdiffusion3Output(designed_structures=[{n_bundles} bundles, {n_designs} designs])"
 
     def __str__(self) -> str:
         """Get human-readable string representation."""
@@ -720,12 +790,13 @@ class RFdiffusion3Output(BaseToolOutput):
 
         path = Path(export_path)
         path.mkdir(parents=True, exist_ok=True)
-        for i, struct in enumerate(self.output_structures):
-            out_file = path / f"rfdiffusion3_design_{i}.{file_format}"
-            if file_format == "pdb":
-                struct.structure.write_pdb(out_file)
-            elif file_format == "cif":
-                struct.structure.write_cif(out_file)
+        for bundle in self.designed_structures:
+            for i, struct in enumerate(bundle.structures):
+                out_file = path / f"{bundle.spec_key}_design_{i}.{file_format}"
+                if file_format == "pdb":
+                    struct.structure.write_pdb(out_file)
+                elif file_format == "cif":
+                    struct.structure.write_cif(out_file)
 
 
 # ============================================================================
@@ -749,7 +820,7 @@ def example_input() -> Any:
     uses_gpu=True,
     example_input=example_input,
     iterable_input_field="design_specs",
-    iterable_output_field="output_structures",
+    iterable_output_field="designed_structures",
     cacheable=True,
     stochastic=True,
 )
@@ -778,8 +849,10 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
 
     Returns:
         RFdiffusion3Output: Structured output containing:
-            - ``output_structures``: List of ``RFdiffusion3Structure`` instances
-            - Each structure includes:
+            - ``designed_structures``: One ``RFdiffusion3Designs`` bundle per
+              input spec, in input order. Each bundle has a ``spec_key`` and
+              a list of ``RFdiffusion3Structure``s (one per generated design).
+            - Each ``RFdiffusion3Structure`` includes:
                 - 3D coordinates (as Structure)
                 - Designed sequence
                 - Metadata (sampled contig, chain info, etc.)
@@ -789,12 +862,13 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
         - RFdiffusion3 paper: https://doi.org/10.1101/2025.09.18.676967
 
     Example:
-        >>> # Unconditional design of 100-residue protein
+        >>> # Unconditional design of 100-residue protein, 4 designs in one batch
         >>> inputs = RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(length="100")])
         >>> config = RFdiffusion3Config(diffusion_batch_size=4, num_timesteps=200, verbose=True)
         >>> result = run_rfdiffusion3(inputs, config)
-        >>> print(f"Designed {len(result)} structures")
-        >>> print(f"First sequence: {result[0].sequence}")
+        >>> bundle = result[0]  # one bundle per input spec
+        >>> print(f"Spec {bundle.spec_key}: {len(bundle)} designs")
+        >>> print(f"First sequence: {bundle[0].sequence}")
 
     Note:
         - RFdiffusion3 generates both structure AND sequence
@@ -832,20 +906,40 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
             config=config,
         )
 
-    output_structures = []
+    # Group designs by originating spec so the output has 1:1 cardinality with
+    # inputs.design_specs. Subprocess emits a flat list; the spec-key prefix on
+    # each design (set in to_json_spec at line 380-384) lets us bucket them.
+    buckets: dict[str, list[RFdiffusion3Structure]] = defaultdict(list)
     for design_data in output_data.get("designs", []):
         structure = Structure(
             structure=design_data["structure_content"],
             source="rfdiffusion3-design",
         )
-        output_structures.append(
+        buckets[design_data["spec_key"]].append(
             RFdiffusion3Structure(
                 structure=structure,
                 sequence=design_data["sequence"],
-                spec_key=design_data["spec_key"],
-                design_index=design_data["design_index"],
                 metadata=design_data.get("metadata", {}),
             )
         )
 
-    return RFdiffusion3Output(output_structures=output_structures)
+    # Preserve input order. to_json_spec assigns spec-0, spec-1, ... by
+    # enumeration, so re-emit bundles in that order.
+    designed_structures = [
+        RFdiffusion3Designs(spec_key=key, structures=buckets[key]) for key in sorted(buckets, key=_spec_key_sort_index)
+    ]
+    return RFdiffusion3Output(designed_structures=designed_structures)
+
+
+def _spec_key_sort_index(key: str) -> tuple[int, str]:
+    """Sort spec keys by trailing integer when present, falling back to lexical.
+
+    Positional inputs produce ``spec-0``, ``spec-1``, ... — sort those
+    numerically. ``raw_json`` callers may use arbitrary key names; those fall
+    through to lexical ordering.
+    """
+    suffix = key.rsplit("-", 1)[-1] if "-" in key else key
+    try:
+        return (0, f"{int(suffix):020d}")
+    except ValueError:
+        return (1, key)

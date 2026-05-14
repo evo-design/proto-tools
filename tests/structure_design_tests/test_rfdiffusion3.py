@@ -34,6 +34,50 @@ def test_rfdiffusion3_design_spec_rejects_empty():
         RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec()])
 
 
+def test_rfdiffusion3_design_spec_selections_require_input_structure():
+    """contig, unindex, and select_* fields all require ``input_structure``."""
+    pattern = r"require 'input_structure'"
+
+    # select_* with only length → reject (length doesn't establish an atom array).
+    with pytest.raises(ValueError, match=pattern):
+        RFdiffusion3DesignSpec(length="100", select_hotspots="A24,A35")
+    with pytest.raises(ValueError, match=pattern):
+        RFdiffusion3DesignSpec(length="100", select_hbond_donor={"A40": ["NE2"]})
+
+    # contig alone → reject (upstream rfd3 needs atoms to resolve contig against).
+    with pytest.raises(ValueError, match=pattern):
+        RFdiffusion3DesignSpec(contig="A1-100")
+    with pytest.raises(ValueError, match=pattern):
+        RFdiffusion3DesignSpec(contig="50-80")
+
+    # contig + select_* without input → reject (contig is not an atom source).
+    with pytest.raises(ValueError, match=pattern):
+        RFdiffusion3DesignSpec(contig="A1-100", select_hotspots="A24")
+    with pytest.raises(ValueError, match=pattern):
+        RFdiffusion3DesignSpec(contig="50-80", select_hbond_donor={"A40": ["NE2"]})
+
+    # unindex without input → reject (same upstream rule as contig and select_*).
+    with pytest.raises(ValueError, match=pattern):
+        RFdiffusion3DesignSpec(unindex="A244,A274")
+
+    # Happy path 1: input_structure alone with select_*
+    spec = RFdiffusion3DesignSpec(input_structure="target.pdb", select_hotspots="A24,A35,A50")
+    assert spec.select_hotspots == "A24,A35,A50"
+
+    # Happy path 2: input_structure + contig + select_* (full motif scaffolding shape)
+    spec = RFdiffusion3DesignSpec(
+        input_structure="target.pdb",
+        contig="A1-100",
+        select_hbond_donor={"A40": ["NE2"]},
+    )
+    assert spec.contig == "A1-100"
+    assert spec.select_hbond_donor == {"A40": ["NE2"]}
+
+    # Happy path 3: length alone (unconditional design — the only no-input path).
+    spec = RFdiffusion3DesignSpec(length="40")
+    assert spec.length == "40"
+
+
 # ── Config: CLI kwargs assembly ─────────────────────────────────────────────
 
 
@@ -114,12 +158,10 @@ def test_rfdiffusion3_typed_fields_override_extras_on_collision():
 
 
 def test_rfdiffusion3_design_spec_typed_fields_propagate_to_json():
-    """Every typed InputSpecification field lands in to_dict() under its upstream key.
-
-    No ``length`` or ``contig`` is set — this also exercises the validator
-    accepting specs whose only constraints are typed design fields.
-    """
+    """Every typed InputSpecification field lands in to_dict() under its upstream key."""
     spec = RFdiffusion3DesignSpec(
+        input_structure="target.pdb",
+        contig="A1-100",
         symmetry="c3",
         select_buried="A1-50",
         select_partially_buried="A51-70",
@@ -219,7 +261,7 @@ def test_rfdiffusion3_json_spec_generation():
     inputs = RFdiffusion3Input(
         design_specs=[
             RFdiffusion3DesignSpec(length="100"),
-            RFdiffusion3DesignSpec(contig="50-80"),
+            RFdiffusion3DesignSpec(input_structure="target.pdb", contig="50-80"),
         ]
     )
 
@@ -229,6 +271,7 @@ def test_rfdiffusion3_json_spec_generation():
     assert "spec-1" in spec
     assert spec["spec-0"]["length"] == "100"
     assert spec["spec-1"]["contig"] == "50-80"
+    assert spec["spec-1"]["input"] == "target.pdb"  # input_structure → upstream's "input" key
 
 
 def test_rfdiffusion3_dispatch_operation_is_design(monkeypatch):
@@ -264,11 +307,14 @@ def test_rfdiffusion3_unconditional_design():
 
     output = run_rfdiffusion3(inputs, config)
 
-    assert len(output.output_structures) > 0
-    assert output[0].structure is not None
-    assert len(output[0].sequence) > 0
-    assert output[0].spec_key == "spec-0"
-    assert output[0].design_index == 0
+    # One bundle per input spec (this test passes a single spec).
+    assert len(output.designed_structures) == 1
+    bundle = output[0]
+    assert bundle.spec_key == "spec-0"
+    assert len(bundle.structures) > 0
+    first_design = bundle[0]
+    assert first_design.structure is not None
+    assert len(first_design.sequence) > 0
 
 
 # ── Benchmark ─────────────────────────────────────────────────────────────────
@@ -290,7 +336,10 @@ def test_rfdiffusion3_design_benchmark(request: pytest.FixtureRequest) -> None:
     validate_output(result)
 
     assert result.tool_id == "rfdiffusion3-design"
-    assert len(result.output_structures) == 8
-    for design in result.output_structures:
+    # Single input spec → single bundle holding all 8 designs.
+    assert len(result.designed_structures) == 1
+    bundle = result[0]
+    assert len(bundle.structures) == 8
+    for design in bundle.structures:
         assert design.structure is not None
         assert len(design.sequence) == 128

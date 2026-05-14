@@ -136,9 +136,17 @@ Additional InputSpecification fields can be passed via `**kwargs` (model uses `e
 
 ```python
 RFdiffusion3Output(
-    output_structures: List[RFdiffusion3Structure],
+    designed_structures: List[RFdiffusion3Designs],   # one bundle per input spec
 )
 ```
+
+Each `RFdiffusion3Designs` bundle holds the designs produced for one input spec
+(length = `n_batches * diffusion_batch_size`):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `spec_key` | `str` | Identifier of the originating input spec (e.g. `"spec-0"`) |
+| `structures` | `list[RFdiffusion3Structure]` | The designs generated for this spec |
 
 Each `RFdiffusion3Structure` contains:
 
@@ -146,8 +154,6 @@ Each `RFdiffusion3Structure` contains:
 |-------|------|-------------|
 | `structure` | `Structure` | Full atomic coordinates of designed protein |
 | `sequence` | `str` | Amino acid sequence (multi-chain: chains separated by `/`) |
-| `spec_key` | `str` | Identifier linking to input specification |
-| `design_index` | `int` | Index within batch |
 | `metadata` | `dict` | Sampled contig, chain info, and logged metrics |
 
 ## Interpreting Results
@@ -186,9 +192,10 @@ config = RFdiffusion3Config(
 
 result = run_rfdiffusion3(inputs, config)
 
-for structure in result.output_structures:
-    print(f"Sequence: {structure.sequence[:50]}...")
-    print(f"Design index: {structure.design_index}")
+# Result is one bundle per input spec; each bundle holds the N designs for that spec.
+for bundle in result.designed_structures:
+    for design_index, structure in enumerate(bundle.structures):
+        print(f"{bundle.spec_key} design {design_index}: {structure.sequence[:50]}...")
 ```
 
 **Example 2: Variable-length design**
