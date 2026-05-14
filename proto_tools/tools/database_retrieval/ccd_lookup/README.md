@@ -2,6 +2,8 @@
 
 # CCD Lookup
 
+> This README still needs to be reviewed and quality checked.
+
 ## Overview
 
 CCD Lookup wraps [`pdbeccdutils`](https://github.com/PDBeurope/ccdutils) — the official PDBe Python library for the wwPDB Chemical Component Dictionary (CCD) — to provide rich enrichment for CCD entries. Given a CCD code (e.g. `ATP`) or a SMILES string, it returns a `Ligands` collection of standard `Fragment` objects (ready to feed into downstream tools that take ligands as input) plus a parallel list of `CcdEnrichment` records carrying the rest of the CCD metadata: formula, descriptors (InChI / InChIKey / SMILES), parent component, RDKit physicochemical properties, optional UniChem cross-references (DrugBank / ChEMBL / PubChem), and an optional list of PDB structures using the ligand.

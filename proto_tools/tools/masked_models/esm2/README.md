@@ -1,456 +1,86 @@
 <a href="https://bio-pro.mintlify.app/tools/masked-models/esm2"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Open_Example_Notebook_→-2e7d32?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Open Example Notebook →"></a>
 
 # ESM2
 
-> [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+![ESM-2](https://user-images.githubusercontent.com/3605224/199301187-a9e38b3f-71a7-44be-94f4-db0d66143c53.png)
+
+> *Image source: [facebookresearch/esm](https://github.com/facebookresearch/esm)*
 
 ## Overview
-ESM2 (Evolutionary Scale Modeling 2) is Meta AI's [protein language model](https://www.evolutionaryscale.ai/blog/esm-cambrian) trained on millions of protein sequences from [UniRef](https://www.uniprot.org/help/uniref). It provides sequence embeddings, per-position amino acid logits, sequence mutation (sampling), and sequence scoring (MLM pseudo-perplexity). ESM2 offers multiple model sizes from 8M to 15B parameters, balancing quality and computational cost.
 
-This package also includes `esm2-gradient`, a relaxed-sequence gradient tool that computes the masked pseudo-log-likelihood objective over a continuous L×20 logits distribution and returns its gradient with respect to the input. It can be used as a differentiable structure-free pLM loss inside MCMC, gradient descent, or any optimization loop over relaxed protein sequences.
+Published in 2023, ESM-2 is Meta AI's second-generation of protein masked langauge models. Spanning six checkpoints ranging in scale from 8M to 15B parameters, the ESM-2 model family has become a widely used tool for protein embedding generation, and zero-shot variant-effect prediction via masked log-probabilities.
 
 ## Background
 
-**What are protein language models?**
-Protein language models (pLMs) learn the "grammar" of proteins from evolutionary data. They capture:
-- **Sequence conservation**: Which residues are essential for function
-- **[Co-evolution](https://en.wikipedia.org/wiki/Coevolution)**: Pairs of residues that evolve together (often in contact)
-- **Structural constraints**: Patterns that define [secondary/tertiary structure](https://en.wikipedia.org/wiki/Protein_structure)
-- **Functional motifs**: Binding sites, active sites, [post-translational modifications](https://en.wikipedia.org/wiki/Post-translational_modification)
+In 2023, [Lin et al.](https://doi.org/10.1126/science.ade2574) introduced ESM-2, a family of Transformer encoders trained with a BERT-style masked-language-modeling objective. Training used [UniRef50](https://www.uniprot.org/help/uniref), a clustered subset of UniProt covering roughly 65 million unique protein sequences. A central focus of the paper was the impact of scale, which was treated as the experimental variable across six model checkpoints spanning more than three orders of magnitude (8M, 35M, 150M, 650M, 3B, and 15B parameters). ESM-2 models were trained using a simple masked language modeling (MLM) objective adapted from BERT. Unlike autoregressive language models, which predict each token from preceding context only, MLM lets every residue attend to its full sequence context in both directions. At each training step a randomly generated mask covers 15% of input residues and replaces those tokens with a `<mask>` symbol. The model is then trained to predict the original amino acid from the surrounding bidirectional context. No structural, functional, or alignment supervision is used.
 
-**Why embeddings are useful:**
-ESM2 embeddings encode rich biological information:
-- Similar proteins cluster in embedding space
-- Embeddings predict structure, function, and localization
-- Mean-pooled embeddings work as fixed-length sequence descriptors
-
-**Why logits are useful:**
-Per-position logits indicate the model's confidence in each amino acid:
-- High logits = evolutionarily preferred (conserved)
-- Low logits = tolerated or deleterious positions
-- Comparing wild-type vs mutant logits predicts variant effects
-- Logits are returned over 20 canonical amino acids in fixed order: `ACDEFGHIKLMNPQRSTVWY`
-
-**Sequence length limit:**
-ESM-2's positional encoding caps inputs at 1022 residues. Longer inputs raise a `ValueError` rather than being silently truncated; chunk longer proteins yourself before invoking any ESM-2 tool. The same 1022 cap applies to the `L` dimension of `esm2-gradient` input logits.
+ESM-2 has since become a de facto sequence representation model for protein engineering. Its direct successor, ESM3 ([Hayes et al., 2025](https://doi.org/10.1126/science.ads0018)), extends the recipe at [EvolutionaryScale](https://www.evolutionaryscale.ai) into a multimodal generative model that jointly handles sequence, structure, and function tracks via discrete diffusion. ESM-2 still remains the lightest and most widely deployed protein language model. Within this toolkit, the 650M checkpoint (`esm2_t33_650M_UR50D`) is a standard quality/speed tradeoff and is the default for every tool.
 
 ## Tools
 
 ### ESM2 Embeddings (`esm2-embedding`)
 
-Extract protein sequence embeddings and logits using ESM2.
+Runs a single forward pass over ESM-2 to extract contextualized per-residue hidden states. The hidden states are mean-pooled across valid positions to produce a fixed-length sequence descriptor. Per-position 20-way amino-acid logits over the canonical order `ACDEFGHIKLMNPQRSTVWY` are also returned on request.
 
-Uses ESM2 from Meta AI to extract contextualized embeddings and per-position
-logits for protein sequences. The model is automatically loaded on-demand.
-Supports local GPU execution via isolated Python environments.
+#### Applications
 
-### ESM2 Gradient (`esm2-gradient`)
+The mean-pooled embedding is a standard learned protein representation for downstream supervised tasks like clustering, classification, and regression on protein properties. The same embeddings also power similarity search through cosine similarity on the mean vector. The per-position logits support variant-effect screening by comparing wild-type and mutant log-probabilities at each position. The underlying attention maps are themselves rich enough to recover residue-residue contacts without explicit supervision.
 
-Compute ESM2 masked PLL gradient with respect to relaxed protein logits.
+#### Usage Tips
+
+- **The last transformer layer carries the richest bidirectional context.** `repr_layer` chooses which layer to read for the mean-pooled embedding; the default `-1` selects the last layer and is the standard pick for downstream classification, regression, and variant-effect work. Earlier layers can outperform the top on certain probes (contact prediction is the canonical example).
+- **Per-position logits are large and slow to materialize.** Enabling `return_logits` adds a `seq_len × 20` float tensor per sequence to the output, dominating wall time on long inputs. Leave it `False` unless you actually need the per-position distribution.
 
 ### ESM2 Sampling (`esm2-sample`)
 
-Sample masked positions in protein sequences using ESM2.
+Selects positions to mutate via a specifiable masking strategy, replaces them with `<mask>`, and resamples from ESM-2's predicted distribution. Two decoding modes are available. The `single_pass` mode fills every masked position in one forward pass with independent draws. The `iterative_refinement` mode instead runs a [MaskGIT](https://arxiv.org/abs/2202.04200)-style multi-round commit loop. Each round of that loop uses a cosine or linear unmask schedule with optional temperature annealing. To target specific positions directly, pre-mask them yourself with `_` in the input string. The tool will then fill exactly those positions and skip the masking strategy entirely.
 
-The `preprocess` hook on :class:`ESM2SampleConfig` applies the masking
-strategy before this function runs, so `inputs.sequences` already
-contain `_` at positions to sample.
+#### Applications
+
+This tool drives guided point mutation, variant generation, and infilling at designable sites for protein engineering work. Resampling masked positions from a protein language model is the core operation behind directed-evolution proposals and antibody affinity maturation, which was demonstrated at experimental scale in [Hie et al., 2024](https://www.nature.com/articles/s41587-023-01763-2). It is also the inner loop of MaskGIT-style iterative refinement schemes adapted from image generation ([Chang et al., 2022](https://arxiv.org/abs/2202.04200)) for biological sequences.
+
+#### Usage Tips
+
+- **`iterative_refinement` produces more coherent joint samples than `single_pass`.** It is a multi-round MaskGIT-style commit loop (each round uses a cosine or linear unmask schedule) and is roughly `num_steps×` slower than the one-shot `single_pass` mode. Default to it whenever you mask more than a handful of sites.
+- **`masking_strategy` controls which positions get masked before sampling.** See the [masking strategy README](https://github.com/proto-bio/proto-tools/blob/main/proto_tools/transforms/masking/README.md) for the available selection methods and tuning knobs. As an alternative to passing a strategy, pre-mask exact positions yourself with `_` directly in the input string and the masking strategy is skipped entirely.
+- **`temperature` scales the per-position logits before sampling.** Values of 0.5 to 0.7 yield conservative mutations close to the input; values above 1.0 broaden exploration of the model's distribution.
+- **Long-range coherence is weak.** ESM-2 has no global coherence beyond its local context window, so very long-range dependencies between distant residues are not well captured even in iterative mode.
 
 ### ESM2 Scoring (`esm2-score`)
 
-Score protein sequences using ESM2 language model.
+Computes the masked-language-model pseudo-perplexity for each input sequence. Each position is masked individually, and the model's log-probability of the true amino acid under bidirectional context is recorded. The per-position scores are then aggregated into per-sequence log-likelihood, average log-likelihood, and perplexity metrics.
 
-Computes MLM pseudo-perplexity by masking each position individually and
-computing $P(x_i | x_{-i})$. Uses batched processing for efficiency.
+#### Applications
 
-Ambiguous amino acids (X, B, Z, etc.) are excluded from the perplexity
-calculation using the industry-standard exclusion strategy. Only positions
-with standard amino acids (20 canonical AAs) contribute to log-likelihood
-and perplexity metrics.
+ESM2 pseudo-perplexity is a standard fitness proxy when ranking variants, filtering generated sequences for naturalness, or comparing engineered constructs against wild type. The same masked log-likelihood difference between wild-type and mutant residues is a canonical zero-shot baseline for variant-effect prediction.
 
-## Tool Catalog
+#### Usage Tips
 
-| Tool | Description | Output |
-|------|-------------|--------|
-| `esm2-embedding` | Extract embeddings and logits | Embeddings, logits, attention masks |
-| `esm2-gradient` | Masked PLL gradient over relaxed logits | Gradient, loss, metrics, vocab |
-| `esm2-sample` | Mutate sequences using model | Modified sequences |
-| `esm2-score` | Score sequences via MLM pseudo-perplexity | Per-sequence metrics, optional logits |
+- **Pseudo-perplexity is a relative score, not an absolute fitness.** It is measured against ESM-2's training distribution, which is UniRef50 (the natural proteins it saw during pretraining), which can bias it to proteins that are more heavily represented. The metric is also sensitive to length, so it is most useful for comparing closely related sequences of similar length.
+- **Ambiguous residues are excluded.** Perplexity is computed only over the 20 canonical amino acids; `X`, `B`, `Z`, and similar are dropped from both the log-likelihood sum and the position count.
 
-## Model Variants
+### ESM2 Gradient (`esm2-gradient`)
 
-| Checkpoint | Parameters | Layers | Embedding Dim | Speed | Quality |
-|------------|------------|--------|---------------|-------|---------|
-| `esm2_t6_8M_UR50D` | 8M | 6 | 320 | Fastest | Basic |
-| `esm2_t12_35M_UR50D` | 35M | 12 | 480 | Fast | Good |
-| `esm2_t30_150M_UR50D` | 150M | 30 | 640 | Medium | Better |
-| `esm2_t33_650M_UR50D` | 650M | 33 | 1280 | Slower | High |
-| `esm2_t36_3B_UR50D` | 3B | 36 | 2560 | Slow | Higher |
-| `esm2_t48_15B_UR50D` | 15B | 48 | 5120 | Slowest | Best |
+Computes the gradient of the mean masked negative log-likelihood with respect to a relaxed `(L, 20)` input distribution over the canonical amino-acid order `ACDEFGHIKLMNPQRSTVWY`. The ESM-2 weights are kept frozen throughout. The relaxed distribution is mixed against ESM-2's per-residue token embeddings to form a soft input. Each amino-acid position is then masked in turn, and a per-chunk backward pass accumulates the gradient. An optional Straight-Through Estimator runs the forward on hard one-hot tokens while still routing gradients through the soft probabilities.
 
-**Model selection guidance:**
-1. **Default choice**: `esm2_t33_650M_UR50D` offers best quality/speed tradeoff for most tasks.
-2. **Memory constrained**: Use `esm2_t30_150M_UR50D` or smaller.
-3. **Maximum quality**: Use `esm2_t48_15B_UR50D` (requires >40GB GPU).
+#### Applications
 
-## Execution Modes
+This tool exposes ESM-2 as a differentiable, structure-free protein-language-model loss for use inside MCMC, gradient descent, or any other optimization loop over relaxed protein sequences. It is most often used as a naturalness prior in continuous design pipelines, including latent Bayesian optimization frameworks and discrete walk-jump sampling approaches for de novo protein design.
 
-- **Local GPU/CPU**: Loads the model on-demand. Use `device="cuda"`, `"cpu"`, or `"mps"`.
+#### Usage Tips
 
-## How It Works
+- **`temperature` controls how the raw input is converted into a distribution.** With a value set, the tool applies `softmax(logits / T)` before the forward pass; leave it `None` (the default) if the input already sums to 1 per position.
+- **`use_ste` enables the Straight-Through Estimator.** The forward then runs on hard one-hot tokens while gradients still route through the soft probabilities, giving stronger guidance toward discrete sequences. Leave it off for smooth optimization over the relaxed simplex.
+- **`compute_gradient` toggles whether the backward pass runs.** When set to `False`, the `gradient` field is `None`, but `loss` and `metrics` (log-likelihood, perplexity, and so on) are still populated. Useful for ranking MCMC proposals without paying the backward cost.
 
-ESM2 is a masked language model (similar to BERT) trained on protein sequences. It learns to predict masked amino acids from surrounding context, capturing evolutionary and structural patterns.
+## Toolkit Notes
 
-- **Embeddings**: Forward pass through the model produces per-position hidden states. Mean-pooling across positions yields a fixed-length sequence descriptor.
-- **Sampling**: Positions are selected by a decoding method (entropy, max_logit, or random), masked, and resampled from the model's predicted distribution at a given temperature.
-- **Scoring**: Each position is masked one at a time, and the model's log-probability of the true amino acid is recorded. Aggregated scores give pseudo-perplexity (lower = more "natural" sequence).
-- **Gradient**: A relaxed `(L, 20)` distribution is mixed against ESM2's per-residue token embeddings to form a soft input, each amino-acid position is masked in turn, and a per-chunk backward pass accumulates the gradient of the mean masked negative log-likelihood with respect to the input logits while keeping model parameters frozen. The optional Straight-Through Estimator runs the forward pass on hard one-hot tokens while gradients still flow through the soft probabilities.
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-## Input Parameters
+These apply to every ESM-2 tool in this toolkit (`esm2-embedding`, `esm2-sample`, `esm2-score`, `esm2-gradient`).
 
-### Embeddings Tool
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sequences` | `List[str]` | Protein sequences (amino acid strings) |
-
-### Sampling Tool
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sequences` | `List[str]` | Protein sequences to mutate |
-
-### Scoring Tool
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sequences` | `List[str]` | Protein sequences to score |
-
-### Gradient Tool
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `logits` | `List[List[float]]` | Relaxed sequence logits with shape `(L, 20)` in canonical amino-acid order `ACDEFGHIKLMNPQRSTVWY` |
-| `temperature` | `float \| null` | Optional softmax temperature. When set, applies `softmax(input / temperature)` before gradient computation. When `null` (default), input is used as-is — callers provide a pre-computed distribution |
-
-## Configuration
-
-### Embeddings Tool (`ESM2EmbeddingsConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_checkpoint` | `str` | `"esm2_t33_650M_UR50D"` | Model variant to use |
-| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
-| `device` | `str` | `"cuda"` | Device: `"cuda"`, `"cpu"`, `"mps"` |
-| `verbose` | `bool` | `False` | Print progress messages |
-| `return_logits` | `bool` | `False` | Include per-position logits in output |
-| `repr_layer` | `int` | `-1` | Transformer layer index for embeddings (`-1` = last) |
-
-### Sampling Tool (`ESM2SampleConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_checkpoint` | `str` | `"esm2_t33_650M_UR50D"` | Model variant to use |
-| `masking_strategy` | `MaskingStrategy` | random 30% | Composite — see fields below |
-| `sampling_method` | `Literal["single_pass", "iterative_refinement"]` | `"single_pass"` | `single_pass` fills every mask in one forward; `iterative_refinement` runs a MaskGIT-style loop |
-| `temperature` | `float` | `1.0` | Softmax temperature for sampling |
-| `top_p` | `float` | `1.0` | Nucleus threshold (iterative only); `1.0` disables |
-| `num_steps` | `int` | `20` | Iterative-refinement decoding steps (iterative only) |
-| `schedule` | `Literal["cosine", "linear"]` | `"cosine"` | Unmask schedule across rounds (iterative only) |
-| `strategy` | `Literal["random", "entropy"]` | `"random"` | Per-round commit selection (iterative only) |
-| `temperature_annealing` | `bool` | `True` | Anneal toward 0 across rounds (iterative only) |
-| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
-| `device` | `str` | `"cuda"` | Device for inference |
-| `return_logits` | `bool` | `False` | Include per-position logits in output |
-
-**`MaskingStrategy` fields** (nested, controls which positions to mask):
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `method` | `Literal["random", "entropy", "max-logit"]` | `"random"` | Position-selection scoring method |
-| `num_mutations` | `int \| None` | `None` | Exact number of positions to mask |
-| `mask_fraction` | `float \| None` | `None` | Fraction of designable positions to mask (default ~30%) |
-| `fixed_positions` | `list[int] \| None` | `None` | 1-indexed positions that must NOT be masked |
-| `temperature` | `float` | `1.0` | Temperature for position selection (separate from sampling temperature) |
-
-Use `sampling_method="iterative_refinement"` for higher-coherence joint sampling at multiple masked sites — slower (~num_steps× compute), but commits positions in rounds rather than independently.
-
-### Scoring Tool (`ESM2ScoringConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_checkpoint` | `str` | `"esm2_t33_650M_UR50D"` | Model variant to use |
-| `batch_size` | `int` | `1` | Masked variants per forward pass |
-| `device` | `str` | `"cuda"` | Device for inference |
-| `verbose` | `bool` | `False` | Print progress messages |
-| `return_logits` | `bool` | `False` | Include per-position logits in output |
-
-### Gradient Tool (`ESM2GradientConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_checkpoint` | `str` | `"esm2_t33_650M_UR50D"` | Model variant to use |
-| `use_ste` | `bool` | `False` | When true, uses a Straight-Through Estimator: hard one-hot tokens in the forward pass with gradients flowing through soft probabilities. When false, uses soft blended embeddings directly |
-| `compute_gradient` | `bool` | `True` | When true, runs backward pass and returns the gradient. Set `False` for forward-only log-likelihood scoring (e.g. MCMC proposal ranking); `gradient` is `None` in the output |
-| `batch_size` | `int \| null` | `null` | AA positions per forward pass for batched PLL. `null` selects the backend default (32). Lower if OOM, higher for throughput |
-| `seed` | `int \| null` | `null` | Optional PyTorch random seed for reproducibility |
-| `device` | `str` | `"cuda"` | Device for inference |
-| `verbose` | `bool` | `False` | Print progress messages |
-
-### Parameter Guides
-
-**Temperature guide for sampling:**
-| Temperature | Behavior | Use Case |
-|-------------|----------|----------|
-| 0.5-0.7 | Conservative | Safer mutations |
-| 1.0 | Standard | Model distribution |
-| 1.5-2.0 | Creative | More diverse mutations |
-
-## Output Specification
-
-### ESM2EmbeddingsOutput (Embeddings)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `results` | `List[SequenceEmbedding]` | Per-sequence embedding results (primary field) |
-
-**`SequenceEmbedding` fields:**
-| Field | Type | Description |
-|-------|------|-------------|
-| `mean_embedding` | `List[float]` | Mean-pooled embedding vector for one sequence |
-| `attention_mask` | `List[int]` | Binary mask: 1 = valid position, 0 = padding |
-| `logits` | `Optional[List[List[float]]]` | Per-position amino acid logits (seq_len, 20). Only present if `return_logits=True` |
-
-### ESM2SampleOutput
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `sequences` | `List[str]` | Mutated protein sequences |
-| `logits` | `List[List[List[float]]]?` | Optional per-position logits (AA-only) |
-
-### MaskedModelScoringOutput (Scoring)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `scores` | `List[MaskedModelScoringMetrics]` | One score object per input sequence |
-
-**`MaskedModelScoringMetrics` fields:**
-| Field | Type | Description |
-|-------|------|-------------|
-| `log_likelihood`, `avg_log_likelihood`, `perplexity` | `float` | Scalar metrics (attribute or mapping access) |
-| `logits` | `List[List[float]]?` | Optional per-position logits (shape `[seq_len, 20]`) |
-| `vocab` | `List[str]?` | Amino acid order (AA-only) |
-
-### ESM2GradientOutput
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `gradient` | `List[List[float]] \| null` | Gradient matrix with the same `(L, 20)` shape and amino-acid column order as the input logits. `null` when `compute_gradient=False` (forward-only scoring) |
-| `loss` | `float` | Mean negative log-likelihood over the L masked positions |
-| `metrics` | `dict[str, Any]` | Auxiliary metrics: `log_likelihood`, `avg_log_likelihood`, `perplexity`, `sequence_length`, `model_checkpoint`, and `objective` (`"masked_pll"`) |
-| `vocab` | `List[str]` | Amino-acid column ordering for both the input logits and the returned gradient — always canonical protein order `ACDEFGHIKLMNPQRSTVWY` |
-
-## Interpreting Results
-
-These thresholds are heuristics. Use them comparatively and validate for your task.
-
-**For variant effect prediction (logit difference, heuristic):**
-- **Likely deleterious**: Wild-type logit - mutant logit > 5
-- **Possibly deleterious**: Difference > 2
-- **Neutral**: Difference between -2 and 2
-- **Possibly beneficial**: Difference < -2
-
-**For sequence similarity (cosine similarity of embeddings):**
-- **Highly similar**: > 0.9 (same protein family)
-- **Related**: 0.7 - 0.9 (similar function)
-- **Distant**: 0.5 - 0.7 (remote homology)
-- **Unrelated**: < 0.5
-
-**For scoring (pseudo-perplexity):**
-- Lower perplexity indicates a more "natural" sequence according to the model
-- Compare perplexities across variants rather than interpreting absolute values
-- Perplexity is sensitive to sequence length; compare sequences of similar length
-
-## Quick Start Examples
-
-**Example 1: Extract embeddings for clustering**
-```python
-from proto_tools.tools.masked_models.esm2 import (
-    ESM2EmbeddingsInput, ESM2EmbeddingsConfig, run_esm2_embeddings,
-)
-import numpy as np
-from sklearn.cluster import KMeans
-
-# Protein sequences
-sequences = [
-    "MVLSPADKTNVKAAW",
-    "MVLSGEDKSNIKAAW",
-    "GSSGSSGSSGSSGSS",
-]
-
-inputs = ESM2EmbeddingsInput(sequences=sequences)
-config = ESM2EmbeddingsConfig(
-    model_checkpoint="esm2_t33_650M_UR50D",
-    batch_size=3,
-    verbose=True
-)
-
-result = run_esm2_embeddings(inputs, config)
-
-# Cluster embeddings
-embeddings = np.array([r.mean_embedding for r in result.results])
-kmeans = KMeans(n_clusters=2).fit(embeddings)
-print(f"Cluster assignments: {kmeans.labels_}")
-```
-
-**Example 2: Score sequences (pseudo-perplexity)**
-```python
-from proto_tools.tools.masked_models.esm2 import ESM2ScoringInput, ESM2ScoringConfig, run_esm2_score
-
-inputs = ESM2ScoringInput(sequences=["MVLSPADKTNVKAAW", "GSSGSSGSS"])
-config = ESM2ScoringConfig(batch_size=32, verbose=False)
-
-result = run_esm2_score(inputs, config)
-print(f"Perplexity: {result.scores[0].metrics['perplexity']:.3f}")
-```
-
-**Example 3: Guided sequence mutation**
-```python
-from proto_tools.tools.masked_models.esm2 import ESM2SampleInput, ESM2SampleConfig, run_esm2_sample
-
-# Starting sequence
-inputs = ESM2SampleInput(sequences=["MVLSPADKTNVKAAW"])
-
-config = ESM2SampleConfig(
-    model_checkpoint="esm2_t33_650M_UR50D",
-    temperature=0.7,  # Conservative mutations
-    decoding_method="entropy",  # Mutate uncertain positions
-    num_mutations=3,  # 3 mutations per round
-    verbose=True
-)
-
-result = run_esm2_sample(inputs, config)
-print(f"Original: {inputs.sequences[0]}")
-print(f"Mutated:  {result.sequences[0]}")
-```
-
-**Example 4: Batch processing**
-```python
-from proto_tools.tools.masked_models.esm2 import (
-    ESM2EmbeddingsInput, ESM2EmbeddingsConfig, run_esm2_embeddings,
-)
-
-# Large batch of sequences
-sequences = ["MVLSPADKTNVKAAW"] * 100
-
-inputs = ESM2EmbeddingsInput(sequences=sequences)
-config = ESM2EmbeddingsConfig(
-    batch_size=16,  # Process 16 at a time
-    verbose=True
-)
-
-result = run_esm2_embeddings(inputs, config)
-print(f"Processed {len(result.results)} sequences")
-```
-
-**Example 5: Masked-PLL gradient over a relaxed sequence**
-```python
-from proto_tools.tools.masked_models.esm2 import (
-    ESM2GradientInput, ESM2GradientConfig, run_esm2_gradient,
-)
-from proto_tools.utils import one_hot_protein_logits
-
-# Seed the relaxed distribution from a discrete sequence (sharpness=2.0
-# yields a biased-but-not-saturated softmax target).
-logits = one_hot_protein_logits("MVLSPADKTNVKAAW", sharpness=2.0)
-
-inputs = ESM2GradientInput(logits=logits, temperature=0.6)
-config = ESM2GradientConfig(model_checkpoint="esm2_t33_650M_UR50D")
-
-result = run_esm2_gradient(inputs, config)
-print(f"Mean NLL:    {result.loss:.3f}")
-print(f"Perplexity:  {result.metrics['perplexity']:.3f}")
-print(f"Grad shape:  {len(result.gradient)} x {len(result.gradient[0])}")
-# Step the relaxed sequence: logits ← logits − lr · gradient
-```
-
-**Example 6: Forward-only PLL scoring (no backward pass)**
-```python
-from proto_tools.tools.masked_models.esm2 import (
-    ESM2GradientInput, ESM2GradientConfig, run_esm2_gradient,
-)
-from proto_tools.utils import one_hot_protein_logits
-
-inputs = ESM2GradientInput(
-    logits=one_hot_protein_logits("MVLSPADKTNVKAAW", sharpness=2.0),
-    temperature=0.6,
-)
-config = ESM2GradientConfig(compute_gradient=False)  # skip backward pass
-
-result = run_esm2_gradient(inputs, config)
-assert result.gradient is None  # forward-only mode
-print(f"avg log-likelihood: {result.metrics['avg_log_likelihood']:.3f}")
-```
-
-## Best Practices & Gotchas
-
-**Batch processing:**
-
-1. **Variable lengths**: Sequences are padded to batch max length - group similar-length sequences.
-
-2. **OOM errors**: Reduce `batch_size` or use smaller model.
-
-3. **Attention masks**: Always use masks to ignore padding positions in downstream analysis.
-
-**Embedding usage:**
-
-1. **Mean pooling**: `mean_embeddings` averages across sequence positions (ignoring padding).
-
-2. **Per-position**: Extract from hidden states for residue-level tasks.
-
-3. **Normalization**: Consider L2 normalizing embeddings for cosine similarity.
-
-**Gradient tool:**
-
-1. **Vocab order**: Input logits and the returned gradient share the canonical protein order `ACDEFGHIKLMNPQRSTVWY`. The tool maps to ESM2's tokenizer vocabulary internally.
-
-2. **`temperature=None` vs. `1.0`**: With `temperature=None` (default), input logits are used as the soft distribution as-is — pass an already-normalized distribution. With `temperature` set, `softmax(logits / temperature)` is applied before the forward pass.
-
-3. **STE vs. soft embeddings**: Set `use_ste=True` for stronger guidance toward discrete sequences (the forward sees hard one-hot tokens; gradients still flow through the soft probabilities). Leave `use_ste=False` for smooth optimization over the relaxed simplex.
-
-4. **Forward-only mode**: Set `compute_gradient=False` to skip the backward pass entirely; `gradient` will be `None` but `loss` and `metrics` are populated. Useful for ranking MCMC proposals without paying the backward cost.
-
-5. **Memory**: Gradient memory is dominated by the chunk size, not the sequence length — increase `batch_size` for shorter sequences, decrease on long inputs or smaller GPUs.
-
-**Common mistakes:**
-
-1. **Ignoring padding**: Always apply attention masks before averaging or analyzing logits.
-
-2. **Empty sequences**: ESM2 tools require at least one non-empty sequence.
-
-3. **Length cap (1022 residues)**: ESM-2's positional embeddings cap inputs at 1022 residues. Over-length sequences (or `esm2-gradient` logits with `L > 1022`) raise a `ValueError`.
-
-4. **Wrong vocab indices**: Tool logits are AA-only in order `ACDEFGHIKLMNPQRSTVWY` (no special tokens).
-
-5. **Mixing checkpoints**: Embeddings from different model sizes are NOT comparable.
-
-## References
-
-**Primary publication:**
-- Lin, Z. et al. (2023). "Evolutionary-scale prediction of atomic level protein structure with a language model." *Science*, 379(6637), 1123-1130. DOI: [10.1126/science.ade2574](https://doi.org/10.1126/science.ade2574)
-
-**Implementation:**
-- GitHub: [https://github.com/facebookresearch/esm](https://github.com/facebookresearch/esm)
-- Model hub: [https://huggingface.co/facebook](https://huggingface.co/facebook)
-
-## Related Tools
-
-**Tools often used together:**
-- `esm3`: Newer generative model with structure prediction
-- `inverse_folding/proteinmpnn`: Structure-conditioned sequence design
-- `mmseqs2-clustering`: Cluster sequences before/after embedding analysis
-
-**Alternative tools:**
-- `progen2`: Autoregressive protein generation
-- `esm3`: Can also do embeddings, but ESM2 is faster for embedding-only tasks
+- **Different ESM-2 checkpoints produce different embedding sizes.** Downstream tasks built on one checkpoint will not transfer to another without re-fitting; pick one and stick with it for an analysis.
+- **Smaller checkpoints run faster.** The 150M and 35M variants are significantly faster than the 650M default, with drops in representation quality.
+- **Max sequence length is 1022 residues.** ESM-2's positional encoding caps inputs at 1022 residues, and will raise `ValueError` on longer inputs rather than truncating.
+- **`batch_size` controls memory usage across the toolkit.** Lower it if you OOM; raise it for short-sequence throughput. One nuance: for `esm2-score`, `batch_size` counts masked variants pooled across all input sequences rather than sequences themselves (each input contributes `L` masked variants).
