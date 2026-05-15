@@ -156,6 +156,34 @@ def test_get_readme_section_returns_none_when_missing() -> None:
     assert get_readme_section("esm2-embedding", "Nonexistent Section") is None
 
 
+_LEARNING_RESOURCES_URL = "https://hazyresearch.stanford.edu/blog/2024-03-14-evo"
+
+
+def test_background_excludes_learning_resources_by_default() -> None:
+    """The optional '### Learning Resources' subsection is hidden from agents by default."""
+    background = get_readme_sections("evo1-sample").background
+    assert background, "Background body is empty"
+    assert "Learning Resources" not in background
+    assert _LEARNING_RESOURCES_URL not in background
+
+    section = get_readme_section("evo1-sample", "Background")
+    assert section is not None
+    assert "Learning Resources" not in section
+    assert _LEARNING_RESOURCES_URL not in section
+
+
+def test_background_includes_learning_resources_when_requested() -> None:
+    """include_learning_resources=True keeps the subsection in the Background body."""
+    background = get_readme_sections("evo1-sample", include_learning_resources=True).background
+    assert "Learning Resources" in background
+    assert _LEARNING_RESOURCES_URL in background
+
+    section = get_readme_section("evo1-sample", "Background", include_learning_resources=True)
+    assert section is not None
+    assert "Learning Resources" in section
+    assert _LEARNING_RESOURCES_URL in section
+
+
 def test_qc_pending_flag_reflects_callout() -> None:
     """``qc_pending`` is True when the README still has the TODO callout."""
     assert get_readme_sections("esm2-embedding").qc_pending is False

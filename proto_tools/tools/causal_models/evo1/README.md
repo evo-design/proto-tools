@@ -1,224 +1,66 @@
-<a href="https://bio-pro.mintlify.app/tools/causal-models/evo1"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/causal-models/evo1"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # Evo1
 
+![Evo](https://github.com/evo-design/evo/raw/main/evo.jpg)
+
+> *Image source: [evo-design/evo](https://github.com/evo-design/evo)*
+
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** Evo1 has an Apache-2.0 license. Please refer to [the license](https://github.com/evo-design/evo/blob/main/LICENSE) for full terms.
 
 ## Overview
-Evo1 is a 7-billion parameter DNA language model built on the [StripedHyena](https://en.wikipedia.org/wiki/State_space_model#Deep_learning) architecture, trained on 2.7 million [prokaryotic](https://en.wikipedia.org/wiki/Prokaryote) and [phage](https://en.wikipedia.org/wiki/Bacteriophage) genomes from the OpenGenome dataset. This tool performs autoregressive DNA sequence generation from prompts and optionally scores generated sequences by mean log-probability.
+
+Evo1 is an autoregressive DNA language model from Arc Institute and Stanford, trained at single-nucleotide resolution on prokaryotic and phage genomes. This toolkit wraps it as two tools that generate new DNA sequences from a prompt (`evo1-sample`) and score how likely existing DNA sequences are under the model (`evo1-score`).
 
 ## Background
 
-**What does this tool measure/predict?**
-Evo1 generates novel DNA sequences by learning the statistical patterns of prokaryotic and phage genomes. It can also score sequences by log-likelihood, providing a measure of how "natural" a generated sequence appears relative to the training distribution.
+Evo1 ([Nguyen et al., 2024](https://doi.org/10.1126/science.ado9336)) is a 7-billion-parameter DNA language model trained with an autoregressive objective: during training the model learns to predict the next nucleotide given all preceding nucleotides. Training used the [OpenGenome](https://huggingface.co/datasets/LongSafari/open-genome) dataset, roughly 2.7 million prokaryotic and phage genomes, so the model's predictions are most reliable for bacterial, archaeal, and phage sequences and are not expected to transfer well to eukaryotic genomes. It uses the StripedHyena architecture, a sequence model that combines convolutional state-space layers with a smaller number of attention layers. This design lets it process long stretches of DNA, up to 131,072 nucleotides for the long-context checkpoint, without the memory cost a pure attention model would incur at that length.
 
-**Why is this important?**
-Generative DNA models enable de novo design of biological sequences; genes, [operons](https://en.wikipedia.org/wiki/Operon), [CRISPR](https://en.wikipedia.org/wiki/CRISPR) systems, and [mobile genetic elements](https://en.wikipedia.org/wiki/Transposable_element); without requiring template sequences. By learning the grammar of genomes at single-nucleotide resolution, Evo1 can propose functional DNA that respects codon usage, regulatory signals, and structural constraints.
+The autoregressive objective yields two capabilities directly. Sampling from the predicted next-nucleotide distributions produces new candidate sequences, and reading off the probabilities the model assigns to an existing sequence gives a likelihood score that reflects how closely the sequence matches the patterns seen during training. Alongside the base checkpoints, the authors released specialized variants trained on CRISPR loci and on transposable elements for those sequence types. Evo1 is the first model in the Evo family; [Evo2](https://bio-pro.mintlify.app/tools/causal-models/evo2) extends the approach to eukaryotic genomes and longer context.
 
-**Scientific foundation:**
-Evo1 uses the StripedHyena architecture, a hybrid state-space/attention model that processes DNA at single-nucleotide resolution. Unlike transformer-only models, StripedHyena supports efficient long-range sequence modeling up to 131k tokens. The model is trained with a standard autoregressive (next-token prediction) objective on raw genomic DNA.
+### Learning Resources
+
+- [Learning from DNA: a grand challenge in biology](https://hazyresearch.stanford.edu/blog/2024-03-14-evo) (Hazy Research, Stanford) - an accessible introduction to Evo from the authors, covering the motivation for genomic language modeling and how the model is trained and used.
+- [Evo: DNA foundation modeling from molecular to genome scale](https://arcinstitute.org/news/evo) (Arc Institute) - an overview of Evo's capabilities, including genome-scale generation and the StripedHyena architecture.
 
 ## Tools
 
 ### Evo1 Sampling (`evo1-sample`)
 
-Sample DNA sequences using the Evo1 language model.
+Generates DNA sequences by autoregressive sampling. Given one or more prompt sequences, the model extends each prompt nucleotide by nucleotide, drawing each new nucleotide from the model's predicted distribution under the configured `temperature`, `top_k`, and `top_p` settings, until `num_tokens` new nucleotides have been produced. Optionally returns a per-sequence likelihood score (log-likelihood, average log-likelihood, and perplexity) for the generated sequences.
 
-Uses the Evo1 model to autoregressively generate DNA sequences from
-prompt sequences. Supports multiple model checkpoints including
-CRISPR and transposon fine-tuned variants.
+#### Applications
+
+This tool produces candidate DNA sequences for downstream design and screening, including synthetic genes, regulatory regions, CRISPR systems (using the `evo-1-8k-crispr` checkpoint), and transposable elements (using the `evo-1-8k-transposon` checkpoint). The prompt sets the biological context for what follows, for example a start codon or promoter region.
+
+#### Usage Tips
+
+- **Match the checkpoint to the task.** `evo-1-8k-base` (the default) is the general prokaryotic and phage DNA model and `evo-1-131k-base` is its genome-scale, long-context counterpart. `evo-1-8k-crispr` and `evo-1-8k-transposon` are task-specific variants of `evo-1-8k-base` for generating CRISPR-Cas systems and IS200/IS605 transposons; use them when generating those systems and a base checkpoint otherwise.
+- **`top_k` defaults to 4, the size of the DNA alphabet.** It exists mainly to keep generation on the four bases rather than other byte tokens, so it is not the diversity knob; control diversity with `temperature` (lower stays near the training distribution, higher explores it) and leave `top_p` at its default unless you specifically want nucleus sampling.
+- **Output excludes the prompt by default.** `prepend_prompt=False` returns only the newly generated nucleotides, not the prompt joined to its continuation; set it `True` if you need the full sequence back.
+- **Prompt length plus `num_tokens` must fit the checkpoint's context window** (8,192 nucleotides for the 8k checkpoints; `evo-1-131k-base` for longer). The model cannot attend beyond that window, so a long prompt directly reduces how much can be generated.
+- **Generated sequences are candidates.** Validate them with downstream tools (for example ORF detection, structure prediction, or homology search) before drawing biological conclusions.
 
 ### Evo1 Scoring (`evo1-score`)
 
-Score DNA sequences using Evo1 autoregressive language model.
+Scores existing DNA sequences under the Evo1 model. For each sequence, it computes the model's predicted probability of every nucleotide given the preceding nucleotides and aggregates these into a log-likelihood, an average log-likelihood per nucleotide, and a perplexity. Optionally returns the per-position logits and the token vocabulary.
 
-Computes the likelihood of DNA sequences using Evo1's autoregressive
-modeling. For each position t, computes log $P(x_t | x_{<t})$ and sums
-these to get the total log-likelihood.
+#### Applications
 
-## How It Works
+This tool measures how well a DNA sequence matches the patterns the model learned from natural prokaryotic and phage genomes. Lower perplexity means the sequence is more consistent with that training distribution. Use it to rank or filter candidate sequences (including the output of `evo1-sample`), to compare variants of a sequence, or to flag sequences that fall far outside the model's training domain.
 
-**Method overview:**
-Evo1 performs autoregressive generation: given a prompt DNA sequence, it predicts one nucleotide at a time, sampling from the predicted distribution. The model uses StripedHyena layers that combine gated state-space layers with attention, enabling efficient processing of long genomic sequences. Generation uses top-k and nucleus (top-p) sampling with configurable temperature to control diversity.
+#### Usage Tips
 
-**Key assumptions:**
-- Input prompts are valid DNA strings (characters A, T, C, G)
-- The model is most reliable for prokaryotic and phage-like sequences (its training domain)
-- Generated sequences require downstream validation (e.g., ORF finding, structure prediction)
+- **Compare length-normalized scores within one checkpoint.** Total `log_likelihood` scales with sequence length, so use `perplexity` or `avg_log_likelihood` when comparing sequences of different lengths. Different checkpoints learn different distributions that are not calibrated to a common scale, so scores from different `model_name` values are hard to compare directly; a lower perplexity means the sequence is more consistent with that checkpoint's training distribution.
+- **`return_logits` defaults to `False`.** Leave it off unless you need the per-position distributions, since the logits tensor is large (sequence length by a 512-token vocabulary).
 
-**Limitations:**
-- Context window is 8,192 tokens for base model, 131,072 for the 131k variant
-- Single-nucleotide tokenization means generation is slower per base than codon-level models
-- Fine-tuned checkpoints (CRISPR, transposon) are specialized and may perform poorly outside their domain
+## Toolkit Notes
 
-**Computational requirements:**
-- **Hardware:** NVIDIA GPU with ≥24 GB VRAM (A100 recommended); CPU mode available but very slow
-- **Runtime:** ~1-5 minutes for 1,000 tokens on a single A100 GPU, depending on model variant
-- **Scalability:** Supports batched generation via `batch_size` parameter
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-## Model Variants
+These apply to every Evo1 tool in this toolkit (`evo1-sample`, `evo1-score`).
 
-| Checkpoint | Context Length | Description |
-|------------|--------------|-------------|
-| `evo-1.5-8k-base` | 8,192 | Updated 8k base model (Evo 1.5 release) |
-| `evo-1-8k-base` | 8,192 | General-purpose prokaryotic/phage DNA model |
-| `evo-1-131k-base` | 131,072 | Long-context variant for multi-gene regions |
-| `evo-1-8k-crispr` | 8,192 | Fine-tuned on CRISPR loci for CRISPR system generation |
-| `evo-1-8k-transposon` | 8,192 | Fine-tuned on transposable elements |
-
-## Important Parameters
-
-**Input parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `prompts` | `List[str]` | *Required* | Prompt DNA sequence(s) for generation |
-
-**Configuration parameters:**
-
-| Parameter | Type | Default | Sweep Range | Description |
-|-----------|------|---------|-------------|-------------|
-| `model_name` | `str` | `"evo-1-8k-base"` | N/A | Evo1 weights variant (see Model Variants) |
-| `num_tokens` | `int` | `100` | `100 - 10000` | Number of new tokens to generate per prompt |
-| `temperature` | `float` | `1.0` | `0.5 - 1.5` | Softmax temperature; lower is more deterministic |
-| `top_k` | `int` | `4` | `1 - 20` | Top-k sampling; limits to k most likely tokens |
-| `top_p` | `float` | `1.0` | `0.8 - 1.0` | Nucleus sampling threshold |
-| `prepend_prompt` | `bool` | `False` | N/A | Include input prompt at start of each generated sequence |
-| `cached_generation` | `bool` | `True` | N/A | Use the KV cache for autoregressive generation |
-| `force_prompt_threshold` | `int` | `128` | N/A | Tokens to prefill in parallel before switching to prompt forcing |
-| `batch_size` | `int` | `1` | N/A | Sequences per GPU forward pass |
-| `device` | `str` | `"cuda"` | N/A | Device to run on |
-
-**Parameters to prioritize for sweeps:**
-1. **`temperature`**: Controls diversity of generated sequences. Lower values (0.5-0.8) produce conservative, high-likelihood sequences; higher values (1.0-1.5) increase diversity but may reduce quality.
-2. **`top_k`**: With `top_k=4` (DNA alphabet size), generation stays close to the most likely nucleotide at each position. Increasing top_k allows more exploratory generation.
-3. **`num_tokens`**: Determines output length. For gene-length sequences, use 1,000-5,000; for full operons, 5,000-10,000+.
-
----
-
-**Output specification:**
-
-```python
-# Return type: Evo1SampleOutput
-{
-    "sequences": List[str],           # Generated DNA sequences
-    "scores": Optional[List[float]],  # Mean log-probability per sequence (if computed)
-}
-```
-
-**Key output fields:**
-
-| Field | Type | Range | Interpretation |
-|-------|------|-------|----------------|
-| `sequences` | `List[str]` | Variable length | Generated DNA sequences, one per input prompt |
-| `scores` | `Optional[List[float]]` | Negative floats | Mean log-probability; higher (less negative) = more likely under model |
-
-**Supported export formats:** `fasta`, `txt`, `json`
-
-## Best Practices & Gotchas
-
-**Parameter tuning:**
-- **`temperature`**:
-  - Low values (0.5-0.8): More repetitive but higher per-token likelihood; good for generating sequences close to training distribution
-  - High values (1.0-1.5): More diverse; useful for exploring sequence space but may produce less realistic sequences
-
-**Common mistakes:**
-1. **Using the wrong checkpoint for your task**: The `evo-1-8k-crispr` checkpoint is fine-tuned specifically for CRISPR loci; it will not perform well for general gene generation. Use `evo-1-8k-base` for general purposes.
-2. **Expecting eukaryotic-quality generation**: Evo1 was trained on prokaryotic and phage genomes. For eukaryotic sequences, use Evo2.
-3. **Ignoring prompt length limits**: The 8k model has an 8,192-token context window. Prompt + generated tokens must fit within this limit.
-
-**Tips for optimal results:**
-- Use biologically meaningful prompts (e.g., start codons, promoter regions) rather than random DNA
-- For CRISPR system generation, use the `evo-1-8k-crispr` fine-tuned checkpoint
-- Generated sequences should be validated with downstream tools (Prodigal for ORFs, ESMFold for structure)
-
-**Edge cases to watch for:**
-- Very short prompts (<10 nt) may produce less coherent output
-- Homopolymer runs in prompts can cause repetitive generation
-- The model may generate sequences longer than typical genes; use downstream ORF detection to identify coding regions
-
-## References
-
-**Primary publication:**
-- Nguyen, E., Poli, M., Durrant, M.G., et al. (2024). "Sequence modeling and design from molecular to genome scale with Evo." *Science* 386(6723). [DOI: 10.1126/science.ado9336](https://doi.org/10.1126/science.ado9336)
-- Summary: Introduces the Evo model family for DNA sequence modeling, demonstrating generation of functional CRISPR systems and transposable elements using a StripedHyena architecture trained on prokaryotic and phage genomes.
-
-**Implementation:**
-- GitHub: [https://github.com/evo-design/evo](https://github.com/evo-design/evo)
-- Model weights: Available via Hugging Face (`togethercomputer/evo-1-8k-base`, etc.)
-
-## Quick Start Examples
-
-**Example 1: Basic DNA generation**
-```python
-from proto_tools.tools.causal_models.evo1 import (
-    run_evo1_sample, Evo1SampleInput, Evo1SampleConfig
-)
-
-inputs = Evo1SampleInput(prompts=["ATGCGTAAACGATTGCAGT"])
-config = Evo1SampleConfig(
-    num_tokens=500,
-    temperature=0.8,
-    top_k=4,
-)
-
-result = run_evo1_sample(inputs, config)
-print(f"Generated: {result.sequences[0][:100]}...")
-print(f"Total length: {len(result.sequences[0])}")
-```
-
-**Example 2: CRISPR-specific generation**
-```python
-from proto_tools.tools.causal_models.evo1 import (
-    run_evo1_sample, Evo1SampleInput, Evo1SampleConfig
-)
-
-inputs = Evo1SampleInput(prompts=["ATGCGTAAACGATTGCAGT"])
-config = Evo1SampleConfig(
-    model_name="evo-1-8k-crispr",
-    num_tokens=3000,
-    temperature=1.0,
-)
-
-result = run_evo1_sample(inputs, config)
-print(f"Generated CRISPR locus: {len(result.sequences[0])} bp")
-```
-
-**Example 3: Batched generation with scoring**
-```python
-from proto_tools.tools.causal_models.evo1 import (
-    run_evo1_sample, Evo1SampleInput, Evo1SampleConfig
-)
-
-inputs = Evo1SampleInput(prompts=[
-    "ATGAAACGT",
-    "ATGCCCGTT",
-    "ATGGGGAAA",
-])
-config = Evo1SampleConfig(
-    num_tokens=1000,
-    temperature=1.0,
-    batch_size=3,
-)
-
-result = run_evo1_sample(inputs, config)
-for i, seq in enumerate(result.sequences):
-    score = result.scores[i] if result.scores else "N/A"
-    print(f"Sequence {i+1}: {len(seq)} bp, score={score}")
-```
-
-## Related Tools
-
-**Tools often used together:**
-- **`evo2-sample`**: Successor model for eukaryotic and longer-context generation
-- **`prodigal`**: Find ORFs in generated DNA sequences
-- **`minced-crispr`**: Detect CRISPR arrays in generated sequences
-- **`blast-search`**: Search generated sequences against reference databases
-
-**Alternative tools (similar function):**
-- **`evo2-sample`**: Use for eukaryotic genomes or when longer context is needed
-
----
-**Maintenance notes:**
-- Last updated: 2025-06-01
+- **Requires a GPU.** An NVIDIA GPU with at least 24 GB of memory is recommended; CPU execution is possible but very slow and not practical for typical use.
+- **`batch_size` trades memory for throughput across both tools.** It sets how many prompts (`evo1-sample`) or sequences (`evo1-score`) are processed per GPU forward pass. Raise it for higher throughput on many short sequences; lower it (default `1`) if generation or scoring runs out of GPU memory.
+- **Trained on prokaryotic and phage genomes.** Predictions are most reliable within that domain. For eukaryotic genomes or longer context, use [Evo2](https://bio-pro.mintlify.app/tools/causal-models/evo2).
