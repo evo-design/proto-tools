@@ -56,6 +56,10 @@ dependencies = [
 Homepage = "https://github.com/evo-design/proto-tools"
 Repository = "https://github.com/evo-design/proto-tools"
 
+[project.scripts]
+# Agent/CLI entry point; also reachable via `python -m proto_tools`.
+proto-tools = "proto_tools.cli:main"
+
 [project.optional-dependencies]
 
 # Cloud dispatch (device="cloud")
@@ -302,6 +306,8 @@ ignore = [
 "proto_tools/utils/device.py" = ["T20", "PLW1510", "S603", "S607"]
 "proto_tools/utils/proto_home.py" = ["T20"]
 "scripts/*.py" = ["T20", "S603", "S607"]  # dev helper scripts: prints are intentional, subprocess calls use literal argv
+"proto_tools/cli.py" = ["T20"]  # CLI entry point: print() is the right way to emit to stdout
+"proto_tools/__main__.py" = ["T20"]  # python -m proto_tools entry point
 "proto_tools/tools/sequence_alignment/mmseqs2/setup_databases.py" = ["T20", "S603", "S607", "PERF203"]  # user-facing provisioning CLI
 "proto_tools/utils/system_info.py" = ["PLW0603", "PLW1510", "S603", "S607"]
 "proto_tools/utils/tool_instance.py" = ["S101", "S603", "S607"]
@@ -338,4 +344,5 @@ where = ["."]
 include = ["proto_tools*"]
 
 [tool.setuptools.package-data]
-"*" = ["*.sh", "*.txt", "*.csv", "*.smi", "*.cif", "*.bib", "*.yaml"]
+# *.md / *.ipynb ship per-tool READMEs + example notebooks so tool_docs works on a non-editable install.
+"*" = ["*.sh", "*.txt", "*.csv", "*.smi", "*.cif", "*.bib", "*.yaml", "*.md", "*.ipynb"]

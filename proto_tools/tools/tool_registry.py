@@ -6,6 +6,8 @@ Provides a decorator-based API for registering tools with metadata and
 automatic schema generation for API/client integration.
 """
 
+from __future__ import annotations
+
 import contextlib
 import difflib
 import inspect
@@ -20,10 +22,13 @@ from collections.abc import Callable, MutableMapping
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import yaml
 from pydantic import BaseModel, Field, field_serializer
+
+if TYPE_CHECKING:
+    from proto_tools.utils.tool_docs import ModelDoc, ReadmeSections, ToolReadmeEntry
 
 logger = logging.getLogger(__name__)
 
@@ -392,7 +397,7 @@ class ToolRegistry:
             def wrapper(
                 inputs: BaseToolInput,
                 config: BaseConfig | None = None,
-                instance: "str | ToolInstance | None" = None,
+                instance: str | ToolInstance | None = None,
             ) -> BaseToolOutput:
                 """Wrapper that tracks execution and populates metadata.
 
@@ -413,7 +418,7 @@ class ToolRegistry:
             def _wrapper_body(
                 inputs: BaseToolInput,
                 config: BaseConfig | None,
-                instance: "str | ToolInstance | None",
+                instance: str | ToolInstance | None,
             ) -> BaseToolOutput:
                 # Auto-configure logging if no handlers exist (one-time, O(1) after first call)
                 from proto_tools.utils.logging_config import _auto_configure_logging
@@ -852,6 +857,97 @@ class ToolRegistry:
         }
 
     @classmethod
+    def get_readme(cls, key: str, *, strip_qc_banner: bool = True) -> str:
+        """Return the tool's toolkit README as text.
+
+        See ``proto_tools.utils.tool_docs.get_readme`` for full semantics.
+        """
+        from proto_tools.utils.tool_docs import get_readme
+
+        return get_readme(key, strip_qc_banner=strip_qc_banner)
+
+    @classmethod
+    def get_readme_section(cls, key: str, heading: str, *, strip_qc_banner: bool = True) -> str | None:
+        """Return one named H2 section's body from the tool's toolkit README.
+
+        Returns None when no H2 with that exact heading text exists. See
+        ``proto_tools.utils.tool_docs.get_readme_section``.
+        """
+        from proto_tools.utils.tool_docs import get_readme_section
+
+        return get_readme_section(key, heading, strip_qc_banner=strip_qc_banner)
+
+    @classmethod
+    def get_readme_sections(cls, key: str, *, strip_qc_banner: bool = True) -> ReadmeSections:
+        """Return the tool's toolkit README parsed into a typed structure.
+
+        See ``proto_tools.utils.tool_docs.get_readme_sections``.
+        """
+        from proto_tools.utils.tool_docs import get_readme_sections
+
+        return get_readme_sections(key, strip_qc_banner=strip_qc_banner)
+
+    @classmethod
+    def get_tool_docs(
+        cls,
+        key: str,
+        *,
+        include_toolkit_notes: bool = True,
+        strip_qc_banner: bool = True,
+    ) -> ToolReadmeEntry | None:
+        """Return the tool's H3 subsection from its toolkit README.
+
+        When ``include_toolkit_notes`` is True (default), the returned entry's
+        ``toolkit_notes`` field is also populated from the toolkit's
+        ``## Toolkit Notes`` section, since those tips apply to every tool in
+        the toolkit. See ``proto_tools.utils.tool_docs.get_tool_docs``.
+        """
+        from proto_tools.utils.tool_docs import get_tool_docs
+
+        return get_tool_docs(
+            key,
+            include_toolkit_notes=include_toolkit_notes,
+            strip_qc_banner=strip_qc_banner,
+        )
+
+    @classmethod
+    def get_input_doc(cls, tool: str) -> ModelDoc:
+        """Return a ``ModelDoc`` view of the tool's input model.
+
+        Accepts any identifier form (registry key, run-function name, docs
+        path, single-tool toolkit name). See
+        ``proto_tools.utils.tool_docs._normalize_tool_key`` for the full
+        resolution rules.
+        """
+        from proto_tools.utils.tool_docs import _normalize_tool_key, get_model_doc
+
+        return get_model_doc(cls.get(_normalize_tool_key(tool)).input_model)
+
+    @classmethod
+    def get_config_doc(cls, tool: str) -> ModelDoc:
+        """Return a ``ModelDoc`` view of the tool's config model.
+
+        Accepts any identifier form (registry key, run-function name, docs
+        path, single-tool toolkit name). See
+        ``proto_tools.utils.tool_docs._normalize_tool_key``.
+        """
+        from proto_tools.utils.tool_docs import _normalize_tool_key, get_model_doc
+
+        return get_model_doc(cls.get(_normalize_tool_key(tool)).config_model)
+
+    @classmethod
+    def get_output_doc(cls, tool: str) -> ModelDoc:
+        """Return a ``ModelDoc`` view of the tool's output model.
+
+        Accepts any identifier form (registry key, run-function name, docs
+        path, single-tool toolkit name). See
+        ``proto_tools.utils.tool_docs._normalize_tool_key``.
+        """
+        from proto_tools.utils.tool_docs import _normalize_tool_key, get_model_doc
+
+        return get_model_doc(cls.get(_normalize_tool_key(tool)).output_model)
+
+    @classmethod
     def get_example_input(cls, key: str) -> BaseToolInput | None:
         """Get a minimal valid input instance for a tool, or None if not defined."""
         spec = cls.get(key)
@@ -892,6 +988,45 @@ class ToolRegistry:
             toolkit = "_".join(key_parts[:-1]) if len(key_parts) >= 2 else spec.key
             tool_categories[toolkit] = spec.category
         return tool_categories
+
+    @classmethod
+    def list_categories(cls) -> list[str]:
+        """Return the sorted list of categories any registered tool belongs to.
+
+        Returns:
+            list[str]: Sorted unique category names (e.g.,
+                ``["binder_design", "causal_models", "database_retrieval", ...]``).
+        """
+        return sorted({spec.category for spec in cls._registry.values()})
+
+    @classmethod
+    def list_by_category(cls, category: str) -> list[ToolSpec]:
+        """Return every registered tool in a category, sorted by key.
+
+        Args:
+            category (str): Category name (e.g., ``"masked_models"``,
+                ``"structure_prediction"``). See ``list_categories`` for the
+                full set.
+
+        Returns:
+            list[ToolSpec]: Tools whose ``category`` matches, sorted by
+                registry key. Empty if the category is unknown.
+        """
+        return sorted(
+            (spec for spec in cls._registry.values() if spec.category == category),
+            key=lambda s: s.key,
+        )
+
+    @classmethod
+    def catalog(cls) -> dict[str, list[ToolSpec]]:
+        """Return every registered tool grouped by category.
+
+        Returns:
+            dict[str, list[ToolSpec]]: Mapping from category name to a
+                key-sorted list of ``ToolSpec`` in that category. Categories
+                themselves are sorted alphabetically.
+        """
+        return {category: cls.list_by_category(category) for category in cls.list_categories()}
 
     @classmethod
     def get_citation(cls, key: str) -> str | None:

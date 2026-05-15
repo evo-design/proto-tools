@@ -103,10 +103,6 @@ class ESM2EmbeddingsConfig(MaskedModelEmbeddingsConfig):
         repr_layer (int): Transformer layer index for embeddings. ``-1`` selects the last
             (top) layer; uses HuggingFace ``hidden_states`` indexing where ``0`` is the
             embedding-layer output and ``N`` is transformer layer N.
-
-    Note:
-        The model is loaded on-demand for each call. ESM-2's positional encoding caps inputs
-        at 1022 residues; longer sequences raise ``ValueError`` rather than being truncated.
     """
 
     model_checkpoint: ESM2_MODEL_CHECKPOINTS = ConfigField(
