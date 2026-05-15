@@ -34,15 +34,11 @@ _REQUIRED_SECTIONS = [
 # Overview section length cap (characters of body text, excluding the heading).
 _OVERVIEW_MAX_CHARS = 500
 
-# READMEs containing this marker are exempt from QC-gated checks
-# (Overview length, Toolkit Notes presence + guide links). Drop the marker
-# once the README has been reviewed and quality-checked end-to-end.
+# READMEs with this marker are exempt from QC-gated checks until reviewed.
+# TODO(#743): once every README is migrated, delete _QC_PENDING_MARKER and every QC-gated pytest.skip guard here.
 _QC_PENDING_MARKER = "This README still needs to be reviewed and quality checked"
 
-# Proto-docs guide paths that every ``## Toolkit Notes`` section must link to.
-# The check uses substring match on the path so any host (live domain or
-# Mintlify staging) and any badge syntax (shields.io HTML or plain markdown
-# link) satisfies it, as long as all four paths are present in the section.
+# Guide paths every ## Toolkit Notes must link to (substring match: any host/badge syntax counts).
 _TOOLKIT_NOTES_REQUIRED_GUIDE_PATHS = [
     "/tools/guides/tool-persistence",
     "/tools/guides/device-management",
@@ -205,6 +201,7 @@ def test_has_required_sections(readme: Path) -> None:
     Skipped for READMEs that still contain the QC-pending marker.
     """
     text = readme.read_text()
+    # TODO(#743): drop this skip once every README is migrated.
     if _QC_PENDING_MARKER in text:
         pytest.skip(f"{_tool_id(readme)}/README.md still has QC-pending marker; skipping section check")
 
@@ -231,6 +228,7 @@ def test_overview_within_char_limit(readme: Path) -> None:
     Skipped for READMEs that still contain the QC-pending marker.
     """
     text = readme.read_text()
+    # TODO(#743): drop this skip once every README is migrated.
     if _QC_PENDING_MARKER in text:
         pytest.skip(f"{_tool_id(readme)}/README.md still has QC-pending marker; skipping length check")
 
@@ -257,6 +255,7 @@ def test_toolkit_notes_links_required_guides(readme: Path) -> None:
     section or missing guides are hard failures.
     """
     text = readme.read_text()
+    # TODO(#743): drop this skip once every README is migrated.
     if _QC_PENDING_MARKER in text:
         pytest.skip(f"{_tool_id(readme)}/README.md still has QC-pending marker; skipping toolkit-notes guide check")
 

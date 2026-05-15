@@ -1,17 +1,26 @@
-"""Display tool documentation sections in notebooks from local sources.
+"""Notebook display helpers for tool documentation.
 
-Pulls content directly from each toolkit's ``README.md`` and from the
-``ToolRegistry`` (Pydantic Input/Config/Output schemas). No network access.
+Thin Jupyter-display wrappers over the text-extraction API in
+``proto_tools.utils.tool_docs``. Each ``display_*`` function pulls structured
+content via the public extractors, renders it through ``IPython.display``, and
+returns ``None`` (the display is the side-effect).
+
+Use ``proto_tools.utils.tool_docs`` directly for programmatic access — agents,
+MCP servers, and any non-notebook consumer should not import from this module.
 """
 
 from __future__ import annotations
 
 import logging
-import re
-from pathlib import Path
-from typing import Any
 
-from pydantic import BaseModel
+from proto_tools.utils.tool_docs import (
+    ModelDoc,
+    get_model_doc,
+    get_readme_section,
+    get_readme_sections,
+    resolve_toolkit_dir,
+    toolkit_specs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -19,154 +28,23 @@ logger = logging.getLogger(__name__)
 _DOCS_BASE_URL = "https://bio-pro.mintlify.app/tools"
 
 
-def _toolkit_dir(tool: str) -> Path:
-    """Resolve a tool identifier to its on-disk toolkit directory.
-
-    Accepts any of: docs-style path (``"structure-prediction/esmfold"``), tool
-    directory name (``"esmfold"``), run function name (``"run_esmfold"``), or
-    registry key (``"esmfold-prediction"``).
-
-    Args:
-        tool (str): Tool identifier in any supported format.
-
-    Returns:
-        Path: Absolute path to ``proto_tools/tools/{category}/{toolkit}``.
-
-    Raises:
-        ValueError: If no toolkit matches.
-    """
-    from proto_tools.tools.tool_registry import ToolRegistry
-
-    if "/" in tool:
-        category, toolkit = tool.split("/", 1)
-        cat_us = category.replace("-", "_")
-        tk_us = toolkit.replace("-", "_")
-        for spec in ToolRegistry.list_all():
-            p = spec.source_file.parent
-            if p.name == tk_us and p.parent.name == cat_us:
-                return p
-        raise ValueError(f"Could not resolve toolkit dir for '{tool}'")
-
-    func_prefix = tool if tool.startswith("run_") else f"run_{tool}"
-    tool_normalized = tool.replace("-", "_").removeprefix("run_")
-
-    for spec in ToolRegistry.list_all():
-        p = spec.source_file.parent
-        if (
-            spec.key == tool
-            or spec.function.__name__ == func_prefix
-            or spec.function.__name__.startswith(func_prefix)
-            or p.name == tool_normalized
-        ):
-            return p
-
-    raise ValueError(f"Could not resolve toolkit for '{tool}'")
-
-
 def _docs_url_path(tool: str) -> str:
     """Return the docs-site URL path segment for a tool."""
-    p = _toolkit_dir(tool)
+    p = resolve_toolkit_dir(tool)
     return f"{p.parent.name.replace('_', '-')}/{p.name.replace('_', '-')}"
 
 
-def _read_readme(tool: str) -> str:
-    """Read the toolkit's README.md from disk."""
-    return (_toolkit_dir(tool) / "README.md").read_text()
-
-
-def _toolkit_specs(tool: str) -> list[Any]:
-    """Return the registry specs for tools whose source files live in this toolkit dir."""
-    from proto_tools.tools.tool_registry import ToolRegistry
-
-    target = _toolkit_dir(tool)
-    return sorted(
-        (s for s in ToolRegistry.list_all() if s.source_file.parent == target),
-        key=lambda s: s.key,
-    )
-
-
-_TODO_CALLOUT_RE = re.compile(
-    r"^>\s*\[!NOTE\]\s*\n>\s*\*\*TODO:\*\*\s*This README still needs to be reviewed[^\n]*\n+",
-    re.MULTILINE,
-)
-
-
-def _strip_review_callout(md: str) -> str:
-    """Strip the temporary ``> [!NOTE] **TODO: review**`` callout from a README."""
-    return _TODO_CALLOUT_RE.sub("", md)
-
-
-def _extract_section(md: str, heading: str) -> str:
-    """Extract a markdown section by heading text at any level.
-
-    Matches the first heading containing the given text and captures everything
-    until the next heading at the same or higher level.
-
-    Args:
-        md (str): Full markdown content.
-        heading (str): Section heading text (e.g. ``"Background"``).
-
-    Returns:
-        str: Section content including its heading, or empty string if not found.
-    """
-    m = re.search(rf"^(#{{1,6}})\s+{re.escape(heading)}\s*$", md, re.MULTILINE)
-    if not m:
-        return ""
-    level = len(m.group(1))
-    start = m.start()
-    end_match = re.search(rf"^#{{{1},{level}}}\s+", md[m.end() :], re.MULTILINE)
-    end = m.end() + end_match.start() if end_match else len(md)
-    return md[start:end].strip()
-
-
-def _extract_title(md: str) -> str:
-    """Return the first H1 line in the README, or empty string."""
-    m = re.search(r"^#\s+.+$", md, re.MULTILINE)
-    return m.group() if m else ""
-
-
-def _format_type(annotation: Any) -> str:
-    """Stringify a Python type annotation for table display."""
-    return re.sub(r"<class '([^']+)'>", r"\1", str(annotation).replace("typing.", ""))
-
-
-def _format_default(field_info: Any) -> str:
-    """Stringify a Pydantic v2 ``FieldInfo`` default for table display."""
-    if field_info.is_required():
-        return "required"
-    default = field_info.get_default(call_default_factory=True)
-    if default is None:
-        return "`None`"
-    return f"`{default!r}`"
-
-
-def _render_model_table(model_class: type[BaseModel], kind: str) -> str:
-    """Render a Pydantic model's fields as a markdown table.
-
-    Args:
-        model_class (type[BaseModel]): Pydantic ``BaseModel`` subclass.
-        kind (str): One of ``"input"``, ``"config"``, ``"output"``.
-
-    Returns:
-        str: Markdown table of name / type / default / description.
-    """
-    from proto_tools.utils.tool_io import _OUTPUT_METADATA_FIELDS
-
-    exclude = _OUTPUT_METADATA_FIELDS if kind == "output" else set()
-    rows: list[str] = []
-    for fname, finfo in model_class.model_fields.items():
-        if fname in exclude:
-            continue
-        type_str = _format_type(finfo.annotation)
-        default_str = _format_default(finfo)
-        desc = (finfo.description or "").replace("\n", " ").replace("|", "\\|").strip()
-        rows.append(f"| `{fname}` | `{type_str}` | {default_str} | {desc} |")
-
-    if not rows:
+def _model_table(doc: ModelDoc, kind: str) -> str:
+    """Render a ``ModelDoc`` as a markdown table for notebook display."""
+    if not doc.fields:
         return f"*No {kind} fields.*"
-
+    rows: list[str] = []
+    for f in doc.fields:
+        default = "required" if f.required else (f"`{f.default!r}`" if f.default is not None else "`None`")
+        desc = (f.description or "").replace("\n", " ").replace("|", "\\|").strip()
+        rows.append(f"| `{f.name}` | `{f.type_str}` | {default} | {desc} |")
     header = (
-        f"**{kind.capitalize()}** — `{model_class.__name__}`\n\n"
+        f"**{kind.capitalize()}** — `{doc.name}`\n\n"
         "| Field | Type | Default | Description |\n"
         "|-------|------|---------|-------------|"
     )
@@ -183,20 +61,18 @@ def display_overview(tool: str) -> None:
     from IPython.display import Markdown, display
 
     try:
-        md = _strip_review_callout(_read_readme(tool))
+        sections = get_readme_sections(tool)
     except (ValueError, OSError) as exc:
         logger.warning("Unable to read README for '%s': %s", tool, exc)
         return
 
-    title = _extract_title(md)
-    body = _extract_section(md, "Overview")
-    body = re.sub(r"^##\s+Overview\s*\n*", "", body)
-    text = f"{title}\n\n{body}".strip() if title else body
+    title = f"# {sections.title}" if sections.title else ""
+    text = f"{title}\n\n{sections.overview}".strip() if title else sections.overview
     display(Markdown(text))  # type: ignore[no-untyped-call]
 
 
 def display_docs_section(tool: str, section: str) -> None:
-    """Render one named section from the tool's README.
+    """Render one named H2 section from the tool's README.
 
     Args:
         tool (str): Tool identifier — full path, tool name, or run function name.
@@ -205,14 +81,12 @@ def display_docs_section(tool: str, section: str) -> None:
     from IPython.display import Markdown, display
 
     try:
-        md = _strip_review_callout(_read_readme(tool))
+        body = get_readme_section(tool, section)
     except (ValueError, OSError) as exc:
         logger.warning("Unable to read README for '%s': %s", tool, exc)
         return
 
-    content = _extract_section(md, section)
-    if not content:
-        content = f"*Section `{section}` not found in README.*"
+    content = body or f"*Section `{section}` not found in README.*"
     display(Markdown(content))  # type: ignore[no-untyped-call]
 
 
@@ -225,7 +99,7 @@ def display_available_tools(tool: str) -> None:
     from IPython.display import Markdown, display
 
     try:
-        specs = _toolkit_specs(tool)
+        specs = toolkit_specs(tool)
     except ValueError as exc:
         logger.warning("%s", exc)
         return
@@ -285,7 +159,7 @@ def display_api_reference(tool: str, model: str, function_name: str | None = Non
     from IPython.display import Markdown, display
 
     try:
-        specs = _toolkit_specs(tool)
+        specs = toolkit_specs(tool)
     except ValueError as exc:
         logger.warning("%s", exc)
         return
@@ -312,4 +186,5 @@ def display_api_reference(tool: str, model: str, function_name: str | None = Non
         display(Markdown(msg))  # type: ignore[no-untyped-call]
         return
 
-    display(Markdown(_render_model_table(getattr(target, model_attr), model.lower())))  # type: ignore[no-untyped-call]
+    doc = get_model_doc(getattr(target, model_attr))
+    display(Markdown(_model_table(doc, model.lower())))  # type: ignore[no-untyped-call]

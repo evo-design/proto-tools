@@ -63,6 +63,7 @@ When a code change alters behavior documented in this file, any `SKILL.md`, or `
 | `utils/tool_instance.py` | Docstrings (reference pages auto-generated) |
 | `utils/device_manager.py` | Docstrings (reference pages auto-generated) |
 | `utils/tool_io.py`, `tools/tool_registry.py` | CLAUDE.md (Universal Tool Pattern, Key File Paths) |
+| `utils/tool_docs.py` (extractor signatures or returned Pydantic models) | CLAUDE.md (Key File Paths), `tests/tool_infra_tests/test_tool_docs.py`, `utils/notebook_docs.py` (display wrappers ride on this) |
 | `utils/install_binary.py` | `notes/tool-environments.md` (Binary Installation) |
 | `standalone/env_vars.txt` (any tool) | `notes/tool-environments.md` |
 | `standalone/setup.sh` patterns | `notes/tool-environments.md`, `fix-env` SKILL.md |
@@ -182,6 +183,8 @@ Tools with heavy dependencies run in isolated micromamba environments with centr
 | `utils/auth.py` | `require_hf_token()`: HuggingFace gated model auth |
 | `utils/chemistry.py` | `validate_smiles()`: SMILES string validation |
 | `utils/msa.py` | `extract_msa_sequences()`: MSA extraction utilities |
+| `utils/tool_docs.py` | `get_readme`, `get_readme_sections`, `get_readme_section`, `get_tool_docs`, `get_model_doc` + `ReadmeSections` / `ToolReadmeEntry` / `ModelDoc` / `FieldDoc` Pydantic models — programmatic access to toolkit READMEs and Pydantic model docs |
+| `utils/notebook_docs.py` | Notebook `display_*` wrappers built on `utils/tool_docs.py` |
 | `tools/__init__.py` | Master export, all tools re-exported here |
 
 ## Key Concepts: `tool`, `toolkit`, `tool_key`, `env_name`
@@ -287,12 +290,14 @@ Flat functions only (no test classes). See `notes/testing.md` for full conventio
 
 ## Using proto-tools with Claude Code
 
+See [AGENTS.md](AGENTS.md) for the full runtime guide on consuming proto-tools (discovery via `ToolRegistry`, structured prose docs via `tool_docs`, schemas, citations, identifier shapes, JSON serialization). It is the canonical reference for any agent that needs to call into proto-tools at runtime; this section just covers the Claude-Code-specific dispatch flow.
+
 ### Running Tools Directly
 
 When a user asks to run a bioinformatics tool:
-1. **Find the tool**: Browse `proto_tools/tools/` or use `ToolRegistry.list_all()`
-2. **Read README + notebook**: `tools/{category}/{tool}/README.md` and `examples/example.ipynb`
-3. **Read API**: Tool's `Input`/`Config`/`Output` classes for the Pydantic schema
+1. **Find the tool**: Browse `proto_tools/tools/` or use `ToolRegistry.list_all()` / `ToolRegistry.list_by_category(category)`.
+2. **Read the docs**: Prefer `ToolRegistry.get_tool_docs(tool)` (one Pydantic call returning intro + applications + usage tips + toolkit notes) over re-reading the raw `README.md`.
+3. **Read API**: Tool's `Input`/`Config`/`Output` classes for the Pydantic schema, or `ToolRegistry.get_input_doc(tool)` / `get_config_doc(tool)` / `get_output_doc(tool)` for a structured view.
 4. **Call**: `Input` → `Config` → `run_{tool}()` → `Output`
 
 ```python
