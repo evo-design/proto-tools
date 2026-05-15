@@ -1,311 +1,69 @@
-<a href="https://bio-pro.mintlify.app/tools/causal-models/evo2"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/causal-models/evo2"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # Evo2
 
+![Evo2](https://github.com/ArcInstitute/evo2/raw/main/evo2.jpg)
+
+> *Image source: [ArcInstitute/evo2](https://github.com/arcinstitute/evo2)*
+
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** Evo2 has an Apache-2.0 license. Please refer to [the license](https://github.com/arcinstitute/evo2/blob/main/LICENSE) for full terms.
 
 ## Overview
 
-Evo2 is Arc Institute's genome-scale DNA language model for sequence generation and scoring. Trained on billions of nucleotides spanning prokaryotic and eukaryotic genomes, Evo2 performs autoregressive generation of DNA from prompts and scores sequences by log-likelihood. The tool supports local CUDA GPU execution with KV caching for efficient long generations.
+Evo2 is an autoregressive DNA language model from Arc Institute and Stanford, trained at single-nucleotide resolution across all domains of life. This toolkit wraps it to generate new DNA sequences from a prompt and to score how likely supplied DNA sequences are under the model.
 
 ## Background
 
-DNA encodes the instructions for all cellular processes. Beyond protein-coding genes (~1.5% of the human genome), the vast majority of genomic sequence consists of regulatory elements, structural features, repetitive elements, and sequences of unknown function. The "grammar" of DNA -- the patterns that distinguish functional from non-functional sequence -- is complex and context-dependent.
+Evo2 ([Brixi et al., 2026](https://doi.org/10.1038/s41586-026-10176-5)) is a DNA language model trained with an autoregressive objective: during training the model learns to predict the next nucleotide given all preceding nucleotides. Training used the [OpenGenome2](https://huggingface.co/datasets/arcinstitute/opengenome2) dataset, which spans bacterial, archaeal, eukaryotic, and phage genomes across all domains of life, so the model is not restricted to any single clade. It is available at several scales, the largest being 40 billion parameters, and uses the StripedHyena 2 architecture, a sequence model that combines convolutional state-space layers with a smaller number of attention layers. This design lets the model process very long stretches of DNA, up to roughly one million nucleotides for the long-context checkpoints, without the memory cost a pure attention model would incur at that length. Several checkpoints are also offered with shorter context windows for lower memory use, and one variant is trained specifically on Microviridae phage genomes.
 
-Genome-scale language models like Evo2 learn these patterns by training on diverse genomic sequences across all domains of life. By predicting each nucleotide given preceding context, the model captures:
+The autoregressive objective yields two capabilities directly. Sampling from the predicted next-nucleotide distributions produces new candidate sequences, and reading off the probabilities the model assigns to an existing sequence gives a likelihood score that reflects how closely the sequence matches the patterns seen during training. Evo2 is the second model in the Evo family; the earlier [Evo1](https://bio-pro.mintlify.app/tools/causal-models/evo1) was trained only on prokaryotic and phage genomes, whereas Evo2 extends to eukaryotic genomes and longer context.
 
-- **Codon usage patterns** and open reading frame structure in coding regions
-- **Regulatory motifs** ([transcription factor](https://en.wikipedia.org/wiki/Transcription_factor) binding sites, [promoter](https://en.wikipedia.org/wiki/Promoter_(genetics)) elements, splice signals)
-- **Compositional biases** ([GC content](https://en.wikipedia.org/wiki/GC-content), [CpG islands](https://en.wikipedia.org/wiki/CpG_island), repetitive elements)
-- **Long-range dependencies** ([enhancer](https://en.wikipedia.org/wiki/Enhancer_(genetics))-promoter interactions, chromatin domain boundaries)
-- **Cross-kingdom sequence grammar** (from viral genomes to mammalian chromosomes)
+### Learning Resources
 
-Evo2 uses byte-level tokenization (vocab_size=512), where each DNA base maps to its ASCII value (A=65, C=67, G=71, T=84, N=78). This allows the model to handle any genomic sequence without a specialized tokenizer.
+- [The Illustrated Evo 2](https://research.nvidia.com/labs/dbr/blog/illustrated-evo2/) (NVIDIA Research) - a visual walkthrough of the Evo 2 architecture and how the model processes and generates DNA.
+- [Evo 2 Mechanistic Interpretability](https://arcinstitute.org/tools/evo/evo-mech-interp) (Arc Institute) - an interactive look at the internal features Evo 2 learns, built with sparse autoencoders to surface interpretable genomic patterns.
 
 ## Tools
 
 ### Evo2 Sampling (`evo2-sample`)
 
-Sample DNA sequences using Evo2 language model.
+Generates DNA sequences by autoregressive sampling. Given one or more prompt sequences in Evo2's prompt format, the model extends each prompt nucleotide by nucleotide, drawing each new nucleotide from the model's predicted distribution under the configured `temperature`, `top_k`, and `top_p` settings, until `num_tokens` new nucleotides have been produced or an end-of-sequence token is sampled. A key-value cache makes long generations efficient and can be carried forward to continue a generation.
 
-Uses the Evo2 7B parameter language model to autoregressively generate
-genomic DNA sequences from prompt sequences. Supports local GPU execution
-with advanced sampling strategies including nucleus sampling and KV caching.
+#### Applications
+
+This tool produces candidate DNA sequences for downstream design and screening, including genes, regulatory regions, and longer multi-gene segments. Because Evo2 is trained across all domains of life, it can be prompted with eukaryotic as well as prokaryotic and phage context, unlike the prokaryote-and-phage-only Evo1. The prompt sets the biological context for what follows.
+
+#### Usage Tips
+
+- **Match the checkpoint to the task.** `evo2_7b` (the default), `evo2_20b`, and `evo2_40b` are the 1M-context models in increasing size and capability. The `evo2_7b_base`, `evo2_40b_base`, and `evo2_1b_base` checkpoints are 8K-context counterparts (`evo2_1b_base` is the smallest); `evo2_7b_262k` is a 262K-context variant; `evo2_7b_microviridae` is a 7B model adapted on Microviridae genomes for generating that bacteriophage family.
+- **Prompts use Evo2's prompt format.** Prompt strings follow Evo2's special tokenization (for example a leading `+~` before DNA); see the upstream [Evo2 documentation](https://github.com/arcinstitute/evo2) for the conventions.
+- **`top_k` defaults to 4, the size of the DNA alphabet.** It exists mainly to keep generation on the four bases rather than other byte tokens, so it is not the diversity knob; control diversity with `temperature` (lower stays near the training distribution, higher explores it) and leave `top_p` at its default unless you specifically want nucleus sampling.
+- **Output includes the prompt by default.** `prepend_prompt=True` (the default for this toolkit) returns the prompt joined to its continuation; set it `False` to receive only the newly generated nucleotides.
+- **Prompt length plus `num_tokens` (default 32) must fit the checkpoint's context window.** The model cannot attend beyond that window, so a long prompt directly reduces how much can be generated; pick a longer-context checkpoint when the combined length is large.
+- **`stop_at_eos` ends generation early** when the model emits an end-of-sequence token; set it to `False` to always produce the full `num_tokens`.
+- **Generated sequences are candidates.** Validate them with downstream tools (for example ORF detection, structure prediction, or homology search) before drawing biological conclusions.
 
 ### Evo2 Scoring (`evo2-score`)
 
-Score DNA sequences using Evo2 autoregressive language model.
+Scores existing DNA sequences under the Evo2 model. For each sequence, it computes the model's predicted probability of every nucleotide given the preceding nucleotides and aggregates these into a log-likelihood, an average log-likelihood per nucleotide, and a perplexity. Optionally returns the per-position logits and the token vocabulary.
 
-Computes the likelihood of DNA sequences using Evo2's autoregressive
-modeling. For each position t, computes log $P(x_t | x_{<t})$ and sums
-these to get the total log-likelihood.
+#### Applications
 
-## Tool Catalog
+This tool measures how well a DNA sequence matches the patterns the model learned during training across all domains of life. Lower perplexity means the sequence is more consistent with that distribution. Use it to rank or filter candidate sequences (including the output of `evo2-sample`), to compare variants of a sequence, or to assess sequences from organisms outside the prokaryotic and phage range that Evo1 covers.
 
-| Tool Key | Description | Output |
-|----------|-------------|--------|
-| `evo2-sample` | Autoregressive DNA generation from prompts | Generated sequences, optional logits, optional worker-local KV cache handles |
-| `evo2-score` | Autoregressive sequence scoring | Per-sequence metrics (log-likelihood, perplexity), optional logits |
+#### Usage Tips
 
-## Model Variants
+- **Compare length-normalized scores within one checkpoint.** Total `log_likelihood` scales with sequence length, so use `perplexity` or `avg_log_likelihood` when comparing sequences of different lengths. Different checkpoints learn different distributions that are not calibrated to a common scale, so scores from different `model_checkpoint` values are hard to compare directly; a lower perplexity means the sequence is more consistent with that checkpoint's training distribution.
+- **`return_logits` defaults to `False`.** Leave it off unless you need the per-position distributions, since the logits tensor is large (sequence length by a 512-token vocabulary).
+- **`prepend_bos` adds a beginning-of-sequence token** before scoring; leave it `False` unless matching a specific upstream convention.
 
-| Checkpoint | Parameters | Description |
-|------------|-----------|-------------|
-| `evo2_7b` | 7B | Default model, best balance of quality and speed |
-| `evo2_40b` | 40B | Largest model, highest quality |
-| `evo2_7b_base` | 7B | Base (pre-alignment) 7B model |
-| `evo2_40b_base` | 40B | Base (pre-alignment) 40B model |
-| `evo2_1b_base` | 1B | Smallest model, fastest inference |
-| `evo2_7b_262k` | 7B | 7B model with 262K context window |
-| `evo2_7b_microviridae` | 7B | Fine-tuned for microviridae phage genomes |
+## Toolkit Notes
 
-## Execution Modes
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-- **Local execution**: Loads the model on-demand via `ToolInstance("evo2")`. Supports KV caching for iterative/long generations. Requires CUDA GPU.
+These apply to every Evo2 tool in this toolkit (`evo2-sample`, `evo2-score`).
 
-## How It Works
-
-**Generation (`evo2-sample`):**
-1. The prompt DNA sequence is tokenized at the byte level (each character becomes its ASCII value in a 512-token vocabulary).
-2. At each step, the model predicts a probability distribution over the next byte given all preceding bytes. Evo2 uses a StripedHyena/Vortex architecture for efficient long-context generation.
-3. The next token is sampled according to temperature, top-k, and top-p settings.
-4. Generation continues for `num_tokens` steps or until an EOS token is encountered (if `stop_at_eos=True`).
-5. With `cached_generation=True` and `return_kv_cache=True` inside a persistent `ToolInstance` scope, the model returns worker-local KV cache handles that can be passed as `old_kv_cache` in subsequent calls.
-
-**Scoring (`evo2-score`):**
-1. The full DNA sequence is passed through the model in a single forward pass (batched if `batch_size` is set).
-2. At each position t, the model computes $\log P(x_t | x_{<t})$ -- the log probability of the actual nucleotide given the left context.
-3. These per-position log probabilities are summed to produce total `log_likelihood` and averaged for `avg_log_likelihood`.
-4. Perplexity is computed as exp(-avg_log_likelihood).
-
-## Input Parameters
-
-### Sampling (`Evo2SampleInput`)
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `prompts` | `str` or `List[str]` | Prompt DNA sequence(s) for generation |
-
-### Scoring (`Evo2ScoringInput`)
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sequences` | `str` or `List[str]` | DNA sequences to score |
-
-## Configuration
-
-### Sampling (`Evo2SampleConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_checkpoint` | `str` | `evo2_7b` | Model checkpoint to use |
-| `local_path` | `Optional[str]` | `None` | Local weights path (bypasses HF download) |
-| `num_tokens` | `int` | `32` | Number of new tokens to generate |
-| `temperature` | `float` | `1.0` | Sampling temperature |
-| `top_k` | `int` | `4` | Top-k sampling limit |
-| `top_p` | `float` | `1.0` | Nucleus sampling threshold |
-| `prepend_prompt` | `bool` | `True` | Include prompt in output sequence |
-| `cached_generation` | `bool` | `True` | Use the model's per-call KV cache |
-| `force_prompt_threshold` | `Optional[int]` | `None` | Prefill tokens before prompt forcing |
-| `max_seqlen` | `Optional[int]` | `None` | Max sequence length for KV cache |
-| `skip_special_tokens` | `bool` | `False` | Filter EOS/PAD bytes from detokenized output |
-| `stop_at_eos` | `bool` | `True` | Stop at end-of-sequence token |
-| `old_kv_cache` | `Optional[Evo2KVCacheRef]` | `None` | Worker-local KV cache handle from a previous persistent-worker call |
-| `return_kv_cache` | `bool` | `False` | Return worker-local KV cache handles for continued generation |
-| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
-| `device` | `str` | `cuda` | Device to run the model on |
-| `return_logits` | `bool` | `False` | Include per-position logits in output |
-
-### Scoring (`Evo2ScoringConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_checkpoint` | `str` | `evo2_7b` | Model checkpoint to use |
-| `local_path` | `Optional[str]` | `None` | Local weights path |
-| `prepend_bos` | `bool` | `False` | Prepend a beginning-of-sequence token before scoring |
-| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
-| `device` | `str` | `cuda` | Device to run the model on |
-| `return_logits` | `bool` | `False` | Include per-position logits |
-
-### Parameter Guides
-
-**Temperature for DNA generation:**
-
-| Temperature | Behavior | When to Use |
-|-------------|----------|-------------|
-| 0.5 - 0.8 | Conservative, low diversity | Generating close homologs, constrained design |
-| 0.8 - 1.0 | Balanced diversity and quality | General DNA generation (recommended) |
-| 1.0 - 1.2 | Higher diversity, more exploration | Library design, diverse sampling |
-| 1.2+ | Very high diversity | Maximum exploration (lower average quality) |
-
-## Output Specification
-
-### `Evo2SampleOutput`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `sequences` | `List[str]` | Generated DNA sequences |
-| `logits` | `Optional[List]` | Per-position logits (if requested) |
-| `kv_caches` | `Optional[List[Evo2KVCacheRef]]` | Worker-local KV cache handles for continued generation |
-
-Export formats: `fasta`, `txt`, `json`
-
-### `Evo2ScoringOutput`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `scores` | `List[CausalModelScoringMetrics]` | Per-sequence metrics and optional logits |
-
-Each `CausalModelScoringMetrics` entry contains:
-- `log_likelihood`, `avg_log_likelihood`, `perplexity` — access via attribute (`score.perplexity`) or mapping (`score["perplexity"]`)
-- `logits`: per-position logits (seq_len x vocab_size=512) if `return_logits=True`
-- `vocab`: byte-level vocabulary list (512 tokens) if `return_logits=True`
-
-Export formats: `json`, `csv`
-
-## Interpreting Results
-
-**Perplexity** measures how "surprised" the model is by a DNA sequence. Because DNA has a 4-letter alphabet (vs. 20 for proteins), the interpretation differs from protein language models:
-
-| Perplexity Range | Interpretation |
-|-----------------|----------------|
-| 1.0 - 2.0 | Very high confidence; highly predictable sequence (e.g., repetitive regions) |
-| 2.0 - 4.0 | Good confidence; typical for well-structured coding or regulatory regions |
-| 4.0 - 6.0 | Moderate confidence; may indicate less constrained or intergenic sequence |
-| 6.0+ | Low confidence; unusual sequence patterns or random-like composition |
-
-**Baseline context**: A uniform random DNA model has perplexity 4.0 (since there are 4 equally likely bases). Perplexity below 4.0 indicates the model finds more structure than random; above 4.0 suggests the sequence is harder to predict than random DNA under the model.
-
-**Log-likelihood** is the sum of per-position log probabilities. `avg_log_likelihood` normalizes by length for cross-sequence comparison.
-
-**Per-position logits** reveal which positions are most/least predictable. Low-entropy positions (the model is confident about the next base) often correspond to functional constraints -- coding triplet patterns, splice donor/acceptor motifs, conserved regulatory elements. High-entropy positions may indicate less constrained regions.
-
-**Comparing sequences**: Use `avg_log_likelihood` (length-normalized) rather than raw `log_likelihood` when comparing sequences of different lengths.
-
-## Quick Start Examples
-
-**Example 1: Basic DNA generation**
-```python
-from proto_tools.tools.causal_models.evo2 import (
-    run_evo2_sample, Evo2SampleInput, Evo2SampleConfig
-)
-
-inputs = Evo2SampleInput(prompts=["ATGCGTAAA"])
-config = Evo2SampleConfig(
-    num_tokens=500,
-    temperature=0.8,
-)
-
-result = run_evo2_sample(inputs, config)
-print(f"Generated: {result.sequences[0][:100]}...")
-print(f"Total length: {len(result.sequences[0])}")
-```
-
-**Example 2: Batched generation**
-```python
-from proto_tools.tools.causal_models.evo2 import (
-    run_evo2_sample, Evo2SampleInput, Evo2SampleConfig
-)
-
-inputs = Evo2SampleInput(prompts=[
-    "ATGAAACGT",
-    "ATGCCCGTT",
-    "ATGGGGAAA",
-])
-config = Evo2SampleConfig(
-    num_tokens=1000,
-    temperature=1.0,
-    batch_size=3,
-)
-
-result = run_evo2_sample(inputs, config)
-for i, seq in enumerate(result.sequences):
-    print(f"Sequence {i+1}: {len(seq)} bp")
-```
-
-**Example 3: Continue generation with KV cache**
-```python
-from proto_tools.tools.causal_models.evo2 import (
-    run_evo2_sample, Evo2SampleInput, Evo2SampleConfig
-)
-from proto_tools.utils import ToolInstance
-
-inputs = Evo2SampleInput(prompts=["ATGCGTAAA"])
-config = Evo2SampleConfig(num_tokens=200, cached_generation=True, return_kv_cache=True)
-
-with ToolInstance.persist():
-    result = run_evo2_sample(inputs, config)
-
-    # Continue generation from cached state
-    next_config = Evo2SampleConfig(
-        num_tokens=200,
-        cached_generation=True,
-        return_kv_cache=True,
-        old_kv_cache=result.kv_caches[0],
-    )
-    next_inputs = Evo2SampleInput(prompts=[result.sequences[0]])
-    next_result = run_evo2_sample(next_inputs, next_config)
-```
-
-**Example 4: Score sequences**
-```python
-from proto_tools.tools.causal_models.evo2 import (
-    run_evo2_score, Evo2ScoringInput, Evo2ScoringConfig
-)
-
-inputs = Evo2ScoringInput(sequences=["ATCGATCG", "GCTAGCTA"])
-config = Evo2ScoringConfig(batch_size=2)
-
-result = run_evo2_score(inputs, config)
-for i, score in enumerate(result.scores):
-    print(f"Seq {i+1}: perplexity={score['perplexity']:.3f}, "
-          f"avg_ll={score['avg_log_likelihood']:.4f}")
-```
-
-**Example 5: Score with logits for positional analysis**
-```python
-from proto_tools.tools.causal_models.evo2 import (
-    run_evo2_score, Evo2ScoringInput, Evo2ScoringConfig
-)
-
-inputs = Evo2ScoringInput(sequences=["ATGAAAGCTTCCGATCGATCG"])
-config = Evo2ScoringConfig(return_logits=True)
-
-result = run_evo2_score(inputs, config)
-print(f"Vocab size: {len(result.scores[0].vocab)}")  # 512
-print(f"Logits shape: {len(result.scores[0].logits)} positions")
-```
-
-## Best Practices & Gotchas
-
-- **Prompt design**: Longer, biologically meaningful prompts (e.g., a known promoter, start codon context) give the model better context than short random sequences. ATG-starting prompts bias toward coding sequence generation.
-- **Batching**: For maximum throughput, all prompts in a batch should have the same length. Mixed-length prompts still work but may be padded internally.
-- **KV caching**: `cached_generation=True` uses Vortex's internal per-call cache during generation. Worker-local cache handles are opt-in with `return_kv_cache=True` and require a persistent `ToolInstance`.
-- **Memory management**: Evo2 7B requires significant GPU memory. Reduce `batch_size` if you encounter OOM errors. The 40B model requires multi-GPU setups.
-- **Tokenization**: Evo2 uses byte-level tokenization (vocab_size=512). DNA bases map to ASCII values: A=65, C=67, G=71, T=84, N=78. Non-DNA bytes in the vocabulary are valid tokens but rarely generated.
-- **num_tokens vs. max_length**: Unlike ProGen2's `max_length` (total including prompt), Evo2's `num_tokens` specifies only the newly generated tokens. The output sequence length is `len(prompt) + num_tokens` (with `prepend_prompt=True`).
-- **stop_at_eos**: With `True` (default), generation may stop before `num_tokens` if the model produces an EOS token. Set to `False` to always generate exactly `num_tokens` new bases.
-- **Model selection**: Use `evo2_7b` (default) for most tasks. Use `evo2_7b_microviridae` for phage genome generation. Use `evo2_40b` when highest quality matters and compute is available.
-
-## References
-
-**Primary publications:**
-- Brixi, G. et al. (2025). "Genome-scale language models for genomics." *Science*. DOI: [10.1126/science.ado9336](https://doi.org/10.1126/science.ado9336)
-- Nguyen, E. et al. (2024). "Sequence modeling and design from molecular to genome scale with Evo." *Science*, 386(6723). DOI: [10.1126/science.adn6354](https://doi.org/10.1126/science.adn6354)
-
-**Implementation:**
-- GitHub: [https://github.com/arcinstitute/evo2](https://github.com/arcinstitute/evo2)
-- Vortex (inference engine): [https://github.com/Zymrael/vortex](https://github.com/Zymrael/vortex)
-- Arc Institute: [https://arcinstitute.org/tools/evo](https://arcinstitute.org/tools/evo)
-
-## Related Tools
-
-**Used together:**
-- `enformer`, `borzoi`, `alphagenome`: score generated DNA sequences for regulatory activity predictions
-- `prodigal`: find open reading frames in generated DNA sequences
-- `splice_transformer`: analyze splice site predictions in generated sequences
-
-**Alternatives:**
-- `progen2`: autoregressive generation for protein (not DNA) sequences
-- `esm3`: generative protein language model with structure conditioning
+- **Requires a high-memory GPU; memory scales with model size and context length.** The 7B checkpoint needs a high-memory NVIDIA GPU; the 20B and 40B models and the 1M-context checkpoints need substantially more. CPU execution is not practical.
+- **`batch_size` trades memory for throughput across both tools.** It sets how many prompts (`evo2-sample`) or sequences (`evo2-score`) are processed per GPU forward pass. Raise it for higher throughput on many short sequences; lower it (default `1`) if generation or scoring runs out of GPU memory.
+- **Trained across all domains of life.** Evo2 covers prokaryotic, eukaryotic, archaeal, and phage genomes. For prokaryote-and-phage-only generation with a smaller model, [Evo1](https://bio-pro.mintlify.app/tools/causal-models/evo1) is an alternative.
