@@ -867,7 +867,7 @@ class ToolRegistry:
         return get_readme(key)
 
     @classmethod
-    def get_readme_section(cls, key: str, heading: str) -> str | None:
+    def get_readme_section(cls, key: str, heading: str, *, include_learning_resources: bool = False) -> str | None:
         """Return one named H2 section's body from the tool's toolkit README.
 
         Returns None when no H2 with that exact heading text exists. See
@@ -875,17 +875,17 @@ class ToolRegistry:
         """
         from proto_tools.utils.tool_docs import get_readme_section
 
-        return get_readme_section(key, heading)
+        return get_readme_section(key, heading, include_learning_resources=include_learning_resources)
 
     @classmethod
-    def get_readme_sections(cls, key: str) -> ReadmeSections:
+    def get_readme_sections(cls, key: str, *, include_learning_resources: bool = False) -> ReadmeSections:
         """Return the tool's toolkit README parsed into a typed structure.
 
         See ``proto_tools.utils.tool_docs.get_readme_sections``.
         """
         from proto_tools.utils.tool_docs import get_readme_sections
 
-        return get_readme_sections(key)
+        return get_readme_sections(key, include_learning_resources=include_learning_resources)
 
     @classmethod
     def get_tool_docs(

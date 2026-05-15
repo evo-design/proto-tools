@@ -81,7 +81,13 @@ class ReadmeSections(BaseModel):
 
     title: str = Field(description="Plain text of the README's H1 heading.")
     overview: str = Field(description="Body of the '## Overview' section.")
-    background: str = Field(description="Body of the '## Background' section.")
+    background: str = Field(
+        description=(
+            "Body of the '## Background' section. The optional "
+            "'### Learning Resources' subsection is excluded unless "
+            "include_learning_resources=True was passed."
+        )
+    )
     tools: list[ToolReadmeEntry] = Field(
         default_factory=list,
         description="H3 subsections inside the '## Tools' section, one per registered tool.",
@@ -310,6 +316,21 @@ def _h2_body(md: str, heading: str) -> str:
     return ""
 
 
+# Background may carry an optional `### Learning Resources` subsection: external
+# explainers (blog posts, talks) aimed at human readers. It is excluded from
+# agent-facing Background pulls by default; opt in with include_learning_resources=True.
+_LEARNING_RESOURCES_HEADING = "Learning Resources"
+_LEARNING_RESOURCES_RE = re.compile(
+    rf"^###\s+{re.escape(_LEARNING_RESOURCES_HEADING)}\s*$.*?(?=^###\s|\Z)",
+    re.MULTILINE | re.DOTALL,
+)
+
+
+def _strip_learning_resources(background: str) -> str:
+    """Remove the optional ``### Learning Resources`` subsection from a Background body."""
+    return _LEARNING_RESOURCES_RE.sub("", background).strip()
+
+
 _H3_RE = re.compile(r"^###\s+(.+)$", re.MULTILINE)
 _H4_RE = re.compile(r"^####\s+(.+)$", re.MULTILINE)
 _INLINE_CODE_RE = re.compile(r"`([^`]+)`")
@@ -391,22 +412,28 @@ def get_readme(tool: str) -> str:
     return _strip_review_callout(_read_readme(tool))
 
 
-def get_readme_section(tool: str, heading: str) -> str | None:
+def get_readme_section(tool: str, heading: str, *, include_learning_resources: bool = False) -> str | None:
     """Return one H2 section's body by exact heading text.
 
     Args:
         tool (str): Tool identifier — same forms as ``get_readme``.
         heading (str): H2 heading text (e.g. ``"Background"``).
+        include_learning_resources (bool): When False (the default), the
+            optional ``### Learning Resources`` subsection is stripped from the
+            ``Background`` body; it holds human-facing external links that are
+            noise for agents. Set True to keep it. No effect on other sections.
 
     Returns:
         str | None: The section body (without its heading), or None if no
             matching H2 is found.
     """
     body = _h2_body(get_readme(tool), heading)
+    if heading == "Background" and not include_learning_resources:
+        body = _strip_learning_resources(body)
     return body or None
 
 
-def get_readme_sections(tool: str) -> ReadmeSections:
+def get_readme_sections(tool: str, *, include_learning_resources: bool = False) -> ReadmeSections:
     """Return a toolkit's README parsed into a typed structure.
 
     The QC-pending callout is always stripped before parsing; the
@@ -415,6 +442,10 @@ def get_readme_sections(tool: str) -> ReadmeSections:
 
     Args:
         tool (str): Tool identifier — same forms as ``get_readme``.
+        include_learning_resources (bool): When False (the default), the
+            optional ``### Learning Resources`` subsection is stripped from
+            ``background``; it holds human-facing external links that are noise
+            for agents. Set True to keep it.
 
     Returns:
         ReadmeSections: Parsed structure with overview / background / tools /
@@ -440,7 +471,7 @@ def get_readme_sections(tool: str) -> ReadmeSections:
         if heading == "Overview":
             overview = body
         elif heading == "Background":
-            background = body
+            background = body if include_learning_resources else _strip_learning_resources(body)
         elif heading == "Tools":
             tools = _parse_tool_entries(body)
         elif heading == "Toolkit Notes":

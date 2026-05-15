@@ -86,7 +86,11 @@ background = ToolRegistry.get_readme_section("esm2-embedding", "Background")
 sections = ToolRegistry.get_readme_sections("esm2-embedding")
 sections.title              # "ESM2"
 sections.overview           # body of ## Overview
-sections.background         # body of ## Background
+sections.background         # body of ## Background (excludes the optional
+                            # ### Learning Resources subsection by default;
+                            # it links to user-facing explainers such as blog
+                            # posts and talks that agents do not need. Pass
+                            # include_learning_resources=True to keep it)
 sections.tools              # list[ToolReadmeEntry], one per registered tool
 sections.toolkit_notes      # body of ## Toolkit Notes
 sections.qc_pending         # True if the README still has the QC TODO callout
