@@ -192,6 +192,32 @@ def test_toolkit_license_yaml_schema(toolkit_dir: Path) -> None:
             if access not in _ALLOWED_WEIGHTS_ACCESS:
                 errors.append(f"weights.access: expected one of {sorted(_ALLOWED_WEIGHTS_ACCESS)}, got {access!r}")
 
+    # bundled_dependencies (optional): bundled tools with notable license terms; each entry references a toolkit or inlines external terms.
+    deps = data.get("bundled_dependencies")
+    if deps is not None:
+        if not isinstance(deps, list):
+            errors.append(f"bundled_dependencies: expected list, got {type(deps).__name__}")
+        else:
+            for i, dep in enumerate(deps):
+                label = f"bundled_dependencies[{i}]"
+                if not isinstance(dep, dict):
+                    errors.append(f"{label}: expected mapping, got {type(dep).__name__}")
+                    continue
+                if not isinstance(dep.get("name"), str) or not dep["name"].strip():
+                    errors.append(f"{label}.name: expected non-empty string")
+                unknown = set(dep.keys()) - {"name", "tool", "spdx", "url", "text"}
+                if unknown:
+                    errors.append(f"{label}: unknown keys {sorted(unknown)}")
+                if "tool" in dep:
+                    if {"spdx", "url", "text"} & dep.keys():
+                        errors.append(f"{label}: 'tool' reference and inline license fields are mutually exclusive")
+                    elif not isinstance(dep["tool"], str) or not (_TOOLS_DIR / dep["tool"] / "license.yaml").is_file():
+                        errors.append(
+                            f"{label}.tool: {dep.get('tool')!r} is not an existing toolkit with a license.yaml"
+                        )
+                else:
+                    _validate_terms_block(dep, label, errors)
+
     # commercial_use must be a tri-state string.
     commercial_use = data.get("commercial_use")
     if commercial_use not in _ALLOWED_COMMERCIAL_USE:
@@ -225,6 +251,7 @@ def test_toolkit_license_yaml_schema(toolkit_dir: Path) -> None:
         "attribution_required",
         "notes",
         "proto_tools_original",
+        "bundled_dependencies",
     }
     extra = set(data.keys()) - allowed_top
     if extra:
