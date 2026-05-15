@@ -84,6 +84,30 @@ proto-tools-original code, with no upstream tool/service we can point at?
   reachability and SPDX-text fingerprint checks are skipped for this
   toolkit; URL points at our own repo.
 
+### `bundled_dependencies` (optional)
+
+**Question answered:** Does this toolkit ship or require other tools that
+carry their own notable license terms (especially restrictive ones)?
+
+A list of bundled dependencies whose licenses materially affect the user
+(for example PyRosetta or IgLM in Germinal). List only dependencies with
+notable terms, not every pip dependency. Each entry has a `name` plus
+exactly one of:
+
+- `tool: <category>/<toolkit>` — the dependency is itself a proto-tools
+  toolkit; its license is read from that toolkit's own `license.yaml`
+  (single source of truth, no duplication). The referenced toolkit must
+  exist.
+- inline `spdx` + `url` (+ `text` when `spdx` is `Custom (...)`) — the
+  dependency is external (not a proto-tools toolkit), so its terms are
+  captured here directly, same shape as a `code`/`weights` block.
+
+The generated License callout lists every entry with a link (reference
+entries link to the dependency toolkit's docs page; external entries link
+to their `url`) so the constraint is visible to readers, not buried in
+`notes`. Enforced by `test_license_consistency.py` (schema) and
+`test_readme_consistency.py` (the callout is regenerated from this field).
+
 ## Quick decision matrix
 
 | License (weights) | redistribution | commercial_use | attribution_required |

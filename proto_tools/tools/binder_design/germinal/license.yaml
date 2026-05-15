@@ -4,6 +4,13 @@ code:
 weights:
   spdx: CC-BY-4.0
   url: https://github.com/google-deepmind/alphafold#model-parameters-license
+bundled_dependencies:
+  - name: PyRosetta
+    tool: structure_scoring/pyrosetta
+  - name: IgLM
+    spdx: Custom (IgLM License)
+    url: https://github.com/Graylab/IgLM
+    text: 'IgLM (Graylab/IgLM) is released for academic, non-commercial use only.'
 commercial_use: restricted
 redistribution: false
 attribution_required: true

@@ -366,10 +366,28 @@ def _expected_license_callouts(lic: dict, name: str) -> list[str]:
     else:
         gating = ""
 
+    deps = lic.get("bundled_dependencies")
+    if deps:
+        parts = []
+        for dep in deps:
+            if "tool" in dep:
+                category, toolkit = dep["tool"].split("/", 1)
+                dep_url = f"https://bio-pro.mintlify.app/tools/{_slugify(category)}/{_slugify(toolkit)}"
+            else:
+                dep_url = dep["url"]
+            parts.append(f"[{dep['name']}]({dep_url})")
+        bundled = (
+            " This tool also bundles dependencies with their own license terms: "
+            + ", ".join(parts)
+            + "; review each before commercial or redistribution use."
+        )
+    else:
+        bundled = ""
+
     callouts = []
     for lead in leads:
         body = f"{lead} and {' and '.join(clauses)}." if clauses else f"{lead}."
-        callouts.append(f"> [!NOTE]\n> **License:** {body}{gating} Please refer to {link} for full terms.")
+        callouts.append(f"> [!NOTE]\n> **License:** {body}{gating} Please refer to {link} for full terms.{bundled}")
     return callouts
 
 
