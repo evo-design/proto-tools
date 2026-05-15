@@ -1,294 +1,73 @@
-<a href="https://bio-pro.mintlify.app/tools/masked-models/esm3"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/masked-models/esm3"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a>
 
 # ESM3
 
+![ESM3](https://cdn.prod.website-files.com/6606dc3fd5f6645318003df4/663e392ca11e77f1a562c2c6_og.png)
+
+> *Image source: [EvolutionaryScale](https://www.evolutionaryscale.ai)*
+
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** ESM3 uses Custom (Cambrian Open License Agreement) for code and Custom (Cambrian Non-Commercial License Agreement) for model weights and has restrictions around commercial use and may require explicit attribution when utilized. Model weights are gated and require accepting the provider's terms and authenticating with a HuggingFace token. Please refer to the [code license](https://www.evolutionaryscale.ai/policies/cambrian-open-license-agreement) and [model weights license](https://www.evolutionaryscale.ai/policies/cambrian-non-commercial-license-agreement) for full terms.
 
 ## Overview
-ESM3 is EvolutionaryScale's next-generation [protein language model](https://www.evolutionaryscale.ai/blog/esm-cambrian) with sequence and structure modeling capabilities. This package's `esm3-sample` tool exposes masked sequence editing over supplied protein sequences. The open model (`esm3_sm_open_v1`) provides embeddings, logits, masked sampling, and scoring in a unified framework.
+
+ESM3 is EvolutionaryScale's generative protein language model, trained jointly over sequence, structure, and function. This toolkit wraps the open `esm3_sm_open_v1` checkpoint to embed, sample masked positions in, and score supplied protein sequences.
 
 ## Background
 
-**What are protein language models?**
-Protein language models (pLMs) learn the "grammar" of proteins from evolutionary data. ESM3 extends this by jointly modeling sequence and structure, capturing:
-- **Sequence conservation**: Which residues are essential for function
-- **[Co-evolution](https://en.wikipedia.org/wiki/Coevolution)**: Pairs of residues that evolve together (often in contact)
-- **Structural constraints**: Patterns that define [secondary/tertiary structure](https://en.wikipedia.org/wiki/Protein_structure)
-- **3D geometry**: Spatial relationships between residues
+In 2025, [Hayes et al.](https://doi.org/10.1126/science.ads0018) introduced ESM3, a generative model from [EvolutionaryScale](https://www.evolutionaryscale.ai) that departs from the encoder-only design of the ESM-1/ESM-2 line. ESM3 is a masked generative transformer that represents a protein across three simultaneous tracks (amino-acid sequence, discrete structure tokens, and function annotation). Training masks spans across all three tracks, so a single model can be prompted with any combination of partial sequence, structure, and function and asked to complete the rest. The flagship 98B-parameter model (`esm3-large-2024-03`) is available through the [EvolutionaryScale Forge](https://forge.evolutionaryscale.ai) API under closed-beta access (also offered via AWS SageMaker); the publicly released open checkpoint, `esm3_sm_open_v1`, is the small 1.4B-parameter variant.
 
-**Why ESM3 over ESM2?**
-ESM3 is broader than ESM2 at the model-family level. In Proto Tools today, use `esm3-sample` for masked sequence editing and local refinement; for pure sequence embedding tasks, ESM2 is often faster.
+ESM3 is the multimodal successor to ESM-2 ([Lin et al., 2023](https://doi.org/10.1126/science.ade2574)). Where ESM-2 is a sequence-only masked language model, ESM3 adds structure and function tracks and a generative objective. For pure sequence-embedding workloads ESM-2 remains lighter and faster; ESM3 is the choice when masked generative editing matters. This toolkit exposes only the sequence-track operations (embeddings, masked sampling, scoring) over supplied sequences.
 
 ## Tools
 
 ### ESM3 Embeddings (`esm3-embedding`)
 
-Extract protein sequence embeddings and logits using ESM3.
+Runs a single forward pass over ESM3 and mean-pools the per-residue hidden states into a fixed-length sequence descriptor. Per-position amino-acid logits are returned on request.
 
-Uses ESM3 open model from EvolutionaryScale to extract contextualized embeddings
-and per-position logits for protein sequences. The model is automatically
-loaded on-demand. Supports local GPU execution via isolated Python
-environments.
+#### Applications
+
+The mean-pooled embedding is a learned protein representation for downstream supervised tasks such as clustering, classification, and property regression, and powers similarity search through cosine similarity on the mean vector.
+
+#### Usage Tips
+
+- **`repr_layer` selects which transformer layer is mean-pooled.** The default `-1` returns the post-norm output of the last block (matching ESM-2/ESMC `-1` semantics); other indices select pre-norm per-block hidden states, captured via a forward hook because `ESM3.forward` discards them.
+- **Per-position logits are large.** Enabling `return_logits` adds a per-position vocabulary-sized float tensor per sequence, dominating wall time and memory on long inputs. Leave it `False` unless the per-position distribution is needed.
 
 ### ESM3 Sampling (`esm3-sample`)
 
-Sample masked positions in protein sequences using ESM3.
+Selects positions via a configurable masking strategy, masks them, and resamples from ESM3's predicted distribution. `single_pass` fills every masked position in one forward pass; `iterative_refinement` dispatches to ESM3's native `batch_generate` for multi-round commitment. Positions can also be pre-masked directly with `_` in the input string, or a masking strategy can be used.
 
-The `preprocess` hook on :class:`ESM3SampleConfig` applies the masking
-strategy before this function runs, so `inputs.sequences` already
-contain `_` at positions to sample.
+#### Applications
+
+This tool drives guided point mutation, variant generation, and infilling at designable sites. Resampling masked positions from a protein language model is the core operation behind directed-evolution proposals and antibody affinity maturation. Which positions are resampled is set by the [masking strategy](https://github.com/proto-bio/proto-tools/blob/main/proto_tools/transforms/masking/README.md); see its README for the available selection methods and tuning knobs.
+
+#### Usage Tips
+
+- **`iterative_refinement` produces more coherent joint samples than `single_pass`.** It runs ESM3's `batch_generate` over `num_steps` rounds (cosine or linear unmask schedule) instead of filling every mask independently in one pass; it is roughly `num_steps×` slower. Default to it when masking more than a handful of sites.
+- **`masking_strategy` controls which positions get masked before sampling.** See the [masking strategy README](https://github.com/proto-bio/proto-tools/blob/main/proto_tools/transforms/masking/README.md) for the available selection methods and tuning knobs. As an alternative to passing a strategy, pre-mask exact positions with `_` directly in the input string and the masking strategy is skipped entirely.
+- **`temperature` scales the per-position logits before sampling.** Values of 0.5 to 0.7 yield conservative mutations close to the input; values above 1.0 broaden exploration of the model's distribution.
 
 ### ESM3 Scoring (`esm3-score`)
 
-Score protein sequences using ESM3 language model.
+Computes masked-language-model pseudo-perplexity for each input sequence. Each position is masked individually and the model's log-probability of the true amino acid under bidirectional context is recorded, then aggregated into per-sequence log-likelihood, average log-likelihood, and perplexity.
 
-Computes MLM pseudo-perplexity by masking each position individually and
-computing $P(x_i | x_{-i})$. Uses batched processing for efficiency.
+#### Applications
 
-Ambiguous amino acids (X, B, Z, etc.) are excluded from the perplexity
-calculation using the industry-standard exclusion strategy. Only positions
-with standard amino acids (20 canonical AAs) contribute to log-likelihood
-and perplexity metrics.
+ESM3 pseudo-perplexity is a fitness proxy for ranking variants, filtering generated sequences for naturalness, or comparing engineered constructs against wild type. The masked log-likelihood difference between wild-type and mutant residues is a zero-shot baseline for variant-effect prediction.
 
-## Tool Catalog
+#### Usage Tips
 
-| Tool | Description | Output |
-|------|-------------|--------|
-| `esm3-embedding` | Extract embeddings and logits | Embeddings, logits, attention masks |
-| `esm3-sample` | Mutate/restore masked sequence positions using model | Modified sequences, optional logits |
-| `esm3-score` | Score sequences with MLM pseudo-perplexity | Per-sequence metrics, optional logits |
+- **Pseudo-perplexity is a relative score, not an absolute fitness.** It is measured against the model's training distribution and is sensitive to length, so it is most useful for comparing closely related sequences of similar length.
+- **Ambiguous residues are excluded.** Perplexity is computed only over the 20 canonical amino acids; `X`, `B`, `Z`, and similar are dropped from both the log-likelihood sum and the position count.
 
-## Model Variants
+## Toolkit Notes
 
-| Checkpoint | Description | Default |
-|------------|-------------|---------|
-| `esm3_sm_open_v1` | Small open-source ESM3 model | Yes |
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-Currently only the small open-source model is available. Larger models may become available through EvolutionaryScale's API.
+These apply to every ESM3 tool in this toolkit (`esm3-embedding`, `esm3-sample`, `esm3-score`).
 
-## Execution Modes
-
-- **Local GPU/CPU**: Loads the model on-demand. Use `device="cuda"`, `"cpu"`, or `"mps"`.
-
-## How It Works
-
-ESM3 uses a transformer architecture that jointly models protein sequence and structure. Key differences from ESM2:
-- **Generative model family**: Can support sequence/structure generation modes, though this package exposes masked sequence sampling for supplied sequences
-- **Structure tokens**: Encodes 3D structure as discrete tokens alongside sequence tokens
-- **Multi-track architecture**: Processes sequence, structure, and function information in parallel
-
-**Embeddings**: Forward pass produces per-position hidden states; mean-pooling yields fixed-length descriptors.
-
-**Sampling**: Positions are selected by masking strategy (entropy, max-logit, or random), masked, and resampled from the model's distribution.
-
-**Scoring**: Each position is masked one at a time to compute log-probability of the true amino acid, yielding pseudo-perplexity.
-
-## Input Parameters
-
-All tools take a tool-specific input with one or more protein sequences:
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sequences` | `List[str]` | Protein sequences (amino acid strings) |
-
-## Configuration
-
-### Embeddings Tool (`ESM3EmbeddingsConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_checkpoint` | `str` | `esm3_sm_open_v1` | Model variant |
-| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
-| `device` | `str` | `cuda` | `cuda`, `cpu`, or `mps` |
-| `verbose` | `bool` | `False` | Print progress |
-| `return_logits` | `bool` | `False` | Include per-position logits |
-| `repr_layer` | `int` | `-1` | Transformer layer index for embeddings; `-1` returns post-norm output, others select pre-norm |
-
-### Sampling Tool (`ESM3SampleConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_checkpoint` | `str` | `esm3_sm_open_v1` | Model variant |
-| `masking_strategy` | `MaskingStrategy` | random 30% | Composite — see fields below |
-| `sampling_method` | `Literal["single_pass", "iterative_refinement"]` | `"single_pass"` | `single_pass` fills every mask in one forward; `iterative_refinement` dispatches to ESM3's `model.batch_generate` |
-| `temperature` | `float` | `1.0` | Softmax temperature for per-position AA sampling |
-| `top_p` | `float` | `1.0` | Nucleus threshold (iterative only); `1.0` disables |
-| `num_steps` | `int` | `20` | Iterative-refinement decoding steps (iterative only) |
-| `schedule` | `Literal["cosine", "linear"]` | `"cosine"` | Unmask schedule across rounds (iterative only) |
-| `strategy` | `Literal["random", "entropy"]` | `"random"` | Per-round commit selection (iterative only) |
-| `temperature_annealing` | `bool` | `True` | Anneal toward 0 across rounds (iterative only) |
-| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
-| `device` | `str` | `cuda` | Device |
-| `verbose` | `bool` | `False` | Print progress |
-| `return_logits` | `bool` | `False` | Include per-position logits |
-
-**`MaskingStrategy` fields** (nested, controls which positions to mask):
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `method` | `Literal["random", "entropy", "max-logit"]` | `"random"` | Position-selection scoring method |
-| `num_mutations` | `int \| None` | `None` | Exact number of positions to mask |
-| `mask_fraction` | `float \| None` | `None` | Fraction of designable positions to mask (default ~30%) |
-| `fixed_positions` | `list[int] \| None` | `None` | 1-indexed positions that must NOT be masked |
-| `temperature` | `float` | `1.0` | Temperature for position selection (separate from sampling temperature) |
-
-Use `sampling_method="iterative_refinement"` for higher-coherence joint sampling at multiple masked sites — slower (~num_steps× compute), but commits positions in rounds rather than independently.
-
-### Scoring Tool (`ESM3ScoringConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_checkpoint` | `str` | `esm3_sm_open_v1` | Model variant |
-| `batch_size` | `int` | `1` | Masked variants per forward pass |
-| `device` | `str` | `cuda` | Device |
-| `verbose` | `bool` | `False` | Print progress |
-| `return_logits` | `bool` | `False` | Include per-position logits |
-
-### Parameter Guides
-
-**Temperature guide for sampling:**
-| Temperature | Behavior | Use Case |
-|-------------|----------|----------|
-| 0.5-0.7 | Conservative | Safer mutations |
-| 1.0 | Standard | Model distribution |
-| 1.5-2.0 | Creative | More diverse mutations |
-
-## Output Specification
-
-### ESM3EmbeddingsOutput (Embeddings)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `results` | `List[SequenceEmbedding]` | Per-sequence embedding results (primary field) |
-
-**`SequenceEmbedding` fields:**
-| Field | Type | Description |
-|-------|------|-------------|
-| `mean_embedding` | `List[float]` | Mean-pooled embedding vector for one sequence |
-| `attention_mask` | `List[int]` | Binary mask: 1 = valid position, 0 = padding |
-| `logits` | `Optional[List[List[float]]]` | Per-position logits (seq_len, vocab_size). Only present if `return_logits=True` |
-
-### ESM3SampleOutput
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `sequences` | `List[str]` | Mutated protein sequences |
-| `logits` | `Optional[List[List[List[float]]]]` | Per-position logits (if requested) |
-
-Supported export formats: `fasta`, `txt`, `json`
-
-### MaskedModelScoringOutput (Scoring)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `scores` | `List[MaskedModelScoringMetrics]` | Per-sequence metrics and optional logits |
-
-Each `MaskedModelScoringMetrics` entry includes:
-- `log_likelihood`, `avg_log_likelihood`, `perplexity` — access via attribute (`score.perplexity`) or mapping (`score["perplexity"]`)
-- `logits`: per-position logits if `return_logits=True`
-- `vocab`: list of 20 standard amino acids if `return_logits=True`
-
-## Interpreting Results
-
-**Variant effect (logit difference):**
-- Logit difference > 5: likely deleterious
-- Logit difference > 2: possibly deleterious
-- Logit difference between -2 and 2: neutral
-- Logit difference < -2: possibly beneficial
-
-**Scoring (pseudo-perplexity):**
-- Lower perplexity indicates a more "natural" sequence
-- Compare perplexities across variants rather than interpreting absolute values
-
-## Quick Start Examples
-
-**Example 1: Extract embeddings**
-```python
-from proto_tools.tools.masked_models.esm3 import ESM3EmbeddingsInput, ESM3EmbeddingsConfig, run_esm3_embeddings
-
-inputs = ESM3EmbeddingsInput(sequences=["MVLSPADKTNVKAAW", "GSSGSSGSS"])
-config = ESM3EmbeddingsConfig(verbose=True)
-
-result = run_esm3_embeddings(inputs, config)
-print(f"Processed {len(result.results)} sequences")
-print(f"Embedding dim: {len(result.results[0].mean_embedding)}")
-```
-
-**Example 2: Sequence mutation**
-```python
-from proto_tools.tools.masked_models.esm3 import ESM3SampleInput, ESM3SampleConfig, run_esm3_sample
-
-inputs = ESM3SampleInput(sequences=["MVLSPADKTNVKAAW"])
-
-config = ESM3SampleConfig(
-    temperature=0.7,
-    decoding_method="entropy",
-    num_mutations=3
-)
-
-result = run_esm3_sample(inputs, config)
-print(f"Original: {inputs.sequences[0]}")
-print(f"Mutated:  {result.sequences[0]}")
-```
-
-**Example 3: Score sequences**
-```python
-from proto_tools.tools.masked_models.esm3 import ESM3ScoringInput, ESM3ScoringConfig, run_esm3_score
-
-inputs = ESM3ScoringInput(sequences=["MVLSPADKTNVKAAW", "GSSGSSGSS"])
-config = ESM3ScoringConfig(batch_size=32)
-
-result = run_esm3_score(inputs, config)
-print(f"Perplexity: {result.scores[0].metrics['perplexity']}")
-```
-
-**Example 4: Batch processing**
-```python
-from proto_tools.tools.masked_models.esm3 import (
-    ESM3EmbeddingsInput, ESM3EmbeddingsConfig, run_esm3_embeddings,
-)
-
-# Large batch of sequences
-sequences = ["MVLSPADKTNVKAAW"] * 100
-
-inputs = ESM3EmbeddingsInput(sequences=sequences)
-config = ESM3EmbeddingsConfig(
-    batch_size=16,  # Process 16 at a time
-    verbose=True
-)
-
-result = run_esm3_embeddings(inputs, config)
-print(f"Processed {len(result.results)} sequences")
-```
-
-## Best Practices & Gotchas
-
-**Embeddings and scoring:**
-- Use `return_logits=False` unless you explicitly need logits (saves memory)
-
-**Sampling:**
-- Start with low `temperature` and small `num_mutations` for conservative edits
-- Use `decoding_method="entropy"` for natural-looking mutations
-
-**Common mistakes:**
-1. **Expecting ESM2-speed embeddings**: ESM3 is generally slower than ESM2 for embedding-only tasks.
-
-## References
-
-**Primary publication:**
-- Hayes, T. et al. (2024). "Simulating 500 million years of evolution with a language model." *Science*. DOI: [10.1126/science.adk8946](https://doi.org/10.1126/science.adk8946)
-
-**Implementation:**
-- GitHub: [https://github.com/evolutionaryscale/esm](https://github.com/evolutionaryscale/esm)
-- EvolutionaryScale: [https://www.evolutionaryscale.ai/](https://www.evolutionaryscale.ai/)
-
-## Related Tools
-
-**Tools often used together:**
-- `esm2`: Faster embeddings-only model (use when you don't need structure)
-- `inverse_folding/proteinmpnn`: Structure-conditioned sequence design
-
-**Alternative tools:**
-- `esmfold`: Dedicated structure prediction (based on ESM2)
-- `progen2`: Autoregressive protein generation
+- **ESM3 is a gated model and requires a HuggingFace token.** The open checkpoint lives behind a gated HuggingFace repo ([EvolutionaryScale/esm3-sm-open-v1](https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1)). Set the `HF_TOKEN` environment variable with an account that has accepted the model license, or every tool raises before loading.
+- **One open checkpoint is available.** `esm3_sm_open_v1` is the only public open-weights checkpoint; larger ESM3 models are EvolutionaryScale API-only and not wrapped here.
+- **ESM3 is larger than many ESM-2 variants.** For sequence-embedding-only workloads, smaller ESM-2 variants are faster; consider reaching for ESM3 when you want masked generative editing. This toolkit takes only amino-acid sequences as input and does not expose the structure or function tracks.
+- **`batch_size` controls memory usage across the toolkit.** Lower it if you OOM; raise it for short-sequence throughput. For `esm3-score`, `batch_size` counts masked variants pooled across all input sequences rather than sequences themselves (each input contributes one masked variant per position).

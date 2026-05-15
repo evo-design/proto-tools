@@ -120,6 +120,22 @@ def test_get_tool_docs_omits_toolkit_notes_when_disabled() -> None:
     assert entry.toolkit_notes is None
 
 
+def test_get_tool_docs_includes_license_by_default() -> None:
+    """``get_tool_docs`` attaches the parsed license.yaml, incl. weights.access."""
+    entry = get_tool_docs("esm3-embedding")
+    assert entry is not None
+    assert entry.license is not None
+    assert entry.license["code"]["spdx"] == "Custom (Cambrian Open License Agreement)"
+    assert entry.license["weights"]["access"] == "hf-gated"
+
+
+def test_get_tool_docs_omits_license_when_disabled() -> None:
+    """``include_license=False`` leaves the field as None."""
+    entry = get_tool_docs("esm2-embedding", include_license=False)
+    assert entry is not None
+    assert entry.license is None
+
+
 def test_get_tool_docs_returns_none_for_unknown_key_in_polished_readme() -> None:
     """Asking for a key not present in the README returns None, not an error."""
     # A bogus key resolves the toolkit but matches no H3, so the entry is absent.

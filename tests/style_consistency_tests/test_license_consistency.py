@@ -29,6 +29,9 @@ _TOOLS_DIR = Path(__file__).resolve().parent.parent.parent / "proto_tools" / "to
 # Canonical SPDX license texts live here, deduplicated across toolkits.
 _LICENSES_DIR = _TOOLS_DIR / "_licenses"
 
+# Repo-root README, home of the "Gated model access" table.
+_ROOT_README = _TOOLS_DIR.parent.parent / "README.md"
+
 # Directories under proto_tools/tools/ that aren't tool categories.
 _EXCLUDED_DIRS = frozenset({"__pycache__", "infra", "utils", "testing"})
 
@@ -62,6 +65,9 @@ _REQUIRED_TERMS_KEYS = {"spdx", "url"}
 
 # Allowed values for commercial_use (tri-state string).
 _ALLOWED_COMMERCIAL_USE = frozenset({"yes", "no", "restricted"})
+
+# Allowed values for the optional weights.access field.
+_ALLOWED_WEIGHTS_ACCESS = frozenset({"hf-gated", "request"})
 
 # ISO date format (YYYY-MM-DD) for last_updated.
 _ISO_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -180,6 +186,11 @@ def test_toolkit_license_yaml_schema(toolkit_dir: Path) -> None:
     # weights block (optional). Falls back to code license when absent.
     if "weights" in data:
         _validate_terms_block(data["weights"], "weights", errors)
+        weights_block = data["weights"]
+        if isinstance(weights_block, dict) and "access" in weights_block:
+            access = weights_block["access"]
+            if access not in _ALLOWED_WEIGHTS_ACCESS:
+                errors.append(f"weights.access: expected one of {sorted(_ALLOWED_WEIGHTS_ACCESS)}, got {access!r}")
 
     # commercial_use must be a tri-state string.
     commercial_use = data.get("commercial_use")
@@ -221,6 +232,104 @@ def test_toolkit_license_yaml_schema(toolkit_dir: Path) -> None:
 
     if errors:
         pytest.fail(f"{toolkit_dir.name}/license.yaml schema violations:\n  - " + "\n  - ".join(errors))
+
+
+# ── weights.access ↔ infra cross-checks ─────────────────────────────────────
+
+
+def _toolkit_access_map() -> dict[str, str]:
+    """Map 'category/toolkit' -> weights.access for toolkits that declare it."""
+    out: dict[str, str] = {}
+    for toolkit_dir in _ALL_TOOLKITS:
+        license_path = toolkit_dir / "license.yaml"
+        if not license_path.is_file():
+            continue
+        data = yaml.safe_load(license_path.read_text())
+        weights = data.get("weights") if isinstance(data, dict) else None
+        access = weights.get("access") if isinstance(weights, dict) else None
+        if access:
+            out[_toolkit_id(toolkit_dir)] = access
+    return out
+
+
+def _toolkits_calling_require_hf_token() -> set[str]:
+    """Return 'category/toolkit' ids whose source calls require_hf_token()."""
+    found: set[str] = set()
+    for py in _TOOLS_DIR.rglob("*.py"):
+        parts = py.relative_to(_TOOLS_DIR).parts
+        if len(parts) < 3 or parts[0] in _EXCLUDED_DIRS:
+            continue
+        if "require_hf_token(" in py.read_text():
+            found.add(f"{parts[0]}/{parts[1]}")
+    return found
+
+
+def test_hf_gated_access_matches_require_hf_token() -> None:
+    """weights.access: hf-gated must match exactly the toolkits calling require_hf_token().
+
+    Binds the hand-written metadata to the runtime-enforced gate so the two
+    can never silently diverge.
+    """
+    declared = {tid for tid, access in _toolkit_access_map().items() if access == "hf-gated"}
+    enforced = _toolkits_calling_require_hf_token()
+    assert declared == enforced, (
+        "weights.access: hf-gated is out of sync with require_hf_token() call sites. "
+        f"Declared in license.yaml only: {sorted(declared - enforced)}; "
+        f"calls require_hf_token() but not declared hf-gated: {sorted(enforced - declared)}."
+    )
+
+
+def _gated_readme_table_models() -> set[str]:
+    """First-column model names from the root README 'Gated model access' table."""
+    lines = _ROOT_README.read_text().splitlines()
+    header = next(
+        (i for i, ln in enumerate(lines) if re.match(r"\|\s*Model\s*\|\s*Source\s*\|\s*Access\s*\|", ln)),
+        None,
+    )
+    assert header is not None, "root README is missing the '| Model | Source | Access |' gated-access table"
+    models: set[str] = set()
+    for ln in lines[header + 1 :]:
+        if not ln.startswith("|"):
+            break
+        cell = ln.split("|")[1].strip()
+        if not cell or set(cell) <= set("-: "):
+            continue
+        models.add(cell)
+    return models
+
+
+def test_gated_readme_table_matches_access_field() -> None:
+    """The root README gated-access table must list exactly the access-restricted toolkits.
+
+    Expected model names are each restricted toolkit's README H1, so the
+    hand-maintained table cannot drift from the structured weights.access set.
+    """
+    restricted = {tid for tid, access in _toolkit_access_map().items() if access in ("hf-gated", "request")}
+    expected: set[str] = set()
+    for tid in restricted:
+        readme = _TOOLS_DIR / tid / "README.md"
+        h1 = re.search(r"^# (.+)$", readme.read_text(), re.MULTILINE)
+        assert h1, f"{tid}/README.md has no H1 to match against the gated-access table"
+        expected.add(h1.group(1).strip())
+    table = _gated_readme_table_models()
+    assert table == expected, (
+        "Root README 'Gated model access' table is out of sync with weights.access. "
+        f"In table only: {sorted(table - expected)}; "
+        f"access-restricted but missing from table: {sorted(expected - table)}."
+    )
+
+
+def test_get_weights_access_matches_license_yaml() -> None:
+    """ToolRegistry.get_weights_access reflects license.yaml for every tool."""
+    access_by_toolkit = _toolkit_access_map()
+    for spec in ToolRegistry.list_all():
+        toolkit_dir = spec.source_file.parent
+        toolkit_id = f"{toolkit_dir.parent.name}/{toolkit_dir.name}"
+        expected = access_by_toolkit.get(toolkit_id, "open")
+        actual = ToolRegistry.get_weights_access(spec.key)
+        assert actual == expected, (
+            f"{spec.key}: get_weights_access() returned {actual!r}, but {toolkit_id}/license.yaml implies {expected!r}."
+        )
 
 
 # ── ToolRegistry surface ────────────────────────────────────────────────────

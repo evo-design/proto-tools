@@ -111,6 +111,7 @@ ToolRegistry.get_citation("tool-key")                 # BibTeX string
 ToolRegistry.get_doi("tool-key")                      # DOI extracted from cite.bib
 ToolRegistry.get_links("tool-key")                    # Parsed links.yaml (github, image, huggingface, …)
 ToolRegistry.get_license("tool-key")                  # Parsed license.yaml (code/weights SPDX, commercial use, …)
+ToolRegistry.get_weights_access("tool-key")           # 'open' | 'hf-gated' | 'request' (normalized from license.yaml weights.access)
 ToolRegistry.get_docs_url("tool-key")                 # Documentation URL computed from tool directory
 ToolRegistry.get_example_input("esmfold-prediction")  # Minimal valid Input
 ToolRegistry.get_example_notebook_path("tool-key")    # Path to examples/example.ipynb
@@ -183,7 +184,7 @@ Tools with heavy dependencies run in isolated micromamba environments with centr
 | `utils/auth.py` | `require_hf_token()`: HuggingFace gated model auth |
 | `utils/chemistry.py` | `validate_smiles()`: SMILES string validation |
 | `utils/msa.py` | `extract_msa_sequences()`: MSA extraction utilities |
-| `utils/tool_docs.py` | `get_readme`, `get_readme_sections`, `get_readme_section`, `get_tool_docs`, `get_model_doc` + `ReadmeSections` / `ToolReadmeEntry` / `ModelDoc` / `FieldDoc` Pydantic models — programmatic access to toolkit READMEs and Pydantic model docs |
+| `utils/tool_docs.py` | `get_readme`, `get_readme_sections`, `get_readme_section`, `get_tool_docs`, `get_model_doc` + `ReadmeSections` / `ToolReadmeEntry` / `ModelDoc` / `FieldDoc` Pydantic models — programmatic access to toolkit READMEs and Pydantic model docs. `ToolReadmeEntry` carries `toolkit_notes` + `license` (parsed `license.yaml`), attached by `get_tool_docs` by default |
 | `utils/notebook_docs.py` | Notebook `display_*` wrappers built on `utils/tool_docs.py` |
 | `tools/__init__.py` | Master export, all tools re-exported here |
 
@@ -296,7 +297,7 @@ See [AGENTS.md](AGENTS.md) for the full runtime guide on consuming proto-tools (
 
 When a user asks to run a bioinformatics tool:
 1. **Find the tool**: Browse `proto_tools/tools/` or use `ToolRegistry.list_all()` / `ToolRegistry.list_by_category(category)`.
-2. **Read the docs**: Prefer `ToolRegistry.get_tool_docs(tool)` (one Pydantic call returning intro + applications + usage tips + toolkit notes) over re-reading the raw `README.md`.
+2. **Read the docs**: Prefer `ToolRegistry.get_tool_docs(tool)` (one Pydantic call returning intro + applications + usage tips + toolkit notes + license) over re-reading the raw `README.md`.
 3. **Read API**: Tool's `Input`/`Config`/`Output` classes for the Pydantic schema, or `ToolRegistry.get_input_doc(tool)` / `get_config_doc(tool)` / `get_output_doc(tool)` for a structured view.
 4. **Call**: `Input` → `Config` → `run_{tool}()` → `Output`
 

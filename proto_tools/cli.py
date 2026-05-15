@@ -104,10 +104,11 @@ def _cmd_catalog(args: argparse.Namespace) -> int:
 
 
 def _cmd_docs(args: argparse.Namespace) -> int:
-    """``proto-tools docs <tool> [--no-toolkit-notes]``."""
+    """``proto-tools docs <tool> [--no-toolkit-notes] [--no-license]``."""
     entry = ToolRegistry.get_tool_docs(
         args.tool,
         include_toolkit_notes=not args.no_toolkit_notes,
+        include_license=not args.no_license,
     )
     if entry is None:
         print(f"No README entry found for tool '{args.tool}'.", file=sys.stderr)
@@ -128,12 +129,15 @@ def _cmd_docs(args: argparse.Namespace) -> int:
     if entry.toolkit_notes:
         print("\n### Toolkit Notes\n")
         print(entry.toolkit_notes)
+    if entry.license:
+        print("\n### License\n")
+        print(_dump_json(entry.license))
     return 0
 
 
 def _cmd_readme(args: argparse.Namespace) -> int:
-    """``proto-tools readme <tool> [--no-strip-qc]``."""
-    print(ToolRegistry.get_readme(args.tool, strip_qc_banner=not args.no_strip_qc))
+    """``proto-tools readme <tool>``."""
+    print(ToolRegistry.get_readme(args.tool))
     return 0
 
 
@@ -252,6 +256,12 @@ def _cmd_license(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_access(args: argparse.Namespace) -> int:
+    """``proto-tools access <tool>`` — open | hf-gated | request."""
+    print(ToolRegistry.get_weights_access(args.tool))
+    return 0
+
+
 def _cmd_doi(args: argparse.Namespace) -> int:
     """``proto-tools doi <tool>``."""
     doi = ToolRegistry.get_doi(args.tool)
@@ -304,7 +314,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     p_docs = sub.add_parser(
         "docs",
-        help="Per-tool docs (intro + applications + usage tips + toolkit notes).",
+        help="Per-tool docs (intro + applications + usage tips + toolkit notes + license).",
     )
     p_docs.add_argument("tool", help="Tool identifier (registry key, run-function name, etc.).")
     p_docs.add_argument(
@@ -312,16 +322,16 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Omit the toolkit-wide Toolkit Notes from the output.",
     )
+    p_docs.add_argument(
+        "--no-license",
+        action="store_true",
+        help="Omit the parsed license.yaml from the output.",
+    )
     p_docs.add_argument("--json", action="store_true")
     p_docs.set_defaults(func=_cmd_docs)
 
     p_readme = sub.add_parser("readme", help="Full README text for the tool's toolkit.")
     p_readme.add_argument("tool")
-    p_readme.add_argument(
-        "--no-strip-qc",
-        action="store_true",
-        help="Keep the QC-pending callout in the output.",
-    )
     p_readme.set_defaults(func=_cmd_readme)
 
     p_section = sub.add_parser("section", help="One named H2 section from the README.")
@@ -364,6 +374,13 @@ def _build_parser() -> argparse.ArgumentParser:
     p_license = sub.add_parser("license", help="Parsed license.yaml.")
     p_license.add_argument("tool")
     p_license.set_defaults(func=_cmd_license)
+
+    p_access = sub.add_parser(
+        "access",
+        help="Model-weights access: open | hf-gated | request.",
+    )
+    p_access.add_argument("tool")
+    p_access.set_defaults(func=_cmd_access)
 
     p_doi = sub.add_parser("doi", help="DOI for the tool's primary citation, if any.")
     p_doi.add_argument("tool")

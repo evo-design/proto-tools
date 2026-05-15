@@ -7,6 +7,7 @@ import urllib.request
 from pathlib import Path
 
 import pytest
+import yaml
 
 from proto_tools.tools import ToolRegistry
 
@@ -181,17 +182,328 @@ def test_starts_with_h1(readme: Path) -> None:
 
 @pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
 def test_has_doc_badge(readme: Path) -> None:
-    """README must have a right-aligned Proto Docs badge linking to the correct page."""
+    """README must have a right-aligned docs badge linking to the correct page.
+
+    The badge label is simplified from ``View in Proto Docs`` to ``View Docs``
+    as each README is QC'd, so QC-done READMEs must use the ``View_Docs`` label
+    while QC-pending ones still carry the legacy ``View_in_Proto_Docs`` label.
+    """
     rel = readme.relative_to(_TOOLS_DIR)
     category, toolkit, _ = rel.parts
     expected_path = f"/tools/{_slugify(category)}/{_slugify(toolkit)}"
 
     text = readme.read_text()
-    assert "img.shields.io/badge/View_in_Proto_Docs" in text, (
-        f"{_tool_id(readme)}/README.md is missing the Proto Docs badge"
+    # TODO(#743): drop the legacy branch once every README is migrated.
+    expected_label = "View_in_Proto_Docs" if _QC_PENDING_MARKER in text else "View_Docs"
+    assert f"img.shields.io/badge/{expected_label}" in text, (
+        f"{_tool_id(readme)}/README.md is missing the '{expected_label}' docs badge"
     )
     assert 'align="right"' in text, f'{_tool_id(readme)}/README.md badge must use align="right"'
     assert expected_path in text, f"{_tool_id(readme)}/README.md badge should link to {expected_path}"
+
+
+# The "Use in Proto Tools" badge advertises that a toolkit can be run on the
+# hosted Proto Tools platform. Hosting requires redistributing the tool, so the
+# badge is present only when `redistribution: true` in the toolkit's
+# license.yaml. Hostable toolkits must use this exact markup verbatim so the
+# badge is byte-for-byte identical catalog-wide (label, message, color,
+# flat-square style, matching labelColor, lightning logo, alt text). Tools that
+# cannot be hosted omit it entirely.
+_PROTO_TOOLS_BADGE_LABEL = "Use_on_Proto"
+_PROTO_TOOLS_BADGE_IMG = '<img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">'
+
+
+@pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
+def test_proto_tools_badge_matches_license(readme: Path) -> None:
+    """The 'Use in Proto Tools' badge must be present iff the license permits hosting.
+
+    Hosting a tool on the Proto Tools platform requires redistributing it, so
+    the badge (purple ``coming soon``, with the lightning logo) appears only
+    when ``license.yaml`` declares ``redistribution: true``. Toolkits that
+    cannot be hosted must omit the badge entirely.
+
+    Skipped for READMEs that still contain the QC-pending marker; the badge
+    rollout is incremental (one toolkit at a time as each README is QC'd).
+    """
+    text = readme.read_text()
+    # TODO(#743): drop this skip once every README is migrated.
+    if _QC_PENDING_MARKER in text:
+        pytest.skip(f"{_tool_id(readme)}/README.md still has QC-pending marker; skipping Proto Tools badge check")
+
+    license_path = readme.parent / "license.yaml"
+    assert license_path.exists(), f"{_tool_id(readme)} has no license.yaml to gate the Proto Tools badge."
+    license_data = yaml.safe_load(license_path.read_text())
+    assert "redistribution" in license_data, (
+        f"{_tool_id(readme)}/license.yaml is missing the 'redistribution' field, which gates the "
+        f"'{_PROTO_TOOLS_BADGE_LABEL}' badge."
+    )
+
+    has_badge = _PROTO_TOOLS_BADGE_LABEL in text
+    if license_data["redistribution"]:
+        assert _PROTO_TOOLS_BADGE_IMG in text, (
+            f"{_tool_id(readme)}/README.md has redistribution=true, so it must carry the exact canonical "
+            f"'{_PROTO_TOOLS_BADGE_LABEL}' badge markup (see _PROTO_TOOLS_BADGE_IMG in this module) — "
+            f"identical label, color, flat-square style, labelColor, lightning logo, and alt text."
+        )
+    else:
+        assert not has_badge, (
+            f"{_tool_id(readme)}/README.md has redistribution=false, so it must NOT carry the "
+            f"'{_PROTO_TOOLS_BADGE_LABEL}' badge — the tool cannot be hosted on Proto Tools."
+        )
+
+
+# Canonical markup for the badges that appear in every README regardless of
+# license. Every tool README must contain each verbatim so they are
+# byte-for-byte identical catalog-wide. The View Docs badge's <a href> is
+# per-tool (validated by test_has_doc_badge), so only its constant <img> is
+# pinned here.
+_VIEW_DOCS_BADGE_IMG = '<img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs">'
+_EXAMPLE_NOTEBOOK_BADGE = '<a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a>'
+_TOOLKIT_NOTES_GUIDE_BADGES = '<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>'
+
+
+@pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
+def test_badges_use_compact_style(readme: Path) -> None:
+    """Tool READMEs must use the compact ``flat-square`` shields.io badge style.
+
+    The large ``style=for-the-badge`` style is not allowed for any badge.
+
+    The skip below is temporary scaffolding for the incremental README
+    migration and is removed once every README is migrated; the rule itself is
+    permanent.
+    """
+    text = readme.read_text()
+    # TODO(#743): drop this skip once every README is migrated.
+    if _QC_PENDING_MARKER in text:
+        pytest.skip(f"{_tool_id(readme)}/README.md still has QC-pending marker; skipping badge-size check")
+
+    assert "style=for-the-badge" not in text, (
+        f"{_tool_id(readme)}/README.md uses the large 'style=for-the-badge' shields.io style. "
+        f"All badges must use the compact 'style=flat-square' style."
+    )
+
+
+@pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
+def test_badges_are_canonical(readme: Path) -> None:
+    """Tool READMEs must use the exact canonical markup for every fixed badge.
+
+    Pins the View Docs ``<img>``, the Example Notebook anchor, and the four
+    Toolkit Notes guide badges byte-for-byte so they are identical catalog-wide.
+    The Proto badge is license-gated and verified in
+    ``test_proto_tools_badge_matches_license``.
+
+    The skip below is temporary scaffolding for the incremental README
+    migration and is removed once every README is migrated; the rule itself is
+    permanent.
+    """
+    text = readme.read_text()
+    # TODO(#743): drop this skip once every README is migrated.
+    if _QC_PENDING_MARKER in text:
+        pytest.skip(f"{_tool_id(readme)}/README.md still has QC-pending marker; skipping canonical-badge check")
+
+    canonical = {
+        "View Docs badge <img>": _VIEW_DOCS_BADGE_IMG,
+        "Example Notebook badge": _EXAMPLE_NOTEBOOK_BADGE,
+        "Toolkit Notes guide badges": _TOOLKIT_NOTES_GUIDE_BADGES,
+    }
+    missing = [name for name, markup in canonical.items() if markup not in text]
+    assert not missing, (
+        f"{_tool_id(readme)}/README.md is missing the exact canonical markup for: {missing}. "
+        f"These badges must be byte-for-byte identical across all QC-done READMEs "
+        f"(see the canonical badge constants in this test module)."
+    )
+
+
+def _expected_license_callouts(lic: dict, name: str) -> list[str]:
+    """Build the acceptable License callout strings from a parsed license.yaml.
+
+    The "a/an" article in "has a/an {spdx} license" is not enforced (authors
+    write whichever is grammatically correct), so the plain-SPDX branch yields
+    both variants. ``Custom (...)`` SPDX values keep the article-free
+    "is licensed under {spdx}" form (an article + trailing "license" reads
+    wrong for vendor strings). A code/weights split is used only when the
+    weights SPDX genuinely differs. A ``weights.access`` gating sentence is
+    appended when present.
+
+    Args:
+        lic (dict): Parsed license.yaml mapping.
+        name (str): Tool display name (the README H1 text).
+
+    Returns:
+        list[str]: Acceptable ``> [!NOTE]`` callouts; any one may appear.
+    """
+    code_spdx = lic["code"]["spdx"]
+    code_url = lic["code"]["url"]
+    weights = lic.get("weights")
+    commercial_restricted = lic.get("commercial_use") != "yes"
+    attribution = bool(lic.get("attribution_required"))
+    is_custom = isinstance(code_spdx, str) and code_spdx.startswith("Custom (")
+
+    if weights and weights["spdx"] != code_spdx:
+        leads = [f"{name} uses {code_spdx} for code and {weights['spdx']} for model weights"]
+        link = f"the [code license]({code_url}) and [model weights license]({weights['url']})"
+    elif is_custom:
+        leads = [f"{name} is licensed under {code_spdx}"]
+        link = f"[the license]({code_url})"
+    else:
+        leads = [f"{name} has a {code_spdx} license", f"{name} has an {code_spdx} license"]
+        link = f"[the license]({code_url})"
+
+    clauses = []
+    if commercial_restricted:
+        clauses.append("has restrictions around commercial use")
+    if attribution:
+        clauses.append("may require explicit attribution when utilized")
+
+    access = weights.get("access") if isinstance(weights, dict) else None
+    if access == "hf-gated":
+        gating = (
+            " Model weights are gated and require accepting the provider's terms "
+            "and authenticating with a HuggingFace token."
+        )
+    elif access == "request":
+        gating = " Model weights are not publicly distributed and must be requested from the provider."
+    else:
+        gating = ""
+
+    callouts = []
+    for lead in leads:
+        body = f"{lead} and {' and '.join(clauses)}." if clauses else f"{lead}."
+        callouts.append(f"> [!NOTE]\n> **License:** {body}{gating} Please refer to {link} for full terms.")
+    return callouts
+
+
+@pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
+def test_license_section_matches_yaml(readme: Path) -> None:
+    """Tool READMEs must carry the canonical License callout above ``## Overview``.
+
+    The callout is generated from the sibling ``license.yaml`` (code SPDX,
+    optional weights SPDX, commercial-use / attribution flags, weights.access
+    gating) and must sit between the badge line and the Overview section. The
+    "a/an" article is not enforced; any other deviation is.
+
+    The skip below is temporary scaffolding for the incremental README
+    migration and is removed once every README is migrated; the rule itself is
+    permanent.
+    """
+    text = readme.read_text()
+    # TODO(#743): drop this skip once every README is migrated.
+    if _QC_PENDING_MARKER in text:
+        pytest.skip(f"{_tool_id(readme)}/README.md still has QC-pending marker; skipping license-callout check")
+
+    license_path = readme.parent / "license.yaml"
+    assert license_path.exists(), f"{_tool_id(readme)} has no license.yaml to build the License callout."
+    lic = yaml.safe_load(license_path.read_text())
+
+    h1 = re.search(r"^# (.+)$", text, re.MULTILINE)
+    assert h1, f"{_tool_id(readme)}/README.md has no H1 to name the tool in the License callout."
+    name = h1.group(1).strip()
+
+    variants = _expected_license_callouts(lic, name)
+    present = [v for v in variants if v in text]
+    assert present, (
+        f"{_tool_id(readme)}/README.md is missing the canonical License callout derived from license.yaml. "
+        f"Expected one of:\n" + "\n--\n".join(variants)
+    )
+
+    overview = text.find("## Overview")
+    assert overview != -1 and min(text.find(v) for v in present) < overview, (
+        f"{_tool_id(readme)}/README.md License callout must appear above the '## Overview' section."
+    )
+
+
+def test_expected_license_callouts_logic() -> None:
+    """Article variants, SPDX collapsing, Custom guard, and weights.access gating."""
+    base = {
+        "code": {"spdx": "MIT", "url": "https://example.com/code"},
+        "commercial_use": "yes",
+        "attribution_required": False,
+    }
+
+    no_weights = _expected_license_callouts(base, "Tool")
+    assert sorted(no_weights) == sorted(
+        [
+            "> [!NOTE]\n> **License:** Tool has a MIT license."
+            " Please refer to [the license](https://example.com/code) for full terms.",
+            "> [!NOTE]\n> **License:** Tool has an MIT license."
+            " Please refer to [the license](https://example.com/code) for full terms.",
+        ]
+    )
+
+    same_spdx = _expected_license_callouts(
+        {**base, "weights": {"spdx": "MIT", "url": "https://example.com/weights"}}, "Tool"
+    )
+    assert same_spdx == no_weights
+
+    different_spdx = _expected_license_callouts(
+        {**base, "weights": {"spdx": "CC-BY-4.0", "url": "https://example.com/w"}}, "Tool"
+    )
+    assert different_spdx == [
+        "> [!NOTE]\n> **License:** Tool uses MIT for code and CC-BY-4.0 for model weights."
+        " Please refer to the [code license](https://example.com/code)"
+        " and [model weights license](https://example.com/w) for full terms."
+    ]
+
+    custom = _expected_license_callouts(
+        {"code": {"spdx": "Custom (Foo License)", "url": "https://example.com/c"}, "commercial_use": "yes"},
+        "Tool",
+    )
+    assert custom == [
+        "> [!NOTE]\n> **License:** Tool is licensed under Custom (Foo License)."
+        " Please refer to [the license](https://example.com/c) for full terms."
+    ]
+
+    hf_gated = _expected_license_callouts(
+        {
+            "code": {"spdx": "Apache-2.0", "url": "https://example.com/c"},
+            "weights": {"spdx": "Custom (X)", "url": "https://example.com/w", "access": "hf-gated"},
+            "commercial_use": "no",
+            "attribution_required": True,
+        },
+        "Tool",
+    )
+    assert len(hf_gated) == 1
+    assert (
+        "Model weights are gated and require accepting the provider's terms "
+        "and authenticating with a HuggingFace token." in hf_gated[0]
+    )
+
+
+@pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
+def test_gated_weights_noted_in_toolkit_notes(readme: Path) -> None:
+    """Toolkits with gated weights must flag it in ``## Toolkit Notes``.
+
+    Agents pull the Toolkit Notes section via get_tool_docs, so an access
+    restriction declared by ``weights.access`` must be visible there too, not
+    only in the License callout.
+
+    The skip below is temporary scaffolding for the incremental README
+    migration and is removed once every README is migrated; the rule itself is
+    permanent.
+    """
+    text = readme.read_text()
+    # TODO(#743): drop this skip once every README is migrated.
+    if _QC_PENDING_MARKER in text:
+        pytest.skip(f"{_tool_id(readme)}/README.md still has QC-pending marker; skipping gated-notes check")
+
+    license_path = readme.parent / "license.yaml"
+    if not license_path.exists():
+        return
+    lic = yaml.safe_load(license_path.read_text())
+    weights = lic.get("weights")
+    access = weights.get("access") if isinstance(weights, dict) else None
+    if not access:
+        return
+
+    match = re.search(r"^## Toolkit Notes\s*\n(.*?)(?=^## |\Z)", text, re.MULTILINE | re.DOTALL)
+    assert match, (
+        f"{_tool_id(readme)}/README.md declares weights.access='{access}' but has no "
+        f"'## Toolkit Notes' section to flag it for agents."
+    )
+    assert "gated" in match.group(1).lower(), (
+        f"{_tool_id(readme)}/README.md declares weights.access='{access}' but its '## Toolkit Notes' "
+        f"section does not mention the gating; agents pulling tool docs won't see it."
+    )
 
 
 @pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)

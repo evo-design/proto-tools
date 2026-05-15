@@ -16,7 +16,10 @@ Two surfaces:
 
 1. **README extraction** — ``get_readme`` / ``get_readme_sections`` /
    ``get_readme_section`` / ``get_tool_docs`` return raw or structured
-   slices of a toolkit's README.
+   slices of a toolkit's README. ``get_tool_docs`` also attaches the parsed
+   ``license.yaml`` by default (the human-facing License callout above
+   ``## Overview`` is not a parsed section; structured license metadata is
+   the agent-facing source of truth).
 2. **Pydantic model docs** — ``get_model_doc`` returns a normalized view of
    a model's class docstring plus per-field name / type / default /
    description / required flag.
@@ -60,6 +63,15 @@ class ToolReadmeEntry(BaseModel):
             "Body of the toolkit-level '## Toolkit Notes' section. Populated "
             "by ``get_tool_docs`` when ``include_toolkit_notes=True`` so "
             "agents see toolkit-wide guidance alongside per-tool tips."
+        ),
+    )
+    license: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Parsed license.yaml (code/weights SPDX, commercial_use, "
+            "attribution_required, weights.access). Populated by "
+            "``get_tool_docs`` when ``include_license=True`` so agents can "
+            "check gating and usage terms in the same call."
         ),
     )
 
@@ -118,7 +130,7 @@ class ModelDoc(BaseModel):
 
 
 # TODO(#743): remove all QC-pending plumbing (this regex, _strip_review_callout,
-# _has_qc_callout, the qc_pending field, the strip_qc_banner params) once every README is migrated.
+# _has_qc_callout, the qc_pending field) once every README is migrated.
 _TODO_CALLOUT_RE = re.compile(
     r"^>\s*\[!NOTE\]\s*\n>\s*\*\*TODO:\*\*\s*This README still needs to be reviewed[^\n]*\n+",
     re.MULTILINE,
@@ -359,14 +371,15 @@ def _parse_tool_entries(tools_body: str) -> list[ToolReadmeEntry]:
 # =============================================================================
 
 
-def get_readme(tool: str, *, strip_qc_banner: bool = True) -> str:
+def get_readme(tool: str) -> str:
     """Return a toolkit's README text.
+
+    The ``> [!NOTE] **TODO:** ...`` callout that flags un-reviewed READMEs is
+    always stripped.
 
     Args:
         tool (str): Tool identifier (registry key, docs path, run-function
             name, or toolkit directory name).
-        strip_qc_banner (bool): When True (default), strip the
-            ``> [!NOTE] **TODO:** ...`` callout that flags un-reviewed READMEs.
 
     Returns:
         str: README content.
@@ -375,35 +388,33 @@ def get_readme(tool: str, *, strip_qc_banner: bool = True) -> str:
         ValueError: If ``tool`` doesn't resolve to a registered toolkit.
         OSError: If the README cannot be read from disk.
     """
-    md = _read_readme(tool)
-    return _strip_review_callout(md) if strip_qc_banner else md
+    return _strip_review_callout(_read_readme(tool))
 
 
-def get_readme_section(tool: str, heading: str, *, strip_qc_banner: bool = True) -> str | None:
+def get_readme_section(tool: str, heading: str) -> str | None:
     """Return one H2 section's body by exact heading text.
 
     Args:
         tool (str): Tool identifier — same forms as ``get_readme``.
         heading (str): H2 heading text (e.g. ``"Background"``).
-        strip_qc_banner (bool): Strip the QC-pending callout before extracting.
 
     Returns:
         str | None: The section body (without its heading), or None if no
             matching H2 is found.
     """
-    md = get_readme(tool, strip_qc_banner=strip_qc_banner)
-    body = _h2_body(md, heading)
+    body = _h2_body(get_readme(tool), heading)
     return body or None
 
 
-def get_readme_sections(tool: str, *, strip_qc_banner: bool = True) -> ReadmeSections:
+def get_readme_sections(tool: str) -> ReadmeSections:
     """Return a toolkit's README parsed into a typed structure.
+
+    The QC-pending callout is always stripped before parsing; the
+    ``qc_pending`` field on the result still reflects whether the callout was
+    present in the source.
 
     Args:
         tool (str): Tool identifier — same forms as ``get_readme``.
-        strip_qc_banner (bool): Strip the QC-pending callout before parsing.
-            The ``qc_pending`` field on the result still reflects whether the
-            callout was present in the source.
 
     Returns:
         ReadmeSections: Parsed structure with overview / background / tools /
@@ -411,7 +422,7 @@ def get_readme_sections(tool: str, *, strip_qc_banner: bool = True) -> ReadmeSec
     """
     raw = _read_readme(tool)
     qc_pending = _has_qc_callout(raw)
-    md = _strip_review_callout(raw) if strip_qc_banner else raw
+    md = _strip_review_callout(raw)
     # Collapse badge HTML once up front so every parsed slice inherits clean text.
     md = _linkify_badges(md)
 
@@ -452,7 +463,7 @@ def get_tool_docs(
     tool: str,
     *,
     include_toolkit_notes: bool = True,
-    strip_qc_banner: bool = True,
+    include_license: bool = True,
 ) -> ToolReadmeEntry | None:
     """Return one specific tool's H3 subsection from its toolkit README.
 
@@ -467,7 +478,10 @@ def get_tool_docs(
             ``## Toolkit Notes`` section. The notes apply to every tool in the
             toolkit, so attaching them by default gives agents the full
             relevant context with one call.
-        strip_qc_banner (bool): Strip the QC-pending callout before parsing.
+        include_license (bool): When True (default), also populate the
+            returned entry's ``license`` field from the toolkit's
+            ``license.yaml`` (via ``ToolRegistry.get_license``), so agents see
+            gating and usage terms without a second call.
 
     Returns:
         ToolReadmeEntry | None: The matching tool's entry, or None if the
@@ -478,12 +492,18 @@ def get_tool_docs(
             a multi-tool toolkit.
     """
     tool_key = _normalize_tool_key(tool)
-    sections = get_readme_sections(tool_key, strip_qc_banner=strip_qc_banner)
+    sections = get_readme_sections(tool_key)
     entry = next((t for t in sections.tools if t.key == tool_key), None)
     if entry is None:
         return None
     if include_toolkit_notes and sections.toolkit_notes:
         entry = entry.model_copy(update={"toolkit_notes": sections.toolkit_notes})
+    if include_license:
+        from proto_tools.tools.tool_registry import ToolRegistry
+
+        license_data = ToolRegistry.get_license(tool_key)
+        if license_data is not None:
+            entry = entry.model_copy(update={"license": license_data})
     return entry
 
 

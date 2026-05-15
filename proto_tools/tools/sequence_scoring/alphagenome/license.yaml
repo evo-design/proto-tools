@@ -4,6 +4,7 @@ code:
 weights:
   spdx: Custom (AlphaGenome Terms of Use)
   url: https://deepmind.google.com/science/alphagenome/model-terms
+  access: hf-gated
   text: 'DeepMind AlphaGenome Terms of Use: weights are gated and restricted to non-commercial scientific research only. Prohibited uses include commercial product development, clinical decision-making, and applications outside the published research scope. Full terms at the canonical URL above.'
 commercial_use: 'no'
 redistribution: false

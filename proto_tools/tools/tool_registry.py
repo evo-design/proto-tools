@@ -857,17 +857,17 @@ class ToolRegistry:
         }
 
     @classmethod
-    def get_readme(cls, key: str, *, strip_qc_banner: bool = True) -> str:
+    def get_readme(cls, key: str) -> str:
         """Return the tool's toolkit README as text.
 
         See ``proto_tools.utils.tool_docs.get_readme`` for full semantics.
         """
         from proto_tools.utils.tool_docs import get_readme
 
-        return get_readme(key, strip_qc_banner=strip_qc_banner)
+        return get_readme(key)
 
     @classmethod
-    def get_readme_section(cls, key: str, heading: str, *, strip_qc_banner: bool = True) -> str | None:
+    def get_readme_section(cls, key: str, heading: str) -> str | None:
         """Return one named H2 section's body from the tool's toolkit README.
 
         Returns None when no H2 with that exact heading text exists. See
@@ -875,17 +875,17 @@ class ToolRegistry:
         """
         from proto_tools.utils.tool_docs import get_readme_section
 
-        return get_readme_section(key, heading, strip_qc_banner=strip_qc_banner)
+        return get_readme_section(key, heading)
 
     @classmethod
-    def get_readme_sections(cls, key: str, *, strip_qc_banner: bool = True) -> ReadmeSections:
+    def get_readme_sections(cls, key: str) -> ReadmeSections:
         """Return the tool's toolkit README parsed into a typed structure.
 
         See ``proto_tools.utils.tool_docs.get_readme_sections``.
         """
         from proto_tools.utils.tool_docs import get_readme_sections
 
-        return get_readme_sections(key, strip_qc_banner=strip_qc_banner)
+        return get_readme_sections(key)
 
     @classmethod
     def get_tool_docs(
@@ -893,21 +893,24 @@ class ToolRegistry:
         key: str,
         *,
         include_toolkit_notes: bool = True,
-        strip_qc_banner: bool = True,
+        include_license: bool = True,
     ) -> ToolReadmeEntry | None:
         """Return the tool's H3 subsection from its toolkit README.
 
         When ``include_toolkit_notes`` is True (default), the returned entry's
         ``toolkit_notes`` field is also populated from the toolkit's
         ``## Toolkit Notes`` section, since those tips apply to every tool in
-        the toolkit. See ``proto_tools.utils.tool_docs.get_tool_docs``.
+        the toolkit. When ``include_license`` is True (default), the entry's
+        ``license`` field is populated from the toolkit's ``license.yaml`` so
+        gating and usage terms come back in the same call. See
+        ``proto_tools.utils.tool_docs.get_tool_docs``.
         """
         from proto_tools.utils.tool_docs import get_tool_docs
 
         return get_tool_docs(
             key,
             include_toolkit_notes=include_toolkit_notes,
-            strip_qc_banner=strip_qc_banner,
+            include_license=include_license,
         )
 
     @classmethod
@@ -1155,6 +1158,30 @@ class ToolRegistry:
             if license_data is not None:
                 licenses[key] = license_data
         return licenses
+
+    @classmethod
+    def get_weights_access(cls, key: str) -> str:
+        """Return how a tool's model weights are obtained.
+
+        Normalizes the nested ``license.yaml`` ``weights.access`` field into a
+        single value to check before calling, without navigating the nested
+        mapping or knowing that an absent field means open.
+
+        Args:
+            key (str): Tool identifier (e.g., 'esm3-embedding').
+
+        Returns:
+            str: ``"open"`` (no extra step), ``"hf-gated"`` (accept the
+                provider's terms and set ``HF_TOKEN``), or ``"request"``
+                (weights obtained from the provider out of band).
+
+        Raises:
+            ValueError: If tool key is not found in registry.
+        """
+        license_data = cls.get_license(key)
+        weights = (license_data or {}).get("weights")
+        access = weights.get("access") if isinstance(weights, dict) else None
+        return access if isinstance(access, str) else "open"
 
     @classmethod
     def get_docs_url(cls, key: str) -> str | None:

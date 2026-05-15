@@ -51,6 +51,26 @@ CC-BY-* and CC-BY-NC-* licenses → `true`. Apache-2.0 / MIT typically don't
 require runtime attribution → `false` (NOTICE preservation only applies if
 you redistribute source, which is rarely the wrapper's concern).
 
+### `weights.access: hf-gated | request` (optional)
+
+**Question answered:** Does obtaining the model weights require an extra
+access step beyond installing the package?
+
+Set inside the `weights:` block. Omit when the weights download freely.
+
+- `hf-gated`: weights live behind a gated HuggingFace repo; the user must
+  accept the provider's terms and authenticate with an `HF_TOKEN`. Enforced
+  at runtime by `proto_tools.utils.auth.require_hf_token()`. The set of
+  toolkits with `weights.access: hf-gated` must exactly match the toolkits
+  that call `require_hf_token()` (cross-checked in
+  `test_license_consistency.py`).
+- `request`: weights are not publicly distributed and must be requested
+  from the provider via an external process (e.g. AlphaFold3's DeepMind
+  form).
+
+Any toolkit with `weights.access` set must also appear in the root
+`README.md` "Gated model access" table (also cross-checked).
+
 ### `proto_tools_original: bool` (optional, default `false`)
 
 **Question answered:** Is the toolkit's computation/orchestration fully

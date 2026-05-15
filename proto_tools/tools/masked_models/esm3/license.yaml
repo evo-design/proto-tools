@@ -5,6 +5,7 @@ code:
 weights:
   spdx: Custom (Cambrian Non-Commercial License Agreement)
   url: https://www.evolutionaryscale.ai/policies/cambrian-non-commercial-license-agreement
+  access: hf-gated
   text: 'EvolutionaryScale Cambrian Non-Commercial License Agreement: permits research and educational use only. Commercial use is prohibited without a separate paid license from EvolutionaryScale. Includes a naming requirement and prohibited-use policy. Full terms at the canonical URL above.'
 commercial_use: 'no'
 redistribution: false

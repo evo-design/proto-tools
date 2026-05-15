@@ -4,6 +4,7 @@ code:
 weights:
   spdx: Custom (AlphaFold 3 Model Parameters Terms of Use)
   url: https://github.com/google-deepmind/alphafold3/blob/main/WEIGHTS_TERMS_OF_USE.md
+  access: request
   text: 'DeepMind AlphaFold 3 Model Parameters Terms of Use: weights are gated and restricted to non-commercial research only. Outputs may not be used for commercial product development or any prohibited use listed in the policy. Full terms at the canonical URL above.'
 commercial_use: 'no'
 redistribution: false

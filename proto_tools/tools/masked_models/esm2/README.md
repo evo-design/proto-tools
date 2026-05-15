@@ -1,11 +1,13 @@
-<a href="https://bio-pro.mintlify.app/tools/masked-models/esm2"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
-<a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Open_Example_Notebook_→-2e7d32?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Open Example Notebook →"></a>
+<a href="https://bio-pro.mintlify.app/tools/masked-models/esm2"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # ESM2
 
 ![ESM-2](https://user-images.githubusercontent.com/3605224/199301187-a9e38b3f-71a7-44be-94f4-db0d66143c53.png)
 
 > *Image source: [facebookresearch/esm](https://github.com/facebookresearch/esm)*
+
+> [!NOTE]
+> **License:** ESM2 has an MIT license. Please refer to [the license](https://github.com/facebookresearch/esm/blob/main/LICENSE) for full terms.
 
 ## Overview
 
@@ -46,6 +48,7 @@ This tool drives guided point mutation, variant generation, and infilling at des
 - **`masking_strategy` controls which positions get masked before sampling.** See the [masking strategy README](https://github.com/proto-bio/proto-tools/blob/main/proto_tools/transforms/masking/README.md) for the available selection methods and tuning knobs. As an alternative to passing a strategy, pre-mask exact positions yourself with `_` directly in the input string and the masking strategy is skipped entirely.
 - **`temperature` scales the per-position logits before sampling.** Values of 0.5 to 0.7 yield conservative mutations close to the input; values above 1.0 broaden exploration of the model's distribution.
 - **Long-range coherence is weak.** ESM-2 has no global coherence beyond its local context window, so very long-range dependencies between distant residues are not well captured even in iterative mode.
+- **ESM-2 was trained as a masked language model, not with a generative objective.** Resampling masked positions works for local edits, but the model was optimized for representation rather than de novo generation. For generative workloads (large-scale infilling, sequence design), [ESM3](https://bio-pro.mintlify.app/tools/masked-models/esm3) adds an explicit generative training objective and is the better fit.
 
 ### ESM2 Scoring (`esm2-score`)
 

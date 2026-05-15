@@ -12,13 +12,14 @@ Returned values are Pydantic v2 `BaseModel` instances or plain JSON-serializable
 
 ## Primary entry point
 
-`ToolRegistry.get_tool_docs(tool)` returns a single `ToolReadmeEntry` containing the tool-specific intro paragraph, `Applications`, `Usage Tips`, and the toolkit's `Toolkit Notes`. The toolkit notes apply to every tool in the toolkit and are attached by default, so this one call provides the full conceptual context for a tool.
+`ToolRegistry.get_tool_docs(tool)` returns a single `ToolReadmeEntry` containing the tool-specific intro paragraph, `Applications`, `Usage Tips`, the toolkit's `Toolkit Notes`, and the parsed `license.yaml`. The toolkit notes and license are attached by default, so this one call provides the full conceptual context for a tool, including gating (`license["weights"]["access"]`) and usage terms.
 
 ```python
 entry = ToolRegistry.get_tool_docs("esm2-embedding")
 entry.intro
 entry.usage_tips
 entry.toolkit_notes  # toolkit-wide guidance, attached by default
+entry.license        # parsed license.yaml incl. weights.access, attached by default
 ```
 
 ## Command-line interface
@@ -99,6 +100,7 @@ entry.intro                 # paragraph between the H3 and the first H4
 entry.applications          # body of #### Applications
 entry.usage_tips            # body of #### Usage Tips
 entry.toolkit_notes         # ## Toolkit Notes body (attached by default)
+entry.license               # parsed license.yaml incl. weights.access (attached by default)
 
 # Exclude the toolkit notes for tool-specific content only:
 ToolRegistry.get_tool_docs("esm2-embedding", include_toolkit_notes=False)
@@ -142,9 +144,34 @@ ToolRegistry.get_citation("esm2-embedding")               # BibTeX string or Non
 ToolRegistry.get_doi("esm2-embedding")                    # DOI string or None
 ToolRegistry.get_links("esm2-embedding")                  # {"github": "...", "huggingface": "...", ...}
 ToolRegistry.get_license("esm2-embedding")                # parsed license.yaml
+ToolRegistry.get_weights_access("esm2-embedding")         # "open" | "hf-gated" | "request"
 ToolRegistry.get_docs_url("esm2-embedding")               # https://bio-pro.mintlify.app/tools/...
 ToolRegistry.get_example_notebook_path("esm2-embedding")  # local Path to examples/example.ipynb
 ```
+
+### Gated weights
+
+Before calling a tool that loads model weights, check how the weights are
+obtained:
+
+```python
+ToolRegistry.get_weights_access("esm3-embedding")   # "open" | "hf-gated" | "request"
+```
+
+`get_weights_access` normalizes the nested `license.yaml` `weights.access`
+field (absent => `"open"`) so there is one value to branch on. The same value
+is available raw as `get_license(...)["weights"]["access"]`, and via the CLI
+(`proto-tools access <tool>`). The values:
+
+- `"hf-gated"`: weights are behind a gated HuggingFace repo. The user must
+  accept the provider's terms and set `HF_TOKEN`, or the tool raises before
+  loading. (e.g. ESM3, AlphaGenome)
+- `"request"`: weights are not publicly distributed and must be obtained from
+  the provider out of band. (e.g. AlphaFold3)
+
+`commercial_use` (`"yes"` / `"no"` / `"restricted"`) and `attribution_required`
+(bool) carry the usage terms. The same restricted toolkits are also listed in
+the repo-root README's "Gated model access" table.
 
 ## Calling a tool
 
