@@ -4,7 +4,7 @@
 
 ![Germinal](https://arcinstitute.org/news/germinal/germinal.jpg)
 
-> *Image source: [Arc Institute](https://arcinstitute.org/news/germinal)*
+> *Image source: [Arc Institute](https://arcinstitute.org/news/building-germinal-for-ai-designed-antibody-molecules)*
 
 > [!NOTE]
 > **License:** Germinal uses Apache-2.0 for code and CC-BY-4.0 for model weights and has restrictions around commercial use and may require explicit attribution when utilized. Please refer to the [code license](https://github.com/SantiagoMille/germinal/blob/main/LICENSE) and [model weights license](https://github.com/google-deepmind/alphafold#model-parameters-license) for full terms. This tool also bundles dependencies with their own license terms: [PyRosetta](https://bio-pro.mintlify.app/tools/structure-scoring/pyrosetta), [IgLM](https://github.com/Graylab/IgLM); review each before commercial or redistribution use.
