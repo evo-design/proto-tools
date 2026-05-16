@@ -1,399 +1,68 @@
-<a href="https://bio-pro.mintlify.app/tools/structure-prediction/alphafold2"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/structure-prediction/alphafold2"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # AlphaFold2
 
+![AlphaFold](https://github.com/google-deepmind/alphafold/raw/main/imgs/header.jpg)
+
+> *Image source: [google-deepmind/alphafold](https://github.com/google-deepmind/alphafold)*
+
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** AlphaFold2 uses Apache-2.0 for code and CC-BY-4.0 for model weights and may require explicit attribution when utilized. Please refer to the [code license](https://github.com/google-deepmind/alphafold/blob/main/LICENSE) and [model weights license](https://github.com/google-deepmind/alphafold#model-parameters-license) for full terms.
 
 ## Overview
 
-AlphaFold2 predicts 3D protein structures from amino acid sequences using the original DeepMind model via the ColabDesign JAX wrapper. It supports structure prediction (`alphafold2-prediction`) with optional [multiple sequence alignment](https://en.wikipedia.org/wiki/Multiple_sequence_alignment) (MSA) generation via ColabFold search, and relaxed-sequence gradient computation (`alphafold2-binder`) for Germinal-style binder redesign against a frozen target structure.
+AlphaFold2 (AF2) is Google DeepMind's second-generation AlphaFold, widely regarded as the first method to predict protein structures from sequence at near-experimental accuracy. This toolkit runs AF2 through [ColabDesign](https://github.com/sokrypton/ColabDesign), the open-source JAX implementation from [Sergey Ovchinnikov's group](https://www.solab.org/), to predict 3D structures of proteins and complexes and to score and differentiate binders against a fixed target.
 
 ## Background
 
-**What does this tool measure/predict?**
-AlphaFold2 predicts the 3D atomic coordinates of protein structures from amino acid sequences. It outputs full-atom protein structures with per-residue confidence scores (pLDDT), global structure quality metrics (pTM), and inter-chain confidence for multimers (ipTM).
+AlphaFold2 ([Jumper et al., 2021](https://doi.org/10.1038/s41586-021-03819-2)) predicts a protein's 3D structure from its amino-acid sequence, and was introduced at the CASP14 structure-prediction assessment in 2020. AF2 takes a multiple-sequence alignment (MSA) as a primary input. The MSA carries an evolutionary signal: residues that lie close together in the folded structure tend to mutate in a correlated way across related proteins. AF2 reads these covariation patterns to infer which parts of the chain are in contact. Because the signal comes from the alignment itself, accuracy scales with the depth and diversity of the MSA, and proteins with few detectable homologs are harder to fold.
 
-**Why is this important?**
-- Protein engineering: validate that designed sequences fold into intended structures
-- Drug discovery: predict target protein structures for virtual screening
-- Functional annotation: infer function from predicted 3D structure
-- Protein design pipelines: final quality gate before experimental validation
-- Structural biology: generate models for proteins without experimental structures
+Internally, AlphaFold2 maintains two representations: an MSA representation and a pairwise representation over residue pairs. The Evoformer network repeatedly exchanges information between the two, using attention together with triangle-based updates on the pairwise representation that enforce geometric consistency among the inferred residue-residue distances. A structure module then turns these representations into an explicit 3D model, placing each residue as a rigid backbone frame with its own position and orientation. This whole process is recycled through the network several times, each pass refining the previous prediction. Along with the coordinates, AlphaFold2 emits two calibrated confidence measures: the per-residue predicted local distance difference test (pLDDT), which scores the model's confidence in each residue's local structure, and the predicted aligned error (PAE), which estimates the expected error in one residue's position when the structure is aligned on another.
 
-**Scientific foundation:**
-AlphaFold2 uses a two-track architecture combining evolutionary and structural information:
+This toolkit runs the original AlphaFold2 model through the [ColabDesign](https://github.com/sokrypton/ColabDesign) JAX implementation rather than the full DeepMind or ColabFold pipeline. There is no template-search stage, and multiple-sequence alignments are optional: they can be generated by a ColabFold search, supplied precomputed, or skipped to run in single-sequence mode. Beyond folding, the same model exposes a per-residue gradient, which gradient-based binder-design methods use to optimize a binder sequence against a frozen target.
 
-1. **Multiple Sequence Alignment (MSA) processing:** Evolutionary information from homologous sequences is processed through the Evoformer module, which uses axial attention to capture coevolutionary patterns that constrain 3D structure.
-2. **Structure module:** Iteratively refines 3D coordinates using invariant point attention (IPA), which operates directly in 3D space respecting rotational and translational symmetry.
-3. **Recycling:** The prediction is iteratively refined by feeding outputs back through the network (configurable via `num_recycles`), progressively improving accuracy.
-4. **Ensemble averaging:** Multiple independently trained model parameter sets (1-5) can be averaged for higher confidence predictions.
+### Learning Resources
 
-The model was trained on experimentally determined structures from the [Protein Data Bank](https://www.rcsb.org/) and achieves near-experimental accuracy for many protein families.
+- [AlphaFold: a solution to a 50-year-old grand challenge in biology](https://deepmind.google/discover/blog/alphafold-a-solution-to-a-50-year-old-grand-challenge-in-biology/) (Google DeepMind) - a general-audience blog post explaining the protein-folding problem and how AlphaFold2 approaches it, published alongside the CASP14 result.
 
 ## Tools
 
-### AlphaFold2 Binder (`alphafold2-binder`)
-
-Run one AlphaFold2/ColabDesign binder-design step.
-
-`compute_gradient=False` runs forward only (gradient=None); loss, metrics,
-and Structure are identical to gradient mode.
-
 ### AlphaFold2 Structure Prediction (`alphafold2-prediction`)
 
-Predict protein 3D structures using AlphaFold2.
+Predicts the 3D structure of one or more protein chains. Each input complex (a single chain, or several chains folded together) is run through the ColabDesign AlphaFold2 model, returning a predicted `Structure` per complex with confidence metrics: per-residue pLDDT, pTM, interface pTM for multi-chain complexes, and predicted aligned error.
 
-Uses the original AlphaFold2 model via the ColabDesign JAX wrapper to predict
-3D structures of protein sequences. Supports optional MSA generation via
-ColabFold search for improved accuracy.
+#### Applications
 
-## Execution Modes
+This tool folds a protein sequence into a 3D model for structural analysis, docking, or as input to downstream structure tools. Running it on a multi-chain complex additionally estimates how confidently the chains are placed relative to each other through the interface pTM and PAE, which is informative for assessing predicted protein-protein interfaces.
 
-- **Local GPU (recommended):** Requires GPU with >=16GB VRAM. Runtime varies with sequence length: ~30-120 seconds per monomer (100-500 residues) on A100 GPU, depending on MSA usage and recycling.
-- **CPU:** Possible but extremely slow (minutes to hours per prediction). Use only for testing with very short sequences.
+#### Usage Tips
 
-## How It Works
+- **`use_msa` defaults to `True`.** An MSA is then generated by a ColabFold search for each protein chain; set it `False` for single-sequence prediction (faster, usually lower accuracy), or attach precomputed MSAs to the input to skip the search.
+- **`model_num` and `num_ensemble_models` are mutually exclusive.** `model_num` (default `1`) selects one of AlphaFold2's five trained parameter sets; `num_ensemble_models` runs several and averages them for higher accuracy at higher cost. Setting both raises an error.
+- **Confidence is reported as pLDDT, pTM, ipTM, and PAE.** Average pLDDT (0 to 1) is the primary per-structure quality metric; ipTM is populated only for multi-chain complexes. Set `include_pae_matrix` to attach the full per-residue PAE matrix.
+- **Protein sequences only.** DNA, RNA, ligands, and glycans are not supported; `X` is allowed for unknown residues.
 
-**Method overview:**
-1. **MSA generation (optional):** If `use_msa=True`, ColabFold search queries sequence databases (UniRef, environmental sequences) to build a multiple sequence alignment. MSAs capture evolutionary covariation that strongly constrains structure prediction. Currently supported for single-chain predictions only.
-2. **Model inference:** The ColabDesign JAX wrapper runs the AlphaFold2 neural network with the specified number of recycling iterations and model parameters.
-3. **Output processing:** Raw predictions are converted to Structure objects with PDB coordinates, confidence metrics (pLDDT, pTM, ipTM, PAE), and metadata.
+### AlphaFold2 Binder (`alphafold2-binder`)
 
-**Gradient computation (`alphafold2-binder`):**
-The gradient tool enables differentiable binder design by computing gradients of an AlphaFold2/ColabDesign binder objective with respect to relaxed binder logits. A frozen target structure is loaded from `target_pdb`, binder redesign is anchored to `binder_chain`, and structural callbacks (e.g. `i_plddt`, `i_ptm`, `rg`, `helix`, `beta_strand`, `NC`) can be weighted through `loss_weights`. Two ColabDesign backends are supported via the `backend` field: `"base"` (upstream ColabDesign) and `"germinal"` (Germinal fork with alpha=2.0 logit scaling, persistent bias, and framework contact penalties). The `soft` parameter controls ColabDesign's internal softmax blending — JAX autograd chain-rules through the full `soft_seq()` expression, so the returned gradient is exact `∂loss/∂logits`.
+Scores and differentiates a binder against a frozen target structure. Given a target-plus-binder template, it runs AlphaFold2 (through ColabDesign's binder-design path) on the binder against the fixed target and returns the design loss, the predicted `Structure`, and, by default, the gradient of the loss with respect to the binder sequence logits.
 
-**Key assumptions:**
-- Input sequences are valid protein sequences (standard amino acids plus 'X' for unknown)
-- The protein folds into a stable 3D structure (not intrinsically disordered)
-- For MSA mode: homologous sequences exist in public databases
-- For multimers: MSA generation is not yet supported (runs in single-sequence mode)
+#### Applications
 
-**Limitations:**
-- Proteins only: no DNA, RNA, ligands, glycans, or post-translational modifications
-- MSA generation currently limited to single-chain predictions
-- Maximum sequence length constrained by GPU memory (typically ~2,000 residues on 40GB GPU)
-- Single static structure prediction (no conformational ensembles)
-- Accuracy depends on availability of evolutionary information for MSA-based predictions
+This tool supplies the loss and gradient signal that gradient-based binder-design methods optimize against a chosen target. With `compute_gradient=False` it instead provides forward-only scoring of a candidate binder (loss, metrics, and predicted structure) for ranking or filtering.
 
-**Computational requirements:**
-- **Hardware:** GPU with >=16GB VRAM (A100 40GB recommended for longer sequences)
-- **Runtime:** ~30-120s per monomer on A100 GPU with MSA; ~10-30s without MSA
-- **Scalability:** Processes complexes sequentially; use `ToolInstance.persist()` for batch workloads
+#### Usage Tips
 
-## Input Parameters
+- **One binder configuration per call; this tool is not an optimization loop.** It evaluates a single binder against the fixed target. Drive it from a binder-design optimizer, or call it repeatedly, to actually design a binder.
+- **`compute_gradient` defaults to `True`.** It runs a forward and backward pass and returns the gradient with respect to the binder logits; set it `False` for forward-only scoring (`gradient=None`). The loss, metrics, and predicted structure are identical in both modes.
+- **`backend` selects the loss set.** `"base"` (the default) uses the upstream ColabDesign losses; `"germinal"` adds the Germinal fork's alpha, bias, framework-contact, and extension losses. `starting_binder_seq` is only valid with `"germinal"`.
+- **`target_hotspot` focuses the design on chosen target residues.** Supply comma-separated residue indices on the target to bias the binder toward a specific epitope; `loss_weights` (only the validated keys) tunes the objective terms.
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `complexes` | `List[StructurePredictionComplex]` | *required* | Protein complexes to predict. Each complex contains one or more protein chains. Accepts shorthand: `["MKTV..."]` for a single chain, or full `StructurePredictionComplex` objects for multi-chain. |
+## Toolkit Notes
 
-**StructurePredictionComplex fields:**
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `chains` | `List[Chain]` | Chains in the complex. Each chain has `sequence` (str) and optional `entity_type` (auto-detected as "protein"). |
+These apply to every AlphaFold2 tool in this toolkit (`alphafold2-prediction`, `alphafold2-binder`).
 
-### Gradient Tool (`AlphaFold2BinderInput`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `logits` | `list[list[float]]` | *required* | Relaxed sequence logits with shape (L, 20). |
-| `temperature` | `float` | `1.0` | Softmax temperature for relaxing logits. |
-| `target_pdb` | `str` | *required* | PDB containing the frozen target and binder template complex. |
-| `target_chain` | `str` | `"A"` | Target chain ID(s) in the PDB. |
-| `target_hotspot` | `str \| None` | `None` | Optional hotspot residue specification for interface contacts. |
-| `binder_chain` | `str` | `"H"` | Binder-template chain ID. |
-| `design_positions` | `list[int] \| None` | `None` | Zero-based binder positions for loss focus (e.g. CDR loops). Only active when `backend="germinal"`. |
-
-## Configuration
-
-### Prediction Tool (`AlphaFold2Config`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `use_msa` | `bool` | `True` | Generate MSAs via ColabFold search for improved accuracy. Set `False` for faster single-sequence mode. Only works for single-chain predictions. |
-| `num_recycles` | `int` | `3` | Recycling iterations (0-48). Higher = more refined but slower. 3 is standard; 10-20 for difficult targets. |
-| `model_num` | `int` | `1` | Which AF2 parameter set to use (1-5). Different sets can produce different predictions. Mutually exclusive with `num_ensemble_models > 1`. |
-| `num_ensemble_models` | `int` | `1` | Number of model sets to run and average (1-5). Higher = better quality, linearly more compute. Mutually exclusive with custom `model_num`. |
-| `seed` | `Optional[int]` | `None` | Random seed for reproducibility. |
-| `device` | `str` | `"cuda"` | Device for inference (`"cuda"` or `"cpu"`). |
-| `colabfold_search_config` | `Optional[ColabfoldSearchConfig]` | `None` | Advanced ColabFold MSA search settings. Uses defaults if None. |
-
-### Gradient Tool (`AlphaFold2BinderConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `bias_redesign` | `float \| None` | `None` | Soft bias toward wildtype at non-design positions. Only active when `backend="germinal"`. |
-| `omit_aas` | `str \| None` | `None` | Comma-separated amino acids to ban, e.g. `"C,W"`. |
-| `num_recycles` | `int` | `3` | Recycling iterations (0-48). |
-| `model_num` | `int` | `1` | Which AF2 parameter set to use (1-5). |
-| `sample_models` | `bool` | `False` | Randomly sample from the five AF2 model parameter sets each forward pass. |
-| `soft` | `float` | `1.0` | ColabDesign softmax blending (0=logits, 1=full softmax). Controls `soft_seq()`. |
-| `hard` | `float` | `0.0` | ColabDesign hard-sequence blending (0=relaxed, 1=straight-through argmax). Useful for forward-only discrete scoring. |
-| `backend` | `str` | `"base"` | ColabDesign backend: `"base"` (upstream) or `"germinal"` (with alpha=2.0, bias, framework contacts). |
-| `loss_weights` | `dict[str, float]` | `{}` | Binder-objective weights. Stock: `plddt`, `i_plddt`, `pae`, `i_pae`, `con`, `i_con`, `exp_res`, `rmsd`, `dgram_cce`, `fape`. Extension callbacks (Germinal backend): `rg`, `i_ptm`, `NC`, `helix`, `beta_strand`. |
-| `intra_contact_num` | `int` | `2` | Intra-molecular contacts per residue. Only active when `backend="germinal"`. |
-| `intra_contact_cutoff` | `float` | `14.0` | Intra-molecular distance cutoff (Å). Only active when `backend="germinal"`. |
-| `inter_contact_num` | `int` | `10` | Inter-molecular contacts per residue. Only active when `backend="germinal"`. |
-| `inter_contact_cutoff` | `float` | `20.0` | Inter-molecular distance cutoff (Å). Only active when `backend="germinal"`. |
-| `starting_binder_seq` | `str \| None` | `None` | Warm-start binder AA sequence. Only active when `backend="germinal"`; length must equal `len(logits)`. |
-| `recycle_mode` | `str` | `"last"` | Which recycle's output yields the gradient: `"last"` (Germinal VHH default), `"sample"`, `"average"`, `"first"`. |
-| `compute_gradient` | `bool` | `True` | Run backward pass and return gradient; set `False` for forward-only scoring (returns `gradient=None`, useful for MCMC). |
-| `device` | `str` | `"cuda"` | Device for inference. |
-
-### Parameter Guides
-
-**Recycling iterations:**
-
-| num_recycles | Quality | Speed | Use Case |
-|-------------|---------|-------|----------|
-| 1 | Lower | Fastest | Quick screening, prototyping |
-| 3 | Good (default) | Moderate | Standard predictions |
-| 10-20 | Higher | Slow | Difficult targets, final validation |
-| 48 | Marginal gains | Very slow | Diminishing returns; rarely needed |
-
-**Ensemble models:**
-
-| num_ensemble_models | Quality | Speed | Use Case |
-|--------------------|---------|-------|----------|
-| 1 | Standard (default) | 1x | Most predictions |
-| 3 | Improved | 3x | Important targets |
-| 5 | Best | 5x | Publication-quality predictions |
-
-### Sweep Priorities
-
-1. **`use_msa`**: Largest impact on accuracy. MSA-based predictions are significantly better for proteins with evolutionary relatives. Sweep `[True, False]` to compare.
-2. **`num_recycles`**: Second most impactful. Sweep `[3, 10, 20]` for important targets.
-3. **`num_ensemble_models`**: Sweep `[1, 3, 5]` for final validation runs.
-
-## Output Specification
-
-```python
-# Return type: AlphaFold2Output (extends StructurePredictionOutput)
-AlphaFold2Output(
-    structures: List[Structure],  # One per input complex
-    metadata: dict,               # {"num_complexes": int, "total_chains": int}
-    success: bool,
-    errors: List[str],
-)
-
-# Each Structure contains:
-Structure(
-    avg_plddt: float,       # Average per-residue confidence (0.0-1.0)
-    ptm: float,             # Predicted TM-score (0.0-1.0)
-    iptm: Optional[float],  # Interface pTM for multimers (0.0-1.0)
-    avg_pae: Optional[float], # Average predicted aligned error (lower = better)
-    # Plus PDB coordinates, per-residue pLDDT in B-factor column, etc.
-)
-```
-
-**Key output fields:**
-
-| Field | Type | Range | Interpretation |
-|-------|------|-------|----------------|
-| `avg_plddt` | `float` | `0.0 - 1.0` | Mean per-residue confidence. >0.9 = well-folded, 0.7-0.9 = moderate, <0.7 = disordered/uncertain |
-| `ptm` | `float` | `0.0 - 1.0` | Global fold confidence. >0.8 = reliable topology, <0.5 = fold likely incorrect |
-| `iptm` | `Optional[float]` | `0.0 - 1.0` | Interface confidence for multimers. >0.8 = confident interface, <0.5 = unreliable. None for monomers. |
-| `avg_pae` | `Optional[float]` | `0.0 - 30+` | Average predicted aligned error in Angstroms. Lower = more confident relative positioning. |
-
-**Supported export formats:** `pdb`, `cif`, `json`
-
-### AlphaFold2BinderOutput
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `gradient` | `list[list[float]] \| None` | Gradient matrix matching the input logits shape, or `None` when `compute_gradient=False`. |
-| `loss` | `float` | Backend-local scalar objective value. |
-| `metrics` | `dict[str, Any]` | Auxiliary metrics (pLDDT, pTM, structural losses, etc.). |
-| `vocab` | `list[str]` | Canonical amino-acid column order for the gradient. |
-| `structure` | `Structure` | Predicted target+binder complex. B-factors are the raw 0–100 PDB scale; `b_factor_type=PLDDT` so `Structure.per_residue_plddt` normalizes to `[0, 1]`. |
-
-**Supported export formats:** `json` (writes a `.pdb` sidecar for `structure` alongside the `.json` bundle).
-
-## Interpreting Results
-
-**Thresholds & decision boundaries:**
-- **Excellent:** `avg_plddt > 0.9` and `ptm > 0.8`: High-confidence prediction. Structure is reliable for downstream analysis (docking, design, function annotation). Proceed to experimental validation.
-- **Good:** `0.8 < avg_plddt <= 0.9` and `ptm > 0.7`: Moderate confidence. Core domains likely correct; flexible regions may be uncertain. Check per-residue pLDDT for problem areas.
-- **Marginal:** `0.7 < avg_plddt <= 0.8`: Mixed confidence. Some well-folded regions but significant uncertainty. Consider redesigning low-confidence regions or trying MSA-enhanced prediction.
-- **Poor:** `avg_plddt <= 0.7` or `ptm < 0.5`: Low confidence. Structure likely unreliable. Sequence may be intrinsically disordered, or the model lacks sufficient evolutionary information. Redesign or use alternative methods.
-
-**For multimeric complexes:**
-- `iptm > 0.8`: Confident interface prediction
-- `iptm < 0.5`: Interface likely unreliable; consider Boltz2 or AlphaFold3 for complex modeling
-
-**Interpreting edge cases:**
-- High avg_plddt but low pTM can indicate well-folded domains with incorrect relative orientation
-- Low pLDDT regions may be biologically relevant (flexible linkers, disordered regions) rather than prediction failures
-- MSA-free predictions (`use_msa=False`) may have systematically lower confidence for well-characterized protein families: this reflects reduced information, not necessarily poor structure
-
-## Quick Start Examples
-
-**Example 1: Basic single-chain prediction (MSA-enhanced)**
-```python
-from proto_tools.tools.structure_prediction.alphafold2 import (
-    run_alphafold2, AlphaFold2Input, AlphaFold2Config,
-)
-
-# Predict structure of a single protein
-inputs = AlphaFold2Input(complexes=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTK"])
-config = AlphaFold2Config(use_msa=True, num_recycles=3)
-
-result = run_alphafold2(inputs, config)
-
-structure = result.structures[0]
-print(f"avg_pLDDT: {structure.metrics.avg_plddt:.3f}")
-print(f"pTM: {structure.metrics.ptm:.3f}")
-```
-
-**Example 2: Fast single-sequence mode (no MSA)**
-```python
-from proto_tools.tools.structure_prediction.alphafold2 import (
-    run_alphafold2, AlphaFold2Input, AlphaFold2Config,
-)
-
-# Faster prediction without MSA; useful for screening designed sequences
-# that may not have evolutionary relatives
-inputs = AlphaFold2Input(complexes=["MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDI"])
-config = AlphaFold2Config(use_msa=False, num_recycles=3)
-
-result = run_alphafold2(inputs, config)
-print(f"avg_pLDDT: {result.structures[0].metrics.avg_plddt:.3f}")
-```
-
-**Example 3: High-quality ensemble prediction**
-```python
-from proto_tools.tools.structure_prediction.alphafold2 import (
-    run_alphafold2, AlphaFold2Input, AlphaFold2Config,
-)
-
-# Average 5 model parameter sets for highest quality
-inputs = AlphaFold2Input(complexes=["MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDI"])
-config = AlphaFold2Config(
-    use_msa=True,
-    num_recycles=10,           # More recycling for difficult targets
-    num_ensemble_models=5,     # Average all 5 AF2 parameter sets
-)
-
-result = run_alphafold2(inputs, config)
-s = result.structures[0]
-print(f"avg_pLDDT: {s.avg_plddt:.3f}, pTM: {s.metrics['ptm']:.3f}")
-```
-
-**Example 4: Batch prediction with persistence**
-```python
-from proto_tools.tools.structure_prediction.alphafold2 import (
-    run_alphafold2, AlphaFold2Input, AlphaFold2Config,
-)
-from proto_tools.utils.tool_instance import ToolInstance
-
-sequences = [
-    "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTK",
-    "MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDI",
-    "MGSSHHHHHHSSGLVPRGSHMRGPNPTAASLEASAGPFTVRSFTV",
-]
-
-config = AlphaFold2Config(use_msa=False, num_recycles=3)
-
-# Keep model loaded across predictions for batch efficiency
-with ToolInstance.persist():
-    for seq in sequences:
-        result = run_alphafold2(AlphaFold2Input(complexes=[seq]), config)
-        s = result.structures[0]
-        status = "PASS" if s.avg_plddt > 0.8 else "REVIEW"
-        print(f"pLDDT={s.avg_plddt:.2f} [{status}]: {seq[:30]}...")
-```
-
-**Example 5: Compute gradients for Germinal-style binder design**
-```python
-from proto_tools.tools.structure_prediction.alphafold2 import (
-    AlphaFold2BinderConfig, AlphaFold2BinderInput, run_alphafold2_binder,
-)
-from pathlib import Path
-
-# Relaxed logits for a 10-residue binder (uniform initialization)
-inputs = AlphaFold2BinderInput(
-    logits=[[0.0] * 20] * 10,
-    temperature=1.0,
-    target_pdb=str(Path("target_complex.pdb").resolve()),
-    target_chain="A",
-    binder_chain="B",
-)
-config = AlphaFold2BinderConfig(
-    num_recycles=3,
-    loss_weights={"plddt": 1.0, "i_plddt": 1.0, "i_con": 0.2},
-)
-
-result = run_alphafold2_binder(inputs, config)
-print(f"Loss: {result.loss:.4f}")
-if result.gradient is not None:
-    print(f"Gradient shape: {len(result.gradient)} x {len(result.gradient[0])}")
-print(f"Metrics: {result.metrics}")
-print(f"Per-residue pLDDT: {result.structure.per_residue_plddt[:5]}...")
-
-# Forward-only mode for MCMC scoring:
-config_fwd = AlphaFold2BinderConfig(num_recycles=3, compute_gradient=False)
-score_only = run_alphafold2_binder(inputs, config_fwd)
-assert score_only.gradient is None
-```
-
-## Best Practices & Gotchas
-
-**Parameter tuning:**
-- **`use_msa`**:
-  - `True` (default): Best accuracy for natural proteins with evolutionary relatives. Adds ~30-60s for MSA search.
-  - `False`: Use for designed/de novo sequences that lack evolutionary relatives, or for faster screening.
-- **`num_recycles`**:
-  - Low (1-3): Fast predictions, sufficient for most well-behaved proteins
-  - High (10-20): For difficult targets where initial predictions have low confidence
-  - Very high (>20): Diminishing returns; rarely justified
-- **`num_ensemble_models`**:
-  - 1 (default): Standard quality, fastest
-  - 3-5: For publication-quality predictions or when confidence is borderline
-
-**Common mistakes:**
-1. **Using MSA mode for de novo designed sequences:** Designed sequences often have no evolutionary relatives, so MSA adds compute time without improving accuracy. Set `use_msa=False` for designed sequences.
-2. **Setting both `model_num` and `num_ensemble_models`:** These are mutually exclusive. Use `model_num` to test specific parameter sets, or `num_ensemble_models` to average multiple sets.
-3. **Expecting multi-chain MSA support:** MSA generation currently works for single-chain predictions only. Multi-chain predictions automatically run without MSA.
-4. **Not using persistence for batch workloads:** Model loading takes significant time. Use `ToolInstance.persist()` when predicting multiple structures.
-
-**Tips for optimal results:**
-- Screen with ESMFold first (fast), then validate top candidates with AlphaFold2 (accurate)
-- For designed proteins, compare `use_msa=True` vs `use_msa=False`: if scores are similar, MSA isn't helping
-- Use `num_ensemble_models=3` or higher for important final predictions
-- Check per-residue pLDDT (in B-factor column of PDB output) to identify problematic regions
-
-**Edge cases to watch for:**
-- Very short sequences (<30 residues): Low pLDDT may reflect genuine flexibility (peptides), not prediction failure
-- Sequences with many 'X' (unknown) residues: Predictions will have lower confidence in those regions
-- Multi-chain complexes: MSA is skipped; predictions may be less accurate than single-chain
-- GPU memory limits: Very long sequences (>1500 residues) may require GPUs with >24GB VRAM
-
-## References
-
-**Primary publication:**
-- Jumper, J. et al. (2021). "Highly accurate protein structure prediction with AlphaFold." *Nature*, 596(7873), 583-589. [DOI: 10.1038/s41586-021-03819-2](https://doi.org/10.1038/s41586-021-03819-2)
-- Summary: Introduces AlphaFold2, which achieves near-experimental accuracy in protein structure prediction by combining evolutionary information (MSAs) with a novel neural network architecture using attention mechanisms and equivariant transformations.
-
-**Implementation:**
-- ColabDesign (JAX wrapper): [https://github.com/sokrypton/ColabDesign](https://github.com/sokrypton/ColabDesign)
-- Original AlphaFold2: [https://github.com/google-deepmind/alphafold](https://github.com/google-deepmind/alphafold)
-
-**Additional resources:**
-- AlphaFold Protein Structure Database: [https://alphafold.ebi.ac.uk](https://alphafold.ebi.ac.uk) - precomputed structures for 200M+ proteins
-- ColabFold: [https://github.com/sokrypton/ColabFold](https://github.com/sokrypton/ColabFold) - fast MSA generation and structure prediction
-
-## Related Tools
-
-**Tools often used together:**
-- **`colabfold-search`**: MSA generation used internally by AlphaFold2 when `use_msa=True`. Can also be called independently for custom MSA workflows.
-- **`esmfold-prediction`**: Fast structure prediction for initial screening before AlphaFold2 validation.
-- **`structure-metrics`**: Compute structural quality metrics (helix length, radius of gyration) on predicted structures.
-- **`tmalign-alignment`** / **`usalign-alignment`**: Compare predicted structures to reference structures using TM-score.
-
-**Alternative tools (similar function):**
-- **`esmfold-prediction`**: 60x faster but slightly less accurate. Best for high-throughput screening.
-- **`alphafold3-prediction`**: Handles proteins, nucleic acids, ligands, and modifications. Use for non-protein or complex biomolecular predictions.
-- **`boltz2-prediction`**: Next-generation predictor supporting all biomolecular types including protein-ligand complexes.
-- **`chai1-prediction`**: Alternative multi-modal structure predictor with similar capabilities to Boltz2.
-- **`protenix-prediction`**: Open-source AlphaFold3 implementation.
+- **Requires a GPU.** Both tools run AlphaFold2 through a JAX backend and need an NVIDIA GPU; CPU execution is not practical.
+- **Runs the original AlphaFold2 through ColabDesign, not the full DeepMind pipeline.** There is no template-search stage; multiple-sequence alignments are optional and are used only by `alphafold2-prediction`.
+- **`num_recycles` (default `3`) applies to both tools.** Each recycling iteration refines the structure; raising it improves accuracy at higher runtime.
