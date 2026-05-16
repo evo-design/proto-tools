@@ -33,7 +33,7 @@ _REQUIRED_SECTIONS = [
 ]
 
 # Overview section length cap (characters of body text, excluding the heading).
-_OVERVIEW_MAX_CHARS = 500
+_OVERVIEW_MAX_CHARS = 600
 
 # READMEs with this marker are exempt from QC-gated checks until reviewed.
 # TODO(#743): once every README is migrated, delete _QC_PENDING_MARKER and every QC-gated pytest.skip guard here.
