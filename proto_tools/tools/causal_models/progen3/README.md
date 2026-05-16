@@ -1,298 +1,66 @@
-<a href="https://bio-pro.mintlify.app/tools/causal-models/progen3"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/causal-models/progen3"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a>
 
 # ProGen3
 
+![ProGen3](https://cdn.prod.website-files.com/6769c2fceb550649b2f37b59/6769c2fceb550649b2f37d5e_ProGen.avif)
+
+> *Image source: [Profluent](https://www.profluent.bio/showcase/progen3)*
+
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** ProGen3 uses Apache-2.0 for code and CC-BY-NC-SA-4.0 for model weights and has restrictions around commercial use and may require explicit attribution when utilized. Please refer to the [code license](https://github.com/Profluent-AI/progen3/blob/main/LICENSE-CODE) and [model weights license](https://github.com/Profluent-AI/progen3#license) for full terms.
 
 ## Overview
 
-ProGen3 is a Mixture-of-Experts (MoE) protein language model from Profluent, based on the Mixtral/Mistral architecture. It supports autoregressive protein sequence generation in both forward (N→C) and reverse (C→N) directions, as well as bidirectional sequence scoring that averages forward and reverse log-likelihoods for more robust evaluation.
-
-ProGen3 is available in six sizes from 112M to 3B parameters, trained on large-scale protein sequence databases. It uses [Flash Attention 2](https://github.com/Dao-AILab/flash-attention) and [MegaBlocks](https://github.com/databricks/megablocks) for efficient sparse MoE computation.
+First released in 2025, ProGen3 is a family of autoregressive protein language models from Profluent that use a sparse mixture-of-experts architecture. It is trained on a large curated corpus of natural protein sequences.
 
 ## Background
 
-Protein language models learn the statistical patterns of natural protein sequences, capturing evolutionary constraints on amino acid usage. ProGen3's bidirectional scoring (averaging N→C and C→N likelihoods) provides a more robust assessment of sequence naturalness than unidirectional models, since protein function depends on the complete [3D structure](https://en.wikipedia.org/wiki/Protein_structure) rather than just the N-to-C reading frame.
+ProGen3 ([Roney et al., 2025](https://doi.org/10.1101/2025.05.16.654471)) is a family of generative protein language models from Profluent. ProGen3 models employ a sparse mixture-of-experts (MoE) architecture, which routes model activations in the transformer feed-forward layers to smaller specialized MLPs to make each forward pass more computationally tractable. The published family spans 112 million to 46 billion parameters; this toolkit exposes the `progen3-112m` through `progen3-3b` checkpoints. Pre-training used roughly 1.5 trillion amino-acid tokens sampled from the Profluent Protein Atlas, a curated collection of full-length natural proteins.
 
-The [Mixture-of-Experts](https://en.wikipedia.org/wiki/Mixture_of_experts) architecture activates only a subset of parameters per token, allowing larger model capacity without proportionally increasing compute cost.
+Unlike a strictly left-to-right model, ProGen3 is trained autoregressively in **both directions**: forward predicts each residue from the N-terminus toward the C-terminus, and reverse predicts from the C-terminus toward the N-terminus. Generation runs in a chosen direction, and scoring combines both directions into a single per-residue likelihood. Two capabilities follow from this objective. Sampling from the predicted next-residue distributions produces new candidate protein sequences, and the likelihood the model assigns to an existing sequence provides a zero-shot proxy-fitness score with no additional task-specific training.
+
+### Learning Resources
+
+- [ProGen3 showcase](https://www.profluent.bio/showcase/progen3) (Profluent) - an accessible overview of ProGen3, the Profluent Protein Atlas training data, and downstream applications such as antibody design and compact gene editors.
 
 ## Tools
 
 ### ProGen3 Sampling (`progen3-sample`)
 
-Generate protein sequences using ProGen3 autoregressive language model.
+Generates protein sequences by autoregressive sampling. Given one or more prompt sequences, the model extends each prompt one amino acid at a time, drawing each residue from the model's predicted distribution under the configured `temperature` and `top_p` settings, in the chosen `direction`, until `max_new_tokens` residues have been generated (at least `min_new_tokens`).
 
-Uses the ProGen3 Mixture-of-Experts protein language model to
-autoregressively generate protein sequences from prompt sequences.
-Supports forward (N→C) and reverse (C→N) generation via the
-`direction` config parameter.
+#### Applications
+
+This tool performs de novo protein design, generating novel sequences that resemble natural proteins, optionally conditioned on a prompt. Because generation can run in reverse (C-terminus toward N-terminus), a C-terminal fragment can be used as the prompt and the rest of the sequence grown toward the N-terminus, which a strictly left-to-right model cannot do.
+
+#### Usage Tips
+
+- **`direction` chooses which terminus is generated.** `"forward"` (the default) continues a prompt from the N-terminus toward the C-terminus; `"reverse"` treats the prompt as a C-terminal fragment and generates toward the N-terminus. Note that the reverse generation will append to the prompt to grow the sequence on the left. All starting sequences should still be provided in the left to right direction from N->C.
+- **Sampling defaults are conservative.** `temperature` defaults to `0.2` and `top_p` to `0.95`, which keep generations close to natural-looking sequences; raise `temperature` for more diverse but riskier designs. This tool exposes only nucleus (`top_p`) sampling for ProGen3; there is no top-k cutoff.
+- **`max_new_tokens` and `min_new_tokens` bound the generated length.** They count only newly generated residues (default `256` and `1`), separate from the prompt length.
+- **Output includes the prompt by default.** `prepend_prompt=True` (the toolkit default) returns the prompt joined to its continuation; set it `False` to receive only the newly generated residues.
+- **Generated sequences are candidates.** Validate them with downstream tools (for example structure prediction, function annotation, or homology search) before drawing biological conclusions.
 
 ### ProGen3 Scoring (`progen3-score`)
 
-Score protein sequences using ProGen3 bidirectional language model.
+Scores existing protein sequences under ProGen3 using bidirectional likelihood. For each sequence it runs both a forward (N→C) and a reverse (C→N) pass, averages the per-position log-likelihoods into a single bidirectional value, and aggregates these into a log-likelihood, an average log-likelihood per residue, and a perplexity. It also exposes the forward, reverse, and bidirectional per-position values, and optionally the per-position logits.
 
-For each sequence, runs forward (N→C) and reverse (C→N) autoregressive
-passes and averages their log-likelihoods.
+#### Applications
 
-## Tool Catalog
+This tool gives a zero-shot measure of how consistent a protein sequence is with ProGen3's training distribution, usable as a fitness or plausibility signal without additional task-specific training. Because it uses both directions, every residue is scored with full surrounding context rather than left context only. Use it to rank or filter candidate sequences (including the output of `progen3-sample`), to compare variants of a sequence, or to flag sequences far from the model's training distribution.
 
-| Key | Operation | Input | Output | Use Case |
-|-----|-----------|-------|--------|----------|
-| `progen3-sample` | Generate | Prompt sequences | Generated proteins | Design novel proteins from N/C-terminal seeds |
-| `progen3-score` | Score | Protein sequences | Perplexity metrics | Evaluate sequence naturalness/fitness |
+#### Usage Tips
 
-## Model Variants
+- **Scores are bidirectional, not a single-direction log-likelihood.** The reported `log_likelihood`, `avg_log_likelihood`, and `perplexity` are derived from the averaged forward and reverse per-position values, so they are not directly comparable to a one-directional model's scores.
+- **Compare length-normalized scores within one checkpoint.** Total `log_likelihood` scales with sequence length, so use `perplexity` or `avg_log_likelihood` when comparing sequences of different lengths. Different checkpoints learn different distributions that are not calibrated to a common scale, so scores from different `model_checkpoint` values are hard to compare directly; a lower perplexity means the sequence is more consistent with that checkpoint's training distribution.
+- **`return_logits` defaults to `False`.** Leave it off unless you need the per-position distributions, since the logits tensor is large (sequence length by the token vocabulary).
 
-| Checkpoint | Parameters | Use Case |
-|------------|-----------|----------|
-| `progen3-112m` | 112M | Fast prototyping and testing |
-| `progen3-219m` | 219M | Light production workloads |
-| `progen3-339m` | 339M | Balanced speed/quality |
-| `progen3-762m` | 762M | **Default.** Good quality, reasonable speed |
-| `progen3-1b` | 1B | Higher quality generation and scoring |
-| `progen3-3b` | 3B | Best quality, highest GPU memory requirement |
+## Toolkit Notes
 
-All checkpoints are available on HuggingFace under the [Profluent-Bio](https://huggingface.co/Profluent-Bio) organization. Weights are licensed CC BY-NC-SA 4.0 (non-commercial).
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-## Execution Modes
+These apply to every ProGen3 tool in this toolkit (`progen3-sample`, `progen3-score`).
 
-ProGen3 runs in an isolated standalone environment with its own Python 3.12 installation, Flash Attention 2, and MegaBlocks. Requires a GPU with bfloat16 support (A100/H100 recommended). The environment is built automatically on first use.
-
-## How It Works
-
-### Sampling (progen3-sample)
-
-Generates protein sequences autoregressively from a prompt:
-
-1. A direction token is prepended internally (`"1"` for forward, `"2"` for reverse)
-2. The model generates tokens autoregressively until a stop token or `max_new_tokens` is reached
-3. Special tokens and direction markers are stripped from the output
-4. If `prepend_prompt=False`, prompt residues are removed
-
-Prompts with the same tokenized prefix length are grouped into GPU generation
-batches up to `batch_size`. Prompts with different tokenized lengths are split
-into separate generation batches so padding is never treated as model context.
-
-The `direction` config controls generation direction:
-- `direction="forward"` (default): N→C generation, extending from the N-terminus
-- `direction="reverse"`: C→N generation, extending from the C-terminus
-- Empty string prompt (`""`) for unconditional generation in either direction
-
-### Scoring (progen3-score)
-
-Evaluates protein sequences using bidirectional autoregressive likelihood:
-
-1. **Forward pass**: computes per-token log-likelihood $P(x_t | x_{<t})$ from N→C
-2. **Reverse pass**: computes per-token log-likelihood $P(x_t | x_{>t})$ from C→N
-3. **Averaging**: per-position likelihoods are averaged where both directions contribute; aggregate metrics average the two directional scores
-
-Returns `log_likelihood`, `avg_log_likelihood`, and `perplexity` per sequence, plus optional per-position metrics for each direction.
-
-## Input Parameters
-
-### Sampling
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `prompts` | `list[str]` | Amino acid prompt sequences. Pass `""` for unconditional generation |
-
-### Scoring
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sequences` | `list[str]` | Protein sequences to score (standard amino acids, N-to-C direction) |
-
-## Configuration
-
-### Sampling (`ProGen3SampleConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_checkpoint` | `str` | `progen3-762m` | Model checkpoint to use |
-| `direction` | `str` | `forward` | Generation direction: `forward` (N→C) or `reverse` (C→N) |
-| `temperature` | `float` | `0.2` | Sampling temperature. Lower = more deterministic |
-| `top_p` | `float` | `0.95` | Nucleus sampling threshold |
-| `max_new_tokens` | `int` | `256` | Max new tokens to generate (excludes prompt) |
-| `min_new_tokens` | `int` | `1` | Min new tokens before stopping |
-| `prepend_prompt` | `bool` | `True` | Include prompt residues in output sequence |
-| `batch_size` | `int` | `1` | Same-length prompts per GPU forward pass |
-
-### Scoring (`ProGen3ScoringConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_checkpoint` | `str` | `progen3-762m` | Model checkpoint to use |
-| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
-
-### Parameter Guides
-
-**Temperature** controls sequence diversity:
-
-| Temperature | Behavior | Use Case |
-|-------------|----------|----------|
-| 0.1 | Very conservative, near-greedy | Extending a known motif faithfully |
-| 0.2 | Low diversity (default) | General protein design |
-| 0.5 | Moderate diversity | Exploring sequence variants |
-| 0.8-1.0 | High diversity | Library generation, creative exploration |
-
-### Sweep Priorities
-
-1. **`temperature`**: Largest effect on generation diversity and quality
-2. **`model_checkpoint`**: Larger models produce more natural sequences
-3. **`top_p`**: Fine-tunes the sampling distribution tail
-
-## Output Specification
-
-### Sampling
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `sequences` | `list[str]` | Generated protein sequences (amino acid characters) |
-
-Export formats: `fasta` (default), `txt`, `json`
-
-### Scoring
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `scores` | `list[CausalModelScoringMetrics]` | One entry per input sequence |
-| `scores[i]["perplexity"]`, `"log_likelihood"`, `"avg_log_likelihood"` | `float` | Scalar metrics (also available as `.perplexity`, etc.) |
-| `scores[i]["log_likelihood_pp"]`, `"forward_log_likelihood_pp"`, `"reverse_log_likelihood_pp"` | `list[float \| None]` | Per-position log-likelihoods (``_pp`` extras); `None` at boundary positions |
-
-Export formats: `csv` (default), `json`
-
-## Interpreting Results
-
-### Perplexity
-
-Perplexity measures how "surprised" the model is by a sequence. Lower perplexity indicates the sequence is more consistent with natural proteins the model has seen.
-
-| Perplexity | Confidence | Interpretation |
-|------------|-----------|----------------|
-| 1.0-3.0 | Very high | Highly natural; resembles well-represented protein families |
-| 3.0-6.0 | High | Natural; reasonable for most design applications |
-| 6.0-10.0 | Moderate | Somewhat unusual; may contain non-standard motifs |
-| 10.0-15.0 | Low | Unusual sequence; review for biological plausibility |
-| 15.0+ | Very low | Likely unnatural or outside training distribution |
-
-### Log-likelihood
-
-Use `avg_log_likelihood` (per-token, length-normalized) when comparing sequences of different lengths. Use `log_likelihood` (the sum) only when comparing sequences of the same length.
-
-### Bidirectional scoring
-
-ProGen3 always scores in both directions automatically. The bidirectional average is more robust than either direction alone because:
-- Forward-only scoring can miss C-terminal context
-- Reverse-only scoring can miss N-terminal context
-- The average captures dependencies in both directions
-
-Per-position metrics include separate `forward_log_likelihood` and `reverse_log_likelihood` lists, plus a bidirectional `log_likelihood` average. Positions where only one direction contributes (first/last residue) use the single available value.
-
-## Quick Start Examples
-
-```python
-# Example 1: Basic forward generation (N→C)
-from proto_tools.tools.causal_models.progen3 import (
-    ProGen3SampleInput, ProGen3SampleConfig, run_progen3_sample,
-)
-
-inputs = ProGen3SampleInput(prompts=["MKTL"])
-config = ProGen3SampleConfig(max_new_tokens=100, temperature=0.2)
-result = run_progen3_sample(inputs, config)
-print(result.sequences[0])
-```
-
-```python
-# Example 2: Reverse generation (C→N)
-inputs = ProGen3SampleInput(prompts=["RYTEAFLK"])
-config = ProGen3SampleConfig(direction="reverse", max_new_tokens=100)
-result = run_progen3_sample(inputs, config)
-print(result.sequences[0])
-```
-
-```python
-# Example 3: Batch generation
-inputs = ProGen3SampleInput(prompts=["MKTL", "MVLS", ""])
-config = ProGen3SampleConfig(
-    temperature=0.5,
-    max_new_tokens=150,
-)
-result = run_progen3_sample(inputs, config)
-for i, seq in enumerate(result.sequences):
-    print(f"Sequence {i}: {seq[:60]}... ({len(seq)} aa)")
-```
-
-```python
-# Example 4: Score and rank protein sequences
-from proto_tools.tools.causal_models.progen3 import (
-    ProGen3ScoringInput, ProGen3ScoringConfig, run_progen3_score,
-)
-
-inputs = ProGen3ScoringInput(sequences=[
-    "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHF",  # Hemoglobin alpha
-    "MKTLLILAVVAAALA",  # Signal peptide
-    "AAAAAAAAAAAAAAAAA",  # Polyalanine (low complexity)
-])
-result = run_progen3_score(inputs)
-for i, score in enumerate(result.scores):
-    print(f"Seq {i}: perplexity={score['perplexity']:.2f}")
-```
-
-```python
-# Example 5: Per-position scoring analysis
-inputs = ProGen3ScoringInput(sequences=["MVLSPADKTNVKAAW"])
-result = run_progen3_score(inputs)
-
-score = result.scores[0]
-per_pos = score.per_position_metrics
-if per_pos:
-    fwd = per_pos["forward_log_likelihood"]
-    rev = per_pos["reverse_log_likelihood"]
-    avg = per_pos["log_likelihood"]
-    for pos, (f, r, a) in enumerate(zip(fwd, rev, avg)):
-        f_str = f"{f:.3f}" if f is not None else "N/A"
-        r_str = f"{r:.3f}" if r is not None else "N/A"
-        a_str = f"{a:.3f}" if a is not None else "N/A"
-        print(f"Position {pos}: fwd={f_str}  rev={r_str}  avg={a_str}")
-```
-
-## Best Practices & Gotchas
-
-- **bfloat16 required**: ProGen3 will not work on GPUs without bf16 support. A100/H100 recommended
-- **Non-commercial weights**: model weights are CC BY-NC-SA 4.0
-- **Use `progen3-112m` for testing**: much faster iteration; switch to larger checkpoints for production
-- **Temperature 0.2 is the recommended default** for protein generation. Higher temperatures increase diversity but reduce naturalness
-- **Bidirectional scoring is automatic**: no need to manually reverse sequences or run separate passes
-- **`max_new_tokens` excludes the prompt**: unlike ProGen2's `max_length`, ProGen3's `max_new_tokens` counts only newly generated tokens
-- **Empty prompt for unconditional generation**: pass `""` as a prompt, not `None`
-- **Scoring length sensitivity**: prefer `avg_log_likelihood` for comparing sequences of different lengths; `log_likelihood` (the sum) only for fixed-length comparisons
-
-## Seed Reproducibility
-
-ProGen3's MoE forward pass is non-deterministic: the `grouped-gemm` CUDA
-kernels used by MegaBlocks to batch GEMMs across experts accumulate
-reductions in non-deterministic order, so outputs drift by ~1e-3 in
-log-likelihood across independent invocations with the same seed
-(amplified to completely different sequences under autoregressive
-sampling). For bit-exact repeat calls, keep the model in a single
-persistent worker. Acknowledged upstream:
-
-- [Profluent-AI/progen3#6 — Reproducibility issue in computing model logits](https://github.com/Profluent-AI/progen3/issues/6)
-- [databricks/megablocks#83 — ParallelDroplessMLP initialises self.mlp twice](https://github.com/databricks/megablocks/issues/83)
-
-## References
-
-- **Paper**: Roney et al. "ProGen3: A Large-Scale Protein Language Model" (2025). [bioRxiv doi:10.1101/2025.05.16.654471](https://doi.org/10.1101/2025.05.16.654471)
-- **GitHub**: https://github.com/Profluent-AI/progen3
-- **HuggingFace**: https://huggingface.co/Profluent-Bio
-
-## Related Tools
-
-| Tool | Relationship |
-|------|-------------|
-| ProGen2 | Previous generation protein LM from Salesforce (smaller, faster, no bidirectional scoring) |
-| Evo1/Evo2 | DNA language models (genomic sequences, not protein) |
-| ESM2 | Masked protein LM (infilling and embeddings, not autoregressive) |
-| ESM3 | Generative protein model (joint sequence/structure, masked approach) |
-| ProteinMPNN | Structure-conditioned inverse folding (requires a backbone structure) |
+- **Requires a GPU; memory scales with checkpoint size.** This toolkit exposes the `progen3-112m` through `progen3-3b` checkpoints; larger checkpoints are more capable but need substantially more GPU memory. CPU execution is not practical.
+- **`batch_size` trades memory for throughput across both tools.** It sets how many same-length prompts (`progen3-sample`) or sequences (`progen3-score`) are processed per GPU forward pass. Raise it for higher throughput on many short sequences; lower it (default `1`) if generation or scoring runs out of GPU memory.
+- **`model_checkpoint` selects the model size.** The default is `progen3-762m`; smaller checkpoints (`progen3-112m`, `progen3-219m`, `progen3-339m`) are faster and lighter, while `progen3-1b` and `progen3-3b` are more capable at higher memory cost.
