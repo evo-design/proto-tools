@@ -1,300 +1,55 @@
-<a href="https://bio-pro.mintlify.app/tools/structure-prediction/protenix"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/structure-prediction/protenix"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # Protenix
 
+![Protenix](https://github.com/bytedance/Protenix/raw/main/assets/protenix_predictions.gif)
+
+> *Image source: [bytedance/Protenix](https://github.com/bytedance/Protenix)*
+
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** Protenix has an Apache-2.0 license. Please refer to [the license](https://github.com/bytedance/Protenix/blob/main/LICENSE) for full terms.
 
 ## Overview
 
-Protenix is ByteDance's open-source reimplementation of AlphaFold3 that predicts 3D structures of biomolecular complexes using a [diffusion](https://en.wikipedia.org/wiki/Diffusion_model)-based architecture. It supports proteins, DNA, RNA, ligands, and their multi-chain complexes with optional post-translational modifications. Protenix is the first fully open-source model to match or exceed AlphaFold3 accuracy across diverse benchmarks.
-
-- **Tool key**: `protenix-prediction`
-- **Input**: Multi-chain complexes (protein, DNA, RNA, ligand) with optional modifications
-- **Output**: 3D structures in mmCIF format with confidence metrics (pTM, ipTM, pLDDT, GPDE)
-- **MSA support**: Automatic via ColabFold search (optional)
-- **GPU required**: Yes
+Protenix is [ByteDance](https://www.bytedance.com/)'s open-source reproduction of AlphaFold3: a trainable PyTorch model that predicts the joint 3D structure of complexes mixing proteins, DNA, RNA, and small-molecule ligands, including modified residues. This toolkit runs Protenix structure prediction, with optional ColabFold multiple-sequence alignments and a choice of the base, mini, and tiny model variants that trade accuracy for speed.
 
 ## Background
 
-Predicting the 3D structure of biomolecular complexes is fundamental to understanding biological function. Protein-protein interactions govern signaling pathways, protein-DNA interactions control gene regulation, and protein-ligand binding underlies drug action.
+Protenix ([ByteDance Research, 2025](https://doi.org/10.1101/2025.01.08.631967)) predicts the joint 3D structure of a biomolecular assembly from the sequences and chemical components it contains. It is a trainable, openly licensed reproduction of the AlphaFold3 architecture: like AlphaFold3, one model folds complexes that mix proteins, DNA, RNA, and small-molecule ligands, and predicts how those components are arranged relative to one another. Each protein chain can be paired with a multiple-sequence alignment (MSA) of evolutionarily related sequences, whose covariation patterns supply the evolutionary signal the model uses to place residues.
 
-Protenix uses a diffusion-based architecture (following the AlphaFold3 approach) that:
-- **Generates full-atom coordinates** rather than inter-residue distances, enabling direct prediction of ligand binding poses and nucleic acid conformations
-- **Handles multi-modal inputs** natively: proteins, DNA, RNA, and small molecule ligands in a single prediction
-- **Supports chemical modifications** via [Chemical Component Dictionary](https://www.wwpdb.org/data/ccd) (CCD) codes, enabling prediction of structures with phosphorylation, methylation, and other PTMs
-- **Uses MSA information** (optional) from ColabFold search to capture evolutionary conservation signals
+Architecturally, Protenix follows AlphaFold3 rather than AlphaFold2: it carries a single representation of the input tokens and a pairwise representation over token pairs, refines them through a Pairformer trunk, and generates all-atom coordinates with a diffusion module that starts from noise and iteratively denoises into a structure, in place of AlphaFold2's structure module. Several structures are sampled per random seed and ranked by a confidence score. Protenix is distributed in several sizes: full-parameter base models for highest accuracy, and lighter mini and tiny variants for faster, lower-memory prediction; the `mini_esm` and `mini_ism` variants replace the MSA with learned embeddings — from the ESM-2 protein language model or the ISM inverse-structure model, respectively — so they can fold without an alignment. Predicted confidence includes a per-residue predicted local distance difference test (pLDDT) for local reliability, a predicted aligned error (PAE) for the relative placement of any two tokens, a global predicted distance error (gPDE), and predicted template-modeling (pTM) and interface predicted template-modeling (ipTM) scores that summarize overall and interface accuracy.
 
-The model architecture consists of a Pairformer module (iterative refinement of pair representations), followed by a diffusion module that denoises random 3D coordinates into the predicted structure. Multiple samples are generated and ranked by a confidence head.
+The reference implementation is open-sourced at [bytedance/Protenix](https://github.com/bytedance/Protenix), with both the code and the model parameters released under the Apache-2.0 license for academic and commercial use. It was developed by [ByteDance](https://www.bytedance.com/)'s AI4Science team as a comprehensive reproduction of AlphaFold3, trained on comparable data to reach competitive accuracy across protein, nucleic-acid, and protein-ligand benchmarks.
+
+### Learning Resources
+
+- [bytedance/Protenix](https://github.com/bytedance/Protenix) (ByteDance) - the official repository, with a model card for each variant, benchmark results across protein, nucleic-acid, and ligand tasks, and a link to the hosted [Protenix web server](https://protenix-server.com).
 
 ## Tools
 
 ### Protenix Structure Prediction (`protenix-prediction`)
 
-Predict 3D structures using Protenix.
+Predicts the 3D structure of a biomolecular complex. Each input complex can combine protein, DNA, RNA, and ligand chains, with optional post-translational and nucleotide modifications; the assembly is folded by Protenix and returned as a predicted `Structure` per complex with confidence metrics: average pLDDT, pTM, interface pTM, per-chain and pairwise-chain scores, a global predicted distance error, and predicted aligned error.
 
-Uses Protenix, an open-source reimplementation of AlphaFold3 by ByteDance
-Research, to predict 3D structures of proteins, DNA, RNA, ligands, and their
-complexes. Supports local GPU execution via isolated Python environments.
+#### Applications
 
-All input complexes are batched into a single Protenix CLI call for efficiency,
-avoiding repeated model loading.
+This tool predicts the structure of multi-component assemblies such as protein-DNA and protein-RNA complexes, protein-ligand binding poses, and chains carrying modified residues. For a multi-chain complex it also reports how confidently the chains are placed relative to one another: interface pTM (ipTM) gives a single 0-to-1 score for the overall inter-chain arrangement, per-chain-pair ipTM scores each individual interface, and the cross-chain blocks of the PAE matrix show which specific inter-chain regions are positioned confidently versus uncertainly. These let you rank or filter predicted complexes and judge whether a docking pose or binding interface is reliable before trusting it downstream.
 
-## Model Variants
+#### Usage Tips
 
-| Model Name | Size | Recycling | Diffusion Steps | Notes |
-|------------|------|-----------|-----------------|-------|
-| `protenix_base_default_v1.0.0` | Base | 10 cycles | 200 steps | **Recommended.** Best overall accuracy. |
-| `protenix_base_20250630_v1.0.0` | Base | 10 cycles | 200 steps | More recent training data cutoff (June 2025). |
-| `protenix_base_default_v0.5.0` | Base | 10 cycles | 200 steps | Earlier base model version. |
-| `protenix_base_constraint_v0.5.0` | Base | 10 cycles | 200 steps | Supports contact/pocket constraints for incorporating experimental priors. |
-| `protenix_mini_default_v0.5.0` | Mini | 4 cycles | 5 steps | Compact model, faster predictions. |
-| `protenix_mini_esm_v0.5.0` | Mini | 4 cycles | 5 steps | ESM2 embeddings. Good when MSAs are unavailable. |
-| `protenix_mini_ism_v0.5.0` | Mini | 4 cycles | 5 steps | ISM embeddings. Alternative MSA-free mode. |
-| `protenix_tiny_default_v0.5.0` | Tiny | 4 cycles | 5 steps | Smallest and fastest. High-throughput screening. |
+- **`model_name` selects the accuracy/speed trade-off.** The default `protenix_base_default_v1.0.0` is the most accurate (10 Pairformer cycles, 200 diffusion steps); the `mini` and `tiny` variants are far faster with fewer cycles and steps, and `protenix_mini_esm_v0.5.0` / `protenix_mini_ism_v0.5.0` use protein language-model embeddings for MSA-free prediction.
+- **`use_msa` defaults to `True`.** A ColabFold search generates an MSA for each protein chain; set it `False`, attach precomputed MSAs, or use an ESM/ISM mini variant to skip alignments entirely.
+- **Diffusion sampling is controlled by `seeds` and `num_diffusion_samples`.** Protenix draws `num_diffusion_samples` (default `5`) structures per seed and keeps the best by ranking score; the total number of candidates is `len(seeds)` times `num_diffusion_samples`. Setting `seed` overrides `seeds` with a single value for reproducibility.
+- **`num_pairformer_cycles` (default `10`) and `num_diffusion_steps` (default `200`) trade accuracy for time.** More cycles and steps refine the prediction but increase runtime. These defaults are applied for every `model_name`; the mini and tiny variants run their native low-step schedules best, so lower these yourself for faster runs with them.
+- **Confidence is reported as pLDDT, pTM, ipTM, gPDE, and PAE.** `confidence_score`, the ranking score and primary metric, selects the best sample; `avg_plddt` is on a 0 to 1 scale and PAE and gPDE are in angstroms. `has_clash` flags steric clashes. Set `include_pae_matrix` to attach the full per-token PAE matrix.
+- **Modified residues are supported.** Protein PTMs and DNA/RNA modifications are passed through as CCD codes, as in AlphaFold3.
 
-**Choosing a model:**
-- For publication-quality predictions, use `protenix_base_default_v1.0.0`
-- For rapid screening or resource-constrained environments, use `protenix_mini_default_v0.5.0` or `protenix_tiny_default_v0.5.0`
-- For MSA-free prediction (orphan proteins, designed sequences), use `protenix_mini_esm_v0.5.0`
+## Toolkit Notes
 
-## How It Works
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-1. **Input preparation**: Chains are converted to Protenix JSON format with entity types and modifications
-2. **MSA generation** (optional): ColabFold search generates multiple sequence alignments for protein chains
-3. **Feature embedding**: Sequences and MSAs are processed into pair and single representations
-4. **Pairformer recycling**: Iterative refinement of pair representations (default: 10 cycles)
-5. **Diffusion sampling**: Random 3D coordinates are denoised over multiple steps (default: 200 steps) to produce structure samples
-6. **Ranking**: Multiple samples are generated per seed, and the best is selected by a confidence ranking score
-7. **Output**: mmCIF structure files with per-residue and global confidence metrics
+These apply to every Protenix tool in this toolkit (`protenix-prediction`).
 
-## Input Parameters
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `complexes` | `List[StructurePredictionComplex]` | Yes | Complexes to predict. Each complex contains one or more chains. |
-
-Each `StructurePredictionComplex` contains chains that can be specified as:
-- Plain strings (entity type auto-inferred): `["MVLSPADKTN", "ATCGATCG"]`
-- `Chain` objects with explicit types: `Chain(sequence="MVLSPADKTN", entity_type="protein")`
-- `Chain` objects with modifications: `Chain(sequence="MVLSPADKTN", modifications=[(5, "SEP")])`
-
-Supported entity types: `protein`, `dna`, `rna`, `ligand`
-
-## Configuration
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `model_name` | `ProtenixModelName` | `"protenix_base_default_v1.0.0"` | Model checkpoint to use (see Model Variants) |
-| `seeds` | `List[int]` | `[0]` | Random seeds for sampling. Each seed generates `num_diffusion_samples` structures. |
-| `use_msa` | `bool` | `True` | Generate and use MSAs for protein chains via ColabFold |
-| `colabfold_search_config` | `ColabfoldSearchConfig` | `None` (uses defaults) | Configuration for ColabFold MSA search |
-| `num_diffusion_samples` | `int` | `5` | Structure samples per seed (best is returned by ranking score) |
-| `num_diffusion_steps` | `int` | `200` | Denoising steps in the diffusion process |
-| `num_pairformer_cycles` | `int` | `10` | Pairformer recycling iterations |
-| `device` | `str` | `"cuda"` | Inference device |
-| `verbose` | `bool` | `False` | Log progress during MSA generation, model loading, and prediction |
-
-### Parameter Guides
-
-**`num_diffusion_samples`** controls conformational exploration:
-
-| Value | Use Case | Runtime Impact |
-|-------|----------|---------------|
-| 1-3 | Rapid screening, initial exploration | Fastest |
-| 5 | Default, good balance of speed and quality | Moderate |
-| 7-10 | High-confidence predictions, flexible complexes | Slowest |
-
-**`num_diffusion_steps`** controls structure refinement quality:
-
-| Value | Use Case | Runtime Impact |
-|-------|----------|---------------|
-| 100-150 | Fast screening, acceptable quality | ~50% of default |
-| 200 | Default, recommended for production | Baseline |
-| 300-500 | Maximum quality, critical predictions | 1.5-2.5x default |
-
-**`num_pairformer_cycles`** controls iterative refinement:
-
-| Value | Use Case | Runtime Impact |
-|-------|----------|---------------|
-| 3-5 | Fast screening | ~50% of default |
-| 10 | Default, good accuracy | Baseline |
-| 15-20 | Maximum refinement, publication quality | 1.5-2x default |
-
-### Sweep Priorities
-
-When using Protenix in optimization loops, prioritize sweeping:
-
-1. **`num_diffusion_samples`**: Most impactful for finding optimal conformations and binding poses
-2. **`num_pairformer_cycles`**: Affects refinement quality of the pair representations
-3. **`num_diffusion_steps`**: For critical predictions, increase for finer structure quality
-4. **`use_msa`**: Critical for accuracy but adds runtime. Try `False` for designed/orphan proteins
-
-## Output Specification
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `structures` | `List[Structure]` | One predicted structure per input complex |
-
-Each `Structure` contains 3D coordinates (mmCIF format) and a `metrics` dictionary:
-
-| Metric | Type | Range | Description |
-|--------|------|-------|-------------|
-| `confidence_score` | `float` | 0.0-1.0 | Primary ranking score (weighted combination) |
-| `ptm` | `float` | 0.0-1.0 | Predicted TM-score (global fold quality) |
-| `iptm` | `float` | 0.0-1.0 | Interface pTM (inter-chain interface quality) |
-| `avg_plddt` | `float` | 0.0-1.0 | Average per-residue confidence (normalized from 0-100) |
-| `gpde` | `float` | >0 (Angstroms) | Global Predicted Distance Error |
-| `chain_ptm` | `List[float]` | 0.0-1.0 each | Per-chain PTM scores |
-| `chain_plddt` | `List[float]` | 0.0-1.0 each | Per-chain average pLDDT |
-| `chain_pair_iptm` | `List[List[float]]` | 0.0-1.0 each | Pairwise interface PTM between all chain pairs |
-| `has_clash` | `bool` |: | Whether the structure has steric clashes |
-
-## Interpreting Results
-
-**Confidence score thresholds:**
-
-| Range | Interpretation | Action |
-|-------|---------------|--------|
-| > 0.8 | Excellent: high confidence | Structure suitable for detailed analysis |
-| 0.6-0.8 | Good: moderate confidence | Verify key interactions manually |
-| < 0.6 | Poor: low confidence | Consider more samples, MSA, or alternative approaches |
-
-**Metric-specific guidance:**
-- **ptm > 0.8**: High confidence in the overall fold. Suitable for structural analysis.
-- **iptm > 0.8**: High confidence in inter-chain interfaces. Binding mode is reliable.
-- **iptm 0.6-0.8**: Moderate interface confidence. The binding orientation may be approximate.
-- **avg_plddt > 0.9**: Very high per-residue confidence. Side-chain conformations are meaningful.
-- **gpde < 10 A**: Good spatial accuracy. Relative chain positions are reliable.
-- **has_clash = True**: Steric clashes present. May need energy minimization or more diffusion samples.
-
-**Per-chain metrics** (`chain_ptm`, `chain_plddt`) help identify which chains in a complex are well-predicted versus uncertain. **Pairwise interface metrics** (`chain_pair_iptm`) reveal which specific chain-chain interfaces are confident.
-
-## Quick Start Examples
-
-**Single protein structure:**
-```python
-from proto_tools.tools.structure_prediction.protenix import (
-    ProtenixInput,
-    ProtenixConfig,
-    run_protenix,
-)
-
-inputs = ProtenixInput(complexes=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSH"])
-config = ProtenixConfig(
-    model_name="protenix_base_default_v1.0.0",
-    num_diffusion_samples=5,
-    verbose=True,
-)
-
-result = run_protenix(inputs, config)
-structure = result.structures[0]
-print(f"Confidence: {structure.metrics['confidence_score']:.2f}")
-print(f"pTM: {structure.metrics['ptm']:.2f}")
-print(f"pLDDT: {structure.metrics['avg_plddt']:.2f}")
-```
-
-**Protein-protein complex:**
-```python
-inputs = ProtenixInput(
-    complexes=[["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSH",
-                "MHSSIVLATVLFVAIASASKTRELCMKSLEHAKVGTSKEAKQDGIDLYKHMFE"]]
-)
-config = ProtenixConfig(num_diffusion_samples=5, verbose=True)
-
-result = run_protenix(inputs, config)
-metrics = result.structures[0].metrics
-print(f"Interface confidence (ipTM): {metrics['iptm']:.2f}")
-print(f"Chain-pair ipTM: {metrics['chain_pair_iptm']}")
-```
-
-**Protein-DNA complex with modifications:**
-```python
-from proto_tools.tools.structure_prediction.protenix import ProtenixInput, ProtenixConfig, run_protenix
-from proto_tools.tools.structure_prediction.shared_data_models import (
-    StructurePredictionComplex,
-    Chain,
-)
-
-complex = StructurePredictionComplex(
-    chains=[
-        Chain(
-            sequence="MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSH",
-            entity_type="protein",
-            modifications=[(4, "SEP")],  # Phosphoserine at position 4
-        ),
-        Chain(sequence="ATCGATCGATCGATCG", entity_type="dna"),
-    ]
-)
-
-inputs = ProtenixInput(complexes=[complex])
-config = ProtenixConfig(num_diffusion_samples=5, use_msa=True, verbose=True)
-result = run_protenix(inputs, config)
-```
-
-**Fast screening with mini model (no MSA):**
-```python
-inputs = ProtenixInput(complexes=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSH"])
-config = ProtenixConfig(
-    model_name="protenix_mini_esm_v0.5.0",
-    use_msa=False,
-    num_diffusion_samples=3,
-    verbose=True,
-)
-
-result = run_protenix(inputs, config)
-```
-
-**Export structure to PDB file:**
-```python
-result = run_protenix(inputs, config)
-result.export("protenix_output/", file_format="pdb")
-# Writes protenix_output/structure_0.pdb
-```
-
-## Best Practices & Gotchas
-
-- **MSA improves accuracy significantly**: Keep `use_msa=True` for natural proteins. Only disable for designed sequences, orphan proteins, or when speed is critical.
-- Ensure you have a CUDA-capable GPU with sufficient VRAM (~16-24 GB for base models, ~8 GB for mini/tiny).
-- **CUDA isolation**: Protenix uses a fully isolated CUDA environment managed via micromamba. If you encounter CUDA compilation errors, check the `$VENV_PATH/cuda_env` directory.
-- **Batch complexes for efficiency**: Pass multiple complexes in a single `run_protenix` call rather than calling the function repeatedly. This avoids reloading the model for each complex.
-- **Increase samples for flexible complexes**: Protein-ligand docking and antibody-antigen complexes benefit from higher `num_diffusion_samples` (7-10) to explore binding poses.
-- **Check `has_clash`**: If the output structure has steric clashes, consider increasing `num_diffusion_samples` or `num_diffusion_steps`.
-- **Modifications use 1-based positions**: Position 1 is the first residue/base, following standard biological convention.
-- **Ligand input format**: Ligands are specified as SMILES strings or CCD codes, not as sequences.
-- **Seeds for diversity**: Use multiple seeds (`seeds=[0, 1, 2]`) to explore different sampling trajectories. Each seed produces `num_diffusion_samples` independent samples.
-
-## Seed Reproducibility
-
-Protenix honours `--seed`, but the `cuequivariance` triangle
-multiplication/attention kernels we enable for speed accumulate float
-ops non-deterministically, causing ~1-2 mÅ coordinate drift between
-runs with the same seed. Forcing the `torch` fallback kernel would
-restore determinism at a significant speed cost. Upstream confirmation
-and deterministic-mode escape hatch:
-
-- [bytedance/Protenix#116 — Different results for the same seed](https://github.com/bytedance/Protenix/issues/116)
-- [bytedance/Protenix#119 — unstable predictions](https://github.com/bytedance/Protenix/issues/119)
-
-The Protenix maintainers' recommended fix is to set
-`USE_DEEPSPEED_EVO_ATTENTION=false` and pass `--deterministic true` to
-the CLI — proto-tools currently does not enable this path because it
-trades off significant inference speed.
-
-## References
-
-- ByteDance Protenix Team. "Protenix: Toward High-Accuracy Open-Source Biomolecular Structure Prediction." [Technical Report](https://github.com/bytedance/Protenix/blob/main/docs/PTX_V1_Technical_Report_202602042356.pdf)
-- Abramson, J., Adler, J., Dunger, J. et al. "Accurate structure prediction of biomolecular interactions with AlphaFold 3." *Nature* 630, 493-500 (2024). DOI: [10.1038/s41586-024-07487-w](https://doi.org/10.1038/s41586-024-07487-w)
-- GitHub: [bytedance/Protenix](https://github.com/bytedance/Protenix)
-- Benchmarks: [Protenix v1.0.0 model benchmark](https://github.com/bytedance/Protenix/blob/main/docs/model_1.0.0_benchmark.md)
-
-## Related Tools
-
-**Used together:**
-- `colabfold-search`: MSA generation used internally by Protenix when `use_msa=True`
-- `proteinmpnn`: Design sequences for predicted structures, then validate with Protenix
-
-**Alternatives:**
-- `alphafold3-prediction`: Original AlphaFold3 (requires API access)
-- `esmfold-prediction`: Fast single-chain protein folding without MSA (no DNA/RNA/ligand support)
-- `chai-prediction`: Another open-source multi-modal structure prediction model
+- **Requires a GPU.** Protenix runs through a PyTorch backend and needs an NVIDIA GPU; base models are memory-intensive and slower, while mini and tiny variants run on more modest hardware. CPU execution is not practical.
+- **Open AlphaFold3 reproduction.** Unlike AlphaFold3, whose weights are gated and non-commercial, Protenix releases both code and weights under Apache-2.0 for academic and commercial use. Like Boltz-2 it follows the AlphaFold3 diffusion architecture, and additionally accepts modified residues.
+- **Predictions are stochastic.** Structures come from a diffusion process; set `seed` (or `seeds`) for reproducible sampling.
