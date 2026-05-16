@@ -1,282 +1,58 @@
-<a href="https://bio-pro.mintlify.app/tools/causal-models/progen2"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/causal-models/progen2"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # ProGen2
 
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** ProGen2 has a BSD-3-Clause license. Please refer to [the license](https://github.com/enijkamp/progen2/blob/main/LICENSE.txt) for full terms.
 
 ## Overview
 
-ProGen2 is Salesforce's autoregressive protein language model for de novo protein sequence generation and scoring. Unlike masked language models (ESM2/ESM3) that predict masked positions bidirectionally, ProGen2 generates proteins left-to-right from a prompt and provides autoregressive likelihood scoring. The tool supports local GPU execution via a standalone venv .
+ProGen2 is an autoregressive protein language model from Salesforce Research, first released in 2022 and published in 2023, trained on natural protein sequences from genomic, metagenomic, and immune-repertoire databases.
 
 ## Background
 
-[Autoregressive](https://en.wikipedia.org/wiki/Autoregressive_model) protein language models like ProGen2 learn the statistical patterns of natural protein sequences from large databases ([UniRef](https://www.uniprot.org/help/uniref), BFD, [OAS](https://opig.stats.ox.ac.uk/webapps/oas/)). By training to predict each amino acid given the preceding context, the model implicitly captures local motifs, long-range dependencies (such as distal residue co-evolution), and sequence patterns characteristic of particular protein families
+ProGen2 ([Nijkamp et al., 2023](https://doi.org/10.1016/j.cels.2023.10.002)) is a family of autoregressive protein language models trained with a next-token prediction objective: during training the model learns to predict the next residue given all preceding residues. The family spans `progen2-small` (151 million parameters) up to `progen2-xlarge` (6.4 billion parameters). The checkpoints were trained on different protein collections as a result of the paper's finding that the training-data distribution has a large and sometimes counterintuitive effect on downstream performance. Most checkpoints are trained on natural proteins drawn from [UniRef90](https://www.uniprot.org/help/uniref) and the [BFD](https://bfd.mmseqs.com/) metagenomic set; `progen2-BFD90` uses the BFD90 collection, and `progen2-oas` is trained on antibody sequences from the [Observed Antibody Space](https://opig.stats.ox.ac.uk/webapps/oas/) database.
 
-This learned distribution enables two key applications: **generation** (sampling new sequences that follow natural protein statistics) and **scoring** (evaluating how "protein-like" a given sequence is under the model). Lower perplexity indicates a sequence is more consistent with the model's learned distribution of natural proteins.
+The autoregressive training objective instills two primary capabilities. First, new candidate protein sequences can be sampled from a starting prompt via the predicted next-residue distributions. Second, the model can be used to score existing protein sequences, as the likelihood the model assigns to a sequence is shown in the paper to provide a proxy zero-shot fitness score or measure of plausibility with no additional task-specific training.
 
 ## Tools
 
 ### ProGen2 Sampling (`progen2-sample`)
 
-Generate protein sequences using ProGen2 autoregressive language model.
+Generates protein sequences by autoregressive sampling. Given one or more prompt sequences, the model extends each prompt one amino acid at a time, drawing each residue from the model's predicted distribution under the configured `temperature`, `top_p`, and `top_k` settings, until a stop token is produced or `max_length` (prompt plus generated, default 256) is reached.
 
-Uses the ProGen2 protein language model to autoregressively generate protein
-sequences from prompt sequences. Supports local GPU execution with various
-sampling strategies.
+#### Applications
+
+This tool performs de novo protein design, generating novel sequences that resemble natural proteins conditioned on a prompt such as a starting motif or partial domain. The antibody-trained `progen2-oas` checkpoint targets antibody and immune-repertoire generation specifically.
+
+#### Usage Tips
+
+- **Generated output is trimmed by default.** Generated sequences are cut at the first stop token with the start/stop sentinels removed (`truncate_at_stop` and `strip_special_tokens`, both `True`); set them `False` to keep the raw model output.
+- **Sampling defaults are conservative.** `temperature` defaults to `0.2` and `top_p` to `0.95`, which keep generations close to natural-looking sequences; raise `temperature` for more diverse but riskier designs. `top_k` defaults to `0`, which disables top-k truncation so only nucleus (`top_p`) sampling is applied.
+- **`max_length` counts the prompt.** It caps prompt plus generated length (default `256`), so a long prompt directly reduces how much can be generated.
+- **Output includes the prompt by default.** `prepend_prompt=True` (the toolkit default) returns the prompt joined to its continuation; set it `False` to receive only the newly generated residues.
+- **Generated sequences are candidates.** Validate them with downstream tools (for example structure prediction, function annotation, or homology search) before drawing biological conclusions.
 
 ### ProGen2 Scoring (`progen2-score`)
 
-Score protein sequences using ProGen2 autoregressive language model.
+Scores existing protein sequences using ProGen2. For each sequence it computes the model's predicted probability of every residue given the preceding residues and aggregates these into a log-likelihood, an average log-likelihood per residue, and a perplexity (perplexity is fully determined by the average log-likelihood, computed as `exp(-avg_log_likelihood)`, but is the conventionally reported metric). Optionally returns the per-position logits and the token vocabulary.
 
-Computes the likelihood of protein sequences using ProGen2's autoregressive
-modeling. For each position t, computes log $P(x_t | x_{<t})$ and sums
-these to get the total log-likelihood.
+#### Applications
 
-## Tool Catalog
+This tool gives a zero-shot measure of how consistent a protein sequence is with ProGen2's training distribution, which is used in the paper as a proxy-fitness predictor without additional task-specific training. It can be used to rank or filter candidate sequences (including the output of `progen2-sample`), to compare variants of a sequence, or to flag sequences far from the model's training distribution.
 
-| Tool Key | Description | Output |
-|----------|-------------|--------|
-| `progen2-sample` | Autoregressive protein generation from prompts | Generated sequences, optional per-position logits |
-| `progen2-score` | Autoregressive likelihood scoring | Per-sequence metrics (log-likelihood, perplexity), optional logits |
+#### Usage Tips
 
-## Model Variants
+- **Compare length-normalized scores within one checkpoint.** Total `log_likelihood` scales with sequence length, so use `perplexity` or `avg_log_likelihood` when comparing sequences of different lengths. Different checkpoints learn different distributions that are not calibrated to a common scale, so scores from different `model_checkpoint` values are hard to compare directly. A lower perplexity means the sequence is more consistent with that checkpoint's training distribution.
+- **`return_logits` defaults to `False`.** Leave it off unless you need the per-position distributions, since the logits tensor is large (sequence length by the token vocabulary).
+- **A domain-matched checkpoint is not automatically better for scoring.** The ProGen2 paper found the antibody-specific `progen2-oas` checkpoint underperformed the universal checkpoints on antibody fitness prediction, so a universal checkpoint (such as the default `progen2-large`) is often the safer choice for scoring.
 
-| Checkpoint | Parameters | Training Data | Use Case |
-|------------|-----------|---------------|----------|
-| `progen2-small` | 151M | UniRef90 | Fast prototyping, testing |
-| `progen2-medium` | 754M | UniRef90 | Balanced speed/quality |
-| `progen2-base` | 754M | UniRef90 | Base checkpoint (alt to medium) |
-| `progen2-oas` | 754M | OAS (antibodies) | Antibody sequence generation |
-| `progen2-large` | 2.7B | UniRef90 | Production use (default) |
-| `progen2-BFD90` | 2.7B | BFD90 | Broader protein diversity |
-| `progen2-xlarge` | 6.4B | UniRef90 | Highest quality, slowest |
+## Toolkit Notes
 
-## Execution Modes
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-- **Local execution**: Runs ProGen2 in an isolated venv via `ToolInstance("progen2")`. Requires CUDA GPU.
+These apply to every ProGen2 tool in this toolkit (`progen2-sample`, `progen2-score`).
 
-## How It Works
-
-**Generation (`progen2-sample`):**
-1. The prompt sequence is tokenized using ProGen2's 30-token vocabulary (5 special tokens + 25 amino acids). The start token `1` is prepended automatically if absent.
-2. At each step, the model predicts a probability distribution over the next token given all preceding tokens.
-3. The next token is sampled from this distribution according to the temperature, top-k, and top-p settings.
-4. Generation continues until `max_length` is reached.
-5. Output sequences are optionally truncated at terminal tokens (`1` or `2`) and stripped of terminal sentinels.
-
-**Scoring (`progen2-score`):**
-1. The full sequence is passed through the model in a single forward pass.
-2. At each position t, the model computes $\log P(x_t | x_{<t})$ -- the log probability of the actual token given the left context.
-3. These per-position log probabilities are summed to produce the total log-likelihood.
-4. Perplexity is computed as exp(-avg_log_likelihood), providing an interpretable measure of sequence plausibility.
-
-## Input Parameters
-
-### Sampling (`ProGen2SampleInput`)
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `prompts` | `str` or `List[str]` | Prompt protein sequence(s) for generation |
-
-### Scoring (`ProGen2ScoringInput`)
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sequences` | `str` or `List[str]` | Protein sequences to score |
-
-## Configuration
-
-### Sampling (`ProGen2SampleConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_checkpoint` | `str` | `progen2-large` | Model checkpoint to use |
-| `local_path` | `Optional[str]` | `None` | Local weights path (bypasses HF download) |
-| `max_length` | `int` | `256` | Max total length (prompt + generated) |
-| `temperature` | `float` | `0.2` | Sampling temperature |
-| `top_p` | `float` | `0.95` | Nucleus sampling threshold |
-| `top_k` | `int` | `0` | Top-k sampling limit (0 disables) |
-| `truncate_at_stop` | `bool` | `True` | Truncate at stop tokens (`1` or `2`) |
-| `strip_special_tokens` | `bool` | `True` | Remove special tokens from output |
-| `prepend_prompt` | `bool` | `True` | Include prompt in output sequence |
-| `batch_size` | `int` | `1` | Prompts per GPU forward pass |
-| `return_logits` | `bool` | `False` | Include per-position logits in output |
-
-### Scoring (`ProGen2ScoringConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_checkpoint` | `str` | `progen2-large` | Model checkpoint to use |
-| `local_path` | `Optional[str]` | `None` | Local weights path |
-| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
-| `device` | `str` | `cuda` | Device to run on |
-| `return_logits` | `bool` | `False` | Include per-position logits |
-
-### Parameter Guides
-
-**Temperature for protein generation:**
-
-| Temperature | Behavior | When to Use |
-|-------------|----------|-------------|
-| 0.1 - 0.2 | Very conservative, near-deterministic | Close homologs, minimal divergence |
-| 0.2 - 0.5 | Balanced diversity and quality | General protein design (recommended range) |
-| 0.5 - 0.8 | Higher diversity, more novel sequences | Exploration, library design |
-| 0.8 - 1.0+ | High diversity, lower average quality | Maximum diversity screening |
-
-## Output Specification
-
-### `ProGen2SampleOutput`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `sequences` | `List[str]` | Generated protein sequences |
-| `logits` | `Optional[List[List[List[float]]]]` | Per-position logits (if requested) |
-
-Export formats: `fasta`, `txt`, `json`
-
-### `ProGen2ScoringOutput`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `scores` | `List[CausalModelScoringMetrics]` | Per-sequence metrics and optional logits |
-
-Each `CausalModelScoringMetrics` entry contains:
-- `log_likelihood`, `avg_log_likelihood`, `perplexity` — access via attribute (`score.perplexity`) or mapping (`score["perplexity"]`)
-- `logits`: per-position logits (seq_len x vocab_size=30) if `return_logits=True`
-- `vocab`: 30-token vocabulary list if `return_logits=True`
-
-Export formats: `json`, `csv`
-
-## Interpreting Results
-
-**Perplexity** is the primary metric for evaluating sequence quality. It measures how "surprised" the model is by the sequence:
-
-| Perplexity Range | Interpretation |
-|-----------------|----------------|
-| 1.0 - 3.0 | Very high confidence; sequence closely follows natural protein patterns |
-| 3.0 - 8.0 | Good confidence; typical range for well-folded natural proteins |
-| 8.0 - 15.0 | Moderate confidence; may indicate unusual sequence features or partial disorder |
-| 15.0+ | Low confidence; sequence deviates significantly from learned protein distribution |
-
-**Log-likelihood** is the sum of per-position log probabilities. More negative values indicate less likely sequences. `avg_log_likelihood` normalizes by sequence length, making it comparable across different-length proteins.
-
-**Per-position logits** (when `return_logits=True`) reveal which positions the model finds most/least predictable. High-entropy positions may correspond to variable loop regions; low-entropy positions often correspond to conserved structural or functional residues.
-
-**Comparing sequences**: When ranking sequence variants, prefer `avg_log_likelihood` (length-normalized) over raw `log_likelihood` to avoid biasing toward shorter sequences.
-
-## Quick Start Examples
-
-**Example 1: Basic protein generation**
-```python
-from proto_tools.tools.causal_models.progen2 import (
-    run_progen2_sample, ProGen2SampleInput, ProGen2SampleConfig
-)
-
-inputs = ProGen2SampleInput(prompts=["MKTAYIAKQRQISF"])
-config = ProGen2SampleConfig(
-    model_checkpoint="progen2-large",
-    max_length=120,
-    temperature=0.2,
-)
-
-result = run_progen2_sample(inputs, config)
-print(f"Generated: {result.sequences[0]}")
-```
-
-**Example 2: Batch generation**
-```python
-from proto_tools.tools.causal_models.progen2 import (
-    run_progen2_sample, ProGen2SampleInput, ProGen2SampleConfig
-)
-
-inputs = ProGen2SampleInput(prompts=["MKTL"] * 5)
-config = ProGen2SampleConfig(
-    model_checkpoint="progen2-large",
-    max_length=200,
-    temperature=0.5,
-    top_p=0.95,
-)
-
-result = run_progen2_sample(inputs, config)
-for i, seq in enumerate(result.sequences):
-    print(f"Variant {i+1}: {len(seq)} aa")
-```
-
-**Example 3: Score candidate sequences**
-```python
-from proto_tools.tools.causal_models.progen2 import (
-    run_progen2_score, ProGen2ScoringInput, ProGen2ScoringConfig
-)
-
-inputs = ProGen2ScoringInput(sequences=["MVLSPADKTN", "MKTLLILAVVAA"])
-config = ProGen2ScoringConfig(model_checkpoint="progen2-large")
-
-result = run_progen2_score(inputs, config)
-for i, score in enumerate(result.scores):
-    print(f"Seq {i+1}: perplexity={score['perplexity']:.3f}, "
-          f"avg_ll={score['avg_log_likelihood']:.4f}")
-```
-
-**Example 4: Generate antibody sequences**
-```python
-from proto_tools.tools.causal_models.progen2 import (
-    run_progen2_sample, ProGen2SampleInput, ProGen2SampleConfig
-)
-
-inputs = ProGen2SampleInput(prompts=["EVQLVESGGGLVQPGG"])
-config = ProGen2SampleConfig(
-    model_checkpoint="progen2-oas",
-    max_length=150,
-    temperature=0.3,
-)
-
-result = run_progen2_sample(inputs, config)
-print(f"Antibody: {result.sequences[0]}")
-```
-
-**Example 5: Score with per-position logits**
-```python
-from proto_tools.tools.causal_models.progen2 import (
-    run_progen2_score, ProGen2ScoringInput, ProGen2ScoringConfig
-)
-
-inputs = ProGen2ScoringInput(sequences=["MVLSPADKTNVKAAWGKVG"])
-config = ProGen2ScoringConfig(return_logits=True)
-
-result = run_progen2_score(inputs, config)
-print(f"Vocab: {result.scores[0].vocab}")
-print(f"Logits shape: {len(result.scores[0].logits)} positions x {len(result.scores[0].logits[0])} tokens")
-```
-
-## Best Practices & Gotchas
-
-- **Special tokens**: ProGen2 uses `1` as the start/BOS token and `2` as the end/EOS token. Raw amino acid prompts are automatically prepended with `1` by the inference layer.
-- **Vocabulary**: 30 tokens total (5 special + 25 amino acids including B, O, U, X, Z but no J).
-- **Temperature**: Lower temperatures (0.2-0.5) produce more conservative, higher-quality proteins. The default 0.2 is deliberately conservative.
-- **max_length includes the prompt**: If your prompt is 50 residues and `max_length=100`, you get at most 50 new residues. Set `max_length` accordingly for longer target proteins.
-- **truncate_at_stop**: With `True` (default), sequences may be shorter than `max_length` if the model generates a stop token early. This is generally desirable.
-- **Model selection**: Use `progen2-small` for rapid iteration, `progen2-large` (default) for production, `progen2-oas` specifically for antibodies, and `progen2-xlarge` for highest quality when compute is available.
-- **Scoring normalization**: Use `avg_log_likelihood` (not raw `log_likelihood`) when comparing sequences of different lengths.
-- **Batch memory**: Large models (`progen2-xlarge`) may OOM with large batch sizes. Reduce `batch_size` if needed.
-
-## References
-
-**Primary publication:**
-- Nijkamp, E. et al. (2023). "ProGen2: Exploring the boundaries of protein language models." *Cell Systems*, 14(11), 968-978. DOI: [10.1016/j.cels.2023.10.002](https://doi.org/10.1016/j.cels.2023.10.002)
-
-**Implementation:**
-- Original GitHub: [https://github.com/enijkamp/progen2](https://github.com/enijkamp/progen2)
-- Fine-tuning GitHub: [https://github.com/hugohrban/ProGen2-finetuning](https://github.com/hugohrban/ProGen2-finetuning)
-- Hugging Face weights: [https://huggingface.co/hugohrban/](https://huggingface.co/hugohrban/)
-
-## Related Tools
-
-**Used together:**
-- `esmfold`, `boltz2`, `chai1`: predict structure of ProGen2-generated sequences
-- `esm2`: compute embeddings or pseudo-likelihood scores for generated sequences
-- `proteinmpnn`: inverse folding to generate sequences conditioned on a target structure
-
-**Alternatives:**
-- `esm3`: masked/generative protein language model with structure conditioning
-- `evo2`: autoregressive generation for DNA (not protein) sequences
+- **Requires a GPU; memory scales with checkpoint size.** The larger checkpoints, up to `progen2-xlarge` at 6.4 billion parameters, need substantially more GPU memory than `progen2-small`. CPU execution is not practical.
+- **`batch_size` trades memory for throughput across both tools.** It sets how many prompts (`progen2-sample`) or sequences (`progen2-score`) are processed per GPU forward pass. Raise it for higher throughput on many short sequences; lower it (default `1`) if generation or scoring runs out of GPU memory.
+- **`model_checkpoint` selects the training distribution.** The default `progen2-large` and the `small`, `medium`, `base`, and `xlarge` checkpoints are trained on broad natural-protein collections (UniRef90 and BFD); `progen2-BFD90` is trained on the BFD90 set and `progen2-oas` on antibody sequences from the Observed Antibody Space. The choice of model has performance implications for both sampling and scoring.
