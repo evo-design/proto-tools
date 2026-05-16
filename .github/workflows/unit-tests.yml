@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
   schedule:
     - cron: '0 7 * * 0'  # Weekly Sunday 7am UTC
   workflow_dispatch:
@@ -15,7 +15,9 @@ concurrency:
 
 jobs:
   test:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    if: >-
+      (github.event_name != 'pull_request' || github.event.pull_request.draft == false) &&
+      !(github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'skip-tests'))
     name: Run Unit Tests
     runs-on: ubuntu-latest
     steps:
