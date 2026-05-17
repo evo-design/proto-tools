@@ -35,6 +35,10 @@ class _CloudConfig(BaseConfig):
     temperature: float = ConfigField(default=1.0, ge=0.0)
 
 
+class _SlowCloudConfig(_CloudConfig):
+    timeout: int | None = ConfigField(default=1200, ge=1)
+
+
 class _CloudOutput(MockToolOutputBase):
     result: str = Field(description="Result payload")
 
@@ -149,7 +153,12 @@ def clean_registry():
     ToolRegistry._try_dispatch = original_dispatch  # type: ignore[method-assign]
 
 
-def _register_cloud_tool(registry, key: str, output_class: type[MockToolOutputBase] = _CloudOutput):
+def _register_cloud_tool(
+    registry,
+    key: str,
+    output_class: type[MockToolOutputBase] = _CloudOutput,
+    config_class: type[BaseConfig] = _CloudConfig,
+):
     """Register a tool whose local impl fails — proves we routed to cloud."""
 
     def _must_not_run_locally(inputs, config, instance=None):
@@ -161,7 +170,7 @@ def _register_cloud_tool(registry, key: str, output_class: type[MockToolOutputBa
         label=key,
         category="test",
         input_class=_CloudInput,
-        config_class=_CloudConfig,
+        config_class=config_class,
         output_class=output_class,
         description=key,
     )(_must_not_run_locally)
@@ -217,6 +226,21 @@ def test_use_api_backend_routes_device_cloud(fake_proto_client, clean_registry):
     assert call["poll_interval"] == 0.25
     assert call["timeout"] == 5.0
     assert call["output_model"] is None
+
+
+def test_use_api_backend_defaults_to_tool_config_timeout(fake_proto_client, clean_registry):
+    """Default cloud dispatch respects the selected tool config's effective timeout."""
+    use_api_backend(api_key="test-key")
+
+    client = fake_proto_client.last_instance
+    assert client is not None
+    client.tools.output_to_return = {"result": "from-api"}
+
+    spec = _register_cloud_tool(clean_registry, "slow-api-tool", config_class=_SlowCloudConfig)
+    result = spec.function(_CloudInput(payload="hi"), _SlowCloudConfig(device="cloud"))
+
+    assert isinstance(result, _CloudOutput)
+    assert client.tools.calls[0]["timeout"] == 1200.0
 
 
 def test_cloud_output_assets_are_decoded_before_validation(fake_proto_client, clean_registry):

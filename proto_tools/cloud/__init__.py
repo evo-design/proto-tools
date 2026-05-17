@@ -60,7 +60,7 @@ def _decode_output_assets(value: Any, assets: Any) -> Any:
 def use_api_backend(
     *,
     poll_interval: float = 1.0,
-    timeout: float = 600.0,
+    timeout: float | None = None,
     **client_kwargs: Any,
 ) -> None:
     """Enable ``device="cloud"`` by routing tool runs through ``proto-client``.
@@ -72,7 +72,9 @@ def use_api_backend(
 
     Args:
         poll_interval (float): Seconds between job-status polls.
-        timeout (float): Max seconds to wait for a single tool to complete.
+        timeout (float | None): Optional global max seconds to wait for a
+            single tool to complete. When unset, each tool's config timeout is
+            used.
         client_kwargs (Any): Forwarded to :class:`proto_client.ProtoClient`
             (e.g. ``api_key``, ``tools_base_url``).
 
@@ -110,13 +112,16 @@ def use_api_backend(
         # device='cloud' is the routing signal for this client; the server picks its own physical device, so strip it before sending.
         config_payload = config.model_dump(exclude_none=True)
         config_payload.pop("device", None)
+        tool_timeout = timeout if timeout is not None else config.effective_timeout()
+        if tool_timeout is None:
+            tool_timeout = 600.0
         try:
             response = client.tools.run(
                 key,
                 inputs=inputs.model_dump(exclude_none=True),
                 config=config_payload,
                 poll_interval=poll_interval,
-                timeout=timeout,
+                timeout=float(tool_timeout),
                 output_model=None,
             )
         except ProtoAuthError as exc:
