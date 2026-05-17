@@ -123,7 +123,9 @@ class Chai1Config(MSAStructurePredictionConfig):
         use_esm_embeddings (bool): Whether to use ESM (Evolutionary Scale Modeling)
             embeddings for improved predictions. ESM embeddings provide evolutionary
             context from large-scale protein language models, typically improving
-            prediction quality. Default: ``True``.
+            prediction quality. Independent of ``use_msa``; both can be enabled
+            together and Chai-1 conditions on the ESM embeddings and the MSA
+            simultaneously. Default: ``True``.
 
         num_trunk_recycles (int): Number of iterative refinement passes through
             the trunk network. Higher values produce more refined structures but
