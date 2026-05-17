@@ -319,6 +319,7 @@ def example_input() -> Any:
     input_class=AlphaFoldDBFetchInput,
     config_class=AlphaFoldDBFetchConfig,
     output_class=AlphaFoldDBFetchOutput,
+    metrics_class=AlphaFoldDBMetrics,
     description=(
         "Fetch predicted structure (PDB/mmCIF), per-residue pLDDT, and PAE "
         "matrix from the AlphaFold Protein Structure Database by UniProt "

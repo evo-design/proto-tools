@@ -237,6 +237,7 @@ def example_input() -> Any:
     input_class=PyRosettaEnergyInput,
     config_class=PyRosettaEnergyConfig,
     output_class=PyRosettaEnergyOutput,
+    metrics_class=PyRosettaEnergyMetrics,
     description="Compute Rosetta energy scores for protein structures (with optional FastRelax preprocess via config.pre_relax_structures)",
     uses_gpu=False,
     example_input=example_input,

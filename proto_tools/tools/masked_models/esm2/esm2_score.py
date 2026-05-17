@@ -104,6 +104,7 @@ def example_input() -> Any:
     input_class=ESM2ScoringInput,
     config_class=ESM2ScoringConfig,
     output_class=ESM2ScoringOutput,
+    metrics_class=MaskedModelScoringMetrics,
     description="Score protein sequences using ESM2 language model",
     uses_gpu=True,
     example_input=example_input,

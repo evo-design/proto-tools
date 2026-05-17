@@ -118,6 +118,7 @@ def example_input() -> Any:
     input_class=USalignInput,
     config_class=USalignConfig,
     output_class=USalignOutput,
+    metrics_class=USalignMetrics,
     uses_gpu=False,
     description=(
         "Universal structure alignment using USalign (Zhang et al., 2022). "

@@ -257,6 +257,7 @@ def example_input() -> Any:
     input_class=PyRosettaRelaxInput,
     config_class=PyRosettaRelaxConfig,
     output_class=PyRosettaRelaxOutput,
+    metrics_class=PyRosettaRelaxMetrics,
     description="Run PyRosetta FastRelax on a structure and return the relaxed Structure plus its total score",
     uses_gpu=False,
     example_input=example_input,

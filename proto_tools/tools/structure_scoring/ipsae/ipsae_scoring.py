@@ -225,6 +225,7 @@ def example_input() -> Any:
     input_class=IPSAEScoringInput,
     config_class=IPSAEScoringConfig,
     output_class=IPSAEScoringOutput,
+    metrics_class=IPSAEMetrics,
     description="Score a cofolded protein complex with IPSAE (Dunbrack 2025), computing ipSAE, pDockQ2, LIS, pDockQ, and ipTM",
     uses_gpu=False,
     example_input=example_input,

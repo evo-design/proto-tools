@@ -362,6 +362,7 @@ def example_input() -> AlphaFold2BinderInput:
     input_class=AlphaFold2BinderInput,
     config_class=AlphaFold2BinderConfig,
     output_class=AlphaFold2BinderOutput,
+    metrics_class=AlphaFold2Metrics,
     description="AF2 binder design against a fixed target. Returns loss, Structure, and optionally gradient.",
     uses_gpu=True,
     example_input=example_input,

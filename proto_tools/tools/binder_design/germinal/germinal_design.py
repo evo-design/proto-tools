@@ -550,6 +550,7 @@ def example_input() -> GerminalInput:
     input_class=GerminalInput,
     config_class=GerminalConfig,
     output_class=GerminalOutput,
+    metrics_class=GerminalDesignMetrics,
     description="De novo epitope-targeted antibody design (VHH or scFv) using the Germinal pipeline",
     uses_gpu=True,
     example_input=example_input,

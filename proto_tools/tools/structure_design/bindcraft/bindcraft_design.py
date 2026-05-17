@@ -880,6 +880,7 @@ def example_input() -> BindCraftInput:
     input_class=BindCraftInput,
     config_class=BindCraftConfig,
     output_class=BindCraftOutput,
+    metrics_class=BindCraftMetrics,
     description=(
         "End-to-end binder design pipeline: AlphaFold2 hallucination + ProteinMPNN refinement "
         "+ AlphaFold2 validation + PyRosetta filtering. Returns accepted binders against a target."

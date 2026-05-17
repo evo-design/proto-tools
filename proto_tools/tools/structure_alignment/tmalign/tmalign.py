@@ -117,6 +117,7 @@ def example_input() -> Any:
     input_class=TMalignInput,
     config_class=TMalignConfig,
     output_class=TMalignOutput,
+    metrics_class=TMalignMetrics,
     uses_gpu=False,
     description=(
         "Pairwise protein structure alignment using TMalign "

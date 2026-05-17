@@ -184,6 +184,7 @@ def example_input() -> Any:
     input_class=PyMOLRMSDInput,
     config_class=PyMOLRMSDConfig,
     output_class=PyMOLRMSDOutput,
+    metrics_class=PyMOLRMSDMetrics,
     uses_gpu=False,
     description="Pairwise structure RMSD alignment using PyMOL cealign or align.",
     example_input=example_input,

@@ -192,6 +192,22 @@ def _cmd_model_doc(args: argparse.Namespace, kind: str) -> int:
         print(f"  {f.name:24s}  {f.type_str:30s}  ({marker})")
         if f.description:
             print(f"  {'':24s}  {f.description}")
+
+    if doc.metric_specs:
+        scope = f" (per {doc.metrics_per_item_field} item)" if doc.metrics_per_item_field else ""
+        print(f"\nMetrics{scope}:")
+        for m in doc.metric_specs:
+            lo = m.min if m.min is not None else "-inf"
+            hi = m.max if m.max is not None else "inf"
+            bits = [m.type_str or "?", f"range [{lo}, {hi}]"]
+            if m.unit:
+                bits.append(m.unit)
+            if m.availability:
+                bits.append(m.availability)
+            star = "  *primary" if m.is_primary else ""
+            print(f"  {m.name:24s}  {', '.join(bits)}{star}")
+            if m.description:
+                print(f"  {'':24s}  {m.description}")
     return 0
 
 

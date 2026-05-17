@@ -130,6 +130,7 @@ def example_input() -> Any:
     input_class=ProteinMPNNScoringInput,
     config_class=ProteinMPNNScoringConfig,
     output_class=ProteinMPNNScoringOutput,
+    metrics_class=InverseFoldingScoringMetrics,
     description="Score protein sequences using ProteinMPNN",
     uses_gpu=True,
     example_input=example_input,

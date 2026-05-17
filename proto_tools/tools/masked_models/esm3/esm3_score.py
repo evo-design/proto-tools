@@ -77,6 +77,7 @@ def example_input() -> Any:
     input_class=ESM3ScoringInput,
     config_class=ESM3ScoringConfig,
     output_class=ESM3ScoringOutput,
+    metrics_class=MaskedModelScoringMetrics,
     description="Score protein sequences using ESM3 language model",
     uses_gpu=True,
     example_input=example_input,

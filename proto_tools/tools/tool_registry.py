@@ -79,7 +79,7 @@ from proto_tools.utils.tool_cache import (
     deduplicate_items,
 )
 from proto_tools.utils.tool_instance import ToolInstance
-from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, MissingAssetError
+from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, Metrics, MissingAssetError
 
 
 class ToolSpec(BaseModel):
@@ -103,6 +103,8 @@ class ToolSpec(BaseModel):
             and schema generation.
         input_model (type[BaseToolInput]): Pydantic model class for primary input validation.
         output_model (type[BaseToolOutput]): Pydantic model class for tool output validation.
+        metrics_model (type[Metrics] | None): Optional Metrics subclass the tool emits, carrying
+            the declarative ``metric_spec`` and ``primary_metric`` surfaced by tool_docs.
         function (Callable[..., Any]): The wrapped tool function.
         source_file (Path): Path to the source file where the tool function is defined.
         example_input (Callable[[], BaseToolInput] | None): Factory returning a minimal
@@ -156,6 +158,7 @@ class ToolSpec(BaseModel):
     # Private fields - excluded from serialization
     input_model: type[BaseToolInput] = Field(exclude=True)
     output_model: type[BaseToolOutput] = Field(exclude=True)
+    metrics_model: type[Metrics] | None = Field(default=None, exclude=True)
     function: Callable[..., Any] = Field(exclude=True)
     source_file: Path = Field(
         exclude=True,
@@ -301,6 +304,7 @@ class ToolRegistry:
         config_class: type[BaseConfig],
         output_class: type[BaseToolOutput],
         description: str,
+        metrics_class: type[Metrics] | None = None,
         uses_gpu: bool = False,
         gpu_only: bool = False,
         device_count: str = "1",
@@ -328,6 +332,8 @@ class ToolRegistry:
             config_class (type[BaseConfig]): Pydantic model class for tool configuration validation
             output_class (type[BaseToolOutput]): Pydantic model class for tool output validation
             description (str): Readable description
+            metrics_class (type[Metrics] | None): Optional Metrics subclass the tool emits on its
+                output. Recorded on the spec so tool_docs can surface the metric_spec table.
             uses_gpu (bool): Whether this tool requires a GPU for execution
             gpu_only (bool): Tool cannot run on CPU. Direct ``device="cpu"``
                 dispatch raises ``ValueError``, and LRU eviction restarts the
@@ -781,6 +787,7 @@ class ToolRegistry:
                 input_model=input_class,
                 config_model=config_class,
                 output_model=output_class,
+                metrics_model=metrics_class,
                 function=wrapper,
                 source_file=source_file,
                 example_input=example_input,
@@ -948,7 +955,12 @@ class ToolRegistry:
         """
         from proto_tools.utils.tool_docs import _normalize_tool_key, get_model_doc
 
-        return get_model_doc(cls.get(_normalize_tool_key(tool)).output_model)
+        spec = cls.get(_normalize_tool_key(tool))
+        return get_model_doc(
+            spec.output_model,
+            metrics_class=spec.metrics_model,
+            iterable_output_field=spec.iterable_output_field,
+        )
 
     @classmethod
     def get_example_input(cls, key: str) -> BaseToolInput | None:

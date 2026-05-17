@@ -175,6 +175,7 @@ def example_input() -> Any:
     input_class=SegmaskerInput,
     config_class=SegmaskerConfig,
     output_class=SegmaskerOutput,
+    metrics_class=SegmaskerMetrics,
     description="Detect low-complexity regions in protein sequences using NCBI segmasker",
     example_input=example_input,
     cacheable=True,

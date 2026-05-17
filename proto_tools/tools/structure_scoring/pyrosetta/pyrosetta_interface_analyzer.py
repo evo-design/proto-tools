@@ -337,6 +337,7 @@ def example_input() -> Any:
     input_class=PyRosettaInterfaceAnalyzerInput,
     config_class=PyRosettaInterfaceAnalyzerConfig,
     output_class=PyRosettaInterfaceAnalyzerOutput,
+    metrics_class=PyRosettaInterfaceAnalyzerMetrics,
     description=(
         "Compute interface-quality metrics for a two-chain complex via Rosetta's "
         "InterfaceAnalyzerMover + LayerSelector (with optional FastRelax "

@@ -92,6 +92,7 @@ def example_input() -> Any:
     input_class=LigandMPNNScoringInput,
     config_class=LigandMPNNScoringConfig,
     output_class=LigandMPNNScoringOutput,
+    metrics_class=InverseFoldingScoringMetrics,
     description="Score protein sequences using LigandMPNN",
     uses_gpu=True,
     example_input=example_input,

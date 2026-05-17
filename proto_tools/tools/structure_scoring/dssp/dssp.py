@@ -167,6 +167,7 @@ def example_input() -> Any:
     input_class=DSSPSecondaryStructureInput,
     config_class=DSSPSecondaryStructureConfig,
     output_class=DSSPSecondaryStructureOutput,
+    metrics_class=DSSPSecondaryStructureMetrics,
     description="Assign helix/sheet/loop percentages using the DSSP binary",
     example_input=example_input,
     iterable_input_field="inputs",

@@ -236,6 +236,7 @@ def example_input() -> Any:
     input_class=AlphaFold2Input,
     config_class=AlphaFold2Config,
     output_class=AlphaFold2Output,
+    metrics_class=AlphaFold2Metrics,
     description="Protein structure prediction using AlphaFold2 via ColabDesign",
     uses_gpu=True,
     example_input=example_input,
