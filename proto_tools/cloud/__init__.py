@@ -20,6 +20,8 @@ import logging
 import os
 from typing import Any
 
+from pydantic import ValidationError
+
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.utils.base_config import BaseConfig
 from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput
@@ -39,6 +41,20 @@ _NOT_READY_MSG = (
 )
 
 _enabled: bool = False
+
+
+def _is_output_asset_ref(value: Any) -> bool:
+    return isinstance(value, dict) and isinstance(value.get("id"), str) and value.get("kind") == "output"
+
+
+def _decode_output_assets(value: Any, assets: Any) -> Any:
+    if _is_output_asset_ref(value):
+        return assets.decode(value)
+    if isinstance(value, dict):
+        return {key: _decode_output_assets(item, assets) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_decode_output_assets(item, assets) for item in value]
+    return value
 
 
 def use_api_backend(
@@ -101,18 +117,18 @@ def use_api_backend(
                 config=config_payload,
                 poll_interval=poll_interval,
                 timeout=timeout,
-                output_model=output_class,
+                output_model=None,
             )
         except ProtoAuthError as exc:
             # Invalid / unauthorized key — surface the user-facing placeholder. All other SDK exceptions propagate.
             logger.debug("Cloud auth error for %r: %s", key, exc, exc_info=True)
             raise NotImplementedError(_NOT_READY_MSG) from exc
 
-        # SDK swaps in the validated instance when output_model is passed; widen for the type checker.
-        result: Any = response.result
-        if not isinstance(result, output_class):
-            raise TypeError(f"Tool {key!r} returned {type(result).__name__}, expected {output_class.__name__}")
-        return result
+        decoded_result = _decode_output_assets(response.result, client.assets)
+        try:
+            return output_class.model_validate(decoded_result)
+        except ValidationError as exc:
+            raise TypeError(f"Tool {key!r} result does not conform to {output_class.__name__}: {exc}") from exc
 
     setattr(ToolRegistry, "_try_dispatch", classmethod(_route_to_cloud))  # noqa: B010
     global _enabled  # noqa: PLW0603 — module-level on/off flag

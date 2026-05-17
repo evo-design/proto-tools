@@ -39,6 +39,11 @@ class _CloudOutput(MockToolOutputBase):
     result: str = Field(description="Result payload")
 
 
+class _CloudAssetOutput(MockToolOutputBase):
+    structure: str = Field(description="Decoded structure text")
+    scores: list[list[float]] = Field(description="Decoded score matrix")
+
+
 class _PreprocessConfig(_CloudConfig):
     local_path: str | None = ConfigField(default=None, hidden=True)
 
@@ -84,6 +89,16 @@ class _StubToolsNamespace:
         return _StubResponse(result=self.output_to_return)
 
 
+@dataclass
+class _StubAssetsNamespace:
+    decoded_by_id: dict[str, Any] = field(default_factory=dict)
+    calls: list[dict[str, Any]] = field(default_factory=list)
+
+    def decode(self, ref: dict[str, Any]) -> Any:
+        self.calls.append(ref)
+        return self.decoded_by_id[ref["id"]]
+
+
 class _StubProtoClient:
     """Fake proto_client.ProtoClient for tests."""
 
@@ -92,6 +107,7 @@ class _StubProtoClient:
     def __init__(self, **kwargs: Any) -> None:
         self.kwargs = kwargs
         self.tools = _StubToolsNamespace()
+        self.assets = _StubAssetsNamespace()
         _StubProtoClient.last_instance = self
 
 
@@ -133,7 +149,7 @@ def clean_registry():
     ToolRegistry._try_dispatch = original_dispatch  # type: ignore[method-assign]
 
 
-def _register_cloud_tool(registry, key: str):
+def _register_cloud_tool(registry, key: str, output_class: type[MockToolOutputBase] = _CloudOutput):
     """Register a tool whose local impl fails — proves we routed to cloud."""
 
     def _must_not_run_locally(inputs, config, instance=None):
@@ -146,7 +162,7 @@ def _register_cloud_tool(registry, key: str):
         category="test",
         input_class=_CloudInput,
         config_class=_CloudConfig,
-        output_class=_CloudOutput,
+        output_class=output_class,
         description=key,
     )(_must_not_run_locally)
     return registry.get(key)
@@ -175,14 +191,13 @@ def test_is_api_backend_enabled_defaults_false():
 
 def test_use_api_backend_routes_device_cloud(fake_proto_client, clean_registry):
     """device='cloud' dispatches through proto-client and returns the validated output."""
-    expected = _CloudOutput(result="from-api")
     use_api_backend(poll_interval=0.25, timeout=5.0, api_key="test-key")
     assert is_api_backend_enabled() is True
 
     client = fake_proto_client.last_instance
     assert client is not None
     assert client.kwargs == {"api_key": "test-key"}
-    client.tools.output_to_return = expected
+    client.tools.output_to_return = {"result": "from-api"}
 
     spec = _register_cloud_tool(clean_registry, "api-tool")
     result = spec.function(_CloudInput(payload="hi"), _CloudConfig(device="cloud"))
@@ -201,7 +216,39 @@ def test_use_api_backend_routes_device_cloud(fake_proto_client, clean_registry):
     assert "device" not in call["config"]
     assert call["poll_interval"] == 0.25
     assert call["timeout"] == 5.0
-    assert call["output_model"] is _CloudOutput
+    assert call["output_model"] is None
+
+
+def test_cloud_output_assets_are_decoded_before_validation(fake_proto_client, clean_registry):
+    """Cloud dispatch materializes output AssetRefs before applying the proto-tools output model."""
+    use_api_backend()
+    client = fake_proto_client.last_instance
+    client.assets.decoded_by_id = {
+        "structure_asset": "data_test\n#",
+        "scores_asset": [[0.91, 0.87]],
+    }
+    client.tools.output_to_return = {
+        "structure": {
+            "id": "structure_asset",
+            "kind": "output",
+            "mime_type": "chemical/x-mmcif",
+            "url": "https://api.test/api/v1/assets/structure_asset",
+        },
+        "scores": {
+            "id": "scores_asset",
+            "kind": "output",
+            "mime_type": "application/json+gzip",
+            "url": "https://api.test/api/v1/assets/scores_asset",
+        },
+    }
+
+    spec = _register_cloud_tool(clean_registry, "asset-tool", output_class=_CloudAssetOutput)
+    result = spec.function(_CloudInput(payload="hi"), _CloudConfig(device="cloud"))
+
+    assert isinstance(result, _CloudAssetOutput)
+    assert result.structure == "data_test\n#"
+    assert result.scores == [[0.91, 0.87]]
+    assert [ref["id"] for ref in client.assets.calls] == ["structure_asset", "scores_asset"]
 
 
 def test_device_cloud_dispatches_before_preprocess(fake_proto_client, clean_registry):
@@ -345,13 +392,13 @@ def test_real_tool_failure_propagates_to_caller(fake_proto_client, clean_registr
 
 
 def test_unexpected_result_type_raises(fake_proto_client, clean_registry):
-    """If proto-client returns a non-matching result type, cloud dispatch flags it."""
+    """If proto-client returns a non-conforming result, cloud dispatch flags it."""
     use_api_backend()
-    fake_proto_client.last_instance.tools.output_to_return = {"result": "ok"}
+    fake_proto_client.last_instance.tools.output_to_return = {"unexpected": "ok"}
 
     spec = _register_cloud_tool(clean_registry, "type-check-tool")
 
-    with pytest.raises(Exception, match="expected _CloudOutput"):
+    with pytest.raises(Exception, match="does not conform to _CloudOutput"):
         spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
 
 
