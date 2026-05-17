@@ -1,3 +1,4 @@
 github: https://github.com/evo-design/evo
 image: https://github.com/evo-design/evo/raw/main/evo.jpg
-organizations: Arc Institute
+organizations:
+  - Arc Institute

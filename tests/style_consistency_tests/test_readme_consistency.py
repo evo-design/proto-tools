@@ -35,6 +35,20 @@ _REQUIRED_SECTIONS = [
 # Overview section length cap (characters of body text, excluding the heading).
 _OVERVIEW_MAX_CHARS = 600
 
+# Permissive OSI / public-domain SPDX identifiers used to gate the fully-open License callout.
+_PERMISSIVE_SPDX = frozenset(
+    {
+        "MIT",
+        "Apache-2.0",
+        "BSD-2-Clause",
+        "BSD-3-Clause",
+        "MPL-2.0",
+        "ISC",
+        "Unlicense",
+        "CC0-1.0",
+    }
+)
+
 # READMEs with this marker are exempt from QC-gated checks until reviewed.
 # TODO(#743): once every README is migrated, delete _QC_PENDING_MARKER and every QC-gated pytest.skip guard here.
 _QC_PENDING_MARKER = "This README still needs to be reviewed and quality checked"
@@ -338,8 +352,25 @@ def _expected_license_callouts(lic: dict, name: str) -> list[str]:
     commercial_restricted = lic.get("commercial_use") != "yes"
     attribution = bool(lic.get("attribution_required"))
     is_custom = isinstance(code_spdx, str) and code_spdx.startswith("Custom (")
+    access = weights.get("access") if isinstance(weights, dict) else None
+    weights_spdx = weights["spdx"] if isinstance(weights, dict) else None
 
-    if weights and weights["spdx"] != code_spdx:
+    # Fully open: permissive code (and weights, if any), commercial use allowed, weights not gated.
+    fully_open = (
+        not is_custom
+        and code_spdx in _PERMISSIVE_SPDX
+        and (weights is None or weights_spdx == code_spdx)
+        and lic.get("commercial_use") == "yes"
+        and not access
+    )
+
+    if fully_open:
+        leads = [
+            f"{name} is open source and free for academic and commercial use under a {code_spdx} license",
+            f"{name} is open source and free for academic and commercial use under an {code_spdx} license",
+        ]
+        link = f"[the license]({code_url})"
+    elif weights and weights["spdx"] != code_spdx:
         leads = [f"{name} uses {code_spdx} for code and {weights['spdx']} for model weights"]
         link = f"the [code license]({code_url}) and [model weights license]({weights['url']})"
     elif is_custom:
@@ -355,7 +386,6 @@ def _expected_license_callouts(lic: dict, name: str) -> list[str]:
     if attribution:
         clauses.append("may require explicit attribution when utilized")
 
-    access = weights.get("access") if isinstance(weights, dict) else None
     if access == "hf-gated":
         gating = (
             " Model weights are gated and require accepting the provider's terms "
@@ -438,16 +468,20 @@ def test_expected_license_callouts_logic() -> None:
         "attribution_required": False,
     }
 
+    # MIT code, commercial use allowed, no gated weights -> fully-open phrasing.
     no_weights = _expected_license_callouts(base, "Tool")
     assert sorted(no_weights) == sorted(
         [
-            "> [!NOTE]\n> **License:** Tool has a MIT license."
+            "> [!NOTE]\n> **License:** Tool is open source and free for academic"
+            " and commercial use under a MIT license."
             " Please refer to [the license](https://example.com/code) for full terms.",
-            "> [!NOTE]\n> **License:** Tool has an MIT license."
+            "> [!NOTE]\n> **License:** Tool is open source and free for academic"
+            " and commercial use under an MIT license."
             " Please refer to [the license](https://example.com/code) for full terms.",
         ]
     )
 
+    # Weights under the same permissive SPDX stay fully-open (no code/weights split).
     same_spdx = _expected_license_callouts(
         {**base, "weights": {"spdx": "MIT", "url": "https://example.com/weights"}}, "Tool"
     )

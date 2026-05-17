@@ -7,7 +7,7 @@
 > *Image source: [bytedance/Protenix](https://github.com/bytedance/Protenix)*
 
 > [!NOTE]
-> **License:** Protenix has an Apache-2.0 license. Please refer to [the license](https://github.com/bytedance/Protenix/blob/main/LICENSE) for full terms.
+> **License:** Protenix is open source and free for academic and commercial use under an Apache-2.0 license. Please refer to [the license](https://github.com/bytedance/Protenix/blob/main/LICENSE) for full terms.
 
 ## Overview
 

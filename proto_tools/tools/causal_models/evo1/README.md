@@ -7,7 +7,7 @@
 > *Image source: [evo-design/evo](https://github.com/evo-design/evo)*
 
 > [!NOTE]
-> **License:** Evo1 has an Apache-2.0 license. Please refer to [the license](https://github.com/evo-design/evo/blob/main/LICENSE) for full terms.
+> **License:** Evo1 is open source and free for academic and commercial use under an Apache-2.0 license. Please refer to [the license](https://github.com/evo-design/evo/blob/main/LICENSE) for full terms.
 
 ## Overview
 

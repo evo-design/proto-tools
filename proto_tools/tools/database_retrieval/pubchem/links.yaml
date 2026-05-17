@@ -1,3 +1,4 @@
 image: https://pubchem.ncbi.nlm.nih.gov/pcfe/logo/PubChem_logo.png
 website: https://pubchem.ncbi.nlm.nih.gov/
-organizations: NCBI/NLM/NIH
+organizations:
+  - NCBI

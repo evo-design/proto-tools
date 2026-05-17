@@ -6,4 +6,5 @@ huggingface:
   - https://huggingface.co/hugohrban/progen2-xlarge
   - https://huggingface.co/hugohrban/progen2-oas
   - https://huggingface.co/hugohrban/progen2-BFD90
-organizations: Salesforce Research
+organizations:
+  - Salesforce Research

@@ -7,7 +7,7 @@
 > *Image source: [facebookresearch/esm](https://github.com/facebookresearch/esm)*
 
 > [!NOTE]
-> **License:** ESMFold has an MIT license. Please refer to [the license](https://github.com/facebookresearch/esm/blob/main/LICENSE) for full terms.
+> **License:** ESMFold is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/facebookresearch/esm/blob/main/LICENSE) for full terms.
 
 ## Overview
 

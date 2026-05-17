@@ -1,4 +1,5 @@
 github: https://github.com/RosettaCommons/rosetta
 image: https://rosettacommons.org/wp-content/uploads/2026/01/12-1024x576.png
-organizations: RosettaCommons
+organizations:
+  - RosettaCommons
 website: https://www.pyrosetta.org/

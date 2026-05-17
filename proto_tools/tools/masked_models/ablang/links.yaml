@@ -2,4 +2,5 @@ github: https://github.com/oxpig/AbLang2
 huggingface:
   - https://huggingface.co/qilowoq/AbLang_heavy
   - https://huggingface.co/qilowoq/AbLang_light
-organizations: Oxford Protein Informatics Group (OPIG)
+organizations:
+  - Oxford Protein Informatics Group (OPIG)

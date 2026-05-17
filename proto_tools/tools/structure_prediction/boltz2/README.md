@@ -7,7 +7,7 @@
 > *Image source: [jwohlwend/boltz](https://github.com/jwohlwend/boltz)*
 
 > [!NOTE]
-> **License:** Boltz-2 has an MIT license. Please refer to [the license](https://github.com/jwohlwend/boltz/blob/main/LICENSE) for full terms.
+> **License:** Boltz-2 is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/jwohlwend/boltz/blob/main/LICENSE) for full terms.
 
 ## Overview
 

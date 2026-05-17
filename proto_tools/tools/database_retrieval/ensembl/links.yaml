@@ -1,4 +1,5 @@
 github: https://github.com/Ensembl/ensembl-rest
 website: https://www.ensembl.org/
 image: https://github.com/Ensembl.png
-organizations: EMBL-EBI
+organizations:
+  - EMBL-EBI

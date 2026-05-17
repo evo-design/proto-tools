@@ -1,4 +1,5 @@
 github: https://github.com/evolutionaryscale/esm
 image: https://cdn.prod.website-files.com/6606dc3fd5f6645318003df4/663e392ca11e77f1a562c2c6_og.png
 huggingface: https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1
-organizations: bi[o]hub
+organizations:
+  - bi[o]hub

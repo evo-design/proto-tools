@@ -1,4 +1,5 @@
 github: https://github.com/evolutionaryscale/esm
 blog: https://www.evolutionaryscale.ai/blog/esm-cambrian
 huggingface: https://huggingface.co/EvolutionaryScale/esmc-300m-2024-12
-organizations: bi[o]hub
+organizations:
+  - bi[o]hub

@@ -1,3 +1,4 @@
 github: https://github.com/steineggerlab/foldmason
 website: https://search.foldseek.com/foldmason
-organizations: Steinegger Lab, Seoul National University
+organizations:
+  - Steinegger Lab

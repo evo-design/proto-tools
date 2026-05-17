@@ -1,2 +1,3 @@
 github: https://github.com/facebookresearch/esm
-organizations: Meta AI
+organizations:
+  - Meta AI

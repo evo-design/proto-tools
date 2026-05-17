@@ -7,7 +7,7 @@
 > *Image source: [ArcInstitute/evo2](https://github.com/arcinstitute/evo2)*
 
 > [!NOTE]
-> **License:** Evo2 has an Apache-2.0 license. Please refer to [the license](https://github.com/arcinstitute/evo2/blob/main/LICENSE) for full terms.
+> **License:** Evo2 is open source and free for academic and commercial use under an Apache-2.0 license. Please refer to [the license](https://github.com/arcinstitute/evo2/blob/main/LICENSE) for full terms.
 
 ## Overview
 

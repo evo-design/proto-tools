@@ -3,7 +3,7 @@
 # ProGen2
 
 > [!NOTE]
-> **License:** ProGen2 has a BSD-3-Clause license. Please refer to [the license](https://github.com/enijkamp/progen2/blob/main/LICENSE.txt) for full terms.
+> **License:** ProGen2 is open source and free for academic and commercial use under a BSD-3-Clause license. Please refer to [the license](https://github.com/enijkamp/progen2/blob/main/LICENSE.txt) for full terms.
 
 ## Overview
 
