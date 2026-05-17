@@ -239,6 +239,7 @@ def example_input() -> Any:
     input_class=Boltz2Input,
     config_class=Boltz2Config,
     output_class=Boltz2Output,
+    metrics_class=Boltz2Metrics,
     description="Multi-modal structure prediction using Boltz2",
     uses_gpu=True,
     device_count="1-2",

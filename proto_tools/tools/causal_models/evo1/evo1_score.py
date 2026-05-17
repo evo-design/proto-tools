@@ -88,6 +88,7 @@ def example_input() -> Any:
     input_class=Evo1ScoringInput,
     config_class=Evo1ScoringConfig,
     output_class=Evo1ScoringOutput,
+    metrics_class=CausalModelScoringMetrics,
     description="Score DNA sequences using Evo1 language model",
     uses_gpu=True,
     example_input=example_input,

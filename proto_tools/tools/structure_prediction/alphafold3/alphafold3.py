@@ -257,6 +257,7 @@ def _config_overrides_env(model_dir: str | None) -> Iterator[None]:
     input_class=AlphaFold3Input,
     config_class=AlphaFold3Config,
     output_class=AlphaFold3Output,
+    metrics_class=AlphaFold3Metrics,
     description="Protein structure prediction using AlphaFold3",
     uses_gpu=True,
     example_input=example_input,

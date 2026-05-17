@@ -206,6 +206,7 @@ def example_input() -> Any:
     input_class=PyRosettaSAPInput,
     config_class=PyRosettaSAPConfig,
     output_class=PyRosettaSAPOutput,
+    metrics_class=PyRosettaSAPMetrics,
     description="Compute Spatial Aggregation Propensity (SAP) scores for protein structures using PyRosetta",
     uses_gpu=False,
     example_input=example_input,

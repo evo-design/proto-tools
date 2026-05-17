@@ -78,6 +78,7 @@ def example_input() -> AbLangScoringInput:
     input_class=AbLangScoringInput,
     config_class=AbLangScoringConfig,
     output_class=AbLangScoringOutput,
+    metrics_class=MaskedModelScoringMetrics,
     description="Score antibody sequences using AbLang language model",
     uses_gpu=True,
     example_input=example_input,

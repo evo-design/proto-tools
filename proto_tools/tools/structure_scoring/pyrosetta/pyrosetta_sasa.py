@@ -217,6 +217,7 @@ def example_input() -> Any:
     input_class=PyRosettaSASAInput,
     config_class=PyRosettaSASAConfig,
     output_class=PyRosettaSASAOutput,
+    metrics_class=PyRosettaSASAMetrics,
     description="Compute Solvent Accessible Surface Area (SASA) for protein structures using PyRosetta",
     uses_gpu=False,
     example_input=example_input,

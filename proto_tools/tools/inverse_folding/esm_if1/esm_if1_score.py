@@ -181,6 +181,7 @@ def example_input() -> Any:
     input_class=ESMIF1ScoringInput,
     config_class=ESMIF1ScoringConfig,
     output_class=ESMIF1ScoringOutput,
+    metrics_class=InverseFoldingScoringMetrics,
     description=(
         "Score protein sequences against backbone structures using "
         "ESM-IF1 or ProteinDPO. Computes average log-likelihood and "

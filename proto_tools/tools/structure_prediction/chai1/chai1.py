@@ -246,6 +246,7 @@ def example_input() -> Any:
     input_class=Chai1Input,
     config_class=Chai1Config,
     output_class=Chai1Output,
+    metrics_class=Chai1Metrics,
     description="Multi-modal structure prediction using Chai1",
     uses_gpu=True,
     example_input=example_input,

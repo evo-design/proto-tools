@@ -153,6 +153,7 @@ def example_input() -> Any:
     input_class=StructureMetricsInput,
     config_class=StructureMetricsConfig,
     output_class=StructureMetricsOutput,
+    metrics_class=StructureQualityMetrics,
     description="Compute structural quality metrics (SS percentages, longest helix, gyration radius) from PDB files",
     example_input=example_input,
     iterable_input_field="structures",

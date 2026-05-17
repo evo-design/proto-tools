@@ -35,6 +35,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from proto_tools.utils.tool_io import Metrics
+
 logger = logging.getLogger(__name__)
 
 
@@ -122,12 +124,55 @@ class FieldDoc(BaseModel):
     required: bool = Field(description="Whether the field is required (no default).")
 
 
+class MetricSpecDoc(BaseModel):
+    """One metric's declarative spec, from a ``Metrics`` subclass ``metric_spec``."""
+
+    name: str = Field(description="Metric key (e.g. ``avg_plddt``).")
+    type_str: str | None = Field(
+        default=None,
+        description="Stringified value type (e.g. ``float``, ``list[list[float]]``).",
+    )
+    min: float | None = Field(default=None, description="Minimum valid value; None if unbounded below.")
+    max: float | None = Field(default=None, description="Maximum valid value; None if unbounded above.")
+    unit: str | None = Field(default=None, description="Unit string (e.g. ``Å``, ``REU``, ``bits``).")
+    availability: str | None = Field(
+        default=None,
+        description="When the metric is present (e.g. ``always``, ``depends on model output``).",
+    )
+    description: str | None = Field(default=None, description="Human-readable description of the metric.")
+    is_primary: bool = Field(
+        default=False,
+        description="True if this is the model's ``primary_metric`` (headline value).",
+    )
+
+
 class ModelDoc(BaseModel):
     """Normalized view of a Pydantic model's docs."""
 
     name: str = Field(description="Class name.")
     docstring: str = Field(description="Cleaned class docstring.")
     fields: list[FieldDoc] = Field(default_factory=list, description="Per-field docs.")
+    metric_specs: list[MetricSpecDoc] | None = Field(
+        default=None,
+        description=(
+            "For tool output models with an associated Metrics subclass: the per-metric "
+            "spec table (type/range/unit/availability). None when no Metrics is associated. "
+            "When ``metrics_per_item_field`` is set, these describe the metrics carried by "
+            "each item of that output list (one set per item), not the call as a whole."
+        ),
+    )
+    primary_metric: str | None = Field(
+        default=None,
+        description="Name of the associated Metrics subclass's primary (headline) metric, if any.",
+    )
+    metrics_per_item_field: str | None = Field(
+        default=None,
+        description=(
+            "Name of the iterable output field whose every item carries the metrics in "
+            "``metric_specs`` (e.g. ``structures``: one metric set per predicted structure). "
+            "None means the tool is not iterable, so the metrics describe the single output."
+        ),
+    )
 
 
 # =============================================================================
@@ -560,7 +605,32 @@ def _clean_docstring(obj: Any) -> str:
     return inspect.cleandoc(obj.__doc__ or "")
 
 
-def get_model_doc(model_class: type[BaseModel]) -> ModelDoc:
+def _build_metric_specs(metrics_class: type[Metrics]) -> tuple[list[MetricSpecDoc], str | None]:
+    """Build the metric-spec table and primary-metric name from a Metrics subclass."""
+    primary = (
+        metrics_class.model_fields["primary_metric"].default if "primary_metric" in metrics_class.model_fields else None
+    )
+    specs = [
+        MetricSpecDoc(
+            name=name,
+            type_str=spec.get("type"),
+            min=spec.get("min"),
+            max=spec.get("max"),
+            unit=spec.get("unit"),
+            availability=spec.get("availability"),
+            description=spec.get("description"),
+            is_primary=(name == primary),
+        )
+        for name, spec in metrics_class.metric_spec.items()
+    ]
+    return specs, primary
+
+
+def get_model_doc(
+    model_class: type[BaseModel],
+    metrics_class: type[Metrics] | None = None,
+    iterable_output_field: str | None = None,
+) -> ModelDoc:
     """Return a ``ModelDoc`` view of a Pydantic model.
 
     Includes the class docstring plus a row per field with name, stringified
@@ -569,6 +639,12 @@ def get_model_doc(model_class: type[BaseModel]) -> ModelDoc:
 
     Args:
         model_class (type[BaseModel]): Any Pydantic v2 ``BaseModel`` subclass.
+        metrics_class (type[Metrics] | None): Optional Metrics subclass the tool emits;
+            when given, its ``metric_spec`` populates ``ModelDoc.metric_specs`` and its
+            ``primary_metric`` populates ``ModelDoc.primary_metric``.
+        iterable_output_field (str | None): The tool's iterable output field name; when
+            metrics are present this is recorded as ``ModelDoc.metrics_per_item_field``
+            so consumers know the metrics are reported once per item of that list.
 
     Returns:
         ModelDoc: Normalized view of the model's documentation.
@@ -591,8 +667,18 @@ def get_model_doc(model_class: type[BaseModel]) -> ModelDoc:
             )
         )
 
+    metric_specs: list[MetricSpecDoc] | None = None
+    primary_metric: str | None = None
+    metrics_per_item_field: str | None = None
+    if metrics_class is not None and metrics_class.metric_spec:
+        metric_specs, primary_metric = _build_metric_specs(metrics_class)
+        metrics_per_item_field = iterable_output_field
+
     return ModelDoc(
         name=model_class.__name__,
         docstring=_clean_docstring(model_class),
         fields=fields,
+        metric_specs=metric_specs,
+        primary_metric=primary_metric,
+        metrics_per_item_field=metrics_per_item_field,
     )

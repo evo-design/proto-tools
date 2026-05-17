@@ -88,6 +88,7 @@ def example_input() -> Any:
     input_class=ProGen2ScoringInput,
     config_class=ProGen2ScoringConfig,
     output_class=ProGen2ScoringOutput,
+    metrics_class=CausalModelScoringMetrics,
     description="Score protein sequences using ProGen2 language model",
     uses_gpu=True,
     example_input=example_input,

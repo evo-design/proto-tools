@@ -332,6 +332,7 @@ def example_input() -> Any:
     input_class=ProtenixInput,
     config_class=ProtenixConfig,
     output_class=ProtenixOutput,
+    metrics_class=ProtenixMetrics,
     description="Multi-modal structure prediction using Protenix (open-source AlphaFold3)",
     uses_gpu=True,
     example_input=example_input,

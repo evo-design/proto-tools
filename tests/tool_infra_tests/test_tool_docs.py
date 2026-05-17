@@ -29,6 +29,7 @@ import pytest
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.utils.tool_docs import (
     FieldDoc,
+    MetricSpecDoc,
     ModelDoc,
     ReadmeSections,
     _normalize_tool_key,
@@ -218,6 +219,24 @@ def test_get_model_doc_returns_normalized_view() -> None:
     assert return_logits.required is False
     assert return_logits.default is False
     assert return_logits.description
+
+
+def test_get_output_doc_nests_metric_specs() -> None:
+    """``get_output_doc`` nests ``MetricSpecDoc`` (with primary + per-item field) by default."""
+    doc = ToolRegistry.get_output_doc("chai1-prediction")
+    assert doc.metric_specs is not None
+    assert all(isinstance(m, MetricSpecDoc) for m in doc.metric_specs)
+    assert doc.primary_metric == "avg_plddt"
+    assert doc.metrics_per_item_field == "structures"
+
+    avg_plddt = next(m for m in doc.metric_specs if m.name == "avg_plddt")
+    assert (avg_plddt.type_str, avg_plddt.min, avg_plddt.max) == ("float", 0.0, 1.0)
+    assert avg_plddt.availability == "always"
+    assert avg_plddt.is_primary is True
+    assert sum(m.is_primary for m in doc.metric_specs) == 1
+
+    # A tool with no registered metrics_class has no nested specs.
+    assert ToolRegistry.get_output_doc("evo1-sample").metric_specs is None
 
 
 def test_get_input_doc_excludes_output_metadata_fields() -> None:

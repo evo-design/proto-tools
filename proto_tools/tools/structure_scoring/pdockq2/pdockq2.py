@@ -229,6 +229,7 @@ def example_input() -> Any:
     input_class=PDockQ2Input,
     config_class=PDockQ2Config,
     output_class=PDockQ2Output,
+    metrics_class=PDockQ2Metrics,
     description="Score a cofolded protein complex with pDockQ2 (Zhu 2023), using pLDDT + PAE to summarize interface quality",
     uses_gpu=False,
     example_input=example_input,
