@@ -223,7 +223,6 @@ class MalinoisScoreConfig(BaseConfig):
         title="Device",
         default="cuda",
         description="Device to run Malinois inference on",
-        hidden=True,
         include_in_key=False,
     )
     cell_types: list[MalinoisCellType] = ConfigField(
@@ -243,35 +242,30 @@ class MalinoisScoreConfig(BaseConfig):
         default=DEFAULT_MALINOIS_ARTIFACT_PATH,
         description="Optional local artifact tarball path; empty uses the managed cache download.",
         reload_on_change=True,
-        hidden=True,
     )
     artifact_url: str = ConfigField(
         title="Artifact URL",
         default=DEFAULT_MALINOIS_ARTIFACT_URL,
         description="HTTPS URL used to provision the Malinois artifact.",
         reload_on_change=True,
-        hidden=True,
     )
     artifact_md5: str = ConfigField(
         title="Artifact MD5",
         default=DEFAULT_MALINOIS_ARTIFACT_MD5,
         description="Expected MD5 checksum for the downloaded Malinois artifact.",
         reload_on_change=True,
-        hidden=True,
     )
     malinois_dir: str = ConfigField(
         title="Malinois Directory",
         default=DEFAULT_MALINOIS_DIR,
         description="Optional local Malinois metadata directory; empty uses the managed cache extraction.",
         reload_on_change=True,
-        hidden=True,
     )
     batch_size: int = ConfigField(
         title="Batch Size",
         default=1,
         ge=1,
         description="Number of sequences to score simultaneously on GPU.",
-        advanced=True,
         include_in_key=False,
     )
 
@@ -382,7 +376,6 @@ class MalinoisGradientConfig(BaseConfig):
         title="Device",
         default="cuda",
         description="Device to run Malinois inference on",
-        hidden=True,
         include_in_key=False,
     )
     loss_terms: list[MalinoisGradientLossTerm] = ConfigField(
@@ -402,28 +395,24 @@ class MalinoisGradientConfig(BaseConfig):
         default=DEFAULT_MALINOIS_ARTIFACT_PATH,
         description="Optional local artifact tarball path; empty uses the managed cache download.",
         reload_on_change=True,
-        hidden=True,
     )
     artifact_url: str = ConfigField(
         title="Artifact URL",
         default=DEFAULT_MALINOIS_ARTIFACT_URL,
         description="HTTPS URL used to provision the Malinois artifact.",
         reload_on_change=True,
-        hidden=True,
     )
     artifact_md5: str = ConfigField(
         title="Artifact MD5",
         default=DEFAULT_MALINOIS_ARTIFACT_MD5,
         description="Expected MD5 checksum for the downloaded Malinois artifact.",
         reload_on_change=True,
-        hidden=True,
     )
     malinois_dir: str = ConfigField(
         title="Malinois Directory",
         default=DEFAULT_MALINOIS_DIR,
         description="Optional local Malinois metadata directory; empty uses the managed cache extraction.",
         reload_on_change=True,
-        hidden=True,
     )
     soft: float = ConfigField(
         title="Soft Mixing",
@@ -431,7 +420,6 @@ class MalinoisGradientConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="Blend hard argmax one-hot (0) to softmax probabilities (1).",
-        advanced=True,
     )
     hard: float = ConfigField(
         title="Hard Mixing",
@@ -439,13 +427,11 @@ class MalinoisGradientConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="Straight-through hard-forward coefficient.",
-        advanced=True,
     )
     compute_gradient: bool = ConfigField(
         title="Compute Gradient",
         default=True,
         description="Run backward pass and return gradient; set False for forward-only scoring.",
-        advanced=True,
     )
 
     @model_validator(mode="after")
