@@ -105,7 +105,6 @@ class FoldseekRBHConfig(BaseConfig):
         title="Alignment Type",
         default=2,
         description="Alignment scoring: 0=3Di SW, 1=TMalign, 2=3Di+AA (default), 3=LoL. RBH treats 0 same as 2",
-        advanced=True,
     )
     cov: float = ConfigField(
         title="Coverage Threshold",
@@ -113,13 +112,9 @@ class FoldseekRBHConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="Min aligned-residue coverage for an RBH pair (0-1). 0.0 keeps all",
-        advanced=True,
     )
     cov_mode: Literal[0, 1, 2] = ConfigField(
-        title="Coverage Mode",
-        default=0,
-        description="Coverage mode: 0=bidirectional, 1=target-only, 2=query-only",
-        advanced=True,
+        title="Coverage Mode", default=0, description="Coverage mode: 0=bidirectional, 1=target-only, 2=query-only"
     )
     tmscore_threshold: float = ConfigField(
         title="TM-score Threshold",
@@ -127,24 +122,11 @@ class FoldseekRBHConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="TM-score floor for RBH pairs (0-1). 0.0 keeps all",
-        advanced=True,
     )
     lddt_threshold: float = ConfigField(
-        title="LDDT Threshold",
-        default=0.0,
-        ge=0.0,
-        le=1.0,
-        description="LDDT floor for RBH pairs (0-1). 0.0 keeps all",
-        advanced=True,
+        title="LDDT Threshold", default=0.0, ge=0.0, le=1.0, description="LDDT floor for RBH pairs (0-1). 0.0 keeps all"
     )
-    num_threads: int = ConfigField(
-        title="Threads",
-        default=4,
-        ge=1,
-        description="CPU threads",
-        advanced=True,
-        include_in_key=False,
-    )
+    num_threads: int = ConfigField(title="Threads", default=4, ge=1, description="CPU threads", include_in_key=False)
 
     @model_validator(mode="after")
     def _local_db_required(self) -> "FoldseekRBHConfig":

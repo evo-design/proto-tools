@@ -57,54 +57,28 @@ class NCBIEsearchInput(BaseToolInput):
     db: NCBIDatabase = InputField(
         description="NCBI database to query (e.g. 'protein', 'nuccore', 'gene', 'pubmed', 'taxonomy')"
     )
-    search_term: str = InputField(
-        description="NCBI search query (e.g. 'lacI[Gene] AND Escherichia coli[Organism]')",
-    )
-    max_results: int = InputField(
-        default=20,
-        ge=1,
-        le=10000,
-        description="Max IDs to return (NCBI retmax; default 20)",
-    )
+    search_term: str = InputField(description="NCBI search query (e.g. 'lacI[Gene] AND Escherichia coli[Organism]')")
+    max_results: int = InputField(default=20, ge=1, le=10000, description="Max IDs to return (NCBI retmax; default 20)")
     retstart: int = InputField(
-        default=0,
-        ge=0,
-        description="0-indexed offset of the first hit (NCBI retstart). For pagination.",
-        advanced=True,
+        default=0, ge=0, description="0-indexed offset of the first hit (NCBI retstart). For pagination."
     )
     sort: str | None = InputField(
-        default=None,
-        description="Db-specific sort key (e.g. 'relevance' or 'pub_date' on pubmed)",
-        advanced=True,
+        default=None, description="Db-specific sort key (e.g. 'relevance' or 'pub_date' on pubmed)"
     )
     field: str | None = InputField(
-        default=None,
-        description="Restrict search term to a single field (e.g. 'title' / 'author' on pubmed)",
-        advanced=True,
+        default=None, description="Restrict search term to a single field (e.g. 'title' / 'author' on pubmed)"
     )
     datetype: Literal["mdat", "pdat", "edat"] | None = InputField(
-        default=None,
-        description="Date axis for mindate/maxdate/reldate: mdat / pdat / edat",
-        advanced=True,
+        default=None, description="Date axis for mindate/maxdate/reldate: mdat / pdat / edat"
     )
     mindate: str | None = InputField(
-        default=None,
-        description="Lower date bound (YYYY/MM/DD, YYYY/MM, or YYYY); requires datetype",
-        advanced=True,
-        depends_on={"field": "datetype", "not_null": True},
+        default=None, description="Lower date bound (YYYY/MM/DD, YYYY/MM, or YYYY); requires datetype"
     )
     maxdate: str | None = InputField(
-        default=None,
-        description="Upper date bound (YYYY/MM/DD, YYYY/MM, or YYYY); requires datetype",
-        advanced=True,
-        depends_on={"field": "datetype", "not_null": True},
+        default=None, description="Upper date bound (YYYY/MM/DD, YYYY/MM, or YYYY); requires datetype"
     )
     reldate: int | None = InputField(
-        default=None,
-        ge=1,
-        description="Records dated within the last N days; requires datetype",
-        advanced=True,
-        depends_on={"field": "datetype", "not_null": True},
+        default=None, ge=1, description="Records dated within the last N days; requires datetype"
     )
 
     @model_validator(mode="after")

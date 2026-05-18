@@ -148,7 +148,7 @@ Each `InterfaceStructureInput` has:
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `pre_relax_structures` | `bool` | `False` | If `True`, run `pyrosetta-relax` on each input structure before scoring. |
-| `relax_config` | `PyRosettaRelaxConfig` | `PyRosettaRelaxConfig()` (factory) | Settings used when `pre_relax_structures=True`. Shown in the UI only when the toggle is on (`depends_on={"pre_relax_structures": [True]}`). |
+| `relax_config` | `PyRosettaRelaxConfig` | `PyRosettaRelaxConfig()` (factory) | Settings used when `pre_relax_structures=True`. UI visibility gated on the toggle via the proto-ui overlay layer. |
 
 ### `pyrosetta-sap`
 

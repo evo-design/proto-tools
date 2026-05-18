@@ -287,22 +287,16 @@ class MaskingStrategy(BaseModel):
             "highest-scored positions). = 1.0: use scores as-is. > 1.0: "
             "more uniform (ignore score differences)."
         ),
-        depends_on={"method": ["entropy", "max-logit"]},
-        advanced=True,
     )
 
     # -- Model-based method fields (only relevant for entropy / max-logit) -----
     model_name: Literal["esm2", "esm3"] | None = ConfigField(
         default=None,
         description="Which masked model to use for scoring. Defaults to the sampling tool's model when unset.",
-        depends_on={"method": ["entropy", "max-logit"]},
-        advanced=True,
     )
     model_checkpoint: str | None = ConfigField(
         default=None,
         description="Model checkpoint override (uses tool default if None).",
-        depends_on={"method": ["entropy", "max-logit"]},
-        hidden=True,
     )
 
     # -- Validators ------------------------------------------------------------

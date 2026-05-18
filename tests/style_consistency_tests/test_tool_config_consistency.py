@@ -12,11 +12,13 @@ from pydantic.fields import PydanticUndefined
 
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.utils import BaseConfig as ToolsBaseConfig
+from proto_tools.utils.base_config import ConfigField
 from tests.style_consistency_tests.helpers import field_description_is_valid, find_missing_fields_in_docstring
 
 _MAX_FIELD_TITLE_LENGTH = 31
 _MAX_FIELD_DESCRIPTION_LENGTH = 100
 _BASE_CONFIG_FIELDS = frozenset(ToolsBaseConfig.model_fields.keys())
+_BANNED_UI_SCHEMA_KEYS = frozenset({"advanced", "hidden", "depends_on", "x-depends-on", "x-xor-group"})
 
 
 def _list_of_all_tool_config_models():
@@ -34,10 +36,6 @@ def test_tool_config_consistency(config_model):
     assert issubclass(config_model, ToolsBaseConfig), (
         f"Config model {config_model} is not a subclass of ToolsBaseConfig"
     )
-
-    # Pull the model schema and ensure fields are defined consistently
-    schema = config_model.model_json_schema()
-    required_fields = set(schema.get("required", []))
 
     # Pull the docstring for the config model
     docstring = config_model.__doc__
@@ -80,21 +78,11 @@ def test_tool_config_consistency(config_model):
         assert json_schema_extra.get("_field_type") == "ConfigField", (
             f"{config_model.__name__}.{field_name} must use ConfigField() instead of Field()."
         )
-
-        # Pull advanced and hidden flags
-        advanced = json_schema_extra.get("advanced", False)
-        hidden = json_schema_extra.get("hidden", False)
-
-        # Advanced and hidden flags must be false if the field is required
-        if field_name in required_fields:
-            assert not advanced, (
-                f"{config_model.__name__}.{field_name} 'advanced' flag cannot be True if the field is required. "
-                "Remove the 'advanced' flag."
-            )
-            assert not hidden, (
-                f"{config_model.__name__}.{field_name} 'hidden' flag cannot be True if the field is required. "
-                "Remove the 'hidden' flag."
-            )
+        banned_keys = _BANNED_UI_SCHEMA_KEYS.intersection(json_schema_extra)
+        assert not banned_keys, (
+            f"{config_model.__name__}.{field_name} has UI-presentation schema keys {sorted(banned_keys)}. "
+            "Move advanced/hidden/conditional visibility to the proto-ui overlay."
+        )
 
     # Every field must appear in the config's own docstring (excluding
     # BaseConfig fields, which are documented once at the base level).
@@ -105,6 +93,20 @@ def test_tool_config_consistency(config_model):
         f"{missing_fields}. Every non-BaseConfig field must be documented in the "
         "class's own docstring, even if inherited from a parent config."
     )
+
+
+@pytest.mark.parametrize(
+    ("removed_kwarg", "value"),
+    [
+        ("advanced", True),
+        ("hidden", True),
+        ("depends_on", {"mode": ["remote"]}),
+    ],
+)
+def test_config_field_rejects_ui_presentation_kwargs(removed_kwarg, value):
+    """ConfigField rejects UI-presentation kwargs that belong in proto-ui overlays."""
+    with pytest.raises(TypeError, match="ConfigField no longer accepts UI-presentation"):
+        ConfigField(default=None, **{removed_kwarg: value})
 
 
 # ── Default config instantiation ────────────────────────────────────────────

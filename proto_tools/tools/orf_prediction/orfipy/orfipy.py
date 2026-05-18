@@ -208,7 +208,6 @@ class OrfipyConfig(BaseConfig):
         default=4,
         ge=1,
         description="CPU threads passed to orfipy --procs",
-        hidden=True,
     )
     start_codons: list[StartCodon] = ConfigField(
         title="Start Codons",
@@ -248,31 +247,26 @@ class OrfipyConfig(BaseConfig):
         title="Ignore Case",
         default=False,
         description="Treat lowercase (soft-masked) nucleotides as ORF-eligible",
-        advanced=True,
     )
     partial_3: bool = ConfigField(
         title="Allow 3' Partial ORFs",
         default=False,
         description="Report ORFs missing a stop codon at the sequence end",
-        advanced=True,
     )
     partial_5: bool = ConfigField(
         title="Allow 5' Partial ORFs",
         default=False,
         description="Report ORFs missing a start codon at the sequence start",
-        advanced=True,
     )
     between_stops: bool = ConfigField(
         title="Between Stops",
         default=False,
         description="Report ORFs spanning stop-to-stop (ignores start codons; implies partial_3 + partial_5)",
-        advanced=True,
     )
     translation_table: OrfipyTranslationTable | None = ConfigField(
         title="Translation Table",
         default=None,
         description="NCBI genetic code for translation (None = standard genetic code)",
-        advanced=True,
     )
     model_config = ConfigDict(extra="forbid")
 

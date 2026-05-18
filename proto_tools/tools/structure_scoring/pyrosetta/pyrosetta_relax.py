@@ -155,38 +155,32 @@ class PyRosettaRelaxConfig(BaseConfig):
         title="Constrain to Start",
         default=True,
         description="Constrain relaxation to starting coordinates",
-        advanced=True,
     )
     max_iter: int | None = ConfigField(
         default=None,
         ge=1,
         title="Max Iterations",
         description="Maximum minimizer iterations per relax cycle. None uses PyRosetta default (2500).",
-        advanced=True,
     )
     disable_jumps: bool = ConfigField(
         default=False,
         title="Disable Jumps",
         description="Lock inter-chain rigid-body DOFs during relaxation.",
-        advanced=True,
     )
     min_type: str | None = ConfigField(
         default=None,
         title="Minimizer Type",
         description="Optional FastRelax minimizer type.",
-        advanced=True,
     )
     align_to_start: bool = ConfigField(
         default=False,
         title="Align to Start",
         description="Align the relaxed pose back onto the starting pose after FastRelax.",
-        advanced=True,
     )
     copy_b_factors_from_start: bool = ConfigField(
         default=False,
         title="Copy Start B-factors",
         description="Copy per-residue B-factors from the starting pose to the relaxed pose.",
-        advanced=True,
     )
 
     @property

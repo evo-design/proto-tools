@@ -10,31 +10,10 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 from pydantic import Field as PydanticField
 
-from proto_tools.utils.tool_io import BaseToolInput, _extra_dict
+from proto_tools.utils.tool_io import BaseToolInput, _extra_dict, _reject_removed_ui_kwargs
 
 DEFAULT_TIMEOUT = 600  # seconds
 RANDOM_SEED_UPPER_BOUND = 2**31
-
-
-def _normalize_depends_on(depends_on: dict[str, Any]) -> dict[str, Any]:
-    """Convert shorthand depends_on to explicit format if needed.
-
-    Args:
-        depends_on (dict[str, Any]): Either shorthand ``{"field_name": value}``
-            or explicit ``{"field": "field_name", "value": ...}`` format.
-
-    Returns:
-        dict[str, Any]: Explicit format with ``field`` key.
-    """
-    if "field" in depends_on:
-        return depends_on
-    # Shorthand: single key-value pair like {"search_mode": ["online"]}
-    keys = [k for k in depends_on if k not in ("value", "not_null")]
-    if len(keys) != 1:
-        msg = f"Shorthand depends_on must have exactly one field key, got {list(depends_on.keys())}"
-        raise ValueError(msg)
-    field_name = keys[0]
-    return {"field": field_name, "value": depends_on[field_name]}
 
 
 def ConfigField(
@@ -42,12 +21,9 @@ def ConfigField(
     *,
     title: str | None = None,
     description: str | None = None,
-    advanced: bool = False,
-    hidden: bool = False,
     reload_on_change: bool = False,
     include_in_key: bool = True,
-    depends_on: dict[str, Any] | None = None,
-    xor_group: str | None = None,
+    xor_group: str | None = None,  # noqa: ARG001 — marker for sibling-field XOR groups; enforced by @model_validator per tool.
     **kwargs: Any,
 ) -> Any:
     """Custom Field wrapper that automatically adds metadata flags to json_schema_extra.
@@ -56,48 +32,24 @@ def ConfigField(
         default (Any): Default value for the field. Use ``...`` for required fields.
         title (str | None): Human-readable title for UI display.
         description (str | None): Description of the field for documentation and UI tooltips.
-        advanced (bool): If True, field appears in "Advanced" section of UI.
-        hidden (bool): If True, field is hidden from UI completely.
         reload_on_change (bool): If True, changing this field between persistent
             worker calls triggers a subprocess restart.
         include_in_key (bool): If False, field is excluded from tool cache key
             generation. Fields that don't affect computation results (device,
             verbose, timeout) should set this to False.
-        depends_on (dict[str, Any] | None): If set, field is only visible when the
-            sibling field satisfies the condition. Accepts two formats:
-            shorthand ``{"field_name": ["val1", "val2"]}`` or explicit
-            ``{"field": "field_name", "value": ["val1", "val2"]}``.
-            Use ``{"field": "x", "not_null": True}`` to show when the
-            target field is not None. ``value`` and ``not_null`` are
-            mutually exclusive.
-        xor_group (str | None): Mutual-exclusion group name; emitted as
-            ``x-xor-group`` in JSON schema. Enforce at runtime with a
-            ``@model_validator`` on the Config class.
+        xor_group (str | None): Mutual-exclusion group name. Enforce at runtime
+            with a ``@model_validator`` on the Config class.
         kwargs: All other standard Pydantic Field arguments (via ``**kwargs``).
 
     Usage:
-        param: int = ConfigField(default=42, title="Param", description="...", advanced=True)
-        mode_field: str = ConfigField(
-            default="a",
-            depends_on={"mode": ["advanced"]},
-        )
+        param: int = ConfigField(default=42, title="Param", description="...")
     """
+    _reject_removed_ui_kwargs("ConfigField", kwargs)
     json_schema_extra = kwargs.get("json_schema_extra", {})
 
-    json_schema_extra["advanced"] = advanced
-    json_schema_extra["hidden"] = hidden
     json_schema_extra["reload_on_change"] = reload_on_change
     json_schema_extra["include_in_key"] = include_in_key
     json_schema_extra["_field_type"] = "ConfigField"
-
-    if depends_on is not None:
-        normalized = _normalize_depends_on(depends_on)
-        if "value" in normalized and "not_null" in normalized:
-            raise ValueError("depends_on cannot specify both 'value' and 'not_null'")
-        json_schema_extra["x-depends-on"] = normalized
-
-    if xor_group is not None:
-        json_schema_extra["x-xor-group"] = xor_group
 
     kwargs["json_schema_extra"] = json_schema_extra
 
@@ -161,7 +113,6 @@ class BaseConfig(BaseModel):
         ge=0,
         le=3,
         description="Verbosity level (0=quiet, 1=info, 2=debug, 3=raw subprocess stderr). True→1, False→0.",
-        hidden=True,
         include_in_key=False,
     )
 
@@ -184,7 +135,6 @@ class BaseConfig(BaseModel):
         title="Device",
         default="cpu",
         description="Device to run the tool on (e.g., 'cpu', 'cuda', 'cuda:0', 'cloud')",
-        hidden=True,
         include_in_key=False,
     )
 
@@ -193,7 +143,6 @@ class BaseConfig(BaseModel):
         default=DEFAULT_TIMEOUT,
         ge=1,
         description="Maximum execution time in seconds. None waits indefinitely.",
-        hidden=True,
         include_in_key=False,
     )
 
@@ -203,7 +152,6 @@ class BaseConfig(BaseModel):
         ge=0,
         lt=2**32,
         description="Random seed for reproducible results. Some cacheable tools gate cache on this field.",
-        advanced=True,
         include_in_key=True,
     )
 

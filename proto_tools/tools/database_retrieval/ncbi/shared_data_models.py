@@ -91,14 +91,12 @@ class NCBIFetchConfig(BaseConfig):
         title="NCBI API Key",
         default=None,
         description="Optional NCBI API key (lifts rate limit from 3 to 10 req/s)",
-        advanced=True,
         include_in_key=False,
     )
     ncbi_email: str | None = ConfigField(
         title="NCBI Email",
         default=None,
         description="Optional contact email; pair with API key for traceability",
-        advanced=True,
         include_in_key=False,
     )
 

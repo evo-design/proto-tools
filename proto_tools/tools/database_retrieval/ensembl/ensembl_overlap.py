@@ -82,27 +82,22 @@ class EnsemblOverlapConfig(BaseConfig):
         description="Type of feature to retrieve (e.g. gene, transcript, exon, regulatory, variation)",
     )
     assembly: EnsemblAssembly = ConfigField(
-        title="Assembly",
-        default="GRCh38",
-        description="Genome assembly; GRCh37 routes to grch37.rest.ensembl.org",
+        title="Assembly", default="GRCh38", description="Genome assembly; GRCh37 routes to grch37.rest.ensembl.org"
     )
     biotype: EnsemblBiotype | None = ConfigField(
         title="Biotype Filter",
         default=None,
         description="Restrict to a biotype (e.g. 'protein_coding'); most useful for gene/transcript features",
-        advanced=True,
     )
     so_term: EnsemblSOTerm | None = ConfigField(
         title="SO Term Filter",
         default=None,
         description="Restrict variation features by SO consequence (e.g. 'missense_variant')",
-        advanced=True,
     )
     variant_set: str | None = ConfigField(
         title="Variant Set Filter",
         default=None,
         description="Restrict variation features to a named variant set (e.g. 'ClinVar')",
-        advanced=True,
     )
 
 

@@ -284,13 +284,11 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
         title="Use GPU",
         default=True,
         description="Use MMseqs2-GPU; requires a `.idx_pad` index, an NVIDIA GPU (Turing+), and a Linux host.",
-        advanced=True,
     )
     pairing_strategy: Literal["greedy", "complete"] = ConfigField(
         title="Pairing Strategy",
         default="greedy",
         description="Paired-MSA strategy (forward-compat field; not yet wired up).",
-        hidden=True,
     )
     sensitivity: float | None = ConfigField(
         title="MMseqs2 Sensitivity",
@@ -298,14 +296,12 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
         ge=1.0,
         le=9.0,
         description="MMseqs2 `-s` override (1.0-9.0); ignored on GPU; `None` uses the dataset's default.",
-        advanced=True,
     )
     num_threads: int | None = ConfigField(
         title="Number of Threads",
         default=None,
         ge=1,
         description="CPU threads; `None` auto-detects all available cores.",
-        hidden=True,
         include_in_key=False,
     )
     timeout: int | None = ConfigField(
@@ -313,7 +309,6 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
         default=3600,
         ge=1,
         description="Subprocess timeout in seconds; full-database searches can exceed 10 minutes.",
-        hidden=True,
         include_in_key=False,
     )
 

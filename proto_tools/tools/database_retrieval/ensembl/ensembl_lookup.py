@@ -85,35 +85,27 @@ class EnsemblLookupConfig(BaseConfig):
         title="Species", default="homo_sapiens", description="Species (used when symbol is provided)"
     )
     assembly: EnsemblAssembly = ConfigField(
-        title="Assembly",
-        default="GRCh38",
-        description="Genome assembly; GRCh37 routes to grch37.rest.ensembl.org",
+        title="Assembly", default="GRCh38", description="Genome assembly; GRCh37 routes to grch37.rest.ensembl.org"
     )
     expand: bool = ConfigField(
         title="Expand Transcripts/Exons",
         default=False,
         description="Include transcripts, translations, and exons in the response",
-        advanced=True,
     )
     mane: bool = ConfigField(
         title="MANE Annotations",
         default=False,
         description="Include MANE Select annotations (lookup-by-id only; requires expand=True)",
-        advanced=True,
-        depends_on={"field": "expand", "value": [True]},
     )
     phenotypes: bool = ConfigField(
         title="Phenotype Annotations",
         default=False,
         description="Include phenotype annotations on gene records (lookup-by-id only)",
-        advanced=True,
     )
     utr: bool = ConfigField(
         title="UTR Coordinates",
         default=False,
         description="Include UTR coordinates per transcript (lookup-by-id only; requires expand=True)",
-        advanced=True,
-        depends_on={"field": "expand", "value": [True]},
     )
 
 

@@ -157,55 +157,31 @@ class EnsemblVEPAnnotationConfig(BaseConfig):
         default=False,
         description="Mark canonical Ensembl transcripts in each consequence record",
     )
-    hgvs: bool = ConfigField(
-        title="HGVS Notation",
-        default=False,
-        description="Include HGVS notation per consequence",
-    )
-    protein: bool = ConfigField(
-        title="Protein IDs",
-        default=False,
-        description="Include Ensembl protein identifiers",
-    )
+    hgvs: bool = ConfigField(title="HGVS Notation", default=False, description="Include HGVS notation per consequence")
+    protein: bool = ConfigField(title="Protein IDs", default=False, description="Include Ensembl protein identifiers")
     domains: bool = ConfigField(
-        title="Protein Domains",
-        default=False,
-        description="List overlapping protein domain names",
+        title="Protein Domains", default=False, description="List overlapping protein domain names"
     )
     numbers: bool = ConfigField(
-        title="Exon/Intron Numbers",
-        default=False,
-        description="Include affected exon/intron numbers per consequence",
+        title="Exon/Intron Numbers", default=False, description="Include affected exon/intron numbers per consequence"
     )
     variant_class: bool = ConfigField(
-        title="Variant Class",
-        default=False,
-        description="Include Sequence Ontology variant classification",
+        title="Variant Class", default=False, description="Include Sequence Ontology variant classification"
     )
     uniprot: bool = ConfigField(
-        title="UniProt Accessions",
-        default=False,
-        description="Include UniProt accession for each transcript",
+        title="UniProt Accessions", default=False, description="Include UniProt accession for each transcript"
     )
     xref_refseq: bool = ConfigField(
-        title="RefSeq Xrefs",
-        default=False,
-        description="Include RefSeq cross-reference IDs per transcript",
+        title="RefSeq Xrefs", default=False, description="Include RefSeq cross-reference IDs per transcript"
     )
     mirna: bool = ConfigField(
-        title="miRNA Targets",
-        default=False,
-        description="Include overlapping miRNA target sites",
+        title="miRNA Targets", default=False, description="Include overlapping miRNA target sites"
     )
     pubmed: bool = ConfigField(
-        title="PubMed Citations",
-        default=False,
-        description="Include PubMed citation IDs for each variant",
+        title="PubMed Citations", default=False, description="Include PubMed citation IDs for each variant"
     )
     conservation: bool = ConfigField(
-        title="Conservation Scores",
-        default=False,
-        description="Conservation scores from EPO multi-species alignments",
+        title="Conservation Scores", default=False, description="Conservation scores from EPO multi-species alignments"
     )
     phenotypes: bool = ConfigField(
         title="Phenotype Annotations",
@@ -213,14 +189,10 @@ class EnsemblVEPAnnotationConfig(BaseConfig):
         description="Overlapping phenotype/disease annotations from ClinVar/dbSNP/etc.",
     )
     blosum62: bool = ConfigField(
-        title="BLOSUM62 Score",
-        default=False,
-        description="BLOSUM62 substitution score for missense changes",
+        title="BLOSUM62 Score", default=False, description="BLOSUM62 substitution score for missense changes"
     )
     max_ent_scan: bool = ConfigField(
-        title="MaxEntScan Splice Scores",
-        default=False,
-        description="MaxEntScan splice donor/acceptor scores",
+        title="MaxEntScan Splice Scores", default=False, description="MaxEntScan splice donor/acceptor scores"
     )
 
 
@@ -264,96 +236,63 @@ class EnsemblVEPConfig(BaseConfig):
 
     species: EnsemblSpecies = ConfigField(title="Species", default="homo_sapiens", description="Species slug for VEP")
     assembly: EnsemblAssembly = ConfigField(
-        title="Assembly",
-        default="GRCh38",
-        description="Genome assembly; GRCh37 routes to grch37.rest.ensembl.org",
+        title="Assembly", default="GRCh38", description="Genome assembly; GRCh37 routes to grch37.rest.ensembl.org"
     )
     annotations: EnsemblVEPAnnotationConfig = ConfigField(
         title="Annotations",
         default_factory=EnsemblVEPAnnotationConfig,
         description="Optional VEP annotations to include in the response",
-        advanced=True,
     )
     sift: Literal["b", "p", "s"] | None = ConfigField(
         title="SIFT Output",
         default=None,
         description="SIFT output level: b=both, p=prediction, s=score; None = API default",
-        advanced=True,
     )
     polyphen: Literal["b", "p", "s"] | None = ConfigField(
         title="PolyPhen Output",
         default=None,
         description="PolyPhen output level: b=both, p=prediction, s=score; None = API default",
-        advanced=True,
     )
     mane: bool = ConfigField(
-        title="MANE Select",
-        default=False,
-        description="Include MANE Select annotations (GRCh38 only)",
-        advanced=True,
-        depends_on={"field": "assembly", "value": ["GRCh38"]},
+        title="MANE Select", default=False, description="Include MANE Select annotations (GRCh38 only)"
     )
     alphamissense: bool = ConfigField(
         title="AlphaMissense Scores",
         default=False,
         description="AlphaMissense missense pathogenicity scores (human only)",
-        advanced=True,
-        depends_on={"field": "species", "value": ["homo_sapiens"]},
     )
     revel: bool = ConfigField(
-        title="REVEL Scores",
-        default=False,
-        description="REVEL ensemble pathogenicity scores (human only)",
-        advanced=True,
-        depends_on={"field": "species", "value": ["homo_sapiens"]},
+        title="REVEL Scores", default=False, description="REVEL ensemble pathogenicity scores (human only)"
     )
-    cadd: bool = ConfigField(
-        title="CADD Scores",
-        default=False,
-        description="CADD deleteriousness scores (human only)",
-        advanced=True,
-        depends_on={"field": "species", "value": ["homo_sapiens"]},
-    )
+    cadd: bool = ConfigField(title="CADD Scores", default=False, description="CADD deleteriousness scores (human only)")
     appris: bool = ConfigField(
-        title="APPRIS Tag",
-        default=False,
-        description="APPRIS principal-isoform tag per transcript (human/mouse only)",
-        advanced=True,
-        depends_on={"field": "species", "value": ["homo_sapiens", "mus_musculus"]},
+        title="APPRIS Tag", default=False, description="APPRIS principal-isoform tag per transcript (human/mouse only)"
     )
     tsl: bool = ConfigField(
         title="Transcript Support Level",
         default=False,
         description="Transcript support level (TSL) per transcript (human/mouse only)",
-        advanced=True,
-        depends_on={"field": "species", "value": ["homo_sapiens", "mus_musculus"]},
     )
     ccds: bool = ConfigField(
         title="CCDS IDs",
         default=False,
         description="Include CCDS identifier per transcript (human/mouse only — CCDS is a human/mouse project)",
-        advanced=True,
-        depends_on={"field": "species", "value": ["homo_sapiens", "mus_musculus"]},
     )
     distance: int | None = ConfigField(
         title="Up/Downstream Distance (bp)",
         default=None,
         ge=0,
         description="Bases up/downstream considered for consequence terms (None = API default 5000)",
-        advanced=True,
     )
     pick: bool = ConfigField(
         title="Pick One Consequence",
         default=False,
         description="Collapse output to one consequence per variant via Ensembl PICK heuristic",
-        advanced=True,
     )
     per_gene: bool = ConfigField(
         title="One Consequence per Gene",
         default=False,
         description="Collapse output to one consequence per gene; incompatible with pick",
-        advanced=True,
-        depends_on={"field": "pick", "value": [False]},
     )
 
     @model_validator(mode="after")

@@ -187,21 +187,18 @@ class MincedConfig(BaseConfig):
         default=47,
         ge=10,
         description="Max repeat length in nt; covers known CRISPR families, raise for unusual loci",
-        advanced=True,
     )
     min_spacer_length: int = ConfigField(
         title="Minimum Spacer Length",
         default=26,
         ge=1,
         description="Min spacer length in nt; lower (~18) for partial or degraded arrays",
-        advanced=True,
     )
     max_spacer_length: int = ConfigField(
         title="Maximum Spacer Length",
         default=50,
         ge=1,
         description="Max spacer length in nt; raise for noncanonical families with longer spacers",
-        advanced=True,
     )
 
     @model_validator(mode="after")

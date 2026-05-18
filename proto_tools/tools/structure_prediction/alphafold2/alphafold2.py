@@ -190,7 +190,6 @@ class AlphaFold2Config(MSAStructurePredictionConfig):
         default=3,
         ge=0,
         description="Recycling iterations through the model. Higher = more accurate but slower.",
-        advanced=True,
     )
     model_num: int = ConfigField(
         title="Model Number",
@@ -198,7 +197,6 @@ class AlphaFold2Config(MSAStructurePredictionConfig):
         ge=1,
         le=5,
         description="Which of AlphaFold2's 5 trained parameter sets to use.",
-        advanced=True,
         reload_on_change=True,
     )
     num_ensemble_models: int = ConfigField(

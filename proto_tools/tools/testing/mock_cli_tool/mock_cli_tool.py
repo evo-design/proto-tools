@@ -51,7 +51,6 @@ class MockCLIToolConfig(BaseConfig):
         default="cuda",
         title="Device",
         description="Device to run on",
-        hidden=True,
         include_in_key=False,
     )
 

@@ -179,7 +179,6 @@ class Chai1Config(MSAStructurePredictionConfig):
         title="Use ESM Embeddings",
         default=True,
         description="Whether to use ESM embeddings for improved predictions",
-        advanced=True,
     )
 
     num_trunk_recycles: int = ConfigField(
@@ -187,48 +186,41 @@ class Chai1Config(MSAStructurePredictionConfig):
         default=3,
         ge=0,
         description="Iterative refinement passes through the trunk network. Higher = more accurate but slower.",
-        advanced=True,
     )
     num_diffn_timesteps: int = ConfigField(
         title="Number of Diffusion Timesteps",
         default=200,
         ge=1,
         description="Denoising steps in the diffusion process. Higher = more refined but slower.",
-        advanced=True,
     )
     num_diffn_samples: int = ConfigField(
         title="Number of Diffusion Samples",
         default=5,
         ge=1,
         description="Structure samples per complex; best by confidence is kept. Higher = more thorough but slower.",
-        advanced=True,
     )
     num_trunk_samples: int = ConfigField(
         title="Number of Trunk Samples",
         default=1,
         ge=1,
         description="Independent trunk forward passes per diffusion sample (adds sample diversity).",
-        advanced=True,
     )
     low_memory: bool = ConfigField(
         title="Low Memory Mode",
         default=True,
         description="Stream features per sample to reduce peak GPU memory at the cost of speed.",
-        advanced=True,
     )
     recycle_msa_subsample: int = ConfigField(
         title="Recycle MSA Subsample",
         default=0,
         ge=0,
         description="Randomly subsample the MSA across recycles for diversity. 0 disables.",
-        advanced=True,
     )
     timeout: int | None = ConfigField(
         title="Timeout",
         default=1200,
         ge=1,
         description="Maximum execution time in seconds",
-        hidden=True,
         include_in_key=False,
     )
 

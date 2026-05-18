@@ -129,9 +129,7 @@ class CcdLookupInput(BaseToolInput):
             A single string is normalized to a list.
     """
 
-    identifiers: list[str] = InputField(
-        description="CCD codes (e.g. 'ATP') or SMILES strings to enrich",
-    )
+    identifiers: list[str] = InputField(description="CCD codes (e.g. 'ATP') or SMILES strings to enrich")
 
     @field_validator("identifiers", mode="before")
     @classmethod
@@ -160,23 +158,14 @@ class CcdLookupConfig(BaseConfig):
     """
 
     include_cross_references: bool = ConfigField(
-        title="Include Cross-References",
-        default=False,
-        description="Fetch UniChem cross-references (network, opt-in)",
-        advanced=True,
+        title="Include Cross-References", default=False, description="Fetch UniChem cross-references (network, opt-in)"
     )
     include_pdb_usage: bool = ConfigField(
         title="Include PDB Usage",
         default=False,
         description="Fetch PDB structures containing this ligand (network, opt-in)",
-        advanced=True,
     )
-    sanitize: bool = ConfigField(
-        title="Sanitize",
-        default=True,
-        description="Sanitize the parsed RDKit molecule",
-        advanced=True,
-    )
+    sanitize: bool = ConfigField(title="Sanitize", default=True, description="Sanitize the parsed RDKit molecule")
 
 
 class CcdLookupOutput(BaseToolOutput):

@@ -71,7 +71,6 @@ class BorzoiInput(BaseToolInput):
     target_ranges: list[SequenceTargetRange] | None = InputField(
         default=None,
         description="Sequence-relative range(s) that must remain inside Borzoi output bins",
-        advanced=True,
     )
 
     @field_validator("sequences", mode="before")
@@ -281,7 +280,6 @@ class BorzoiConfig(BaseConfig):
         title="Device",
         default="cuda",
         description="Device to run the model on",
-        hidden=True,
         include_in_key=False,
     )
     output_tracks: list[int] = ConfigField(
@@ -299,21 +297,18 @@ class BorzoiConfig(BaseConfig):
         title="Replicate",
         default="0",
         description="Replicate ID to run",
-        advanced=True,
         reload_on_change=True,
     )
     avg_output_tracks: bool = ConfigField(
         title="Average Tracks",
         default=True,
         description="Whether to average selected tracks into one output",
-        advanced=True,
     )
     batch_size: int = ConfigField(
         title="Batch Size",
         default=1,
         ge=1,
         description="Number of sequences to process simultaneously on GPU",
-        advanced=True,
     )
 
 

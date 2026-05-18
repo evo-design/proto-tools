@@ -87,13 +87,11 @@ class MaskedModelEmbeddingsConfig(BaseConfig):
         default=1,
         ge=1,
         description="Sequences per GPU forward pass; raise for throughput, lower if OOM",
-        advanced=True,
     )
     device: str = ConfigField(
         title="Device",
         default="cuda",
         description="Device to run the model on",
-        hidden=True,
         include_in_key=False,
     )
 
@@ -217,13 +215,11 @@ class MaskedModelSampleConfig(BaseConfig):
         default=1,
         ge=1,
         description="Sequences per GPU forward pass; raise for throughput, lower if OOM",
-        advanced=True,
     )
     device: str = ConfigField(
         title="Device",
         default="cuda",
         description="Device to run the model on",
-        hidden=True,
         include_in_key=False,
     )
 
@@ -287,20 +283,17 @@ class MaskedModelScoringConfig(BaseConfig):
         default=1,
         ge=1,
         description="Sequences per GPU forward pass; raise for throughput, lower if OOM",
-        advanced=True,
     )
     device: str = ConfigField(
         title="Device",
         default="cuda",
         description="Device to run the model on",
-        hidden=True,
         include_in_key=False,
     )
     return_logits: bool = ConfigField(
         title="Return Logits",
         default=False,
         description="Include per-position logits in the output (large; disable to save memory)",
-        advanced=True,
     )
 
 

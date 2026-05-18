@@ -151,7 +151,6 @@ class SpliceTransformerConfig(BaseConfig):
         title="Device",
         default="cuda",
         description="Device to run the model on",
-        hidden=True,
         include_in_key=False,
     )
 

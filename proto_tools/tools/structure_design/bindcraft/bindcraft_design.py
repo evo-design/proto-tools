@@ -351,20 +351,17 @@ class BindCraftConfig(BaseConfig):
         title="Use Multimer Design",
         default=True,
         description="Use AF2 multimer params during hallucination. Every upstream preset uses multimer.",
-        advanced=True,
         reload_on_change=True,
     )
     omit_AAs: str = ConfigField(
         title="Omit Amino Acids",
         default="C",
         description="Comma-separated amino acids to ban during design (e.g. 'C' or 'C,W').",
-        advanced=True,
     )
     force_reject_AA: bool = ConfigField(
         title="Force Reject AA",
         default=False,
         description="Drop any MPNN sequence containing residues from omit_AAs (hard reject, not a soft penalty).",
-        advanced=True,
     )
 
     soft_iterations: int = ConfigField(
@@ -372,32 +369,24 @@ class BindCraftConfig(BaseConfig):
         default=75,
         ge=0,
         description="Soft-stage hallucination iterations. Used by 2stage / 3stage / 4stage.",
-        advanced=True,
-        depends_on={"design_algorithm": ["2stage", "3stage", "4stage"]},
     )
     temporary_iterations: int = ConfigField(
         title="Temporary Iterations",
         default=45,
         ge=0,
         description="Temporary-stage hallucination iterations. Used by 3stage / 4stage.",
-        advanced=True,
-        depends_on={"design_algorithm": ["3stage", "4stage"]},
     )
     hard_iterations: int = ConfigField(
         title="Hard Iterations",
         default=5,
         ge=0,
         description="Hard-stage hallucination iterations. Used by 3stage / 4stage.",
-        advanced=True,
-        depends_on={"design_algorithm": ["3stage", "4stage"]},
     )
     greedy_iterations: int = ConfigField(
         title="Greedy Iterations",
         default=15,
         ge=0,
         description="Greedy-stage iteration count. Used by 2stage / 4stage / greedy / mcmc (3stage doesn't use it).",
-        advanced=True,
-        depends_on={"design_algorithm": ["2stage", "4stage", "greedy", "mcmc"]},
     )
     greedy_percentage: float = ConfigField(
         title="Greedy Percentage",
@@ -405,91 +394,73 @@ class BindCraftConfig(BaseConfig):
         gt=0.0,
         le=100.0,
         description="Mutation rate for greedy/MCMC tries (% of binder length). Used by 2stage / 4stage / greedy / mcmc.",
-        advanced=True,
-        depends_on={"design_algorithm": ["2stage", "4stage", "greedy", "mcmc"]},
     )
 
     weights_plddt: float = ConfigField(
         title="pLDDT Loss Weight",
         default=0.1,
         description="Loss weight on AF2 pLDDT (higher = push for more confident-folding designs).",
-        advanced=True,
     )
     weights_pae_intra: float = ConfigField(
         title="Intra-Chain PAE Weight",
         default=0.4,
         description="Loss weight on within-binder PAE (higher = push for cleaner internal geometry).",
-        advanced=True,
     )
     weights_pae_inter: float = ConfigField(
         title="Inter-Chain PAE Weight",
         default=0.1,
         description="Loss weight on binder↔target interface PAE (higher = push for confident pairing).",
-        advanced=True,
     )
     weights_con_intra: float = ConfigField(
         title="Intra-Chain Contact Weight",
         default=1.0,
         description="Loss weight on within-binder C-alpha contacts (encourages a compact fold).",
-        advanced=True,
     )
     weights_con_inter: float = ConfigField(
         title="Inter-Chain Contact Weight",
         default=1.0,
         description="Loss weight on binder↔target interface contacts (encourages docking).",
-        advanced=True,
     )
     weights_helicity: float = ConfigField(
         title="Helicity Weight",
         default=-0.3,
         description="Helicity bias weight (negative discourages helices, positive encourages them).",
-        advanced=True,
     )
     weights_iptm: float = ConfigField(
         title="Interface pTM Weight",
         default=0.05,
         description="Loss weight on AF2 interface pTM (higher = push for higher iPTM).",
-        advanced=True,
-        depends_on={"use_i_ptm_loss": [True]},
     )
     weights_rg: float = ConfigField(
         title="Radius-of-Gyration Weight",
         default=0.3,
         description="Loss weight on binder radius of gyration (higher = compress toward a tighter binder).",
-        advanced=True,
-        depends_on={"use_rg_loss": [True]},
     )
     weights_termini_loss: float = ConfigField(
         title="Termini Distance Weight",
         default=0.1,
         description="Loss weight pulling binder N- and C-termini together (for cyclisable backbones).",
-        advanced=True,
-        depends_on={"use_termini_distance_loss": [True]},
     )
 
     random_helicity: bool = ConfigField(
         title="Random Helicity",
         default=False,
         description="Randomise the sign of weights_helicity per trajectory.",
-        advanced=True,
     )
     use_i_ptm_loss: bool = ConfigField(
         title="Use Interface pTM Loss",
         default=True,
         description="Enable interface pTM loss term (weights_iptm). Pushes for higher iPTM during hallucination.",
-        advanced=True,
     )
     use_rg_loss: bool = ConfigField(
         title="Use Radius-of-Gyration Loss",
         default=True,
         description="Enable radius-of-gyration loss.",
-        advanced=True,
     )
     use_termini_distance_loss: bool = ConfigField(
         title="Use Termini Distance Loss",
         default=False,
         description="Enable N-/C-termini distance loss.",
-        advanced=True,
     )
 
     intra_contact_distance: float = ConfigField(
@@ -497,125 +468,100 @@ class BindCraftConfig(BaseConfig):
         default=14.0,
         gt=0.0,
         description="Intra-chain contact distance cutoff (Å).",
-        advanced=True,
     )
     inter_contact_distance: float = ConfigField(
         title="Inter-Chain Contact Distance",
         default=20.0,
         gt=0.0,
         description="Inter-chain (interface) contact distance cutoff (Å).",
-        advanced=True,
     )
     intra_contact_number: int = ConfigField(
         title="Intra-Chain Contact Number",
         default=2,
         ge=1,
         description="Number of intra-chain contacts per residue.",
-        advanced=True,
     )
     inter_contact_number: int = ConfigField(
         title="Inter-Chain Contact Number",
         default=2,
         ge=1,
         description="Number of inter-chain contacts per residue.",
-        advanced=True,
     )
 
     rm_template_seq_design: bool = ConfigField(
         title="Mask Template Seq (Design)",
         default=False,
         description="Hide target sequence from AF2 template during hallucination (geometry-only target).",
-        advanced=True,
     )
     rm_template_seq_predict: bool = ConfigField(
         title="Mask Template Seq (Predict)",
         default=False,
         description="Hide target sequence from AF2 template during validation (geometry-only target).",
-        advanced=True,
     )
     rm_template_sc_design: bool = ConfigField(
         title="Mask Template SC (Design)",
         default=False,
         description="Hide target side-chain coordinates from AF2 template during hallucination.",
-        advanced=True,
     )
     rm_template_sc_predict: bool = ConfigField(
         title="Mask Template SC (Predict)",
         default=False,
         description="Hide target side-chain coordinates from AF2 template during validation.",
-        advanced=True,
     )
     predict_initial_guess: bool = ConfigField(
         title="Predict Initial Guess",
         default=False,
         description="Seed AF2 validation with the hallucinated complex coords (helps hard targets).",
-        advanced=True,
     )
     predict_bigbang: bool = ConfigField(
         title="Predict Big Bang",
         default=False,
         description="Seed AF2 validation with the hallucinated atom positions (alternative to initial_guess).",
-        advanced=True,
     )
 
     enable_mpnn: bool = ConfigField(
         title="Enable MPNN",
         default=True,
         description="Refine each hallucinated binder with ProteinMPNN before AF2 re-validation.",
-        advanced=True,
     )
     mpnn_fix_interface: bool = ConfigField(
         title="MPNN Fix Interface",
         default=True,
         description="Fix interface residues during MPNN redesign.",
-        advanced=True,
-        depends_on={"enable_mpnn": [True]},
     )
     num_seqs: int = ConfigField(
         title="MPNN Samples per Traj",
         default=20,
         ge=1,
         description="MPNN sequences sampled per accepted trajectory before filtering.",
-        advanced=True,
-        depends_on={"enable_mpnn": [True]},
     )
     max_mpnn_sequences: int = ConfigField(
         title="MPNN Validated per Traj",
         default=2,
         ge=1,
         description="Top-scoring MPNN sequences (out of num_seqs) carried forward to AF2 validation.",
-        advanced=True,
-        depends_on={"enable_mpnn": [True]},
     )
     sampling_temp: float = ConfigField(
         title="MPNN Sampling Temperature",
         default=0.1,
         gt=0.0,
         description="MPNN sampling temperature (lower = more deterministic).",
-        advanced=True,
-        depends_on={"enable_mpnn": [True]},
     )
     backbone_noise: float = ConfigField(
         title="MPNN Backbone Noise",
         default=0.0,
         ge=0.0,
         description="Std-dev of Gaussian noise added to backbone coords before MPNN sampling (0 = none).",
-        advanced=True,
-        depends_on={"enable_mpnn": [True]},
     )
     model_path: Literal["v_48_002", "v_48_010", "v_48_020", "v_48_030"] = ConfigField(
         title="MPNN Checkpoint",
         default="v_48_020",
         description="MPNN checkpoint name. Higher trailing digits = trained with more backbone noise.",
-        advanced=True,
-        depends_on={"enable_mpnn": [True]},
     )
     mpnn_weights: Literal["original", "soluble"] = ConfigField(
         title="MPNN Weights",
         default="soluble",
         description="MPNN weight set. 'soluble' biases toward soluble residues; 'original' is the unbiased release.",
-        advanced=True,
-        depends_on={"enable_mpnn": [True]},
     )
 
     num_recycles_design: int = ConfigField(
@@ -623,52 +569,41 @@ class BindCraftConfig(BaseConfig):
         default=1,
         ge=0,
         description="AlphaFold2 recycles during hallucination.",
-        advanced=True,
     )
     num_recycles_validation: int = ConfigField(
         title="Recycles (Validation)",
         default=3,
         ge=0,
         description="AlphaFold2 recycles during validation.",
-        advanced=True,
     )
     optimise_beta: bool = ConfigField(
         title="Optimise Beta Designs",
         default=True,
         description="When a trajectory looks β-heavy (>15% sheet), bump iterations + recycles to help it converge.",
-        advanced=True,
     )
     optimise_beta_extra_soft: int = ConfigField(
         title="Beta: Extra Soft Iterations",
         default=0,
         ge=0,
         description="Extra soft iterations for beta-heavy designs (4stage only — added after soft stage).",
-        advanced=True,
-        depends_on={"optimise_beta": [True]},
     )
     optimise_beta_extra_temp: int = ConfigField(
         title="Beta: Extra Temp Iterations",
         default=0,
         ge=0,
         description="Extra temporary iterations for beta-heavy designs (4stage only).",
-        advanced=True,
-        depends_on={"optimise_beta": [True]},
     )
     optimise_beta_recycles_design: int = ConfigField(
         title="Beta: Recycles (Design)",
         default=3,
         ge=0,
         description="AF2 recycles during hallucination for beta-heavy designs.",
-        advanced=True,
-        depends_on={"optimise_beta": [True]},
     )
     optimise_beta_recycles_valid: int = ConfigField(
         title="Beta: Recycles (Validation)",
         default=3,
         ge=0,
         description="AF2 recycles during validation for beta-heavy designs.",
-        advanced=True,
-        depends_on={"optimise_beta": [True]},
     )
 
     max_trajectories: int | bool = ConfigField(
@@ -681,7 +616,6 @@ class BindCraftConfig(BaseConfig):
         title="Enable Rejection Check",
         default=True,
         description="Enable rolling acceptance-rate monitoring (stops the run if it stalls).",
-        advanced=True,
         include_in_key=False,
     )
     acceptance_rate: float = ConfigField(
@@ -690,25 +624,20 @@ class BindCraftConfig(BaseConfig):
         gt=0.0,
         le=1.0,
         description="Minimum design acceptance rate to keep running.",
-        advanced=True,
         include_in_key=False,
-        depends_on={"enable_rejection_check": [True]},
     )
     start_monitoring: int = ConfigField(
         title="Monitor Start (Trajectories)",
         default=600,
         ge=0,
         description="Trajectory count before acceptance-rate monitoring starts.",
-        advanced=True,
         include_in_key=False,
-        depends_on={"enable_rejection_check": [True]},
     )
 
     filter_overrides: dict[str, Any] = ConfigField(
         title="Filter Overrides",
         default_factory=dict,
         description="Per-metric threshold overrides merged on top of upstream default_filters.json.",
-        advanced=True,
     )
 
     @model_validator(mode="after")
@@ -725,7 +654,6 @@ class BindCraftConfig(BaseConfig):
         title="Device",
         default="cuda",
         description="Device to run the tool on.",
-        hidden=True,
         include_in_key=False,
     )
     # BindCraft campaigns run hours-to-days; truncating mid-run wastes compute (default: no cap).
@@ -734,7 +662,6 @@ class BindCraftConfig(BaseConfig):
         default=None,
         ge=1,
         description="Maximum execution time in seconds. None (default) waits indefinitely.",
-        hidden=True,
         include_in_key=False,
     )
 

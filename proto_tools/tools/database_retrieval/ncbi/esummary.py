@@ -46,9 +46,7 @@ class NCBIEsummaryInput(BaseToolInput):
     db: NCBIDatabase = InputField(
         description="NCBI database to query (e.g. 'protein', 'nuccore', 'gene', 'pubmed', 'taxonomy')"
     )
-    identifier: str = InputField(
-        description="Accession or NCBI ID for esummary (e.g. 'NP_000537.3', '7157')",
-    )
+    identifier: str = InputField(description="Accession or NCBI ID for esummary (e.g. 'NP_000537.3', '7157')")
 
 
 class NCBIEsummaryOutput(BaseToolOutput):

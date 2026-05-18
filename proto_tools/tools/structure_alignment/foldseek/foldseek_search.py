@@ -142,47 +142,36 @@ class FoldseekSearchConfig(BaseConfig):
         title="Databases",
         default_factory=lambda: ["pdb100", "afdb50"],
         description="Remote-only — server-hosted reference databases to search",
-        depends_on={"search_mode": ["remote"]},
     )
     mode: FoldseekMode = ConfigField(
         title="Alignment Mode",
         default="3diaa",
         description="Remote-only — '3diaa' (fast 3Di+AA local), 'tmalign' (global), or 'lolalign' (local, slow)",
-        depends_on={"search_mode": ["remote"]},
     )
     poll_interval_seconds: float = ConfigField(
         title="Poll Interval (seconds)",
         default=5.0,
         ge=1.0,
         description="Remote-only — delay between status polls",
-        advanced=True,
         include_in_key=False,
-        depends_on={"search_mode": ["remote"]},
     )
     timeout_seconds: float = ConfigField(
         title="Timeout (seconds)",
         default=600.0,
         ge=10.0,
         description="Remote-only — max wall-clock time for the search",
-        advanced=True,
         include_in_key=False,
-        depends_on={"search_mode": ["remote"]},
     )
     local_db: str | None = ConfigField(
         title="Local Foldseek Database",
         default=None,
         description="Path to a local Foldseek DB or a directory of PDB files (required for local mode)",
-        depends_on={"search_mode": ["local"]},
-        hidden=True,
     )
     evalue: float = ConfigField(
         title="E-value Threshold",
         default=10.0,
         ge=0.0,
         description="E-value cutoff. Lower = stricter (1e-3 for confident homologs; default 10.0 reports all)",
-        advanced=True,
-        depends_on={"search_mode": ["local"]},
-        hidden=True,
     )
     sensitivity: float = ConfigField(
         title="Sensitivity",
@@ -190,26 +179,17 @@ class FoldseekSearchConfig(BaseConfig):
         ge=1.0,
         le=9.5,
         description="Prefilter sensitivity (1.0-9.5). Lower = faster, higher = more sensitive (default 9.5)",
-        advanced=True,
-        depends_on={"search_mode": ["local"]},
-        hidden=True,
     )
     max_seqs: int = ConfigField(
         title="Max Sequences",
         default=1000,
         ge=1,
         description="Max prefilter targets per query. Raise to surface more hits at cost of runtime",
-        advanced=True,
-        depends_on={"search_mode": ["local"]},
-        hidden=True,
     )
     alignment_type: Literal[0, 1, 2, 3] = ConfigField(
         title="Alignment Type",
         default=2,
         description="Alignment scoring: 0=3Di SW, 1=TMalign, 2=3Di+AA (default), 3=LoL",
-        advanced=True,
-        depends_on={"search_mode": ["local"]},
-        hidden=True,
     )
     tmscore_threshold: float = ConfigField(
         title="TM-score Threshold",
@@ -217,9 +197,6 @@ class FoldseekSearchConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="TM-score floor for hits (0-1). 0.0 keeps all; 0.5 ≈ same fold",
-        advanced=True,
-        depends_on={"search_mode": ["local"]},
-        hidden=True,
     )
     lddt_threshold: float = ConfigField(
         title="LDDT Threshold",
@@ -227,19 +204,9 @@ class FoldseekSearchConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="LDDT floor for hits (0-1). 0.0 keeps all; 0.7+ = high local accuracy",
-        advanced=True,
-        depends_on={"search_mode": ["local"]},
-        hidden=True,
     )
     num_threads: int = ConfigField(
-        title="Threads (local)",
-        default=4,
-        ge=1,
-        description="CPU threads for local search",
-        advanced=True,
-        include_in_key=False,
-        depends_on={"search_mode": ["local"]},
-        hidden=True,
+        title="Threads (local)", default=4, ge=1, description="CPU threads for local search", include_in_key=False
     )
 
     _REMOTE_ONLY_DEFAULTS = {  # noqa: RUF012

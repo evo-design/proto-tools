@@ -68,7 +68,6 @@ class Evo1ScoringConfig(CausalModelScoringConfig):
         default=1800,
         ge=1,
         description="Maximum execution time in seconds",
-        hidden=True,
         include_in_key=False,
     )
 

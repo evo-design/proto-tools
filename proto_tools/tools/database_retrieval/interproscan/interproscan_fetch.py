@@ -172,14 +172,8 @@ class InterProScanFetchInput(BaseToolInput):
             submit-and-scan path. Requires ``config.email``.
     """
 
-    uniprot_id: str | None = InputField(
-        default=None,
-        description="UniProt accession for direct entry lookup",
-    )
-    sequence: str | None = InputField(
-        default=None,
-        description="Protein sequence for submit-and-scan path",
-    )
+    uniprot_id: str | None = InputField(default=None, description="UniProt accession for direct entry lookup")
+    sequence: str | None = InputField(default=None, description="Protein sequence for submit-and-scan path")
 
     @model_validator(mode="after")
     def validate_lookup_params(self) -> "InterProScanFetchInput":
@@ -220,32 +214,25 @@ class InterProScanFetchConfig(BaseConfig):
         title="Contact Email",
         default=None,
         description="Required by EBI for sequence-submit path; ignored for direct UniProt lookup",
-        advanced=True,
         include_in_key=False,
     )
     applications: list[InterProApp] | None = ConfigField(
         title="Applications",
         default=None,
         description="Submit-only — restrict to subset of InterPro member DBs; None runs the EBI default set",
-        advanced=True,
     )
     include_go_terms: bool = ConfigField(
-        title="Include GO Terms",
-        default=True,
-        description="Include GO term cross-references in the output",
-        advanced=True,
+        title="Include GO Terms", default=True, description="Include GO term cross-references in the output"
     )
     include_pathways: bool = ConfigField(
         title="Include Pathways",
         default=True,
         description="Reactome/KEGG/MetaCyc xrefs on the sequence path; no-op on UniProt-id path",
-        advanced=True,
     )
     sequence_type: Literal["protein", "nucleic"] = ConfigField(
         title="Sequence Type",
         default="protein",
         description="Sequence-submit path: 'protein' or 'nucleic' (6-frame translated server-side)",
-        advanced=True,
     )
 
 

@@ -131,7 +131,6 @@ class AlphaGenomeScoreVariantsConfig(BaseConfig):
         title="Model Version",
         default=DEFAULT_ALPHAGENOME_MODEL_VERSION,
         description="AlphaGenome Hugging Face model version",
-        advanced=True,
         reload_on_change=True,
     )
     variant_scorers: list[VariantScorerName] | None = ConfigField(
@@ -143,13 +142,11 @@ class AlphaGenomeScoreVariantsConfig(BaseConfig):
         title="Organism",
         default="human",
         description="Organism for AlphaGenome predictions",
-        advanced=True,
     )
     device: str = ConfigField(
         title="Device",
         default="cuda",
         description="Device to run AlphaGenome inference on",
-        hidden=True,
         include_in_key=False,
     )
 

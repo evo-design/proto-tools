@@ -108,49 +108,41 @@ class CreateBlastDbConfig(BaseConfig):
         title="Output Prefix",
         default=None,
         description="File-path prefix for the generated DB files; falls back to the input FASTA stem when None.",
-        hidden=True,
     )
     title: str | None = ConfigField(
         title="Database Title",
         default=None,
         description="Descriptive DB title shown in search reports; `makeblastdb` falls back to the input file name.",
-        advanced=True,
     )
     parse_seqids: bool = ConfigField(
         title="Parse Sequence IDs",
         default=False,
         description="Parse FASTA seq IDs so `blastdbcmd` can address sequences by ID; required for v5 taxonomy.",
-        advanced=True,
     )
     hash_index: bool = ConfigField(
         title="Hash Index",
         default=False,
         description="Build a hash index of sequence IDs for faster ID lookups; usually paired with `parse_seqids`.",
-        advanced=True,
     )
     blastdb_version: Literal[4, 5] = ConfigField(
         title="BLAST DB Version",
         default=5,
         description="BLAST DB format version: `5` (taxonomy-aware, default since BLAST+ 2.10) or `4` (legacy).",
-        advanced=True,
     )
     max_file_sz: str = ConfigField(
         title="Max File Size",
         default="1GB",
         description="Max size per DB volume with unit suffix (e.g. `1GB`, `500MB`); `4GB` is the upstream max.",
-        advanced=True,
     )
     taxid: int | None = ConfigField(
         title="Taxonomy ID",
         default=None,
         description="NCBI taxonomy ID assigned to every sequence; set to tag a single-organism DB.",
-        advanced=True,
     )
     extra_args: list[str] = ConfigField(
         title="Extra CLI Arguments",
         default=[],
         description="Verbatim `makeblastdb` flags for fields not exposed above (e.g. `-mask_data /path`).",
-        advanced=True,
     )
 
     @field_validator("dbtype")

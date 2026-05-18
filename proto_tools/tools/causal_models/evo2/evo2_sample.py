@@ -119,7 +119,6 @@ class Evo2SampleConfig(CausalModelSampleConfig):
         title="Local Checkpoint Path",
         default=None,
         description="Override the default download with a local weights directory",
-        hidden=True,
         reload_on_change=True,
     )
     timeout: int | None = ConfigField(
@@ -127,7 +126,6 @@ class Evo2SampleConfig(CausalModelSampleConfig):
         default=1800,
         ge=1,
         description="Maximum execution time in seconds",
-        hidden=True,
         include_in_key=False,
     )
     # Sampling params
@@ -147,49 +145,41 @@ class Evo2SampleConfig(CausalModelSampleConfig):
         title="Cached Generation",
         default=True,
         description="Use the model's per-call KV cache during generation",
-        advanced=True,
     )
     force_prompt_threshold: int | None = ConfigField(
         title="Force Prompt Threshold",
         default=None,
         description="Tokens to prefill in parallel before switching to prompt forcing",
-        hidden=True,
     )
     max_seqlen: int | None = ConfigField(
         title="Max Sequence Length",
         default=None,
         description="Maximum sequence length the KV cache will be sized for",
-        advanced=True,
     )
     skip_special_tokens: bool = ConfigField(
         title="Skip Special Tokens",
         default=False,
         description="Filter EOS/PAD bytes from the detokenized output",
-        advanced=True,
     )
     stop_at_eos: bool = ConfigField(
         title="Stop at EOS",
         default=True,
         description="Stop generation when an EOS (id=0) token is sampled",
-        advanced=True,
     )
     old_kv_cache: Evo2KVCacheRef | None = ConfigField(
         title="Old KV Cache",
         default=None,
         description="Worker-local KV cache handle to use for continued generation",
-        hidden=True,
     )
     return_kv_cache: bool = ConfigField(
         title="Return KV Cache",
         default=False,
         description="Return worker-local KV cache handles for continued generation",
-        hidden=True,
     )
     return_logits: bool = ConfigField(
         title="Return Logits",
         default=False,
         description="Include per-position logits in the output (large; disable to save memory)",
-        advanced=True,
     )
 
 

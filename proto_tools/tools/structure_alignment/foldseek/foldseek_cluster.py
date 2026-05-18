@@ -86,12 +86,10 @@ class FoldseekClusterInput(BaseToolInput):
         min_length=2,
     )
     structures_dir: str | None = InputField(
-        default=None,
-        description="Directory of structure (.pdb/.cif) or FASTA (.fasta/.fa) files, incl. .gz; ≥2.",
+        default=None, description="Directory of structure (.pdb/.cif) or FASTA (.fasta/.fa) files, incl. .gz; ≥2."
     )
     structure_ids: list[str] | None = InputField(
-        default=None,
-        description="Optional IDs (only with `structures`; default: 'structure_0', 'structure_1', ...).",
+        default=None, description="Optional IDs (only with `structures`; default: 'structure_0', 'structure_1', ...)."
     )
 
     @model_validator(mode="before")
@@ -136,7 +134,6 @@ class FoldseekClusterConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="Sequence-identity floor (0-1). 0.0 lets 3Di structural similarity dominate",
-        advanced=True,
     )
     cov: float = ConfigField(
         title="Coverage Threshold",
@@ -146,22 +143,18 @@ class FoldseekClusterConfig(BaseConfig):
         description="Min aligned-residue coverage for cluster membership (0-1)",
     )
     cov_mode: Literal[0, 1, 2] = ConfigField(
-        title="Coverage Mode",
-        default=0,
-        description="Coverage mode: 0=bidirectional, 1=target-only, 2=query-only",
+        title="Coverage Mode", default=0, description="Coverage mode: 0=bidirectional, 1=target-only, 2=query-only"
     )
     evalue: float = ConfigField(
         title="E-value Threshold",
         default=0.01,
         ge=0.0,
         description="E-value cutoff for cluster-membership alignments. Lower = stricter (default 0.01)",
-        advanced=True,
     )
     alignment_type: Literal[0, 1, 2, 3] = ConfigField(
         title="Alignment Type",
         default=2,
         description="Alignment scoring: 0=3Di SW, 1=TMalign, 2=3Di+AA (default), 3=LoL",
-        advanced=True,
     )
     tmscore_threshold: float = ConfigField(
         title="TM-score Threshold",
@@ -169,7 +162,6 @@ class FoldseekClusterConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="TM-score floor for cluster-membership alignments (0-1). 0.0 keeps all",
-        advanced=True,
     )
     lddt_threshold: float = ConfigField(
         title="LDDT Threshold",
@@ -177,23 +169,14 @@ class FoldseekClusterConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="LDDT floor for cluster-membership alignments (0-1). 0.0 keeps all",
-        advanced=True,
     )
     prostt5_weights_dir: str | None = ConfigField(
         title="ProstT5 Weights Directory",
         default=None,
         description="Path to ProstT5 weights for FASTA inputs (auto-provisioned if None).",
-        advanced=True,
         include_in_key=False,
     )
-    num_threads: int = ConfigField(
-        title="Threads",
-        default=4,
-        ge=1,
-        description="CPU threads",
-        advanced=True,
-        include_in_key=False,
-    )
+    num_threads: int = ConfigField(title="Threads", default=4, ge=1, description="CPU threads", include_in_key=False)
 
 
 class FoldseekClusterOutput(BaseToolOutput):

@@ -168,13 +168,11 @@ class PubChemFetchConfig(BaseConfig):
         title="Include Description",
         default=False,
         description="Fetch textual descriptions of the compound (one extra HTTP call)",
-        advanced=True,
     )
     include_aids: bool = ConfigField(
         title="Include BioAssay IDs",
         default=False,
         description="Fetch BioAssay IDs that tested this compound; can be thousands for common ones",
-        advanced=True,
     )
 
 

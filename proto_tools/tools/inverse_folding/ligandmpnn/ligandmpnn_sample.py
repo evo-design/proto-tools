@@ -61,26 +61,22 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         default="ligand_mpnn",
         description="LigandMPNN variant: ligand-aware or membrane (per-residue/global)",
         reload_on_change=True,
-        advanced=True,
     )
     ligand_mpnn_use_atom_context: bool = ConfigField(
         title="Use Ligand Atom Context",
         default=True,
         description="Encode ligand atom context in the message-passing graph",
-        advanced=True,
     )
     ligand_mpnn_use_side_chain_context: bool = ConfigField(
         title="Use Sidechain Context",
         default=False,
         description="Condition on sidechain atoms of fixed residues",
-        advanced=True,
     )
     ligand_mpnn_cutoff_for_score: float = ConfigField(
         title="Ligand Cutoff for Score",
         default=8.0,
         gt=0.0,
         description="Ligand-residue distance cutoff (A) for interface recovery score",
-        advanced=True,
     )
     excluded_amino_acids: list[AminoAcid] | None = ConfigField(
         title="Excluded Amino Acids",

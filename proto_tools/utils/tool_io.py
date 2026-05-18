@@ -17,56 +17,46 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from proto_tools.utils.compressed_array import is_compressed_array
 
+_REMOVED_UI_KWARGS = frozenset({"advanced", "hidden", "depends_on"})
+
+
+def _reject_removed_ui_kwargs(field_helper: str, kwargs: dict[str, Any]) -> None:
+    """Reject UI-presentation kwargs that belong in proto-ui overlays."""
+    removed = sorted(_REMOVED_UI_KWARGS.intersection(kwargs))
+    if not removed:
+        return
+    names = ", ".join(removed)
+    raise TypeError(
+        f"{field_helper} no longer accepts UI-presentation kwarg(s): {names}. "
+        "Edit the proto-ui overlay for advanced/hidden/conditional visibility."
+    )
+
 
 def InputField(
     default: Any = ...,
     *,
     title: str | None = None,
     description: str | None = None,
-    hidden: bool = False,
-    advanced: bool = False,
     include_in_key: bool = True,
-    depends_on: dict[str, Any] | None = None,
-    xor_group: str | None = None,
+    xor_group: str | None = None,  # noqa: ARG001 — marker for sibling-field XOR groups; enforced by @model_validator per tool.
     **kwargs: Any,
 ) -> Any:
     """Custom Field wrapper for tool Input classes.
-
-    Adds UI metadata flags to json_schema_extra, matching the pattern
-    established by ``ConfigField`` for Config classes.
 
     Args:
         default (Any): Default value for the field. Use ``...`` for required fields.
         title (str | None): Human-readable title for UI display.
         description (str | None): Description of the field for documentation and UI tooltips.
-        hidden (bool): If True, field is hidden from UI completely.
-        advanced (bool): If True, field appears in "Advanced" section of UI.
         include_in_key (bool): If False, field is excluded from tool cache key
             generation.
-        depends_on (dict[str, Any] | None): Conditional visibility — show
-            this field only when another field has a specific value or is
-            non-null. Same shape as ``ConfigField.depends_on``. Examples:
-            ``{"field": "db", "value": ["nuccore", "nucleotide"]}`` or
-            ``{"field": "datetype", "not_null": True}``.
-        xor_group (str | None): Mutual-exclusion group name; emitted as
-            ``x-xor-group`` in JSON schema. Enforce at runtime with a
-            ``@model_validator`` on the Input class.
+        xor_group (str | None): Mutual-exclusion group name. Enforce at runtime
+            with a ``@model_validator`` on the Input class.
         kwargs: All other standard Pydantic Field arguments (via ``**kwargs``).
     """
-    from proto_tools.utils.base_config import _normalize_depends_on
-
+    _reject_removed_ui_kwargs("InputField", kwargs)
     json_schema_extra = kwargs.get("json_schema_extra", {})
-    json_schema_extra["hidden"] = hidden
-    json_schema_extra["advanced"] = advanced
     json_schema_extra["include_in_key"] = include_in_key
     json_schema_extra["_field_type"] = "InputField"
-    if depends_on is not None:
-        normalized = _normalize_depends_on(depends_on)
-        if "value" in normalized and "not_null" in normalized:
-            raise ValueError("depends_on cannot specify both 'value' and 'not_null'")
-        json_schema_extra["x-depends-on"] = normalized
-    if xor_group is not None:
-        json_schema_extra["x-xor-group"] = xor_group
     kwargs["json_schema_extra"] = json_schema_extra
     return Field(default, title=title, description=description, **kwargs)
 

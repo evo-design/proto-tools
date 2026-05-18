@@ -120,7 +120,6 @@ class ESM2SampleConfig(MaskedModelSampleConfig):
         title="Sampling Method",
         default="single_pass",
         description="'single_pass' samples every mask in one forward; 'iterative_refinement' runs the MaskGIT-style loop",
-        advanced=True,
     )
     temperature: float = ConfigField(
         title="Sampling Temperature",
@@ -134,43 +133,32 @@ class ESM2SampleConfig(MaskedModelSampleConfig):
         gt=0.0,
         le=1.0,
         description="Nucleus sampling threshold; 1.0 disables",
-        advanced=True,
-        depends_on={"sampling_method": ["iterative_refinement"]},
     )
     num_steps: int = ConfigField(
         title="Num Steps",
         default=20,
         ge=1,
         description="Iterative-refinement decoding steps; diminishing returns above 20",
-        advanced=True,
-        depends_on={"sampling_method": ["iterative_refinement"]},
     )
     schedule: Literal["cosine", "linear"] = ConfigField(
         title="Unmask Schedule",
         default="cosine",
         description="Unmask schedule across rounds; 'cosine' fronts more commits late",
-        advanced=True,
-        depends_on={"sampling_method": ["iterative_refinement"]},
     )
     strategy: Literal["random", "entropy"] = ConfigField(
         title="Unmask Strategy",
         default="random",
         description="Position-selection per round; 'entropy' commits the most-confident first",
-        advanced=True,
-        depends_on={"sampling_method": ["iterative_refinement"]},
     )
     temperature_annealing: bool = ConfigField(
         title="Temperature Annealing",
         default=True,
         description="Anneal temperature toward 0 across rounds",
-        advanced=True,
-        depends_on={"sampling_method": ["iterative_refinement"]},
     )
     return_logits: bool = ConfigField(
         title="Return Logits",
         default=False,
         description="Include per-position logits in the output (large; disable to save memory)",
-        advanced=True,
     )
 
     def preprocess(self, inputs: Any) -> Any:

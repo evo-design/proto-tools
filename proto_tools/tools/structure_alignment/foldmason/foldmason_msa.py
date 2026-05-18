@@ -57,12 +57,10 @@ class FoldmasonMSAInput(BaseToolInput):
     """
 
     structures: list[str] = InputField(
-        description="PDB-format text strings to align (must provide at least 2)",
-        min_length=2,
+        description="PDB-format text strings to align (must provide at least 2)", min_length=2
     )
     structure_ids: list[str] | None = InputField(
-        default=None,
-        description="Optional IDs per structure (default: 'structure_0', 'structure_1', ...)",
+        default=None, description="Optional IDs per structure (default: 'structure_0', 'structure_1', ...)"
     )
 
     @field_validator("structure_ids")
@@ -115,71 +113,34 @@ class FoldmasonMSAConfig(BaseConfig):
         default=5.0,
         ge=1.0,
         description="Remote-only — delay between status polls",
-        advanced=True,
         include_in_key=False,
-        depends_on={"search_mode": ["remote"]},
     )
     timeout_seconds: float = ConfigField(
         title="Timeout (seconds)",
         default=600.0,
         ge=10.0,
         description="Remote-only — max wall-clock time for the alignment",
-        advanced=True,
         include_in_key=False,
-        depends_on={"search_mode": ["remote"]},
     )
-    gap_open: int = ConfigField(
-        title="Gap Open Cost",
-        default=25,
-        ge=0,
-        description="Local-only — gap open cost",
-        advanced=True,
-        depends_on={"search_mode": ["local"]},
-        hidden=True,
-    )
+    gap_open: int = ConfigField(title="Gap Open Cost", default=25, ge=0, description="Local-only — gap open cost")
     gap_extend: int = ConfigField(
-        title="Gap Extend Cost",
-        default=2,
-        ge=0,
-        description="Local-only — gap extension cost",
-        advanced=True,
-        depends_on={"search_mode": ["local"]},
-        hidden=True,
+        title="Gap Extend Cost", default=2, ge=0, description="Local-only — gap extension cost"
     )
     refine_iters: int = ConfigField(
-        title="Refine Iterations",
-        default=0,
-        ge=0,
-        description="Local-only — number of alignment-refinement iterations",
-        advanced=True,
-        depends_on={"search_mode": ["local"]},
-        hidden=True,
+        title="Refine Iterations", default=0, ge=0, description="Local-only — number of alignment-refinement iterations"
     )
     precluster: bool = ConfigField(
         title="Pre-cluster",
         default=False,
         description="Local-only — pre-cluster structures before MSA (recommended for large datasets)",
-        advanced=True,
-        depends_on={"search_mode": ["local"]},
-        hidden=True,
     )
     guide_tree_newick: str | None = ConfigField(
         title="Guide Tree (Newick)",
         default=None,
         description="Local-only — Newick guide tree to use instead of computing one; leaf labels must match structure_ids",
-        advanced=True,
-        depends_on={"search_mode": ["local"]},
-        hidden=True,
     )
     num_threads: int = ConfigField(
-        title="Threads (local)",
-        default=4,
-        ge=1,
-        description="Local-only — CPU threads",
-        advanced=True,
-        include_in_key=False,
-        depends_on={"search_mode": ["local"]},
-        hidden=True,
+        title="Threads (local)", default=4, ge=1, description="Local-only — CPU threads", include_in_key=False
     )
 
     _REMOTE_ONLY_DEFAULTS = {  # noqa: RUF012

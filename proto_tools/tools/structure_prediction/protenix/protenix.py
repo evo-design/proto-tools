@@ -280,7 +280,6 @@ class ProtenixConfig(MSAStructurePredictionConfig):
         title="Seeds",
         default=[0],
         description="Random seeds for sampling; each seed produces num_diffusion_samples independent samples.",
-        advanced=True,
     )
 
     num_diffusion_samples: int = ConfigField(
@@ -288,7 +287,6 @@ class ProtenixConfig(MSAStructurePredictionConfig):
         default=5,
         ge=1,
         description="Structure samples per seed; best by ranking score is kept. Higher = more thorough but slower.",
-        advanced=True,
     )
 
     num_diffusion_steps: int = ConfigField(
@@ -296,7 +294,6 @@ class ProtenixConfig(MSAStructurePredictionConfig):
         default=200,
         ge=1,
         description="Denoising steps in the diffusion process. Higher = more refined but slower.",
-        advanced=True,
     )
 
     num_pairformer_cycles: int = ConfigField(
@@ -304,7 +301,6 @@ class ProtenixConfig(MSAStructurePredictionConfig):
         default=10,
         ge=0,
         description="Pairformer refinement passes through the model. Higher = more refined but slower.",
-        advanced=True,
     )
 
     timeout: int | None = ConfigField(
@@ -312,7 +308,6 @@ class ProtenixConfig(MSAStructurePredictionConfig):
         default=1200,
         ge=1,
         description="Maximum execution time in seconds (base models typically need 10-15 min on slower GPUs).",
-        hidden=True,
         include_in_key=False,
     )
 

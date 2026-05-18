@@ -87,7 +87,6 @@ class {ToolName}Config(BaseConfig):
         title="Device",
         default="cuda",  # REQUIRED for GPU tools (uses_gpu=True); OMIT this for CPU tools
         description="Device to run the model on (e.g., 'cuda', 'cpu')",
-        hidden=True,
         include_in_key=False,
     )
 
@@ -114,14 +113,13 @@ class {ToolName}Config(BaseConfig):
         description="Choose between option_a and option_b",
     )
 
-    # --- Advanced parameters (shown under "Advanced" in UI) ---
+    # --- Secondary parameters (mark advanced in proto-ui overlay if needed) ---
     advanced_param: float = ConfigField(
         title="Advanced Parameter",
         default=0.5,
         gt=0.0,
         le=1.0,
         description="Parameter that users rarely need to change",
-        advanced=True,
     )
 
     # --- Batch processing (GPU tools) ---
@@ -130,7 +128,6 @@ class {ToolName}Config(BaseConfig):
         default=1,
         ge=1,
         description="Number of items to process per GPU forward pass",
-        advanced=True,
     )
 
     # --- Mutually exclusive fields (XOR group) ---

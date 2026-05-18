@@ -52,7 +52,6 @@ class MockJAXMultiGPUToolConfig(BaseConfig):
         default="cudax2",
         title="Device",
         description="Device spec for 2 GPUs (cudax2, cuda:0,1)",
-        hidden=True,
         include_in_key=False,
     )
 

@@ -172,11 +172,6 @@ def test_config_cache_key_invariants():
     assert BioEmuConfig(msa_host_url="https://other.example.com").cache_key() != base
 
 
-def test_config_include_pae_matrix_is_hidden():
-    """include_pae_matrix is inherited from StructurePredictionConfig but unused by BioEmu."""
-    assert BioEmuConfig.model_json_schema()["properties"]["include_pae_matrix"]["hidden"] is True
-
-
 # ── Output assembly (mocked dispatch) ────────────────────────────────────────
 
 

@@ -62,7 +62,6 @@ class ProteinMPNNSampleConfig(InverseFoldingConfig):
         default=0.0,
         ge=0.0,
         description="Gaussian noise (A) on backbone coords; raise (e.g. 0.02) for diversity",
-        advanced=True,
     )
     excluded_amino_acids: list[AminoAcid] | None = ConfigField(
         title="Excluded Amino Acids",

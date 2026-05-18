@@ -134,7 +134,6 @@ class PyRosettaSASAConfig(BaseConfig):
         default_factory=PyRosettaRelaxConfig,
         title="Relax Config",
         description="Settings used when pre_relax_structures=True. Ignored otherwise.",
-        depends_on={"pre_relax_structures": [True]},
     )
 
     def preprocess(self, inputs: PyRosettaSASAInput) -> PyRosettaSASAInput:  # type: ignore[override]

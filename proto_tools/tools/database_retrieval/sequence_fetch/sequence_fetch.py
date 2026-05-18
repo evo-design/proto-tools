@@ -385,13 +385,11 @@ class SequenceFetchConfig(BaseConfig):
         ge=1,
         le=25,
         description="Maximum database candidates to evaluate per name-based search",
-        advanced=True,
     )
     type_check_mode: Literal["off", "warn", "error"] = ConfigField(
         title="Type Check Mode",
         default="error",
         description="Molecule-type mismatch handling: 'off' (skip), 'warn' (log + continue), 'error' (fail)",
-        advanced=True,
     )
     # Mirrors NCBIFetchConfig.ncbi_api_key / ncbi_email — keep the descriptions
     # in sync with ncbi/shared_data_models.py.
@@ -399,14 +397,12 @@ class SequenceFetchConfig(BaseConfig):
         title="NCBI API Key",
         default=None,
         description="Optional NCBI API key (lifts rate limit from 3 to 10 req/s)",
-        advanced=True,
         include_in_key=False,
     )
     ncbi_email: str | None = ConfigField(
         title="NCBI Email",
         default=None,
         description="Optional contact email; pair with API key for IP-block recovery",
-        advanced=True,
         include_in_key=False,
     )
 

@@ -150,13 +150,11 @@ class AlphaFold2BinderConfig(BaseConfig):
         default=None,
         gt=0.0,
         description="Soft bias strength for non-design positions toward the wildtype template.",
-        advanced=True,
     )
     omit_aas: list[AminoAcid] | None = ConfigField(
         title="Omit Amino Acids",
         default=None,
         description="Amino acids to ban during optimization (e.g. ['C', 'W']).",
-        advanced=True,
         examples=[["C"], ["C", "W"]],
     )
     num_recycles: int = ConfigField(
@@ -164,7 +162,6 @@ class AlphaFold2BinderConfig(BaseConfig):
         default=3,
         ge=0,
         description="Recycling iterations through the model. Higher = more accurate but slower.",
-        advanced=True,
     )
     # No reload_on_change: inference.py:_get_model caches one AF2 model per
     # recycle_mode in self._models, so mode switches reuse the persistent
@@ -173,7 +170,6 @@ class AlphaFold2BinderConfig(BaseConfig):
         title="Recycle Mode",
         default="last",
         description="Which recycle's output is used for loss/gradient ('last' matches Germinal VHH).",
-        advanced=True,
     )
     model_num: int = ConfigField(
         title="Model Number",
@@ -181,40 +177,34 @@ class AlphaFold2BinderConfig(BaseConfig):
         ge=1,
         le=5,
         description="Which AlphaFold2 model parameter set to use (1-5).",
-        advanced=True,
         reload_on_change=True,
     )
     sample_models: bool = ConfigField(
         title="Sample Models",
         default=False,
         description="Randomly sample from available AF2 model parameter sets each forward pass.",
-        advanced=True,
         include_in_key=False,
     )
     use_multimer: bool = ConfigField(
         title="Use Multimer",
         default=True,
         description="Use AlphaFold multimer parameters for binder protocol.",
-        advanced=True,
         reload_on_change=True,
     )
     rm_target_seq: bool = ConfigField(
         title="Mask Target Sequence",
         default=True,
         description="Mask target template sequence in ColabDesign prep_inputs.",
-        advanced=True,
     )
     rm_target_sc: bool = ConfigField(
         title="Mask Target Side Chains",
         default=False,
         description="Mask target template side chains in ColabDesign prep_inputs.",
-        advanced=True,
     )
     rm_template_ic: bool = ConfigField(
         title="Mask Inter-chain Contacts",
         default=True,
         description="Mask inter-chain template contacts in ColabDesign prep_inputs.",
-        advanced=True,
     )
     soft: float = ConfigField(
         title="Soft Mixing",
@@ -222,7 +212,6 @@ class AlphaFold2BinderConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="ColabDesign soft mixing coefficient (0=hard logits, 1=full softmax blend).",
-        advanced=True,
     )
     hard: float = ConfigField(
         title="Hard Mixing",
@@ -230,31 +219,26 @@ class AlphaFold2BinderConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="ColabDesign hard mixing coefficient (0=relaxed, 1=straight-through argmax).",
-        advanced=True,
     )
     backend: Literal["base", "germinal"] = ConfigField(
         title="Backend",
         default="base",
         description="ColabDesign backend: 'base' (upstream) or 'germinal' (with alpha, bias, framework contacts).",
-        advanced=True,
     )
     compute_gradient: bool = ConfigField(
         title="Compute Gradient",
         default=True,
         description="Run backward pass and return gradient; set False for forward-only scoring.",
-        advanced=True,
     )
     starting_binder_seq: str | None = ConfigField(
         title="Starting Binder Sequence",
         default=None,
         description="Warm-start binder AA sequence (Germinal backend only; length must equal len(logits)).",
-        advanced=True,
     )
     loss_weights: dict[str, float] = ConfigField(
         title="Loss Weights",
         default_factory=dict,
         description="Binder-objective weights passed to ColabDesign's set_weights().",
-        advanced=True,
     )
     # Contact loss defaults match ColabDesign (mk_af_model.__init__). Override per-pipeline.
     intra_contact_num: int = ConfigField(
@@ -262,41 +246,35 @@ class AlphaFold2BinderConfig(BaseConfig):
         default=2,  # ColabDesign default
         ge=1,
         description="Number of intra-molecular contacts per residue for the contact loss.",
-        advanced=True,
     )
     intra_contact_cutoff: float = ConfigField(
         title="Intra Contact Cutoff",
         default=14.0,  # ColabDesign default
         gt=0.0,
         description="Distance cutoff in angstroms for intra-molecular contacts.",
-        advanced=True,
     )
     inter_contact_num: int = ConfigField(
         title="Inter Contact Number",
         default=1,  # ColabDesign default (Germinal uses 10, BindCraft uses 2)
         ge=1,
         description="Number of inter-molecular (interface) contacts per residue.",
-        advanced=True,
     )
     inter_contact_cutoff: float = ConfigField(
         title="Inter Contact Cutoff",
         default=21.6875,  # ColabDesign default (Germinal/BindCraft use 20.0)
         gt=0.0,
         description="Distance cutoff in angstroms for inter-molecular contacts.",
-        advanced=True,
     )
     framework_contact_offset: float = ConfigField(
         title="Framework Contact Offset",
         default=1.0,
         gt=0.0,
         description="Penalty offset for framework contacts in the Germinal inter-chain contact loss.",
-        advanced=True,
     )
     device: str = ConfigField(
         title="Device",
         default="cuda",
         description="Device to run the model on (GPU-required tool overrides BaseConfig 'cpu' default)",
-        hidden=True,
         include_in_key=False,
     )
 

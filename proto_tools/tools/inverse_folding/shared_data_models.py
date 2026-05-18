@@ -164,7 +164,6 @@ class InverseFoldingConfig(BaseConfig):
         default=None,
         ge=1,
         description="Number of sequences to process simultaneously on GPU. Defaults to num_sequences_per_structure.",
-        advanced=True,
     )
 
     @model_validator(mode="after")
@@ -186,7 +185,6 @@ class InverseFoldingConfig(BaseConfig):
         title="Device",
         default="cuda",
         description="Device to run the model on. Options include 'cuda' (NVIDIA GPU), 'cpu' (CPU execution)",
-        hidden=True,
         include_in_key=False,
         examples=["cuda", "cpu"],
     )

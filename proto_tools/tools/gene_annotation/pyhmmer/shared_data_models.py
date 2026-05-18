@@ -331,7 +331,6 @@ class PyHmmerConfig(BaseConfig):
         default=0,
         ge=0,
         description="CPU threads. 0 auto-detects available cores",
-        hidden=True,
         include_in_key=False,
     )
     evalue_threshold: float = ConfigField(
@@ -344,7 +343,6 @@ class PyHmmerConfig(BaseConfig):
         title="Score Threshold",
         default=None,
         description="Sequence bit-score floor. Use for cross-DB-size comparisons; overrides E-value if set",
-        advanced=True,
     )
     domain_evalue_threshold: float = ConfigField(
         title="Domain E-value Threshold",
@@ -356,41 +354,35 @@ class PyHmmerConfig(BaseConfig):
         title="Domain Score Threshold",
         default=None,
         description="Domain bit-score floor. For cross-DB-size comparisons; overrides domain E-value",
-        advanced=True,
     )
     inclusion_evalue_threshold: float = ConfigField(
         title="Inclusion E-value Threshold",
         default=0.01,
         gt=0,
         description="Inclusion E-value cap. Sets 'included' flag; seeds jackhmmer next iteration",
-        advanced=True,
     )
     inclusion_domain_evalue_threshold: float = ConfigField(
         title="Inclusion Domain E-value",
         default=0.01,
         gt=0,
         description="Domain inclusion E-value cap. Sets included flag on domain hits",
-        advanced=True,
     )
     z_value: float | None = ConfigField(
         title="Database Size (Z)",
         default=None,
         gt=0,
         description="Effective DB size for E-value calc. Set constant for cross-DB compare; None = actual count",
-        advanced=True,
     )
     domain_z_value: float | None = ConfigField(
         title="Domain Database Size (Z)",
         default=None,
         gt=0,
         description="Significant hits for domain E-value calc. Set with Z for cross-DB; None = actual",
-        advanced=True,
     )
     skip_filters: bool = ConfigField(
         title="Skip Heuristic Filters",
         default=False,
         description="Disable MSV/Vit/Fwd + bias filters. 10-100x slower but max sensitivity for distant homologs",
-        advanced=True,
     )
 
 

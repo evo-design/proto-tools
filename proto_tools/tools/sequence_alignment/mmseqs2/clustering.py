@@ -227,33 +227,28 @@ class Mmseqs2ClusteringConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="Minimum aligned-residue fraction (0-1); semantics depend on `cov_mode`.",
-        advanced=True,
     )
     cov_mode: CovMode = ConfigField(
         title="Coverage Mode",
         default=DEFAULT_COV_MODE,
         description=("How `coverage` is measured: 0=query AND target, 1=target, 2=query, 3-5=length-ratio variants."),
-        advanced=True,
     )
     evalue: float = ConfigField(
         title="E-value Threshold",
         default=DEFAULT_CLUSTER_EVALUE,
         gt=0.0,
         description="E-value threshold for the prefilter step; raise to keep weaker matches.",
-        advanced=True,
     )
     cluster_mode: ClusterMode = ConfigField(
         title="Cluster Mode",
         default=DEFAULT_CLUSTER_MODE,
         description="0=Set-Cover greedy, 1=Connected component (BLASTclust), 2-3=Greedy by length (CD-HIT).",
-        advanced=True,
     )
     max_seqs: int = ConfigField(
         title="Max Prefilter Hits",
         default=DEFAULT_CLUSTER_MAX_SEQS,
         ge=1,
         description="Max prefilter results per query; raise for deeper clustering at the cost of runtime/memory.",
-        advanced=True,
     )
     sensitivity: float = ConfigField(
         title="Search Sensitivity",
@@ -261,13 +256,11 @@ class Mmseqs2ClusteringConfig(BaseConfig):
         ge=1.0,
         le=7.5,
         description="Prefilter sensitivity (1.0-7.5); higher is slower but finds more remote homologs.",
-        advanced=True,
     )
     extra_args: list[str] = ConfigField(
         title="Extra CLI Arguments",
         default=[],
         description="Verbatim `mmseqs cluster` CLI tokens for niche flags (e.g. `['--similarity-type', '2']`).",
-        advanced=True,
     )
 
 

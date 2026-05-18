@@ -219,7 +219,6 @@ class Mmseqs2SearchGenomesConfig(BaseConfig):
         default=DEFAULT_THREADS,
         ge=0,
         description="CPU threads; `0` lets MMseqs2 auto-detect all available cores.",
-        hidden=True,
         include_in_key=False,
     )
     sensitivity: float = ConfigField(
@@ -228,14 +227,12 @@ class Mmseqs2SearchGenomesConfig(BaseConfig):
         ge=1.0,
         le=7.5,
         description="Prefilter sensitivity (1.0-7.5); wrapper biases higher than upstream's 5.7.",
-        advanced=True,
     )
     evalue: float = ConfigField(
         title="E-value Threshold",
         default=DEFAULT_SEARCH_EVALUE,
         gt=0.0,
         description="E-value threshold for reported hits; raise to keep weaker matches.",
-        advanced=True,
     )
     min_seq_id: float = ConfigField(
         title="Minimum Sequence Identity",
@@ -243,7 +240,6 @@ class Mmseqs2SearchGenomesConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="Minimum sequence identity (0-1) for reported hits; raise to filter to closer homologs.",
-        advanced=True,
     )
     coverage: float = ConfigField(
         title="Coverage Threshold",
@@ -251,32 +247,27 @@ class Mmseqs2SearchGenomesConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="Minimum aligned-residue fraction (0-1); semantics depend on `cov_mode`.",
-        advanced=True,
     )
     cov_mode: CovMode = ConfigField(
         title="Coverage Mode",
         default=DEFAULT_COV_MODE,
         description=("How `coverage` is measured: 0=query AND target, 1=target, 2=query, 3-5=length-ratio variants."),
-        advanced=True,
     )
     max_seqs: int = ConfigField(
         title="Max Prefilter Hits",
         default=DEFAULT_SEARCH_MAX_SEQS,
         ge=1,
         description="Max prefilter results per query; raise for deeper searches at the cost of runtime/memory.",
-        advanced=True,
     )
     strand: NuclStrand = ConfigField(
         title="Search Strand",
         default=DEFAULT_NUCL_STRAND,
         description="Strand: 0=reverse, 1=forward, 2=both. Wrapper defaults to 2; upstream = 1.",
-        advanced=True,
     )
     extra_args: list[str] = ConfigField(
         title="Extra CLI Arguments",
         default=[],
         description="Verbatim `mmseqs search` CLI tokens for niche flags (e.g. `['--alignment-mode', '2']`).",
-        advanced=True,
     )
 
 

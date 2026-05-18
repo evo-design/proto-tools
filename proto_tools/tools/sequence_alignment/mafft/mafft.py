@@ -119,21 +119,18 @@ class MafftConfig(BaseConfig):
         default=0,
         ge=0,
         description="Iterative-refinement cycles; 0 = no refinement; ~1000 enables full *-INS-i.",
-        advanced=True,
     )
     threads: int = ConfigField(
         title="Number of Threads",
         default=1,
         ge=1,
         description="CPU threads for parallel processing.",
-        hidden=True,
         include_in_key=False,
     )
     extra_args: list[str] = ConfigField(
         title="Extra CLI Arguments",
         default=[],
         description="Verbatim `mafft` CLI tokens for niche flags (e.g. `['--retree', '3', '--reorder']`).",
-        advanced=True,
     )
 
 

@@ -58,9 +58,7 @@ class FoldseekMultimerClusterInput(BaseToolInput):
     """
 
     structures: list[str] | None = InputField(
-        default=None,
-        description="Multi-chain PDB or mmCIF text strings to cluster (≥2).",
-        min_length=2,
+        default=None, description="Multi-chain PDB or mmCIF text strings to cluster (≥2).", min_length=2
     )
     structures_dir: str | None = InputField(
         default=None,
@@ -133,7 +131,6 @@ class FoldseekMultimerClusterConfig(BaseConfig):
         title="Alignment Type",
         default=2,
         description="Alignment scoring: 0=3Di SW, 1=TMalign, 2=3Di+AA (default), 3=LoL",
-        advanced=True,
     )
     tmscore_threshold: float = ConfigField(
         title="TM-score Threshold",
@@ -141,7 +138,6 @@ class FoldseekMultimerClusterConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="TM-score floor for chain-pair alignments (0-1). 0.0 keeps all",
-        advanced=True,
     )
     lddt_threshold: float = ConfigField(
         title="LDDT Threshold",
@@ -149,16 +145,8 @@ class FoldseekMultimerClusterConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="LDDT floor for chain-pair alignments (0-1). 0.0 keeps all",
-        advanced=True,
     )
-    num_threads: int = ConfigField(
-        title="Threads",
-        default=4,
-        ge=1,
-        description="CPU threads",
-        advanced=True,
-        include_in_key=False,
-    )
+    num_threads: int = ConfigField(title="Threads", default=4, ge=1, description="CPU threads", include_in_key=False)
 
 
 class FoldseekMultimerClusterOutput(BaseToolOutput):

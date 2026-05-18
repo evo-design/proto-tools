@@ -138,19 +138,16 @@ class ProteinMPNNGradientConfig(BaseConfig):
         title="Straight-Through Estimator",
         default=True,
         description="Hard one-hot forward pass with soft-probability gradients.",
-        advanced=True,
     )
     compute_gradient: bool = ConfigField(
         title="Compute Gradient",
         default=True,
         description="Run backward pass and return gradient; set False for forward-only log-likelihood.",
-        advanced=True,
     )
     device: str = ConfigField(
         title="Device",
         default="cuda",
         description="Device to run the model on",
-        hidden=True,
         include_in_key=False,
     )
 

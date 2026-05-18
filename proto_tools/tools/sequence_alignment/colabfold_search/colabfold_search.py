@@ -316,28 +316,22 @@ class ColabfoldSearchConfig(BaseConfig):
         title="Use Metagenomic Database",
         default=False,
         description="Include metagenomic DBs (envdb/SPIRE). Off by default for speed (upstream = on).",
-        advanced=True,
     )
     output_dir: str | None = ConfigField(
         title="Output Directory",
         default=None,
         description="Directory for output MSA files; resolves to a `$PROTO_HOME/colabfold_search` subdir when None.",
-        hidden=True,
         include_in_key=False,
     )
     msa_db_dir: str | None = ConfigField(
         title="MSA Database Directory",
         default=None,
         description="Local MMseqs2 database directory; resolves to the registry-provisioned location when None.",
-        advanced=True,
-        depends_on={"search_mode": ["local"]},
     )
     database_name: str = ConfigField(
         title="Database Name",
         default="uniref30_2302_db",
         description="MMseqs2 DB stem within `msa_db_dir` (matches the `*.dbtype` file).",
-        advanced=True,
-        depends_on={"search_mode": ["local"]},
     )
     sensitivity: float | None = ConfigField(
         title="MMseqs2 Sensitivity",
@@ -345,38 +339,29 @@ class ColabfoldSearchConfig(BaseConfig):
         ge=1.0,
         le=9.0,
         description="MMseqs2 `-s` (1.0-9.0); ignored on GPU; `None` falls back to colabfold's k-score path.",
-        advanced=True,
-        depends_on={"search_mode": ["local"]},
     )
     num_threads: int | None = ConfigField(
         title="Number of Threads",
         default=None,
         ge=1,
         description="CPU threads; `None` auto-detects all available cores.",
-        hidden=True,
         include_in_key=False,
-        depends_on={"search_mode": ["local"]},
     )
     use_gpu: bool = ConfigField(
         title="Use GPU",
         default=False,
         description="GPU-accelerated MMseqs2; requires an NVIDIA GPU (Turing+) on Linux and a GPU-padded DB.",
-        advanced=True,
-        depends_on={"search_mode": ["local"]},
     )
     extra_args: list[str] = ConfigField(
         title="Extra CLI Arguments",
         default=[],
         description="Verbatim `colabfold_search` CLI tokens for niche flags (e.g. `['--max-accept', '500']`).",
-        advanced=True,
-        depends_on={"search_mode": ["local"]},
     )
     timeout: int | None = ConfigField(
         title="Timeout",
         default=3600,
         ge=1,
         description="Subprocess timeout in seconds; full-database searches can exceed 10 minutes.",
-        hidden=True,
         include_in_key=False,
     )
     # Private field to track if user specified custom db_dir

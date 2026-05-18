@@ -73,9 +73,7 @@ class EnsemblXrefsConfig(BaseConfig):
     """
 
     assembly: EnsemblAssembly = ConfigField(
-        title="Assembly",
-        default="GRCh38",
-        description="Genome assembly; GRCh37 routes to grch37.rest.ensembl.org",
+        title="Assembly", default="GRCh38", description="Genome assembly; GRCh37 routes to grch37.rest.ensembl.org"
     )
     all_levels: bool = ConfigField(
         title="All Levels",
@@ -86,13 +84,11 @@ class EnsemblXrefsConfig(BaseConfig):
         title="External DB Filter",
         default=None,
         description="Restrict to one external DB (e.g. 'UniProtKB/Swiss-Prot', 'HGNC')",
-        advanced=True,
     )
     object_type: Literal["gene", "transcript", "translation"] | None = ConfigField(
         title="Object Type Filter",
         default=None,
         description="Restrict to one feature type when the stable ID resolves ambiguously",
-        advanced=True,
     )
 
 

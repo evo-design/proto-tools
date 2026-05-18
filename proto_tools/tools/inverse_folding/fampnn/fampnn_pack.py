@@ -74,20 +74,17 @@ class FAMPNNPackConfig(BaseConfig):
         default=50,
         ge=1,
         description="Number of sidechain diffusion denoising steps",
-        hidden=True,
     )
     scn_step_scale: float = ConfigField(
         title="Sidechain Step Scale",
         default=1.5,
         gt=0.0,
         description="Step scale (eta) for sidechain diffusion",
-        hidden=True,
     )
     device: str = ConfigField(
         title="Device",
         default="cuda",
         description="Device to run the model on",
-        hidden=True,
         include_in_key=False,
     )
 

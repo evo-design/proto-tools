@@ -92,7 +92,6 @@ class PyNhmmerConfig(PyHmmerConfig):
         title="Strand",
         default="both",
         description="Strand: 'both' (~2x runtime), 'watson' (forward only), 'crick' (reverse only)",
-        advanced=True,
     )
 
 

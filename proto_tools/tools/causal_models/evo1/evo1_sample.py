@@ -105,21 +105,18 @@ class Evo1SampleConfig(CausalModelSampleConfig):
         title="Cached Generation",
         default=True,
         description="Use the KV cache for autoregressive generation",
-        advanced=True,
     )
     force_prompt_threshold: int = ConfigField(
         title="Force Prompt Threshold",
         default=128,
         ge=1,
         description="Tokens to prefill in parallel before switching to prompt forcing",
-        hidden=True,
     )
     timeout: int | None = ConfigField(
         title="Timeout",
         default=1800,
         ge=1,
         description="Maximum execution time in seconds",
-        hidden=True,
         include_in_key=False,
     )
 

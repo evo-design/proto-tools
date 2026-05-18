@@ -216,21 +216,7 @@ def test_rfdiffusion3_design_spec_ori_token_must_be_xyz():
         RFdiffusion3DesignSpec(length="100", ori_token=[1.0, 2.0, 3.0, 4.0])
 
 
-# ── Schema flags + cache-key invariants ─────────────────────────────────────
-
-
-def test_rfdiffusion3_config_schema_visibility_flags():
-    """depends_on relationships render correctly in the generated JSON Schema."""
-    properties = RFdiffusion3Config.model_json_schema()["properties"]
-
-    cfg_dep = {"field": "use_classifier_free_guidance", "value": [True]}
-    for f in ("cfg_scale", "cfg_features", "cfg_t_max"):
-        assert properties[f]["x-depends-on"] == cfg_dep, f"{f} missing CFG depends_on"
-
-    assert properties["align_trajectory_structures"]["x-depends-on"] == {
-        "field": "dump_trajectories",
-        "value": [True],
-    }
+# ── Cache-key invariants ────────────────────────────────────────────────────
 
 
 def test_rfdiffusion3_config_cache_key_invariants():

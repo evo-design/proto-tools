@@ -170,48 +170,41 @@ class Boltz2Config(MSAStructurePredictionConfig):
         default=3,
         ge=0,
         description="Iterative refinement passes through the model. Higher = more accurate but slower.",
-        advanced=True,
     )
     sampling_steps: int = ConfigField(
         title="Number of Sampling Steps",
         default=200,
         ge=1,
         description="Denoising steps in the diffusion process. Higher = more refined but slower.",
-        advanced=True,
     )
     diffusion_samples: int = ConfigField(
         title="Number of Diffusion Samples",
         default=1,
         ge=1,
         description="Structure samples per complex; best by confidence is kept. Higher = more thorough but slower.",
-        advanced=True,
     )
     step_scale: float = ConfigField(
         title="Diffusion Step Scale",
         default=1.5,
         gt=0.0,
         description="Diffusion step size (typical range 1.0-2.0). Lower values produce more sample diversity.",
-        advanced=True,
     )
     max_msa_seqs: int = ConfigField(
         title="Max MSA Sequences",
         default=8192,
         ge=1,
         description="Maximum number of MSA sequences fed into the model. Lower this to reduce GPU memory on deep MSAs.",
-        advanced=True,
     )
     subsample_msa: bool = ConfigField(
         title="Subsample MSA",
         default=False,
         description="Randomly subsample the MSA on each run for sample diversity (loses determinism).",
-        advanced=True,
     )
     num_workers: int = ConfigField(
         title="Number of Workers",
         default=min(os.cpu_count() or 4, 4),
         ge=1,
         description="Number of dataloader workers for prediction.",
-        hidden=True,
         include_in_key=False,
     )
     timeout: int | None = ConfigField(
@@ -219,7 +212,6 @@ class Boltz2Config(MSAStructurePredictionConfig):
         default=1200,
         ge=1,
         description="Maximum execution time in seconds.",
-        hidden=True,
         include_in_key=False,
     )
 

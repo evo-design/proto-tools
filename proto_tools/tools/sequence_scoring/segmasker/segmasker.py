@@ -74,19 +74,16 @@ class SegmaskerConfig(BaseConfig):
         default=12,
         ge=1,
         description="Sliding-window size for SEG; smaller = more sensitive to short low-complexity runs",
-        advanced=True,
     )
     locut: float = ConfigField(
         title="Low-complexity Threshold",
         default=2.2,
         description="Lower SEG complexity cutoff; lower = stricter (only the most biased regions)",
-        advanced=True,
     )
     hicut: float = ConfigField(
         title="High-complexity Threshold",
         default=2.5,
         description="Upper SEG complexity cutoff; must be >= locut",
-        advanced=True,
     )
 
     @model_validator(mode="after")

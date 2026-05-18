@@ -72,7 +72,6 @@ class EnformerInput(BaseToolInput):
     target_ranges: list[SequenceTargetRange] | None = InputField(
         default=None,
         description="Sequence-relative range(s) that must remain inside Enformer output bins",
-        advanced=True,
     )
 
     @field_validator("sequences", mode="before")
@@ -272,7 +271,6 @@ class EnformerConfig(BaseConfig):
         title="Device",
         default="cuda",
         description="Device to run the model on",
-        hidden=True,
         include_in_key=False,
     )
     output_tracks: list[int] = ConfigField(
@@ -284,14 +282,12 @@ class EnformerConfig(BaseConfig):
         title="Species",
         default="human",
         description="Species track head to use",
-        advanced=True,
     )
     batch_size: int = ConfigField(
         title="Batch Size",
         default=1,
         ge=1,
         description="Number of sequences to process simultaneously on GPU",
-        advanced=True,
     )
 
 

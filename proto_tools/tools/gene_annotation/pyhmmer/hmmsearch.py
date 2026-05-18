@@ -85,7 +85,6 @@ class PyHmmsearchConfig(PyHmmerConfig):
         title="HMM Bit-Score Cutoffs",
         default=None,
         description="HMM curated cutoff: 'gathering' (Pfam GA), 'noise' (permissive), 'trusted' (strictest)",
-        advanced=True,
     )
 
 

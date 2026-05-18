@@ -89,59 +89,44 @@ class EnsemblSequenceConfig(BaseConfig):
         description="genomic = DNA+UTR+introns; cdna = mRNA+UTR; cds = coding only; protein = translation",
     )
     assembly: EnsemblAssembly = ConfigField(
-        title="Assembly",
-        default="GRCh38",
-        description="Genome assembly; GRCh37 routes to grch37.rest.ensembl.org",
+        title="Assembly", default="GRCh38", description="Genome assembly; GRCh37 routes to grch37.rest.ensembl.org"
     )
     multiple_sequences: bool = ConfigField(
         title="Allow Multiple Sequences",
         default=False,
         description="Return all sequences for IDs that map to multiple records",
-        advanced=True,
     )
     mask: Literal["hard", "soft"] | None = ConfigField(
-        title="Repeat Mask",
-        default=None,
-        description="Mask repeats: 'hard' (N) or 'soft' (lowercase); genomic only",
-        advanced=True,
-        depends_on={"field": "sequence_type", "value": ["genomic"]},
+        title="Repeat Mask", default=None, description="Mask repeats: 'hard' (N) or 'soft' (lowercase); genomic only"
     )
     mask_feature: bool = ConfigField(
         title="Mask Features",
         default=False,
         description="Mask introns (genomic) or UTRs (cdna) so the primary feature stands out",
-        advanced=True,
-        depends_on={"field": "sequence_type", "value": ["genomic", "cdna"]},
     )
     expand_3prime: int | None = ConfigField(
         title="Expand 3' End",
         default=None,
         ge=0,
         description="Add bases to the 3' end (genomic only; incompatible with 'end')",
-        advanced=True,
-        depends_on={"field": "sequence_type", "value": ["genomic"]},
     )
     expand_5prime: int | None = ConfigField(
         title="Expand 5' End",
         default=None,
         ge=0,
         description="Add bases to the 5' end (genomic only; incompatible with 'start')",
-        advanced=True,
-        depends_on={"field": "sequence_type", "value": ["genomic"]},
     )
     start: int | None = ConfigField(
         title="Trim Start",
         default=None,
         ge=1,
         description="1-indexed start trim coordinate (incompatible with expand_5prime)",
-        advanced=True,
     )
     end: int | None = ConfigField(
         title="Trim End",
         default=None,
         ge=1,
         description="1-indexed end trim coordinate (incompatible with expand_3prime)",
-        advanced=True,
     )
 
     @model_validator(mode="after")

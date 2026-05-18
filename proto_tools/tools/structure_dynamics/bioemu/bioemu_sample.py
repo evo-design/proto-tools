@@ -181,73 +181,62 @@ class BioEmuConfig(StructurePredictionConfig):
         title="Model Name",
         default="bioemu-v1.1",
         description="BioEmu checkpoint (v1.1 = Science paper; v1.2 = extended MD + folding-FE training)",
-        advanced=True,
         reload_on_change=True,
     )
     filter_samples: bool = ConfigField(
         title="Filter Samples",
         default=True,
         description="Drop unphysical samples (steric clashes, chain discontinuities)",
-        advanced=True,
     )
     batch_size: int = ConfigField(
         title="Batch Size",
         default=10,
         ge=1,
         description="Batch size at L=100; effective batch scales as batch_size * (100/L)^2",
-        advanced=True,
     )
     denoiser_type: Literal["dpm", "heun"] = ConfigField(
         title="Denoiser Type",
         default="dpm",
         description="Diffusion sampler algorithm (dpm = 50 deterministic steps; heun = stochastic)",
-        advanced=True,
     )
     denoiser_config: str | None = ConfigField(
         title="Denoiser Config Path",
         default=None,
         description="Path to a custom denoiser/steering YAML; overrides denoiser_type when set",
-        hidden=True,
         examples=["physical_steering.yaml"],
     )
     msa_host_url: str | None = ConfigField(
         title="MSA Host URL",
         default=None,
         description="Override the ColabFold MMseqs2 MSA server URL",
-        hidden=True,
     )
     cache_embeds_dir: str | None = ConfigField(
         title="MSA Embeds Cache Dir",
         default=None,
         description="Directory to cache MSA embeddings across runs",
-        hidden=True,
         include_in_key=False,
     )
     cache_so3_dir: str | None = ConfigField(
         title="SO3 Cache Dir",
         default=None,
         description="Directory to cache SO3 precomputations across runs",
-        hidden=True,
         include_in_key=False,
     )
     output_dir: str | None = ConfigField(
         title="Output Directory",
         default=None,
         description="Optional directory for raw BioEmu output files",
-        hidden=True,
         include_in_key=False,
     )
     colabfold_search_config: ColabfoldSearchConfig | None = ConfigField(
         title="ColabFold Search Config",
         default=None,
         description="Configuration for ColabFold MSA search; None uses defaults",
-        hidden=True,
     )
     include_pae_matrix: bool = ConfigField(
         title="Include PAE Matrix",
         default=False,
         description="Unused by BioEmu (inherited from StructurePredictionConfig)",
-        hidden=True,
     )
 
     def preprocess(self, inputs: StructurePredictionInput) -> StructurePredictionInput:  # type: ignore[override]

@@ -56,7 +56,6 @@ class AlphaFoldDBFetchInput(BaseToolInput):
         default=None,
         ge=2,
         description="Isoform number to fetch (None = canonical record). For non-canonical isoforms only.",
-        advanced=True,
     )
 
 
@@ -83,26 +82,21 @@ class AlphaFoldDBFetchConfig(BaseConfig):
         title="Structure Format",
         default="pdb",
         description="Structure file format (pdb or mmCIF); ignored when include_structure=False",
-        depends_on={"field": "include_structure", "value": [True]},
     )
     include_structure: bool = ConfigField(
         title="Include Structure",
         default=True,
         description="Fetch the structure body and per-residue pLDDT; disable for metadata-only probes",
-        advanced=True,
     )
     include_pae: bool = ConfigField(
         title="Include PAE Matrix",
         default=False,
         description="Also fetch the predicted aligned error matrix; tens of MB for long proteins",
-        advanced=True,
-        depends_on={"field": "include_structure", "value": [True]},
     )
     include_msa: bool = ConfigField(
         title="Include MSA",
         default=False,
         description="Fetch the A3M MSA used for prediction; large for conserved proteins",
-        advanced=True,
     )
 
 

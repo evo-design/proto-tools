@@ -49,22 +49,15 @@ class PyMOLRMSDConfig(BaseConfig):
         description="PyMOL alignment routine to use for RMSD calculation.",
     )
     target_selection: str = ConfigField(
-        title="Target Selection",
-        default="target",
-        description="PyMOL target selection, e.g. 'target and name CA'.",
-        advanced=True,
+        title="Target Selection", default="target", description="PyMOL target selection, e.g. 'target and name CA'."
     )
     mobile_selection: str = ConfigField(
-        title="Mobile Selection",
-        default="mobile",
-        description="PyMOL mobile selection, e.g. 'mobile and name CA'.",
-        advanced=True,
+        title="Mobile Selection", default="mobile", description="PyMOL mobile selection, e.g. 'mobile and name CA'."
     )
     failure_rmsd: float = ConfigField(
         title="Failure RMSD",
         default=999.0,
         description="RMSD returned when PyMOL cannot align the requested structures.",
-        advanced=True,
         include_in_key=False,
     )
 

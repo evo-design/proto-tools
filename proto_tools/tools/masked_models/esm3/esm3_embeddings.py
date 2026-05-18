@@ -85,14 +85,12 @@ class ESM3EmbeddingsConfig(MaskedModelEmbeddingsConfig):
         title="Return Logits",
         default=False,
         description="Include per-position logits in the output (large; disable to save memory)",
-        advanced=True,
     )
     repr_layer: int = ConfigField(
         title="Representation Layer",
         default=-1,
         ge=-1,
         description="Transformer layer index for embeddings; -1 returns post-norm output, others select pre-norm",
-        advanced=True,
     )
 
 

@@ -294,7 +294,6 @@ class Mmseqs2SearchProteinsConfig(BaseConfig):
         default=DEFAULT_THREADS,
         ge=0,
         description="CPU threads; `0` lets MMseqs2 auto-detect all available cores.",
-        hidden=True,
         include_in_key=False,
     )
     split: int = ConfigField(
@@ -302,7 +301,6 @@ class Mmseqs2SearchProteinsConfig(BaseConfig):
         default=DEFAULT_SPLIT,
         ge=0,
         description="Split input into N chunks for memory-bounded prefiltering; `0` picks the best split automatically.",
-        advanced=True,
     )
     sensitivity: float = ConfigField(
         title="Search Sensitivity",
@@ -310,14 +308,12 @@ class Mmseqs2SearchProteinsConfig(BaseConfig):
         ge=1.0,
         le=7.5,
         description="Prefilter sensitivity (1.0-7.5); higher = slower but more remote homologs found.",
-        advanced=True,
     )
     evalue: float = ConfigField(
         title="E-value Threshold",
         default=DEFAULT_SEARCH_EVALUE,
         gt=0.0,
         description="E-value threshold for reported hits; raise to keep weaker matches.",
-        advanced=True,
     )
     min_seq_id: float = ConfigField(
         title="Minimum Sequence Identity",
@@ -325,7 +321,6 @@ class Mmseqs2SearchProteinsConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="Minimum sequence identity (0-1) for reported hits; raise to filter to closer homologs.",
-        advanced=True,
     )
     coverage: float = ConfigField(
         title="Coverage Threshold",
@@ -333,38 +328,32 @@ class Mmseqs2SearchProteinsConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="Minimum aligned-residue fraction (0-1); semantics depend on `cov_mode`.",
-        advanced=True,
     )
     cov_mode: CovMode = ConfigField(
         title="Coverage Mode",
         default=DEFAULT_COV_MODE,
         description=("How `coverage` is measured: 0=query AND target, 1=target, 2=query, 3-5=length-ratio variants."),
-        advanced=True,
     )
     max_seqs: int = ConfigField(
         title="Max Prefilter Hits",
         default=DEFAULT_SEARCH_MAX_SEQS,
         ge=1,
         description="Max prefilter results per query; raise for deeper searches at the cost of runtime/memory.",
-        advanced=True,
     )
     only_top_hits: bool = ConfigField(
         title="Only Top Hits",
         default=True,
         description="Wrapper-side filter: when True, keep only the best hit (highest pident) per query sequence.",
-        advanced=True,
     )
     use_gpu: bool = ConfigField(
         title="Use GPU",
         default=False,
         description="Run MMseqs2-GPU (`--gpu 1`); requires a `*.idx_pad` GPU index alongside the target DB.",
-        advanced=True,
     )
     extra_args: list[str] = ConfigField(
         title="Extra CLI Arguments",
         default=[],
         description="Verbatim `mmseqs easy-search` tokens for niche flags (e.g. `['--alignment-mode', '3']`).",
-        advanced=True,
     )
 
     @property

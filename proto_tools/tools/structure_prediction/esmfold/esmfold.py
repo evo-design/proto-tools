@@ -211,27 +211,23 @@ class ESMFoldConfig(StructurePredictionConfig):
         default=512,
         ge=0,
         description="Residue numbering gap between chains in multi-chain structures",
-        hidden=True,
     )
     chain_linker: str = ConfigField(
         title="Chain Linker",
         default="G" * 25,
         description="Sequence to link chains (default: 25 glycines)",
-        hidden=True,
     )
     max_batch_residues: int = ConfigField(
         title="Max Batch Residues",
         default=1200,
         ge=100,
         description="Maximum total residues per inference batch (to prevent GPU memory overflow)",
-        hidden=True,
     )
     num_recycles: int = ConfigField(
         title="Recycling Iterations",
         default=4,
         ge=1,
         description="Iterative refinement passes through ESMFold. Higher = more accurate but slower.",
-        advanced=True,
     )
 
 
@@ -316,7 +312,6 @@ class ESMFoldGradientConfig(ESMFoldConfig):
         default_factory=lambda: {"plddt": 1.0},
         title="Loss Weights",
         description="ESMFold confidence loss weights. Valid keys: plddt, ptm, pae.",
-        advanced=True,
     )
     soft: float = ConfigField(
         title="Soft Mixing",
@@ -324,7 +319,6 @@ class ESMFoldGradientConfig(ESMFoldConfig):
         ge=0.0,
         le=1.0,
         description="Blend hard argmax one-hot (0) to softmax probabilities (1).",
-        advanced=True,
     )
     hard: float = ConfigField(
         title="Hard Mixing",
@@ -332,13 +326,11 @@ class ESMFoldGradientConfig(ESMFoldConfig):
         ge=0.0,
         le=1.0,
         description="Straight-through hard-forward coefficient.",
-        advanced=True,
     )
     compute_gradient: bool = ConfigField(
         title="Compute Gradient",
         default=True,
         description="Run backward pass and return gradient; set False for forward-only scoring.",
-        advanced=True,
     )
 
     @model_validator(mode="after")

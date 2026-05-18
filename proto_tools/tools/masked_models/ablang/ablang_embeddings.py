@@ -71,7 +71,6 @@ class AbLangEmbeddingsConfig(MaskedModelEmbeddingsConfig):
         title="Return Logits",
         default=False,
         description="Include per-position amino-acid logits in the output (large; disable to save memory)",
-        advanced=True,
     )
 
 

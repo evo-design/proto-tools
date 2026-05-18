@@ -187,7 +187,6 @@ class BorzoiEnsembleConfig(BaseConfig):
         title="Device",
         default="cuda",
         description="Device to run the model on",
-        hidden=True,
         include_in_key=False,
     )
     output_tracks: list[int] = ConfigField(
@@ -204,14 +203,12 @@ class BorzoiEnsembleConfig(BaseConfig):
         title="Average Tracks",
         default=True,
         description="Whether to average selected tracks into one output",
-        advanced=True,
     )
     batch_size: int = ConfigField(
         title="Batch Size",
         default=1,
         ge=1,
         description="Number of sequences to process simultaneously on GPU",
-        advanced=True,
     )
 
 

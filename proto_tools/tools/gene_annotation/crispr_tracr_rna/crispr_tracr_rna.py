@@ -273,97 +273,72 @@ class CrisprTracrRNAConfig(BaseConfig):
         title="Number of Workers",
         default=None,
         description="Parallel workers. None auto-selects $SLURM_CPUS_PER_TASK or 1",
-        hidden=True,
         include_in_key=False,
     )
     anti_repeat_similarity_threshold: float = ConfigField(
         title="Anti-repeat Similarity",
         default=0.7,
         description="Anti-repeat ↔ repeat similarity floor (0-1). Lower for divergent CRISPR families",
-        depends_on={"run_type": "complete_run"},
     )
     anti_repeat_coverage_threshold: float = ConfigField(
         title="Anti-repeat Coverage",
         default=0.6,
         description="Anti-repeat alignment coverage floor (0-1). Lower for partial anti-repeats",
-        depends_on={"run_type": "complete_run"},
     )
     weight_crispr_array_score: float = ConfigField(
         title="Weight: CRISPR Array Score",
         default=0.5,
         description="Multi-evidence ranking weight for CRISPRidentify array-detection confidence.",
-        advanced=True,
-        depends_on={"run_type": "complete_run"},
     )
     weight_anti_repeat_sim: float = ConfigField(
         title="Weight: Anti-repeat Similarity",
         default=0.5,
         description="Multi-evidence ranking weight for anti-repeat sequence similarity.",
-        advanced=True,
-        depends_on={"run_type": "complete_run"},
     )
     weight_anti_repeat_coverage: float = ConfigField(
         title="Weight: Anti-repeat Coverage",
         default=0.5,
         description="Multi-evidence ranking weight for anti-repeat alignment coverage.",
-        advanced=True,
-        depends_on={"run_type": "complete_run"},
     )
     weight_anti_sim_coverage: float = ConfigField(
         title="Weight: Sim x Coverage",
         default=0.5,
         description="Multi-evidence ranking weight for the similarity x coverage product.",
-        advanced=True,
-        depends_on={"run_type": "complete_run"},
     )
     weight_interaction_score: float = ConfigField(
         title="Weight: IntaRNA Score",
         default=0.6,
         description="Multi-evidence ranking weight for the IntaRNA RNA-RNA interaction energy.",
-        advanced=True,
-        depends_on={"run_type": "complete_run"},
     )
     weight_model_hit_score: float = ConfigField(
         title="Weight: Tail Hit Score",
         default=0.9,
         description="Multi-evidence ranking weight for the covariance-model tail hit score.",
-        advanced=True,
-        depends_on={"run_type": "complete_run"},
     )
     weight_terminator_hit_score: float = ConfigField(
         title="Weight: Terminator Hit Score",
         default=0.9,
         description="Multi-evidence ranking weight for erpin terminator presence/score.",
-        advanced=True,
-        depends_on={"run_type": "complete_run"},
     )
     weight_consistency_orientation: float = ConfigField(
         title="Weight: Orientation",
         default=0.1,
         description="Multi-evidence ranking weight for repeat / anti-repeat orientation consistency.",
-        advanced=True,
-        depends_on={"run_type": "complete_run"},
     )
     weight_consistency_anti_repeat_tail: float = ConfigField(
         title="Weight: Anti-repeat-Tail",
         default=0.1,
         description="Multi-evidence ranking weight for anti-repeat ↔ tail positional consistency.",
-        advanced=True,
-        depends_on={"run_type": "complete_run"},
     )
     weight_consistency_tail_terminator: float = ConfigField(
         title="Weight: Tail-Terminator",
         default=0.1,
         description="Multi-evidence ranking weight for tail ↔ terminator positional consistency.",
-        advanced=True,
-        depends_on={"run_type": "complete_run"},
     )
     perform_type_v_anti_repeat_analysis: bool = ConfigField(
         title="Type V Anti-repeat Analysis",
         default=False,
         description="Search Type V (Cas12) anti-repeat locations. Niche; off by default",
-        advanced=True,
-        depends_on={"run_type": "model_run"},
     )
 
 

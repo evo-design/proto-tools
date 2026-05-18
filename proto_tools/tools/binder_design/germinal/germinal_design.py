@@ -290,7 +290,6 @@ class GerminalConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="Override final external_plddt (VHH preset: > 0.87, scFv preset: > 0.85).",
-        advanced=True,
     )
     iptm_threshold: float | None = ConfigField(
         title="ipTM Threshold",
@@ -298,14 +297,12 @@ class GerminalConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="Override final external_iptm (preset: > 0.74).",
-        advanced=True,
     )
     ipae_threshold: float | None = ConfigField(
         title="iPAE Threshold (Å)",
         default=None,
         gt=0.0,
         description="Override final external_pae (VHH preset: < 7.5, scFv preset: < 8).",
-        advanced=True,
     )
     ptm_threshold: float | None = ConfigField(
         title="pTM Threshold",
@@ -313,7 +310,6 @@ class GerminalConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="Override final external_ptm (preset: > 0.84).",
-        advanced=True,
     )
     pdockq2_threshold: float | None = ConfigField(
         title="pDockQ2 Threshold",
@@ -321,34 +317,29 @@ class GerminalConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="Override final pdockq2 (preset: > 0.23).",
-        advanced=True,
     )
 
     germinal_overrides: dict[str, Any] = ConfigField(
         title="Germinal Hydra Overrides",
         default_factory=dict,
         description="Free-form Hydra overrides (key must be a valid dotpath). Applied as <key>=<value>.",
-        advanced=True,
     )
     filter_overrides: dict[str, dict[str, dict[str, Any]]] = ConfigField(
         title="Filter Overrides",
         default_factory=dict,
         description="Override filter YAMLs: {'initial' | 'final': {key: {'value': v, 'operator': op}}}.",
-        advanced=True,
     )
 
     device: str = ConfigField(
         title="Device",
         default="cuda",
         description="Device for the Germinal subprocess (forced 'cuda'; CPU not supported).",
-        hidden=True,
         include_in_key=False,
     )
     output_dir: str | None = ConfigField(
         title="Output Directory",
         default=None,
         description="Optional persistent output directory; if unset, a temp dir is used.",
-        hidden=True,
         include_in_key=False,
     )
     # Germinal campaigns run hours-to-days; truncating mid-run wastes compute (default: no cap).
@@ -357,7 +348,6 @@ class GerminalConfig(BaseConfig):
         default=None,
         ge=1,
         description="Maximum execution time in seconds. None (default) waits indefinitely.",
-        hidden=True,
         include_in_key=False,
     )
     # verbose, seed inherited from BaseConfig.

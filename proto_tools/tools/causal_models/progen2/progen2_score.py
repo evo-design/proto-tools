@@ -68,7 +68,6 @@ class ProGen2ScoringConfig(CausalModelScoringConfig):
         title="Local Model Path",
         default=None,
         description="Override the default download with a local weights directory",
-        hidden=True,
         reload_on_change=True,
     )
 

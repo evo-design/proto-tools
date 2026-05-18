@@ -488,63 +488,52 @@ class RFdiffusion3Config(BaseConfig):
         default=8,
         ge=1,
         description="Designs sampled in parallel per batch",
-        advanced=True,
     )
     num_timesteps: int = ConfigField(
         title="Number of Timesteps",
         default=200,
         ge=1,
         description="Diffusion timesteps for sampling (more = slower, generally higher quality)",
-        advanced=True,
     )
     step_scale: float = ConfigField(
         title="Step Scale",
         default=1.5,
         ge=0.1,
         description="Diffusion step size scaling; higher = less diverse, more designable (typical: 1.0-2.0)",
-        advanced=True,
     )
     n_recycle: int | None = ConfigField(
         title="Recycle Iterations",
         default=None,
         ge=0,
         description="Recycle iterations; None inherits the checkpoint default (typically 2)",
-        advanced=True,
         examples=[2, 5],
     )
     sampler_kind: Literal["default", "symmetry"] = ConfigField(
         title="Sampler Kind",
         default="default",
         description="Inference sampler kind ('symmetry' for homo-oligomer design)",
-        advanced=True,
         reload_on_change=True,
     )
     center_option: Literal["all", "motif", "diffuse"] = ConfigField(
         title="Center Option",
         default="all",
         description="Coordinate-frame centering mode (all/motif/diffuse)",
-        advanced=True,
     )
     use_classifier_free_guidance: bool = ConfigField(
         title="Use Classifier-Free Guidance",
         default=False,
         description="Enable CFG sampling (cfg_scale is a no-op when False)",
-        advanced=True,
     )
     cfg_scale: float = ConfigField(
         title="CFG Scale",
         default=1.5,
         ge=0.0,
         description="CFG scale (typical: 1.0-3.0); requires use_classifier_free_guidance=True",
-        advanced=True,
-        depends_on={"use_classifier_free_guidance": [True]},
     )
     cfg_features: list[Literal["active_donor", "active_acceptor", "ref_atomwise_rasa"]] | None = ConfigField(
         title="CFG Features",
         default=None,
         description="CFG steering feature names; None uses upstream default (donor/acceptor/RASA)",
-        advanced=True,
-        depends_on={"use_classifier_free_guidance": [True]},
         examples=[["active_donor", "active_acceptor", "ref_atomwise_rasa"]],
     )
     cfg_t_max: float | None = ConfigField(
@@ -553,69 +542,57 @@ class RFdiffusion3Config(BaseConfig):
         ge=0.0,
         le=1.0,
         description="Maximum diffusion timestep (0.0-1.0) at which CFG is applied",
-        advanced=True,
-        depends_on={"use_classifier_free_guidance": [True]},
     )
     gamma_0: float = ConfigField(
         title="Gamma 0",
         default=0.6,
         ge=0.0,
         description="Sampler stochasticity; lower = more designable, less diverse; 0.0 = deterministic ODE",
-        advanced=True,
     )
     low_memory_mode: bool = ConfigField(
         title="Low Memory Mode",
         default=False,
         description="Memory-efficient tokenization (slower); set True only if GPU RAM is tight",
-        advanced=True,
     )
     dump_trajectories: bool = ConfigField(
         title="Dump Trajectories",
         default=False,
         description="Save diffusion trajectory frames to the output directory",
-        advanced=True,
         include_in_key=False,
     )
     align_trajectory_structures: bool = ConfigField(
         title="Align Trajectory Structures",
         default=False,
         description="Align trajectory structures across timesteps",
-        advanced=True,
-        depends_on={"dump_trajectories": [True]},
         include_in_key=False,
     )
     prevalidate_inputs: bool = ConfigField(
         title="Prevalidate Inputs",
         default=False,
         description="Validate the full input JSON before launching diffusion",
-        advanced=True,
         include_in_key=False,
     )
     ckpt_path: str = ConfigField(
         title="Checkpoint Path",
         default="rfd3",
         description="Checkpoint path or canonical alias (default: rfd3 production preset)",
-        hidden=True,
     )
     input_dir: str | None = ConfigField(
         title="Input Directory",
         default=None,
         description="Optional input directory for local execution inputs",
-        hidden=True,
         include_in_key=False,
     )
     output_dir: str | None = ConfigField(
         title="Output Directory",
         default=None,
         description="Optional output directory for local execution outputs",
-        hidden=True,
         include_in_key=False,
     )
     device: str = ConfigField(
         title="Device",
         default="cuda",
         description="Device to run the model on (e.g., 'cuda', 'cpu')",
-        hidden=True,
         include_in_key=False,
     )
 

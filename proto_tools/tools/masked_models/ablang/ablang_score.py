@@ -59,7 +59,6 @@ class AbLangScoringConfig(MaskedModelScoringConfig):
         title="Scoring Mode",
         default="pseudo_log_likelihood",
         description="Per-position masked PLL (accurate, O(L) passes) vs single-pass confidence proxy",
-        advanced=True,
     )
 
 

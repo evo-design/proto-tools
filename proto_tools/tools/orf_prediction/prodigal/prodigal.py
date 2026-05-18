@@ -180,39 +180,33 @@ class ProdigalConfig(BaseConfig):
         title="Meta Mode",
         default=True,
         description="Use meta mode for short sequences/fragments (True) or single-genome mode (False)",
-        advanced=True,
     )
     translation_table: TranslationTable = ConfigField(
         title="Translation Table",
         default="bacterial",
         description="NCBI genetic code for translation (bacterial = table 11, standard = table 1)",
-        advanced=True,
     )
     closed_ends: bool = ConfigField(
         title="Closed Ends",
         default=False,
         description="Prevent genes from running off sequence edges (use True for complete circular genomes)",
-        advanced=True,
     )
     mask: bool = ConfigField(
         title="Mask N-Runs",
         default=False,
         description="Treat runs of N as masked; do not call genes across them",
-        advanced=True,
     )
     min_gene: int = ConfigField(
         title="Minimum Gene Length",
         default=90,
         ge=3,
         description="Minimum gene length in nt; lower for draft assemblies",
-        advanced=True,
     )
     num_threads: int = ConfigField(
         title="Number of Threads",
         default_factory=lambda: os.cpu_count() or 1,
         ge=1,
         description="Number of threads for parallel processing (default: auto-detect all available cores)",
-        hidden=True,
     )
 
 

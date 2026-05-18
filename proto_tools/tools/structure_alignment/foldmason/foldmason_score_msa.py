@@ -43,15 +43,14 @@ class FoldmasonScoreMSAInput(BaseToolInput):
     """
 
     structures: list[str] = InputField(
-        description="PDB-format text strings whose order matches the rows of `aa_msa_fasta` (≥2)",
-        min_length=2,
+        description="PDB-format text strings whose order matches the rows of `aa_msa_fasta` (≥2)", min_length=2
     )
     structure_ids: list[str] | None = InputField(
         default=None,
         description="Optional IDs per structure (default: 'structure_0', ...); must match FASTA headers in `aa_msa_fasta`",
     )
     aa_msa_fasta: str = InputField(
-        description="Amino-acid MSA in FASTA. Row order and IDs must match `structures` / `structure_ids`",
+        description="Amino-acid MSA in FASTA. Row order and IDs must match `structures` / `structure_ids`"
     )
 
     @field_validator("structure_ids")
@@ -96,28 +95,18 @@ class FoldmasonScoreMSAConfig(BaseConfig):
         ge=0.0,
         le=1.0,
         description="Minimum fraction of pair sub-alignments with LDDT info to score a column (0-1)",
-        advanced=True,
     )
     only_scoring_cols: bool = ConfigField(
         title="Only Scoring Columns",
         default=False,
         description="Normalise average LDDT by scoring-column count rather than alignment length",
-        advanced=True,
     )
     guide_tree_newick: str | None = ConfigField(
         title="Guide Tree (Newick)",
         default=None,
         description="Newick guide tree to score against; leaf labels must match structure_ids",
-        advanced=True,
     )
-    num_threads: int = ConfigField(
-        title="Threads",
-        default=4,
-        ge=1,
-        description="CPU threads",
-        advanced=True,
-        include_in_key=False,
-    )
+    num_threads: int = ConfigField(title="Threads", default=4, ge=1, description="CPU threads", include_in_key=False)
 
 
 class FoldmasonScoreMSAOutput(BaseToolOutput):

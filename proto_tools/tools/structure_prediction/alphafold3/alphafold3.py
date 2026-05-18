@@ -163,35 +163,30 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
         title="AlphaFold3 Job Name",
         default="af3_job",
         description="Name of the AlphaFold3 folding job",
-        hidden=True,
     )
 
     seeds: list[int] = ConfigField(
         title="AlphaFold3 Seeds",
         default=[0],
         description="Seeds to use for AlphaFold3 when the common seed field is unset.",
-        advanced=True,
     )
 
     output_dir: str | None = ConfigField(
         title="Output Directory Prefix",
         default=None,
         description="Prefix for the AlphaFold3 output directory. If None, uses temp directory with auto-cleanup.",
-        hidden=True,
     )
 
     model_dir: str | None = ConfigField(
         title="AlphaFold3 Weights Directory",
         default=None,
         description="Directory with AlphaFold3 weights. If unset, resolves from env vars.",
-        advanced=True,
     )
 
     sif_path: str | None = ConfigField(
         title="AlphaFold3 Apptainer Image",
         default=None,
         description="Pre-built AlphaFold3 .sif image. If unset, prefers provisioned sif then env.",
-        hidden=True,
     )
 
     num_recycles: int = ConfigField(
@@ -199,14 +194,12 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
         default=10,
         ge=1,
         description="Recycling iterations through the model. Higher = more accurate but slower.",
-        advanced=True,
     )
     num_diffusion_samples: int = ConfigField(
         title="Diffusion Samples per Seed",
         default=5,
         ge=1,
         description="Diffusion samples per seed; best by ranking score is kept. Total = len(seeds) x samples.",
-        advanced=True,
     )
 
 

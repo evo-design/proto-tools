@@ -166,7 +166,6 @@ class PromoterCalculatorConfig(BaseConfig):
         default=1,
         ge=1,
         description="CPU threads for promoter calculator parallelism; raise on multi-core hosts",
-        hidden=True,
         include_in_key=False,
     )
     circular: bool = ConfigField(

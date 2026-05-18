@@ -51,32 +51,14 @@ class UniProtFetchInput(BaseToolInput):
             ranking.
     """
 
-    uniprot_id: str | None = InputField(
-        default=None,
-        description="UniProt accession for direct entry lookup",
-    )
-    target_name: str | None = InputField(
-        default=None,
-        description="Gene or protein name for search",
-    )
-    organism: str | None = InputField(
-        default=None,
-        description="Organism for search disambiguation",
-        depends_on={"field": "target_name", "not_null": True},
-    )
+    uniprot_id: str | None = InputField(default=None, description="UniProt accession for direct entry lookup")
+    target_name: str | None = InputField(default=None, description="Gene or protein name for search")
+    organism: str | None = InputField(default=None, description="Organism for search disambiguation")
     prefer_pdb_crossref: bool = InputField(
-        default=False,
-        description="When searching, prefer entries that have linked PDB structures",
-        advanced=True,
-        depends_on={"field": "target_name", "not_null": True},
+        default=False, description="When searching, prefer entries that have linked PDB structures"
     )
     max_candidates: int = InputField(
-        default=5,
-        ge=1,
-        le=25,
-        description="Maximum number of search results to evaluate when ranking",
-        advanced=True,
-        depends_on={"field": "target_name", "not_null": True},
+        default=5, ge=1, le=25, description="Maximum number of search results to evaluate when ranking"
     )
 
     @model_validator(mode="after")
@@ -165,7 +147,6 @@ class UniProtFetchConfig(BaseConfig):
         title="Response Fields",
         default=None,
         description="Subset of UniProt fields to return; None = full entry. See www.uniprot.org/help/return_fields",
-        advanced=True,
     )
 
     @model_validator(mode="after")

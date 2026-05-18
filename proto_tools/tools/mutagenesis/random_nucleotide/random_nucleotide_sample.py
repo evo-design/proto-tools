@@ -138,7 +138,6 @@ class RandomNucleotideSampleConfig(BaseConfig):
         title="Sequence Type",
         default="auto",
         description="Sequence type: auto-detect, force DNA, or force RNA.",
-        hidden=True,
     )
 
     def preprocess(self, inputs: Any) -> Any:

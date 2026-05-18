@@ -186,26 +186,22 @@ class ViennaRNAConfig(BaseConfig):
         title="No Lonely Pairs",
         default=False,
         description="Disallow lonely base pairs (helices of length 1)",
-        advanced=True,
     )
     dangles: Literal[0, 1, 2, 3] = ConfigField(
         title="Dangling-End Energies",
         default=2,
         description="Dangling-end treatment: 0=ignore, 1=minimal, 2=multibranch, 3=accurate",
-        advanced=True,
     )
     circ: bool = ConfigField(
         title="Circular RNA",
         default=False,
         description="Treat sequence as circular (plasmids, viroids, circRNAs)",
-        advanced=True,
     )
     max_bp_span: int = ConfigField(
         title="Max Base-Pair Span",
         default=-1,
         ge=-1,
         description="Max base-pair span in nt; -1 = no limit, positive forbids long-range pairs",
-        advanced=True,
     )
 
     @field_validator("max_bp_span")

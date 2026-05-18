@@ -74,13 +74,11 @@ class AbLangSampleConfig(MaskedModelSampleConfig):
         title="ANARCI-aligned Restore",
         default=False,
         description="Run ANARCI alignment first; enables extension of unknown-length termini",
-        advanced=True,
     )
     return_logits: bool = ConfigField(
         title="Return Logits",
         default=False,
         description="Include per-position logits in the output (large; disable to save memory)",
-        advanced=True,
     )
 
 

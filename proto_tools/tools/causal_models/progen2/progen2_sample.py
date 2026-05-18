@@ -89,7 +89,6 @@ class ProGen2SampleConfig(CausalModelSampleConfig):
         gt=0.0,
         le=1.0,
         description="Nucleus sampling threshold over per-position token probabilities",
-        advanced=True,
     )
     model_checkpoint: PROGEN2_MODEL_CHECKPOINTS = ConfigField(
         default="progen2-large",
@@ -101,7 +100,6 @@ class ProGen2SampleConfig(CausalModelSampleConfig):
         default=None,
         title="Local Model Path",
         description="Override the default download with a local weights directory",
-        hidden=True,
         reload_on_change=True,
     )
     top_k: int = ConfigField(
@@ -109,7 +107,6 @@ class ProGen2SampleConfig(CausalModelSampleConfig):
         ge=0,
         title="Top-k",
         description="Top-k truncation; 0 disables and uses top-p only",
-        advanced=True,
     )
     max_length: int = ConfigField(
         default=256,
@@ -121,19 +118,16 @@ class ProGen2SampleConfig(CausalModelSampleConfig):
         default=True,
         title="Truncate at Stop",
         description="Truncate generated sequences at the first stop token",
-        advanced=True,
     )
     strip_special_tokens: bool = ConfigField(
         title="Strip Special Tokens",
         default=True,
         description="Strip ProGen2 start/stop sentinel tokens from output",
-        advanced=True,
     )
     return_logits: bool = ConfigField(
         title="Return Logits",
         default=False,
         description="Include per-position logits in the output (large; disable to save memory)",
-        advanced=True,
     )
 
 

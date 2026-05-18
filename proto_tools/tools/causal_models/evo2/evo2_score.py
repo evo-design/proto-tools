@@ -83,21 +83,18 @@ class Evo2ScoringConfig(CausalModelScoringConfig):
         title="Local Checkpoint Path",
         default=None,
         description="Override HuggingFace download with a local weights directory",
-        hidden=True,
         reload_on_change=True,
     )
     prepend_bos: bool = ConfigField(
         title="Prepend BOS",
         default=False,
         description="Prepend a beginning-of-sequence token before scoring",
-        advanced=True,
     )
     timeout: int | None = ConfigField(
         title="Timeout",
         default=1800,
         ge=1,
         description="Maximum execution time in seconds",
-        hidden=True,
         include_in_key=False,
     )
 

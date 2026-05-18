@@ -648,7 +648,6 @@ class StructurePredictionInput(BaseToolInput):
     msas: dict[str, MSA] | None = InputField(
         default=None,
         description="Pre-computed MSAs keyed by sequence. Populated by preprocess() or supplied directly.",
-        hidden=True,
     )
 
     @classmethod
@@ -760,7 +759,6 @@ class StructurePredictionConfig(BaseConfig):
         title="Device",
         default="cuda",
         description="Device to run the model on (e.g., 'cuda', 'cpu')",
-        hidden=True,
         include_in_key=False,
     )
     include_pae_matrix: bool = ConfigField(
@@ -795,7 +793,6 @@ class MSAStructurePredictionConfig(StructurePredictionConfig):
         title="ColabFold Search Config",
         default=None,
         description="Nested configuration for ColabFold MSA search. If None, uses default settings.",
-        hidden=True,
     )
 
     @classmethod

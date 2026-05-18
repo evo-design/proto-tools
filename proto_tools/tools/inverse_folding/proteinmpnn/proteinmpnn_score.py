@@ -88,7 +88,6 @@ class ProteinMPNNScoringConfig(BaseConfig):
         title="Device",
         default="cuda",
         description="Device to run the model on. Options include 'cuda' (NVIDIA GPU), 'cpu' (CPU execution)",
-        hidden=True,
         include_in_key=False,
         examples=["cuda", "cpu"],
     )
@@ -97,7 +96,6 @@ class ProteinMPNNScoringConfig(BaseConfig):
         title="Return Logits",
         default=False,
         description="Whether to include per-position logits in the output. Disable to save memory.",
-        advanced=True,
     )
 
     model_choice: Literal["proteinmpnn", "v_48_002", "v_48_010", "v_48_030", "abmpnn", "soluble"] = ConfigField(

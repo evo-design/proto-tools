@@ -394,23 +394,6 @@ def test_xor_violation_raises(input_cls, base_kwargs, both_kwargs, msg, violatio
         input_cls(**base_kwargs, **extra)
 
 
-@pytest.mark.parametrize(
-    "input_cls, field, expected_group",
-    [
-        (Mmseqs2SearchProteinsInput, "mmseqs_db", "target"),
-        (Mmseqs2SearchProteinsInput, "target_sequences", "target"),
-        (Mmseqs2SearchGenomesInput, "target_genomes", "target"),
-        (Mmseqs2SearchGenomesInput, "target_db", "target"),
-        (Mmseqs2ClusteringInput, "input_sequences", "input"),
-        (Mmseqs2ClusteringInput, "mmseqs_db", "input"),
-    ],
-)
-def test_xor_group_emitted_in_json_schema(input_cls, field, expected_group):
-    """Every XOR-grouped field surfaces `x-xor-group` so frontends can render a picker."""
-    schema = input_cls.model_json_schema()
-    assert schema["properties"][field]["x-xor-group"] == expected_group
-
-
 def test_resolve_to_mmseqs_db_classifies_inputs(tmp_path):
     """Atoms detect DB stems / FASTA; resolver raises FileNotFoundError on missing path and RuntimeError on unknown format."""
     from proto_tools.tools.sequence_alignment.mmseqs2.standalone.run import (

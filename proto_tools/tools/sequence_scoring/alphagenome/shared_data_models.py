@@ -284,7 +284,6 @@ class AlphaGenomePredictConfig(BaseConfig):
         title="Model Version",
         default=DEFAULT_ALPHAGENOME_MODEL_VERSION,
         description="AlphaGenome Hugging Face model version",
-        advanced=True,
         reload_on_change=True,
     )
     requested_outputs: list[OutputTypeName] = ConfigField(
@@ -296,19 +295,16 @@ class AlphaGenomePredictConfig(BaseConfig):
         title="Ontology Terms",
         default=None,
         description="UBERON tissue/cell IDs to filter tracks (e.g. 'UBERON:0001167'); None = all",
-        advanced=True,
     )
     organism: Literal["human", "mouse"] = ConfigField(
         title="Organism",
         default="human",
         description="Organism for AlphaGenome predictions",
-        advanced=True,
     )
     device: str = ConfigField(
         title="Device",
         default="cuda",
         description="Device to run AlphaGenome inference on",
-        hidden=True,
         include_in_key=False,
     )
     timeout: int | None = ConfigField(
@@ -316,7 +312,6 @@ class AlphaGenomePredictConfig(BaseConfig):
         default=1800,
         ge=1,
         description="Maximum execution time in seconds (JAX compilation is slow on first run). None = no cap.",
-        hidden=True,
     )
 
     @field_validator("requested_outputs")

@@ -64,20 +64,17 @@ class CausalModelScoringConfig(BaseConfig):
         default=1,
         ge=1,
         description="Sequences per GPU forward pass; raise for throughput, lower if OOM",
-        advanced=True,
     )
     device: str = ConfigField(
         title="Device",
         default="cuda",
         description="Device to run the model on",
-        hidden=True,
         include_in_key=False,
     )
     return_logits: bool = ConfigField(
         title="Return Logits",
         default=False,
         description="Include per-position logits in the output (large; disable to save memory)",
-        advanced=True,
     )
 
 
@@ -259,20 +256,17 @@ class CausalModelSampleConfig(BaseConfig):
         gt=0.0,
         le=1.0,
         description="Nucleus sampling cutoff over per-position token probabilities",
-        advanced=True,
     )
     batch_size: int = ConfigField(
         title="Batch Size",
         default=1,
         ge=1,
         description="Prompts per GPU forward pass; raise for throughput, lower if OOM",
-        advanced=True,
     )
     device: str = ConfigField(
         title="Device",
         default="cuda",
         description="Device to run the model on",
-        hidden=True,
         include_in_key=False,
     )
 

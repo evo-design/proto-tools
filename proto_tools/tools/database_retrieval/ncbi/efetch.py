@@ -50,31 +50,18 @@ class NCBIEfetchInput(BaseToolInput):
     db: NCBISequenceDatabase = InputField(
         description="NCBI sequence database to query (protein, nuccore, or nucleotide)"
     )
-    identifier: str = InputField(
-        description="Accession or NCBI ID for efetch (e.g. 'NP_000537.3', '7157')",
-    )
+    identifier: str = InputField(description="Accession or NCBI ID for efetch (e.g. 'NP_000537.3', '7157')")
     return_format: Literal["fasta", "fasta_cds_na"] = InputField(
-        default="fasta",
-        description="NCBI rettype: 'fasta' (protein/nuccore) or 'fasta_cds_na' (CDS, nuccore-only)",
-        advanced=True,
+        default="fasta", description="NCBI rettype: 'fasta' (protein/nuccore) or 'fasta_cds_na' (CDS, nuccore-only)"
     )
     seq_start: int | None = InputField(
-        default=None,
-        ge=1,
-        description="Start position for subsequence extraction (1-indexed, inclusive)",
-        advanced=True,
+        default=None, ge=1, description="Start position for subsequence extraction (1-indexed, inclusive)"
     )
     seq_stop: int | None = InputField(
-        default=None,
-        ge=1,
-        description="Stop position for subsequence extraction (1-indexed, inclusive)",
-        advanced=True,
+        default=None, ge=1, description="Stop position for subsequence extraction (1-indexed, inclusive)"
     )
     strand: Literal["+", "-"] | None = InputField(
-        default=None,
-        description="Strand for nucleotide retrieval (nuccore-only)",
-        advanced=True,
-        depends_on={"field": "db", "value": ["nuccore", "nucleotide"]},
+        default=None, description="Strand for nucleotide retrieval (nuccore-only)"
     )
 
     @model_validator(mode="after")

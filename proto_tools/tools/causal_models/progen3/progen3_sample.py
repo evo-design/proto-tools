@@ -70,7 +70,6 @@ class ProGen3SampleConfig(CausalModelSampleConfig):
         default=None,
         title="Local Model Path",
         description="Override the default download with a local weights directory",
-        hidden=True,
         reload_on_change=True,
     )
     direction: PROGEN3_DIRECTION = ConfigField(
@@ -90,14 +89,12 @@ class ProGen3SampleConfig(CausalModelSampleConfig):
         le=1.0,
         title="Top-p",
         description="Nucleus sampling cutoff over per-position token probabilities",
-        advanced=True,
     )
     batch_size: int = ConfigField(
         default=1,
         ge=1,
         title="Batch Size",
         description="Same-length prompts per GPU forward pass; raise for throughput, lower if OOM",
-        advanced=True,
     )
     max_new_tokens: int = ConfigField(
         default=256,
@@ -110,7 +107,6 @@ class ProGen3SampleConfig(CausalModelSampleConfig):
         ge=1,
         title="Min New Tokens",
         description="Minimum number of new tokens to generate per prompt",
-        advanced=True,
     )
 
 

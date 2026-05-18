@@ -56,7 +56,6 @@ class LigandMPNNScoringConfig(BaseConfig):
         title="Device",
         default="cuda",
         description="Device to run the model on.",
-        hidden=True,
         include_in_key=False,
         examples=["cuda", "cpu"],
     )
@@ -64,13 +63,11 @@ class LigandMPNNScoringConfig(BaseConfig):
         title="Return Logits",
         default=False,
         description="Whether to include per-position logits in the output.",
-        advanced=True,
     )
     scoring_mode: LigandMPNNScoringMode = ConfigField(
         title="Scoring Mode",
         default="single_aa",
         description="Use single-position probabilities or one seed-determined autoregressive order.",
-        advanced=True,
     )
 
 

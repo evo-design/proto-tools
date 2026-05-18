@@ -49,7 +49,7 @@ class _CloudAssetOutput(MockToolOutputBase):
 
 
 class _PreprocessConfig(_CloudConfig):
-    local_path: str | None = ConfigField(default=None, hidden=True)
+    local_path: str | None = ConfigField(default=None)
 
     def preprocess(self, inputs: BaseToolInput) -> BaseToolInput:
         raise AssertionError("cloud dispatch should not run local preprocess")

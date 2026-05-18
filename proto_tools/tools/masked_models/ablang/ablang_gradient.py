@@ -78,27 +78,23 @@ class AbLangGradientConfig(BaseConfig):
         title="Straight-Through Estimator",
         default=False,
         description="Hard one-hot forward pass with soft-probability gradients",
-        advanced=True,
     )
     compute_gradient: bool = ConfigField(
         title="Compute Gradient",
         default=True,
         description="Run backward pass and return gradient; set False for forward-only log-likelihood",
-        advanced=True,
     )
     batch_size: int | None = ConfigField(
         title="PLL Batch Size",
         default=None,
         gt=0,
         description="AA positions per forward pass. Lower if OOM, higher for throughput",
-        advanced=True,
         include_in_key=False,
     )
     device: str = ConfigField(
         title="Device",
         default="cuda",
         description="Device to run the model on",
-        hidden=True,
         include_in_key=False,
     )
 

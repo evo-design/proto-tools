@@ -8,10 +8,11 @@ import inspect
 import pytest
 
 from proto_tools.tools.tool_registry import ToolRegistry
-from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 from tests.style_consistency_tests.helpers import field_description_is_valid, find_missing_fields_in_docstring
 
 _MAX_FIELD_DESCRIPTION_LENGTH = 100
+_BANNED_UI_SCHEMA_KEYS = frozenset({"advanced", "hidden", "depends_on", "x-depends-on", "x-xor-group"})
 
 
 def _list_tool_inputs_and_outputs():
@@ -35,6 +36,25 @@ def test_tool_input_uses_input_field(tool_input):
         assert json_schema_extra.get("_field_type") == "InputField", (
             f"{tool_input.__name__}.{field_name} must use InputField() instead of Field()."
         )
+        banned_keys = _BANNED_UI_SCHEMA_KEYS.intersection(json_schema_extra)
+        assert not banned_keys, (
+            f"{tool_input.__name__}.{field_name} has UI-presentation schema keys {sorted(banned_keys)}. "
+            "Move advanced/hidden/conditional visibility to the proto-ui overlay."
+        )
+
+
+@pytest.mark.parametrize(
+    ("removed_kwarg", "value"),
+    [
+        ("advanced", True),
+        ("hidden", True),
+        ("depends_on", {"mode": ["remote"]}),
+    ],
+)
+def test_input_field_rejects_ui_presentation_kwargs(removed_kwarg, value):
+    """InputField rejects UI-presentation kwargs that belong in proto-ui overlays."""
+    with pytest.raises(TypeError, match="InputField no longer accepts UI-presentation"):
+        InputField(default=None, **{removed_kwarg: value})
 
 
 # ── Input and output consistency ────────────────────────────────────────────
