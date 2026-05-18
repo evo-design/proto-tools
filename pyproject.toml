@@ -169,6 +169,8 @@ exclude = [
     ".*ccd_lookup/standalone/run\\.py$",
     # Vendored Malinois architecture code is untyped reference model code.
     ".*malinois/standalone/malinois_scoring\\.py$",
+    # Vendored upstream ipSAE script (Dunbrack lab) is untyped reference code.
+    ".*ipsae/standalone/ipsae\\.py$",
 ]
 
 [[tool.mypy.overrides]]
