@@ -7,7 +7,14 @@
 > *Image source: [Arc Institute](https://arcinstitute.org/news/building-germinal-for-ai-designed-antibody-molecules)*
 
 > [!NOTE]
-> **License:** Germinal uses Apache-2.0 for code and CC-BY-4.0 for model weights and has restrictions around commercial use and may require explicit attribution when utilized. Please refer to the [code license](https://github.com/SantiagoMille/germinal/blob/main/LICENSE) and [model weights license](https://github.com/google-deepmind/alphafold#model-parameters-license) for full terms. This tool also bundles dependencies with their own license terms: [PyRosetta](https://bio-pro.mintlify.app/tools/structure-scoring/pyrosetta), [IgLM](https://github.com/Graylab/IgLM); review each before commercial or redistribution use.
+> **License:** Germinal's own code is licensed under Apache-2.0, but it runs as a pipeline that depends on bundled components and model weights under separate license terms, including non-commercial or restricted-use terms. The bundled model weights are licensed under CC-BY-4.0. As a whole the pipeline has restrictions around commercial use and may require explicit attribution when utilized.
+>
+> Bundled dependencies, each under its own license:
+>
+> - [PyRosetta](https://bio-pro.mintlify.app/tools/structure-scoring/pyrosetta): Custom (PyRosetta Software License)
+> - [IgLM](https://github.com/Graylab/IgLM): Custom (IgLM License)
+>
+> Review the [code license](https://github.com/SantiagoMille/germinal/blob/main/LICENSE) and the [model weights license](https://github.com/google-deepmind/alphafold#model-parameters-license) before any commercial use or redistribution.
 
 ## Overview
 
@@ -44,5 +51,5 @@ These apply to every Germinal tool in this toolkit (`germinal-design`).
 
 - **Requires a GPU and can run for a long time.** An NVIDIA GPU with at least 40 GB of GPU memory is required (at least 80 GB for scFv mode or targets longer than 250 residues); running on CPU is not supported. A full run with default settings takes hours to days, so reduce `max_trajectories` when testing.
 - **Structure-validation model setup varies.** `structure_model="chai"` needs no manual setup. `"af3"` requires AlphaFold3 weights that you must request and install yourself (access is restricted; request it through DeepMind's form) along with a container image. `"protenix"` requires a separate Protenix environment.
-- **Bundled dependencies carry their own licenses.** The pipeline requires PyRosetta (free for academic, non-profit, and government use; commercial use requires a separate license from UW CoMotion; redistribution is not permitted) and IgLM (academic, non-commercial use only); AbLang2 and Chai-1 are Apache-2.0. See the License note above and the linked terms.
+- **Bundled dependencies carry their own licenses.** The pipeline requires PyRosetta (academic, non-profit, and government use is governed by the University of Washington CoMotion license; commercial use requires a separate license; redistribution is not permitted; consult the current [PyRosetta licensing page](https://www.pyrosetta.org/home/licensing-pyrosetta) for terms and availability) and IgLM (academic, non-commercial use only); Chai-1 is Apache-2.0 and AbLang2 is BSD-3-Clause. See the License note above and the linked terms.
 - **One campaign per call.** Each call is a single complete run against one target. To screen several targets, call the tool once per target (for example, in a loop) rather than expecting one call to process multiple targets at once.

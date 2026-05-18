@@ -14,5 +14,5 @@ bundled_dependencies:
 commercial_use: restricted
 redistribution: false
 attribution_required: true
-notes: 'Germinal (SantiagoMille/germinal) is Apache-2.0; ColabDesign (Germinal-fork) is MIT. The dominant weights are AlphaFold-Multimer parameters (CC-BY-4.0). The pipeline requires PyRosetta for relax/scoring (free for academic/non-profit/government, commercial users must license separately from UW CoMotion; redistribution forbidden) and IgLM (academic non-commercial only — https://github.com/Graylab/IgLM). AbLang2 (Apache-2.0) and Chai-1 (Apache-2.0) are also bundled.'
+notes: 'Germinal (SantiagoMille/germinal) is Apache-2.0; ColabDesign (Germinal-fork) is MIT. The dominant weights are AlphaFold-Multimer parameters (CC-BY-4.0). The pipeline requires PyRosetta for relax/scoring (UW CoMotion license for academic/non-profit/government use, commercial users must license separately, redistribution forbidden; academic access availability changes, see https://www.pyrosetta.org/home/licensing-pyrosetta) and IgLM (academic non-commercial only, https://github.com/Graylab/IgLM). Chai-1 (Apache-2.0) and AbLang2 (BSD-3-Clause) are also bundled.'
 last_updated: '2026-05-06'

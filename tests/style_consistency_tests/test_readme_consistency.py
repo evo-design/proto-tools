@@ -355,6 +355,51 @@ def _expected_license_callouts(lic: dict, name: str) -> list[str]:
     access = weights.get("access") if isinstance(weights, dict) else None
     weights_spdx = weights["spdx"] if isinstance(weights, dict) else None
 
+    # Pipeline toolkits (bundled_dependencies present): layer each license explicitly instead of collapsing restrictions onto the code lead.
+    deps = lic.get("bundled_dependencies")
+    if deps:
+        split_weights = bool(weights) and weights_spdx != code_spdx
+        intro = [
+            f"{name}'s own code is licensed under {code_spdx}, but it runs as a "
+            "pipeline that depends on bundled components and model weights under "
+            "separate license terms, including non-commercial or restricted-use terms."
+        ]
+        if split_weights:
+            intro.append(f"The bundled model weights are licensed under {weights_spdx}.")
+        agg = []
+        if commercial_restricted:
+            agg.append("has restrictions around commercial use")
+        if attribution:
+            agg.append("may require explicit attribution when utilized")
+        if agg:
+            intro.append("As a whole the pipeline " + " and ".join(agg) + ".")
+
+        bullets = []
+        for dep in deps:
+            if "tool" in dep:
+                category, toolkit = dep["tool"].split("/", 1)
+                dep_url = f"https://bio-pro.mintlify.app/tools/{_slugify(category)}/{_slugify(toolkit)}"
+                dep_lic = yaml.safe_load((_TOOLS_DIR / dep["tool"] / "license.yaml").read_text())
+                dep_spdx = dep_lic["code"]["spdx"]
+            else:
+                dep_url = dep["url"]
+                dep_spdx = dep.get("spdx")
+            suffix = f": {dep_spdx}" if dep_spdx else ""
+            bullets.append(f"> - [{dep['name']}]({dep_url}){suffix}")
+
+        if split_weights:
+            review = (
+                f"Review the [code license]({code_url}) and the "
+                f"[model weights license]({weights['url']}) before any commercial use or redistribution."
+            )
+        else:
+            review = f"Review the [code license]({code_url}) before any commercial use or redistribution."
+
+        return [
+            f"> [!NOTE]\n> **License:** {' '.join(intro)}\n>\n"
+            "> Bundled dependencies, each under its own license:\n>\n" + "\n".join(bullets) + f"\n>\n> {review}"
+        ]
+
     # Fully open: permissive code (and weights, if any), commercial use allowed, weights not gated.
     fully_open = (
         not is_custom
@@ -396,28 +441,10 @@ def _expected_license_callouts(lic: dict, name: str) -> list[str]:
     else:
         gating = ""
 
-    deps = lic.get("bundled_dependencies")
-    if deps:
-        parts = []
-        for dep in deps:
-            if "tool" in dep:
-                category, toolkit = dep["tool"].split("/", 1)
-                dep_url = f"https://bio-pro.mintlify.app/tools/{_slugify(category)}/{_slugify(toolkit)}"
-            else:
-                dep_url = dep["url"]
-            parts.append(f"[{dep['name']}]({dep_url})")
-        bundled = (
-            " This tool also bundles dependencies with their own license terms: "
-            + ", ".join(parts)
-            + "; review each before commercial or redistribution use."
-        )
-    else:
-        bundled = ""
-
     callouts = []
     for lead in leads:
         body = f"{lead} and {' and '.join(clauses)}." if clauses else f"{lead}."
-        callouts.append(f"> [!NOTE]\n> **License:** {body}{gating} Please refer to {link} for full terms.{bundled}")
+        callouts.append(f"> [!NOTE]\n> **License:** {body}{gating} Please refer to {link} for full terms.")
     return callouts
 
 
@@ -519,6 +546,35 @@ def test_expected_license_callouts_logic() -> None:
         "Model weights are gated and require accepting the provider's terms "
         "and authenticating with a HuggingFace token." in hf_gated[0]
     )
+
+    # Bundled-pipeline toolkit: own code, weights, and deps licensed separately; restriction attributed to the pipeline as a whole.
+    pipeline = _expected_license_callouts(
+        {
+            "code": {"spdx": "Apache-2.0", "url": "https://example.com/c"},
+            "weights": {"spdx": "CC-BY-4.0", "url": "https://example.com/w"},
+            "commercial_use": "restricted",
+            "attribution_required": True,
+            "bundled_dependencies": [
+                {"name": "PyRosetta", "tool": "structure_scoring/pyrosetta"},
+                {"name": "IgLM", "spdx": "Custom (IgLM License)", "url": "https://github.com/Graylab/IgLM"},
+            ],
+        },
+        "Tool",
+    )
+    assert pipeline == [
+        "> [!NOTE]\n> **License:** Tool's own code is licensed under Apache-2.0,"
+        " but it runs as a pipeline that depends on bundled components and model"
+        " weights under separate license terms, including non-commercial or"
+        " restricted-use terms. The bundled model weights are licensed under"
+        " CC-BY-4.0. As a whole the pipeline has restrictions around commercial"
+        " use and may require explicit attribution when utilized.\n>\n"
+        "> Bundled dependencies, each under its own license:\n>\n"
+        "> - [PyRosetta](https://bio-pro.mintlify.app/tools/structure-scoring/pyrosetta):"
+        " Custom (PyRosetta Software License)\n"
+        "> - [IgLM](https://github.com/Graylab/IgLM): Custom (IgLM License)\n>\n"
+        "> Review the [code license](https://example.com/c) and the [model weights"
+        " license](https://example.com/w) before any commercial use or redistribution."
+    ]
 
 
 @pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)

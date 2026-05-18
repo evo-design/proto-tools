@@ -248,10 +248,10 @@ class AlphaFold3Model:
                 "-lc",
                 (
                     "if [ -f /app/alphafold/run_alphafold.py ]; then "
-                    "exec python3 /app/alphafold/run_alphafold.py \"$@\"; "
+                    'exec python3 /app/alphafold/run_alphafold.py "$@"; '
                     "elif [ -f /opt/alphafold3/run_alphafold.py ]; then "
-                    "exec python /opt/alphafold3/run_alphafold.py \"$@\"; "
-                    "else exec python3 run_alphafold.py \"$@\"; fi"
+                    'exec python /opt/alphafold3/run_alphafold.py "$@"; '
+                    'else exec python3 run_alphafold.py "$@"; fi'
                 ),
                 "alphafold3",
                 *common_args,
