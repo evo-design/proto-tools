@@ -225,17 +225,18 @@ class AlphaFold3Model:
         ]
 
         if self.sif_path is not None:
-            # Sif path: `apptainer run` invokes the sif's %runscript with the
-            # appended args. This avoids hardcoding the in-sif path to
-            # run_alphafold.py — the sif itself encapsulates where AF3 lives
-            # in its rootfs (our Singularity.def puts it at /opt/alphafold3).
-            # BYO sifs must have a %runscript that accepts AF3 CLI args.
+            # Sif path: use `exec` rather than `run` so Docker-derived images
+            # with CMD-only runscripts do not treat AF3 flags as the executable.
+            # The lab BYO image stores AF3 at /app/alphafold; the proto-built
+            # image stores it at /opt/alphafold3.
             input_dir = os.path.dirname(input_json_path)
             apptainer_bin = os.path.join(_venv_path(), "bin", "apptainer")
             return [
                 apptainer_bin,
-                "run",
+                "exec",
                 "--nv",
+                "--env",
+                "LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu",
                 "--bind",
                 f"{input_dir}:{input_dir}",
                 "--bind",
@@ -243,6 +244,16 @@ class AlphaFold3Model:
                 "--bind",
                 f"{self.model_dir}:{self.model_dir}",
                 self.sif_path,
+                "sh",
+                "-lc",
+                (
+                    "if [ -f /app/alphafold/run_alphafold.py ]; then "
+                    "exec python3 /app/alphafold/run_alphafold.py \"$@\"; "
+                    "elif [ -f /opt/alphafold3/run_alphafold.py ]; then "
+                    "exec python /opt/alphafold3/run_alphafold.py \"$@\"; "
+                    "else exec python3 run_alphafold.py \"$@\"; fi"
+                ),
+                "alphafold3",
                 *common_args,
             ]
 

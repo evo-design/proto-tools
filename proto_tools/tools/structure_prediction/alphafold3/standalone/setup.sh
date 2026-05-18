@@ -81,6 +81,8 @@ if [ -n "${PROTO_ALPHAFOLD3_SIF_PATH:-}" ]; then
   fi
   echo "[af3] Using pre-built sif from PROTO_ALPHAFOLD3_SIF_PATH=$PROTO_ALPHAFOLD3_SIF_PATH"
   "$MAMBA_BIN" install -p "$VENV_PATH" -c conda-forge -y apptainer
+  echo "Installing worker dependencies from requirements.txt..."
+  uv pip install -r requirements.txt
   ln -sf "$PROTO_ALPHAFOLD3_SIF_PATH" "$SIF_PATH"
   USE_SIF=1
   AUTO_DETECT=0
