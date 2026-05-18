@@ -213,7 +213,8 @@ class ESMFoldConfig(StructurePredictionConfig):
     Note:
         ESMFold has a maximum total sequence length of 2,400 residues per complex.
         Unlike AlphaFold-based models, ESMFold does not use MSAs, making it much
-        faster but potentially less accurate for some targets.
+        faster but potentially less accurate for some targets. A precomputed
+        ``msas`` input is ignored and logs a single warning.
     """
 
     residue_idx_offset: int = ConfigField(
@@ -239,6 +240,17 @@ class ESMFoldConfig(StructurePredictionConfig):
         ge=1,
         description="Iterative refinement passes through ESMFold. Higher = more accurate but slower.",
     )
+
+    def preprocess(self, inputs: ESMFoldInput) -> ESMFoldInput:  # type: ignore[override]
+        """Warn once if MSAs were supplied (ESMFold ignores them), then no-op."""
+        # ESMFoldGradientConfig inherits this; its input has no msas field.
+        msas = getattr(inputs, "msas", None)
+        if msas:
+            logger.warning(
+                "ESMFold is single-sequence and does not use MSAs; the %d supplied MSA(s) were ignored.",
+                len(msas),
+            )
+        return inputs
 
 
 class ESMFoldGradientInput(GradientInput):

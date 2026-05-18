@@ -37,7 +37,7 @@ This tool folds a protein sequence into a 3D model for structural analysis or as
 
 #### Usage Tips
 
-- **No MSA or template search is used.** ESMFold does not incorporate MSAs into the prediction. There is no `use_msa` option (unlike Boltz-2 or Protenix), and passing one raises an error; the inherited `msas` input, by contrast, is hidden and silently ignored.
+- **No MSA or template search is used.** ESMFold does not incorporate MSAs into the prediction. There is no `use_msa` option (unlike Boltz-2 or Protenix), and passing one raises an error; the inherited `msas` input, by contrast, is hidden and, if supplied, is ignored with a single logged warning.
 - **Multi-chain complexes are approximated with an internal glycine linker.** `chain_linker` (default 25 glycines) joins chains before folding and is stripped from the output; this works best for homomeric assemblies and is unreliable for true hetero-complexes. Use AlphaFold3, Boltz2, Chai-1, or Protenix for those.
 - **Protein sequences only, with a hard cap of 2,400 residues per complex.** DNA, RNA, and ligands are not supported; `X` is allowed for unknown residues. The cap is enforced against the linked length actually folded: the sum of all chain residues plus the inter-chain `chain_linker` inserted between them (`len(chain_linker) * (chains - 1)`, 25 residues per junction by default). A multi-chain complex whose bare residues sum to just under 2,400 can still exceed the cap.
 - **Confidence is reported as pLDDT, pTM, and PAE.** Average pLDDT (0 to 1) is the primary per-structure quality metric; set `include_pae_matrix` to attach the full per-residue PAE matrix.
