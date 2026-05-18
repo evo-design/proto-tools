@@ -25,8 +25,9 @@ logger = logging.getLogger(__name__)
 
 LigandMPNNModelType = Literal[
     "ligand_mpnn",
-    "per_residue_label_membrane_mpnn",
-    "global_label_membrane_mpnn",
+    # Membrane variants need transmembrane-label inputs that are not wired; disabled for now.
+    # "per_residue_label_membrane_mpnn",
+    # "global_label_membrane_mpnn",
 ]
 
 
@@ -59,7 +60,7 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
     model_type: LigandMPNNModelType = ConfigField(
         title="Model Type",
         default="ligand_mpnn",
-        description="LigandMPNN variant: ligand-aware or membrane (per-residue/global)",
+        description="LigandMPNN model variant (ligand-aware weights).",
         reload_on_change=True,
     )
     ligand_mpnn_use_atom_context: bool = ConfigField(
