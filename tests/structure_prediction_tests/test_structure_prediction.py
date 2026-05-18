@@ -250,6 +250,16 @@ def test_esmfold_input_rejects_sequence_too_long():
         ESMFoldInput(complexes=["M" * 2401])
 
 
+def test_esmfold_prepare_complexes_enforces_cap_against_linked_length():
+    """A multi-chain complex at the bare-sum cap is over the cap once linkers are inserted."""
+    # sum(chains) == 2400 clears the field validator, but the 25-residue linker
+    # pushes the linked length to 2425, so the model would fold over its hard cap.
+    chains = [{"sequence": "M" * 1200, "entity_type": "protein"} for _ in range(2)]
+    inputs = ESMFoldInput(complexes=[StructurePredictionComplex(chains=chains)])
+    with pytest.raises(ValueError, match=r"2425.*max 2400"):
+        inputs.prepare_complexes(chain_linker="G" * 25)
+
+
 def test_esmfold_input_rejects_non_protein_entity():
     with pytest.raises(ValidationError, match=r"unsupported entity types|only supports"):
         ESMFoldInput(complexes=[StructurePredictionComplex(chains=[{"sequence": "ATCG", "entity_type": "dna"}])])

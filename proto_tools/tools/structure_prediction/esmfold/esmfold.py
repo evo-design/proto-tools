@@ -62,8 +62,9 @@ class ESMFoldInput(StructurePredictionInput):
     Attributes:
         complexes (list[StructurePredictionComplex]): List of complexes to predict
             structures for. Inherited from ``StructurePredictionInput``. Each complex
-            can contain one or more protein chains. Total length across all chains
-            in a complex must not exceed 2,400 residues.
+            can contain one or more protein chains. The linked length actually
+            folded (summed chain residues plus the inter-chain ``chain_linker``,
+            i.e. ``len(chain_linker) * (num_chains - 1)``) must not exceed 2,400.
         msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
             Populated by preprocess() or supplied directly. Default: None.
 
@@ -88,7 +89,9 @@ class ESMFoldInput(StructurePredictionInput):
 
         Checks:
         - Valid protein characters (including 'X' for unknown)
-        - Total residues per complex ≤ 2400 (ESMFold limit)
+        - Bare chain-residue sum ≤ 2400 (coarse early guard; the linker-aware
+          2,400 cap is enforced in ``prepare_complexes`` where the configured
+          ``chain_linker`` is known)
 
         Note:
             Entity type validation (proteins only) is handled automatically
@@ -117,13 +120,20 @@ class ESMFoldInput(StructurePredictionInput):
             chain_sequences = comp.chain_sequences  # SUPPORTED_ENTITY_TYPES rejects ligands upstream
             seq_lengths = [len(s) for s in chain_sequences]
             linked_seq = chain_linker.join(chain_sequences)
+            # Enforce the 2,400 cap and batch budget against the linked length, not the bare sum.
+            linked_len = len(linked_seq)
+            if linked_len > 2400:
+                raise ValueError(
+                    f"Complex {comp_idx} too long ({linked_len} positions after linking "
+                    f"{comp.num_chains()} chains with a {len(chain_linker)}-residue linker, max 2400)"
+                )
             prepared_complexes.append(
                 {
                     "complex_idx": comp_idx,
                     "chains": chain_sequences,
                     "linked_seq": linked_seq,
                     "seq_lengths": seq_lengths,
-                    "total_residues": comp.sum_of_chain_lengths(),
+                    "total_residues": linked_len,
                     "num_chains": comp.num_chains(),
                 }
             )
@@ -419,7 +429,8 @@ def run_esmfold(
 
     Args:
         inputs (ESMFoldInput): Validated input containing one or more protein complexes
-            to predict structures for. Each complex must be ≤ 2,400 residues total.
+            to predict structures for. Each complex's linked length (chain residues
+            plus inter-chain linkers) must be ≤ 2,400.
         config (ESMFoldConfig): Validated ESMFold configuration specifying chain linking,
             batching, and execution options.
 
@@ -462,7 +473,8 @@ def run_esmfold(
         >>> print(f"Average pLDDT: {result.structures[0].metrics.avg_plddt:.2f}")
 
     Note:
-        - Maximum 2,400 residues per complex (hard limit)
+        - Maximum 2,400 linked residues per complex (chain residues plus
+          inter-chain linkers; hard limit)
         - Multi-chain complexes are predicted by linking chains
     """
     # Prepare complexes for inference
