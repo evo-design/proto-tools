@@ -1,405 +1,82 @@
-<a href="https://bio-pro.mintlify.app/tools/inverse-folding/proteinmpnn"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/inverse-folding/proteinmpnn"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # ProteinMPNN
 
+![ProteinMPNN](https://camo.githubusercontent.com/d2e58bb7f520b9393e38084cbe2a5de762583096e74bb3a9a85057c3056c9756/68747470733a2f2f646f63732e676f6f676c652e636f6d2f64726177696e67732f642f652f32504143582d317654746e4d42444f71385470484963745566474e38566c3332783549534e63504b6c786a63514a4632713730506c61483275466c6a3241633473336b686e5a71473159787070644d72306954796b2d2f7075623f773d38383926683d333538)
+
+> *Image source: [dauparas/ProteinMPNN](https://github.com/dauparas/ProteinMPNN)*
+
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** ProteinMPNN is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/dauparas/ProteinMPNN/blob/main/LICENSE) for full terms.
 
 ## Overview
-ProteinMPNN is a deep learning model for protein sequence design given a protein backbone structure ("inverse folding"). It uses message passing neural networks to predict amino acid sequences that will fold into a target 3D structure. This module provides interfaces for *Sequence Sampling* (generating new sequences for a given backbone), *Sequence Scoring* (evaluating how well a sequence fits a structure), and *Relaxed-Sequence Gradients* (differentiating ProteinMPNN's perplexity objective with respect to a continuous `(L, 20)` distribution for use as a structure-conditioned loss in MCMC or gradient descent).
+
+First released in 2022 by the [Baker Lab at the Institute for Protein Design](https://www.ipd.uw.edu/), Protein Message Passing Neural Network (ProteinMPNN) is a deep-learning model for inverse folding, predicting which sequences fold into a given 3D backbone. It has become a standard sequence-design step in de novo protein design, sharply outperforming prior physics-based methods in both accuracy and speed. It can design sequences for a target backbone, score how well a sequence fits a structure, and act as a differentiable structure-conditioned objective for gradient-based design.
 
 ## Background
 
-**What does this tool do?**
-ProteinMPNN solves the "[inverse folding](https://en.wikipedia.org/wiki/Protein_design#Inverse_folding)" problem: given a protein backbone structure (the 3D coordinates of N, CA, C, O atoms), predict which amino acid sequence will fold into that structure. This is the inverse of structure prediction.
+ProteinMPNN ([Dauparas et al., 2022](https://doi.org/10.1126/science.add2187)) solves the inverse-folding problem: given a fixed protein backbone (the 3D coordinates of its N, C-alpha, C, and O atoms), predict an amino-acid sequence that will fold into that structure. It is the inverse of structure prediction and a core step in protein design, where a backbone is proposed first and a sequence that encodes it is designed afterwards.
 
-**Why is this important?**
-Inverse folding enables:
-- Protein engineering: Redesign natural proteins with improved stability, solubility, or expression.
-- Scaffold design: Create proteins with desired shapes for binding, catalysis, or assembly.
-- Therapeutic development: Design antibodies, enzymes, and binding proteins.
-- Experimental validation: Generate multiple sequence candidates for a single structure to find the best experimental hits.
+Internally, ProteinMPNN encodes the backbone as a graph: each residue is a node connected to its 48 nearest neighbors in space, with edges featurized by inter-atomic distances between the backbone atoms (including a virtual C-beta). A neural network called a "message-passing" encoder turns this geometry into node and edge representations, and a decoder then generates the sequence autoregressively. ProteinMPNN is trained with a random decoding order rather than a fixed N-to-C order, so at inference any order can be used and arbitrary subsets of positions can be held fixed while the rest are designed in full structural context. It was trained on protein structures from the [Protein Data Bank](https://www.rcsb.org/). During training, a small amount of Gaussian noise was added to the backbone coordinates so the model is robust to imperfect, non-crystal backbones; this slightly lowers native-sequence recovery but yields sequences that more reliably fold to the intended structure. On native backbones it recovers roughly 52% of the native sequence on average, compared with roughly 33% for physically based Rosetta design. ProteinMPNN designs have been experimentally validated by X-ray crystallography and cryo-electron microscopy, and ProteinMPNN rescued monomers, cyclic homo-oligomers, nanoparticles, and target-binding proteins that had failed when designed with Rosetta or AlphaFold.
 
-**Scientific foundation:**
-ProteinMPNN uses a [message passing neural network](https://en.wikipedia.org/wiki/Graph_neural_network) architecture:
+### Learning Resources
 
-1. **Graph representation**: The protein backbone is represented as a graph where each residue is a node and edges connect spatially close residues (within ~30A).
-2. **Message passing**: Information flows between connected residues over multiple rounds, allowing the model to learn long-range dependencies.
-3. **[Autoregressive](https://en.wikipedia.org/wiki/Autoregressive_model) decoding**: Sequences are generated one residue at a time, conditioned on previously generated residues and the full structural context.
-4. **Training**: The model was trained on ~19,000 protein structures from the [PDB](https://www.rcsb.org/) to maximize the probability of native sequences given their structures.
+- [Sequence Design with ProteinMPNN](https://www.youtube.com/watch?v=zbpWFKjiXEk) - a video walkthrough of using ProteinMPNN for fixed-backbone protein sequence design.
+- [MPNN - ML for protein sequence design](https://www.youtube.com/watch?v=6z4XmUAwdNA) - a talk on the message-passing machine-learning approach behind ProteinMPNN.
 
 ## Tools
 
-### ProteinMPNN Gradient (`proteinmpnn-gradient`)
-
-Compute ProteinMPNN mean-NLL gradient with respect to relaxed sequence logits.
-
 ### ProteinMPNN Sampling (`proteinmpnn-sample`)
 
-Sample protein sequences using ProteinMPNN.
+Designs new sequences for a given backbone. Each input structure is encoded once and decoded into one or more candidate sequences, each returned with a perplexity and the sequence recovery against the structure's original sequence.
+
+#### Applications
+
+Use this to redesign or stabilize a natural protein, or to generate sequences for a de novo backbone (for example one from RFdiffusion). The standard design loop is to sample many sequences per backbone, rank by perplexity, and validate the top candidates with a structure predictor.
+
+#### Usage Tips
+
+- **`temperature` (default `0.1`) controls diversity.** Lower values are greedier and stay close to the single most likely sequence, while higher values sample more varied sequences. A value near `0.0` behaves like an argmax, and the temperature must be at least `0`.
+- **Lower `batch_size` if you hit GPU memory limits.** It defaults to `num_sequences_per_structure`, so every requested sequence is generated in one forward pass. For large requests or long backbones this can exhaust GPU memory, and a smaller `batch_size` trades speed for lower memory.
+- **`model_choice` selects the weights.** The default `proteinmpnn` is `v_48_020`. The `v_48_002`, `v_48_010`, and `v_48_030` variants are trained with increasing backbone noise, which makes designs more robust and diverse at the cost of native-sequence recovery. `abmpnn` is antibody-tuned. Use `soluble` when the design must be water-soluble, because the default model tends to place hydrophobic residues on membrane-like surfaces whereas `soluble` is retrained with transmembrane proteins excluded.
+- **`fixed_positions` is counted from 1, not 0.** Listing a position keeps that residue at its input identity, which is how you preserve catalytic or interface residues while redesigning everything else.
+- **`excluded_amino_acids` forbids residue types everywhere.** Use it to keep unwanted residues out of every design, for example `["C"]` to avoid introducing cysteines.
+- **`backbone_noise` (default `0.0`) and `seed`.** `backbone_noise` adds Gaussian noise in angstroms to the input backbone. Small values such as `0.02` increase diversity at some cost in recovery. Set `seed` for reproducible sampling.
 
 ### ProteinMPNN Scoring (`proteinmpnn-score`)
 
-Score protein sequences using ProteinMPNN structure-conditioned model.
+Evaluates how well existing sequences fit a structure. Each (sequence, structure) pair is scored under ProteinMPNN's structure-conditioned likelihood, returning log-likelihood, average log-likelihood, and perplexity, with optional per-position logits.
 
-Computes the likelihood of protein sequences given a 3D structure using
-ProteinMPNN's structure-conditioned language model. This evaluates how well
-a sequence "fits" a given protein structure.
+#### Applications
 
-## Tool Catalog
+Use this to rank candidate sequences or point mutations by structural compatibility without generating new ones: compare designs, assess the effect of a substitution, or filter a library before experimental testing. Lower perplexity indicates a better structure-sequence fit.
 
-| Tool | Input | Output | Use Case |
-|------|-------|--------|----------|
-| `proteinmpnn-sample` | Structure(s) | Designed sequences + metrics | Design new sequences for a target fold |
-| `proteinmpnn-score` | Sequence + Structure pairs | Perplexity + logits | Evaluate sequence-structure compatibility |
-| `proteinmpnn-gradient` | Logits `(L, 20)` + Structure | Mean NLL + gradient w.r.t. logits | Differentiable structure-conditioned objective for MCMC / gradient descent over relaxed sequences |
+#### Usage Tips
 
-## Execution Modes
+- **Use `fixed_positions` to score only part of a chain.** Any positions you list are skipped when computing log-likelihood and perplexity, so the score reflects just the residues you care about instead of the whole sequence. **NOTE:** Positions are per chain and counted from 1, not 0 to match biological residue selection conventions.
+- **`return_logits` (default `False`) has a size trade-off.** Enabling it returns a per-position `(sequence length x 21)` logit array per sequence for residue-level analysis. That array dominates output size and memory for long sequences or large batches, so leave it off unless you need it.
 
-ProteinMPNN runs on GPU (recommended) or CPU:
-- **GPU**: Required for practical use. ~1-2 seconds per structure for sampling 10 sequences on modern GPUs. ~2-4GB GPU memory for typical single-chain proteins (<500 residues).
-- **CPU**: Possible but very slow. Not recommended for production use.
-- **Model size**: ~150MB model weights (downloaded automatically).
+### ProteinMPNN Gradient (`proteinmpnn-gradient`)
 
-## How It Works
+Exposes ProteinMPNN as a differentiable structure-conditioned objective: given a relaxed `(L, 20)` sequence distribution and a backbone, it returns the mean negative log-likelihood and its gradient with respect to the input logits, for use as a loss in gradient-based or MCMC sequence optimization.
 
-**Sampling (`proteinmpnn-sample`):** Generates new protein sequences for a given backbone structure. Outputs multiple sequence candidates with diversity controlled by temperature. Returns perplexity scores and sequence identity to the original structure's sequence.
+#### Applications
 
-**Scoring (`proteinmpnn-score`):** Evaluates how well a given sequence fits a structure. Returns perplexity (lower is better) and per-position logits for detailed analysis.
+Use this when ProteinMPNN is one term in a larger optimization over a continuous sequence representation (for example combined with other structure or property objectives), rather than for standalone sampling. Set `compute_gradient=False` for forward-only NLL scoring, such as ranking MCMC proposals.
 
-## Input Parameters
+#### Usage Tips
 
-### Sampling (`proteinmpnn-sample`)
+- **`logits` columns must be in the order `ACDEFGHIKLMNPQRSTVWY`.** The columns are read by position, so a different amino-acid ordering silently produces the wrong gradient. An optional `temperature` runs `softmax(logits / T)` first. Leave it unset to use the logits as they are.
+- **`compute_gradient` (default `True`).** Returns the gradient of the mean negative log-likelihood with respect to `logits`. Set `False` for forward-only scoring (`loss` only, `gradient` is `None`), for example to cheaply rank MCMC proposals.
+- **`use_ste` (default `True`) sets the forward pass.** Straight-through: a hard one-hot in the forward pass with soft-probability gradients in the backward pass. Set `False` for fully soft blended embeddings, smoother but biased.
+- **`fixed_positions` is counted from 1 and is left out of the objective.** Positions you list are excluded from both the loss and its gradient, so set it to optimize only the residues you are designing.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `structures` | `List[Structure]` or `List[str]` | Backbone structures as Structure objects or PDB file paths/content |
-| `all_chain_ids` | `Optional[List[List[str]]]` | Which chains to design for each structure. If `None`, designs all chains |
+## Toolkit Notes
 
-### Scoring (`proteinmpnn-score`)
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sequence_structure_pairs` | `List[SequenceStructurePair]` | List of (sequence, structure) pairs to score |
+These apply to every ProteinMPNN tool in this toolkit (`proteinmpnn-sample`, `proteinmpnn-score`, `proteinmpnn-gradient`).
 
-### Gradient (`proteinmpnn-gradient`)
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `logits` | `List[List[float]]` | Relaxed sequence logits with shape `(L, 20)` in canonical amino-acid order `ACDEFGHIKLMNPQRSTVWY` |
-| `structure` | `Structure` | Backbone structure to condition ProteinMPNN on |
-| `chains_to_redesign` | `ChainSelection \| None` | Chains to score. `None` = all chains in the structure |
-| `fixed_positions` | `ResidueSelection \| None` | Per-chain 1-indexed positions excluded from the perplexity objective |
-| `temperature` | `float \| null` | Optional softmax temperature; applies `softmax(input / T)` before evaluating. `None` = use logits as-is |
-
-## Configuration
-
-### Sampling Configuration (`ProteinMPNNSampleConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `num_sequences_per_structure` | `int` | `1` | Total number of sequences to generate per structure |
-| `batch_size` | `Optional[int]` | `None` | Max sequences per GPU forward pass (defaults to `num_sequences_per_structure`) |
-| `temperature` | `float` | `0.1` | Sampling temperature (0.0-1.0). Lower = more conservative, higher = more diverse |
-| `fixed_positions` | `Optional[Dict[str, List[int]]]` | `None` | Residues to keep fixed (not redesigned). Maps chain IDs to position lists |
-| `excluded_amino_acids` | `Optional[List[str]]` | `None` | Amino acids to exclude from design (e.g., `["C"]` to avoid cysteines) |
-| `model_choice` | `Literal["proteinmpnn", "abmpnn", "soluble"]` | `"proteinmpnn"` | Model weights: `proteinmpnn` (general), `abmpnn` (antibody), or `soluble` |
-| `backbone_noise` | `float` | `0.0` | Gaussian noise (A) on backbone coords; raise (e.g. `0.02`) for sampling diversity |
-| `seed` | `int` | `42` | Random seed for reproducibility |
-| `device` | `str` | `"cuda"` | Device for inference (`"cuda"` or `"cpu"`) |
-
-### Scoring Configuration (`ProteinMPNNScoringConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `fixed_positions` | `Optional[Dict[str, List[int]]]` | `None` | Positions to exclude from perplexity calculation |
-| `seed` | `int` | `42` | Random seed |
-| `device` | `str` | `"cuda"` | Device for inference |
-
-### Gradient Configuration (`ProteinMPNNGradientConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_choice` | `Literal["proteinmpnn", "v_48_002", "v_48_010", "v_48_030", "abmpnn", "soluble"]` | `"proteinmpnn"` | Weights: `proteinmpnn` (=v_48_020), `v_48_{002,010,030}` noise variants, `abmpnn`, `soluble` |
-| `use_ste` | `bool` | `True` | Straight-Through Estimator: hard one-hot in forward, soft probabilities in backward. When `False`, soft blended embeddings flow forward (smoother but biased) |
-| `compute_gradient` | `bool` | `True` | Run backward pass and return gradient. Set `False` for forward-only NLL scoring (e.g. MCMC proposal ranking); `gradient` is `None` in the output |
-| `device` | `str` | `"cuda"` | Device for inference |
-
-### Parameter Guides
-
-**Temperature guide:**
-| Temperature | Behavior | Use Case |
-|-------------|----------|----------|
-| `0.0` | Deterministic (argmax) | Most likely sequence, no diversity |
-| `0.1` | Low diversity (default) | Conservative designs, high confidence |
-| `0.3-0.5` | Moderate diversity | Balanced exploration |
-| `0.7-1.0` | High diversity | Maximum sequence variation |
-
-### Sweep Priorities
-
-1. **`temperature`**: Most impactful for sequence diversity. Start at 0.1 for conservative designs, increase to 0.3-0.5 for exploration.
-2. **`num_sequences_per_structure`**: Generate 10-100 sequences and filter by perplexity. More sequences = more chances of finding good designs.
-3. **`fixed_positions`**: Use to preserve catalytic residues, binding sites, or experimentally validated positions.
-
-## Output Specification
-
-### Sampling Output (`InverseFoldingOutput`)
-
-Contains a list of `ProteinMPNNSequences` objects, one per input structure:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `sequences` | `List[str]` | Designed amino acid sequences. Multi-chain sequences are "/"-delimited (e.g., `"MASCQT/EVQLVE"`) |
-| `perplexity` | `List[float]` | Perplexity for each sequence. **Lower is better.** Typical range: 1.5-8.0 |
-| `sequence_recovery` | `List[float]` | Fraction of designed residues matching the original PDB sequence (0.0-1.0) |
-
-### Scoring Output (`ProteinMPNNScoringOutput`)
-
-Contains a list of `InverseFoldingScoringMetrics` objects, one per input pair. Metric values are accessed via attribute-style (`score.perplexity`) or mapping-style (`score["perplexity"]`):
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `scores` | `List[InverseFoldingScoringMetrics]` | List of scores, one per input sequence-structure pair |
-| `vocab` | `Optional[List[str]]` | Token ordering for logits: `logits[:, j]` corresponds to `vocab[j]` |
-
-Each `InverseFoldingScoringMetrics` contains:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `log_likelihood`, `avg_log_likelihood`, `perplexity` | `float` | Scalar metrics (attribute or mapping access) |
-| `logits` | `Optional[List[List[float]]]` | Per-position logits array of shape `(seq_length, vocab_size)` |
-
-When `fixed_positions` is set, likelihood metrics are computed over non-fixed scored positions.
-
-### Gradient Output (`ProteinMPNNGradientOutput`)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `loss` | `float` | Mean negative log-likelihood over ProteinMPNN-scored positions |
-| `gradient` | `List[List[float]] \| None` | Gradient of `loss` w.r.t. input `logits`, shape `(L, 20)`. `None` when `compute_gradient=False` |
-| `metrics` | `Dict[str, Any]` | `log_likelihood`, `avg_log_likelihood`, `perplexity`, `sequence_length`, `model_choice`, `objective` |
-| `vocab` | `List[str]` | Canonical amino-acid column ordering for `logits` and `gradient` |
-
-## Interpreting Results
-
-**For perplexity (sampling & scoring):**
-- **Excellent:** `perplexity < 2.0` (highly compatible sequence-structure pair)
-- **Good:** `perplexity < 4.0` (reasonable designs)
-- **Marginal:** `perplexity < 6.0` (may need optimization)
-- **Poor:** `perplexity > 8.0` (likely incompatible)
-
-**For sequence identity:**
-- `>0.9`: Nearly identical to input (low temperature or constrained design)
-- `0.5-0.9`: Moderate redesign
-- `<0.5`: Significant redesign (high temperature or few constraints)
-
-**Important caveats:**
-- Perplexity is exponential -- a perplexity of 2.0 means the model is "uncertain" between ~2 amino acids per position on average.
-- Low perplexity does not guarantee folding. Always validate designs with structure prediction (ESMFold, AlphaFold) or experimental characterization.
-- Multiple low-perplexity sequences can fold into the same structure -- sample many and filter.
-
-## Quick Start Examples
-
-**Example 1: Design sequences for a single-chain protein**
-```python
-from proto_tools.tools.inverse_folding import (
-    run_proteinmpnn_sample,
-    InverseFoldingInput,
-    InverseFoldingConfig
-)
-
-# Load your structure
-inputs = InverseFoldingInput(
-    structures=["my_protein.pdb"]
-)
-
-# Configure sampling
-config = InverseFoldingConfig(
-    num_sequences_per_structure=10,
-    temperature=0.1
-)
-
-# Run ProteinMPNN
-result = run_proteinmpnn_sample(inputs, config)
-
-# Get designed sequences
-for i, seq in enumerate(result[0].sequences):
-    perplexity = result[0].perplexity[i]
-    print(f"Sequence {i+1}: {seq[:50]}... (perplexity: {perplexity:.2f})")
-```
-
-**Example 2: Design with fixed positions (preserve active site)**
-```python
-from proto_tools.tools.inverse_folding import (
-    run_proteinmpnn_sample,
-    InverseFoldingInput,
-    InverseFoldingConfig
-)
-
-inputs = InverseFoldingInput(
-    structures=["enzyme.pdb"],
-    all_chain_ids=[["A"]]  # Only design chain A
-)
-
-# Fix catalytic triad positions
-config = InverseFoldingConfig(
-    num_sequences_per_structure=20,
-    temperature=0.2,
-    fixed_positions={"A": [57, 102, 195]},  # Catalytic residues
-    excluded_amino_acids=["C"]  # No cysteines
-)
-
-result = run_proteinmpnn_sample(inputs, config)
-
-# Filter for best designs
-best_designs = sorted(
-    zip(result[0].sequences, result[0].perplexity),
-    key=lambda x: x[1]
-)[:5]
-
-for seq, ppl in best_designs:
-    print(f"Perplexity {ppl:.2f}: {seq}")
-```
-
-**Example 3: Score sequence-structure compatibility**
-```python
-from proto_tools.tools.inverse_folding.proteinmpnn import (
-    run_proteinmpnn_score,
-    ProteinMPNNScoringInput,
-    ProteinMPNNScoringConfig,
-    SequenceStructurePair,
-)
-from proto_tools.entities.structures import Structure
-
-# Load structure
-structure = Structure.from_file("my_protein.pdb")
-
-# Create sequence-structure pairs to score
-pairs = [
-    SequenceStructurePair(sequence="MVLSPADKTNVKAAWGK", structure=structure),
-    SequenceStructurePair(sequence="MVLSAADKTNVKAAWGK", structure=structure),  # S->A mutation
-]
-
-inputs = ProteinMPNNScoringInput(sequence_structure_pairs=pairs)
-config = ProteinMPNNScoringConfig()
-
-result = run_proteinmpnn_score(inputs, config)
-
-# Compare perplexities
-for i, score in enumerate(result.scores):
-    print(f"Sequence {i+1}: perplexity = {score.perplexity:.2f}")
-```
-
-**Example 4: Multi-chain complex design**
-```python
-from proto_tools.tools.inverse_folding import (
-    run_proteinmpnn_sample,
-    InverseFoldingInput,
-    InverseFoldingConfig
-)
-
-# Design both chains of a heterodimer
-inputs = InverseFoldingInput(
-    structures=["complex.pdb"],
-    all_chain_ids=[["A", "B"]]  # Design both chains together
-)
-
-config = InverseFoldingConfig(
-    num_sequences_per_structure=10,
-    temperature=0.1
-)
-
-result = run_proteinmpnn_sample(inputs, config)
-
-# Parse multi-chain output
-for seq in result[0].sequences:
-    chain_a, chain_b = seq.split("/")
-    print(f"Chain A: {chain_a[:30]}...")
-    print(f"Chain B: {chain_b[:30]}...")
-    print()
-```
-
-**Example 5: Analyze per-position logits**
-```python
-import numpy as np
-from proto_tools.tools.inverse_folding.proteinmpnn import (
-    run_proteinmpnn_score,
-    ProteinMPNNScoringInput,
-    ProteinMPNNScoringConfig,
-    SequenceStructurePair,
-    ALPHAFOLD_VOCAB,
-)
-
-# Score a sequence
-# ... (setup as in Example 3)
-
-result = run_proteinmpnn_score(inputs, config)
-
-# Get per-position probabilities
-logits = result[0].logits
-probs = np.exp(logits) / np.exp(logits).sum(axis=1, keepdims=True)
-
-# Find positions with low confidence
-for pos in range(len(probs)):
-    max_prob = probs[pos].max()
-    best_aa = ALPHAFOLD_VOCAB[probs[pos].argmax()]
-    if max_prob < 0.5:
-        print(f"Position {pos+1}: best={best_aa} (prob={max_prob:.2f}) - consider redesign")
-```
-
-## Best Practices & Gotchas
-
-**Parameter tuning:**
-
-1. `temperature`:
-   - Start with `0.1` for initial designs.
-   - Increase to `0.3-0.5` if you need more diversity.
-   - Use `0.0` only when you want a single deterministic answer.
-
-2. `num_sequences_per_structure`:
-   - Generate 10-100 sequences and filter by perplexity.
-   - More sequences = more chances of finding good designs.
-
-3. `fixed_positions`:
-   - Use to preserve catalytic residues, binding sites, or experimentally validated positions.
-   - Positions are **1-indexed** and must match the PDB residue numbering.
-   - Format: `{"A": [1, 2, 3], "B": [10, 11]}` for chains A and B.
-
-4. `excluded_amino_acids`:
-   - Common: `["C"]` to avoid disulfide complications.
-   - Use `["M"]` to avoid oxidation-sensitive methionines.
-
-**Common mistakes:**
-
-1. **Wrong position indexing:** Fixed positions must match PDB residue numbering (usually 1-indexed), not 0-indexed Python arrays.
-
-2. **Ignoring multi-chain format:** Multi-chain outputs are "/"-delimited: `"CHAINASEQUENCE/CHAINBSEQUENCE"`. Parse accordingly.
-
-3. **Over-trusting perplexity:** Low perplexity suggests compatibility, not guaranteed folding. Always validate with structure prediction.
-
-4. **No structure validation:** After designing sequences, predict their structures with ESMFold/AlphaFold and check RMSD to the target backbone.
-
-5. **CPU inference:** Running on CPU is possible but extremely slow. Always use GPU when available.
-
-6. **Mismatched chain IDs:** Ensure `fixed_positions` chain IDs match the chains in your structure. Check with `structure.get_chain_ids()`.
-
-## References
-
-**Primary citation:**
-- Dauparas, J. et al. (2022). "Robust deep learning-based protein sequence design using ProteinMPNN." *Science* 378(6615): 49-56. [DOI: 10.1126/science.add2187](https://doi.org/10.1126/science.add2187)
-
-**Documentation:**
-- GitHub: [https://github.com/dauparas/ProteinMPNN](https://github.com/dauparas/ProteinMPNN)
-- ColabDesign: [https://github.com/sokrypton/ColabDesign](https://github.com/sokrypton/ColabDesign)
-
-## Related Tools
-
-**Tools often used together:**
-- `esmfold` / `boltz2` / `chai1`: Validate that designed sequences fold correctly
-- `esm2-embedding`: Sequence-level analysis of designed proteins
-- `mmseqs2-clustering`: Cluster designed sequences and select diverse representatives for experimental testing
-- `rfdiffusion3`: Generate novel backbone structures to use as input to ProteinMPNN
-
-**Alternative tools:**
-- `esm-if1`: Alternative inverse folding model with different architecture
-- `esm2-sample` / `esm3-sample`: Sequence-only design (no structure conditioning)
+- **GPU recommended; CPU works but is slower.** ProteinMPNN is a small model and runs on CPU, but a GPU is far faster when sampling or scoring many sequences. Model weights (a few hundred MB across variants) download automatically on first use.
+- **Reproducibility.** `proteinmpnn-sample` and `proteinmpnn-gradient` are stochastic; set `seed` for reproducible runs.
+- **Multi-chain sequences are "/"-delimited.** Designs spanning multiple chains are returned as a single string with chains separated by `/` (for example `"MASCQT/EVQLVE"`).
