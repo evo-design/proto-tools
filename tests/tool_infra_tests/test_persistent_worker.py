@@ -405,6 +405,41 @@ def test_alive_property(echo_script: Path):
     assert not worker.alive
 
 
+def test_send_kills_worker_on_stale_frame(tmp_path: Path):
+    """Mismatched-id raises AND kills the worker; the next dispatch must spawn fresh.
+
+    Simulates the production scenario where an upstream-cancelled prior ``send()`` left
+    a stale response in the pipe. The script writes a stale PROTO_LENGTH frame via
+    ``sys.__stdout__`` ahead of the real reply — same byte layout the subprocess
+    produces when it finishes after the parent has unwound out of a cancelled call.
+    """
+    script = tmp_path / "stale.py"
+    script.write_text(
+        textwrap.dedent("""\
+        import json, sys
+
+        def dispatch(input_dict):
+            body = json.dumps({"id": "deadbeef", "result": {"data": "stale"}}, separators=(",", ":"))
+            sys.__stdout__.write(f"PROTO_LENGTH:{len(body)}\\n{body}")
+            sys.__stdout__.flush()
+            return {"data": "real"}
+        """)
+    )
+
+    worker = _make_worker(script)
+    try:
+        with pytest.raises(RuntimeError, match="mismatched id"):
+            worker.send({"x": 1})
+        assert not worker.alive
+
+        clean = tmp_path / "clean.py"
+        clean.write_text("def dispatch(input_dict):\n    return {'echo': input_dict}\n")
+        worker.script_path = clean
+        assert worker.send({"x": 2}) == {"echo": {"x": 2}}
+    finally:
+        worker.stop()
+
+
 # ── Process group cleanup ───────────────────────────────────────────────────
 
 

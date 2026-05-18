@@ -708,80 +708,81 @@ class PersistentWorker:
                     f"{self.toolkit} worker crashed sending request {request_id} ({self._crash_context()})"
                 ) from exc
 
-            # Read response line (with optional timeout).
-            # select() on pipe fds is Unix-only; this module assumes Linux.
-            if timeout is not None:
-                ready, _, _ = select.select([self._process.stdout.fileno()], [], [], timeout)
-                if not ready:
+            # Kill the worker if we fail to read a matching response. The worker is in its own
+            # process group and survives parent-side cancellation (e.g. Modal `fc.cancel.aio()`);
+            # without this, the worker's late response sits in the pipe and corrupts the next send.
+            response_matched = False
+            try:
+                # Read response line (with optional timeout).
+                # select() on pipe fds is Unix-only; this module assumes Linux.
+                if timeout is not None:
+                    ready, _, _ = select.select([self._process.stdout.fileno()], [], [], timeout)
+                    if not ready:
+                        raise TimeoutError(
+                            f"{self.toolkit} worker timed out waiting for response to request {request_id} "
+                            f"after {timeout}s"
+                        )
+
+                # Header is PROTO_LENGTH:<n> (pipe payload) or PROTO_FILE:<path> (temp-file payload).
+                # proto_tools own logs route to stderr; anything else on stdout is third-party noise we skip.
+                while True:
+                    header_line = self._process.stdout.readline()
+                    if not header_line:
+                        raise RuntimeError(
+                            f"{self.toolkit} worker closed stdout before responding to request {request_id} "
+                            f"({self._crash_context()})"
+                        )
+                    header_line = header_line.strip()
+                    if header_line.startswith(("PROTO_LENGTH:", "PROTO_FILE:")):
+                        break
+
+                if header_line.startswith("PROTO_FILE:"):
+                    file_path = header_line.split(":", 1)[1]
+                    if not file_path.startswith(tempfile.gettempdir()):
+                        logger.warning(
+                            "Worker for %s sent file path outside temp directory: %s",
+                            self.toolkit,
+                            file_path,
+                        )
+                    try:
+                        with open(file_path) as f:
+                            response = json.load(f)
+                    finally:
+                        with contextlib.suppress(OSError):
+                            os.unlink(file_path)
+                else:
+                    try:
+                        json_length = int(header_line.split(":", 1)[1])
+                    except (ValueError, IndexError) as exc:
+                        raise RuntimeError(
+                            f"{self.toolkit} worker sent invalid LENGTH header {header_line!r} "
+                            f"for request {request_id} ({self._crash_context()})"
+                        ) from exc
+
+                    response_bytes = self._process.stdout.read(json_length)
+                    if len(response_bytes) != json_length:
+                        raise RuntimeError(
+                            f"{self.toolkit} worker sent incomplete JSON for request {request_id}: "
+                            f"expected {json_length} bytes, got {len(response_bytes)} ({self._crash_context()})"
+                        )
+
+                    try:
+                        response = json.loads(response_bytes)
+                    except json.JSONDecodeError as exc:
+                        raise RuntimeError(
+                            f"{self.toolkit} worker returned invalid JSON for request {request_id} "
+                            f"({self._crash_context()}); payload: {response_bytes!r}"
+                        ) from exc
+
+                if response.get("id") != request_id:
+                    raise RuntimeError(
+                        f"{self.toolkit} worker returned mismatched id "
+                        f"(expected {request_id}, got {response.get('id')}); {self._crash_context()}"
+                    )
+                response_matched = True
+            finally:
+                if not response_matched and self.alive:
                     self.stop()
-                    raise TimeoutError(
-                        f"{self.toolkit} worker timed out waiting for response to request {request_id} after {timeout}s"
-                    )
-
-            # Read header, skipping non-protocol lines (rare; libraries that
-            # write to stdout instead of stderr). Header is either
-            # PROTO_LENGTH:<n> (pipe payload) or PROTO_FILE:<path> (large
-            # payload written to a temp file by the worker). proto_tools own
-            # logs route to stderr via _ParentBridgeHandler, so anything on
-            # stdout other than a protocol header is third-party noise we
-            # silently skip.
-            while True:
-                header_line = self._process.stdout.readline()
-                if not header_line:
-                    raise RuntimeError(
-                        f"{self.toolkit} worker closed stdout before responding to request {request_id} "
-                        f"({self._crash_context()})"
-                    )
-                header_line = header_line.strip()
-                if header_line.startswith(("PROTO_LENGTH:", "PROTO_FILE:")):
-                    break
-
-            # Branch on header type
-            if header_line.startswith("PROTO_FILE:"):
-                # Large payload: worker wrote JSON to a temp file
-                file_path = header_line.split(":", 1)[1]
-                if not file_path.startswith(tempfile.gettempdir()):
-                    logger.warning(
-                        "Worker for %s sent file path outside temp directory: %s",
-                        self.toolkit,
-                        file_path,
-                    )
-                try:
-                    with open(file_path) as f:
-                        response = json.load(f)
-                finally:
-                    with contextlib.suppress(OSError):
-                        os.unlink(file_path)
-            else:
-                # Standard LENGTH-prefixed pipe payload
-                try:
-                    json_length = int(header_line.split(":", 1)[1])
-                except (ValueError, IndexError) as exc:
-                    raise RuntimeError(
-                        f"{self.toolkit} worker sent invalid LENGTH header {header_line!r} "
-                        f"for request {request_id} ({self._crash_context()})"
-                    ) from exc
-
-                response_bytes = self._process.stdout.read(json_length)
-                if len(response_bytes) != json_length:
-                    raise RuntimeError(
-                        f"{self.toolkit} worker sent incomplete JSON for request {request_id}: "
-                        f"expected {json_length} bytes, got {len(response_bytes)} ({self._crash_context()})"
-                    )
-
-                try:
-                    response = json.loads(response_bytes)
-                except json.JSONDecodeError as exc:
-                    raise RuntimeError(
-                        f"{self.toolkit} worker returned invalid JSON for request {request_id} "
-                        f"({self._crash_context()}); payload: {response_bytes!r}"
-                    ) from exc
-
-            if response.get("id") != request_id:
-                raise RuntimeError(
-                    f"{self.toolkit} worker returned mismatched id "
-                    f"(expected {request_id}, got {response.get('id')}); {self._crash_context()}"
-                )
 
             if "error" in response:
                 raise RuntimeError(
