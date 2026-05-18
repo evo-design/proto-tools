@@ -304,8 +304,7 @@ class AlphaFold2BinderOutput(GradientOutput):
             ``Structure.per_residue_plddt`` normalizes them to ``[0, 1]``.
     """
 
-    # Narrow to Optional for compute_gradient=False mode; only GradientOutput subclass that does this.
-    gradient: list[list[float]] | None = Field(  # type: ignore[assignment]
+    gradient: list[list[float]] | None = Field(
         default=None,
         description="Gradient w.r.t. input logits. None when compute_gradient=False.",
     )

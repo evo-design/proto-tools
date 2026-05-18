@@ -111,7 +111,7 @@ class ProteinMPNNGradientOutput(GradientOutput):
         vocab (list[str]): Canonical amino-acid column ordering for logits and gradients.
     """
 
-    gradient: list[list[float]] | None = Field(  # type: ignore[assignment]
+    gradient: list[list[float]] | None = Field(
         default=None,
         description="Gradient w.r.t. input logits. None when compute_gradient=False.",
     )

@@ -358,7 +358,7 @@ class ESMFoldGradientOutput(GradientOutput):
         structure (Structure): Predicted ESMFold complex structure.
     """
 
-    gradient: list[list[float]] | None = Field(  # type: ignore[assignment]
+    gradient: list[list[float]] | None = Field(
         default=None,
         description="Gradient w.r.t. input logits. None when compute_gradient=False.",
     )

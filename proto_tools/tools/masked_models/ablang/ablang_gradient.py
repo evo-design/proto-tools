@@ -53,8 +53,7 @@ class AbLangGradientOutput(GradientOutput):
         vocab (list[str]): Amino-acid column ordering for the input logits.
     """
 
-    # Widen to Optional for compute_gradient=False mode; same treatment as AlphaFold2BinderOutput.
-    gradient: list[list[float]] | None = Field(  # type: ignore[assignment]
+    gradient: list[list[float]] | None = Field(
         default=None,
         description="Gradient w.r.t. input logits. None when compute_gradient=False.",
     )

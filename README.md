@@ -145,6 +145,7 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 ├── <a href="proto_tools/tools/sequence_scoring/alphagenome/">alphagenome/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/borzoi/">borzoi/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/enformer/">enformer/</a>
+├── <a href="proto_tools/tools/sequence_scoring/malinois/">malinois/</a>
 └── <a href="proto_tools/tools/sequence_scoring/segmasker/">segmasker/</a>
 <a href="proto_tools/tools/structure_alignment/">structure_alignment/</a>            # Structure comparison
 ├── <a href="proto_tools/tools/structure_alignment/foldmason/">foldmason/</a>

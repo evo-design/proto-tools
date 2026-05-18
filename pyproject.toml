@@ -162,10 +162,13 @@ warn_unreachable = true
 enable_error_code = ["redundant-expr", "truthy-bool", "ignore-without-code", "deprecated"]
 explicit_package_bases = true
 exclude = [
+    ".*standalone/standalone_helpers/.*",
     ".*standalone/standalone_helpers\\.py$",
     # ccd_lookup standalone uses rdkit/pdbeccdutils/gemmi (only available in
     # the tool's micromamba env); their stubs are incomplete or missing.
     ".*ccd_lookup/standalone/run\\.py$",
+    # Vendored Malinois architecture code is untyped reference model code.
+    ".*malinois/standalone/malinois_scoring\\.py$",
 ]
 
 [[tool.mypy.overrides]]
@@ -219,6 +222,8 @@ module = [
     "hydra.*",
     # Local sibling imports in standalone dirs (resolved at runtime via sys.path)
     "inference.*",
+    "malinois_scoring",
+    "malinois_scoring.*",
     "model.*",
 ]
 ignore_missing_imports = true

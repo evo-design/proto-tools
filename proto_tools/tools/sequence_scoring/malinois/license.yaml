@@ -1,0 +1,11 @@
+code:
+  spdx: MIT
+  url: https://github.com/sjgosai/boda2/blob/main/LICENSE.mit
+weights:
+  spdx: MIT
+  url: https://github.com/sjgosai/boda2/blob/main/README.md
+commercial_use: 'yes'
+redistribution: true
+attribution_required: true
+notes: Per the CODA/BODA2 README, the Malinois model, model weights, and code defining the model architecture are covered under the MIT license. Proto-tools treats the vendored Malinois model-architecture/inference wrapper and the Malinois weights under that MIT license.
+last_updated: '2026-05-17'

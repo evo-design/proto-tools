@@ -1,0 +1,10 @@
+github: https://github.com/sjgosai/boda2
+model: https://zenodo.org/records/10698014/files/MODELS-malinois_artifacts__20211113_021200__287348.tar.gz?download=1
+model_gcs: https://storage.googleapis.com/tewhey-public-data/CODA_resources/malinois_artifacts__20211113_021200__287348.tar.gz
+paper: https://doi.org/10.1038/s41586-024-08070-z
+preprint: https://doi.org/10.1101/2023.08.08.552077
+zenodo: https://doi.org/10.5281/zenodo.10698014
+organizations:
+  - Broad Institute
+  - The Jackson Laboratory
+  - Yale University

@@ -9,6 +9,8 @@ from pydantic import Field, field_validator
 from proto_tools.utils.sequence import PROTEIN_AMINO_ACIDS
 from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
+GradientValue = list[list[float]] | list[list[list[float]]] | None
+
 
 class GradientInput(BaseToolInput):
     """Relaxed sequence state for one gradient evaluation step.
@@ -49,8 +51,8 @@ class GradientOutput(BaseToolOutput):
     """Gradient of a backend objective with respect to relaxed sequence logits.
 
     Attributes:
-        gradient (list[list[float]]): Gradient matrix matching the input logits
-            shape.
+        gradient (GradientValue): Gradient tensor matching the input logits
+            shape, or ``None`` when a tool runs in forward-only mode.
         loss (float): Backend-local scalar objective value.
         metrics (dict[str, Any]): Auxiliary metrics reported alongside the
             scalar objective.
@@ -58,8 +60,9 @@ class GradientOutput(BaseToolOutput):
             returned gradient.
     """
 
-    gradient: list[list[float]] = Field(
-        description="Gradient matrix with the same shape and amino-acid column order as the input logits."
+    gradient: GradientValue = Field(
+        default=None,
+        description="Gradient tensor with the same shape and vocabulary column order as the input logits.",
     )
     loss: float = Field(description="Scalar objective value returned by the backend for this relaxed sequence.")
     metrics: dict[str, Any] = Field(
@@ -67,7 +70,7 @@ class GradientOutput(BaseToolOutput):
         description="Auxiliary metrics reported alongside the scalar objective value.",
     )
     vocab: list[str] = Field(
-        description="Amino-acid symbols defining the column ordering for both the input logits and the returned gradient."
+        description="Symbols defining the column ordering for both the input logits and the returned gradient."
     )
 
     @property
