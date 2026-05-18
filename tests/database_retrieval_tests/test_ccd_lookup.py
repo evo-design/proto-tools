@@ -80,7 +80,7 @@ def test_output_export_json_writes_ligands_and_enrichments(tmp_path):
         ligands=Ligands(fragments=[Fragment(ccd_code="ATP")]),
         enrichments=[CcdEnrichment(ccd_code="ATP", formula="C10 H16 N5 O13 P3", formula_weight=507.181)],
     )
-    output.export(str(tmp_path / "out"), file_format="json")
+    output.export(name="out", export_path=str(tmp_path), file_format="json")
     payload = json.loads((tmp_path / "out.json").read_text())
     assert payload["enrichments"][0]["ccd_code"] == "ATP"
     assert payload["enrichments"][0]["formula"] == "C10 H16 N5 O13 P3"

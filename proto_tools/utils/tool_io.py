@@ -16,6 +16,7 @@ from typing import Any, ClassVar, TypedDict
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from proto_tools.utils.compressed_array import is_compressed_array
+from proto_tools.utils.export_names import sanitize_field
 
 _REMOVED_UI_KWARGS = frozenset({"advanced", "hidden", "depends_on"})
 
@@ -721,7 +722,7 @@ class BaseToolOutput(BaseModel, ABC):
         elif file_format not in self.output_format_options:
             raise ValueError(f"Invalid file format: {file_format}. Must be one of: {self.output_format_options}")
 
-        export_path = Path(export_path) / f"{str(name).lower()}"
+        export_path = Path(export_path) / sanitize_field(name)
         self._export_output(export_path, file_format)
 
     def approx_equal(self, other: "BaseToolOutput", rtol: float = 1e-4, atol: float = 1e-5) -> None:

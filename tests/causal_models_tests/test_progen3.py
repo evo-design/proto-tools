@@ -136,8 +136,7 @@ def test_sample_output_export_fasta(tmp_path):
         tool_id="progen3-sample",
         success=True,
     )
-    export_path = tmp_path / "test_output"
-    output.export(str(export_path), file_format="fasta")
+    output.export(name="test_output", export_path=str(tmp_path), file_format="fasta")
 
     fasta_path = tmp_path / "test_output.fasta"
     assert fasta_path.exists()
@@ -155,8 +154,7 @@ def test_sample_output_export_json(tmp_path):
         tool_id="progen3-sample",
         success=True,
     )
-    export_path = tmp_path / "test_output"
-    output.export(str(export_path), file_format="json")
+    output.export(name="test_output", export_path=str(tmp_path), file_format="json")
 
     json_path = tmp_path / "test_output.json"
     assert json_path.exists()

@@ -419,3 +419,17 @@ def test_multi_file_export(tmp_path):
     assert (exported / "file1.txt").exists()
     assert (exported / "file2.txt").exists()
     assert (exported / "file3.txt").exists()
+
+
+def test_export_preserves_casing_in_name(tmp_path):
+    """export(name='MyOutput') writes 'MyOutput.<fmt>' — casing preserved, not lowercased."""
+    output = MockToolOutput(success=True, data=["x"])
+    output.export(name="MyOutput", export_path=tmp_path, file_format="txt")
+    assert (tmp_path / "MyOutput.txt").exists()
+
+
+def test_export_sanitizes_unsafe_chars_in_name(tmp_path):
+    """Filesystem-unsafe chars in the name are replaced with underscores."""
+    output = MockToolOutput(success=True, data=["x"])
+    output.export(name="bad/name:x", export_path=tmp_path, file_format="txt")
+    assert (tmp_path / "bad_name_x.txt").exists()

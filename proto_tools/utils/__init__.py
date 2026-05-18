@@ -14,6 +14,7 @@ from proto_tools.utils.device import (
     number_of_available_gpus,
 )
 from proto_tools.utils.device_manager import SUPPORTED_DEVICE_PREFIXES, AllocationType, DeviceManager, OffloadStrategy
+from proto_tools.utils.export_names import build_export_name, sanitize_field
 from proto_tools.utils.gradient_models import GradientInput, GradientOutput, GradientValue
 from proto_tools.utils.http_session import build_http_session
 from proto_tools.utils.logging_config import get_logger, setup_logging
@@ -80,6 +81,9 @@ __all__ = [
     "return_invalid_rna_chars",
     "validate_positions_list",
     "validate_smiles",
+    # Export filenames
+    "build_export_name",
+    "sanitize_field",
     "DNA_NUCLEOTIDES",
     "RNA_NUCLEOTIDES",
     "PROTEIN_AMINO_ACIDS",
