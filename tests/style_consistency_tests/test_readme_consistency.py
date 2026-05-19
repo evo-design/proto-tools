@@ -400,6 +400,29 @@ def _expected_license_callouts(lic: dict, name: str) -> list[str]:
             "> Bundled dependencies, each under its own license:\n>\n" + "\n".join(bullets) + f"\n>\n> {review}"
         ]
 
+    # Database / API-wrapper toolkits: the shipped code is a thin client; what governs
+    # use of the retrieved results is the external data resource's own terms.
+    data = lic.get("data")
+    if data:
+        d_name = data["name"]
+        d_spdx = data["spdx"]
+        d_url = data["url"]
+        d_spdx_l = str(d_spdx).lower()
+        if d_spdx_l.startswith("cc0") or "public domain" in d_spdx_l:
+            distributed = f"distributed under {d_spdx} (public domain; no attribution required)"
+            attribution_sentence = ""
+        elif bool(data.get("attribution_required")) or d_spdx_l.startswith("cc-by"):
+            distributed = f"distributed under {d_spdx}"
+            attribution_sentence = f" Attribution to {d_name} is required when the data is redistributed."
+        else:
+            distributed = f"distributed under {d_spdx}"
+            attribution_sentence = ""
+        body = (
+            f"{name} retrieves data from {d_name}, {distributed}.{attribution_sentence} "
+            f"The client wrapper code is {code_spdx}-licensed."
+        )
+        return [f"> [!NOTE]\n> **License:** {body} Please refer to [the data terms]({d_url}) for full terms."]
+
     # Fully open: permissive code (and weights, if any), commercial use allowed, weights not gated.
     fully_open = (
         not is_custom
@@ -574,6 +597,44 @@ def test_expected_license_callouts_logic() -> None:
         "> - [IgLM](https://github.com/Graylab/IgLM): Custom (IgLM License)\n>\n"
         "> Review the [code license](https://example.com/c) and the [model weights"
         " license](https://example.com/w) before any commercial use or redistribution."
+    ]
+
+
+def test_expected_license_callouts_data_block() -> None:
+    """An optional ``data:`` block yields a data-resource callout (CC0 vs CC-BY)."""
+    cc0 = {
+        "code": {"spdx": "Apache-2.0", "url": "https://github.com/proto-bio/proto-tools"},
+        "data": {
+            "name": "the RCSB Protein Data Bank",
+            "spdx": "CC0-1.0",
+            "url": "https://www.rcsb.org/pages/policies",
+            "attribution_required": False,
+        },
+        "commercial_use": "yes",
+    }
+    assert _expected_license_callouts(cc0, "PDB") == [
+        "> [!NOTE]\n> **License:** PDB retrieves data from the RCSB Protein Data Bank, "
+        "distributed under CC0-1.0 (public domain; no attribution required). "
+        "The client wrapper code is Apache-2.0-licensed. "
+        "Please refer to [the data terms](https://www.rcsb.org/pages/policies) for full terms."
+    ]
+
+    ccby = {
+        "code": {"spdx": "Apache-2.0", "url": "https://github.com/proto-bio/proto-tools"},
+        "data": {
+            "name": "the AlphaFold Protein Structure Database",
+            "spdx": "CC-BY-4.0",
+            "url": "https://alphafold.ebi.ac.uk/faq",
+            "attribution_required": True,
+        },
+        "commercial_use": "yes",
+    }
+    assert _expected_license_callouts(ccby, "AlphaFold DB") == [
+        "> [!NOTE]\n> **License:** AlphaFold DB retrieves data from the AlphaFold Protein "
+        "Structure Database, distributed under CC-BY-4.0. Attribution to the AlphaFold Protein "
+        "Structure Database is required when the data is redistributed. "
+        "The client wrapper code is Apache-2.0-licensed. "
+        "Please refer to [the data terms](https://alphafold.ebi.ac.uk/faq) for full terms."
     ]
 
 
