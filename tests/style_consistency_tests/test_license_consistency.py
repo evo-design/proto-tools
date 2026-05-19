@@ -192,6 +192,18 @@ def test_toolkit_license_yaml_schema(toolkit_dir: Path) -> None:
             if access not in _ALLOWED_WEIGHTS_ACCESS:
                 errors.append(f"weights.access: expected one of {sorted(_ALLOWED_WEIGHTS_ACCESS)}, got {access!r}")
 
+    # data block (optional): the external data resource an API-wrapper toolkit retrieves from.
+    if "data" in data:
+        data_block = data["data"]
+        _validate_terms_block(data_block, "data", errors)
+        if isinstance(data_block, dict):
+            if not isinstance(data_block.get("name"), str) or not data_block["name"].strip():
+                errors.append("data.name: expected non-empty string")
+            if "attribution_required" in data_block and not isinstance(data_block["attribution_required"], bool):
+                errors.append(
+                    f"data.attribution_required: expected bool, got {type(data_block['attribution_required']).__name__}"
+                )
+
     # bundled_dependencies (optional): bundled tools with notable license terms; each entry references a toolkit or inlines external terms.
     deps = data.get("bundled_dependencies")
     if deps is not None:
@@ -248,6 +260,7 @@ def test_toolkit_license_yaml_schema(toolkit_dir: Path) -> None:
     # Reject unknown top-level keys so typos surface immediately.
     allowed_top = _REQUIRED_TOP_KEYS | {
         "weights",
+        "data",
         "attribution_required",
         "notes",
         "proto_tools_original",

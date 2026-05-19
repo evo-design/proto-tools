@@ -1,274 +1,66 @@
-<a href="https://bio-pro.mintlify.app/tools/database-retrieval/pdb"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/database-retrieval/pdb"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # PDB
 
+![PDB](https://cdn.rcsb.org/rcsb-pdb/v2/about-us/Logo/rcsb-pdb-logo.png)
+
+> *Image source: [RCSB PDB](https://www.rcsb.org/)*
+
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** PDB retrieves data from the RCSB Protein Data Bank, distributed under CC0-1.0 (public domain; no attribution required). The client wrapper code is Apache-2.0-licensed. Please refer to [the data terms](https://www.rcsb.org/pages/policies) for full terms.
 
 ## Overview
 
-Two tools for retrieving data from the RCSB Protein Data Bank:
-
-- **`pdb-fetch-entry`**: Fetch structure metadata (title, experimental method, resolution)
-- **`pdb-fetch-fasta`**: Fetch chain sequences with automatic protein/nucleotide classification
-
-Both are CPU-only tools that wrap the RCSB PDB REST API.
-
-## Tool Catalog
-
-| Tool | Input | Output | Use Case |
-|------|-------|--------|----------|
-| `pdb-fetch-entry` | PDB ID | Title, method, resolution | Get structure metadata to assess quality |
-| `pdb-fetch-fasta` | PDB ID | Chain sequences + classification | Extract protein/nucleotide sequences from a structure |
+The RCSB Protein Data Bank is a database of experimentally determined three-dimensional structures of proteins, nucleic acids, and their complexes. This toolkit provides two CPU-only tools: `pdb-fetch-entry` retrieves structure metadata (title, experimental method, and resolution) for a PDB accession, and `pdb-fetch-fasta` retrieves the chain sequences of an entry and classifies each as protein or nucleic acid. It runs on CPU and requires only network access.
 
 ## Background
 
-**What does this tool measure/predict?**
-These tools retrieve information from the [RCSB Protein Data Bank](https://www.rcsb.org/), the global archive for experimentally determined 3D structures of biological macromolecules. PDB entries contain structures solved by [X-ray crystallography](https://en.wikipedia.org/wiki/X-ray_crystallography), [cryo-EM](https://en.wikipedia.org/wiki/Cryogenic_electron_microscopy), [NMR spectroscopy](https://en.wikipedia.org/wiki/Nuclear_magnetic_resonance_spectroscopy_of_proteins), and other methods.
+The Protein Data Bank ([Berman et al., 2000](https://doi.org/10.1093/nar/28.1.235)) is the single worldwide archive of experimentally determined macromolecular structures, served here through the RCSB PDB. It is operated by the Research Collaboratory for Structural Bioinformatics (RCSB) at Rutgers University and the University of California San Diego, with funding from the National Science Foundation, the National Institutes of Health, and the Department of Energy. Entries are solved by X-ray crystallography, cryo-electron microscopy, nuclear magnetic resonance spectroscopy, and other experimental methods.
 
-**Why is this important?**
-- Structure quality assessment: resolution and experimental method indicate reliability of atomic coordinates
-- Protein design: extract reference sequences from specific chains of experimental structures
-- Structural analysis: identify which chains are protein vs nucleic acid in multi-component complexes
-- Benchmarking: retrieve experimental structures to compare against computational predictions
+The tools call two RCSB HTTP endpoints directly. `pdb-fetch-entry` issues a GET request to the RCSB Data API core entry endpoint (`https://data.rcsb.org/rest/v1/core/entry/{pdb_id}`) and reads the structure title from `struct.title`, the experimental method from the first `exptl` record, and the resolution from `rcsb_entry_info.resolution_combined`, which covers both X-ray and cryo-EM entries; entries solved by NMR have no resolution value. `pdb-fetch-fasta` requests the FASTA endpoint (`https://www.rcsb.org/fasta/entry/{pdb_id}`), parses each record, extracts the author-assigned chain identifiers from the header, and classifies a sequence as protein when it contains amino-acid letters that do not also occur in nucleotide alphabets. Both tools uppercase the supplied accession, retry transient HTTP failures with backoff, and return an empty result when the accession is not found (HTTP 404). Results reflect the live archive at query time rather than a fixed release snapshot.
 
-**Scientific foundation:**
-The PDB was established in 1971 and now contains over 220,000 structures. Key metadata:
-- **Resolution** (for X-ray/cryo-EM): lower values indicate higher-quality atomic models (1.0-2.0 A is considered high resolution)
-- **Experimental method**: X-ray crystallography (most entries), cryo-EM (growing), NMR (small proteins), neutron diffraction (rare)
-- **Chain classification**: protein chains contain amino acids; nucleotide chains contain DNA/RNA bases
+### Learning Resources
+
+- [RCSB PDB Data API documentation](https://www.rcsb.org/docs/programmatic-access/web-apis-overview) (RCSB PDB) - reference for the REST endpoints, query syntax, and rate limits.
+- [RCSB PDB training and education](https://www.rcsb.org/training) (RCSB PDB) - guided material on PDB data, structure determination methods, and how to interpret entries.
 
 ## Tools
 
 ### PDB Fetch Entry (`pdb-fetch-entry`)
 
-Fetch structure metadata from RCSB PDB.
+Retrieves structure metadata for a PDB accession from the RCSB Data API core entry endpoint, returning the structure title, the experimental method, the resolution in angstroms, and the request URL.
 
-Returns title, experimental method, and resolution for a PDB accession.
+#### Applications
+
+Use this to assess whether an experimental structure is suitable as a reference before structure-based design or benchmarking: check the experimental method and resolution, then decide whether to use the entry. It pairs with [UniProt](https://bio-pro.mintlify.app/tools/database-retrieval/uniprot), whose returned PDB cross-references can be ranked by resolution, and with [PDB Fetch FASTA](https://bio-pro.mintlify.app/tools/database-retrieval/pdb) to pull the chain sequences once a suitable entry is selected.
+
+#### Usage Tips
+
+- **Resolution is absent for some methods.** NMR and fiber-diffraction entries have no resolution value, so `resolution` is `None`; filter on it before sorting entries by quality.
+- **This is metadata only.** The tool returns the title, method, and resolution, not atomic coordinates or a structure file.
+- **An unknown accession is not an error.** A missing or obsolete accession returns an empty output rather than raising, so check the populated fields before using the result.
 
 ### PDB Fetch FASTA (`pdb-fetch-fasta`)
 
-Fetch chain sequences from RCSB PDB.
+Retrieves the chain sequences of a PDB entry from the RCSB FASTA endpoint, returning one record per unique sequence with the author-assigned chain identifiers that share it, the FASTA header, the sequence, and a protein/nucleic-acid classification, plus the request URL.
 
-Returns parsed chain sequences with automatic protein/nucleic acid
-classification based on amino acid composition.
+#### Applications
 
-## How It Works
+Use this to extract reference sequences from an experimental structure for sequence design, alignment, or comparison against computational predictions. Filter `chains` by `is_protein` to separate protein subunits from nucleic-acid chains in a complex, and deduplicate identical sequences to recover the unique entities of a homo-oligomer. It follows [PDB Fetch Entry](https://bio-pro.mintlify.app/tools/database-retrieval/pdb) once a suitable entry is chosen and consumes PDB identifiers surfaced by [UniProt](https://bio-pro.mintlify.app/tools/database-retrieval/uniprot).
 
-**Method overview:**
-- `pdb-fetch-entry` queries the RCSB core entry API (`/entry/{pdb_id}`) for structure metadata
-- `pdb-fetch-fasta` queries the RCSB FASTA API (`/fasta/entry/{pdb_id}`) for chain sequences, then classifies each chain as protein or nucleic acid based on amino acid composition
+#### Usage Tips
 
-**Chain classification logic:** A chain is classified as protein if it contains amino acid residues specific to proteins (F, W, Y, H, E, D, K, R, etc.). Chains composed purely of A, T/U, G, C are classified as nucleotide.
+- **One record can cover several chains.** A single `PdbChain` carries every author-assigned chain identifier that shares its sequence, so a homo-oligomer collapses to one record with multiple `chain_ids`.
+- **Protein classification is heuristic.** A chain is called protein only when it contains amino-acid letters absent from nucleotide alphabets; peptide nucleic acids and other hybrid molecules may be misclassified.
+- **An unknown accession is not an error.** A missing or obsolete accession returns an empty `chains` list rather than raising.
+- **Exporting to `fasta` writes the original headers.** The `fasta` export emits each record using its stored FASTA header verbatim; `json` and `csv` are also supported, with the `csv` form joining shared chain identifiers with a semicolon.
 
-**Key assumptions:**
-- PDB IDs are valid 4-character identifiers (case-insensitive, automatically uppercased)
-- Network access to data.rcsb.org is available
+## Toolkit Notes
 
-**Limitations:**
-- Returns metadata and sequences only, not 3D coordinates or full PDB files
-- Chain classification is heuristic-based; unusual sequences (e.g., peptide nucleic acids) may be misclassified
-- Some PDB entries may have incomplete metadata (e.g., NMR structures lack resolution)
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-**Computational requirements:**
-- **Hardware:** CPU only, network access required
-- **Runtime:** 1-3 seconds per query
-- **Scalability:** Sequential queries; loop for batch retrieval
+These apply to every PDB tool in this toolkit (`pdb-fetch-entry`, `pdb-fetch-fasta`).
 
-## Input Parameters
-
-### `PdbFetchEntryInput`
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `pdb_id` | `str` | *required* | PDB accession (e.g., `"1LBG"`, `"6VXX"`). Case-insensitive. |
-
-### `PdbFetchFastaInput`
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `pdb_id` | `str` | *required* | PDB accession (e.g., `"1LBG"`, `"6VXX"`). Case-insensitive. |
-
-## Configuration
-
-`PdbFetchConfig` has no user-facing fields. Pass it bare (or omit entirely): all behavior comes from the Input. Example: `run_pdb_fetch_entry(PdbFetchEntryInput(pdb_id="1LBG"))`.
-
-## Output Specification
-
-### `PdbFetchEntryOutput`
-
-```python
-PdbFetchEntryOutput(
-    title: Optional[str],       # Structure title
-    method: Optional[str],      # Experimental method (e.g., "X-RAY DIFFRACTION")
-    resolution: Optional[float], # Resolution in Angstroms (lower = better)
-    source_url: Optional[str],  # RCSB API URL
-)
-```
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `title` | `Optional[str]` | Structure title from PDB entry |
-| `method` | `Optional[str]` | Experimental method (X-RAY DIFFRACTION, ELECTRON MICROSCOPY, NMR, etc.) |
-| `resolution` | `Optional[float]` | Resolution in Angstroms. None for NMR structures. |
-| `source_url` | `Optional[str]` | RCSB API request URL |
-
-### `PdbFetchFastaOutput`
-
-```python
-PdbFetchFastaOutput(
-    chains: List[PdbChain],     # Parsed chain sequences
-    source_url: Optional[str],  # RCSB API URL
-)
-```
-
-### `PdbChain`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `chain_ids` | `list[str]` | Author-assigned chain IDs sharing this sequence (e.g., `["A", "B"]` for a homodimer) |
-| `header` | `str` | Full FASTA header line |
-| `sequence` | `str` | Chain amino acid or nucleotide sequence |
-| `is_protein` | `bool` | True if protein chain, False if nucleic acid |
-
-**Supported export formats:** `json`, `csv`
-
-## Interpreting Results
-
-**Resolution quality tiers (X-ray/cryo-EM):**
-- **High resolution:** `< 2.0 A`: Atomic detail visible; reliable for side-chain conformations and ligand binding
-- **Good resolution:** `2.0 - 3.0 A`: Backbone well-defined; side-chain positions approximate
-- **Low resolution:** `3.0 - 4.0 A`: Backbone trace visible; individual side chains unreliable
-- **Very low resolution:** `> 4.0 A`: Domain-level topology only; use with caution
-
-**Method considerations:**
-- X-ray crystallography: resolution directly indicates coordinate quality
-- Cryo-EM: resolution varies by region; overall resolution may not reflect local quality
-- NMR: no resolution value (set to None); typically limited to proteins <30 kDa
-
-**Interpreting edge cases:**
-- Multiple chains with the same sequence indicate a homo-oligomer (e.g., homodimer has chains A and B with identical sequences)
-- Very short chains may be peptide ligands rather than structural subunits
-- Missing resolution (None) typically indicates an NMR structure
-
-## Quick Start Examples
-
-**Example 1: Fetch entry metadata**
-```python
-from proto_tools.tools.database_retrieval import (
-    PdbFetchConfig, PdbFetchEntryInput, run_pdb_fetch_entry,
-)
-
-inputs = PdbFetchEntryInput(pdb_id="1LBG")
-output = run_pdb_fetch_entry(inputs, PdbFetchConfig())
-
-print(f"Title: {output.title}")
-print(f"Method: {output.method}")
-print(f"Resolution: {output.resolution} A")
-```
-
-**Example 2: Fetch chain sequences with classification**
-```python
-from proto_tools.tools.database_retrieval import (
-    PdbFetchConfig, PdbFetchFastaInput, run_pdb_fetch_fasta,
-)
-
-inputs = PdbFetchFastaInput(pdb_id="6VXX")  # SARS-CoV-2 spike protein
-output = run_pdb_fetch_fasta(inputs, PdbFetchConfig())
-
-for chain in output.chains:
-    chain_type = "protein" if chain.is_protein else "nucleotide"
-    print(f"Chains {chain.chain_ids}: {chain_type}, {len(chain.sequence)} residues")
-    print(f"  Sequence: {chain.sequence[:50]}...")
-```
-
-**Example 3: Get protein sequences from a complex for design**
-```python
-from proto_tools.tools.database_retrieval import (
-    PdbFetchConfig, PdbFetchFastaInput, run_pdb_fetch_fasta,
-)
-
-output = run_pdb_fetch_fasta(
-    PdbFetchFastaInput(pdb_id="4OO8"),  # Cas9 complex
-    PdbFetchConfig(),
-)
-
-# Extract only protein chains
-protein_chains = [c for c in output.chains if c.is_protein]
-print(f"Found {len(protein_chains)} protein chains:")
-for chain in protein_chains:
-    print(f"  Chains {chain.chain_ids}: {len(chain.sequence)} residues")
-
-# Get unique protein sequences (deduplicate homo-oligomer chains)
-unique_seqs = list(set(c.sequence for c in protein_chains))
-print(f"Unique protein sequences: {len(unique_seqs)}")
-```
-
-**Example 4: Chained workflow -- UniProt -> highest-resolution PDB structure**
-
-A common an internal repo pattern when picking a structural template: walk a UniProt record's PDB cross-references and pick the highest-resolution X-ray entry.
-
-```python
-from proto_tools.tools.database_retrieval import (
-    PdbFetchConfig, PdbFetchEntryInput,
-    UniProtFetchConfig, UniProtFetchInput,
-    run_pdb_fetch_entry, run_uniprot_fetch,
-)
-
-# 1. Resolve KRAS by symbol; bias toward the reviewed Swiss-Prot entry.
-uniprot = run_uniprot_fetch(
-    UniProtFetchInput(target_name="KRAS", organism="Homo sapiens", prefer_pdb_crossref=True),
-    UniProtFetchConfig(),
-)
-assert uniprot.accession == "P01116"
-assert len(uniprot.pdb_crossrefs) > 0
-
-# 2. Pull metadata for each linked PDB and pick the X-ray entry with the best resolution.
-candidates = []
-for pdb_id in uniprot.pdb_crossrefs[:10]:  # cap to keep the example fast
-    meta = run_pdb_fetch_entry(PdbFetchEntryInput(pdb_id=pdb_id), PdbFetchConfig())
-    if meta.success and meta.resolution is not None and (meta.method or "").startswith("X-RAY"):
-        candidates.append((pdb_id, meta.resolution, meta.title))
-
-candidates.sort(key=lambda c: c[1])  # ascending: smaller resolution = better
-best_id, best_res, best_title = candidates[0]
-print(f"Best X-ray template for KRAS: {best_id} ({best_res} A) -- {best_title}")
-```
-
-## Best Practices & Gotchas
-
-**Common mistakes:**
-1. **Assuming PDB IDs are case-sensitive:** Both tools automatically uppercase PDB IDs. "1lbg" and "1LBG" are equivalent.
-2. **Confusing `pdb-fetch-entry` with structure download:** `pdb-fetch-entry` returns metadata (title, method, resolution), not PDB coordinate files.
-3. **Expecting chain classification to handle all edge cases:** The protein/nucleotide classification is heuristic. Peptide nucleic acids (PNAs) or other hybrid molecules may be misclassified.
-4. **Assuming all entries have resolution:** NMR structures do not have resolution values; the field will be None.
-
-**Tips for optimal results:**
-- Use `pdb-fetch-entry` first to check resolution and method before deciding whether to use a structure as a reference
-- For multi-chain structures, iterate over `output.chains`: a single PDB entry may contain many chains
-- Combine with `uniprot-fetch` to go from gene name → UniProt accession → PDB IDs → chain sequences
-
-**Edge cases to watch for:**
-- Entries with very many chains (e.g., ribosome structures with 50+ chains) will return all chains
-- Obsolete PDB entries may return errors or redirect to superseding entries
-- Some PDB entries contain only nucleic acids (no protein chains)
-
-## References
-
-**Primary publication:**
-- Burley, S.K. et al. (2022). "RCSB Protein Data Bank: Celebrating 50 years of the PDB." *Protein Science*, 31(1), 187-208. [DOI: 10.1002/pro.4213](https://doi.org/10.1002/pro.4213)
-- Summary: Describes the RCSB PDB as the global archive for experimentally determined 3D structures of biological macromolecules, with over 200,000 entries.
-
-**Implementation:**
-- RCSB PDB: [https://www.rcsb.org](https://www.rcsb.org)
-- RCSB Data API: [https://data.rcsb.org](https://data.rcsb.org)
-
-## Related Tools
-
-**Tools often used together:**
-- **`uniprot-fetch`**: Get UniProt accessions and PDB cross-references, then fetch specific PDB chains
-- **`sequence-fetch`**: Multi-source orchestrator that can route to PDB automatically
-
-**Alternative tools (similar function):**
-- **`ncbi-esummary`** / **`ncbi-efetch`**: NCBI Entrez tools for retrieving sequences and metadata. Broader scope but less structure-specific.
-- **`sequence-fetch`**: Higher-level orchestrator for automatic database routing.
+- **Requires network access.** The tools call the live RCSB PDB HTTP endpoints; they do not run offline and keep no local copy of the archive.
+- **Subject to RCSB rate limits.** RCSB throttles clients that exceed a few requests per second and returns HTTP 429 when the limit is exceeded; space out high-volume requests, since no account or API key is available to raise the limit.
+- **Runs on CPU.** There is no model and no GPU; latency is dominated by the network round-trip.
