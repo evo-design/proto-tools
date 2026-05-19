@@ -22,7 +22,7 @@ The tools call two RCSB HTTP endpoints directly. `pdb-fetch-entry` issues a GET 
 ### Learning Resources
 
 - [RCSB PDB Data API documentation](https://www.rcsb.org/docs/programmatic-access/web-apis-overview) (RCSB PDB) - reference for the REST endpoints, query syntax, and rate limits.
-- [RCSB PDB training and education](https://www.rcsb.org/training) (RCSB PDB) - guided material on PDB data, structure determination methods, and how to interpret entries.
+- [PDB-101 training and education](https://pdb101.rcsb.org/) (RCSB PDB) - guided material on PDB data, structure determination methods, and how to interpret entries.
 
 ## Tools
 
