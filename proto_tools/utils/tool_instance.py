@@ -235,8 +235,8 @@ def _run_setup_script(
 
     if mirror_dir:
         mirror_path = Path(mirror_dir)
-        mirror_path.mkdir(parents=True, exist_ok=True)
         with suppress(OSError):
+            mirror_path.mkdir(parents=True, exist_ok=True)
             shutil.copy2(log_path, mirror_path / f"{toolkit}_setup.log")
 
     combined_output = log_path.read_text(errors="replace") if log_path.exists() else ""
