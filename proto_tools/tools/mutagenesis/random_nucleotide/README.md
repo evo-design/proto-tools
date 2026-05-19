@@ -1,169 +1,45 @@
-<a href="https://bio-pro.mintlify.app/tools/mutagenesis/random-nucleotide"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/mutagenesis/random-nucleotide"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # Random Nucleotide Sampling
 
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** Random Nucleotide Sampling is open source and free for academic and commercial use under an Apache-2.0 license. Please refer to [the license](https://github.com/proto-bio/proto-tools) for full terms.
 
 ## Overview
 
-Random Nucleotide Sampling fills masked positions in DNA or RNA sequences with random bases drawn from an [IUPAC ambiguity code](https://en.wikipedia.org/wiki/Nucleic_acid_notation#IUPAC_notation) substitution pool. It supports configurable masking strategies, automatic DNA/RNA detection, and all 15 IUPAC degenerate base codes for controlling the substitution alphabet.
-
-- **Tool key**: `random-nucleotide-sample`
-- **Input**: DNA or RNA sequences (with optional `_` masks at positions to mutate)
-- **Output**: Sequences with masked positions filled by random bases
-- **Execution**: CPU only, no external dependencies
+Random Nucleotide Sampling fills the masked positions of a DNA or RNA sequence with random bases drawn from an IUPAC ambiguity-code pool. Positions can be marked directly with `_` or selected automatically by a masking strategy, and the substitution alphabet is set by a single IUPAC code: `N` for any base, `R` for purines, `S` for strong pairs, and so on. It runs on CPU with no model and no external dependencies, and serves as an unbiased random baseline for sequence-design and library-generation workflows.
 
 ## Background
 
-**What does this tool do?**
-This tool performs random [mutagenesis](https://en.wikipedia.org/wiki/Mutagenesis) at the nucleotide level. Given a DNA or RNA sequence, it identifies positions to mutate (either pre-marked with `_` or selected by a masking strategy) and replaces them with random bases drawn from a specified substitution pool.
+Random Nucleotide Sampling performs random mutagenesis at the nucleotide level: it takes a DNA or RNA sequence, determines which positions are designable, and replaces each with a base drawn uniformly from a chosen IUPAC degenerate-base pool. It generates nucleotide diversity without any learned model, the simplest possible baseline against which model-guided generators can be compared.
 
-**Why is this important?**
-Random mutagenesis is a foundational technique in:
-- **[Directed evolution](https://en.wikipedia.org/wiki/Directed_evolution)**: Creating libraries of sequence variants for functional screening
-- **Combinatorial library design**: Generating diversity at specific positions in promoters, UTRs, or coding regions
-- **Robustness testing**: Evaluating how sensitive a designed sequence is to random perturbations
-- **Degenerate codon libraries**: Using IUPAC codes to control which bases appear at each position
+Internally, designable positions are either the `_` characters already present in the input or, when none are present, positions chosen by the configured masking strategy. Each masked position is filled independently by drawing one base uniformly at random from the pool that the IUPAC code expands to: `N` expands to A/C/G/T, `R` to A/G, `S` to G/C, and so on. Sampling is uniform within the pool, with no frequency weighting. When the input is RNA, sampled `T` bases are converted to `U`. With a fixed seed the output is deterministic.
 
-**IUPAC substitution schemes:**
-The substitution scheme controls which bases can appear at masked positions:
-
-| Code | Bases | Description |
-|------|-------|-------------|
-| `N` | A, C, G, T | Any base (maximum diversity) |
-| `R` | A, G | Purines only |
-| `Y` | C, T | Pyrimidines only |
-| `S` | G, C | Strong (3 hydrogen bonds) |
-| `W` | A, T | Weak (2 hydrogen bonds) |
-| `K` | G, T | Keto |
-| `M` | A, C | Amino |
-| `B` | C, G, T | Not A |
-| `D` | A, G, T | Not C |
-| `H` | A, C, T | Not G |
-| `V` | A, C, G | Not T |
+This tool is original proto-tools code maintained by [Proto](https://github.com/proto-bio/proto-tools).
 
 ## Tools
 
 ### Random Nucleotide Sampling (`random-nucleotide-sample`)
 
-Fill masked positions with random nucleotides from an IUPAC scheme.
+Fills every masked position in each input sequence with a random base from the configured IUPAC substitution pool, returning one filled sequence per input.
 
-The `preprocess` hook on :class:`RandomNucleotideSampleConfig` applies
-the masking strategy before this function runs, so
-`inputs.sequences` already contain `_` at positions to sample.
+#### Applications
 
-For RNA sequences, sampled T bases are converted to U.
+Use this to build randomized nucleotide libraries: degenerate positions in promoters, ribosome binding sites, UTRs, or coding regions for directed-evolution and combinatorial-screening campaigns. It also serves as an unbiased random baseline for judging whether a model-guided generator produces better-than-chance sequences.
 
-## How It Works
+#### Usage Tips
 
-1. **Masking**: Positions to mutate are identified either from pre-existing `_` characters in the input or by applying a `MaskingStrategy` (random selection, entropy-based, or max-logit)
-2. **Substitution**: Each masked position is independently replaced with a random base drawn uniformly from the IUPAC substitution pool
-3. **RNA handling**: If the input contains `U` (or `sequence_type="rna"`), output bases are automatically converted from T to U
+- **`substitution_scheme` (default `N`) sets the substitution alphabet.** `N` allows any base for maximum diversity; restrict it to bias the library, for example `R` for purines (A/G), `S` for strong pairs (G/C), or `W` for weak pairs (A/T).
+- **`_` masks override the masking strategy.** If an input already contains `_`, exactly those positions are filled and `masking_strategy` is ignored; remove the `_` characters to let the strategy choose positions instead.
+- **`sequence_type` (default `auto`) controls RNA handling.** `auto` treats the sequence as RNA only when it contains `U`; force it with `dna` or `rna`. In RNA mode sampled `T` bases are written as `U`, so set `rna` explicitly when the input is fully masked.
+- **`masking_strategy.fixed_positions` are 1-indexed.** Positions listed there are never mutated; they are specified using 1-based indexing to match biological residue selection conventions.
+- **Set `seed` for reproducibility.** Sampling is otherwise nondeterministic; a fixed seed makes the filled sequences reproducible across runs.
 
-## Input Parameters
+## Toolkit Notes
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sequences` | `List[str]` | DNA or RNA sequences. Use `_` to mark positions for mutation. Accepts a single string (auto-wrapped) or a list. |
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-## Configuration
+These apply to every Random Nucleotide Sampling tool in this toolkit (`random-nucleotide-sample`).
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `masking_strategy` | `MaskingStrategy` | Random 30% | Controls which positions to mask for sampling. Ignored if sequences already contain `_` masks. |
-| `substitution_scheme` | `str` | `"N"` | IUPAC ambiguity code defining the substitution pool (see table above). |
-| `sequence_type` | `Literal["auto", "dna", "rna"]` | `"auto"` | Sequence type. `"auto"` detects RNA by presence of U. |
-| `seed` | `Optional[int]` | `None` | Random seed for reproducible sampling. |
-
-### Sweep Priorities
-
-1. **`substitution_scheme`**: Most impactful. Controls diversity of the generated library (e.g., `N` for full diversity, `R` for purine-only transitions).
-2. **`masking_strategy`**: Controls how many and which positions are mutated.
-
-## Output Specification
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `sequences` | `List[str]` | Sequences with masked positions filled by random bases |
-
-Export formats: `fasta`, `txt`, `json`
-
-## Quick Start Examples
-
-**Example 1: Pre-masked positions**
-```python
-from proto_tools.tools.mutagenesis import (
-    RandomNucleotideSampleInput, RandomNucleotideSampleConfig,
-    run_random_nucleotide_sample,
-)
-
-# Underscore marks positions to randomize
-inputs = RandomNucleotideSampleInput(sequences=["ACGT_CGT_A"])
-result = run_random_nucleotide_sample(inputs)
-print(result.sequences[0])  # e.g., "ACGTGCGTCA"
-```
-
-**Example 2: Purine-only substitutions**
-```python
-from proto_tools.tools.mutagenesis import (
-    RandomNucleotideSampleInput, RandomNucleotideSampleConfig,
-    run_random_nucleotide_sample,
-)
-
-inputs = RandomNucleotideSampleInput(sequences=["ACGT_CGT_A"])
-config = RandomNucleotideSampleConfig(substitution_scheme="R")  # A or G only
-result = run_random_nucleotide_sample(inputs, config)
-print(result.sequences[0])  # e.g., "ACGTACGTGA"
-```
-
-**Example 3: Auto-masking with MaskingStrategy**
-```python
-from proto_tools.tools.mutagenesis import (
-    RandomNucleotideSampleInput, RandomNucleotideSampleConfig,
-    run_random_nucleotide_sample,
-)
-from proto_tools.transforms.masking import MaskingStrategy
-
-config = RandomNucleotideSampleConfig(
-    masking_strategy=MaskingStrategy(num_mutations=3),
-    substitution_scheme="N",
-    seed=42,
-)
-inputs = RandomNucleotideSampleInput(sequences=["ACGTACGTAC"])
-result = run_random_nucleotide_sample(inputs, config)
-print(result.sequences[0])  # 3 random positions mutated
-```
-
-**Example 4: RNA sequences**
-```python
-from proto_tools.tools.mutagenesis import (
-    RandomNucleotideSampleInput, run_random_nucleotide_sample,
-)
-
-# U in input triggers automatic RNA mode
-inputs = RandomNucleotideSampleInput(sequences=["ACGU_CGU_A"])
-result = run_random_nucleotide_sample(inputs)
-print(result.sequences[0])  # Output uses U instead of T
-```
-
-## Best Practices & Gotchas
-
-- **Pre-masked vs auto-masked**: If your sequences already contain `_`, the masking strategy is ignored. Remove `_` characters if you want the strategy to select positions.
-- **IUPAC codes are case-insensitive** in the config but the tool normalizes them internally.
-- **RNA auto-detection**: The tool detects RNA by the presence of `U` in the input. Use `sequence_type="rna"` to force RNA mode if your input contains only `_` masks.
-- **Uniform sampling within pool**: Each base in the IUPAC pool is equally likely. There is no frequency weighting within a substitution scheme.
-- **Reproducibility**: Set `seed` for deterministic output across runs.
-
-## References
-
-- IUPAC nucleotide codes: [https://www.bioinformatics.org/sms/iupac.html](https://www.bioinformatics.org/sms/iupac.html)
-
-## Related Tools
-
-**Tools often used together:**
-- `evo2-sample`: Model-guided DNA sequence generation (smarter than random)
-- `random-protein-sample`: Random mutagenesis at the protein/codon level
-
-**Alternative tools:**
-- Evo1/Evo2 generators: Use learned sequence distributions instead of uniform random sampling
+- **Runs on CPU.** The sampler is pure Python with no model and no external dependencies; execution is near-instant.
+- **Deterministic only with a seed.** Without a `seed` the filled positions differ every run; set one when you need reproducible libraries.

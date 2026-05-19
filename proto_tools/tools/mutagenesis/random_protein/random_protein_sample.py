@@ -83,6 +83,10 @@ class RandomProteinSampleConfig(BaseConfig):
             probabilities. ``"UNIFORM"`` gives equal weight to all 20
             amino acids; other schemes (NNK, NNS, NDT, etc.) weight
             amino acids by the number of codons encoding them.
+        allow_stop_codons (bool): If True, the stop symbol ``"*"`` is included in
+            the sampling distribution. For degenerate schemes it is weighted by
+            its stop-codon count; for ``"UNIFORM"`` it is an equally weighted
+            21st symbol. Default: False (stops never sampled).
     """
 
     masking_strategy: MaskingStrategy = ConfigField(
@@ -94,6 +98,11 @@ class RandomProteinSampleConfig(BaseConfig):
         title="Codon Scheme",
         default="UNIFORM",
         description="Codon scheme for amino acid sampling probabilities.",
+    )
+    allow_stop_codons: bool = ConfigField(
+        title="Allow Stop Codons",
+        default=False,
+        description="Include the stop symbol '*' in the sampling distribution.",
     )
 
     def preprocess(self, inputs: Any) -> Any:
@@ -154,12 +163,13 @@ def run_random_protein_sample(
         chars = list(seq)
         for i, ch in enumerate(chars):
             if ch == MASK_TOKEN:
-                chars[i] = sample_amino_acid(scheme, rng=rng)
+                chars[i] = sample_amino_acid(scheme, rng=rng, include_stop=config.allow_stop_codons)
         sampled.append("".join(chars))
 
     return RandomProteinSampleOutput(
         metadata={
             "codon_scheme": scheme,
+            "allow_stop_codons": config.allow_stop_codons,
             "num_sequences": len(inputs.sequences),
         },
         sequences=sampled,

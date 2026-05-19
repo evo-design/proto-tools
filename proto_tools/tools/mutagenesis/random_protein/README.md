@@ -1,169 +1,46 @@
-<a href="https://bio-pro.mintlify.app/tools/mutagenesis/random-protein"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/mutagenesis/random-protein"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # Random Protein Sampling
 
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** Random Protein Sampling is open source and free for academic and commercial use under an Apache-2.0 license. Please refer to [the license](https://github.com/proto-bio/proto-tools) for full terms.
 
 ## Overview
 
-Random Protein Sampling fills masked positions in protein sequences with random amino acids drawn from a configurable [codon scheme](https://en.wikipedia.org/wiki/Genetic_code). Different codon schemes produce different amino acid frequency distributions, mirroring the biases of real degenerate codon libraries used in experimental directed evolution.
-
-- **Tool key**: `random-protein-sample`
-- **Input**: Protein sequences (with optional `_` masks at positions to mutate)
-- **Output**: Sequences with masked positions filled by random amino acids
-- **Execution**: CPU only, no external dependencies
+Random Protein Sampling fills the masked positions of a protein sequence with random amino acids drawn from a codon scheme. Positions can be marked directly with `_` or selected automatically by a masking strategy. The codon scheme sets the amino-acid frequencies: `UNIFORM` weights all twenty equally, while degenerate schemes such as `NNK` or `NDT` weight each amino acid by how many codons encode it, matching real degenerate-codon libraries. It runs on CPU with no model and no external dependencies.
 
 ## Background
 
-**What does this tool do?**
-This tool performs random [mutagenesis](https://en.wikipedia.org/wiki/Mutagenesis) at the protein level. Given a protein sequence, it identifies positions to mutate and replaces them with random amino acids sampled according to a codon scheme's frequency distribution.
+Random Protein Sampling performs random mutagenesis at the protein level: it takes a protein sequence, determines which positions are designable, and replaces each with an amino acid sampled from the distribution implied by a codon scheme. It generates protein-sequence diversity without any learned model, the simplest possible baseline against which model-guided designers can be compared.
 
-**Why is this important?**
-Random protein mutagenesis is central to [protein engineering](https://en.wikipedia.org/wiki/Protein_engineering):
-- **Directed evolution libraries**: Experimental mutagenesis uses degenerate codons (e.g., NNK) that encode amino acids with non-uniform frequencies. Simulating these distributions computationally helps predict library diversity.
-- **Baseline comparisons**: Random mutagenesis provides a null model for evaluating whether model-guided designs (ESM2, ProteinMPNN) outperform chance.
-- **Combinatorial screening**: Randomizing a few key positions generates focused libraries for functional assays.
+Internally, designable positions are either the `_` characters already present in the input or, when none are present, positions chosen by the configured masking strategy. The codon scheme is expanded to its concrete codons, and each amino acid's sampling weight is set proportional to the number of codons in the scheme that encode it, with stop codons excluded. `UNIFORM` instead assigns equal weight to all twenty standard amino acids. Each masked position is filled independently by a weighted random draw. With a fixed seed the output is deterministic.
 
-**Codon schemes:**
-Each scheme represents a degenerate codon pattern used in synthetic biology. The scheme determines which amino acids can appear and their relative frequencies:
-
-| Scheme | Codons | Amino Acids | Use Case |
-|--------|--------|-------------|----------|
-| `UNIFORM` | N/A | All 20, equal weight | Unbiased random sampling |
-| `NNK` | 32 | All 20 | Standard library design, reduced stop codons |
-| `NNS` | 32 | All 20 | Alternative to NNK, same coverage |
-| `NDT` | 12 | 12 AAs | Zero-redundancy, small focused libraries |
-| `DBK` | 18 | 18 AAs | Specialized scheme |
-| `NRT` | 8 | 8 AAs | Purine/pyrimidine combination |
-
-In NNK/NNS schemes, amino acids encoded by more codons (e.g., Leu, Ser, Arg) appear more frequently than those with fewer codons (e.g., Met, Trp), matching real experimental library distributions.
+This tool is original proto-tools code maintained by [Proto](https://github.com/proto-bio/proto-tools).
 
 ## Tools
 
 ### Random Protein Sampling (`random-protein-sample`)
 
-Fill masked positions with random amino acids from a codon scheme.
+Fills every masked position in each input sequence with a random amino acid drawn from the configured codon scheme, returning one filled sequence per input.
 
-The `preprocess` hook on :class:`RandomProteinSampleConfig` applies
-the masking strategy before this function runs, so
-`inputs.sequences` already contain `_` at positions to sample.
+#### Applications
 
-## How It Works
+Use this to build randomized protein libraries that mimic experimental degenerate-codon mutagenesis, for example `NNK` saturation at chosen positions for directed-evolution and combinatorial screening. It also serves as an unbiased random baseline for judging whether a model-guided designer beats chance.
 
-1. **Masking**: Positions to mutate are identified either from pre-existing `_` characters in the input or by applying a `MaskingStrategy` (random selection, entropy-based, or max-logit)
-2. **Codon expansion**: The codon scheme is expanded to compute amino acid sampling weights proportional to codon count
-3. **Substitution**: Each masked position is independently replaced with a random amino acid drawn from the scheme's probability distribution
+#### Usage Tips
 
-## Input Parameters
+- **`codon_scheme` (default `UNIFORM`) sets the amino-acid distribution.** `UNIFORM` draws all twenty amino acids equally; degenerate schemes (`NNK`, `NNS`, `NDT`, `DBK`, `NRT`) weight each amino acid by how many of the scheme's codons encode it, so residues such as leucine, serine, and arginine appear more often than methionine or tryptophan.
+- **`NDT` gives an even 12-amino-acid library.** It encodes twelve amino acids with no codon redundancy, so each is equally likely; useful for small focused libraries.
+- **Stop codons are excluded by default.** Set `allow_stop_codons` to `True` to include the stop symbol `*` in the distribution: for degenerate schemes it is weighted by its stop-codon count, and for `UNIFORM` it is an equally weighted 21st symbol.
+- **`_` masks override the masking strategy.** If an input already contains `_`, exactly those positions are filled and `masking_strategy` is ignored; remove the `_` characters to let the strategy choose positions instead.
+- **`masking_strategy.fixed_positions` are 1-indexed.** Positions listed there are never mutated; they are specified using 1-based indexing to match biological residue selection conventions.
+- **Set `seed` for reproducibility.** Sampling is otherwise nondeterministic; a fixed seed makes the filled sequences reproducible across runs.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sequences` | `List[str]` | Protein sequences (20 standard amino acids + X for unknown). Use `_` to mark positions for mutation. Accepts a single string (auto-wrapped) or a list. |
+## Toolkit Notes
 
-## Configuration
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `masking_strategy` | `MaskingStrategy` | Random 30% | Controls which positions to mask for sampling. Ignored if sequences already contain `_` masks. |
-| `codon_scheme` | `str` | `"UNIFORM"` | Codon scheme for amino acid sampling. One of: `UNIFORM`, `NNK`, `NNS`, `NDT`, `DBK`, `NRT`. |
-| `seed` | `Optional[int]` | `None` | Random seed for reproducible sampling. |
+These apply to every Random Protein Sampling tool in this toolkit (`random-protein-sample`).
 
-### Sweep Priorities
-
-1. **`codon_scheme`**: Most impactful. Determines amino acid diversity and frequency distribution of the library.
-2. **`masking_strategy`**: Controls how many and which positions are mutated.
-
-## Output Specification
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `sequences` | `List[str]` | Sequences with masked positions filled by random amino acids |
-
-Export formats: `fasta`, `txt`, `json`
-
-## Quick Start Examples
-
-**Example 1: Pre-masked positions with uniform sampling**
-```python
-from proto_tools.tools.mutagenesis import (
-    RandomProteinSampleInput, RandomProteinSampleConfig,
-    run_random_protein_sample,
-)
-
-inputs = RandomProteinSampleInput(sequences=["MK_AY_AKQR"])
-result = run_random_protein_sample(inputs)
-print(result.sequences[0])  # e.g., "MKTAYFAKQR"
-```
-
-**Example 2: NNK codon scheme**
-```python
-from proto_tools.tools.mutagenesis import (
-    RandomProteinSampleInput, RandomProteinSampleConfig,
-    run_random_protein_sample,
-)
-
-# NNK mimics real degenerate codon library frequencies
-inputs = RandomProteinSampleInput(sequences=["MK_AY_AKQR"])
-config = RandomProteinSampleConfig(codon_scheme="NNK")
-result = run_random_protein_sample(inputs, config)
-print(result.sequences[0])  # Leu, Ser, Arg more likely than Met, Trp
-```
-
-**Example 3: Auto-masking with MaskingStrategy**
-```python
-from proto_tools.tools.mutagenesis import (
-    RandomProteinSampleInput, RandomProteinSampleConfig,
-    run_random_protein_sample,
-)
-from proto_tools.transforms.masking import MaskingStrategy
-
-config = RandomProteinSampleConfig(
-    masking_strategy=MaskingStrategy(num_mutations=3),
-    codon_scheme="UNIFORM",
-    seed=42,
-)
-inputs = RandomProteinSampleInput(sequences=["MKTAYIAKQR"])
-result = run_random_protein_sample(inputs, config)
-print(result.sequences[0])  # 3 random positions mutated
-```
-
-**Example 4: Compare codon scheme diversity**
-```python
-from proto_tools.tools.mutagenesis import (
-    RandomProteinSampleInput, RandomProteinSampleConfig,
-    run_random_protein_sample,
-)
-
-for scheme in ["UNIFORM", "NNK", "NDT"]:
-    config = RandomProteinSampleConfig(codon_scheme=scheme, seed=42)
-    result = run_random_protein_sample(
-        RandomProteinSampleInput(sequences=["____"]),
-        config,
-    )
-    print(f"{scheme}: {result.sequences[0]}")
-```
-
-## Best Practices & Gotchas
-
-- **Pre-masked vs auto-masked**: If your sequences already contain `_`, the masking strategy is ignored. Remove `_` characters if you want the strategy to select positions.
-- **UNIFORM vs codon-based**: Use `UNIFORM` for unbiased random sampling. Use `NNK`/`NNS` to simulate real experimental library distributions where codon degeneracy biases amino acid frequencies.
-- **NDT for small libraries**: NDT encodes only 12 amino acids with zero redundancy, giving the most even distribution among those 12. Ideal for small combinatorial libraries.
-- **Reproducibility**: Set `seed` for deterministic output across runs.
-- **Stop codons**: `NNK` and `NNS` encode 1 stop codon (TAG or TGA) out of 32 codons. The tool samples amino acids only, so stop codons are excluded from the sampling distribution.
-
-## References
-
-- Reetz, M.T. & Carballeira, J.D. (2007). "Iterative saturation mutagenesis (ISM) for rapid directed evolution of functional enzymes." *Nature Protocols*, 2(4), 891-903. [DOI: 10.1038/nprot.2007.72](https://doi.org/10.1038/nprot.2007.72)
-- Nov, Y. (2012). "When second best is good enough: another probabilistic look at saturation mutagenesis." *Applied and Environmental Microbiology*, 78(1), 258-262. [DOI: 10.1128/AEM.06265-11](https://doi.org/10.1128/AEM.06265-11)
-
-## Related Tools
-
-**Tools often used together:**
-- `random-nucleotide-sample`: Random mutagenesis at the DNA level
-- `proteinmpnn-sample`: Structure-aware sequence design (smarter than random)
-- `esm2-sample`: Language model-guided protein mutations
-
-**Alternative tools:**
-- ESM2/ESM3 sampling: Use learned protein distributions for local masked mutations instead of uniform/codon-based random sampling
-- ProteinMPNN: Structure-conditioned inverse folding for informed sequence design
+- **Runs on CPU.** The sampler is pure Python with no model and no external dependencies; execution is near-instant.
+- **Deterministic only with a seed.** Without a `seed` the filled positions differ every run; set one when you need reproducible libraries.

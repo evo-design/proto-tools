@@ -131,16 +131,21 @@ def _expand_degenerate_codon(codon: str) -> list[str]:
 
 
 @functools.cache
-def get_codon_scheme(name: str) -> dict[str, list[str] | dict[str, float]]:
+def get_codon_scheme(name: str, include_stop: bool = False) -> dict[str, list[str] | dict[str, float]]:
     """Expand a codon scheme name into its codons and amino acid weights.
 
     Args:
         name (str): Codon scheme name (e.g., ``"NNK"``, ``"NNS"``, ``"UNIFORM"``).
             Case-insensitive. Must be a valid IUPAC degenerate codon or ``"UNIFORM"``.
+        include_stop (bool): If True, include the stop symbol ``"*"`` in the
+            returned amino acids and weights. For degenerate schemes ``"*"`` is
+            weighted by its stop-codon count, exactly like amino acids; for
+            ``"UNIFORM"`` it is added as an equally weighted 21st symbol.
 
     Returns a dict with:
         - ``"codons"``: list of concrete DNA codons in the scheme
-        - ``"amino_acids"``: list of reachable amino acids (stops excluded)
+        - ``"amino_acids"``: list of reachable amino acids (``"*"`` included
+          only when ``include_stop`` is True)
         - ``"weights"``: dict mapping each amino acid to its sampling weight
           (proportional to the number of codons encoding it)
 
@@ -149,6 +154,8 @@ def get_codon_scheme(name: str) -> dict[str, list[str] | dict[str, float]]:
     name = name.upper()
     if name == "UNIFORM":
         weights = dict.fromkeys(STANDARD_AMINO_ACIDS, 1.0)
+        if include_stop:
+            weights["*"] = 1.0
         return {
             "codons": [],
             "amino_acids": sorted(weights),
@@ -159,7 +166,7 @@ def get_codon_scheme(name: str) -> dict[str, list[str] | dict[str, float]]:
     weights: dict[str, float] = {}  # type: ignore[no-redef]
     for codon in codons:
         aa = CODON_TO_AA.get(codon)
-        if aa is None or aa == "*":
+        if aa is None or (aa == "*" and not include_stop):
             continue
         weights[aa] = weights.get(aa, 0.0) + 1.0
 
@@ -173,9 +180,13 @@ def get_codon_scheme(name: str) -> dict[str, list[str] | dict[str, float]]:
     }
 
 
-def sample_amino_acid(scheme: str, rng: random.Random | None = None) -> str:
-    """Sample a single amino acid from a codon scheme (stops excluded)."""
-    info = get_codon_scheme(scheme)
+def sample_amino_acid(scheme: str, rng: random.Random | None = None, include_stop: bool = False) -> str:
+    """Sample a single amino acid from a codon scheme.
+
+    Stops are excluded unless ``include_stop`` is True, in which case ``"*"``
+    may be drawn with the weight defined by :func:`get_codon_scheme`.
+    """
+    info = get_codon_scheme(scheme, include_stop=include_stop)
     weights = info["weights"]
     assert isinstance(weights, dict)
     aas = list(weights.keys())

@@ -106,6 +106,41 @@ def test_sample_amino_acid_reproducible():
 
 
 # ============================================================================
+# include_stop
+# ============================================================================
+
+
+def test_uniform_include_stop_adds_equal_21st_symbol():
+    info = get_codon_scheme("UNIFORM", include_stop=True)
+    weights = info["weights"]
+    assert "*" in info["amino_acids"]
+    assert len(info["amino_acids"]) == 21
+    assert weights["*"] == 1.0
+    assert all(w == 1.0 for w in weights.values())
+
+
+def test_degenerate_include_stop_weighted_by_codon_count():
+    # NNK (32 codons) contains exactly one stop codon (TAG).
+    base = get_codon_scheme("NNK")
+    with_stop = get_codon_scheme("NNK", include_stop=True)
+    assert "*" not in base["amino_acids"]
+    assert "*" in with_stop["amino_acids"]
+    assert with_stop["weights"]["*"] == 1.0
+    assert sum(with_stop["weights"].values()) == sum(base["weights"].values()) + 1.0
+
+
+def test_default_excludes_stop():
+    assert "*" not in get_codon_scheme("UNIFORM")["amino_acids"]
+    assert "*" not in get_codon_scheme("NNK")["amino_acids"]
+
+
+def test_sample_amino_acid_include_stop_can_draw_star():
+    rng = random.Random(0)
+    draws = {sample_amino_acid("UNIFORM", rng=rng, include_stop=True) for _ in range(500)}
+    assert "*" in draws
+
+
+# ============================================================================
 # get_substitution_pool
 # ============================================================================
 

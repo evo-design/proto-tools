@@ -45,6 +45,28 @@ def test_seed_reproducibility():
 
 
 # ============================================================================
+# Stop codons
+# ============================================================================
+
+
+def test_stop_codons_excluded_by_default():
+    result = run_random_protein_sample(
+        RandomProteinSampleInput(sequences=["_" * 200]),
+        RandomProteinSampleConfig(codon_scheme="UNIFORM", seed=7),
+    )
+    assert "*" not in result.sequences[0]
+
+
+def test_allow_stop_codons_can_emit_star():
+    result = run_random_protein_sample(
+        RandomProteinSampleInput(sequences=["_" * 200]),
+        RandomProteinSampleConfig(codon_scheme="UNIFORM", allow_stop_codons=True, seed=7),
+    )
+    assert "*" in result.sequences[0]
+    assert result.metadata["allow_stop_codons"] is True
+
+
+# ============================================================================
 # Output export
 # ============================================================================
 
