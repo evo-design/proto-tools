@@ -1905,6 +1905,26 @@ def test_run_setup_script_mirrors_log_to_dir(tmp_path, monkeypatch):
     assert "MIRROR_MARKER_99" in mirrored.read_text()
 
 
+def test_run_setup_script_swallows_mirror_oserror(tmp_path, monkeypatch):
+    """A broken PROTO_ENV_LOG_DIR (e.g. the cloud runtime warmup volume unmounted at runtime) must not fail the env build."""
+    monkeypatch.delenv("PROTO_ENV_VERBOSE", raising=False)
+    broken_symlink = tmp_path / "weights"
+    broken_symlink.symlink_to(tmp_path / "does_not_exist")
+    monkeypatch.setenv("PROTO_ENV_LOG_DIR", str(broken_symlink / "_deploy_logs"))
+    script = _make_setup_script(tmp_path, 'echo "ok"')
+
+    rc, combined = _run_setup_script(
+        script,
+        cwd=tmp_path,
+        env={"PATH": "/usr/bin:/bin"},
+        log_path=tmp_path / "setup.log",
+        toolkit="fake",
+    )
+
+    assert rc == 0
+    assert "ok" in combined
+
+
 def test_run_setup_script_propagates_nonzero_exit(tmp_path, monkeypatch):
     monkeypatch.delenv("PROTO_ENV_VERBOSE", raising=False)
     monkeypatch.delenv("PROTO_ENV_LOG_DIR", raising=False)
