@@ -1,286 +1,54 @@
-<a href="https://bio-pro.mintlify.app/tools/database-retrieval/uniprot"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/database-retrieval/uniprot"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # UniProt
 
+![UniProt](https://www.uniprot.org/android-chrome-192x192.png)
+
+> *Image source: [UniProt](https://www.uniprot.org/)*
+
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** UniProt has a CC-BY-4.0 license and may require explicit attribution when utilized. Please refer to [the license](https://www.uniprot.org/help/license) for full terms.
 
 ## Overview
 
-`uniprot-fetch` retrieves protein entries from UniProt by accession ID or by searching with target name and organism. It returns the protein sequence, gene names, PDB cross-references, and the full UniProt JSON record. This is a CPU-only tool that wraps the UniProt REST API.
+UniProt (the Universal Protein Resource) is the reference database of protein sequences and their functional annotation, maintained by the UniProt consortium. The `uniprot-fetch` tool retrieves a UniProtKB entry over the UniProt REST API, either directly by accession or through a ranked gene- or protein-name and organism search, returning the sequence, gene names, review status, linked PDB structures, and the full JSON record. It runs on CPU and requires only network access.
 
 ## Background
 
-**What does this tool measure/predict?**
-[UniProt](https://www.uniprot.org/) (Universal Protein Resource) is the most comprehensive curated protein sequence and functional annotation database. It combines data from [Swiss-Prot](https://en.wikipedia.org/wiki/Swiss-Prot) (manually reviewed, ~570K entries) and [TrEMBL](https://en.wikipedia.org/wiki/UniProt#UniProtKB/TrEMBL) (computationally annotated, ~250M entries).
+UniProt ([The UniProt Consortium, 2025](https://doi.org/10.1093/nar/gkae1010)) is the central, freely accessible resource for protein sequence and functional annotation, maintained by [SIB](https://www.sib.swiss/), [EMBL-EBI](https://www.ebi.ac.uk/), and [PIR](https://proteininformationresource.org/). Its core database, UniProtKB, has two sections: [Swiss-Prot](https://en.wikipedia.org/wiki/UniProt#UniProtKB/Swiss-Prot), whose entries are manually reviewed and curated from the literature, and [TrEMBL](https://en.wikipedia.org/wiki/UniProt#UniProtKB/TrEMBL), whose entries are automatically annotated. As of release 2026_01 (January 2026), Swiss-Prot contains 574,627 reviewed entries, alongside hundreds of millions of unreviewed TrEMBL entries; current counts are published on the [UniProt statistics page](https://www.uniprot.org/uniprotkb/statistics).
 
-**Why is this important?**
-- Protein design: retrieve reference sequences for target proteins before optimization
-- Structural biology: find PDB structures linked to a protein of interest
-- Functional annotation: access curated function descriptions, active sites, domains
-- Comparative analysis: retrieve well-characterized homologs for benchmarking designed sequences
-- Quality assessment: reviewed (Swiss-Prot) entries provide experimentally validated reference sequences
+Internally, the tool calls the UniProt REST API at `rest.uniprot.org`. Given an accession it fetches that UniProtKB entry directly; given a protein or gene name and an organism it runs a UniProt search and selects one entry deterministically, preferring an exact gene-name match, then optionally entries with linked PDB structures, then reviewed Swiss-Prot status. It extracts the sequence, length, review status, gene symbols, and PDB cross-references, and also returns the complete entry JSON; the `fields` option narrows the API response. Results reflect the live database at query time rather than a fixed release snapshot.
 
-**Scientific foundation:**
-UniProt integrates sequence data from [EMBL-Bank](https://www.ebi.ac.uk/ena/browser/home), protein structures from [PDB](https://www.rcsb.org/), and curated annotations from expert biocurators. Swiss-Prot entries undergo manual review including experimental evidence attribution, cross-referencing to literature, and standardized functional annotation. The database is updated biweekly with new sequences and annotations from the scientific community.
+Records and their provenance come directly from UniProt's official REST API, maintained by the UniProt consortium.
+
+### Learning Resources
+
+- [UniProt help and documentation](https://www.uniprot.org/help) (UniProt) - official documentation covering accessions, query syntax, return fields, and the REST API.
+- [Exploring protein sequence and functional information](https://www.ebi.ac.uk/training/online/courses/uniprot-exploring-protein-sequence-and-functional-info/) (EMBL-EBI Training) - a guided introduction to UniProt's data and how to query it.
 
 ## Tools
 
 ### UniProt Fetch (`uniprot-fetch`)
 
-Fetch protein entries from UniProt.
+Retrieves a single UniProtKB entry, either by accession or by a ranked name-and-organism search, and returns its sequence, length, gene names, review status, PDB cross-references, source URL, and the full entry JSON.
 
-Supports direct entry lookup by accession or name+organism search with
-ranked result selection based on gene name match, reviewed status, and
-PDB cross-reference availability.
+#### Applications
 
-## How It Works
+Use this to pull a reference protein sequence and its annotation into a pipeline: fetch a target by accession before sequence design or optimization, resolve a gene symbol plus organism to a canonical reviewed entry, or discover which experimental structures are linked to a protein before structure-based work. The returned PDB identifiers feed directly into the [PDB](https://bio-pro.mintlify.app/tools/database-retrieval/pdb) and [AlphaFold DB](https://bio-pro.mintlify.app/tools/database-retrieval/alphafold-db) tools.
 
-**Method overview:**
-The tool wraps the UniProt REST API with two modes:
-1. **Direct lookup** (`uniprot_id` provided): Fetches the entry directly by accession from the UniProt API
-2. **Name-based search** (`target_name` + `organism` provided): Searches UniProt using two query strategies (exact gene match, then broader gene+protein match), ranks results by review status and gene name match quality, and returns the best match
+#### Usage Tips
 
-**Key assumptions:**
-- Network access to api.uniprot.org is available
-- UniProt accessions follow standard format (e.g., P04637, Q9Y6K9)
-- For name-based search: at least one matching entry exists in UniProt
+- **Provide either `uniprot_id` or both `target_name` and `organism`.** An accession does a direct lookup; a name requires the organism to disambiguate, and the search returns the single best-ranked entry, not a list.
+- **`prefer_pdb_crossref` only affects search ranking.** It biases the name-and-organism search toward entries with linked PDB structures; it has no effect on a direct accession lookup and never filters out entries that lack structures.
+- **`fields` narrows the response but can blank typed outputs.** Restricting `fields` shrinks large entries substantially, but the typed outputs are only populated when their source fields are kept, so include `accession`, `sequence`, `reviewed`, `gene_names`, and `xref_pdb` if you read those.
+- **Results track the live database.** The same call can return updated annotation as UniProt releases change; it is not pinned to a fixed release.
 
-**Limitations:**
-- Protein sequences only (no DNA, RNA, or small molecule data)
-- Search quality depends on how well the gene/protein name matches UniProt nomenclature
-- Rate-limited by UniProt API (typically generous, but burst queries may be throttled)
+## Toolkit Notes
 
-**Computational requirements:**
-- **Hardware:** CPU only, network access required
-- **Runtime:** 1-5 seconds per query (depends on network latency and UniProt API load)
-- **Scalability:** Sequential queries; for batch retrieval, loop over accessions
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-## Input Parameters
+These apply to every UniProt tool in this toolkit (`uniprot-fetch`).
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `uniprot_id` | `Optional[str]` | `None` | UniProt accession for direct entry lookup (e.g., "P04637") |
-| `target_name` | `Optional[str]` | `None` | Gene or protein name for search (e.g., "TP53", "tumor protein p53") |
-| `organism` | `Optional[str]` | `None` | Organism for search disambiguation (e.g., "Homo sapiens", "E. coli") |
-| `prefer_pdb_crossref` | `bool` | `False` | When searching by name, prioritize entries that have linked PDB structures |
-| `max_candidates` | `int` | `5` | Maximum number of search results to evaluate when ranking (1-25) |
-
-**Validation rules:** Provide either `uniprot_id` (direct lookup) OR both `target_name` and `organism` (search mode). The validator enforces this.
-
-## Configuration
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `fields` | `list[str] \| None` | `None` | If set, restrict the UniProt API response to these fields. Default returns the full entry (~880 KB for human TP53). A targeted selection like `["accession", "sequence", "gene_names", "xref_pdb"]` shrinks the response to ~1 KB. See [UniProt return fields](https://www.uniprot.org/help/return_fields) for the full list. |
-
-**When to set `fields`:** batch lookups where the full record is overkill, or any caller that only inspects typed Output fields and never touches `raw_entry`.
-
-**Caveats:**
-- Typed Output fields are populated only when the corresponding API field is included. If you set `fields=["accession"]`, only `output.accession` is populated; `output.sequence`, `output.gene_names`, etc. fall back to `None` / `[]`.
-- The wrapper's search-mode ranker reads `gene_names`, `reviewed`, and `xref_pdb`. Excluding those while in search mode degrades ranking quality. If using search mode with `fields`, include at minimum `["accession", "gene_names", "reviewed", "xref_pdb"]`.
-
-## Output Specification
-
-```python
-# Return type: UniProtFetchOutput
-UniProtFetchOutput(
-    accession: str,              # Primary UniProt accession (e.g., "P04637")
-    sequence: Optional[str],     # Protein amino acid sequence
-    length: Optional[int],       # Sequence length
-    entry_type: Optional[str],   # Review status (Swiss-Prot vs TrEMBL)
-    gene_names: List[str],       # Gene name symbols
-    pdb_crossrefs: List[str],    # Linked PDB structure IDs
-    source_url: str,             # UniProt entry URL
-    raw_entry: Dict[str, Any],   # Complete UniProt JSON record
-)
-```
-
-**Key output fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `accession` | `str` | Primary UniProt accession ID |
-| `sequence` | `Optional[str]` | Full protein amino acid sequence |
-| `length` | `Optional[int]` | Sequence length in amino acids |
-| `entry_type` | `Optional[str]` | Review status: `"UniProtKB reviewed (Swiss-Prot)"` for curated entries, `"UniProtKB unreviewed (TrEMBL)"` for computationally annotated |
-| `gene_names` | `List[str]` | Gene name symbols (e.g., `["TP53", "P53"]`) |
-| `pdb_crossrefs` | `List[str]` | PDB IDs linked to this protein (e.g., `["1TUP", "2XWR"]`) |
-| `raw_entry` | `Dict[str, Any]` | Complete UniProt JSON for advanced access (function annotations, cross-references, feature tables, etc.) |
-
-**Supported export formats:** `json`, `csv`
-
-## Interpreting Results
-
-**Entry quality indicators:**
-- **Swiss-Prot (reviewed):** `entry_type` contains "reviewed": manually curated, experimentally validated. Highest quality; use as reference sequences.
-- **TrEMBL (unreviewed):** `entry_type` contains "unreviewed": computationally annotated, not manually verified. Useful but verify critical annotations independently.
-
-**PDB cross-references:**
-- Non-empty `pdb_crossrefs` means experimental 3D structures exist for this protein
-- Multiple PDB IDs may represent different conditions, ligand complexes, or resolution improvements
-- Use `pdb-fetch-entry` to get metadata (method, resolution) for specific PDB IDs
-
-**Interpreting edge cases:**
-- Empty `pdb_crossrefs` does not mean the protein structure is unknown: it may have been predicted by AlphaFold2 (check the [AlphaFold DB](https://alphafold.ebi.ac.uk/))
-- Multiple gene names are common for well-studied proteins with historical nomenclature
-- Very long `raw_entry` records contain rich functional annotation; explore `raw_entry["comments"]` for function, subcellular location, and disease associations
-
-## Quick Start Examples
-
-**Example 1: Fetch by accession**
-```python
-from proto_tools.tools.database_retrieval import (
-    UniProtFetchConfig, UniProtFetchInput, run_uniprot_fetch,
-)
-
-# Fetch human TP53 by accession
-inputs = UniProtFetchInput(uniprot_id="P04637")
-output = run_uniprot_fetch(inputs, UniProtFetchConfig())
-
-print(f"Accession: {output.accession}")
-print(f"Gene names: {output.gene_names}")
-print(f"Length: {output.length} aa")
-print(f"Review status: {output.entry_type}")
-print(f"PDB structures: {output.pdb_crossrefs[:5]}")
-print(f"Sequence: {output.sequence[:50]}...")
-```
-
-**Example 2: Search by gene name and organism**
-```python
-from proto_tools.tools.database_retrieval import (
-    UniProtFetchConfig, UniProtFetchInput, run_uniprot_fetch,
-)
-
-# Find Cas9 from S. pyogenes
-inputs = UniProtFetchInput(
-    target_name="Cas9",
-    organism="Streptococcus pyogenes",
-    prefer_pdb_crossref=True,  # Prioritize entries with linked PDB structures
-)
-output = run_uniprot_fetch(inputs, UniProtFetchConfig())
-
-print(f"Found: {output.accession} ({output.gene_names})")
-print(f"Length: {output.length} aa")
-print(f"Available PDB structures: {output.pdb_crossrefs}")
-```
-
-**Example 3: Access advanced annotations from raw entry**
-```python
-from proto_tools.tools.database_retrieval import (
-    UniProtFetchConfig, UniProtFetchInput, run_uniprot_fetch,
-)
-
-inputs = UniProtFetchInput(uniprot_id="P04637")
-output = run_uniprot_fetch(inputs, UniProtFetchConfig())
-
-# Explore function annotations
-for comment in output.raw_entry.get("comments", []):
-    if comment.get("commentType") == "FUNCTION":
-        for text in comment.get("texts", []):
-            print(f"Function: {text.get('value', '')[:200]}...")
-
-# List all cross-referenced databases
-xrefs = output.raw_entry.get("uniProtKBCrossReferences", [])
-db_types = set(xref.get("database") for xref in xrefs)
-print(f"Cross-referenced databases: {sorted(db_types)}")
-```
-
-**Example 4: Chained workflow -- gene symbol -> UniProt -> PDB structure**
-
-A common an internal repo pattern: resolve a target by gene symbol, then pull experimental structures for design templates.
-
-```python
-from proto_tools.tools.database_retrieval import (
-    PdbFetchConfig, PdbFetchEntryInput, PdbFetchFastaInput,
-    UniProtFetchConfig, UniProtFetchInput,
-    run_pdb_fetch_entry, run_pdb_fetch_fasta, run_uniprot_fetch,
-)
-
-# 1. Resolve TP53 by gene symbol; bias toward the reviewed Swiss-Prot entry
-#    that carries PDB cross-references.
-uniprot = run_uniprot_fetch(
-    UniProtFetchInput(target_name="TP53", organism="Homo sapiens", prefer_pdb_crossref=True),
-    UniProtFetchConfig(),
-)
-assert uniprot.accession == "P04637"
-assert len(uniprot.pdb_crossrefs) > 0
-
-# 2. Walk the PDB cross-refs and pull the first structure's metadata + chain FASTA.
-first_pdb_id = uniprot.pdb_crossrefs[0]
-pdb_meta = run_pdb_fetch_entry(PdbFetchEntryInput(pdb_id=first_pdb_id), PdbFetchConfig())
-pdb_fasta = run_pdb_fetch_fasta(PdbFetchFastaInput(pdb_id=first_pdb_id), PdbFetchConfig())
-
-print(f"UniProt {uniprot.accession} ({uniprot.length} aa) -> PDB {first_pdb_id}")
-print(f"  method={pdb_meta.method}, resolution={pdb_meta.resolution} A")
-print(f"  {len(pdb_fasta.chains)} chains; first chain length: {len(pdb_fasta.chains[0].sequence)}")
-```
-
-**Example 5: Chained workflow -- gene symbol -> UniProt -> AlphaFold DB structure**
-
-When no experimental structure exists in the PDB (or when you want a complete monomer model rather than a partial chain), pull the AlphaFold DB prediction. Same gene-name resolver, different downstream fetch.
-
-```python
-from proto_tools.tools.database_retrieval import (
-    AlphaFoldDBFetchConfig, AlphaFoldDBFetchInput,
-    UniProtFetchConfig, UniProtFetchInput,
-    run_alphafold_db_fetch, run_uniprot_fetch,
-)
-
-# 1. Resolve gene symbol to a UniProt accession.
-uniprot = run_uniprot_fetch(
-    UniProtFetchInput(target_name="MLH1", organism="Homo sapiens"),
-    UniProtFetchConfig(),
-)
-
-# 2. Fetch the AlphaFold prediction keyed on that accession.
-afdb = run_alphafold_db_fetch(
-    AlphaFoldDBFetchInput(uniprot_id=uniprot.accession),
-    AlphaFoldDBFetchConfig(),
-)
-
-print(f"UniProt {uniprot.accession} ({uniprot.length} aa) -> AFDB {afdb.entry_id}")
-print(f"  mean pLDDT: {afdb.mean_plddt:.1f}")
-print(f"  per-residue pLDDT length: {len(afdb.structure.metrics['plddt_per_residue'])}")
-```
-
-## Best Practices & Gotchas
-
-**Common mistakes:**
-1. **Providing neither accession nor name+organism:** The validator requires either `uniprot_id` OR both `target_name` and `organism`. Providing only `target_name` without `organism` will fail.
-2. **Using organism common names inconsistently:** UniProt accepts both scientific names ("Escherichia coli") and common names ("E. coli"), but scientific names give more precise results.
-3. **Assuming all entries have PDB structures:** Many proteins lack experimental structures. Check `pdb_crossrefs` before attempting to fetch PDB data.
-4. **Ignoring review status:** Swiss-Prot (reviewed) entries are manually curated and more reliable than TrEMBL (unreviewed) entries. Always check `entry_type` for critical applications.
-
-**Tips for optimal results:**
-- Set `prefer_pdb_crossref=True` when you need both sequence and structure information
-- Use `raw_entry` for advanced use cases: it contains function annotations, disease associations, subcellular localization, active sites, and more
-- For ambiguous gene names, increase `max_candidates` to evaluate more search results
-
-**Edge cases to watch for:**
-- Deprecated or merged accessions: UniProt may redirect to a new accession
-- Isoforms: the primary sequence may not match all known isoforms; check `raw_entry` for isoform data
-- Very common gene names (e.g., "kinase"): search may return unexpected results; be specific with organism
-
-## References
-
-**Primary publication:**
-- The UniProt Consortium. (2025). "UniProt: the Universal Protein Knowledgebase in 2025." *Nucleic Acids Research*, 53(D1), D609-D617. [DOI: 10.1093/nar/gkae1010](https://doi.org/10.1093/nar/gkae1010)
-- Summary: Describes the UniProt database combining Swiss-Prot (curated) and TrEMBL (computed) protein sequences and functional annotations, serving as the primary reference for protein information.
-
-**Implementation:**
-- UniProt REST API: [https://rest.uniprot.org](https://rest.uniprot.org)
-- UniProt website: [https://www.uniprot.org](https://www.uniprot.org)
-
-## Related Tools
-
-**Tools often used together:**
-- **`sequence-fetch`**: Multi-source orchestrator that resolves sequences from gene names across NCBI, UniProt, and PDB. Use when you want automatic database routing.
-- **`pdb-fetch-entry`** / **`pdb-fetch-fasta`**: Fetch PDB metadata and chain sequences for PDB IDs found in `pdb_crossrefs` (Example 4).
-- **`alphafold-db-fetch`**: Fetch AlphaFold-predicted structure keyed on the UniProt accession returned here (Example 5). Useful when no experimental structure exists.
-- **`alphamissense-fetch`**: Per-residue saturation pathogenicity grid for the resolved accession; pair with the UniProt sequence to mask intolerant positions during variant design.
-- **`blast-search`**: Search for homologs of a protein sequence retrieved from UniProt.
-
-**Alternative tools (similar function):**
-- **`ncbi-efetch`**: NCBI Entrez sequence retrieval. Broader scope (protein + nucleotide + gene) but less curated for proteins than UniProt.
-- **`sequence-fetch`**: Higher-level orchestrator; use when you don't need UniProt-specific metadata.
+- **Requires network access.** The tool calls the live UniProt REST API; it does not run offline and keeps no local copy of the database.
+- **Subject to UniProt rate limits.** Large or rapid batches may be throttled by the UniProt API; space out high-volume requests.
+- **Runs on CPU.** There is no model and no GPU; latency is dominated by the network round-trip.
