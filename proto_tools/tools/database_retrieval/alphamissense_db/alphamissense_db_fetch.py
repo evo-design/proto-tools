@@ -31,7 +31,7 @@ _AFDB_FILES_BASE = "https://alphafold.ebi.ac.uk/files"
 _REQUEST_TIMEOUT_SECONDS = 15
 _HTTP_RETRIES = 2
 _BACKOFF_SECONDS = 1.0
-_USER_AGENT = "proto-tools/alphamissense-fetch-v1"
+_USER_AGENT = "proto-tools/alphamissense-db-fetch-v1"
 
 AlphaMissenseClass = Literal["likely_benign", "ambiguous", "likely_pathogenic"]
 CoordinateSystem = Literal["uniprot", "hg19", "hg38"]
@@ -91,7 +91,7 @@ class AlphaMissensePrediction(BaseModel):
     transcript_id: str | None = Field(default=None, description="GENCODE transcript ID (genomic mode only)")
 
 
-class AlphaMissenseFetchInput(BaseToolInput):
+class AlphaMissenseDBFetchInput(BaseToolInput):
     """Input for AlphaMissense fetch.
 
     Attributes:
@@ -102,7 +102,7 @@ class AlphaMissenseFetchInput(BaseToolInput):
     uniprot_id: str = InputField(description="UniProt accession (human canonical isoform; e.g. 'P04637')")
 
 
-class AlphaMissenseFetchConfig(BaseConfig):
+class AlphaMissenseDBFetchConfig(BaseConfig):
     """Configuration for AlphaMissense fetch.
 
     AlphaMissense is a static CSV at AFDB with no server-side filtering;
@@ -125,7 +125,7 @@ class AlphaMissenseFetchConfig(BaseConfig):
     )
 
 
-class AlphaMissenseFetchOutput(BaseToolOutput):
+class AlphaMissenseDBFetchOutput(BaseToolOutput):
     """Output from AlphaMissense fetch.
 
     Attributes:
@@ -184,16 +184,16 @@ class AlphaMissenseFetchOutput(BaseToolOutput):
 
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return AlphaMissenseFetchInput(uniprot_id="P04637")
+    return AlphaMissenseDBFetchInput(uniprot_id="P04637")
 
 
 @tool(
-    key="alphamissense-fetch",
+    key="alphamissense-db-fetch",
     label="AlphaMissense Fetch",
     category="database_retrieval",
-    input_class=AlphaMissenseFetchInput,
-    config_class=AlphaMissenseFetchConfig,
-    output_class=AlphaMissenseFetchOutput,
+    input_class=AlphaMissenseDBFetchInput,
+    config_class=AlphaMissenseDBFetchConfig,
+    output_class=AlphaMissenseDBFetchOutput,
     description=(
         "Fetch per-residue, per-substitution AlphaMissense pathogenicity scores for a "
         "human UniProt accession from the AlphaFold Protein Structure Database"
@@ -202,11 +202,11 @@ def example_input() -> Any:
     example_input=example_input,
     cacheable=True,
 )
-def run_alphamissense_fetch(
-    inputs: AlphaMissenseFetchInput,
-    config: AlphaMissenseFetchConfig,
+def run_alphamissense_db_fetch(
+    inputs: AlphaMissenseDBFetchInput,
+    config: AlphaMissenseDBFetchConfig,
     instance: Any = None,
-) -> AlphaMissenseFetchOutput:
+) -> AlphaMissenseDBFetchOutput:
     """Fetch AlphaMissense pathogenicity scores for a UniProt accession.
 
     AlphaMissense covers all reviewed human UniProt proteins. Non-human accessions
@@ -214,13 +214,13 @@ def run_alphamissense_fetch(
     SNV-accessible subset (genomic coords); filter the output client-side as needed.
 
     Args:
-        inputs (AlphaMissenseFetchInput): UniProt accession to look up.
-        config (AlphaMissenseFetchConfig): `coordinate_system` selects which
+        inputs (AlphaMissenseDBFetchInput): UniProt accession to look up.
+        config (AlphaMissenseDBFetchConfig): `coordinate_system` selects which
             AFDB CSV variant to fetch.
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        AlphaMissenseFetchOutput: Per-substitution predictions, count, mean
+        AlphaMissenseDBFetchOutput: Per-substitution predictions, count, mean
             pathogenicity score, and the source URL.
     """
     del instance
@@ -247,7 +247,7 @@ def run_alphamissense_fetch(
         predictions = [_parse_row(row, csv_url, is_genomic=is_genomic) for row in rows]
         mean = sum(p.pathogenicity_score for p in predictions) / len(predictions) if predictions else None
 
-        return AlphaMissenseFetchOutput(
+        return AlphaMissenseDBFetchOutput(
             uniprot_accession=accession,
             predictions=predictions,
             num_predictions=len(predictions),

@@ -207,6 +207,6 @@ print(f"BRCA1 UniProt: {uniprot.accession}, {uniprot.length} aa")
 
 ## Related Tools
 
-- **`uniprot-fetch`**: Resolve `ensembl-xrefs` rows with `dbname="Uniprot_gn"` to a UniProt accession; chain into `interproscan-fetch` / `alphamissense-fetch` for protein-level annotations.
+- **`uniprot-fetch`**: Resolve `ensembl-xrefs` rows with `dbname="Uniprot_gn"` to a UniProt accession; chain into `interproscan-fetch` / `alphamissense-db-fetch` for protein-level annotations.
 - **`ncbi-efetch`**: Pull GenBank / RefSeq records when you need NCBI-side identifiers; `ensembl-xrefs` also exposes `EntrezGene` mappings.
 - **`alphafold-db-fetch`**: Once an Ensembl protein is mapped to UniProt, fetch its predicted structure for downstream design.

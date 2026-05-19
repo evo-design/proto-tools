@@ -9,13 +9,13 @@ from proto_tools.tools.database_retrieval.alphafold_db import (
 )
 
 # AlphaMissense fetch
-from proto_tools.tools.database_retrieval.alphamissense import (
+from proto_tools.tools.database_retrieval.alphamissense_db import (
     AlphaMissenseClass,
-    AlphaMissenseFetchConfig,
-    AlphaMissenseFetchInput,
-    AlphaMissenseFetchOutput,
+    AlphaMissenseDBFetchConfig,
+    AlphaMissenseDBFetchInput,
+    AlphaMissenseDBFetchOutput,
     AlphaMissensePrediction,
-    run_alphamissense_fetch,
+    run_alphamissense_db_fetch,
 )
 
 # CCD lookup
@@ -146,11 +146,11 @@ __all__ = [
     "run_alphafold_db_fetch",
     # AlphaMissense fetch
     "AlphaMissenseClass",
-    "AlphaMissenseFetchConfig",
-    "AlphaMissenseFetchInput",
-    "AlphaMissenseFetchOutput",
+    "AlphaMissenseDBFetchConfig",
+    "AlphaMissenseDBFetchInput",
+    "AlphaMissenseDBFetchOutput",
     "AlphaMissensePrediction",
-    "run_alphamissense_fetch",
+    "run_alphamissense_db_fetch",
     # CCD lookup
     "CcdEnrichment",
     "CcdLookupConfig",

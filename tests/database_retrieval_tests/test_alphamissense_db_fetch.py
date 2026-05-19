@@ -8,14 +8,14 @@ from unittest.mock import MagicMock
 import pytest
 
 from proto_tools.tools.database_retrieval import (
-    AlphaMissenseFetchConfig,
-    AlphaMissenseFetchInput,
+    AlphaMissenseDBFetchConfig,
+    AlphaMissenseDBFetchInput,
     UniProtFetchConfig,
     UniProtFetchInput,
-    run_alphamissense_fetch,
+    run_alphamissense_db_fetch,
     run_uniprot_fetch,
 )
-from proto_tools.tools.database_retrieval.alphamissense.alphamissense_fetch import (
+from proto_tools.tools.database_retrieval.alphamissense_db.alphamissense_db_fetch import (
     _fetch_csv,
     _parse_row,
 )
@@ -73,9 +73,9 @@ def test_fetch_csv_returns_none_on_404():
 @pytest.mark.integration
 def test_alphamissense_fetch_full_p04637_predictions():
     """TP53 (P04637) returns the full saturation grid: 393 residues x 19 alts = 7467 predictions."""
-    output = run_alphamissense_fetch(AlphaMissenseFetchInput(uniprot_id="P04637"), AlphaMissenseFetchConfig())
+    output = run_alphamissense_db_fetch(AlphaMissenseDBFetchInput(uniprot_id="P04637"), AlphaMissenseDBFetchConfig())
     assert output.success
-    assert output.tool_id == "alphamissense-fetch"
+    assert output.tool_id == "alphamissense-db-fetch"
     assert output.uniprot_accession == "P04637"
     assert output.num_predictions == 393 * 19
     assert output.mean_pathogenicity is not None
@@ -94,9 +94,9 @@ def test_alphamissense_fetch_known_pathogenic_tp53_r175h():
     Filtering happens client-side now; the wrapper returns the full grid and
     the caller picks the position/alt of interest.
     """
-    output = run_alphamissense_fetch(
-        AlphaMissenseFetchInput(uniprot_id="P04637"),
-        AlphaMissenseFetchConfig(),
+    output = run_alphamissense_db_fetch(
+        AlphaMissenseDBFetchInput(uniprot_id="P04637"),
+        AlphaMissenseDBFetchConfig(),
     )
     assert output.success
     r175h = next(p for p in output.predictions if p.position == 175 and p.alt_aa == "H")
@@ -108,9 +108,9 @@ def test_alphamissense_fetch_known_pathogenic_tp53_r175h():
 @pytest.mark.integration
 def test_alphamissense_fetch_client_side_filter_at_hotspots():
     """Realistic constraint loop: caller post-filters to confidently pathogenic at TP53 hotspots 175/248/273."""
-    output = run_alphamissense_fetch(
-        AlphaMissenseFetchInput(uniprot_id="P04637"),
-        AlphaMissenseFetchConfig(),
+    output = run_alphamissense_db_fetch(
+        AlphaMissenseDBFetchInput(uniprot_id="P04637"),
+        AlphaMissenseDBFetchConfig(),
     )
     assert output.success
     assert output.num_predictions == 393 * 19
@@ -136,7 +136,7 @@ def test_alphamissense_fetch_client_side_filter_at_hotspots():
 def test_alphamissense_fetch_returns_failure_when_no_data(uniprot_id, reason):
     """Both bogus accessions and non-human accessions raise with a clear error."""
     with pytest.raises(Exception, match="AlphaMissense has no predictions"):
-        run_alphamissense_fetch(AlphaMissenseFetchInput(uniprot_id=uniprot_id), AlphaMissenseFetchConfig())
+        run_alphamissense_db_fetch(AlphaMissenseDBFetchInput(uniprot_id=uniprot_id), AlphaMissenseDBFetchConfig())
 
 
 @pytest.mark.integration
@@ -166,9 +166,9 @@ def test_workflow_uniprot_then_alphamissense_grid_consistency():
     assert uniprot.length == 189
 
     # 2. AlphaMissense: full saturation grid
-    am = run_alphamissense_fetch(
-        AlphaMissenseFetchInput(uniprot_id=uniprot.accession),
-        AlphaMissenseFetchConfig(),
+    am = run_alphamissense_db_fetch(
+        AlphaMissenseDBFetchInput(uniprot_id=uniprot.accession),
+        AlphaMissenseDBFetchConfig(),
     )
     assert am.success
     assert am.uniprot_accession == "P01116"
@@ -192,9 +192,9 @@ def test_workflow_uniprot_then_alphamissense_grid_consistency():
 @pytest.mark.integration
 def test_alphamissense_fetch_hg38_returns_genomic_coords():
     """`coordinate_system='hg38'` returns the genomic-coord CSV with chrom/pos/ref/alt populated."""
-    output = run_alphamissense_fetch(
-        AlphaMissenseFetchInput(uniprot_id="P04637"),
-        AlphaMissenseFetchConfig(coordinate_system="hg38"),
+    output = run_alphamissense_db_fetch(
+        AlphaMissenseDBFetchInput(uniprot_id="P04637"),
+        AlphaMissenseDBFetchConfig(coordinate_system="hg38"),
     )
     assert output.success
     # Genomic CSV is a subset (SNV-accessible only) — fewer rows than the full grid.
@@ -213,13 +213,13 @@ def test_alphamissense_fetch_hg38_returns_genomic_coords():
 @pytest.mark.integration
 def test_alphamissense_fetch_hg19_vs_hg38_have_same_classifications():
     """A given protein variant gets the same pathogenicity score in hg19 vs hg38 mode."""
-    hg19 = run_alphamissense_fetch(
-        AlphaMissenseFetchInput(uniprot_id="P04637"),
-        AlphaMissenseFetchConfig(coordinate_system="hg19"),
+    hg19 = run_alphamissense_db_fetch(
+        AlphaMissenseDBFetchInput(uniprot_id="P04637"),
+        AlphaMissenseDBFetchConfig(coordinate_system="hg19"),
     )
-    hg38 = run_alphamissense_fetch(
-        AlphaMissenseFetchInput(uniprot_id="P04637"),
-        AlphaMissenseFetchConfig(coordinate_system="hg38"),
+    hg38 = run_alphamissense_db_fetch(
+        AlphaMissenseDBFetchInput(uniprot_id="P04637"),
+        AlphaMissenseDBFetchConfig(coordinate_system="hg38"),
     )
     assert hg19.success and hg38.success
     # Same protein variants are reachable by SNV in both genome builds, so the

@@ -170,4 +170,4 @@ print(f"{sum(lock_mask)} of {length} residues locked")
 
 - **`uniprot-fetch`**: Resolve a gene symbol / organism pair to a canonical UniProt accession before calling `interproscan-fetch`. Also gives sequence length for `lock_mask`-style outputs.
 - **`alphafold-db-fetch`**: Pull AlphaFold's predicted structure + per-residue pLDDT for the same accession. Combined with InterPro domain types, this lets you weight design constraints by both functional importance (InterPro) and structural confidence (pLDDT).
-- **`alphamissense-fetch`**: Per-residue pathogenicity. Composes naturally with InterPro-derived locks for "lock the active site, allow benign substitutions elsewhere" workflows.
+- **`alphamissense-db-fetch`**: Per-residue pathogenicity. Composes naturally with InterPro-derived locks for "lock the active site, allow benign substitutions elsewhere" workflows.

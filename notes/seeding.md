@@ -31,7 +31,7 @@ cacheable; identical iterable items deduplicate.
 - **Single-pass structure prediction**: ESMFold-prediction
 - **Forward-pass scoring**: Evo1/2-score, ProGen2/3-score, ESM2/3-score, ProteinMPNN-score, LigandMPNN-score, ESM-IF1-score, FaMPNN-score, FaMPNN-score-all-mutations
 - **Predictive models**: Borzoi-prediction, Borzoi-ensemble, Enformer-prediction
-- **Annotation & lookup**: InterProScan, Ensembl, AlphaFold-DB lookup, CCD lookup, MinCED, AlphaMissense, AlphaGenome
+- **Annotation & lookup**: InterProScan, Ensembl, AlphaFold-DB lookup, CCD lookup, MinCED, AlphaMissense DB, AlphaGenome
 - **Embeddings**: ESMC
 
 ### Stochastic tools (`stochastic=True`)
