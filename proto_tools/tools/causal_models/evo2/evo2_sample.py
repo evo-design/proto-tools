@@ -76,7 +76,7 @@ class Evo2SampleConfig(CausalModelSampleConfig):
         model_checkpoint (EVO2_MODEL_CHECKPOINTS): Evo2 weights variant.
         local_path (str | None): Override HuggingFace download with a local weights directory.
         top_k (int): Limit sampling to the top-k most probable tokens at each step.
-        num_tokens (int): Number of new tokens to generate per prompt (excludes prompt).
+        max_new_tokens (int): Maximum number of new tokens to generate per prompt (excludes prompt).
         cached_generation (bool): Use the model's per-call KV cache during generation.
         force_prompt_threshold (int | None): Tokens to prefill in parallel before switching
             to autoregressive prompt forcing.
@@ -135,11 +135,11 @@ class Evo2SampleConfig(CausalModelSampleConfig):
         ge=1,
         description="Limit sampling to the top-k most probable tokens at each step",
     )
-    num_tokens: int = ConfigField(
-        title="Num Tokens",
+    max_new_tokens: int = ConfigField(
+        title="Max New Tokens",
         default=32,
         ge=1,
-        description="Number of new tokens to generate per prompt",
+        description="Maximum number of new tokens to generate per prompt",
     )
     cached_generation: bool = ConfigField(
         title="Cached Generation",
@@ -235,7 +235,7 @@ def run_evo2_sample(
     Examples:
         >>> # Basic DNA sequence generation
         >>> inputs = Evo2SampleInput(prompts=["+~GA"])
-        >>> config = Evo2SampleConfig(num_tokens=1000, temperature=0.8, top_k=4)
+        >>> config = Evo2SampleConfig(max_new_tokens=1000, temperature=0.8, top_k=4)
         >>> result = run_evo2_sample(inputs, config)
         >>> print(f"Generated: {result.sequences[0]}")
 
@@ -260,7 +260,7 @@ def run_evo2_sample(
             "top_k": config.top_k,
             "top_p": config.top_p,
             "temperature": config.temperature,
-            "num_tokens": config.num_tokens,
+            "max_new_tokens": config.max_new_tokens,
             "cached_generation": config.cached_generation,
             "force_prompt_threshold": config.force_prompt_threshold,
             "max_seqlen": config.max_seqlen,
@@ -298,7 +298,7 @@ def run_evo2_sample(
             "top_k": config.top_k,
             "top_p": config.top_p,
             "temperature": config.temperature,
-            "num_tokens": config.num_tokens,
+            "max_new_tokens": config.max_new_tokens,
             "cached_generation": config.cached_generation,
             "prepend_prompt": config.prepend_prompt,
         },

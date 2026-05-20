@@ -28,7 +28,7 @@ The autoregressive objective yields two capabilities directly. Sampling from the
 
 ### Evo2 Sampling (`evo2-sample`)
 
-Generates DNA sequences by autoregressive sampling. Given one or more prompt sequences in Evo2's prompt format, the model extends each prompt nucleotide by nucleotide, drawing each new nucleotide from the model's predicted distribution under the configured `temperature`, `top_k`, and `top_p` settings, until `num_tokens` new nucleotides have been produced or an end-of-sequence token is sampled. A key-value cache makes long generations efficient and can be carried forward to continue a generation.
+Generates DNA sequences by autoregressive sampling. Given one or more prompt sequences in Evo2's prompt format, the model extends each prompt nucleotide by nucleotide, drawing each new nucleotide from the model's predicted distribution under the configured `temperature`, `top_k`, and `top_p` settings, until `max_new_tokens` new nucleotides have been produced or an end-of-sequence token is sampled. A key-value cache makes long generations efficient and can be carried forward to continue a generation.
 
 #### Applications
 
@@ -40,8 +40,8 @@ This tool produces candidate DNA sequences for downstream design and screening, 
 - **Prompts use Evo2's prompt format.** Prompt strings follow Evo2's special tokenization (for example a leading `+~` before DNA); see the upstream [Evo2 documentation](https://github.com/arcinstitute/evo2) for the conventions.
 - **`top_k` defaults to 4, the size of the DNA alphabet.** It exists mainly to keep generation on the four bases rather than other byte tokens, so it is not the diversity knob; control diversity with `temperature` (lower stays near the training distribution, higher explores it) and leave `top_p` at its default unless you specifically want nucleus sampling.
 - **Output includes the prompt by default.** `prepend_prompt=True` (the default for this toolkit) returns the prompt joined to its continuation; set it `False` to receive only the newly generated nucleotides.
-- **Prompt length plus `num_tokens` (default 32) must fit the checkpoint's context window.** The model cannot attend beyond that window, so a long prompt directly reduces how much can be generated; pick a longer-context checkpoint when the combined length is large.
-- **`stop_at_eos` ends generation early** when the model emits an end-of-sequence token; set it to `False` to always produce the full `num_tokens`.
+- **Prompt length plus `max_new_tokens` (default 32) must fit the checkpoint's context window.** The model cannot attend beyond that window, so a long prompt directly reduces how much can be generated; pick a longer-context checkpoint when the combined length is large.
+- **`stop_at_eos` ends generation early** when the model emits an end-of-sequence token; set it to `False` to always produce the full `max_new_tokens`.
 - **Generated sequences are candidates.** Validate them with downstream tools (for example ORF detection, structure prediction, or homology search) before drawing biological conclusions.
 
 ### Evo2 Scoring (`evo2-score`)

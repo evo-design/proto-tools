@@ -70,7 +70,7 @@ class ProGen2SampleConfig(CausalModelSampleConfig):
         temperature (float): Softmax temperature; lower values are more deterministic.
         top_p (float): Nucleus sampling threshold over per-position token probabilities.
         top_k (int): Top-k truncation; ``0`` disables and uses top-p only.
-        max_length (int): Maximum total sequence length including prompt.
+        max_new_tokens (int): Maximum number of new tokens to generate per prompt (excludes prompt).
         truncate_at_stop (bool): Truncate generated sequences at the first stop token.
         strip_special_tokens (bool): Strip ProGen2 start/stop sentinel tokens (``1``/``2``)
             from output.
@@ -108,11 +108,11 @@ class ProGen2SampleConfig(CausalModelSampleConfig):
         title="Top-k",
         description="Top-k truncation; 0 disables and uses top-p only",
     )
-    max_length: int = ConfigField(
+    max_new_tokens: int = ConfigField(
         default=256,
         ge=1,
-        title="Max Length",
-        description="Maximum total sequence length including prompt",
+        title="Max New Tokens",
+        description="Maximum number of new tokens to generate per prompt",
     )
     truncate_at_stop: bool = ConfigField(
         default=True,
@@ -182,7 +182,7 @@ def run_progen2_sample(
     Examples:
         >>> # Basic protein sequence generation with explicit start token
         >>> inputs = ProGen2SampleInput(prompts=["1MKTL"])
-        >>> config = ProGen2SampleConfig(max_length=100, temperature=0.2, top_p=0.95)
+        >>> config = ProGen2SampleConfig(max_new_tokens=100, temperature=0.2, top_p=0.95)
         >>> result = run_progen2_sample(inputs, config)
         >>> print(f"Generated: {result.sequences[0]}")
 
@@ -220,7 +220,7 @@ def run_progen2_sample(
             "temperature": config.temperature,
             "top_p": config.top_p,
             "top_k": config.top_k,
-            "max_length": config.max_length,
+            "max_new_tokens": config.max_new_tokens,
             "truncate_at_stop": config.truncate_at_stop,
             "strip_special_tokens": config.strip_special_tokens,
             "prepend_prompt": config.prepend_prompt,
@@ -238,7 +238,7 @@ def run_progen2_sample(
         metadata={
             "model_checkpoint": config.model_checkpoint,
             "temperature": config.temperature,
-            "max_length": config.max_length,
+            "max_new_tokens": config.max_new_tokens,
         },
         sequences=result["sequences"],
         logits=result.get("logits"),

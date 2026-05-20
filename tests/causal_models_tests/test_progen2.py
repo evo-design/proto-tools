@@ -47,7 +47,7 @@ def test_progen2_sample_input_validation(input_kwargs, match):
     [
         ({"temperature": 0.0}, "greater than 0"),
         ({"top_p": 1.5}, "less than or equal to 1"),
-        ({"max_length": 0}, "greater than or equal to 1"),
+        ({"max_new_tokens": 0}, "greater than or equal to 1"),
     ],
 )
 def test_progen2_sample_config_validation(config_kwargs, match):
@@ -108,7 +108,7 @@ def test_progen2_sample_basic():
     inputs = ProGen2SampleInput(prompts=prompts)
     config = ProGen2SampleConfig(
         model_checkpoint="progen2-small",
-        max_length=100,
+        max_new_tokens=100,
         temperature=0.2,
         top_p=0.95,
         top_k=0,
@@ -123,7 +123,7 @@ def test_progen2_sample_basic():
 
     assert result.tool_id == "progen2-sample"
     assert result.metadata["model_checkpoint"] == "progen2-small"
-    assert result.metadata["max_length"] == 100
+    assert result.metadata["max_new_tokens"] == 100
     assert result.metadata["temperature"] == 0.2
 
     assert len(result.sequences) == 2
@@ -136,7 +136,7 @@ def test_progen2_sample_basic():
         prompt_aa = prompt[1:]  # Remove '1' start token
         assert seq.startswith(prompt_aa), f"Sequence {i} should start with prompt '{prompt_aa}'"
 
-        assert len(seq) <= 100, f"Sequence {i} exceeds max_length"
+        assert len(seq) <= len(prompt_aa) + 100, f"Sequence {i} exceeds prompt + max_new_tokens"
 
 
 @pytest.mark.uses_gpu
@@ -153,7 +153,7 @@ def test_progen2_sample_prompt_handling(prompt, expected_prefix):
     inputs = ProGen2SampleInput(prompts=prompt)
     config = ProGen2SampleConfig(
         model_checkpoint="progen2-small",
-        max_length=100,
+        max_new_tokens=100,
         temperature=0.2,
         verbose=False,
     )
@@ -168,19 +168,20 @@ def test_progen2_sample_prompt_handling(prompt, expected_prefix):
 
 
 @pytest.mark.uses_gpu
-def test_progen2_sample_max_length_respected():
-    """Test that max_length is strictly respected."""
+def test_progen2_sample_max_new_tokens_respected():
+    """Test that max_new_tokens caps the newly generated portion of the output."""
     inputs = ProGen2SampleInput(prompts="1M")
     config = ProGen2SampleConfig(
         model_checkpoint="progen2-small",
-        max_length=20,
+        max_new_tokens=20,
         temperature=0.2,
         verbose=False,
     )
 
     result = run_progen2_sample(inputs=inputs, config=config)
 
-    assert len(result.sequences[0]) <= 20
+    # "1M" decodes to "M" after the start sentinel is stripped; output ≤ prompt + new tokens.
+    assert len(result.sequences[0]) <= 1 + 20
 
 
 @pytest.mark.uses_gpu
@@ -190,7 +191,7 @@ def test_progen2_sample_special_token_stripping():
         inputs=ProGen2SampleInput(prompts="1MKTLV"),
         config=ProGen2SampleConfig(
             model_checkpoint="progen2-small",
-            max_length=50,
+            max_new_tokens=50,
             strip_special_tokens=True,
             verbose=False,
         ),
@@ -200,7 +201,7 @@ def test_progen2_sample_special_token_stripping():
         inputs=ProGen2SampleInput(prompts="1MKTLV"),
         config=ProGen2SampleConfig(
             model_checkpoint="progen2-small",
-            max_length=50,
+            max_new_tokens=50,
             strip_special_tokens=False,
             verbose=False,
         ),
@@ -224,7 +225,7 @@ def test_progen2_sample_batched():
     inputs = ProGen2SampleInput(prompts=prompts)
     config = ProGen2SampleConfig(
         model_checkpoint="progen2-small",
-        max_length=50,
+        max_new_tokens=50,
         temperature=0.2,
         batch_size=2,
         verbose=False,
@@ -247,7 +248,7 @@ def test_progen2_sample_batched_many():
     inputs = ProGen2SampleInput(prompts=prompts)
     config = ProGen2SampleConfig(
         model_checkpoint="progen2-small",
-        max_length=50,
+        max_new_tokens=50,
         temperature=0.2,
         batch_size=2,
         verbose=False,
@@ -261,7 +262,7 @@ def test_progen2_sample_batched_many():
     for i, (prompt, seq) in enumerate(zip(prompts, result.sequences, strict=False)):
         prompt_aa = prompt[1:]
         assert seq.startswith(prompt_aa), f"Sequence {i} should start with '{prompt_aa}'"
-        assert len(seq) <= 50
+        assert len(seq) <= len(prompt_aa) + 50
 
 
 # ── Scoring tests ─────────────────────────────────────────────────────────────
@@ -482,7 +483,7 @@ def test_progen2_sample_logits_returned():
     inputs = ProGen2SampleInput(prompts=prompts)
     config = ProGen2SampleConfig(
         model_checkpoint="progen2-small",
-        max_length=50,
+        max_new_tokens=50,
         temperature=0.2,
         top_p=0.95,
         return_logits=True,
@@ -506,7 +507,7 @@ def test_progen2_sample_logits_not_returned_by_default():
     inputs = ProGen2SampleInput(prompts=["1MKTLV"])
     config = ProGen2SampleConfig(
         model_checkpoint="progen2-small",
-        max_length=50,
+        max_new_tokens=50,
         temperature=0.2,
         return_logits=False,
         verbose=False,
@@ -525,13 +526,13 @@ def test_progen2_sample_logits_not_returned_by_default():
 @pytest.mark.slow
 @pytest.mark.uses_gpu
 def test_progen2_sample_benchmark(request: pytest.FixtureRequest) -> None:
-    """Benchmark progen2-sample on 50 length-250 prompts generating up to 700 total tokens (cold + warm)."""
+    """Benchmark progen2-sample on 50 length-250 prompts generating up to 450 new tokens (cold + warm)."""
     prompts = random_protein_sequences(n=50, length=250, seed=0)
     inputs = ProGen2SampleInput(prompts=prompts)
     config = ProGen2SampleConfig(
         model_checkpoint="progen2-medium",
         batch_size=16,
-        max_length=700,
+        max_new_tokens=450,
         temperature=0.2,
         top_p=0.95,
         verbose=False,

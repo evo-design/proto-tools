@@ -72,7 +72,7 @@ def test_evo1_sample_input_rejects_empty():
     [
         ({"temperature": 0.0}, "greater than 0"),
         ({"top_p": 1.5}, "less than or equal to 1"),
-        ({"num_tokens": 0}, "greater than or equal to 1"),
+        ({"max_new_tokens": 0}, "greater than or equal to 1"),
         ({"top_k": 0}, "greater than or equal to 1"),
     ],
 )
@@ -163,7 +163,7 @@ def test_evo1_sample_tool():
     inputs = Evo1SampleInput(prompts=prompts)
     config = Evo1SampleConfig(
         model_name="evo-1-8k-base",
-        num_tokens=50,
+        max_new_tokens=50,
         temperature=1.0,
         top_k=4,
         verbose=False,
@@ -175,7 +175,7 @@ def test_evo1_sample_tool():
 
     assert result.tool_id == "evo1-sample"
     assert result.metadata["model_name"] == "evo-1-8k-base"
-    assert result.metadata["num_tokens"] == 50
+    assert result.metadata["max_new_tokens"] == 50
     assert len(result.sequences) == 2
     assert result.scores is not None
     assert len(result.scores) == 2
@@ -193,7 +193,7 @@ def test_evo1_sample_batched():
     prompts = ["ATCG", "GCTA", "AAAA", "GGGG", "CCCC", "TTTT"]
     inputs = Evo1SampleInput(prompts=prompts)
     config = Evo1SampleConfig(
-        num_tokens=50,
+        max_new_tokens=50,
         temperature=1.0,
         batch_size=2,
         verbose=False,
@@ -215,13 +215,13 @@ def test_evo1_sample_prepend_prompt():
 
     result_with = run_evo1_sample(
         inputs=Evo1SampleInput(prompts=[prompt]),
-        config=Evo1SampleConfig(num_tokens=50, prepend_prompt=True, verbose=False),
+        config=Evo1SampleConfig(max_new_tokens=50, prepend_prompt=True, verbose=False),
     )
     assert result_with.sequences[0].startswith(prompt)
 
     result_without = run_evo1_sample(
         inputs=Evo1SampleInput(prompts=[prompt]),
-        config=Evo1SampleConfig(num_tokens=50, prepend_prompt=False, verbose=False),
+        config=Evo1SampleConfig(max_new_tokens=50, prepend_prompt=False, verbose=False),
     )
     assert len(result_without.sequences[0]) > 0
 
@@ -293,7 +293,7 @@ def test_evo1_sample_benchmark(request):
     inputs = Evo1SampleInput(prompts=prompts)
     config = Evo1SampleConfig(
         model_name="evo-1-8k-base",
-        num_tokens=500,
+        max_new_tokens=500,
         temperature=1.0,
         batch_size=16,
         prepend_prompt=True,

@@ -53,18 +53,18 @@ class Evo2Model:
         >>> model = Evo2Model("evo2_7b")
         >>>
         >>> # Basic generation
-        >>> out = model.sample(prompts=["ATCG"], num_tokens=100)
+        >>> out = model.sample(prompts=["ATCG"], max_new_tokens=100)
         >>> out["sequences"]
         >>>
         >>> # With caching for beam search
         >>> out1 = model.sample(
         ...     prompts=["ATCG"],
-        ...     num_tokens=100,
+        ...     max_new_tokens=100,
         ...     cached_generation=True,  # vortex internal caching
         ... )
         >>> out2 = model.sample(
         ...     prompts=out1["sequences"],
-        ...     num_tokens=100,
+        ...     max_new_tokens=100,
         ...     old_kv_cache=out1["kv_caches"][0],  # continue from cache
         ... )
     """
@@ -93,7 +93,7 @@ class Evo2Model:
         temperature: float = 1.0,
         # vortex generation arguments
         device: str = "cuda",
-        num_tokens: int = 32,
+        max_new_tokens: int = 32,
         cached_generation: bool = True,
         force_prompt_threshold: int | None = None,
         max_seqlen: int | None = None,
@@ -114,7 +114,7 @@ class Evo2Model:
             top_p: Top-p sampling parameter
             temperature: Sampling temperature
             device: CUDA device to run inference on
-            num_tokens: Number of tokens to generate
+            max_new_tokens: Maximum number of new tokens to generate
             cached_generation: Whether to use vortex KV caching for generation
             force_prompt_threshold: Number of tokens to prefill in parallel before
                 switching to prompt forcing. Used to reduce peak memory usage and
@@ -204,7 +204,7 @@ class Evo2Model:
                 output_ids, logits, new_kv_cache = gen.generate(
                     device=self.device,
                     input_ids=input_ids,
-                    num_tokens=num_tokens,
+                    num_tokens=max_new_tokens,
                     cached_generation=cached_generation,
                     force_prompt_threshold=force_prompt_threshold,
                     max_seqlen=max_seqlen,
@@ -660,7 +660,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         old_kv_cache_handle = input_dict.get("old_kv_cache")
         if old_kv_cache_handle is not None:
             resolved_cache = _resolve_cache_handle(old_kv_cache_handle)
-            required_seqlen = max(len(prompt) for prompt in input_dict["prompts"]) + input_dict["num_tokens"]
+            required_seqlen = max(len(prompt) for prompt in input_dict["prompts"]) + input_dict["max_new_tokens"]
             if resolved_cache["mha"].max_seqlen < required_seqlen:
                 logger.warning(
                     "KV cache max_seqlen (%s) is insufficient for continued generation (need %s). Discarding cache.",
@@ -679,7 +679,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             top_p=input_dict["top_p"],
             temperature=input_dict["temperature"],
             device=input_dict["device"],
-            num_tokens=input_dict["num_tokens"],
+            max_new_tokens=input_dict["max_new_tokens"],
             cached_generation=input_dict["cached_generation"],
             force_prompt_threshold=input_dict["force_prompt_threshold"],
             max_seqlen=max_seqlen,

@@ -19,7 +19,7 @@ The autoregressive training objective instills two primary capabilities. First, 
 
 ### ProGen2 Sampling (`progen2-sample`)
 
-Generates protein sequences by autoregressive sampling. Given one or more prompt sequences, the model extends each prompt one amino acid at a time, drawing each residue from the model's predicted distribution under the configured `temperature`, `top_p`, and `top_k` settings, until a stop token is produced or `max_length` (prompt plus generated, default 256) is reached.
+Generates protein sequences by autoregressive sampling. Given one or more prompt sequences, the model extends each prompt one amino acid at a time, drawing each residue from the model's predicted distribution under the configured `temperature`, `top_p`, and `top_k` settings, until a stop token is produced or `max_new_tokens` new residues have been generated (default 256).
 
 #### Applications
 
@@ -29,7 +29,7 @@ This tool performs de novo protein design, generating novel sequences that resem
 
 - **Generated output is trimmed by default.** Generated sequences are cut at the first stop token with the start/stop sentinels removed (`truncate_at_stop` and `strip_special_tokens`, both `True`); set them `False` to keep the raw model output.
 - **Sampling defaults are conservative.** `temperature` defaults to `0.2` and `top_p` to `0.95`, which keep generations close to natural-looking sequences; raise `temperature` for more diverse but riskier designs. `top_k` defaults to `0`, which disables top-k truncation so only nucleus (`top_p`) sampling is applied.
-- **`max_length` counts the prompt.** It caps prompt plus generated length (default `256`), so a long prompt directly reduces how much can be generated.
+- **`max_new_tokens` bounds the generated length.** It caps newly generated residues (default `256`), separate from the prompt length.
 - **Output includes the prompt by default.** `prepend_prompt=True` (the toolkit default) returns the prompt joined to its continuation; set it `False` to receive only the newly generated residues.
 - **Generated sequences are candidates.** Validate them with downstream tools (for example structure prediction, function annotation, or homology search) before drawing biological conclusions.
 

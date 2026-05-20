@@ -43,7 +43,7 @@ def test_evo2_sample_input_validation(input_kwargs, match):
     [
         ({"temperature": 0.0}, "greater than 0"),
         ({"top_p": 1.5}, "less than or equal to 1"),
-        ({"num_tokens": 0}, "greater than or equal to 1"),
+        ({"max_new_tokens": 0}, "greater than or equal to 1"),
     ],
 )
 def test_evo2_sample_config_validation(config_kwargs, match):
@@ -63,7 +63,7 @@ def test_evo2_sample_tool(model_checkpoint="evo2_7b"):
     inputs = Evo2SampleInput(prompts=prompts)
     config = Evo2SampleConfig(
         model_checkpoint=model_checkpoint,
-        num_tokens=50,
+        max_new_tokens=50,
         temperature=0.8,
         top_k=4,
         top_p=1.0,
@@ -76,7 +76,7 @@ def test_evo2_sample_tool(model_checkpoint="evo2_7b"):
 
     assert result.tool_id == "evo2-sample"
     assert result.metadata["model_checkpoint"] == model_checkpoint
-    assert result.metadata["num_tokens"] == 50
+    assert result.metadata["max_new_tokens"] == 50
     assert result.metadata["temperature"] == 0.8
     assert len(result.sequences) == 2
 
@@ -102,7 +102,7 @@ def test_evo2_sample_prompt_handling(prompt, model_checkpoint):
     inputs = Evo2SampleInput(prompts=prompt)
     config = Evo2SampleConfig(
         model_checkpoint=model_checkpoint,
-        num_tokens=50,
+        max_new_tokens=50,
         temperature=1.0,
         verbose=False,
     )
@@ -126,7 +126,7 @@ def test_evo2_sample_prepend_prompt(model_checkpoint):
         inputs=Evo2SampleInput(prompts=[prompt]),
         config=Evo2SampleConfig(
             model_checkpoint=model_checkpoint,
-            num_tokens=50,
+            max_new_tokens=50,
             prepend_prompt=True,
             verbose=False,
         ),
@@ -137,7 +137,7 @@ def test_evo2_sample_prepend_prompt(model_checkpoint):
         inputs=Evo2SampleInput(prompts=[prompt]),
         config=Evo2SampleConfig(
             model_checkpoint=model_checkpoint,
-            num_tokens=50,
+            max_new_tokens=50,
             prepend_prompt=False,
             verbose=False,
         ),
@@ -157,7 +157,7 @@ def test_evo2_sample_batched_tool(model_checkpoint):
     inputs = Evo2SampleInput(prompts=prompts)
     config = Evo2SampleConfig(
         model_checkpoint=model_checkpoint,
-        num_tokens=50,
+        max_new_tokens=50,
         temperature=1.0,
         batch_size=2,
         verbose=False,
@@ -394,7 +394,7 @@ def test_evo2_sample_benchmark(request):
     # OOM'd at a 16 GiB ifft allocation once memory fragmented across runs.
     config = Evo2SampleConfig(
         model_checkpoint="evo2_7b",
-        num_tokens=512,
+        max_new_tokens=512,
         temperature=1.0,
         batch_size=8,
         verbose=False,

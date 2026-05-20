@@ -71,7 +71,7 @@ class Evo1SampleConfig(CausalModelSampleConfig):
             ``-crispr``/``-transposon`` are domain fine-tunes.
         top_k (int): Limit sampling to the top-k most probable tokens at each step.
             Defaults to ``4`` (one per DNA base).
-        num_tokens (int): Number of new tokens to generate per prompt (excludes prompt).
+        max_new_tokens (int): Maximum number of new tokens to generate per prompt (excludes prompt).
         cached_generation (bool): Use the KV cache for autoregressive generation.
         force_prompt_threshold (int): Number of tokens to prefill in parallel before
             switching to autoregressive prompt forcing; lower values reduce peak memory.
@@ -94,11 +94,11 @@ class Evo1SampleConfig(CausalModelSampleConfig):
         ge=1,
         description="Limit sampling to the top-k most probable tokens at each step",
     )
-    num_tokens: int = ConfigField(
-        title="Number of Tokens",
+    max_new_tokens: int = ConfigField(
+        title="Max New Tokens",
         default=100,
         ge=1,
-        description="Number of new tokens to generate per prompt",
+        description="Maximum number of new tokens to generate per prompt",
     )
     cached_generation: bool = ConfigField(
         title="Cached Generation",
@@ -165,7 +165,7 @@ def run_evo1_sample(
 
     Examples:
         >>> inputs = Evo1SampleInput(prompts=["ATCGATCG"])
-        >>> config = Evo1SampleConfig(num_tokens=100, top_k=4)
+        >>> config = Evo1SampleConfig(max_new_tokens=100, top_k=4)
         >>> result = run_evo1_sample(inputs, config)
         >>> print(f"Generated {len(result.sequences)} sequences")
     """
@@ -177,7 +177,7 @@ def run_evo1_sample(
             "operation": "sample",
             "model_name": config.model_name,
             "prompts": inputs.prompts,
-            "num_tokens": config.num_tokens,
+            "max_new_tokens": config.max_new_tokens,
             "top_k": config.top_k,
             "temperature": config.temperature,
             "top_p": config.top_p,
@@ -209,7 +209,7 @@ def run_evo1_sample(
             "top_k": config.top_k,
             "temperature": config.temperature,
             "top_p": config.top_p,
-            "num_tokens": config.num_tokens,
+            "max_new_tokens": config.max_new_tokens,
             "prepend_prompt": config.prepend_prompt,
         },
         sequences=sequences,

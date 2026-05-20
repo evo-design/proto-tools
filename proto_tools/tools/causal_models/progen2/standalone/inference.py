@@ -173,7 +173,7 @@ class ProGen2Model:
         temperature: float = 0.2,
         top_p: float = 0.95,
         top_k: int = 0,
-        max_length: int = 256,
+        max_new_tokens: int = 256,
         truncate_at_stop: bool = True,
         strip_special_tokens: bool = True,
         prepend_prompt: bool = True,
@@ -190,7 +190,7 @@ class ProGen2Model:
             temperature: Sampling temperature
             top_p: Nucleus sampling probability
             top_k: Top-k sampling (0 to disable)
-            max_length: Maximum total sequence length
+            max_new_tokens: Maximum number of new tokens to generate per prompt
             truncate_at_stop: Whether to stop at EOS tokens
             strip_special_tokens: Whether to remove start and stop tokens
             prepend_prompt: Whether to include prompt in output
@@ -235,7 +235,7 @@ class ProGen2Model:
                     attention_mask=attention_mask,
                     do_sample=True,
                     temperature=temperature,
-                    max_length=max_length,
+                    max_new_tokens=max_new_tokens,
                     top_p=top_p,
                     top_k=top_k if top_k > 0 else None,
                     num_return_sequences=1,
@@ -394,7 +394,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             temperature=input_dict["temperature"],
             top_p=input_dict["top_p"],
             top_k=input_dict["top_k"],
-            max_length=input_dict["max_length"],
+            max_new_tokens=input_dict["max_new_tokens"],
             truncate_at_stop=input_dict["truncate_at_stop"],
             strip_special_tokens=input_dict["strip_special_tokens"],
             prepend_prompt=input_dict["prepend_prompt"],

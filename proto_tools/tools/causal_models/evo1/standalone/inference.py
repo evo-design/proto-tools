@@ -37,7 +37,7 @@ class Evo1Model:
 
     Example:
         >>> model = Evo1Model("evo-1-8k-base")
-        >>> out = model.sample(prompts=["ATCG"], num_tokens=100)
+        >>> out = model.sample(prompts=["ATCG"], max_new_tokens=100)
         >>> out["sequences"]
     """
 
@@ -56,7 +56,7 @@ class Evo1Model:
     def sample(
         self,
         prompts: list[str],
-        num_tokens: int = 100,
+        max_new_tokens: int = 100,
         top_k: int = 4,
         temperature: float = 1.0,
         top_p: float = 1.0,
@@ -73,7 +73,7 @@ class Evo1Model:
 
         Args:
             prompts: DNA prompt sequences.
-            num_tokens: Number of tokens to generate per prompt.
+            max_new_tokens: Maximum number of new tokens to generate per prompt.
             top_k: Top-k sampling parameter.
             temperature: Sampling temperature.
             top_p: Top-p (nucleus) sampling parameter.
@@ -105,7 +105,7 @@ class Evo1Model:
                 prompt_seqs=batch,
                 model=self.model,
                 tokenizer=self.tokenizer,
-                n_tokens=num_tokens,
+                n_tokens=max_new_tokens,
                 temperature=temperature,
                 top_k=top_k,
                 top_p=top_p,
@@ -122,7 +122,7 @@ class Evo1Model:
         assert len(all_sequences) == len(prompts)
         return {
             "sequences": all_sequences,
-            "metrics": [log_likelihood_metrics(float(s), num_tokens) for s in all_scores],
+            "metrics": [log_likelihood_metrics(float(s), max_new_tokens) for s in all_scores],
         }
 
     def score(
@@ -298,7 +298,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if operation == "sample":
         return _model.sample(
             prompts=input_dict["prompts"],
-            num_tokens=input_dict["num_tokens"],
+            max_new_tokens=input_dict["max_new_tokens"],
             top_k=input_dict["top_k"],
             temperature=input_dict["temperature"],
             top_p=input_dict["top_p"],
