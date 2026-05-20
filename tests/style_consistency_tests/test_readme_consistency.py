@@ -1032,11 +1032,14 @@ def _extract_urls(text: str) -> list[tuple[int, str]]:
     """Extract all URLs from text outside code blocks.
 
     Handles Wikipedia-style URLs with parentheses (e.g., BLAST_(biotechnology)).
+    Inline code spans (`...`) are stripped first so URLs documented as API
+    endpoints inside code spans aren't treated as clickable links.
     Returns deduplicated (1-based line number, url) tuples.
     """
     urls: list[tuple[int, str]] = []
     seen: set[str] = set()
-    for lineno, line in _lines_outside_code_blocks(text):
+    for lineno, raw_line in _lines_outside_code_blocks(text):
+        line = _strip_inline_code(raw_line)
         # First extract from markdown links [text](url) which may have parens
         # (e.g., Wikipedia URLs like BLAST_(biotechnology)#Algorithm)
         for match in re.finditer(r"\[(?:[^\]]*)\]\((https?://[^()\s]*(?:\([^)]*\)[^()\s]*)*)\)", line):
