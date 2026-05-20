@@ -1,230 +1,49 @@
-<a href="https://bio-pro.mintlify.app/tools/gene-annotation/minced"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/gene-annotation/minced"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # MinCED
 
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** MinCED has a GPL-3.0 license. Please refer to [the license](https://github.com/ctSkennerton/minced/blob/master/LICENSE) for full terms.
 
 ## Overview
-MinCED (Mining CRISPRs in Environmental Datasets) is a tool for detecting [CRISPR](https://en.wikipedia.org/wiki/CRISPR) arrays in nucleotide sequences. It identifies repeat-spacer arrays using a heuristic [k-mer](https://en.wikipedia.org/wiki/K-mer) search algorithm derived from the CRISPR Recognition Tool (CRT), returning structured information about each array's repeats, spacers, and their genomic positions.
+
+[MinCED](https://github.com/ctSkennerton/minced) (Mining CRISPRs in Environmental Datasets) is a fast Java program that locates [CRISPR](https://en.wikipedia.org/wiki/CRISPR) arrays in nucleotide sequences from isolate genomes or metagenomic contigs. It returns each detected array as an ordered list of repeat-spacer units with their genomic coordinates, the repeat consensus, and per-spacer sequence.
 
 ## Background
 
-**What does this tool measure/predict?**
-MinCED detects [CRISPR](https://en.wikipedia.org/wiki/CRISPR) (Clustered Regularly Interspaced Short Palindromic Repeats) arrays in DNA sequences. CRISPR arrays consist of short, conserved repeat sequences separated by unique [spacer sequences](https://en.wikipedia.org/wiki/CRISPR#Spacer_acquisition) derived from past viral infections.
+MinCED is a derivative of the [CRISPR Recognition Tool (CRT)](https://pmc.ncbi.nlm.nih.gov/articles/PMC1924867/) ([Bland et al., 2007](https://doi.org/10.1186/1471-2105-8-209)), maintained by [Connor Skennerton](https://github.com/ctSkennerton). CRISPR arrays are blocks of short, near-identical direct repeats (typically 23 to 47 nt) separated by unique [spacer](https://en.wikipedia.org/wiki/CRISPR#Spacer_acquisition) sequences (typically 26 to 50 nt) that record fragments of past viral and plasmid infections; they form the heritable memory of the [CRISPR-Cas adaptive immune system](https://en.wikipedia.org/wiki/CRISPR) of bacteria and archaea.
 
-**Why is this important?**
-CRISPR arrays are the [adaptive immune](https://en.wikipedia.org/wiki/CRISPR#Immunity) memory of prokaryotes. Each spacer records a past viral encounter, and the repeats serve as structural elements recognized by [CRISPR-associated (Cas) proteins](https://en.wikipedia.org/wiki/Cas9). Detecting CRISPR arrays is essential for:
-- Identifying CRISPR-Cas defense systems in genomes
-- Characterizing spacer repertoires for phage-host interaction studies
-- Validating that generated DNA sequences contain functional CRISPR loci
-- Engineering new CRISPR systems by understanding natural array architecture
+Internally, MinCED uses a [k-mer](https://en.wikipedia.org/wiki/K-mer) seed-and-extend strategy. It scans for short exact k-mer matches that recur at a consistent spacing, then extends each seed bidirectionally to the actual repeat length, and finally validates the candidate by checking that the inter-repeat spacers fall within the configured length window. The algorithm runs on raw DNA, has linear time complexity in sequence length, and finishes in seconds on a typical 5 Mb bacterial genome on commodity CPU hardware.
 
-**Scientific foundation:**
-CRISPR arrays have a characteristic structure: direct repeats of 23-47 nucleotides separated by unique spacers of 26-50 nucleotides. MinCED exploits this regularity by searching for repeated k-mers at consistent intervals, then extending and refining candidate arrays. The algorithm is based on CRT (CRISPR Recognition Tool), which uses a seed-and-extend approach analogous to BLAST but tuned for the specific repeat-spacer pattern of CRISPR loci.
+### Learning Resources
+
+- [ctSkennerton/minced](https://github.com/ctSkennerton/minced) (Connor Skennerton) - official repository with the canonical command-line flag surface, installation instructions, and example output.
+- [PMC1924867 (CRT paper)](https://pmc.ncbi.nlm.nih.gov/articles/PMC1924867/) (Bland et al.) - the full text of the algorithm description, including the seed-and-extend mechanism and the comparison against PatScan and PILER-CR.
 
 ## Tools
 
 ### MinCED CRISPR Array Detection (`minced-crispr`)
 
-Detect CRISPR arrays in nucleotide sequences using MinCED.
+Detects CRISPR arrays in one or more nucleotide sequences. Returns, per input sequence, a list of `CrisprArray` objects; each carries an ordered list of `CrisprRepeatSpacer` units with the repeat's start position, the repeat sequence, and the following spacer (the last unit has no spacer).
 
-Uses MinCED (Mining CRISPRs in Environmental Datasets) to identify
-CRISPR repeats and spacers in input nucleotide sequences. This is
-used as a Stage 1 filter in the Cas9 filtering pipeline to confirm
-that candidate sequences contain functional CRISPR loci.
+#### Applications
 
-## How It Works
+Use this to confirm and catalog CRISPR loci across newly sequenced bacterial and archaeal genomes, or to mine spacer libraries from metagenomic assemblies for phage-host interaction studies. As a pre-filter, run `minced-crispr` first to verify that a candidate contig actually carries a CRISPR array before spending compute on downstream Cas and tracrRNA analysis with [`pyhmmer-hmmsearch`](https://bio-pro.mintlify.app/tools/gene-annotation/pyhmmer) for Cas effector domains and [`crispr-tracr-rna`](https://bio-pro.mintlify.app/tools/gene-annotation/crispr-tracr-rna) for tracrRNA on the same locus. The spacer set returned for each array can then be aligned against phage or plasmid sequence databases to reconstruct the host's immune history.
 
-**Method overview:**
-MinCED uses a heuristic k-mer search to find candidate CRISPR arrays. It scans the input sequence for exact k-mer matches occurring at regular intervals (consistent with repeat-spacer structure), then extends candidate arrays by searching for additional repeats flanking the initial seeds. Each candidate array is validated by checking that repeats are sufficiently similar and spacers fall within expected length ranges.
+#### Usage Tips
 
-**Key assumptions:**
-- Input sequences are prokaryotic or phage DNA
-- CRISPR repeats are 23-47 nt in length (matches MinCED's `-minRL`/`-maxRL` defaults)
-- Arrays contain at least 3 repeats (by default; minimum 2 allowed)
-- Spacers between repeats are 26-50 nt (matches `-minSL`/`-maxSL`)
+- **`min_num_repeats` controls the sensitivity-versus-specificity trade-off.** The default of 3 balances both for typical bacterial and archaeal genomes. Lower it to 2 to catch partial or degraded arrays at the cost of more false positives, and raise it to 4 or more when only high-confidence arrays should pass through.
+- **The 23 to 47 nt repeat and 26 to 50 nt spacer windows match canonical CRISPR loci.** Widen `max_repeat_length` and `max_spacer_length` to detect atypical families such as Type IV-A or CRISPR systems with unusually long spacers, and lower `min_repeat_length` only when chasing partial repeats since values below 20 nt start to pick up generic tandem repeats.
+- **MinCED only locates the array; it does not identify Cas genes or classify the CRISPR system.** Type assignment requires downstream Cas-effector annotation, typically `pyhmmer-hmmsearch` against curated Cas HMMs or a dedicated classifier such as CRISPRcasIdentifier.
+- **Inverted length ranges are caught at config time.** Setting `max_repeat_length < min_repeat_length` or `max_spacer_length < min_spacer_length` raises `ValueError` before the run starts, so the call fails fast instead of completing with an empty result set.
+- **Spacer count is not an immunity-breadth metric.** Multiple spacers in an array can target the same phage, and many spacers are degraded remnants of historical encounters, so the number of spacers overestimates how many distinct threats the host can recognize today.
 
-**Limitations:**
-- May miss degenerate or highly diverged CRISPR arrays
-- Cannot distinguish active from inactive (degraded) arrays
-- Does not identify Cas genes or system type -- use complementary tools for full CRISPR-Cas annotation
-- Very short arrays (2 repeats) have higher false-positive rates
+## Toolkit Notes
 
-**Computational requirements:**
-- **Hardware:** CPU only; no GPU required
-- **Runtime:** Seconds for typical bacterial genomes (~5 Mb)
-- **Scalability:** Processes sequences independently; scales linearly with input size
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-## Important Parameters
+These apply to every MinCED tool in this toolkit (`minced-crispr`).
 
-**Input parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `sequences` | `List[str]` | *Required* | Nucleotide sequence(s) to search for CRISPR arrays |
-| `sequence_ids` | `Optional[List[str]]` | `None` | Optional sequence identifiers (defaults to seq_0, seq_1, ...) |
-
-**Configuration parameters:**
-
-All defaults match upstream MinCED's `-h` output (verified live).
-
-| Parameter | Type | Default | MinCED Flag | Description |
-|-----------|------|---------|-------------|-------------|
-| `min_num_repeats` | `int` | `3` | `-minNR` | Minimum number of repeats required for a CRISPR array |
-| `min_repeat_length` | `int` | `23` | `-minRL` | Minimum length of a repeat sequence in nucleotides |
-| `max_repeat_length` | `int` | `47` | `-maxRL` | Maximum length of a repeat sequence in nucleotides |
-| `min_spacer_length` | `int` | `26` | `-minSL` | Minimum length of a spacer in nucleotides |
-| `max_spacer_length` | `int` | `50` | `-maxSL` | Maximum length of a spacer in nucleotides |
-
-**Parameters to prioritize for sweeps:**
-1. **`min_num_repeats`**: Lowering to 2 increases sensitivity but also false positives. Default of 3 balances sensitivity and specificity for most applications.
-2. **`min_repeat_length`**: Lowering below 23 may detect non-CRISPR tandem repeats. Raising above 30 may miss canonical CRISPR arrays.
-
----
-
-**Output specification:**
-
-```python
-# Return type: MincedOutput
-{
-    "results": [
-        {
-            "sequence_id": str,
-            "crispr_arrays": [
-                {
-                    "repeats_and_spacers": [
-                        {
-                            "position": int,       # Genomic position
-                            "repeat": str,         # Repeat sequence
-                            "spacer": str | None,  # Spacer (None for last repeat)
-                            "repeat_length": int,
-                            "spacer_length": int | None,
-                        },
-                        ...
-                    ]
-                },
-                ...
-            ]
-        },
-        ...
-    ]
-}
-```
-
-**Key output fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `results` | `List[MincedSequenceResult]` | Per-sequence CRISPR array detection results |
-| `sequence_id` | `str` | Identifier for the input sequence |
-| `crispr_arrays` | `List[CrisprArray]` | CRISPR arrays detected in this sequence |
-| `repeats_and_spacers` | `List[CrisprRepeatSpacer]` | Ordered repeat-spacer units in each array |
-| `position` | `int` | Genomic position of each repeat |
-| `repeat` / `spacer` | `str` | The actual repeat and spacer sequences |
-
-**Properties:**
-- `MincedSequenceResult.has_crispr`: Whether any CRISPR arrays were found
-- `MincedSequenceResult.num_arrays`: Number of arrays detected
-- `CrisprArray.num_repeats`: Number of repeats in the array
-- `CrisprArray.spacers`: List of spacer sequences
-
-**Supported export formats:** `csv`, `json`
-
-**Thresholds & decision boundaries:**
-- **Typical CRISPR array**: 3+ repeats of 23-47 nt, spacers of 26-50 nt
-- **High-confidence array**: >=4 repeats with consistent repeat lengths (+/-2 nt)
-- **Questionable array**: 2 repeats only, or highly variable repeat lengths
-
-## Best Practices & Gotchas
-
-**Parameter tuning:**
-- **`min_num_repeats`**:
-  - Default (3): Good balance for most genomes
-  - Lower (2): Use when searching for partial or degraded arrays; expect more false positives
-  - Higher (4-5): Use for high-confidence detection only
-
-**Common mistakes:**
-1. **Expecting Cas gene annotation**: MinCED only detects the CRISPR array (repeats + spacers). It does not identify Cas proteins or classify the CRISPR system type. Use Prodigal + PyHMMER for Cas gene identification.
-2. **Using protein sequences as input**: MinCED operates on nucleotide sequences only.
-3. **Interpreting spacer count as immunity breadth**: Spacers may target the same phage or be inactive remnants.
-
-**Tips for optimal results:**
-- For generated sequences, run MinCED as a first-pass filter to confirm CRISPR array presence before more expensive analyses
-- Cross-reference detected spacers with phage databases to identify targets
-- Use `sequence_ids` to maintain traceability in batch processing
-
-**Edge cases to watch for:**
-- Tandem repeats that are not CRISPR arrays may be detected with low `min_repeat_length`
-- Very long sequences (>10 Mb) may take longer but should complete without issues
-- Sequences with no CRISPR arrays return results with `has_crispr=False` and empty `crispr_arrays`
-
-## References
-
-**Primary publication:**
-- Bland, C., Ramsey, T.L., Sabree, F., Lowe, M., Brown, K., Kyrpides, N.C. & Hugenholtz, P. (2007). "CRISPR Recognition Tool (CRT): a tool for automatic detection of clustered regularly interspaced palindromic repeats." *BMC Bioinformatics* 8:209. [DOI: 10.1186/1471-2105-8-209](https://doi.org/10.1186/1471-2105-8-209)
-- Summary: Describes the CRT algorithm that MinCED is based on, which uses a k-mer seed-and-extend approach to identify CRISPR repeat-spacer arrays in genomic sequences.
-
-**Implementation:**
-- GitHub: [https://github.com/ctSkennerton/minced](https://github.com/ctSkennerton/minced)
-
-## Quick Start Examples
-
-**Example 1: Detect CRISPR arrays in a sequence**
-```python
-from proto_tools.tools.gene_annotation.minced import (
-    run_minced, MincedInput, MincedConfig
-)
-
-inputs = MincedInput(
-    sequences=["ATGCGT...your_genomic_sequence...GCATCG"],
-    sequence_ids=["my_genome"],
-)
-config = MincedConfig()
-
-result = run_minced(inputs, config)
-
-for seq_result in result.results:
-    print(f"{seq_result.sequence_id}: {seq_result.num_arrays} CRISPR arrays found")
-    for i, array in enumerate(seq_result.crispr_arrays):
-        print(f"  Array {i+1}: {array.num_repeats} repeats")
-        for rs in array.repeats_and_spacers:
-            print(f"    Repeat at {rs.position}: {rs.repeat[:20]}...")
-            if rs.spacer:
-                print(f"    Spacer: {rs.spacer[:20]}...")
-```
-
-**Example 2: Batch processing with sensitive settings**
-```python
-from proto_tools.tools.gene_annotation.minced import (
-    run_minced, MincedInput, MincedConfig
-)
-
-inputs = MincedInput(
-    sequences=[seq1, seq2, seq3],
-    sequence_ids=["genome_A", "genome_B", "genome_C"],
-)
-config = MincedConfig(
-    min_num_repeats=2,            # More sensitive (vs default 3)
-    min_repeat_length=20,         # Allow shorter repeats (vs default 23)
-)
-
-result = run_minced(inputs, config)
-print(f"{result.num_sequences_with_crispr} of {len(result.results)} sequences have CRISPR arrays")
-```
-
-## Related Tools
-
-**Tools often used together:**
-- **`crispr-tracr-rna`**: Predict tracrRNA sequences in CRISPR loci (run after MinCED confirms array presence)
-- **`prodigal`**: Find ORFs near CRISPR arrays to identify Cas genes
-- **`pyhmmer-hmmsearch`**: Search for Cas protein domains using HMM profiles
-- **`blast-search`**: Search spacer sequences against phage databases
-
-**Alternative tools (similar function):**
-- **CRISPRCasFinder**: More comprehensive (detects Cas genes too) but web-based
-- **PILER-CR**: Alternative local CRISPR finder; MinCED is generally more sensitive for short arrays
-
----
-**Maintenance notes:**
-- Last updated: 2025-06-01
+- **Runs on CPU only.** MinCED is a Java program; the standalone install bundles a Java runtime alongside the `minced` binary. There is no GPU acceleration to enable, and runtime is seconds per typical bacterial genome.
+- **Self-contained after install.** The standalone `setup.sh` downloads the `minced` binary once; subsequent runs need no network access and no model weights or reference databases.
+- **Sequences are processed one at a time.** The wrapper iterates over `inputs.sequences` sequentially rather than parallelizing across them. For large batches, run independent calls in parallel from the caller side.
