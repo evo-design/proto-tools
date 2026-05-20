@@ -12,7 +12,13 @@ import sys
 from typing import Any, Literal
 
 import torch
-from standalone_helpers import get_logger, move_model_to_device, serialize_output, set_torch_seed
+from standalone_helpers import (
+    get_logger,
+    log_likelihood_metrics,
+    move_model_to_device,
+    serialize_output,
+    set_torch_seed,
+)
 from tqdm import tqdm
 
 logger = get_logger(__name__)
@@ -80,7 +86,8 @@ class Evo1Model:
                 switching to autoregressive prompt forcing.
 
         Returns:
-            Dictionary with keys "sequences" (List[str]) and "scores" (List[float]).
+            Dictionary with keys ``sequences`` (list[str]) and ``metrics`` (list of
+            dicts with ``log_likelihood``, ``avg_log_likelihood``, ``perplexity``).
         """
         set_torch_seed(seed)
 
@@ -113,10 +120,9 @@ class Evo1Model:
             all_scores.extend(scores)
 
         assert len(all_sequences) == len(prompts)
-        # Convert numpy floats to native Python floats for JSON serialization
         return {
             "sequences": all_sequences,
-            "scores": [float(s) for s in all_scores],
+            "metrics": [log_likelihood_metrics(float(s), num_tokens) for s in all_scores],
         }
 
     def score(
@@ -197,13 +203,7 @@ class Evo1Model:
 
                 for i, length in enumerate(seq_lengths):
                     seq_logprobs = logprobs[i, :length].float()
-                    all_metrics.append(
-                        {
-                            "log_likelihood": seq_logprobs.sum().item(),
-                            "avg_log_likelihood": seq_logprobs.mean().item(),
-                            "perplexity": torch.exp(-seq_logprobs.mean()).item(),
-                        }
-                    )
+                    all_metrics.append(log_likelihood_metrics(seq_logprobs.mean().item(), length))
                     # Store full logits (unshifted) for the sequence positions
                     # logits has BOS-prepended length, so positions 0..length-1
                     # correspond to predictions for positions 1..length

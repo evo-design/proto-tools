@@ -49,7 +49,8 @@ class AbLangGradientOutput(GradientOutput):
         gradient (list[list[float]] | None): Gradient w.r.t. input logits, or ``None``
             when ``compute_gradient=False`` (forward-only scoring).
         loss (float): Mean negative log-likelihood over AA positions.
-        metrics (dict[str, Any]): ``log_likelihood``, ``sequence_length``, ``model_choice``, ``objective``.
+        metrics (dict[str, Any]): ``log_likelihood``, ``avg_log_likelihood``, ``perplexity``,
+            ``sequence_length``, ``model_choice``, ``objective``.
         vocab (list[str]): Amino-acid column ordering for the input logits.
     """
 

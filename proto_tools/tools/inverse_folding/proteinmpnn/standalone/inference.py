@@ -1,7 +1,6 @@
 """ProteinMPNN standalone inference implementation for venv execution."""
 
 import json
-import math
 import os
 import sys
 from typing import Any
@@ -12,7 +11,7 @@ import numpy as np
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
-from standalone_helpers import get_logger
+from standalone_helpers import get_logger, log_likelihood_metrics
 
 logger = get_logger(__name__)
 
@@ -203,16 +202,11 @@ class ProteinMPNNModel:
         effective_length = _effective_score_length(self.model._inputs)
         if effective_length == 0:
             raise ValueError("proteinmpnn: no residues available to score")
-        metrics = {
-            "log_likelihood": -neg_avg_ll * effective_length,
-            "avg_log_likelihood": -neg_avg_ll,
-            "perplexity": float(math.exp(neg_avg_ll)),
-        }
 
         self.unload()
         return {
             "logits": output["logits"] if return_logits else None,
-            "metrics": metrics,
+            "metrics": log_likelihood_metrics(-neg_avg_ll, effective_length),
             "vocab": ALPHAFOLD_VOCAB,
         }
 
@@ -313,9 +307,7 @@ class ProteinMPNNModel:
             "gradient": gradient_value,
             "loss": mean_nll,
             "metrics": {
-                "log_likelihood": -mean_nll * effective_length,
-                "avg_log_likelihood": -mean_nll,
-                "perplexity": float(math.exp(mean_nll)),
+                **log_likelihood_metrics(-mean_nll, effective_length),
                 "sequence_length": parsed_len,
                 "effective_sequence_length": effective_length,
                 "model_choice": model_choice,

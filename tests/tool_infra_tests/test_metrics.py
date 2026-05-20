@@ -7,10 +7,14 @@ enforcement, and element-wise bounds).
 
 from __future__ import annotations
 
+import math
 from typing import ClassVar
 
 import pytest
 
+from proto_tools.utils.standalone_helpers_source.standalone_helpers.scoring import (
+    log_likelihood_metrics,
+)
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 
@@ -232,3 +236,40 @@ def test_validate_type_legacy_fallback():
     _LegacyMetrics(score=0.5).validate_against_spec()
     with pytest.raises(AssertionError, match=r"score.*above declared max"):
         _LegacyMetrics(score=1.5).validate_against_spec()
+
+
+# ============================================================================
+# log_likelihood_metrics helper
+# ============================================================================
+def test_log_likelihood_metrics_returns_canonical_triple():
+    """Helper derives the full ``{ll, avg_ll, perplexity}`` triple from ``(avg, seq_len)``."""
+    m = log_likelihood_metrics(avg_log_likelihood=-2.0, seq_len=100)
+    assert m == {
+        "log_likelihood": pytest.approx(-200.0),
+        "avg_log_likelihood": pytest.approx(-2.0),
+        "perplexity": pytest.approx(math.exp(2.0)),
+    }
+
+
+def test_log_likelihood_metrics_satisfies_scoring_spec():
+    """The triple validates against the three shared scoring-metrics specs."""
+    from proto_tools.tools.causal_models.shared_data_models import CausalModelScoringMetrics
+    from proto_tools.tools.inverse_folding.shared_data_models import InverseFoldingScoringMetrics
+    from proto_tools.tools.masked_models.shared_data_models import MaskedModelScoringMetrics
+
+    triple = log_likelihood_metrics(avg_log_likelihood=-1.5, seq_len=50)
+    for cls in (CausalModelScoringMetrics, MaskedModelScoringMetrics, InverseFoldingScoringMetrics):
+        cls(**triple).validate_against_spec()
+
+
+def test_log_likelihood_metrics_seq_len_one_collapses_sum_and_mean():
+    """At ``seq_len=1`` the sum and mean coincide."""
+    m = log_likelihood_metrics(avg_log_likelihood=-0.7, seq_len=1)
+    assert m["log_likelihood"] == pytest.approx(m["avg_log_likelihood"])
+
+
+def test_log_likelihood_metrics_perplexity_one_at_zero_likelihood():
+    """``avg_log_likelihood == 0`` corresponds to perfect prediction (perplexity = 1)."""
+    m = log_likelihood_metrics(avg_log_likelihood=0.0, seq_len=10)
+    assert m["log_likelihood"] == 0.0
+    assert m["perplexity"] == pytest.approx(1.0)

@@ -8,7 +8,7 @@ from collections import defaultdict
 from copy import deepcopy
 from typing import Any
 
-from standalone_helpers import get_logger, serialize_output, set_torch_seed
+from standalone_helpers import get_logger, log_likelihood_metrics, serialize_output, set_torch_seed
 
 logger = get_logger(__name__)
 
@@ -314,8 +314,6 @@ class ProGen3Model:
                 ``logits`` (per-sequence tensor of shape ``(tokenized_len, vocab_size)``
                 when ``return_logits=True``), and ``vocab``.
         """
-        import math
-
         if not self._loaded:
             self.load(device, verbose)
         elif self.device != device:
@@ -331,21 +329,11 @@ class ProGen3Model:
 
         result = scorer.score_batch_with_positions(sequences, return_logits=return_logits)
 
-        # Derive log_likelihood (sum), avg_log_likelihood (mean), and perplexity
-        # (exp(-mean)) from the bidirectional per-position values so all three
-        # fields stay internally consistent with the per-position output.
+        # Stay consistent with the per-position output by deriving the triple from those values.
         metrics = []
         for per_pos in result["per_position_metrics"]:
             valid = [x for x in per_pos["log_likelihood"] if x is not None]
-            ll_sum = sum(valid)
-            ll_avg = ll_sum / len(valid)
-            metrics.append(
-                {
-                    "log_likelihood": ll_sum,
-                    "avg_log_likelihood": ll_avg,
-                    "perplexity": math.exp(-ll_avg),
-                }
-            )
+            metrics.append(log_likelihood_metrics(sum(valid) / len(valid), len(valid)))
 
         return {
             "metrics": metrics,

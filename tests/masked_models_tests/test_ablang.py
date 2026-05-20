@@ -90,7 +90,12 @@ def test_ablang_gradient_dispatch_contract(monkeypatch):
         return {
             "gradient": [[0.0] * 20] * n,
             "loss": 0.5,
-            "metrics": {"log_likelihood": -0.5, "model_choice": payload.get("model_choice")},
+            "metrics": {
+                "log_likelihood": -0.5 * n,
+                "avg_log_likelihood": -0.5,
+                "perplexity": math.exp(0.5),
+                "model_choice": payload.get("model_choice"),
+            },
             "vocab": list(PROTEIN_AMINO_ACIDS),
         }
 
@@ -135,7 +140,12 @@ def test_ablang_forward_mode_dispatch_contract(monkeypatch):
         return {
             "gradient": None,
             "loss": 0.5,
-            "metrics": {"log_likelihood": -0.5, "sequence_length": n},
+            "metrics": {
+                "log_likelihood": -0.5 * n,
+                "avg_log_likelihood": -0.5,
+                "perplexity": math.exp(0.5),
+                "sequence_length": n,
+            },
             "vocab": list(PROTEIN_AMINO_ACIDS),
         }
 
@@ -152,7 +162,7 @@ def test_ablang_forward_mode_dispatch_contract(monkeypatch):
     assert captured["payload"]["compute_gradient"] is False
     assert result.gradient is None
     assert result.loss == 0.5
-    assert result.metrics["log_likelihood"] == -0.5
+    assert result.metrics["avg_log_likelihood"] == -0.5
 
 
 # ── Gradient dispatch tests (subprocess venv, GPU-only) ──────────────────────
@@ -201,7 +211,9 @@ def test_compute_gradient_dispatch(
     assert all(math.isfinite(v) for row in result.gradient for v in row)
     assert result.loss > 0
     assert math.isfinite(result.loss)
-    assert result.metrics["log_likelihood"] == pytest.approx(-result.loss, rel=1e-6)
+    assert result.metrics["avg_log_likelihood"] == pytest.approx(-result.loss, rel=1e-6)
+    assert result.metrics["log_likelihood"] == pytest.approx(-result.loss * expected_len, rel=1e-6)
+    assert result.metrics["perplexity"] == pytest.approx(math.exp(result.loss), rel=1e-6)
     assert result.metrics["sequence_length"] == expected_len
     assert result.vocab == _CANONICAL_VOCAB
 

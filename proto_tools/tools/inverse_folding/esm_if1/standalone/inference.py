@@ -2,13 +2,18 @@
 
 import gc
 import json
-import math
 import os
 import sys
 from typing import Any
 
 import torch
-from standalone_helpers import get_logger, move_model_to_device, serialize_output, set_torch_seed
+from standalone_helpers import (
+    get_logger,
+    log_likelihood_metrics,
+    move_model_to_device,
+    serialize_output,
+    set_torch_seed,
+)
 
 logger = get_logger(__name__)
 
@@ -251,13 +256,7 @@ class ESMIF1Model:
             sequence,
         )
 
-        metrics = {
-            "log_likelihood": float(avg_ll) * len(sequence),
-            "avg_log_likelihood": float(avg_ll),
-            "perplexity": float(math.exp(-avg_ll)),
-        }
-
-        return {"metrics": metrics}
+        return {"metrics": log_likelihood_metrics(float(avg_ll), len(sequence))}
 
     def load(
         self,

@@ -2,14 +2,13 @@
 
 import gc
 import json
-import math
 import os
 import sys
 from typing import Any
 
 import numpy as np
 import torch
-from standalone_helpers import get_logger, move_model_to_device, serialize_output
+from standalone_helpers import get_logger, log_likelihood_metrics, move_model_to_device, serialize_output
 
 logger = get_logger(__name__)
 
@@ -243,17 +242,12 @@ class LigandMPNNModel:
         if effective_length == 0:
             raise ValueError("ligandmpnn: no residues available to score")
 
-        log_likelihood = float(selected.sum().item())
-        avg_log_likelihood = log_likelihood / effective_length
+        avg_log_likelihood = float(selected.sum().item()) / effective_length
 
         self.unload()
         return {
             "logits": output["decoder_features"]["logits"][0] if return_logits else None,
-            "metrics": {
-                "log_likelihood": log_likelihood,
-                "avg_log_likelihood": avg_log_likelihood,
-                "perplexity": float(math.exp(-avg_log_likelihood)),
-            },
+            "metrics": log_likelihood_metrics(avg_log_likelihood, effective_length),
             "vocab": vocab,
         }
 
