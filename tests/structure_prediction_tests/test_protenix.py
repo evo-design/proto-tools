@@ -80,6 +80,32 @@ def test_protenix_config_defaults():
     assert config.num_pairformer_cycles == 10
 
 
+@pytest.mark.parametrize(
+    "model_name, expected_cycles, expected_steps",
+    [
+        ("protenix_base_default_v1.0.0", 10, 200),
+        ("protenix_mini_default_v0.5.0", 4, 5),
+        ("protenix_tiny_default_v0.5.0", 4, 5),
+    ],
+)
+def test_protenix_config_schedule_defaults_per_variant(model_name, expected_cycles, expected_steps):
+    """Unset cycles/steps resolve to the upstream native schedule per variant."""
+    config = ProtenixConfig(model_name=model_name)
+    assert config.num_pairformer_cycles == expected_cycles
+    assert config.num_diffusion_steps == expected_steps
+
+
+def test_protenix_config_explicit_schedule_overrides_variant_default():
+    """User-supplied cycles/steps win over the per-variant default."""
+    config = ProtenixConfig(
+        model_name="protenix_mini_default_v0.5.0",
+        num_pairformer_cycles=8,
+        num_diffusion_steps=100,
+    )
+    assert config.num_pairformer_cycles == 8
+    assert config.num_diffusion_steps == 100
+
+
 def test_protenix_config_colabfold_lazy_init():
     """colabfold_search_config is None by default, initialized lazily in preprocess."""
     config = ProtenixConfig(verbose=True)
