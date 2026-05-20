@@ -1,434 +1,98 @@
-<a href="https://bio-pro.mintlify.app/tools/gene-annotation/pyhmmer"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/gene-annotation/pyhmmer"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # PyHMMER
 
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** PyHMMER is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/althonos/pyhmmer/blob/master/COPYING) for full terms.
 
 ## Overview
-PyHMMER is a Python library binding to [HMMER3](http://hmmer.org/) for biological sequence analysis using [profile hidden Markov models](https://en.wikipedia.org/wiki/Hidden_Markov_model) (HMMs). It enables fast and sensitive domain annotation and homology detection, particularly for finding distant homologs that BLAST may miss. This module provides interfaces for *HMM Search* (searching HMM profiles against sequences), *HMM Scan* (searching sequences against an HMM database), *PHMMER* (protein sequence-protein sequence search), *NHMMER* (nucleotide sequence search), and *JackHMMER* (iterative protein sequence search).
+
+[PyHMMER](https://github.com/althonos/pyhmmer) is a Python library that binds [HMMER3](http://hmmer.org/) for [profile hidden Markov model](https://en.wikipedia.org/wiki/Hidden_Markov_model) sequence search and domain annotation. It exposes the five canonical HMMER programs (`hmmsearch`, `hmmscan`, `phmmer`, `nhmmer`, `jackhmmer`) as Python functions, returns structured per-hit and per-domain results, and reaches the sensitivity of HMMER while staying entirely in-process.
 
 ## Background
 
-**What does this tool do?**
-PyHMMER uses profile Hidden Markov Models to search for sequence homology. Unlike pairwise alignment methods (BLAST), HMMs capture the position-specific conservation patterns of an entire protein family, making them more sensitive for detecting distant relationships.
+[PyHMMER](https://github.com/althonos/pyhmmer) ([Larralde & Zeller, 2023](https://doi.org/10.1093/bioinformatics/btad214)) is a Cython binding to the HMMER C API that ships the HMMER source itself, so a single `pip install` provides both the Python interface and the compiled search engine. The underlying [HMMER3](http://hmmer.org/) algorithm ([Eddy, 2011](https://doi.org/10.1371/journal.pcbi.1002195)) builds a profile hidden Markov model from a [multiple sequence alignment](https://en.wikipedia.org/wiki/Multiple_sequence_alignment), where each match state stores position-specific emission probabilities and the transitions between states model insertions and deletions. Search proceeds through a cascade of accelerated filters: a [SIMD](https://en.wikipedia.org/wiki/Single_instruction,_multiple_data)-vectorised multiple-segment Viterbi (MSV) filter, a vectorised Viterbi filter, and a Forward/Backward filter, each tightening the candidate set before the final scored alignment. Each hit carries a database-size-independent bit score together with an [E-value](https://en.wikipedia.org/wiki/E-value) derived from extreme-value-distribution theory. The E-value calibrates the expected number of false-positive hits at that bit score for the database being searched.
 
-**Why is this important?**
-Many protein families have diverged so much that pairwise methods fail to detect their relationship. HMMs solve this by:
-- Capturing evolutionary constraints: Some positions in proteins are highly conserved (active sites), while others vary freely. HMMs model this.
-- Leveraging family information: Instead of comparing one sequence to another, HMMs represent an entire family's "signature."
-- Quantifying uncertainty: HMMs provide probabilistic scores that account for insertions, deletions, and substitutions.
+Profile HMMs detect homology that pairwise methods such as [BLAST](https://en.wikipedia.org/wiki/BLAST_(biotechnology)) miss because they encode an entire family's position-specific conservation pattern rather than the similarity of two sequences alone. HMMER3 brought profile-HMM search within roughly the runtime envelope of BLAST while keeping that sensitivity advantage. PyHMMER preserves the algorithm exactly and adds Python-native multithreading, in-memory HMM and sequence handles, and structured result objects. Coordinates returned for HMM matches, target alignments, and envelopes are reported as 1-indexed, inclusive intervals to match biological residue selection conventions.
 
-**Scientific foundation:**
-HMMER uses profile HMMs built from [multiple sequence alignments](https://en.wikipedia.org/wiki/Multiple_sequence_alignment):
+### Learning Resources
 
-1. **Profile Construction**: A multiple alignment of related sequences is converted into an HMM, where each position has emission probabilities (which amino acids are likely) and transition probabilities (insertions/deletions).
-2. **[Forward-Backward Algorithm](https://en.wikipedia.org/wiki/Forward%E2%80%93backward_algorithm)**: Calculates the probability of a sequence given the model.
-3. **[Viterbi Algorithm](https://en.wikipedia.org/wiki/Viterbi_algorithm)**: Finds the most likely alignment path through the model.
-4. **E-value Calculation**: Uses [extreme value distribution](https://en.wikipedia.org/wiki/Generalized_extreme_value_distribution) theory to estimate statistical significance, accounting for database size.
+- [pyhmmer documentation](https://pyhmmer.readthedocs.io/) (Martin Larralde) - the canonical API reference, with worked examples for every binding and a guide to feeding HMM and sequence files in and out of memory.
+- [HMMER User's Guide](http://hmmer.org/) (The Eddy/Rivas Laboratory, Harvard) - reference for the HMMER 3 command-line surface, the MSV/Viterbi/Forward filter cascade, E-value statistics, and the gathering/noise/trusted cutoff system used by Pfam HMMs.
+- [Pfam (via InterPro)](https://www.ebi.ac.uk/interpro/) (EMBL-EBI) - the standard curated HMM library that ships gathering, noise, and trusted cutoffs, and the typical target database for `hmmscan` domain annotation.
 
 ## Tools
 
-### PyHMMER Scan (`pyhmmer-hmmscan`)
-
-Search protein sequences against HMM database using PyHMMER.
-
-This function implements the hmmscan algorithm, searching protein sequences
-against an HMM database to identify domains and protein families within the
-query sequences. This is the reverse of hmmsearch and is useful for annotating
-proteins with known domain architectures.
-
 ### PyHMMER Profile Search (`pyhmmer-hmmsearch`)
 
-Search HMM profile(s) against protein sequences using PyHMMER.
+Searches one or more HMM profiles against a set of protein sequences and returns the sequences (and the per-domain alignments within them) that match each profile.
 
-This function implements the hmmsearch algorithm, searching one or more HMM
-profiles against protein sequences to identify sequences that match the
-profile(s). This is useful for finding proteins belonging to specific families
-or containing particular domains.
+#### Applications
 
-### PyHMMER JackHMMER Search (`pyhmmer-jackhmmer`)
+Use this when the question is "which proteins belong to family X." Build or download an HMM for a family of interest, then sweep a proteome, a [metagenome](https://en.wikipedia.org/wiki/Metagenomics), or a designed library to enumerate members and pull out their domain coordinates for downstream filtering or alignment.
 
-Iteratively search protein sequences against protein database using PyHMMER.
+#### Usage Tips
 
-### PyHMMER NHMMER Search (`pyhmmer-nhmmer`)
+- **`bit_cutoffs="gathering"` activates the Pfam-curated thresholds and replaces the E-value filter.** Each Pfam HMM ships a hand-curated gathering (`--cut_ga`) cutoff that defines family membership, together with the auto-derived noise (`--cut_nc`) and trusted (`--cut_tc`) cutoffs that bracket the curated set. Use `"gathering"` for routine Pfam annotation; ad-hoc HMMs without stored cutoffs raise `MissingCutoffs`.
+- **The default `evalue_threshold=10.0` is intentionally permissive.** Tighten to `0.001` for confident annotation or `1e-10` for stringent homology detection; loose thresholds are useful only when you plan to post-filter on `included` or `domain_included`.
 
-Search nucleotide sequences against nucleotide database using PyHMMER.
+### PyHMMER HMM Scan (`pyhmmer-hmmscan`)
 
-### PyHMMER PHMMER Search (`pyhmmer-phmmer`)
+Searches one or more query protein sequences against an HMM database and returns the profiles that match each query.
 
-Search protein sequences against protein database using PyHMMER.
+#### Applications
 
-This function implements the phmmer algorithm, which performs iterative
-protein-protein searches by building temporary HMM profiles from query
-sequences on-the-fly. This is useful for finding homologous sequences without
-requiring pre-built HMM profiles.
+Use this when the question is "what does this protein contain." Run a query proteome against [Pfam](https://www.ebi.ac.uk/interpro/) to annotate each protein with its domain architecture, then filter on `domain_included` to keep curated hits.
 
-## Tool Catalog
+#### Usage Tips
 
-| Tool | Query | Database | Use Case |
-|------|-------|----------|----------|
-| `pyhmmer-hmmsearch` | HMM profile(s) | Protein sequences | Find family members in a proteome |
-| `pyhmmer-hmmscan` | Protein sequence(s) | HMM database | Annotate domains in proteins |
-| `pyhmmer-phmmer` | Protein sequence(s) | Protein sequences | Sensitive homolog search without pre-built HMMs |
-| `pyhmmer-nhmmer` | Nucleotide sequence(s) | Nucleotide sequences | Sensitive DNA/RNA homolog search |
-| `pyhmmer-jackhmmer` | Protein sequence(s) | Protein sequences | Iterative homolog expansion search |
+- **Pick `hmmscan` versus `hmmsearch` by what you are querying with.** `hmmscan` takes sequences as queries and a database of HMMs as the target; `hmmsearch` is the reverse. For one or a few queries against Pfam, `hmmscan` is the natural choice; for one HMM against a large sequence database, `hmmsearch` is much faster.
+- **`bit_cutoffs="gathering"` applies here too and is the recommended Pfam annotation default.** As with `hmmsearch`, the cutoff is read from the HMM file and ad-hoc HMMs without stored cutoffs will fail with `MissingCutoffs`.
 
-## How It Works
+### PyHMMER Single-Sequence Protein Search (`pyhmmer-phmmer`)
 
-**Method overview:**
-The module exposes five distinct functions:
+Searches one or more protein query sequences against a target protein database by building a temporary HMM around each query.
 
-`pyhmmer-hmmsearch`: Searches one or more HMM profiles against a set of protein sequences. Use this when you have a specific protein family (HMM) and want to find all members in your sequences.
+#### Applications
 
-`pyhmmer-hmmscan`: Searches protein sequences against an HMM database (like Pfam). Use this to annotate proteins with known domains;the reverse of hmmsearch.
+Use this for HMM-grade sensitivity when no pre-built profile is available. Typical workflows include finding remote homologs of a newly characterised protein in a reference proteome and running a sequence-based homology pass when the family of interest is too narrow or too new to have a curated HMM.
 
-`pyhmmer-phmmer`: Performs iterative protein-protein searches by building temporary HMM profiles from query sequences on-the-fly. Use this when you don't have pre-built HMMs but want HMM-level sensitivity.
+#### Usage Tips
 
-`pyhmmer-nhmmer`: Searches nucleotide query sequences against nucleotide target sequences. Use this for sensitive DNA/RNA homology search.
+- **A single-query, single-target search will not converge.** `phmmer` builds the HMM from the query against the target database's residue statistics; a database of one sequence has no background to estimate against. Use `phmmer` with a real target proteome, not a synthetic pair.
 
-`pyhmmer-jackhmmer`: Performs iterative protein sequence search against a protein database, refining the model over multiple rounds.
+### PyHMMER Nucleotide Search (`pyhmmer-nhmmer`)
 
-**Computational Requirements:**
+Searches nucleotide query sequences against a nucleotide target database with the same profile-HMM machinery used for proteins.
 
-Speed: Slower than BLAST for simple searches, but provides much better sensitivity for distant homologs.
+#### Applications
 
-CPU: Scales well with multiple threads (use `num_threads=0` for auto-detection).
+Use this to find homologs of transposable elements, non-coding RNAs, regulatory elements, and other nucleotide features that diverge fast enough to slip past direct sequence alignment. Pair it with [Dfam](https://www.dfam.org/) - the curated profile-HMM library of transposable-element families that was co-designed with nhmmer - or with custom-built nucleotide HMMs when annotating genomes and metagenomic contigs.
 
-RAM: Depends on HMM database size; Pfam-A (~20,000 HMMs) requires ~2GB RAM.
+#### Usage Tips
 
-Storage: HMM files are compact; Pfam-A is ~300MB.
+- **`strand` defaults to `"both"` and searches the forward and reverse-complement strands.** Set `"watson"` to restrict to forward or `"crick"` to restrict to reverse-complement when the orientation of a hit is meaningful (e.g., on annotated coding strands).
 
-## Input Parameters
+### PyHMMER Iterative Protein Search (`pyhmmer-jackhmmer`)
 
-| Tool | Parameter | Type | Description |
-|------|-----------|------|-------------|
-| `pyhmmer-hmmsearch` | `sequences` | `str` or `List[str]` | Target protein sequences to search (amino acid strings). |
-| `pyhmmer-hmmsearch` | `hmm` | `str` | Path to HMM file containing one or more profiles. |
-| `pyhmmer-hmmscan` | `sequences` | `str` or `List[str]` | Query protein sequences to annotate. |
-| `pyhmmer-hmmscan` | `hmm_db` | `str` | Path to HMM database file (e.g., Pfam-A.hmm). |
-| `pyhmmer-phmmer` | `sequences` | `str` or `List[str]` | Query protein sequences. |
-| `pyhmmer-phmmer` | `target_sequences` | `str` or `List[str]` | Target protein sequences to search against. |
-| `pyhmmer-nhmmer` | `sequences` | `str` or `List[str]` | Query nucleotide sequences. |
-| `pyhmmer-nhmmer` | `target_sequences` | `str` or `List[str]` | Target nucleotide sequences to search against. |
-| `pyhmmer-jackhmmer` | `sequences` | `str` or `List[str]` | Query protein sequences. |
-| `pyhmmer-jackhmmer` | `target_sequences` | `str` or `List[str]` | Target protein sequences to search against. |
+Performs iterative protein-sequence search against a target protein database, rebuilding the HMM from each round's included hits to extend the search outward across remote homologs.
 
-## Configuration
+#### Applications
 
-All defaults match HMMER 3 / pyhmmer Pipeline defaults (verified live).
+Use this when you need to reach divergent family members that a single-pass `phmmer` would miss, for example when seeding a new family from one characterised representative or expanding a manually curated set to its full evolutionary breadth.
 
-**Shared Parameters (All Tools)**
+#### Usage Tips
 
-| Parameter | Type | Default | HMMER Flag | Description |
-|-----------|------|---------|------------|-------------|
-| `num_threads` | `int` | `0` | `--cpu` | CPU threads (0 = auto-detect). |
-| `evalue_threshold` | `float` | `10.0` | `-E` | Sequence-level E-value cap to **report**. |
-| `score_threshold` | `float \| None` | `None` | `-T` | Sequence-level bit-score floor to **report** (overrides `-E` when set). |
-| `domain_evalue_threshold` | `float` | `10.0` | `--domE` | Per-domain E-value cap to **report**. |
-| `domain_score_threshold` | `float \| None` | `None` | `--domT` | Per-domain bit-score floor to **report** (overrides `--domE` when set). |
-| `inclusion_evalue_threshold` | `float` | `0.01` | `--incE` | Sequence-level E-value cap for **inclusion**. |
-| `inclusion_domain_evalue_threshold` | `float` | `0.01` | `--incdomE` | Per-domain E-value cap for **inclusion**. |
-| `z_value` | `float \| None` | `None` | `-Z` | Effective database size for E-value calc. |
-| `domain_z_value` | `float \| None` | `None` | `--domZ` | Significant hit count for domain E-value calc. |
-| `skip_filters` | `bool` | `False` | `--max` | Disable MSV/Vit/Fwd heuristic filters (slower, max sensitivity). |
+- **`inclusion_evalue_threshold` is the lever that controls iterative drift.** Each iteration rebuilds the HMM from hits that pass the inclusion thresholds (`--incE` / `--incdomE`, defaults `0.01`). A looser inclusion threshold pulls in more sequences per round and increases the risk of pulling in unrelated families; tighten it when iterations start drifting.
+- **`max_iterations` defaults to 5 and the search exits early on convergence.** Raising it rarely helps if the search has already converged on a stable set, and a higher cap multiplies runtime on long-running jobs.
 
-**Tool-specific knobs**
+## Toolkit Notes
 
-| Tool | Parameter | Type | Default | HMMER Flag | Notes |
-|------|-----------|------|---------|------------|-------|
-| `pyhmmer-hmmsearch`, `pyhmmer-hmmscan` | `bit_cutoffs` | `Literal['gathering', 'noise', 'trusted'] \| None` | `None` | `--cut_ga` / `--cut_nc` / `--cut_tc` | Use the HMM's stored Pfam-curated cutoff in place of E-value reporting. |
-| `pyhmmer-nhmmer` | `strand` | `Literal['both', 'watson', 'crick']` | `'both'` | `--watson` / `--crick` | Restrict to forward (`watson`), reverse-complement (`crick`), or search both. |
-| `pyhmmer-jackhmmer` | `max_iterations` | `int` | `5` | `-N` | Iterations before stopping; converges early. |
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-### Reporting vs Inclusion Thresholds
-
-HMMER applies two parallel filters per hit:
-
-- **Reporting** (`-E`, `-T`, `--domE`, `--domT`): controls what appears in output. Hits ≤ `evalue_threshold` are reported and serialized into `sequence_hits` / `domain_hits`.
-- **Inclusion** (`--incE`, `--incT`, `--incdomE`, `--incdomT`): a stricter sub-threshold that marks hits as "trusted." `included = True` on a hit means it passed inclusion. **Jackhmmer uses the included set to seed the next iteration's HMM**, so tightening `inclusion_evalue_threshold` (default 0.01) is how you control iterative drift.
-
-### Parameter Guides
-
-**E-value thresholds:**
-| Threshold | Use Case |
-|-----------|----------|
-| `10.0` | Permissive exploration (default) |
-| `0.001` | High-confidence domain annotation |
-| `1e-10` | Stringent homology detection |
-
-**Score vs E-value:**
-- E-values are database-size dependent; scores are not.
-- For reproducible thresholds across different databases, use `score_threshold`.
-
-**Pfam bit-score cutoffs (`bit_cutoffs`):**
-- `'gathering'` (`--cut_ga`): use the curated GA threshold from the HMM file. Recommended for Pfam annotation.
-- `'noise'` (`--cut_nc`): permissive — typically only excludes obvious junk.
-- `'trusted'` (`--cut_tc`): strictest — only confidently curated members.
-- Only meaningful for `pyhmmer-hmmsearch` and `pyhmmer-hmmscan`; `phmmer`/`nhmmer`/`jackhmmer` build HMMs from queries on the fly and have no stored cutoffs.
-- **Setting `bit_cutoffs` against an HMM file without the requested cutoff raises `MissingCutoffs`**. Pfam-A always carries all three; ad-hoc HMMs typically don't. Use `None` for non-curated HMMs.
-
-### Sweep Priorities
-
-1. `evalue_threshold` — controls overall sensitivity vs specificity tradeoff.
-2. `inclusion_evalue_threshold` — primary knob for jackhmmer iterative drift.
-3. `bit_cutoffs='gathering'` — for Pfam-annotated HMMs, replaces E-value with curated cutoff.
-4. `domain_evalue_threshold` — independent domain-level filtering.
-5. `skip_filters=True` — last-resort sensitivity boost; ~10× slower.
-
-## Output Specification
-
-All tools return a `PyHmmerOutput` object with two DataFrames:
-- `sequence_hits_df`: Sequence-level hits (one row per query-target pair)
-- `domain_hits_df`: Domain-level hits (one row per domain alignment)
-
-**Sequence-Level DataFrame Columns:**
-
-| Column | Description | Interpretation |
-|--------|-------------|----------------|
-| `query_name` | Name of the query HMM or sequence | Identifier for what you searched with. |
-| `query_accession` | Accession of the query | Database accession (e.g., PF00001) or "-". |
-| `target_name` | Name of the target sequence | Identifier of the matching sequence. |
-| `evalue` | Expect Value | **Key statistic.** Number of hits expected by chance. Lower is better. |
-| `score` | Bit Score | Log-odds score of the full sequence match. Higher is better. |
-| `bias` | Composition Bias | Correction for biased amino acid composition. |
-| `num_domains` | Domain Count | Number of domains found in this sequence. |
-| `included` | Inclusion Status | Whether hit passes inclusion thresholds. |
-| `reported` | Reporting Status | Whether hit passes reporting thresholds. |
-
-**Domain-Level DataFrame Columns:**
-
-| Column | Description | Interpretation |
-|--------|-------------|----------------|
-| `query_name` | Name of the query HMM | Which HMM profile matched. |
-| `target_name` | Name of the target sequence | Which sequence contains this domain. |
-| `hmm_from` / `hmm_to` | HMM coordinates (1-indexed) | Which positions of the HMM are aligned. |
-| `target_from` / `target_to` | Sequence coordinates (1-indexed) | Where the domain is located in the protein. |
-| `c_evalue` | Conditional E-value | E-value conditioned on finding *this* sequence. |
-| `i_evalue` | Independent E-value | E-value for this domain alone. |
-| `domain_score` | Domain Bit Score | Score for this specific domain alignment. |
-| `env_from` / `env_to` | Envelope coordinates | Broader region containing the domain. |
-
-## Interpreting Results
-
-**For Sequence-Level Hits:**
-- **High Confidence:** `evalue < 1e-10`, `score > 50`
-- **Likely Homolog:** `evalue < 0.001`, `score > 25`
-- **Marginal/Noise:** `evalue > 0.01` (inspect manually)
-
-**For Domain-Level Hits:**
-- **Confident Domain:** `i_evalue < 1e-5`, `domain_score > 25`
-- **Possible Domain:** `i_evalue < 0.001`
-- **Fragment/Noise:** `domain_score < 15` or coverage < 50% of HMM length
-
-**Interpreting E-values:**
-- E-value depends on database size. An E-value of 0.001 against Pfam (~20,000 HMMs) is more significant than the same E-value against a smaller custom database.
-- Always check `included` column;PyHMMER applies gathering thresholds when available.
-
-## Quick Start Examples
-
-**Example 1: Search sequences against an HMM profile (hmmsearch)**
-```python
-from proto_tools.tools.gene_annotation import (
-    run_pyhmmer_hmmsearch,
-    PyHmmsearchInput,
-    PyHmmerConfig
-)
-
-# Your protein sequences
-inputs = PyHmmsearchInput(
-    hmm="/path/to/kinase.hmm",
-    sequences=["MVLSPADKTNVKAAWGK", "MNIFEMLRIDEGLRLK"]
-)
-
-# Search with default parameters
-config = PyHmmerConfig(
-    evalue_threshold=0.001,
-    domain_evalue_threshold=0.001
-)
-
-result = run_pyhmmer_hmmsearch(inputs, config)
-
-print(f"Found {result.num_sequence_hits} sequence hits")
-print(f"Found {result.num_domain_hits} domain hits")
-
-# View top hits
-if result.sequence_hits_df is not None:
-    print(result.sequence_hits_df[['target_name', 'evalue', 'score']])
-```
-
-**Example 2: Annotate proteins with Pfam domains (hmmscan)**
-```python
-from proto_tools.tools.gene_annotation import (
-    run_pyhmmer_hmmscan,
-    PyHmmscanInput,
-    PyHmmerConfig
-)
-
-# Annotate a protein sequence
-inputs = PyHmmscanInput(
-    sequences=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSH"],
-    hmm_db="/path/to/Pfam-A.hmm"
-)
-
-config = PyHmmerConfig(evalue_threshold=1.0)
-
-result = run_pyhmmer_hmmscan(inputs, config)
-
-# Show domain architecture
-if result.domain_hits_df is not None:
-    domains = result.domain_hits_df[result.domain_hits_df['domain_included']]
-    for _, row in domains.iterrows():
-        print(f"  {row['query_name']}: {row['target_from']}-{row['target_to']} "
-              f"(score: {row['domain_score']:.1f})")
-```
-
-**Example 3: Sensitive protein-protein search (phmmer)**
-```python
-from proto_tools.tools.gene_annotation import (
-    run_pyhmmer_phmmer,
-    PyPhmmerInput,
-    PyHmmerConfig
-)
-
-# Search for homologs of your query protein
-inputs = PyPhmmerInput(
-    sequences=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSH"],
-    target_sequences=[
-        "MVLSGEDKSNIKAAWGKIGGHGAEYGAEALERMFASFPTTKTYFPHFDVSH",
-        "MGLSDGEWQLVLNVWGKVEADIPGHGQEVLIRLFKGHPETLEKFDKFKHLK",
-        "ATCGATCGATCGATCG"  # Non-homolog
-    ]
-)
-
-config = PyHmmerConfig(
-    evalue_threshold=1.0,
-    domain_evalue_threshold=1.0
-)
-
-result = run_pyhmmer_phmmer(inputs, config)
-
-print(f"Found {result.num_sequence_hits} homologs")
-
-# Filter for significant hits
-if result.sequence_hits_df is not None:
-    significant = result.sequence_hits_df[
-        result.sequence_hits_df['evalue'] < 0.01
-    ]
-    print(significant[['target_name', 'evalue', 'score']])
-```
-
-**Example 4: Sensitive nucleotide sequence search (nhmmer)**
-```python
-from proto_tools.tools.gene_annotation import (
-    run_pyhmmer_nhmmer,
-    PyNhmmerInput,
-    PyHmmerConfig
-)
-
-inputs = PyNhmmerInput(
-    sequences=["ATGGTGCTGAGCCCGGCGGACAAGACCAACGTGAAAGCAGCATGGGGC"],
-    target_sequences=[
-        "ATGGTGCTGAGCCCGGCGGACAAGACCAACGTGAAAGCAGCATGGGGC",
-        "TTTAAACCCGGGTTTAAACCCGGGTTTAAACCCGGG",
-    ],
-)
-
-result = run_pyhmmer_nhmmer(inputs, PyHmmerConfig(evalue_threshold=10.0))
-print(f"Found {result.num_sequence_hits} nucleotide hits")
-```
-
-**Example 5: Iterative protein search (jackhmmer)**
-```python
-from proto_tools.tools.gene_annotation import (
-    run_pyhmmer_jackhmmer,
-    PyJackhmmerInput,
-    PyJackhmmerConfig
-)
-
-inputs = PyJackhmmerInput(
-    sequences=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSH"],
-    target_sequences=[
-        "MVLSGEDKSNIKAAWGKIGGHGAEYGAEALERMFASFPTTKTYFPHFDVSH",
-        "MGLSDGEWQLVLNVWGKVEADIPGHGQEVLIRLFKGHPETLEKFDKFKHLK",
-    ],
-)
-
-config = PyJackhmmerConfig(max_iterations=3, evalue_threshold=1.0)
-result = run_pyhmmer_jackhmmer(inputs, config)
-print(result.metadata["iterations_per_query"])
-```
-
-**Example 6: Filter results for high-confidence domains**
-```python
-# After running any PyHMMER search...
-if result.domain_hits_df is not None:
-    # Keep only included domains with good scores
-    confident_domains = result.domain_hits_df[
-        (result.domain_hits_df['domain_included'] == True) &
-        (result.domain_hits_df['domain_score'] > 25)
-    ]
-
-    # Calculate domain coverage
-    confident_domains = confident_domains.copy()
-    confident_domains['coverage'] = (
-        (confident_domains['hmm_to'] - confident_domains['hmm_from'] + 1) /
-        confident_domains['hmm_length']
-    )
-
-    # Filter for >70% coverage
-    full_domains = confident_domains[confident_domains['coverage'] > 0.7]
-    print(full_domains[['query_name', 'target_name', 'domain_score', 'coverage']])
-```
-
-## Best Practices & Gotchas
-
-**Parameter Tuning:**
-
-1. `evalue_threshold`:
-   - Default `10.0` is permissive for exploration.
-   - Use `0.001` for high-confidence domain annotation.
-   - Use `1e-10` for stringent homology detection.
-
-2. `score_threshold` vs `evalue_threshold`:
-   - E-values are database-size dependent; scores are not.
-   - For reproducible thresholds across different databases, use `score_threshold`.
-
-3. `domain_evalue_threshold`:
-   - Set independently from sequence threshold.
-   - Multi-domain proteins may have a significant sequence E-value but individual weak domain hits.
-
-**Common Mistakes:**
-
-1. **Confusing hmmsearch vs hmmscan:**
-   - `hmmsearch`: You have an HMM, searching for matching *sequences*.
-   - `hmmscan`: You have *sequences*, searching for matching HMMs.
-   - Think: "What am I querying with?"
-
-2. **Ignoring Domain-Level Results:** The sequence-level hit might be significant, but always check which domains actually matched and their coordinates.
-
-3. **Not Using Gathering Thresholds:** For curated databases like Pfam, the `included` column reflects curated gathering thresholds. Trust these over raw E-values.
-
-4. **Protein vs Nucleotide:** `hmmsearch`, `hmmscan`, `phmmer`, and `jackhmmer` are protein workflows. `nhmmer` is for nucleotide sequences.
-
-5. **Single Sequence Queries:** For `phmmer`, searching one sequence against one sequence will likely fail. Use BLAST for simple pairwise alignment.
-
-## References
-
-**Primary Citation:**
-- Eddy, S.R. (2011). "Accelerated Profile HMM Searches." *PLOS Computational Biology* 7(10): e1002195. [DOI: 10.1371/journal.pcbi.1002195](https://doi.org/10.1371/journal.pcbi.1002195)
-
-**Documentation:**
-- PyHMMER: [https://pyhmmer.readthedocs.io/](https://pyhmmer.readthedocs.io/)
-- HMMER: [http://hmmer.org/](http://hmmer.org/)
-- Pfam Database: [https://www.ebi.ac.uk/interpro/](https://www.ebi.ac.uk/interpro/)
-
-## Related Tools
-
-**Tools often used together:**
-- `blast-search`: Run a quick BLAST first, then use PyHMMER for deeper analysis on hits of interest.
-- `mmseqs2-clustering`: Cluster sequences before building HMMs to reduce redundancy.
-
-**Alternative tools:**
-- `blast-search`: Use for quick pairwise searches, broad database compatibility, or when HMM workflows are unnecessary.
-- `mmseqs2-search-proteins`: Use for fast large-scale protein searches (less sensitive but much faster).
+These apply to every PyHMMER tool in this toolkit (`pyhmmer-hmmsearch`, `pyhmmer-hmmscan`, `pyhmmer-phmmer`, `pyhmmer-nhmmer`, `pyhmmer-jackhmmer`).
+
+- **Runs on CPU with SIMD acceleration.** The HMMER3 filter cascade is SIMD-vectorised on x86 platforms. pyhmmer compiles HMMER from source at install time and inherits whatever instruction sets the build host exposes, with no GPU acceleration to enable.
+- **Self-contained after install.** The HMMER C library is compiled into the PyHMMER wheel, so no separate HMMER install or PATH lookup is needed; HMM databases such as Pfam-A still have to be downloaded separately.
+- **`num_threads` parallelises within a single search.** Default `0` auto-detects the available cores. Memory scales with HMM database size; Pfam-A (around 20,000 HMMs) needs roughly 2 GB of RAM held resident.
+- **Reporting versus inclusion thresholds are independent filters.** `evalue_threshold` / `score_threshold` (and their `domain_*` siblings) control what appears in the output, while `inclusion_evalue_threshold` marks the stricter "trusted" subset via the `included` and `domain_included` flags. `jackhmmer` seeds the next iteration's HMM from the included set, so the inclusion threshold drives iterative behaviour while reporting only affects what is returned.
