@@ -15,6 +15,8 @@ import tempfile
 from logging import getLogger
 from typing import Any, ClassVar, Literal
 
+from pydantic import model_validator
+
 from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.tools.structure_prediction.shared_data_models import (
@@ -241,11 +243,13 @@ class ProtenixConfig(MSAStructurePredictionConfig):
             best by ranking score is returned. Higher = more thorough but slower.
             Default 5 (matches upstream).
 
-        num_diffusion_steps (int): Denoising steps in the diffusion process. Higher =
-            more refined but slower. Default 200 (matches upstream).
+        num_diffusion_steps (int | None): Denoising steps in the diffusion process.
+            ``None`` uses the upstream schedule: 200 for base/constraint, 5 for mini/tiny.
+            Default ``None``.
 
-        num_pairformer_cycles (int): Pairformer refinement passes through the model.
-            Higher = more refined but slower. Default 10 (matches upstream).
+        num_pairformer_cycles (int | None): Pairformer refinement passes through the model.
+            ``None`` uses the upstream schedule: 10 for base/constraint, 4 for mini/tiny.
+            Default ``None``.
 
         use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
             for protein chains using ColabFold search. Inherited from
@@ -289,18 +293,18 @@ class ProtenixConfig(MSAStructurePredictionConfig):
         description="Structure samples per seed; best by ranking score is kept. Higher = more thorough but slower.",
     )
 
-    num_diffusion_steps: int = ConfigField(
+    num_diffusion_steps: int | None = ConfigField(
         title="Number of Diffusion Steps",
-        default=200,
+        default=None,
         ge=1,
-        description="Denoising steps in the diffusion process. Higher = more refined but slower.",
+        description="Denoising steps. Default depends on model_name (base/constraint=200, mini/tiny=5).",
     )
 
-    num_pairformer_cycles: int = ConfigField(
+    num_pairformer_cycles: int | None = ConfigField(
         title="Number of Pairformer Cycles",
-        default=10,
+        default=None,
         ge=0,
-        description="Pairformer refinement passes through the model. Higher = more refined but slower.",
+        description="Pairformer refinement passes. Default depends on model_name (base/constraint=10, mini/tiny=4).",
     )
 
     timeout: int | None = ConfigField(
@@ -310,6 +314,16 @@ class ProtenixConfig(MSAStructurePredictionConfig):
         description="Maximum execution time in seconds (base models typically need 10-15 min on slower GPUs).",
         include_in_key=False,
     )
+
+    @model_validator(mode="after")
+    def resolve_schedule_defaults(self) -> "ProtenixConfig":
+        """Fill cycles/steps from model_name when unset; preserve explicit values."""
+        cycles, steps = (10, 200) if "base" in self.model_name else (4, 5)
+        if self.num_pairformer_cycles is None:
+            self.num_pairformer_cycles = cycles
+        if self.num_diffusion_steps is None:
+            self.num_diffusion_steps = steps
+        return self
 
 
 # ============================================================================
