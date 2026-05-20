@@ -2,6 +2,7 @@
 
 from proto_tools.entities.ligands.ccd_utils import (
     CCD_DATABASE_PATH,
+    count_heavy_atoms_for_ccd,
     get_ccd_description,
     is_valid_ccd_code,
     map_ccd_code_to_smiles,
@@ -25,6 +26,7 @@ __all__ = [
     "lookup_smiles_via_pubchem",
     # CCD Utilities (offline)
     "CCD_DATABASE_PATH",
+    "count_heavy_atoms_for_ccd",
     "get_ccd_description",
     "is_valid_ccd_code",
     "map_ccd_code_to_smiles",

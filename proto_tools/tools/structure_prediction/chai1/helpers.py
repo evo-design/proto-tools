@@ -1,13 +1,15 @@
 """proto_tools/tools/structure_prediction/chai1/helpers.py.
 
 Shared helpers for Chai-1 structure prediction. Provides utilities for
-sequence hashing, MSA Parquet file writing, and FASTA generation.
+sequence hashing, MSA Parquet file writing, FASTA generation, and token
+counting under Chai-1's AlphaFold3-style tokenization scheme.
 """
 
 import hashlib
+import re
 from typing import Any
 
-from proto_tools.entities.ligands import Fragment
+from proto_tools.entities.ligands import Fragment, count_heavy_atoms_for_ccd
 from proto_tools.tools.structure_prediction.shared_data_models import Chain
 
 
@@ -82,3 +84,67 @@ def complex_to_fasta(chains: list[Chain | Fragment]) -> str:
         fasta_content += f">{chain.entity_type}|name={chain.entity_type}_{i + 1}\n"
         fasta_content += f"{body}\n"
     return fasta_content
+
+
+def count_chai1_tokens(chains: list[Chain | Fragment]) -> int:
+    """Count tokens for a complex under Chai-1's AlphaFold3-style tokenization.
+
+    Standard amino acids and nucleotides count as 1 token each; ligand Fragments,
+    glycan sugars, and modified residues each contribute their heavy-atom count.
+
+    Args:
+        chains (list[Chain | Fragment]): Chains in the complex.
+
+    Returns:
+        int: Total token count.
+
+    Raises:
+        ValueError: If a glycan string or modification CCD code cannot be resolved.
+    """
+    total = 0
+    for chain in chains:
+        if isinstance(chain, Fragment):
+            total += chain.heavy_atom_count
+            continue
+        if chain.entity_type == "glycan":
+            total += _glycan_string_heavy_atom_count(chain.sequence)
+            continue
+        modified_positions = {mod.position for mod in chain.modifications}
+        standard_count = len(chain.sequence) - len(modified_positions)
+        modified_token_count = sum(count_heavy_atoms_for_ccd(mod.modification_code) for mod in chain.modifications)
+        total += standard_count + modified_token_count
+    return total
+
+
+def _glycan_string_heavy_atom_count(glycan_string: str) -> int:
+    """Sum heavy atoms across sugars in a Chai-1 glycan string.
+
+    Mirrors chai-lab's parser at ``chai_lab/data/parsing/glycans.py``.
+
+    Args:
+        glycan_string (str): Chai-1 glycan string (e.g., ``"MAN(6-1 FUC)(4-1 MAN)"``).
+
+    Returns:
+        int: Total heavy-atom count across all sugars.
+
+    Raises:
+        ValueError: If the glycan string cannot be parsed.
+    """
+    total = 0
+    i = 0
+    s = glycan_string.strip()
+    while i < len(s):
+        c = s[i]
+        if c in " ()":
+            i += 1
+            continue
+        chunk = s[i : i + 3]
+        if re.match(r"[1-6]-[1-6]", chunk):
+            i += 3
+            continue
+        if re.match(r"[0-9A-Z]{3}", chunk):
+            total += count_heavy_atoms_for_ccd(chunk)
+            i += 3
+            continue
+        raise ValueError(f"Invalid glycan string: {glycan_string!r}")
+    return total

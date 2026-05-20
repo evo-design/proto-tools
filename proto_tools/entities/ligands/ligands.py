@@ -163,6 +163,11 @@ class Fragment(BaseModel):
         """
         return [self.mol.GetConformer(i) for i in range(self.mol.GetNumConformers())]
 
+    @property
+    def heavy_atom_count(self) -> int:
+        """Number of heavy (non-hydrogen) atoms in the molecule."""
+        return int(self.mol.GetNumHeavyAtoms())
+
     def generate_conformers(
         self, num_conformers: int = 1, random_seed: int | None = 42, prune_rms_threshold: float = 0.5
     ) -> None:

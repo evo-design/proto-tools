@@ -37,7 +37,7 @@ This tool predicts the structure of multi-component assemblies such as protein-l
 
 #### Usage Tips
 
-- **Total length is capped at 2,048 residues per complex** (summed across all chains); longer inputs are rejected.
+- **Total length is capped at 2,048 tokens per complex** (1 per amino-acid residue, 1 per heavy atom for ligands and glycans); longer inputs are rejected.
 - **`use_esm_embeddings` defaults to `True`.** Chai-1 conditions on embeddings from an ESM protein language model; they are used with or without an MSA.
 - **`use_msa` defaults to `True`.** A ColabFold search generates an MSA for each protein chain; set it `False` for single-sequence prediction, or attach precomputed MSAs to the input.
 - **Sampling and refinement are configurable.** `num_diffn_samples` (default `5`) independent samples are drawn per complex and the best is kept by `confidence_score`; `num_diffn_timesteps` (default `200`) sets the denoising steps and `num_trunk_recycles` (default `3`) trades accuracy for runtime.

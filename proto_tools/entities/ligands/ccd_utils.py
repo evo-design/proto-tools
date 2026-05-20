@@ -238,6 +238,27 @@ def map_ccd_code_to_smiles(ccd_code: str) -> str | None:
     return ccd_to_smiles.get(ccd_code.upper())
 
 
+def count_heavy_atoms_for_ccd(ccd_code: str) -> int:
+    """Count heavy (non-hydrogen) atoms for a CCD-coded component.
+
+    Args:
+        ccd_code (str): CCD code. Case-insensitive.
+
+    Returns:
+        int: Heavy-atom count of the component's RDKit-canonical structure.
+
+    Raises:
+        ValueError: If the CCD code is not found in the database.
+    """
+    from rdkit import Chem
+
+    smiles = map_ccd_code_to_smiles(ccd_code)
+    if smiles is None:
+        raise ValueError(f"Unknown CCD code: {ccd_code!r}")
+    mol = Chem.MolFromSmiles(smiles)
+    return int(mol.GetNumHeavyAtoms())
+
+
 def get_ccd_description(ccd_code: str) -> str | None:
     """Get the description/name for a CCD code.
 

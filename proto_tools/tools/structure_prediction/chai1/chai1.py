@@ -52,15 +52,15 @@ class Chai1Input(StructurePredictionInput):
         complexes (list[StructurePredictionComplex]): List of complexes to predict
             structures for. Inherited from ``StructurePredictionInput``. Each complex
             can contain multiple chains of proteins, ligands, and/or glycans. Total
-            length across all chains in a complex must not exceed 2,048 residues.
+            token count per complex must not exceed 2,048 (see ``Note`` below).
         msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
             Populated by preprocess() or supplied directly. Default: None.
 
     Note:
         Chai1 supports entity types: ``"protein"``, ``"ligand"``, and ``"glycan"``.
         DNA and RNA are not supported. Entity types are automatically inferred if
-        not explicitly provided. The 2,048 residue limit is a hard constraint of
-        the Chai1 architecture.
+        not explicitly provided. The 2,048-token cap is a hard model constraint;
+        ligands and glycans cost 1 token per heavy atom.
     """
 
     # Chai1 supports proteins, ligands, and glycans (no DNA/RNA)
@@ -69,11 +69,14 @@ class Chai1Input(StructurePredictionInput):
 
     @field_validator("complexes")
     @classmethod
-    def validate_sequence_length(cls, complexes: list[StructurePredictionComplex]) -> list[StructurePredictionComplex]:
-        """Validate total sequence length doesn't exceed Chai1 limit (2048 residues)."""
+    def validate_token_count(cls, complexes: list[StructurePredictionComplex]) -> list[StructurePredictionComplex]:
+        """Reject complexes that exceed Chai-1's 2048-token limit."""
+        from proto_tools.tools.structure_prediction.chai1.helpers import count_chai1_tokens
+
         for comp_idx, comp in enumerate(complexes):
-            if comp.sum_of_chain_lengths() > 2048:
-                raise ValueError(f"Complex {comp_idx} too long ({comp.sum_of_chain_lengths()} positions, max 2048)")
+            n_tokens = count_chai1_tokens(comp.chains)
+            if n_tokens > 2048:
+                raise ValueError(f"Complex {comp_idx} has {n_tokens} tokens, exceeding Chai-1's 2048-token limit.")
         return complexes
 
 
@@ -170,9 +173,10 @@ class Chai1Config(MSAStructurePredictionConfig):
         timeout (int | None): Maximum execution time in seconds. ``None`` waits indefinitely. Default: 1200.
 
     Note:
-        Chai1 has a maximum total sequence length of 2,048 residues per complex.
-        Higher refinement parameters (``num_trunk_recycles``, ``num_diffn_timesteps``)
-        improve quality but significantly increase runtime.
+        Chai-1 caps each complex at 2,048 tokens (1 per amino acid, 1 per heavy
+        atom for ligands and glycans). Higher refinement parameters
+        (``num_trunk_recycles``, ``num_diffn_timesteps``) improve quality but
+        significantly increase runtime.
     """
 
     use_esm_embeddings: bool = ConfigField(
@@ -258,7 +262,7 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config, instance: Any = None) -> 
 
     Args:
         inputs (Chai1Input): Validated input containing one or more complexes to
-            predict structures for. Each complex must be ≤ 2,048 residues total.
+            predict structures for. Each complex must be ≤ 2,048 tokens total.
         config (Chai1Config): Validated Chai1 configuration specifying ESM embeddings,
             MSA settings, refinement parameters, and execution options.
 
@@ -292,7 +296,7 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config, instance: Any = None) -> 
                     May be ``None`` if not computed.
 
     Raises:
-        ValueError: If total residues exceed 2,048, if entity types are invalid
+        ValueError: If total tokens exceed 2,048, if entity types are invalid
             (only ``"protein"``, ``"ligand"``, ``"glycan"`` supported), or if
             sequences are empty.
         RuntimeError: If model loading, embedding generation, or prediction fails.
