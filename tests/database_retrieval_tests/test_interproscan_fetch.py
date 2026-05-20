@@ -527,3 +527,24 @@ def test_submit_path_real_short_sequence():
     # P53 DBD start ≥ 100 in TP53; submission was the first 200 residues, so any
     # Pfam P53 hit must start at or after residue 100 within the submitted segment.
     assert any(d.member_database == "pfam" and "P53" in d.name for d in output.domains)
+
+
+def test_interproscan_config_env_var_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """INTERPROSCAN_EMAIL env var populates the config email default."""
+    monkeypatch.setenv("INTERPROSCAN_EMAIL", "env@example.org")
+    cfg = InterProScanFetchConfig()
+    assert cfg.email == "env@example.org"
+
+
+def test_interproscan_config_explicit_overrides_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An explicit config email overrides the env var."""
+    monkeypatch.setenv("INTERPROSCAN_EMAIL", "env@example.org")
+    cfg = InterProScanFetchConfig(email="explicit@example.org")
+    assert cfg.email == "explicit@example.org"
+
+
+def test_interproscan_config_no_env_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With INTERPROSCAN_EMAIL unset, the config email defaults to None."""
+    monkeypatch.delenv("INTERPROSCAN_EMAIL", raising=False)
+    cfg = InterProScanFetchConfig()
+    assert cfg.email is None

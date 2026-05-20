@@ -10,6 +10,7 @@ CATH-Gene3D, Panther, and the rest of the InterPro member-DB catalog.
 import csv
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, Literal
 
@@ -193,7 +194,9 @@ class InterProScanFetchConfig(BaseConfig):
     Attributes:
         email (str | None): Required by EBI's iprscan5 endpoint when
             submitting a sequence; ignored on the direct UniProt-lookup
-            path.
+            path. Defaults to the ``INTERPROSCAN_EMAIL`` environment
+            variable; an explicit value passed to the config overrides
+            the env var.
         applications (list[InterProApp] | None): Submit-only — restrict
             iprscan5 to a subset of member databases. ``None`` runs the
             EBI default set (every application enabled, matching upstream
@@ -212,8 +215,8 @@ class InterProScanFetchConfig(BaseConfig):
 
     email: str | None = ConfigField(
         title="Contact Email",
-        default=None,
-        description="Required by EBI for sequence-submit path; ignored for direct UniProt lookup",
+        default_factory=lambda: os.environ.get("INTERPROSCAN_EMAIL"),
+        description="EBI contact email for the sequence-submit path. Defaults to the INTERPROSCAN_EMAIL env var.",
         include_in_key=False,
     )
     applications: list[InterProApp] | None = ConfigField(

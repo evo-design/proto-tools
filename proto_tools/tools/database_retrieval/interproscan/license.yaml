@@ -1,8 +1,15 @@
 code:
   spdx: Apache-2.0
-  url: https://github.com/ebi-pf-team/interproscan/blob/master/LICENSE
+  url: https://github.com/evo-design/proto-tools
+data:
+  name: the InterPro classification
+  spdx: Custom (the EMBL-EBI Terms of Use)
+  url: https://www.ebi.ac.uk/about/terms-of-use/
+  text: Data accessed via EMBL-EBI's public InterPro REST API and the iprscan5 service is freely usable under the EMBL-EBI Terms of Use. InterPro aggregates member databases (Pfam, SMART, PROSITE, CATH-Gene3D, and others) whose own licenses vary.
+  attribution_required: false
 commercial_use: 'yes'
 redistribution: true
 attribution_required: false
-notes: InterProScan (EMBL-EBI / Pfam team) is Apache-2.0. This wrapper calls EBI's public InterPro REST API and iprscan5 submit-and-poll service; member databases aggregated by InterPro have varying terms but data accessed via the public InterPro API is freely usable.
-last_updated: '2026-05-04'
+proto_tools_original: true
+notes: proto-tools original client code (Apache-2.0) calling EBI's public InterPro REST API and iprscan5 submit-and-poll service over plain HTTP. Data accessed via the public InterPro API is freely usable under the EMBL-EBI Terms of Use; member databases aggregated by InterPro have varying terms.
+last_updated: '2026-05-18'
