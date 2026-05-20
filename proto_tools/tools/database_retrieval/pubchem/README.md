@@ -1,372 +1,51 @@
-<a href="https://bio-pro.mintlify.app/tools/database-retrieval/pubchem"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/database-retrieval/pubchem"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # PubChem
 
+![PubChem](https://pubchem.ncbi.nlm.nih.gov/pcfe/logo/PubChem_logo.png)
+
+> *Image source: [PubChem](https://pubchem.ncbi.nlm.nih.gov/)*
+
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** PubChem retrieves data from the PubChem database, in the public domain (U.S. Government public domain). The client wrapper code is Apache-2.0-licensed. Please refer to [the data terms](https://www.ncbi.nlm.nih.gov/home/about/policies/) for full terms.
 
 ## Overview
 
-`pubchem-fetch` resolves a small-molecule identifier (CID, name, SMILES, or InChIKey) against the PubChem PUG REST API
-and returns canonical structure data plus optional synonyms. Exactly one identifier is supplied per call; the wrapper
-takes care of CID resolution, property fetching, and (optionally) synonym retrieval. This is a CPU-only,
-network-bound tool with no model weights or GPU dependencies.
+[PubChem](https://pubchem.ncbi.nlm.nih.gov/) is a public repository of chemical structures, their computed properties, and bioactivity data, maintained by the [National Center for Biotechnology Information (NCBI)](https://www.ncbi.nlm.nih.gov/). The `pubchem-fetch` tool resolves a single small-molecule identifier (CID, name, SMILES, InChI, or InChIKey) against the PubChem PUG REST API and returns the canonical structure descriptors, computed physicochemical properties, and optionally synonyms, textual descriptions, and BioAssay identifiers. It runs on CPU and requires only network access.
 
 ## Background
 
-**What does this tool measure/predict?**
-[PubChem](https://pubchem.ncbi.nlm.nih.gov/) is the world's largest open chemistry database, hosted at the National
-Center for Biotechnology Information (NCBI). It aggregates compound records (well-defined chemical structures),
-substance records (depositor-supplied entries, possibly redundant), and bioassay results. `pubchem-fetch` queries the
-*Compound* domain via PUG REST and returns canonical structure descriptors (SMILES, InChI, InChIKey, IUPAC name) along
-with computed physicochemical properties (molecular weight, exact mass, TPSA, hydrogen-bond counts, rotatable bond
-count, complexity, charge, heavy-atom count) and optionally a list of synonyms.
+[PubChem](https://pubchem.ncbi.nlm.nih.gov/) ([Kim et al., 2023](https://doi.org/10.1093/nar/gkac956)) is a freely accessible chemistry resource hosted by [NCBI](https://www.ncbi.nlm.nih.gov/). It aggregates compound records with well-defined chemical structures, depositor-supplied substance records, and bioassay results contributed by hundreds of data sources. Each unique compound is assigned a stable Compound Identifier (CID), and standardized structure representations and computed descriptors are derived from a uniform processing pipeline.
 
-**Why is this important?**
-- Compound resolution: convert a user-supplied name or SMILES into a canonical CID for downstream pipelines
-- Cheminformatics: retrieve standardized SMILES/InChI/InChIKey for deduplication and database joins
-- Drug discovery: pull descriptor counts (HBD, HBA, TPSA, rotatable bonds) for rule-of-five style filtering
-- Annotation: enrich a list of CIDs with molecular formulas, masses, and human-readable names
-- Cross-referencing: PubChem CIDs are the canonical anchor for cross-linking to ChEMBL, NCBI, and many other
-  chemistry resources
+Internally, the tool calls the [PUG REST](https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest) endpoint at `https://pubchem.ncbi.nlm.nih.gov/rest/pug`. It first resolves the supplied identifier to one or more CIDs. A name, SMILES, or InChIKey is sent as a URL-encoded GET against the matching `/compound/{domain}/{value}/cids/JSON` endpoint, an InChI is submitted via POST, and a CID skips resolution entirely. It then fetches the configured property bundle from `/compound/cid/{cid}/property/{properties}/JSON`, and optionally retrieves synonyms, descriptions, and BioAssay identifiers through additional endpoints. Results reflect the live database at query time rather than a fixed release snapshot.
 
-**Scientific foundation:**
-PubChem ingests structures from hundreds of depositors and runs them through a standardization pipeline that
-canonicalizes structure representations, computes 2D and 3D descriptors, generates standard InChI/InChIKey hashes via
-the [IUPAC InChI](https://www.inchi-trust.org/) library, and assigns each unique compound a stable CID. Computed
-properties are derived directly from the standardized structure (TPSA via the Ertl algorithm, complexity via
-Bertz/Hendrickson/Ihlenfeldt). The PUG REST endpoint exposes both the resolution graph (name/SMILES/InChIKey to CID)
-and the property table; the database is updated continuously as new depositions arrive.
+### Learning Resources
+
+- [PUG REST documentation](https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest) (PubChem) - official reference for the request grammar, compound domains, property names, and response formats.
+- [Programmatic access](https://pubchem.ncbi.nlm.nih.gov/docs/programmatic-access) (PubChem) - overview of the programmatic interfaces and the published usage policies and rate limits.
 
 ## Tools
 
 ### PubChem Fetch (`pubchem-fetch`)
 
-Fetch a compound record from PubChem.
+Resolves a single small-molecule identifier to a PubChem CID and returns the requested property bundle, the full list of matched CIDs, and optionally synonyms, textual descriptions, BioAssay identifiers, the source URL, and the raw property record.
 
-Resolves the input identifier to a PubChem CID (skipped when `inputs.cid`
-is given directly), then fetches the configured property bundle and
-optionally synonyms.
+#### Applications
 
-## How It Works
+Use this to resolve a ligand to its canonical structure and properties before structure-based or chemical-constraint work: convert a user-supplied name or SMILES into a canonical CID and standardized SMILES/InChI/InChIKey before docking, deduplicate or join compound sets on canonical identifiers, or pull descriptor counts for rule-of-five style filtering. PubChem CIDs anchor cross-references into other chemistry resources. Pair this with [NCBI E-utilities](https://bio-pro.mintlify.app/tools/database-retrieval/ncbi) to pull linked literature or biomolecule records once a CID is resolved.
 
-**Method overview:**
-The tool wraps the PubChem PUG REST API in two stages:
-1. **Identifier resolution:** If `cid` is supplied, the resolver is skipped. Otherwise the wrapper URL-encodes the
-   provided `name`, `smiles`, or `inchikey` and calls the matching `/compound/{domain}/{value}/cids/JSON` endpoint to
-   obtain a list of matching CIDs. The first CID is used; all matches are returned in `all_matched_cids`.
-2. **Property fetch:** The wrapper then calls
-   `/compound/cid/{cid}/property/{comma-separated-properties}/JSON` with the configured property bundle and parses the
-   response into typed fields. PubChem returns `MolecularWeight` and `ExactMass` as JSON strings (preserving the
-   server-formatted precision) and most other numeric descriptors as native JSON numbers; the wrapper coerces both to
-   `float` or `int` as appropriate. If `include_synonyms=True`, a second call to `/compound/cid/{cid}/synonyms/JSON`
-   retrieves the synonym list (truncated to 50).
+#### Usage Tips
 
-A shared `requests` session with retry/backoff handles transient HTTP failures.
+- **Ambiguous names resolve to multiple CIDs.** A generic name can match many compounds. The tool deterministically selects the first CID and records the full list in `all_matched_cids`. Pass a CID directly when the identity must be exact.
+- **Prefer CID inputs for large batches.** Supplying a CID skips the resolution call and reduces the request count per query, which matters under the rate limits.
+- **Synonym, description, and BioAssay retrieval each add a request.** Enabling them issues an extra HTTP call, and for common compounds the BioAssay list can return thousands of identifiers.
+- **Results track the live database.** The same call can return updated structures or properties as PubChem ingests new depositions. It is not pinned to a release.
 
-**Key assumptions:**
-- Network access to `pubchem.ncbi.nlm.nih.gov` is available
-- Exactly one of `cid`, `name`, `smiles`, `inchikey` is provided (a model_validator enforces this)
-- Standard PubChem identifier formats (CIDs are positive integers; InChIKeys are 27-character hashes with two hyphens)
+## Toolkit Notes
 
-**Limitations:**
-- Compound domain only (no Substance or BioAssay queries; no structure search beyond exact identity)
-- Ambiguous names (e.g. "vitamin D") may resolve to many CIDs; the wrapper picks the first and logs a warning
-- Property bundle is limited to PubChem's computed property table; bioactivity, vendor, and patent data are out of
-  scope
-- Rate-limited by PubChem: no more than 5 requests per second, 400 requests per minute, and 300 seconds of running time
-  per minute per IP (see [PubChem usage policies](https://pubchem.ncbi.nlm.nih.gov/docs/programmatic-access))
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-**Computational requirements:**
-- **Hardware:** CPU only, network access required
-- **Runtime:** ~0.5-3 seconds per query (depends on network latency and whether `include_synonyms` is set)
-- **Scalability:** Sequential queries; for batch retrieval, loop over identifiers and throttle to stay under 5 req/s
+These apply to every PubChem tool in this toolkit (`pubchem-fetch`).
 
-## Input Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `cid` | `int \| None` | `None` | PubChem Compound Identifier (e.g. `2244` for aspirin). Must be >= 1. |
-| `name` | `str \| None` | `None` | Common or systematic name (e.g. `"aspirin"`). URL-encoded automatically. |
-| `smiles` | `str \| None` | `None` | SMILES string (e.g. `"CC(=O)Oc1ccccc1C(=O)O"`). URL-encoded automatically. |
-| `inchi` | `str \| None` | `None` | Standard InChI string (e.g. `"InChI=1S/C9H8O4/..."`). Sent via POST. |
-| `inchikey` | `str \| None` | `None` | Standard InChIKey (e.g. `"BSYNRYMUTXBXSQ-UHFFFAOYSA-N"`). |
-
-**Validation rules:** Exactly one of `cid`, `name`, `smiles`, `inchi`, `inchikey` must be provided. The
-model_validator rejects calls supplying zero or more than one identifier.
-
-## Configuration
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `properties` | `list[PubChemProperty]` | 16 defaults (see below) | PubChem property names to request. |
-| `include_synonyms` | `bool` | `False` | If `True`, fetch the compound's synonyms (one extra HTTP call to `/synonyms/JSON`; up to 50 returned). |
-| `include_description` | `bool` | `False` | If `True`, fetch the compound's textual descriptions (one extra HTTP call to `/description/JSON`). |
-| `include_aids` | `bool` | `False` | If `True`, fetch the list of BioAssay IDs that tested this compound (one extra HTTP call to `/aids/JSON`; can return thousands of IDs). |
-
-**Default `properties` bundle (16 entries):** `Title`, `MolecularFormula`, `MolecularWeight`, `SMILES`,
-`ConnectivitySMILES`, `InChI`, `InChIKey`, `IUPACName`, `ExactMass`, `TPSA`, `Complexity`, `Charge`,
-`HBondDonorCount`, `HBondAcceptorCount`, `RotatableBondCount`, `HeavyAtomCount`.
-
-`PubChemProperty` is a `Literal` type covering the full PubChem property table (mass, descriptors, 2D/3D features,
-fingerprints). Override `properties` to request a different subset; properties that are not in the default bundle
-will appear in `raw_property_record` even if no typed output field exists for them.
-
-## Output Specification
-
-```python
-# Return type: PubChemFetchOutput
-PubChemFetchOutput(
-    cid: int,                              # Resolved PubChem CID
-    all_matched_cids: list[int],           # All CIDs returned by the resolver
-    title: str | None,                     # Common compound name (e.g. "Aspirin")
-    molecular_formula: str | None,         # Hill-system molecular formula
-    molecular_weight: float | None,        # Average molecular weight (g/mol)
-    smiles: str | None,                    # PubChem canonical SMILES (new "SMILES" property)
-    connectivity_smiles: str | None,       # Connectivity-only SMILES (new "ConnectivitySMILES" property)
-    inchi: str | None,                     # Standard InChI
-    inchikey: str | None,                  # Standard InChIKey
-    iupac_name: str | None,                # IUPAC systematic name
-    exact_mass: float | None,              # Exact (monoisotopic) mass in Da
-    tpsa: float | None,                    # Topological polar surface area
-    complexity: int | None,                # Bertz/Hendrickson/Ihlenfeldt complexity
-    charge: int | None,                    # Net formal charge
-    hbond_donor_count: int | None,         # Number of hydrogen-bond donors
-    hbond_acceptor_count: int | None,      # Number of hydrogen-bond acceptors
-    rotatable_bond_count: int | None,      # Number of rotatable bonds
-    heavy_atom_count: int | None,          # Number of non-hydrogen atoms
-    synonyms: list[str],                   # Compound synonyms (empty if include_synonyms=False)
-    descriptions: list[str],               # Textual descriptions (empty if include_description=False)
-    bioassay_ids: list[int],               # BioAssay IDs that tested this compound (empty if include_aids=False)
-    source_url: str,                       # URL of the property request
-    raw_property_record: dict[str, Any],   # Complete property record from PubChem
-)
-```
-
-**Key output fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `cid` | `int` | Resolved PubChem CID (>= 1). |
-| `all_matched_cids` | `list[int]` | All CIDs returned by the resolver; length 1 for unambiguous queries, longer for ambiguous names. |
-| `title` | `str \| None` | Common compound name (e.g. `"Aspirin"`), distinct from the IUPAC systematic name in `iupac_name`. |
-| `molecular_formula` | `str \| None` | Molecular formula in Hill order (e.g. `"C9H8O4"` for aspirin). |
-| `molecular_weight` | `float \| None` | Average molecular weight in g/mol. PubChem returns this as a string; the wrapper parses it to `float`. |
-| `smiles` | `str \| None` | PubChem canonical SMILES with stereochemistry. Pulled from the new `SMILES` property (replaces the retired `IsomericSMILES`). |
-| `connectivity_smiles` | `str \| None` | Connectivity-only SMILES, with stereochemistry stripped. Pulled from the new `ConnectivitySMILES` property (replaces the retired `CanonicalSMILES`). |
-| `inchi` | `str \| None` | Standard InChI string. |
-| `inchikey` | `str \| None` | Standard InChIKey hash (27 characters, two hyphens). |
-| `iupac_name` | `str \| None` | IUPAC systematic name. |
-| `exact_mass` | `float \| None` | Exact (monoisotopic) mass in Da. |
-| `tpsa` | `float \| None` | Topological polar surface area in angstroms-squared. |
-| `complexity` | `int \| None` | Bertz/Hendrickson/Ihlenfeldt complexity score. |
-| `charge` | `int \| None` | Net formal charge. |
-| `hbond_donor_count` | `int \| None` | Number of hydrogen-bond donors. |
-| `hbond_acceptor_count` | `int \| None` | Number of hydrogen-bond acceptors. |
-| `rotatable_bond_count` | `int \| None` | Number of rotatable bonds. |
-| `heavy_atom_count` | `int \| None` | Number of non-hydrogen atoms. |
-| `synonyms` | `list[str]` | Up to 50 synonyms; empty list when `include_synonyms=False`. |
-| `source_url` | `str` | URL of the PubChem property request (useful for debugging and citation). |
-| `raw_property_record` | `dict[str, Any]` | Complete property record from PubChem for advanced access (includes any properties requested beyond the 16 default fields). |
-
-**Supported export formats:** `json`, `csv`
-
-## Interpreting Results
-
-**SMILES naming change:**
-PubChem retired the property names `CanonicalSMILES` and `IsomericSMILES` in favor of `SMILES` and
-`ConnectivitySMILES`. The wrapper requests the new names and exposes them as `smiles` (the canonical, stereochemistry-
-preserving SMILES) and `connectivity_smiles` (the connectivity-only SMILES, with stereochemistry stripped). If you
-have legacy code referring to canonical/isomeric SMILES from PubChem, the closest mappings are:
-- old `IsomericSMILES` -> new `SMILES` (stereochemistry preserved)
-- old `CanonicalSMILES` -> new `ConnectivitySMILES` (stereochemistry stripped)
-
-**Mass interpretation:**
-- `molecular_weight` is the *average* molecular weight in g/mol, computed using natural-abundance atomic weights. Use
-  this for stoichiometry and bulk-property calculations.
-- `exact_mass` is the *monoisotopic* mass in Da, computed using the most abundant isotope of each element. Use this
-  when comparing against high-resolution mass-spectrometry peaks.
-
-**Drug-likeness heuristics (Lipinski's Rule of Five):**
-Lipinski's rule of five flags compounds likely to have poor oral bioavailability:
-- `molecular_weight <= 500` g/mol
-- `hbond_donor_count <= 5`
-- `hbond_acceptor_count <= 10`
-- LogP <= 5 (not provided directly; request `XLogP` via `properties` if needed)
-
-A compound that violates two or more rules is typically flagged as likely to have absorption or permeation problems.
-`rotatable_bond_count <= 10` and `tpsa <= 140` (Veber's rules) are commonly applied alongside the rule of five for
-oral-bioavailability filtering.
-
-**TPSA interpretation:**
-- `tpsa < 90`: typically associated with good blood-brain-barrier penetration
-- `tpsa <= 140`: oral bioavailability is plausible
-- `tpsa > 140`: poor passive membrane permeability is likely
-
-**Interpreting edge cases:**
-- An empty `synonyms` list with `include_synonyms=True` indicates PubChem has no curated synonyms for this CID, not
-  an HTTP failure
-- Multiple entries in `all_matched_cids` mean the supplied identifier was ambiguous; the wrapper deterministically
-  returns the first CID. Pass `cid=` directly when ambiguity matters.
-- `complexity` is a relative numeric score, not a unitless quality metric; compare values within a series rather
-  than absolute thresholds
-- `raw_property_record` contains the unmodified PubChem dictionary; use it to access properties that have no typed
-  field (e.g. `Volume3D`, `Fingerprint2D`)
-
-## Quick Start Examples
-
-**Example 1: Fetch by CID**
-```python
-from proto_tools.tools.database_retrieval import (
-    PubChemFetchConfig, PubChemFetchInput, run_pubchem_fetch,
-)
-
-# Aspirin
-inputs = PubChemFetchInput(cid=2244)
-output = run_pubchem_fetch(inputs, PubChemFetchConfig())
-
-print(f"CID: {output.cid}")
-print(f"Formula: {output.molecular_formula}")
-print(f"MW: {output.molecular_weight} g/mol")
-print(f"Exact mass: {output.exact_mass} Da")
-print(f"SMILES: {output.smiles}")
-print(f"InChIKey: {output.inchikey}")
-print(f"IUPAC name: {output.iupac_name}")
-```
-
-**Example 2: Resolve by name and pull synonyms**
-```python
-from proto_tools.tools.database_retrieval import (
-    PubChemFetchConfig, PubChemFetchInput, run_pubchem_fetch,
-)
-
-# Caffeine, with synonyms
-inputs = PubChemFetchInput(name="caffeine")
-config = PubChemFetchConfig(include_synonyms=True)
-output = run_pubchem_fetch(inputs, config)
-
-print(f"Resolved to CID {output.cid} ({output.molecular_formula})")
-print(f"Top synonyms: {output.synonyms[:5]}")
-print(f"All matched CIDs: {output.all_matched_cids}")
-```
-
-**Example 3: Resolve by SMILES and apply Lipinski filtering**
-```python
-from proto_tools.tools.database_retrieval import (
-    PubChemFetchConfig, PubChemFetchInput, run_pubchem_fetch,
-)
-
-# Ibuprofen
-inputs = PubChemFetchInput(smiles="CC(C)Cc1ccc(cc1)C(C)C(=O)O")
-output = run_pubchem_fetch(inputs, PubChemFetchConfig())
-
-violations = 0
-if output.molecular_weight is not None and output.molecular_weight > 500:
-    violations += 1
-if output.hbond_donor_count is not None and output.hbond_donor_count > 5:
-    violations += 1
-if output.hbond_acceptor_count is not None and output.hbond_acceptor_count > 10:
-    violations += 1
-
-print(f"CID {output.cid} ({output.iupac_name})")
-print(f"MW={output.molecular_weight}, HBD={output.hbond_donor_count}, HBA={output.hbond_acceptor_count}")
-print(f"TPSA={output.tpsa}, rotatable bonds={output.rotatable_bond_count}")
-print(f"Lipinski violations: {violations}")
-```
-
-**Example 4: Fetch by InChIKey with a custom property bundle**
-```python
-from proto_tools.tools.database_retrieval import (
-    PubChemFetchConfig, PubChemFetchInput, run_pubchem_fetch,
-)
-
-# Aspirin via InChIKey, requesting only the descriptors we need
-inputs = PubChemFetchInput(inchikey="BSYNRYMUTXBXSQ-UHFFFAOYSA-N")
-config = PubChemFetchConfig(
-    properties=["MolecularFormula", "MolecularWeight", "SMILES", "XLogP"],
-)
-output = run_pubchem_fetch(inputs, config)
-
-# XLogP has no typed field; access it via raw_property_record
-xlogp = output.raw_property_record.get("XLogP")
-print(f"CID {output.cid}: {output.molecular_formula}, MW {output.molecular_weight}, XLogP {xlogp}")
-```
-
-**Example 5: Chained workflow -- name -> CID -> SMILES -> CID round-trip (identifier coherence)**
-
-Use this whenever a downstream tool will hand back a SMILES string that you need to map to a canonical compound; the round-trip proves PubChem accepts what we just emitted.
-
-```python
-from proto_tools.tools.database_retrieval import (
-    PubChemFetchConfig, PubChemFetchInput, run_pubchem_fetch,
-)
-
-# 1. Resolve a natural-language name to canonical structure data.
-by_name = run_pubchem_fetch(PubChemFetchInput(name="caffeine"), PubChemFetchConfig())
-canonical_smiles = by_name.smiles  # "CN1C=NC2=C1C(=O)N(C(=O)N2C)C"
-
-# 2. Round-trip: feed PubChem's canonical SMILES back as the identifier.
-by_smiles = run_pubchem_fetch(PubChemFetchInput(smiles=canonical_smiles), PubChemFetchConfig())
-
-# 3. Both calls must converge on the same compound.
-assert by_smiles.cid == by_name.cid == 2519  # caffeine
-assert by_smiles.molecular_formula == by_name.molecular_formula == "C8H10N4O2"
-
-# Same idea for InChIKey:
-by_inchikey = run_pubchem_fetch(PubChemFetchInput(inchikey=by_name.inchikey), PubChemFetchConfig())
-assert by_inchikey.cid == by_name.cid
-```
-
-## Best Practices & Gotchas
-
-**Common mistakes:**
-1. **Rate-limit violations:** PubChem enforces three concurrent ceilings per IP: no more than 5 requests per second, 400
-   requests per minute, and 300 seconds of running time per minute. For batch lookups, throttle client-side (e.g.
-   `time.sleep(0.25)` between calls) or PubChem will return HTTP 503 (`PUGREST.ServerBusy`).
-2. **Ambiguous names:** Generic names like `"vitamin D"` resolve to multiple CIDs. The wrapper picks the first CID
-   and logs a warning; `all_matched_cids` contains the full list. When ambiguity matters, pass `cid=` directly.
-3. **InChIKey case sensitivity:** InChIKeys are 27-character strings with two hyphens (e.g.
-   `BSYNRYMUTXBXSQ-UHFFFAOYSA-N`). Case matters; lowercase strings will not resolve.
-4. **Confusing `smiles` with `connectivity_smiles`:** `smiles` preserves stereochemistry, `connectivity_smiles` does
-   not. Use `smiles` for any application that relies on E/Z or R/S information.
-
-**Tips for optimal results:**
-- Set `include_synonyms=False` (the default) when you only need structural data; it skips an HTTP call and is
-  noticeably faster for very common compounds (which can have hundreds of synonyms)
-- For large lookup batches, prefer CID inputs over name/SMILES/InChIKey: CID resolution is skipped and you save one
-  HTTP call per query
-- Use `raw_property_record` to access PubChem properties beyond the 16 typed defaults (e.g. `Volume3D`, `PatentCount`,
-  `Fingerprint2D`); request them via `properties` and read them out of the dict
-
-**Edge cases to watch for:**
-- SMILES strings often contain `/`, `\`, `+`, `#`, `=`, and `[]`; the wrapper URL-encodes the value automatically, so
-  you do not need to pre-encode
-- Salts and mixtures: PubChem stores some entries as multi-component compounds. Check `all_matched_cids` and
-  `connectivity_smiles` to confirm you got the expected component
-- Setting `include_synonyms=True` adds one extra HTTP call; for very common compounds (e.g. water, ethanol) this can
-  return hundreds of synonyms and is the slowest part of the request
-- The `raw_property_record` field contains the unmodified PubChem record for properties not yet exposed as typed
-  fields; treat unknown keys as strings unless you know they are numeric
-
-## References
-
-**Primary publication:**
-- Kim, S. et al. (2023). "PubChem 2023 update." *Nucleic Acids Research*, 51(D1), D1373-D1380.
-  [DOI: 10.1093/nar/gkac956](https://doi.org/10.1093/nar/gkac956)
-- Summary: Describes the PubChem database (compounds, substances, bioassays), the standardization pipeline that
-  generates canonical structures and computed descriptors, and the PUG REST programmatic interface used by this tool.
-
-**Implementation:**
-- PubChem website: [https://pubchem.ncbi.nlm.nih.gov/](https://pubchem.ncbi.nlm.nih.gov/)
-- PUG REST documentation: [https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest](https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest)
-
-## Related Tools
-
-**Tools often used together:**
-- **`ncbi-efetch`**: PubChem entries cross-link to NCBI databases (PubMed, Gene, Protein); use `ncbi-efetch` to pull
-  the linked literature or biomolecule records once you have a CID.
-
-**Alternative tools (similar function):**
-- **`chembl-fetch`** (forthcoming): ChEMBL is the canonical source for curated bioactivity data (assays, targets,
-  IC50/EC50 measurements). Use it instead of `pubchem-fetch` when you need binding affinities, mechanism-of-action
-  annotations, or target associations rather than structural descriptors.
+- **Requires network access.** The tool calls the live PubChem PUG REST API. It does not run offline and keeps no local copy of the database.
+- **Subject to PUG REST throttling.** PubChem applies dynamic per-user throttling, with limits of no more than 5 requests per second, 400 requests per minute, and 300 seconds of running time per minute. Exceeding them returns HTTP 503.
