@@ -1,173 +1,55 @@
-<a href="https://bio-pro.mintlify.app/tools/database-retrieval/interproscan"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/database-retrieval/interproscan"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # InterPro
 
+![InterPro](https://www.ebi.ac.uk/interpro/favicons/android-chrome-192x192.png)
+
+> *Image source: [InterPro](https://www.ebi.ac.uk/interpro/)*
+
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** InterPro retrieves data from the InterPro classification, distributed under the EMBL-EBI Terms of Use. The client wrapper code is Apache-2.0-licensed. Please refer to [the data terms](https://www.ebi.ac.uk/about/terms-of-use/) for full terms.
 
 ## Overview
 
-`interproscan-fetch` retrieves protein domain annotations from [InterPro](https://www.ebi.ac.uk/interpro/) — the EMBL-EBI aggregator that integrates Pfam, SMART, PROSITE, Gene3D / CATH-Gene3D, Panther, PIRSF, and a dozen other member databases under unified InterPro IDs (`IPRxxxxxx`). Two access paths share the same Output schema: a fast direct lookup by UniProt accession, and a submit-and-poll path against EBI's iprscan5 service for novel sequences. Each domain row carries a 1-indexed inclusive `start` / `end`, a unified `type` label (`family` / `domain` / `repeat` / `active_site` / `conserved_site` / `homologous_superfamily` / `binding_site` / `ptm`), the parent InterPro accession when integrated, and optional GO / pathway cross-references.
+[InterPro](https://www.ebi.ac.uk/interpro/) integrates protein signatures from member databases such as [Pfam](https://www.ebi.ac.uk/interpro/entry/pfam/), [SMART](https://smart.embl.de/), [PROSITE](https://prosite.expasy.org/), [CATH-Gene3D](https://www.cathdb.info/), [Panther](https://www.pantherdb.org/), and [PIRSF](https://proteininformationresource.org/pirsf/) into unified entries describing protein families, domains, and conserved sites. The `interproscan-fetch` tool returns one `InterProDomain` row schema over two paths: a direct lookup of precomputed InterPro annotations for a UniProt accession via the InterPro REST API, or submission of a raw protein sequence to EBI's InterProScan job service, which polls to completion and parses the result. It runs on CPU and requires only network access.
 
 ## Background
 
-**What does this tool measure/predict?**
-InterPro is the authoritative classification of protein families, domains, conserved sites, and homologous superfamilies. A single InterPro entry (e.g. `IPR011615` "p53 DNA-binding domain") aggregates orthogonal models from multiple member databases — an HMM in Pfam, a profile in SMART, a structural model in CATH-Gene3D — into one curated grouping. InterProScan is the analysis pipeline that runs every member-DB model against a sequence; iprscan5 exposes that pipeline as a public REST service.
+[InterPro](https://www.ebi.ac.uk/interpro/) ([Blum et al., 2025](https://doi.org/10.1093/nar/gkae1082)) is a freely accessible classification of protein families, domains, conserved sites, and homologous superfamilies, maintained by [EMBL-EBI](https://www.ebi.ac.uk/). A protein family is a set of evolutionarily related proteins that descend from a shared ancestor and share detectable sequence similarity, typically along with a common three-dimensional fold or biological function. A single InterPro entry groups orthogonal member-database signatures, such as a [Pfam](https://www.ebi.ac.uk/interpro/entry/pfam/) HMM and a [CATH-Gene3D](https://www.cathdb.info/) structural model, under one accession. InterProScan is the analysis pipeline that runs the member-database models against a sequence, and EBI exposes it as a public web service.
 
-**Why is this important?**
-Domain-aware annotation is the load-bearing primitive for most protein-design workflows:
+Internally, the direct path issues `GET https://www.ebi.ac.uk/interpro/api/entry/all/protein/uniprot/{accession}`, walking the opaque `next` cursor across paginated responses until the result set is exhausted. The submit path issues `POST https://www.ebi.ac.uk/Tools/services/rest/iprscan5/run/` with a required contact `email` and the sequence, receives a plain-text job ID, polls `/status/{job_id}` every three seconds until the job reaches `FINISHED`, then fetches `/result/{job_id}/json`. Both paths flatten matches into the same row schema, with each member-database match contributing rows carrying 1-indexed inclusive `start` and `end` coordinates to match biological residue selection conventions, a unified `type` label, the parent InterPro accession when integrated, and optional [Gene Ontology](https://geneontology.org/) (GO) and pathway cross-references.
 
-- **"Preserve the active site, redesign the rest":** lock conserved residues identified by an `active_site` or `conserved_site` annotation; let everything else vary.
-- **Antibody / scaffold redesign:** keep the framework constant and only redesign within explicitly typed CDR / repeat regions.
-- **Enzyme refinement:** identify catalytic / binding-site residues that must be preserved across rounds of directed evolution.
-- **Constraint scoring:** weight per-residue mutation penalties by domain importance.
+Annotations and their provenance come directly from EMBL-EBI's official [InterPro REST API](https://interpro-documentation.readthedocs.io/) and iprscan5 service. Results reflect the live resource at query time rather than a fixed release snapshot.
 
-UniProt's per-protein annotations are partial; InterPro is the reference catalog.
+### Learning Resources
 
-**Scientific foundation:**
-InterPro 2025 (Blum et al., *Nucleic Acids Res*) integrates 14 member databases into ~46,000 InterPro entries covering ~85% of UniProtKB. For a sequence, iprscan5 runs each member's HMM / profile / regex / structural model in parallel and returns matches with member-DB scores plus the parent InterPro grouping. The direct REST path (`/interpro/api/entry/all/protein/uniprot/{acc}/`) returns the pre-computed integration of those matches keyed by UniProt accession — the same data without the per-job submission cost.
+- [InterPro documentation](https://interpro-documentation.readthedocs.io/) (EMBL-EBI) - official documentation covering InterPro entries, member databases, and the REST API.
+- [Job Dispatcher web services documentation](https://www.ebi.ac.uk/jdispatcher/docs/webservices/) (EMBL-EBI) - reference for the iprscan5 submit-and-poll REST service, including fair-use guidance.
 
 ## Tools
 
 ### InterProScan Fetch (`interproscan-fetch`)
 
-Fetch InterPro domain annotations.
+Retrieves InterPro domain annotations for a protein, either by direct REST lookup of a UniProt accession or by submitting a raw sequence to the iprscan5 service, and returns the resolved accession, sequence length, the list of member-database hits, the source URL, the iprscan5 job ID on the sequence path, and the raw API entries.
 
-Dispatches to the direct lookup path when `inputs.uniprot_id` is set,
-or the iprscan5 submit-and-poll path when `inputs.sequence` is set.
-The input validator guarantees exactly one is populated.
+#### Applications
 
-## How It Works
+Use this to attach domain, family, and site annotation to a protein before design or filtering: identify the residues of an `active_site` or `conserved_site` match to lock before a redesign loop, partition a sequence into typed family and domain regions, or collect GO and pathway cross-references for functional grouping. The resolved accession and the parent InterPro identifiers compose with the [UniProt](https://bio-pro.mintlify.app/tools/database-retrieval/uniprot) and [AlphaFold DB](https://bio-pro.mintlify.app/tools/database-retrieval/alphafold-db) tools for accession resolution and structural context.
 
-**Two paths, one Output:**
+#### Usage Tips
 
-| Path | Input | Endpoint | Wall-clock |
-|---|---|---|---|
-| Direct lookup | UniProt accession | `interpro/api/entry/all/protein/uniprot/{acc}/?page_size=N` (paginated) | < 1 s typical |
-| Submit-and-scan | Raw protein sequence | `Tools/services/rest/iprscan5/run/` → poll `/status/{id}` → fetch `/result/{id}/json` | 2–30 min (queue depth dependent) |
+- **The sequence-submission path requires a contact email.** When `sequence` is provided, `config.email` must be set. Provide it either via the `email` config attribute or via the `INTERPROSCAN_EMAIL` environment variable; an explicit config value overrides the env var. The tool raises a clear `ValueError` before contacting the server if neither is set. The direct accession path ignores `email`.
+- **Provide exactly one of `uniprot_id` or `sequence`.** The input validator rejects a call that supplies both or neither.
+- **`score` units are not uniform across rows.** The field carries whichever value the source member database publishes, an e-value for some databases and a bit-score for others, so filter by `member_database` before comparing scores.
+- **The direct path returns no pathway cross-references.** InterPro's UniProt-keyed endpoint does not surface pathway data, so `pathways` stays empty on that path regardless of configuration. Pathways are only populated on the sequence-submission path.
+- **A direct lookup raises when the accession is not indexed.** Very recent or removed UniProt accessions outside InterPro's coverage return no entries, surfacing as a `ValueError` rather than an empty result.
 
-The submit path requires a contact email per EBI policy (`config.email`). Both paths flatten matches into the same `InterProDomain` row schema, so downstream consumers don't need to know which path produced the output.
+## Toolkit Notes
 
-**Method overview:**
-- **Direct path:** single HTTP GET per page; walks the opaque `next` cursor until exhausted. Each result has one `metadata` block (the InterPro / member-DB entry) and one `proteins[0].entry_protein_locations[]` list (the per-protein matches). Each `fragments[]` entry becomes one row.
-- **Submit path:** multipart POST with `email` + `sequence` + optional `appl[]` returns a plain-text job ID. We poll `/status/{id}` (vocabulary: `RUNNING` / `QUEUED` / `FINISHED` / `ERROR` / `FAILURE` / `NOT_FOUND`) every 3 s — matching EBI's reference [iprscan5 Python client](https://github.com/ebi-jdispatcher/webservice-clients/blob/master/python/iprscan5.py) — up to a 30 min cap, then GET `/result/{id}/json`. The same flattening logic lifts each `match.locations[]` entry into one row.
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-**Key assumptions:**
-- The provided UniProt accession is in InterPro's coverage (true for ~85% of UniProtKB).
-- For the submit path: `config.email` is a valid contact mailbox.
-- The canonical UniProt sequence is the relevant isoform.
+These apply to every InterProScan tool in this toolkit (`interproscan-fetch`).
 
-**Limitations:**
-- Direct path returns 404 for accessions InterPro hasn't indexed (very recent UniProt entries, removed accessions).
-- iprscan5 is rate-limited by queue depth, not by per-IP throttling — a busy server can mean 30 min wall-clock for a 350-aa sequence.
-- Member-DB scores have heterogeneous units (e-value vs bit-score) — the row's `score` field carries whichever the source DB published.
-
-**Computational requirements:**
-- **Hardware:** CPU only, network access required. No GPU, no isolated env.
-- **Runtime:** Direct path < 1 s. Submit path 2–30 min depending on queue.
-
-## Input Parameters
-
-| Parameter | Type | Description |
-|---|---|---|
-| `uniprot_id` | `str \| None` | UniProt accession for direct REST lookup (e.g. `"P04637"`). Provide exactly one of `uniprot_id` or `sequence`. |
-| `sequence` | `str \| None` | Raw protein sequence for the submit-and-scan path. Requires `config.email`. |
-
-## Configuration
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `email` | `str \| None` | `None` | Contact email — required by EBI when submitting a sequence; ignored on the direct path. |
-| `applications` | `list[InterProApp] \| None` | `None` | Submit-only — restrict iprscan5 to a subset of member databases. `None` runs the EBI default set. |
-| `include_go_terms` | `bool` | `True` | Include GO term cross-references in each row's `go_terms` list. |
-| `include_pathways` | `bool` | `True` | Include pathway IDs (Reactome, MetaCyc) in each row's `pathways` list. |
-| `sequence_type` | `Literal["protein", "nucleic"]` | `"protein"` | Submit-only — `"nucleic"` triggers server-side 6-frame translation. |
-
-`InterProApp` enumerates the 24 casings EBI's `parameterdetails` endpoint accepts: `PfamA`, `Panther`, `Gene3d`, `SuperFamily`, `SMART`, `PrositeProfiles`, `PrositePatterns`, `PRINTS`, `PIRSF`, `FunFam`, `HAMAP`, `CDD`, `NCBIfam`, `SFLD`, `Coils`, `MobiDBLite`, `Phobius`, `SignalP`, `SignalP_EUK`, `SignalP_GRAM_POSITIVE`, `SignalP_GRAM_NEGATIVE`, `AntiFam`, `PIRSR`, `TMHMM`. (Note `PfamA` not `Pfam`, `Gene3d` not `Gene3D`.)
-
-## Output Specification
-
-| Field | Type | Description |
-|---|---|---|
-| `accession` | `str \| None` | Resolved UniProt accession; `None` when the sequence path returns no UniProt cross-reference. |
-| `sequence_length` | `int \| None` | Length of the queried protein, when reported. |
-| `domains` | `list[InterProDomain]` | All hits across all member databases. |
-| `num_domains` | `int` | `len(domains)`. |
-| `job_id` | `str` | iprscan5 job ID (sequence path); empty for direct lookup. |
-| `source_url` | `str` | Canonical InterPro entry URL (direct) or iprscan5 result URL (submit). |
-| `raw_entries` | `list[dict[str, Any]]` | Raw JSON entries / matches for advanced consumers. |
-
-`InterProDomain` rows carry `accession` (the member-DB ID), `name`, `type`, `member_database`, `integrated_ipr` (parent InterPro ID), `start` / `end` (1-indexed inclusive), `score`, `model`, `representative`, `go_terms`, `pathways`.
-
-## Best Practices & Gotchas
-
-**Common mistakes:**
-1. **Using `"Pfam"` instead of `"PfamA"`** in `applications`: EBI's iprscan5 expects `PfamA` exactly. The `InterProApp` Literal enforces the correct casing at validation time.
-2. **Submitting a sequence without an email:** `config.email` is mandatory for the iprscan5 path; the wrapper raises `ValueError` with a clear message rather than 400-ing on the server.
-3. **Treating `score` as a uniform e-value:** the field carries whichever score the member DB published. For Pfam this is an e-value; for some structural-classifier members it's a bit-score. Filter per `member_database` if you need uniform semantics.
-
-**Tips:**
-- For programmatic chains, prefer the **direct path** when you have an accession — it's two orders of magnitude faster.
-- Filter by `representative=True` to keep only InterPro's chosen representative match per parent IPR entry.
-- Disable GO / pathway lookups (`include_go_terms=False`, `include_pathways=False`) when you're only interested in domain coordinates — saves a small amount of payload.
-
-## Quick Start Examples
-
-**Example 1: Direct lookup by UniProt accession (no email required):**
-```python
-from proto_tools.tools.database_retrieval import (
-    InterProScanFetchInput,
-    InterProScanFetchConfig,
-    run_interproscan_fetch,
-)
-
-output = run_interproscan_fetch(InterProScanFetchInput(uniprot_id="P04637"))
-assert output.success
-print(f"{output.num_domains} hits across {sorted({d.member_database for d in output.domains})}")
-
-dbd = next(d for d in output.domains if d.member_database == "pfam" and d.name.startswith("P53"))
-print(f"DBD: {dbd.start}-{dbd.end} ({dbd.type})")  # → 100-288 (domain)
-```
-
-**Example 2: chained workflow — UniProt → InterPro for "preserve the active site, redesign the rest":**
-```python
-from proto_tools.tools.database_retrieval import (
-    InterProScanFetchInput, run_interproscan_fetch,
-    UniProtFetchInput, run_uniprot_fetch,
-)
-
-# Resolve the canonical TP53 sequence and its length.
-uniprot = run_uniprot_fetch(UniProtFetchInput(uniprot_id="P04637"))
-length = uniprot.length
-assert length is not None
-
-# Pull all InterPro hits for the same accession.
-ipr = run_interproscan_fetch(InterProScanFetchInput(uniprot_id="P04637"))
-
-# Build a per-residue lock mask: True at any residue inside an active_site /
-# conserved_site / binding_site / ptm match — i.e. positions a redesign loop
-# should not touch.
-lock_mask = [False] * length
-for domain in ipr.domains:
-    if domain.type in {"active_site", "conserved_site", "binding_site", "ptm"}:
-        for i in range(domain.start - 1, domain.end):
-            lock_mask[i] = True
-
-print(f"{sum(lock_mask)} of {length} residues locked")
-```
-
-## References
-
-**Primary publication:**
-- Blum, M., Andreeva, A., Florentino, L. C., Chuguransky, S. R., Grego, T., Hobbs, E., Pinto, B. L., Orr, A., Paysan-Lafosse, T., Ponamareva, I., Salazar, G. A., Bordin, N., Bork, P., Bridge, A., Colwell, L., Gough, J., Haft, D. H., Letunic, I., Llinares-López, F., Marchler-Bauer, A., Meng-Papaxanthos, L., Mi, H., Natale, D. A., Orengo, C. A., Pandurangan, A. P., Piovesan, D., Rivoire, C., Sigrist, C. J. A., Thanki, N., Thibaud-Nissen, F., Thomas, P. D., Tosatto, S. C. E., Wu, C. H., & Bateman, A. (2025). "InterPro: the protein sequence classification resource in 2025." *Nucleic Acids Research*, 53(D1), D444–D456. [DOI: 10.1093/nar/gkae1082](https://doi.org/10.1093/nar/gkae1082)
-
-**Implementation:**
-- InterProScan: [https://github.com/ebi-pf-team/interproscan](https://github.com/ebi-pf-team/interproscan)
-- InterPro database: [https://www.ebi.ac.uk/interpro/](https://www.ebi.ac.uk/interpro/)
-- iprscan5 REST: [https://www.ebi.ac.uk/Tools/services/rest/iprscan5/](https://www.ebi.ac.uk/Tools/services/rest/iprscan5/)
-
-## Related Tools
-
-- **`uniprot-fetch`**: Resolve a gene symbol / organism pair to a canonical UniProt accession before calling `interproscan-fetch`. Also gives sequence length for `lock_mask`-style outputs.
-- **`alphafold-db-fetch`**: Pull AlphaFold's predicted structure + per-residue pLDDT for the same accession. Combined with InterPro domain types, this lets you weight design constraints by both functional importance (InterPro) and structural confidence (pLDDT).
-- **`alphamissense-db-fetch`**: Per-residue pathogenicity. Composes naturally with InterPro-derived locks for "lock the active site, allow benign substitutions elsewhere" workflows.
+- **Requires network access.** The tool calls the live InterPro REST API and iprscan5 service. It does not run offline and keeps no local copy of the data.
+- **The sequence-submission path requires a contact email for identification.** This email lets EBI contact the submitter about job issues. It does not raise any bandwidth or rate allowance.
+- **Sequence submissions are subject to a fair-use concurrency cap.** EBI asks that jobs be submitted in batches of no more than 30 concurrent jobs.

@@ -748,9 +748,12 @@ def test_no_duplicate_h2(readme: Path) -> None:
 
 @pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
 def test_overview_within_char_limit(readme: Path) -> None:
-    """Overview section body must be at most ``_OVERVIEW_MAX_CHARS`` characters.
+    """Overview section visible-text body must be at most ``_OVERVIEW_MAX_CHARS`` characters.
 
-    Skipped for READMEs that still contain the QC-pending marker.
+    Markdown link URLs (the ``(url)`` portion of ``[text](url)``) are
+    stripped before measuring; only the visible text the reader sees
+    counts toward the cap. Skipped for READMEs that still contain the
+    QC-pending marker.
     """
     text = readme.read_text()
     # TODO(#743): drop this skip once every README is migrated.
@@ -761,8 +764,10 @@ def test_overview_within_char_limit(readme: Path) -> None:
     assert match, f"{_tool_id(readme)}/README.md has no '## Overview' section to measure"
 
     body = match.group(1).strip()
-    assert len(body) <= _OVERVIEW_MAX_CHARS, (
-        f"{_tool_id(readme)}/README.md Overview is {len(body)} chars "
+    # Collapse [text](url) -> text so URL bytes do not count against the cap.
+    visible = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", body)
+    assert len(visible) <= _OVERVIEW_MAX_CHARS, (
+        f"{_tool_id(readme)}/README.md Overview is {len(visible)} chars of visible text "
         f"(limit {_OVERVIEW_MAX_CHARS}). Trim it, or add the QC-pending marker "
         f"'{_QC_PENDING_MARKER}' near the top while it is still being edited."
     )
