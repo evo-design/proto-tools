@@ -356,14 +356,26 @@ def _expected_license_callouts(lic: dict, name: str) -> list[str]:
     weights_spdx = weights["spdx"] if isinstance(weights, dict) else None
 
     # Pipeline toolkits (bundled_dependencies present): layer each license explicitly instead of collapsing restrictions onto the code lead.
+    # Two flavors: model-weight pipelines (weights block present) keep the existing
+    # "pipeline + model weights + restricted-use" intro; data-orchestrator toolkits
+    # (no weights) federate over sibling toolkits and surface each sibling's data terms.
     deps = lic.get("bundled_dependencies")
     if deps:
-        split_weights = bool(weights) and weights_spdx != code_spdx
-        intro = [
-            f"{name}'s own code is licensed under {code_spdx}, but it runs as a "
-            "pipeline that depends on bundled components and model weights under "
-            "separate license terms, including non-commercial or restricted-use terms."
-        ]
+        has_weights = bool(weights)
+        split_weights = has_weights and weights_spdx != code_spdx
+        if has_weights:
+            intro = [
+                f"{name}'s own code is licensed under {code_spdx}, but it runs as a "
+                "pipeline that depends on bundled components and model weights under "
+                "separate license terms, including non-commercial or restricted-use terms."
+            ]
+            agg_subject = "pipeline"
+        else:
+            intro = [
+                f"{name}'s own code is licensed under {code_spdx}, and it federates "
+                "over bundled data sources and components, each under its own license terms."
+            ]
+            agg_subject = "federation"
         if split_weights:
             intro.append(f"The bundled model weights are licensed under {weights_spdx}.")
         agg = []
@@ -372,7 +384,7 @@ def _expected_license_callouts(lic: dict, name: str) -> list[str]:
         if attribution:
             agg.append("may require explicit attribution when utilized")
         if agg:
-            intro.append("As a whole the pipeline " + " and ".join(agg) + ".")
+            intro.append(f"As a whole the {agg_subject} " + " and ".join(agg) + ".")
 
         bullets = []
         for dep in deps:
@@ -380,7 +392,20 @@ def _expected_license_callouts(lic: dict, name: str) -> list[str]:
                 category, toolkit = dep["tool"].split("/", 1)
                 dep_url = f"https://bio-pro.mintlify.app/tools/{_slugify(category)}/{_slugify(toolkit)}"
                 dep_lic = yaml.safe_load((_TOOLS_DIR / dep["tool"] / "license.yaml").read_text())
-                dep_spdx = dep_lic["code"]["spdx"]
+                # Data-orchestrator deps surface the sibling's data SPDX (what governs use of
+                # the retrieved records); pipeline deps surface the sibling's code SPDX. When
+                # the sibling has no explicit data block (e.g. UniProt, where code.spdx already
+                # carries the data license), fall back to code.spdx. Redistribution-attribution
+                # clauses are intentionally omitted here; they apply to hosts of the tool, not
+                # to the end-user reading the README.
+                dep_data = dep_lic.get("data")
+                if not has_weights:
+                    ds = dep_data["spdx"] if isinstance(dep_data, dict) else dep_lic["code"]["spdx"]
+                    if isinstance(ds, str) and ds.startswith("Custom (") and ds.endswith(")"):
+                        ds = ds[len("Custom (") : -1]
+                    dep_spdx = ds
+                else:
+                    dep_spdx = dep_lic["code"]["spdx"]
             else:
                 dep_url = dep["url"]
                 dep_spdx = dep.get("spdx")
@@ -392,8 +417,10 @@ def _expected_license_callouts(lic: dict, name: str) -> list[str]:
                 f"Review the [code license]({code_url}) and the "
                 f"[model weights license]({weights['url']}) before any commercial use or redistribution."
             )
-        else:
+        elif has_weights:
             review = f"Review the [code license]({code_url}) before any commercial use or redistribution."
+        else:
+            review = "Review each source's terms before commercial use or redistribution."
 
         return [
             f"> [!NOTE]\n> **License:** {' '.join(intro)}\n>\n"
@@ -679,6 +706,36 @@ def test_expected_license_callouts_data_custom() -> None:
         "distributed under the EMBL-EBI Terms of Use. Attribution to the Ensembl project is "
         "required when the data is redistributed. The client wrapper code is Apache-2.0-licensed. "
         "Please refer to [the data terms](https://www.ebi.ac.uk/about/terms-of-use/) for full terms."
+    ]
+
+
+def test_expected_license_callouts_bundled_data_orchestrator() -> None:
+    """bundled_dependencies with no weights yields a federated data-orchestrator callout.
+
+    Sibling toolkits with a ``data:`` block contribute their data SPDX (not their
+    code SPDX), so the surfaced terms reflect what governs use of the retrieved
+    records. The ``Custom (...)`` wrapper is stripped for display, and an
+    attribution-required source gets an inline clause.
+    """
+    orchestrator = {
+        "code": {"spdx": "Apache-2.0", "url": "https://github.com/proto-bio/proto-tools"},
+        "commercial_use": "yes",
+        "attribution_required": False,
+        "bundled_dependencies": [
+            {"name": "NCBI Entrez", "tool": "database_retrieval/ncbi"},
+            {"name": "UniProt", "tool": "database_retrieval/uniprot"},
+            {"name": "RCSB PDB", "tool": "database_retrieval/pdb"},
+        ],
+    }
+    assert _expected_license_callouts(orchestrator, "Unified Sequence Fetch") == [
+        "> [!NOTE]\n> **License:** Unified Sequence Fetch's own code is licensed under Apache-2.0,"
+        " and it federates over bundled data sources and components, each under its own license terms.\n>\n"
+        "> Bundled dependencies, each under its own license:\n>\n"
+        "> - [NCBI Entrez](https://bio-pro.mintlify.app/tools/database-retrieval/ncbi):"
+        " U.S. Government public domain\n"
+        "> - [UniProt](https://bio-pro.mintlify.app/tools/database-retrieval/uniprot): CC-BY-4.0\n"
+        "> - [RCSB PDB](https://bio-pro.mintlify.app/tools/database-retrieval/pdb): CC0-1.0\n>\n"
+        "> Review each source's terms before commercial use or redistribution."
     ]
 
 

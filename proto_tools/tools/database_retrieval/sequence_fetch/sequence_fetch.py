@@ -7,6 +7,7 @@ pdb) with molecule-type routing and cross-fetcher ID resolution.
 import csv
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any, Literal
@@ -374,9 +375,13 @@ class SequenceFetchConfig(BaseConfig):
             for a name that looks like an ncRNA gene).
             ``"off"`` skips validation entirely; ``"warn"`` records a warning
             but continues; ``"error"`` (default) fails the request.
-        ncbi_api_key (str | None): Optional NCBI API key. Without one NCBI
-            limits to 3 requests/second; with one the limit is 10/second.
-        ncbi_email (str | None): Optional contact email; recommended by NCBI.
+        ncbi_api_key (str | None): Optional NCBI API key (lifts rate limit
+            from 3 to 10 requests/second). Defaults to the ``NCBI_API_KEY``
+            environment variable; an explicit value passed to the config
+            overrides the env var.
+        ncbi_email (str | None): Optional contact email. Defaults to the
+            ``NCBI_EMAIL`` environment variable; an explicit value passed to
+            the config overrides the env var.
     """
 
     max_candidates_per_source: int = ConfigField(
@@ -391,18 +396,18 @@ class SequenceFetchConfig(BaseConfig):
         default="error",
         description="Molecule-type mismatch handling: 'off' (skip), 'warn' (log + continue), 'error' (fail)",
     )
-    # Mirrors NCBIFetchConfig.ncbi_api_key / ncbi_email — keep the descriptions
-    # in sync with ncbi/shared_data_models.py.
+    # Mirrors NCBIFetchConfig.ncbi_api_key / ncbi_email — keep behavior and
+    # env-var fallbacks in sync with ncbi/shared_data_models.py.
     ncbi_api_key: str | None = ConfigField(
         title="NCBI API Key",
-        default=None,
-        description="Optional NCBI API key (lifts rate limit from 3 to 10 req/s)",
+        default_factory=lambda: os.environ.get("NCBI_API_KEY"),
+        description="Optional NCBI API key (3 to 10 req/s). Defaults to the NCBI_API_KEY env var if not set.",
         include_in_key=False,
     )
     ncbi_email: str | None = ConfigField(
         title="NCBI Email",
-        default=None,
-        description="Optional contact email; pair with API key for IP-block recovery",
+        default_factory=lambda: os.environ.get("NCBI_EMAIL"),
+        description="Optional contact email for NCBI. Defaults to the NCBI_EMAIL env var if not set.",
         include_in_key=False,
     )
 
