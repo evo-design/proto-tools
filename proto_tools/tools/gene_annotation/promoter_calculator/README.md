@@ -1,215 +1,50 @@
-<a href="https://bio-pro.mintlify.app/tools/gene-annotation/promoter-calculator"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/gene-annotation/promoter-calculator"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a>
 
 # Salis Lab Promoter Calculator
 
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** Salis Lab Promoter Calculator has a GPL-3.0 license. Please refer to [the license](https://github.com/barricklab/promoter-calculator/blob/master/LICENSE) for full terms.
 
 ## Overview
-The [Salis Lab Promoter Calculator](https://github.com/barricklab/promoter-calculator) is a 346-parameter biophysical + machine-learning model that predicts [sigma70 promoter](https://en.wikipedia.org/wiki/Sigma_factor) strength in *Escherichia coli*. It scans both strands of input DNA for canonical promoter elements -- the [-35 hexamer](https://en.wikipedia.org/wiki/Pribnow_box#%E2%88%9235_element), spacer, [-10 hexamer (Pribnow box)](https://en.wikipedia.org/wiki/Pribnow_box), [UP element](https://en.wikipedia.org/wiki/Promoter_(genetics)#UP_element), and discriminator -- and returns binding free energy (`dG_total`, kcal/mol) and transcription initiation rate (`Tx_rate`, arbitrary units) per candidate.
+
+The [Salis Lab Promoter Calculator](https://github.com/barricklab/promoter-calculator) is a 346-parameter biophysical and machine-learning model from the [Salis Lab](https://salislab.net/) that predicts the strength of [σ70](https://en.wikipedia.org/wiki/Sigma_factor) housekeeping promoters in *Escherichia coli*. It scans both strands of an input DNA sequence for every candidate transcription start site, decomposes the surrounding region into the canonical promoter elements ([UP element](https://en.wikipedia.org/wiki/Promoter_(genetics)), [−35 hexamer](https://en.wikipedia.org/wiki/Pribnow_box), spacer, [−10 hexamer](https://en.wikipedia.org/wiki/Pribnow_box), and discriminator), and returns the predicted [Gibbs free energy](https://en.wikipedia.org/wiki/Gibbs_free_energy) of RNA polymerase holoenzyme binding (`dG_total`) together with a calibrated transcription initiation rate (`Tx_rate`).
 
 ## Background
 
-**What does this tool measure/predict?**
-Per-TSS (transcription start site) [Gibbs free energy](https://en.wikipedia.org/wiki/Gibbs_free_energy) of RNA polymerase holoenzyme binding (`dG_total`) and a calibrated transcription initiation rate (`Tx_rate`).
+The Promoter Calculator ([LaFleur et al., 2022](https://doi.org/10.1038/s41467-022-32829-5)) predicts site-specific σ70 transcription initiation rates from DNA sequence alone. σ70 is the housekeeping [sigma factor](https://en.wikipedia.org/wiki/Sigma_factor) that recruits *E. coli* RNA polymerase to the majority of constitutive promoters, and its strength is set by the sequence and geometry of the surrounding promoter elements. The model decomposes a candidate promoter into the UP element, the −35 hexamer, the spacer, the extended and core −10 hexamers, the discriminator, and the initial transcribed region, then fits 346 Ridge-regression coefficients that link these elements to an overall binding free energy ΔG_total. The fitted ΔG_total is mapped to an absolute transcription initiation rate via `log(TX / TX_ref) = -β (ΔG_total - ΔG_total_ref)`, with the fit grounded in [massively parallel reporter assay](https://en.wikipedia.org/wiki/Reporter_gene) measurements. The released coefficients were trained on 5,193 designed promoters with a single dominant transcription start site and validated against 22,132 diverse bacterial σ70 promoters drawn from multiple datasets.
 
-**Why is this important?**
-sigma70 is the housekeeping [sigma factor](https://en.wikipedia.org/wiki/Sigma_factor) of *E. coli*. Quantitative promoter strength prediction is foundational for designing tunable expression cassettes, avoiding cryptic promoters in engineered DNA, and understanding native gene regulation.
+The reference Python implementation used here is the [barricklab/promoter-calculator](https://github.com/barricklab/promoter-calculator) fork from the [Barrick Lab](https://barricklab.org/), which packages the original [Salis Lab algorithm](https://github.com/hsalis/SalisLabCode/tree/master/Promoter_Calculator) for streamlined installation and adds optional multi-threading for the internal transcription-start-site scan.
 
-**Scientific foundation:**
-The model combines a free-energy biophysical layer (per-element contributions: -10/-35 boxes, spacer length and composition, UP element, discriminator) with a regression learned on a [massively parallel reporter assay](https://en.wikipedia.org/wiki/Reporter_gene#Massively_parallel_reporter_assays) and validated across 22,132 bacterial promoters with diverse sequences.
+### Learning Resources
+
+- [barricklab/promoter-calculator](https://github.com/barricklab/promoter-calculator) (Barrick Lab) - the Python fork used here, with installation instructions and the command-line surface that the wrapper drives.
+- [hsalis/SalisLabCode (Promoter_Calculator)](https://github.com/hsalis/SalisLabCode/tree/master/Promoter_Calculator) (Salis Lab) - the original reference implementation distributed alongside the publication and the source of the trained coefficients.
+- [salislab.net](https://salislab.net/) (Salis Lab) - the lab home page and entry point to the hosted Promoter Calculator web service.
 
 ## Tools
 
 ### Salis Lab Promoter Calculator (`promoter-calculator`)
 
-Predict E. coli sigma70 promoter strength on DNA sequences.
+Scans one or more DNA sequences on both strands for every candidate σ70 transcription start site and returns, per sequence, a list of `PromoterPrediction` rows. Each row carries the predicted TSS position and strand, the binding free energy `dG_total` (kcal/mol), the transcription initiation rate `Tx_rate` (arbitrary units), the DNA spanning the predicted promoter, and the start and end positions of the UP, −35, spacer, −10, and discriminator elements.
 
-Wraps the Salis Lab Promoter Calculator: a 346-parameter biophysical + ML
-model that scans both strands for canonical sigma70 elements (-35, spacer,
--10, UP, discriminator) and predicts dG_total and Tx_rate per candidate.
+#### Applications
 
-## How It Works
+Use this to quantify σ70 promoter strength when designing or analysing *E. coli* expression cassettes. Common workflows include ranking a synthetic library such as the [Anderson collection](https://parts.igem.org/Promoters/Catalog/Anderson) of J231xx variants by predicted `Tx_rate` to pick a target strength, sweeping a candidate construct to flag unintended cryptic promoters that could drive off-target transcription before ordering DNA, and annotating native intergenic regions across an *E. coli* genome to estimate baseline σ70 activity. Pair the predicted transcription rate with downstream [ribosome binding site](https://en.wikipedia.org/wiki/Shine-Dalgarno_sequence) strength and plasmid copy number when projecting end-to-end protein expression.
 
-**Method overview:**
-Every candidate TSS on both strands is scored independently by the biophysical layer; the ML layer maps the resulting dG to an absolute Tx rate.
+#### Usage Tips
 
-**Key assumptions:**
-- Input is double-stranded DNA in the `A/C/G/T` alphabet
-- Promoters use the *E. coli* sigma70 holoenzyme
-- Sequences are linear unless `circular=True`
+- **Set `circular=True` for plasmids and bacterial chromosomes.** Linear scanning of a circular sequence cannot see candidates that span the wraparound origin. When the input is circular, the calculator examines the junction explicitly and recovers any promoter that straddles it.
+- **Short inputs need flanking context to score.** The element scan needs roughly 20 nucleotides on either side of the promoter region; sequences shorter than the scan window return no predictions. Pad with neutral flanking sequence when scoring a single promoter element in isolation.
+- **Predictions are calibrated for *E. coli* σ70 only.** Applying the model to other organisms or to alternative sigma factors (σS, σ32, σ54, σ28) is not validated. Treat any cross-organism output as a relative ranking, not as a calibrated rate.
+- **`Tx_rate` is transcription initiation, not protein expression.** The model captures RNA polymerase binding and open-complex formation. End-to-end expression also depends on the ribosome binding site, mRNA stability, copy number, and growth state, none of which the calculator sees.
+- **The model does not see transcription factors, attenuation, or anti-σ factors.** Repression by a TF bound near the promoter, riboswitch attenuation, and anti-σ sequestration all reduce in vivo output without changing the predicted `Tx_rate`. Use the prediction as the unregulated upper bound.
 
-**Limitations:**
-- Models *E. coli* sigma70 only -- not alternative sigma factors (sigmaS, sigma32, sigma54, ...) or other organisms' housekeeping sigmas
-- Sequences shorter than the calculator's scan window return no predictions; pad with neutral context if needed
-- Predicts in vitro transcription rate, not in vivo expression (which also depends on RBS strength, copy number, growth state)
-- Does not model transcription factor repression, attenuation, or anti-sigma factors
+## Toolkit Notes
 
-**Computational requirements:**
-- **Hardware:** CPU only
-- **Runtime:** Seconds for short sequences (~100-1000 bp); scales with sequence length and candidate TSS count
-- **Parallelism:** Single-threaded by default; `threads > 1` parallelises the internal TSS scan
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-## Important Parameters
+These apply to every Promoter Calculator tool in this toolkit (`promoter-calculator`).
 
-**Input parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `sequences` | `list[str]` | *Required* | DNA sequences to scan for sigma70 promoters |
-| `sequence_ids` | `list[str] \| None` | `None` | Optional sequence identifiers (defaults to `seq_0`, `seq_1`, ...) |
-
-**Configuration parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `threads` | `int` | `1` | CPU threads for the internal TSS scan (must be `>= 1`) |
-| `circular` | `bool` | `False` | Treat input sequences as circular DNA (e.g. plasmids) |
-
-**Parameters to prioritize:**
-1. **`circular`**: Set to `True` for plasmids and bacterial chromosomes -- otherwise promoters spanning the origin are silently missed.
-2. **`threads`**: No effect on results, only on wall-clock runtime. Raise for whole-plasmid scans or large batches.
-
----
-
-**Output specification:**
-
-```python
-# Return type: PromoterCalculatorOutput
-{
-    "results": [
-        {
-            "sequence_id": str,
-            "predictions": [
-                {
-                    "tss_name": str,           # e.g. "Fwd123" or "Rev456"
-                    "tss": int,                # TSS position
-                    "strand": str,             # "+" or "-"
-                    "dG_total": float,         # Predicted binding free energy (kcal/mol)
-                    "Tx_rate": float,          # Predicted transcription rate (a.u.)
-                    "promoter_sequence": str,  # DNA spanning the predicted promoter
-                    "length": int,             # Length of the promoter sequence
-                    "UP_position": [int, int],     # UP element bounds
-                    "hex35_position": [int, int],  # -35 hexamer bounds
-                    "spacer_position": [int, int], # spacer bounds
-                    "hex10_position": [int, int],  # -10 hexamer bounds
-                    "disc_position": [int, int],   # discriminator bounds
-                },
-                ...
-            ]
-        },
-        ...
-    ]
-}
-```
-
-**Key output fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `results` | `list[PromoterCalculatorSequenceResult]` | Per-sequence predictions |
-| `predictions` | `list[PromoterPrediction]` | All predicted promoters across both strands |
-| `tss_name` / `strand` | `str` | `Fwd...`/`+` or `Rev...`/`-` |
-| `dG_total` | `float` | Binding free energy in kcal/mol (more negative = stronger) |
-| `Tx_rate` | `float` | Transcription initiation rate (higher = stronger) |
-
-**Convenience properties:**
-- `PromoterCalculatorOutput.num_sequences_with_promoter`
-- `PromoterCalculatorSequenceResult.num_promoters`
-- `PromoterCalculatorSequenceResult.has_promoter`
-
-**Supported export formats:** `csv`, `json`
-
-**Interpreting `dG_total` and `Tx_rate`:**
-- `dG_total < -3.0 kcal/mol` -- strong promoter
-- `dG_total` between `-3.0` and `-1.5` -- moderate
-- `dG_total > -1.5` -- weak / unlikely
-- `Tx_rate > 10000` -- strong; `3000-10000` -- moderate; `< 3000` -- weak
-
-Results are not pre-filtered by strength -- apply your own threshold downstream.
-
-## Best Practices & Gotchas
-
-- **Plasmids**: always set `circular=True`; otherwise promoters spanning the linearised origin are silently missed.
-- **Short sequences**: pad with neutral context (e.g. `A`-rich flanking) if the input is below the calculator's scan-window minimum.
-- **Cross-organism use**: the model is trained on *E. coli*. Treat predictions in other organisms as relative rankings only.
-- **`Tx_rate` vs expression**: `Tx_rate` is *transcription initiation*, not protein output -- combine with an RBS calculator and copy-number information for end-to-end expression prediction.
-- **Threads**: bump only for long sequences or large batches; doesn't change results.
-
-## Quick Start Examples
-
-**Example 1: Predict promoters in the lacUV5 promoter**
-```python
-from proto_tools.tools.gene_annotation.promoter_calculator import (
-    PromoterCalculatorConfig,
-    PromoterCalculatorInput,
-    run_promoter_calculator,
-)
-
-# lacUV5 promoter padded with 20 nt of neutral context. The calculator needs
-# ~20 nt of flanking sequence on each side to score the promoter elements;
-# shorter padding returns no predictions (boundary effect).
-seq = "A" * 20 + "AAAATTGTGAGCGGATAACAATTTCACACAGGAAACAGCTATGACC" + "A" * 20
-
-result = run_promoter_calculator(
-    PromoterCalculatorInput(sequences=[seq], sequence_ids=["lacUV5"]),
-    PromoterCalculatorConfig(),
-)
-
-for seq_result in result.results:
-    print(f"{seq_result.sequence_id}: {seq_result.num_promoters} promoter(s)")
-    for pred in seq_result.predictions:
-        print(
-            f"  {pred.tss_name} strand={pred.strand} TSS={pred.tss} "
-            f"dG={pred.dG_total:.2f} Tx_rate={pred.Tx_rate:.1f}"
-        )
-```
-
-**Example 2: Rank an Anderson-collection library by predicted strength**
-```python
-# Three Anderson-collection synthetic E. coli sigma70 promoters, padded with
-# 30 nt of A on each side. J23119 is the canonical "strong" reference.
-variants = {
-    "J23119_strong": "TTGACAGCTAGCTCAGTCCTAGGTATAATGCTAGC",
-    "J23100_strong": "TTGACGGCTAGCTCAGTCCTAGGTACAGTGCTAGC",
-    "J23113_weak":   "CTGATGGCTAGCTCAGTCCTAGGGATTATGCTAGC",
-}
-
-result = run_promoter_calculator(
-    PromoterCalculatorInput(
-        sequences=["A" * 30 + s + "A" * 30 for s in variants.values()],
-        sequence_ids=list(variants.keys()),
-    ),
-    PromoterCalculatorConfig(threads=4),
-)
-
-for seq_result in result.results:
-    fwd = [p for p in seq_result.predictions if p.strand == "+"]
-    if not fwd:
-        print(f"{seq_result.sequence_id}: no forward-strand promoter")
-        continue
-    best = max(fwd, key=lambda p: p.Tx_rate)
-    print(f"{seq_result.sequence_id}: best Tx_rate={best.Tx_rate:.1f} dG={best.dG_total:.2f}")
-
-result.export("promoter_library_predictions", file_format="csv")
-```
-
-**Example 3: Scan a circular plasmid**
-```python
-result = run_promoter_calculator(
-    PromoterCalculatorInput(sequences=[plasmid_seq], sequence_ids=["pUC19_variant"]),
-    PromoterCalculatorConfig(threads=8, circular=True),
-)
-print(f"{result.num_sequences_with_promoter} of {len(result.results)} have promoters")
-```
-
-## References
-
-- LaFleur, T. L., Hossain, A., & Salis, H. M. (2022). "Automated Model-Predictive Design of Synthetic Promoters to Control Transcriptional Profiles in Bacteria." *Nature Communications* 13, 5159. [DOI: 10.1038/s41467-022-32829-5](https://doi.org/10.1038/s41467-022-32829-5)
-- Source (Barrick Lab fork used here): [https://github.com/barricklab/promoter-calculator](https://github.com/barricklab/promoter-calculator)
-- Original Salis Lab implementation: [https://github.com/hsalis/SalisLabCode/tree/master/Promoter_Calculator](https://github.com/hsalis/SalisLabCode/tree/master/Promoter_Calculator)
-
-## Related Tools
-
-- **`minced`**, **`blast-search`**, **`pyhmmer-hmmsearch`**: complementary annotation of the same DNA region
-- **RBS Calculator** (separate tool): pair with promoter strength for full transcription + translation modelling
+- **Runs on CPU only.** The model is a Ridge-regression sum over 346 coefficients that ship with the Python source. No neural network is loaded at inference time, and there is no GPU acceleration to enable.
+- **Self-contained after install.** The standalone setup builds a Python virtual environment and pulls dependencies once; subsequent runs need no further network access and no model-weight downloads.
+- **`threads` parallelises the internal TSS scan within a single sequence.** Raising it shortens wall-clock time on long inputs but does not change the predictions. Across input sequences the wrapper itself runs sequentially.
