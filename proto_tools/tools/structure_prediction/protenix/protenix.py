@@ -39,6 +39,7 @@ ProtenixModelName = Literal[
     "protenix_mini_ism_v0.5.0",
     "protenix_mini_default_v0.5.0",
     "protenix_tiny_default_v0.5.0",
+    "protenix-v2",
 ]
 
 
@@ -230,6 +231,13 @@ class ProtenixConfig(MSAStructurePredictionConfig):
             - ``"protenix_tiny_default_v0.5.0"``: Smallest and fastest variant for
               high-throughput screening or resource-constrained environments.
 
+            **Scaled-up model** (enhanced capacity, ~464M params, 10 recycle iterations,
+            200 diffusion steps; **weights are gated by ByteDance, not auto-downloaded**):
+
+            - ``"protenix-v2"``: Wider representation (``c_z=256``) with scaled-up
+              modules. v2 weights are not currently distributed publicly; if you have
+              a copy, place it under the configured weights directory.
+
             Default: ``"protenix_base_default_v1.0.0"``.
 
         seeds (list[int]): Random seeds for structure sampling. Each seed produces
@@ -318,7 +326,8 @@ class ProtenixConfig(MSAStructurePredictionConfig):
     @model_validator(mode="after")
     def resolve_schedule_defaults(self) -> "ProtenixConfig":
         """Fill cycles/steps from model_name when unset; preserve explicit values."""
-        cycles, steps = (10, 200) if "base" in self.model_name else (4, 5)
+        is_lightweight = "mini" in self.model_name or "tiny" in self.model_name
+        cycles, steps = (4, 5) if is_lightweight else (10, 200)
         if self.num_pairformer_cycles is None:
             self.num_pairformer_cycles = cycles
         if self.num_diffusion_steps is None:

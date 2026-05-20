@@ -86,6 +86,7 @@ def test_protenix_config_defaults():
         ("protenix_base_default_v1.0.0", 10, 200),
         ("protenix_mini_default_v0.5.0", 4, 5),
         ("protenix_tiny_default_v0.5.0", 4, 5),
+        ("protenix-v2", 10, 200),
     ],
 )
 def test_protenix_config_schedule_defaults_per_variant(model_name, expected_cycles, expected_steps):

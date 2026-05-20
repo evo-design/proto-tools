@@ -180,6 +180,13 @@ class ProtenixModel:
                 "protenix: PROTENIX_ROOT_DIR not set — set PROTO_HOME or PROTO_MODEL_CACHE to configure storage"
             )
         checkpoint_dir = Path(protenix_root) / "checkpoint"
+        if model_name == "protenix-v2":
+            checkpoint_path = checkpoint_dir / f"{model_name}.pt"
+            if not checkpoint_path.exists():
+                raise FileNotFoundError(
+                    f"protenix-v2 weights not found at {checkpoint_path}. "
+                    "v2 weights are gated by ByteDance and not auto-downloaded."
+                )
         cleanup_corrupted_checkpoints(checkpoint_dir, model_name)
 
         log = logger.info if verbose else logger.debug
