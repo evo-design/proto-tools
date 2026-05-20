@@ -6,6 +6,7 @@ by esearch, esummary, and efetch tool modules.
 
 import json
 import logging
+import os
 from io import StringIO
 from typing import Any, Literal
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
@@ -82,21 +83,25 @@ class NCBIFetchConfig(BaseConfig):
 
     Attributes:
         ncbi_api_key (str | None): Optional NCBI API key (lifts rate limit
-            from 3 to 10 requests/second).
+            from 3 to 10 requests/second). Defaults to the ``NCBI_API_KEY``
+            environment variable; an explicit value passed to the config
+            overrides the env var.
         ncbi_email (str | None): Optional contact email. NCBI usage policy
-            requires both ``tool`` and ``email`` for traceability.
+            requires both ``tool`` and ``email`` for traceability. Defaults
+            to the ``NCBI_EMAIL`` environment variable; an explicit value
+            passed to the config overrides the env var.
     """
 
     ncbi_api_key: str | None = ConfigField(
         title="NCBI API Key",
-        default=None,
-        description="Optional NCBI API key (lifts rate limit from 3 to 10 req/s)",
+        default_factory=lambda: os.environ.get("NCBI_API_KEY"),
+        description="Optional NCBI API key (3 to 10 req/s). Defaults to the NCBI_API_KEY env var if not set.",
         include_in_key=False,
     )
     ncbi_email: str | None = ConfigField(
         title="NCBI Email",
-        default=None,
-        description="Optional contact email; pair with API key for traceability",
+        default_factory=lambda: os.environ.get("NCBI_EMAIL"),
+        description="Optional contact email for NCBI. Defaults to the NCBI_EMAIL env var if not set.",
         include_in_key=False,
     )
 

@@ -124,3 +124,30 @@ def test_ncbi_esearch_retstart_paginates():
     assert set(page1.ids).isdisjoint(set(page2.ids)), (
         f"retstart did not shift the result window: page1={page1.ids}, page2={page2.ids}"
     )
+
+
+def test_ncbi_config_env_var_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    """NCBI_API_KEY / NCBI_EMAIL env vars populate the config defaults."""
+    monkeypatch.setenv("NCBI_API_KEY", "env-key-123")
+    monkeypatch.setenv("NCBI_EMAIL", "env@example.org")
+    cfg = NCBIFetchConfig()
+    assert cfg.ncbi_api_key == "env-key-123"
+    assert cfg.ncbi_email == "env@example.org"
+
+
+def test_ncbi_config_explicit_overrides_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An explicit config value overrides the env var."""
+    monkeypatch.setenv("NCBI_API_KEY", "env-key-123")
+    monkeypatch.setenv("NCBI_EMAIL", "env@example.org")
+    cfg = NCBIFetchConfig(ncbi_api_key="explicit-key", ncbi_email="explicit@example.org")
+    assert cfg.ncbi_api_key == "explicit-key"
+    assert cfg.ncbi_email == "explicit@example.org"
+
+
+def test_ncbi_config_no_env_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With both env vars unset, the config fields default to None."""
+    monkeypatch.delenv("NCBI_API_KEY", raising=False)
+    monkeypatch.delenv("NCBI_EMAIL", raising=False)
+    cfg = NCBIFetchConfig()
+    assert cfg.ncbi_api_key is None
+    assert cfg.ncbi_email is None
