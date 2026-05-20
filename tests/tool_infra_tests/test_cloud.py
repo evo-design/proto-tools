@@ -159,7 +159,7 @@ def _register_cloud_tool(
     output_class: type[MockToolOutputBase] = _CloudOutput,
     config_class: type[BaseConfig] = _CloudConfig,
 ):
-    """Register a tool whose local impl fails — proves we routed to cloud."""
+    """Register a non-local_cpu tool (``uses_gpu=True``) whose local impl fails — proves we routed to cloud."""
 
     def _must_not_run_locally(inputs, config, instance=None):
         del inputs, config, instance
@@ -173,6 +173,7 @@ def _register_cloud_tool(
         config_class=config_class,
         output_class=output_class,
         description=key,
+        uses_gpu=True,
     )(_must_not_run_locally)
     return registry.get(key)
 
@@ -289,6 +290,7 @@ def test_device_cloud_dispatches_before_preprocess(fake_proto_client, clean_regi
         config_class=_PreprocessConfig,
         output_class=_CloudOutput,
         description="preprocess-tool",
+        uses_gpu=True,
     )(lambda inputs, config, instance=None: _CloudOutput(result="local"))
     spec = clean_registry.get("preprocess-tool")
 
@@ -312,6 +314,7 @@ def test_device_cloud_uses_custom_dispatch_without_proto_client_backend(clean_re
         config_class=_PreprocessConfig,
         output_class=_CloudOutput,
         description="custom-cloud-tool",
+        uses_gpu=True,
     )(lambda inputs, config, instance=None: _CloudOutput(result="local"))
     spec = clean_registry.get("custom-cloud-tool")
     seen: dict[str, Any] = {}
@@ -368,6 +371,86 @@ def test_device_cloud_without_use_api_backend_raises(clean_registry):
 
     with pytest.raises(RuntimeError, match="Proto's remote execution backend is not enabled"):
         spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
+
+
+# ─ local_cpu no-op ───────────────────────────────────────────────────────────
+
+
+def test_device_cloud_noops_for_local_cpu_without_backend(clean_registry):
+    """device='cloud' on a local_cpu tool runs locally even without use_api_backend()."""
+    assert is_api_backend_enabled() is False
+
+    def _local_impl(inputs, config, instance=None):
+        del config, instance
+        return _CloudOutput(result=f"local:{inputs.payload}")
+
+    clean_registry.register(
+        key="local-cpu-tool",
+        label="local-cpu-tool",
+        category="test",
+        input_class=_CloudInput,
+        config_class=_CloudConfig,
+        output_class=_CloudOutput,
+        description="pure-python tool — no GPU, no standalone env",
+    )(_local_impl)
+    spec = clean_registry.get("local-cpu-tool")
+    assert spec.local_cpu is True
+
+    result = spec.function(_CloudInput(payload="hi"), _CloudConfig(device="cloud"))
+
+    assert result.result == "local:hi"
+    assert result.success is True
+
+
+def test_device_cloud_noops_for_local_cpu_with_backend(fake_proto_client, clean_registry):
+    """device='cloud' on a local_cpu tool bypasses the cloud client even when use_api_backend() is on."""
+    use_api_backend()
+
+    def _local_impl(inputs, config, instance=None):
+        del config, instance
+        return _CloudOutput(result=f"local:{inputs.payload}")
+
+    clean_registry.register(
+        key="local-cpu-tool-with-backend",
+        label="local-cpu-tool-with-backend",
+        category="test",
+        input_class=_CloudInput,
+        config_class=_CloudConfig,
+        output_class=_CloudOutput,
+        description="pure-python tool — no GPU, no standalone env",
+    )(_local_impl)
+    spec = clean_registry.get("local-cpu-tool-with-backend")
+    assert spec.local_cpu is True
+
+    result = spec.function(_CloudInput(payload="ok"), _CloudConfig(device="cloud"))
+
+    assert result.result == "local:ok"
+    assert fake_proto_client.last_instance.tools.calls == []
+
+
+def test_device_cloud_noop_leaves_caller_config_untouched(clean_registry):
+    """The wrapper's device rewrite must not mutate the caller's config object."""
+
+    def _local_impl(inputs, config, instance=None):
+        del inputs, instance
+        assert config.device == "cpu"
+        return _CloudOutput(result="ok")
+
+    clean_registry.register(
+        key="local-cpu-config-untouched",
+        label="local-cpu-config-untouched",
+        category="test",
+        input_class=_CloudInput,
+        config_class=_CloudConfig,
+        output_class=_CloudOutput,
+        description="verifies caller-config immutability under cloud no-op",
+    )(_local_impl)
+    spec = clean_registry.get("local-cpu-config-untouched")
+    caller_config = _CloudConfig(device="cloud")
+
+    spec.function(_CloudInput(payload="x"), caller_config)
+
+    assert caller_config.device == "cloud"
 
 
 def test_use_api_backend_without_proto_client_raises(monkeypatch):

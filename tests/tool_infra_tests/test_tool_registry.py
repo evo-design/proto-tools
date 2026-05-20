@@ -552,6 +552,92 @@ def test_cpu_tools_are_not_marked_gpu():
     assert "mafft-align" in cpu_keys
 
 
+def test_tool_registry_list_local_cpu_tools(clean_registry, tmp_path):
+    """list_local_cpu_tools returns tools with no GPU and no standalone env."""
+
+    @clean_registry.register(
+        key="gpu-tool",
+        label="GPU Tool",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="gpu",
+        uses_gpu=True,
+    )
+    def _gpu_tool(inputs, config):
+        return MockToolOutput(result="ok")
+
+    @clean_registry.register(
+        key="cpu-inline",
+        label="CPU Inline",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="cpu, in-process",
+    )
+    def _cpu_inline(inputs, config):
+        return MockToolOutput(result="ok")
+
+    @clean_registry.register(
+        key="cpu-standalone",
+        label="CPU Standalone",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="cpu, isolated worker env",
+    )
+    def _cpu_standalone(inputs, config):
+        return MockToolOutput(result="ok")
+
+    # Simulate a standalone/ directory next to the third tool's source file.
+    fake_dir = tmp_path / "cpu_standalone"
+    fake_dir.mkdir()
+    (fake_dir / "standalone").mkdir()
+    spec_standalone = clean_registry.get("cpu-standalone")
+    spec_standalone.source_file = fake_dir / "cpu_standalone.py"
+
+    local_cpu = clean_registry.list_local_cpu_tools()
+    assert {spec.key for spec in local_cpu} == {"cpu-inline"}
+
+    assert clean_registry.get("cpu-inline").local_cpu is True
+    assert clean_registry.get("gpu-tool").local_cpu is False
+    assert spec_standalone.local_cpu is False
+
+
+def test_local_cpu_tools_match_known_set():
+    """Pin the registry's ``local_cpu`` set so contract drift requires a deliberate test update."""
+    expected = {
+        # database_retrieval — thin network clients (ccd-lookup excluded: ships standalone/pdbeccdutils)
+        "alphafold-db-fetch",
+        "alphamissense-db-fetch",
+        "ensembl-lookup",
+        "ensembl-overlap",
+        "ensembl-sequence",
+        "ensembl-vep",
+        "ensembl-xrefs",
+        "interproscan-fetch",
+        "ncbi-efetch",
+        "ncbi-esearch",
+        "ncbi-esummary",
+        "pdb-fetch-entry",
+        "pdb-fetch-fasta",
+        "pubchem-fetch",
+        "sequence-fetch",
+        "uniprot-fetch",
+        # mutagenesis — trivial pure-Python samplers
+        "random-nucleotide-sample",
+        "random-protein-sample",
+        # structure_scoring — pure-Python scoring, no worker env
+        "pdockq2",
+        "structure-metrics",
+    }
+    actual = {spec.key for spec in ToolRegistry.list_local_cpu_tools() if spec.category != "testing"}
+    assert actual == expected
+
+
 def _register_and_run(registry, key, func):
     """Register a tool with mock types and run it with default inputs."""
     registry.register(

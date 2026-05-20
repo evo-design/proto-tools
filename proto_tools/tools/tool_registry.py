@@ -222,6 +222,16 @@ class ToolSpec(BaseModel):
         """
         return (self.source_file.parent / "standalone").is_dir()
 
+    @property
+    def local_cpu(self) -> bool:
+        """Whether this tool runs trivially in-process on CPU.
+
+        ``True`` iff ``uses_gpu=False`` and ``has_standalone_env=False``;
+        ``device='cloud'`` is a no-op for these tools. Opt out by giving the
+        tool a ``standalone/`` directory.
+        """
+        return not self.uses_gpu and not self.has_standalone_env
+
     @field_serializer("config_model")
     def serialize_config_model(self, config_model: type[BaseModel]) -> dict[str, Any]:
         """Serialize config_model as standard JSON Schema."""
@@ -482,37 +492,46 @@ class ToolRegistry:
                 if hasattr(config, "device"):
                     device_str = str(config.device)
                     if device_str == "cloud":
-                        try:
-                            dispatched = cls._try_dispatch(key, inputs, config)
-                        except Exception as e:
-                            logger.error(
-                                "Tool %s: _try_dispatch raised %s: %s",
+                        # local_cpu tools have nothing to offload — rewrite device and fall through.
+                        if spec is not None and spec.local_cpu:
+                            logger.debug(
+                                "Tool %s: device='cloud' is a no-op for local_cpu tools; running in-process",
                                 key,
-                                type(e).__name__,
-                                e,
                             )
-                            return _make_error_output_or_raise(
-                                output_class,
-                                key,
-                                start_time,
-                                e,
-                                traceback.format_exc(),
-                            )
-                        if dispatched is not None:
-                            return _finish_dispatched(dispatched)
-                        from proto_tools.cloud import is_api_backend_enabled
+                            config = config.model_copy(update={"device": "cpu"})
+                            device_str = "cpu"
+                        else:
+                            try:
+                                dispatched = cls._try_dispatch(key, inputs, config)
+                            except Exception as e:
+                                logger.error(
+                                    "Tool %s: _try_dispatch raised %s: %s",
+                                    key,
+                                    type(e).__name__,
+                                    e,
+                                )
+                                return _make_error_output_or_raise(
+                                    output_class,
+                                    key,
+                                    start_time,
+                                    e,
+                                    traceback.format_exc(),
+                                )
+                            if dispatched is not None:
+                                return _finish_dispatched(dispatched)
+                            from proto_tools.cloud import is_api_backend_enabled
 
-                        if not is_api_backend_enabled():
+                            if not is_api_backend_enabled():
+                                raise RuntimeError(
+                                    f"Tool {key!r} called with device='cloud' but Proto's "
+                                    "remote execution backend is not enabled. Install "
+                                    "proto-tools[cloud] and call "
+                                    "proto_tools.cloud.use_api_backend()."
+                                )
                             raise RuntimeError(
-                                f"Tool {key!r} called with device='cloud' but Proto's "
-                                "remote execution backend is not enabled. Install "
-                                "proto-tools[cloud] and call "
-                                "proto_tools.cloud.use_api_backend()."
+                                f"Tool {key!r} called with device='cloud' but the configured "
+                                "remote execution backend did not handle the call."
                             )
-                        raise RuntimeError(
-                            f"Tool {key!r} called with device='cloud' but the configured "
-                            "remote execution backend did not handle the call."
-                        )
                     if gpu_only_flag and device_str == "cpu":
                         raise ValueError(
                             f"Tool {key!r} is gpu_only and rejects device='cpu'; use 'cuda', 'cuda:N', or 'cudaxN'"
@@ -984,6 +1003,11 @@ class ToolRegistry:
     def list_cpu_tools(cls) -> list[ToolSpec]:
         """List all registered tools that do not require a GPU."""
         return [spec for spec in cls._registry.values() if not spec.uses_gpu]
+
+    @classmethod
+    def list_local_cpu_tools(cls) -> list[ToolSpec]:
+        """List all registered tools that run trivially in-process on CPU (no GPU, no standalone env)."""
+        return [spec for spec in cls._registry.values() if spec.local_cpu]
 
     @classmethod
     def get_tool_categories(cls) -> dict[str, str]:
