@@ -1,8 +1,0 @@
-code:
-  spdx: MIT
-  url: https://github.com/soedinglab/MMseqs2/blob/master/LICENSE.md
-commercial_use: 'yes'
-redistribution: true
-attribution_required: false
-notes: Same MMseqs2 binary as gene_annotation/mmseqs; MIT.
-last_updated: '2026-05-01'

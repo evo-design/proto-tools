@@ -1,8 +1,0 @@
-code:
-  spdx: MIT
-  url: https://github.com/soedinglab/MMseqs2/blob/master/LICENSE.md
-commercial_use: 'yes'
-redistribution: true
-attribution_required: false
-notes: MMseqs2 (Söding Lab) is MIT-licensed (the LICENSE.md explicitly states 'The MIT License (MIT) Copyright (c) 2024 The MMseqs2 Development Team'); free for any use including commercial.
-last_updated: '2026-05-01'
