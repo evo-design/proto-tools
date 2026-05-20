@@ -8,7 +8,3 @@
 # Optional: path to the CRISPRtracrRNA install directory (containing CRISPRtracrRNA.py).
 # If not set, the runner falls back to common locations within the venv.
 CRISPR_TRACR_RNA_PATH
-
-# Optional: number of CPU cores to use (for SLURM environments)
-# If not set, defaults to all available cores
-SLURM_CPUS_PER_TASK

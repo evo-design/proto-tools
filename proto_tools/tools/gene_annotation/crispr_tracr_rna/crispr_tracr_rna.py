@@ -5,7 +5,6 @@ Wraps the CRISPRtracrRNA tool from the Backofen Lab
 sequences and validating them via a multi-evidence ranking pipeline.
 """
 
-import os
 from pathlib import Path
 from typing import Any, Literal
 
@@ -243,7 +242,7 @@ class CrisprTracrRNAConfig(BaseConfig):
     Attributes:
         model_type (Literal['II', 'all']): CRISPR model type.
         run_type (Literal['complete_run', 'model_run']): Pipeline mode.
-        num_workers (int | None): Parallel workers (defaults to SLURM CPUs or 1).
+        num_workers (int | None): Parallel workers across input sequences (defaults to 1).
         anti_repeat_similarity_threshold (float): Minimum anti-repeat ↔ repeat similarity (0-1).
         anti_repeat_coverage_threshold (float): Minimum anti-repeat alignment coverage (0-1).
         weight_crispr_array_score (float): Ranking weight for CRISPR array confidence.
@@ -272,7 +271,7 @@ class CrisprTracrRNAConfig(BaseConfig):
     num_workers: int | None = ConfigField(
         title="Number of Workers",
         default=None,
-        description="Parallel workers. None auto-selects $SLURM_CPUS_PER_TASK or 1",
+        description="Parallel workers across input sequences. None or 0 defaults to 1; capped at len(sequences).",
         include_in_key=False,
     )
     anti_repeat_similarity_threshold: float = ConfigField(
@@ -394,10 +393,7 @@ def run_crispr_tracr_rna(
     """
     sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
 
-    num_workers = config.num_workers
-    if num_workers is None:
-        slurm_cpus = os.environ.get("SLURM_CPUS_PER_TASK")
-        num_workers = int(slurm_cpus) if slurm_cpus else 1
+    num_workers = config.num_workers or 1
 
     input_data = {
         "sequences": inputs.sequences,
