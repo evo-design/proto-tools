@@ -9,7 +9,13 @@ from pathlib import Path
 from typing import Any, Literal
 
 import torch
-from standalone_helpers import get_logger, move_model_to_device, serialize_output, set_torch_seed
+from standalone_helpers import (
+    get_logger,
+    log_likelihood_metrics,
+    move_model_to_device,
+    serialize_output,
+    set_torch_seed,
+)
 from tqdm import tqdm
 
 logger = get_logger(__name__)
@@ -336,13 +342,7 @@ class Evo2Model:
 
                 for i, length in enumerate(lengths):
                     seq_log_probs = batch_log_probs[i, : length - 1]  # [seq_len - 1]
-                    all_metrics.append(
-                        {
-                            "log_likelihood": seq_log_probs.sum().item(),
-                            "avg_log_likelihood": seq_log_probs.mean().item(),
-                            "perplexity": torch.exp(-seq_log_probs.mean()).item(),
-                        }
-                    )
+                    all_metrics.append(log_likelihood_metrics(seq_log_probs.mean().item(), seq_log_probs.shape[0]))
                     all_logits.append(logits[i, :length, :].cpu())
 
         return {

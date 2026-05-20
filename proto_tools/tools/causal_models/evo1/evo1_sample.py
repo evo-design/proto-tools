@@ -6,7 +6,6 @@ including CRISPR and transposon fine-tuned variants.
 """
 
 import logging
-import math
 from typing import Any, Literal
 
 from pydantic import Field
@@ -194,23 +193,14 @@ def run_evo1_sample(
     )
 
     sequences = result["sequences"]
-    raw_scores: list[float] | None = result.get("scores")
+    raw_metrics = result.get("metrics")
 
-    # Prepend prompts if requested
     if config.prepend_prompt:
         sequences = [prompt + seq for prompt, seq in zip(inputs.prompts, sequences, strict=False)]
 
-    # Derive standard score triplet from mean log-prob per token.
-    scores: list[CausalModelScoringMetrics] | None = None
-    if raw_scores is not None:
-        scores = [
-            CausalModelScoringMetrics(
-                log_likelihood=s * config.num_tokens,
-                avg_log_likelihood=s,
-                perplexity=math.exp(-s),
-            )
-            for s in raw_scores
-        ]
+    scores: list[CausalModelScoringMetrics] | None = (
+        [CausalModelScoringMetrics(**m) for m in raw_metrics] if raw_metrics else None
+    )
 
     return Evo1SampleOutput(
         metadata={

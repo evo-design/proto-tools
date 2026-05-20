@@ -8,7 +8,13 @@ import json
 import sys
 from typing import Any, Literal
 
-from standalone_helpers import get_logger, move_model_to_device, serialize_output, set_torch_seed
+from standalone_helpers import (
+    get_logger,
+    log_likelihood_metrics,
+    move_model_to_device,
+    serialize_output,
+    set_torch_seed,
+)
 from tqdm import tqdm
 
 logger = get_logger(__name__)
@@ -354,13 +360,7 @@ class ProGen2Model:
                     aa_mask = (seq_targets >= PROGEN2_FIRST_AA_TOKEN) & (seq_targets <= PROGEN2_LAST_AA_TOKEN)
                     seq_log_probs = seq_log_probs[aa_mask]
 
-                    all_metrics.append(
-                        {
-                            "log_likelihood": seq_log_probs.sum().item(),
-                            "avg_log_likelihood": seq_log_probs.mean().item(),
-                            "perplexity": torch.exp(-seq_log_probs.mean()).item(),
-                        }
-                    )
+                    all_metrics.append(log_likelihood_metrics(seq_log_probs.mean().item(), seq_log_probs.shape[0]))
                     # Return unpadded logits (full vocabulary)
                     # Note: model outputs 32 logits but tokenizer has 30 tokens
                     all_logits.append(logits[i, :length, : len(PROGEN2_VOCAB)].cpu())

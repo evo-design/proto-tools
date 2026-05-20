@@ -2,12 +2,17 @@
 
 import json
 import logging
-import math
 import sys
 from typing import Any, Literal
 
 import torch
-from standalone_helpers import AMINO_ACIDS_LIST, get_logger, serialize_output, set_torch_seed
+from standalone_helpers import (
+    AMINO_ACIDS_LIST,
+    get_logger,
+    log_likelihood_metrics,
+    serialize_output,
+    set_torch_seed,
+)
 from tqdm import tqdm
 
 logger = get_logger(__name__)
@@ -570,17 +575,10 @@ class ESM3Model:
             valid_count = int(seq_valid.sum().item())
             if valid_count == 0:
                 raise ValueError(f"esm3: score sequence {i}/{len(sequences)} contains no valid amino-acid characters")
-            log_prob = (seq_log_probs * seq_valid.float()).sum().item()
-            avg_ll = log_prob / valid_count
+            avg_ll = (seq_log_probs * seq_valid.float()).sum().item() / valid_count
 
             all_logits.append(seq_logits)
-            all_metrics.append(
-                {
-                    "log_likelihood": log_prob,
-                    "avg_log_likelihood": avg_ll,
-                    "perplexity": math.exp(-avg_ll),
-                }
-            )
+            all_metrics.append(log_likelihood_metrics(avg_ll, valid_count))
             cursor += length
 
         # Return per-sequence in input order (logits omitted unless requested)

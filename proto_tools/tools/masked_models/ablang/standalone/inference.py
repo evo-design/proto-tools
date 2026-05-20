@@ -1,14 +1,13 @@
 """Local AbLang inference: embeddings, scoring, sampling, and masked PLL gradient."""
 
 import json
-import math
 import os
 import shutil
 import sys
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import get_logger, serialize_output
+from standalone_helpers import get_logger, log_likelihood_metrics, serialize_output
 
 logger = get_logger(__name__)
 
@@ -461,10 +460,7 @@ class AbLangModel:
                 m: dict[str, float] = {scoring_mode: score_val}
                 if scoring_mode == "pseudo_log_likelihood":
                     # Library returns mean log-prob (reduction="mean" in ablang2's scores.py).
-                    seq_len = len(batch[j].replace("|", ""))
-                    m["log_likelihood"] = score_val * seq_len  # sum
-                    m["avg_log_likelihood"] = score_val  # mean (as returned)
-                    m["perplexity"] = math.exp(-score_val)
+                    m.update(log_likelihood_metrics(score_val, len(batch[j].replace("|", ""))))
                 all_metrics.append(m)
 
             if all_logits is not None:
@@ -783,7 +779,7 @@ class AbLangModel:
             "gradient": gradient_value,
             "loss": mean_nll,
             "metrics": {
-                "log_likelihood": -mean_nll,
+                **log_likelihood_metrics(-mean_nll, n_aa),
                 "sequence_length": sequence_length,
                 "model_choice": self.model_choice,
                 "objective": "masked_pll",
