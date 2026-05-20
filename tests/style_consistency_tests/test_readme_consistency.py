@@ -408,14 +408,21 @@ def _expected_license_callouts(lic: dict, name: str) -> list[str]:
         d_spdx = data["spdx"]
         d_url = data["url"]
         d_spdx_l = str(d_spdx).lower()
-        if d_spdx_l.startswith("cc0") or "public domain" in d_spdx_l:
+        # Strip a "Custom (...)" wrapper for display; non-SPDX data terms read better unwrapped.
+        d_disp = d_spdx
+        if isinstance(d_spdx, str) and d_spdx.startswith("Custom (") and d_spdx.endswith(")"):
+            d_disp = d_spdx[len("Custom (") : -1]
+        if d_spdx_l.startswith("cc0"):
             distributed = f"distributed under {d_spdx} (public domain; no attribution required)"
             attribution_sentence = ""
+        elif "public domain" in d_spdx_l:
+            distributed = f"in the public domain ({d_disp})"
+            attribution_sentence = ""
         elif bool(data.get("attribution_required")) or d_spdx_l.startswith("cc-by"):
-            distributed = f"distributed under {d_spdx}"
+            distributed = f"distributed under {d_disp}"
             attribution_sentence = f" Attribution to {d_name} is required when the data is redistributed."
         else:
-            distributed = f"distributed under {d_spdx}"
+            distributed = f"distributed under {d_disp}"
             attribution_sentence = ""
         body = (
             f"{name} retrieves data from {d_name}, {distributed}.{attribution_sentence} "
@@ -635,6 +642,43 @@ def test_expected_license_callouts_data_block() -> None:
         "Structure Database is required when the data is redistributed. "
         "The client wrapper code is Apache-2.0-licensed. "
         "Please refer to [the data terms](https://alphafold.ebi.ac.uk/faq) for full terms."
+    ]
+
+
+def test_expected_license_callouts_data_custom() -> None:
+    """data: with Custom/public-domain terms strips the wrapper and reads cleanly."""
+    pd = {
+        "code": {"spdx": "Apache-2.0", "url": "https://github.com/evo-design/proto-tools"},
+        "data": {
+            "name": "NCBI's Entrez databases",
+            "spdx": "Custom (U.S. Government public domain)",
+            "url": "https://www.ncbi.nlm.nih.gov/home/about/policies/",
+            "attribution_required": False,
+        },
+        "commercial_use": "yes",
+    }
+    assert _expected_license_callouts(pd, "NCBI Entrez") == [
+        "> [!NOTE]\n> **License:** NCBI Entrez retrieves data from NCBI's Entrez databases, "
+        "in the public domain (U.S. Government public domain). "
+        "The client wrapper code is Apache-2.0-licensed. "
+        "Please refer to [the data terms](https://www.ncbi.nlm.nih.gov/home/about/policies/) for full terms."
+    ]
+
+    custom_attr = {
+        "code": {"spdx": "Apache-2.0", "url": "https://github.com/evo-design/proto-tools"},
+        "data": {
+            "name": "the Ensembl project",
+            "spdx": "Custom (the EMBL-EBI Terms of Use)",
+            "url": "https://www.ebi.ac.uk/about/terms-of-use/",
+            "attribution_required": True,
+        },
+        "commercial_use": "yes",
+    }
+    assert _expected_license_callouts(custom_attr, "Ensembl") == [
+        "> [!NOTE]\n> **License:** Ensembl retrieves data from the Ensembl project, "
+        "distributed under the EMBL-EBI Terms of Use. Attribution to the Ensembl project is "
+        "required when the data is redistributed. The client wrapper code is Apache-2.0-licensed. "
+        "Please refer to [the data terms](https://www.ebi.ac.uk/about/terms-of-use/) for full terms."
     ]
 
 
