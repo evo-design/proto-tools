@@ -100,13 +100,13 @@ class ProGen3SampleConfig(CausalModelSampleConfig):
         default=256,
         ge=1,
         title="Max New Tokens",
-        description="Maximum number of new tokens to generate per prompt",
+        description="Maximum newly-generated tokens per prompt (excludes the prompt)",
     )
     min_new_tokens: int = ConfigField(
         default=1,
         ge=1,
         title="Min New Tokens",
-        description="Minimum number of new tokens to generate per prompt",
+        description="Minimum newly-generated tokens per prompt before stopping is allowed",
     )
 
 

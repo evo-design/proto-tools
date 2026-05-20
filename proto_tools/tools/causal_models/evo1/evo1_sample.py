@@ -98,7 +98,7 @@ class Evo1SampleConfig(CausalModelSampleConfig):
         title="Max New Tokens",
         default=100,
         ge=1,
-        description="Maximum number of new tokens to generate per prompt",
+        description="Maximum newly-generated tokens per prompt (excludes the prompt)",
     )
     cached_generation: bool = ConfigField(
         title="Cached Generation",

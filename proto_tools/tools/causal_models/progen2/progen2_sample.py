@@ -112,7 +112,7 @@ class ProGen2SampleConfig(CausalModelSampleConfig):
         default=256,
         ge=1,
         title="Max New Tokens",
-        description="Maximum number of new tokens to generate per prompt",
+        description="Maximum newly-generated tokens per prompt (excludes the prompt)",
     )
     truncate_at_stop: bool = ConfigField(
         default=True,
