@@ -219,15 +219,11 @@ Runnable walkthroughs of the core framework features live in [`tutorials/`](tuto
 
 Each specific tool also ships a minimal `examples/example.ipynb` under `proto_tools/tools/{category}/{tool}/examples/`.
 
-## Using with Claude Code
+## Using with a coding agent
 
-Run tools interactively through natural language using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Launch `claude` from the repo root:
+Run tools interactively through natural language with any conventions-aware coding agent (Claude Code, Gemini CLI, OpenAI Codex CLI, etc.). The agent reads `CLAUDE.md` — symlinked as `AGENTS.md` and `GEMINI.md` so each agent picks up the same content — for proto-tools conventions, and the [`.claude/skills/`](.claude/skills/) directory for task-specific guides.
 
-```bash
-claude
-```
-
-Ask Claude things like:
+Launch your agent CLI from the repo root and ask things like:
 
 ```
 > BLAST this sequence against swissprot
@@ -235,42 +231,17 @@ Ask Claude things like:
 > Fold this sequence, redesign it with inverse folding, and compare the original and designed sequences
 ```
 
-It will write runnable scripts to `analyses/` or execute directly depending on context. See `CLAUDE.md` for the full workflow guide.
+It will write runnable scripts to `analyses/` or execute directly depending on context.
 
 ## Development & Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for full developer setup, storage configuration, PR format, code style, and testing conventions.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for full developer setup, storage configuration, PR format, code style, and testing conventions (pytest flags, markers, `--env-report`).
 
-### Claude Code features for developers
+### Agent skills
 
-Slash commands for common development tasks (invoked with `/command-name`):
-- **`/implement-tool`**: step-by-step guide for implementing a new tool wrapper (architecture, templates, export chain, examples, tests)
+Task-specific guides live in [`.claude/skills/`](.claude/skills/). Claude Code surfaces them as slash commands (e.g. `/implement-tool`); other agents read the same `SKILL.md` files directly.
+
+- **`implement-tool`**: step-by-step guide for implementing a new tool wrapper (architecture, templates, export chain, examples, tests)
+- **`fix-env`**: troubleshooting recipes for tool environment setup failures
 
 Every tool follows the same `Input` / `Config` / `run_{tool}()` / `Output` pattern.
-
-### Testing
-
-```bash
-pytest                          # run everything the host can handle (GPU tests run iff a GPU is visible; slow + integration + extensive skipped)
-pytest --gpu-only               # filter: only GPU-marked tests
-pytest --cpu-only               # filter: only CPU-only tests
-pytest --slow                   # filter: only slow-marked tests
-pytest --integration            # add: include integration tests (external APIs/services)
-pytest --ext                    # add: include extensive (combinatorial) tests
-pytest --benchmark              # filter: only @pytest.mark.benchmark tests (slow gate bypassed)
-pytest --benchmark-report=DIR   # implies --benchmark, plus per-tool markdown reports
-pytest --benchmark-tool=KEY     # implies --benchmark, narrows to one tool's benchmark
-pytest --benchmark-toolkit=NAME # implies --benchmark, narrows to one toolkit's benchmarks
-pytest --all                    # add: include slow + integration (does NOT include extensive or benchmark)
-pytest --env-report             # generate environment compatibility report
-```
-
-Markers:
-
-| Marker | Purpose | Default behavior | Bypassed by |
-|---|---|---|---|
-| `uses_gpu` | needs a GPU | runs iff a GPU is visible (hardware-gated) | `--use-cloud` (uses cloud GPUs) |
-| `slow` | long-running | skipped | `--all`, `--ext`, `--slow`, `--benchmark` |
-| `integration` | hits external APIs | skipped | `--integration`, `--all` |
-| `extensive` | combinatorial / matrix tests | skipped | `--ext` / `--extensive` |
-| `benchmark("tool-key")` | the canonical benchmark for one tool | skipped | `--benchmark` / `--benchmark-report` / `--benchmark-tool` / `--benchmark-toolkit` |
