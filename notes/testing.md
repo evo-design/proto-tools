@@ -21,11 +21,17 @@ All tests use **flat functions** (no test classes). Follow these patterns when w
 
 ## Markers
 
+Canonical reference is `pyproject.toml [tool.pytest.ini_options].markers`. Tool-author cheat sheet:
+
 - **`@pytest.mark.integration`**: Tests calling `ToolInstance.dispatch()` for CPU tools. Skipped by default; run with `--integration`
-- **`@pytest.mark.uses_gpu`**: Tests calling `ToolInstance.dispatch()` for GPU tools. Auto-skipped when no GPU. Implies environment requirement; do **not** also add `@pytest.mark.integration`
+- **`@pytest.mark.uses_gpu`**: Tests calling `ToolInstance.dispatch()` for GPU tools. Auto-skipped when no GPU. Implies environment requirement; do **not** also add `@pytest.mark.integration`. Optional arg `@pytest.mark.uses_gpu(n)` requires `n` visible GPUs
+- **`@pytest.mark.uses_cpu`**: CPU-only test. Optional arg `@pytest.mark.uses_cpu(n)` requires `n` CPUs (matches what `ToolPool._detect_cpus` would see)
+- **`@pytest.mark.slow`**: Tests that may take several minutes. Skipped by default; run with `--slow` or `--all`
+- **`@pytest.mark.extensive`**: Combinatorial tests (e.g. every tool × device transition). Skipped unless `--ext` (or `--extensive`) is passed
+- **`@pytest.mark.benchmark('<tool-key>')`**: E2E benchmark for one tool. Required arg. Skipped by default; opt in via `--benchmark` (or `--benchmark-report` / `--benchmark-tool` / `--benchmark-toolkit`). Not enabled by `--all` or `--slow`
+- **`@pytest.mark.skip_ci`**: Only for tests requiring optional/external dependencies not in `pyproject.toml`. Do not add for core deps
 - **`@pytest.mark.include_in_env_report`**: Applied automatically by `test_env_report.py` parametrization; do not add manually
-- **No `@pytest.mark.skip_ci`** for core dependencies: If a package is in `pyproject.toml`, its tests should run without special markers
-- **`@pytest.mark.skip_ci`**: Only for tests requiring optional/external dependencies not in `pyproject.toml`
+- **`@pytest.mark.test_on_platforms('x86_64', ...)`**: Restrict to specific architectures
 
 ## Naming
 
