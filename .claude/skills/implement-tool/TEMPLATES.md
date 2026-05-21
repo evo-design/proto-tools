@@ -237,7 +237,8 @@ def example_input():
     device_count="1",  # Optional: Device count requirement ("1", "1-2", ">=1", "<=2"). Defaults to "1"
     example_input=example_input,  # Factory returning minimal valid input for parametrized tests
     # cacheable=True,  # Optional: enable wrapper cache
-    # seed_sensitive=True,  # Optional: outputs depend on config.seed (sampling/gradient/design/diffusion)
+    # stochastic=True,  # Optional: outputs depend on config.seed (sampling/gradient/design/diffusion)
+    # metrics_class={ToolName}Metrics,  # Optional: scalar metric container (plDDT, perplexity, etc.)
 )
 def run_{tool_key_snake}(
     inputs: {ToolName}Input, config: {ToolName}Config
@@ -281,149 +282,120 @@ def run_{tool_key_snake}(
 
 Create `tests/{category}_tests/test_{tool_key_snake}.py`:
 
+Flat functions only — no test classes (see CLAUDE.md, **Test Conventions**).
+
 ```python
 """Tests for {tool_display_name} tool."""
 import pytest
+
 from proto_tools.tools import run_{tool_key_snake}, {ToolName}Input, {ToolName}Config
 
 
-class Test{ToolName}:
-    """Tests for {tool_display_name}."""
+def test_basic_execution():
+    """Basic tool execution with default config."""
+    inputs = {ToolName}Input(sequences=["ATGCGT"])
+    config = {ToolName}Config()
+    result = run_{tool_key_snake}(inputs, config)
 
-    def test_basic_execution(self):
-        """Test basic tool execution with default config."""
-        inputs = {ToolName}Input(sequences=["ATGCGT"])
-        config = {ToolName}Config()
-        result = run_{tool_key_snake}(inputs, config)
+    assert result.success
+    assert result.num_results > 0
+    assert result.execution_time > 0
 
-        assert result.success
-        assert result.num_results > 0
-        assert result.execution_time > 0
 
-    def test_single_string_input(self):
-        """Test that single string is normalized to list."""
-        inputs = {ToolName}Input(sequences="ATGCGT")
-        assert isinstance(inputs.sequences, list)
-        assert len(inputs.sequences) == 1
+def test_single_string_input():
+    """Single string is normalized to list."""
+    inputs = {ToolName}Input(sequences="ATGCGT")
+    assert isinstance(inputs.sequences, list)
+    assert len(inputs.sequences) == 1
 
-    def test_empty_input_raises(self):
-        """Test that empty input raises ValidationError."""
-        with pytest.raises(Exception):
-            {ToolName}Input(sequences=[])
 
-    def test_export_csv(self, tmp_path):
-        """Test CSV export."""
-        inputs = {ToolName}Input(sequences=["ATGCGT"])
-        config = {ToolName}Config()
-        result = run_{tool_key_snake}(inputs, config)
-        result.export(name="test_output", export_path=tmp_path, file_format="csv")
-        assert (tmp_path / "test_output.csv").exists()
-```
+def test_empty_input_raises():
+    """Empty input raises ValidationError."""
+    with pytest.raises(Exception):
+        {ToolName}Input(sequences=[])
 
-For GPU tools, add the marker:
-```python
+
+def test_export_csv(tmp_path):
+    """CSV export writes the expected file."""
+    inputs = {ToolName}Input(sequences=["ATGCGT"])
+    config = {ToolName}Config()
+    result = run_{tool_key_snake}(inputs, config)
+    result.export(name="test_output", export_path=tmp_path, file_format="csv")
+    assert (tmp_path / "test_output.csv").exists()
+
+
 @pytest.mark.uses_gpu
-class Test{ToolName}GPU:
-    ...
+def test_gpu_execution():
+    """GPU dispatch test — auto-skipped if no GPU is visible."""
+    inputs = {ToolName}Input(sequences=["ATGCGT"])
+    config = {ToolName}Config(device="cuda")
+    result = run_{tool_key_snake}(inputs, config)
+    assert result.success
 ```
 
 ---
 
 ## README.md Template — [Subagent 2: README + cite.bib]
 
-Create `tools/{category}/{toolkit}/README.md`:
+Create `tools/{category}/{toolkit}/README.md` using the structured template. Schemas / configs / output specs are auto-generated from Pydantic field descriptions, so the README focuses on prose — biology, when to use, and per-tool tips. The four H2 sections are canonical: `Overview`, `Background`, `Tools`, `Toolkit Notes`.
 
 ```markdown
-# {Tool Display Name}
+<a href="https://bio-pro.mintlify.app/tools/{category-kebab}/{toolkit-kebab}"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,…" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,…&logoColor=white" alt="Use on Proto (coming soon)">
+
+# {Toolkit Display Name}
+
+> [!NOTE]
+> **License:** {one-line license summary with link to upstream COPYING/LICENSE.}
+>
+> {For tools that federate over multiple sources, list each bundled dependency on its own bullet inside the same callout, with its license and a link.}
 
 ## Overview
-Brief biological context — what does this tool do and why is it useful?
 
-## When to Use This Tool
+[2–3 sentences: who built it, what it does, why useful. Link the upstream repo on first mention.]
 
-**Primary use cases:**
-- Use case 1
-- Use case 2
+## Background
 
-**When NOT to use this tool:**
-- Anti-pattern 1
-- Anti-pattern 2
+[1–3 paragraphs: deeper biological and algorithmic context. Cite the paper(s) inline as `([First Author, Year](DOI))`. Link key concepts to Wikipedia or canonical references on first mention. Explain the scientific foundation at a level a senior researcher new to the subfield can follow.]
 
-## Biological Background
+### Learning Resources
 
-**What does this tool do?**
-Description of the biological problem it solves.
+- [Link title](url) (Author or org) - one-line description of why this resource is useful.
+- [Link title](url) (Author or org) - one-line description.
 
-**Why is this important?**
-Real-world applications.
+## Tools
 
-**Scientific foundation:**
-How the algorithm/model works at a high level.
+### {Tool Display Name} (`{tool-key}`)
 
-## Tool Catalog
+[One sentence on what the tool does and what it returns.]
 
-| Tool | Input | Output | Use Case |
-|------|-------|--------|----------|
-| `{tool-key}` | Description | Description | Use case |
+#### Applications
 
-## Execution Modes
+[1–2 sentences on the typical research question this tool answers and how it fits in a pipeline.]
 
-GPU/CPU requirements, memory estimates, timing.
+#### Usage Tips
 
-## How It Works
+- **Critical-knob name explained in bold.** Followed by a short explanation including units, defaults, and the most common failure mode.
+- **Second tip in bold.** Explanation including any non-obvious interaction with other config fields.
 
-Brief description of each operation.
+[Repeat the H3 + H4 block per tool in the toolkit.]
 
-## Input Parameters
+## Toolkit Notes
 
-### Operation Name (`{tool-key}`)
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `field1` | `Type` | Description |
+These apply to every {Toolkit Display Name} tool in this toolkit (`{tool-key-1}`, `{tool-key-2}`, ...).
 
-## Configuration
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `param1` | `type` | `default` | Description |
-
-## Output Specification
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `field1` | `type` | Description |
-
-## Interpreting Results
-
-How to interpret the output values biologically.
-
-## Quick Start Examples
-
-**Example 1: Basic usage**
-\```python
-from proto_tools.tools.{category}.{toolkit} import (
-    run_{tool_key_snake}, {ToolName}Input, {ToolName}Config
-)
-
-inputs = {ToolName}Input(...)
-config = {ToolName}Config(...)
-result = run_{tool_key_snake}(inputs, config)
-\```
-
-## Best Practices & Gotchas
-
-Parameter tuning guidance and common mistakes.
-
-## References
-
-- [Paper](https://doi.org/...)
-- [GitHub](https://github.com/...)
-
-## Related Tools
-
-Tools often used together, alternatives.
+- **First toolkit-wide note in bold.** Explanation covering execution mode (CPU/GPU, SIMD, etc.), install footprint, or memory characteristics that apply to every tool in the toolkit.
+- **Second note in bold.** Explanation of cross-tool behaviour (shared resources, thresholds, threading model, etc.).
 ```
+
+Conventions:
+- Use the canonical four H2 sections (`Overview`, `Background`, `Tools`, `Toolkit Notes`) verbatim — `get_readme_sections()` parses on these exact names.
+- `### Learning Resources` is optional under `## Background` and is excluded from `get_tool_docs()` by default — use it for user-facing explainers (blogs, talks, course pages) rather than agent-readable spec.
+- Per-tool H3 heading must be `{Tool Display Name} (\`{tool-key}\`)` — the parser extracts the tool key from the backticks.
+- `#### Applications` and `#### Usage Tips` are the canonical H4s under each tool.
+- Mintlify URL pattern is `/tools/{category-kebab}/{toolkit-kebab}` — both segments kebab-cased (e.g. `gene-annotation/promoter-calculator`, `database-retrieval/sequence-fetch`).
+- Read a recently-rewritten toolkit (e.g. `gene_annotation/pyhmmer/README.md`) to copy the exact badge SVG data and Toolkit Notes badge row.
 
 ---
 
