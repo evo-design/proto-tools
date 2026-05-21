@@ -209,7 +209,7 @@ For batch jobs, `--rcfile` doesn't apply (it's interactive-only), so source `.ba
 #SBATCH --time=04:00:00
 #SBATCH --output=logs/%j.out
 
-apptainer exec --nv $GROUP_HOME/$USER/pytorch_latest.sif bash -c "
+apptainer exec --nv $GROUP_HOME/simg/pytorch_latest.sif bash -c "
     source ~/.bashrc
     conda activate proto-tools
     python my_script.py

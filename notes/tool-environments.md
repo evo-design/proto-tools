@@ -18,9 +18,9 @@ Tools with PyTorch/JAX dependencies use **centralized hardware detection** (`uti
 
 | Variable | Example Value | Description |
 |---|---|---|
-| `DETECTED_COMPUTE_PLATFORM` | `"nvidia-gpu"` or `"cpu"` | Hardware platform detected |
-| `DETECTED_DRIVER_VERSION` | `"570.122.3"` | NVIDIA driver version |
-| `DETECTED_CUDA_VERSION` | `"12.6"` | CUDA version |
+| `DETECTED_COMPUTE_PLATFORM` | `"cuda"` or `"cpu"` | Hardware platform detected |
+| `DETECTED_DRIVER_VERSION` | `"570"` | NVIDIA driver major version |
+| `DETECTED_CUDA_VERSION` | `"12"` | CUDA toolkit major version |
 | `RECOMMENDED_TORCH_SPEC` | `"torch>=2.10,<3"` | PyTorch version constraint for detected driver |
 | `RECOMMENDED_JAX_SPEC` | `"jax[cuda12]>=0.5,<1"` | JAX version constraint with CUDA plugin |
 | `RECOMMENDED_JAX_VARIANT` | `"cuda12"` | JAX CUDA variant (cuda12, cuda13) |
