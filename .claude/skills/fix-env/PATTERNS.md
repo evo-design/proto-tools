@@ -6,7 +6,7 @@ Reference file for the `fix-env` skill. Contains detailed failure patterns with 
 
 ## Infrastructure Failures
 
-Failures in the centralized environment setup infrastructure — hardware detection, env variable isolation, sitecustomize.py injection. These are **root causes** that produce misleading downstream symptoms. Always check these first.
+Centralized-infrastructure failures (hardware detection, env-var isolation, sitecustomize.py injection, micromamba install) are root causes that produce misleading downstream symptoms — check these before pattern-matching the surface error.
 
 ### 1. Compute Detection Failure
 
@@ -78,16 +78,7 @@ print('LD_LIBRARY_PATH:', env.get('LD_LIBRARY_PATH', ''))
 - Missing LD_LIBRARY_PATH: add `LD_LIBRARY_PATH=${VENV_PATH}/cuda_env/lib` to `env_vars.txt` `[set]` section
 - Leaked parent vars: check `_BASE_PASSTHROUGH` whitelist
 
-**env_vars.txt format:**
-```
-[passthrough]
-HF_TOKEN
-
-[set]
-LD_LIBRARY_PATH=${VENV_PATH}/cuda_env/lib
-```
-
-See `utils/persistent_worker.py` (`_build_subprocess_env`, steps 1-8), `evo1/standalone/env_vars.txt`, `alphagenome/standalone/env_vars.txt`.
+See `notes/tool-environments.md` for the full `env_vars.txt` format (`[passthrough]` / `[set]` / `[no_passthrough]` sections, auto-set vars, interpolation) and `utils/persistent_worker.py` for `_build_subprocess_env` internals.
 
 ---
 
@@ -241,15 +232,13 @@ See `evo2/standalone/setup.sh` (torch 2.6.0 + triton coordination).
 
 **Root Cause:** JAX needs `jax` + `jaxlib` + CUDA plugin. If a dependency reinstalls jax as a transitive dep, it can downgrade or drop the CUDA plugin.
 
-**Solution:** Re-apply JAX spec AFTER all dependency installs:
-```bash
-JAX_VARIANT="${TOOL_JAX_VARIANT:-${RECOMMENDED_JAX_VARIANT:-cuda12}}"
-JAX_SPEC="${TOOL_JAX_SPEC:-${RECOMMENDED_JAX_SPEC:-jax[cuda12]>=0.5,<1}}"
+**Solution:** Re-apply the JAX spec AFTER all dependency installs. Prefer the helper, which reads `${TOOL_PREFIX}_JAX_VARIANT` / `${TOOL_PREFIX}_JAX_SPEC` (tool-specific) before falling back to `RECOMMENDED_JAX_VARIANT` / `RECOMMENDED_JAX_SPEC`:
 
-uv pip install "${JAX_SPEC}"
+```bash
+# Tool-specific env-var prefix, uppercase. Falls back to RECOMMENDED_JAX_* and finally to cuda12 defaults.
+proto_install_jax ALPHAGENOME       # reads ${ALPHAGENOME_JAX_SPEC}, etc.
 uv pip install -r requirements.txt
-# RE-APPLY in case a dependency downgraded it
-uv pip install "${JAX_SPEC}"
+proto_install_jax ALPHAGENOME       # re-apply in case a dependency downgraded it
 
 # Validate
 if [ "${DETECTED_COMPUTE_PLATFORM:-cpu}" = "cuda" ]; then
@@ -257,7 +246,7 @@ if [ "${DETECTED_COMPUTE_PLATFORM:-cpu}" = "cuda" ]; then
 fi
 ```
 
-See `alphagenome/standalone/setup.sh`.
+See `alphagenome/standalone/setup.sh` and the `proto_install_jax` helper in `proto_tools/utils/standalone_helpers_source/standalone_helpers.sh`.
 
 ---
 
@@ -269,25 +258,19 @@ See `alphagenome/standalone/setup.sh`.
 
 **Root Cause:** CUDA JIT tools need GCC compatible with their CUDA toolkit. conda-forge sysroot 2.34+ adds typedefs that older nvcc can't parse.
 
-**CUDA → max GCC mapping:**
-| CUDA | Max GCC | Sysroot needed? |
-|------|---------|-----------------|
-| 12.1 | GCC ≤12 | Yes: `sysroot_linux-64=2.17` |
-| 12.4 | GCC ≤13.2 | Depends on nvcc |
-| 12.6+ | GCC ≤14 | No |
+See `notes/tool-environments.md` (**GCC/nvcc Compatibility for CUDA JIT Tools**) for the full CUDA → max GCC mapping and the per-tool pins. The recurring `setup.sh` shape:
 
-**Solution:** Match GCC to CUDA version in micromamba create:
 ```bash
-# CUDA 12.1 (evo1, protenix):
+# CUDA 12.1 (e.g. evo1, protenix): GCC 12 + sysroot 2.17
 micromamba create -p "$CUDA_HOME" -c conda-forge -c nvidia \
     "cuda-toolkit=12.1.*" "gcc=12.*" "gxx=12.*" "sysroot_linux-64=2.17" -y
 
-# CUDA 12.8 (evo2):
+# CUDA 12.8 (e.g. evo2): GCC 14
 micromamba create -p "$CUDA_HOME" -c conda-forge -c nvidia \
     "cuda-toolkit=12.8.*" "gcc=14.*" "gxx=14.*" -y
 ```
 
-For runtime JIT tools (protenix), also set `CC`/`CXX` in `sitecustomize.py`. See `evo1/standalone/setup.sh` (GCC 12 + sysroot), `protenix/standalone/setup.sh` (GCC 12 + CC/CXX), `evo2/standalone/setup.sh` (GCC 14).
+For runtime JIT tools, also set `CC`/`CXX` in `sitecustomize.py` (see protenix's setup.sh).
 
 ---
 

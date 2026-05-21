@@ -157,8 +157,8 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
    - Proper imports
    - Input class extending `BaseToolInput` (or shared base) with `Field()` — `extra="forbid"`
    - Config class extending `BaseConfig` (or shared base) with `ConfigField()` — `extra="forbid"`. Use `reload_on_change=True` on fields that require worker restart (model checkpoint, etc.). Use `include_in_key=False` on fields that don't affect computation results (device, verbose, timeout are already excluded on `BaseConfig`; tool-level overrides of `device` must also set `include_in_key=False`). `include_in_key` defaults to `True`. Use `xor_group="<slug>"` to mark mutually exclusive sibling fields (see "Mutual-exclusion fields (XOR groups)" below). UI-presentation flags (advanced/hidden/conditional visibility) live in the proto-ui overlay layer, not on `ConfigField()`.
-   - Output class extending `BaseToolOutput` (or shared base) with `Field()` — `extra="forbid"`
-   - `@tool()` decorator with all 9 required kwargs: key, label, category, input_class, config_class, output_class, description, uses_gpu, example_input (plus optional `device_count`, `cacheable`, and `seed_sensitive`)
+   - Output class extending `BaseToolOutput` (or shared base) with `Field()` — `extra="ignore"` (set by `BaseToolOutput`; the base also emits a warning for unexpected fields so computed-field JSON round-trips can validate cleanly)
+   - `@tool()` decorator with the 7 required kwargs (key, label, category, input_class, config_class, output_class, description) plus conventionally set `uses_gpu`. Optional: `example_input`, `device_count`, `cacheable`, `stochastic`, `iterable_input_field`, `iterable_output_field`, `metrics_class`, `gpu_only`, `post_process_iterable`
    - `run_*()` function that calls `ToolInstance.dispatch()`
    - If category has shared data models, use type aliases (e.g., `ToolInput = InverseFoldingInput`)
    - **Metrics**: if the tool emits scalar metric-like values (plDDT, perplexity, scores, etc.), route them through a `Metrics` subclass (from `proto_tools/utils/tool_io.py`). Prefer a shared per-category class (`MaskedModelScoringMetrics`, `InverseFoldingScoringMetrics`, `CausalModelScoringMetrics`, etc.) when the metric set matches siblings. Otherwise declare a per-tool `<Tool>Metrics(Metrics)` subclass in the tool file with a `metric_spec: ClassVar[dict[str, MetricSpec]]` documenting type/range for each metric. Verification lives in each tool's e2e test via `assert_metrics_in_spec(result)` (helper at `tests/tool_infra_tests/_metric_helpers.py`).
@@ -316,7 +316,7 @@ CRITICAL RULES:
 - Match the operation names used in the contract's ToolInstance.dispatch() calls
 - Device handling: accept device from input_dict, pass to model.load()
 - Seed handling: pass `config.seed` (raw `Optional[int]`) through the dispatch dict. In inference.py, call `set_torch_seed(seed)` unconditionally — the helper's None-check gates the expensive cuDNN flags. For any downstream sampler that needs a concrete int, do `sampling_seed = seed if seed is not None else get_random_int()` using the helper from `standalone_helpers`.
-- `seed_sensitive=True`: set when outputs depend on `config.seed`. Cacheable unseeded calls skip cache/dedup; iterable multi-item dispatches auto-unroll with per-item-derived seeds. Do not set for tools that accept but ignore the seed.
+- `stochastic=True`: set when outputs depend on `config.seed`. Cacheable unseeded calls skip cache; iterable dispatches skip dedup so duplicate items diverge via per-item RNG advancement. The framework does **not** unroll multi-item dispatches — per-item seed handling is the tool's responsibility. Do not set for tools that accept but ignore the seed.
 - Audit hardcoded values in the reference/research code (chain IDs, model paths, default parameters, assumed dimensions). If a value could vary across valid inputs, parameterize it — accept it from the dispatch input dict rather than hardcoding. For example, `chain_id="A"` should come from the input, not be a constant.
 
 ### Required Device Management Protocol Functions
@@ -497,24 +497,14 @@ Here is the README from {reference_tool} to use as a structural template:
 <paste tool description, paper info, biological context from Phase 1>
 
 ## README.md Structure
-Follow this exact structure:
-1. # {Tool Display Name}
-2. ## Overview — biological context, what the tool does, why it's useful
-3. ## When to Use This Tool — primary use cases + when NOT to use
-4. ## Biological Background — scientific foundation for non-biologists
-5. ## Tool Catalog — table of operations (key, input, output, use case)
-6. ## Execution Modes — GPU/CPU requirements, memory, timing
-7. ## How It Works — brief description of each operation
-8. ## Input Parameters — tables for each operation
-9. ## Configuration — parameter tables with types, defaults, descriptions
-10. ## Output Specification — output field tables
-11. ## Interpreting Results — how to interpret scores/metrics biologically
-12. ## Quick Start Examples — 3-5 working code examples with exact imports
-13. ## Best Practices & Gotchas — parameter tuning, common mistakes
-14. ## References — paper citation, GitHub links
-15. ## Related Tools — tools often used together, alternatives
+Follow the structured template in TEMPLATES.md exactly. Four canonical H2 sections in order:
+1. `# {Toolkit Display Name}` (plus the badge row above the title and a `> [!NOTE] License: ...` callout)
+2. `## Overview` — 2–3 sentences: who built it, what it does, why useful (link the upstream repo on first mention)
+3. `## Background` — 1–3 paragraphs of biological/algorithmic context with inline paper citations; optional `### Learning Resources` subsection for user-facing explainers (blogs, talks, courses)
+4. `## Tools` — one `### {Tool Display Name} (\`{tool-key}\`)` block per registered tool, each with `#### Applications` and `#### Usage Tips` (critical-knob tips in bold)
+5. `## Toolkit Notes` — Toolkit-wide guide badges row + bulleted notes that apply to every tool in the toolkit
 
-CRITICAL: Use exact import paths from proto_tools.tools.{category}.{toolkit}. Class names and function names must match the contract exactly.
+DO NOT add other H2 sections — schemas, configs, and output specs are auto-generated from Pydantic field descriptions. Read `gene_annotation/pyhmmer/README.md` for the canonical example before drafting.
 
 ## cite.bib
 Look up the paper's BibTeX citation using the DOI. Format:
@@ -736,10 +726,11 @@ CRITICAL RULES:
    - [ ] Output extends `BaseToolOutput`, implements `output_format_options`, `output_format_default`, `_export_output()`
    - [ ] Run function signature: `def run_*(inputs: *Input, config: *Config) -> *Output`
    - [ ] Run function returns Output with `metadata={}` dict of key parameters
-   - [ ] `@tool()` has all 9 kwargs: key, label, category, input_class, config_class, output_class, description, uses_gpu, example_input
+   - [ ] `@tool()` has the 7 required kwargs (key, label, category, input_class, config_class, output_class, description); optional kwargs commonly set: `uses_gpu` (default `False`), `example_input` (factory for parametrized tests)
    - [ ] `@tool()`: `uses_gpu=True` matches Config `device="cuda"` override
    - [ ] `@tool()`: Optional `device_count` specifies expected device allocation ("1", "1-2", ">=1", etc.)
-   - [ ] `@tool()`: `seed_sensitive=True` is set when outputs depend on `config.seed`; iterable multi-item dispatches auto-unroll with per-item seeds
+   - [ ] `@tool()`: `stochastic=True` is set when outputs depend on `config.seed`; the tool advances its own RNG per item (framework does not unroll)
+   - [ ] `@tool()`: `metrics_class=<Tool>Metrics` is set when the tool emits scalar metric-like values
    - [ ] No try/except wrapping tool logic
    - [ ] Google-style docstrings with Attributes (for classes) and Args/Returns/Examples (for functions)
    - [ ] `__init__.py` exports at all 4 levels

@@ -599,7 +599,7 @@ def run_{tool_key_snake}(inputs, config) -> Output:
 ```
 
 No separate imports needed — caching is built into the `@tool()` decorator.
-Set `seed_sensitive=True` when outputs depend on `config.seed`. For cacheable tools, unseeded calls skip cache/dedup and iterable multi-item dispatches auto-unroll with per-item-derived seeds. For non-cacheable tools, it's metadata only.
+Set `stochastic=True` when outputs depend on `config.seed`. For cacheable tools, unseeded calls skip cache and iterable dispatches skip dedup so duplicate items diverge via per-item RNG. The framework does **not** unroll multi-item dispatches — the tool advances its own RNG per item internally (e.g. `torch.manual_seed(seed + i)` inside the per-prompt loop). For non-cacheable tools, it's metadata only.
 
 ---
 
