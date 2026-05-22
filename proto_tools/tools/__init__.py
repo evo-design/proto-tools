@@ -4,11 +4,17 @@
 
 # Binder / antibody design tools
 from proto_tools.tools.binder_design import (
+    BindCraftConfig,
+    BindCraftDesign,
+    BindCraftInput,
+    BindCraftMetrics,
+    BindCraftOutput,
     GerminalConfig,
     GerminalDesign,
     GerminalDesignMetrics,
     GerminalInput,
     GerminalOutput,
+    run_bindcraft_design,
     run_germinal_design,
 )
 
@@ -555,18 +561,12 @@ from proto_tools.tools.structure_alignment import (
 
 # Structure design tools
 from proto_tools.tools.structure_design import (
-    BindCraftConfig,
-    BindCraftDesign,
-    BindCraftInput,
-    BindCraftMetrics,
-    BindCraftOutput,
     RFdiffusion3Config,
     RFdiffusion3Designs,
     RFdiffusion3DesignSpec,
     RFdiffusion3Input,
     RFdiffusion3Output,
     RFdiffusion3Structure,
-    run_bindcraft_design,
     run_rfdiffusion3,
 )
 
@@ -691,6 +691,13 @@ __all__ = [
     "clear_cache",
     "clear_tool_cache",
     "get_cache_info",
+    # Binder / antibody design - BindCraft
+    "run_bindcraft_design",
+    "BindCraftInput",
+    "BindCraftConfig",
+    "BindCraftOutput",
+    "BindCraftDesign",
+    "BindCraftMetrics",
     # Binder / antibody design - Germinal
     "GerminalConfig",
     "GerminalDesign",
@@ -1236,13 +1243,6 @@ __all__ = [
     "RFdiffusion3DesignSpec",
     "RFdiffusion3Designs",
     "RFdiffusion3Structure",
-    # Structure design - BindCraft
-    "run_bindcraft_design",
-    "BindCraftInput",
-    "BindCraftConfig",
-    "BindCraftOutput",
-    "BindCraftDesign",
-    "BindCraftMetrics",
     # Masked models - shared
     "MaskedModelScoringMetrics",
     "MaskingStrategy",

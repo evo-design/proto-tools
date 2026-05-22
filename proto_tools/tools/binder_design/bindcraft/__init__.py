@@ -1,6 +1,6 @@
 """BindCraft binder-design tool wrapper."""
 
-from proto_tools.tools.structure_design.bindcraft.bindcraft_design import (
+from proto_tools.tools.binder_design.bindcraft.bindcraft_design import (
     BindCraftConfig,
     BindCraftDesign,
     BindCraftInput,

@@ -803,7 +803,7 @@ def example_input() -> BindCraftInput:
 @tool(
     key="bindcraft-design",
     label="BindCraft Binder Design",
-    category="structure_design",
+    category="binder_design",
     input_class=BindCraftInput,
     config_class=BindCraftConfig,
     output_class=BindCraftOutput,

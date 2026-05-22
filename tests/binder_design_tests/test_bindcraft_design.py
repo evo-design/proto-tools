@@ -11,7 +11,7 @@ from proto_tools.tools import (
     BindCraftInput,
     run_bindcraft_design,
 )
-from proto_tools.tools.structure_design.bindcraft.bindcraft_design import (
+from proto_tools.tools.binder_design.bindcraft.bindcraft_design import (
     _HARDCODED_INTERNAL_SETTINGS,
     _USER_FACING_UPSTREAM_KEYS,
 )
@@ -84,7 +84,7 @@ def test_dispatch_payload_carries_user_config_plus_hardcoded_internals(monkeypat
         return {"designs": [], "n_trajectories_run": 0, "n_designs_accepted": 0}
 
     monkeypatch.setattr(
-        "proto_tools.tools.structure_design.bindcraft.bindcraft_design.ToolInstance.dispatch",
+        "proto_tools.tools.binder_design.bindcraft.bindcraft_design.ToolInstance.dispatch",
         fake_dispatch,
     )
 
@@ -125,7 +125,7 @@ def test_bindcraft_design_registered_with_expected_metadata() -> None:
     """``@tool`` wires the right registry metadata + a callable example_input."""
     spec = next((s for s in ToolRegistry.list_all() if s.key == "bindcraft-design"), None)
     assert spec is not None
-    assert spec.category == "structure_design"
+    assert spec.category == "binder_design"
     assert spec.uses_gpu is True
     assert spec.cacheable is False
     assert spec.device_count == "1"
