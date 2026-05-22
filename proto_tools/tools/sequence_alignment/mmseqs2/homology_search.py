@@ -2,10 +2,9 @@
 
 The MSA-generation entry point of the unified ``mmseqs2`` toolkit, alongside
 ``mmseqs2-search-proteins`` / ``mmseqs2-search-genomes`` / ``mmseqs2-clustering``.
-Replaces ``colabfold-search`` in structure predictors. Phase 3 (this file):
-protein search via the registry's UniRef30 entry, GPU by default, unpaired
-only. Paired MSA support and additional datasets land in subsequent PRs
-per ``notes/homology-search-design.md``.
+Replaces ``colabfold-search`` in structure predictors. This implementation
+supports protein search via the registry's UniRef30 entry, GPU by default,
+and unpaired MSAs.
 """
 
 import hashlib
