@@ -96,6 +96,7 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 
 <pre>
 <a href="proto_tools/tools/binder_design/">binder_design/</a>                  # De novo antibody / binder design pipelines
+├── <a href="proto_tools/tools/binder_design/bindcraft/">bindcraft/</a>
 └── <a href="proto_tools/tools/binder_design/germinal/">germinal/</a>
 <a href="proto_tools/tools/causal_models/">causal_models/</a>                 # Autoregressive sequence models
 ├── <a href="proto_tools/tools/causal_models/evo1/">evo1/</a>
@@ -155,7 +156,6 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 ├── <a href="proto_tools/tools/structure_alignment/tmalign/">tmalign/</a>
 └── <a href="proto_tools/tools/structure_alignment/usalign/">usalign/</a>
 <a href="proto_tools/tools/structure_design/">structure_design/</a>               # De novo structure generation
-├── <a href="proto_tools/tools/structure_design/bindcraft/">bindcraft/</a>
 └── <a href="proto_tools/tools/structure_design/rfdiffusion3/">rfdiffusion3/</a>
 <a href="proto_tools/tools/structure_dynamics/">structure_dynamics/</a>             # Conformational dynamics
 └── <a href="proto_tools/tools/structure_dynamics/bioemu/">bioemu/</a>

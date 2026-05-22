@@ -1,4 +1,4 @@
-<a href="https://bio-pro.mintlify.app/tools/structure-design/bindcraft"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/binder-design/bindcraft"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
 
 # BindCraft Binder Design
 
@@ -325,7 +325,7 @@ A *single accepted design* already passed every default filter — the metrics a
 The same import block is used in all three examples:
 
 ```python
-from proto_tools.tools.structure_design.bindcraft import (
+from proto_tools.tools.binder_design.bindcraft import (
     BindCraftConfig,
     BindCraftInput,
     run_bindcraft_design,

@@ -1,5 +1,13 @@
 """De novo binder and antibody design tools."""
 
+from proto_tools.tools.binder_design.bindcraft import (
+    BindCraftConfig,
+    BindCraftDesign,
+    BindCraftInput,
+    BindCraftMetrics,
+    BindCraftOutput,
+    run_bindcraft_design,
+)
 from proto_tools.tools.binder_design.germinal import (
     GerminalConfig,
     GerminalDesign,
@@ -10,6 +18,12 @@ from proto_tools.tools.binder_design.germinal import (
 )
 
 __all__ = [
+    "BindCraftConfig",
+    "BindCraftDesign",
+    "BindCraftInput",
+    "BindCraftMetrics",
+    "BindCraftOutput",
+    "run_bindcraft_design",
     "GerminalConfig",
     "GerminalDesign",
     "GerminalDesignMetrics",
