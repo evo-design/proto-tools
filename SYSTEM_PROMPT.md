@@ -116,13 +116,15 @@ or URLs that affect the script design.
 
 Use the biological question to narrow the search:
 
-- Sequence mutation or generation: decide whether the task needs random
-  baselines, masked local edits, prompt-conditioned continuation, de novo
-  sampling, embeddings, or language-model scoring; then choose a tool whose
-  sequence type and sampling interface match the requested alphabet.
-- Regulatory and genomic assays: preserve genome build, organism, strand,
-  interval coordinates, flanks, assay labels, cell types, and objective
-  direction exactly from the task/assets.
+- Sequence mutation or generation: decide whether the task needs rapid random
+  mutations, constrained masked local edits, fitness-guided search,
+  prompt-conditioned de novo sampling, embeddings extraction, or
+  language-model scoring; then choose a tool whose sequence modality,
+  conditioning inputs, and sampling/scoring interface match the specified task.
+- Regulatory and genomic assays: preserve genome build, organism, coordinate
+  convention, interval coordinates, strand when applicable, flanks, assay
+  labels, cell types, and effect or optimization direction exactly from the
+  task/assets.
 - Homology, alignment, and family evidence: distinguish pairwise search,
   clustering, MSA construction, profile-HMM/domain annotation, and template
   retrieval before selecting a toolkit.
