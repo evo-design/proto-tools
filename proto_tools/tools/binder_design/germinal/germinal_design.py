@@ -117,7 +117,11 @@ class GerminalDesignMetrics(Metrics):
         "loops_all": {"availability": "after filtering", "type": "float", "min": 0.0, "max": 1.0},
         "n_framework_mutations": {"availability": "after filtering", "type": "int", "min": 0},
     }
-    primary_metric: str | None = "i_ptm"
+    primary_metric: str | None = Field(
+        default="i_ptm",
+        title="Primary Metric",
+        description="Headline metric used to rank results.",
+    )
 
 
 # ============================================================================
@@ -153,25 +157,33 @@ class GerminalInput(BaseToolInput):
             ``hotspot_residue`` field in ``configs/target/*.yaml``.
     """
 
-    target_pdb: Structure = InputField(description="Target structure")
+    target_pdb: Structure = InputField(
+        title="Target PDB",
+        description="Target structure",
+    )
     target_chain: str = InputField(
         default="A",
+        title="Target Chain",
         description="Target chain ID(s); comma-separated for multi-chain targets",
     )
     binder_chain: str = InputField(
         default="B",
+        title="Binder Chain",
         description="Chain ID assigned to the designed binder; must differ from target_chain.",
     )
     hotspots: list[str] = InputField(
         default_factory=list,
+        title="Hotspots",
         description="Target hotspot residues, e.g. ['A37','A39'] (chain letter + 1-indexed resnum)",
     )
     target_name: str | None = InputField(
         default=None,
+        title="Target Name",
         description="Short identifier; defaults to a hash of the PDB content",
     )
     hotspot_residue: str | None = InputField(
         default=None,
+        title="Hotspot Residue",
         description="Single-residue contact-restraint anchor for Chai-1 (e.g. 'W40'). Ignored by AF3 / Protenix.",
     )
 
@@ -403,23 +415,39 @@ class GerminalDesign(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    sequence_heavy: str = Field(description="Heavy chain or VHH amino acid sequence")
-    sequence_light: str | None = Field(default=None, description="Light chain sequence (scFv only)")
-    structure: Structure = Field(description="Predicted binder + target complex")
-    metrics: GerminalDesignMetrics = Field(description="Per-design quality metrics")
+    sequence_heavy: str = Field(
+        title="Heavy Chain Sequence",
+        description="Heavy chain or VHH amino acid sequence",
+    )
+    sequence_light: str | None = Field(
+        default=None,
+        title="Light Chain Sequence",
+        description="Light chain sequence (scFv only)",
+    )
+    structure: Structure = Field(
+        title="Predicted Complex",
+        description="Predicted binder + target complex",
+    )
+    metrics: GerminalDesignMetrics = Field(
+        title="Design Quality Metrics",
+        description="Per-design quality metrics from the Germinal pipeline.",
+    )
     stage_passed: Literal["accepted", "redesign_candidate", "trajectory"] = Field(
+        title="Stage Passed",
         description="Highest pipeline stage this design reached",
     )
-    design_id: str = Field(description="Germinal's internal design identifier")
+    design_id: str = Field(
+        title="Design ID",
+        description="Germinal's internal design identifier",
+    )
     trajectory_index: int = Field(
         ge=0,
-        description=(
-            "Trajectory seed (Germinal uses seed as the unique trajectory identifier; "
-            "extracted from the '_s<seed>' suffix in design_id)."
-        ),
+        title="Trajectory Seed",
+        description="Trajectory seed; extracted from the '_s<seed>' suffix in design_id.",
     )
     mpnn_index: int = Field(
         ge=0,
+        title="AbMPNN Index",
         description="AbMPNN sample index (1-based; 0 for trajectory-only designs without redesign).",
     )
 
@@ -437,19 +465,30 @@ class GerminalOutput(BaseToolOutput):
         num_designs (int): Computed; total number of returned designs.
     """
 
-    designs: list[GerminalDesign] = Field(default_factory=list, description="All produced designs")
+    designs: list[GerminalDesign] = Field(
+        default_factory=list,
+        title="Designs",
+        description="All produced designs",
+    )
     pipeline_stats: dict[str, int] = Field(
         default_factory=dict,
+        title="Pipeline Stats",
         description="Per-stage counts from Germinal's failure_counts.csv",
     )
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field(  # type: ignore[prop-decorator]
+        title="Accepted Count",
+        description="Number of designs that passed all final filters.",
+    )
     @property
     def num_accepted(self) -> int:
         """Number of designs that passed all final filters."""
         return sum(1 for d in self.designs if d.stage_passed == "accepted")
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field(  # type: ignore[prop-decorator]
+        title="Total Designs",
+        description="Total number of designs returned across all pipeline stages.",
+    )
     @property
     def num_designs(self) -> int:
         """Total number of designs returned across all pipeline stages."""

@@ -160,7 +160,11 @@ class BindCraftMetrics(Metrics):
         "unrelaxed_clashes": {"type": "float", "min": 0.0, "unit": "count"},
         "relaxed_clashes": {"type": "float", "min": 0.0, "unit": "count"},
     }
-    primary_metric: str | None = "avg_iptm"
+    primary_metric: str | None = Field(
+        default="avg_iptm",
+        title="Primary Metric",
+        description="Headline metric used to rank results.",
+    )
 
 
 # ============================================================================
@@ -186,17 +190,35 @@ class BindCraftDesign(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    design_name: str = Field(description="Unique design identifier emitted by BindCraft.")
-    binder_sequence: str = Field(description="Designed binder amino-acid sequence (1-letter codes).")
-    structure: Structure = Field(description="Relaxed target+binder complex with per-residue pLDDT in B-factors.")
-    metrics: BindCraftMetrics = Field(description="Per-design averaged metrics evaluated by the filter check.")
-    seed: int = Field(ge=0, description="Random seed of the trajectory that produced this design.")
+    design_name: str = Field(
+        title="Design Name",
+        description="Unique design identifier emitted by BindCraft.",
+    )
+    binder_sequence: str = Field(
+        title="Binder Sequence",
+        description="Designed binder amino-acid sequence (1-letter codes).",
+    )
+    structure: Structure = Field(
+        title="Design Structure",
+        description="Relaxed target+binder complex with per-residue pLDDT in B-factors.",
+    )
+    metrics: BindCraftMetrics = Field(
+        title="Design Metrics",
+        description="Per-design averaged metrics evaluated by the filter check.",
+    )
+    seed: int = Field(
+        ge=0,
+        title="Seed",
+        description="Random seed of the trajectory that produced this design.",
+    )
     interface_aas: dict[str, int] = Field(
         default_factory=dict,
+        title="Interface AA Composition",
         description="Amino-acid composition at the binder-target interface.",
     )
     interface_residues: list[int] = Field(
         default_factory=list,
+        title="Interface Residues",
         description="1-indexed binder residue positions at the interface.",
     )
 
@@ -227,27 +249,33 @@ class BindCraftInput(BaseToolInput):
     """
 
     target_pdb: Structure = InputField(
+        title="Target PDB",
         description="Target structure.",
     )
     target_chain: str = InputField(
         default="A",
+        title="Target Chain",
         description="Chain ID(s) of the frozen target (comma-separated for multi-chain).",
     )
     target_hotspot_residues: str | None = InputField(
         default=None,
+        title="Target Hotspot Residues",
         description="Comma-separated 1-indexed residue positions on the target (e.g. '1-10,56,78').",
     )
     binder_lengths: tuple[int, int] = InputField(
         default=(65, 150),
+        title="Binder Lengths",
         description="(min, max) binder length range. Upstream default: (65, 150).",
     )
     binder_name: str = InputField(
         default="binder",
-        description="Prefix used in each accepted design's name (e.g. 'binder' → 'binder_l60_s12345_mpnn3').",
+        title="Binder Name",
+        description="Filename prefix for accepted designs (e.g. 'binder' yields 'binder_l60_s12345_mpnn3').",
     )
     number_of_final_designs: int = InputField(
         default=100,
         ge=1,
+        title="Number of Final Designs",
         description="Target accepted-design count. Set to 1 for one-off sampling. Upstream default: 100.",
     )
 
@@ -345,7 +373,7 @@ class BindCraftConfig(BaseConfig):
     design_algorithm: Literal["2stage", "3stage", "4stage", "greedy", "mcmc"] = ConfigField(
         title="Design Algorithm",
         default="4stage",
-        description="Hallucination algorithm. 4stage (default) commits logits via soft→temporary→hard→greedy.",
+        description="Hallucination algorithm; '4stage' runs soft, temporary, hard, then greedy stages.",
     )
     use_multimer_design: bool = ConfigField(
         title="Use Multimer Design",
@@ -409,7 +437,7 @@ class BindCraftConfig(BaseConfig):
     weights_pae_inter: float = ConfigField(
         title="Inter-Chain PAE Weight",
         default=0.1,
-        description="Loss weight on binder↔target interface PAE (higher = push for confident pairing).",
+        description="Loss weight on the binder-target interface PAE; higher values push for more confident pairing.",
     )
     weights_con_intra: float = ConfigField(
         title="Intra-Chain Contact Weight",
@@ -419,7 +447,7 @@ class BindCraftConfig(BaseConfig):
     weights_con_inter: float = ConfigField(
         title="Inter-Chain Contact Weight",
         default=1.0,
-        description="Loss weight on binder↔target interface contacts (encourages docking).",
+        description="Loss weight on the binder-target interface contacts; encourages docking.",
     )
     weights_helicity: float = ConfigField(
         title="Helicity Weight",
@@ -716,16 +744,19 @@ class BindCraftOutput(BaseToolOutput):
 
     designs: list[BindCraftDesign] = Field(
         default_factory=list,
+        title="Designs",
         description="Accepted binder designs.",
     )
     n_trajectories_run: int = Field(
         default=0,
         ge=0,
+        title="Trajectories Run",
         description="Total trajectories attempted before stopping.",
     )
     n_designs_accepted: int = Field(
         default=0,
         ge=0,
+        title="Designs Accepted",
         description="Designs that passed all filters (equals len(designs)).",
     )
 

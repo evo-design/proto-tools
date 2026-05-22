@@ -52,10 +52,11 @@ class Mmseqs2HomologySearchQuery(BaseModel):
             mismatches against the configured datasets.
     """
 
-    sequence: str = Field(description="Sequence to search for homologs")
-    sequence_id: str | None = Field(default=None, description="Optional sequence identifier")
+    sequence: str = Field(title="Sequence", description="Sequence to search for homologs")
+    sequence_id: str | None = Field(default=None, title="Sequence ID", description="Optional sequence identifier")
     molecule_type: Literal["protein", "rna", "dna"] | None = Field(
         default=None,
+        title="Molecule Type",
         description="Sequence type; inferred from datasets when None",
     )
 
@@ -86,6 +87,7 @@ class Mmseqs2HomologySearchInput(BaseToolInput):
     """
 
     queries: list[Mmseqs2HomologySearchQuery | list[Mmseqs2HomologySearchQuery]] = InputField(
+        title="Query Groups",
         description="Query groups (flat = singleton/unpaired; nested list = paired chains)",
     )
 
@@ -191,11 +193,19 @@ class Mmseqs2HomologySearchResult(BaseModel):
             the query itself).
     """
 
-    sequence_ids: list[str] = Field(description="Chain identifiers in this group")
-    msas: list[MSA | None] = Field(description="Per-chain unpaired MSAs")
-    paired_msas: list[MSA | None] = Field(description="Per-chain paired MSAs (Phase 4+); None in Phase 3")
-    datasets_searched: list[str] = Field(description="Registry keys of datasets searched for this group")
-    num_homologs_found: list[int] = Field(description="Homolog count per chain (excludes query)")
+    sequence_ids: list[str] = Field(title="Sequence IDs", description="Chain identifiers in this group")
+    msas: list[MSA | None] = Field(title="Unpaired MSAs", description="Per-chain unpaired MSAs")
+    paired_msas: list[MSA | None] = Field(
+        title="Paired MSAs", description="Per-chain paired MSAs (Phase 4+); None in Phase 3"
+    )
+    datasets_searched: list[str] = Field(
+        title="Datasets Searched",
+        description="Registry keys of datasets searched for this group",
+    )
+    num_homologs_found: list[int] = Field(
+        title="Homologs Per Chain",
+        description="Homolog count per chain (excludes query)",
+    )
 
 
 class Mmseqs2HomologySearchOutput(BaseToolOutput):
@@ -206,7 +216,9 @@ class Mmseqs2HomologySearchOutput(BaseToolOutput):
             group (matches the order of ``Mmseqs2HomologySearchInput.queries``).
     """
 
-    results: list[Mmseqs2HomologySearchResult] = Field(description="One result per input group")
+    results: list[Mmseqs2HomologySearchResult] = Field(
+        title="Per-Group Results", description="One result per input group"
+    )
 
     @property
     def output_format_options(self) -> list[str]:

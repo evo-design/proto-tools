@@ -46,7 +46,7 @@ class FoldseekRBHInput(BaseToolInput):
             upstream to obtain it.
     """
 
-    structure_text: str = InputField(description="PDB-format text of the query structure")
+    structure_text: str = InputField(title="Structure Text", description="PDB-format text of the query structure")
 
 
 class FoldseekRBHConfig(BaseConfig):
@@ -146,9 +146,9 @@ class FoldseekRBHOutput(BaseToolOutput):
         target_db (str): The target DB path that was queried.
     """
 
-    hits: list[FoldseekHit] = Field(default_factory=list, description="Reciprocal best-hit alignments")
-    num_hits: int = Field(description="Total number of hits", ge=0)
-    target_db: str = Field(description="Target DB path that was queried")
+    hits: list[FoldseekHit] = Field(default_factory=list, title="Hits", description="Reciprocal best-hit alignments")
+    num_hits: int = Field(title="Number of Hits", description="Total number of hits", ge=0)
+    target_db: str = Field(title="Target Database", description="Target DB path that was queried")
 
     @property
     def output_format_options(self) -> list[str]:

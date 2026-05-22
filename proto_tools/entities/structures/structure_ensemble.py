@@ -3,7 +3,7 @@
 Contains base class for representing a protein structure ensemble.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from proto_tools.entities.structures.structure import Structure
 
@@ -22,8 +22,14 @@ class StructureEnsemble(BaseModel):
         sequence (str): The input protein sequence.
     """
 
-    structures: list[Structure]
-    sequence: str
+    structures: list[Structure] = Field(
+        title="Structures",
+        description="Sampled conformational structures, one per frame in the ensemble.",
+    )
+    sequence: str = Field(
+        title="Sequence",
+        description="Input protein sequence shared by all conformations in the ensemble.",
+    )
 
     def approx_equal(self, other: "StructureEnsemble", rtol: float = 1e-4, atol: float = 1e-6) -> None:
         """Assert that two structure ensembles are approximately equal.

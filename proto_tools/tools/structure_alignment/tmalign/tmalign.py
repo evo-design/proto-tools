@@ -36,8 +36,8 @@ class TMalignInput(BaseToolInput):
         pdb_text_2 (str): Raw PDB content of the second structure (reference / target).
     """
 
-    pdb_text_1: str = InputField(description="PDB content of structure 1 (query)")
-    pdb_text_2: str = InputField(description="PDB content of structure 2 (reference)")
+    pdb_text_1: str = InputField(title="Structure 1 PDB", description="PDB content of structure 1 (query)")
+    pdb_text_2: str = InputField(title="Structure 2 PDB", description="PDB content of structure 2 (reference)")
 
 
 class TMalignConfig(BaseConfig):
@@ -72,7 +72,11 @@ class TMalignOutput(BaseToolOutput):
             (the forwarded shortcut from :class:`BaseToolOutput`).
     """
 
-    metrics: TMalignMetrics = Field(default_factory=TMalignMetrics, description="Pairwise alignment scores")
+    metrics: TMalignMetrics = Field(
+        default_factory=TMalignMetrics,
+        title="Alignment Scores",
+        description="Pairwise alignment scores",
+    )
 
     @property
     def output_format_options(self) -> list[str]:

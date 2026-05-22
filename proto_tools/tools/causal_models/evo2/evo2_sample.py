@@ -42,8 +42,15 @@ Evo2SampleInput = CausalModelSampleInput
 class Evo2KVCacheRef(BaseModel):
     """Worker-local Evo2 KV-cache handle returned by a persistent worker."""
 
-    type: Literal["evo2_kv_cache"] = Field(default="evo2_kv_cache", description="Evo2 KV-cache handle type")
-    cache_id: str = Field(description="Identifier for the worker-local KV cache")
+    type: Literal["evo2_kv_cache"] = Field(
+        default="evo2_kv_cache",
+        title="Cache Type",
+        description="Evo2 KV-cache handle type",
+    )
+    cache_id: str = Field(
+        title="Cache ID",
+        description="Identifier for the worker-local KV cache",
+    )
 
 
 class Evo2SampleOutput(CausalModelSampleOutput):
@@ -57,9 +64,15 @@ class Evo2SampleOutput(CausalModelSampleOutput):
             for continued generation inside the same persistent worker.
     """
 
-    logits: list[Any] | None = Field(default=None, description="Per-position logits for each generated sequence")
+    logits: list[Any] | None = Field(
+        default=None,
+        title="Logits",
+        description="Per-step logits for each generated sequence (shape [n_outputs, gen_len, vocab_size])",
+    )
     kv_caches: list[Evo2KVCacheRef] | None = Field(
-        default=None, description="Worker-local KV cache handles for continued generation"
+        default=None,
+        title="KV Caches",
+        description="Opaque worker-local KV cache handles (only valid on the same worker)",
     )
 
 

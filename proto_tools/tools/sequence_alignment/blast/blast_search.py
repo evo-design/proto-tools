@@ -87,18 +87,21 @@ class BlastHit(BaseModel):
         bitscore (float): Bit score.
     """
 
-    qseqid: str = Field(description="Query sequence ID")
-    sseqid: str = Field(description="Subject sequence ID")
-    pident: float = Field(description="Percentage of identical matches")
-    length: int = Field(description="Alignment length")
-    mismatch: int = Field(description="Number of mismatches")
-    gapopen: int = Field(description="Number of gap openings")
-    qstart: int = Field(description="Start of alignment in query")
-    qend: int = Field(description="End of alignment in query")
-    sstart: int = Field(description="Start of alignment in subject")
-    send: int = Field(description="End of alignment in subject")
-    evalue: float = Field(description="Expect value")
-    bitscore: float = Field(description="Bit score")
+    qseqid: str = Field(title="Query ID", description="Query sequence ID")
+    sseqid: str = Field(title="Subject ID", description="Subject sequence ID")
+    pident: float = Field(title="Percent Identity", description="Percentage of identical matches")
+    length: int = Field(title="Alignment Length", description="Alignment length")
+    mismatch: int = Field(title="Mismatch Count", description="Number of mismatches")
+    gapopen: int = Field(title="Gap Open Count", description="Number of gap openings")
+    qstart: int = Field(title="Query Start", description="1-indexed inclusive start in query")
+    qend: int = Field(title="Query End", description="1-indexed inclusive end in query")
+    sstart: int = Field(
+        title="Subject Start",
+        description="1-indexed inclusive subject start (sstart > send means minus strand for nucleotide subjects)",
+    )
+    send: int = Field(title="Subject End", description="1-indexed inclusive subject end")
+    evalue: float = Field(title="E-value", description="Expect value; smaller values are more significant")
+    bitscore: float = Field(title="Bit Score", description="Alignment bit score; higher is better")
 
 
 # Input:
@@ -118,10 +121,12 @@ class BlastSearchInput(BaseToolInput):
     """
 
     query: str = InputField(
+        title="Query",
         description=("Query sequence string or path to a FASTA file containing query sequence(s)"),
     )
     query_type: Literal["sequence", "fasta_path"] = InputField(
         default="sequence",
+        title="Query Type",
         description=("Auto-inferred query type: 'sequence' for raw string, 'fasta_path' for a file path."),
     )
 
@@ -158,6 +163,7 @@ class BlastSearchOutput(BaseToolOutput):
 
     hits: list[BlastHit] = Field(
         default_factory=list,
+        title="Hits",
         description="BLAST alignment hits",
     )
 

@@ -51,14 +51,26 @@ class UniProtFetchInput(BaseToolInput):
             ranking.
     """
 
-    uniprot_id: str | None = InputField(default=None, description="UniProt accession for direct entry lookup")
-    target_name: str | None = InputField(default=None, description="Gene or protein name for search")
-    organism: str | None = InputField(default=None, description="Organism for search disambiguation")
+    uniprot_id: str | None = InputField(
+        default=None,
+        title="UniProt Accession",
+        description="UniProt accession for direct entry lookup",
+    )
+    target_name: str | None = InputField(
+        default=None, title="Target Name", description="Gene or protein name for search"
+    )
+    organism: str | None = InputField(default=None, title="Organism", description="Organism for search disambiguation")
     prefer_pdb_crossref: bool = InputField(
-        default=False, description="When searching, prefer entries that have linked PDB structures"
+        default=False,
+        title="Prefer PDB Cross-Reference",
+        description="When searching, prefer entries that have linked PDB structures",
     )
     max_candidates: int = InputField(
-        default=5, ge=1, le=25, description="Maximum number of search results to evaluate when ranking"
+        default=5,
+        ge=1,
+        le=25,
+        title="Max Candidates",
+        description="Maximum number of search results to evaluate when ranking",
     )
 
     @model_validator(mode="after")
@@ -85,17 +97,25 @@ class UniProtFetchOutput(BaseToolOutput):
             access.
     """
 
-    accession: str = Field(description="Primary UniProt accession")
-    sequence: str | None = Field(default=None, description="Protein sequence")
-    length: int | None = Field(default=None, description="Sequence length")
+    accession: str = Field(title="Accession", description="Primary UniProt accession")
+    sequence: str | None = Field(default=None, title="Sequence", description="Protein sequence")
+    length: int | None = Field(default=None, title="Length", description="Sequence length")
     entry_type: str | None = Field(
-        default=None, description="Review status (e.g. 'UniProtKB reviewed (Swiss-Prot)' for curated entries)"
+        default=None,
+        title="Entry Type",
+        description="Review status (e.g. 'UniProtKB reviewed (Swiss-Prot)' for curated entries)",
     )
-    gene_names: list[str] = Field(default_factory=list, description="Gene name symbols")
-    pdb_crossrefs: list[str] = Field(default_factory=list, description="PDB structure IDs linked to this protein entry")
-    source_url: str = Field(description="UniProt entry URL")
+    gene_names: list[str] = Field(default_factory=list, title="Gene Names", description="Gene name symbols")
+    pdb_crossrefs: list[str] = Field(
+        default_factory=list,
+        title="PDB Cross-References",
+        description="PDB structure IDs linked to this protein entry",
+    )
+    source_url: str = Field(title="Source URL", description="UniProt entry URL")
     raw_entry: dict[str, Any] = Field(
-        default_factory=dict, description="Complete UniProt JSON record for advanced programmatic access"
+        default_factory=dict,
+        title="Raw Entry",
+        description="Complete UniProt JSON record for advanced programmatic access",
     )
 
     @property

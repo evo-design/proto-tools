@@ -55,7 +55,7 @@ class AlphaGenomePredictSequencesInput(BaseToolInput):
             must match a supported context length.
     """
 
-    sequences: list[str] = InputField(description="Raw DNA sequences for prediction")
+    sequences: list[str] = InputField(title="Sequences", description="Raw DNA sequences for prediction")
 
     @field_validator("sequences", mode="before")
     @classmethod
@@ -84,6 +84,7 @@ class AlphaGenomePredictSequencesOutput(BaseToolOutput):
     """
 
     results: list[AlphaGenomePredictOutput] = Field(
+        title="Results",
         description="Per-sequence AlphaGenome prediction outputs",
     )
 

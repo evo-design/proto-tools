@@ -56,6 +56,7 @@ class PuffinPredictionInput(BaseToolInput):
     """
 
     sequences: list[str] = InputField(
+        title="Sequences",
         description="DNA sequence(s) >= 651 bp. Per-base output length = len(seq) - 650",
         min_length=1,
     )
@@ -112,13 +113,23 @@ class PuffinPredictionResult(BaseModel):
             ``[output_length, 10]``. Channel order matches ``TRACK_NAMES``.
     """
 
-    sequence: str = Field(description="DNA sequence originally provided to the tool")
-    sequence_length: int = Field(description="Length of the provided DNA sequence")
-    output_length: int = Field(description="Number of per-base output positions (= sequence_length - 650)")
-    output_start: int = Field(description="0-based sequence coordinate of the first output position")
-    output_end: int = Field(description="0-based exclusive end of the output span in the input sequence")
+    sequence: str = Field(title="Sequence", description="DNA sequence originally provided to the tool")
+    sequence_length: int = Field(title="Sequence Length", description="Length of the provided DNA sequence")
+    output_length: int = Field(
+        title="Output Length",
+        description="Number of per-base output positions (= sequence_length - 650)",
+    )
+    output_start: int = Field(
+        title="Output Start",
+        description="0-based sequence coordinate of the first output position",
+    )
+    output_end: int = Field(
+        title="Output End",
+        description="0-based exclusive end of the output span in the input sequence",
+    )
     predictions: list[list[float]] = Field(
-        description="Per-base predictions with shape [output_length, 10] in TRACK_NAMES order"
+        title="Predictions",
+        description="Per-base log-scale predictions in TRACK_NAMES order (shape [output_length, 10])",
     )
 
 
@@ -145,8 +156,8 @@ class PuffinPredictionOutput(BaseToolOutput):
         track_names (list[str]): Names of the 10 output channels in order.
     """
 
-    results: list[PuffinPredictionResult] = Field(description="Per-sequence Puffin prediction results")
-    track_names: list[str] = Field(description="Names of the 10 output channels in order")
+    results: list[PuffinPredictionResult] = Field(title="Results", description="Per-sequence Puffin prediction results")
+    track_names: list[str] = Field(title="Track Names", description="Names of the 10 output channels in order")
 
     def __len__(self) -> int:
         """Number of per-sequence results."""

@@ -36,17 +36,19 @@ class ORF(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    parent_id: str = Field(description="Identifier of the parent/input sequence")
-    orf_id: str = Field(description="Unique ORF identifier within the parent sequence")
-    strand: Literal["+", "-"] = Field(description="Strand direction ('+' or '-')")
-    frame: Literal[1, 2, 3] = Field(description="Reading frame (1, 2, or 3)")
-    amino_acid_sequence: str = Field(description="Translated protein sequence")
-    nucleotide_sequence: str = Field(description="DNA sequence of the ORF")
-    amino_acid_length: int = Field(description="Length of protein in amino acids")
-    nucleotide_length: int = Field(description="Length of ORF in nucleotides")
-    nucleotide_start: int = Field(description="Start position (1-indexed, inclusive)")
-    nucleotide_end: int = Field(description="End position (1-indexed, inclusive)")
-    metrics: dict[str, Any] = Field(default_factory=dict, description="Tool-specific metrics or metadata")
+    parent_id: str = Field(title="Parent ID", description="Identifier of the parent/input sequence")
+    orf_id: str = Field(title="ORF ID", description="Unique ORF identifier within the parent sequence")
+    strand: Literal["+", "-"] = Field(title="Strand", description="Strand direction ('+' or '-')")
+    frame: Literal[1, 2, 3] = Field(title="Frame", description="Reading frame (1, 2, or 3)")
+    amino_acid_sequence: str = Field(title="Amino Acid Sequence", description="Translated protein sequence")
+    nucleotide_sequence: str = Field(title="Nucleotide Sequence", description="DNA sequence of the ORF")
+    amino_acid_length: int = Field(title="Amino Acid Length", description="Length of protein in amino acids")
+    nucleotide_length: int = Field(title="Nucleotide Length", description="Length of ORF in nucleotides")
+    nucleotide_start: int = Field(title="Nucleotide Start", description="Start position (1-indexed, inclusive)")
+    nucleotide_end: int = Field(title="Nucleotide End", description="End position (1-indexed, inclusive)")
+    metrics: dict[str, Any] = Field(
+        default_factory=dict, title="Metrics", description="Tool-specific metrics or metadata"
+    )
 
     @model_validator(mode="after")
     def _validate_coordinates(self) -> ORF:

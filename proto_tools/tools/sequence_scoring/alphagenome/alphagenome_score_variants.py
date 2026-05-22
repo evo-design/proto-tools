@@ -46,6 +46,7 @@ class AlphaGenomeScoreVariantsInput(BaseToolInput):
     """
 
     variants: list[AlphaGenomeVariant] = InputField(
+        title="Variants",
         description="Variants (with intervals) for scoring",
     )
 
@@ -70,6 +71,7 @@ class AlphaGenomeScoreVariantsOutput(BaseToolOutput):
     """
 
     results: list[AlphaGenomeScoreOutput] = Field(
+        title="Results",
         description="Per-variant AlphaGenome score outputs",
     )
 

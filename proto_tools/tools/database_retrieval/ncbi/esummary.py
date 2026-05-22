@@ -44,9 +44,13 @@ class NCBIEsummaryInput(BaseToolInput):
     """
 
     db: NCBIDatabase = InputField(
-        description="NCBI database to query (e.g. 'protein', 'nuccore', 'gene', 'pubmed', 'taxonomy')"
+        title="Database",
+        description="NCBI database to query (e.g. 'protein', 'nuccore', 'gene', 'pubmed', 'taxonomy')",
     )
-    identifier: str = InputField(description="Accession or NCBI ID for esummary (e.g. 'NP_000537.3', '7157')")
+    identifier: str = InputField(
+        title="Identifier",
+        description="Accession or NCBI ID for esummary (e.g. 'NP_000537.3', '7157')",
+    )
 
 
 class NCBIEsummaryOutput(BaseToolOutput):
@@ -57,8 +61,10 @@ class NCBIEsummaryOutput(BaseToolOutput):
         source_url (str): Sanitized URL used for the request.
     """
 
-    summary: dict[str, Any] = Field(default_factory=dict, description="Record summary data returned by esummary")
-    source_url: str = Field(description="Sanitized request URL")
+    summary: dict[str, Any] = Field(
+        default_factory=dict, title="Summary", description="Record summary data returned by esummary"
+    )
+    source_url: str = Field(title="Source URL", description="Sanitized request URL")
 
     @property
     def output_format_options(self) -> list[str]:

@@ -147,92 +147,112 @@ class RFdiffusion3DesignSpec(BaseModel):
 
     input_structure: str | None = Field(
         default=None,
+        title="Input Structure",
         description="Path to input PDB/CIF file or PDB content string",
     )
     contig: str | None = Field(
         default=None,
+        title="Contig",
         description="Contig string specifying design topology (e.g., '50-80,\\0,A1-100')",
         examples=["50-80", "A1-100,50,A150-200"],
     )
     length: str | None = Field(
         default=None,
+        title="Length",
         description="Total design length constraint ('min-max' or int as string)",
         examples=["100", "80-120"],
     )
     ligand: str | None = Field(
         default=None,
+        title="Ligand",
         description="Ligand selection by residue name (e.g., 'HAX,OAA')",
     )
     unindex: str | dict[str, str] | None = Field(
         default=None,
+        title="Unindexed Motifs",
         description="Unindexed motif components for flexible positioning (e.g., 'A244,A274,A320')",
     )
     select_fixed_atoms: bool | str | dict[str, str] | None = Field(
         default=None,
+        title="Fixed Atoms",
         description="Atoms to fix in 3D space (True/False, contig string, or dict with BKBN/TIP/ALL)",
     )
     select_unfixed_sequence: bool | str | dict[str, str] | None = Field(
         default=None,
+        title="Unfixed Sequence",
         description="Residues whose sequence can change (True/False, contig string, or dict)",
     )
     select_hotspots: bool | str | dict[str, str] | None = Field(
         default=None,
+        title="Hotspots",
         description="Atom/residue-level hotspots for binder design (True/False, contig string, or dict)",
         examples=["A24,A35,A50"],
     )
     symmetry: str | dict[str, Any] | None = Field(
         default=None,
+        title="Symmetry",
         description="Symmetry configuration for homo-oligomer design; pair with sampler_kind='symmetry'",
         examples=["c3", "c5", "d2"],
     )
     select_buried: bool | str | dict[str, str] | None = Field(
         default=None,
+        title="Buried Residues",
         description="RASA selector for residues that should be buried (True/False, contig string, or dict)",
     )
     select_partially_buried: bool | str | dict[str, str] | None = Field(
         default=None,
+        title="Partially Buried Residues",
         description="RASA selector for partially buried residues (True/False, contig string, or dict)",
     )
     select_exposed: bool | str | dict[str, str] | None = Field(
         default=None,
+        title="Exposed Residues",
         description="RASA selector for solvent-exposed residues (True/False, contig string, or dict)",
     )
     select_hbond_donor: dict[str, list[str]] | None = Field(
         default=None,
+        title="H-bond Donor Flags",
         description="Atom-wise hydrogen-bond donor flags, e.g. {'A40': ['NE2']}",
     )
     select_hbond_acceptor: dict[str, list[str]] | None = Field(
         default=None,
+        title="H-bond Acceptor Flags",
         description="Atom-wise hydrogen-bond acceptor flags, e.g. {'A45': ['OD1']}",
     )
     redesign_motif_sidechains: bool | None = Field(
         default=None,
+        title="Redesign Motif Sidechains",
         description="Keep motif backbone fixed but redesign side-chains",
     )
     plddt_enhanced: bool | None = Field(
         default=None,
+        title="pLDDT-Enhanced Denoising",
         description="Enable pLDDT-based denoising enhancement (upstream default: True)",
     )
     infer_ori_strategy: Literal["com", "hotspots"] | None = Field(
         default=None,
+        title="Origin Strategy",
         description="Origin placement strategy: 'com' (center of mass) or 'hotspots'",
     )
     ori_token: list[float] | None = Field(
         default=None,
         min_length=3,
         max_length=3,
-        description="[x, y, z] origin override (Angstroms) for COM placement",
+        title="Origin (x, y, z)",
+        description="Origin override for center-of-mass placement, in Ångstroms (shape [x, y, z])",
         examples=[[0.0, 0.0, 0.0]],
     )
     partial_t: float | None = Field(
         default=None,
         ge=0.0,
-        description="Noise (Angstroms) for partial diffusion (5.0-15.0 recommended)",
+        title="Partial Diffusion Noise",
+        description="Noise level in Ångstroms for partial diffusion; 5.0-15.0 recommended",
         examples=[5.0, 10.0, 15.0],
     )
     is_non_loopy: bool | None = Field(
         default=None,
-        description="If True/False, produces output structures with fewer/more loops",
+        title="Suppress Loops",
+        description="When True, produces structures with fewer loops; when False, more loops",
     )
 
     @model_validator(mode="after")
@@ -388,10 +408,12 @@ class RFdiffusion3Input(BaseToolInput):
 
     design_specs: list[RFdiffusion3DesignSpec] = InputField(
         default_factory=list,
+        title="Design Specs",
         description="List of design specifications",
     )
     raw_json: str | None = InputField(
         default=None,
+        title="Raw JSON",
         description="Raw JSON string for advanced RFdiffusion3 configuration",
     )
 
@@ -657,10 +679,17 @@ class RFdiffusion3Structure(BaseModel):
             including sampled contig, chain info, and any logged metrics.
     """
 
-    structure: Structure = Field(description="The designed 3D structure")
-    sequence: str = Field(description="The designed amino acid sequence")
+    structure: Structure = Field(
+        title="Designed Structure",
+        description="The designed 3D structure",
+    )
+    sequence: str = Field(
+        title="Sequence",
+        description="The designed amino acid sequence",
+    )
     metadata: dict[str, Any] = Field(
         default_factory=dict,
+        title="Design Metadata",
         description="Additional metadata from RFdiffusion3 output",
     )
 
@@ -685,9 +714,13 @@ class RFdiffusion3Designs(BaseModel):
             equals ``n_batches * diffusion_batch_size``.
     """
 
-    spec_key: str = Field(description="Identifier of the input spec that produced these designs")
+    spec_key: str = Field(
+        title="Spec Key",
+        description="Identifier of the input spec that produced these designs",
+    )
     structures: list[RFdiffusion3Structure] = Field(
         default_factory=list,
+        title="Designs",
         description="Designs generated for this spec",
     )
 
@@ -726,6 +759,7 @@ class RFdiffusion3Output(BaseToolOutput):
 
     designed_structures: list[RFdiffusion3Designs] = Field(
         default_factory=list,
+        title="Designed Structures",
         description="Per-spec bundles of designed structures",
     )
 

@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing_extensions import Self
 
 from proto_tools.utils.sequence import PROTEIN_AMINO_ACIDS
@@ -20,8 +20,16 @@ class Antibody(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    heavy_chain: str | None = None
-    light_chain: str | None = None
+    heavy_chain: str | None = Field(
+        default=None,
+        title="Heavy Chain",
+        description="Heavy chain amino-acid sequence",
+    )
+    light_chain: str | None = Field(
+        default=None,
+        title="Light Chain",
+        description="Light chain amino-acid sequence",
+    )
 
     @model_validator(mode="after")
     def validate_at_least_one_chain(self) -> Self:
@@ -58,8 +66,16 @@ class AntibodyLogits(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    heavy_chain: list[list[float]] | None = None
-    light_chain: list[list[float]] | None = None
+    heavy_chain: list[list[float]] | None = Field(
+        default=None,
+        title="Heavy Chain Logits",
+        description="Heavy chain logits with shape (Lh, 20) in canonical amino-acid order",
+    )
+    light_chain: list[list[float]] | None = Field(
+        default=None,
+        title="Light Chain Logits",
+        description="Light chain logits with shape (Ll, 20) in canonical amino-acid order",
+    )
 
     @model_validator(mode="after")
     def validate_at_least_one_chain(self) -> Self:

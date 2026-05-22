@@ -49,7 +49,7 @@ class ViennaRNAInput(BaseToolInput):
         unless DNA parameters are explicitly loaded.
     """
 
-    sequences: list[str] = InputField(description="List of input RNA sequences")
+    sequences: list[str] = InputField(title="Sequences", description="List of input RNA sequences")
 
     @field_validator("sequences")
     @classmethod
@@ -91,9 +91,17 @@ class ViennaRNAResult(BaseModel):
         mfe (float | None): Minimum free energy in kcal/mol.
     """
 
-    sequence: str
-    structure: str | None = None
-    mfe: float | None = None
+    sequence: str = Field(title="Sequence", description="The input RNA sequence")
+    structure: str | None = Field(
+        default=None,
+        title="Secondary Structure",
+        description="Predicted RNA secondary structure in dot-bracket notation",
+    )
+    mfe: float | None = Field(
+        default=None,
+        title="MFE",
+        description="Minimum free energy in kcal/mol; more negative values indicate a more stable structure",
+    )
 
 
 # Output:
@@ -107,7 +115,7 @@ class ViennaRNAOutput(BaseToolOutput):
         metadata (dict[str, Any]): Additional information about the prediction run.
     """
 
-    results: list[ViennaRNAResult] = Field(description="List of ViennaRNA results")
+    results: list[ViennaRNAResult] = Field(title="RNA Predictions", description="List of ViennaRNA results")
 
     @property
     def output_format_options(self) -> list[str]:

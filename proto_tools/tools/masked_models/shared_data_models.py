@@ -45,6 +45,7 @@ class MaskedModelInput(BaseToolInput):
     """
 
     sequences: list[str] = InputField(
+        title="Sequences",
         description="Protein sequence(s) to process as string or list of strings. (will be normalized to List[str])",
         examples=[
             "MVLSP",
@@ -104,8 +105,8 @@ class Projection2D(BaseModel):
         y (float): Second reduced coordinate.
     """
 
-    x: float = Field(description="First reduced coordinate")
-    y: float = Field(description="Second reduced coordinate")
+    x: float = Field(title="X", description="First reduced coordinate")
+    y: float = Field(title="Y", description="Second reduced coordinate")
 
 
 class SequenceEmbedding(BaseModel):
@@ -127,17 +128,21 @@ class SequenceEmbedding(BaseModel):
     """
 
     mean_embedding: list[float] = Field(
+        title="Mean Embedding",
         description="Mean-pooled embedding vector (averaged over sequence length)",
     )
     attention_mask: list[int] = Field(
+        title="Attention Mask",
         description="Binary mask: 1 = valid position, 0 = padding",
     )
     logits: list[list[float]] | None = Field(
         default=None,
+        title="Logits",
         description="Per-position amino acid logits (seq_len, vocab_size)",
     )
     projection: Projection2D | None = Field(
         default=None,
+        title="UMAP Projection",
         description="2D UMAP projection of this sequence's embedding within the call's batch",
     )
 
@@ -154,6 +159,7 @@ class MaskedModelEmbeddingsOutput(BaseToolOutput):
     """
 
     results: list[SequenceEmbedding] = Field(
+        title="Results",
         description="Per-sequence embedding results",
     )
 
@@ -232,6 +238,7 @@ class MaskedModelSampleOutput(BaseToolOutput):
     """
 
     sequences: list[str] = Field(
+        title="Sequences",
         description="Sampled/restored protein sequences",
     )
 
@@ -319,14 +326,20 @@ class MaskedModelScoringMetrics(Metrics):
         "avg_log_likelihood": {"availability": "always", "type": "float", "min": None, "max": 0.0},
         "perplexity": {"availability": "always", "type": "float", "min": 1.0, "max": None},
     }
-    primary_metric: str | None = "perplexity"
+    primary_metric: str | None = Field(
+        default="perplexity",
+        title="Primary Metric",
+        description="Headline metric used to rank results.",
+    )
 
     logits: list[list[float]] | None = Field(
         default=None,
+        title="Logits",
         description="Per-position logits array as nested list (seq_len, vocab_size)",
     )
     vocab: list[str] | None = Field(
         default=None,
+        title="Vocabulary",
         description="Token ordering for logits: logits[:, j] corresponds to vocab[j]",
     )
 
@@ -343,6 +356,7 @@ class MaskedModelScoringOutput(BaseToolOutput):
     """
 
     scores: list[MaskedModelScoringMetrics] = Field(
+        title="Scores",
         description="List of scoring outputs, one per input sequence",
     )
 

@@ -49,9 +49,11 @@ class Mmseqs2ClusterMember(BaseModel):
         is_representative (bool): Whether this sequence is the cluster representative.
     """
 
-    sequence_id: str = Field(description="Sequence identifier")
-    sequence: str = Field(description="The sequence string")
-    is_representative: bool = Field(default=False, description="Whether this is the cluster representative")
+    sequence_id: str = Field(title="Sequence ID", description="Sequence identifier")
+    sequence: str = Field(title="Sequence", description="The sequence string")
+    is_representative: bool = Field(
+        default=False, title="Representative", description="Whether this is the cluster representative"
+    )
 
 
 class Mmseqs2ClusterResult(BaseModel):
@@ -68,13 +70,18 @@ class Mmseqs2ClusterResult(BaseModel):
         is_representative (bool): Whether this sequence is the cluster representative.
     """
 
-    sequence_id: str = Field(description="Input sequence identifier")
+    sequence_id: str = Field(title="Sequence ID", description="Input sequence identifier")
     input_sequence: str | None = Field(
         default=None,
+        title="Input Sequence",
         description="The original input sequence (only when `input_sequences` is provided inline)",
     )
-    cluster_id: str = Field(description="Cluster identifier (representative sequence ID)")
-    is_representative: bool = Field(default=False, description="Whether this sequence is the cluster representative")
+    cluster_id: str = Field(title="Cluster ID", description="Cluster identifier (representative sequence ID)")
+    is_representative: bool = Field(
+        default=False,
+        title="Representative",
+        description="Whether this sequence is the cluster representative",
+    )
 
 
 # Input:
@@ -92,16 +99,17 @@ class Mmseqs2ClusteringInput(BaseToolInput):
 
     input_sequences: list[str] | None = InputField(
         default=None,
-        xor_group="input",
+        title="Input Sequences",
         description="Inline sequences to cluster. Mutually exclusive with `mmseqs_db`.",
     )
     mmseqs_db: str | None = InputField(
         default=None,
-        xor_group="input",
+        title="MMseqs2 Database",
         description="Pre-built MMseqs2 DB to cluster (path/slug/AssetRef). Mutually exclusive with `input_sequences`.",
     )
     sequence_ids: list[str] | None = InputField(
         default=None,
+        title="Sequence IDs",
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )
 
@@ -121,7 +129,7 @@ class Mmseqs2ClusteringInput(BaseToolInput):
 
     @model_validator(mode="after")
     def exactly_one_input(self) -> Mmseqs2ClusteringInput:
-        """Enforce the xor_group='input' constraint at runtime."""
+        """Enforce the 'input' XOR constraint at runtime."""
         if (self.input_sequences is None) == (self.mmseqs_db is None):
             raise ValueError("mmseqs2-clustering: provide exactly one of `input_sequences` or `mmseqs_db`.")
         return self
@@ -138,7 +146,9 @@ class Mmseqs2ClusteringOutput(BaseToolOutput):
             input sequence. The order matches the input sequences order.
     """
 
-    results: list[Mmseqs2ClusterResult] = Field(description="List of clustering results, one per input sequence")
+    results: list[Mmseqs2ClusterResult] = Field(
+        title="Clustering Results", description="List of clustering results, one per input sequence"
+    )
 
     def __len__(self) -> int:
         """Get the number of results."""

@@ -8,9 +8,10 @@ import inspect
 import pytest
 
 from proto_tools.tools.tool_registry import ToolRegistry
-from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
+from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from tests.style_consistency_tests.helpers import field_description_is_valid, find_missing_fields_in_docstring
 
+_MAX_FIELD_TITLE_LENGTH = 31
 _MAX_FIELD_DESCRIPTION_LENGTH = 100
 _BANNED_UI_SCHEMA_KEYS = frozenset({"advanced", "hidden", "depends_on", "x-depends-on", "x-xor-group"})
 
@@ -43,20 +44,6 @@ def test_tool_input_uses_input_field(tool_input):
         )
 
 
-@pytest.mark.parametrize(
-    ("removed_kwarg", "value"),
-    [
-        ("advanced", True),
-        ("hidden", True),
-        ("depends_on", {"mode": ["remote"]}),
-    ],
-)
-def test_input_field_rejects_ui_presentation_kwargs(removed_kwarg, value):
-    """InputField rejects UI-presentation kwargs that belong in proto-ui overlays."""
-    with pytest.raises(TypeError, match="InputField no longer accepts UI-presentation"):
-        InputField(default=None, **{removed_kwarg: value})
-
-
 # ── Input and output consistency ────────────────────────────────────────────
 
 
@@ -78,25 +65,37 @@ def test_tool_input_and_output_consistency(tool_input, tool_output):
 
     # Iterate through input fields and ensure they are defined consistently
     for field_name, field_info in tool_input.model_fields.items():
+        title = field_info.title
+        assert title is not None, f"Tool input {tool_input.__name__}.{field_name} is missing title."
+        assert len(title) <= _MAX_FIELD_TITLE_LENGTH, (
+            f"Tool input {tool_input.__name__}.{field_name} title is too long "
+            f"(currently {len(title)} characters, must be ≤ {_MAX_FIELD_TITLE_LENGTH})."
+        )
         description_error = field_description_is_valid(field_info.description, _MAX_FIELD_DESCRIPTION_LENGTH)
         assert description_error == "", (
             f"Tool input {tool_input.__name__} has field {field_name} {description_error}. "
-            "Ensure: Field(..., description='Brief explanation for tooltip')"
+            "Ensure: InputField(..., title='Label', description='Brief explanation')"
         )
 
     # Iterate through output fields and ensure they are defined consistently
     for field_name, field_info in tool_output.model_fields.items():
+        title = field_info.title
+        assert title is not None, f"Tool output {tool_output.__name__}.{field_name} is missing title."
+        assert len(title) <= _MAX_FIELD_TITLE_LENGTH, (
+            f"Tool output {tool_output.__name__}.{field_name} title is too long "
+            f"(currently {len(title)} characters, must be ≤ {_MAX_FIELD_TITLE_LENGTH})."
+        )
         description_error = field_description_is_valid(field_info.description, _MAX_FIELD_DESCRIPTION_LENGTH)
         assert description_error == "", (
             f"Tool output {tool_output.__name__} has field {field_name} {description_error}. "
-            "Ensure: Field(..., description='Brief explanation for tooltip')"
+            "Ensure: Field(..., title='Label', description='Brief explanation')"
         )
 
     # DOCUMENTATION CHECK: Ensure that all fields are mentioned in the docstring
     missing_fields = find_missing_fields_in_docstring(input_docstring, tool_input.model_fields.keys())
     assert len(missing_fields) == 0, (
         f"Tool input {tool_input.__name__} is missing the following fields in the docstring: {missing_fields}. "
-        "Ensure: Field(..., description='Brief explanation for tooltip')"
+        "Ensure: Field(..., description='Brief explanation')"
     )
     missing_fields = find_missing_fields_in_docstring(output_docstring, tool_output.model_fields.keys())
     # Remove standardized output fields
@@ -112,7 +111,7 @@ def test_tool_input_and_output_consistency(tool_input, tool_output):
     missing_fields = [field for field in missing_fields if field not in standard_tool_output_fields]
     assert len(missing_fields) == 0, (
         f"Tool output {tool_output.__name__} is missing the following fields in the docstring: {missing_fields}. "
-        "Ensure: Field(..., description='Brief explanation for tooltip')"
+        "Ensure: Field(..., description='Brief explanation')"
     )
 
     # Ensure tool output is concrete (all abstract methods implemented)

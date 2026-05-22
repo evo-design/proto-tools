@@ -45,7 +45,7 @@ class EnsemblSequenceInput(BaseToolInput):
         ensembl_id (str): Ensembl ID (``ENSG...``, ``ENST...``, or ``ENSP...``).
     """
 
-    ensembl_id: str = InputField(description="Ensembl ID (ENSG..., ENST..., ENSP...)")
+    ensembl_id: str = InputField(title="Ensembl ID", description="Ensembl ID (ENSG..., ENST..., ENSP...)")
 
     @field_validator("ensembl_id")
     @classmethod
@@ -151,9 +151,13 @@ class EnsemblSequenceOutput(BaseToolOutput):
         raw_payload (list[dict[str, Any]]): Raw API JSON, always wrapped in a list.
     """
 
-    results: list[EnsemblSequence] = Field(default_factory=list, description="Fetched sequence record(s)")
-    source_url: str = Field(description="Final Ensembl REST URL that was hit")
-    raw_payload: list[dict[str, Any]] = Field(default_factory=list, description="Raw API JSON")
+    results: list[EnsemblSequence] = Field(
+        default_factory=list, title="Sequence Records", description="Fetched sequence record(s)"
+    )
+    source_url: str = Field(title="Source URL", description="Final Ensembl REST URL that was hit")
+    raw_payload: list[dict[str, Any]] = Field(
+        default_factory=list, title="Raw Payload", description="Raw API JSON returned by Ensembl"
+    )
 
     @property
     def output_format_options(self) -> list[str]:

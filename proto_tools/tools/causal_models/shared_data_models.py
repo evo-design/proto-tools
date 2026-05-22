@@ -30,6 +30,7 @@ class CausalModelScoringInput(BaseToolInput):
     """
 
     sequences: list[str] = InputField(
+        title="Sequences",
         description="Sequences to score",
         examples=["MVLSPADKTNVKAAW", ["MVLSP", "GGGS"]],
     )
@@ -105,14 +106,20 @@ class CausalModelScoringMetrics(Metrics):
         "avg_log_likelihood": {"availability": "always", "type": "float", "min": None, "max": 0.0},
         "perplexity": {"availability": "always", "type": "float", "min": 1.0, "max": None},
     }
-    primary_metric: str | None = "perplexity"
+    primary_metric: str | None = Field(
+        default="perplexity",
+        title="Primary Metric",
+        description="Headline metric used to rank results.",
+    )
 
     logits: list[list[float]] | None = Field(
         default=None,
+        title="Logits",
         description="Per-position logits array as nested list (seq_len, vocab_size)",
     )
     vocab: list[str] | None = Field(
         default=None,
+        title="Vocabulary",
         description="Token ordering for logits: logits[:, j] corresponds to vocab[j]",
     )
 
@@ -129,6 +136,7 @@ class CausalModelScoringOutput(BaseToolOutput):
     """
 
     scores: list[CausalModelScoringMetrics] = Field(
+        title="Scores",
         description="List of scoring outputs, one per input sequence",
     )
 
@@ -203,6 +211,7 @@ class CausalModelSampleInput(BaseToolInput):
     """
 
     prompts: list[str] = InputField(
+        title="Prompts",
         description="Prompt sequence(s) to condition generation on",
         examples=["MVLSPADKTNVKAAW", ["MVLSP", "GGGS"]],
     )
@@ -279,6 +288,7 @@ class CausalModelSampleOutput(BaseToolOutput):
     """
 
     sequences: list[str] = Field(
+        title="Sequences",
         description="Generated sequences",
     )
 

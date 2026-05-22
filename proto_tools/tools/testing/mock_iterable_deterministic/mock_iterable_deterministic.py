@@ -46,7 +46,7 @@ class MockIterableDeterministicInput(BaseToolInput):
             batched scoring input.
     """
 
-    prompts: list[str] = InputField(description="Prompts to score")
+    prompts: list[str] = InputField(title="Prompts", description="Prompts to score")
 
 
 class MockIterableDeterministicConfig(BaseConfig):
@@ -82,10 +82,12 @@ class MockIterableDeterministicOutput(BaseToolOutput):
 
     scores: list[str] = Field(
         default_factory=list,
+        title="Scores",
         description="Per-prompt deterministic argmax tokens",
     )
     items_processed: int = Field(
         default=0,
+        title="Items Processed",
         description="Number of items the tool function received from the framework",
     )
 

@@ -92,7 +92,8 @@ class StructurePredictionComplex(BaseModel):
     """
 
     chains: list[Chain | Fragment] = Field(
-        description="Chains in the complex. Strings, dicts, Chain, Fragment, or Ligands."
+        title="Chains",
+        description="Chains in the complex. Strings, dicts, Chain, Fragment, or Ligands.",
     )
 
     @model_validator(mode="before")
@@ -359,10 +360,12 @@ class StructurePredictionInput(BaseToolInput):
             )
 
     complexes: list[StructurePredictionComplex] = InputField(
-        description="List of complexes to predict structure for containing chains and entity types."
+        title="Complexes",
+        description="List of complexes to predict structure for containing chains and entity types.",
     )
     msas: dict[str, MSA] | None = InputField(
         default=None,
+        title="MSAs",
         description="Pre-computed MSAs keyed by sequence. Populated by preprocess() or supplied directly.",
     )
 
@@ -552,7 +555,10 @@ class StructurePredictionOutput(BaseToolOutput):
         and length (``len(output)``).
     """
 
-    structures: list[Structure] = Field(description="List of predicted structures")
+    structures: list[Structure] = Field(
+        title="Structures",
+        description="List of predicted structures, one per input complex.",
+    )
 
     def __len__(self) -> int:
         """Get the number of predicted structures."""

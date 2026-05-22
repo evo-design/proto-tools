@@ -43,14 +43,18 @@ class FoldmasonScoreMSAInput(BaseToolInput):
     """
 
     structures: list[str] = InputField(
-        description="PDB-format text strings whose order matches the rows of `aa_msa_fasta` (≥2)", min_length=2
+        title="Structures",
+        description="PDB-format text strings whose order matches the rows of `aa_msa_fasta` (≥2)",
+        min_length=2,
     )
     structure_ids: list[str] | None = InputField(
         default=None,
+        title="Structure IDs",
         description="Optional IDs per structure (default: 'structure_0', ...); must match FASTA headers in `aa_msa_fasta`",
     )
     aa_msa_fasta: str = InputField(
-        description="Amino-acid MSA in FASTA. Row order and IDs must match `structures` / `structure_ids`"
+        title="Amino-acid MSA",
+        description="Amino-acid MSA in FASTA. Row order and IDs must match `structures` / `structure_ids`",
     )
 
     @field_validator("structure_ids")
@@ -122,10 +126,12 @@ class FoldmasonScoreMSAOutput(BaseToolOutput):
             ``alignment_length``.
     """
 
-    average_lddt: float = Field(description="Average MSA LDDT score (0-1)", ge=0.0, le=1.0)
-    columns_considered: int = Field(description="Number of MSA columns scored", ge=0)
-    alignment_length: int = Field(description="Total MSA columns", ge=0)
-    column_scores: list[float] = Field(default_factory=list, description="Per-column LDDT scores")
+    average_lddt: float = Field(title="Average LDDT", description="Average MSA LDDT score (0-1)", ge=0.0, le=1.0)
+    columns_considered: int = Field(title="Columns Considered", description="Number of MSA columns scored", ge=0)
+    alignment_length: int = Field(title="Alignment Length", description="Total MSA columns", ge=0)
+    column_scores: list[float] = Field(
+        default_factory=list, title="Column Scores", description="Per-column LDDT scores"
+    )
 
     @property
     def output_format_options(self) -> list[str]:

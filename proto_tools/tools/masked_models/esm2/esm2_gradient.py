@@ -37,12 +37,14 @@ class ESM2GradientInput(BaseToolInput):
     """
 
     logits: list[list[float]] = InputField(
+        title="Logits",
         description="Relaxed sequence logits with shape (L, 20) in canonical amino-acid order.",
         examples=[[[0.0] * 20, [0.0] * 20]],
     )
 
     temperature: float | None = InputField(
         default=None,
+        title="Temperature",
         description="Softmax temperature. Applies softmax(input / T) when set.",
         gt=0.0,
     )
@@ -78,6 +80,7 @@ class ESM2GradientOutput(GradientOutput):
 
     gradient: list[list[float]] | None = Field(
         default=None,
+        title="Gradient",
         description="Gradient w.r.t. input logits. None when compute_gradient=False.",
     )
 

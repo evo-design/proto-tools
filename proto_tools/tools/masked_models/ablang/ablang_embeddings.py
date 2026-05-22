@@ -47,6 +47,7 @@ class AbLangEmbeddingsInput(BaseToolInput):
     """
 
     antibodies: list[Antibody] = InputField(
+        title="Antibodies",
         description="Antibody sequence(s) to embed.",
         min_length=1,
     )

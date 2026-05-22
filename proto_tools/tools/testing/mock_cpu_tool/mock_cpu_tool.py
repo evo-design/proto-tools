@@ -40,6 +40,7 @@ class MockCPUToolInput(BaseToolInput):
 
     items: list[int] = InputField(
         default=[1, 2, 3, 4],
+        title="Items",
         description="List of integer items to process",
     )
 
@@ -74,10 +75,12 @@ class MockCPUToolResult(BaseModel):
             actually ran, and to verify warm-worker reuse across dispatches.
     """
 
-    item: int = Field(description="The input item this result corresponds to")
-    pid: int = Field(description="OS pid of the worker subprocess")
-    omp_num_threads: str = Field(description="OMP_NUM_THREADS observed by the worker")
-    process_unique_id: str = Field(description="{pid}-{startup_uuid} — distinct per worker, stable per worker")
+    item: int = Field(title="Item", description="The input item this result corresponds to")
+    pid: int = Field(title="PID", description="OS pid of the worker subprocess")
+    omp_num_threads: str = Field(title="OMP Num Threads", description="OMP_NUM_THREADS observed by the worker")
+    process_unique_id: str = Field(
+        title="Process Unique ID", description="{pid}-{startup_uuid} — distinct per worker, stable per worker"
+    )
 
 
 class MockCPUToolOutput(BaseToolOutput):
@@ -87,7 +90,7 @@ class MockCPUToolOutput(BaseToolOutput):
         results (list[MockCPUToolResult]): One result per input item, in input order.
     """
 
-    results: list[MockCPUToolResult] = Field(description="Per-item results, in input order")
+    results: list[MockCPUToolResult] = Field(title="Results", description="Per-item results, in input order")
 
     @property
     def output_format_options(self) -> list[str]:

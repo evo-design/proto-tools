@@ -35,6 +35,7 @@ class MockJAXToolInput(BaseToolInput):
 
     data: list[float] = InputField(
         default=[1.0, 2.0, 3.0, 4.0],
+        title="Data",
         description="Input data to pass through the model (any length)",
     )
 
@@ -78,9 +79,9 @@ class MockJAXToolOutput(BaseToolOutput):
         device_used (str): Device the model ran on.
     """
 
-    result: list[float] = Field(description="Output from the model")
+    result: list[float] = Field(title="Result", description="Output from the model")
 
-    device_used: str = Field(description="Device the model ran on")
+    device_used: str = Field(title="Device Used", description="Device the model ran on")
 
     @property
     def output_format_options(self) -> list[str]:

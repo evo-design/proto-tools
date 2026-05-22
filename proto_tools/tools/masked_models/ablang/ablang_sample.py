@@ -37,6 +37,7 @@ class AbLangSampleInput(BaseToolInput):
     """
 
     antibodies: list[Antibody] = InputField(
+        title="Antibodies",
         description="Antibody sequence(s) with '_' at positions to restore.",
         min_length=1,
     )
@@ -97,6 +98,7 @@ class AbLangSampleOutput(MaskedModelSampleOutput):
 
     logits: list[list[list[float]]] | None = Field(
         default=None,
+        title="Logits",
         description="Per-position amino acid logits. Shape: [num_sequences, seq_len, 20].",
     )
 

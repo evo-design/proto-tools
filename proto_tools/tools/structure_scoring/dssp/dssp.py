@@ -42,7 +42,7 @@ class DSSPSecondaryStructureMetrics(Metrics):
         "loop_pct": {"availability": "always", "type": "float", "min": 0.0, "max": 100.0, "unit": "%"},
     }
 
-    chain_id: str = Field(description="Analyzed chain label in the input structure namespace")
+    chain_id: str = Field(title="Chain ID", description="Analyzed chain label in the input structure namespace")
 
 
 class DSSPStructureInput(BaseModel):
@@ -55,8 +55,8 @@ class DSSPStructureInput(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    structure: Structure = Field(description="Protein structure to analyze")
-    chain_id: str = Field(default="A", description="Chain label to analyze")
+    structure: Structure = Field(title="Input Structure", description="Protein structure to analyze")
+    chain_id: str = Field(default="A", title="Chain ID", description="Chain label to analyze")
 
     @model_validator(mode="before")
     @classmethod
@@ -91,7 +91,10 @@ class DSSPSecondaryStructureInput(BaseToolInput):
         inputs (list[DSSPStructureInput]): Structures and chains to analyze.
     """
 
-    inputs: list[DSSPStructureInput] = InputField(description="Structures and chains to analyze with DSSP")
+    inputs: list[DSSPStructureInput] = InputField(
+        title="Structures",
+        description="Structures and chains to analyze with DSSP",
+    )
 
     @field_validator("inputs", mode="before")
     @classmethod
@@ -120,6 +123,7 @@ class DSSPSecondaryStructureOutput(BaseToolOutput):
 
     results: list[DSSPSecondaryStructureMetrics] = Field(
         default_factory=list,
+        title="SS Percentages",
         description="DSSP secondary-structure percentages, one per input",
     )
 

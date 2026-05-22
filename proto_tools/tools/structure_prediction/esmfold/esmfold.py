@@ -269,11 +269,13 @@ class ESMFoldGradientInput(GradientInput):
     """
 
     chains: list[str] = InputField(
+        title="Chains",
         description="Complete protein-chain sequences for the ESMFold complex.",
         examples=[["EVQLV"]],
     )
     target_chain_indices: list[int] = InputField(
         default=[0],
+        title="Target Chain Indices",
         description="Zero-based chain indices that receive the relaxed input logits.",
     )
 
@@ -382,9 +384,13 @@ class ESMFoldGradientOutput(GradientOutput):
 
     gradient: list[list[float]] | None = Field(
         default=None,
+        title="Gradient",
         description="Gradient w.r.t. input logits. None when compute_gradient=False.",
     )
-    structure: Structure = Field(description="Predicted ESMFold complex structure.")
+    structure: Structure = Field(
+        title="Predicted Structure",
+        description="Predicted ESMFold complex structure.",
+    )
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
         """Write gradient JSON plus a PDB sidecar."""

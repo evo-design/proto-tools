@@ -57,10 +57,14 @@ class FoldmasonMSAInput(BaseToolInput):
     """
 
     structures: list[str] = InputField(
-        description="PDB-format text strings to align (must provide at least 2)", min_length=2
+        title="Structures",
+        description="PDB-format text strings to align (must provide at least 2)",
+        min_length=2,
     )
     structure_ids: list[str] | None = InputField(
-        default=None, description="Optional IDs per structure (default: 'structure_0', 'structure_1', ...)"
+        default=None,
+        title="Structure IDs",
+        description="Optional IDs per structure (default: 'structure_0', 'structure_1', ...)",
     )
 
     @field_validator("structure_ids")
@@ -180,13 +184,16 @@ class FoldmasonMSAOutput(BaseToolOutput):
         result_url (str): Remote result-archive URL; empty in local mode.
     """
 
-    ticket_id: str = Field(description="FoldMason job ticket ID (remote only; empty in local mode)")
-    aa_msa_fasta: str = Field(description="Amino-acid MSA in FASTA format")
-    three_di_msa_fasta: str = Field(description="3Di-alphabet MSA in FASTA format")
-    newick_tree: str = Field(description="Newick guide tree")
-    num_sequences: int = Field(description="Number of aligned sequences", ge=0)
-    alignment_length: int = Field(description="Number of MSA columns", ge=0)
-    result_url: str = Field(description="FoldMason result archive URL (remote only)")
+    ticket_id: str = Field(
+        title="Ticket ID",
+        description="FoldMason job ticket ID (remote only; empty in local mode)",
+    )
+    aa_msa_fasta: str = Field(title="Amino-acid MSA", description="Amino-acid MSA in FASTA format")
+    three_di_msa_fasta: str = Field(title="3Di MSA", description="3Di-alphabet MSA in FASTA format")
+    newick_tree: str = Field(title="Newick Tree", description="Newick guide tree")
+    num_sequences: int = Field(title="Number of Sequences", description="Number of aligned sequences", ge=0)
+    alignment_length: int = Field(title="Alignment Length", description="Number of MSA columns", ge=0)
+    result_url: str = Field(title="Result URL", description="FoldMason result archive URL (remote only)")
 
     @property
     def output_format_options(self) -> list[str]:

@@ -12,7 +12,6 @@ from pydantic.fields import PydanticUndefined
 
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.utils import BaseConfig as ToolsBaseConfig
-from proto_tools.utils.base_config import ConfigField
 from tests.style_consistency_tests.helpers import field_description_is_valid, find_missing_fields_in_docstring
 
 _MAX_FIELD_TITLE_LENGTH = 31
@@ -51,11 +50,11 @@ def test_tool_config_consistency(config_model):
             f"{config_model.__name__}.{field_name} title is too long (currently {len(title)} characters, must be under {_MAX_FIELD_TITLE_LENGTH} characters). "
         )
 
-        # DESCRIPTION: Must exist and be concise (~15 words / ~90 chars for tooltip)
+        # DESCRIPTION: Must exist and be concise (~15 words / ~90 chars)
         description_error = field_description_is_valid(field_info.description, _MAX_FIELD_DESCRIPTION_LENGTH)
         assert description_error == "", (
             f"{config_model.__name__}.{field_name} {description_error}. "
-            "Ensure: Field(..., description='Brief explanation for tooltip')"
+            "Ensure: Field(..., description='Brief explanation')"
         )
 
         # OPTIONALITY: Check for Optional types (should be rare)
@@ -93,20 +92,6 @@ def test_tool_config_consistency(config_model):
         f"{missing_fields}. Every non-BaseConfig field must be documented in the "
         "class's own docstring, even if inherited from a parent config."
     )
-
-
-@pytest.mark.parametrize(
-    ("removed_kwarg", "value"),
-    [
-        ("advanced", True),
-        ("hidden", True),
-        ("depends_on", {"mode": ["remote"]}),
-    ],
-)
-def test_config_field_rejects_ui_presentation_kwargs(removed_kwarg, value):
-    """ConfigField rejects UI-presentation kwargs that belong in proto-ui overlays."""
-    with pytest.raises(TypeError, match="ConfigField no longer accepts UI-presentation"):
-        ConfigField(default=None, **{removed_kwarg: value})
 
 
 # ── Default config instantiation ────────────────────────────────────────────

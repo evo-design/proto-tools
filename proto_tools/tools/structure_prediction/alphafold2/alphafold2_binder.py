@@ -75,22 +75,27 @@ class AlphaFold2BinderInput(GradientInput):
     """
 
     target_pdb: Structure = InputField(
+        title="Target PDB",
         description="Target+binder template PDB.",
     )
     target_chain: str = InputField(
         default="A",
+        title="Target Chain",
         description="Chain ID(s) of the frozen target in the PDB.",
     )
     target_hotspot: str | None = InputField(
         default=None,
+        title="Target Hotspot",
         description="Comma-separated hotspot residue indices on the target (e.g. '10,25,42').",
     )
     binder_chain: str = InputField(
         default="H",
+        title="Binder Chain",
         description="Binder chain ID for template-based binder redesign.",
     )
     design_positions: list[int] | None = InputField(
         default=None,
+        title="Design Positions",
         description="Zero-based binder residue indices for loss focus (e.g. CDR loops).",
     )
 
@@ -306,9 +311,13 @@ class AlphaFold2BinderOutput(GradientOutput):
 
     gradient: list[list[float]] | None = Field(
         default=None,
+        title="Gradient",
         description="Gradient w.r.t. input logits. None when compute_gradient=False.",
     )
-    structure: Structure = Field(description="Predicted target+binder complex with per-residue pLDDT in B-factors.")
+    structure: Structure = Field(
+        title="Predicted Structure",
+        description="Predicted target+binder complex with per-residue pLDDT in B-factors.",
+    )
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
         """Write the gradient bundle as JSON alongside the structure as a PDB sidecar."""

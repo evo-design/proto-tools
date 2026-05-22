@@ -91,13 +91,15 @@ class AlphaGenomeInterval(BaseToolInput):
         interval_end (int): Interval end (0-based, exclusive).
     """
 
-    chromosome: str = InputField(description="Chromosome identifier, e.g. 'chr1'")
+    chromosome: str = InputField(title="Chromosome", description="Chromosome identifier, e.g. 'chr1'")
     interval_start: int = InputField(
         ge=0,
+        title="Interval Start",
         description="Interval start (0-based, inclusive)",
     )
     interval_end: int = InputField(
         ge=1,
+        title="Interval End",
         description="Interval end (0-based, exclusive)",
     )
 
@@ -125,10 +127,11 @@ class AlphaGenomeVariant(AlphaGenomeInterval):
 
     variant_position: int = InputField(
         ge=0,
+        title="Variant Position",
         description="Variant genomic position (0-based)",
     )
-    reference_bases: str = InputField(description="Reference allele, e.g. 'A' or 'AC'")
-    alternate_bases: str = InputField(description="Alternate allele, e.g. 'G' or 'GTT'")
+    reference_bases: str = InputField(title="Reference Bases", description="Reference allele, e.g. 'A' or 'AC'")
+    alternate_bases: str = InputField(title="Alternate Bases", description="Alternate allele, e.g. 'G' or 'GTT'")
 
     @field_validator("reference_bases", "alternate_bases")
     @classmethod
@@ -168,14 +171,20 @@ class AlphaGenomePredictOutput(BaseToolOutput):
         variant (dict[str, Any] | None): Variant metadata (variant predictions only).
     """
 
-    chromosome: str = Field(description="Chromosome identifier")
-    interval_start: int = Field(description="Interval start (0-based)")
-    interval_end: int = Field(description="Interval end (0-based, exclusive)")
-    requested_outputs: list[OutputTypeName] = Field(description="Output types requested for this prediction")
-    result: dict[str, Any] = Field(description="Serialized AlphaGenome prediction payload")
+    chromosome: str = Field(title="Chromosome", description="Chromosome identifier")
+    interval_start: int = Field(title="Interval Start", description="Interval start (0-based)")
+    interval_end: int = Field(title="Interval End", description="Interval end (0-based, exclusive)")
+    requested_outputs: list[OutputTypeName] = Field(
+        title="Requested Outputs", description="Output types requested for this prediction"
+    )
+    result: dict[str, Any] = Field(
+        title="Track Outputs",
+        description="Per-output-type track arrays keyed by OutputTypeName (e.g. RNA_SEQ, CAGE, ATAC)",
+    )
     variant: dict[str, Any] | None = Field(
         default=None,
-        description="Variant metadata for variant-effect predictions",
+        title="Variant Metadata",
+        description="Variant metadata (None for interval/sequence predictions)",
     )
 
     def model_post_init(self, __context: Any) -> None:
@@ -232,7 +241,10 @@ class AlphaGenomeScoreOutput(BaseToolOutput):
             ``interval_scorer``, ``track_name``, ``raw_score``, etc.
     """
 
-    scores: list[dict[str, Any]] = Field(description="Tidy score records (one per scorer-track-gene combination)")
+    scores: list[dict[str, Any]] = Field(
+        title="Scores",
+        description="Tidy score records (one per scorer-track-gene combination)",
+    )
 
     @property
     def output_format_options(self) -> list[str]:

@@ -48,20 +48,34 @@ class NCBIEfetchInput(BaseToolInput):
     """
 
     db: NCBISequenceDatabase = InputField(
-        description="NCBI sequence database to query (protein, nuccore, or nucleotide)"
+        title="Database",
+        description="NCBI sequence database to query (protein, nuccore, or nucleotide)",
     )
-    identifier: str = InputField(description="Accession or NCBI ID for efetch (e.g. 'NP_000537.3', '7157')")
+    identifier: str = InputField(
+        title="Identifier",
+        description="Accession or NCBI ID for efetch (e.g. 'NP_000537.3', '7157')",
+    )
     return_format: Literal["fasta", "fasta_cds_na"] = InputField(
-        default="fasta", description="NCBI rettype: 'fasta' (protein/nuccore) or 'fasta_cds_na' (CDS, nuccore-only)"
+        default="fasta",
+        title="Return Format",
+        description="NCBI rettype: 'fasta' (protein or nuccore) or 'fasta_cds_na' (CDS, nuccore-only)",
     )
     seq_start: int | None = InputField(
-        default=None, ge=1, description="Start position for subsequence extraction (1-indexed, inclusive)"
+        default=None,
+        ge=1,
+        title="Sequence Start",
+        description="Start position for subsequence extraction (1-indexed, inclusive)",
     )
     seq_stop: int | None = InputField(
-        default=None, ge=1, description="Stop position for subsequence extraction (1-indexed, inclusive)"
+        default=None,
+        ge=1,
+        title="Sequence Stop",
+        description="Stop position for subsequence extraction (1-indexed, inclusive)",
     )
     strand: Literal["+", "-"] | None = InputField(
-        default=None, description="Strand for nucleotide retrieval (nuccore-only)"
+        default=None,
+        title="Strand",
+        description="Strand for nucleotide retrieval (nuccore-only)",
     )
 
     @model_validator(mode="after")
@@ -80,8 +94,10 @@ class NCBIEfetchOutput(BaseToolOutput):
         source_url (str): Sanitized URL used for the request.
     """
 
-    fasta_records: list[NCBIFastaRecord] = Field(default_factory=list, description="Parsed FASTA records")
-    source_url: str = Field(description="Sanitized request URL")
+    fasta_records: list[NCBIFastaRecord] = Field(
+        default_factory=list, title="FASTA Records", description="Parsed FASTA records"
+    )
+    source_url: str = Field(title="Source URL", description="Sanitized request URL")
 
     @property
     def output_format_options(self) -> list[str]:

@@ -52,6 +52,7 @@ class Evo1SampleOutput(CausalModelSampleOutput):
 
     scores: list[CausalModelScoringMetrics] | None = Field(
         default=None,
+        title="Scores",
         description="Scoring metrics per generated sequence",
     )
 

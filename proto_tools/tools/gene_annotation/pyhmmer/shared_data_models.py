@@ -44,21 +44,29 @@ class SequenceHit(BaseModel):
         num_domains (int): Number of domains found in the hit.
     """
 
-    query_name: str = Field(description="Name of the query HMM")
-    query_accession: str = Field(description="Accession of the query HMM. If not available, set to '-'.")
-    query_description: str = Field(description="Description of the query HMM. If not available, set to '-'.")
-    query_idx: int = Field(description="Index of the query (0-indexed)")
-    target_name: str = Field(description="Name of the target sequence")
-    target_accession: str = Field(description="Accession of the target sequence. If not available, set to '-'.")
-    target_description: str = Field(description="Description of the target sequence. If not available, set to '-'.")
-    evalue: float = Field(description="E-value of the hit")
-    score: float = Field(description="Score of the full sequence")
-    bias: float = Field(description="Bias of the full sequence")
-    sum_score: float = Field(description="Sum score of the full sequence")
-    reported: bool = Field(description="Whether the hit is reported")
-    included: bool = Field(description="Whether the hit is included")
-    pvalue: float = Field(description="p-value of the hit")
-    num_domains: int = Field(description="Number of domains in the hit")
+    query_name: str = Field(title="Query Name", description="Name of the query HMM")
+    query_accession: str = Field(
+        title="Query Accession", description="Accession of the query HMM. If not available, set to '-'."
+    )
+    query_description: str = Field(
+        title="Query Description", description="Description of the query HMM. If not available, set to '-'."
+    )
+    query_idx: int = Field(title="Query Index", description="Index of the query (0-indexed)")
+    target_name: str = Field(title="Target Name", description="Name of the target sequence")
+    target_accession: str = Field(
+        title="Target Accession", description="Accession of the target sequence. If not available, set to '-'."
+    )
+    target_description: str = Field(
+        title="Target Description", description="Description of the target sequence. If not available, set to '-'."
+    )
+    evalue: float = Field(title="E-value", description="E-value of the hit")
+    score: float = Field(title="Score", description="Score of the full sequence")
+    bias: float = Field(title="Bias", description="Bias of the full sequence")
+    sum_score: float = Field(title="Sum Score", description="Sum score of the full sequence")
+    reported: bool = Field(title="Reported", description="Whether the hit is reported")
+    included: bool = Field(title="Included", description="Whether the hit is included")
+    pvalue: float = Field(title="P-value", description="p-value of the hit")
+    num_domains: int = Field(title="Number of Domains", description="Number of domains in the hit")
 
 
 class DomainHit(BaseModel):
@@ -91,30 +99,44 @@ class DomainHit(BaseModel):
         domain_pvalue (float): P-value of the domain.
     """
 
-    query_name: str = Field(description="Name of the query HMM")
-    query_accession: str = Field(description="Accession of the query HMM. If not available, set to '-'.")
-    query_description: str = Field(description="Description of the query HMM. If not available, set to '-'.")
-    query_idx: int = Field(description="Index of the query (0-indexed)")
-    target_name: str = Field(description="Name of the target sequence")
-    target_accession: str = Field(description="Accession of the target sequence. If not available, set to '-'.")
-    target_description: str = Field(description="Description of the target sequence. If not available, set to '-'.")
-    hmm_length: int = Field(description="Length of the HMM profile")
-    hmm_from: int = Field(description="Start position of the domain match in the HMM (1-indexed)")
-    hmm_to: int = Field(description="End position of the domain match in the HMM (1-indexed)")
-    target_from: int = Field(description="Start position of the domain match in the target sequence (1-indexed)")
-    target_to: int = Field(description="End position of the domain match in the target sequence (1-indexed)")
-    target_length: int = Field(description="Length of the target sequence")
-    c_evalue: float = Field(description="Conditional E-value of the domain")
-    i_evalue: float = Field(description="Independent E-value of the domain")
-    domain_score: float = Field(description="Bit score of the domain")
-    domain_bias: float = Field(description="Bias correction of the domain score")
-    domain_idx: int = Field(description="Index of the domain within the hit (0-indexed)")
-    env_from: int = Field(description="Start position of the domain envelope in the target sequence (1-indexed)")
-    env_to: int = Field(description="End position of the domain envelope in the target sequence (1-indexed)")
-    envelope_score: float = Field(description="Bit score of the domain envelope")
-    domain_included: bool = Field(description="Whether the domain passes inclusion thresholds")
-    domain_reported: bool = Field(description="Whether the domain passes reporting thresholds")
-    domain_pvalue: float = Field(description="P-value of the domain")
+    query_name: str = Field(title="Query Name", description="Name of the query HMM")
+    query_accession: str = Field(
+        title="Query Accession", description="Accession of the query HMM. If not available, set to '-'."
+    )
+    query_description: str = Field(
+        title="Query Description", description="Description of the query HMM. If not available, set to '-'."
+    )
+    query_idx: int = Field(title="Query Index", description="Index of the query (0-indexed)")
+    target_name: str = Field(title="Target Name", description="Name of the target sequence")
+    target_accession: str = Field(
+        title="Target Accession", description="Accession of the target sequence. If not available, set to '-'."
+    )
+    target_description: str = Field(
+        title="Target Description", description="Description of the target sequence. If not available, set to '-'."
+    )
+    hmm_length: int = Field(title="HMM Length", description="Length of the HMM profile")
+    hmm_from: int = Field(title="HMM From", description="Start position of the domain match in the HMM (1-indexed)")
+    hmm_to: int = Field(title="HMM To", description="End position of the domain match in the HMM (1-indexed)")
+    target_from: int = Field(
+        title="Target From", description="Start position of the domain match in the target (1-indexed)"
+    )
+    target_to: int = Field(title="Target To", description="End position of the domain match in the target (1-indexed)")
+    target_length: int = Field(title="Target Length", description="Length of the target sequence")
+    c_evalue: float = Field(title="Conditional E-value", description="Conditional E-value of the domain")
+    i_evalue: float = Field(title="Independent E-value", description="Independent E-value of the domain")
+    domain_score: float = Field(title="Domain Score", description="Bit score of the domain")
+    domain_bias: float = Field(title="Domain Bias", description="Bias correction of the domain score")
+    domain_idx: int = Field(title="Domain Index", description="Index of the domain within the hit (0-indexed)")
+    env_from: int = Field(
+        title="Envelope From", description="Start position of the domain envelope in the target (1-indexed)"
+    )
+    env_to: int = Field(
+        title="Envelope To", description="End position of the domain envelope in the target (1-indexed)"
+    )
+    envelope_score: float = Field(title="Envelope Score", description="Bit score of the domain envelope")
+    domain_included: bool = Field(title="Domain Included", description="Whether the domain passes inclusion thresholds")
+    domain_reported: bool = Field(title="Domain Reported", description="Whether the domain passes reporting thresholds")
+    domain_pvalue: float = Field(title="Domain P-value", description="P-value of the domain")
 
 
 # Input:
@@ -136,7 +158,8 @@ class PyHmmerInput(BaseToolInput):
     """
 
     sequences: list[str] = InputField(
-        description="Input sequences as: single sequence string or list of sequence strings"
+        title="Sequences",
+        description="Input sequences as: single sequence string or list of sequence strings",
     )
 
     @field_validator("sequences", mode="before")
@@ -234,8 +257,16 @@ class PyHmmerOutput(BaseToolOutput):
         num_domain_hits: Total number of domain-level hits found.
     """
 
-    sequence_hits: list[SequenceHit] = Field(default_factory=list, description="Sequence-level hits from the search")
-    domain_hits: list[DomainHit] = Field(default_factory=list, description="Domain-level hits from the search")
+    sequence_hits: list[SequenceHit] = Field(
+        default_factory=list,
+        title="Sequence Hits",
+        description="Sequence-level hits from the search",
+    )
+    domain_hits: list[DomainHit] = Field(
+        default_factory=list,
+        title="Domain Hits",
+        description="Domain-level hits from the search",
+    )
 
     @property
     def num_sequence_hits(self) -> int:

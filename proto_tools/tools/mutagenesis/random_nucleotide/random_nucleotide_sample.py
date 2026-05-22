@@ -56,6 +56,7 @@ class RandomNucleotideSampleInput(BaseToolInput):
     """
 
     sequences: list[str] = InputField(
+        title="Sequences",
         description="DNA/RNA sequence(s) to mutate. May contain '_' at positions to sample.",
         examples=["ACGTACGT", ["ACGT_CGT", "AUGC"]],
     )
@@ -81,6 +82,7 @@ class RandomNucleotideSampleOutput(BaseToolOutput):
     """
 
     sequences: list[str] = Field(
+        title="Sequences",
         description="Nucleotide sequences with masked positions randomly filled",
     )
 

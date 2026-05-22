@@ -39,8 +39,8 @@ class SequenceStructurePair(BaseModel):
         structure (Structure): Protein structure to score the sequence against.
     """
 
-    sequence: str = Field(description="Sequence to score against the structure")
-    structure: Structure = Field(description="Structure to score the sequence against")
+    sequence: str = Field(title="Sequence", description="Sequence to score against the structure")
+    structure: Structure = Field(title="Input Structure", description="Structure to score the sequence against")
 
 
 class InverseFoldingStructureInput(StructureInputBase):
@@ -77,10 +77,12 @@ class InverseFoldingStructureInput(StructureInputBase):
 
     chains_to_redesign: ChainSelection | None = Field(
         default=None,
+        title="Chains to Redesign",
         description="Chains to redesign. None = redesign every chain in the structure.",
     )
     fixed_positions: ResidueSelection | None = Field(
         default=None,
+        title="Fixed Positions",
         description="Per-chain positions whose residue identity is held fixed (1-indexed).",
     )
 
@@ -127,6 +129,7 @@ class InverseFoldingInput(BaseToolInput):
     """
 
     inputs: list[InverseFoldingStructureInput] = InputField(
+        title="Structure Inputs",
         description="Per-structure inputs, each containing a structure and optional selections.",
     )
 
@@ -215,7 +218,9 @@ class DesignedSequences(BaseModel, ABC):
         - Model-specific scores (e.g., ProteinMPNN score)
     """
 
-    sequences: list[str] = Field(description="Designed amino acid sequences from the inverse folding model")
+    sequences: list[str] = Field(
+        title="Sequences", description="Designed amino acid sequences from the inverse folding model"
+    )
 
     def __len__(self) -> int:
         """Get the number of designed sequences."""
@@ -257,7 +262,8 @@ class InverseFoldingOutput(BaseToolOutput):
     # SerializeAsAny covers model_dump only; concrete tools must also narrow this
     # field to their XSequences subclass for model_validate. See ProteinMPNNSampleOutput.
     designed_sequences: list[SerializeAsAny[DesignedSequences]] = Field(
-        description="List of sequences predicted for the input structures"
+        title="Designed Sequences",
+        description="List of sequences predicted for the input structures",
     )
 
     def __len__(self) -> int:
@@ -344,14 +350,20 @@ class InverseFoldingScoringMetrics(Metrics):
         "avg_log_likelihood": {"availability": "always", "type": "float", "min": None, "max": 0.0},
         "perplexity": {"availability": "always", "type": "float", "min": 1.0, "max": None},
     }
-    primary_metric: str | None = "perplexity"
+    primary_metric: str | None = Field(
+        default="perplexity",
+        title="Primary Metric",
+        description="Headline metric used to rank results.",
+    )
 
     logits: list[list[float]] | None = Field(
         default=None,
+        title="Logits",
         description="Per-position logits array as nested list (seq_len, vocab_size)",
     )
     vocab: list[str] | None = Field(
         default=None,
+        title="Vocabulary",
         description="Token ordering for logits: logits[:, j] corresponds to vocab[j]",
     )
 
@@ -370,6 +382,7 @@ class InverseFoldingScoringOutput(BaseToolOutput):
     """
 
     scores: list[InverseFoldingScoringMetrics] = Field(
+        title="Scores",
         description="List of scoring outputs, one per input sequence-structure pair",
     )
 

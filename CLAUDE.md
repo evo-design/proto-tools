@@ -86,10 +86,10 @@ Every registered tool follows the same broad shape:
 Input -> Config -> run_*() -> Output
 ```
 
-Use the local field helpers and base classes: `BaseToolInput` with input
-fields, `BaseConfig` with `ConfigField()`, `BaseToolOutput` with Pydantic
-fields, and `Metrics` / `MetricSpec` for scalar metrics. Config is optional at
-the public call site because the decorator supplies defaults.
+Field helpers: `InputField` on `BaseToolInput`, `ConfigField` on `BaseConfig`,
+bare `pydantic.Field` on `BaseToolOutput` and nested submodels. All fields
+require `title=` and `description=`. Config is optional at the call site —
+the decorator supplies defaults.
 
 Naming and file placement:
 

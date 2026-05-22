@@ -122,11 +122,11 @@ class PubChemFetchInput(BaseToolInput):
         inchikey (str | None): Standard InChIKey (e.g. 'BSYNRYMUTXBXSQ-UHFFFAOYSA-N').
     """
 
-    cid: int | None = InputField(default=None, ge=1, description="PubChem Compound Identifier")
-    name: str | None = InputField(default=None, description="Common or systematic name")
-    smiles: str | None = InputField(default=None, description="SMILES string")
-    inchi: str | None = InputField(default=None, description="Standard InChI string")
-    inchikey: str | None = InputField(default=None, description="Standard InChIKey")
+    cid: int | None = InputField(default=None, ge=1, title="PubChem CID", description="PubChem Compound Identifier")
+    name: str | None = InputField(default=None, title="Name", description="Common or systematic name")
+    smiles: str | None = InputField(default=None, title="SMILES", description="SMILES string")
+    inchi: str | None = InputField(default=None, title="InChI", description="Standard InChI string")
+    inchikey: str | None = InputField(default=None, title="InChIKey", description="Standard InChIKey")
 
     @model_validator(mode="after")
     def validate_exactly_one_identifier(self) -> "PubChemFetchInput":
@@ -215,30 +215,60 @@ class PubChemFetchOutput(BaseToolOutput):
             PubChem for advanced programmatic access.
     """
 
-    cid: int = Field(description="Resolved PubChem CID", ge=1)
-    all_matched_cids: list[int] = Field(default_factory=list, description="All CIDs returned by the resolver")
-    title: str | None = Field(default=None, description="Common compound name (e.g. 'Aspirin')")
-    molecular_formula: str | None = Field(default=None, description="Molecular formula in Hill order")
-    molecular_weight: float | None = Field(default=None, description="Molecular weight (g/mol)")
-    smiles: str | None = Field(default=None, description="Canonical SMILES")
-    connectivity_smiles: str | None = Field(default=None, description="Connectivity-only SMILES")
-    inchi: str | None = Field(default=None, description="Standard InChI")
-    inchikey: str | None = Field(default=None, description="Standard InChIKey")
-    iupac_name: str | None = Field(default=None, description="IUPAC systematic name")
-    exact_mass: float | None = Field(default=None, description="Exact (monoisotopic) mass in Da")
-    tpsa: float | None = Field(default=None, description="Topological polar surface area")
-    complexity: int | None = Field(default=None, description="Bertz/Hendrickson/Ihlenfeldt complexity")
-    charge: int | None = Field(default=None, description="Net formal charge")
-    hbond_donor_count: int | None = Field(default=None, description="Hydrogen-bond donor count")
-    hbond_acceptor_count: int | None = Field(default=None, description="Hydrogen-bond acceptor count")
-    rotatable_bond_count: int | None = Field(default=None, description="Rotatable bond count")
-    heavy_atom_count: int | None = Field(default=None, description="Non-hydrogen atom count")
-    synonyms: list[str] = Field(default_factory=list, description="Compound synonyms")
-    descriptions: list[str] = Field(default_factory=list, description="Textual descriptions of the compound")
-    bioassay_ids: list[int] = Field(default_factory=list, description="BioAssay IDs that tested this compound")
-    source_url: str = Field(description="URL of the property request")
+    cid: int = Field(title="PubChem CID", description="Resolved PubChem CID", ge=1)
+    all_matched_cids: list[int] = Field(
+        default_factory=list,
+        title="All Matched CIDs",
+        description="All CIDs returned by the resolver",
+    )
+    title: str | None = Field(default=None, title="Title", description="Common compound name (e.g. 'Aspirin')")
+    molecular_formula: str | None = Field(
+        default=None, title="Molecular Formula", description="Molecular formula in Hill order"
+    )
+    molecular_weight: float | None = Field(
+        default=None, title="Molecular Weight", description="Molecular weight (g/mol)"
+    )
+    smiles: str | None = Field(default=None, title="SMILES", description="Canonical SMILES")
+    connectivity_smiles: str | None = Field(
+        default=None, title="Connectivity SMILES", description="Connectivity-only SMILES"
+    )
+    inchi: str | None = Field(default=None, title="InChI", description="Standard InChI")
+    inchikey: str | None = Field(default=None, title="InChIKey", description="Standard InChIKey")
+    iupac_name: str | None = Field(default=None, title="IUPAC Name", description="IUPAC systematic name")
+    exact_mass: float | None = Field(default=None, title="Exact Mass", description="Exact (monoisotopic) mass in Da")
+    tpsa: float | None = Field(default=None, title="TPSA", description="Topological polar surface area in Å²")
+    complexity: int | None = Field(
+        default=None,
+        title="Complexity",
+        description="PubChem molecular complexity score; higher values are more complex",
+    )
+    charge: int | None = Field(default=None, title="Charge", description="Net formal charge (elementary charge units)")
+    hbond_donor_count: int | None = Field(
+        default=None, title="H-Bond Donor Count", description="Hydrogen-bond donor count"
+    )
+    hbond_acceptor_count: int | None = Field(
+        default=None, title="H-Bond Acceptor Count", description="Hydrogen-bond acceptor count"
+    )
+    rotatable_bond_count: int | None = Field(
+        default=None, title="Rotatable Bond Count", description="Rotatable bond count"
+    )
+    heavy_atom_count: int | None = Field(default=None, title="Heavy Atom Count", description="Non-hydrogen atom count")
+    synonyms: list[str] = Field(default_factory=list, title="Synonyms", description="Compound synonyms")
+    descriptions: list[str] = Field(
+        default_factory=list,
+        title="Descriptions",
+        description="Textual descriptions of the compound",
+    )
+    bioassay_ids: list[int] = Field(
+        default_factory=list,
+        title="BioAssay IDs",
+        description="BioAssay IDs that tested this compound",
+    )
+    source_url: str = Field(title="Source URL", description="URL of the property request")
     raw_property_record: dict[str, Any] = Field(
-        default_factory=dict, description="Complete property record from PubChem for advanced access"
+        default_factory=dict,
+        title="Raw Property Record",
+        description="Complete property record from PubChem for advanced access",
     )
 
     @property

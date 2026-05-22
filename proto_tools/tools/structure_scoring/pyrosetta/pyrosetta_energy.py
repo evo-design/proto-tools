@@ -51,10 +51,12 @@ class ResidueEnergy(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    chain_id: str = Field(description="Chain identifier")
-    residue_index: int = Field(description="1-indexed residue position")
-    residue_name: str = Field(description="Three-letter residue code")
-    total_energy: float = Field(description="Total residue energy in REU")
+    chain_id: str = Field(title="Chain ID", description="Chain identifier")
+    residue_index: int = Field(title="Residue Index", description="1-indexed residue position")
+    residue_name: str = Field(title="Residue Name", description="Three-letter residue code")
+    total_energy: float = Field(
+        title="Total Energy (REU)", description="Per-residue total energy in Rosetta Energy Units (REU)"
+    )
 
 
 class PyRosettaEnergyMetrics(Metrics):
@@ -90,10 +92,20 @@ class PyRosettaEnergyMetrics(Metrics):
             "unit": "REU",
         },
     }
-    primary_metric: str | None = "total_energy"
+    primary_metric: str | None = Field(
+        default="total_energy",
+        title="Primary Metric",
+        description="Headline metric used to rank results.",
+    )
 
-    energy_terms: dict[str, float] = Field(description="Energy breakdown by score term (fa_atr, fa_rep, etc.)")
-    per_residue: list[ResidueEnergy] = Field(description="Per-residue energy breakdown")
+    energy_terms: dict[str, float] = Field(
+        title="Energy Terms",
+        description="Energy breakdown by score term (fa_atr, fa_rep, etc.)",
+    )
+    per_residue: list[ResidueEnergy] = Field(
+        title="Per-Residue Energies",
+        description="Per-residue energy breakdown",
+    )
 
 
 class PyRosettaEnergyInput(BaseToolInput):
@@ -106,7 +118,8 @@ class PyRosettaEnergyInput(BaseToolInput):
     """
 
     inputs: list[ScoringStructureInput] = InputField(
-        description="Protein structures with optional chain selection for energy scoring"
+        title="Structures",
+        description="Protein structures with optional chain selection for energy scoring",
     )
 
     @field_validator("inputs", mode="before")
@@ -177,6 +190,7 @@ class PyRosettaEnergyOutput(BaseToolOutput):
 
     results: list[PyRosettaEnergyMetrics] = Field(
         default_factory=list,
+        title="Energy Results",
         description="Energy scores, one per input structure",
     )
 

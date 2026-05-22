@@ -46,10 +46,10 @@ class ResidueSASA(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    chain_id: str = Field(description="Chain identifier")
-    residue_index: int = Field(description="1-indexed residue position")
-    residue_name: str = Field(description="Three-letter residue code")
-    sasa: float = Field(description="SASA in Angstroms squared")
+    chain_id: str = Field(title="Chain ID", description="Chain identifier")
+    residue_index: int = Field(title="Residue Index", description="1-indexed residue position")
+    residue_name: str = Field(title="Residue Name", description="Three-letter residue code")
+    sasa: float = Field(title="SASA", description="Per-residue solvent-accessible surface area in Å²")
 
 
 class PyRosettaSASAMetrics(Metrics):
@@ -78,9 +78,16 @@ class PyRosettaSASAMetrics(Metrics):
             "unit": "Å²",
         },
     }
-    primary_metric: str | None = "total_sasa"
+    primary_metric: str | None = Field(
+        default="total_sasa",
+        title="Primary Metric",
+        description="Headline metric used to rank results.",
+    )
 
-    per_residue: list[ResidueSASA] = Field(description="Per-residue SASA breakdown")
+    per_residue: list[ResidueSASA] = Field(
+        title="Per-Residue SASA",
+        description="Per-residue SASA breakdown",
+    )
 
 
 class PyRosettaSASAInput(BaseToolInput):
@@ -93,7 +100,8 @@ class PyRosettaSASAInput(BaseToolInput):
     """
 
     inputs: list[ScoringStructureInput] = InputField(
-        description="Protein structures with optional chain selection for SASA computation"
+        title="Structures",
+        description="Protein structures with optional chain selection for SASA computation",
     )
 
     @field_validator("inputs", mode="before")
@@ -157,6 +165,7 @@ class PyRosettaSASAOutput(BaseToolOutput):
 
     results: list[PyRosettaSASAMetrics] = Field(
         default_factory=list,
+        title="SASA Results",
         description="SASA results, one per input structure",
     )
 

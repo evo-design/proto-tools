@@ -81,9 +81,13 @@ class ProteinMPNNSequences(DesignedSequences):
             residues matching the PDB prompt reference (0.0-1.0).
     """
 
-    perplexity: list[float] = Field(description="Perplexity of the sequence from the ProteinMPNN model")
+    perplexity: list[float] = Field(
+        title="Perplexity",
+        description="Per-sequence ProteinMPNN perplexity (one value per designed sequence)",
+    )
     sequence_recovery: list[float] = Field(
-        description="Per-sequence fraction of chains_to_redesign residues matching the PDB prompt reference (0.0-1.0)",
+        title="Sequence Recovery",
+        description="Per-sequence fraction of chains_to_redesign residues matching the reference (0.0-1.0)",
     )
 
 
@@ -96,6 +100,7 @@ class ProteinMPNNSampleOutput(InverseFoldingOutput):
     """
 
     designed_sequences: list[ProteinMPNNSequences] = Field(  # type: ignore[assignment]
+        title="Designed Sequences",
         description="ProteinMPNN-designed sequences with per-sequence perplexity and recovery metrics.",
     )
 

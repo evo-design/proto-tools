@@ -35,6 +35,7 @@ class MockCLIMultiGPUToolInput(BaseToolInput):
 
     data: list[float] = InputField(
         default=[1.0, 2.0, 3.0, 4.0],
+        title="Data",
         description="Input data to pass through the CLI subprocess",
     )
 
@@ -70,11 +71,13 @@ class MockCLIMultiGPUToolOutput(BaseToolOutput):
         cuda_visible_devices (str): CUDA_VISIBLE_DEVICES passed to subprocess.
     """
 
-    result: list[float] = Field(description="Output from the CLI subprocess")
+    result: list[float] = Field(title="Result", description="Output from the CLI subprocess")
 
-    device_used: str = Field(description="Device string passed to subprocess")
+    device_used: str = Field(title="Device Used", description="Device string passed to subprocess")
 
-    cuda_visible_devices: str = Field(description="CUDA_VISIBLE_DEVICES passed to subprocess")
+    cuda_visible_devices: str = Field(
+        title="CUDA Visible Devices", description="CUDA_VISIBLE_DEVICES passed to subprocess"
+    )
 
     @property
     def output_format_options(self) -> list[str]:

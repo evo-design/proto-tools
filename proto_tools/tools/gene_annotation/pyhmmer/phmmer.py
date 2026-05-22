@@ -40,7 +40,8 @@ class PyPhmmerInput(PyHmmerInput):
     """
 
     target_sequences: list[str] = InputField(
-        description="Target sequences as: single sequence string or list of sequence strings"
+        title="Target Sequences",
+        description="Target sequences as: single sequence string or list of sequence strings",
     )
 
     @field_validator("target_sequences", mode="before")

@@ -36,7 +36,10 @@ class FAMPNNScoreAllMutationsInput(BaseToolInput):
         inputs (list[Structure]): List of structures to score all mutations for.
     """
 
-    inputs: list[Structure] = InputField(description="List of structures to score all possible single mutations.")
+    inputs: list[Structure] = InputField(
+        title="Structures",
+        description="List of structures to score all possible single mutations.",
+    )
 
 
 class FAMPNNScoreAllMutationsConfig(BaseConfig):
@@ -81,7 +84,8 @@ class AllMutationsScoreResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     scores: dict[str, dict[str, float]] = Field(
-        description="Position label -> {mutant_residue: log-likelihood ratio score}"
+        title="Scores",
+        description="Position label -> {mutant_residue: log-likelihood ratio score}",
     )
 
 
@@ -92,7 +96,10 @@ class FAMPNNScoreAllMutationsOutput(BaseToolOutput):
         results (list[AllMutationsScoreResult]): List of AllMutationsScoreResult objects, one per input structure.
     """
 
-    results: list[AllMutationsScoreResult] = Field(description="All-mutations scoring results, one per input structure")
+    results: list[AllMutationsScoreResult] = Field(
+        title="Results",
+        description="All-mutations scoring results, one per input structure",
+    )
 
     @property
     def output_format_options(self) -> list[str]:

@@ -106,9 +106,13 @@ class OrfipyInput(BaseToolInput):
             These IDs are used as ``parent_id`` in the output ORFs.
     """
 
-    sequences: list[str] = InputField(description="DNA sequence(s) to analyze for open reading frames")
+    sequences: list[str] = InputField(
+        title="Sequences",
+        description="DNA sequence(s) to analyze for open reading frames",
+    )
     sequence_ids: list[str] | None = InputField(
         default=None,
+        title="Sequence IDs",
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )
 
@@ -298,6 +302,7 @@ class OrfipyOutput(BaseToolOutput):
 
     predicted_orfs: list[list[ORF]] = Field(
         default_factory=list,
+        title="Predicted ORFs",
         description="List of ORF results per input sequence",
     )
 

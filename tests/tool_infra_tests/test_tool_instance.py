@@ -946,6 +946,7 @@ def test_dispatch_derives_reload_on_from_config(mock_init: MagicMock):
     class TestConfig(BaseConfig):
         model_checkpoint: str = ConfigField(
             default="default",
+            title="Model Checkpoint",
             description="model",
             reload_on_change=True,
         )
@@ -983,7 +984,7 @@ def test_subclass_without_reload_fields():
     from proto_tools.utils.base_config import BaseConfig, ConfigField
 
     class MyConfig(BaseConfig):
-        param: int = ConfigField(default=1, description="test")
+        param: int = ConfigField(default=1, title="Param", description="test")
 
     assert MyConfig.reload_fields() == set()
 
@@ -995,6 +996,7 @@ def test_subclass_with_reload_on_change():
     class MyConfig(BaseConfig):
         model_checkpoint: str = ConfigField(
             default="default",
+            title="Model Checkpoint",
             description="model",
             reload_on_change=True,
         )
@@ -1009,10 +1011,11 @@ def test_reload_fields_excludes_non_reload():
     class MyConfig(BaseConfig):
         reload_me: str = ConfigField(
             default="a",
+            title="Reload Me",
             description="r",
             reload_on_change=True,
         )
-        leave_me: str = ConfigField(default="b", description="l")
+        leave_me: str = ConfigField(default="b", title="Leave Me", description="l")
 
     fields = MyConfig.reload_fields()
     assert "reload_me" in fields

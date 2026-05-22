@@ -101,9 +101,9 @@ class SequenceFetchRequest(BaseModel):
         additional_ids (dict[str, str]): Extra IDs used for custom routing.
     """
 
-    request_id: str | None = Field(default=None, description="Optional request identifier")
-    target_name: str = Field(min_length=1, description="Gene, RNA, or protein name")
-    organism: str = Field(min_length=1, description="Organism for disambiguation")
+    request_id: str | None = Field(default=None, title="Request ID", description="Optional request identifier")
+    target_name: str = Field(min_length=1, title="Target Name", description="Gene, RNA, or protein name")
+    organism: str = Field(min_length=1, title="Organism", description="Organism for disambiguation")
     sequence_types: list[
         Literal[
             "protein",
@@ -113,21 +113,27 @@ class SequenceFetchRequest(BaseModel):
             "rna_premrna",
             "structure",
         ]
-    ] = Field(description="Requested output molecule types")
-    uniprot_id: str | None = Field(default=None, description="UniProt accession override")
-    genbank_accession: str | None = Field(default=None, description="GenBank accession override")
-    refseq_accession: str | None = Field(default=None, description="RefSeq accession override")
-    pdb_id: str | None = Field(default=None, description="PDB accession override")
-    gene_id: str | None = Field(default=None, description="NCBI Gene ID override")
-    protein_id: str | None = Field(default=None, description="NCBI protein accession override")
-    transcript_id: str | None = Field(default=None, description="Transcript accession override")
+    ] = Field(title="Sequence Types", description="Requested output molecule types")
+    uniprot_id: str | None = Field(default=None, title="UniProt ID", description="UniProt accession override")
+    genbank_accession: str | None = Field(
+        default=None, title="GenBank Accession", description="GenBank accession override"
+    )
+    refseq_accession: str | None = Field(
+        default=None, title="RefSeq Accession", description="RefSeq accession override"
+    )
+    pdb_id: str | None = Field(default=None, title="PDB ID", description="PDB accession override")
+    gene_id: str | None = Field(default=None, title="Gene ID", description="NCBI Gene ID override")
+    protein_id: str | None = Field(default=None, title="Protein ID", description="NCBI protein accession override")
+    transcript_id: str | None = Field(default=None, title="Transcript ID", description="Transcript accession override")
     genomic_coordinates: str | None = Field(
         default=None,
+        title="Genomic Coordinates",
         description="Genomic coordinates as accession:start-end:strand",
     )
     additional_ids: dict[str, str] = Field(
         default_factory=dict,
-        description="Extra IDs for custom routing; key 'accession' is consulted as a generic fallback",
+        title="Additional IDs",
+        description="Extra IDs for custom routing (the 'accession' key is consulted as a generic fallback)",
     )
 
     @field_validator("sequence_types", mode="before")
@@ -155,7 +161,7 @@ class SequenceFetchInput(BaseToolInput):
         requests (list[SequenceFetchRequest]): One or more retrieval requests.
     """
 
-    requests: list[SequenceFetchRequest] = InputField(description="One or more retrieval requests")
+    requests: list[SequenceFetchRequest] = InputField(title="Requests", description="One or more retrieval requests")
 
     @field_validator("requests", mode="before")
     @classmethod
@@ -196,14 +202,20 @@ class FetchedSequence(BaseModel):
         "dna_cds",
         "rna_transcript",
         "rna_premrna",
-    ] = Field(description="Requested type for this sequence")
-    source_database: Literal["ncbi", "uniprot", "pdb"] = Field(description="Source database for this sequence")
-    accession: str | None = Field(default=None, description="Source accession identifier")
-    sequence: str = Field(description="Retrieved sequence")
-    length: int = Field(ge=0, description="Sequence length")
-    checksum_sha256: str | None = Field(default=None, description="SHA256 checksum")
-    source_url: str | None = Field(default=None, description="Source URL for provenance")
-    inferred: bool = Field(default=False, description="Whether sequence is inferred")
+    ] = Field(title="Sequence Type", description="Requested type for this sequence")
+    source_database: Literal["ncbi", "uniprot", "pdb"] = Field(
+        title="Source Database", description="Source database for this sequence"
+    )
+    accession: str | None = Field(default=None, title="Accession", description="Source accession identifier")
+    sequence: str = Field(title="Sequence", description="Retrieved sequence")
+    length: int = Field(ge=0, title="Length", description="Sequence length")
+    checksum_sha256: str | None = Field(default=None, title="SHA256 Checksum", description="SHA256 checksum")
+    source_url: str | None = Field(default=None, title="Source URL", description="Source URL for provenance")
+    inferred: bool = Field(
+        default=False,
+        title="Inferred",
+        description="True if sequence was reconstructed (e.g. translated CDS) rather than fetched directly",
+    )
 
 
 class FetchedStructure(BaseModel):
@@ -218,12 +230,18 @@ class FetchedStructure(BaseModel):
         source_url (str): Canonical URL for this structure.
     """
 
-    pdb_id: str = Field(description="PDB accession")
-    source_database: Literal["pdb"] = Field(default="pdb", description="Source database")
-    title: str | None = Field(default=None, description="Structure title")
-    method: str | None = Field(default=None, description="Experimental method")
-    resolution: float | None = Field(default=None, description="Resolution in angstroms")
-    source_url: str = Field(description="Canonical structure URL")
+    pdb_id: str = Field(title="PDB ID", description="PDB accession")
+    source_database: Literal["pdb"] = Field(default="pdb", title="Source Database", description="Source database")
+    title: str | None = Field(default=None, title="Title", description="Structure title")
+    method: str | None = Field(
+        default=None,
+        title="Experimental Method",
+        description="PDB experimental method (e.g. X-RAY DIFFRACTION, SOLUTION NMR, ELECTRON MICROSCOPY)",
+    )
+    resolution: float | None = Field(
+        default=None, title="Resolution", description="Resolution in Å (None for NMR or fiber diffraction)"
+    )
+    source_url: str = Field(title="Source URL", description="Canonical structure URL")
 
 
 class SequenceFetchResult(BaseModel):
@@ -242,25 +260,28 @@ class SequenceFetchResult(BaseModel):
         errors (list[str]): Fatal or partial failure messages.
     """
 
-    request_id: str = Field(description="Request identifier")
-    target_name: str = Field(description="Original target name")
-    organism: str = Field(description="Original organism name")
-    requested_types: list[str] = Field(description="Requested molecule types")
-    status: Literal["success", "warning", "failed"] = Field(description="Result status")
+    request_id: str = Field(title="Request ID", description="Request identifier")
+    target_name: str = Field(title="Target Name", description="Original target name")
+    organism: str = Field(title="Organism", description="Original organism name")
+    requested_types: list[str] = Field(title="Requested Types", description="Requested molecule types")
+    status: Literal["success", "warning", "failed"] = Field(title="Status", description="Result status")
     fetched_sequences: list[FetchedSequence] = Field(
         default_factory=list,
+        title="Fetched Sequences",
         description="Retrieved sequence records",
     )
     fetched_structures: list[FetchedStructure] = Field(
         default_factory=list,
+        title="Fetched Structures",
         description="Retrieved structure records",
     )
     resolved_ids: dict[str, str] = Field(
         default_factory=dict,
+        title="Resolved IDs",
         description="Resolved identifiers used in retrieval",
     )
-    warnings: list[str] = Field(default_factory=list, description="Non-fatal warnings")
-    errors: list[str] = Field(default_factory=list, description="Fatal or partial failure messages")
+    warnings: list[str] = Field(default_factory=list, title="Warnings", description="Non-fatal warnings")
+    errors: list[str] = Field(default_factory=list, title="Errors", description="Fatal or partial failure messages")
 
 
 class SequenceFetchOutput(BaseToolOutput):
@@ -277,6 +298,7 @@ class SequenceFetchOutput(BaseToolOutput):
 
     results: list[SequenceFetchResult] = Field(
         default_factory=list,
+        title="Retrieval Results",
         description="Per-request retrieval outcomes",
     )
 

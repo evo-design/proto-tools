@@ -38,10 +38,12 @@ class MafftInput(BaseToolInput):
     """
 
     sequences: list[str] = InputField(
+        title="Sequences",
         description="List of sequences to align (minimum 2 required)",
     )
     sequence_ids: list[str] | None = InputField(
         default=None,
+        title="Sequence IDs",
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )
 
@@ -69,7 +71,7 @@ class MafftOutput(BaseToolOutput):
             sequence IDs, and original unaligned sequences.
     """
 
-    msa: MSA = Field(description="The multiple sequence alignment")
+    msa: MSA = Field(title="MSA Result", description="The multiple sequence alignment")
 
     @property
     def output_format_options(self) -> list[str]:

@@ -29,8 +29,8 @@ class PyMOLRMSDInput(BaseToolInput):
         mobile_structure (Structure): Mobile/query structure to align against the target.
     """
 
-    target_structure: Structure = InputField(description="Target/reference structure.")
-    mobile_structure: Structure = InputField(description="Mobile/query structure to align.")
+    target_structure: Structure = InputField(title="Target Structure", description="Target/reference structure.")
+    mobile_structure: Structure = InputField(title="Mobile Structure", description="Mobile/query structure to align.")
 
 
 class PyMOLRMSDConfig(BaseConfig):
@@ -76,7 +76,11 @@ class PyMOLRMSDMetrics(Metrics):
         aligned_residues (int): Residue pairs aligned by ``align``.
     """
 
-    primary_metric: str | None = "rmsd"
+    primary_metric: str | None = Field(
+        default="rmsd",
+        title="Primary Metric",
+        description="Headline metric used to rank results.",
+    )
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
         "rmsd": {
             "availability": "always",
@@ -139,8 +143,12 @@ class PyMOLRMSDOutput(BaseToolOutput):
         metrics (PyMOLRMSDMetrics): RMSD alignment metrics.
     """
 
-    method: PyMOLAlignmentMethod = Field(description="PyMOL alignment method used.")
-    metrics: PyMOLRMSDMetrics = Field(default_factory=PyMOLRMSDMetrics, description="RMSD alignment metrics.")
+    method: PyMOLAlignmentMethod = Field(title="Method", description="PyMOL alignment method used.")
+    metrics: PyMOLRMSDMetrics = Field(
+        default_factory=PyMOLRMSDMetrics,
+        title="RMSD Metrics",
+        description="RMSD alignment metrics.",
+    )
 
     @property
     def output_format_options(self) -> list[str]:

@@ -223,13 +223,13 @@ class EnsemblExon(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    id: str
-    seq_region_name: str
-    start: int
-    end: int
-    strand: int
-    assembly_name: str
-    version: int | None = None
+    id: str = Field(title="Exon ID", description="Stable Ensembl exon identifier (ENSE...)")
+    seq_region_name: str = Field(title="Sequence Region", description="Chromosome or contig name (e.g. '17')")
+    start: int = Field(title="Start", description="1-indexed inclusive genomic start coordinate")
+    end: int = Field(title="End", description="1-indexed inclusive genomic end coordinate")
+    strand: int = Field(title="Strand", description="Genomic strand (+1 or -1)")
+    assembly_name: str = Field(title="Assembly Name", description="Genome assembly name (e.g. 'GRCh38')")
+    version: int | None = Field(default=None, title="Version", description="Ensembl version of this exon")
 
 
 class EnsemblTranslation(BaseModel):
@@ -245,11 +245,11 @@ class EnsemblTranslation(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    id: str
-    start: int
-    end: int
-    length: int
-    Parent: str
+    id: str = Field(title="Protein ID", description="Stable Ensembl protein identifier (ENSP...)")
+    start: int = Field(title="CDS Start", description="1-indexed inclusive start of the CDS on the parent transcript")
+    end: int = Field(title="CDS End", description="1-indexed inclusive end of the CDS on the parent transcript")
+    length: int = Field(title="Length", description="Protein length in amino acids")
+    Parent: str = Field(title="Parent", description="Parent transcript ID (ENST...)")
 
 
 class EnsemblTranscript(BaseModel):
@@ -272,17 +272,25 @@ class EnsemblTranscript(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    id: str
-    display_name: str | None = None
-    biotype: str
-    is_canonical: bool = False
-    start: int
-    end: int
-    strand: int
-    seq_region_name: str
-    assembly_name: str
-    Exon: list[EnsemblExon] = Field(default_factory=list)
-    Translation: EnsemblTranslation | None = None
+    id: str = Field(title="Transcript ID", description="Stable Ensembl transcript identifier (ENST...)")
+    display_name: str | None = Field(
+        default=None, title="Display Name", description="Human-readable transcript name, if any"
+    )
+    biotype: str = Field(title="Biotype", description="Transcript biotype (protein_coding, lncRNA, ...)")
+    is_canonical: bool = Field(
+        default=False, title="Is Canonical", description="Whether this is the canonical transcript"
+    )
+    start: int = Field(title="Start", description="1-indexed inclusive genomic start coordinate")
+    end: int = Field(title="End", description="1-indexed inclusive genomic end coordinate")
+    strand: int = Field(title="Strand", description="Genomic strand (+1 or -1)")
+    seq_region_name: str = Field(title="Sequence Region", description="Chromosome or contig name")
+    assembly_name: str = Field(title="Assembly Name", description="Genome assembly name (e.g. 'GRCh38')")
+    Exon: list[EnsemblExon] = Field(
+        default_factory=list, title="Exons", description="Exon records (empty unless expand=True)"
+    )
+    Translation: EnsemblTranslation | None = Field(
+        default=None, title="Translation", description="Protein translation; None for non-coding biotypes"
+    )
 
 
 class EnsemblGene(BaseModel):
@@ -306,18 +314,26 @@ class EnsemblGene(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    id: str
-    display_name: str | None = None
-    description: str | None = None
-    biotype: str
-    species: str
-    seq_region_name: str
-    start: int
-    end: int
-    strand: int
-    assembly_name: str
-    canonical_transcript: str | None = None
-    Transcript: list[EnsemblTranscript] = Field(default_factory=list)
+    id: str = Field(title="Gene ID", description="Stable Ensembl gene identifier (ENSG...)")
+    display_name: str | None = Field(
+        default=None, title="Display Name", description="Human-readable gene symbol (e.g. 'BRCA1')"
+    )
+    description: str | None = Field(
+        default=None, title="Description", description="Free-text gene description from Ensembl"
+    )
+    biotype: str = Field(title="Biotype", description="Gene biotype (protein_coding, lncRNA, ...)")
+    species: str = Field(title="Species", description="Species slug (e.g. 'homo_sapiens')")
+    seq_region_name: str = Field(title="Sequence Region", description="Chromosome or contig name")
+    start: int = Field(title="Start", description="1-indexed inclusive genomic start coordinate")
+    end: int = Field(title="End", description="1-indexed inclusive genomic end coordinate")
+    strand: int = Field(title="Strand", description="Genomic strand (+1 or -1)")
+    assembly_name: str = Field(title="Assembly Name", description="Genome assembly name (e.g. 'GRCh38')")
+    canonical_transcript: str | None = Field(
+        default=None, title="Canonical Transcript", description="Canonical transcript ID with version"
+    )
+    Transcript: list[EnsemblTranscript] = Field(
+        default_factory=list, title="Transcripts", description="Transcript records (empty unless expand=True)"
+    )
 
 
 class EnsemblSequence(BaseModel):
@@ -334,10 +350,15 @@ class EnsemblSequence(BaseModel):
 
     model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
-    id: str
-    desc: str | None = None
-    mol_type: str | None = Field(default=None, alias="molecule")
-    seq: str
+    id: str = Field(title="ID", description="Stable Ensembl ID echoed by the server (may differ from input)")
+    desc: str | None = Field(default=None, title="Description", description="Description string returned by the server")
+    mol_type: str | None = Field(
+        default=None,
+        alias="molecule",
+        title="Molecule Type",
+        description="Molecule type ('dna', 'protein', ...)",
+    )
+    seq: str = Field(title="Sequence", description="Raw sequence string (DNA, cDNA, CDS, or protein)")
 
 
 class EnsemblXref(BaseModel):
@@ -354,12 +375,18 @@ class EnsemblXref(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    dbname: str
-    db_display_name: str | None = None
-    display_id: str
-    primary_id: str
-    description: str | None = None
-    info_type: str | None = None
+    dbname: str = Field(title="Database Name", description="External database name (e.g. 'Uniprot_gn', 'EntrezGene')")
+    db_display_name: str | None = Field(
+        default=None, title="Database Display Name", description="Human-readable external database name"
+    )
+    display_id: str = Field(title="Display ID", description="Display identifier in the external database")
+    primary_id: str = Field(title="Primary ID", description="Primary identifier in the external database")
+    description: str | None = Field(
+        default=None, title="Description", description="External-DB description for this entry"
+    )
+    info_type: str | None = Field(
+        default=None, title="Info Type", description="Cross-reference type (e.g. 'DIRECT', 'DEPENDENT')"
+    )
 
 
 class EnsemblOverlapFeatureRecord(BaseModel):
@@ -384,11 +411,15 @@ class EnsemblOverlapFeatureRecord(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    feature_type: str
-    id: str | None = None
-    biotype: str | None = None
-    start: int
-    end: int
-    strand: int
-    seq_region_name: str
-    raw: dict[str, Any] = Field(default_factory=dict)
+    feature_type: str = Field(
+        title="Feature Type", description="Feature type ('gene', 'transcript', 'regulatory', 'variation', ...)"
+    )
+    id: str | None = Field(default=None, title="Feature ID", description="Feature identifier where the API returns one")
+    biotype: str | None = Field(default=None, title="Biotype", description="Feature biotype where applicable")
+    start: int = Field(title="Start", description="1-indexed inclusive genomic start coordinate")
+    end: int = Field(title="End", description="1-indexed inclusive genomic end coordinate")
+    strand: int = Field(title="Strand", description="Genomic strand (+1, -1, or 0 for unstranded)")
+    seq_region_name: str = Field(title="Sequence Region", description="Chromosome or contig name")
+    raw: dict[str, Any] = Field(
+        default_factory=dict, title="Raw Record", description="Full upstream record for feature-specific fields"
+    )

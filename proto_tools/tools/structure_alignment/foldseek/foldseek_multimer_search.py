@@ -64,7 +64,10 @@ class FoldseekMultimerSearchInput(BaseToolInput):
             for an experimental complex.
     """
 
-    structure_text: str = InputField(description="Multi-chain PDB-format text of the query complex")
+    structure_text: str = InputField(
+        title="Structure Text",
+        description="Multi-chain PDB-format text of the query complex",
+    )
 
 
 class FoldseekMultimerSearchConfig(BaseConfig):
@@ -214,11 +217,14 @@ class FoldseekMultimerSearchOutput(BaseToolOutput):
         result_url (str): Remote result-archive URL; empty in local mode.
     """
 
-    ticket_id: str = Field(description="Foldseek job ticket ID (remote only; empty in local mode)")
-    hits: list[FoldseekMultimerHit] = Field(default_factory=list, description="Multimer alignment hits")
-    num_hits: int = Field(description="Total number of hits", ge=0)
-    databases_queried: list[str] = Field(description="Databases included in the search")
-    result_url: str = Field(description="Foldseek result archive URL (remote only)")
+    ticket_id: str = Field(
+        title="Ticket ID",
+        description="Foldseek job ticket ID (remote only; empty in local mode)",
+    )
+    hits: list[FoldseekMultimerHit] = Field(default_factory=list, title="Hits", description="Multimer alignment hits")
+    num_hits: int = Field(title="Number of Hits", description="Total number of hits", ge=0)
+    databases_queried: list[str] = Field(title="Databases Queried", description="Databases included in the search")
+    result_url: str = Field(title="Result URL", description="Foldseek result archive URL (remote only)")
 
     @property
     def output_format_options(self) -> list[str]:

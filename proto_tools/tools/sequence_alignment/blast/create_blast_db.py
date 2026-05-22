@@ -34,7 +34,8 @@ class CreateBlastDbInput(BaseToolInput):
     """
 
     fasta: str = InputField(
-        description="Path to the input FASTA file containing sequences to create a BLAST database from"
+        title="FASTA Path",
+        description="Path to the input FASTA file containing sequences to create a BLAST database from",
     )
 
 
@@ -55,7 +56,7 @@ class CreateBlastDbOutput(BaseToolOutput):
             for protein databases.
     """
 
-    db_path: str = Field(description="Path to the generated BLAST database")
+    db_path: str = Field(title="Database Path", description="Path to the generated BLAST database")
 
     @property
     def output_format_options(self) -> list[str]:

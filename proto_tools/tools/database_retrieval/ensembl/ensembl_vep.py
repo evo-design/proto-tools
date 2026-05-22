@@ -96,15 +96,28 @@ class EnsemblVEPConsequence(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    input: str
-    most_severe_consequence: str
-    seq_region_name: str | None = None
-    start: int | None = None
-    end: int | None = None
-    strand: int | None = None
-    allele_string: str | None = None
-    transcript_consequences: list[dict[str, Any]] = Field(default_factory=list)
-    colocated_variants: list[dict[str, Any]] = Field(default_factory=list)
+    input: str = Field(title="Input", description="HGVS notation string the API echoed back")
+    most_severe_consequence: str = Field(
+        title="Most Severe Consequence",
+        description="Highest-severity Sequence Ontology consequence term",
+    )
+    seq_region_name: str | None = Field(default=None, title="Sequence Region", description="Chromosome or contig name")
+    start: int | None = Field(default=None, title="Start", description="1-indexed inclusive genomic start coordinate")
+    end: int | None = Field(default=None, title="End", description="1-indexed inclusive genomic end coordinate")
+    strand: int | None = Field(default=None, title="Strand", description="Genomic strand (+1 or -1)")
+    allele_string: str | None = Field(
+        default=None, title="Allele String", description="Reference/alternate alleles (e.g. 'G/C')"
+    )
+    transcript_consequences: list[dict[str, Any]] = Field(
+        default_factory=list,
+        title="Transcript Consequences",
+        description="Per-transcript consequence records as raw dicts (shape varies by record type)",
+    )
+    colocated_variants: list[dict[str, Any]] = Field(
+        default_factory=list,
+        title="Co-located Variants",
+        description="Co-located known variants (rsIDs, frequencies, clinical significance)",
+    )
 
 
 class EnsemblVEPInput(BaseToolInput):
@@ -116,7 +129,7 @@ class EnsemblVEPInput(BaseToolInput):
             (``ENSP00000418960:p.Tyr124Cys``) forms all work.
     """
 
-    hgvs: str = InputField(description="HGVS notation (genomic / coding / protein)")
+    hgvs: str = InputField(title="HGVS Notation", description="HGVS notation (genomic / coding / protein)")
 
     @model_validator(mode="after")
     def validate_hgvs(self) -> "EnsemblVEPInput":
@@ -315,10 +328,14 @@ class EnsemblVEPOutput(BaseToolOutput):
     """
 
     consequences: list[EnsemblVEPConsequence] = Field(
-        default_factory=list, description="One record per VEP input (Ensembl returns a list even for a single HGVS)"
+        default_factory=list,
+        title="Consequences",
+        description="One record per VEP input (Ensembl returns a list even for a single HGVS)",
     )
-    source_url: str = Field(description="Final Ensembl REST URL that was hit")
-    raw_payload: list[dict[str, Any]] = Field(default_factory=list, description="Raw API JSON")
+    source_url: str = Field(title="Source URL", description="Final Ensembl REST URL that was hit")
+    raw_payload: list[dict[str, Any]] = Field(
+        default_factory=list, title="Raw Payload", description="Raw API JSON returned by Ensembl"
+    )
 
     @computed_field  # type: ignore[prop-decorator]
     @property

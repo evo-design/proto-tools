@@ -38,7 +38,10 @@ class SegmaskerInput(BaseToolInput):
             sequences are handled gracefully (assigned 0.0 low-complexity fraction).
     """
 
-    sequences: list[str] = InputField(description="Protein sequence(s) to analyze for low-complexity regions")
+    sequences: list[str] = InputField(
+        title="Sequences",
+        description="Protein sequence(s) to analyze for low-complexity regions",
+    )
 
     @field_validator("sequences", mode="before")
     @classmethod
@@ -110,7 +113,11 @@ class SegmaskerMetrics(Metrics):
         "low_complexity_count": {"availability": "always", "type": "int", "min": 0, "max": None},
         "sequence_length": {"availability": "always", "type": "int", "min": 1, "max": None},
     }
-    primary_metric: str | None = "low_complexity_fraction"
+    primary_metric: str | None = Field(
+        default="low_complexity_fraction",
+        title="Primary Metric",
+        description="Headline metric for ranking; defaults to low_complexity_fraction",
+    )
 
 
 class SegmaskerOutput(BaseToolOutput):
@@ -123,6 +130,7 @@ class SegmaskerOutput(BaseToolOutput):
 
     results: list[SegmaskerMetrics] = Field(
         default_factory=list,
+        title="Per-Sequence Metrics",
         description="Per-sequence low-complexity metrics",
     )
 

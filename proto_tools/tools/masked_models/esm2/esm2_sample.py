@@ -80,6 +80,7 @@ class ESM2SampleOutput(MaskedModelSampleOutput):
 
     logits: list[list[list[float]]] | None = Field(
         default=None,
+        title="Logits",
         description="Per-position amino acid logits. Shape: [num_sequences, seq_len, 20].",
     )
 

@@ -39,7 +39,7 @@ class PdbFetchEntryInput(BaseToolInput):
         pdb_id (str): PDB accession (e.g. '1LBG').
     """
 
-    pdb_id: str = InputField(description="PDB accession (e.g. '1LBG')")
+    pdb_id: str = InputField(title="PDB ID", description="PDB accession (e.g. '1LBG')")
 
 
 class PdbFetchEntryOutput(BaseToolOutput):
@@ -52,10 +52,16 @@ class PdbFetchEntryOutput(BaseToolOutput):
         source_url (str | None): URL used for the request.
     """
 
-    title: str | None = Field(default=None, description="Structure title")
-    method: str | None = Field(default=None, description="Experimental method")
-    resolution: float | None = Field(default=None, description="Resolution in angstroms")
-    source_url: str | None = Field(default=None, description="Request URL")
+    title: str | None = Field(default=None, title="Title", description="Human-readable RCSB entry title")
+    method: str | None = Field(
+        default=None,
+        title="Experimental Method",
+        description="PDB experimental method (e.g. X-RAY DIFFRACTION, SOLUTION NMR, ELECTRON MICROSCOPY)",
+    )
+    resolution: float | None = Field(
+        default=None, title="Resolution", description="Resolution in Å (None for NMR or fiber diffraction)"
+    )
+    source_url: str | None = Field(default=None, title="Source URL", description="Request URL")
 
     @property
     def output_format_options(self) -> list[str]:

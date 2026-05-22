@@ -29,6 +29,7 @@ class AbLangScoringInput(BaseToolInput):
     """
 
     antibodies: list[Antibody] = InputField(
+        title="Antibodies",
         description="Antibody sequence(s) to score.",
         min_length=1,
     )

@@ -48,7 +48,7 @@ class EnsemblOverlapInput(BaseToolInput):
         ensembl_id (str): Ensembl ID whose region to query for overlapping features.
     """
 
-    ensembl_id: str = InputField(description="Ensembl ID (ENSG..., ENST..., ENSP...)")
+    ensembl_id: str = InputField(title="Ensembl ID", description="Ensembl ID (ENSG..., ENST..., ENSP...)")
 
     @field_validator("ensembl_id")
     @classmethod
@@ -113,10 +113,14 @@ class EnsemblOverlapOutput(BaseToolOutput):
     """
 
     result: list[EnsemblOverlapFeatureRecord] = Field(
-        default_factory=list, description="Overlapping features (typed common fields + raw dict)"
+        default_factory=list,
+        title="Overlapping Features",
+        description="Overlapping features (typed common fields + raw dict)",
     )
-    source_url: str = Field(description="Final Ensembl REST URL that was hit")
-    raw_payload: list[dict[str, Any]] = Field(default_factory=list, description="Raw API JSON")
+    source_url: str = Field(title="Source URL", description="Final Ensembl REST URL that was hit")
+    raw_payload: list[dict[str, Any]] = Field(
+        default_factory=list, title="Raw Payload", description="Raw API JSON returned by Ensembl"
+    )
 
     @property
     def output_format_options(self) -> list[str]:

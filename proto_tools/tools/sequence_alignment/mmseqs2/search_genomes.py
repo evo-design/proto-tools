@@ -58,23 +58,27 @@ class Mmseqs2SearchGenomesInput(BaseToolInput):
             (defaults to target_0, target_1, ...).
     """
 
-    query_genomes: list[str] = InputField(description="List of query genome sequences (nucleotide)")
+    query_genomes: list[str] = InputField(
+        title="Query Genomes", description="List of query genome sequences (nucleotide)"
+    )
     query_ids: list[str] | None = InputField(
         default=None,
+        title="Query IDs",
         description="Optional query identifiers (defaults to seq_0, seq_1, ...)",
     )
     target_genomes: list[str] | None = InputField(
         default=None,
-        xor_group="target",
+        title="Target Genomes",
         description="Inline target genome sequences. Mutually exclusive with `target_db`.",
     )
     target_db: str | None = InputField(
         default=None,
-        xor_group="target",
+        title="Target Database",
         description="Target FASTA or MMseqs2 DB stem (path/slug/AssetRef). Mutually exclusive with `target_genomes`.",
     )
     target_ids: list[str] | None = InputField(
         default=None,
+        title="Target IDs",
         description="Optional target identifiers (defaults to target_0, target_1, ...)",
     )
 
@@ -106,7 +110,7 @@ class Mmseqs2SearchGenomesInput(BaseToolInput):
 
     @model_validator(mode="after")
     def exactly_one_target(self) -> Mmseqs2SearchGenomesInput:
-        """Enforce the xor_group='target' constraint at runtime."""
+        """Enforce the 'target' XOR constraint at runtime."""
         if (self.target_genomes is None) == (self.target_db is None):
             raise ValueError("mmseqs2-search-genomes: provide exactly one of `target_genomes` or `target_db`.")
         return self
@@ -123,7 +127,10 @@ class Mmseqs2SearchGenomesOutput(BaseToolOutput):
             input query genome. The order matches the input query genomes order.
     """
 
-    results: list[Mmseqs2SequenceSearchResult] = Field(description="List of search results, one per input query genome")
+    results: list[Mmseqs2SequenceSearchResult] = Field(
+        title="Search Results",
+        description="List of search results, one per input query genome",
+    )
 
     def __len__(self) -> int:
         """Get the number of results."""

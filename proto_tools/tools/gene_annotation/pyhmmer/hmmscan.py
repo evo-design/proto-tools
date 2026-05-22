@@ -37,7 +37,7 @@ class PyHmmscanInput(PyHmmerInput):
             will be searched against the query sequences.
     """
 
-    hmm_db: str | Path = InputField(description="Path to HMM database file")
+    hmm_db: str | Path = InputField(title="HMM Database", description="Path to HMM database file")
 
 
 # Output:

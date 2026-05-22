@@ -11,7 +11,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from proto_tools.entities.structures import Structure
 from proto_tools.entities.structures.structure import BFactorType
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import BaseConfig, BaseToolInput, BaseToolOutput, ConfigField, InputField, ToolInstance
+from proto_tools.utils import (
+    BaseConfig,
+    BaseToolInput,
+    BaseToolOutput,
+    ConfigField,
+    InputField,
+    ToolInstance,
+)
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = logging.getLogger(__name__)
@@ -39,17 +46,35 @@ class ChainPairScores(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    chain1: str = Field(description="First chain ID")
-    chain2: str = Field(description="Second chain ID")
-    pair_type: str = Field(description="'asym' (directional) or 'max' (symmetric maximum)")
-    ipsae: float = Field(description="ipSAE score (adaptive d0)")
-    ipsae_d0chn: float = Field(description="ipSAE with chain-length d0")
-    ipsae_d0dom: float = Field(description="ipSAE with domain-size d0")
-    iptm_af: float = Field(description="AlphaFold-reported ipTM (-1.0 if unavailable)")
-    iptm_d0chn: float = Field(description="ipTM from PAE with chain-length d0")
-    pdockq: float = Field(description="pDockQ (Bryant 2022)")
-    pdockq2: float = Field(description="pDockQ2 (Zhu 2023)")
-    lis: float = Field(description="Local Interaction Score (Kim 2024)")
+    chain1: str = Field(title="Chain 1", description="First chain ID")
+    chain2: str = Field(title="Chain 2", description="Second chain ID")
+    pair_type: str = Field(title="Pair Type", description="'asym' (directional) or 'max' (symmetric maximum)")
+    ipsae: float = Field(
+        title="ipSAE", description="ipSAE interface score with adaptive d0; 0-1, higher indicates a better interface"
+    )
+    ipsae_d0chn: float = Field(
+        title="ipSAE d0chn", description="ipSAE with chain-length d0; 0-1, higher indicates a better interface"
+    )
+    ipsae_d0dom: float = Field(
+        title="ipSAE d0dom", description="ipSAE with domain-size d0; 0-1, higher indicates a better interface"
+    )
+    iptm_af: float = Field(
+        title="ipTM (AlphaFold)",
+        description="AlphaFold-reported interface pTM; 0-1, higher is better. Returns -1.0 if unavailable.",
+    )
+    iptm_d0chn: float = Field(
+        title="ipTM d0chn",
+        description="Interface pTM recomputed from PAE with chain-length d0; 0-1, higher is better",
+    )
+    pdockq: float = Field(
+        title="pDockQ", description="pDockQ interface score (Bryant 2022); 0-1, higher indicates a better interface"
+    )
+    pdockq2: float = Field(
+        title="pDockQ2", description="pDockQ2 interface score (Zhu 2023); 0-1, higher indicates a better interface"
+    )
+    lis: float = Field(
+        title="LIS", description="Local Interaction Score (Kim 2024); higher values indicate more interface contact"
+    )
 
 
 class IPSAEMetrics(Metrics):
@@ -98,10 +123,15 @@ class IPSAEMetrics(Metrics):
             "max": 1.0,
         },
     }
-    primary_metric: str | None = "ipsae"
+    primary_metric: str | None = Field(
+        default="ipsae",
+        title="Primary Metric",
+        description="Headline metric used to rank results.",
+    )
 
     chain_pair_results: list[ChainPairScores] = Field(
         default_factory=list,
+        title="Chain-Pair Scores",
         description="Full per-chain-pair breakdown from IPSAE",
     )
 
@@ -117,9 +147,18 @@ class IPSAEScoringInput(BaseToolInput):
         target_chains (list[str]): Target chain ID(s).
     """
 
-    structure: Structure = InputField(description="Cofolded complex with pLDDT B-factors and PAE matrix in metrics")
-    binder_chain: str = InputField(description="Single-character chain ID of the binder")
-    target_chains: list[str] = InputField(description="Target chain ID(s)")
+    structure: Structure = InputField(
+        title="Input Structure",
+        description="Cofolded complex with per-residue pLDDT in B-factors and a PAE matrix attached to its metrics",
+    )
+    binder_chain: str = InputField(
+        title="Binder Chain",
+        description="Single-character chain ID of the binder",
+    )
+    target_chains: list[str] = InputField(
+        title="Target Chains",
+        description="Target chain ID(s)",
+    )
 
     @field_validator("target_chains", mode="before")
     @classmethod
@@ -180,7 +219,10 @@ class IPSAEScoringOutput(BaseToolOutput):
         metrics (IPSAEMetrics): Scalar metrics plus per-chain-pair breakdown.
     """
 
-    metrics: IPSAEMetrics = Field(description="IPSAE metrics for the input complex")
+    metrics: IPSAEMetrics = Field(
+        title="ipSAE Metrics",
+        description="IPSAE metrics for the input complex",
+    )
 
     @property
     def output_format_options(self) -> list[str]:

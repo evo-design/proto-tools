@@ -24,11 +24,13 @@ class GradientInput(BaseToolInput):
     """
 
     logits: list[list[float]] = InputField(
+        title="Logits",
         description="Relaxed sequence logits with shape (L, 20) in backend-specific amino-acid order.",
         examples=[[[0.0] * 20, [0.0] * 20]],
     )
     temperature: float = InputField(
         default=1.0,
+        title="Temperature",
         description="Softmax temperature used to convert logits into a relaxed amino-acid probability distribution.",
         gt=0.0,
     )
@@ -62,15 +64,21 @@ class GradientOutput(BaseToolOutput):
 
     gradient: GradientValue = Field(
         default=None,
-        description="Gradient tensor with the same shape and vocabulary column order as the input logits.",
+        title="Gradient",
+        description="Gradient of the loss with respect to the input logits; matches input shape and column order",
     )
-    loss: float = Field(description="Scalar objective value returned by the backend for this relaxed sequence.")
+    loss: float = Field(
+        title="Loss",
+        description="Scalar objective for this sequence; lower is better (typically a positive negative log-likelihood)",
+    )
     metrics: dict[str, Any] = Field(
         default_factory=dict,
+        title="Auxiliary Metrics",
         description="Auxiliary metrics reported alongside the scalar objective value.",
     )
     vocab: list[str] = Field(
-        description="Symbols defining the column ordering for both the input logits and the returned gradient."
+        title="Vocabulary",
+        description="Symbols defining the column ordering for both the input logits and the returned gradient.",
     )
 
     @property

@@ -92,7 +92,10 @@ class BioEmuOutput(BaseToolOutput):
             input complex.
     """
 
-    ensembles: list[StructureEnsemble] = Field(description="Generated protein conformational ensembles")
+    ensembles: list[StructureEnsemble] = Field(
+        title="Ensembles",
+        description="Generated protein conformational ensembles",
+    )
 
     @property
     def output_format_options(self) -> list[str]:

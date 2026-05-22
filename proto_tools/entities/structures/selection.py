@@ -34,7 +34,7 @@ class ChainSelection(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    chains: list[str] = Field(description="Chain IDs in the selection.")
+    chains: list[str] = Field(title="Chains", description="Chain IDs in the selection.")
 
     @model_validator(mode="before")
     @classmethod
@@ -109,6 +109,7 @@ class ResidueSelection(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     chains: dict[str, list[int]] = Field(
+        title="Chains",
         description="Per-chain residue positions (1-indexed; position 1 = first residue).",
     )
 
@@ -221,6 +222,7 @@ class StructureInputBase(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     structure: Structure = Field(
+        title="Input Structure",
         description="Structure (Path | PDB string | Structure | dict).",
     )
 

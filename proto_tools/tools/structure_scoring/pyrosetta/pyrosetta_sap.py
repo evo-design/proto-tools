@@ -47,10 +47,13 @@ class ResidueSAP(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    chain_id: str = Field(description="Chain identifier")
-    residue_index: int = Field(description="1-indexed residue position")
-    residue_name: str = Field(description="Three-letter residue code")
-    sap_score: float = Field(description="Per-residue SAP contribution")
+    chain_id: str = Field(title="Chain ID", description="Chain identifier")
+    residue_index: int = Field(title="Residue Index", description="1-indexed residue position")
+    residue_name: str = Field(title="Residue Name", description="Three-letter residue code")
+    sap_score: float = Field(
+        title="SAP Score",
+        description="Per-residue spatial aggregation propensity (SAP); higher values are more aggregation-prone",
+    )
 
 
 class PyRosettaSAPMetrics(Metrics):
@@ -74,9 +77,16 @@ class PyRosettaSAPMetrics(Metrics):
             "max": None,
         },
     }
-    primary_metric: str | None = "sap_score"
+    primary_metric: str | None = Field(
+        default="sap_score",
+        title="Primary Metric",
+        description="Headline metric used to rank results.",
+    )
 
-    per_residue: list[ResidueSAP] = Field(description="Per-residue SAP contributions")
+    per_residue: list[ResidueSAP] = Field(
+        title="Per-Residue SAP",
+        description="Per-residue SAP contributions",
+    )
 
 
 class PyRosettaSAPInput(BaseToolInput):
@@ -89,7 +99,8 @@ class PyRosettaSAPInput(BaseToolInput):
     """
 
     inputs: list[ScoringStructureInput] = InputField(
-        description="Protein structures with optional chain selection for SAP scoring"
+        title="Structures",
+        description="Protein structures with optional chain selection for SAP scoring",
     )
 
     @field_validator("inputs", mode="before")
@@ -146,6 +157,7 @@ class PyRosettaSAPOutput(BaseToolOutput):
 
     results: list[PyRosettaSAPMetrics] = Field(
         default_factory=list,
+        title="SAP Results",
         description="SAP scores with per-residue breakdown, one per input structure",
     )
 

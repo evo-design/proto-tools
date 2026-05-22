@@ -46,7 +46,7 @@ class MockInput(BaseToolInput):
 
 
 class MockConfig(BaseConfig):
-    device: str = ConfigField(default="cuda")
+    device: str = ConfigField(default="cuda", title="Device", description="Device to use")
 
 
 class MockOutput(MockToolOutputBase):
@@ -430,7 +430,7 @@ def test_dispatch_gpus_per_instance_grouping(clean_registry):
     _, call_log = _register_mock_tool(clean_registry)
 
     class MultiGPUConfig(BaseConfig):
-        device: str = ConfigField(default="cuda")
+        device: str = ConfigField(default="cuda", title="Device", description="Device to use")
 
         @property
         def gpus_per_instance(self) -> int:
@@ -489,7 +489,7 @@ def test_dispatch_gpus_per_instance_zero_bypasses_pool(clean_registry):
     _, call_log = _register_mock_tool(clean_registry)
 
     class CPUOnlyConfig(BaseConfig):
-        device: str = ConfigField(default="cuda")
+        device: str = ConfigField(default="cuda", title="Device", description="Device to use")
 
         @property
         def gpus_per_instance(self) -> int:
@@ -802,7 +802,7 @@ def test_compute_worker_layout_gpu_path():
     """GPU path: groups devices into gpus_per_instance-sized slots."""
 
     class GpuConfig(BaseConfig):
-        device: str = ConfigField(default="cuda")
+        device: str = ConfigField(default="cuda", title="Device", description="Device to use")
 
         @property
         def gpus_per_instance(self) -> int:
@@ -833,7 +833,7 @@ def test_compute_worker_layout_cpu_fanout():
     """gpus_per_instance==0 + cpus_per_instance==N → N CPU worker slots."""
 
     class CpuFanoutConfig(BaseConfig):
-        device: str = ConfigField(default="cpu")
+        device: str = ConfigField(default="cpu", title="Device", description="Device to use")
 
         @property
         def cpus_per_instance(self) -> int | None:
@@ -857,7 +857,7 @@ def test_compute_worker_layout_cpu_fanout_with_thread_budget():
     """cpus_per_instance=2 with cpus=8 → 4 workers, each gets OMP=2."""
 
     class CpuMultiThreadConfig(BaseConfig):
-        device: str = ConfigField(default="cpu")
+        device: str = ConfigField(default="cpu", title="Device", description="Device to use")
 
         @property
         def cpus_per_instance(self) -> int | None:
@@ -882,7 +882,7 @@ def test_dispatch_cpu_fanout_partitions_items(clean_registry):
     _, call_log = _register_mock_tool(clean_registry)
 
     class CpuFanoutConfig(BaseConfig):
-        device: str = ConfigField(default="cpu")
+        device: str = ConfigField(default="cpu", title="Device", description="Device to use")
 
         @property
         def cpus_per_instance(self) -> int | None:
@@ -947,7 +947,7 @@ def test_dispatch_cpu_short_circuit_preserved(clean_registry):
     _, call_log = _register_mock_tool(clean_registry)
 
     class CpuOptOutConfig(BaseConfig):
-        device: str = ConfigField(default="cpu")
+        device: str = ConfigField(default="cpu", title="Device", description="Device to use")
 
         @property
         def cpus_per_instance(self) -> int | None:
@@ -1015,7 +1015,7 @@ def test_gpus_per_instance_override():
     """Subclasses can override gpus_per_instance based on config values."""
 
     class MultiGPU(BaseConfig):
-        model_name: str = ConfigField(default="small")
+        model_name: str = ConfigField(default="small", title="Model Name", description="Model name")
 
         @property
         def gpus_per_instance(self) -> int:

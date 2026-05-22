@@ -52,10 +52,14 @@ class PdbChain(BaseModel):
         is_protein (bool): True if protein, False if nucleic acid.
     """
 
-    chain_ids: list[str] = Field(default_factory=list, description="Author-assigned chain IDs sharing this sequence")
-    header: str = Field(description="FASTA header")
-    sequence: str = Field(description="Chain sequence")
-    is_protein: bool = Field(description="True if protein, False if nucleic acid")
+    chain_ids: list[str] = Field(
+        default_factory=list,
+        title="Chain IDs",
+        description="Author-assigned chain IDs sharing this sequence",
+    )
+    header: str = Field(title="FASTA Header", description="FASTA header")
+    sequence: str = Field(title="Sequence", description="Chain sequence")
+    is_protein: bool = Field(title="Is Protein", description="True if protein, False if nucleic acid")
 
 
 class PdbFetchConfig(BaseConfig):

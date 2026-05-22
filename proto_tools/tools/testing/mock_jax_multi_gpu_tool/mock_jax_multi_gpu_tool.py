@@ -35,6 +35,7 @@ class MockJAXMultiGPUToolInput(BaseToolInput):
 
     data: list[float] = InputField(
         default=[1.0, 2.0, 3.0, 4.0],
+        title="Data",
         description="Input data to pass through both models (any length)",
     )
 
@@ -79,11 +80,11 @@ class MockJAXMultiGPUToolOutput(BaseToolOutput):
         devices_used (list[str]): Devices each model ran on.
     """
 
-    result_model_a: list[float] = Field(description="Output from model A (first GPU)")
+    result_model_a: list[float] = Field(title="Result Model A", description="Output from model A (first GPU)")
 
-    result_model_b: list[float] = Field(description="Output from model B (second GPU)")
+    result_model_b: list[float] = Field(title="Result Model B", description="Output from model B (second GPU)")
 
-    devices_used: list[str] = Field(description="Devices each model ran on [device_a, device_b]")
+    devices_used: list[str] = Field(title="Devices Used", description="Devices each model ran on [device_a, device_b]")
 
     @property
     def output_format_options(self) -> list[str]:

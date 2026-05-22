@@ -80,6 +80,7 @@ class MalinoisScoreInput(BaseToolInput):
     """
 
     sequences: list[str] = InputField(
+        title="Sequences",
         description="DNA insert sequence(s) to score with Malinois",
         min_length=1,
     )
@@ -126,9 +127,11 @@ class MalinoisScoreResult(BaseModel):
             requested cell type name.
     """
 
-    sequence: str = Field(description="DNA sequence scored by Malinois")
-    sequence_length: int = Field(description="Length of the scored DNA sequence")
-    scores: MalinoisActivityMetrics = Field(description="Malinois predictions keyed by cell type")
+    sequence: str = Field(title="Sequence", description="DNA sequence scored by Malinois")
+    sequence_length: int = Field(title="Sequence Length", description="Length of the scored DNA sequence")
+    scores: MalinoisActivityMetrics = Field(
+        title="Activity Scores", description="Malinois predictions keyed by cell type"
+    )
 
 
 class MalinoisScoreOutput(BaseToolOutput):
@@ -140,9 +143,9 @@ class MalinoisScoreOutput(BaseToolOutput):
         seq_length (int): Expected insert length used for MPRA flank padding.
     """
 
-    results: list[MalinoisScoreResult] = Field(description="Per-sequence Malinois scoring results")
-    cell_types: list[str] = Field(description="Cell types included in each score dictionary")
-    seq_length: int = Field(description="Expected Malinois insert length")
+    results: list[MalinoisScoreResult] = Field(title="Results", description="Per-sequence Malinois scoring results")
+    cell_types: list[str] = Field(title="Cell Types", description="Cell types included in each score dictionary")
+    seq_length: int = Field(title="Insert Length", description="Expected Malinois insert length")
 
     def __len__(self) -> int:
         """Return the number of per-sequence results."""
@@ -300,11 +303,31 @@ class MalinoisGradientLossTerm(BaseModel):
         sigmoid_scale (float): Positive scale for the raw score transform.
     """
 
-    cell_type: MalinoisCellType = Field(default="K562", description="Malinois cell-type output to optimize.")
-    direction: MalinoisObjectiveDirection = Field(default="max", description="Optimization direction.")
-    weight: float = Field(default=1.0, ge=0.0, description="Non-negative term weight.")
-    sigmoid_center: float = Field(default=4.0, description="Raw score at the midpoint of the sigmoid transform.")
-    sigmoid_scale: float = Field(default=1.0, gt=0.0, description="Positive sigmoid scale.")
+    cell_type: MalinoisCellType = Field(
+        default="K562", title="Cell Type", description="Malinois cell-type output to optimize."
+    )
+    direction: MalinoisObjectiveDirection = Field(
+        default="max",
+        title="Direction",
+        description="Whether to maximize ('max') or minimize ('min') activity for this cell type",
+    )
+    weight: float = Field(
+        default=1.0,
+        ge=0.0,
+        title="Weight",
+        description="Relative weight of this term in the summed objective (must be non-negative)",
+    )
+    sigmoid_center: float = Field(
+        default=4.0,
+        title="Sigmoid Center",
+        description="Raw Malinois score at the sigmoid midpoint (0.5 output)",
+    )
+    sigmoid_scale: float = Field(
+        default=1.0,
+        gt=0.0,
+        title="Sigmoid Scale",
+        description="Sigmoid steepness in raw-score units; larger values produce a wider transition",
+    )
 
 
 class MalinoisGradientInput(BaseToolInput):
@@ -318,12 +341,14 @@ class MalinoisGradientInput(BaseToolInput):
     """
 
     logits: MalinoisLogits = InputField(
+        title="Logits",
         description="Batched relaxed DNA logits with shape (B, L, 4) in A,C,G,T order.",
         examples=[[[[0.0] * 4] * 200]],
     )
     temperature: float = InputField(
         default=1.0,
         gt=0.0,
+        title="Temperature",
         description="Softmax temperature used to convert logits into relaxed nucleotide probabilities.",
     )
 
@@ -490,10 +515,15 @@ class MalinoisGradientSampleMetrics(Metrics):
             "description": "Raw Malinois activity prediction for SK-N-SH cells.",
         },
     }
-    primary_metric: str | None = "loss"
+    primary_metric: str | None = Field(
+        default="loss",
+        title="Primary Metric",
+        description="Headline metric used to rank results.",
+    )
 
     loss_terms: list[dict[str, Any]] = Field(
         default_factory=list,
+        title="Loss Terms",
         description="Per-objective-term transform metadata for this sample.",
     )
 
@@ -545,10 +575,12 @@ class MalinoisGradientOutput(GradientOutput):
 
     gradient: MalinoisGradientValue = Field(
         default=None,
+        title="Gradient",
         description="Gradient w.r.t. input logits. None when compute_gradient=False.",
     )
     sample_metrics: list[MalinoisGradientSampleMetrics] = Field(
         default_factory=list,
+        title="Sample Metrics",
         description="Per-sample Malinois objective metrics.",
     )
 

@@ -72,25 +72,35 @@ class CcdEnrichment(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    ccd_code: str | None = Field(default=None, description="CCD code; None if SMILES has no match")
-    formula: str | None = Field(default=None, description="Chemical formula string")
-    formula_weight: float | None = Field(default=None, description="Formula weight in Daltons")
-    inchi: str | None = Field(default=None, description="InChI from CCD")
-    inchikey: str | None = Field(default=None, description="InChIKey from CCD")
-    released: bool = Field(default=False, description="Whether release status is REL")
-    release_status: str | None = Field(default=None, description="Raw pdbx_release_status value")
-    parent_ccd_code: str | None = Field(default=None, description="Canonical parent CCD code, if derivative")
+    ccd_code: str | None = Field(default=None, title="CCD Code", description="CCD code (None if SMILES has no match)")
+    formula: str | None = Field(default=None, title="Formula", description="Chemical formula string")
+    formula_weight: float | None = Field(default=None, title="Formula Weight", description="Formula weight in Daltons")
+    inchi: str | None = Field(default=None, title="InChI", description="InChI from CCD")
+    inchikey: str | None = Field(default=None, title="InChIKey", description="InChIKey from CCD")
+    released: bool = Field(default=False, title="Released", description="Whether release status is REL")
+    release_status: str | None = Field(
+        default=None, title="Release Status", description="Raw pdbx_release_status value"
+    )
+    parent_ccd_code: str | None = Field(
+        default=None, title="Parent CCD Code", description="Canonical parent CCD code, if derivative"
+    )
     physchem_properties: dict[str, float] = Field(
-        default_factory=dict, description="RDKit-derived physicochemical properties"
+        default_factory=dict,
+        title="Physicochemical Properties",
+        description="RDKit-derived physicochemical properties",
     )
     cross_references: dict[str, list[str]] | None = Field(
-        default=None, description="UniChem cross-references (network, opt-in)"
+        default=None,
+        title="Cross-References",
+        description="UniChem cross-references (network, opt-in)",
     )
     pdb_structures: list[str] | None = Field(
-        default=None, description="PDB IDs containing this ligand (network, opt-in)"
+        default=None,
+        title="PDB Structures",
+        description="PDB IDs containing this ligand (network, opt-in)",
     )
-    warnings: list[str] = Field(default_factory=list, description="Non-fatal parsing warnings")
-    errors: list[str] = Field(default_factory=list, description="Parsing errors")
+    warnings: list[str] = Field(default_factory=list, title="Warnings", description="Non-fatal parsing warnings")
+    errors: list[str] = Field(default_factory=list, title="Errors", description="Parsing errors")
 
     @model_validator(mode="after")
     def _check_resolved_or_fully_unresolved(self) -> "CcdEnrichment":
@@ -129,7 +139,9 @@ class CcdLookupInput(BaseToolInput):
             A single string is normalized to a list.
     """
 
-    identifiers: list[str] = InputField(description="CCD codes (e.g. 'ATP') or SMILES strings to enrich")
+    identifiers: list[str] = InputField(
+        title="Identifiers", description="CCD codes (e.g. 'ATP') or SMILES strings to enrich"
+    )
 
     @field_validator("identifiers", mode="before")
     @classmethod
@@ -192,10 +204,12 @@ class CcdLookupOutput(BaseToolOutput):
 
     ligands: Ligands = Field(
         default_factory=Ligands,
+        title="Resolved Ligands",
         description="Resolved fragments, one per input identifier (in input order)",
     )
     enrichments: list[CcdEnrichment] = Field(
         default_factory=list,
+        title="Enrichments",
         description="Per-identifier CCD enrichment metadata, parallel to ligands.fragments",
     )
 

@@ -42,6 +42,7 @@ class AlphaGenomePredictIntervalsInput(BaseToolInput):
     """
 
     intervals: list[AlphaGenomeInterval] = InputField(
+        title="Intervals",
         description="Genomic intervals for prediction",
     )
 
@@ -66,6 +67,7 @@ class AlphaGenomePredictIntervalsOutput(BaseToolOutput):
     """
 
     results: list[AlphaGenomePredictOutput] = Field(
+        title="Results",
         description="Per-interval AlphaGenome prediction outputs",
     )
 

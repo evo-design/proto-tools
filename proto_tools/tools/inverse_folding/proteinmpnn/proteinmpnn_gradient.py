@@ -40,20 +40,27 @@ class ProteinMPNNGradientInput(BaseToolInput):
     """
 
     logits: list[list[float]] = InputField(
+        title="Logits",
         description="Relaxed sequence logits with shape (L, 20) in canonical amino-acid order.",
         examples=[[[0.0] * 20, [0.0] * 20]],
     )
-    structure: Structure = InputField(description="Backbone structure for ProteinMPNN conditioning.")
+    structure: Structure = InputField(
+        title="Input Structure",
+        description="Backbone structure for ProteinMPNN conditioning.",
+    )
     chains_to_redesign: ChainSelection | None = InputField(
         default=None,
+        title="Chains to Redesign",
         description="Structure chains to score. Defaults to all chains in the structure.",
     )
     fixed_positions: ResidueSelection | None = InputField(
         default=None,
+        title="Fixed Positions",
         description="Per-chain 1-indexed residue positions excluded from the ProteinMPNN objective.",
     )
     temperature: float | None = InputField(
         default=None,
+        title="Temperature",
         description="Softmax temperature. Applies softmax(input / T) when set.",
         gt=0.0,
     )
@@ -113,6 +120,7 @@ class ProteinMPNNGradientOutput(GradientOutput):
 
     gradient: list[list[float]] | None = Field(
         default=None,
+        title="Gradient",
         description="Gradient w.r.t. input logits. None when compute_gradient=False.",
     )
 

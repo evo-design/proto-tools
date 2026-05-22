@@ -10,7 +10,12 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 from pydantic import Field as PydanticField
 
-from proto_tools.utils.tool_io import BaseToolInput, _extra_dict, _reject_removed_ui_kwargs
+from proto_tools.utils.tool_io import (
+    BaseToolInput,
+    _extra_dict,
+    _reject_removed_ui_kwargs,
+    _require_title_and_description,
+)
 
 DEFAULT_TIMEOUT = 600  # seconds
 RANDOM_SEED_UPPER_BOUND = 2**31
@@ -23,27 +28,25 @@ def ConfigField(
     description: str | None = None,
     reload_on_change: bool = False,
     include_in_key: bool = True,
-    xor_group: str | None = None,  # noqa: ARG001 — marker for sibling-field XOR groups; enforced by @model_validator per tool.
     **kwargs: Any,
 ) -> Any:
     """Custom Field wrapper that automatically adds metadata flags to json_schema_extra.
 
     Args:
-        default (Any): Default value for the field. Use ``...`` for required fields.
-        title (str | None): Human-readable title for UI display.
-        description (str | None): Description of the field for documentation and UI tooltips.
+        default (Any): Default value. Use ``...`` for required fields.
+        title (str | None): Short user-readable title; must be a non-empty string.
+        description (str | None): Field description; must be a non-empty string.
         reload_on_change (bool): If True, changing this field between persistent
             worker calls triggers a subprocess restart.
         include_in_key (bool): If False, field is excluded from tool cache key
             generation. Fields that don't affect computation results (device,
             verbose, timeout) should set this to False.
-        xor_group (str | None): Mutual-exclusion group name. Enforce at runtime
-            with a ``@model_validator`` on the Config class.
-        kwargs: All other standard Pydantic Field arguments (via ``**kwargs``).
+        kwargs: All other standard Pydantic Field arguments.
 
     Usage:
         param: int = ConfigField(default=42, title="Param", description="...")
     """
+    _require_title_and_description("ConfigField", title, description)
     _reject_removed_ui_kwargs("ConfigField", kwargs)
     json_schema_extra = kwargs.get("json_schema_extra", {})
 

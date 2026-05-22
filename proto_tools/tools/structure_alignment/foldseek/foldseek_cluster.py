@@ -57,8 +57,8 @@ class FoldseekCluster(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    representative_id: str = Field(description="ID of the cluster representative")
-    member_ids: list[str] = Field(description="IDs of all members (includes the representative)")
+    representative_id: str = Field(title="Representative ID", description="ID of the cluster representative")
+    member_ids: list[str] = Field(title="Member IDs", description="IDs of all members (includes the representative)")
 
 
 class FoldseekClusterInput(BaseToolInput):
@@ -82,14 +82,19 @@ class FoldseekClusterInput(BaseToolInput):
 
     structures: list[str] | None = InputField(
         default=None,
+        title="Structures",
         description="PDB, mmCIF, or single-record FASTA text strings (≥2). Mutually exclusive with structures_dir.",
         min_length=2,
     )
     structures_dir: str | None = InputField(
-        default=None, description="Directory of structure (.pdb/.cif) or FASTA (.fasta/.fa) files, incl. .gz; ≥2."
+        default=None,
+        title="Structures Directory",
+        description="Directory of structure (.pdb/.cif) or FASTA (.fasta/.fa) files, incl. .gz; ≥2.",
     )
     structure_ids: list[str] | None = InputField(
-        default=None, description="Optional IDs (only with `structures`; default: 'structure_0', 'structure_1', ...)."
+        default=None,
+        title="Structure IDs",
+        description="Optional IDs (only with `structures`; default: 'structure_0', 'structure_1', ...).",
     )
 
     @model_validator(mode="before")
@@ -189,9 +194,9 @@ class FoldseekClusterOutput(BaseToolOutput):
         num_structures (int): Total number of input structures clustered.
     """
 
-    clusters: list[FoldseekCluster] = Field(default_factory=list, description="One entry per cluster")
-    num_clusters: int = Field(description="Total number of clusters", ge=0)
-    num_structures: int = Field(description="Total number of input structures", ge=0)
+    clusters: list[FoldseekCluster] = Field(default_factory=list, title="Clusters", description="One entry per cluster")
+    num_clusters: int = Field(title="Number of Clusters", description="Total number of clusters", ge=0)
+    num_structures: int = Field(title="Number of Structures", description="Total number of input structures", ge=0)
 
     @property
     def output_format_options(self) -> list[str]:

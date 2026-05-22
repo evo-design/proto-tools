@@ -114,7 +114,11 @@ class PyRosettaInterfaceAnalyzerMetrics(Metrics):
             "unit": "count",
         },
     }
-    primary_metric: str | None = "interface_dG"
+    primary_metric: str | None = Field(
+        default="interface_dG",
+        title="Primary Metric",
+        description="Headline metric used to rank results.",
+    )
 
 
 class InterfaceStructureInput(BaseModel):
@@ -138,9 +142,20 @@ class InterfaceStructureInput(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    structure: Structure = Field(description="Protein complex (file path, content string, or Structure object).")
-    target_chain: str = Field(default="A", description="Chain label for the target side of the interface.")
-    binder_chain: str = Field(default="B", description="Chain label for the binder side of the interface.")
+    structure: Structure = Field(
+        title="Complex Structure",
+        description="Protein complex (file path, content string, or Structure object).",
+    )
+    target_chain: str = Field(
+        default="A",
+        title="Target Chain",
+        description="Chain label for the target side of the interface.",
+    )
+    binder_chain: str = Field(
+        default="B",
+        title="Binder Chain",
+        description="Chain label for the binder side of the interface.",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -192,6 +207,7 @@ class PyRosettaInterfaceAnalyzerInput(BaseToolInput):
     """
 
     inputs: list[InterfaceStructureInput] = InputField(
+        title="Complexes",
         description="Two-chain complexes to analyze, each with target_chain/binder_chain labels",
     )
 
@@ -284,6 +300,7 @@ class PyRosettaInterfaceAnalyzerOutput(BaseToolOutput):
 
     results: list[PyRosettaInterfaceAnalyzerMetrics] = Field(
         default_factory=list,
+        title="Interface Metrics",
         description="Interface-analysis metrics, one per input structure",
     )
 

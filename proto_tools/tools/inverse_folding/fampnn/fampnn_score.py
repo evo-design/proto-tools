@@ -41,9 +41,13 @@ class MutationInput(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    structure: Structure = Field(description="Protein structure to evaluate mutations against")
+    structure: Structure = Field(
+        title="Input Structure",
+        description="Protein structure to evaluate mutations against",
+    )
     mutations: list[str] = Field(
-        description="List of mutation strings (format: 'A1V' or 'A1V:G5L' for multi-site, 1-indexed)"
+        title="Mutations",
+        description="Mutation strings (format: 'A1V' or 'A1V:G5L' for multi-site, 1-indexed)",
     )
 
 
@@ -56,7 +60,8 @@ class FAMPNNScoreInput(BaseToolInput):
     """
 
     inputs: list[MutationInput] = InputField(
-        description="List of mutation inputs, each with a structure and mutations."
+        title="Mutation Inputs",
+        description="List of mutation inputs, each with a structure and mutations.",
     )
 
 
@@ -121,8 +126,11 @@ class MutationScoreResult(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    mutations: list[str] = Field(description="Mutation strings that were scored")
-    scores: list[float] = Field(description="Log-likelihood ratio scores (positive = favored over wild-type)")
+    mutations: list[str] = Field(title="Mutations", description="Mutation strings that were scored")
+    scores: list[float] = Field(
+        title="Scores",
+        description="Log-likelihood ratio scores (positive = favored over wild-type)",
+    )
 
 
 class FAMPNNScoreOutput(BaseToolOutput):
@@ -132,7 +140,10 @@ class FAMPNNScoreOutput(BaseToolOutput):
         results (list[MutationScoreResult]): List of MutationScoreResult objects, one per input structure.
     """
 
-    results: list[MutationScoreResult] = Field(description="Scoring results, one per input structure")
+    results: list[MutationScoreResult] = Field(
+        title="Results",
+        description="Scoring results, one per input structure",
+    )
 
     @property
     def output_format_options(self) -> list[str]:

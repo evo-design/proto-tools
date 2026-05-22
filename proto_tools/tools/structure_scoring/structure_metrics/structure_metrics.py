@@ -81,7 +81,10 @@ class StructureMetricsInput(BaseToolInput):
             raw PDB/CIF content strings, or ``Structure`` objects per item.
     """
 
-    structures: list[Structure] = InputField(description="Structures to compute structure metrics for")
+    structures: list[Structure] = InputField(
+        title="Structures",
+        description="Structures to compute structure metrics for",
+    )
 
     @field_validator("structures", mode="before")
     @classmethod
@@ -103,6 +106,7 @@ class StructureMetricsOutput(BaseToolOutput):
 
     metrics: list[StructureQualityMetrics] = Field(
         default_factory=list,
+        title="Quality Metrics",
         description="Per-structure quality metrics",
     )
 

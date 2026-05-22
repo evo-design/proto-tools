@@ -72,9 +72,10 @@ class ColabfoldSearchQuery(BaseModel):
             will be auto-generated as seq_0, seq_1, etc.
     """
 
-    sequence: str = Field(description="Protein sequence to search for homologs")
+    sequence: str = Field(title="Sequence", description="Protein sequence to search for homologs")
     sequence_id: str | None = Field(
         default=None,
+        title="Sequence ID",
         description="Optional sequence identifier (auto-generated if not provided)",
     )
 
@@ -117,7 +118,10 @@ class ColabfoldSearchInput(BaseToolInput):
         >>> inputs = ColabfoldSearchInput(queries=[query1])
     """
 
-    queries: list[ColabfoldSearchQuery] = InputField(description="List of protein sequences to search for homologs")
+    queries: list[ColabfoldSearchQuery] = InputField(
+        title="Queries",
+        description="List of protein sequences to search for homologs",
+    )
 
     @field_validator("queries", mode="before")
     @classmethod
@@ -196,9 +200,10 @@ class ColabfoldSearchResult(BaseModel):
     """
 
     msa: MSA | None = Field(
-        description="Multiple Sequence Alignment containing homologous sequences, or None if no homologs found"
+        title="MSA Result",
+        description="Multiple Sequence Alignment containing homologous sequences, or None if no homologs found",
     )
-    sequence_id: str = Field(description="Identifier for the searched sequence")
+    sequence_id: str = Field(title="Sequence ID", description="Identifier for the searched sequence")
 
     @property
     def num_homologs_found(self) -> int:
@@ -223,7 +228,7 @@ class ColabfoldSearchOutput(BaseToolOutput):
             and metadata. The order matches the input queries order.
     """
 
-    results: list[ColabfoldSearchResult] = Field(description="List of MSA search results")
+    results: list[ColabfoldSearchResult] = Field(title="MSA Results", description="List of MSA search results")
 
     @property
     def output_format_options(self) -> list[str]:

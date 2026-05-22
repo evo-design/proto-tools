@@ -79,16 +79,26 @@ class AlphaMissensePrediction(BaseModel):
             only for genomic-coordinate fetches.
     """
 
-    position: int = Field(description="1-indexed residue position", ge=1)
-    wild_type_aa: str = Field(description="Wild-type amino acid (single letter)", min_length=1, max_length=1)
-    alt_aa: str = Field(description="Alternate amino acid (single letter)", min_length=1, max_length=1)
-    pathogenicity_score: float = Field(description="Pathogenicity score in [0, 1]", ge=0.0, le=1.0)
-    classification: AlphaMissenseClass = Field(description="AlphaMissense classification")
-    chrom: str | None = Field(default=None, description="Chromosome (genomic mode only)")
-    pos: int | None = Field(default=None, description="1-indexed genomic position (genomic mode only)")
-    ref: str | None = Field(default=None, description="Reference allele (genomic mode only)")
-    alt: str | None = Field(default=None, description="Alternate allele (genomic mode only)")
-    transcript_id: str | None = Field(default=None, description="GENCODE transcript ID (genomic mode only)")
+    position: int = Field(title="Position", description="1-indexed residue position", ge=1)
+    wild_type_aa: str = Field(
+        title="Wild-Type AA", description="Wild-type amino acid (single letter)", min_length=1, max_length=1
+    )
+    alt_aa: str = Field(
+        title="Alternate AA", description="Alternate amino acid (single letter)", min_length=1, max_length=1
+    )
+    pathogenicity_score: float = Field(
+        title="Pathogenicity Score", description="Pathogenicity score (0-1 scale)", ge=0.0, le=1.0
+    )
+    classification: AlphaMissenseClass = Field(title="Classification", description="AlphaMissense classification")
+    chrom: str | None = Field(default=None, title="Chromosome", description="Chromosome (genomic mode only)")
+    pos: int | None = Field(
+        default=None, title="Genomic Position", description="1-indexed genomic position (genomic mode only)"
+    )
+    ref: str | None = Field(default=None, title="Reference Allele", description="Reference allele (genomic mode only)")
+    alt: str | None = Field(default=None, title="Alternate Allele", description="Alternate allele (genomic mode only)")
+    transcript_id: str | None = Field(
+        default=None, title="Transcript ID", description="GENCODE transcript ID (genomic mode only)"
+    )
 
 
 class AlphaMissenseDBFetchInput(BaseToolInput):
@@ -99,7 +109,9 @@ class AlphaMissenseDBFetchInput(BaseToolInput):
             AlphaMissense; e.g. 'P04637').
     """
 
-    uniprot_id: str = InputField(description="UniProt accession (human canonical isoform; e.g. 'P04637')")
+    uniprot_id: str = InputField(
+        title="UniProt Accession", description="UniProt accession (human canonical isoform; e.g. 'P04637')"
+    )
 
 
 class AlphaMissenseDBFetchConfig(BaseConfig):
@@ -139,15 +151,21 @@ class AlphaMissenseDBFetchOutput(BaseToolOutput):
         source_url (str): URL of the AlphaMissense CSV that was fetched.
     """
 
-    uniprot_accession: str = Field(description="UniProt accession looked up")
+    uniprot_accession: str = Field(title="UniProt Accession", description="UniProt accession looked up")
     predictions: list[AlphaMissensePrediction] = Field(
-        default_factory=list, description="Per-substitution pathogenicity predictions"
+        default_factory=list,
+        title="Predictions",
+        description="Per-substitution pathogenicity predictions",
     )
-    num_predictions: int = Field(description="Number of predictions in the source CSV", ge=0)
+    num_predictions: int = Field(
+        title="Number of Predictions", description="Number of predictions in the source CSV", ge=0
+    )
     mean_pathogenicity: float | None = Field(
-        default=None, description="Mean pathogenicity score across all predictions"
+        default=None,
+        title="Mean Pathogenicity",
+        description="Mean pathogenicity score across all predictions",
     )
-    source_url: str = Field(description="URL of the AlphaMissense CSV fetched")
+    source_url: str = Field(title="Source URL", description="URL of the AlphaMissense CSV fetched")
 
     @property
     def output_format_options(self) -> list[str]:

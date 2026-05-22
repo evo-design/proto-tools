@@ -68,7 +68,10 @@ class ESMIF1Sequences(DesignedSequences):
             under the model.
     """
 
-    log_likelihoods: list[float] = Field(description="Average log likelihood of each designed sequence under the model")
+    log_likelihoods: list[float] = Field(
+        title="Log Likelihoods",
+        description="Mean per-residue log-likelihood per designed sequence (negative for typical sequences)",
+    )
 
 
 class ESMIF1SampleOutput(InverseFoldingOutput):
@@ -80,6 +83,7 @@ class ESMIF1SampleOutput(InverseFoldingOutput):
     """
 
     designed_sequences: list[ESMIF1Sequences] = Field(  # type: ignore[assignment]
+        title="Designed Sequences",
         description="ESM-IF1/ProteinDPO-designed sequences with per-sequence average log-likelihoods.",
     )
 

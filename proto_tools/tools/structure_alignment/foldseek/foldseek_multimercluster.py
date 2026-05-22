@@ -58,14 +58,19 @@ class FoldseekMultimerClusterInput(BaseToolInput):
     """
 
     structures: list[str] | None = InputField(
-        default=None, description="Multi-chain PDB or mmCIF text strings to cluster (≥2).", min_length=2
+        default=None,
+        title="Structures",
+        description="Multi-chain PDB or mmCIF text strings to cluster (≥2).",
+        min_length=2,
     )
     structures_dir: str | None = InputField(
         default=None,
+        title="Structures Directory",
         description="Directory of multimer .pdb/.cif/.mmcif files (incl. .gz; ≥2). Stems must not contain '_'.",
     )
     structure_ids: list[str] | None = InputField(
         default=None,
+        title="Structure IDs",
         description="Optional IDs (only with `structures`; default: 'multimer-0', ...). Must not contain '_'.",
     )
 
@@ -162,10 +167,10 @@ class FoldseekMultimerClusterOutput(BaseToolOutput):
             (with ``#multimer_id`` group separators between chains).
     """
 
-    clusters: list[FoldseekCluster] = Field(default_factory=list, description="One entry per cluster")
-    num_clusters: int = Field(description="Total number of clusters", ge=0)
-    num_multimers: int = Field(description="Total number of input multimers", ge=0)
-    rep_seq_fasta: str = Field(description="Representative-multimer FASTA from Foldseek")
+    clusters: list[FoldseekCluster] = Field(default_factory=list, title="Clusters", description="One entry per cluster")
+    num_clusters: int = Field(title="Number of Clusters", description="Total number of clusters", ge=0)
+    num_multimers: int = Field(title="Number of Multimers", description="Total number of input multimers", ge=0)
+    rep_seq_fasta: str = Field(title="Representative FASTA", description="Representative-multimer FASTA from Foldseek")
 
     @property
     def output_format_options(self) -> list[str]:

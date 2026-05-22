@@ -53,8 +53,11 @@ class RelaxResult(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    relaxed_structure: Structure = Field(description="Relaxed structure (drop-in replacement for the input)")
-    relax_cycles: int = Field(description="Number of FastRelax repeats applied")
+    relaxed_structure: Structure = Field(
+        title="Relaxed Structure",
+        description="Relaxed structure (drop-in replacement for the input)",
+    )
+    relax_cycles: int = Field(title="FastRelax Cycles", description="Number of FastRelax repeats applied")
 
 
 class PyRosettaRelaxMetrics(Metrics):
@@ -79,9 +82,13 @@ class PyRosettaRelaxMetrics(Metrics):
             "unit": "REU",
         },
     }
-    primary_metric: str | None = "total_score"
+    primary_metric: str | None = Field(
+        default="total_score",
+        title="Primary Metric",
+        description="Headline metric used to rank results.",
+    )
 
-    relax: RelaxResult = Field(description="Relaxed structure and run metadata")
+    relax: RelaxResult = Field(title="Relaxed Output", description="Relaxed structure and run metadata")
 
 
 class PyRosettaRelaxInput(BaseToolInput):
@@ -94,6 +101,7 @@ class PyRosettaRelaxInput(BaseToolInput):
     """
 
     inputs: list[ScoringStructureInput] = InputField(
+        title="Structures",
         description="Protein structures to relax",
     )
 
@@ -145,7 +153,7 @@ class PyRosettaRelaxConfig(BaseConfig):
         examples=["ref2015", "beta_nov16", "ref2015_cart"],
     )
     relax_cycles: int = ConfigField(
-        title="Relax Cycles",
+        title="FastRelax Cycles",
         default=1,
         ge=1,
         le=15,
@@ -201,6 +209,7 @@ class PyRosettaRelaxOutput(BaseToolOutput):
 
     results: list[PyRosettaRelaxMetrics] = Field(
         default_factory=list,
+        title="Relaxed Structures",
         description="Relax results, one per input structure",
     )
 

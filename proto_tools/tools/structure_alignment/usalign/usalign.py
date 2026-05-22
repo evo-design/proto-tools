@@ -36,8 +36,8 @@ class USalignInput(BaseToolInput):
         pdb_text_2 (str): Raw PDB content of the second structure (reference / target).
     """
 
-    pdb_text_1: str = InputField(description="PDB content of structure 1 (query)")
-    pdb_text_2: str = InputField(description="PDB content of structure 2 (reference)")
+    pdb_text_1: str = InputField(title="Structure 1 PDB", description="PDB content of structure 1 (query)")
+    pdb_text_2: str = InputField(title="Structure 2 PDB", description="PDB content of structure 2 (reference)")
 
 
 class USalignConfig(BaseConfig):
@@ -73,7 +73,11 @@ class USalignOutput(BaseToolOutput):
             :class:`BaseToolOutput`).
     """
 
-    metrics: USalignMetrics = Field(default_factory=USalignMetrics, description="Pairwise alignment scores")
+    metrics: USalignMetrics = Field(
+        default_factory=USalignMetrics,
+        title="Alignment Scores",
+        description="Pairwise alignment scores",
+    )
 
     @property
     def output_format_options(self) -> list[str]:

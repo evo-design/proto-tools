@@ -143,20 +143,36 @@ class InterProDomain(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    accession: str = Field(description="Member-DB accession (PfamID, IPR-ID, G3DSA-ID, ...)")
-    name: str = Field(description="Human-readable domain/family name")
-    type: InterProDomainType = Field(description="Category (family, domain, repeat, ...)")
-    member_database: str = Field(description="Source DB ('pfam', 'panther', 'cathgene3d', ...)")
-    integrated_ipr: str | None = Field(
-        default=None, description="Parent InterPro accession; None for non-integrated member-DB hits"
+    accession: str = Field(title="Accession", description="Member-DB accession (PfamID, IPR-ID, G3DSA-ID, ...)")
+    name: str = Field(title="Name", description="Human-readable domain/family name")
+    type: InterProDomainType = Field(title="Type", description="Category (family, domain, repeat, ...)")
+    member_database: str = Field(
+        title="Member Database", description="Source DB ('pfam', 'panther', 'cathgene3d', ...)"
     )
-    start: int = Field(description="1-indexed inclusive start residue", ge=1)
-    end: int = Field(description="1-indexed inclusive end residue", ge=1)
-    score: float | None = Field(default=None, description="Per-DB score (e-value or bit-score)")
-    model: str | None = Field(default=None, description="HMM/profile model ID")
-    representative: bool = Field(default=False, description="Whether this is the representative match")
-    go_terms: list[str] = Field(default_factory=list, description="GO term IDs cross-referenced from this entry")
-    pathways: list[str] = Field(default_factory=list, description="Pathway IDs (Reactome, MetaCyc, ...)")
+    integrated_ipr: str | None = Field(
+        default=None,
+        title="Parent InterPro ID",
+        description="Parent InterPro accession; None for non-integrated member-DB hits",
+    )
+    start: int = Field(title="Start", description="1-indexed inclusive start residue", ge=1)
+    end: int = Field(title="End", description="1-indexed inclusive end residue", ge=1)
+    score: float | None = Field(
+        default=None,
+        title="Score",
+        description="Per-database score: e-value (smaller is better) for HMM DBs, otherwise bit score (larger is better)",
+    )
+    model: str | None = Field(default=None, title="Model", description="HMM/profile model ID")
+    representative: bool = Field(
+        default=False, title="Representative", description="Whether this is the representative match"
+    )
+    go_terms: list[str] = Field(
+        default_factory=list,
+        title="GO Terms",
+        description="GO term IDs cross-referenced from this entry",
+    )
+    pathways: list[str] = Field(
+        default_factory=list, title="Pathways", description="Pathway IDs (Reactome, MetaCyc, ...)"
+    )
 
 
 class InterProScanFetchInput(BaseToolInput):
@@ -173,8 +189,14 @@ class InterProScanFetchInput(BaseToolInput):
             submit-and-scan path. Requires ``config.email``.
     """
 
-    uniprot_id: str | None = InputField(default=None, description="UniProt accession for direct entry lookup")
-    sequence: str | None = InputField(default=None, description="Protein sequence for submit-and-scan path")
+    uniprot_id: str | None = InputField(
+        default=None,
+        title="UniProt Accession",
+        description="UniProt accession for direct entry lookup",
+    )
+    sequence: str | None = InputField(
+        default=None, title="Sequence", description="Protein sequence for submit-and-scan path"
+    )
 
     @model_validator(mode="after")
     def validate_lookup_params(self) -> "InterProScanFetchInput":
@@ -259,13 +281,17 @@ class InterProScanFetchOutput(BaseToolOutput):
             sequence path — for advanced consumers.
     """
 
-    accession: str | None = Field(default=None, description="Resolved UniProt accession")
-    sequence_length: int | None = Field(default=None, description="Queried protein length")
-    domains: list[InterProDomain] = Field(default_factory=list, description="InterPro hits across all member DBs")
-    num_domains: int = Field(description="Total number of hits", ge=0)
-    job_id: str = Field(description="iprscan5 job ID (sequence path); empty for direct lookup")
-    source_url: str = Field(description="InterPro entry / iprscan5 result URL")
-    raw_entries: list[dict[str, Any]] = Field(default_factory=list, description="Raw API JSON entries")
+    accession: str | None = Field(default=None, title="UniProt Accession", description="Resolved UniProt accession")
+    sequence_length: int | None = Field(default=None, title="Sequence Length", description="Queried protein length")
+    domains: list[InterProDomain] = Field(
+        default_factory=list, title="Domains", description="InterPro hits across all member DBs"
+    )
+    num_domains: int = Field(title="Number of Domains", description="Total number of hits", ge=0)
+    job_id: str = Field(title="Job ID", description="iprscan5 job ID for the sequence path (empty for direct lookup)")
+    source_url: str = Field(title="Source URL", description="InterPro entry / iprscan5 result URL")
+    raw_entries: list[dict[str, Any]] = Field(
+        default_factory=list, title="Raw Entries", description="Raw API JSON entries"
+    )
 
     @property
     def output_format_options(self) -> list[str]:

@@ -55,30 +55,56 @@ class NCBIEsearchInput(BaseToolInput):
     """
 
     db: NCBIDatabase = InputField(
-        description="NCBI database to query (e.g. 'protein', 'nuccore', 'gene', 'pubmed', 'taxonomy')"
+        title="Database",
+        description="NCBI database to query (e.g. 'protein', 'nuccore', 'gene', 'pubmed', 'taxonomy')",
     )
-    search_term: str = InputField(description="NCBI search query (e.g. 'lacI[Gene] AND Escherichia coli[Organism]')")
-    max_results: int = InputField(default=20, ge=1, le=10000, description="Max IDs to return (NCBI retmax; default 20)")
+    search_term: str = InputField(
+        title="Search Term",
+        description="NCBI search query (e.g. 'lacI[Gene] AND Escherichia coli[Organism]')",
+    )
+    max_results: int = InputField(
+        default=20,
+        ge=1,
+        le=10000,
+        title="Max Results",
+        description="Max IDs to return (NCBI retmax; default 20)",
+    )
     retstart: int = InputField(
-        default=0, ge=0, description="0-indexed offset of the first hit (NCBI retstart). For pagination."
+        default=0,
+        ge=0,
+        title="Start Offset",
+        description="0-indexed offset of the first hit (NCBI retstart). For pagination.",
     )
     sort: str | None = InputField(
-        default=None, description="Db-specific sort key (e.g. 'relevance' or 'pub_date' on pubmed)"
+        default=None,
+        title="Sort Key",
+        description="Db-specific sort key (e.g. 'relevance' or 'pub_date' on pubmed)",
     )
     field: str | None = InputField(
-        default=None, description="Restrict search term to a single field (e.g. 'title' / 'author' on pubmed)"
+        default=None,
+        title="Search Field",
+        description="Restrict search term to a single field (e.g. 'title' or 'author' on pubmed)",
     )
     datetype: Literal["mdat", "pdat", "edat"] | None = InputField(
-        default=None, description="Date axis for mindate/maxdate/reldate: mdat / pdat / edat"
+        default=None,
+        title="Date Type",
+        description="Date axis for mindate/maxdate/reldate (one of mdat, pdat, edat)",
     )
     mindate: str | None = InputField(
-        default=None, description="Lower date bound (YYYY/MM/DD, YYYY/MM, or YYYY); requires datetype"
+        default=None,
+        title="Min Date",
+        description="Lower date bound (YYYY/MM/DD, YYYY/MM, or YYYY); requires datetype",
     )
     maxdate: str | None = InputField(
-        default=None, description="Upper date bound (YYYY/MM/DD, YYYY/MM, or YYYY); requires datetype"
+        default=None,
+        title="Max Date",
+        description="Upper date bound (YYYY/MM/DD, YYYY/MM, or YYYY); requires datetype",
     )
     reldate: int | None = InputField(
-        default=None, ge=1, description="Records dated within the last N days; requires datetype"
+        default=None,
+        ge=1,
+        title="Relative Date (Days)",
+        description="Records dated within the last N days; requires datetype",
     )
 
     @model_validator(mode="after")
@@ -96,7 +122,7 @@ class NCBIEsearchOutput(BaseToolOutput):
         ids (list[str]): List of NCBI IDs matching the search query.
     """
 
-    ids: list[str] = Field(default_factory=list, description="List of NCBI IDs found by the search")
+    ids: list[str] = Field(default_factory=list, title="IDs", description="List of NCBI IDs found by the search")
 
     @property
     def output_format_options(self) -> list[str]:

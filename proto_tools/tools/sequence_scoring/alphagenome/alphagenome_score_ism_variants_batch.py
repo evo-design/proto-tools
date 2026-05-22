@@ -51,23 +51,28 @@ class AlphaGenomeISM(AlphaGenomeInterval):
 
     ism_interval_start: int = InputField(
         ge=0,
+        title="ISM Interval Start",
         description="ISM sub-interval start (0-based, inclusive)",
     )
     ism_interval_end: int = InputField(
         ge=1,
+        title="ISM Interval End",
         description="ISM sub-interval end (0-based, exclusive)",
     )
     variant_position: int | None = InputField(
         default=None,
         ge=0,
+        title="Variant Position",
         description="Optional existing variant position for ISM context (0-based)",
     )
     reference_bases: str | None = InputField(
         default=None,
+        title="Reference Bases",
         description="Optional existing variant reference allele",
     )
     alternate_bases: str | None = InputField(
         default=None,
+        title="Alternate Bases",
         description="Optional existing variant alternate allele",
     )
 
@@ -114,6 +119,7 @@ class AlphaGenomeScoreISMInput(BaseToolInput):
     """
 
     requests: list[AlphaGenomeISM] = InputField(
+        title="ISM Requests",
         description="ISM requests to process",
     )
 
@@ -138,6 +144,7 @@ class AlphaGenomeScoreISMOutput(BaseToolOutput):
     """
 
     results: list[AlphaGenomeScoreOutput] = Field(
+        title="Results",
         description="Per-request AlphaGenome ISM score outputs",
     )
 

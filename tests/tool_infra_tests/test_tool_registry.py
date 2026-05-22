@@ -46,8 +46,8 @@ class MockToolInput(BaseToolInput):
 class MockToolConfig(BaseConfig):
     """Mock configuration for testing."""
 
-    param1: str = ConfigField(description="Parameter 1")
-    param2: int = ConfigField(default=10, ge=0, description="Parameter 2")
+    param1: str = ConfigField(title="Param 1", description="Parameter 1")
+    param2: int = ConfigField(default=10, ge=0, title="Param 2", description="Parameter 2")
 
 
 class MockToolOutput(MockToolOutputBase):
@@ -65,7 +65,7 @@ class AnotherMockToolInput(BaseToolInput):
 class AnotherMockToolConfig(BaseConfig):
     """Another mock configuration for testing."""
 
-    threshold: float = ConfigField(default=0.5, ge=0.0, le=1.0, description="Threshold")
+    threshold: float = ConfigField(default=0.5, ge=0.0, le=1.0, title="Threshold", description="Threshold")
 
 
 class AnotherMockToolOutput(MockToolOutputBase):
@@ -794,7 +794,7 @@ def test_timeout_error_not_retried(clean_registry, fast_retry):
 class MockConfigWithDevice(BaseConfig):
     """Mock config with device field for testing device validation."""
 
-    device: str = ConfigField(default="cpu", description="Device to use")
+    device: str = ConfigField(default="cpu", title="Device", description="Device to use")
 
 
 def test_tool_registry_default_device_count(clean_registry):
@@ -1331,14 +1331,14 @@ class ChildInput(ParentInput):
 class ParentConfig(BaseConfig):
     """Parent config with shared fields."""
 
-    temperature: float = ConfigField(default=0.5, description="Sampling temperature")
+    temperature: float = ConfigField(default=0.5, title="Temperature", description="Sampling temperature")
 
 
 class ChildConfig(ParentConfig):
     """Child config adding a field and overriding a parent default."""
 
-    temperature: float = ConfigField(default=0.1, description="Sampling temperature")
-    model_name: str = ConfigField(default="v2", description="Model variant")
+    temperature: float = ConfigField(default=0.1, title="Temperature", description="Sampling temperature")
+    model_name: str = ConfigField(default="v2", title="Model Name", description="Model variant")
 
 
 class CoercionOutput(MockToolOutputBase):
@@ -1457,7 +1457,7 @@ def test_exact_child_classes_not_coerced(clean_registry):
 class PreprocessConfig(BaseConfig):
     """Config that transforms inputs via preprocess."""
 
-    prefix: str = ConfigField(default="PRE", description="Prefix to add")
+    prefix: str = ConfigField(default="PRE", title="Prefix", description="Prefix to add")
 
     def preprocess(self, inputs):
         return inputs.model_copy(update={"input_data": f"{self.prefix}_{inputs.input_data}"})
@@ -1826,7 +1826,9 @@ def test_iterable_dispatch_respects_effective_timeout_override(clean_registry):
     seen_effective: list[int | None] = []
 
     class UnboundedConfig(AnotherMockToolConfig):
-        unbounded: bool = ConfigField(default=False, description="If True, effective_timeout returns None")
+        unbounded: bool = ConfigField(
+            default=False, title="Unbounded", description="If True, effective_timeout returns None"
+        )
 
         def effective_timeout(self) -> int | None:
             if self.unbounded and "timeout" not in self.model_fields_set:

@@ -80,14 +80,14 @@ class ESMIF1ScoringPair(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    sequence: str = Field(description="Target chain sequence to score")
-    structure: Structure = Field(description="Structure providing the (multi-chain) coordinate context")
+    sequence: str = Field(title="Sequence", description="Target chain sequence to score")
+    structure: Structure = Field(
+        title="Input Structure", description="Structure providing the (multi-chain) coordinate context"
+    )
     target_chain: str | None = Field(
         default=None,
-        description=(
-            "Chain ID within the structure whose sequence is scored. Required for multi-chain "
-            "structures; defaults to the sole chain for single-chain structures."
-        ),
+        title="Target Chain",
+        description="Chain ID whose sequence is scored. Required for multi-chain structures.",
     )
 
     @model_validator(mode="after")
@@ -115,7 +115,8 @@ class ESMIF1ScoringInput(BaseToolInput):
     """
 
     sequence_structure_pairs: list[ESMIF1ScoringPair] = InputField(
-        description="List of sequence-structure pairs to score"
+        title="Sequence-Structure Pairs",
+        description="List of sequence-structure pairs to score",
     )
 
 

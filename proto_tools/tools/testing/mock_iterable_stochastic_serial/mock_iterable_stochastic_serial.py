@@ -48,7 +48,7 @@ class MockIterableStochasticSerialInput(BaseToolInput):
             a time (no internal batching).
     """
 
-    prompts: list[str] = InputField(description="Prompts to generate completions for")
+    prompts: list[str] = InputField(title="Prompts", description="Prompts to generate completions for")
 
 
 class MockIterableStochasticSerialConfig(BaseConfig):
@@ -75,10 +75,12 @@ class MockIterableStochasticSerialOutput(BaseToolOutput):
 
     completions: list[str] = Field(
         default_factory=list,
+        title="Completions",
         description="Per-prompt sampled tokens",
     )
     items_processed: int = Field(
         default=0,
+        title="Items Processed",
         description="Number of items the tool function received from the framework",
     )
 

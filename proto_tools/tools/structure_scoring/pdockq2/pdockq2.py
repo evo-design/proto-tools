@@ -48,11 +48,19 @@ class InterfacePDockQ2(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    chain_id: str = Field(description="Chain whose interface is summarized")
-    neighbor_chains: str = Field(description="Concatenated IDs of chains ``chain_id`` contacts")
-    if_plddt: float = Field(description="Mean interface pLDDT on the 0-100 scale")
-    norm_pae: float = Field(description="Mean normalized PAE over contact pairs")
-    pmidockq: float = Field(description="Per-chain pDockQ2 score in [0, 1]")
+    chain_id: str = Field(title="Chain ID", description="Chain whose interface is summarized")
+    neighbor_chains: str = Field(
+        title="Neighbor Chains", description="Concatenated chain IDs that contact this chain at the interface"
+    )
+    if_plddt: float = Field(title="Interface pLDDT", description="Mean interface pLDDT on the 0-100 scale")
+    norm_pae: float = Field(
+        title="Normalized PAE",
+        description="Normalized PAE confidence averaged over interface contact pairs; 0-1, higher is more confident",
+    )
+    pmidockq: float = Field(
+        title="pmiDockQ",
+        description="Per-chain pDockQ2 contribution; 0-1, higher indicates a better interface",
+    )
 
 
 class PDockQ2Metrics(Metrics):
@@ -101,11 +109,16 @@ class PDockQ2Metrics(Metrics):
             "max": None,
         },
     }
-    primary_metric: str | None = "pdockq2"
+    primary_metric: str | None = Field(
+        default="pdockq2",
+        title="Primary Metric",
+        description="Headline metric used to rank results.",
+    )
 
     interfaces: list[InterfacePDockQ2] = Field(
         default_factory=list,
-        description="Per-target-chain interface breakdown used to produce ``pdockq2``",
+        title="Per-Chain Interfaces",
+        description="Per-target-chain interface breakdown that produces the overall pDockQ2 score",
     )
 
 
@@ -122,9 +135,18 @@ class PDockQ2Input(BaseToolInput):
         target_chains (list[str]): Target chain IDs (single character each).
     """
 
-    structure: Structure = InputField(description="Cofolded complex with pLDDT B-factors and PAE in metrics['pae']")
-    binder_chain: str = InputField(description="Single-character chain ID of the binder")
-    target_chains: list[str] = InputField(description="Target chain ID(s)")
+    structure: Structure = InputField(
+        title="Input Structure",
+        description="Cofolded complex with pLDDT in B-factors and the PAE matrix at metrics['pae']",
+    )
+    binder_chain: str = InputField(
+        title="Binder Chain",
+        description="Single-character chain ID of the binder",
+    )
+    target_chains: list[str] = InputField(
+        title="Target Chains",
+        description="Target chain ID(s)",
+    )
 
     @field_validator("target_chains", mode="before")
     @classmethod
@@ -192,7 +214,10 @@ class PDockQ2Output(BaseToolOutput):
             interface breakdown.
     """
 
-    metrics: PDockQ2Metrics = Field(description="pDockQ2 metrics for the input complex")
+    metrics: PDockQ2Metrics = Field(
+        title="pDockQ2 Metrics",
+        description="pDockQ2 metrics for the input complex",
+    )
 
     @property
     def output_format_options(self) -> list[str]:

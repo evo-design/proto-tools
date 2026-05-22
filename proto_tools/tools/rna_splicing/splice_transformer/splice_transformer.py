@@ -113,12 +113,15 @@ class SpliceTransformerInput(BaseToolInput):
     """
 
     target_seqs: list[str] = InputField(
+        title="Target Sequences",
         description="Sequence(s) on which to make splicing predictions",
     )
     left_contexts: list[str] = InputField(
+        title="Left Contexts",
         description="Sequence(s) of the left context. Must be the same length as target_seqs",
     )
     right_contexts: list[str] = InputField(
+        title="Right Contexts",
         description="Sequence(s) of the right context. Must be the same length as target_seqs",
     )
 
@@ -199,7 +202,8 @@ class SpliceTransformerOutput(BaseToolOutput):
     """
 
     prediction: list[list[list[float]]] = Field(
-        description="Matrix of [batch, target_length, 18]",
+        title="Prediction",
+        description="Probabilities for 3 splice-site classes + 15 tissues (shape [batch, target_length, 18])",
     )
 
     @property

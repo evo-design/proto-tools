@@ -42,7 +42,7 @@ class PdbFetchFastaInput(BaseToolInput):
         pdb_id (str): PDB accession (e.g. '1LBG').
     """
 
-    pdb_id: str = InputField(description="PDB accession (e.g. '1LBG')")
+    pdb_id: str = InputField(title="PDB ID", description="PDB accession (e.g. '1LBG')")
 
 
 class PdbFetchFastaOutput(BaseToolOutput):
@@ -53,8 +53,12 @@ class PdbFetchFastaOutput(BaseToolOutput):
         source_url (str | None): URL used for the request.
     """
 
-    chains: list[PdbChain] = Field(default_factory=list, description="Parsed chain sequences")
-    source_url: str | None = Field(default=None, description="Request URL")
+    chains: list[PdbChain] = Field(
+        default_factory=list,
+        title="Chains",
+        description="Parsed chain sequences",
+    )
+    source_url: str | None = Field(default=None, title="Source URL", description="Request URL")
 
     @property
     def output_format_options(self) -> list[str]:

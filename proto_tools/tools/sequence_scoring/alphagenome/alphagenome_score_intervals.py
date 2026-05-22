@@ -47,6 +47,7 @@ class AlphaGenomeScoreIntervalsInput(BaseToolInput):
     """
 
     intervals: list[AlphaGenomeInterval] = InputField(
+        title="Intervals",
         description="Genomic intervals for scoring",
     )
 
@@ -71,6 +72,7 @@ class AlphaGenomeScoreIntervalsOutput(BaseToolOutput):
     """
 
     results: list[AlphaGenomeScoreOutput] = Field(
+        title="Results",
         description="Per-interval AlphaGenome score outputs",
     )
 

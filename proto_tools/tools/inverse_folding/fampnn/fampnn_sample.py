@@ -48,6 +48,7 @@ class FAMPNNStructureInput(InverseFoldingStructureInput):
 
     fixed_sidechain_positions: ResidueSelection | None = Field(
         default=None,
+        title="Fixed Sidechain Positions",
         description="Per-chain positions whose sidechain coordinates condition the model (1-indexed).",
     )
 
@@ -64,7 +65,10 @@ class FAMPNNSampleInput(BaseToolInput):
             ``fixed_sidechain_positions`` selections.
     """
 
-    inputs: list[FAMPNNStructureInput] = InputField(description="List of structure inputs for sequence design.")
+    inputs: list[FAMPNNStructureInput] = InputField(
+        title="Structure Inputs",
+        description="List of structure inputs for sequence design.",
+    )
 
 
 class FAMPNNSampleConfig(InverseFoldingConfig):
@@ -149,8 +153,14 @@ class FAMPNNSequences(DesignedSequences):
         psce (list[list[float]]): Per-residue predicted sidechain error (mean over atoms) in Angstroms.
     """
 
-    structures: list[Structure] = Field(description="Designed structures with packed sidechain coordinates")
-    psce: list[list[float]] = Field(description="Per-residue predicted sidechain error (Angstroms)")
+    structures: list[Structure] = Field(
+        title="Structures",
+        description="Designed structures with packed sidechain coordinates",
+    )
+    psce: list[list[float]] = Field(
+        title="pSCE",
+        description="Per-residue predicted sidechain error (Angstroms)",
+    )
 
 
 class FAMPNNSampleOutput(InverseFoldingOutput):
@@ -162,6 +172,7 @@ class FAMPNNSampleOutput(InverseFoldingOutput):
     """
 
     designed_sequences: list[FAMPNNSequences] = Field(  # type: ignore[assignment]
+        title="Designed Sequences",
         description="FAMPNN-designed sequences with full-atom sidechain coordinates and per-residue pSCE.",
     )
 

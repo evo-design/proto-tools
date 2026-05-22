@@ -29,7 +29,8 @@ class LigandMPNNScoringInput(BaseToolInput):
     """
 
     sequence_structure_pairs: list[SequenceStructurePair] = InputField(
-        description="List of sequence-structure pairs to score"
+        title="Sequence-Structure Pairs",
+        description="List of sequence-structure pairs to score",
     )
 
 

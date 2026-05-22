@@ -82,18 +82,27 @@ class FoldseekHit(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    database: str = Field(description="Source database the hit came from")
-    target_id: str = Field(description="Database-specific target identifier")
-    sequence_identity: float = Field(description="Sequence identity over aligned region (0-1)", ge=0.0, le=1.0)
-    alignment_length: int = Field(description="Aligned region length in residues", ge=0)
-    mismatches: int = Field(description="Mismatched columns", ge=0)
-    gap_openings: int = Field(description="Gap-opening events", ge=0)
-    query_start: int = Field(description="Query start (1-indexed)")
-    query_end: int = Field(description="Query end (1-indexed)")
-    target_start: int = Field(description="Target start (1-indexed)")
-    target_end: int = Field(description="Target end (1-indexed)")
-    evalue: float = Field(description="E-value", ge=0.0)
-    bit_score: float = Field(description="Bit score")
+    database: str = Field(title="Database", description="Source database the hit came from")
+    target_id: str = Field(title="Target ID", description="Database-specific target identifier")
+    sequence_identity: float = Field(
+        title="Sequence Identity",
+        description="Sequence identity over aligned region (0-1)",
+        ge=0.0,
+        le=1.0,
+    )
+    alignment_length: int = Field(title="Alignment Length", description="Aligned region length in residues", ge=0)
+    mismatches: int = Field(title="Mismatches", description="Mismatched columns", ge=0)
+    gap_openings: int = Field(title="Gap Openings", description="Gap-opening events", ge=0)
+    query_start: int = Field(title="Query Start", description="Query start (1-indexed)")
+    query_end: int = Field(title="Query End", description="Query end (1-indexed)")
+    target_start: int = Field(title="Target Start", description="Target start (1-indexed)")
+    target_end: int = Field(title="Target End", description="Target end (1-indexed)")
+    evalue: float = Field(
+        title="E-value",
+        description="Foldseek e-value; smaller values are more significant",
+        ge=0.0,
+    )
+    bit_score: float = Field(title="Bit Score", description="Foldseek alignment bit score; higher is better")
 
 
 class FoldseekSearchInput(BaseToolInput):
@@ -104,7 +113,7 @@ class FoldseekSearchInput(BaseToolInput):
             ``alphafold-db-fetch`` or ``pdb-fetch-entry`` upstream to obtain it.
     """
 
-    structure_text: str = InputField(description="PDB-format text of the query structure")
+    structure_text: str = InputField(title="Structure Text", description="PDB-format text of the query structure")
 
 
 class FoldseekSearchConfig(BaseConfig):
@@ -254,11 +263,14 @@ class FoldseekSearchOutput(BaseToolOutput):
         result_url (str): Remote result-archive URL; empty in local mode.
     """
 
-    ticket_id: str = Field(description="Foldseek job ticket ID (remote only; empty in local mode)")
-    hits: list[FoldseekHit] = Field(default_factory=list, description="All alignment hits")
-    num_hits: int = Field(description="Total number of hits", ge=0)
-    databases_queried: list[str] = Field(description="Databases included in the search")
-    result_url: str = Field(description="Foldseek result archive URL (remote only)")
+    ticket_id: str = Field(
+        title="Ticket ID",
+        description="Foldseek job ticket ID (remote only; empty in local mode)",
+    )
+    hits: list[FoldseekHit] = Field(default_factory=list, title="Hits", description="All alignment hits")
+    num_hits: int = Field(title="Number of Hits", description="Total number of hits", ge=0)
+    databases_queried: list[str] = Field(title="Databases Queried", description="Databases included in the search")
+    result_url: str = Field(title="Result URL", description="Foldseek result archive URL (remote only)")
 
     @property
     def output_format_options(self) -> list[str]:

@@ -76,9 +76,9 @@ class Mmseqs2Hit(BaseModel):
         evalue (float): Expected value (E-value) - statistical significance.
     """
 
-    target_id: str = Field(description="Target sequence identifier from the database")
-    pident: float = Field(description="Percentage identity (0-100)")
-    evalue: float = Field(description="E-value (expected number of chance matches)")
+    target_id: str = Field(title="Target ID", description="Target sequence identifier from the database")
+    pident: float = Field(title="Percent Identity", description="Percentage identity (0-100)")
+    evalue: float = Field(title="E-value", description="E-value (expected number of chance matches)")
 
 
 class Mmseqs2SequenceSearchResult(BaseModel):
@@ -93,9 +93,9 @@ class Mmseqs2SequenceSearchResult(BaseModel):
         hits (list[Mmseqs2Hit]): All hits found for this query, sorted by pident descending.
     """
 
-    query_id: str = Field(description="Query sequence identifier")
-    query_sequence: str = Field(description="The input query sequence")
-    hits: list[Mmseqs2Hit] = Field(default_factory=list, description="List of hits for this query")
+    query_id: str = Field(title="Query ID", description="Query sequence identifier")
+    query_sequence: str = Field(title="Query Sequence", description="The input query sequence")
+    hits: list[Mmseqs2Hit] = Field(default_factory=list, title="Hits", description="List of hits for this query")
 
     @property
     def top_hit(self) -> Mmseqs2Hit | None:
@@ -132,20 +132,22 @@ class Mmseqs2SearchProteinsInput(BaseToolInput):
     """
 
     query_sequences: list[str] = InputField(
+        title="Query Sequences",
         description="List of protein sequences to search",
     )
     sequence_ids: list[str] | None = InputField(
         default=None,
+        title="Sequence IDs",
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )
     mmseqs_db: str | None = InputField(
         default=None,
-        xor_group="target",
+        title="MMseqs2 Database",
         description="Target DB (path/slug/AssetRef). Mutually exclusive with `target_sequences`.",
     )
     target_sequences: list[str] | None = InputField(
         default=None,
-        xor_group="target",
+        title="Target Sequences",
         description="Inline target protein sequences. Mutually exclusive with `mmseqs_db`.",
     )
 
@@ -177,7 +179,7 @@ class Mmseqs2SearchProteinsInput(BaseToolInput):
 
     @model_validator(mode="after")
     def exactly_one_target(self) -> Mmseqs2SearchProteinsInput:
-        """Enforce the xor_group='target' constraint at runtime."""
+        """Enforce the 'target' XOR constraint at runtime."""
         if (self.mmseqs_db is None) == (self.target_sequences is None):
             raise ValueError("mmseqs2-search-proteins: provide exactly one of `mmseqs_db` or `target_sequences`.")
         return self
@@ -194,7 +196,9 @@ class Mmseqs2SearchProteinsOutput(BaseToolOutput):
             input sequence. The order matches the input sequences order.
     """
 
-    results: list[Mmseqs2SequenceSearchResult] = Field(description="List of search results, one per input sequence")
+    results: list[Mmseqs2SequenceSearchResult] = Field(
+        title="Search Results", description="List of search results, one per input sequence"
+    )
 
     def __len__(self) -> int:
         """Get the number of results."""

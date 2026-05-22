@@ -42,6 +42,7 @@ class AlphaGenomePredictVariantsInput(BaseToolInput):
     """
 
     variants: list[AlphaGenomeVariant] = InputField(
+        title="Variants",
         description="Variants (with intervals) for prediction",
     )
 
@@ -66,6 +67,7 @@ class AlphaGenomePredictVariantsOutput(BaseToolOutput):
     """
 
     results: list[AlphaGenomePredictOutput] = Field(
+        title="Results",
         description="Per-variant AlphaGenome prediction outputs",
     )
 

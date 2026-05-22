@@ -28,11 +28,11 @@ from proto_tools.utils import (
 class CrisprRepeatSpacer(BaseModel):
     """A single repeat-spacer unit within a CRISPR array."""
 
-    position: int = Field(description="Position of the repeat in the sequence")
-    repeat: str = Field(description="Repeat sequence")
-    spacer: str | None = Field(default=None, description="Spacer sequence (None for last repeat)")
-    repeat_length: int | None = Field(default=None, description="Length of the repeat")
-    spacer_length: int | None = Field(default=None, description="Length of the spacer")
+    position: int = Field(title="Position", description="1-indexed start position of the repeat on the input sequence")
+    repeat: str = Field(title="Repeat", description="Repeat sequence")
+    spacer: str | None = Field(default=None, title="Spacer", description="Spacer sequence (None for last repeat)")
+    repeat_length: int | None = Field(default=None, title="Repeat Length", description="Length of the repeat")
+    spacer_length: int | None = Field(default=None, title="Spacer Length", description="Length of the spacer")
 
 
 class CrisprArray(BaseModel):
@@ -40,6 +40,7 @@ class CrisprArray(BaseModel):
 
     repeats_and_spacers: list[CrisprRepeatSpacer] = Field(
         default_factory=list,
+        title="Repeats and Spacers",
         description="List of repeat-spacer units in this CRISPR array",
     )
 
@@ -57,9 +58,10 @@ class CrisprArray(BaseModel):
 class MincedSequenceResult(BaseModel):
     """MinCED results for a single input sequence."""
 
-    sequence_id: str = Field(description="ID of the input sequence")
+    sequence_id: str = Field(title="Sequence ID", description="ID of the input sequence")
     crispr_arrays: list[CrisprArray] = Field(
         default_factory=list,
+        title="CRISPR Arrays",
         description="CRISPR arrays detected in this sequence",
     )
 
@@ -83,9 +85,13 @@ class MincedInput(BaseToolInput):
         sequence_ids (list[str] | None): Optional sequence identifiers.
     """
 
-    sequences: list[str] = InputField(description="Nucleotide sequence(s) to search for CRISPR arrays")
+    sequences: list[str] = InputField(
+        title="Sequences",
+        description="Nucleotide sequence(s) to search for CRISPR arrays",
+    )
     sequence_ids: list[str] | None = InputField(
         default=None,
+        title="Sequence IDs",
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )
 
@@ -108,6 +114,7 @@ class MincedOutput(BaseToolOutput):
 
     results: list[MincedSequenceResult] = Field(
         default_factory=list,
+        title="Detection Results",
         description="Per-sequence CRISPR array detection results",
     )
 

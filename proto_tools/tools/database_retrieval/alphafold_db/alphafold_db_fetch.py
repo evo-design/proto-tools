@@ -51,11 +51,12 @@ class AlphaFoldDBFetchInput(BaseToolInput):
             Raises ``ValueError`` if the requested isoform doesn't exist.
     """
 
-    uniprot_id: str = InputField(description="UniProt accession (e.g. 'P04637')")
+    uniprot_id: str = InputField(title="UniProt Accession", description="UniProt accession (e.g. 'P04637')")
     isoform: int | None = InputField(
         default=None,
         ge=2,
-        description="Isoform number to fetch (None = canonical record). For non-canonical isoforms only.",
+        title="Isoform Number",
+        description="Isoform number to fetch; None returns the canonical record. For non-canonical isoforms only.",
     )
 
 
@@ -192,43 +193,67 @@ class AlphaFoldDBFetchOutput(BaseToolOutput):
             programmatic access.
     """
 
-    uniprot_accession: str = Field(description="Primary UniProt accession")
-    entry_id: str = Field(description="AlphaFold entry identifier (e.g. 'AF-P04637-F1')")
-    gene: str | None = Field(default=None, description="Gene symbol")
-    organism_scientific_name: str | None = Field(default=None, description="Source organism scientific name")
-    tax_id: int | None = Field(default=None, description="NCBI taxonomy ID")
-    sequence: str = Field(description="Amino-acid sequence covered by the prediction")
-    sequence_length: int = Field(description="Length of the predicted sequence")
-    sequence_start: int = Field(description="1-indexed start residue of the prediction")
-    sequence_end: int = Field(description="1-indexed inclusive end residue of the prediction")
+    uniprot_accession: str = Field(title="UniProt Accession", description="Primary UniProt accession")
+    entry_id: str = Field(title="Entry ID", description="AlphaFold entry identifier (e.g. 'AF-P04637-F1')")
+    gene: str | None = Field(default=None, title="Gene", description="Gene symbol")
+    organism_scientific_name: str | None = Field(
+        default=None, title="Organism", description="Source organism scientific name"
+    )
+    tax_id: int | None = Field(default=None, title="Taxonomy ID", description="NCBI taxonomy ID")
+    sequence: str = Field(title="Sequence", description="Amino-acid sequence covered by the prediction")
+    sequence_length: int = Field(title="Sequence Length", description="Length of the predicted sequence")
+    sequence_start: int = Field(
+        title="Sequence Start", description="1-indexed inclusive start residue of the prediction"
+    )
+    sequence_end: int = Field(title="Sequence End", description="1-indexed inclusive end residue of the prediction")
     latest_version: int = Field(
-        description="Latest AlphaFold DB version of this prediction (always the served version)"
+        title="Latest Version",
+        description="Latest AlphaFold DB version of this prediction (always the served version)",
     )
-    model_created_date: str | None = Field(default=None, description="ISO 8601 model creation timestamp")
-    mean_plddt: float | None = Field(default=None, description="Mean per-residue pLDDT")
-    pdb_url: str = Field(description="URL to PDB structure file")
-    cif_url: str = Field(description="URL to mmCIF structure file")
-    bcif_url: str | None = Field(default=None, description="URL to BinaryCIF structure file (None on legacy entries)")
-    pae_doc_url: str = Field(description="URL to PAE JSON document")
-    plddt_doc_url: str = Field(description="URL to per-residue pLDDT JSON document")
-    pae_image_url: str = Field(description="URL to rendered PAE PNG")
-    msa_url: str | None = Field(default=None, description="URL to MSA A3M file, when present")
+    model_created_date: str | None = Field(
+        default=None, title="Model Created Date", description="ISO 8601 model creation timestamp"
+    )
+    mean_plddt: float | None = Field(
+        default=None, title="Mean pLDDT", description="Mean per-residue pLDDT confidence (0-100 scale)"
+    )
+    pdb_url: str = Field(title="PDB URL", description="URL to PDB structure file")
+    cif_url: str = Field(title="mmCIF URL", description="URL to mmCIF structure file")
+    bcif_url: str | None = Field(
+        default=None, title="BinaryCIF URL", description="URL to BinaryCIF structure file (None on legacy entries)"
+    )
+    pae_doc_url: str = Field(title="PAE Document URL", description="URL to PAE JSON document")
+    plddt_doc_url: str = Field(title="pLDDT Document URL", description="URL to per-residue pLDDT JSON document")
+    pae_image_url: str = Field(title="PAE Image URL", description="URL to rendered PAE PNG")
+    msa_url: str | None = Field(default=None, title="MSA URL", description="URL to MSA A3M file, when present")
     am_annotations_url: str | None = Field(
-        default=None, description="URL to AlphaMissense pathogenicity CSV (sequence coords)"
+        default=None,
+        title="AlphaMissense URL",
+        description="URL to AlphaMissense pathogenicity CSV (sequence coords)",
     )
-    am_annotations_hg19_url: str | None = Field(default=None, description="URL to AlphaMissense annotations on GRCh37")
-    am_annotations_hg38_url: str | None = Field(default=None, description="URL to AlphaMissense annotations on GRCh38")
+    am_annotations_hg19_url: str | None = Field(
+        default=None, title="AlphaMissense hg19 URL", description="URL to AlphaMissense annotations on GRCh37"
+    )
+    am_annotations_hg38_url: str | None = Field(
+        default=None, title="AlphaMissense hg38 URL", description="URL to AlphaMissense annotations on GRCh38"
+    )
     sequence_checksum: str | None = Field(
-        default=None, description="CRC64 checksum of the predicted sequence (cache validation)"
+        default=None,
+        title="Sequence Checksum",
+        description="CRC64 checksum of the predicted sequence (cache validation)",
     )
     structure: Structure | None = Field(
         default=None,
+        title="Predicted Structure",
         description="Parsed AlphaFold Structure (PLDDT B-factors, metrics with pLDDT and PAE); None when skipped",
     )
-    msa_a3m: str | None = Field(default=None, description="A3M-format MSA contents used as input to prediction")
-    source_url: str = Field(description="AlphaFold DB API URL used for lookup")
+    msa_a3m: str | None = Field(
+        default=None, title="MSA A3M", description="A3M-format MSA contents used as input to prediction"
+    )
+    source_url: str = Field(title="Source URL", description="AlphaFold DB API URL used for lookup")
     raw_entry: dict[str, Any] = Field(
-        default_factory=dict, description="Complete AlphaFold DB JSON record for advanced programmatic access"
+        default_factory=dict,
+        title="Raw Entry",
+        description="Complete AlphaFold DB JSON record for advanced programmatic access",
     )
 
     @property

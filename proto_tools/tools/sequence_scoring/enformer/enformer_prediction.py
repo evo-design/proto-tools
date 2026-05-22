@@ -66,11 +66,13 @@ class EnformerInput(BaseToolInput):
     """
 
     sequences: list[str] = InputField(
+        title="Sequences",
         description="DNA sequence(s): exact model windows, or sources paired with target_ranges",
         min_length=1,
     )
     target_ranges: list[SequenceTargetRange] | None = InputField(
         default=None,
+        title="Target Ranges",
         description="Sequence-relative range(s) that must remain inside Enformer output bins",
     )
 
@@ -152,18 +154,43 @@ class EnformerPredictionResult(BaseModel):
             sequence.
     """
 
-    sequence: str = Field(description="DNA sequence originally provided to the tool")
-    sequence_length: int = Field(description="Length of the provided DNA sequence")
-    prediction: list[list[float]] = Field(description="Predicted activity matrix with shape [896, num_tracks]")
-    context_start: int = Field(description="0-based start of the Enformer input window in sequence")
-    context_end: int = Field(description="0-based exclusive end of the Enformer input window")
-    output_start: int = Field(description="0-based start of the span covered by Enformer output bins")
-    output_end: int = Field(description="0-based exclusive end of the Enformer output-bin span")
-    output_resolution: int = Field(
-        default=ENFORMER_OUTPUT_RESOLUTION, description="Base pairs represented by each output bin"
+    sequence: str = Field(title="Sequence", description="DNA sequence originally provided to the tool")
+    sequence_length: int = Field(title="Sequence Length", description="Length of the provided DNA sequence")
+    prediction: list[list[float]] = Field(
+        title="Track Activity",
+        description="Predicted track activity per 128 bp bin (shape [896, num_tracks])",
     )
-    target_start: int | None = Field(default=None, description="Requested target start, if target_ranges was provided")
-    target_end: int | None = Field(default=None, description="Requested target end, if target_ranges was provided")
+    context_start: int = Field(
+        title="Context Start",
+        description="0-based start of the Enformer input window in sequence",
+    )
+    context_end: int = Field(
+        title="Context End",
+        description="0-based exclusive end of the Enformer input window",
+    )
+    output_start: int = Field(
+        title="Output Start",
+        description="0-based start of the span covered by Enformer output bins",
+    )
+    output_end: int = Field(
+        title="Output End",
+        description="0-based exclusive end of the Enformer output-bin span",
+    )
+    output_resolution: int = Field(
+        default=ENFORMER_OUTPUT_RESOLUTION,
+        title="Output Resolution",
+        description="Base pairs represented by each output bin",
+    )
+    target_start: int | None = Field(
+        default=None,
+        title="Target Start",
+        description="Requested target start, if target_ranges was provided",
+    )
+    target_end: int | None = Field(
+        default=None,
+        title="Target End",
+        description="Requested target end, if target_ranges was provided",
+    )
 
 
 class EnformerOutput(BaseToolOutput):
@@ -175,9 +202,18 @@ class EnformerOutput(BaseToolOutput):
         species (str): Species used for prediction (``"human"`` or ``"mouse"``).
     """
 
-    results: list[EnformerPredictionResult] = Field(description="Per-sequence Enformer prediction results")
-    output_tracks: list[int] = Field(description="Track indices extracted from Enformer")
-    species: str = Field(description="Species used for prediction ('human' or 'mouse')")
+    results: list[EnformerPredictionResult] = Field(
+        title="Results",
+        description="Per-sequence Enformer prediction results",
+    )
+    output_tracks: list[int] = Field(
+        title="Output Tracks",
+        description="Track indices extracted from Enformer",
+    )
+    species: str = Field(
+        title="Species",
+        description="Species used for prediction ('human' or 'mouse')",
+    )
 
     def __len__(self) -> int:
         """Return the number of per-sequence prediction results."""

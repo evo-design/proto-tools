@@ -44,6 +44,7 @@ class RandomProteinSampleOutput(BaseToolOutput):
     """
 
     sequences: list[str] = Field(
+        title="Sequences",
         description="Protein sequences with masked positions randomly filled",
     )
 

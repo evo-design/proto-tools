@@ -100,11 +100,13 @@ class LigandMPNNSequences(DesignedSequences):
     """
 
     sequence_recovery: list[float] = Field(
+        title="Sequence Recovery",
         description="Per-sequence fraction of chains_to_redesign residues matching the reference (0.0-1.0)",
     )
     ligand_interface_sequence_recovery: list[float] | None = Field(
         default=None,
-        description="Per-sequence recovery restricted to ligand-interface residues (0.0-1.0); None when no ligand",
+        title="Ligand Interface Recovery",
+        description="Per-sequence interface-residue recovery (0.0-1.0); None when no ligand",
     )
 
 
@@ -117,7 +119,8 @@ class LigandMPNNSampleOutput(InverseFoldingOutput):
     """
 
     designed_sequences: list[LigandMPNNSequences] = Field(  # type: ignore[assignment]
-        description="LigandMPNN-designed sequences with per-sequence recovery and optional ligand-interface recovery.",
+        title="Designed Sequences",
+        description="LigandMPNN-designed sequences with recovery and optional ligand-interface recovery.",
     )
 
 

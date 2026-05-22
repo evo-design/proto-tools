@@ -33,8 +33,8 @@ class SequenceTargetRange(BaseToolInput):
             ``start`` for an empty target prefix.
     """
 
-    start: int = InputField(ge=0, description="0-based inclusive start in the provided sequence")
-    end: int = InputField(ge=0, description="0-based exclusive end in the provided sequence")
+    start: int = InputField(ge=0, title="Start", description="0-based inclusive start in the provided sequence")
+    end: int = InputField(ge=0, title="End", description="0-based exclusive end in the provided sequence")
 
     @field_validator("start", "end", mode="before")
     @classmethod

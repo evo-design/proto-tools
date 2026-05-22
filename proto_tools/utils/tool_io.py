@@ -33,27 +33,41 @@ def _reject_removed_ui_kwargs(field_helper: str, kwargs: dict[str, Any]) -> None
     )
 
 
+def _require_title_and_description(field_helper: str, title: str | None, description: str | None) -> None:
+    """Ensure ``title=`` and ``description=`` are non-empty.
+
+    Both are surfaced via ``model_json_schema()`` and must be non-empty strings.
+    """
+    missing = []
+    if not title:
+        missing.append("title=")
+    if not description:
+        missing.append("description=")
+    if not missing:
+        return
+    names = " and ".join(missing)
+    raise TypeError(f"{field_helper} requires {names} as non-empty kwarg(s).")
+
+
 def InputField(
     default: Any = ...,
     *,
     title: str | None = None,
     description: str | None = None,
     include_in_key: bool = True,
-    xor_group: str | None = None,  # noqa: ARG001 — marker for sibling-field XOR groups; enforced by @model_validator per tool.
     **kwargs: Any,
 ) -> Any:
     """Custom Field wrapper for tool Input classes.
 
     Args:
-        default (Any): Default value for the field. Use ``...`` for required fields.
-        title (str | None): Human-readable title for UI display.
-        description (str | None): Description of the field for documentation and UI tooltips.
+        default (Any): Default value. Use ``...`` for required fields.
+        title (str | None): Short user-readable title; must be a non-empty string.
+        description (str | None): Field description; must be a non-empty string.
         include_in_key (bool): If False, field is excluded from tool cache key
             generation.
-        xor_group (str | None): Mutual-exclusion group name. Enforce at runtime
-            with a ``@model_validator`` on the Input class.
-        kwargs: All other standard Pydantic Field arguments (via ``**kwargs``).
+        kwargs: All other standard Pydantic Field arguments.
     """
+    _require_title_and_description("InputField", title, description)
     _reject_removed_ui_kwargs("InputField", kwargs)
     json_schema_extra = kwargs.get("json_schema_extra", {})
     json_schema_extra["include_in_key"] = include_in_key
@@ -182,7 +196,11 @@ class Metrics(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {}
-    primary_metric: str | None = None
+    primary_metric: str | None = Field(
+        default=None,
+        title="Primary Metric",
+        description="Headline metric used to rank results.",
+    )
 
     def __init__(self, **data: Any) -> None:
         """Accept arbitrary metric keyword arguments alongside declared fields.
@@ -534,25 +552,42 @@ class BaseToolOutput(BaseModel, ABC):
     # Universal metadata fields (optional during construction, populated by decorator)
     tool_id: str | None = Field(
         default=None,
+        title="Tool ID",
         description="Unique tool identifier (e.g., 'blast-search', 'esm3-embedding')",
     )
-    execution_time: float | None = Field(default=None, description="Execution time in seconds", ge=0.0)
-    timestamp: datetime = Field(default_factory=datetime.now, description="Execution timestamp")
+    execution_time: float | None = Field(
+        default=None,
+        title="Execution Time",
+        description="Execution time in seconds",
+        ge=0.0,
+    )
+    timestamp: datetime = Field(
+        default_factory=datetime.now,
+        title="Timestamp",
+        description="Execution timestamp",
+    )
     success: bool | None = Field(
         default=None,
-        description="Whether execution succeeded. False only under PROTO_CAPTURE_ERRORS=1.",
+        title="Success",
+        description="Whether execution succeeded; only False when the PROTO_CAPTURE_ERRORS env var is set.",
     )
 
     # Optional metadata fields
     warnings: list[str] = Field(
         default_factory=list,
+        title="Warnings",
         description="Non-fatal warnings generated during execution",
     )
     errors: list[str] = Field(
         default_factory=list,
-        description="Fatal error messages, populated only under PROTO_CAPTURE_ERRORS=1.",
+        title="Errors",
+        description="Fatal error messages; populated only when the PROTO_CAPTURE_ERRORS env var is set.",
     )
-    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional tool-specific metadata")
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        title="Tool Metadata",
+        description="Additional tool-specific metadata",
+    )
 
     model_config = ConfigDict(
         # Allow serialized computed fields to round-trip.

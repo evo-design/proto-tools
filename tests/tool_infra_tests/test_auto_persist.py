@@ -77,6 +77,7 @@ class _PreprocessConfig(BaseConfig):
 
     recorded_overlay_has_toolkit: bool = ConfigField(
         default=False,
+        title="Recorded Overlay Has Toolkit",
         description="Set by preprocess() to the presence of the toolkit in the overlay when called",
         include_in_key=False,
     )
@@ -92,7 +93,7 @@ class _PreprocessConfig(BaseConfig):
 class _PlainConfig(BaseConfig):
     """Config with no preprocess override."""
 
-    param: str = ConfigField(default="x", description="Dummy")
+    param: str = ConfigField(default="x", title="Param", description="Dummy")
 
 
 @pytest.fixture

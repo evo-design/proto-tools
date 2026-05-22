@@ -37,89 +37,156 @@ class CrisprTracrRNAPrediction(BaseModel):
     """
 
     # Identity
-    sequence_id: str = Field(description="ID of the input sequence")
-    accession_number: str | None = Field(default=None, description="Upstream's accession_number column.")
-    crispr_array_index: int | None = Field(default=None, description="Index of the matched CRISPR array.")
-    crispr_array_category: str | None = Field(default=None, description="CRISPR array category from CRISPRidentify.")
+    sequence_id: str = Field(title="Sequence ID", description="ID of the input sequence")
+    accession_number: str | None = Field(
+        default=None, title="Accession Number", description="Upstream's accession_number column."
+    )
+    crispr_array_index: int | None = Field(
+        default=None, title="CRISPR Array Index", description="Index of the matched CRISPR array."
+    )
+    crispr_array_category: str | None = Field(
+        default=None, title="CRISPR Array Category", description="CRISPR array category from CRISPRidentify."
+    )
 
     # CRISPR array (from CRISPRidentify)
-    crispr_array_score: float | None = Field(default=None, description="CRISPRidentify array-detection confidence.")
-    crispr_array_start: int | None = Field(default=None, description="Start position of the CRISPR array.")
-    crispr_array_end: int | None = Field(default=None, description="End position of the CRISPR array.")
-    crispr_array_repeat_consensus: str | None = Field(default=None, description="Consensus repeat sequence.")
-    crispr_array_orientation: str | None = Field(default=None, description="Predicted array orientation.")
-    crispr_orientation_flag: str | None = Field(default=None, description="Orientation-confidence flag.")
+    crispr_array_score: float | None = Field(
+        default=None, title="CRISPR Array Score", description="CRISPRidentify array-detection confidence."
+    )
+    crispr_array_start: int | None = Field(
+        default=None, title="CRISPR Array Start", description="Start position of the CRISPR array."
+    )
+    crispr_array_end: int | None = Field(
+        default=None, title="CRISPR Array End", description="End position of the CRISPR array."
+    )
+    crispr_array_repeat_consensus: str | None = Field(
+        default=None, title="Repeat Consensus", description="Consensus repeat sequence."
+    )
+    crispr_array_orientation: str | None = Field(
+        default=None, title="Array Orientation", description="Predicted array orientation."
+    )
+    crispr_orientation_flag: str | None = Field(
+        default=None, title="Orientation Flag", description="Orientation-confidence flag."
+    )
 
     # Anti-repeat (from fasta36 + vmatch + clustalo + blast)
-    anti_repeat_sequence: str | None = Field(default=None, description="Anti-repeat sequence.")
-    anti_repeat_start: int | None = Field(default=None, description="Anti-repeat start position.")
-    anti_repeat_end: int | None = Field(default=None, description="Anti-repeat end position.")
-    anti_repeat_direction: str | None = Field(default=None, description="Anti-repeat strand/direction.")
+    anti_repeat_sequence: str | None = Field(
+        default=None, title="Anti-repeat Sequence", description="Anti-repeat sequence."
+    )
+    anti_repeat_start: int | None = Field(
+        default=None, title="Anti-repeat Start", description="Anti-repeat start position."
+    )
+    anti_repeat_end: int | None = Field(default=None, title="Anti-repeat End", description="Anti-repeat end position.")
+    anti_repeat_direction: str | None = Field(
+        default=None, title="Anti-repeat Direction", description="Anti-repeat strand/direction."
+    )
     anti_repeat_relative_location: str | None = Field(
-        default=None, description="Anti-repeat location relative to the CRISPR array."
+        default=None,
+        title="Anti-repeat Location",
+        description="Anti-repeat location relative to the CRISPR array.",
     )
     anti_repeat_distance_from_crispr_array: int | None = Field(
-        default=None, description="Distance from the anti-repeat to the CRISPR array."
+        default=None,
+        title="Anti-repeat Distance",
+        description="Distance from the anti-repeat to the CRISPR array.",
     )
-    anti_repeat_similarity: float | None = Field(default=None, description="Anti-repeat sequence similarity (0-1).")
-    anti_repeat_coverage: float | None = Field(default=None, description="Anti-repeat alignment coverage (0-1).")
+    anti_repeat_similarity: float | None = Field(
+        default=None, title="Anti-repeat Similarity", description="Anti-repeat sequence similarity (0-1)."
+    )
+    anti_repeat_coverage: float | None = Field(
+        default=None, title="Anti-repeat Coverage", description="Anti-repeat alignment coverage (0-1)."
+    )
     anti_repeat_similarity_coverage_multiplication: float | None = Field(
-        default=None, description="Similarity x coverage product."
+        default=None, title="Similarity x Coverage", description="Similarity multiplied by coverage."
     )
-    anti_repeat_upstream: str | None = Field(default=None, description="Sequence upstream of the anti-repeat.")
+    anti_repeat_upstream: str | None = Field(
+        default=None, title="Anti-repeat Upstream", description="Sequence upstream of the anti-repeat."
+    )
 
     # tracrRNA (from covariance-model search)
-    tracr_rna_taken_flag: str | None = Field(default=None, description="Flag for whether the tracrRNA was selected.")
-    tracr_rna_tail_sequence: str | None = Field(default=None, description="3' tail sequence of the tracrRNA.")
-    tracr_rna_global_window_sequence: str | None = Field(
-        default=None, description="Global window sequence around the tracrRNA."
+    tracr_rna_taken_flag: str | None = Field(
+        default=None, title="tracrRNA Taken Flag", description="Flag for whether the tracrRNA was selected."
     )
-    tracr_rna_sequence: str | None = Field(default=None, description="Predicted tracrRNA sequence.")
+    tracr_rna_tail_sequence: str | None = Field(
+        default=None, title="tracrRNA Tail", description="3' tail sequence of the tracrRNA."
+    )
+    tracr_rna_global_window_sequence: str | None = Field(
+        default=None, title="tracrRNA Window", description="Global window sequence around the tracrRNA."
+    )
+    tracr_rna_sequence: str | None = Field(
+        default=None, title="tracrRNA Sequence", description="Predicted tracrRNA sequence."
+    )
 
     # Interaction (from IntaRNA)
     intarna_anti_repeat_interaction_interval: str | None = Field(
-        default=None, description="Interval of the predicted RNA-RNA interaction."
+        default=None, title="IntaRNA Interval", description="Interval of the predicted RNA-RNA interaction."
     )
     intarna_anti_repeat_interaction: str | None = Field(
-        default=None, description="IntaRNA anti-repeat interaction structure."
+        default=None, title="IntaRNA Interaction", description="IntaRNA anti-repeat interaction structure."
     )
     interaction_energy: float | None = Field(
         default=None,
-        description="IntaRNA interaction energy in kcal/mol, more negative = stronger (complete_run mode).",
+        title="Interaction Energy",
+        description="IntaRNA interaction energy in kcal/mol; more negative values indicate a stronger interaction.",
     )
     poli_u_signal_coordinates: str | None = Field(
-        default=None, description="Coordinates of the poly-U transcription terminator signal."
+        default=None,
+        title="Poly-U Signal Coordinates",
+        description="Coordinates of the poly-U transcription terminator signal.",
     )
 
     # Terminator (from erpin)
-    terminator_all_locations: str | None = Field(default=None, description="All erpin terminator hit locations.")
-    terminator_all_scores: str | None = Field(default=None, description="All erpin terminator hit scores.")
-    best_terminator_location: str | None = Field(default=None, description="Best erpin terminator location.")
-    best_terminator_score: float | None = Field(default=None, description="Best erpin terminator score.")
-    terminator_presence_flag: str | None = Field(default=None, description="Flag for terminator presence.")
+    terminator_all_locations: str | None = Field(
+        default=None, title="Terminator Locations", description="All erpin terminator hit locations."
+    )
+    terminator_all_scores: str | None = Field(
+        default=None, title="Terminator Scores", description="All erpin terminator hit scores."
+    )
+    best_terminator_location: str | None = Field(
+        default=None, title="Best Terminator Location", description="Best erpin terminator location."
+    )
+    best_terminator_score: float | None = Field(
+        default=None, title="Best Terminator Score", description="Best erpin terminator score."
+    )
+    terminator_presence_flag: str | None = Field(
+        default=None, title="Terminator Flag", description="Flag for terminator presence."
+    )
 
     # Tail (covariance-model tail hit)
-    tail_model_hit_location: str | None = Field(default=None, description="Tail model hit location.")
-    tail_model_hit_score: float | None = Field(default=None, description="Tail model hit score.")
-    tail_presence_flag: str | None = Field(default=None, description="Flag for tail presence.")
+    tail_model_hit_location: str | None = Field(
+        default=None, title="Tail Hit Location", description="Tail model hit location."
+    )
+    tail_model_hit_score: float | None = Field(
+        default=None, title="Tail Hit Score", description="Tail model hit score."
+    )
+    tail_presence_flag: str | None = Field(
+        default=None, title="Tail Presence Flag", description="Flag for tail presence."
+    )
 
     # Cas (from CRISPRcasIdentifier)
     closest_corresponding_cas_interval: str | None = Field(
-        default=None, description="Coordinates of the closest cas-effector cassette."
+        default=None, title="Closest Cas Interval", description="Coordinates of the closest cas-effector cassette."
     )
-    distance_to_cas: int | None = Field(default=None, description="Distance from the tracrRNA to the cas cassette.")
+    distance_to_cas: int | None = Field(
+        default=None, title="Distance to Cas", description="Distance from the tracrRNA to the cas cassette."
+    )
 
     # Multi-evidence ranking (from candidate_ranking.py)
     score: float | None = Field(
-        default=None, description="Multi-evidence ranking score (weighted sum across all evidence fields)."
+        default=None,
+        title="Ranking Score",
+        description="Multi-evidence ranking score (weighted sum across all evidence fields).",
     )
 
     # model_run only
-    start: int | None = Field(default=None, description="cmsearch hit start position (model_run mode).")
-    end: int | None = Field(default=None, description="cmsearch hit end position (model_run mode).")
-    e_value: float | None = Field(default=None, description="cmsearch hit e-value (model_run mode).")
-    best_e_value: float | None = Field(default=None, description="cmsearch best-hit e-value (model_run mode).")
-    hit_sequence: str | None = Field(default=None, description="cmsearch hit sequence (model_run mode).")
+    start: int | None = Field(default=None, title="Start", description="cmsearch hit start position (model_run mode).")
+    end: int | None = Field(default=None, title="End", description="cmsearch hit end position (model_run mode).")
+    e_value: float | None = Field(default=None, title="E-value", description="cmsearch hit e-value (model_run mode).")
+    best_e_value: float | None = Field(
+        default=None, title="Best E-value", description="cmsearch best-hit e-value (model_run mode)."
+    )
+    hit_sequence: str | None = Field(
+        default=None, title="Hit Sequence", description="cmsearch hit sequence (model_run mode)."
+    )
 
     @property
     def has_tracr(self) -> bool:
@@ -139,9 +206,13 @@ class CrisprTracrRNAInput(BaseToolInput):
         sequence_ids (list[str] | None): Optional sequence identifiers.
     """
 
-    sequences: list[str] = InputField(description="Nucleotide sequence(s) to predict tracrRNA from")
+    sequences: list[str] = InputField(
+        title="Sequences",
+        description="Nucleotide sequence(s) to predict tracrRNA from",
+    )
     sequence_ids: list[str] | None = InputField(
         default=None,
+        title="Sequence IDs",
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )
 
@@ -163,9 +234,10 @@ class CrisprTracrRNASequenceResult(BaseModel):
             this sequence, top-ranked first; empty when upstream found nothing.
     """
 
-    sequence_id: str = Field(description="ID of the input sequence")
+    sequence_id: str = Field(title="Sequence ID", description="ID of the input sequence")
     candidates: list[CrisprTracrRNAPrediction] = Field(
         default_factory=list,
+        title="tracrRNA Candidates",
         description="All candidate hits for this sequence, top-ranked first.",
     )
 
@@ -192,6 +264,7 @@ class CrisprTracrRNAOutput(BaseToolOutput):
 
     results: list[CrisprTracrRNASequenceResult] = Field(
         default_factory=list,
+        title="Results",
         description="Per-input sequence results, each with all candidate hits top-ranked first.",
     )
 

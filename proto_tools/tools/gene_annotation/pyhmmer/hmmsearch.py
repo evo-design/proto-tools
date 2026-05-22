@@ -38,7 +38,7 @@ class PyHmmsearchInput(PyHmmerInput):
             against the target sequences.
     """
 
-    hmm: str | Path = InputField(description="Path to HMM file")
+    hmm: str | Path = InputField(title="HMM File", description="Path to HMM file")
 
 
 # Output:

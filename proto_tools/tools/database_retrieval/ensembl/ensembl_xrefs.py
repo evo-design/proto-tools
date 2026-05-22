@@ -45,7 +45,7 @@ class EnsemblXrefsInput(BaseToolInput):
         ensembl_id (str): Ensembl ID for direct cross-reference lookup.
     """
 
-    ensembl_id: str = InputField(description="Ensembl ID (ENSG..., ENST..., ENSP...)")
+    ensembl_id: str = InputField(title="Ensembl ID", description="Ensembl ID (ENSG..., ENST..., ENSP...)")
 
     @field_validator("ensembl_id")
     @classmethod
@@ -102,9 +102,13 @@ class EnsemblXrefsOutput(BaseToolOutput):
         raw_payload (list[dict[str, Any]]): Raw API JSON.
     """
 
-    result: list[EnsemblXref] = Field(default_factory=list, description="Cross-reference records to external databases")
-    source_url: str = Field(description="Final Ensembl REST URL that was hit")
-    raw_payload: list[dict[str, Any]] = Field(default_factory=list, description="Raw API JSON")
+    result: list[EnsemblXref] = Field(
+        default_factory=list, title="Cross-References", description="Cross-reference records to external databases"
+    )
+    source_url: str = Field(title="Source URL", description="Final Ensembl REST URL that was hit")
+    raw_payload: list[dict[str, Any]] = Field(
+        default_factory=list, title="Raw Payload", description="Raw API JSON returned by Ensembl"
+    )
 
     @property
     def output_format_options(self) -> list[str]:

@@ -49,8 +49,10 @@ class EnsemblLookupInput(BaseToolInput):
         symbol (str | None): Gene symbol (e.g. ``BRCA1``).
     """
 
-    ensembl_id: str | None = InputField(default=None, description="Ensembl gene ID (e.g. ENSG00000012048)")
-    symbol: str | None = InputField(default=None, description="Gene symbol (e.g. BRCA1)")
+    ensembl_id: str | None = InputField(
+        default=None, title="Ensembl Gene ID", description="Ensembl gene ID (e.g. ENSG00000012048)"
+    )
+    symbol: str | None = InputField(default=None, title="Gene Symbol", description="Gene symbol (e.g. BRCA1)")
 
     @model_validator(mode="after")
     def validate_input(self) -> "EnsemblLookupInput":
@@ -118,9 +120,11 @@ class EnsemblLookupOutput(BaseToolOutput):
         raw_payload (dict[str, Any]): Raw API JSON.
     """
 
-    result: EnsemblGene = Field(description="The looked-up gene record")
-    source_url: str = Field(description="Final Ensembl REST URL that was hit")
-    raw_payload: dict[str, Any] = Field(default_factory=dict, description="Raw API JSON")
+    result: EnsemblGene = Field(title="Gene Record", description="The looked-up gene record")
+    source_url: str = Field(title="Source URL", description="Final Ensembl REST URL that was hit")
+    raw_payload: dict[str, Any] = Field(
+        default_factory=dict, title="Raw Payload", description="Raw API JSON returned by Ensembl"
+    )
 
     @property
     def output_format_options(self) -> list[str]:

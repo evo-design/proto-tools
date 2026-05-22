@@ -35,6 +35,7 @@ class MockPyTorchToolInput(BaseToolInput):
 
     data_items: list[list[float]] = InputField(
         default=[[1.0, 2.0, 3.0, 4.0]],
+        title="Data Items",
         description="List of data items to process (each is a 4-element float vector)",
     )
 
@@ -73,8 +74,8 @@ class MockPyTorchToolConfig(BaseConfig):
 class MockPyTorchToolResult(BaseModel):
     """Single result from mock PyTorch tool."""
 
-    result: list[float] = Field(description="Output from the model")
-    device_used: str = Field(description="Device the model ran on")
+    result: list[float] = Field(title="Result", description="Output from the model")
+    device_used: str = Field(title="Device Used", description="Device the model ran on")
 
 
 class MockPyTorchToolOutput(BaseToolOutput):
@@ -84,7 +85,9 @@ class MockPyTorchToolOutput(BaseToolOutput):
         results (list[MockPyTorchToolResult]): List of results, one per input data item.
     """
 
-    results: list[MockPyTorchToolResult] = Field(description="Results from the model, one per input data item")
+    results: list[MockPyTorchToolResult] = Field(
+        title="Results", description="Results from the model, one per input data item"
+    )
 
     @property
     def output_format_options(self) -> list[str]:

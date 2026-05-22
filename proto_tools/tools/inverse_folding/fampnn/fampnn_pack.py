@@ -35,7 +35,10 @@ class FAMPNNPackInput(BaseToolInput):
         inputs (list[FAMPNNStructureInput]): List of structure inputs for sidechain packing.
     """
 
-    inputs: list[FAMPNNStructureInput] = InputField(description="List of structure inputs for sidechain packing.")
+    inputs: list[FAMPNNStructureInput] = InputField(
+        title="Structure Inputs",
+        description="List of structure inputs for sidechain packing.",
+    )
 
 
 class FAMPNNPackConfig(BaseConfig):
@@ -99,9 +102,13 @@ class FAMPNNPackingResult(BaseToolOutput):
         psce (list[list[list[float]]]): Per-residue predicted sidechain error (Angstroms) for each sample.
     """
 
-    packed_structures: list[list[Structure]] = Field(description="Packed structures (outer=inputs, inner=samples)")
+    packed_structures: list[list[Structure]] = Field(
+        title="Packed Structures",
+        description="Packed structures (outer=inputs, inner=samples)",
+    )
     psce: list[list[list[float]]] = Field(
-        description="Per-residue pSCE for each sample (outer=structures, inner=samples)"
+        title="pSCE",
+        description="Per-residue predicted sidechain error in Å (shape [n_inputs, n_samples, n_residues])",
     )
 
     @property

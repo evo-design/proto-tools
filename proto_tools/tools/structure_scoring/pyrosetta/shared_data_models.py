@@ -54,6 +54,7 @@ class ScoringStructureInput(StructureInputBase):
 
     chains_to_score: ChainSelection | None = Field(
         default=None,
+        title="Chains to Score",
         description="Chains to include in scoring. None = include every chain.",
     )
 

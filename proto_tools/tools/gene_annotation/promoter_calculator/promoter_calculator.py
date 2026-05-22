@@ -27,26 +27,38 @@ from proto_tools.utils import (
 class PromoterPrediction(BaseModel):
     """A single predicted sigma70 promoter on one strand of an input sequence."""
 
-    tss_name: str = Field(description="Promoter label, e.g. 'Fwd123' or 'Rev456'")
-    tss: int = Field(description="Transcription start site position")
-    strand: Literal["+", "-"] = Field(description="Strand, '+' or '-'")
-    dG_total: float = Field(description="Predicted binding free energy (kcal/mol)")
-    Tx_rate: float = Field(description="Predicted transcription initiation rate (au)")
-    promoter_sequence: str = Field(description="DNA spanning the predicted promoter")
-    length: int = Field(description="Length of the promoter sequence")
-    UP_position: list[int] = Field(description="UP element [start, end]")
-    hex35_position: list[int] = Field(description="-35 hexamer [start, end]")
-    spacer_position: list[int] = Field(description="Spacer [start, end]")
-    hex10_position: list[int] = Field(description="-10 hexamer [start, end]")
-    disc_position: list[int] = Field(description="Discriminator [start, end]")
+    tss_name: str = Field(title="TSS Name", description="Promoter label, e.g. 'Fwd123' or 'Rev456'")
+    tss: int = Field(title="TSS Position", description="0-indexed transcription start site on the input sequence")
+    strand: Literal["+", "-"] = Field(title="Strand", description="'+' = forward strand, '-' = reverse-complement")
+    dG_total: float = Field(title="dG Total", description="Predicted binding free energy in kcal/mol")
+    Tx_rate: float = Field(
+        title="Transcription Rate",
+        description="Predicted transcription initiation rate in arbitrary units (model-relative)",
+    )
+    promoter_sequence: str = Field(title="Promoter Sequence", description="DNA spanning the predicted promoter")
+    length: int = Field(title="Length", description="Length of the promoter sequence in nt")
+    UP_position: list[int] = Field(
+        title="UP Position", description="UP element 0-indexed [start, end_inclusive] on the input sequence"
+    )
+    hex35_position: list[int] = Field(
+        title="-35 Hexamer Position", description="-35 hexamer 0-indexed [start, end_inclusive]"
+    )
+    spacer_position: list[int] = Field(title="Spacer Position", description="Spacer 0-indexed [start, end_inclusive]")
+    hex10_position: list[int] = Field(
+        title="-10 Hexamer Position", description="-10 hexamer 0-indexed [start, end_inclusive]"
+    )
+    disc_position: list[int] = Field(
+        title="Discriminator Position", description="Discriminator 0-indexed [start, end_inclusive]"
+    )
 
 
 class PromoterCalculatorSequenceResult(BaseModel):
     """Promoter Calculator predictions for a single input sequence."""
 
-    sequence_id: str = Field(description="ID of the input sequence")
+    sequence_id: str = Field(title="Sequence ID", description="ID of the input sequence")
     predictions: list[PromoterPrediction] = Field(
         default_factory=list,
+        title="Predictions",
         description="Predicted promoters across both strands",
     )
 
@@ -70,9 +82,13 @@ class PromoterCalculatorInput(BaseToolInput):
         sequence_ids (list[str] | None): Optional sequence identifiers.
     """
 
-    sequences: list[str] = InputField(description="DNA sequences to scan for E. coli sigma70 (housekeeping) promoters")
+    sequences: list[str] = InputField(
+        title="Sequences",
+        description="DNA sequences to scan for E. coli sigma70 (housekeeping) promoters",
+    )
     sequence_ids: list[str] | None = InputField(
         default=None,
+        title="Sequence IDs",
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )
 
@@ -95,6 +111,7 @@ class PromoterCalculatorOutput(BaseToolOutput):
 
     results: list[PromoterCalculatorSequenceResult] = Field(
         default_factory=list,
+        title="Results",
         description="Per-sequence promoter predictions",
     )
 

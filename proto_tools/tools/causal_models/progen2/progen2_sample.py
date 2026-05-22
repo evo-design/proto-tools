@@ -48,7 +48,9 @@ class ProGen2SampleOutput(CausalModelSampleOutput):
     """
 
     logits: list[list[list[float]]] | None = Field(
-        default=None, description="Per-position logits for each generated sequence"
+        default=None,
+        title="Logits",
+        description="Per-position logits for each generated sequence",
     )
 
 

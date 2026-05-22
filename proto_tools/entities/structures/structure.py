@@ -195,13 +195,25 @@ class Structure(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    structure: str = Field(description="Structure content (PDB or CIF format string)")
-    structure_format: Literal["pdb", "cif"] | None = Field(default=None, description="Format of the structure content")
-    b_factor_type: BFactorType = Field(
-        default=BFactorType.UNSPECIFIED, description="What the B-factor column represents"
+    structure: str = Field(title="PDB or CIF Content", description="Raw structure content (PDB or CIF format string)")
+    structure_format: Literal["pdb", "cif"] | None = Field(
+        default=None, title="Structure Format", description="Format of the structure content"
     )
-    source: str | None = Field(default=None, description="Source identifier for the structure")
-    metrics: Metrics = Field(default_factory=Metrics, description="Associated metrics")
+    b_factor_type: BFactorType = Field(
+        default=BFactorType.UNSPECIFIED,
+        title="B-Factor Type",
+        description="What the B-factor column represents",
+    )
+    source: str | None = Field(
+        default=None,
+        title="Source",
+        description="Origin identifier (e.g. file path, PDB ID, or producing tool name)",
+    )
+    metrics: Metrics = Field(
+        default_factory=Metrics,
+        title="Associated Metrics",
+        description="Structure-level metrics attached by the producing tool (e.g. pLDDT, pTM, PAE)",
+    )
 
     _gemmi_struct: Any = PrivateAttr(default=None)
 

@@ -55,6 +55,7 @@ class PuffinInterpretationInput(BaseToolInput):
     """
 
     sequences: list[str] = InputField(
+        title="Sequences",
         description="DNA sequence(s) >= 651 bp. Per-base output length = len(seq) - 650",
         min_length=1,
     )
@@ -131,32 +132,57 @@ class PuffinInterpretationResult(BaseModel):
             contribution to motif-activation scores, decomposed by motif name.
     """
 
-    sequence: str = Field(description="DNA sequence originally provided to the tool")
-    sequence_length: int = Field(description="Length of the provided DNA sequence")
-    output_length: int = Field(description="Number of per-base output positions (= sequence_length - 650)")
-    output_start: int = Field(description="0-based sequence coordinate of the first output position")
-    output_end: int = Field(description="0-based exclusive end of the output span in the input sequence")
+    sequence: str = Field(title="Sequence", description="DNA sequence originally provided to the tool")
+    sequence_length: int = Field(title="Sequence Length", description="Length of the provided DNA sequence")
+    output_length: int = Field(
+        title="Output Length",
+        description="Number of per-base output positions (= sequence_length - 650)",
+    )
+    output_start: int = Field(
+        title="Output Start",
+        description="0-based sequence coordinate of the first output position",
+    )
+    output_end: int = Field(
+        title="Output End",
+        description="0-based exclusive end of the output span in the input sequence",
+    )
     prediction: list[float] = Field(
-        description="Predicted log-scale signal for the selected target and strand, length output_length"
+        title="Prediction",
+        description="Predicted log-scale signal for the selected target and strand, length output_length",
     )
     motif_activations: dict[str, list[float]] = Field(
-        description="Per-base motif activation scores keyed by strand-suffixed motif name"
+        title="Motif Activations",
+        description="Per-base motif activation scores keyed by strand-suffixed motif name",
     )
     motif_effects: dict[str, list[float]] = Field(
-        description="Per-base motif effect scores keyed by strand-suffixed motif name"
+        title="Motif Effects",
+        description="Per-base motif effect scores keyed by strand-suffixed motif name",
     )
-    sum_motif_effects: list[float] = Field(description="Per-base sum of non-initiator motif effects")
-    sum_initiator_effects: list[float] = Field(description="Per-base sum of initiator-motif effects, centered")
+    sum_motif_effects: list[float] = Field(
+        title="Sum Motif Effects", description="Per-base sum of non-initiator motif effects"
+    )
+    sum_initiator_effects: list[float] = Field(
+        title="Sum Initiator Effects",
+        description="Per-base sum of initiator-motif effects, centered",
+    )
     sum_trinucleotide_effects: list[float] = Field(
-        description="Per-base sum of trinucleotide sequence effects, centered"
+        title="Sum Trinucleotide Effects",
+        description="Per-base sum of trinucleotide sequence effects, centered",
     )
-    sum_total_effects: list[float] = Field(description="Per-base sum of motif, initiator, and trinucleotide effects")
-    bp_contribution: list[float] = Field(description="Per-base contribution to transcription initiation")
+    sum_total_effects: list[float] = Field(
+        title="Sum Total Effects",
+        description="Per-base sum of motif, initiator, and trinucleotide effects",
+    )
+    bp_contribution: list[float] = Field(
+        title="BP Contribution", description="Per-base contribution to transcription initiation"
+    )
     bp_contribution_per_motif: dict[str, list[float]] = Field(
-        description="Per-base contribution to transcription, decomposed by motif"
+        title="BP Contribution per Motif",
+        description="Per-base contribution to transcription, decomposed by motif",
     )
     bp_contribution_to_motif_activation: dict[str, list[float]] = Field(
-        description="Per-base contribution to motif-activation scores, decomposed by motif"
+        title="BP Contribution to Motif",
+        description="Per-base contribution to motif-activation scores, decomposed by motif",
     )
 
 
@@ -203,10 +229,18 @@ class PuffinInterpretationOutput(BaseToolOutput):
             appear as keys in each result's motif-keyed dicts.
     """
 
-    results: list[PuffinInterpretationResult] = Field(description="Per-sequence interpretation results")
-    target_signal: str = Field(description="Target transcription initiation signal that was interpreted")
-    reverse_strand: bool = Field(description="Whether the reverse-strand head was used")
-    motif_names: list[str] = Field(description="The 9 learned motif names (without strand suffix)")
+    results: list[PuffinInterpretationResult] = Field(
+        title="Results", description="Per-sequence interpretation results"
+    )
+    target_signal: str = Field(
+        title="Target Signal",
+        description="Target transcription initiation signal that was interpreted",
+    )
+    reverse_strand: bool = Field(title="Reverse Strand", description="Whether the reverse-strand head was used")
+    motif_names: list[str] = Field(
+        title="Motif Names",
+        description="The 9 learned motif names (without strand suffix)",
+    )
 
     def __len__(self) -> int:
         """Number of per-sequence results."""

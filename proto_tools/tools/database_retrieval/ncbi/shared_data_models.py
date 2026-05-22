@@ -73,9 +73,9 @@ class NCBIFastaRecord(BaseModel):
         accession (str | None): Best-effort accession extracted from header.
     """
 
-    header: str = Field(description="FASTA header line")
-    sequence: str = Field(description="Sequence string")
-    accession: str | None = Field(default=None, description="Accession extracted from header")
+    header: str = Field(title="Header", description="FASTA header line")
+    sequence: str = Field(title="Sequence", description="Sequence string")
+    accession: str | None = Field(default=None, title="Accession", description="Accession extracted from header")
 
 
 class NCBIFetchConfig(BaseConfig):

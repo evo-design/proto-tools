@@ -33,10 +33,12 @@ class AbLangGradientInput(BaseToolInput):
     """
 
     antibody: AntibodyLogits = InputField(
+        title="Antibody Logits",
         description="Antibody with relaxed sequence distributions over amino acids.",
     )
     temperature: float | None = InputField(
         default=None,
+        title="Temperature",
         description="Softmax temperature. Applies softmax(input / T) when set.",
         gt=0.0,
     )
@@ -56,6 +58,7 @@ class AbLangGradientOutput(GradientOutput):
 
     gradient: list[list[float]] | None = Field(
         default=None,
+        title="Gradient",
         description="Gradient w.r.t. input logits. None when compute_gradient=False.",
     )
 

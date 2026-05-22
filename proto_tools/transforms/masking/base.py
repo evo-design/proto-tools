@@ -251,30 +251,29 @@ class MaskingStrategy(BaseModel):
     # -- Scoring method --------------------------------------------------------
     method: MaskingMethod = ConfigField(
         default="random",
-        description=(
-            "Scoring method for position selection. 'random': uniform random. "
-            "'entropy': highest model uncertainty. 'max-logit': lowest model confidence."
-        ),
+        title="Scoring Method",
+        description="Position scoring: 'random' (uniform), 'entropy' (most uncertain), 'max-logit' (low confidence)",
     )
 
     # -- How many positions to mask (set one or neither, not both) -------------
     num_mutations: int | None = ConfigField(
         default=None,
         ge=1,
-        xor_group="mask_amount",
+        title="Num Mutations",
         description="Exact number of positions to mask per sequence.",
     )
     mask_fraction: float | None = ConfigField(
         default=None,
         gt=0.0,
         le=1.0,
-        xor_group="mask_amount",
+        title="Mask Fraction",
         description="Fraction of designable positions to mask (e.g. 0.15 for ~15%).",
     )
 
     # -- Which positions to protect from masking -------------------------------
     fixed_positions: list[int] | None = ConfigField(
         default=None,
+        title="Fixed Positions",
         description="1-indexed positions that must NOT be masked. Applied uniformly to all sequences.",
     )
 
@@ -282,20 +281,19 @@ class MaskingStrategy(BaseModel):
     temperature: float = ConfigField(
         default=1.0,
         gt=0.0,
-        description=(
-            "Temperature for position selection. < 1.0: greedy (prefer "
-            "highest-scored positions). = 1.0: use scores as-is. > 1.0: "
-            "more uniform (ignore score differences)."
-        ),
+        title="Selection Temperature",
+        description="Position-selection temperature: <1 greedy, 1 use scores as-is, >1 more uniform.",
     )
 
     # -- Model-based method fields (only relevant for entropy / max-logit) -----
     model_name: Literal["esm2", "esm3"] | None = ConfigField(
         default=None,
+        title="Model Name",
         description="Which masked model to use for scoring. Defaults to the sampling tool's model when unset.",
     )
     model_checkpoint: str | None = ConfigField(
         default=None,
+        title="Model Checkpoint",
         description="Model checkpoint override (uses tool default if None).",
     )
 

@@ -163,8 +163,8 @@ def test_complex_subclass_preserves_typed_fields():
 
 
 class _TestInput(BaseToolInput):
-    sequences: list[str] = InputField(description="Input sequences")
-    device: str = InputField(default="cpu", description="Device", include_in_key=False)
+    sequences: list[str] = InputField(title="Sequences", description="Input sequences")
+    device: str = InputField(default="cpu", title="Device", description="Device", include_in_key=False)
 
 
 def test_cache_key_deterministic():

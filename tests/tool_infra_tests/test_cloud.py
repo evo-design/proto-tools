@@ -32,11 +32,11 @@ class _CloudInput(BaseToolInput):
 
 
 class _CloudConfig(BaseConfig):
-    temperature: float = ConfigField(default=1.0, ge=0.0)
+    temperature: float = ConfigField(default=1.0, ge=0.0, title="Temperature", description="Temperature parameter")
 
 
 class _SlowCloudConfig(_CloudConfig):
-    timeout: int | None = ConfigField(default=1200, ge=1)
+    timeout: int | None = ConfigField(default=1200, ge=1, title="Timeout", description="Timeout in seconds")
 
 
 class _CloudOutput(MockToolOutputBase):
@@ -49,7 +49,7 @@ class _CloudAssetOutput(MockToolOutputBase):
 
 
 class _PreprocessConfig(_CloudConfig):
-    local_path: str | None = ConfigField(default=None)
+    local_path: str | None = ConfigField(default=None, title="Local Path", description="Local path override")
 
     def preprocess(self, inputs: BaseToolInput) -> BaseToolInput:
         raise AssertionError("cloud dispatch should not run local preprocess")
