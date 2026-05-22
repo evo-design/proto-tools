@@ -1,19 +1,12 @@
-# CLAUDE.md
-
-This file is the short entrypoint for coding agents contributing to
-`proto-tools`. Keep long-form guidance in `notes/`, source docstrings, toolkit
-READMEs, and local skills so instructions do not drift.
-
-`SYSTEM_PROMPT.md` is for agents that use the existing library to write
-programs and scripts. Use this file when editing the repo itself.
+`SYSTEM_PROMPT.md` is for agents that use the existing library to write programs and scripts. 
+Use the contents of this file when contributing to the repo itself.
 
 ## Project Overview
 
 `proto_tools` is the Proto Bio library of typed bioinformatics tool wrappers.
 It provides uniform Python APIs, schemas, docs, examples, citations, licenses,
 and isolated execution environments for sequence, structure, ligand, genomic,
-and publication/database tools. It is also mounted as the `proto-tools/`
-submodule inside `proto-language`.
+and publication/database tools.
 
 ## Read Before Editing
 
@@ -34,10 +27,6 @@ the package in editable mode with dev dependencies:
 
 ```bash
 pip install -e ".[dev]"      # first-time setup only
-ruff check proto_tools tests
-ruff format .
-mypy proto_tools/
-pytest --all
 ```
 
 Do not manually create or activate tool-specific environments; proto-tools
@@ -60,6 +49,34 @@ selection flags, logs, and test layout.
 - `tutorials/` and `scripts/`: examples, runtime guides, and repository
   utilities.
 - `notes/`: canonical long-form developer references.
+
+## Canonical Toolkit Layout
+
+Use this default layout for each toolkit directory:
+
+```text
+proto_tools/tools/{category}/{toolkit}/
+  __init__.py
+  {tool_key_snake}.py
+  README.md
+  cite.bib
+  license.yaml
+  links.yaml
+  examples/
+    example.ipynb
+  standalone/              # optional, for isolated tool environments
+    inference.py           # or run.py, depending on the toolkit
+    setup.sh
+    requirements.txt
+    python_version.txt
+    env_vars.txt           # optional environment passthrough/blocklist
+```
+
+Treat the toolkit directory as the shared home for docs, citations, licenses,
+examples, model/runtime setup, and common code. Add one `{tool_key_snake}.py`
+file per registered operation unless the toolkit has an established local
+pattern. See `notes/tool-environments.md` for the required `standalone/`
+contract and shared-environment options.
 
 ## Tool Conventions
 

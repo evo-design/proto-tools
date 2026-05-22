@@ -46,9 +46,6 @@ Read files before guessing. Use these paths as the working map:
 - Source under `proto_tools/` only when docs do not expose the exact input
   field, config field, output shape, helper, or serialization behavior.
 
-For multi-stage sequence design, use `proto-language` as the orchestration
-framework and `proto_tools` as the model/tool execution layer.
-
 # Repository Map
 
 - `proto_tools/tools/`: all registered tool wrappers, grouped by biological or
@@ -149,21 +146,20 @@ Use the biological question to narrow the search:
   and tissue/cell context.
 
 If more than one tool is plausible, inspect each candidate's README, schemas,
-example input, license/access metadata, and output model. Choose based on the
-biological object, supported input type, output metric, runtime cost,
-dependencies, and whether the task needs retrieval, prediction, scoring,
-generation, validation, or a full design loop.
+example input, and output model. Choose based on the biological objective, 
+supported input type, output metric, and whether the task needs retrieval, 
+prediction, scoring, generation, validation, or a full design loop.
 
 # Script Design Heuristics
 
-1. Research the biological background. Read enough of the prompt to identify
+1. Research the biological background. Evaluate the user's prompt to identify
    the target and objective, then search the web and scientific literature for
    credible sources that clarify the target, mechanism, assay, template,
    organism, tool method, or design constraints.
 2. Parse the task contract: inputs, assets, biological context, output path,
    output format, candidate count, hard filters, ranking metrics, and
    prohibited methods.
-3. Load local assets first: FASTA, PDB/mmCIF, CSV/TSV, JSON, SMILES, genomic
+3. Check local assets first: FASTA, PDB/mmCIF, CSV/TSV, JSON, SMILES, genomic
    intervals, prompts, flanks, MSAs, or reference IDs.
 4. Use database retrieval/fetch tools when local assets are missing or when
    the task needs sourced sequences, annotations, templates, or reference
@@ -179,11 +175,6 @@ generation, validation, or a full design loop.
    existence, SMILES validity, and chain IDs.
 9. Write final artifacts in the requested format using structured output
    fields, not logs.
-
-For biological design loops with generators, constraints, and staged
-optimization, prefer `proto-language`. Use proto-tools directly when the task
-is retrieval, prediction, scoring, alignment, annotation, or a single
-tool-backed transformation.
 
 # Biological Design Checks
 
