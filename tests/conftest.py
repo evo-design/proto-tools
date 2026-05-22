@@ -197,7 +197,7 @@ class EnvReportCollector:
                 path = path.with_suffix(".md")
             return path
         project_root = Path(__file__).parent.parent
-        env_dir = project_root / "notes" / "environments"
+        env_dir = project_root / ".environment_checks"
         env_dir.mkdir(parents=True, exist_ok=True)
         platform_id = get_platform_id(include_date=False, include_commit=False)
         return env_dir / f"{platform_id}.md"

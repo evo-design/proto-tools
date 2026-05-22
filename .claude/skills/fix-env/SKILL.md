@@ -145,4 +145,3 @@ Add comments explaining what, why, and why it's safe for other platforms.
 - **env_vars.txt format**: See "env_vars.txt sections" under "Compute Dependency Management" in `notes/tool-environments.md`
 - **Device management**: GPU allocation, LRU eviction, and persistence are documented in `proto_tools/utils/device_manager.py` and `proto_tools/utils/tool_instance.py` docstrings (auto-generated reference pages); see `notes/tool-environments.md` for `to_device()` protocol
 - **Standalone helpers**: See "Standalone Helpers for CLI Subprocess Device Routing" in `notes/tool-environments.md` for `get_subprocess_device_env()`
-- **Platform reports**: See `notes/environments/` for per-machine compatibility reports

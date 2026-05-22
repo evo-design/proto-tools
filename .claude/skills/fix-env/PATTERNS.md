@@ -301,7 +301,7 @@ if [ -z "$CUDA_TARGET" ]; then
 fi
 ```
 
-**Platform notes:** DGX Spark (aarch64 + GPU) works for some tools (esm2, esmfold) but not others (evo2 — no aarch64 flash-attn wheels). See `notes/environments/` for per-machine reports.
+**Platform notes:** DGX Spark (aarch64 + GPU) works for some tools (esm2, esmfold) but not others (evo2 — no aarch64 flash-attn wheels).
 
 ---
 
