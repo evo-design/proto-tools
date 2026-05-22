@@ -9,6 +9,23 @@ Do not edit tool wrappers, registries, environments, or repository
 infrastructure unless the user explicitly asks for library development. The
 normal job is to compose existing tools correctly.
 
+# Initial Research
+
+Start each bioinformatics or biological design task by building a grounded
+understanding of the design objective and the relevant biological background.
+Read enough of the task prompt to know what biological question you are
+answering, then search the web and scientific literature for credible sources
+that clarify the target, mechanism, assay, template, organism, tool method,
+constraints, scoring metric, or biological assumptions. Inspect local assets,
+examples, and markdown docs as supporting evidence, not as a substitute for
+biological grounding.
+
+Use primary literature, official tool documentation, database records,
+accessions, PDB IDs, DOIs, PMIDs/PMCIDs, and authoritative protocols as
+evidence. Search results and abstracts are leads; open and read the underlying
+source before using it to choose tools, interpret metrics, or shape the
+script. Record identifiers or URLs that materially affect design choices.
+
 # Where to Look
 
 Read files before guessing. Use these paths as the working map:
@@ -121,9 +138,12 @@ Use the biological question to narrow the search:
 - Structure comparison and scoring: choose by metric type: alignment,
   secondary structure, interface quality, energy, solvent exposure, geometry,
   dynamics, or confidence.
-- Database and annotation retrieval: use retrieval tools when the script needs
-  sourced templates, structures, variants, ligands, sequences, publications,
-  or reference metadata rather than generated guesses.
+- Database and annotation retrieval: use registered database/fetch tools when
+  the script needs sourced sequences, annotations, templates, structures,
+  variants, ligands, publications, or reference metadata rather than generated
+  guesses. Prefer these tools for sequence and annotation lookup when the task
+  names an accession, gene, protein, organism, locus, transcript, structure,
+  ligand, or database record.
 - Gene, ORF, CRISPR, and splicing analysis: preserve coding-frame, strand,
   transcript, exon/intron boundaries, promoter context, repeat/spacer grammar,
   and tissue/cell context.
@@ -136,23 +156,28 @@ generation, validation, or a full design loop.
 
 # Script Design Heuristics
 
-1. Parse the task contract: inputs, assets, biological context, output path,
+1. Research the biological background. Read enough of the prompt to identify
+   the target and objective, then search the web and scientific literature for
+   credible sources that clarify the target, mechanism, assay, template,
+   organism, tool method, or design constraints.
+2. Parse the task contract: inputs, assets, biological context, output path,
    output format, candidate count, hard filters, ranking metrics, and
    prohibited methods.
-2. Load local assets first: FASTA, PDB/mmCIF, CSV/TSV, JSON, SMILES, genomic
+3. Load local assets first: FASTA, PDB/mmCIF, CSV/TSV, JSON, SMILES, genomic
    intervals, prompts, flanks, MSAs, or reference IDs.
-3. Use database retrieval tools only when a local asset is missing and the
-   task needs sourced templates or records.
-4. Build typed `Input` and `Config` objects from inspected schemas. Override
+4. Use database retrieval/fetch tools when local assets are missing or when
+   the task needs sourced sequences, annotations, templates, or reference
+   records.
+5. Build typed `Input` and `Config` objects from inspected schemas. Override
    only config fields that matter for the task.
-5. Check `ToolRegistry.get_weights_access()` and toolkit license metadata
+6. Check `ToolRegistry.get_weights_access()` and toolkit license metadata
    before dispatching gated or request-only model weights.
-6. For many repeated calls, use persistence, batching, or tool pools only when
+7. For many repeated calls, use persistence, batching, or tool pools only when
    the selected tool and workload justify warm workers or parallel execution.
-7. Apply cheap deterministic validation before expensive tools: alphabet,
+8. Apply cheap deterministic validation before expensive tools: alphabet,
    sequence length, duplicate records, fixed motifs, coordinate bounds, file
    existence, SMILES validity, and chain IDs.
-8. Write final artifacts in the requested format using structured output
+9. Write final artifacts in the requested format using structured output
    fields, not logs.
 
 For biological design loops with generators, constraints, and staged
@@ -179,26 +204,20 @@ records with identifiers.
 
 # Program Artifact
 
-Follow the task or runner contract rather than a fixed script skeleton. Inspect
-the prompt, metadata, and staged assets for the required filename, invocation,
-output path, output format, candidate count, sequence fields, and validation
-rules before choosing the program shape.
+Follow the caller, task, or runner contract exactly rather than using a fixed
+script skeleton. Inspect the prompt, metadata, staged assets, and local
+instructions for the required filename, invocation, output path, output
+format, record fields, candidate count, sequence fields, and validation rules
+before choosing the program shape.
 
-For ProtoBench-style tasks, the task YAML is the source of truth. The script
-named by `script_name` is executed as `python <script> --out <path> --seed
-<int>` and must write exactly the configured `candidate_count` candidates to
-the requested output path. FASTA outputs contain one sequence per candidate for
-single-field tasks; TSV outputs use the configured columns, with a header or
-the exact column order.
-
-When no runner contract is specified, use the simplest runnable Python
-entrypoint that satisfies the user's request. Use `argparse` only when CLI
-arguments are requested or supplied by the runner. Seed stochastic logic from
-the provided seed when present, create parent directories for written outputs,
-validate final records before writing, and fail clearly when required assets,
-credentials, or model weights are absent. Internal search, filtering, and
-best-of-K selection are fine; the important artifact is the requested output,
-not diagnostic stdout.
+If a runner supplies CLI flags such as `--out` or `--seed`, implement those
+arguments exactly and use the supplied values for output placement and
+reproducibility. If no runner contract is specified, use the simplest runnable
+Python entrypoint that satisfies the user's request. Create parent directories
+for written outputs, validate final records before writing, and fail clearly
+when required assets, credentials, or model weights are absent. Internal
+search, filtering, and best-of-K selection are fine; the important artifact is
+the requested output, not diagnostic stdout.
 
 # Final Answer
 
