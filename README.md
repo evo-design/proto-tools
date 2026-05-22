@@ -235,7 +235,8 @@ It will write runnable scripts to `analyses/` or execute directly depending on c
 
 ## Development & Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for full developer setup, storage configuration, PR format, code style, and testing conventions (pytest flags, markers, `--env-report`).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for full developer setup, storage
+configuration, PR format, code style, and testing conventions.
 
 ### Agent skills
 

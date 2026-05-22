@@ -6,10 +6,8 @@ per-dataset metadata — molecule type, download URLs, index recipe, MMseqs2
 flags, GPU/pairing capability — and resolves the on-disk cache location under
 ``$PROTO_MODEL_CACHE/databases/{name}/``.
 
-This module defines the schemas and a simple lookup registry only. The actual
-download / index / paired-index machinery (``DatasetManager.ensure``,
-``provision_datasets``, CLI entrypoint) ships with ``mmseqs2-homology-search``
-— see ``notes/homology-search-design.md``.
+This module defines the schemas and a simple lookup registry. Dataset
+provisioning is implemented by the MMseqs2 homology-search tooling.
 """
 
 from __future__ import annotations
