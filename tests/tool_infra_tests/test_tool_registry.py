@@ -6,6 +6,7 @@ Tests for ToolRegistry.
 import logging
 import math
 import time
+from pathlib import Path
 
 import pytest
 from pydantic import BaseModel, Field
@@ -120,6 +121,25 @@ def test_tool_registry_register_decorator(clean_registry):
     assert spec.config_model == MockToolConfig
     assert spec.description == "Mock tool for testing"
     assert spec.output_model == MockToolOutput
+
+
+def test_tool_registry_source_file_uses_decorated_function(clean_registry):
+    """Registered source files come from the decorated function."""
+
+    @clean_registry.register(
+        key="source-file-tool",
+        label="Source File Tool",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="Source file lookup test",
+    )
+    def source_file_tool(inputs: MockToolInput, config: MockToolConfig) -> MockToolOutput:
+        return MockToolOutput(tool_id="source-file-tool", execution_time=0.1, success=True, result=inputs.input_data)
+
+    spec = clean_registry.get("source-file-tool")
+    assert spec.source_file == Path(source_file_tool.__wrapped__.__code__.co_filename)
 
 
 def test_tool_registry_prevent_duplicate_registration(clean_registry):

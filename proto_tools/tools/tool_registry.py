@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import contextlib
 import difflib
-import inspect
 import logging
 import math
 import os
@@ -395,19 +394,7 @@ class ToolRegistry:
             if gpu_only and not uses_gpu:
                 raise ValueError(f"@tool({key!r}): gpu_only=True requires uses_gpu=True")
 
-            # Capture source file from call stack (find first frame in tools directory)
-            stack = inspect.stack()
-            source_file = None
-            for frame_info in stack:
-                filename = frame_info.filename
-                # Look for the first frame in the tools directory (skip this registry file)
-                if "/tools/" in filename and "tool_registry.py" not in filename:
-                    source_file = Path(filename)
-                    break
-
-            # Fallback to func's code if we couldn't find it in the stack
-            if source_file is None:
-                source_file = Path(func.__code__.co_filename)
+            source_file = Path(func.__code__.co_filename)
 
             @wraps(func)
             def wrapper(

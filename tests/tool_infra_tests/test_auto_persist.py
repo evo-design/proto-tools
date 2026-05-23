@@ -263,9 +263,9 @@ def test_concurrent_threads_isolated_overlays() -> None:
 def _override_wrapper_source_file(wrapped_fn: Any, new_source_file: Path) -> None:
     """Mutate the ``source_file`` closure cell of a @tool-wrapped function.
 
-    The @tool decorator captures ``source_file`` from the call stack at decoration
-    time. In tests we want to pretend the tool lives in a different directory (one
-    with a real ``standalone/`` dir) so the wrapper's auto-persist branch fires.
+    The @tool decorator captures ``source_file`` at decoration time. In tests we
+    want to pretend the tool lives in a different directory (one with a real
+    ``standalone/`` dir) so the wrapper's auto-persist branch fires.
     """
     body = wrapped_fn.__closure__[0].cell_contents
     freevars = body.__code__.co_freevars
