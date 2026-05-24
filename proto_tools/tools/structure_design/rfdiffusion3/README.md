@@ -91,7 +91,7 @@ Each `RFdiffusion3DesignSpec` contains:
 | `select_fixed_atoms` | `Optional[bool \| str \| dict]` | Atoms held fixed in 3D space during diffusion |
 | `select_unfixed_sequence` | `Optional[bool \| str \| dict]` | Residues whose sequence can change |
 | `select_hotspots` | `Optional[bool \| str \| dict]` | Hotspots for binder/PPI design |
-| `symmetry` | `Optional[str \| dict]` | Symmetry config (homo-oligomer); pair with `sampler_kind="symmetry"` |
+| `symmetry` | `Optional[str \| dict]` | Symmetry for homo-oligomer: group-id str (e.g. `"C3"`) or `SymmetryConfig` dict; pair with `sampler_kind="symmetry"` |
 | `select_buried` / `select_partially_buried` / `select_exposed` | `Optional[bool \| str \| dict]` | RASA conditioning |
 | `select_hbond_donor` / `select_hbond_acceptor` | `Optional[dict[str, list[str]]]` | Atom-wise H-bond flags |
 | `redesign_motif_sidechains` | `Optional[bool]` | Fix motif backbone, redesign side-chains |

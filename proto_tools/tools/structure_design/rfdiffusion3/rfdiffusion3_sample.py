@@ -23,7 +23,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.tool_registry import tool
@@ -99,8 +99,10 @@ class RFdiffusion3DesignSpec(BaseModel):
             hotspots for binder/PPI design (typically <=4.5 Angstroms to any
             heavy atom in the designed structure).
 
-        symmetry (str | dict[str, Any] | None): Symmetry config for
-            homo-oligomer design; pair with ``RFdiffusion3Config.sampler_kind="symmetry"``.
+        symmetry (str | dict[str, Any] | None): Symmetry for homo-oligomer design.
+            A group-id string (e.g. ``"C3"``) is wrapped as ``{"id": "C3"}``; a
+            full ``SymmetryConfig`` dict is passed through. Pair with
+            ``RFdiffusion3Config.sampler_kind="symmetry"``.
 
         select_buried (bool | str | dict[str, str] | None): RASA selector for
             buried residues.
@@ -191,8 +193,11 @@ class RFdiffusion3DesignSpec(BaseModel):
     symmetry: str | dict[str, Any] | None = Field(
         default=None,
         title="Symmetry",
-        description="Symmetry configuration for homo-oligomer design; pair with sampler_kind='symmetry'",
-        examples=["c3", "c5", "d2"],
+        description=(
+            "Symmetry for homo-oligomer design: group-id string (e.g. 'C3') or "
+            "SymmetryConfig dict; pair with sampler_kind='symmetry'"
+        ),
+        examples=["C3", {"id": "C3"}],
     )
     select_buried: bool | str | dict[str, str] | None = Field(
         default=None,
@@ -254,6 +259,14 @@ class RFdiffusion3DesignSpec(BaseModel):
         title="Suppress Loops",
         description="When True, produces structures with fewer loops; when False, more loops",
     )
+
+    @field_validator("symmetry", mode="before")
+    @classmethod
+    def _normalize_symmetry(cls, value: Any) -> Any:
+        """Wrap a group-id string (e.g. ``"c3"``) as the ``{"id": "C3"}`` dict rfd3 requires."""
+        if isinstance(value, str):
+            return {"id": value.strip().upper()}
+        return value
 
     @model_validator(mode="after")
     def validate_has_design_params(self) -> Any:

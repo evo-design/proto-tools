@@ -171,7 +171,7 @@ def test_rfdiffusion3_design_spec_typed_fields_propagate_to_json():
         is_non_loopy=True,
     )
     d = spec.to_dict()
-    assert d["symmetry"] == "c3"
+    assert d["symmetry"] == {"id": "C3"}  # string normalized to SymmetryConfig dict
     assert d["select_buried"] == "A1-50"
     assert d["select_partially_buried"] == "A51-70"
     assert d["select_exposed"] == "A71-100"
@@ -210,6 +210,16 @@ def test_rfdiffusion3_design_spec_ori_token_must_be_xyz():
         RFdiffusion3DesignSpec(length="100", ori_token=[1.0, 2.0])
     with pytest.raises(ValueError):
         RFdiffusion3DesignSpec(length="100", ori_token=[1.0, 2.0, 3.0, 4.0])
+
+
+def test_rfdiffusion3_design_spec_symmetry_serializes_to_id_dict():
+    """A group-id str wraps to {"id": "<UPPER>"} (the rfd3 SymmetryConfig); a dict passes through."""
+    assert RFdiffusion3DesignSpec(length="100", symmetry="c3").to_dict()["symmetry"] == {"id": "C3"}
+    assert RFdiffusion3DesignSpec(length="100", symmetry="D2").to_dict()["symmetry"] == {"id": "D2"}
+    # dict passes through unchanged (advanced SymmetryConfig)
+    assert RFdiffusion3DesignSpec(length="100", symmetry={"id": "C3"}).to_dict()["symmetry"] == {"id": "C3"}
+    rich = {"id": "C5", "extra": 1}
+    assert RFdiffusion3DesignSpec(length="100", symmetry=rich).to_dict()["symmetry"] == rich
 
 
 # ── Cache-key invariants ────────────────────────────────────────────────────
