@@ -111,7 +111,6 @@ Additional InputSpecification fields can be passed via `**kwargs` (model uses `e
 | `diffusion_batch_size` | `int` | `8` | Designs sampled in parallel per batch (memory scales with this) |
 | `num_timesteps` | `int` | `200` | Diffusion steps (higher = better quality, slower) |
 | `step_scale` | `float` | `1.5` | Step size scale; higher = less diverse, more designable (typical 1.0-2.0) |
-| `n_recycle` | `Optional[int]` | `None` | Recycle iterations; None inherits checkpoint default (~2) |
 | `sampler_kind` | `"default" \| "symmetry"` | `"default"` | Sampler kind; `"symmetry"` for homo-oligomer design |
 | `center_option` | `"all" \| "motif" \| "diffuse"` | `"all"` | Coordinate-frame centering mode |
 | `use_classifier_free_guidance` | `bool` | `False` | Enable classifier-free guidance (CFG) |
@@ -129,8 +128,7 @@ Additional InputSpecification fields can be passed via `**kwargs` (model uses `e
 1. **`num_timesteps`**: Most impactful for structure quality. Use 50-100 for rapid prototyping, 200-500 for production.
 2. **`step_scale`**: Controls diversity vs designability tradeoff. Lower (1.0-1.3) for diverse exploration, higher (1.5-2.0) for safer designs.
 3. **`diffusion_batch_size`**: Generate multiple designs per run; rank by downstream metrics.
-4. **`n_recycle`**: Bump to 5+ when designability matters more than throughput; default inherits checkpoint setting.
-5. **`use_classifier_free_guidance`** + **`cfg_scale`**: Enable when active-site / H-bond constraints matter; otherwise leave off (no-op when off).
+4. **`use_classifier_free_guidance`** + **`cfg_scale`**: Enable when active-site / H-bond constraints matter; otherwise leave off (no-op when off).
 
 ## Output Specification
 

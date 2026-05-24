@@ -84,13 +84,12 @@ def test_rfdiffusion3_design_spec_selections_require_input_structure():
 def test_rfdiffusion3_config_get_cli_kwargs():
     """Sampler knobs emit under inference_sampler.* dotted paths; top-level toggles stay flat.
 
-    Conditional fields (n_recycle, cfg_features, cfg_t_max) only emit when explicitly
+    Conditional fields (cfg_features, cfg_t_max) only emit when explicitly
     set so upstream defaults stand for None.
     """
     # Defaults: conditionals omitted, required fields present
     default_kwargs = RFdiffusion3Config().get_cli_kwargs()
     for omitted in (
-        "inference_sampler.n_recycle",
         "inference_sampler.cfg_features",
         "inference_sampler.cfg_t_max",
     ):
@@ -103,7 +102,6 @@ def test_rfdiffusion3_config_get_cli_kwargs():
         sampler_kind="symmetry",
         center_option="motif",
         use_classifier_free_guidance=True,
-        n_recycle=3,
         cfg_features=["active_donor"],
         cfg_t_max=0.8,
         dump_trajectories=True,
@@ -119,7 +117,6 @@ def test_rfdiffusion3_config_get_cli_kwargs():
         "inference_sampler.kind": "symmetry",
         "inference_sampler.center_option": "motif",
         "inference_sampler.use_classifier_free_guidance": True,
-        "inference_sampler.n_recycle": 3,
         "inference_sampler.cfg_features": ["active_donor"],
         "inference_sampler.cfg_t_max": 0.8,
     }
@@ -138,7 +135,6 @@ def test_rfdiffusion3_config_get_cli_kwargs():
         "kind",
         "center_option",
         "use_classifier_free_guidance",
-        "n_recycle",
         "cfg_features",
         "cfg_t_max",
     ):
@@ -220,7 +216,7 @@ def test_rfdiffusion3_design_spec_ori_token_must_be_xyz():
 
 
 def test_rfdiffusion3_config_cache_key_invariants():
-    """Path / debug-output fields are excluded; n_recycle is included (changes outputs)."""
+    """Path / debug-output fields are excluded; sampler knobs are included (change outputs)."""
     base = RFdiffusion3Config().cache_key()
 
     # Excluded — purely IO / debug knobs
@@ -235,8 +231,8 @@ def test_rfdiffusion3_config_cache_key_invariants():
         == base
     )
 
-    # Included — n_recycle changes the model output
-    assert RFdiffusion3Config(n_recycle=5).cache_key() != base
+    # Included — num_timesteps changes the model output
+    assert RFdiffusion3Config(num_timesteps=50).cache_key() != base
 
 
 # ── JSON spec generation ────────────────────────────────────────────────────

@@ -462,8 +462,6 @@ class RFdiffusion3Config(BaseConfig):
         diffusion_batch_size (int): Designs sampled in parallel per batch.
         num_timesteps (int): Diffusion timesteps; more = slower, generally higher quality.
         step_scale (float): Step size scale; higher = less diverse, more designable.
-        n_recycle (int | None): Recycle iterations; ``None`` inherits the
-            checkpoint default (~2).
         sampler_kind (Literal['default', 'symmetry']): Sampler kind;
             ``'symmetry'`` for homo-oligomer design (paired with ``DesignSpec.symmetry``).
         center_option (Literal['all', 'motif', 'diffuse']): Coordinate-frame
@@ -522,13 +520,6 @@ class RFdiffusion3Config(BaseConfig):
         default=1.5,
         ge=0.1,
         description="Diffusion step size scaling; higher = less diverse, more designable (typical: 1.0-2.0)",
-    )
-    n_recycle: int | None = ConfigField(
-        title="Recycle Iterations",
-        default=None,
-        ge=0,
-        description="Recycle iterations; None inherits the checkpoint default (typically 2)",
-        examples=[2, 5],
     )
     sampler_kind: Literal["default", "symmetry"] = ConfigField(
         title="Sampler Kind",
@@ -648,8 +639,6 @@ class RFdiffusion3Config(BaseConfig):
             }
         )
         # Forward optional sampler knobs only when explicitly set; otherwise upstream defaults stand.
-        if self.n_recycle is not None:
-            cli_kwargs["inference_sampler.n_recycle"] = self.n_recycle
         if self.cfg_features is not None:
             cli_kwargs["inference_sampler.cfg_features"] = self.cfg_features
         if self.cfg_t_max is not None:
