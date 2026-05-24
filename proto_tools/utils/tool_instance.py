@@ -84,6 +84,9 @@ logger = logging.getLogger(__name__)
 # Seconds to wait for a worker to complete a to_device move.
 DEVICE_MOVE_TIMEOUT = 200
 
+# conda corrupts relocated binaries past its 255-byte prefix; cap the envs root.
+MAX_TOOL_ENVS_ROOT_LEN = 200
+
 # ============================================================================
 # Singleton registry
 # ============================================================================
@@ -1338,12 +1341,20 @@ class ToolInstance:
     def _get_tool_envs_root() -> Path:
         """Return ``PROTO_HOME/proto_tool_envs/``.
 
-        Always uses ``PROTO_HOME`` regardless of install mode.
+        Always uses ``PROTO_HOME`` regardless of install mode; raises if too deep
+        for conda's 255-byte binary-relocation limit (set a shorter ``PROTO_HOME``).
         See :func:`~.proto_home.get_proto_home`.
         """
         from proto_tools.utils.proto_home import get_proto_home
 
-        return get_proto_home() / "proto_tool_envs"
+        root = get_proto_home() / "proto_tool_envs"
+        if len(str(root)) > MAX_TOOL_ENVS_ROOT_LEN:
+            raise RuntimeError(
+                f"PROTO_HOME is too deep for conda's binary-relocation limit: {root} "
+                f"exceeds {MAX_TOOL_ENVS_ROOT_LEN} chars and would corrupt env binaries. "
+                f"Set PROTO_HOME to a shorter path."
+            )
+        return root
 
     @staticmethod
     def _get_micromamba_root() -> Path:

@@ -2146,3 +2146,27 @@ def test_use_env_var_one_forces_install_even_when_host_modern(monkeypatch, tmp_p
     assert install_called, "PROTO_USE_FOUNDATION_ENV=1 should force install"
     assert result == foundation_path
     get_proto_home.cache_clear()
+
+
+# ── Tool-env path guard (conda binary-relocation safety) ─────────────────────
+
+
+def test_get_tool_envs_root_under_proto_home(monkeypatch, tmp_path):
+    """Tool envs stay strictly coupled to PROTO_HOME."""
+    from proto_tools.utils.proto_home import get_proto_home
+
+    monkeypatch.setenv("PROTO_HOME", str(tmp_path))
+    get_proto_home.cache_clear()
+    assert ToolInstance._get_tool_envs_root() == tmp_path / "proto_tool_envs"
+    get_proto_home.cache_clear()
+
+
+def test_get_tool_envs_root_raises_when_proto_home_too_deep(monkeypatch):
+    """A PROTO_HOME too long for conda binary relocation fails fast (no silent corruption)."""
+    from proto_tools.utils.proto_home import get_proto_home
+
+    monkeypatch.setenv("PROTO_HOME", "/" + "d" * 250 + "/.proto")
+    get_proto_home.cache_clear()
+    with pytest.raises(RuntimeError, match="Set PROTO_HOME to a shorter path"):
+        ToolInstance._get_tool_envs_root()
+    get_proto_home.cache_clear()
