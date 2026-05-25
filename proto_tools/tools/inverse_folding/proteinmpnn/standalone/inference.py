@@ -52,6 +52,7 @@ class ProteinMPNNModel:
         """Initialize ProteinMPNNModel."""
         self._loaded = False
         self._model_choice: str | None = None
+        self._backbone_noise: float | None = None
         self.device: str | None = None
         self.params: Any = None
         self.model: Any = None
@@ -96,11 +97,7 @@ class ProteinMPNNModel:
         if key is None:
             raise ValueError("proteinmpnn: sample requires an explicit int seed (jax.random.PRNGKey rejects None)")
 
-        # Lazy load the model (reload if model_choice changed)
-        if not self._loaded or self._model_choice != model_choice:
-            self.load(device, model_choice, verbose)
-        elif self.device != device:
-            self.to_device(device)
+        self._ensure_loaded(device, model_choice, verbose, backbone_noise=backbone_noise)
 
         fix_pos = (
             ",".join(f"{chain}{idx}" for chain, positions in fixed_positions.items() for idx in positions)
@@ -115,9 +112,6 @@ class ProteinMPNNModel:
             chain=",".join(chain_ids),
             rm_aa=",".join(excluded_amino_acids) if excluded_amino_acids else None,
         )
-
-        if backbone_noise > 0.0:
-            self.model.set_opt(backbone_noise=backbone_noise)
 
         # Sample sequences
         sequences = self.model.sample_parallel(
@@ -169,11 +163,7 @@ class ProteinMPNNModel:
         if key is None:
             raise ValueError("proteinmpnn: score requires an explicit int seed (jax.random.PRNGKey rejects None)")
 
-        # Lazy load the model (reload if model_choice changed)
-        if not self._loaded or self._model_choice != model_choice:
-            self.load(device, model_choice, verbose)
-        elif self.device != device:
-            self.to_device(device)
+        self._ensure_loaded(device, model_choice, verbose, backbone_noise=0.0)
 
         fix_pos = (
             ",".join(f"{chain}{idx}" for chain, positions in fixed_positions.items() for idx in positions)
@@ -248,11 +238,7 @@ class ProteinMPNNModel:
                 "proteinmpnn: compute_gradient requires an explicit int seed (jax.random.PRNGKey rejects None)"
             )
 
-        # Lazy load the model (reload if model_choice changed)
-        if not self._loaded or self._model_choice != model_choice:
-            self.load(device, model_choice, verbose)
-        elif self.device != device:
-            self.to_device(device)
+        self._ensure_loaded(device, model_choice, verbose, backbone_noise=0.0)
 
         fix_pos = (
             ",".join(f"{chain}{idx}" for chain, positions in fixed_positions.items() for idx in positions)
@@ -316,13 +302,33 @@ class ProteinMPNNModel:
             "vocab": CANONICAL_VOCAB,
         }
 
-    def load(self, device: str, model_choice: str = "proteinmpnn", verbose: bool = False) -> None:
+    def _ensure_loaded(
+        self,
+        device: str,
+        model_choice: str,
+        verbose: bool,
+        *,
+        backbone_noise: float,
+    ) -> None:
+        if not self._loaded or self._model_choice != model_choice or self._backbone_noise != backbone_noise:
+            self.load(device, model_choice, verbose, backbone_noise=backbone_noise)
+        elif self.device != device:
+            self.to_device(device)
+
+    def load(
+        self,
+        device: str,
+        model_choice: str = "proteinmpnn",
+        verbose: bool = False,
+        backbone_noise: float = 0.0,
+    ) -> None:
         """Load ProteinMPNN model to device.
 
         Args:
             device: Device to load the model on.
             model_choice: Model weights ('proteinmpnn', 'abmpnn', or 'soluble').
             verbose: Whether to print status messages.
+            backbone_noise: Gaussian noise (A) baked into ColabDesign's model config.
         """
         self.verbose = verbose
         model_name, weights = _MODEL_CONFIG.get(model_choice, ("v_48_020", "original"))
@@ -334,10 +340,11 @@ class ProteinMPNNModel:
         from colabdesign.mpnn import mk_mpnn_model
 
         # Load the Flax module (params land on CPU by default)
-        self.model = mk_mpnn_model(model_name=model_name, weights=weights)
+        self.model = mk_mpnn_model(model_name=model_name, weights=weights, backbone_noise=backbone_noise)
         self.params = self.model._model.params
         self.device = "cpu"
         self._model_choice = model_choice
+        self._backbone_noise = backbone_noise
 
         # Move the model parameters to the selected device
         self.to_device(device)

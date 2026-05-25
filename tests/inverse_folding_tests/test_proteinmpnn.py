@@ -4,7 +4,9 @@ Tests for ProteinMPNN sampling and scoring.
 """
 
 import random
+import sys
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
 import numpy as np
 import pytest
@@ -69,6 +71,56 @@ def pdb_structure():
 
 def _small_structure() -> Structure:
     return Structure(structure=_SMALL_PDB)
+
+
+def test_proteinmpnn_sample_backbone_noise_uses_model_constructor(monkeypatch, tmp_path):
+    """ColabDesign's mk_mpnn_model has no set_opt; backbone_noise is a constructor arg."""
+    from proto_tools.tools.inverse_folding.proteinmpnn.standalone import inference as proteinmpnn_inference
+
+    calls: list[float] = []
+
+    class FakeMpnnModel:
+        def __init__(self, *, model_name, weights, backbone_noise=0.0):
+            calls.append(backbone_noise)
+            self._model = SimpleNamespace(params={"p": np.array([1.0])})
+
+        def prep_inputs(self, *args, **kwargs):
+            return None
+
+        def sample_parallel(self, *args, **kwargs):
+            return {
+                "seq": np.array(["AGSVL"]),
+                "score": np.array([0.0]),
+                "seqid": np.array([1.0]),
+                "logits": np.zeros((1, 5, len(ALPHAFOLD_VOCAB))),
+            }
+
+    fake_colabdesign = ModuleType("colabdesign")
+    fake_mpnn = ModuleType("colabdesign.mpnn")
+    fake_mpnn.mk_mpnn_model = FakeMpnnModel
+    fake_colabdesign.mpnn = fake_mpnn
+    monkeypatch.setitem(sys.modules, "colabdesign", fake_colabdesign)
+    monkeypatch.setitem(sys.modules, "colabdesign.mpnn", fake_mpnn)
+
+    standalone_helpers = sys.modules["standalone_helpers"]
+    monkeypatch.setattr(standalone_helpers, "set_jax_seed", lambda seed: object())
+    monkeypatch.setattr(
+        proteinmpnn_inference.ProteinMPNNModel,
+        "to_device",
+        lambda self, device: setattr(self, "device", device),
+    )
+    monkeypatch.setattr(proteinmpnn_inference.ProteinMPNNModel, "unload", lambda self: None)
+
+    pdb_path = tmp_path / "input.pdb"
+    pdb_path.write_text("END\n")
+    model = proteinmpnn_inference.ProteinMPNNModel()
+
+    noisy = model.sample(str(pdb_path), ["A"], batch_size=1, seed=1, device="cpu", backbone_noise=0.02)
+    assert noisy["seq"].tolist() == ["AGSVL"]
+    assert calls == [0.02]
+
+    model.sample(str(pdb_path), ["A"], batch_size=1, seed=2, device="cpu", backbone_noise=0.0)
+    assert calls == [0.02, 0.0]
 
 
 @pytest.mark.uses_gpu
