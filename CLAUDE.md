@@ -1,6 +1,3 @@
-`SYSTEM_PROMPT.md` is for agents that use the existing library to write programs and scripts. 
-Use the contents of this file when contributing to the repo itself.
-
 ## Project Overview
 
 `proto_tools` is the Proto Bio library of typed bioinformatics tool wrappers.
