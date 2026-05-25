@@ -115,7 +115,7 @@ def test_rfdiffusion3_config_get_cli_kwargs():
     # Explicit override of every typed sampler + top-level toggle
     config = RFdiffusion3Config(
         cfg_scale=2.0,
-        gamma_0=0.4,
+        gamma_0=0.7,
         sampler_kind="symmetry",
         center_option="motif",
         use_classifier_free_guidance=True,
@@ -130,7 +130,7 @@ def test_rfdiffusion3_config_get_cli_kwargs():
     # Sampler knobs use dotted Hydra paths
     expected_dotted = {
         "inference_sampler.cfg_scale": 2.0,
-        "inference_sampler.gamma_0": 0.4,
+        "inference_sampler.gamma_0": 0.7,
         "inference_sampler.kind": "symmetry",
         "inference_sampler.center_option": "motif",
         "inference_sampler.use_classifier_free_guidance": True,

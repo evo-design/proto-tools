@@ -193,10 +193,7 @@ class RFdiffusion3DesignSpec(BaseModel):
     symmetry: str | dict[str, Any] | None = Field(
         default=None,
         title="Symmetry",
-        description=(
-            "Symmetry for homo-oligomer design: group-id string (e.g. 'C3') or "
-            "SymmetryConfig dict; pair with sampler_kind='symmetry'"
-        ),
+        description="Homo-oligomer symmetry: group-id or SymmetryConfig dict; pair with sampler_kind='symmetry'",
         examples=["C3", {"id": "C3"}],
     )
     select_buried: bool | str | dict[str, str] | None = Field(
@@ -574,10 +571,7 @@ class RFdiffusion3Config(BaseConfig):
         title="Gamma 0",
         default=0.6,
         ge=0.0,
-        description=(
-            "Sampler stochasticity; lower = more designable, less diverse; "
-            "0.0 = deterministic ODE. Must be > 0.5 when sampler_kind='symmetry'."
-        ),
+        description="Sampler stochasticity (lower = more designable, less diverse); >0.5 for symmetry sampler",
     )
     low_memory_mode: bool = ConfigField(
         title="Low Memory Mode",
