@@ -65,5 +65,6 @@ This tool supplies the loss and gradient signal that gradient-based or MCMC sequ
 These apply to every ESMFold tool in this toolkit (`esmfold-prediction`, `esmfold-gradient`).
 
 - **Requires a GPU.** Both tools run ESMFold through a PyTorch backend and need an NVIDIA GPU (roughly 16 GB of VRAM or more for longer sequences); CPU execution is not practical.
+- **`max_batch_residues` is a starting cap, not a hard ceiling.** On CUDA OOM the wrapper halves the cap (floor = longest single complex) and re-splits the offending sub-batch, so the default `1200` is usually fine to leave in place.
 - **MSA-free and single-sequence.** ESMFold folds from one sequence with no alignment or template search, which makes it much faster than AlphaFold2 but less accurate for targets where a deep, diverse MSA would help.
 - **`num_recycles` (default `4`) applies to both tools.** Each recycling iteration refines the structure; raising it improves accuracy at higher runtime.
