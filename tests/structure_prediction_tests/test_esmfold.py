@@ -40,6 +40,79 @@ def _minimal_pdb(num_residues: int) -> str:
     return "\n".join(lines) + "\n"
 
 
+def test_esmfold_predict_retries_on_cuda_oom():
+    """On CUDA OOM the wrapper halves max_batch_residues and re-splits the sub-batch."""
+    seq_a, seq_b = "A" * 100, "C" * 100  # each 100 residues; default split would put both in one batch
+    inputs = ESMFoldInput(
+        complexes=[
+            StructurePredictionComplex(chains=[{"sequence": seq_a, "entity_type": "protein"}]),
+            StructurePredictionComplex(chains=[{"sequence": seq_b, "entity_type": "protein"}]),
+        ]
+    )
+    config = ESMFoldConfig(max_batch_residues=200, num_recycles=1)
+    one_result = {"pdb": _minimal_pdb(4), "avg_plddt": 0.8, "ptm": 0.5, "avg_pae": 6.0}
+
+    calls: list[int] = []
+
+    def fake_dispatch(_name, payload, **_kwargs):
+        n = len(payload["batch_data"])
+        calls.append(n)
+        if len(calls) == 1:
+            raise RuntimeError("CUDA out of memory. Tried to allocate 1.00 GiB")
+        return {"results": [one_result] * n}
+
+    with patch(
+        "proto_tools.tools.structure_prediction.esmfold.esmfold.ToolInstance.dispatch", side_effect=fake_dispatch
+    ):
+        output = run_esmfold(inputs=inputs, config=config)
+
+    # First call: original batch of 2 OOMs. Cap halves 200→100, splitter yields two batches of 1.
+    assert calls == [2, 1, 1]
+    assert len(output.structures) == 2
+
+
+def test_esmfold_predict_does_not_duplicate_results_on_mid_attempt_oom():
+    """Mid-iteration OOM discards earlier chunks' results so retry doesn't double-count."""
+    inputs = ESMFoldInput(
+        complexes=[
+            StructurePredictionComplex(chains=[{"sequence": ch * 50, "entity_type": "protein"}])
+            for ch in ("A", "C", "D", "E")
+        ]
+    )
+    config = ESMFoldConfig(max_batch_residues=200, num_recycles=1)
+    one_result = {"pdb": _minimal_pdb(4), "avg_plddt": 0.8, "ptm": 0.5, "avg_pae": 6.0}
+
+    call_idx = 0
+
+    def fake_dispatch(_name, payload, **_kwargs):
+        nonlocal call_idx
+        call_idx += 1
+        # OOM full batch (call 1), then chunk 2 of the halved attempt (call 3); cap=50 succeeds.
+        if call_idx in (1, 3):
+            raise RuntimeError("CUDA out of memory")
+        return {"results": [one_result] * len(payload["batch_data"])}
+
+    with patch(
+        "proto_tools.tools.structure_prediction.esmfold.esmfold.ToolInstance.dispatch", side_effect=fake_dispatch
+    ):
+        output = run_esmfold(inputs=inputs, config=config)
+
+    assert len(output.structures) == 4
+
+
+def test_esmfold_predict_propagates_non_oom_errors():
+    """Non-OOM RuntimeError surfaces immediately without halving."""
+    inputs = ESMFoldInput(
+        complexes=[StructurePredictionComplex(chains=[{"sequence": "A" * 50, "entity_type": "protein"}])]
+    )
+    with patch(
+        "proto_tools.tools.structure_prediction.esmfold.esmfold.ToolInstance.dispatch",
+        side_effect=RuntimeError("unrelated worker failure"),
+    ):
+        with pytest.raises(RuntimeError, match=r"unrelated worker failure"):
+            run_esmfold(inputs=inputs, config=ESMFoldConfig(num_recycles=1))
+
+
 def test_esmfold_gradient_input_validation():
     """Gradient input validates target-chain/logit shape before dispatch."""
     logits = one_hot_protein_logits("MKTL", sharpness=2.0)

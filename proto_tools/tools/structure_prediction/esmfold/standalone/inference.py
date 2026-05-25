@@ -7,6 +7,7 @@ Usage:
     python inference.py <input_json_path> <output_json_path>
 """
 
+import gc
 import json
 import logging
 import sys
@@ -15,6 +16,14 @@ from typing import Any
 
 import torch
 from standalone_helpers import AMINO_ACIDS_LIST, get_logger, move_model_to_device, serialize_output
+
+
+def _release_cuda_memory() -> None:
+    """``gc.collect()`` + ``torch.cuda.empty_cache()`` to drop autograd graph between worker requests."""
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
 
 logger = get_logger(__name__)
 # Suppress transformers logging
@@ -78,27 +87,31 @@ class ESMFoldModel:
                 logger.info(f"Long sequence detected ({max_seq_len} residues), enabling trunk chunking (chunk_size=64)")
             self.model.trunk.set_chunk_size(64)
 
-        # Forward-only path; avoid inference tensors.
-        with torch.no_grad(), _allow_tf32():
-            # Tokenize all sequences
-            tokenized_inputs = self.tokenizer(
-                linked_sequences, return_tensors="pt", padding=True, add_special_tokens=False
-            )
-            tokenized_inputs = {k: v.to(self.device) for k, v in tokenized_inputs.items()}
+        try:
+            # Forward-only path; avoid inference tensors.
+            with torch.no_grad(), _allow_tf32():
+                # Tokenize all sequences
+                tokenized_inputs = self.tokenizer(
+                    linked_sequences, return_tensors="pt", padding=True, add_special_tokens=False
+                )
+                tokenized_inputs = {k: v.to(self.device) for k, v in tokenized_inputs.items()}
 
-            # Build position_ids and linker_masks
-            position_ids, linker_masks = self._build_batch_tensors(batch_data, residue_idx_offset, chain_linker)
-            tokenized_inputs["position_ids"] = position_ids
+                # Build position_ids and linker_masks
+                position_ids, linker_masks = self._build_batch_tensors(batch_data, residue_idx_offset, chain_linker)
+                tokenized_inputs["position_ids"] = position_ids
 
-            # Forward pass
-            logger.update_status(f"Folding {len(batch_data)} complex(es), num_recycles={num_recycles}")
-            outputs = self.model(**tokenized_inputs, num_recycles=num_recycles)
+                # Forward pass
+                logger.update_status(f"Folding {len(batch_data)} complex(es), num_recycles={num_recycles}")
+                outputs = self.model(**tokenized_inputs, num_recycles=num_recycles)
 
-            # Apply linker masking
-            outputs["atom37_atom_exists"] = outputs["atom37_atom_exists"] * linker_masks[:, :, None]
+                # Apply linker masking
+                outputs["atom37_atom_exists"] = outputs["atom37_atom_exists"] * linker_masks[:, :, None]
 
-        # Extract per-complex results
-        return [self._extract_result(outputs, idx, include_pae_matrix) for idx in range(len(batch_data))]
+            # Extract per-complex results
+            return [self._extract_result(outputs, idx, include_pae_matrix) for idx in range(len(batch_data))]
+        finally:
+            # Drop activations before the worker handles the next request (incl. after OOM).
+            _release_cuda_memory()
 
     def compute_gradient(
         self,
@@ -158,59 +171,65 @@ class ESMFoldModel:
                 logger.info(f"Long sequence detected ({max_seq_len} residues), enabling trunk chunking (chunk_size=64)")
             self.model.trunk.set_chunk_size(64)
 
-        if all(weight == 0.0 for weight in loss_weights.values()):
-            # Forward-only path; avoid inference tensors.
-            with torch.no_grad(), _allow_tf32():
-                outputs = self._run_discrete_forward(
+        try:
+            if all(weight == 0.0 for weight in loss_weights.values()):
+                # Forward-only path; avoid inference tensors.
+                with torch.no_grad(), _allow_tf32():
+                    outputs = self._run_discrete_forward(
+                        complex_data,
+                        residue_idx_offset=residue_idx_offset,
+                        chain_linker=chain_linker,
+                        num_recycles=num_recycles,
+                    )
+                result = self._extract_result(outputs, 0, include_pae_matrix)
+                metrics = _metrics_with_losses(result, {})
+                return {
+                    "gradient": serialize_output(torch.zeros_like(logits)) if compute_gradient else None,
+                    "loss": 0.0,
+                    "metrics": metrics,
+                    "vocab": AMINO_ACIDS_LIST,
+                    "pdb": result["pdb"],
+                }
+
+            # Differentiable path; tensors must be saved for backward.
+            with torch.inference_mode(False), torch.set_grad_enabled(compute_gradient), _allow_tf32():
+                relaxed_probs = _relaxed_amino_acid_probs(logits, temperature=temperature, soft=soft, hard=hard)
+                outputs = self._run_relaxed_forward(
                     complex_data,
+                    relaxed_probs=relaxed_probs,
+                    target_chain_indices=target_chain_indices,
                     residue_idx_offset=residue_idx_offset,
                     chain_linker=chain_linker,
                     num_recycles=num_recycles,
                 )
+                loss_terms = self._confidence_loss_terms(outputs)
+                missing = [key for key, weight in loss_weights.items() if weight != 0.0 and key not in loss_terms]
+                if missing:
+                    raise RuntimeError(
+                        f"esmfold: model output did not include required confidence terms {missing}; "
+                        f"available terms: {sorted(loss_terms)}"
+                    )
+                weighted_terms = [
+                    float(weight) * loss_terms[key] for key, weight in loss_weights.items() if weight != 0.0
+                ]
+                weighted_loss = torch.stack(weighted_terms).sum()
+
+                gradient = None
+                if compute_gradient:
+                    gradient = torch.autograd.grad(weighted_loss, logits, allow_unused=False)[0]
+
             result = self._extract_result(outputs, 0, include_pae_matrix)
-            metrics = _metrics_with_losses(result, {})
+            metrics = _metrics_with_losses(result, {key: float(loss_terms[key].detach()) for key in loss_terms})
             return {
-                "gradient": serialize_output(torch.zeros_like(logits)) if compute_gradient else None,
-                "loss": 0.0,
+                "gradient": serialize_output(gradient) if gradient is not None else None,
+                "loss": float(weighted_loss.detach()),
                 "metrics": metrics,
                 "vocab": AMINO_ACIDS_LIST,
                 "pdb": result["pdb"],
             }
-
-        # Differentiable path; tensors must be saved for backward.
-        with torch.inference_mode(False), torch.set_grad_enabled(compute_gradient), _allow_tf32():
-            relaxed_probs = _relaxed_amino_acid_probs(logits, temperature=temperature, soft=soft, hard=hard)
-            outputs = self._run_relaxed_forward(
-                complex_data,
-                relaxed_probs=relaxed_probs,
-                target_chain_indices=target_chain_indices,
-                residue_idx_offset=residue_idx_offset,
-                chain_linker=chain_linker,
-                num_recycles=num_recycles,
-            )
-            loss_terms = self._confidence_loss_terms(outputs)
-            missing = [key for key, weight in loss_weights.items() if weight != 0.0 and key not in loss_terms]
-            if missing:
-                raise RuntimeError(
-                    f"esmfold: model output did not include required confidence terms {missing}; "
-                    f"available terms: {sorted(loss_terms)}"
-                )
-            weighted_terms = [float(weight) * loss_terms[key] for key, weight in loss_weights.items() if weight != 0.0]
-            weighted_loss = torch.stack(weighted_terms).sum()
-
-            gradient = None
-            if compute_gradient:
-                gradient = torch.autograd.grad(weighted_loss, logits, allow_unused=False)[0]
-
-        result = self._extract_result(outputs, 0, include_pae_matrix)
-        metrics = _metrics_with_losses(result, {key: float(loss_terms[key].detach()) for key in loss_terms})
-        return {
-            "gradient": serialize_output(gradient) if gradient is not None else None,
-            "loss": float(weighted_loss.detach()),
-            "metrics": metrics,
-            "vocab": AMINO_ACIDS_LIST,
-            "pdb": result["pdb"],
-        }
+        finally:
+            # Drop autograd graph + activations before the worker handles the next request.
+            _release_cuda_memory()
 
     def _run_discrete_forward(
         self,

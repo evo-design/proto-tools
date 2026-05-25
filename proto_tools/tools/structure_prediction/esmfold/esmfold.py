@@ -46,6 +46,14 @@ from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 _VALID_GRADIENT_LOSS_KEYS = frozenset({"plddt", "ptm", "pae"})
 
+# Up to 4 halvings (e.g. 1200→600→300→150→75) before re-raising the OOM.
+_MAX_OOM_HALVINGS = 4
+
+
+def _is_cuda_oom(exc: RuntimeError) -> bool:
+    """Match ``torch.OutOfMemoryError`` (modern) or ``RuntimeError("out of memory")`` (legacy)."""
+    return "out of memory" in str(exc).lower()
+
 
 # ============================================================================
 # Data Models
@@ -195,10 +203,9 @@ class ESMFoldConfig(StructurePredictionConfig):
             chains with a flexible linker sequence (typically glycines). The linker
             is removed in the final output. Default: 25 glycines (``"G" * 25``).
 
-        max_batch_residues (int): Maximum total residues to process in a single
-            inference batch. Used to prevent GPU memory overflow when predicting
-            multiple structures. Complexes are automatically split into safe batches
-            based on this limit. Must be at least 100. Default: 1200.
+        max_batch_residues (int): Starting cap on total residues per inference
+            batch; auto-halved on CUDA OOM (floor = longest single complex).
+            Must be at least 100. Default: 1200.
 
         num_recycles (int): Recycling iterations through the structure module.
 
@@ -232,7 +239,7 @@ class ESMFoldConfig(StructurePredictionConfig):
         title="Max Batch Residues",
         default=1200,
         ge=100,
-        description="Maximum total residues per inference batch (to prevent GPU memory overflow)",
+        description="Starting cap on total residues per inference batch; auto-halved on CUDA OOM",
     )
     num_recycles: int = ConfigField(
         title="Recycling Iterations",
@@ -520,31 +527,53 @@ def run_esmfold(
         unit="structure",
     )
 
-    for batch_idx, sub_batch in enumerate(sub_batches):
-        if len(sub_batches) > 1:
-            logger.debug(f"  Sub-batch {batch_idx + 1}/{len(sub_batches)}: {len(sub_batch)} complexes")
-
-        # Prepare input data for inference script
+    def _dispatch(batch: list[dict[str, Any]]) -> list[dict[str, Any]]:
         input_data = {
             "operation": "predict",
-            "batch_data": sub_batch,
+            "batch_data": batch,
             "residue_idx_offset": config.residue_idx_offset,
             "chain_linker": config.chain_linker,
             "include_pae_matrix": config.include_pae_matrix,
             "num_recycles": config.num_recycles,
+            "device": config.device,
+            "verbose": config.verbose,
         }
+        results: list[dict[str, Any]] = ToolInstance.dispatch("esmfold", input_data, instance=instance, config=config)[
+            "results"
+        ]
+        return results
 
-        # Call the inference script
-        input_data["device"] = config.device
-        input_data["verbose"] = config.verbose
-        output_data = ToolInstance.dispatch(
-            "esmfold",
-            input_data,
-            instance=instance,
-            config=config,
-        )
+    for batch_idx, sub_batch in enumerate(sub_batches):
+        if len(sub_batches) > 1:
+            logger.debug(f"  Sub-batch {batch_idx + 1}/{len(sub_batches)}: {len(sub_batch)} complexes")
 
-        all_results.extend(output_data["results"])
+        # Auto-halve max_batch_residues on CUDA OOM and re-split this sub-batch. Floor
+        # is the longest single complex — below it the splitter cannot reduce further.
+        floor = max(item["total_residues"] for item in sub_batch)
+        cap = config.max_batch_residues
+        for attempt in range(_MAX_OOM_HALVINGS + 1):
+            attempt_results: list[dict[str, Any]] = []
+            try:
+                if cap == config.max_batch_residues:
+                    attempt_results.extend(_dispatch(sub_batch))
+                else:
+                    for chunk in _split_into_safe_batches(sub_batch, max_residues=cap):
+                        attempt_results.extend(_dispatch(chunk))
+            except RuntimeError as exc:
+                if not _is_cuda_oom(exc):
+                    raise
+                next_cap = cap // 2
+                if next_cap < floor or attempt == _MAX_OOM_HALVINGS:
+                    raise
+                logger.warning(
+                    f"esmfold-predict: CUDA OOM at max_batch_residues={cap}, halving to "
+                    f"{next_cap} (attempt {attempt + 1}/{_MAX_OOM_HALVINGS})"
+                )
+                cap = next_cap
+            else:
+                # Commit only on full attempt success so mid-iteration OOM doesn't duplicate.
+                all_results.extend(attempt_results)
+                break
 
         # Update progress bar by the number of structures in this batch
         pbar.update(len(sub_batch))
