@@ -488,7 +488,8 @@ class RFdiffusion3Config(BaseConfig):
         cfg_t_max (float | None): Diffusion-timestep cap for CFG (0.0-1.0);
             ``None`` keeps upstream default.
         gamma_0 (float): Sampler stochasticity; lower = more designable,
-            less diverse; ``0.0`` = deterministic ODE.
+            less diverse; ``0.0`` = deterministic ODE. Must be ``> 0.5``
+            when ``sampler_kind="symmetry"``.
         low_memory_mode (bool): Memory-efficient tokenization (slower);
             enable only if GPU RAM is tight.
         dump_trajectories (bool): Save diffusion trajectory frames (debugging).
@@ -573,7 +574,10 @@ class RFdiffusion3Config(BaseConfig):
         title="Gamma 0",
         default=0.6,
         ge=0.0,
-        description="Sampler stochasticity; lower = more designable, less diverse; 0.0 = deterministic ODE",
+        description=(
+            "Sampler stochasticity; lower = more designable, less diverse; "
+            "0.0 = deterministic ODE. Must be > 0.5 when sampler_kind='symmetry'."
+        ),
     )
     low_memory_mode: bool = ConfigField(
         title="Low Memory Mode",
@@ -621,6 +625,13 @@ class RFdiffusion3Config(BaseConfig):
         description="Device to run the model on (e.g., 'cuda', 'cpu')",
         include_in_key=False,
     )
+
+    @model_validator(mode="after")
+    def validate_gamma_0_with_symmetry_sampler(self) -> Any:
+        """Upstream rfd3 invariant: ``gamma_0 > 0.5`` is required when ``sampler_kind == "symmetry"``."""
+        if self.sampler_kind == "symmetry" and self.gamma_0 <= 0.5:
+            raise ValueError(f"gamma_0 must be > 0.5 when sampler_kind='symmetry'; got {self.gamma_0}")
+        return self
 
     def get_cli_kwargs(self) -> dict[str, Any]:
         """Build CLI args for the rfd3 inference script.

@@ -78,6 +78,23 @@ def test_rfdiffusion3_design_spec_selections_require_input_structure():
     assert spec.length == "40"
 
 
+def test_rfdiffusion3_config_gamma_0_symmetry_constraint():
+    """gamma_0 must be > 0.5 when sampler_kind='symmetry' (upstream rfd3 asserts this)."""
+    pattern = r"gamma_0 must be > 0\.5 when sampler_kind='symmetry'"
+
+    # Reject: low gamma_0 with symmetry sampler, including the strict boundary at 0.5.
+    with pytest.raises(ValueError, match=pattern):
+        RFdiffusion3Config(sampler_kind="symmetry", gamma_0=0.35)
+    with pytest.raises(ValueError, match=pattern):
+        RFdiffusion3Config(sampler_kind="symmetry", gamma_0=0.5)
+
+    # Happy path: default gamma_0=0.6 is fine with symmetry.
+    assert RFdiffusion3Config(sampler_kind="symmetry").gamma_0 == 0.6
+
+    # Happy path: low gamma_0 is fine with the default sampler (constraint is symmetry-specific).
+    assert RFdiffusion3Config(sampler_kind="default", gamma_0=0.1).gamma_0 == 0.1
+
+
 # ── Config: CLI kwargs assembly ─────────────────────────────────────────────
 
 

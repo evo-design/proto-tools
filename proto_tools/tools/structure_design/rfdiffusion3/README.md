@@ -117,7 +117,7 @@ Additional InputSpecification fields can be passed via `**kwargs` (model uses `e
 | `cfg_scale` | `float` | `1.5` | CFG scale (typical 1.0-3.0); requires CFG enabled |
 | `cfg_features` | `Optional[List[str]]` | `None` | CFG feature names; None uses upstream default |
 | `cfg_t_max` | `Optional[float]` | `None` | Max diffusion timestep at which CFG is applied (0.0-1.0) |
-| `gamma_0` | `float` | `0.6` | Sampler stochasticity; 0.0 = deterministic ODE |
+| `gamma_0` | `float` | `0.6` | Sampler stochasticity; 0.0 = deterministic ODE. Must be > 0.5 when `sampler_kind="symmetry"` |
 | `low_memory_mode` | `bool` | `False` | Memory-efficient tokenization (slower); set if GPU RAM is tight |
 | `dump_trajectories` | `bool` | `False` | Save diffusion trajectory frames to output dir |
 | `align_trajectory_structures` | `bool` | `False` | Align trajectory frames (only when dumping) |
