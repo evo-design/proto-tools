@@ -38,6 +38,38 @@ from proto_tools.utils import (
 
 logger = logging.getLogger(__name__)
 
+_STRUCTURE_PATH_SUFFIXES = (".pdb", ".cif", ".pdb.gz", ".cif.gz")
+
+
+def _looks_like_structure_path(value: str) -> bool:
+    stripped = value.strip()
+    if not stripped or "\n" in stripped or "\r" in stripped:
+        return False
+    lower = stripped.lower()
+    return any(lower.endswith(suffix) for suffix in _STRUCTURE_PATH_SUFFIXES) or "/" in stripped or "\\" in stripped
+
+
+def _resolve_input_structure_path(value: str) -> str:
+    path = Path(value).expanduser()
+    try:
+        exists = path.exists()
+    except OSError as exc:
+        if not _looks_like_structure_path(value):
+            return value
+        raise FileNotFoundError(
+            f"RFdiffusion3 input_structure path could not be inspected: {value!r} (resolved from cwd {Path.cwd()})"
+        ) from exc
+    if exists:
+        if not path.is_file():
+            raise ValueError(f"RFdiffusion3 input_structure is not a file: {value!r}")
+        return str(path.resolve())
+    if _looks_like_structure_path(value):
+        raise FileNotFoundError(
+            f"RFdiffusion3 input_structure path does not exist: {value!r} (resolved from cwd {Path.cwd()})"
+        )
+    return value
+
+
 # ============================================================================
 # Data Models
 # ============================================================================
@@ -265,6 +297,13 @@ class RFdiffusion3DesignSpec(BaseModel):
             return {"id": value.strip().upper()}
         return value
 
+    @field_validator("contig")
+    @classmethod
+    def _reject_literal_nul_in_contig(cls, value: str | None) -> str | None:
+        if value is not None and "\0" in value:
+            raise ValueError("contig contains a literal NUL byte; use the two-character '\\\\0' chain-break token")
+        return value
+
     @model_validator(mode="after")
     def validate_has_design_params(self) -> Any:
         """Reject specs with no constraints (any typed field or extras suffices)."""
@@ -339,7 +378,7 @@ class RFdiffusion3DesignSpec(BaseModel):
 
         # Add typed fields (these override extra kwargs if both provided)
         if self.input_structure is not None:
-            spec["input"] = self.input_structure
+            spec["input"] = _resolve_input_structure_path(self.input_structure)
         if self.contig is not None:
             spec["contig"] = self.contig
         if self.length is not None:
@@ -437,7 +476,11 @@ class RFdiffusion3Input(BaseToolInput):
     def to_json_spec(self) -> str:
         """Convert input to RFdiffusion3 JSON specification format."""
         if self.raw_json:
-            return self.raw_json
+            spec = json.loads(self.raw_json)
+            for item in spec.values() if isinstance(spec, dict) else []:
+                if isinstance(item, dict) and isinstance(item.get("input"), str):
+                    item["input"] = _resolve_input_structure_path(item["input"])
+            return json.dumps(spec, indent=2)
 
         spec_dict: dict[str, Any] = {}
         for i, spec in enumerate(self.design_specs):

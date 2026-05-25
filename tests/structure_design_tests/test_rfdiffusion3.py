@@ -4,6 +4,9 @@ Tests for RFdiffusion3.
 """
 
 import json
+import subprocess
+from importlib import util
+from pathlib import Path
 
 import pytest
 
@@ -158,13 +161,15 @@ def test_rfdiffusion3_config_get_cli_kwargs():
         assert flat not in kwargs
 
 
-def test_rfdiffusion3_typed_fields_override_extras_on_collision():
+def test_rfdiffusion3_typed_fields_override_extras_on_collision(tmp_path):
     """Both Config.get_cli_kwargs and DesignSpec.to_dict resolve typed-vs-extras collisions for typed."""
     config = RFdiffusion3Config(cfg_scale=2.0, **{"inference_sampler.cfg_scale": 99.0})
     assert config.get_cli_kwargs()["inference_sampler.cfg_scale"] == 2.0
 
-    spec = RFdiffusion3DesignSpec.model_validate({"input_structure": "typed.pdb", "input": "extra.pdb"})
-    assert spec.to_dict()["input"] == "typed.pdb"
+    target = tmp_path / "typed.pdb"
+    target.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000\n", encoding="utf-8")
+    spec = RFdiffusion3DesignSpec.model_validate({"input_structure": str(target), "input": "extra.pdb"})
+    assert spec.to_dict()["input"] == str(target)
 
 
 # ── DesignSpec: JSON spec emission ──────────────────────────────────────────
@@ -172,8 +177,10 @@ def test_rfdiffusion3_typed_fields_override_extras_on_collision():
 
 def test_rfdiffusion3_design_spec_typed_fields_propagate_to_json():
     """Every typed InputSpecification field lands in to_dict() under its upstream key."""
+    pdb_content = "ATOM      1  N   ALA A   1       0.000   0.000   0.000\nEND\n"
+
     spec = RFdiffusion3DesignSpec(
-        input_structure="target.pdb",
+        input_structure=pdb_content,
         contig="A1-100",
         symmetry="c3",
         select_buried="A1-50",
@@ -188,6 +195,7 @@ def test_rfdiffusion3_design_spec_typed_fields_propagate_to_json():
         is_non_loopy=True,
     )
     d = spec.to_dict()
+    assert d["input"] == pdb_content
     assert d["symmetry"] == {"id": "C3"}  # string normalized to SymmetryConfig dict
     assert d["select_buried"] == "A1-50"
     assert d["select_partially_buried"] == "A51-70"
@@ -229,6 +237,12 @@ def test_rfdiffusion3_design_spec_ori_token_must_be_xyz():
         RFdiffusion3DesignSpec(length="100", ori_token=[1.0, 2.0, 3.0, 4.0])
 
 
+def test_rfdiffusion3_design_spec_rejects_literal_nul_chain_break():
+    r"""Use the text token "\\0", not a Python literal NUL byte."""
+    with pytest.raises(ValueError, match="literal NUL byte"):
+        RFdiffusion3DesignSpec(input_structure="target.pdb", contig="50,\0,A1-10")
+
+
 def test_rfdiffusion3_design_spec_symmetry_serializes_to_id_dict():
     """A group-id str wraps to {"id": "<UPPER>"} (the rfd3 SymmetryConfig); a dict passes through."""
     assert RFdiffusion3DesignSpec(length="100", symmetry="c3").to_dict()["symmetry"] == {"id": "C3"}
@@ -265,8 +279,12 @@ def test_rfdiffusion3_config_cache_key_invariants():
 # ── JSON spec generation ────────────────────────────────────────────────────
 
 
-def test_rfdiffusion3_json_spec_generation():
+def test_rfdiffusion3_json_spec_generation(tmp_path, monkeypatch):
     """Multiple design specs produce keyed JSON with correct fields."""
+    target = tmp_path / "target.pdb"
+    target.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
     inputs = RFdiffusion3Input(
         design_specs=[
             RFdiffusion3DesignSpec(length="100"),
@@ -280,7 +298,58 @@ def test_rfdiffusion3_json_spec_generation():
     assert "spec-1" in spec
     assert spec["spec-0"]["length"] == "100"
     assert spec["spec-1"]["contig"] == "50-80"
-    assert spec["spec-1"]["input"] == "target.pdb"  # input_structure → upstream's "input" key
+    assert spec["spec-1"]["input"] == str(target)  # input_structure -> upstream's "input" key
+
+
+def test_rfdiffusion3_json_spec_rejects_missing_path_like_input():
+    """Path-like input_structure values fail before rfd3 runs in a temp dir."""
+    inputs = RFdiffusion3Input(
+        design_specs=[
+            RFdiffusion3DesignSpec(
+                input_structure="benchmarks/assets/missing.pdb",
+                contig="50-80",
+            )
+        ]
+    )
+
+    with pytest.raises(FileNotFoundError, match="input_structure path does not exist"):
+        inputs.to_json_spec()
+
+
+def test_rfdiffusion3_json_spec_rejects_directory_input_structure(tmp_path):
+    inputs = RFdiffusion3Input(
+        design_specs=[
+            RFdiffusion3DesignSpec(
+                input_structure=str(tmp_path),
+                contig="50-80",
+            )
+        ]
+    )
+
+    with pytest.raises(ValueError, match="input_structure is not a file"):
+        inputs.to_json_spec()
+
+
+def test_rfdiffusion3_json_spec_preserves_inline_structure_content():
+    """Inline PDB/CIF strings are not treated as local paths."""
+    pdb_content = "ATOM      1  N   ALA A   1       0.000   0.000   0.000\nEND\n"
+    inputs = RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(input_structure=pdb_content, contig="50-80")])
+
+    spec = json.loads(inputs.to_json_spec())
+
+    assert spec["spec-0"]["input"] == pdb_content
+
+
+def test_rfdiffusion3_raw_json_resolves_relative_input_paths(tmp_path, monkeypatch):
+    target = tmp_path / "target.cif"
+    target.write_text("data_target\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    inputs = RFdiffusion3Input(raw_json=json.dumps({"spec-0": {"input": "target.cif", "contig": "50-80"}}))
+
+    spec = json.loads(inputs.to_json_spec())
+
+    assert spec["spec-0"]["input"] == str(target)
 
 
 def test_rfdiffusion3_dispatch_operation_is_design(monkeypatch):
@@ -297,6 +366,45 @@ def test_rfdiffusion3_dispatch_operation_is_design(monkeypatch):
     run_rfdiffusion3(RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(length="40")]), RFdiffusion3Config())
 
     assert captured["operation"] == "design"
+
+
+def test_rfdiffusion3_standalone_failure_reports_full_subprocess_output(monkeypatch, tmp_path):
+    """Subprocess failures should preserve the full captured error, not only a tail."""
+    standalone_dir = Path(__file__).resolve().parents[2] / "proto_tools/tools/structure_design/rfdiffusion3/standalone"
+    monkeypatch.syspath_prepend(str(standalone_dir))
+    spec = util.spec_from_file_location("rfdiffusion3_standalone_inference", standalone_dir / "inference.py")
+    mod = util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(mod)
+
+    model = mod.RFdiffusion3Model()
+    model._loaded = True
+    model.rfd3_executable = "rfd3"
+    stderr = "\n".join(f"stderr line {i}" for i in range(20))
+    stdout = "\n".join(f"stdout line {i}" for i in range(20))
+
+    def fake_run(*args, **kwargs):
+        raise subprocess.CalledProcessError(
+            returncode=2,
+            cmd=args[0],
+            stderr=stderr,
+            output=stdout,
+        )
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        model(
+            input_json_path=str(tmp_path / "input.json"),
+            output_dir=str(tmp_path / "out"),
+            device="cpu",
+        )
+
+    message = str(excinfo.value)
+    assert "stderr line 0" in message
+    assert "stderr line 19" in message
+    assert "stdout line 0" in message
+    assert "stdout line 19" in message
 
 
 # ---------------------------------------------------------------------------
