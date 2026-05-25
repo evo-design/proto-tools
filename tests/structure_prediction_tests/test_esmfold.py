@@ -12,11 +12,11 @@ import pytest
 
 from proto_tools.entities.structures import is_valid_structure
 from proto_tools.tools.structure_prediction import (
+    Complex,
     ESMFoldConfig,
     ESMFoldGradientConfig,
     ESMFoldGradientInput,
     ESMFoldInput,
-    StructurePredictionComplex,
     run_esmfold,
     run_esmfold_gradient,
 )
@@ -45,8 +45,8 @@ def test_esmfold_predict_retries_on_cuda_oom():
     seq_a, seq_b = "A" * 100, "C" * 100  # each 100 residues; default split would put both in one batch
     inputs = ESMFoldInput(
         complexes=[
-            StructurePredictionComplex(chains=[{"sequence": seq_a, "entity_type": "protein"}]),
-            StructurePredictionComplex(chains=[{"sequence": seq_b, "entity_type": "protein"}]),
+            Complex(chains=[{"sequence": seq_a, "entity_type": "protein"}]),
+            Complex(chains=[{"sequence": seq_b, "entity_type": "protein"}]),
         ]
     )
     config = ESMFoldConfig(max_batch_residues=200, num_recycles=1)
@@ -74,10 +74,7 @@ def test_esmfold_predict_retries_on_cuda_oom():
 def test_esmfold_predict_does_not_duplicate_results_on_mid_attempt_oom():
     """Mid-iteration OOM discards earlier chunks' results so retry doesn't double-count."""
     inputs = ESMFoldInput(
-        complexes=[
-            StructurePredictionComplex(chains=[{"sequence": ch * 50, "entity_type": "protein"}])
-            for ch in ("A", "C", "D", "E")
-        ]
+        complexes=[Complex(chains=[{"sequence": ch * 50, "entity_type": "protein"}]) for ch in ("A", "C", "D", "E")]
     )
     config = ESMFoldConfig(max_batch_residues=200, num_recycles=1)
     one_result = {"pdb": _minimal_pdb(4), "avg_plddt": 0.8, "ptm": 0.5, "avg_pae": 6.0}
@@ -102,9 +99,7 @@ def test_esmfold_predict_does_not_duplicate_results_on_mid_attempt_oom():
 
 def test_esmfold_predict_propagates_non_oom_errors():
     """Non-OOM RuntimeError surfaces immediately without halving."""
-    inputs = ESMFoldInput(
-        complexes=[StructurePredictionComplex(chains=[{"sequence": "A" * 50, "entity_type": "protein"}])]
-    )
+    inputs = ESMFoldInput(complexes=[Complex(chains=[{"sequence": "A" * 50, "entity_type": "protein"}])])
     with patch(
         "proto_tools.tools.structure_prediction.esmfold.esmfold.ToolInstance.dispatch",
         side_effect=RuntimeError("unrelated worker failure"),
@@ -183,7 +178,7 @@ def test_esmfold_benchmark(request):
     which would split into three sub-batches.
     """
     sequences = random_protein_sequences(n=10, length=300, seed=0)
-    complexes = [StructurePredictionComplex(chains=[seq]) for seq in sequences]
+    complexes = [Complex(chains=[seq]) for seq in sequences]
     inputs = ESMFoldInput(complexes=complexes)
     config = ESMFoldConfig(max_batch_residues=4096)
 

@@ -56,7 +56,7 @@ class ProtenixInput(StructurePredictionInput):
     Inherits from ``StructurePredictionInput``.
 
     Attributes:
-        complexes (list[StructurePredictionComplex]): List of complexes to predict
+        complexes (list[Complex]): List of complexes to predict
             structures for. Inherited from ``StructurePredictionInput``. Each complex
             can contain multiple chains of proteins, DNA, RNA, and/or ligands.
         msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.

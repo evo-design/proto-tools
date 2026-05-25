@@ -19,7 +19,7 @@ from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search impo
     ColabfoldSearchConfig,
 )
 from proto_tools.tools.structure_prediction.shared_data_models import (
-    StructurePredictionComplex,
+    Complex,
     StructurePredictionConfig,
     StructurePredictionInput,
     _preprocess_structure_prediction_msas,
@@ -44,7 +44,7 @@ class BioEmuInput(StructurePredictionInput):
     """Input object for BioEmu conformational ensemble sampling.
 
     Attributes:
-        complexes (list[StructurePredictionComplex]): Protein complexes to sample.
+        complexes (list[Complex]): Protein complexes to sample.
             BioEmu supports monomer-only inputs, so each complex must contain one
             protein chain.
         msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
@@ -56,7 +56,7 @@ class BioEmuInput(StructurePredictionInput):
 
     @field_validator("complexes", mode="after")
     @classmethod
-    def validate_complexes(cls, complexes: list[StructurePredictionComplex]) -> list[StructurePredictionComplex]:
+    def validate_complexes(cls, complexes: list[Complex]) -> list[Complex]:
         """Validate BioEmu input constraints for each complex."""
         for comp_idx, comp in enumerate(complexes):
             if comp.num_chains() != 1:

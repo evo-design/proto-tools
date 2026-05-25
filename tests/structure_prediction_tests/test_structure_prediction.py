@@ -25,13 +25,13 @@ from proto_tools.tools.structure_prediction import (
     Chai1Config,
     Chai1Input,
     Chai1Output,
+    Complex,
     ESMFoldConfig,
     ESMFoldInput,
     ESMFoldOutput,
     ProtenixConfig,
     ProtenixInput,
     ProtenixOutput,
-    StructurePredictionComplex,
     StructurePredictionOutput,
     run_alphafold2,
     run_alphafold3,
@@ -109,7 +109,7 @@ def _supports_msa(config_class) -> bool:
     return hasattr(config_class, "model_fields") and "use_msa" in config_class.model_fields
 
 
-def _get_complex_entity_types(complexes: list[StructurePredictionComplex]) -> set:
+def _get_complex_entity_types(complexes: list[Complex]) -> set:
     """Get all entity types present in a list of complexes."""
     entity_types = set()
     for comp in complexes:
@@ -117,7 +117,7 @@ def _get_complex_entity_types(complexes: list[StructurePredictionComplex]) -> se
     return entity_types
 
 
-def _has_modifications(complexes: list[StructurePredictionComplex]) -> bool:
+def _has_modifications(complexes: list[Complex]) -> bool:
     """Check if any complex has modifications."""
     return any(comp.has_modifications() for comp in complexes)
 
@@ -255,24 +255,24 @@ def test_esmfold_prepare_complexes_enforces_cap_against_linked_length():
     # sum(chains) == 2400 clears the field validator, but the 25-residue linker
     # pushes the linked length to 2425, so the model would fold over its hard cap.
     chains = [{"sequence": "M" * 1200, "entity_type": "protein"} for _ in range(2)]
-    inputs = ESMFoldInput(complexes=[StructurePredictionComplex(chains=chains)])
+    inputs = ESMFoldInput(complexes=[Complex(chains=chains)])
     with pytest.raises(ValueError, match=r"2425.*max 2400"):
         inputs.prepare_complexes(chain_linker="G" * 25)
 
 
 def test_esmfold_input_rejects_non_protein_entity():
     with pytest.raises(ValidationError, match=r"unsupported entity types|only supports"):
-        ESMFoldInput(complexes=[StructurePredictionComplex(chains=[{"sequence": "ATCG", "entity_type": "dna"}])])
+        ESMFoldInput(complexes=[Complex(chains=[{"sequence": "ATCG", "entity_type": "dna"}])])
 
 
 def test_structure_prediction_complex_rejects_empty_sequence():
     with pytest.raises(ValueError, match="empty"):
-        StructurePredictionComplex(chains=[""])
+        Complex(chains=[""])
 
 
 def test_structure_prediction_complex_rejects_entity_types_param():
     with pytest.raises(ValidationError, match="entity_types"):
-        StructurePredictionComplex(chains=["MKTL"], entity_types=["protein"])
+        Complex(chains=["MKTL"], entity_types=["protein"])
 
 
 # ── Dict deserialization tests (no GPU required) ────────────────────────────────
@@ -294,9 +294,7 @@ def test_normalize_complexes_rejects_invalid_dict():
 
 def test_normalize_complexes_roundtrip_with_modifications():
     """Round-trip with modifications exercises both dict branches."""
-    original = ProtenixInput(
-        complexes=[StructurePredictionComplex(chains=[{"sequence": "MKTL", "modifications": [(1, "MSE")]}])]
-    )
+    original = ProtenixInput(complexes=[Complex(chains=[{"sequence": "MKTL", "modifications": [(1, "MSE")]}])])
     dumped = original.model_dump()
     restored = ProtenixInput.model_validate(dumped)
     assert restored.complexes[0].chains[0].modifications[0].modification_code == "MSE"
@@ -370,7 +368,7 @@ def test_folding_cache():
     _program_tool_cache.set(cache)
 
     try:
-        complexes = [StructurePredictionComplex(chains=chain) for chain in complexes_first_pass]
+        complexes = [Complex(chains=chain) for chain in complexes_first_pass]
         inputs = ESMFoldInput(complexes=complexes)
         output_first_pass = run_esmfold(inputs=inputs, config=ESMFoldConfig())
 
@@ -383,7 +381,7 @@ def test_folding_cache():
         assert cache_info["total_entries"] == 3
 
         # Run the second pass with overlapping complexes
-        complexes = [StructurePredictionComplex(chains=chain) for chain in complexes_second_pass]
+        complexes = [Complex(chains=chain) for chain in complexes_second_pass]
         inputs = ESMFoldInput(complexes=complexes)
         output_second_pass = run_esmfold(inputs, ESMFoldConfig())
 
@@ -419,7 +417,7 @@ def test_batched_vs_individual_inference_consistency():
     bugs such as wrong dimension slicing (which would produce completely wrong
     values).
     """
-    complexes = [StructurePredictionComplex(chains=[seq]) for seq in _BATCHED_TEST_SEQUENCES]
+    complexes = [Complex(chains=[seq]) for seq in _BATCHED_TEST_SEQUENCES]
 
     # Run batched inference (all sequences in one call)
     batched_input = ESMFoldInput(complexes=complexes)
@@ -435,7 +433,7 @@ def test_batched_vs_individual_inference_consistency():
     # Run individual inference (one sequence at a time)
     individual_outputs = []
     for i, seq in enumerate(_BATCHED_TEST_SEQUENCES):
-        single_complex = [StructurePredictionComplex(chains=[seq])]
+        single_complex = [Complex(chains=[seq])]
         single_input = ESMFoldInput(complexes=single_complex)
         single_output = run_esmfold(single_input, ESMFoldConfig())
 
@@ -478,7 +476,7 @@ def test_batched_inference_varying_lengths():
         "YTWHKLARFGMVLSPADKTN",  # 20 residues
     ]
 
-    complexes = [StructurePredictionComplex(chains=[seq]) for seq in varying_length_sequences]
+    complexes = [Complex(chains=[seq]) for seq in varying_length_sequences]
 
     batched_input = ESMFoldInput(complexes=complexes)
     batched_config = ESMFoldConfig(max_batch_residues=10000)
@@ -497,9 +495,9 @@ def test_batched_inference_varying_lengths():
 def test_batched_multichain_complexes():
     """Batched ESMFold correctly handles multi-chain complexes."""
     multichain_complexes = [
-        StructurePredictionComplex(chains=["MARFGL", "GARYTWM"]),  # 2 chains
-        StructurePredictionComplex(chains=["YTWHK"]),  # 1 chain
-        StructurePredictionComplex(chains=["LAR", "FGM", "VLS"]),  # 3 chains
+        Complex(chains=["MARFGL", "GARYTWM"]),  # 2 chains
+        Complex(chains=["YTWHK"]),  # 1 chain
+        Complex(chains=["LAR", "FGM", "VLS"]),  # 3 chains
     ]
 
     batched_input = ESMFoldInput(complexes=multichain_complexes)

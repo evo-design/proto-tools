@@ -15,7 +15,7 @@ from proto_tools.tools.structure_prediction import (
     AlphaFold3Config,
     AlphaFold3Input,
     Chain,
-    StructurePredictionComplex,
+    Complex,
     run_alphafold3,
 )
 from proto_tools.utils.standalone_helpers_source.standalone_helpers import resolve_weights_dir
@@ -93,7 +93,7 @@ def test_af3_ligand_and_nucleic_acids(mock_af3_inference):
         Chain(sequence="ACGT", entity_type="dna"),
         Chain(sequence="CCO", entity_type="ligand"),
     ]
-    complexes = [StructurePredictionComplex(chains=chains)]
+    complexes = [Complex(chains=chains)]
     inputs = AlphaFold3Input(complexes=complexes)
     config = AlphaFold3Config(name="test_entities", use_msa=False)
 
@@ -115,7 +115,7 @@ def test_af3_ligand_and_nucleic_acids(mock_af3_inference):
 
 def test_af3_common_seed_overrides_model_seeds(mock_af3_inference):
     """The common BaseConfig.seed drives AlphaFold3 modelSeeds when supplied."""
-    complexes = [StructurePredictionComplex(chains=[Chain(sequence="MVLSPADKTN", entity_type="protein")])]
+    complexes = [Complex(chains=[Chain(sequence="MVLSPADKTN", entity_type="protein")])]
     inputs = AlphaFold3Input(complexes=complexes)
     config = AlphaFold3Config(name="test_seed", use_msa=False, seed=123, seeds=[0, 1])
 
@@ -129,7 +129,7 @@ def test_af3_rna_entity(mock_af3_inference):
     chains = [
         Chain(sequence="AUGC", entity_type="rna"),
     ]
-    complexes = [StructurePredictionComplex(chains=chains)]
+    complexes = [Complex(chains=chains)]
     inputs = AlphaFold3Input(complexes=complexes)
     config = AlphaFold3Config(name="test_rna", use_msa=False)
 
@@ -151,7 +151,7 @@ def test_af3_protein_modifications_in_json(mock_af3_inference):
             modifications=[(4, "SEP")],  # position 4 is 'S' (serine)
         ),
     ]
-    complexes = [StructurePredictionComplex(chains=chains)]
+    complexes = [Complex(chains=chains)]
     inputs = AlphaFold3Input(complexes=complexes)
     config = AlphaFold3Config(name="test_ptm", use_msa=False)
 
@@ -175,7 +175,7 @@ def test_af3_nucleic_acid_modifications_in_json(mock_af3_inference):
             modifications=[(3, "2MG")],  # position 3 is 'G' (guanosine)
         ),
     ]
-    complexes = [StructurePredictionComplex(chains=chains)]
+    complexes = [Complex(chains=chains)]
     inputs = AlphaFold3Input(complexes=complexes)
     config = AlphaFold3Config(name="test_rna_mod", use_msa=False)
 
@@ -199,7 +199,7 @@ def test_af3_ligand_smile_to_ccd_conversion(mock_af3_inference):
         Chain(sequence=_EPINEPHRINE_SMILES, entity_type="ligand"),
         Chain(sequence=_ATP_SMILES, entity_type="ligand"),
     ]
-    complexes = [StructurePredictionComplex(chains=chains)]
+    complexes = [Complex(chains=chains)]
     inputs = AlphaFold3Input(complexes=complexes)
     config = AlphaFold3Config(name="test_entities", use_msa=False)
 
@@ -219,7 +219,7 @@ def test_af3_ligand_smile_to_ccd_conversion(mock_af3_inference):
 def test_af3_accepts_fragment_directly(mock_af3_inference):
     """Fragment objects in chains list flow through AF3 with their CCD code."""
     complexes = [
-        StructurePredictionComplex(
+        Complex(
             chains=["MVLSPADKTN", Fragment(ccd_code="ATP")],
         )
     ]
@@ -237,7 +237,7 @@ def test_af3_accepts_fragment_directly(mock_af3_inference):
 def test_af3_accepts_ligands_collection_expanded(mock_af3_inference):
     """A Ligands collection in chains list expands to one AF3 ligand entry per fragment."""
     complexes = [
-        StructurePredictionComplex(
+        Complex(
             chains=["MVLSPADKTN", Ligands(ccd_codes=["ATP", "MG"])],
         )
     ]

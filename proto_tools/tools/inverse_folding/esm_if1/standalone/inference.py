@@ -2,6 +2,7 @@
 
 import gc
 import json
+import math
 import os
 import sys
 from typing import Any
@@ -170,7 +171,7 @@ class ESMIF1Model:
         all_coords, all_native_seqs, target_chain = self._load_structure(pdb_path, chain_ids)
 
         sequences = []
-        log_likelihoods = []
+        metrics = []
 
         set_torch_seed(seed)
         for _ in range(batch_size):
@@ -191,7 +192,7 @@ class ESMIF1Model:
                 )
             sequences.append(sampled_seq)
 
-            # Score sampled sequence to get log-likelihood
+            # Score sampled sequence; avg_ll is the mean per-position log-likelihood.
             avg_ll, _ = esm.inverse_folding.multichain_util.score_sequence_in_complex(
                 self.model,
                 self.alphabet,
@@ -199,11 +200,18 @@ class ESMIF1Model:
                 target_chain,
                 sampled_seq,
             )
-            log_likelihoods.append(float(avg_ll))
+            avg_ll = float(avg_ll)
+            metrics.append(
+                {
+                    "log_likelihood": avg_ll * len(sampled_seq),
+                    "avg_log_likelihood": avg_ll,
+                    "perplexity": math.exp(-avg_ll),
+                }
+            )
 
         return {
             "sequences": sequences,
-            "log_likelihoods": log_likelihoods,
+            "metrics": metrics,
         }
 
     def score(

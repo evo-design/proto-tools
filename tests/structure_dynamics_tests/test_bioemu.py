@@ -14,7 +14,7 @@ from proto_tools.tools.structure_dynamics.bioemu import (
     run_bioemu,
 )
 from proto_tools.tools.structure_prediction.shared_data_models import (
-    StructurePredictionComplex,
+    Complex,
 )
 from proto_tools.utils import ToolInstance
 from tests.conftest import benchmark_twice
@@ -37,7 +37,7 @@ def test_input_rejects_multi_chain_complex():
     with pytest.raises(ValueError, match="single-chain"):
         BioEmuInput(
             complexes=[
-                StructurePredictionComplex(
+                Complex(
                     chains=[
                         {"sequence": _SAMPLE_SEQUENCE, "entity_type": "protein"},
                         {"sequence": _SAMPLE_SEQUENCE, "entity_type": "protein"},
@@ -49,7 +49,7 @@ def test_input_rejects_multi_chain_complex():
 
 def test_input_rejects_non_protein_entity():
     with pytest.raises(ValueError, match="only supports: protein"):
-        BioEmuInput(complexes=[StructurePredictionComplex(chains=[{"sequence": "ACGT", "entity_type": "dna"}])])
+        BioEmuInput(complexes=[Complex(chains=[{"sequence": "ACGT", "entity_type": "dna"}])])
 
 
 def test_input_rejects_invalid_amino_acids():
@@ -62,7 +62,7 @@ def test_input_rejects_invalid_amino_acids():
     ):
         BioEmuInput(
             complexes=[
-                StructurePredictionComplex(
+                Complex(
                     chains=[
                         {
                             "sequence": "MVLSPADKTNVKAAW123",
@@ -85,7 +85,7 @@ def test_input_warns_on_long_sequence(caplog):
     ):
         BioEmuInput(
             complexes=[
-                StructurePredictionComplex(
+                Complex(
                     chains=[
                         {
                             "sequence": long_sequence,
@@ -119,7 +119,7 @@ def test_config_rejects_invalid_model_name():
 def test_config_passes_new_fields_to_dispatch():
     """All five new Config fields must flow to the dispatch payload."""
     # Pre-supply an empty MSA dict so preprocess() skips ColabFold (network-free test).
-    complex_ = StructurePredictionComplex(chains=[{"sequence": _SAMPLE_SEQUENCE, "entity_type": "protein"}])
+    complex_ = Complex(chains=[{"sequence": _SAMPLE_SEQUENCE, "entity_type": "protein"}])
     bioemu_input = BioEmuInput(complexes=[complex_], msas={})
     bioemu_config = BioEmuConfig(
         num_samples=2,
@@ -177,7 +177,7 @@ def test_config_cache_key_invariants():
 
 @pytest.mark.slow
 def test_multiple_complexes_produce_separate_ensembles():
-    complex_ = StructurePredictionComplex(chains=[{"sequence": _SAMPLE_SEQUENCE, "entity_type": "protein"}])
+    complex_ = Complex(chains=[{"sequence": _SAMPLE_SEQUENCE, "entity_type": "protein"}])
     bioemu_input = BioEmuInput(complexes=[complex_, complex_])
     bioemu_config = BioEmuConfig(num_samples=10, verbose=False)
 
@@ -216,9 +216,7 @@ def test_multiple_complexes_produce_separate_ensembles():
 def test_bioemu_sample_end_to_end():
     """Test BioEmu conformational ensemble sampling end-to-end."""
     sequence = "MKTAYIAKQRQISFVKSHFSRQLE"
-    inputs = BioEmuInput(
-        complexes=[StructurePredictionComplex(chains=[{"sequence": sequence, "entity_type": "protein"}])]
-    )
+    inputs = BioEmuInput(complexes=[Complex(chains=[{"sequence": sequence, "entity_type": "protein"}])])
     config = BioEmuConfig(num_samples=5, verbose=False)
 
     result = run_bioemu(inputs, config)
@@ -240,9 +238,7 @@ def test_bioemu_sample_end_to_end():
 def test_bioemu_holds_score_model_across_calls():
     """Two calls inside persist_tool reuse the held score_model (no on-disk reload)."""
     sequence = "MKTAYIAKQRQISFVKSHFSRQLE"
-    inputs = BioEmuInput(
-        complexes=[StructurePredictionComplex(chains=[{"sequence": sequence, "entity_type": "protein"}])]
-    )
+    inputs = BioEmuInput(complexes=[Complex(chains=[{"sequence": sequence, "entity_type": "protein"}])])
     config = BioEmuConfig(num_samples=2, batch_size=2, seed=0, verbose=False)
 
     # Echo reload_on_change fields so the framework doesn't restart the worker.
@@ -277,9 +273,7 @@ _BARNASE_SEQUENCE = (
 @pytest.mark.uses_gpu
 def test_bioemu_sample_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark bioemu-sample: 20 conformations of barnase (110 aa), batch_size=10 (cold + warm)."""
-    inputs = BioEmuInput(
-        complexes=[StructurePredictionComplex(chains=[{"sequence": _BARNASE_SEQUENCE, "entity_type": "protein"}])]
-    )
+    inputs = BioEmuInput(complexes=[Complex(chains=[{"sequence": _BARNASE_SEQUENCE, "entity_type": "protein"}])])
     config = BioEmuConfig(num_samples=20, batch_size=10, verbose=False)
 
     result = benchmark_twice(request, "bioemu", lambda: run_bioemu(inputs, config))

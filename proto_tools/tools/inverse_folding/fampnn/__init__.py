@@ -7,10 +7,12 @@ from proto_tools.tools.inverse_folding.fampnn.fampnn_pack import (
     run_fampnn_pack,
 )
 from proto_tools.tools.inverse_folding.fampnn.fampnn_sample import (
+    FAMPNNDesign,
+    FAMPNNDesignMetrics,
+    FAMPNNDesignSet,
     FAMPNNSampleConfig,
     FAMPNNSampleInput,
     FAMPNNSampleOutput,
-    FAMPNNSequences,
     FAMPNNStructureInput,
     run_fampnn_sample,
 )
@@ -32,10 +34,12 @@ from proto_tools.tools.inverse_folding.fampnn.fampnn_score_all_mutations import 
 
 __all__ = [
     # Sampling
+    "FAMPNNDesign",
+    "FAMPNNDesignMetrics",
+    "FAMPNNDesignSet",
     "FAMPNNSampleConfig",
     "FAMPNNSampleInput",
     "FAMPNNSampleOutput",
-    "FAMPNNSequences",
     "FAMPNNStructureInput",
     "run_fampnn_sample",
     # Packing

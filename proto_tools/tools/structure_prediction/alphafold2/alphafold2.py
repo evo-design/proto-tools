@@ -11,8 +11,8 @@ from pydantic import field_validator, model_validator
 
 from proto_tools.entities.structures.structure import BFactorType, Structure
 from proto_tools.tools.structure_prediction.shared_data_models import (
+    Complex,
     MSAStructurePredictionConfig,
-    StructurePredictionComplex,
     StructurePredictionInput,
     StructurePredictionOutput,
 )
@@ -41,7 +41,7 @@ class AlphaFold2Input(StructurePredictionInput):
     Inherits from ``StructurePredictionInput``.
 
     Attributes:
-        complexes (list[StructurePredictionComplex]): List of complexes to predict
+        complexes (list[Complex]): List of complexes to predict
             structures for. Inherited from ``StructurePredictionInput``. Each complex
             can contain one or more protein chains.
         msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
@@ -58,11 +58,11 @@ class AlphaFold2Input(StructurePredictionInput):
 
     @field_validator("complexes", check_fields=False)
     @classmethod
-    def validate_complexes(cls, complexes: list[StructurePredictionComplex]) -> list[StructurePredictionComplex]:
+    def validate_complexes(cls, complexes: list[Complex]) -> list[Complex]:
         """Validate that complexes contain valid protein sequences.
 
         Args:
-            complexes (list[StructurePredictionComplex]): Complexes to validate.
+            complexes (list[Complex]): Complexes to validate.
 
         Checks:
         - Valid protein characters (including 'X' for unknown)

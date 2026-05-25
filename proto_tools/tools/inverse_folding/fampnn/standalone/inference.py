@@ -132,7 +132,7 @@ class FAMPNNModel:
             "interface_residue_mask",
         ]
 
-        all_sequences = []
+        all_chain_sequences: list[list[str]] = []
         all_pdb_strings: list[str] = []
         all_psce = []
 
@@ -193,13 +193,25 @@ class FAMPNNModel:
             "psce": aux["psce"],
         }
 
-        # Extract sequences and PDB strings
+        # Extract per-chain sequences and PDB strings
         for j in range(B):
-            seq_mask_j = samples["seq_mask"][j].cpu()
-            pred_aatype_j = samples["pred_aatype"][j].cpu()
-            pred_aatype_j = pred_aatype_j[seq_mask_j.bool()]
-            pred_seq = "".join(rc.restypes_with_x[a] for a in pred_aatype_j)
-            all_sequences.append(pred_seq)
+            seq_mask_j = samples["seq_mask"][j].cpu().bool()
+            pred_aatype_j = samples["pred_aatype"][j].cpu()[seq_mask_j]
+            chain_index_j = samples["chain_index"][j].cpu()[seq_mask_j]
+            # Group residues into contiguous runs of equal chain_index (ascending == input-PDB chain order)
+            chain_seqs: list[str] = []
+            current_chain: int | None = None
+            current_residues: list[int] = []
+            for aa, ci in zip(pred_aatype_j.tolist(), chain_index_j.tolist(), strict=True):
+                if current_chain is None or ci != current_chain:
+                    if current_residues:
+                        chain_seqs.append("".join(rc.restypes_with_x[a] for a in current_residues))
+                    current_chain = ci
+                    current_residues = []
+                current_residues.append(aa)
+            if current_residues:
+                chain_seqs.append("".join(rc.restypes_with_x[a] for a in current_residues))
+            all_chain_sequences.append(chain_seqs)
 
             # Extract per-residue pSCE (mean over atoms)
             psce_j = aux["psce"][j].cpu()
@@ -216,7 +228,7 @@ class FAMPNNModel:
             all_pdb_strings.extend(Path(pdb_out).read_text() for pdb_out in pdb_paths_out)
 
         return {
-            "sequences": all_sequences,
+            "chain_sequences": all_chain_sequences,
             "pdb_strings": all_pdb_strings,
             "psce": all_psce,
         }

@@ -4,14 +4,16 @@ LigandMPNN sampling tool.
 """
 
 import logging
-import math
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import Field
 
+from proto_tools.entities.complex import Chain
+from proto_tools.entities.ligands import Fragment
 from proto_tools.tools.inverse_folding.shared_data_models import (
-    DesignedSequences,
+    DesignedComplex,
+    DesignSet,
     InverseFoldingConfig,
     InverseFoldingInput,
     InverseFoldingOutput,
@@ -20,6 +22,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import AminoAcid, ConfigField, ToolInstance
 from proto_tools.utils.progress import progress_bar
+from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = logging.getLogger(__name__)
 
@@ -87,26 +90,67 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
     )
 
 
-class LigandMPNNSequences(DesignedSequences):
-    """Represents designed sequences from LigandMPNN.
+class LigandMPNNDesignMetrics(Metrics):
+    """Per-design recovery metrics emitted by LigandMPNN sampling.
 
-    Attributes:
-        sequences (list[str]): Designed amino acid sequences.
-        sequence_recovery (list[float]): Per-sequence fraction of chains_to_redesign
-            residues matching the input structure's reference sequence (0.0-1.0).
-        ligand_interface_sequence_recovery (list[float] | None): Per-sequence recovery
-            restricted to ligand-interface residues (0.0-1.0); ``None`` when the input
-            structure has no ligand.
+    Metrics documented in ``metric_spec``:
+        sequence_recovery (float): Fraction of chains_to_redesign residues
+            matching the input structure's reference sequence (0.0-1.0).
+            Always present.
+        ligand_interface_sequence_recovery (float): Recovery restricted to
+            ligand-interface residues (0.0-1.0). Present only when a ligand
+            interface is present; ``NaN`` or absent when the input structure
+            has no ligand interface.
     """
 
-    sequence_recovery: list[float] = Field(
-        title="Sequence Recovery",
-        description="Per-sequence fraction of chains_to_redesign residues matching the reference (0.0-1.0)",
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "sequence_recovery": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
+        "ligand_interface_sequence_recovery": {
+            "availability": "when a ligand interface is present",
+            "type": "float",
+            "min": 0.0,
+            "max": 1.0,
+        },
+    }
+    primary_metric: str | None = Field(
+        default="sequence_recovery",
+        title="Primary Metric",
+        description="Headline metric used to rank results.",
     )
-    ligand_interface_sequence_recovery: list[float] | None = Field(
-        default=None,
-        title="Ligand Interface Recovery",
-        description="Per-sequence interface-residue recovery (0.0-1.0); None when no ligand",
+
+
+class LigandMPNNDesign(DesignedComplex):
+    """One LigandMPNN-designed complex produced from a single input structure.
+
+    Holds every protein chain of the input structure (redesigned chains plus
+    fixed context chains carried over unchanged), in input structure chain
+    order, plus this design's scalar recovery metrics.
+
+    Attributes:
+        chains (list[Chain | Fragment]): All protein chains of the design, in input
+            structure chain order.
+        metrics (LigandMPNNDesignMetrics): Per-design recovery metrics
+            (``sequence_recovery`` and ``ligand_interface_sequence_recovery``).
+    """
+
+    metrics: LigandMPNNDesignMetrics = Field(
+        default_factory=LigandMPNNDesignMetrics,
+        title="Metrics",
+        description="Per-design recovery metrics for this complex.",
+    )
+
+
+class LigandMPNNDesignSet(DesignSet):
+    """All LigandMPNN complexes produced for a single input structure.
+
+    Attributes:
+        complexes (list[LigandMPNNDesign]): The complexes generated for one input
+            structure, each a complete multi-chain complex with recovery metrics.
+    """
+
+    complexes: list[LigandMPNNDesign] = Field(  # type: ignore[assignment]
+        title="Complexes",
+        description="LigandMPNN complexes generated for one input structure, each a complete complex.",
     )
 
 
@@ -114,13 +158,13 @@ class LigandMPNNSampleOutput(InverseFoldingOutput):
     """Output of the LigandMPNN sampling tool.
 
     Attributes:
-        designed_sequences (list[LigandMPNNSequences]): LigandMPNN-designed sequences with
-            per-sequence recovery and optional ligand-interface recovery.
+        design_sets (list[LigandMPNNDesignSet]): One ``LigandMPNNDesignSet``
+            per input structure, in input order.
     """
 
-    designed_sequences: list[LigandMPNNSequences] = Field(  # type: ignore[assignment]
-        title="Designed Sequences",
-        description="LigandMPNN-designed sequences with recovery and optional ligand-interface recovery.",
+    design_sets: list[LigandMPNNDesignSet] = Field(  # type: ignore[assignment]
+        title="Design Sets",
+        description="One LigandMPNNDesignSet per input structure, in input order.",
     )
 
 
@@ -149,7 +193,7 @@ def example_input() -> Any:
     uses_gpu=True,
     example_input=example_input,
     iterable_input_field="inputs",
-    iterable_output_field="designed_sequences",
+    iterable_output_field="design_sets",
     cacheable=True,
     stochastic=True,
 )
@@ -168,9 +212,9 @@ def run_ligandmpnn_sample(
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        LigandMPNNSampleOutput: LigandMPNNSampleOutput with designed sequences for each input structure.
+        LigandMPNNSampleOutput: LigandMPNNSampleOutput with one design set per input structure.
     """
-    designed_sequences = []
+    design_sets: list[LigandMPNNDesignSet] = []
 
     base_seed = config.seed if config.seed is not None else config.get_random_int()
     # Advances across every dispatch (inputs x chunks) so duplicate items get distinct seeds.
@@ -183,10 +227,9 @@ def run_ligandmpnn_sample(
         unit="structure",
         total=len(inputs.inputs),
     ):
-        all_seqs: list[str] = []
+        all_chain_sequences: list[list[dict[str, str]]] = []
         all_recovery: list[float] = []
-        # Foundry returns NaN here when the structure has no ligand interface; surface that as None.
-        all_interface_recovery: list[float] | None = []
+        all_interface_recovery: list[float] = []
         remaining = config.num_sequences_per_structure
         # Materialize the Structure to a tempfile once per input — reused across chunks.
         with inp.structure.temp_file() as pdb_path:
@@ -214,22 +257,31 @@ def run_ligandmpnn_sample(
                     instance=instance,
                     config=config,
                 )
-                all_seqs.extend(result["sequences"])
+                all_chain_sequences.extend(result["chain_sequences"])
                 all_recovery.extend(m["sequence_recovery"] for m in result["metrics"])
-                chunk_interface = [m["ligand_interface_sequence_recovery"] for m in result["metrics"]]
-                if all_interface_recovery is not None:
-                    if any(v is None or (isinstance(v, float) and math.isnan(v)) for v in chunk_interface):
-                        all_interface_recovery = None
-                    else:
-                        all_interface_recovery.extend(chunk_interface)
+                all_interface_recovery.extend(m["ligand_interface_sequence_recovery"] for m in result["metrics"])
                 dispatch_idx += 1
                 remaining -= chunk  # type: ignore[operator]
-        designed_sequences.append(
-            LigandMPNNSequences(
-                sequences=all_seqs,
-                sequence_recovery=all_recovery,
-                ligand_interface_sequence_recovery=all_interface_recovery,
-            )
-        )
 
-    return LigandMPNNSampleOutput(designed_sequences=designed_sequences)
+        # The standalone emits ordered per-chain (chain_id, sequence) pairs.
+        redesigned_ids = set(inp.chain_ids_to_redesign)
+
+        complexes: list[LigandMPNNDesign] = []
+        for chain_seqs, recovery, interface_recovery in zip(
+            all_chain_sequences, all_recovery, all_interface_recovery, strict=True
+        ):
+            chains: list[Chain | Fragment] = [Chain(id=entry["id"], sequence=entry["sequence"]) for entry in chain_seqs]
+            designed: list[bool] = [entry["id"] in redesigned_ids for entry in chain_seqs]
+            complexes.append(
+                LigandMPNNDesign(
+                    chains=chains,
+                    designed=designed,
+                    metrics=LigandMPNNDesignMetrics(
+                        sequence_recovery=recovery,
+                        ligand_interface_sequence_recovery=interface_recovery,
+                    ),
+                )
+            )
+        design_sets.append(LigandMPNNDesignSet(complexes=complexes))
+
+    return LigandMPNNSampleOutput(design_sets=design_sets)

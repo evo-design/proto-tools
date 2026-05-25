@@ -1,0 +1,40 @@
+{
+  "complexes": [
+    {
+      "chains": [
+        {
+          "id": "A",
+          "sequence": "SKGAELMKGEVPVKVTLEGDVNGKKFKVEGEGHVRAQEGLLELHFECTSGELPVPWPTLVPILIMAATRYPDHMKEHDFFQSALPEGYTQKSVLQFEGDGSFETEAVVRFEGDTLVNDVKLKGTGFKADGPILGKKLKFEWGSAVVNIRADPERRGIRQDWTLELPLEDGSTQKVAVKETATPLGDGPVLLPRPHHINTETTLSRDPNEARDHMLLRETMVASGIPE",
+          "entity_type": "protein",
+          "modifications": []
+        }
+      ],
+      "designed": [
+        true
+      ],
+      "metrics": {
+        "primary_metric": "sequence_recovery",
+        "sequence_recovery": 0.5267857313156128,
+        "ligand_interface_sequence_recovery": 0.5384615659713745
+      }
+    },
+    {
+      "chains": [
+        {
+          "id": "A",
+          "sequence": "SKGAELLKGRVPVRVHLEGDVNGKKFKVEGEGHGDASRGLLRLHFRCTSGELPVPWPTLVPILILAFTRYPDHMKEHDFFQSALPEGYRQTSVAQFEGDGYFETESRVYFEGDTLVNESKLKGTGFKEDGPILGKKLKFEFGSARVHIEADPERRGIRIHFTLRYPLEDGSVQRVDWHVRAEPLGDGPVLLPQPHYILTETVLSRDPDEAADSMDLTERFVADGIPE",
+          "entity_type": "protein",
+          "modifications": []
+        }
+      ],
+      "designed": [
+        true
+      ],
+      "metrics": {
+        "primary_metric": "sequence_recovery",
+        "sequence_recovery": 0.5446428656578064,
+        "ligand_interface_sequence_recovery": 0.5769230723381042
+      }
+    }
+  ]
+}

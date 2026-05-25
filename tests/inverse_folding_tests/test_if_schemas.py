@@ -6,11 +6,12 @@ Tests for inverse folding shared data models.
 from pathlib import Path
 
 import pytest
-from pydantic import Field
 
+from proto_tools.entities.complex import Chain
 from proto_tools.entities.structures.structure import Structure
 from proto_tools.tools.inverse_folding.shared_data_models import (
-    DesignedSequences,
+    DesignedComplex,
+    DesignSet,
     InverseFoldingInput,
     InverseFoldingOutput,
     InverseFoldingScoringMetrics,
@@ -98,42 +99,60 @@ def test_input_from_pdb_content(pdb_file_content: str):
     assert all(isinstance(i.structure, Structure) for i in inp.inputs)
 
 
-# ── DesignedSequences ────────────────────────────────────────────────────
+# ── DesignedComplex / DesignSet ──────────────────────────────────────────
 
 
-class _MockDesignedSequences(DesignedSequences):
-    custom_metric: list[float] = Field(description="Custom metric for the designed sequences")
+class _MockDesignSet(DesignSet):
+    """Concrete DesignSet over plain DesignedComplex instances for testing."""
+
+    complexes: list[DesignedComplex]
 
 
-def test_designed_sequences_len():
-    sequences = _MockDesignedSequences(sequences=["MVLSP", "GGGS"], custom_metric=[0.1, 0.2])
-    assert len(sequences) == 2
+def _mock_complex() -> DesignedComplex:
+    return DesignedComplex(
+        chains=[
+            Chain(id="A", sequence="MVLSP"),
+            Chain(id="B", sequence="GGGS"),
+        ],
+        designed=[True, False],
+        metrics=InverseFoldingScoringMetrics(perplexity=1.5, log_likelihood=-3.2, avg_log_likelihood=-0.64),
+    )
 
 
-def test_designed_sequences_getitem_and_metrics():
-    sequences = _MockDesignedSequences(sequences=["MVLSP", "GGGS"], custom_metric=[0.1, 0.2])
-    assert sequences[0] == "MVLSP"
-    assert sequences[1] == "GGGS"
-    assert sequences.get_sequence_metrics(0) == {"custom_metric": 0.1}
-    assert sequences.get_sequence_metrics(1) == {"custom_metric": 0.2}
+def test_design_set_routes_metrics():
+    """``get_design_metrics(i)`` delegates to ``self.complexes[i].design_metrics()``."""
+    design_set = _MockDesignSet(complexes=[_mock_complex()])
+    assert design_set.get_design_metrics(0)["perplexity"] == 1.5
+
+
+def test_designed_complex_helpers():
+    """chain_sequences, as_chain_map, designed_chains, design_metrics."""
+    complex_ = _mock_complex()
+    assert complex_.chain_sequences == ["MVLSP", "GGGS"]
+    assert complex_.as_chain_map() == {"A": "MVLSP", "B": "GGGS"}
+    redesigned = complex_.designed_chains
+    assert [c.id for c in redesigned] == ["A"]
+    assert complex_.design_metrics()["perplexity"] == 1.5
 
 
 # ── InverseFoldingOutput ─────────────────────────────────────────────────
 
 
 def test_output_len():
-    output = InverseFoldingOutput(designed_sequences=[DesignedSequences(sequences=["MVLSP", "GGGS"])])
+    output = InverseFoldingOutput(design_sets=[_MockDesignSet(complexes=[_mock_complex()])])
     assert len(output) == 1
 
 
 def test_output_getitem():
-    output = InverseFoldingOutput(designed_sequences=[DesignedSequences(sequences=["MVLSP", "GGGS"])])
-    assert output[0] == DesignedSequences(sequences=["MVLSP", "GGGS"])
+    design_set = _MockDesignSet(complexes=[_mock_complex()])
+    output = InverseFoldingOutput(design_sets=[design_set])
+    assert output[0] == design_set
 
 
 def test_output_iter():
-    output = InverseFoldingOutput(designed_sequences=[DesignedSequences(sequences=["MVLSP", "GGGS"])])
-    assert list(output) == [DesignedSequences(sequences=["MVLSP", "GGGS"])]
+    design_set = _MockDesignSet(complexes=[_mock_complex()])
+    output = InverseFoldingOutput(design_sets=[design_set])
+    assert list(output) == [design_set]
 
 
 # ── Validation: invalid chains_to_redesign and fixed_positions selections ───────────────────────
@@ -153,11 +172,32 @@ def test_structure_rejects_invalid_fixed_chain():
 
 
 def test_output_export_fasta(tmp_path):
-    output = InverseFoldingOutput(designed_sequences=[DesignedSequences(sequences=["MVLSP", "GGGS"])])
-    output.export("designs", export_path=tmp_path, file_format="fasta")
-    fasta_files = list((tmp_path / "designs").glob("*.fasta"))
+    output = InverseFoldingOutput(design_sets=[_MockDesignSet(complexes=[_mock_complex()])])
+    output.export("complexes", export_path=tmp_path, file_format="fasta")
+    fasta_files = list((tmp_path / "complexes").glob("*.fasta"))
     assert len(fasta_files) == 1
     assert "MVLSP" in fasta_files[0].read_text()
+
+
+def test_output_export_fasta_includes_ligand_smiles(tmp_path):
+    """Ligand Fragments are emitted with a `_ligand_{id}_{ccd}` header and their canonical SMILES."""
+    from proto_tools.entities.ligands import Fragment
+
+    design = DesignedComplex(
+        chains=[
+            Chain(id="A", sequence="MVLSP"),
+            Fragment(id="B", ccd_code="HEM"),
+        ],
+        designed=[True, False],
+        metrics=InverseFoldingScoringMetrics(perplexity=1.5, log_likelihood=-3.2, avg_log_likelihood=-0.64),
+    )
+    output = InverseFoldingOutput(design_sets=[_MockDesignSet(complexes=[design])])
+    output.export("complexes", export_path=tmp_path, file_format="fasta")
+    text = (tmp_path / "complexes" / "input_0.fasta").read_text()
+    assert ">input_0_design_0_chain_A\nMVLSP\n" in text
+    assert ">input_0_design_0_ligand_B_HEM\n" in text
+    # SMILES for HEM starts with C=CC1=C(C)... in RDKit's canonical form.
+    assert "C=CC1=C(C)" in text
 
 
 @pytest.mark.parametrize("fmt", ["csv", "json"])
@@ -199,9 +239,9 @@ def test_scoring_metrics_attribute_and_dict_access():
 
 
 def test_output_export_json(tmp_path):
-    output = InverseFoldingOutput(designed_sequences=[DesignedSequences(sequences=["MVLSP"])])
-    output.export("designs", export_path=tmp_path, file_format="json")
-    json_files = list((tmp_path / "designs").glob("*.json"))
+    output = InverseFoldingOutput(design_sets=[_MockDesignSet(complexes=[_mock_complex()])])
+    output.export("complexes", export_path=tmp_path, file_format="json")
+    json_files = list((tmp_path / "complexes").glob("*.json"))
     assert len(json_files) == 1
 
 
@@ -237,91 +277,71 @@ def test_sequence_structure_pair_roundtrip():
     assert restored.structure.structure == original.structure.structure
 
 
-# ── Subclass-field roundtrip for inverse-folding sample outputs ────────────────
+# ── Per-tool concrete output round-trip ───────────────────────────────────────
 
 
-def _proteinmpnn_payload():
+def _proteinmpnn_design():
     from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample import (
+        ProteinMPNNDesign,
+        ProteinMPNNDesignMetrics,
+    )
+
+    return ProteinMPNNDesign(
+        chains=[
+            Chain(id="A", sequence="MVLSP"),
+            Chain(id="B", sequence="GGGS"),
+        ],
+        designed=[True, False],
+        metrics=ProteinMPNNDesignMetrics(perplexity=1.5, sequence_recovery=0.42),
+    )
+
+
+def test_sample_output_polymorphism_roundtrip():
+    """Concrete ProteinMPNNSampleOutput must reconstruct its subclasses on model_validate."""
+    from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample import (
+        ProteinMPNNDesign,
+        ProteinMPNNDesignSet,
         ProteinMPNNSampleOutput,
-        ProteinMPNNSequences,
     )
 
-    item = ProteinMPNNSequences(
-        sequences=["MVLSP", "GGGSA"],
-        perplexity=[1.5, 1.8],
-        sequence_recovery=[0.42, 0.31],
-    )
-    return ProteinMPNNSampleOutput, ProteinMPNNSequences, item
+    original = ProteinMPNNSampleOutput(design_sets=[ProteinMPNNDesignSet(complexes=[_proteinmpnn_design()])])
+    restored = ProteinMPNNSampleOutput.model_validate(original.model_dump(mode="json"))
+
+    restored_set = restored.design_sets[0]
+    assert isinstance(restored_set, ProteinMPNNDesignSet)
+    restored_design = restored_set.complexes[0]
+    assert isinstance(restored_design, ProteinMPNNDesign)
+    assert restored_design.chain_sequences == ["MVLSP", "GGGS"]
+    assert restored_design.metrics["perplexity"] == 1.5
+    assert restored_design.metrics["sequence_recovery"] == 0.42
 
 
-def _fampnn_payload():
-    from proto_tools.entities.structures import Structure
-    from proto_tools.tools.inverse_folding.fampnn.fampnn_sample import (
-        FAMPNNSampleOutput,
-        FAMPNNSequences,
-    )
+def test_metrics_round_trip_preserves_values():
+    """ProteinMPNNDesign.model_validate(model_dump()) preserves metric values."""
+    from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample import ProteinMPNNDesign
 
-    pdb = "ATOM      1  N   MET A   1       0.000   0.000   0.000  1.00  0.00           N\nEND\n"
-    item = FAMPNNSequences(
-        sequences=["MVLSP"],
-        structures=[Structure(structure=pdb, structure_format="pdb")],
-        psce=[[0.12, 0.34, 0.56, 0.78, 0.90]],
-    )
-    return FAMPNNSampleOutput, FAMPNNSequences, item
+    design = _proteinmpnn_design()
+    restored = ProteinMPNNDesign.model_validate(design.model_dump())
+    assert restored.metrics["perplexity"] == 1.5
+    assert restored.metrics.primary_value == 1.5
 
 
-def _ligandmpnn_payload():
-    from proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample import (
-        LigandMPNNSampleOutput,
-        LigandMPNNSequences,
-    )
-
-    item = LigandMPNNSequences(
-        sequences=["MVLSP", "GGGSA"],
-        sequence_recovery=[0.40, 0.55],
-        ligand_interface_sequence_recovery=[0.20, 0.35],
-    )
-    return LigandMPNNSampleOutput, LigandMPNNSequences, item
+# ── Bridge to structure prediction ────────────────────────────────────────────
 
 
-def _esm_if1_payload():
-    from proto_tools.tools.inverse_folding.esm_if1.esm_if1_sample import (
-        ESMIF1SampleOutput,
-        ESMIF1Sequences,
-    )
+def test_designed_complex_feeds_structure_predictor():
+    """LSP: ``DesignedComplex`` is-a ``Complex``, so SP tool inputs accept it directly."""
+    from proto_tools.tools.structure_prediction import ESMFoldInput
 
-    item = ESMIF1Sequences(
-        sequences=["MVLSP"],
-        log_likelihoods=[-12.34],
-    )
-    return ESMIF1SampleOutput, ESMIF1Sequences, item
+    designed = _mock_complex()
+    inp = ESMFoldInput(complexes=[designed])
+    assert inp.complexes[0] is designed
+    assert inp.complexes[0].chain_sequences == designed.chain_sequences
 
 
-@pytest.mark.parametrize(
-    ("payload_factory", "expected_extras"),
-    [
-        pytest.param(_proteinmpnn_payload, ("perplexity", "sequence_recovery"), id="proteinmpnn"),
-        pytest.param(_fampnn_payload, ("structures", "psce"), id="fampnn"),
-        pytest.param(
-            _ligandmpnn_payload,
-            ("sequence_recovery", "ligand_interface_sequence_recovery"),
-            id="ligandmpnn",
-        ),
-        pytest.param(_esm_if1_payload, ("log_likelihoods",), id="esm_if1"),
-    ],
-)
-def test_sample_output_polymorphism_roundtrip(payload_factory, expected_extras):
-    """Concrete XSampleOutput must reconstruct its XSequences subclass on model_validate."""
-    output_cls, item_cls, original_item = payload_factory()
-    original = output_cls(designed_sequences=[original_item])
-    restored = output_cls.model_validate(original.model_dump(mode="json"))
-    restored_item = restored.designed_sequences[0]
+def test_complex_accepts_mixed_chain_list():
+    """``Complex`` chains list still accepts mixed ``Chain``/string entries via the lenient validator."""
+    from proto_tools.entities.complex import Complex
 
-    assert isinstance(restored_item, item_cls), (
-        f"{output_cls.__name__}.designed_sequences[0] roundtripped as "
-        f"{type(restored_item).__name__} instead of {item_cls.__name__}"
-    )
-    for name in expected_extras:
-        assert getattr(restored_item, name) == getattr(original_item, name), (
-            f"{output_cls.__name__}: model_validate dropped subclass field {name!r}"
-        )
+    mixed = Complex(chains=[Chain(id="A", sequence="MVLSP"), "GGGG"])
+    assert [c.sequence for c in mixed.chains] == ["MVLSP", "GGGG"]

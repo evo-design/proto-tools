@@ -46,7 +46,7 @@ class Boltz2Input(StructurePredictionInput):
     Inherits from ``StructurePredictionInput``.
 
     Attributes:
-        complexes (list[StructurePredictionComplex]): List of complexes to predict
+        complexes (list[Complex]): List of complexes to predict
             structures for. Inherited from ``StructurePredictionInput``. Each complex
             can contain multiple chains of proteins, DNA, RNA, and/or ligands.
         msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
@@ -371,7 +371,7 @@ def run_boltz2_on_complex(
 
     Args:
         config (Boltz2Config): Boltz2 configuration
-        sp_complex (Any): StructurePredictionComplex instance containing chain information
+        sp_complex (Any): Complex instance containing chain information
         msas (dict[str, Any] | None): Pre-computed MSAs keyed by protein sequence
         instance (Any): Optional ToolInstance for persistent execution
         seed (int | None): Per-complex seed to pass to the standalone. When ``None``,

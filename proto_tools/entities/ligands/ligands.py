@@ -40,6 +40,10 @@ class Fragment(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    id: str | None = Field(
+        default=None,
+        description="Optional identifier (free-form; e.g. a chain letter for in-complex use).",
+    )
     smiles: str | None = Field(default=None, description="SMILES string")
     ccd_code: str | None = Field(default=None, description="CCD code")
     entity_type: Literal["ligand"] = Field(default="ligand", description="Always 'ligand'")

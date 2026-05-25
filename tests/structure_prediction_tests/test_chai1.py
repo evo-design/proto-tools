@@ -21,7 +21,7 @@ from proto_tools.tools.structure_prediction.chai1.helpers import (
     count_chai1_tokens,
 )
 from proto_tools.tools.structure_prediction.shared_data_models import (
-    StructurePredictionComplex,
+    Complex,
 )
 from tests.conftest import benchmark_twice
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
@@ -93,4 +93,4 @@ def test_count_chai1_tokens_modified_residue():
 
 def test_chai1_input_within_token_budget_passes():
     """A small protein + small ligand stays well under 2048 tokens."""
-    Chai1Input(complexes=[StructurePredictionComplex(chains=["MKTL", "CCO"])])
+    Chai1Input(complexes=[Complex(chains=["MKTL", "CCO"])])

@@ -21,11 +21,11 @@ logger = logging.getLogger(__name__)
 from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures.structure import BFactorType, Structure
 from proto_tools.tools.structure_prediction.shared_data_models import (
-    CHAIN_IDS,
+    Complex,
     MSAStructurePredictionConfig,
-    StructurePredictionComplex,
     StructurePredictionInput,
     StructurePredictionOutput,
+    chain_label,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance
@@ -48,7 +48,7 @@ class AlphaFold3Input(StructurePredictionInput):
     Inherits from ``StructurePredictionInput``.
 
     Attributes:
-        complexes (list[StructurePredictionComplex]): List of complexes to predict
+        complexes (list[Complex]): List of complexes to predict
             structures for. Inherited from ``StructurePredictionInput``. Each complex
             can contain one or more sequences of proteins, DNA, RNA, or ligands.
         msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
@@ -408,7 +408,7 @@ def _assign_msas_to_input_json(
 
 
 def _create_input_json_from_complex(
-    sp_complex: StructurePredictionComplex,
+    sp_complex: Complex,
     name: str,
     seed: int | list[int],
 ) -> AlphaFold3JSON:
@@ -421,7 +421,7 @@ def _create_input_json_from_complex(
     https://files.wwpdb.org/pub/pdb/data/monomers/Components-smiles-stereo-oe.smi
 
     Args:
-        sp_complex (StructurePredictionComplex): Complex to predict.
+        sp_complex (Complex): Complex to predict.
         name (str): Name identifier for this prediction job.
         seed (int | list[int]): Random seed(s) for structure prediction.
 
@@ -453,7 +453,7 @@ def _create_input_json_from_complex(
                 )
             sequence_entry = {
                 "ligand": {
-                    "id": CHAIN_IDS[idx],
+                    "id": chain_label(idx),
                     "ccdCodes": [ccd_code],
                 }
             }
@@ -466,7 +466,7 @@ def _create_input_json_from_complex(
             # Ignore MSA fields for DNA and RNA.
             sequence_entry = {
                 mol_type: {
-                    "id": CHAIN_IDS[idx],
+                    "id": chain_label(idx),
                     "sequence": sequence,
                 }
             }
@@ -478,7 +478,7 @@ def _create_input_json_from_complex(
             # has run to populate them.
             sequence_entry = {
                 mol_type: {  # type: ignore[dict-item]
-                    "id": CHAIN_IDS[idx],
+                    "id": chain_label(idx),
                     "sequence": sequence,
                     "pairedMsa": "",
                     "unpairedMsa": "",

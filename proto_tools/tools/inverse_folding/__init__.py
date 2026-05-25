@@ -1,6 +1,9 @@
 """Inverse folding models for structure-conditioned sequence design."""
 
 from proto_tools.tools.inverse_folding.esm_if1 import (
+    ESMIF1Design,
+    ESMIF1DesignMetrics,
+    ESMIF1DesignSet,
     ESMIF1SampleConfig,
     ESMIF1SampleInput,
     ESMIF1SampleOutput,
@@ -8,12 +11,14 @@ from proto_tools.tools.inverse_folding.esm_if1 import (
     ESMIF1ScoringInput,
     ESMIF1ScoringOutput,
     ESMIF1ScoringPair,
-    ESMIF1Sequences,
     run_esm_if1_sample,
     run_esm_if1_score,
 )
 from proto_tools.tools.inverse_folding.fampnn import (
     AllMutationsScoreResult,
+    FAMPNNDesign,
+    FAMPNNDesignMetrics,
+    FAMPNNDesignSet,
     FAMPNNPackConfig,
     FAMPNNPackingResult,
     FAMPNNPackInput,
@@ -26,7 +31,6 @@ from proto_tools.tools.inverse_folding.fampnn import (
     FAMPNNScoreConfig,
     FAMPNNScoreInput,
     FAMPNNScoreOutput,
-    FAMPNNSequences,
     FAMPNNStructureInput,
     MutationInput,
     MutationScoreResult,
@@ -36,6 +40,9 @@ from proto_tools.tools.inverse_folding.fampnn import (
     run_fampnn_score_all_mutations,
 )
 from proto_tools.tools.inverse_folding.ligandmpnn import (
+    LigandMPNNDesign,
+    LigandMPNNDesignMetrics,
+    LigandMPNNDesignSet,
     LigandMPNNModelType,
     LigandMPNNSampleConfig,
     LigandMPNNSampleInput,
@@ -44,11 +51,13 @@ from proto_tools.tools.inverse_folding.ligandmpnn import (
     LigandMPNNScoringInput,
     LigandMPNNScoringMode,
     LigandMPNNScoringOutput,
-    LigandMPNNSequences,
     run_ligandmpnn_sample,
     run_ligandmpnn_score,
 )
 from proto_tools.tools.inverse_folding.proteinmpnn import (
+    ProteinMPNNDesign,
+    ProteinMPNNDesignMetrics,
+    ProteinMPNNDesignSet,
     ProteinMPNNGradientConfig,
     ProteinMPNNGradientInput,
     ProteinMPNNGradientOutput,
@@ -58,13 +67,13 @@ from proto_tools.tools.inverse_folding.proteinmpnn import (
     ProteinMPNNScoringConfig,
     ProteinMPNNScoringInput,
     ProteinMPNNScoringOutput,
-    ProteinMPNNSequences,
     run_proteinmpnn_gradient,
     run_proteinmpnn_sample,
     run_proteinmpnn_score,
 )
-from proto_tools.tools.inverse_folding.shared_data_models import (  # noqa: F401
-    DesignedSequences,
+from proto_tools.tools.inverse_folding.shared_data_models import (
+    DesignedComplex,
+    DesignSet,
     InverseFoldingConfig,
     InverseFoldingInput,
     InverseFoldingOutput,
@@ -76,11 +85,15 @@ from proto_tools.tools.inverse_folding.shared_data_models import (  # noqa: F401
 
 __all__ = [
     # Shared Data Models
+    "DesignedComplex",
+    "DesignSet",
     "InverseFoldingScoringMetrics",
     "SequenceStructurePair",
     "InverseFoldingStructureInput",
     "InverseFoldingConfig",
     "InverseFoldingInput",
+    "InverseFoldingOutput",
+    "InverseFoldingScoringOutput",
     # ESM-IF1 / ProteinDPO
     "ESMIF1SampleConfig",
     "ESMIF1SampleInput",
@@ -89,7 +102,9 @@ __all__ = [
     "ESMIF1ScoringInput",
     "ESMIF1ScoringOutput",
     "ESMIF1ScoringPair",
-    "ESMIF1Sequences",
+    "ESMIF1Design",
+    "ESMIF1DesignSet",
+    "ESMIF1DesignMetrics",
     "run_esm_if1_sample",
     "run_esm_if1_score",
     # ProteinMPNN
@@ -105,7 +120,9 @@ __all__ = [
     "ProteinMPNNScoringInput",
     "ProteinMPNNScoringConfig",
     "ProteinMPNNScoringOutput",
-    "ProteinMPNNSequences",
+    "ProteinMPNNDesign",
+    "ProteinMPNNDesignSet",
+    "ProteinMPNNDesignMetrics",
     # LigandMPNN
     "run_ligandmpnn_sample",
     "run_ligandmpnn_score",
@@ -117,9 +134,14 @@ __all__ = [
     "LigandMPNNScoringConfig",
     "LigandMPNNScoringMode",
     "LigandMPNNScoringOutput",
-    "LigandMPNNSequences",
+    "LigandMPNNDesign",
+    "LigandMPNNDesignSet",
+    "LigandMPNNDesignMetrics",
     # FAMPNN
     "AllMutationsScoreResult",
+    "FAMPNNDesign",
+    "FAMPNNDesignSet",
+    "FAMPNNDesignMetrics",
     "FAMPNNPackConfig",
     "FAMPNNPackInput",
     "FAMPNNPackingResult",
@@ -132,7 +154,6 @@ __all__ = [
     "FAMPNNScoreConfig",
     "FAMPNNScoreInput",
     "FAMPNNScoreOutput",
-    "FAMPNNSequences",
     "FAMPNNStructureInput",
     "MutationInput",
     "MutationScoreResult",

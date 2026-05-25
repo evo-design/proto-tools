@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from proto_tools.entities.complex import Chain
 from proto_tools.entities.structures.structure import Structure
 from proto_tools.tools.inverse_folding.esm_if1 import (
     ESMIF1SampleConfig,
@@ -16,6 +17,10 @@ from proto_tools.tools.inverse_folding.esm_if1 import (
     ESMIF1ScoringPair,
     run_esm_if1_sample,
     run_esm_if1_score,
+)
+from proto_tools.tools.inverse_folding.esm_if1.esm_if1_sample import (
+    ESMIF1Design,
+    ESMIF1DesignMetrics,
 )
 from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
@@ -57,13 +62,15 @@ def test_esm_if1_sample_simple(pdb_structure: Structure):
     validate_output(output)
     assert output.tool_id == "esm-if1-sample"
 
-    designs = output.designed_sequences[0]
-    assert len(designs.sequences) == 1
-    assert isinstance(designs.sequences[0], str)
-    assert len(designs.sequences[0]) > 0
-    assert len(designs.log_likelihoods) == 1
-    assert isinstance(designs.log_likelihoods[0], float)
-    assert np.isfinite(designs.log_likelihoods[0])
+    design_set = output.design_sets[0]
+    assert len(design_set.complexes) == 1
+    design = design_set.complexes[0]
+    seq = design.designed_chains[0].sequence
+    assert isinstance(seq, str)
+    assert len(seq) > 0
+    ll = design.metrics["log_likelihood"]
+    assert isinstance(ll, float)
+    assert np.isfinite(ll)
 
 
 @pytest.mark.uses_gpu
@@ -78,13 +85,14 @@ def test_esm_if1_sample_multiple(pdb_structure: Structure):
     output = run_esm_if1_sample(inp, config)
     assert output.success, f"Failed to sample: {output}"
 
-    designs = output.designed_sequences[0]
-    assert len(designs.sequences) == 3
-    assert all(isinstance(seq, str) for seq in designs.sequences)
-    assert all(len(seq) > 0 for seq in designs.sequences)
-    assert len(designs.log_likelihoods) == 3
-    assert all(isinstance(ll, float) for ll in designs.log_likelihoods)
-    assert all(np.isfinite(ll) for ll in designs.log_likelihoods)
+    design_set = output.design_sets[0]
+    assert len(design_set.complexes) == 3
+    seqs = [d.designed_chains[0].sequence for d in design_set.complexes]
+    assert all(isinstance(seq, str) for seq in seqs)
+    assert all(len(seq) > 0 for seq in seqs)
+    lls = [d.metrics["log_likelihood"] for d in design_set.complexes]
+    assert all(isinstance(ll, float) for ll in lls)
+    assert all(np.isfinite(ll) for ll in lls)
 
 
 @pytest.mark.uses_gpu
@@ -100,11 +108,12 @@ def test_esm_if1_sample_chunked_batching(pdb_structure: Structure):
     output = run_esm_if1_sample(inp, config)
     assert output.success, f"Chunked batching failed: {output}"
 
-    designs = output.designed_sequences[0]
-    assert len(designs.sequences) == 4
-    assert all(isinstance(seq, str) for seq in designs.sequences)
-    assert all(len(seq) > 0 for seq in designs.sequences)
-    assert len(designs.log_likelihoods) == 4
+    design_set = output.design_sets[0]
+    assert len(design_set.complexes) == 4
+    seqs = [d.designed_chains[0].sequence for d in design_set.complexes]
+    assert all(isinstance(seq, str) for seq in seqs)
+    assert all(len(seq) > 0 for seq in seqs)
+    assert all(np.isfinite(d.metrics["log_likelihood"]) for d in design_set.complexes)
 
 
 @pytest.mark.uses_gpu
@@ -131,9 +140,10 @@ def test_esm_if1_sample_fixed_positions(pdb_structure: Structure):
     output = run_esm_if1_sample(inp, config)
     assert output.success, f"Fixed positions sampling failed: {output}"
 
-    designs = output.designed_sequences[0]
-    assert len(designs.sequences) == 2
-    for seq in designs.sequences:
+    design_set = output.design_sets[0]
+    assert len(design_set.complexes) == 2
+    for design in design_set.complexes:
+        seq = design.designed_chains[0].sequence
         for pos in fixed_pos:
             assert seq[pos - 1] == native_seq[pos - 1], (
                 f"Position {pos}: expected '{native_seq[pos - 1]}', got '{seq[pos - 1]}'"
@@ -153,10 +163,63 @@ def test_esm_if1_sample_dpo_weights(pdb_structure: Structure):
     output = run_esm_if1_sample(inp, config)
     assert output.success, f"Failed to sample with DPO weights: {output}"
 
-    designs = output.designed_sequences[0]
-    assert len(designs.sequences) == 1
-    assert isinstance(designs.sequences[0], str)
-    assert len(designs.sequences[0]) > 0
+    design_set = output.design_sets[0]
+    assert len(design_set.complexes) == 1
+    seq = design_set.complexes[0].designed_chains[0].sequence
+    assert isinstance(seq, str)
+    assert len(seq) > 0
+
+
+# ============================================================================
+# Design structure tests (no dispatch)
+# ============================================================================
+def test_esm_if1_design_single_target_chain_structure():
+    """An ESMIF1Design holds one redesigned target chain plus fixed context chains."""
+    # Chain B is the redesigned target; A and C are carried-over context chains.
+    chains = [
+        Chain(id="A", sequence="MKTAYIAK"),
+        Chain(id="B", sequence="GGGSSSGG"),
+        Chain(id="C", sequence="LLLVVVLL"),
+    ]
+    design = ESMIF1Design(
+        chains=chains,
+        designed=[False, True, False],
+        metrics=ESMIF1DesignMetrics(log_likelihood=-9.6, avg_log_likelihood=-1.2, perplexity=3.32),
+    )
+
+    designed = design.designed_chains
+    assert len(designed) == 1
+    assert designed[0].id == "B"
+    assert designed[0].sequence == "GGGSSSGG"
+
+    # Chain ids and order are preserved from the input structure.
+    assert [c.id for c in design.chains] == ["A", "B", "C"]
+    assert design.chain_sequences == ["MKTAYIAK", "GGGSSSGG", "LLLVVVLL"]
+    assert design.as_chain_map() == {"A": "MKTAYIAK", "B": "GGGSSSGG", "C": "LLLVVVLL"}
+
+    # Metrics expose the standard triple; perplexity is the primary value.
+    assert design.metrics["log_likelihood"] == -9.6
+    assert design.metrics["avg_log_likelihood"] == -1.2
+    assert design.metrics.primary_value == 3.32
+    assert design.design_metrics()["perplexity"] == 3.32
+
+
+def test_esm_if1_design_feeds_structure_predictor():
+    """An ESMIF1Design feeds an SP tool input directly via LSP (subclass-as-Complex)."""
+    from proto_tools.tools.structure_prediction import ESMFoldInput
+
+    design = ESMIF1Design(
+        chains=[
+            Chain(id="A", sequence="MKTAYIAK"),
+            Chain(id="B", sequence="GGGSSSGG"),
+        ],
+        designed=[False, True],
+        metrics=ESMIF1DesignMetrics(log_likelihood=-5.6, avg_log_likelihood=-0.7, perplexity=2.01),
+    )
+
+    inp = ESMFoldInput(complexes=[design])
+    assert inp.complexes[0] is design
+    assert inp.complexes[0].chain_sequences == ["MKTAYIAK", "GGGSSSGG"]
 
 
 # ============================================================================
@@ -366,7 +429,7 @@ def test_esm_if1_score_unknown_target_chain(multichain_structure: Structure):
 @pytest.mark.slow
 @pytest.mark.uses_gpu
 def test_esm_if1_sample_benchmark(request: pytest.FixtureRequest, pdb_structure: Structure) -> None:
-    """Benchmark esm-if1-sample: 50 ProteinDPO designs of renin (~340 aa) at batch_size=16 (cold + warm)."""
+    """Benchmark esm-if1-sample: 50 ProteinDPO complexes of renin (~340 aa) at batch_size=16 (cold + warm)."""
     inputs = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=pdb_structure)])
     config = ESMIF1SampleConfig(
         num_sequences_per_structure=50,
@@ -378,14 +441,13 @@ def test_esm_if1_sample_benchmark(request: pytest.FixtureRequest, pdb_structure:
     result = benchmark_twice(request, "esm_if1", lambda: run_esm_if1_sample(inputs, config))
 
     assert result.tool_id == "esm-if1-sample"
-    assert len(result.designed_sequences) == 1
-    designs = result.designed_sequences[0]
-    assert len(designs.sequences) == 50
+    assert len(result.design_sets) == 1
+    design_set = result.design_sets[0]
+    assert len(design_set.complexes) == 50
     target_len = len(pdb_structure.get_chain_sequence("A"))
-    for seq in designs.sequences:
-        assert len(seq) == target_len
-    assert len(designs.log_likelihoods) == 50
-    assert all(np.isfinite(ll) for ll in designs.log_likelihoods)
+    for design in design_set.complexes:
+        assert len(design.designed_chains[0].sequence) == target_len
+    assert all(np.isfinite(d.metrics["log_likelihood"]) for d in design_set.complexes)
 
 
 @pytest.mark.benchmark("esm-if1-score")

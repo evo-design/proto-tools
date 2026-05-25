@@ -751,7 +751,7 @@ class RFdiffusion3Designs(BaseModel):
     cardinality between ``iterable_input_field`` and ``iterable_output_field``
     even though RFdiffusion3 fans out (N = ``n_batches * diffusion_batch_size``
     designs per spec). Mirrors the per-input bundling pattern used by
-    ``ProteinMPNNSequences``.
+    ``DesignSet``.
 
     Attributes:
         spec_key (str): Identifier of the input specification that produced

@@ -16,7 +16,7 @@ from proto_tools.tools.structure_prediction import (
     AlphaFold2BinderOutput,
     AlphaFold2Config,
     AlphaFold2Input,
-    StructurePredictionComplex,
+    Complex,
     run_alphafold2,
     run_alphafold2_binder,
 )
@@ -418,7 +418,7 @@ def test_gradient_loss_weights_matter():
 @pytest.mark.uses_gpu
 def test_homooligomer():
     output = run_alphafold2(
-        AlphaFold2Input(complexes=[StructurePredictionComplex(chains=[_HOMOOLIGOMER_SEQ, _HOMOOLIGOMER_SEQ])]),
+        AlphaFold2Input(complexes=[Complex(chains=[_HOMOOLIGOMER_SEQ, _HOMOOLIGOMER_SEQ])]),
         AlphaFold2Config(use_msa=False),
     )
     assert output.success

@@ -5,10 +5,9 @@ batching complexes and relabeling chains in PDB output.
 """
 
 import io
-import string
 from typing import Any
 
-CHAIN_IDS: list[str] = list(string.ascii_uppercase)
+from proto_tools.entities.complex import chain_label
 
 
 def split_into_safe_batches(complexes: list[dict[str, Any]], max_residues: int) -> list[list[dict[str, Any]]]:
@@ -78,7 +77,7 @@ def relabel_chains(pdb_str: str, chain_lengths: list[int]) -> str:
     start = 0
 
     for idx, length in enumerate(chain_lengths):
-        new_chain = PDB.Chain.Chain(CHAIN_IDS[idx])  # type: ignore[no-untyped-call]
+        new_chain = PDB.Chain.Chain(chain_label(idx))  # type: ignore[no-untyped-call]
         for residue in all_residues[start : start + length]:
             new_chain.add(residue)
         new_chains.append(new_chain)

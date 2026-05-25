@@ -11,6 +11,7 @@ from types import ModuleType, SimpleNamespace
 import numpy as np
 import pytest
 
+from proto_tools.entities.complex import Chain
 from proto_tools.entities.structures.structure import Structure
 from proto_tools.tools.inverse_folding.proteinmpnn import (
     ProteinMPNNGradientConfig,
@@ -21,6 +22,10 @@ from proto_tools.tools.inverse_folding.proteinmpnn import (
     run_proteinmpnn_gradient,
     run_proteinmpnn_sample,
     run_proteinmpnn_score,
+)
+from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample import (
+    ProteinMPNNDesign,
+    ProteinMPNNDesignMetrics,
 )
 from proto_tools.tools.inverse_folding.proteinmpnn.standalone.inference import (
     ALPHAFOLD_VOCAB,
@@ -143,11 +148,12 @@ def test_proteinmpnn_sample_simple(pdb_structure: Structure):
     validate_output(output)
     assert output.tool_id == "proteinmpnn-sample"
 
-    for designed_sequences in output.designed_sequences:
-        assert len(designed_sequences) == 10
-        assert all(isinstance(sequence, str) for sequence in designed_sequences.sequences)
-        assert all(isinstance(perplexity, float) for perplexity in designed_sequences.perplexity)
-        assert all(isinstance(recovery, float) for recovery in designed_sequences.sequence_recovery)
+    for design_set in output.design_sets:
+        assert len(design_set.complexes) == 10
+        for design in design_set.complexes:
+            assert isinstance(design.chains[0].sequence, str)
+            assert isinstance(design.metrics["perplexity"], float)
+            assert isinstance(design.metrics["sequence_recovery"], float)
 
 
 @pytest.mark.uses_gpu
@@ -163,14 +169,14 @@ def test_proteinmpnn_sample_chunked_batching(pdb_structure: Structure):
     output = run_proteinmpnn_sample(inp, config)
     assert output.success, f"Chunked batching failed: {output}"
 
-    designs = output.designed_sequences[0]
-    assert len(designs.sequences) == 6
-    assert all(isinstance(seq, str) for seq in designs.sequences)
-    assert all(len(seq) > 0 for seq in designs.sequences)
-    assert len(designs.perplexity) == 6
-    assert all(isinstance(p, float) for p in designs.perplexity)
-    assert len(designs.sequence_recovery) == 6
-    assert all(isinstance(s, float) for s in designs.sequence_recovery)
+    design_set = output.design_sets[0]
+    assert len(design_set.complexes) == 6
+    for design in design_set.complexes:
+        seq = design.chains[0].sequence
+        assert isinstance(seq, str)
+        assert len(seq) > 0
+        assert isinstance(design.metrics["perplexity"], float)
+        assert isinstance(design.metrics["sequence_recovery"], float)
 
 
 @pytest.mark.uses_gpu
@@ -202,8 +208,9 @@ def test_proteinmpnn_sample_advanced_args(pdb_structure: Structure):
 
     validate_output(output)
 
-    for designed_sequences in output.designed_sequences:
-        for sequence in designed_sequences.sequences:
+    for design_set in output.design_sets:
+        for design in design_set.complexes:
+            sequence = design.chains[0].sequence
             assert "C" not in sequence, f"Sequence contains excluded 'C': {sequence}"
 
             for position in fixed_positions:
@@ -384,6 +391,52 @@ def test_proteinmpnn_sample_seeds_distinct_across_inputs(monkeypatch):
         ProteinMPNNSampleConfig(num_sequences_per_structure=1, batch_size=1, seed=42, device="cpu"),
     )
     assert captured_seeds == captured_seeds_again
+
+
+def test_proteinmpnn_multichain_design_structure():
+    """A multi-chain ProteinMPNNDesign exposes chain order, redesigned flags, and metrics."""
+    design = ProteinMPNNDesign(
+        chains=[
+            Chain(id="A", sequence="MKTL"),
+            Chain(id="B", sequence="GGSS"),
+        ],
+        designed=[True, False],
+        metrics=ProteinMPNNDesignMetrics(perplexity=1.5, sequence_recovery=0.4),
+    )
+
+    # Chain ids preserve input order.
+    assert [c.id for c in design.chains] == ["A", "B"]
+    assert design.designed == [True, False]
+
+    # Chain-level helpers.
+    assert design.chain_sequences == ["MKTL", "GGSS"]
+    assert design.as_chain_map() == {"A": "MKTL", "B": "GGSS"}
+    assert [c.id for c in design.designed_chains] == ["A"]
+
+    # Metric access via mapping, attribute, and primary value.
+    assert design.metrics["perplexity"] == 1.5
+    assert design.metrics.perplexity == 1.5
+    assert design.metrics["sequence_recovery"] == 0.4
+    assert design.metrics.primary_value == 1.5
+    assert design.design_metrics() == {"perplexity": 1.5, "sequence_recovery": 0.4}
+
+
+def test_proteinmpnn_design_feeds_structure_predictor():
+    """A ProteinMPNNDesign feeds an SP tool input directly via LSP (subclass-as-Complex)."""
+    from proto_tools.tools.structure_prediction import ESMFoldInput
+
+    design = ProteinMPNNDesign(
+        chains=[
+            Chain(id="A", sequence="MKTL"),
+            Chain(id="B", sequence="GGSS"),
+        ],
+        designed=[True, False],
+        metrics=ProteinMPNNDesignMetrics(perplexity=1.5, sequence_recovery=0.4),
+    )
+
+    inp = ESMFoldInput(complexes=[design])
+    assert inp.complexes[0] is design
+    assert [c.sequence for c in inp.complexes[0].chains] == ["MKTL", "GGSS"]
 
 
 @pytest.mark.uses_gpu
@@ -616,8 +669,9 @@ def test_abmpnn_sample(pdb_structure: Structure):
     )
     output = run_proteinmpnn_sample(inp, config)
     assert output.success, f"AbMPNN sampling failed: {output}"
-    assert len(output.designed_sequences[0].sequences) == 2
-    assert all(isinstance(s, str) for s in output.designed_sequences[0].sequences)
+    design_set = output.design_sets[0]
+    assert len(design_set.complexes) == 2
+    assert all(isinstance(d.chains[0].sequence, str) for d in design_set.complexes)
 
 
 @pytest.mark.uses_gpu
@@ -643,7 +697,7 @@ def test_abmpnn_score(pdb_structure: Structure):
 @pytest.mark.slow
 @pytest.mark.uses_gpu
 def test_proteinmpnn_sample_benchmark(request: pytest.FixtureRequest, pdb_structure: Structure) -> None:
-    """Benchmark proteinmpnn-sample: 50 designs of renin (~340 aa) at batch_size=16 (cold + warm)."""
+    """Benchmark proteinmpnn-sample: 50 complexes of renin (~340 aa) at batch_size=16 (cold + warm)."""
     inputs = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=pdb_structure)])
     config = ProteinMPNNSampleConfig(
         num_sequences_per_structure=50,
@@ -655,12 +709,12 @@ def test_proteinmpnn_sample_benchmark(request: pytest.FixtureRequest, pdb_struct
     result = benchmark_twice(request, "proteinmpnn", lambda: run_proteinmpnn_sample(inputs, config))
 
     assert result.tool_id == "proteinmpnn-sample"
-    assert len(result.designed_sequences) == 1, "Should have one DesignedSequences per input structure"
-    designs = result.designed_sequences[0]
-    assert len(designs.sequences) == 50, "Should have 50 designed sequences"
+    assert len(result.design_sets) == 1, "Should have one design set per input structure"
+    design_set = result.design_sets[0]
+    assert len(design_set.complexes) == 50, "Should have 50 complexes"
     target_len = len(pdb_structure.get_chain_sequence("A"))
-    for seq in designs.sequences:
-        assert len(seq) == target_len, "Designed sequence should match structure length"
+    for design in design_set.complexes:
+        assert len(design.chains[0].sequence) == target_len, "Designed sequence should match structure length"
 
 
 @pytest.mark.benchmark("proteinmpnn-score")

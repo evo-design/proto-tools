@@ -10,7 +10,7 @@ from proto_tools.tools.structure_prediction import (
     Boltz2Config,
     Boltz2Input,
     Chain,
-    StructurePredictionComplex,
+    Complex,
     run_boltz2,
 )
 from tests.conftest import benchmark_twice
@@ -81,12 +81,12 @@ def test_boltz2_ccd_vs_smiles_input_equivalent_predictions():
     # CCD path: validator auto-resolves ccd_code="TYR"; implementation sends ccd: TYR
     ccd_frag = Fragment(smiles=tyr_smiles)
     assert ccd_frag.ccd_code == "TYR"  # invariant guard
-    ccd_complex = StructurePredictionComplex(chains=[protein, ccd_frag])
+    ccd_complex = Complex(chains=[protein, ccd_frag])
 
     # SMILES path: force ccd_code=None so the implementation falls back to raw SMILES
     smiles_frag = Fragment(smiles=tyr_smiles)
     smiles_frag.ccd_code = None
-    smiles_complex = StructurePredictionComplex(chains=[protein, smiles_frag])
+    smiles_complex = Complex(chains=[protein, smiles_frag])
 
     config = Boltz2Config(
         use_msa=False,

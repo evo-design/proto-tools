@@ -6,13 +6,16 @@ ProteinMPNN sampling tool.
 import logging
 import random
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 import numpy as np
 from pydantic import Field
 
+from proto_tools.entities.complex import Chain
+from proto_tools.entities.ligands import Fragment
 from proto_tools.tools.inverse_folding.shared_data_models import (
-    DesignedSequences,
+    DesignedComplex,
+    DesignSet,
     InverseFoldingConfig,
     InverseFoldingInput,
     InverseFoldingOutput,
@@ -21,6 +24,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import AminoAcid, ConfigField, ToolInstance
 from proto_tools.utils.progress import progress_bar
+from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = logging.getLogger(__name__)
 
@@ -71,23 +75,56 @@ class ProteinMPNNSampleConfig(InverseFoldingConfig):
     )
 
 
-class ProteinMPNNSequences(DesignedSequences):
-    """Represents a designed sequence from the ProteinMPNN model.
+class ProteinMPNNDesignMetrics(Metrics):
+    """Per-design metrics emitted by ProteinMPNN sampling.
 
-    Attributes:
-        sequences (list[str]): Designed protein sequences.
-        perplexity (list[float]): Per-sequence perplexity values.
-        sequence_recovery (list[float]): Per-sequence fraction of chains_to_redesign
-            residues matching the PDB prompt reference (0.0-1.0).
+    Metrics documented in ``metric_spec``:
+        perplexity (float): Perplexity of the design from the ProteinMPNN model.
+            Always present. Range ``[1, ∞)``.
+        sequence_recovery (float): Fraction of redesigned-chain residues matching
+            the PDB prompt reference for this design (0.0-1.0). Always present.
     """
 
-    perplexity: list[float] = Field(
-        title="Perplexity",
-        description="Per-sequence ProteinMPNN perplexity (one value per designed sequence)",
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "perplexity": {"availability": "always", "type": "float", "min": 1.0, "max": None},
+        "sequence_recovery": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
+    }
+    primary_metric: str | None = Field(
+        default="perplexity",
+        title="Primary Metric",
+        description="Headline metric used to rank results.",
     )
-    sequence_recovery: list[float] = Field(
-        title="Sequence Recovery",
-        description="Per-sequence fraction of chains_to_redesign residues matching the reference (0.0-1.0)",
+
+
+class ProteinMPNNDesign(DesignedComplex):
+    """One ProteinMPNN-designed complex with its per-design scalar metrics.
+
+    Attributes:
+        chains (list[Chain | Fragment]): All protein chains of the design, in input
+            structure chain order. Redesigned chains carry the model output;
+            context chains carry the original input sequence unchanged.
+        metrics (ProteinMPNNDesignMetrics): Per-design metrics (perplexity and
+            sequence recovery) for this design.
+    """
+
+    metrics: ProteinMPNNDesignMetrics = Field(
+        default_factory=ProteinMPNNDesignMetrics,
+        title="Metrics",
+        description="Per-design metrics (perplexity and sequence recovery).",
+    )
+
+
+class ProteinMPNNDesignSet(DesignSet):
+    """All ProteinMPNN complexes produced for a single input structure.
+
+    Attributes:
+        complexes (list[ProteinMPNNDesign]): The complexes generated for one input
+            structure, each a complete multi-chain complex with per-design metrics.
+    """
+
+    complexes: list[ProteinMPNNDesign] = Field(  # type: ignore[assignment]
+        title="Complexes",
+        description="ProteinMPNN complexes for one input structure, each a complete complex.",
     )
 
 
@@ -95,13 +132,14 @@ class ProteinMPNNSampleOutput(InverseFoldingOutput):
     """Output of the ProteinMPNN sampling tool.
 
     Attributes:
-        designed_sequences (list[ProteinMPNNSequences]): ProteinMPNN-designed sequences
-            with per-sequence perplexity and recovery metrics.
+        design_sets (list[ProteinMPNNDesignSet]): One ``ProteinMPNNDesignSet``
+            per input structure, in input order. Entry ``i`` holds all complexes for
+            input structure ``i``.
     """
 
-    designed_sequences: list[ProteinMPNNSequences] = Field(  # type: ignore[assignment]
-        title="Designed Sequences",
-        description="ProteinMPNN-designed sequences with per-sequence perplexity and recovery metrics.",
+    design_sets: list[ProteinMPNNDesignSet] = Field(  # type: ignore[assignment]
+        title="Design Sets",
+        description="One ProteinMPNNDesignSet per input structure, in input order.",
     )
 
 
@@ -131,7 +169,7 @@ def example_input() -> Any:
     stochastic=True,
     example_input=example_input,
     iterable_input_field="inputs",
-    iterable_output_field="designed_sequences",
+    iterable_output_field="design_sets",
 )
 def run_proteinmpnn_sample(
     inputs: ProteinMPNNSampleInput,
@@ -148,19 +186,21 @@ def run_proteinmpnn_sample(
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        ProteinMPNNSampleOutput: ProteinMPNNSampleOutput with designed sequences for each input structure.
+        ProteinMPNNSampleOutput: ProteinMPNNSampleOutput with one design set per input structure.
 
     Note:
-        Multi-chain sampling returns a "/"-delimited sequence preserving chain ID order.
+        Each design is a ``ProteinMPNNDesign`` whose ``chains`` cover every chain
+        of the input structure in order: redesigned chains carry the model output
+        with ``redesigned=True``, context chains are carried over unchanged with
+        ``redesigned=False``.
     """
-    designed_sequences = []
+    design_sets: list[ProteinMPNNDesignSet] = []
 
     # Local venv execution
     logger.debug("Using local venv for ProteinMPNN sampling")
 
     base_seed = config.seed if config.seed is not None else config.get_random_int()
-    # Draw a fresh seed per chunk so identical structures across inputs don't collide
-    # on the same seed (previously `base_seed + chunk_idx` reset to 0 per input).
+    # Draw a fresh seed per chunk so identical structures across inputs do not collide.
     seed_rng = random.Random(base_seed)  # noqa: S311 -- non-cryptographic
 
     for inp in progress_bar(
@@ -169,9 +209,11 @@ def run_proteinmpnn_sample(
         unit="structure",
         disable=not config.verbose,
     ):
-        all_seqs, all_perp, all_seq_recovery = [], [], []
+        all_seqs: list[str] = []
+        all_perp: list[float] = []
+        all_seq_recovery: list[float] = []
         remaining = config.num_sequences_per_structure
-        # Materialize the Structure to a tempfile once per input — reused across chunks.
+        # Materialize the Structure to a tempfile once per input, reused across chunks.
         with inp.structure.temp_file() as pdb_path:
             while remaining > 0:
                 chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
@@ -200,11 +242,38 @@ def run_proteinmpnn_sample(
                 all_perp.extend(np.exp(result["score"]).tolist())
                 all_seq_recovery.extend(result["seqid"])
                 remaining -= chunk  # type: ignore[operator]
-        designed_sequences.append(
-            ProteinMPNNSequences(
-                sequences=all_seqs,
-                perplexity=all_perp,
-                sequence_recovery=all_seq_recovery,
+
+        redesign_ids = inp.chain_ids_to_redesign
+        redesign_set = set(redesign_ids)
+        all_chain_ids = inp.structure.get_chain_ids()
+        complexes: list[ProteinMPNNDesign] = []
+        for raw_seq, perp, recovery in zip(all_seqs, all_perp, all_seq_recovery, strict=True):
+            # Segments are the redesigned chains in chain_ids_to_redesign order.
+            segments = raw_seq.split("/")
+            if len(segments) != len(redesign_ids):
+                raise ValueError(
+                    f"ProteinMPNN returned {len(segments)} sequence segment(s) but "
+                    f"{len(redesign_ids)} chain(s) were requested for redesign "
+                    f"({redesign_ids}). Raw sequence: {raw_seq!r}."
+                )
+            redesigned_seq_by_chain = dict(zip(redesign_ids, segments, strict=True))
+            # Build all chains in input order; context chains keep the input sequence.
+            chains: list[Chain | Fragment] = [
+                Chain(
+                    id=cid,
+                    sequence=redesigned_seq_by_chain[cid]
+                    if cid in redesign_set
+                    else inp.structure.get_chain_sequence(cid),
+                )
+                for cid in all_chain_ids
+            ]
+            designed: list[bool] = [cid in redesign_set for cid in all_chain_ids]
+            complexes.append(
+                ProteinMPNNDesign(
+                    chains=chains,
+                    designed=designed,
+                    metrics=ProteinMPNNDesignMetrics(perplexity=perp, sequence_recovery=recovery),
+                )
             )
-        )
-    return ProteinMPNNSampleOutput(designed_sequences=designed_sequences)
+        design_sets.append(ProteinMPNNDesignSet(complexes=complexes))
+    return ProteinMPNNSampleOutput(design_sets=design_sets)

@@ -5,13 +5,11 @@ MSA CSV file writing and YAML input generation.
 """
 
 import csv
-import string
 from typing import Any
 
+from proto_tools.entities.complex import chain_label
 from proto_tools.entities.ligands import Fragment
 from proto_tools.tools.structure_prediction.shared_data_models import Chain
-
-CHAIN_IDS: list[str] = list(string.ascii_uppercase)
 
 
 def write_msa_csv(aligned_sequences: list[Any], csv_path: str) -> None:
@@ -54,7 +52,7 @@ def complex_to_yaml(
 
     for i, chain in enumerate(chains):
         e_type = chain.entity_type
-        entry: dict[str, Any] = {"id": CHAIN_IDS[i]}
+        entry: dict[str, Any] = {"id": chain_label(i)}
 
         if isinstance(chain, Fragment):
             # Prefer CCD code: Boltz2 uses internal CCD parameterization,
@@ -66,7 +64,7 @@ def complex_to_yaml(
         else:
             entry["sequence"] = chain.sequence
             if e_type == "protein":
-                chain_id = CHAIN_IDS[i]
+                chain_id = chain_label(i)
                 entry["msa"] = chain_msa_paths[chain_id] if chain_msa_paths and chain_id in chain_msa_paths else "empty"
 
         yaml_entries.append({e_type: entry})

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from proto_tools.entities.complex import Chain
 from proto_tools.entities.structures.structure import Structure
 from proto_tools.tools.inverse_folding.fampnn import (
     FAMPNNPackConfig,
@@ -24,11 +25,33 @@ from proto_tools.tools.inverse_folding.fampnn import (
     run_fampnn_score,
     run_fampnn_score_all_mutations,
 )
+from proto_tools.tools.inverse_folding.fampnn.fampnn_sample import (
+    FAMPNNDesign,
+    FAMPNNDesignMetrics,
+)
 from tests.conftest import benchmark_twice, make_persistent_fixture
+from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "test_structure_similarity.pdb"
 BENCHMARK_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
+
+# Minimal 3-residue single-chain backbone PDB used to build a Structure without disk or GPU.
+_SMALL_PDB = """ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00           N
+ATOM      2  CA  ALA A   1       1.458   0.000   0.000  1.00  0.00           C
+ATOM      3  C   ALA A   1       2.009   1.420   0.000  1.00  0.00           C
+ATOM      4  O   ALA A   1       1.246   2.390   0.000  1.00  0.00           O
+ATOM      5  N   GLY A   2       3.326   1.562   0.000  1.00  0.00           N
+ATOM      6  CA  GLY A   2       3.941   2.877   0.000  1.00  0.00           C
+ATOM      7  C   GLY A   2       5.449   2.831   0.000  1.00  0.00           C
+ATOM      8  O   GLY A   2       6.074   1.772   0.000  1.00  0.00           O
+ATOM      9  N   SER A   3       6.032   4.027   0.000  1.00  0.00           N
+ATOM     10  CA  SER A   3       7.476   4.180   0.000  1.00  0.00           C
+ATOM     11  C   SER A   3       8.064   5.572   0.000  1.00  0.00           C
+ATOM     12  O   SER A   3       7.337   6.562   0.000  1.00  0.00           O
+TER
+END
+"""
 
 
 _persistent_tool = make_persistent_fixture("fampnn")
@@ -153,6 +176,57 @@ def test_fampnn_sample_config_rejects_excluded_amino_acids():
         FAMPNNSampleConfig(excluded_amino_acids=["C"])
 
 
+def test_fampnn_design_structure_and_metrics():
+    """FAMPNNDesign holds all chains, a packed structure, and full-atom pSCE metrics."""
+    structure = Structure(structure=_SMALL_PDB, structure_format="pdb", source="test")
+    design = FAMPNNDesign(
+        chains=[
+            Chain(id="A", sequence="AGS"),
+            Chain(id="B", sequence="MKT"),
+        ],
+        structure=structure,
+        designed=[True, False],
+        metrics=FAMPNNDesignMetrics(avg_psce=0.25, psce=[0.2, 0.3]),
+    )
+
+    assert len(design.chains) == 2
+    assert design.chains[0].id == "A"
+    assert design.designed[0] is True
+    assert design.chains[1].id == "B"
+    assert design.designed[1] is False
+    assert design.designed_chains == [design.chains[0]]
+    assert design.chain_sequences == ["AGS", "MKT"]
+    assert design.as_chain_map() == {"A": "AGS", "B": "MKT"}
+
+    assert design.structure is not None
+    assert design.structure.structure_format == "pdb"
+    assert "ATOM" in design.structure.structure
+
+    assert design.metrics["avg_psce"] == 0.25
+    assert design.metrics.psce == [0.2, 0.3]
+    assert design.design_metrics()["avg_psce"] == 0.25
+
+
+def test_fampnn_design_feeds_structure_predictor():
+    """A FAMPNNDesign feeds an SP tool input directly via LSP (subclass-as-Complex)."""
+    from proto_tools.tools.structure_prediction import ESMFoldInput
+
+    structure = Structure(structure=_SMALL_PDB, structure_format="pdb", source="test")
+    design = FAMPNNDesign(
+        chains=[
+            Chain(id="A", sequence="AGS"),
+            Chain(id="B", sequence="MKT"),
+        ],
+        structure=structure,
+        designed=[True, False],
+        metrics=FAMPNNDesignMetrics(avg_psce=0.1, psce=[0.1, 0.1]),
+    )
+
+    inp = ESMFoldInput(complexes=[design])
+    assert inp.complexes[0] is design
+    assert inp.complexes[0].chain_sequences == ["AGS", "MKT"]
+
+
 # ============================================================================
 # Integration tests (GPU required, run with --integration or --all)
 # ============================================================================
@@ -171,17 +245,18 @@ def test_fampnn_sample_simple(pdb_structure):
     validate_output(output)
     assert output.tool_id == "fampnn-sample"
 
-    designs = output.designed_sequences[0]
-    assert len(designs.sequences) == 2
-    assert all(isinstance(seq, str) for seq in designs.sequences)
-    assert all(len(seq) > 0 for seq in designs.sequences)
-    # FAMPNN-specific: PDB strings and pSCE
-    assert len(designs.structures) == 2
-    assert all(s.structure_format == "pdb" for s in designs.structures)
-    assert all("ATOM" in s.structure for s in designs.structures)
-    assert len(designs.psce) == 2
-    assert all(isinstance(psce, list) for psce in designs.psce)
-    assert all(isinstance(v, float) for psce in designs.psce for v in psce)
+    design_set = output.design_sets[0]
+    assert len(design_set.complexes) == 2
+    assert all(isinstance(d.chains[0].sequence, str) for d in design_set.complexes)
+    assert all(len(d.chains[0].sequence) > 0 for d in design_set.complexes)
+    # FAMPNN-specific: per-design packed structure and pSCE metrics
+    assert all(d.structure.structure_format == "pdb" for d in design_set.complexes)
+    assert all("ATOM" in d.structure.structure for d in design_set.complexes)
+    for d in design_set.complexes:
+        assert isinstance(d.metrics["avg_psce"], float)
+        assert isinstance(d.metrics.psce, list)
+        assert all(isinstance(v, float) for v in d.metrics.psce)
+    assert_metrics_in_spec(output)
 
 
 @pytest.mark.uses_gpu
@@ -198,10 +273,10 @@ def test_fampnn_sample_chunked_batching(pdb_structure):
     output = run_fampnn_sample(inp, config)
     assert output.success, f"Chunked batching failed: {output}"
 
-    designs = output.designed_sequences[0]
-    assert len(designs.sequences) == 4
-    assert len(designs.structures) == 4
-    assert len(designs.psce) == 4
+    design_set = output.design_sets[0]
+    assert len(design_set.complexes) == 4
+    assert all(d.structure.structure_format == "pdb" for d in design_set.complexes)
+    assert all(isinstance(d.metrics.psce, list) for d in design_set.complexes)
 
 
 @pytest.mark.uses_gpu
@@ -217,10 +292,11 @@ def test_fampnn_sample_seq_only(pdb_structure):
     output = run_fampnn_sample(inp, config)
     assert output.success, f"seq_only sampling failed: {output}"
 
-    designs = output.designed_sequences[0]
-    assert len(designs.sequences) == 1
-    assert isinstance(designs.sequences[0], str)
-    assert len(designs.sequences[0]) > 0
+    design_set = output.design_sets[0]
+    assert len(design_set.complexes) == 1
+    seq = design_set.complexes[0].chains[0].sequence
+    assert isinstance(seq, str)
+    assert len(seq) > 0
 
 
 @pytest.mark.uses_gpu
@@ -240,9 +316,9 @@ def test_fampnn_sample_multiple_structures(pdb_structure):
     output = run_fampnn_sample(inp, config)
     assert output.success
 
-    assert len(output.designed_sequences) == 2
-    for designs in output.designed_sequences:
-        assert len(designs.sequences) == 2
+    assert len(output.design_sets) == 2
+    for design_set in output.design_sets:
+        assert len(design_set.complexes) == 2
 
 
 @pytest.mark.uses_gpu
@@ -269,7 +345,7 @@ def test_fampnn_sample_with_fixed_positions(pdb_structure):
     )
     output = run_fampnn_sample(inp, config)
     assert output.success, f"Fixed positions sampling failed: {output}"
-    assert len(output.designed_sequences[0].sequences) == 1
+    assert len(output.design_sets[0].complexes) == 1
 
 
 @pytest.mark.uses_gpu
@@ -461,7 +537,7 @@ def _random_mutations(sequence: str, n: int, seed: int) -> list[str]:
 @pytest.mark.slow
 @pytest.mark.uses_gpu
 def test_fampnn_sample_benchmark(request: pytest.FixtureRequest, benchmark_pdb_structure: Structure) -> None:
-    """Benchmark fampnn-sample: 20 full-atom designs of renin (~340 aa) at batch_size=8 (cold + warm).
+    """Benchmark fampnn-sample: 20 full-atom complexes of renin (~340 aa) at batch_size=8 (cold + warm).
 
     Uses default ``num_steps=100`` and ``model_variant="0.3"`` so each design exercises
     the full iterative-MLM + sidechain-diffusion path. FAMPNN sample is much heavier
@@ -478,14 +554,13 @@ def test_fampnn_sample_benchmark(request: pytest.FixtureRequest, benchmark_pdb_s
     result = benchmark_twice(request, "fampnn", lambda: run_fampnn_sample(inputs, config))
 
     assert result.tool_id == "fampnn-sample"
-    assert len(result.designed_sequences) == 1
-    designs = result.designed_sequences[0]
-    assert len(designs.sequences) == 20
+    assert len(result.design_sets) == 1
+    design_set = result.design_sets[0]
+    assert len(design_set.complexes) == 20
     target_len = len(benchmark_pdb_structure.get_chain_sequence("A"))
-    for seq in designs.sequences:
-        assert len(seq) == target_len
-    assert len(designs.structures) == 20
-    assert all("ATOM" in s.structure for s in designs.structures)
+    for d in design_set.complexes:
+        assert len(d.chains[0].sequence) == target_len
+    assert all("ATOM" in d.structure.structure for d in design_set.complexes)
 
 
 @pytest.mark.benchmark("fampnn-pack")

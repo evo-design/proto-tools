@@ -4,14 +4,18 @@ FAMPNN sequence sampling tool with full-atom sidechain co-generation.
 """
 
 import logging
+import statistics
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import Field
 
+from proto_tools.entities.complex import Chain
+from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures import ResidueSelection, Structure
 from proto_tools.tools.inverse_folding.shared_data_models import (
-    DesignedSequences,
+    DesignedComplex,
+    DesignSet,
     InverseFoldingConfig,
     InverseFoldingOutput,
     InverseFoldingStructureInput,
@@ -24,6 +28,7 @@ from proto_tools.utils import (
     ToolInstance,
 )
 from proto_tools.utils.progress import progress_bar
+from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 
 class FAMPNNStructureInput(InverseFoldingStructureInput):
@@ -143,23 +148,70 @@ class FAMPNNSampleConfig(InverseFoldingConfig):
     )
 
 
-class FAMPNNSequences(DesignedSequences):
-    """Designed sequences from FAMPNN with full-atom sidechain outputs.
+class FAMPNNDesignMetrics(Metrics):
+    """Per-design full-atom sidechain confidence metrics for FAMPNN sampling.
+
+    Metrics documented in ``metric_spec``:
+        avg_psce (float): Mean of the per-residue predicted sidechain error
+            (``psce``) over all residues in the design, in Angstroms. Lower is
+            more confident. Always present.
 
     Attributes:
-        sequences (list[str]): Designed amino acid sequences.
-        structures (list[Structure]): Designed structures with packed sidechain
-            coordinates. B-factor column carries per-atom pSCE.
-        psce (list[list[float]]): Per-residue predicted sidechain error (mean over atoms) in Angstroms.
+        psce (list[float]): Per-residue predicted sidechain error (mean over
+            atoms) in Angstroms, concatenated across all chains in input chain
+            order.
     """
 
-    structures: list[Structure] = Field(
-        title="Structures",
-        description="Designed structures with packed sidechain coordinates",
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "avg_psce": {"availability": "always", "type": "float", "min": 0.0, "max": None},
+    }
+    primary_metric: str | None = Field(
+        default="avg_psce",
+        title="Primary Metric",
+        description="Headline metric used to rank results.",
     )
-    psce: list[list[float]] = Field(
+
+    psce: list[float] = Field(
+        default_factory=list,
         title="pSCE",
-        description="Per-residue predicted sidechain error (Angstroms)",
+        description="Per-residue predicted sidechain error (Angstroms), concatenated in input chain order.",
+    )
+
+
+class FAMPNNDesign(DesignedComplex):
+    """One FAMPNN-designed complex with full-atom sidechain confidence.
+
+    Attributes:
+        chains (list[Chain | Fragment]): All protein chains of the design, in input
+            structure chain order. Inherited from :class:`DesignedComplex`.
+        structure (Structure): Designed full-atom structure with packed sidechain
+            coordinates co-generated for this design.
+        metrics (FAMPNNDesignMetrics): Per-design full-atom sidechain confidence
+            metrics (``avg_psce`` plus the per-residue ``psce`` array).
+    """
+
+    structure: Structure = Field(
+        title="Designed Structure",
+        description="Designed full-atom structure with packed sidechain coordinates.",
+    )
+    metrics: FAMPNNDesignMetrics = Field(
+        default_factory=FAMPNNDesignMetrics,
+        title="Metrics",
+        description="Per-design full-atom sidechain confidence metrics (avg_psce plus per-residue psce).",
+    )
+
+
+class FAMPNNDesignSet(DesignSet):
+    """All FAMPNN complexes produced for a single input structure.
+
+    Attributes:
+        complexes (list[FAMPNNDesign]): The FAMPNN complexes generated for one input,
+            each a complete multi-chain complex.
+    """
+
+    complexes: list[FAMPNNDesign] = Field(  # type: ignore[assignment]
+        title="Complexes",
+        description="FAMPNN complexes generated for one input structure, each a complete complex.",
     )
 
 
@@ -167,13 +219,13 @@ class FAMPNNSampleOutput(InverseFoldingOutput):
     """Output of the FAMPNN sampling tool.
 
     Attributes:
-        designed_sequences (list[FAMPNNSequences]): FAMPNN-designed sequences with
-            full-atom sidechain coordinates and per-residue pSCE.
+        design_sets (list[FAMPNNDesignSet]): One ``FAMPNNDesignSet`` per
+            input structure, in input order.
     """
 
-    designed_sequences: list[FAMPNNSequences] = Field(  # type: ignore[assignment]
-        title="Designed Sequences",
-        description="FAMPNN-designed sequences with full-atom sidechain coordinates and per-residue pSCE.",
+    design_sets: list[FAMPNNDesignSet] = Field(  # type: ignore[assignment]
+        title="Design Sets",
+        description="One FAMPNNDesignSet per input structure, in input order.",
     )
 
 
@@ -202,7 +254,7 @@ def example_input() -> Any:
     uses_gpu=True,
     example_input=example_input,
     iterable_input_field="inputs",
-    iterable_output_field="designed_sequences",
+    iterable_output_field="design_sets",
     cacheable=True,
     stochastic=True,
 )
@@ -225,9 +277,9 @@ def run_fampnn_sample(
         instance (Any): Optional ToolInstance for persistent execution.
 
     Returns:
-        FAMPNNSampleOutput: FAMPNNSampleOutput with designed sequences, PDB strings, and pSCE values.
+        FAMPNNSampleOutput: FAMPNNSampleOutput with one FAMPNNDesignSet per input structure.
     """
-    designed_sequences = []
+    design_sets: list[FAMPNNDesignSet] = []
 
     base_seed = config.seed if config.seed is not None else config.get_random_int()
     # Advances across every dispatch (inputs x chunks) so duplicate items get distinct seeds.
@@ -239,9 +291,13 @@ def run_fampnn_sample(
         unit="structure",
         disable=not config.verbose,
     ):
-        all_seqs, all_pdbs, all_psce = [], [], []
+        chain_ids = inp.structure.get_chain_ids()
+        redesign_set = set(inp.chain_ids_to_redesign)
+        all_chain_seqs: list[list[str]] = []
+        all_psce: list[list[float]] = []
+        all_pdbs: list[str] = []
         remaining = config.num_sequences_per_structure
-        # Materialize the Structure to a tempfile once per input — reused across chunks.
+        # Materialize the Structure to a tempfile once per input, reused across chunks.
         with inp.structure.temp_file() as pdb_path:
             while remaining > 0:
                 chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
@@ -272,20 +328,39 @@ def run_fampnn_sample(
                     instance=instance,
                     config=config,
                 )
-                all_seqs.extend(result["sequences"])
-                all_pdbs.extend(result["pdb_strings"])
+                all_chain_seqs.extend(result["chain_sequences"])
                 all_psce.extend(result["psce"])
+                all_pdbs.extend(result["pdb_strings"])
                 dispatch_idx += 1
                 remaining -= chunk  # type: ignore[operator]
 
-        designed_sequences.append(
-            FAMPNNSequences(
-                sequences=all_seqs,
-                structures=[
-                    Structure(structure=pdb, structure_format="pdb", source="fampnn-sample") for pdb in all_pdbs
-                ],
-                psce=all_psce,
+        complexes: list[FAMPNNDesign] = []
+        for chain_seqs, psce, pdb in zip(all_chain_seqs, all_psce, all_pdbs, strict=True):
+            if len(chain_seqs) != len(chain_ids):
+                raise ValueError(
+                    f"fampnn-sample: model returned {len(chain_seqs)} chains but the input "
+                    f"structure has {len(chain_ids)} chains ({chain_ids})"
+                )
+            if sum(len(s) for s in chain_seqs) != len(psce):
+                raise ValueError(
+                    f"fampnn-sample: total designed length {sum(len(s) for s in chain_seqs)} "
+                    f"does not match per-residue pSCE length {len(psce)}"
+                )
+            chains: list[Chain | Fragment] = [
+                Chain(id=cid, sequence=seq) for cid, seq in zip(chain_ids, chain_seqs, strict=True)
+            ]
+            designed: list[bool] = [cid in redesign_set for cid in chain_ids]
+            structure = Structure(structure=pdb, structure_format="pdb", source="fampnn-sample")
+            avg_psce = statistics.fmean(psce) if psce else 0.0
+            complexes.append(
+                FAMPNNDesign(
+                    chains=chains,
+                    designed=designed,
+                    structure=structure,
+                    metrics=FAMPNNDesignMetrics(avg_psce=avg_psce, psce=psce),
+                )
             )
-        )
 
-    return FAMPNNSampleOutput(designed_sequences=designed_sequences)
+        design_sets.append(FAMPNNDesignSet(complexes=complexes))
+
+    return FAMPNNSampleOutput(design_sets=design_sets)

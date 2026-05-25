@@ -5,12 +5,15 @@ ESM-IF1/ProteinDPO sampling tool.
 
 import logging
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import Field
 
+from proto_tools.entities.complex import Chain
+from proto_tools.entities.ligands import Fragment
 from proto_tools.tools.inverse_folding.shared_data_models import (
-    DesignedSequences,
+    DesignedComplex,
+    DesignSet,
     InverseFoldingConfig,
     InverseFoldingInput,
     InverseFoldingOutput,
@@ -20,6 +23,7 @@ from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField
 from proto_tools.utils.progress import progress_bar
 from proto_tools.utils.tool_instance import ToolInstance
+from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = logging.getLogger(__name__)
 
@@ -59,18 +63,60 @@ class ESMIF1SampleConfig(InverseFoldingConfig):
     )
 
 
-class ESMIF1Sequences(DesignedSequences):
-    """Designed sequences from ESM-IF1/ProteinDPO.
+class ESMIF1DesignMetrics(Metrics):
+    """Per-design metrics emitted by ESM-IF1/ProteinDPO sampling.
 
-    Attributes:
-        sequences (list[str]): Designed amino acid sequences.
-        log_likelihoods (list[float]): Average log likelihood of each designed sequence
-            under the model.
+    Metrics documented in ``metric_spec``:
+        log_likelihood (float): Sum of per-position log-likelihoods of the
+            designed target chain under the model (<= 0). Always present.
+        avg_log_likelihood (float): Mean per-position log-likelihood (<= 0).
+            Always present.
+        perplexity (float): exp(-avg_log_likelihood) (>= 1). Always present.
     """
 
-    log_likelihoods: list[float] = Field(
-        title="Log Likelihoods",
-        description="Mean per-residue log-likelihood per designed sequence (negative for typical sequences)",
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "log_likelihood": {"availability": "always", "type": "float", "min": None, "max": 0.0},
+        "avg_log_likelihood": {"availability": "always", "type": "float", "min": None, "max": 0.0},
+        "perplexity": {"availability": "always", "type": "float", "min": 1.0, "max": None},
+    }
+    primary_metric: str | None = Field(
+        default="perplexity",
+        title="Primary Metric",
+        description="Headline metric used to rank results.",
+    )
+
+
+class ESMIF1Design(DesignedComplex):
+    """One ESM-IF1/ProteinDPO design over a single input structure.
+
+    Holds every protein chain of the input structure; only the target chain is
+    redesigned, all other chains are carried over as fixed context.
+
+    Attributes:
+        chains (list[Chain | Fragment]): All protein chains of the design, in input
+            structure chain order.
+        metrics (ESMIF1DesignMetrics): Per-design metrics, including the average
+            per-position log-likelihood of the redesigned target chain.
+    """
+
+    metrics: ESMIF1DesignMetrics = Field(
+        default_factory=ESMIF1DesignMetrics,
+        title="Metrics",
+        description="Per-design ESM-IF1/ProteinDPO metrics (average log-likelihood).",
+    )
+
+
+class ESMIF1DesignSet(DesignSet):
+    """All ESM-IF1/ProteinDPO complexes produced for a single input structure.
+
+    Attributes:
+        complexes (list[ESMIF1Design]): The complexes generated for one input,
+            each a complete multi-chain complex with a per-design log-likelihood.
+    """
+
+    complexes: list[ESMIF1Design] = Field(  # type: ignore[assignment]
+        title="Complexes",
+        description="ESM-IF1/ProteinDPO complexes for one input structure, each a complete complex.",
     )
 
 
@@ -78,13 +124,13 @@ class ESMIF1SampleOutput(InverseFoldingOutput):
     """Output of the ESM-IF1 sampling tool.
 
     Attributes:
-        designed_sequences (list[ESMIF1Sequences]): ESM-IF1/ProteinDPO-designed sequences
-            with per-sequence average log-likelihoods.
+        design_sets (list[ESMIF1DesignSet]): One ``ESMIF1DesignSet`` per
+            input structure, in input order.
     """
 
-    designed_sequences: list[ESMIF1Sequences] = Field(  # type: ignore[assignment]
-        title="Designed Sequences",
-        description="ESM-IF1/ProteinDPO-designed sequences with per-sequence average log-likelihoods.",
+    design_sets: list[ESMIF1DesignSet] = Field(  # type: ignore[assignment]
+        title="Design Sets",
+        description="One ESMIF1DesignSet per input structure, in input order.",
     )
 
 
@@ -117,7 +163,7 @@ def example_input() -> Any:
     uses_gpu=True,
     example_input=example_input,
     iterable_input_field="inputs",
-    iterable_output_field="designed_sequences",
+    iterable_output_field="design_sets",
     cacheable=True,
     stochastic=True,
 )
@@ -135,9 +181,9 @@ def run_esm_if1_sample(
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        ESMIF1SampleOutput: ESMIF1SampleOutput with designed sequences for each input structure.
+        ESMIF1SampleOutput: ESMIF1SampleOutput with one design set per input structure.
     """
-    designed_sequences = []
+    design_sets = []
 
     base_seed = config.seed if config.seed is not None else config.get_random_int()
     # Advances across every dispatch (inputs x chunks) so duplicate items get distinct seeds.
@@ -149,7 +195,7 @@ def run_esm_if1_sample(
         unit="structure",
         total=len(inputs.inputs),
     ):
-        all_seqs, all_lls = [], []
+        all_seqs, all_metrics = [], []
         remaining = config.num_sequences_per_structure
         # Materialize the Structure to a tempfile once per input — reused across chunks.
         with inp.structure.temp_file() as pdb_path:
@@ -174,14 +220,23 @@ def run_esm_if1_sample(
                     config=config,
                 )
                 all_seqs.extend(result["sequences"])
-                all_lls.extend(result["log_likelihoods"])
+                all_metrics.extend(result["metrics"])
                 dispatch_idx += 1
                 remaining -= chunk  # type: ignore[operator]
-        designed_sequences.append(
-            ESMIF1Sequences(
-                sequences=all_seqs,
-                log_likelihoods=all_lls,
-            )
-        )
 
-    return ESMIF1SampleOutput(designed_sequences=designed_sequences)
+        # ESM-IF1 complexes exactly one chain; standalone falls back to chain_ids[0].
+        target = inp.chain_ids_to_redesign[0]
+        structure_chain_ids = inp.structure.get_chain_ids()
+        context_seqs = {cid: inp.structure.get_chain_sequence(cid) for cid in structure_chain_ids if cid != target}
+
+        complexes = []
+        for designed_seq, metrics in zip(all_seqs, all_metrics, strict=True):
+            chains: list[Chain | Fragment] = [
+                Chain(id=cid, sequence=designed_seq if cid == target else context_seqs[cid])
+                for cid in structure_chain_ids
+            ]
+            designed: list[bool] = [cid == target for cid in structure_chain_ids]
+            complexes.append(ESMIF1Design(chains=chains, designed=designed, metrics=ESMIF1DesignMetrics(**metrics)))
+        design_sets.append(ESMIF1DesignSet(complexes=complexes))
+
+    return ESMIF1SampleOutput(design_sets=design_sets)

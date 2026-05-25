@@ -3,7 +3,7 @@
 Shared FASTA parsing helpers for structure prediction tests.
 
 Loads ``tests/dummy_data/structure_prediction_test_examples/*.fasta`` into
-``StructurePredictionComplex`` objects. Used by both the cross-tool
+``Complex`` objects. Used by both the cross-tool
 integration test and the per-tool benchmarks.
 """
 
@@ -13,7 +13,7 @@ from pathlib import Path
 
 from Bio import SeqIO
 
-from proto_tools.tools.structure_prediction import StructurePredictionComplex
+from proto_tools.tools.structure_prediction import Complex
 
 FASTA_DIR = Path(__file__).parent.parent / "dummy_data" / "structure_prediction_test_examples"
 
@@ -48,8 +48,8 @@ def parse_modifications_from_header(description: str) -> list[tuple]:
     return modifications
 
 
-def parse_fasta_to_complexes(fasta_file: Path) -> list[StructurePredictionComplex]:
-    """Parse a FASTA file into ``StructurePredictionComplex`` objects.
+def parse_fasta_to_complexes(fasta_file: Path) -> list[Complex]:
+    """Parse a FASTA file into ``Complex`` objects.
 
     All sequences in a file are bundled into a single complex, except for
     ``two_complex.fasta`` which yields one complex per sequence.
@@ -58,7 +58,7 @@ def parse_fasta_to_complexes(fasta_file: Path) -> list[StructurePredictionComple
         fasta_file (Path): FASTA file to load.
 
     Returns:
-        list[StructurePredictionComplex]: Complexes parsed from the file.
+        list[Complex]: Complexes parsed from the file.
     """
     chains_data = []
 
@@ -79,27 +79,27 @@ def parse_fasta_to_complexes(fasta_file: Path) -> list[StructurePredictionComple
         chains_data.append(chain_dict)
 
     if "two_complex" not in fasta_file.name:
-        return [StructurePredictionComplex(chains=chains_data)]
-    return [StructurePredictionComplex(chains=[chain_dict]) for chain_dict in chains_data]
+        return [Complex(chains=chains_data)]
+    return [Complex(chains=[chain_dict]) for chain_dict in chains_data]
 
 
-def load_benchmark_complex(stem: str) -> StructurePredictionComplex:
+def load_benchmark_complex(stem: str) -> Complex:
     """Load a single benchmark complex by FASTA stem.
 
     Args:
         stem (str): FASTA basename without ``.fasta`` (e.g. ``"trp_heterodimer"``).
 
     Returns:
-        StructurePredictionComplex: The first parsed complex from the file.
+        Complex: The first parsed complex from the file.
     """
     complexes = parse_fasta_to_complexes(FASTA_DIR / f"{stem}.fasta")
     return complexes[0]
 
 
-def load_all_test_complexes() -> dict[str, list[StructurePredictionComplex]]:
+def load_all_test_complexes() -> dict[str, list[Complex]]:
     """Pre-load every FASTA in ``FASTA_DIR`` keyed by file stem.
 
     Returns:
-        dict[str, list[StructurePredictionComplex]]: ``stem`` → complexes list.
+        dict[str, list[Complex]]: ``stem`` → complexes list.
     """
     return {f.stem: parse_fasta_to_complexes(f) for f in FASTA_DIR.glob("*.fasta")}

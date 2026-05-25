@@ -6,7 +6,7 @@ import pytest
 from pydantic import BaseModel
 
 from proto_tools.tools.structure_prediction.dispatch import SP_TOOL_MAP, predict_structures
-from proto_tools.tools.structure_prediction.shared_data_models import StructurePredictionComplex
+from proto_tools.tools.structure_prediction.shared_data_models import Complex
 
 
 class _FakeConfig(BaseModel):
@@ -18,14 +18,14 @@ def _dispatch(tool_config=None, *, config_cls=_FakeConfig):
     mock_run = MagicMock()
     mock_input = MagicMock()
     fake_map = {"fake": {"config": config_cls, "input": mock_input, "run_func": mock_run}}
-    cpx = StructurePredictionComplex(chains=["MVLSPADKTN"])
+    cpx = Complex(chains=["MVLSPADKTN"])
     with patch.dict(SP_TOOL_MAP, fake_map, clear=True):
         predict_structures(cpx, toolkit="fake", tool_config=tool_config)
     return mock_run, mock_input
 
 
 def test_unknown_tool_raises():
-    cpx = StructurePredictionComplex(chains=["MVLSPADKTN"])
+    cpx = Complex(chains=["MVLSPADKTN"])
     with pytest.raises(ValueError, match=r"predict_structures: unknown toolkit"):
         predict_structures(cpx, toolkit="nonexistent_tool")
 

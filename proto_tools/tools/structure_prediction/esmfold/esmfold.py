@@ -27,7 +27,7 @@ from proto_tools.tools.structure_prediction.esmfold.helpers import (
 )
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
-    StructurePredictionComplex,
+    Complex,
     StructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
@@ -68,7 +68,7 @@ class ESMFoldInput(StructurePredictionInput):
     Inherits from ``StructurePredictionInput``.
 
     Attributes:
-        complexes (list[StructurePredictionComplex]): List of complexes to predict
+        complexes (list[Complex]): List of complexes to predict
             structures for. Inherited from ``StructurePredictionInput``. Each complex
             can contain one or more protein chains. The linked length actually
             folded (summed chain residues plus the inter-chain ``chain_linker``,
@@ -89,11 +89,11 @@ class ESMFoldInput(StructurePredictionInput):
 
     @field_validator("complexes", check_fields=False)
     @classmethod
-    def validate_complexes(cls, complexes: list[StructurePredictionComplex]) -> list[StructurePredictionComplex]:
+    def validate_complexes(cls, complexes: list[Complex]) -> list[Complex]:
         """Ensures that complexes are valid inputs for ESMFold.
 
         Args:
-            complexes (list[StructurePredictionComplex]): Complexes to validate.
+            complexes (list[Complex]): Complexes to validate.
 
         Checks:
         - Valid protein characters (including 'X' for unknown)
@@ -636,9 +636,7 @@ def run_esmfold_gradient(
     pass returns ``d(loss) / d(logits)``.
     """
     complex_input = ESMFoldInput(
-        complexes=[
-            StructurePredictionComplex(chains=[Chain(sequence=chain, entity_type="protein") for chain in inputs.chains])
-        ]
+        complexes=[Complex(chains=[Chain(sequence=chain, entity_type="protein") for chain in inputs.chains])]
     )
     prepared_complex = complex_input.prepare_complexes(chain_linker=config.chain_linker)[0]
 

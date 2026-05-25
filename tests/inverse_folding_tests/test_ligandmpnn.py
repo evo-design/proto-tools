@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from proto_tools.entities.complex import Chain
 from proto_tools.entities.structures.structure import Structure
 from proto_tools.tools.inverse_folding import (
     InverseFoldingInput,
@@ -22,9 +23,14 @@ from proto_tools.tools.inverse_folding import (
     run_ligandmpnn_score,
 )
 from proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample import (
+    LigandMPNNDesign,
+    LigandMPNNDesignMetrics,
+)
+from proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample import (
     example_input as ligandmpnn_example_input,
 )
 from tests.conftest import benchmark_twice, make_persistent_fixture
+from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_CIF_FILE = Path(__file__).parent.parent / "dummy_data" / "renin.cif"
@@ -49,15 +55,18 @@ def test_ligandmpnn_sample_simple(cif_structure: Structure):
 
     validate_output(output)
 
-    designs = output.designed_sequences[0]
-    assert len(designs.sequences) == 2
-    assert all(isinstance(sequence, str) for sequence in designs.sequences)
-    assert all(len(seq) > 0 for seq in designs.sequences)
-    assert len(designs.sequence_recovery) == 2
-    assert designs.ligand_interface_sequence_recovery is not None
-    assert len(designs.ligand_interface_sequence_recovery) == 2
-    assert all(0.0 <= r <= 1.0 for r in designs.sequence_recovery)
-    assert all(0.0 <= r <= 1.0 for r in designs.ligand_interface_sequence_recovery)
+    design_set = output.design_sets[0]
+    assert len(design_set.complexes) == 2
+    for design in design_set.complexes:
+        # LigandMPNN returns every chain (designed + fixed) per design.
+        assert len(design.chains) > 0
+        assert all(isinstance(chain.sequence, str) for chain in design.chains)
+        assert all(len(chain.sequence) > 0 for chain in design.chains)
+        recovery = design.metrics["sequence_recovery"]
+        assert 0.0 <= recovery <= 1.0
+        interface_recovery = design.metrics["ligand_interface_sequence_recovery"]
+        assert 0.0 <= interface_recovery <= 1.0
+    assert_metrics_in_spec(output)
 
 
 @pytest.mark.uses_gpu
@@ -73,11 +82,21 @@ def test_ligandmpnn_sample_no_ligand(cif_structure: Structure):
     output = run_ligandmpnn_sample(inp, config)
     assert output.success
 
-    with_ligand, without_ligand = output.designed_sequences
-    assert with_ligand.ligand_interface_sequence_recovery is not None
-    assert all(0.0 <= r <= 1.0 for r in with_ligand.ligand_interface_sequence_recovery)
-    assert without_ligand.ligand_interface_sequence_recovery is None
-    assert all(math.isfinite(r) for d in (with_ligand, without_ligand) for r in d.sequence_recovery)
+    with_ligand, without_ligand = output.design_sets
+    for design in with_ligand.complexes:
+        interface_recovery = design.metrics["ligand_interface_sequence_recovery"]
+        assert math.isfinite(interface_recovery)
+        assert 0.0 <= interface_recovery <= 1.0
+    for design in without_ligand.complexes:
+        # No ligand interface: metric is NaN or absent.
+        assert "ligand_interface_sequence_recovery" not in design.metrics or math.isnan(
+            design.metrics["ligand_interface_sequence_recovery"]
+        )
+    assert all(
+        math.isfinite(design.metrics["sequence_recovery"])
+        for design_set in (with_ligand, without_ligand)
+        for design in design_set.complexes
+    )
     json.dumps(output.model_dump(mode="json"), allow_nan=False)
 
 
@@ -94,12 +113,13 @@ def test_ligandmpnn_sample_chunked_batching(cif_structure: Structure):
     output = run_ligandmpnn_sample(inp, config)
     assert output.success, f"Chunked batching failed: {output}"
 
-    designs = output.designed_sequences[0]
-    assert len(designs.sequences) == 6
-    assert all(isinstance(seq, str) for seq in designs.sequences)
-    assert all(len(seq) > 0 for seq in designs.sequences)
-    assert len(designs.sequence_recovery) == 6
-    assert len(designs.ligand_interface_sequence_recovery) == 6
+    design_set = output.design_sets[0]
+    assert len(design_set.complexes) == 6
+    for design in design_set.complexes:
+        assert all(isinstance(chain.sequence, str) for chain in design.chains)
+        assert all(len(chain.sequence) > 0 for chain in design.chains)
+        assert math.isfinite(design.metrics["sequence_recovery"])
+        assert "ligand_interface_sequence_recovery" in design.metrics
 
 
 @pytest.mark.uses_gpu
@@ -117,10 +137,11 @@ def test_ligandmpnn_sample_multiple_structures(cif_structure: Structure):
 
     validate_output(output)
 
-    assert len(output.designed_sequences) == 2
-    for designs in output.designed_sequences:
-        assert len(designs.sequences) == 3
-        assert all(isinstance(sequence, str) for sequence in designs.sequences)
+    assert len(output.design_sets) == 2
+    for design_set in output.design_sets:
+        assert len(design_set.complexes) == 3
+        for design in design_set.complexes:
+            assert all(isinstance(chain.sequence, str) for chain in design.chains)
 
 
 def test_ligandmpnn_score_dispatch_contract(monkeypatch):
@@ -189,6 +210,48 @@ def test_ligandmpnn_score():
     assert math.isclose(score.perplexity, math.exp(-score.avg_log_likelihood), rel_tol=1e-5)
 
 
+def test_ligandmpnn_multichain_design_structure():
+    """A LigandMPNNDesign preserves chain id, order, redesigned flag, and metrics."""
+    design = LigandMPNNDesign(
+        chains=[
+            Chain(id="A", sequence="MKTL"),
+            Chain(id="B", sequence="GGSG"),
+        ],
+        designed=[True, False],
+        metrics=LigandMPNNDesignMetrics(
+            sequence_recovery=0.5,
+            ligand_interface_sequence_recovery=0.3,
+        ),
+    )
+
+    assert [chain.id for chain in design.chains] == ["A", "B"]
+    assert design.designed == [True, False]
+    assert design.chain_sequences == ["MKTL", "GGSG"]
+    assert design.as_chain_map() == {"A": "MKTL", "B": "GGSG"}
+    assert [chain.id for chain in design.designed_chains] == ["A"]
+    assert design.metrics["sequence_recovery"] == 0.5
+    assert design.metrics["ligand_interface_sequence_recovery"] == 0.3
+    assert design.design_metrics()["sequence_recovery"] == 0.5
+
+
+def test_ligandmpnn_design_feeds_structure_predictor():
+    """A LigandMPNNDesign feeds an SP tool input directly via LSP (subclass-as-Complex)."""
+    from proto_tools.tools.structure_prediction import ESMFoldInput
+
+    design = LigandMPNNDesign(
+        chains=[
+            Chain(id="A", sequence="MKTLVLSP"),
+            Chain(id="B", sequence="GGSGGSGG"),
+        ],
+        designed=[True, False],
+        metrics=LigandMPNNDesignMetrics(sequence_recovery=0.7),
+    )
+
+    inp = ESMFoldInput(complexes=[design])
+    assert inp.complexes[0] is design
+    assert [c.sequence for c in inp.complexes[0].chains] == design.chain_sequences
+
+
 # ── Benchmarks ──────────────────────────────────────────────────────────────
 
 
@@ -196,7 +259,7 @@ def test_ligandmpnn_score():
 @pytest.mark.slow
 @pytest.mark.uses_gpu
 def test_ligandmpnn_sample_benchmark(request: pytest.FixtureRequest, cif_structure: Structure) -> None:
-    """Benchmark ligandmpnn-sample: 50 designs of renin chain A (~217 aa) at batch_size=16 (cold + warm)."""
+    """Benchmark ligandmpnn-sample: 50 complexes of renin chain A (~217 aa) at batch_size=16 (cold + warm)."""
     inputs = InverseFoldingInput(
         inputs=[InverseFoldingStructureInput(structure=cif_structure, chains_to_redesign=["A"])]
     )
@@ -210,9 +273,9 @@ def test_ligandmpnn_sample_benchmark(request: pytest.FixtureRequest, cif_structu
     result = benchmark_twice(request, "ligandmpnn", lambda: run_ligandmpnn_sample(inputs, config))
 
     assert result.tool_id == "ligandmpnn-sample"
-    assert len(result.designed_sequences) == 1, "Should have one DesignedSequences per input structure"
-    designs = result.designed_sequences[0]
-    assert len(designs.sequences) == 50, "Should have 50 designed sequences"
-    lengths = {len(seq) for seq in designs.sequences}
-    assert len(lengths) == 1, f"All designed sequences should have the same length, got {lengths}"
-    assert next(iter(lengths)) > 0, "Designed sequences should be non-empty"
+    assert len(result.design_sets) == 1, "Should have one design set per input structure"
+    design_set = result.design_sets[0]
+    assert len(design_set.complexes) == 50, "Should have 50 complexes"
+    lengths = {sum(len(s) for s in design.chain_sequences) for design in design_set.complexes}
+    assert len(lengths) == 1, f"All complexes should have the same length, got {lengths}"
+    assert next(iter(lengths)) > 0, "Designs should be non-empty"

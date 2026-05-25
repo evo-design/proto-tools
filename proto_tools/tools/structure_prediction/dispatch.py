@@ -36,7 +36,7 @@ from proto_tools.tools.structure_prediction.protenix import (
     run_protenix,
 )
 from proto_tools.tools.structure_prediction.shared_data_models import (
-    StructurePredictionComplex,
+    Complex,
     StructurePredictionOutput,
 )
 
@@ -51,7 +51,7 @@ SP_TOOL_MAP = {
 
 
 def predict_structures(
-    complexes: StructurePredictionComplex | list[StructurePredictionComplex],
+    complexes: Complex | list[Complex],
     toolkit: str,
     tool_config: ESMFoldConfig
     | AlphaFold2Config
@@ -68,7 +68,7 @@ def predict_structures(
     structure-related constraints and optimizers.
 
     Args:
-        complexes (StructurePredictionComplex | list[StructurePredictionComplex]): List of StructurePredictionComplex objects to predict.
+        complexes (Complex | list[Complex]): List of Complex objects to predict.
         toolkit (str): Name of the structure prediction tool. Supported values:
             ``"esmfold"``, ``"alphafold2"``, ``"alphafold3"``, ``"boltz2"``, ``"chai1"``, ``"protenix"``.
         tool_config (ESMFoldConfig | AlphaFold2Config | AlphaFold3Config | Boltz2Config | Chai1Config | ProtenixConfig | dict[str, Any] | None): Tool-specific configuration dictionary.
@@ -79,8 +79,8 @@ def predict_structures(
     Raises:
         ValueError: If toolkit is not recognized.
     """
-    # If complexes is a single StructurePredictionComplex, normalize it to a list
-    if isinstance(complexes, StructurePredictionComplex):
+    # If complexes is a single Complex, normalize it to a list
+    if isinstance(complexes, Complex):
         complexes = [complexes]
 
     if toolkit not in SP_TOOL_MAP:

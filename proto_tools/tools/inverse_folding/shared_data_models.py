@@ -12,6 +12,8 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field, SerializeAsAny, model_validator
 
+from proto_tools.entities.complex import Chain, Complex, chain_label
+from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures import (
     ChainSelection,
     ResidueSelection,
@@ -193,98 +195,143 @@ class InverseFoldingConfig(BaseConfig):
     )
 
 
-class DesignedSequences(BaseModel, ABC):
-    """Represents the output of an inverse folding model produced from a single input structure.
+class DesignedComplex(Complex):
+    """One complete designed complex produced from a single input structure.
 
-    Each inverse folding model should define a concrete subclass with
-    model-specific confidence metrics and metadata. Contains the designed
-    amino acid sequence along with per-position and sequence-level quality metrics.
+    Subclass of the shared :class:`Complex`. Faithfully reproduces the input
+    structure's entities (protein/DNA/RNA chains + ligands), in input order,
+    with the redesigned chains' sequences substituted. Per-chain redesign status
+    is tracked as a parallel boolean list (``designed``), aligned with
+    ``chains`` by position. Ligand ``Fragment`` entries are always context
+    (``designed[i] is False``); the IF models don't redesign ligands.
 
-    NOTE: Because inverse folding models can generate multiple sequences for each
-    input structure, fields in this class should be lists of length `num_sequences_per_structure`.
+    ``Complex`` accepts a ``DesignedComplex`` directly
+    (real ``isinstance`` via the shared base), so a design feeds a structure
+    predictor with no manual reassembly.
+
+    Each inverse folding model defines a :class:`Metrics` subclass declaring its
+    per-design ``metric_spec`` (perplexity, sequence recovery, log-likelihood,
+    ...) and assigns it to ``metrics``; subclasses narrow the ``metrics`` type.
 
     Attributes:
-        sequences (list[str]): Designed amino acid sequences in single-letter code.
-
-    Properties:
-        metrics: All confidence and quality metrics as a
-            dictionary. Excludes the sequence itself.
-
-    Note:
-        Subclasses should add model-specific metrics like:
-        - Overall sequence confidence/perplexity
-        - Log probabilities
-        - Temperature used for sampling
-        - Model-specific scores (e.g., ProteinMPNN score)
+        chains (list[Chain | Fragment]): All entities of the design, in input
+            structure chain order. Inherited from :class:`Complex`.
+        designed (list[bool]): Per-chain redesign status, aligned by position
+            with ``chains`` (``len(designed) == len(chains)``). ``True`` for
+            chains the model designed; ``False`` for fixed context chains and
+            for all ligand entries.
+        metrics (SerializeAsAny[Metrics]): Per-design metrics. Each tool assigns
+            its own ``Metrics`` subclass; values round-trip via ``Metrics``
+            ``extra="allow"``.
     """
 
-    sequences: list[str] = Field(
-        title="Sequences", description="Designed amino acid sequences from the inverse folding model"
+    designed: list[bool] = Field(
+        title="Designed",
+        description="Per-chain redesign status, aligned by position with chains.",
+    )
+    metrics: SerializeAsAny[Metrics] = Field(
+        default_factory=Metrics,
+        title="Metrics",
+        description="Per-design metrics (model-specific Metrics subclass).",
+    )
+
+    @model_validator(mode="after")
+    def _validate_designed_length(self) -> "DesignedComplex":
+        """Enforce that ``designed`` is aligned 1:1 with ``chains``."""
+        if len(self.designed) != len(self.chains):
+            raise ValueError(
+                f"designed has {len(self.designed)} entries but chains has {len(self.chains)}; "
+                "the two lists must be the same length (one bool per chain entry)."
+            )
+        return self
+
+    @property
+    def designed_chains(self) -> list[Chain | Fragment]:
+        """Only the chains the model actually redesigned."""
+        return [c for c, r in zip(self.chains, self.designed, strict=True) if r]
+
+    def design_metrics(self) -> dict[str, Any]:
+        """Per-design metric values for this complex."""
+        return dict(self.metrics.items())
+
+
+class DesignSet(BaseModel, ABC):
+    """All complexes produced for a single input structure.
+
+    A model generates ``num_sequences_per_structure`` complexes per input; each is a
+    :class:`DesignedComplex`. Concrete subclasses narrow ``complexes`` to their
+    model-specific :class:`DesignedComplex` subclass for ``model_validate``.
+
+    Attributes:
+        complexes (list[SerializeAsAny[DesignedComplex]]): The complexes generated for one input,
+            each a complete multi-chain complex.
+    """
+
+    complexes: list[SerializeAsAny[DesignedComplex]] = Field(
+        title="Complexes",
+        description="Designs generated for one input structure, each a complete complex.",
     )
 
     def __len__(self) -> int:
-        """Get the number of designed sequences."""
-        return len(self.sequences)
+        """Get the number of complexes."""
+        return len(self.complexes)
 
-    def __getitem__(self, index: int) -> str:
-        """Get a designed sequence by index."""
-        return self.sequences[index]
+    def __getitem__(self, index: int) -> DesignedComplex:
+        """Get a design by index."""
+        return self.complexes[index]
 
-    def __iter__(self) -> Iterator[str]:  # type: ignore[override]
-        """Iterate over the designed sequences."""
-        return iter(self.sequences)
+    def __iter__(self) -> Iterator[DesignedComplex]:  # type: ignore[override]
+        """Iterate over the complexes."""
+        return iter(self.complexes)
 
     def __repr__(self) -> str:
-        """Get a string representation of the designed sequences."""
+        """Get a string representation of the design set."""
         return self.__str__()
 
     def __str__(self) -> str:
-        """Get a string representation of the designed sequences."""
-        return f"DesignedSequences(with {len(self.sequences)} sequences)"
+        """Get a string representation of the design set."""
+        return f"DesignSet(with {len(self.complexes)} complexes)"
 
-    def get_sequence_metrics(self, index: int) -> dict[str, float]:
-        """Get the metrics for a designed sequence by index."""
-        # Get all fields that are not sequences
-        fields = self.model_dump()
-        return {k: v[index] for k, v in fields.items() if k != "sequences" and isinstance(v, list)}
+    def get_design_metrics(self, index: int) -> dict[str, Any]:
+        """Get the per-design scalar metrics for the design at ``index``."""
+        return self.complexes[index].design_metrics()
 
 
 class InverseFoldingOutput(BaseToolOutput):
     """Output object for inverse folding models.
 
-    Contains a list of DesignedSequences objects, one for each input structure.
+    Contains one :class:`DesignSet` per input structure, in input order.
 
     Attributes:
-        designed_sequences (list[SerializeAsAny[DesignedSequences]]): List of DesignedSequences objects, one for each
-            input structure. The order matches the input structures order.
+        design_sets (list[SerializeAsAny[DesignSet]]): One ``DesignSet`` per input
+            structure. Entry ``i`` holds all complexes for input structure ``i``.
     """
 
-    # SerializeAsAny covers model_dump only; concrete tools must also narrow this
-    # field to their XSequences subclass for model_validate. See ProteinMPNNSampleOutput.
-    designed_sequences: list[SerializeAsAny[DesignedSequences]] = Field(
-        title="Designed Sequences",
-        description="List of sequences predicted for the input structures",
+    # SerializeAsAny covers model_dump only; concrete tools narrow this for model_validate.
+    design_sets: list[SerializeAsAny[DesignSet]] = Field(
+        title="Design Sets",
+        description="One DesignSet per input structure, in input order.",
     )
 
     def __len__(self) -> int:
-        """Get the number of designed sequences."""
-        return len(self.designed_sequences)
+        """Get the number of input structures designed for."""
+        return len(self.design_sets)
 
-    def __getitem__(self, index: int) -> DesignedSequences:
-        """Get a designed sequence by index."""
-        return self.designed_sequences[index]
+    def __getitem__(self, index: int) -> DesignSet:
+        """Get the DesignSet for an input structure by index."""
+        return self.design_sets[index]
 
-    def __iter__(self) -> Iterator[DesignedSequences]:  # type: ignore[override]
-        """Iterate over the designed sequences."""
-        return iter(self.designed_sequences)
+    def __iter__(self) -> Iterator[DesignSet]:  # type: ignore[override]
+        """Iterate over the per-input DesignSets."""
+        return iter(self.design_sets)
 
     def __repr__(self) -> str:
-        """Get a string representation of the designed sequences."""
+        """Get a string representation of the output."""
         return self.__str__()
 
     def __str__(self) -> str:
         """Get a string representation of the output."""
-        return f"InverseFoldingOutput(with {len(self.designed_sequences)} designed structures)"
+        return f"InverseFoldingOutput(with {len(self.design_sets)} input structures)"
 
     @property
     def output_format_options(self) -> list[str]:
@@ -301,10 +348,18 @@ class InverseFoldingOutput(BaseToolOutput):
 
         if file_format == "fasta":
             path.mkdir(parents=True, exist_ok=True)
-            for i, designs in enumerate(self.designed_sequences):
-                out_file = path / f"design_{i}.fasta"
+            for i, design_set in enumerate(self.design_sets):
+                out_file = path / f"input_{i}.fasta"
                 with open(out_file, "w") as f:
-                    f.writelines(f">design_{i}_seq_{j}\n{seq}\n" for j, seq in enumerate(designs.sequences))
+                    for j, design in enumerate(design_set.complexes):
+                        # Biopolymers as sequences, ligand Fragments as SMILES; header convention `_chain_` vs `_ligand_` lets consumers filter by type.
+                        for k, entry in enumerate(design.chains):
+                            entry_id = entry.id if entry.id is not None else chain_label(k)
+                            if isinstance(entry, Chain):
+                                f.write(f">input_{i}_design_{j}_chain_{entry_id}\n{entry.sequence}\n")
+                            else:
+                                ccd_suffix = f"_{entry.ccd_code}" if entry.ccd_code else ""
+                                f.write(f">input_{i}_design_{j}_ligand_{entry_id}{ccd_suffix}\n{entry.smiles}\n")
 
         elif file_format == "json":
             path.mkdir(parents=True, exist_ok=True)
@@ -315,10 +370,10 @@ class InverseFoldingOutput(BaseToolOutput):
                     return obj.tolist()
                 return str(obj)
 
-            for i, designs in enumerate(self.designed_sequences):
-                out_file = path / f"design_{i}.json"
+            for i, design_set in enumerate(self.design_sets):
+                out_file = path / f"input_{i}.json"
                 with open(out_file, "w") as f:
-                    json.dump(designs.model_dump(), f, indent=2, default=default)
+                    json.dump(design_set.model_dump(), f, indent=2, default=default)
         else:
             raise ValueError(f"Unsupported format: {file_format}")
 

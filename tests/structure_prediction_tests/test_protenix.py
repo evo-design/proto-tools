@@ -9,9 +9,9 @@ from pydantic import ValidationError
 from proto_tools.entities.structures import is_valid_structure
 from proto_tools.tools.structure_prediction import (
     Chain,
+    Complex,
     ProtenixConfig,
     ProtenixInput,
-    StructurePredictionComplex,
     run_protenix,
 )
 from proto_tools.utils import ToolInstance
@@ -115,7 +115,7 @@ def test_protenix_config_colabfold_lazy_init():
 
 
 def test_protenix_input_accepts_string_shorthand():
-    """Single-chain string input is normalised to a StructurePredictionComplex."""
+    """Single-chain string input is normalised to a Complex."""
     inputs = ProtenixInput(complexes=["MKTL"])
     assert len(inputs.complexes) == 1
     assert inputs.complexes[0].chains[0].sequence == "MKTL"
@@ -123,7 +123,7 @@ def test_protenix_input_accepts_string_shorthand():
 
 def test_protenix_input_accepts_chain_objects():
     chain = Chain(sequence=_CRO_SEQUENCE, entity_type="protein")
-    complex_ = StructurePredictionComplex(chains=[chain])
+    complex_ = Complex(chains=[chain])
     inputs = ProtenixInput(complexes=[complex_])
     assert len(inputs.complexes) == 1
     assert inputs.complexes[0].chains[0].entity_type == "protein"
@@ -134,7 +134,7 @@ def test_protenix_input_accepts_chain_objects():
 
 def _protenix_ligand_entries(chains):
     """Build a Protenix JSON payload from ``chains`` and return its ligand entries."""
-    inputs = ProtenixInput(complexes=[StructurePredictionComplex(chains=chains)])
+    inputs = ProtenixInput(complexes=[Complex(chains=chains)])
     payload = inputs.to_json(complex_idx=0, name="test")
     return [entry["ligand"] for entry in payload[0]["sequences"] if "ligand" in entry]
 
@@ -173,7 +173,7 @@ def test_protenix_ligand_falls_back_to_smiles_when_no_ccd_match():
 @pytest.mark.parametrize("model_name", _PROTENIX_MODEL_VARIANTS)
 def test_protenix_model_variants(model_name):
     """Each Protenix model variant folds a simple protein and returns valid metrics."""
-    complexes = [StructurePredictionComplex(chains=[Chain(sequence=_CRO_SEQUENCE, entity_type="protein")])]
+    complexes = [Complex(chains=[Chain(sequence=_CRO_SEQUENCE, entity_type="protein")])]
     inputs = ProtenixInput(complexes=complexes)
     config = ProtenixConfig(
         model_name=model_name,
@@ -222,12 +222,12 @@ def test_protenix_ccd_vs_smiles_input_equivalent_predictions():
     # CCD path: validator auto-resolves ccd_code="TYR"; implementation sends "CCD_TYR"
     ccd_frag = Fragment(smiles=tyr_smiles)
     assert ccd_frag.ccd_code == "TYR"  # invariant guard
-    ccd_complex = StructurePredictionComplex(chains=[protein, ccd_frag])
+    ccd_complex = Complex(chains=[protein, ccd_frag])
 
     # SMILES path: force ccd_code=None so the implementation falls back to raw SMILES
     smiles_frag = Fragment(smiles=tyr_smiles)
     smiles_frag.ccd_code = None
-    smiles_complex = StructurePredictionComplex(chains=[protein, smiles_frag])
+    smiles_complex = Complex(chains=[protein, smiles_frag])
 
     config = ProtenixConfig(
         model_name="protenix_tiny_default_v0.5.0",
@@ -269,7 +269,7 @@ def test_protenix_ccd_vs_smiles_input_equivalent_predictions():
 @pytest.mark.parametrize("model_name", _MINI_MODEL_VARIANTS)
 def test_protenix_mini_models_with_msa(model_name):
     """Mini model variants (default, esm, ism) succeed with MSA enabled."""
-    complexes = [StructurePredictionComplex(chains=[Chain(sequence=_CRO_SEQUENCE, entity_type="protein")])]
+    complexes = [Complex(chains=[Chain(sequence=_CRO_SEQUENCE, entity_type="protein")])]
     inputs = ProtenixInput(complexes=complexes)
     config = ProtenixConfig(
         model_name=model_name,
@@ -291,7 +291,7 @@ def test_protenix_mini_models_with_msa(model_name):
 @pytest.mark.slow
 def test_protenix_holds_runner_across_calls():
     """Two calls inside persist_tool reuse the held InferenceRunner (no rebuild)."""
-    complexes = [StructurePredictionComplex(chains=[Chain(sequence=_CRO_SEQUENCE, entity_type="protein")])]
+    complexes = [Complex(chains=[Chain(sequence=_CRO_SEQUENCE, entity_type="protein")])]
     inputs = ProtenixInput(complexes=complexes)
     config = ProtenixConfig(
         model_name="protenix_tiny_default_v0.5.0",
@@ -327,7 +327,7 @@ def test_protenix_holds_runner_across_calls():
 @pytest.mark.uses_gpu
 def test_protenix_pae_surface():
     """avg_pae always emitted; pae square + self-consistent only when flag set."""
-    complexes = [StructurePredictionComplex(chains=[Chain(sequence=_CRO_SEQUENCE, entity_type="protein")])]
+    complexes = [Complex(chains=[Chain(sequence=_CRO_SEQUENCE, entity_type="protein")])]
     inputs = ProtenixInput(complexes=complexes)
     base = {
         "model_name": "protenix_tiny_default_v0.5.0",

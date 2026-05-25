@@ -7,10 +7,12 @@ from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_gradient import (
     run_proteinmpnn_gradient,
 )
 from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample import (
+    ProteinMPNNDesign,
+    ProteinMPNNDesignMetrics,
+    ProteinMPNNDesignSet,
     ProteinMPNNSampleConfig,
     ProteinMPNNSampleInput,
     ProteinMPNNSampleOutput,
-    ProteinMPNNSequences,
     run_proteinmpnn_sample,
 )
 from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_score import (
@@ -28,6 +30,9 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
 
 __all__ = [
     "ALPHAFOLD_VOCAB",
+    "ProteinMPNNDesign",
+    "ProteinMPNNDesignMetrics",
+    "ProteinMPNNDesignSet",
     "ProteinMPNNGradientConfig",
     "ProteinMPNNGradientInput",
     "ProteinMPNNGradientOutput",
@@ -37,7 +42,6 @@ __all__ = [
     "ProteinMPNNScoringConfig",
     "ProteinMPNNScoringInput",
     "ProteinMPNNScoringOutput",
-    "ProteinMPNNSequences",
     "SequenceStructurePair",
     "run_proteinmpnn_gradient",
     "run_proteinmpnn_sample",

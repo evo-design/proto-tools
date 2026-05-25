@@ -64,7 +64,7 @@ All three variants accept the same inputs and produce the same output format. v1
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `complexes` | `List[StructurePredictionComplex]` | Protein complexes to sample. Each must be a single-chain monomer with standard amino acids only. |
+| `complexes` | `List[Complex]` | Protein complexes to sample. Each must be a single-chain monomer with standard amino acids only. |
 
 **Constraints:**
 - Each complex must contain exactly one protein chain (monomers only)
@@ -159,13 +159,13 @@ Export formats: `pdb`, `json`
 **Basic ensemble sampling:**
 ```python
 from proto_tools.tools.structure_prediction.shared_data_models import (
-    StructurePredictionComplex,
+    Complex,
 )
 from proto_tools.tools.structure_dynamics.bioemu import (
     BioEmuInput, BioEmuConfig, run_bioemu,
 )
 
-complex_ = StructurePredictionComplex(
+complex_ = Complex(
     chains=[{"sequence": "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTK", "entity_type": "protein"}],
 )
 
@@ -181,8 +181,8 @@ print(f"Sequence: {ensemble.sequence}")
 **Multiple proteins in one call:**
 ```python
 complexes = [
-    StructurePredictionComplex(chains=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTK"]),
-    StructurePredictionComplex(chains=["MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQAPILSRVG"]),
+    Complex(chains=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTK"]),
+    Complex(chains=["MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQAPILSRVG"]),
 ]
 
 inputs = BioEmuInput(complexes=complexes)

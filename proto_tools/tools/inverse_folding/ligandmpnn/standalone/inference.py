@@ -90,7 +90,9 @@ class LigandMPNNModel:
                 ligand-interface recovery scoring.
 
         Returns:
-            Dictionary with keys: sequences, metrics
+            dict[str, Any]: Dictionary with keys ``chain_sequences`` (per
+                design, an ordered list of ``{"id": str, "sequence": str}``
+                dicts) and ``metrics`` (per design, the raw output_dict).
         """
         if seed is None:
             raise ValueError("ligandmpnn: sample requires an explicit int seed")
@@ -133,15 +135,43 @@ class LigandMPNNModel:
         # Run inference
         results = self._engine.run(input_dicts=[input_dict])
 
-        # Extract sequences and metrics
-        sequences: list[str] = []
+        from atomworks.ml.utils.token import get_token_starts  # type: ignore[import-not-found]
+
+        # Split designed_sequence by the non-atomized token level (1:1 with it).
+        chain_sequences: list[list[dict[str, str]]] = []
         metrics: list[dict[str, Any]] = []
         for output in results:
-            sequences.append(output.output_dict["designed_sequence"])
+            arr = output.atom_array
+            # Drop atomized residues; retained backbone atoms cover every non-atomized residue.
+            non_atom = arr[~arr.atomize]
+            starts = get_token_starts(non_atom)
+            # One row per non-atomized residue, 1:1 with designed_sequence.
+            tok = non_atom[starts]
+            per_residue_chain = [str(cid) for cid in tok.chain_id]
+            designed_sequence = output.output_dict["designed_sequence"]
+            if len(per_residue_chain) != len(designed_sequence):
+                raise ValueError(
+                    f"ligandmpnn: non-atomized token count {len(per_residue_chain)} does not match "
+                    f"designed_sequence length {len(designed_sequence)}; upstream contract changed."
+                )
+            # Group designed_sequence into contiguous per-chain runs, preserving order.
+            groups: list[dict[str, str]] = []
+            current_chain: str | None = None
+            buffer: list[str] = []
+            for cid, aa in zip(per_residue_chain, designed_sequence, strict=True):
+                if cid != current_chain:
+                    if current_chain is not None:
+                        groups.append({"id": current_chain, "sequence": "".join(buffer)})
+                    current_chain = cid
+                    buffer = []
+                buffer.append(aa)
+            if current_chain is not None:
+                groups.append({"id": current_chain, "sequence": "".join(buffer)})
+            chain_sequences.append(groups)
             metrics.append(output.output_dict)
 
         self.unload()
-        return {"sequences": sequences, "metrics": metrics}
+        return {"chain_sequences": chain_sequences, "metrics": metrics}
 
     def score(
         self,

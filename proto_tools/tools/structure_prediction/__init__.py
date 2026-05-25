@@ -33,8 +33,8 @@ from proto_tools.tools.structure_prediction.protenix import ProtenixConfig, Prot
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
     ChainModification,
+    Complex,
     MSAStructurePredictionConfig,
-    StructurePredictionComplex,
     StructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
@@ -94,7 +94,7 @@ __all__ = [
     "Chain",
     "ChainModification",
     "MSAStructurePredictionConfig",
-    "StructurePredictionComplex",
+    "Complex",
     "StructurePredictionConfig",
     "StructurePredictionInput",
     "StructurePredictionOutput",

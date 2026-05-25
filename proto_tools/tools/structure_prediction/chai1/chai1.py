@@ -24,8 +24,8 @@ from proto_tools.tools.structure_prediction.chai1.helpers import (
 )
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
+    Complex,
     MSAStructurePredictionConfig,
-    StructurePredictionComplex,
     StructurePredictionInput,
     StructurePredictionOutput,
 )
@@ -49,7 +49,7 @@ class Chai1Input(StructurePredictionInput):
     Inherits from ``StructurePredictionInput``.
 
     Attributes:
-        complexes (list[StructurePredictionComplex]): List of complexes to predict
+        complexes (list[Complex]): List of complexes to predict
             structures for. Inherited from ``StructurePredictionInput``. Each complex
             can contain multiple chains of proteins, ligands, and/or glycans. Total
             token count per complex must not exceed 2,048 (see ``Note`` below).
@@ -69,7 +69,7 @@ class Chai1Input(StructurePredictionInput):
 
     @field_validator("complexes")
     @classmethod
-    def validate_token_count(cls, complexes: list[StructurePredictionComplex]) -> list[StructurePredictionComplex]:
+    def validate_token_count(cls, complexes: list[Complex]) -> list[Complex]:
         """Reject complexes that exceed Chai-1's 2048-token limit."""
         from proto_tools.tools.structure_prediction.chai1.helpers import count_chai1_tokens
 
@@ -344,13 +344,13 @@ def _msa_to_pqt_file(msa: Any, pqt_path: str, query_index: int = 0, source_datab
     write_msa_pqt(sequences, pqt_path, source_database=source_database, comments=seq_ids)
 
 
-def _generate_fasta_content(comp: StructurePredictionComplex) -> str:
-    """Generate FASTA content from a typed StructurePredictionComplex."""
+def _generate_fasta_content(comp: Complex) -> str:
+    """Generate FASTA content from a typed Complex."""
     return complex_to_fasta(comp.chains)
 
 
 def run_chai1_on_complex(
-    comp: StructurePredictionComplex,
+    comp: Complex,
     config: Chai1Config,
     msas: dict[str, Any] | None = None,
     instance: Any = None,
@@ -361,7 +361,7 @@ def run_chai1_on_complex(
     by ``run_chai1`` to sequentially predict all complexes in the input.
 
     Args:
-        comp (StructurePredictionComplex): The complex to fold.
+        comp (Complex): The complex to fold.
         config (Chai1Config): Chai1 configuration.
         msas (dict[str, Any] | None): Pre-computed MSAs keyed by protein sequence.
         instance (Any): Optional ToolInstance for persistent execution.
