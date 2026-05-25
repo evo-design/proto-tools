@@ -173,8 +173,15 @@ class RFdiffusion3Model:
                 stderr=sys.stderr if verbose else subprocess.PIPE,
             )
         except subprocess.CalledProcessError as e:
-            stderr_tail = " | ".join((e.stderr or "").strip().splitlines()[-10:]) or "<no stderr>"
-            raise RuntimeError(f"rfdiffusion3: failed (exit {e.returncode}): {stderr_tail}") from e
+            stderr = (e.stderr or "").strip()
+            stdout = (e.stdout or "").strip()
+            details = []
+            if stderr:
+                details.append(f"stderr:\n{stderr}")
+            if stdout:
+                details.append(f"stdout:\n{stdout}")
+            message = "; ".join(details) or "<no subprocess output>"
+            raise RuntimeError(f"rfdiffusion3: failed (exit {e.returncode}): {message}") from e
 
         # Extract the outputs
         return self._extract_rfd3_outputs(output_dir)
