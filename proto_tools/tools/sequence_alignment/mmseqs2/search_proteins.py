@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 if TYPE_CHECKING:
     import pandas as pd
 
+from proto_tools.databases import DatasetRegistry, get_dataset_dir
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -438,9 +439,14 @@ def run_mmseqs2_search_proteins(
             )
     else:
         # XOR validator guarantees mmseqs_db is non-None here; explicit check is for mypy narrowing.
-        mmseqs_db_for_dispatch = inputs.mmseqs_db
-        if config.use_gpu and inputs.mmseqs_db is not None:
-            padded_stem = _resolve_gpu_db_stem(inputs.mmseqs_db)
+        if inputs.mmseqs_db is None:
+            raise ValueError("mmseqs2-search-proteins: provide `mmseqs_db` when `target_sequences` is unset.")
+        mmseqs_db_for_dispatch, resolved_registry_db = _resolve_registered_mmseqs_db(
+            inputs.mmseqs_db,
+            use_gpu=config.use_gpu,
+        )
+        if config.use_gpu and not resolved_registry_db:
+            padded_stem = _resolve_gpu_db_stem(mmseqs_db_for_dispatch)
             if padded_stem is None:
                 raise ValueError(
                     f"mmseqs2-search-proteins: use_gpu=True requires a GPU-padded MMseqs2 DB "
@@ -500,6 +506,7 @@ def run_mmseqs2_search_proteins(
             "only_top_hits": config.only_top_hits,
             "num_sequences": num_sequences,
             "use_gpu": config.use_gpu,
+            "resolved_mmseqs_db": mmseqs_db_for_dispatch,
         },
         results=results,
     )
@@ -508,6 +515,33 @@ def run_mmseqs2_search_proteins(
 # ============================================================================
 # Helper Functions
 # ============================================================================
+def _resolve_registered_mmseqs_db(mmseqs_db: str, *, use_gpu: bool) -> tuple[str, bool]:
+    """Resolve a registered dataset name to the provisioned MMseqs2 DB stem."""
+    if mmseqs_db not in DatasetRegistry.list_all():
+        return mmseqs_db, False
+
+    entry = DatasetRegistry.get(mmseqs_db)
+    if entry.molecule_type != "protein":
+        raise ValueError(
+            f"mmseqs2-search-proteins: registered dataset {mmseqs_db!r} has "
+            f"molecule_type={entry.molecule_type!r}; use a protein dataset."
+        )
+    if use_gpu and not entry.supports_gpu:
+        raise ValueError(f"mmseqs2-search-proteins: registered dataset {mmseqs_db!r} does not support GPU search.")
+
+    cache_dir = get_dataset_dir(mmseqs_db)
+    db_prefix = entry.gpu_padded_marker if use_gpu and entry.gpu_padded_marker else entry.db_prefix
+    stem = cache_dir / db_prefix
+    if not Path(f"{stem}.dbtype").is_file():
+        raise FileNotFoundError(
+            f"mmseqs2-search-proteins: registered dataset {mmseqs_db!r} is not provisioned: "
+            f"expected {stem}.dbtype.\n"
+            "Provision with:\n"
+            f"  python -m proto_tools.tools.sequence_alignment.mmseqs2.setup_databases {mmseqs_db}"
+        )
+    return str(stem), True
+
+
 def _resolve_gpu_db_stem(mmseqs_db: str) -> str | None:
     """Resolve the GPU-padded MMseqs2 DB stem to pass to ``easy-search --gpu 1``.
 
