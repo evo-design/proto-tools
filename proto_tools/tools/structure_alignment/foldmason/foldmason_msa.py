@@ -126,9 +126,9 @@ class FoldmasonMSAConfig(BaseConfig):
         description="Remote-only — max wall-clock time for the alignment",
         include_in_key=False,
     )
-    gap_open: int = ConfigField(title="Gap Open Cost", default=25, ge=0, description="Local-only — gap open cost")
+    gap_open: int = ConfigField(title="Gap Open Cost", default=10, ge=0, description="Local-only — gap open cost")
     gap_extend: int = ConfigField(
-        title="Gap Extend Cost", default=2, ge=0, description="Local-only — gap extension cost"
+        title="Gap Extend Cost", default=1, ge=0, description="Local-only — gap extension cost"
     )
     refine_iters: int = ConfigField(
         title="Refine Iterations", default=0, ge=0, description="Local-only — number of alignment-refinement iterations"
@@ -152,8 +152,8 @@ class FoldmasonMSAConfig(BaseConfig):
         "timeout_seconds": 600.0,
     }
     _LOCAL_ONLY_DEFAULTS = {  # noqa: RUF012
-        "gap_open": 25,
-        "gap_extend": 2,
+        "gap_open": 10,
+        "gap_extend": 1,
         "refine_iters": 0,
         "precluster": False,
         "guide_tree_newick": None,

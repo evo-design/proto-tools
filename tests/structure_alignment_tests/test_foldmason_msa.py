@@ -99,7 +99,7 @@ def test_local_mode_dispatches_easy_msa():
     assert payload["structures"] == [_TINY_PDB, _TINY_PDB]
     assert payload["structure_ids"] == ["structure_0", "structure_1"]
     assert payload["gap_open"] == 15  # user override
-    assert payload["gap_extend"] == 2  # default
+    assert payload["gap_extend"] == 1  # default
     assert payload["refine_iters"] == 0
     assert payload["precluster"] is False
     assert payload["guide_tree_newick"] is None
