@@ -1,275 +1,53 @@
-<a href="https://bio-pro.mintlify.app/tools/structure-design/rfdiffusion3"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/structure-design/rfdiffusion3"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # RFdiffusion3
 
+![RFdiffusion3](https://raw.githubusercontent.com/RosettaCommons/RFdiffusion/main/img/diffusion_protein_gradient_2.jpg)
+
+> *Image source: [RosettaCommons/RFdiffusion](https://github.com/RosettaCommons/RFdiffusion)*
+
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** RFdiffusion3 is open source and free for academic and commercial use under a BSD-3-Clause license. Please refer to [the license](https://github.com/RosettaCommons/foundry/blob/production/LICENSE.md) for full terms.
 
 ## Overview
-RFdiffusion3 is a [diffusion](https://en.wikipedia.org/wiki/Diffusion_model)-based generative model for de novo protein structure design. Unlike structure prediction tools that predict what a given sequence will fold into, RFdiffusion3 generates novel protein structures (and sequences) that satisfy specified constraints.
+
+Released in 2025 by the [Baker Lab at the Institute for Protein Design](https://www.ipd.uw.edu/), RFdiffusion3 is an all-atom denoising-diffusion generative model for de novo protein design. Given constraints such as a target binding site, a structural motif, a small-molecule pocket, or a symmetry group, it generates novel protein structures together with compatible amino-acid sequences. It is the all-atom successor to RFdiffusion and addresses protein binders, nucleic-acid and small-molecule binders, enzymes, and symmetric assemblies within a single model.
 
 ## Background
 
-**What does this tool do?**
-RFdiffusion3 generates novel protein structures at atomic resolution using a diffusion process. Given constraints like target binding sites, structural motifs, or symmetry requirements, it produces designed proteins with both 3D coordinates and amino acid sequences optimized to fold into those structures.
+RFdiffusion3 ([Butcher et al., 2025](https://doi.org/10.1101/2025.09.18.676967)) is a denoising-diffusion generative model trained to design protein structures at all-atom resolution under arbitrary spatial constraints. Starting from random noise, it iteratively denoises atomic coordinates toward a plausible protein while jointly refining the underlying amino-acid sequence. Training combines structures from the [Protein Data Bank](https://www.rcsb.org/) with multi-task conditioning, in which each training example is presented with a randomly generated design problem that constrains a sampled combination of motif tokens, atom subsets, residue identities, or sequence-index labels. The model is therefore trained jointly on binder design, motif scaffolding, inverse folding, sidechain placement, and prediction-style tasks under a single objective, and a single trained checkpoint supports every conditioning style at inference.
 
-**Why is this important?**
-De novo protein design enables creation of proteins with novel functions not found in nature:
-- Designing binders for therapeutic targets (drugs, vaccines)
-- Creating enzymes with novel catalytic activities
-- Engineering protein materials with desired properties
-- Scaffolding around active sites for functional enzyme design
-- Building symmetric assemblies for nanotechnology applications
-
-**Scientific foundation:**
-RFdiffusion3 uses a denoising diffusion process operating on all atoms (backbone and side-chains) simultaneously. Starting from random noise, it iteratively refines coordinates through learned denoising steps while conditioning on specified constraints. Key advances include:
-1. **All-atom diffusion**: Models both backbone and side-chain atoms for realistic structure generation
-2. **Flexible conditioning**: Supports diverse constraints (motifs, binders, symmetry, ligands)
-3. **Sequence co-design**: Generates compatible sequences alongside structures
-4. **Contig language**: Powerful specification system for complex design tasks
+RFdiffusion3 is the successor to [RFdiffusion](https://doi.org/10.1038/s41586-023-06415-8) (Watson et al., 2023), which diffused only over the backbone N, Cα, C, and O atoms and required [ProteinMPNN](https://doi.org/10.1126/science.add2187) as a separate sequence-design step. By denoising every atom and co-designing the sequence, RFdiffusion3 incorporates small-molecule pockets, hydrogen-bond donor and acceptor patterning, and explicit nucleotide and ligand context directly into the generative process. It is the structure-design model within the [Foundry](https://github.com/RosettaCommons/foundry) framework, which distributes it alongside [RoseTTAFold3](https://doi.org/10.1101/2025.08.14.670328) for structure prediction and [ProteinMPNN](https://bio-pro.mintlify.app/tools/inverse-folding/proteinmpnn) for inverse folding.
 
 ## Tools
 
 ### RFdiffusion3 Structure Design (`rfdiffusion3-design`)
 
-Design protein structures using RFdiffusion3.
+Generates new protein structures and sequences subject to specified constraints. Each design task is described by an `RFdiffusion3DesignSpec` containing an optional input structure, a contig string, and per-residue selectors that fix atomic coordinates, constrain sequence positions, or designate hotspot residues. The diffusion sampler returns N candidate structures per specification, each accompanied by its designed amino-acid sequence and the sampled contig.
 
-Uses RFdiffusion3, a diffusion-based generative model, to design novel
-protein structures under specified constraints. Unlike structure prediction,
-RFdiffusion3 generates both structure AND sequence, making it suitable for:
+#### Applications
 
-- De novo protein design (unconditional generation)
-- Motif scaffolding (design around fixed structural motifs)
-- Protein binder design (design proteins that bind to targets)
-- Enzyme design (scaffold around catalytic sites)
-- Symmetric protein design (design homo-oligomers)
+This tool is appropriate for any task in which the output is a novel protein backbone together with a designed amino-acid sequence subject to spatial constraints. Representative applications include protein-binder design against a target hotspot, motif scaffolding around catalytic or epitope residues, enzyme design around a small-molecule active site, symmetric homo-oligomer assembly, and partial-diffusion refinement of an existing backbone. RFdiffusion3 additionally supports nucleic-acid and small-molecule binder design within the same model and the same inference run, capabilities that the original RFdiffusion addressed only through separate model variants or task-specific extensions.
 
-Runs via local GPU execution in isolated Python environments.
+#### Usage Tips
 
-## Execution Modes
+- **One `RFdiffusion3DesignSpec` describes a single design task; multiple specifications passed in one call are processed independently.** Each specification produces `n_batches * diffusion_batch_size` designs, and the resulting design sets are returned in input order. `length` is the only field that may be specified without an `input_structure`; the `contig`, `unindex`, and `select_*` fields are resolved against the input atomic coordinates and are rejected by validation when no input structure is provided.
+- **The `contig` string specifies the design topology.** Comma-separated segments select chain-indexed residues from the input (`A40-60`), insert designed regions of variable length (`70-80`), or introduce a chain break (`/0`). The full grammar is documented in the [RFdiffusion3 input specification](https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md).
+- **`num_timesteps` and `step_scale` are the principal parameters controlling design quality and diversity.** Increasing `num_timesteps` (default `200`) extends the number of denoising steps and generally improves designability at a linear cost in runtime. `step_scale` (default `1.5`) scales the per-step denoising magnitude. Lower values yield more diverse but less designable outputs; higher values produce structures closer to the training distribution.
+- **`sampler_kind="symmetry"` is required for homo-oligomer design and must be paired with a `symmetry` group on the specification.** Setting `symmetry="C3"` on the specification is converted internally to the `{"id": "C3"}` `SymmetryConfig` required by the RFdiffusion3 sampler. The symmetric sampler also imposes a `gamma_0 > 0.5` constraint, which is enforced during configuration validation.
+- **Classifier-free guidance is disabled by default and enabled by setting `use_classifier_free_guidance=True`.** When disabled, `cfg_scale`, `cfg_features`, and `cfg_t_max` have no effect. When enabled, increasing `cfg_scale` (typical range 1.0 to 3.0) more strongly weights the conditioning features (active-site hydrogen-bond donors and acceptors, per-atom relative accessible surface area) during sampling.
+- **`partial_t` enables partial diffusion, in which the sampler refines an input structure rather than starting from random noise.** The input is perturbed with Gaussian noise at the specified amplitude in angstroms and then denoised back, supporting local redesign and topology-preserving diversification of an existing backbone. The RFdiffusion3 `InputSpecification` reference lists 5.0 to 15.0 angstroms as a recommended range, but the [partial-diffusion documentation](https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md#partial-diffusion) notes that `partial_t` is nonlinear and recommends beginning near 2 angstroms and increasing gradually.
+- **`is_non_loopy` is the only secondary-structure conditioning parameter available.** Setting it on `RFdiffusion3DesignSpec` to `True` biases the sampler toward fewer loops and substantially more helical content, with reduced sheet content. Setting it to `False` biases toward more loops and correspondingly fewer helices. Leaving it `None` (the default) applies no topology preference. The parameter is a single boolean flag and offers no per-residue or fractional control.
+- **Sampler parameters not exposed as typed fields must use dotted Hydra paths.** Additional keyword arguments to `RFdiffusion3Config` are forwarded to the inference engine, but sampler sub-parameters must be specified as `inference_sampler.<key>` (for example `inference_sampler.noise_scale=1.003`); non-prefixed keys are ignored by the RFdiffusion3 inference engine.
 
-- **Local GPU**: Requires GPU with >=24GB VRAM (A100/H100 recommended for production)
-- **Runtime**: ~1-10 minutes per design batch depending on size and complexity
+## Toolkit Notes
 
-## How It Works
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-RFdiffusion3 uses a diffusion process that operates on atomic coordinates:
-1. **Forward process**: Training data (real proteins) is progressively noised
-2. **Reverse process**: A neural network learns to denoise, recovering structure
-3. **Conditioning**: Constraints are applied during denoising to guide generation
-4. **Sampling**: Multiple independent designs are generated and can be ranked
+These apply to every RFdiffusion3 tool in this toolkit (`rfdiffusion3-design`).
 
-The model is trained on protein structures from the [PDB](https://www.rcsb.org/), learning the distribution of valid protein geometries. During inference, it generates novel structures by sampling from this learned distribution while respecting specified constraints.
-
-**Key assumptions:**
-- Generated structures should be physically realistic (proper bond lengths, angles)
-- Constraints accurately specify the design objective
-- Generated sequences should be designable (can actually fold into the structure)
-- Larger designs may require more diffusion steps for quality
-
-**Limitations:**
-- Computational cost: Large designs (>500 residues) require significant GPU memory and time
-- No explicit energy function: Relies on learned patterns, not physics-based scoring
-- Designability not guaranteed: Generated structures may need validation with structure prediction
-- Limited to proteins: Cannot design small molecules, nucleic acids, or carbohydrates
-
-## Input Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `design_specs` | `List[RFdiffusion3DesignSpec]` | *required* | Design specifications with constraints |
-
-Each `RFdiffusion3DesignSpec` contains:
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `input_structure` | `Optional[str]` | Path to PDB/CIF or PDB string (motif scaffolding, binder design) |
-| `length` | `Optional[str]` | Target length (int or "min-max" range as string) |
-| `contig` | `Optional[str]` | Contig string specifying design topology. Use `/0` for chain breaks, for example `50,/0,B1-50`. |
-| `ligand` | `Optional[str]` | Ligand selection by 3-letter codes (e.g. `"HAX,OAA"`) |
-| `unindex` | `Optional[str \| dict]` | Unindexed motif components (flexible position) |
-| `select_fixed_atoms` | `Optional[bool \| str \| dict]` | Atoms held fixed in 3D space during diffusion |
-| `select_unfixed_sequence` | `Optional[bool \| str \| dict]` | Residues whose sequence can change |
-| `select_hotspots` | `Optional[bool \| str \| dict]` | Hotspots for binder/PPI design |
-| `symmetry` | `Optional[str \| dict]` | Symmetry for homo-oligomer: group-id str (e.g. `"C3"`) or `SymmetryConfig` dict; pair with `sampler_kind="symmetry"` |
-| `select_buried` / `select_partially_buried` / `select_exposed` | `Optional[bool \| str \| dict]` | RASA conditioning |
-| `select_hbond_donor` / `select_hbond_acceptor` | `Optional[dict[str, list[str]]]` | Atom-wise H-bond flags |
-| `redesign_motif_sidechains` | `Optional[bool]` | Fix motif backbone, redesign side-chains |
-| `plddt_enhanced` | `Optional[bool]` | pLDDT-based denoising enhancement (upstream default: True) |
-| `infer_ori_strategy` | `Optional["com" \| "hotspots"]` | Origin placement strategy |
-| `ori_token` | `Optional[List[float]]` | `[x, y, z]` origin override (Angstroms) |
-| `partial_t` | `Optional[float]` | Noise (Angstroms) for partial diffusion (5.0-15.0 recommended) |
-| `is_non_loopy` | `Optional[bool]` | True/False produces fewer/more loops |
-
-Additional InputSpecification fields can be passed via `**kwargs` (model uses `extra="allow"`). See [upstream input.md](https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md).
-
-## Configuration
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `n_batches` | `int` | `1` | Independent batches per spec (total designs per spec = `n_batches * diffusion_batch_size`) |
-| `diffusion_batch_size` | `int` | `8` | Designs sampled in parallel per batch (memory scales with this) |
-| `num_timesteps` | `int` | `200` | Diffusion steps (higher = better quality, slower) |
-| `step_scale` | `float` | `1.5` | Step size scale; higher = less diverse, more designable (typical 1.0-2.0) |
-| `sampler_kind` | `"default" \| "symmetry"` | `"default"` | Sampler kind; `"symmetry"` for homo-oligomer design |
-| `center_option` | `"all" \| "motif" \| "diffuse"` | `"all"` | Coordinate-frame centering mode |
-| `use_classifier_free_guidance` | `bool` | `False` | Enable classifier-free guidance (CFG) |
-| `cfg_scale` | `float` | `1.5` | CFG scale (typical 1.0-3.0); requires CFG enabled |
-| `cfg_features` | `Optional[List[str]]` | `None` | CFG feature names; None uses upstream default |
-| `cfg_t_max` | `Optional[float]` | `None` | Max diffusion timestep at which CFG is applied (0.0-1.0) |
-| `gamma_0` | `float` | `0.6` | Sampler stochasticity; 0.0 = deterministic ODE. Must be > 0.5 when `sampler_kind="symmetry"` |
-| `low_memory_mode` | `bool` | `False` | Memory-efficient tokenization (slower); set if GPU RAM is tight |
-| `dump_trajectories` | `bool` | `False` | Save diffusion trajectory frames to output dir |
-| `align_trajectory_structures` | `bool` | `False` | Align trajectory frames (only when dumping) |
-| `prevalidate_inputs` | `bool` | `False` | Fail-fast input JSON validation before launching diffusion |
-
-### Sweep Priorities
-
-1. **`num_timesteps`**: Most impactful for structure quality. Use 50-100 for rapid prototyping, 200-500 for production.
-2. **`step_scale`**: Controls diversity vs designability tradeoff. Lower (1.0-1.3) for diverse exploration, higher (1.5-2.0) for safer designs.
-3. **`diffusion_batch_size`**: Generate multiple designs per run; rank by downstream metrics.
-4. **`use_classifier_free_guidance`** + **`cfg_scale`**: Enable when active-site / H-bond constraints matter; otherwise leave off (no-op when off).
-
-## Output Specification
-
-```python
-RFdiffusion3Output(
-    designed_structures: List[RFdiffusion3Designs],   # one bundle per input spec
-)
-```
-
-Each `RFdiffusion3Designs` bundle holds the designs produced for one input spec
-(length = `n_batches * diffusion_batch_size`):
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `spec_key` | `str` | Identifier of the originating input spec (e.g. `"spec-0"`) |
-| `structures` | `list[RFdiffusion3Structure]` | The designs generated for this spec |
-
-Each `RFdiffusion3Structure` contains:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `structure` | `Structure` | Full atomic coordinates of designed protein |
-| `sequence` | `str` | Amino acid sequence (multi-chain: chains separated by `/`) |
-| `metadata` | `dict` | Sampled contig, chain info, and logged metrics |
-
-## Interpreting Results
-
-RFdiffusion3 does not provide built-in confidence scores. Assess design quality using downstream tools:
-
-| Validation method | Tool | What it measures |
-|-------------------|------|------------------|
-| Structure prediction | ESMFold / Boltz2 | Whether the designed sequence folds into the intended structure |
-| Inverse folding score | ProteinMPNN | Sequence-structure compatibility (perplexity) |
-| Physics-based scoring | Rosetta energy | Physical plausibility of the structure |
-| Fold confidence | AlphaFold pLDDT | Confidence that the sequence will fold as designed |
-
-**Validation workflow:**
-1. Generate designs with RFdiffusion3
-2. Score with ProteinMPNN (perplexity < 4.0 is a good sign)
-3. Predict structure from designed sequence with ESMFold/Boltz2
-4. Compare predicted structure to designed structure (RMSD < 2A is excellent)
-
-## Quick Start Examples
-
-**Example 1: Unconditional protein design**
-```python
-from proto_tools.tools.structure_design.rfdiffusion3 import (
-    run_rfdiffusion3, RFdiffusion3Input, RFdiffusion3Config, RFdiffusion3DesignSpec
-)
-
-# Design a 100-residue protein
-spec = RFdiffusion3DesignSpec(length="100")
-inputs = RFdiffusion3Input(design_specs=[spec])
-config = RFdiffusion3Config(
-    diffusion_batch_size=8,
-    num_timesteps=200,
-    step_scale=1.5
-)
-
-result = run_rfdiffusion3(inputs, config)
-
-# Result is one bundle per input spec; each bundle holds the N designs for that spec.
-for bundle in result.designed_structures:
-    for design_index, structure in enumerate(bundle.structures):
-        print(f"{bundle.spec_key} design {design_index}: {structure.sequence[:50]}...")
-```
-
-**Example 2: Variable-length design**
-```python
-from proto_tools.tools.structure_design.rfdiffusion3 import (
-    run_rfdiffusion3, RFdiffusion3Input, RFdiffusion3Config, RFdiffusion3DesignSpec
-)
-
-# Design proteins between 80-120 residues
-spec = RFdiffusion3DesignSpec(length="80-120")
-inputs = RFdiffusion3Input(design_specs=[spec])
-config = RFdiffusion3Config(
-    diffusion_batch_size=4,
-    num_timesteps=300  # Higher quality
-)
-
-result = run_rfdiffusion3(inputs, config)
-```
-
-## Best Practices & Gotchas
-
-**Parameter tuning:**
-- **`num_timesteps`**:
-  - Low values (50-100): Fast but potentially lower quality; good for initial exploration
-  - High values (200-500): Higher quality; use for final production designs
-- **`step_scale`**:
-  - Low values (1.0-1.3): More diverse outputs; may include unusual structures
-  - High values (1.5-2.0): More conservative; structures closer to training data
-
-**Common mistakes:**
-1. **Not validating designs**: Always run structure prediction on designed sequences to verify designability
-2. **Ignoring motif specification**: For scaffolding, carefully specify which atoms to fix
-3. **Insufficient sampling**: Generate multiple designs (8-32) and rank; don't rely on single designs
-4. **Wrong contig syntax**: Chain breaks use `/0`, not `\0` or a bare `/`; ranges use `-` (e.g., `A1-50`)
-
-**Tips for optimal results:**
-- **Start simple**: Test with unconditional design before complex constraints
-- **Validate with ProteinMPNN**: Score designs to check sequence-structure compatibility
-- **Use step_scale ~1.5**: Good balance of diversity and quality for most applications
-- **Generate batches**: Easier to select good designs from a batch than to get one perfect design
-
-**Edge cases to watch for:**
-- **Very long proteins (>300 AA)**: May need more timesteps; memory usage increases
-- **Complex multi-chain designs**: Ensure contig string correctly specifies chain breaks
-- **Tight geometric constraints**: May require more samples to find satisfying designs
-- **Symmetric designs**: Use symmetry mode for homo-oligomers
-
-## Seed Reproducibility
-
-The `seed` parameter is passed to the rfd3 subprocess but the diffusion
-pipeline uses non-deterministic CUDA operations that cannot be controlled
-from outside the process, so different runs with the same seed produce
-different designs. Upstream issue:
-[RosettaCommons/foundry#170](https://github.com/RosettaCommons/foundry/issues/170).
-
-## References
-
-**Primary publication:**
-- Butcher, Krishna, Mitra et al. (2025). "De novo Design of All-atom Biomolecular Interactions with RFdiffusion3". *bioRxiv*. [DOI: 10.1101/2025.09.18.676967](https://doi.org/10.1101/2025.09.18.676967)
-
-**Implementation:**
-- GitHub: [https://github.com/RosettaCommons/foundry](https://github.com/RosettaCommons/foundry)
-- Documentation: [https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/README.md](https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/README.md)
-
-**Additional resources:**
-- RFdiffusion (original): [https://github.com/RosettaCommons/RFdiffusion](https://github.com/RosettaCommons/RFdiffusion)
-- Foundry model collection: [https://github.com/RosettaCommons/foundry](https://github.com/RosettaCommons/foundry)
-
-## Related Tools
-
-**Tools often used together:**
-- `esmfold` / `boltz2-prediction`: Validate designs by predicting structure from designed sequence
-- `proteinmpnn-score`: Score sequence-structure compatibility of designs
-- `proteinmpnn-sample`: Generate alternative sequences for a designed structure
-
-**Alternative tools:**
-- RFdiffusion (original): Backbone-only diffusion; faster but less detailed
-- Chroma: Alternative diffusion-based protein design method
-- ESM3: Sequence-focused generative model (no explicit structure generation)
+- **A GPU is required for any practical use.** CPU execution is supported via `device="cpu"` but is prohibitively slow for typical workloads. The default execution environment uses CUDA.
+- **GPU memory consumption scales with `diffusion_batch_size` and the length of the designs.** When GPU memory is exhausted, first reduce `diffusion_batch_size`; if memory exhaustion persists, set `low_memory_mode=True` to enable memory-efficient tokenization at the cost of throughput.
+- **Designs are returned as a structure together with a sequence and carry no built-in confidence score.** A standard validation procedure is to score the designed sequence against the designed structure with [ProteinMPNN](https://bio-pro.mintlify.app/tools/inverse-folding/proteinmpnn), then predict the structure of the designed sequence with [ESMFold](https://bio-pro.mintlify.app/tools/structure-prediction/esmfold) or [Boltz2](https://bio-pro.mintlify.app/tools/structure-prediction/boltz2) and compare the predicted backbone to the designed backbone.
+- **Multi-chain sequences are `/`-delimited.** Designs spanning multiple chains are returned as a single string with chains separated by `/` (for example `"MASCQT/EVQLVE"`), matching the convention used throughout this toolkit.
+- **`seed` does not guarantee bit-exact reproducibility.** The diffusion sampler relies on non-deterministic CUDA operations, so repeated runs with the same seed will produce different designs. Generate and rank a batch of designs rather than relying on a single seeded sample.
