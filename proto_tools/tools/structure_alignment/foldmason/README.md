@@ -1,222 +1,62 @@
-<a href="https://bio-pro.mintlify.app/tools/structure-alignment/foldmason"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/structure-alignment/foldmason"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a>
 
-# FoldMason Toolkit
+# FoldMason
 
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** FoldMason has a GPL-3.0 license. Please refer to [the license](https://github.com/steineggerlab/foldmason/blob/master/LICENSE.md) for full terms.
 
 ## Overview
 
-The FoldMason toolkit wraps the Steinegger Lab's multiple structure alignment tool (Gilchrist et al., *Science* 2026). Two sibling tools, both backed by the same FoldMason binary:
-
-| Tool key | Operation | Modes |
-|---|---|---|
-| `foldmason-msa` | Multiple structure alignment over ≥2 PDB structures | remote (server) + local (CLI) |
-| `foldmason-score-msa` | Score an existing MSA with average + per-column LDDT | local only |
-
-`foldmason-msa` is the canonical "align my list of structures" tool — it builds a structural MSA and a guide tree from raw PDB inputs. `foldmason-score-msa` takes a precomputed MSA and structures, and returns LDDT scores you can use as a quality metric or downstream design constraint.
+[FoldMason](https://github.com/steineggerlab/foldmason) is a multiple protein-structure alignment tool from the [Steinegger Lab](https://steineggerlab.com/) at Seoul National University. It produces a structural multiple-sequence alignment over an arbitrary set of [PDB](https://www.rcsb.org/) inputs, returns the alignment in both the amino-acid alphabet and the [3Di structural alphabet](https://www.nature.com/articles/s41587-023-01773-0) shared with [Foldseek](https://bio-pro.mintlify.app/tools/structure-alignment/foldseek), and reports a per-column [LDDT](https://doi.org/10.1093/bioinformatics/btt473) quality score for the result.
 
 ## Background
 
-**What does this toolkit measure?**
-FoldMason aligns multiple protein structures by encoding each one as a sequence over the 3Di structural alphabet (the same alphabet used by Foldseek), then running progressive multiple-sequence alignment with structure-aware scoring. The result is an alignment that captures structural homology even between proteins below the sequence-search "twilight zone." LDDT (Local Distance Difference Test) at the column level quantifies how well the structures superimpose at each aligned position.
+[FoldMason](https://github.com/steineggerlab/foldmason) ([Gilchrist, Mirdita & Steinegger, 2026](https://doi.org/10.1126/science.ads6733)) is a progressive multiple-structure alignment method that scales to hundreds of thousands of protein structures. Each input structure is first encoded as a string over the [3Di alphabet](https://www.nature.com/articles/s41587-023-01773-0), the structural alphabet introduced with Foldseek that represents the local backbone geometry of each residue as a discrete letter. FoldMason then aligns the 3Di strings alongside their amino-acid sequences through a progressive procedure that follows a structural guide tree, using [Foldseek](https://bio-pro.mintlify.app/tools/structure-alignment/foldseek) and [TM-align](https://bio-pro.mintlify.app/tools/structure-alignment/tmalign) as the pairwise structural aligners at each merge step. An optional iterative refinement procedure can re-align the result to maximise its LDDT score. The output is a column-by-column alignment expressed in both alphabets together with the Newick guide tree.
 
-**Why is this important?**
-- **Structural family analysis:** align a set of homologs to discover which residues are structurally conserved vs. variable.
-- **Design-set quality:** score an MSA of designed structures to surface positions where the design diverges from the intended scaffold.
-- **Template ensembles:** prepare a multi-structure template for downstream protein design or template-based modelling.
+Alignment quality is summarised with the [Local Distance Difference Test (lDDT)](https://academic.oup.com/bioinformatics/article-abstract/29/21/2722/195896) ([Mariani et al., 2013](https://doi.org/10.1093/bioinformatics/btt473)), a superposition-free metric that scores local atomic-distance agreement between two structures. FoldMason's `msa2lddt` computes LDDT on each pairwise sub-alignment, maps the per-residue scores back to MSA columns, and averages across pairs to produce one column-wise score and one overall average. The reference implementation is released as open source by the [Steinegger Lab](https://steineggerlab.com/) at [steineggerlab/foldmason](https://github.com/steineggerlab/foldmason). The same group operates a public web service at [search.foldseek.com/foldmason](https://search.foldseek.com/foldmason) that the remote execution mode of this toolkit targets.
 
-**Scientific foundation:**
-FoldMason combines Foldseek's 3Di alphabet with a progressive multiple-alignment engine (`structuremsa`), augmented by neighborhood-aware scoring and optional iterative refinement. `msa2lddt` measures alignment quality column-by-column using LDDT, giving a fast, consistent metric across structurally diverse inputs.
+### Learning Resources
+
+- [steineggerlab/foldmason](https://github.com/steineggerlab/foldmason) (Steinegger Lab, Seoul National University) - official repository, command-line interface for `easy-msa`, `structuremsa`, `refinemsa`, and `msa2lddt`, and the FASTA output format that this toolkit parses.
+- [search.foldseek.com/foldmason](https://search.foldseek.com/foldmason) (Steinegger Lab) - the public web service that the remote execution mode targets, useful for a single browser-based alignment before scripting against the tool.
+- [Van Kempen et al., 2024 - Foldseek 3Di alphabet](https://www.nature.com/articles/s41587-023-01773-0) (Nature Biotechnology) - reference for the 3Di structural alphabet that underpins FoldMason's residue encoding.
 
 ## Tools
 
 ### FoldMason MSA (`foldmason-msa`)
 
-Run a FoldMason multiple structure alignment.
+Aligns two or more PDB structures and returns the amino-acid and 3Di MSAs as FASTA strings together with the Newick guide tree, the alignment length, and the number of sequences aligned. The tool executes against the public Steinegger Lab web service in `remote` mode and against the bundled `foldmason easy-msa` binary in `local` mode.
 
-Dispatches to the public FoldMason server (remote) or the local FoldMason
-CLI's `easy-msa` based on `config.search_mode`.
+#### Applications
+
+This tool is appropriate for aligning a fold family retrieved from a Foldseek search, for comparing designed scaffolds against their target backbone, or for assembling a multi-structure template ensemble for downstream template-based modelling. It also applies to AlphaFold predictions across an evolutionary set, where the alignment can identify residues that are structurally conserved as well as loops that vary in conformation.
+
+#### Usage Tips
+
+- **The Steinegger Lab web service does not accept alignment parameters.** The configuration fields `gap_open`, `gap_extend`, `refine_iters`, `precluster`, and `guide_tree_newick` therefore require `search_mode="local"`.
+- **`refine_iters` controls how many iterative LDDT-maximising refinement passes run after the initial progressive alignment.** Each pass adds runtime, and the default of `0` is appropriate for most workflows. Increase it only when an alignment shows poor quality in difficult regions.
+- **The remote service has no authentication and no published rate limit.** `search.foldseek.com/foldmason` is a free public academic resource. High-throughput or batch workloads should be performed in `local` mode to avoid overloading the shared service.
 
 ### FoldMason Score MSA (`foldmason-score-msa`)
 
-Score a structural MSA with FoldMason msa2lddt.
+Accepts a precomputed amino-acid MSA in FASTA format together with the underlying PDB structures, and returns the average MSA-wide LDDT score, the per-column LDDT scores, the number of columns considered, and the total alignment length.
 
-## How It Works
+#### Applications
 
-**Remote mode (`foldmason-msa` with `search_mode="remote"`):**
-1. POST the list of PDB structures to `search.foldseek.com/api/ticket/foldmason` (multipart/form-data with `fileNames[]` + `queries[]`, one entry per structure).
-2. Poll `/api/ticket/{id}` every `poll_interval_seconds` until status reaches `COMPLETE` (or `ERROR`, or timeout).
-3. Fetch the JSON result from `/api/result/foldmason/{id}` — contains per-row aligned AA + 3Di sequences plus the Newick guide tree.
-4. Reassemble the AA and 3Di alignments as standard FASTA strings and return.
+This tool is appropriate for assigning a structural quality score to an MSA produced elsewhere, for identifying low-LDDT columns that should be masked or treated as variable loops before downstream analysis, or for comparing two candidate alignments of the same structures using a single summary score.
 
-**Local mode (`foldmason-msa` with `search_mode="local"`, `foldmason-score-msa`):**
-1. Provision the FoldMason binary via the standalone env (`standalone/setup.sh` calls `proto_tools/utils/install_binary.py foldmason`, which downloads the platform-specific tarball from `mmseqs.com/foldmason` and extracts the binary into the venv's `bin/` directory).
-2. Write inputs to a temp dir, invoke `foldmason easy-msa` (or `foldmason createdb` + `msa2lddt`) via `ToolInstance.dispatch`, parse the output files / stdout.
+#### Usage Tips
 
-**Key assumptions:**
-- Inputs are PDB-format text (mmCIF works locally but the remote server parses PDB).
-- Remote mode requires network reachability of `search.foldseek.com` (anonymous access).
-- Local modes require the standalone env to have been provisioned (`setup.sh`).
+- **FASTA record headers must match `structure_ids`.** `msa2lddt` resolves each MSA row to its corresponding structure by matching the header against the supplied identifiers. A header that does not appear in `structure_ids` is skipped without warning, which can produce a misleadingly high score derived from a partial alignment.
+- **`only_scoring_cols=True` normalises the average LDDT by the number of scored columns rather than by the total alignment length.** Use this option when comparing alignments with different gap content. Leave it `False` to reproduce the scoring convention used in the original FoldMason publication, which includes gap columns in the denominator.
+- **This tool runs only in local mode.** The public web service does not provide an `msa2lddt` endpoint, so every `foldmason-score-msa` call requires the local FoldMason binary.
 
-**Limitations:**
-- The remote server uses fixed alignment parameters; tune `gap_open`/`gap_extend`/`refine_iters` only in local mode.
-- `foldmason-score-msa` is local-only — the server does not expose `msa2lddt`.
-- For chained `foldmason-msa` → `foldmason-score-msa`, the FASTA record headers in the MSA must match `structure_ids` so `msa2lddt` can resolve each row to its structure.
+## Toolkit Notes
 
-**Computational requirements:**
-- **Remote modes:** HTTP-only on the wrapper side; CPU only. ~5-30s for typical small inputs against the public server.
-- **Local modes:** local CPU; alignment time scales with N² × L (N structures, L mean length). The FoldMason binary is ~50 MB.
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-## Input Parameters
+These apply to every FoldMason tool in this toolkit (`foldmason-msa`, `foldmason-score-msa`).
 
-### `FoldmasonMSAInput`
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `structures` | `list[str]` | *required* (≥2) | PDB-format text strings to align. |
-| `structure_ids` | `list[str] \| None` | `None` | Optional IDs per structure (default: `'structure_0'`, ...). Length must match `structures`. IDs become FASTA record headers and Newick leaf labels. |
-
-### `FoldmasonScoreMSAInput`
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `structures` | `list[str]` | *required* (≥2) | PDB-format text strings whose order matches the rows of `aa_msa_fasta`. |
-| `structure_ids` | `list[str] \| None` | `None` | Optional IDs per structure; must match the FASTA record headers in `aa_msa_fasta`. |
-| `aa_msa_fasta` | `str` | *required* | Amino-acid MSA in FASTA format (typically the output of `foldmason-msa`). |
-
-## Configuration
-
-### `FoldmasonMSAConfig`
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `search_mode` | `Literal["remote", "local"]` | `"remote"` | `remote` hits the public server; `local` runs the FoldMason CLI. |
-| `poll_interval_seconds` | `float` | `5.0` | (advanced, remote-only) Delay between status polls. |
-| `timeout_seconds` | `float` | `600.0` | (advanced, remote-only) Max wall-clock time for the alignment. |
-| `gap_open` | `int` | `25` | (advanced, local-only) Gap open cost. |
-| `gap_extend` | `int` | `2` | (advanced, local-only) Gap extension cost. |
-| `refine_iters` | `int` | `0` | (advanced, local-only) Number of alignment-refinement iterations. |
-| `precluster` | `bool` | `False` | (advanced, local-only) Pre-cluster structures before MSA construction. Recommended for large datasets (>1k structures). |
-| `guide_tree_newick` | `str \| None` | `None` | (advanced, local-only) Newick guide tree to use instead of computing one; leaf labels must match `structure_ids`. |
-| `num_threads` | `int` | `4` | (advanced, local-only) CPU threads. |
-
-### `FoldmasonScoreMSAConfig`
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `pair_threshold` | `float` | `0.0` | (advanced) Minimum fraction of pair sub-alignments with LDDT info to score a column (0-1). |
-| `only_scoring_cols` | `bool` | `False` | (advanced) Normalise average LDDT by scoring-column count rather than alignment length. |
-| `guide_tree_newick` | `str \| None` | `None` | (advanced) Newick guide tree to score against; leaf labels must match `structure_ids`. |
-| `num_threads` | `int` | `4` | (advanced) CPU threads. |
-
-## Output Specification
-
-```python
-# foldmason-msa
-FoldmasonMSAOutput(
-    ticket_id: str,                # Server ticket ID; "" in local mode
-    aa_msa_fasta: str,             # Amino-acid MSA in FASTA format
-    three_di_msa_fasta: str,       # 3Di-alphabet MSA in FASTA format
-    newick_tree: str,              # Newick guide tree
-    num_sequences: int,
-    alignment_length: int,         # Number of MSA columns
-    result_url: str,               # Server result URL; "" in local mode
-)
-
-# foldmason-score-msa
-FoldmasonScoreMSAOutput(
-    average_lddt: float,           # Average MSA LDDT score (0-1)
-    columns_considered: int,       # Number of columns that were scored
-    alignment_length: int,         # Total MSA columns
-    column_scores: list[float],    # Per-column LDDT scores
-)
-```
-
-**Supported export formats:** `json`
-
-## Interpreting Results
-
-**LDDT score interpretation:**
-- `average_lddt > 0.7`: structurally consistent alignment; columns superimpose well.
-- `0.4 < average_lddt < 0.7`: moderate alignment quality; some divergent regions.
-- `average_lddt < 0.4`: weak structural support; treat as exploratory.
-
-**Column scores:**
-Per-column LDDT highlights which alignment positions are structurally conserved (high score) vs. divergent (low score). Use this to identify variable loops in an otherwise conserved fold, or to mask out unreliable regions before downstream analysis.
-
-**Newick tree:**
-The guide tree shows FoldMason's structural-similarity-based grouping. Useful for visualizing relationships when aligning ≥3 structures.
-
-## Quick Start Examples
-
-**Example 1: Remote multiple structure alignment.**
-
-```python
-from proto_tools.tools.structure_alignment import (
-    FoldmasonMSAConfig, FoldmasonMSAInput, run_foldmason_msa,
-)
-import requests
-
-structures = [
-    requests.get(f"https://files.rcsb.org/download/{pdb}.pdb", timeout=30).text
-    for pdb in ("1TIM", "8TIM", "1TPF")
-]
-
-output = run_foldmason_msa(
-    FoldmasonMSAInput(structures=structures, structure_ids=["chicken_TIM", "trypano_TIM", "yeast_TIM"]),
-    FoldmasonMSAConfig(),
-)
-print(f"Aligned {output.num_sequences} structures across {output.alignment_length} columns")
-print(f"Tree: {output.newick_tree.strip()}")
-```
-
-**Example 2: Local alignment with custom gap penalties.**
-
-```python
-output = run_foldmason_msa(
-    FoldmasonMSAInput(structures=designs, structure_ids=design_names),
-    FoldmasonMSAConfig(search_mode="local", gap_open=15, refine_iters=3, num_threads=8),
-)
-```
-
-**Example 3: Chained MSA → LDDT scoring.**
-
-```python
-from proto_tools.tools.structure_alignment import (
-    FoldmasonMSAConfig, FoldmasonMSAInput, run_foldmason_msa,
-    FoldmasonScoreMSAConfig, FoldmasonScoreMSAInput, run_foldmason_score_msa,
-)
-
-ids = ["a", "b", "c"]
-msa_out = run_foldmason_msa(
-    FoldmasonMSAInput(structures=structures, structure_ids=ids),
-    FoldmasonMSAConfig(search_mode="local"),
-)
-
-score = run_foldmason_score_msa(
-    FoldmasonScoreMSAInput(structures=structures, structure_ids=ids, aa_msa_fasta=msa_out.aa_msa_fasta),
-    FoldmasonScoreMSAConfig(),
-)
-print(f"average LDDT: {score.average_lddt:.3f}")
-```
-
-## Best Practices & Gotchas
-
-1. **IDs must round-trip cleanly between MSA and score-MSA.** When chaining `foldmason-msa` → `foldmason-score-msa`, make sure `structure_ids` is the same in both calls — `msa2lddt` resolves rows by FASTA header, and a mismatch silently produces wrong scores.
-2. **The remote server deduplicates by structure content.** Re-submitting the same set of structures returns the same ticket ID and the *original* entry names — user-supplied `structure_ids` are dropped on the server-side cache hit. If you need IDs preserved, use `search_mode="local"`.
-3. **Local mode is the only path for tuned alignments.** The remote server uses fixed defaults; if you need custom `gap_open`/`gap_extend`/`refine_iters`, run locally.
-4. **`refine_iters` costs time linearly.** Each refinement iteration re-aligns every sequence against the current consensus; default 0 is fine for most use cases.
-5. **Cache responsibly.** Both tools are `cacheable=True`; subsequent calls with the same inputs + config skip the work. Polling parameters and threads are correctly excluded from the cache key.
-
-## Related Tools
-
-- [`foldseek-search`](../foldseek/README.md) — pairwise structural search; useful upstream for finding homologs to align with FoldMason.
-- [`tmalign`](../tmalign/README.md) — pairwise structural alignment; complementary for two-structure cases.
-- [`mafft`](../../sequence_alignment/mafft/README.md) — sequence-based MSA; FoldMason replaces this for structure-aware alignment.
-
-## References
-
-- [FoldMason paper](https://doi.org/10.1126/science.ads6733) — Gilchrist et al., *Science* 2026
-- [FoldMason GitHub](https://github.com/steineggerlab/foldmason)
-- [FoldMason web server](https://search.foldseek.com/foldmason)
+- **FoldMason runs on CPU only.** Neither the remote service nor the local binary uses a GPU. Local-mode runtime grows with both the number of structures and their lengths, since each progressive merge step performs a pairwise structural alignment.
+- **Two execution modes share a single configuration interface.** Remote mode targets the Steinegger Lab web service and inherits its fixed alignment parameters. Local mode runs the bundled FoldMason binary and accepts the full set of configuration parameters. The local installation downloads the platform-specific binary from [`mmseqs.com/foldmason`](https://mmseqs.com/foldmason) on first use and maintains no local database.
+- **Inputs are PDB-format text strings.** Each entry is written to disk as `{structure_id}.pdb` before alignment, so each structure should be supplied as PDB-format text in `structures`. The upstream FoldMason CLI also accepts mmCIF, but this toolkit does not currently support mmCIF input.
