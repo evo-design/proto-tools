@@ -142,6 +142,23 @@ def test_example_input_is_valid_json() -> None:
     assert "sequences" in payload
 
 
+# ── Example notebook ───────────────────────────────────────────────────────
+
+
+def test_example_renders_markdown_and_code_fences() -> None:
+    code, out, _ = _run("example", "esm2-embedding")
+    assert code == 0
+    assert out.startswith("# example notebook:")
+    assert "example.ipynb" in out
+    assert "```python" in out
+
+
+def test_example_missing_notebook_exits_one() -> None:
+    code, _, err = _run("example", "mmseqs2-clustering")
+    assert code == 1
+    assert "No example notebook found" in err
+
+
 # ── Model doc verbs ────────────────────────────────────────────────────────
 
 

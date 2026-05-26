@@ -12,7 +12,7 @@ non-notebook consumer that needs typed access to the prose. Notebook display
 helpers in ``proto_tools.utils.notebook_docs`` are thin wrappers over these
 extractors.
 
-Two surfaces:
+Three surfaces:
 
 1. **README extraction** — ``get_readme`` / ``get_readme_sections`` /
    ``get_readme_section`` / ``get_tool_docs`` return raw or structured
@@ -23,11 +23,16 @@ Two surfaces:
 2. **Pydantic model docs** — ``get_model_doc`` returns a normalized view of
    a model's class docstring plus per-field name / type / default /
    description / required flag.
+3. **Example notebooks** — ``get_example_notebook`` returns the toolkit's
+   ``examples/example.ipynb`` rendered as a flat string (markdown prose
+   interleaved with fenced ``python`` code blocks; outputs stripped) so
+   agents can read end-to-end usage demos without parsing nbformat JSON.
 """
 
 from __future__ import annotations
 
 import inspect
+import json
 import logging
 import re
 from pathlib import Path
@@ -682,3 +687,60 @@ def get_model_doc(
         primary_metric=primary_metric,
         metrics_per_item_field=metrics_per_item_field,
     )
+
+
+# =============================================================================
+# Example notebook extraction
+# =============================================================================
+
+
+def _cell_source_to_str(source: Any) -> str:
+    """Normalize an nbformat ``cell.source`` (str or list[str]) to one string."""
+    if isinstance(source, list):
+        return "".join(source)
+    return str(source) if source is not None else ""
+
+
+def get_example_notebook(tool: str) -> str | None:
+    """Render a toolkit's ``examples/example.ipynb`` as markdown + fenced code.
+
+    Markdown cells are emitted as-is; code cells are wrapped in
+    ```python ... ``` fences. Outputs, raw cells, and notebook metadata are
+    dropped. A ``# example notebook: <path>`` provenance header is prepended.
+
+    Args:
+        tool (str): Tool identifier (registry key, run-function name, docs path,
+            or toolkit directory name).
+
+    Returns:
+        str | None: Rendered notebook text, or ``None`` when the toolkit has
+            no ``examples/example.ipynb``.
+
+    Raises:
+        ValueError: If ``tool`` doesn't resolve to a registered toolkit.
+        OSError: If the notebook exists but cannot be read or parsed.
+    """
+    toolkit_dir = resolve_toolkit_dir(tool)
+    notebook_path = toolkit_dir / "examples" / "example.ipynb"
+    if not notebook_path.is_file():
+        return None
+
+    try:
+        nb = json.loads(notebook_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise OSError(f"Could not parse notebook {notebook_path}: {exc}") from exc
+
+    chunks: list[str] = [f"# example notebook: {notebook_path}", ""]
+    for raw_cell in nb.get("cells", []):
+        kind = raw_cell.get("cell_type")
+        if kind not in {"markdown", "code"}:
+            continue
+        source = _cell_source_to_str(raw_cell.get("source", "")).rstrip()
+        if kind == "markdown":
+            chunks.append(source)
+        else:
+            chunks.append("```python")
+            chunks.append(source)
+            chunks.append("```")
+        chunks.append("")
+    return "\n".join(chunks).rstrip() + "\n"

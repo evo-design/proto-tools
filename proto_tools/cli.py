@@ -235,6 +235,16 @@ def _cmd_example_input(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_example(args: argparse.Namespace) -> int:
+    """``proto-tools example <tool>``."""
+    rendered = ToolRegistry.get_example_notebook(args.tool)
+    if rendered is None:
+        print(f"No example notebook found for '{args.tool}'.", file=sys.stderr)
+        return 1
+    print(rendered, end="")
+    return 0
+
+
 def _cmd_citation(args: argparse.Namespace) -> int:
     """``proto-tools citation <tool>``."""
     cite = ToolRegistry.get_citation(args.tool)
@@ -374,9 +384,16 @@ def _build_parser() -> argparse.ArgumentParser:
     p_schema_g.add_argument("--output", action="store_true")
     p_schema.set_defaults(func=_cmd_schema)
 
-    p_example = sub.add_parser("example-input", help="A minimal valid Input for the tool.")
+    p_example_input = sub.add_parser("example-input", help="A minimal valid Input for the tool.")
+    p_example_input.add_argument("tool")
+    p_example_input.set_defaults(func=_cmd_example_input)
+
+    p_example = sub.add_parser(
+        "example",
+        help="Toolkit example notebook rendered as markdown + fenced code (outputs stripped).",
+    )
     p_example.add_argument("tool")
-    p_example.set_defaults(func=_cmd_example_input)
+    p_example.set_defaults(func=_cmd_example)
 
     p_cite = sub.add_parser("citation", help="BibTeX citation, if registered.")
     p_cite.add_argument("tool")

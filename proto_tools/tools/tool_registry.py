@@ -927,6 +927,17 @@ class ToolRegistry:
         )
 
     @classmethod
+    def get_example_notebook(cls, key: str) -> str | None:
+        """Return the tool's ``examples/example.ipynb`` rendered as markdown + code.
+
+        Returns None when the toolkit has no example notebook. See
+        ``proto_tools.utils.tool_docs.get_example_notebook``.
+        """
+        from proto_tools.utils.tool_docs import get_example_notebook
+
+        return get_example_notebook(key)
+
+    @classmethod
     def get_input_doc(cls, tool: str) -> ModelDoc:
         """Return a ``ModelDoc`` view of the tool's input model.
 

@@ -33,6 +33,7 @@ from proto_tools.utils.tool_docs import (
     ModelDoc,
     ReadmeSections,
     _normalize_tool_key,
+    get_example_notebook,
     get_model_doc,
     get_readme,
     get_readme_section,
@@ -378,3 +379,20 @@ def test_polished_readme_parses_cleanly(readme: Path) -> None:
     assert parsed_keys == registry_keys, f"{_toolkit_id(readme)}: parsed={parsed_keys} registry={registry_keys}"
     for entry in sections.tools:
         assert entry.intro, f"{entry.key}: intro paragraph is empty"
+
+
+# ── Example notebook extraction ─────────────────────────────────────────────
+
+
+def test_get_example_notebook_renders_markdown_and_code_fences() -> None:
+    """A polished toolkit's example.ipynb renders as markdown prose + fenced code."""
+    rendered = get_example_notebook("esm2-embedding")
+    assert isinstance(rendered, str)
+    assert rendered.startswith("# example notebook:")
+    assert "examples/example.ipynb" in rendered
+    assert "```python" in rendered
+
+
+def test_get_example_notebook_returns_none_when_missing() -> None:
+    """Toolkits without examples/example.ipynb return None rather than raising."""
+    assert get_example_notebook("mmseqs2-clustering") is None
