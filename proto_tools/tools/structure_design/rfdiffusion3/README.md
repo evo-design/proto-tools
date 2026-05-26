@@ -85,7 +85,7 @@ Each `RFdiffusion3DesignSpec` contains:
 |-----------|------|-------------|
 | `input_structure` | `Optional[str]` | Path to PDB/CIF or PDB string (motif scaffolding, binder design) |
 | `length` | `Optional[str]` | Target length (int or "min-max" range as string) |
-| `contig` | `Optional[str]` | Contig string specifying design topology |
+| `contig` | `Optional[str]` | Contig string specifying design topology. Use `/0` for chain breaks, for example `50,/0,B1-50`. |
 | `ligand` | `Optional[str]` | Ligand selection by 3-letter codes (e.g. `"HAX,OAA"`) |
 | `unindex` | `Optional[str \| dict]` | Unindexed motif components (flexible position) |
 | `select_fixed_atoms` | `Optional[bool \| str \| dict]` | Atoms held fixed in 3D space during diffusion |
@@ -227,7 +227,7 @@ result = run_rfdiffusion3(inputs, config)
 1. **Not validating designs**: Always run structure prediction on designed sequences to verify designability
 2. **Ignoring motif specification**: For scaffolding, carefully specify which atoms to fix
 3. **Insufficient sampling**: Generate multiple designs (8-32) and rank; don't rely on single designs
-4. **Wrong contig syntax**: Chain breaks use `\0`, not `/`; ranges use `-` (e.g., `A1-50`)
+4. **Wrong contig syntax**: Chain breaks use `/0`, not `\0` or a bare `/`; ranges use `-` (e.g., `A1-50`)
 
 **Tips for optimal results:**
 - **Start simple**: Test with unconditional design before complex constraints

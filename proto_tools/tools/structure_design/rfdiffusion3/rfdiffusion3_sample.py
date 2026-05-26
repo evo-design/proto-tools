@@ -91,12 +91,12 @@ class RFdiffusion3DesignSpec(BaseModel):
             structural context. Can be omitted for unconditional de novo design.
 
         contig (str | None): Contig string specifying the design topology.
-            Format: comma-separated segments with chain breaks as ``\\0``.
+            Format: comma-separated segments with chain breaks as ``/0``.
 
     Examples:
                 - ``"50-80"`` - design 50-80 residue monomer
                 - ``"A1-100,50,A150-200"`` - scaffold around residues A1-100 and A150-200
-                - ``"50,\\0,B1-50"`` - design 50 residues, chain break, then keep B1-50
+                - ``"50,/0,B1-50"`` - design 50 residues, chain break, then keep B1-50
 
         length (str | None): Total design length constraint. Can be an integer
             (exact length) or range ``"min-max"``. Used for unconditional design
@@ -187,7 +187,7 @@ class RFdiffusion3DesignSpec(BaseModel):
     contig: str | None = Field(
         default=None,
         title="Contig",
-        description="Contig string specifying design topology (e.g., '50-80,\\0,A1-100')",
+        description="Contig string specifying design topology (e.g., '50-80,/0,A1-100')",
         examples=["50-80", "A1-100,50,A150-200"],
     )
     length: str | None = Field(
@@ -301,7 +301,9 @@ class RFdiffusion3DesignSpec(BaseModel):
     @classmethod
     def _reject_literal_nul_in_contig(cls, value: str | None) -> str | None:
         if value is not None and "\0" in value:
-            raise ValueError("contig contains a literal NUL byte; use the two-character '\\\\0' chain-break token")
+            raise ValueError("contig contains a literal NUL byte; use '/0' for RFdiffusion3 chain breaks")
+        if value is not None and "\\0" in value:
+            raise ValueError("contig contains '\\0'; use '/0' for RFdiffusion3 chain breaks")
         return value
 
     @model_validator(mode="after")

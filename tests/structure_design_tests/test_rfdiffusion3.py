@@ -238,9 +238,15 @@ def test_rfdiffusion3_design_spec_ori_token_must_be_xyz():
 
 
 def test_rfdiffusion3_design_spec_rejects_literal_nul_chain_break():
-    r"""Use the text token "\\0", not a Python literal NUL byte."""
-    with pytest.raises(ValueError, match="literal NUL byte"):
+    """RFdiffusion3 chain breaks use /0, never a Python literal NUL byte."""
+    with pytest.raises(ValueError, match="/0"):
         RFdiffusion3DesignSpec(input_structure="target.pdb", contig="50,\0,A1-10")
+
+
+def test_rfdiffusion3_design_spec_rejects_backslash_zero_chain_break():
+    r"""RFdiffusion3 chain breaks use /0, not the text token "\\0"."""
+    with pytest.raises(ValueError, match="/0"):
+        RFdiffusion3DesignSpec(input_structure="target.pdb", contig=r"50,\0,A1-10")
 
 
 def test_rfdiffusion3_design_spec_symmetry_serializes_to_id_dict():
