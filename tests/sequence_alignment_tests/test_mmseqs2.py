@@ -27,6 +27,7 @@ from proto_tools.tools.sequence_alignment.mmseqs2.search_proteins import (
     _filter_top_hits,
     _parse_m8_output,
     _resolve_gpu_db_stem,
+    _resolve_registered_mmseqs_db,
 )
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -418,6 +419,33 @@ def test_resolve_to_mmseqs_db_classifies_inputs(tmp_path):
     plain.write_text("not a fasta or db\n")
     with pytest.raises(RuntimeError, match="neither a FASTA file nor an MMseqs2 DB stem"):
         _resolve_to_mmseqs_db("mmseqs", str(plain), temp_db_path=str(tmp_path / "out"), label="test")
+
+
+def test_search_proteins_resolves_registered_dataset_names(monkeypatch, tmp_path):
+    cache_dir = tmp_path / "pdb_seqres_2022_09_28"
+    cache_dir.mkdir()
+    stem = cache_dir / "pdb_seqres_padded"
+    stem.write_text("")
+    Path(f"{stem}.dbtype").write_text("")
+    monkeypatch.setattr(
+        "proto_tools.tools.sequence_alignment.mmseqs2.search_proteins.get_dataset_dir",
+        lambda _name: cache_dir,
+    )
+
+    resolved, from_registry = _resolve_registered_mmseqs_db("pdb-seqres-2022-09-28", use_gpu=False)
+
+    assert from_registry is True
+    assert resolved == str(stem)
+
+
+def test_search_proteins_registered_dataset_missing_gives_setup_hint(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "proto_tools.tools.sequence_alignment.mmseqs2.search_proteins.get_dataset_dir",
+        lambda _name: tmp_path / "missing",
+    )
+
+    with pytest.raises(FileNotFoundError, match="setup_databases pdb-seqres-2022-09-28"):
+        _resolve_registered_mmseqs_db("pdb-seqres-2022-09-28", use_gpu=False)
 
 
 # ---------------------------------------------------------------------------
