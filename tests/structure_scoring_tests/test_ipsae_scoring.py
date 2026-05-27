@@ -44,6 +44,13 @@ def test_unknown_chain_rejected():
         IPSAEScoringInput(structure=_bundled_structure(), binder_chain="Z", target_chains=["B"])
 
 
+def test_missing_plddt_rejected():
+    """Structure whose b_factor_type does not represent pLDDT must raise."""
+    structure = example_input().structure.model_copy(update={"b_factor_type": BFactorType.UNSPECIFIED})
+    with pytest.raises(ValidationError, match="per_residue_plddt is None"):
+        IPSAEScoringInput(structure=structure, binder_chain="A", target_chains=["B"])
+
+
 # ── Integration ───────────────────────────────────────────────────────────────
 
 

@@ -169,6 +169,32 @@ class BFactorType(str, Enum):
     UNSPECIFIED = "unspecified"
 
 
+def _detect_plddt_from_metadata(content: Any, fmt: Any) -> BFactorType | None:
+    """Detect ``BFactorType.PLDDT`` from AlphaFold / ModelArchive file metadata.
+
+    Returns ``BFactorType.PLDDT`` when the file declares per-residue pLDDT through
+    unambiguous header metadata; returns ``None`` otherwise. Never inspects numeric
+    values, so it cannot mistake a temperature-factor distribution for pLDDT.
+
+    Recognized signals:
+        * PDB: ``TITLE`` or ``REMARK`` header line containing ``ALPHAFOLD``
+          (AlphaFold DB / ColabFold convention).
+        * mmCIF: presence of an ``_ma_qa_metric`` block declaring a ``pLDDT``
+          metric (ModelArchive / AlphaFold DB / AlphaFold 3 convention).
+    """
+    if not isinstance(content, str) or not fmt:
+        return None
+    if fmt == "pdb":
+        for line in content.splitlines()[:200]:
+            upper = line.upper()
+            if upper.startswith(("TITLE", "REMARK")) and "ALPHAFOLD" in upper:
+                return BFactorType.PLDDT
+        return None
+    if fmt == "cif" and "_ma_qa_metric" in content and "pLDDT" in content:
+        return BFactorType.PLDDT
+    return None
+
+
 class Structure(BaseModel):
     """Standardized representation of a macromolecular structure (protein, nucleic acid, etc.).
 
@@ -245,6 +271,13 @@ class Structure(BaseModel):
         # Auto-detect structure_format when not provided or explicitly None
         if "structure" in data and not data.get("structure_format"):
             data["structure_format"] = detect_structure_format(data["structure"])
+
+        # Auto-detect b_factor_type=PLDDT from header metadata only when unspecified.
+        current_type = data.get("b_factor_type")
+        if current_type is None or current_type == BFactorType.UNSPECIFIED or current_type == "unspecified":
+            detected = _detect_plddt_from_metadata(data.get("structure"), data.get("structure_format"))
+            if detected is not None:
+                data["b_factor_type"] = detected
 
         return data
 

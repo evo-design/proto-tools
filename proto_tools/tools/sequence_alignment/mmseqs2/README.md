@@ -95,4 +95,4 @@ This tool is the proto-tools entry point for generating the MSA input to structu
 
 These apply to every MMseqs2 tool in this toolkit (`mmseqs2-search-proteins`, `mmseqs2-search-genomes`, `mmseqs2-clustering`, `mmseqs2-homology-search`).
 
-- **All four tools share a single MMseqs2 binary installation.** The local installation downloads the GPU-capable MMseqs2 build, which is a strict superset of the CPU-only build and runs CPU subcommands without enabling GPU code paths.
+- **All four tools share a single MMseqs2 installation.** The local installation downloads the GPU-capable MMseqs2 build, which is a strict superset of the CPU-only build and runs CPU subcommands without enabling GPU code paths.

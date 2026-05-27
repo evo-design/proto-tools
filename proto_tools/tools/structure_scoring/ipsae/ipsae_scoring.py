@@ -187,6 +187,12 @@ class IPSAEScoringInput(BaseToolInput):
         pae_arr = np.asarray(pae)
         if pae_arr.ndim != 2 or pae_arr.shape[0] != pae_arr.shape[1]:
             raise ValueError(f"pae must be a square 2D matrix, got shape {pae_arr.shape}")
+        if self.structure.per_residue_plddt is None:
+            raise ValueError(
+                "structure.per_residue_plddt is None; IPSAE requires per-residue pLDDT in the B-factor column. "
+                "Set Structure.b_factor_type to PLDDT (raw 0 to 100) or NORMALIZED_PLDDT (0 to 1) before scoring "
+                f"(current b_factor_type: {self.structure.b_factor_type.value})."
+            )
         return self
 
 

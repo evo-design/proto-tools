@@ -13,7 +13,7 @@
 
 BLAST ([Altschul et al., 1990](https://doi.org/10.1016/S0022-2836(05)80360-2)) performs sequence-similarity search through a heuristic algorithm that approximates the exhaustive [Smith-Waterman](https://en.wikipedia.org/wiki/Smith%E2%80%93Waterman_algorithm) local alignment at a fraction of its computational cost. The query is first broken into short fixed-length words, exact word matches are located in the database, and each match is extended in both directions until the running alignment score drops below a threshold. The statistical significance of each surviving alignment is expressed as an E-value derived from the Karlin-Altschul statistics, which represents the number of alignments with at least the observed score that would be expected to occur by chance for a database of the given size.
 
-BLAST supports five program variants that pair query and database types appropriately. `blastn` aligns a nucleotide query against a nucleotide database. `blastp` aligns a protein query against a protein database. `blastx` translates a nucleotide query and aligns the translations against a protein database. `tblastn` aligns a protein query against a database of translated nucleotide sequences. `tblastx` translates both query and database. The toolkit's local execution mode uses the [NCBI BLAST+](https://www.ncbi.nlm.nih.gov/books/NBK279690/) command-line distribution ([Camacho et al., 2009](https://doi.org/10.1186/1471-2105-10-421)), which provides the `blastn`, `blastp`, `blastx`, `tblastn`, `tblastx`, and `makeblastdb` binaries that this toolkit invokes. The remote execution mode dispatches to the public [NCBI BLAST web service](https://blast.ncbi.nlm.nih.gov/Blast.cgi) through the QBLAST API.
+BLAST supports five program variants that pair query and database types appropriately. `blastn` aligns a nucleotide query against a nucleotide database. `blastp` aligns a protein query against a protein database. `blastx` translates a nucleotide query and aligns the translations against a protein database. `tblastn` aligns a protein query against a database of translated nucleotide sequences. `tblastx` translates both query and database. The toolkit's local execution mode uses the [NCBI BLAST+](https://www.ncbi.nlm.nih.gov/books/NBK279690/) command-line distribution ([Camacho et al., 2009](https://doi.org/10.1186/1471-2105-10-421)), which provides the `blastn`, `blastp`, `blastx`, `tblastn`, `tblastx`, and `makeblastdb` command-line programs that this toolkit invokes. The remote execution mode dispatches to the public [NCBI BLAST web service](https://blast.ncbi.nlm.nih.gov/Blast.cgi) through the QBLAST API.
 
 ### Learning Resources
 
@@ -24,7 +24,7 @@ BLAST supports five program variants that pair query and database types appropri
 
 ### BLAST Search (`blast-search`)
 
-Aligns a query sequence against a reference database and returns the resulting hits. The remote execution mode submits the query to the NCBI BLAST web service through the QBLAST API. The local execution mode invokes the appropriate BLAST+ binary (`blastn`, `blastp`, `blastx`, `tblastn`, or `tblastx`) against a user-supplied database. The query field accepts either a raw nucleotide or protein sequence string or a path to a FASTA file, and the input form is detected automatically.
+Aligns a query sequence against a reference database and returns the resulting hits. The remote execution mode submits the query to the NCBI BLAST web service through the QBLAST API. The local execution mode invokes the appropriate BLAST+ program (`blastn`, `blastp`, `blastx`, `tblastn`, or `tblastx`) against a user-supplied database. The query field accepts either a raw nucleotide or protein sequence string or a path to a FASTA file, and the input form is detected automatically.
 
 #### Applications
 
@@ -40,7 +40,7 @@ This tool is the standard first step in any analysis that begins with an unknown
 
 ### Create BLAST Database (`blast-create-db`)
 
-Builds a local BLAST database from a FASTA file using the BLAST+ `makeblastdb` binary. The output is a set of indexed files referenced by a common stem path. The stem path is returned as `db_path` and can be passed directly as `local_db` to `blast-search`.
+Builds a local BLAST database from a FASTA file using the BLAST+ `makeblastdb` program. The output is a set of indexed files referenced by a common stem path. The stem path is returned as `db_path` and can be passed directly as `local_db` to `blast-search`.
 
 #### Applications
 
