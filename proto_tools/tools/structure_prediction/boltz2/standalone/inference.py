@@ -126,7 +126,7 @@ class Boltz2Model:
 
         # Run the command with stdout/stderr visible
         try:
-            subprocess.run(
+            result = subprocess.run(
                 cmd,  # type: ignore[arg-type]
                 check=True,
                 text=True,
@@ -142,16 +142,22 @@ class Boltz2Model:
         logger.debug("Boltz prediction completed")
         sys.stdout.flush()
 
-        # Extract the output
-        return self._extract_boltz_output(output_dir, input_yaml_path, include_pae_matrix)
+        # boltz can exit 0 yet skip the input; pass its output so the missing-predictions error explains why.
+        captured = "\n".join(s for s in (result.stdout, result.stderr) if s)
+        return self._extract_boltz_output(
+            output_dir, input_yaml_path, include_pae_matrix, boltz_output=captured or None
+        )
 
-    def _extract_boltz_output(self, output_dir: str, input_path: str, include_pae_matrix: bool) -> dict[str, Any]:
+    def _extract_boltz_output(
+        self, output_dir: str, input_path: str, include_pae_matrix: bool, boltz_output: str | None = None
+    ) -> dict[str, Any]:
         """Extract structure and metrics from Boltz prediction outputs.
 
         Args:
             output_dir: Directory containing Boltz prediction outputs
             input_path: Path to input YAML file
             include_pae_matrix: Attach the full per-residue PAE matrix.
+            boltz_output: boltz's captured stdout/stderr, surfaced in the error if no predictions were written.
 
         Returns:
             Dictionary containing structure_cif_output and metrics
@@ -162,7 +168,8 @@ class Boltz2Model:
         prediction_dir = Path(output_dir) / f"boltz_results_{input_name}" / "predictions" / input_name
 
         if not prediction_dir.is_dir():
-            raise FileNotFoundError(f"boltz2: prediction directory not found: {prediction_dir}")
+            hint = f" boltz exited 0 but wrote no predictions; output: {boltz_output}" if boltz_output else ""
+            raise FileNotFoundError(f"boltz2: prediction directory not found: {prediction_dir}.{hint}")
 
         # Read confidence metrics
         confidence_file = prediction_dir / f"confidence_{input_name}_model_0.json"
