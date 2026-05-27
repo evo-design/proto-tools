@@ -7,14 +7,45 @@ to avoid dependency conflicts with the main proto-language environment.
 """
 
 import json
+import random
 import shutil
 import sys
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from standalone_helpers import get_logger
 
 logger = get_logger(__name__)
+
+# Bounded retry: transient api.colabfold.com failures otherwise hard-fail predictions (#1027).
+_MAX_ATTEMPTS = 3  # 1 initial try + 2 retries
+_BASE_DELAY_SECONDS = 2.0  # doubles each retry: ~2s, ~4s
+_MAX_DELAY_SECONDS = 30.0  # per-sleep cap
+_MAX_JITTER_SECONDS = 1.0  # added per sleep to de-correlate concurrent jobs
+
+
+def _run_with_retry(fn: Callable[..., Any], seq_id: str, *args: Any, **kwargs: Any) -> None:
+    """Call ``fn(*args, **kwargs)`` with bounded backoff + jitter, retrying on failure.
+
+    ColabFold reports transient and permanent failures with one opaque message, so we
+    can't classify; the bounded cap keeps retrying genuinely-bad input cheap.
+    """
+    for attempt in range(_MAX_ATTEMPTS):
+        try:
+            fn(*args, **kwargs)
+            return
+        except Exception as exc:  # noqa: PERF203 -- retry loop
+            if attempt == _MAX_ATTEMPTS - 1:
+                raise
+            backoff = min(_BASE_DELAY_SECONDS * 2**attempt, _MAX_DELAY_SECONDS)
+            jitter = random.uniform(0, _MAX_JITTER_SECONDS)
+            delay = backoff + jitter
+            logger.warning(
+                f"{seq_id}: remote MSA error on attempt {attempt + 1}/{_MAX_ATTEMPTS}, retrying in {delay:.1f}s: {exc}"
+            )
+            time.sleep(delay)
 
 
 class ColabFoldRemoteSearchWrapper:
@@ -67,8 +98,10 @@ class ColabFoldRemoteSearchWrapper:
                 # Use a temporary prefix for ColabFold output
                 temp_output_prefix = str(output_dir / seq_id)
 
-                # Run remote MSA search
-                self.run_mmseqs2(
+                # Run remote MSA search, retrying transient API/network blips.
+                _run_with_retry(
+                    self.run_mmseqs2,
+                    seq_id,
                     sequence,
                     temp_output_prefix,
                     use_env=use_metagenomic_db,
