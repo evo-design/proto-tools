@@ -791,7 +791,6 @@ Per-field checklist:
    - `reload_on_change=True` only for fields that require a worker restart (model checkpoint / anything that reloads the model).
    - `include_in_key=False` for fields that don't affect results (`device`, `verbose`, `timeout` are already excluded on `BaseConfig`; a tool-level `device` override must re-set it).
    - `xor_group="<slug>"` for mutually exclusive siblings, paired with the `@model_validator`.
-   - **`advanced` / `hidden` / `depends_on` are NOT accepted** by `ConfigField`/`InputField` — they raise `TypeError` (rejected in `proto_tools/utils/tool_io.py`). Advanced/hidden/conditional visibility lives in the proto-ui overlay, not the field helper. Do not add them.
 7. **Inherited fields** — confirm the Phase 2 inherited-field audit holds: every field from a shared base is implemented or rejected with `ValueError`, never silently ignored.
 
 **Output:** edit the contract directly. If you remove/rename/retype a field, propagate to standalone `dispatch()`, README, notebook, tests, and the export chain — leave no dangling references. Re-run Phase 4 import/test checks. Do this deliberately yourself, or delegate to a focused subagent given the Phase 1 upstream param surface + the contract.
