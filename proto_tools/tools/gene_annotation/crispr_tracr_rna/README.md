@@ -45,6 +45,6 @@ Use this to confirm and characterize Type II and Type V CRISPR-Cas loci, since a
 
 These apply to every CRISPRtracrRNA tool in this toolkit (`crispr-tracr-rna`).
 
-- **Runs on CPU only.** The pipeline drives Infernal, IntaRNA, fasta36, vmatch, Clustal Omega, BLAST, and erpin, all CPU binaries. There is no GPU acceleration to enable.
+- **Runs on CPU only.** The pipeline drives Infernal, IntaRNA, fasta36, vmatch, Clustal Omega, BLAST, and erpin, all CPU-based programs. There is no GPU acceleration to enable.
 - **Initial install pulls model archives from Google Drive.** `complete_run` mode requires the CRISPRcasIdentifier ML and HMM archives, which the standalone install fetches once. Google Drive rate-limits anonymous fetches, so on a failed install retry after a minute or follow the upstream README to place the two archives in the CRISPRcasIdentifier directory by hand. After install the runtime needs no further network access.
 - **`num_workers` parallelizes across input sequences, not within a sequence.** Each worker runs the full pipeline in its own working directory to avoid file-name collisions between concurrent jobs. The default of 1 is single-process; set it explicitly when batch-scanning many loci. The wrapper caps the effective worker count at `len(sequences)`, so over-provisioning is safe.
