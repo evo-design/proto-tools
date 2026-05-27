@@ -2,6 +2,7 @@
 
 from collections import Counter
 from collections.abc import Iterator
+from io import StringIO
 from pathlib import Path
 from typing import Any
 
@@ -84,11 +85,29 @@ class MSA(BaseModel):
         path = Path(path)
         if path.suffix == ".a3m":
             ids, seqs = _parse_a3m_file(path)
-        elif path.suffix in (".fasta", ".fa"):
-            ids, seqs = _parse_fasta_file(path)
-        else:
-            msg = f"Unsupported MSA file format: {path.suffix}. Supported: {SUPPORTED_MSA_FILE_EXTENSIONS}"
-            raise ValueError(msg)
+            return cls(aligned_sequences=seqs, sequence_ids=ids)
+        if path.suffix in (".fasta", ".fa"):
+            return cls.from_fasta_string(path.read_text())
+        msg = f"Unsupported MSA file format: {path.suffix}. Supported: {SUPPORTED_MSA_FILE_EXTENSIONS}"
+        raise ValueError(msg)
+
+    @classmethod
+    def from_fasta_string(cls, text: str) -> "MSA":
+        r"""Parse an in-memory FASTA string into an MSA.
+
+        Args:
+            text (str): FASTA-formatted text (e.g., ``">a\nMK\n>b\nMA\n"``).
+
+        Returns:
+            MSA: The parsed alignment.
+        """
+        from Bio import SeqIO
+
+        ids: list[str] = []
+        seqs: list[str] = []
+        for record in SeqIO.parse(StringIO(text), "fasta"):  # type: ignore[no-untyped-call]
+            ids.append(record.description)
+            seqs.append(str(record.seq))
         return cls(aligned_sequences=seqs, sequence_ids=ids)
 
     # ============================================================================
@@ -211,12 +230,8 @@ class MSA(BaseModel):
     # ============================================================================
 
     def to_fasta_string(self) -> str:
-        """Return the MSA as a FASTA-formatted string."""
-        lines = []
-        for seq_id, seq in self.iter_with_ids():
-            lines.append(f">{seq_id}")
-            lines.append(seq)
-        return "\n".join(lines)
+        """Return the MSA as a FASTA-formatted string (trailing newline included)."""
+        return "".join(f">{seq_id}\n{seq}\n" for seq_id, seq in self.iter_with_ids())
 
     def to_fasta_file(self, fasta_path: str) -> None:
         """Write the MSA to a FASTA file.
@@ -224,8 +239,7 @@ class MSA(BaseModel):
         Args:
             fasta_path (str): Destination file path.
         """
-        with open(fasta_path, "w") as f:
-            f.writelines(f">{seq_id}\n{seq}\n" for seq_id, seq in self.iter_with_ids())
+        Path(fasta_path).write_text(self.to_fasta_string())
 
     def _a3m_lines(self, query_index: int = 0) -> Iterator[tuple[str, str]]:
         """Yield ``(seq_id, a3m_sequence)`` pairs for A3M encoding.
@@ -292,39 +306,6 @@ class MSA(BaseModel):
 # ============================================================================
 # File Parsing
 # ============================================================================
-
-
-def _parse_fasta_file(path: Path) -> tuple[list[str], list[str]]:
-    """Parse a FASTA file into sequence IDs and sequences.
-
-    Args:
-        path (Path): Path to a FASTA file.
-
-    Returns:
-        tuple[list[str], list[str]]: (sequence_ids, aligned_sequences).
-    """
-    ids: list[str] = []
-    seqs: list[str] = []
-    current_id: str | None = None
-    current_seq: list[str] = []
-
-    with open(path) as f:
-        for raw_line in f:
-            line = raw_line.rstrip()
-            if line.startswith(">"):
-                if current_id is not None:
-                    ids.append(current_id)
-                    seqs.append("".join(current_seq))
-                current_id = line[1:].strip()
-                current_seq = []
-            elif line:
-                current_seq.append(line)
-
-    if current_id is not None:
-        ids.append(current_id)
-        seqs.append("".join(current_seq))
-
-    return ids, seqs
 
 
 def _parse_a3m_file(path: Path) -> tuple[list[str], list[str]]:

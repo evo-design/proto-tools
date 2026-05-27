@@ -97,7 +97,7 @@ def test_mafft_output_get_conservation_all_gaps():
 
 def test_mafft_output_to_fasta(two_seq_output):
     fasta = two_seq_output.msa.to_fasta_string()
-    assert fasta == ">seq_0\nMVLS\n>seq_1\nAVLS"
+    assert fasta == ">seq_0\nMVLS\n>seq_1\nAVLS\n"
 
 
 def test_mafft_output_msa_directly_accessible(two_seq_output):
@@ -368,7 +368,7 @@ def test_mafft_to_fasta_output_format():
     validate_output(result)
 
     fasta = result.msa.to_fasta_string()
-    expected = ">seq_0\nMKLVGAARLSSG\n>seq_1\nAKLVGAARLSSG"
+    expected = ">seq_0\nMKLVGAARLSSG\n>seq_1\nAKLVGAARLSSG\n"
     assert fasta == expected
 
 

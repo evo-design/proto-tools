@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 
+from proto_tools.tools.sequence_alignment.msas import MSA
 from proto_tools.tools.structure_alignment import (
     FoldmasonMSAConfig,
     FoldmasonMSAInput,
@@ -74,7 +75,7 @@ def test_parse_stdout_raises_when_lines_missing():
 
 def test_run_foldmason_score_msa_dispatches_msa2lddt():
     """The wrapper sends operation=msa2lddt + structures + msa text; output is parsed scores."""
-    inputs = FoldmasonScoreMSAInput(structures=[_TINY_PDB, _TINY_PDB], aa_msa_fasta=_TINY_MSA)
+    inputs = FoldmasonScoreMSAInput(structures=[_TINY_PDB, _TINY_PDB], msa=_TINY_MSA)
 
     with patch(
         "proto_tools.tools.structure_alignment.foldmason.foldmason_score_msa.ToolInstance.dispatch"
@@ -97,11 +98,33 @@ def test_run_foldmason_score_msa_dispatches_msa2lddt():
     assert payload["operation"] == "msa2lddt"
     assert payload["structures"] == [_TINY_PDB, _TINY_PDB]
     assert payload["structure_ids"] == ["structure_0", "structure_1"]
-    assert payload["aa_msa_fasta"] == _TINY_MSA
+    # Wire payload carries the round-tripped FASTA string (MSA.to_fasta_string output).
+    assert payload["aa_msa_fasta"] == MSA.from_fasta_string(_TINY_MSA).to_fasta_string()
     assert payload["pair_threshold"] == 0.0
     assert payload["only_scoring_cols"] is False
     assert payload["guide_tree_newick"] is None
     assert payload["num_threads"] == 4
+
+
+def test_run_foldmason_score_msa_accepts_msa_object():
+    """`msa` accepts an MSA object directly; wire payload carries the FASTA round-trip."""
+    msa_obj = MSA(aligned_sequences=["M", "M"], sequence_ids=["a", "b"])
+    inputs = FoldmasonScoreMSAInput(structures=[_TINY_PDB, _TINY_PDB], msa=msa_obj)
+
+    with patch(
+        "proto_tools.tools.structure_alignment.foldmason.foldmason_score_msa.ToolInstance.dispatch"
+    ) as mock_dispatch:
+        mock_dispatch.return_value = {
+            "average_lddt": 0.5,
+            "columns_considered": 1,
+            "alignment_length": 1,
+            "column_scores": [0.5],
+        }
+        run_foldmason_score_msa(inputs, FoldmasonScoreMSAConfig())
+
+    # Validator kept the MSA as-is; standalone dispatch receives its FASTA serialization.
+    assert isinstance(inputs.msa, MSA)
+    assert mock_dispatch.call_args.args[1]["aa_msa_fasta"] == msa_obj.to_fasta_string()
 
 
 def test_run_foldmason_score_msa_uses_user_supplied_ids():
@@ -109,7 +132,7 @@ def test_run_foldmason_score_msa_uses_user_supplied_ids():
     inputs = FoldmasonScoreMSAInput(
         structures=[_TINY_PDB, _TINY_PDB],
         structure_ids=["alpha", "beta"],
-        aa_msa_fasta=">alpha\nM\n>beta\nM\n",
+        msa=">alpha\nM\n>beta\nM\n",
     )
     with patch(
         "proto_tools.tools.structure_alignment.foldmason.foldmason_score_msa.ToolInstance.dispatch"
@@ -134,14 +157,14 @@ def test_input_rejects_id_count_mismatch():
         FoldmasonScoreMSAInput(
             structures=[_TINY_PDB, _TINY_PDB],
             structure_ids=["one"],
-            aa_msa_fasta=_TINY_MSA,
+            msa=_TINY_MSA,
         )
 
 
 def test_input_requires_min_two_structures():
     """A single structure can't be scored against an MSA."""
     with pytest.raises(ValidationError, match="at least 2"):
-        FoldmasonScoreMSAInput(structures=[_TINY_PDB], aa_msa_fasta=_TINY_MSA)
+        FoldmasonScoreMSAInput(structures=[_TINY_PDB], msa=_TINY_MSA)
 
 
 @pytest.mark.parametrize(
@@ -155,7 +178,7 @@ def test_input_rejects_unsafe_structure_ids(bad_id):
         FoldmasonScoreMSAInput(
             structures=[_TINY_PDB, _TINY_PDB],
             structure_ids=[bad_id, "ok"],
-            aa_msa_fasta=_TINY_MSA,
+            msa=_TINY_MSA,
         )
 
 
@@ -180,7 +203,7 @@ def test_foldmason_score_msa_chained_after_local_msa():
     assert msa_out.success, f"msa errors: {msa_out.errors}"
 
     score_out = run_foldmason_score_msa(
-        FoldmasonScoreMSAInput(structures=structures, structure_ids=ids, aa_msa_fasta=msa_out.aa_msa_fasta),
+        FoldmasonScoreMSAInput(structures=structures, structure_ids=ids, msa=msa_out.aa_msa_fasta),
         FoldmasonScoreMSAConfig(num_threads=2),
     )
     assert score_out.success, f"score errors: {score_out.errors}"
