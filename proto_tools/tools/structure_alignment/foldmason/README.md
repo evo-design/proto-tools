@@ -7,7 +7,7 @@
 
 ## Overview
 
-[FoldMason](https://github.com/steineggerlab/foldmason) is a multiple protein-structure alignment tool from the [Steinegger Lab](https://steineggerlab.com/) at Seoul National University. It produces a structural multiple-sequence alignment over an arbitrary set of [PDB](https://www.rcsb.org/) inputs, returns the alignment in both the amino-acid alphabet and the [3Di structural alphabet](https://www.nature.com/articles/s41587-023-01773-0) shared with [Foldseek](https://bio-pro.mintlify.app/tools/structure-alignment/foldseek), and reports a per-column [LDDT](https://doi.org/10.1093/bioinformatics/btt473) quality score for the result.
+[FoldMason](https://github.com/steineggerlab/foldmason) is a multiple protein-structure alignment tool from the [Steinegger Lab](https://steineggerlab.com/) at Seoul National University. It produces a structural multiple-sequence alignment over an arbitrary set of [PDB](https://www.rcsb.org/) inputs and returns the alignment in both the amino-acid alphabet and the [3Di structural alphabet](https://www.nature.com/articles/s41587-023-01773-0) shared with [Foldseek](https://bio-pro.mintlify.app/tools/structure-alignment/foldseek). A separate tool in the same toolkit scores an existing MSA against its structures using a per-column [LDDT](https://doi.org/10.1093/bioinformatics/btt473) metric.
 
 ## Background
 
@@ -19,7 +19,6 @@ Alignment quality is summarised with the [Local Distance Difference Test (lDDT)]
 
 - [steineggerlab/foldmason](https://github.com/steineggerlab/foldmason) (Steinegger Lab, Seoul National University) - official repository, command-line interface for `easy-msa`, `structuremsa`, `refinemsa`, and `msa2lddt`, and the FASTA output format that this toolkit parses.
 - [search.foldseek.com/foldmason](https://search.foldseek.com/foldmason) (Steinegger Lab) - the public web service that the remote execution mode targets, useful for a single browser-based alignment before scripting against the tool.
-- [Van Kempen et al., 2024 - Foldseek 3Di alphabet](https://www.nature.com/articles/s41587-023-01773-0) (Nature Biotechnology) - reference for the 3Di structural alphabet that underpins FoldMason's residue encoding.
 
 ## Tools
 
@@ -33,6 +32,7 @@ This tool is appropriate for aligning a fold family retrieved from a Foldseek se
 
 #### Usage Tips
 
+- **`foldmason-msa` supports both remote (`search_mode="remote"`, the default) and local (`search_mode="local"`) execution.** Remote mode targets the Steinegger Lab web service. Local mode runs the bundled FoldMason binary and accepts the full set of alignment parameters.
 - **The Steinegger Lab web service does not accept alignment parameters.** The configuration fields `gap_open`, `gap_extend`, `refine_iters`, `precluster`, and `guide_tree_newick` therefore require `search_mode="local"`.
 - **`refine_iters` controls how many iterative LDDT-maximising refinement passes run after the initial progressive alignment.** Each pass adds runtime, and the default of `0` is appropriate for most workflows. Increase it only when an alignment shows poor quality in difficult regions.
 - **The remote service has no authentication and no published rate limit.** `search.foldseek.com/foldmason` is a free public academic resource. High-throughput or batch workloads should be performed in `local` mode to avoid overloading the shared service.
@@ -47,8 +47,8 @@ This tool is appropriate for assigning a structural quality score to an MSA prod
 
 #### Usage Tips
 
-- **FASTA record headers must match `structure_ids`.** `msa2lddt` resolves each MSA row to its corresponding structure by matching the header against the supplied identifiers. A header that does not appear in `structure_ids` is skipped without warning, which can produce a misleadingly high score derived from a partial alignment.
-- **`only_scoring_cols=True` normalises the average LDDT by the number of scored columns rather than by the total alignment length.** Use this option when comparing alignments with different gap content. Leave it `False` to reproduce the scoring convention used in the original FoldMason publication, which includes gap columns in the denominator.
+- **FASTA record headers must match `structure_ids`.** `msa2lddt` resolves each MSA row to its corresponding structure by matching the header against the supplied identifiers. Headers that do not correspond to a supplied structure are not scored, which can produce a misleadingly high score derived from a partial alignment.
+- **`only_scoring_cols=True` normalises the average LDDT by the number of scored columns rather than by the total alignment length.** Use this option when comparing alignments with different gap content. Leaving it `False` (the default) includes gap columns in the denominator.
 - **This tool runs only in local mode.** The public web service does not provide an `msa2lddt` endpoint, so every `foldmason-score-msa` call requires the local FoldMason binary.
 
 ## Toolkit Notes
@@ -58,5 +58,4 @@ This tool is appropriate for assigning a structural quality score to an MSA prod
 These apply to every FoldMason tool in this toolkit (`foldmason-msa`, `foldmason-score-msa`).
 
 - **FoldMason runs on CPU only.** Neither the remote service nor the local binary uses a GPU. Local-mode runtime grows with both the number of structures and their lengths, since each progressive merge step performs a pairwise structural alignment.
-- **Two execution modes share a single configuration interface.** Remote mode targets the Steinegger Lab web service and inherits its fixed alignment parameters. Local mode runs the bundled FoldMason binary and accepts the full set of configuration parameters. The local installation downloads the platform-specific binary from [`mmseqs.com/foldmason`](https://mmseqs.com/foldmason) on first use and maintains no local database.
 - **Inputs are PDB-format text strings.** Each entry is written to disk as `{structure_id}.pdb` before alignment, so each structure should be supplied as PDB-format text in `structures`. The upstream FoldMason CLI also accepts mmCIF, but this toolkit does not currently support mmCIF input.
