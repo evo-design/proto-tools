@@ -1,292 +1,48 @@
-<a href="https://bio-pro.mintlify.app/tools/sequence-alignment/mafft"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/sequence-alignment/mafft"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # MAFFT
 
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** MAFFT is open source and free for academic and commercial use under a BSD-3-Clause license. Please refer to [the license](https://mafft.cbrc.jp/alignment/software/license.txt) for full terms.
 
 ## Overview
-MAFFT (Multiple Alignment using [Fast Fourier Transform](https://en.wikipedia.org/wiki/Fast_Fourier_transform)) is a widely used tool for [multiple sequence alignment](https://en.wikipedia.org/wiki/Multiple_sequence_alignment) (MSA). It offers various strategies ranging from fast approximate alignments for large datasets to highly accurate iterative methods for smaller sets of sequences. This module provides a standardized interface for performing MSA using MAFFT.
+
+[MAFFT](https://mafft.cbrc.jp/alignment/software/) (Multiple Alignment using Fast Fourier Transform) is a multiple sequence alignment program developed by Kazutaka Katoh and collaborators at Osaka University. It aligns multiple protein or nucleotide sequences by inserting gap characters so that homologous residues occupy the same alignment column, and offers a family of algorithms that trade speed for accuracy. This toolkit exposes the MAFFT command-line program for in-process MSA generation.
 
 ## Background
 
-**What does this tool do?**
-MAFFT aligns multiple biological sequences (protein or nucleotide) by inserting gap characters to maximize the similarity between sequences. The resulting alignment reveals conserved regions, evolutionary relationships, and functional domains.
+MAFFT ([Katoh and Standley, 2013](https://doi.org/10.1093/molbev/mst010)) is a multiple sequence alignment program that constructs an alignment through progressive alignment along a guide tree followed by optional iterative refinement. Pairwise distances between input sequences are first estimated rapidly using either k-mer counting or a Fast Fourier Transform that detects homologous segments in compositionally transformed sequences. A guide tree is built from these distances, sequences are progressively aligned along the tree, and the alignment is optionally refined by an iterative cycle that repeatedly removes and re-aligns subsets of sequences.
 
-**Why is this important?**
-Multiple sequence alignment is fundamental to many bioinformatics analyses:
-- **[Phylogenetics](https://en.wikipedia.org/wiki/Phylogenetics)**: Inferring evolutionary relationships between sequences
-- **Conservation analysis**: Identifying functionally important residues
-- **[Homology modeling](https://en.wikipedia.org/wiki/Homology_modeling)**: Building protein structures based on related sequences
-- **Motif discovery**: Finding conserved patterns across protein families
-- **Variant analysis**: Understanding the impact of mutations in context
+MAFFT exposes several algorithm variants that differ in pairwise scoring and refinement strategy. `FFT-NS-i` is the default progressive method with iterative refinement on FFT-derived distances and is appropriate for large datasets. `L-INS-i` (`localpair`) performs local pairwise alignment with iterative refinement and is appropriate for sequences with one alignable domain flanked by variable regions. `G-INS-i` (`globalpair`) performs global pairwise alignment with iterative refinement and is appropriate for sequences of similar length. `E-INS-i` (`genafpair`) is a local-alignment variant that handles sequences with multiple conserved domains separated by long unalignable regions.
 
-**Scientific foundation:**
-MAFFT uses several algorithmic approaches:
+### Learning Resources
 
-1. **FFT-NS-i**: Uses Fast Fourier Transform to rapidly identify homologous segments, followed by iterative refinement.
-2. **L-INS-i** (localpair): Local pairwise alignment with iterative refinement. Best for sequences with one alignable domain.
-3. **G-INS-i** (globalpair): Global pairwise alignment with iterative refinement. Best for sequences of similar length.
-4. **E-INS-i** (genafpair): Local alignment considering multiple conserved domains. Best for sequences with large unalignable regions.
+- [MAFFT software homepage](https://mafft.cbrc.jp/alignment/software/) (Osaka University). Official distribution site and user documentation for the command-line program that this toolkit invokes.
+- [MAFFT algorithm comparison](https://mafft.cbrc.jp/alignment/software/algorithms/algorithms.html) (Osaka University). A side-by-side comparison of the alignment algorithm variants that the `align_method` field selects.
+- [MAFFT online server](https://mafft.cbrc.jp/alignment/server/) (Osaka University). Hosted entry point to the same MAFFT pipeline, useful for a quick browser-based alignment before scripting against the tool.
 
 ## Tools
 
 ### MAFFT Alignment (`mafft-align`)
 
-Perform multiple sequence alignment using MAFFT.
+Performs multiple sequence alignment over two or more input sequences using the bundled `mafft` command-line program. The selected algorithm variant is controlled by the `align_method` configuration field. The tool returns a typed `MSA` object containing the aligned sequences and their identifiers, with helpers for column statistics and serialisation to FASTA or A3M.
 
-Aligns input sequences using MAFFT with the specified method and
-parameters. Returns aligned sequences with gap characters inserted
-to maximize alignment quality.
+#### Applications
 
-## How It Works
+This tool is appropriate for any analysis that benefits from a multiple sequence alignment of homologous protein or nucleotide sequences. Common downstream uses include phylogenetic-tree inference, conservation analysis over alignment columns to identify functionally important residues, homology modelling against a related reference, motif and domain discovery across a protein family, and variant-effect analysis in the context of the conserved structural and functional positions revealed by the alignment.
 
-MAFFT builds alignments in several stages:
+#### Usage Tips
 
-1. **All-to-all comparison**: Rapidly estimates pairwise distances using k-mer counting or FFT
-2. **Guide tree construction**: Builds a tree to determine alignment order
-3. **Progressive alignment**: Aligns sequences following the guide tree
-4. **Iterative refinement**: Repeatedly improves the alignment (for iterative methods)
+- **`align_method="auto"` is the default and lets MAFFT select an algorithm based on input size.** Use `localpair` for sequences with a single conserved domain flanked by variable regions, `globalpair` for full-length homologs of similar length, and `genafpair` for multi-domain sequences separated by long unalignable regions. The `*pair` variants run in O(N^2) time and are appropriate for up to a few hundred sequences.
+- **`max_iterations=0` (the default) skips iterative refinement.** Raise it to enable the full `*-INS-i` refinement pipeline when paired with one of the `*pair` methods. A value around `1000` is appropriate for high-accuracy alignments of small to medium datasets.
+- **`threads=1` is the default; raise it on large alignments.** MAFFT parallelises both the all-against-all distance computation and the iterative refinement passes, so increasing the thread count yields substantial wall-time reductions on alignments of hundreds of sequences or longer.
+- **Inputs must contain at least two non-empty sequences.** The input validator hard-errors otherwise. Auto-generated identifiers default to `seq_0`, `seq_1`, and so on when `sequence_ids` is omitted.
+- **`extra_args` accepts verbatim `mafft` CLI tokens.** Pass any CLI flag not exposed as a typed field through this list (for example `["--retree", "3", "--reorder"]` to control the guide-tree rebuild schedule). Tokens are inserted before the input FASTA path and take precedence over MAFFT's own defaults.
 
-**Key assumptions:**
-- Input sequences are homologous (evolutionarily related)
-- Sequences can be meaningfully aligned (share common ancestry)
-- Gap penalties are appropriate for the sequence type
+## Toolkit Notes
 
-**Limitations:**
-- Very divergent sequences (<20% identity) may not align well
-- Alignments of >10,000 sequences may require significant time/memory
-- Quality decreases as sequence similarity decreases
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-**Computational requirements:**
-- **Hardware:** CPU only, scales with threads
-- **Runtime:** ~1 second for 10 sequences, minutes for thousands
-- **Scalability:** Excellent parallelization with `--thread`
+These apply to every MAFFT tool in this toolkit (`mafft-align`).
 
-## Input Parameters
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sequences` | `List[str]` | List of sequence strings to align (minimum 2 required) |
-| `sequence_ids` | `Optional[List[str]]` | Optional sequence identifiers. If not provided, defaults to `seq_0`, `seq_1`, etc. These IDs are preserved in the output MSA |
-
-## Configuration
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `align_method` | `str` | `"auto"` | Alignment method: `auto`, `localpair`, `globalpair`, or `genafpair` |
-| `max_iterations` | `int` | `0` | Maximum iterative refinement cycles (0 = method default) |
-| `threads` | `int` | `1` | Number of CPU threads for parallel processing |
-
-### Parameter Guides
-
-**Alignment method selection:**
-
-| `align_method` | Method | Best For | Max Sequences |
-|----------|--------|----------|---------------|
-| `auto` | Auto-select | General use | Any |
-| `localpair` | L-INS-i | One alignable domain with flanking regions | ~200 |
-| `globalpair` | G-INS-i | Similar-length sequences, global homology | ~200 |
-| `genafpair` | E-INS-i | Multiple domains, large unalignable regions | ~200 |
-
-## Output Specification
-
-**Return type:** `MafftOutput`
-
-```python
-MafftOutput(
-    msa=MSA(
-        aligned_sequences=["MVLSPADKTN", "MVLSAADKTN"],
-        sequence_ids=["seq_0", "seq_1"],
-    )
-)
-```
-
-**Key output fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `msa` | `MSA` | Multiple sequence alignment object with aligned sequences |
-
-**MSA fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `aligned_sequences` | `List[str]` | Aligned sequences with gap characters ('-') |
-| `sequence_ids` | `List[str]` | Sequence identifiers (e.g., "seq_0", "seq_1") |
-| `original_sequences` | `List[str]` | Original input sequences without gaps |
-
-**MSA properties:**
-- `num_sequences`: Number of sequences in alignment
-- `alignment_length`: Length of alignment (all sequences have this length)
-- `total_gaps`: Total gap characters across all sequences
-- `average_gap_fraction`: Average fraction of gaps
-- `get_column(pos)`: Get all residues at a position
-- `get_conservation(pos)`: Calculate conservation score at a position
-- `get_position_frequencies(pos)`: Get character frequencies at a position
-- `to_fasta()`: Convert alignment to FASTA format
-
-## Interpreting Results
-
-**Alignment quality indicators:**
-- **High quality:** Average gap fraction < 20%, conservation > 0.7 at key positions
-- **Moderate quality:** Average gap fraction 20-40%
-- **Poor quality:** Average gap fraction > 40%, may indicate non-homologous sequences
-
-**When to increase iterations:**
-- Default (`max_iterations=0`): Good for most cases
-- `max_iterations=100-1000`: For difficult alignments needing refinement
-
-## Quick Start Examples
-
-**Example 1: Basic alignment with auto method**
-```python
-from proto_tools.tools.sequence_alignment import (
-    run_mafft_align,
-    MafftInput,
-    MafftConfig
-)
-
-# Align protein sequences with custom IDs
-inputs = MafftInput(
-    sequences=[
-        "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTK",
-        "MVLSAADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTK",
-        "MVLTPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTK",
-    ],
-    sequence_ids=["human_hbb", "mouse_hbb", "rat_hbb"]
-)
-config = MafftConfig(align_method="auto")
-result = run_mafft_align(inputs, config)
-
-msa = result.msa
-print(f"Alignment length: {msa.alignment_length}")
-print(f"Number of sequences: {msa.num_sequences}")
-
-for seq_id, aligned_seq in zip(msa.sequence_ids, msa.aligned_sequences):
-    print(f"{seq_id}: {aligned_seq}")
-# Output: human_hbb: MVLSPADKTN..., mouse_hbb: MVLSAADKTN..., etc.
-```
-
-**Example 2: High-accuracy alignment for small dataset**
-```python
-from proto_tools.tools.sequence_alignment import (
-    run_mafft_align,
-    MafftInput,
-    MafftConfig
-)
-
-# Use L-INS-i for accurate alignment
-inputs = MafftInput(
-    sequences=[
-        "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTK",
-        "MVLSAADKTNVKAAWSKVGAHAGEYGAEALERMFLSFPTTK",
-        "MVLTPADKTNVKAAWGKVGAHAGEYGAEALERMFLGFPTTK",
-        "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTK",
-    ]
-)
-config = MafftConfig(
-    align_method="localpair",
-    max_iterations=1000,
-    threads=4
-)
-result = run_mafft_align(inputs, config)
-
-# Analyze conservation at position 5
-conservation = result.msa.get_conservation(5)
-print(f"Conservation at position 5: {conservation:.2f}")
-
-# Export to FASTA
-fasta_output = result.msa.to_fasta()
-print(fasta_output)
-```
-
-**Example 3: Analyze gap distribution**
-```python
-from proto_tools.tools.sequence_alignment import (
-    run_mafft_align,
-    MafftInput,
-    MafftConfig
-)
-
-inputs = MafftInput(
-    sequences=[
-        "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTK",
-        "MVLSAADKVKAAWGKVGAHAGEYGAEALERMFLSFPTTK",  # Shorter
-        "MVLTPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKEXTRA",  # Longer
-    ]
-)
-config = MafftConfig()
-result = run_mafft_align(inputs, config)
-
-msa = result.msa
-print(f"Average gap fraction: {msa.average_gap_fraction:.2%}")
-print(f"Total gaps: {msa.total_gaps}")
-
-for seq_id, aligned_seq in zip(msa.sequence_ids, msa.aligned_sequences):
-    gap_count = aligned_seq.count("-")
-    gap_fraction = gap_count / len(aligned_seq)
-    print(f"{seq_id}: {gap_count} gaps ({gap_fraction:.1%})")
-```
-
-## Best Practices & Gotchas
-
-**Parameter tuning:**
-
-1. **`align_method`**:
-   - Start with `auto` for most cases
-   - Use `localpair` for proteins with conserved domains flanked by variable regions
-   - Use `globalpair` for full-length homologs of similar size
-   - Use `genafpair` for multi-domain proteins with insertions
-
-2. **`max_iterations`**:
-   - Keep at 0 for quick alignments
-   - Set to 1000 for publication-quality alignments of <200 sequences
-
-3. **`threads`**:
-   - Set to available CPU cores for large alignments
-   - Single thread sufficient for <100 sequences
-
-**Common mistakes:**
-
-1. **Aligning non-homologous sequences**: MAFFT will produce an alignment even for unrelated sequences, but it won't be meaningful.
-
-2. **Using iterative methods on large datasets**: `localpair`, `globalpair`, and `genafpair` are O(N^2) and slow for >200 sequences. Use `auto` for large datasets.
-
-3. **Ignoring gap patterns**: Many gaps in one region may indicate alignment errors or genuinely variable regions.
-
-4. **Over-interpreting low-identity alignments**: Alignments with <30% identity should be interpreted cautiously.
-
-**Tips for optimal results:**
-- Pre-filter sequences to remove obvious outliers
-- Remove redundant sequences (>95% identity) for cleaner alignments
-- Manually inspect alignments at conserved positions
-
-**Escape hatch for niche MAFFT flags:**
-`extra_args: list[str]` accepts verbatim `mafft` CLI tokens for flags not exposed as typed fields (e.g. `["--retree", "3", "--reorder"]`, `["--op", "1.0"]`). Tokens are inserted before the input FASTA path so they take precedence over MAFFT's own defaults.
-- Consider trimming poorly aligned regions for downstream analysis
-
-## References
-
-**Primary publication:**
-- Katoh, K. & Standley, D.M. (2013). "MAFFT Multiple Sequence Alignment Software Version 7: Improvements in Performance and Usability." *Molecular Biology and Evolution* 30(4):772-780. [DOI: 10.1093/molbev/mst010](https://doi.org/10.1093/molbev/mst010)
-
-**Implementation:**
-- GitHub: [https://github.com/GSLBiotech/mafft](https://github.com/GSLBiotech/mafft)
-- Documentation: [https://mafft.cbrc.jp/alignment/software/](https://mafft.cbrc.jp/alignment/software/)
-
-**Additional resources:**
-- MAFFT online server: [https://mafft.cbrc.jp/alignment/server/](https://mafft.cbrc.jp/alignment/server/)
-- Algorithm comparison: [https://mafft.cbrc.jp/alignment/software/algorithms/algorithms.html](https://mafft.cbrc.jp/alignment/software/algorithms/algorithms.html)
-
-## Related Tools
-
-**Tools often used together:**
-- `mmseqs2-clustering`: Cluster sequences before alignment to reduce redundancy
-- `pyhmmer`: Build HMM profiles from alignments
-- `esmfold`: Predict structures from aligned sequences
-
-**Alternative tools:**
-- Clustal Omega: Alternative MSA tool, available in Biopython
-- MUSCLE: Fast MSA, good for large datasets
-- T-Coffee: Higher accuracy for small sets, significantly slower
+- **Outputs are returned as typed `MSA` objects.** The `msa` field of `MafftOutput` exposes the aligned sequences, their identifiers, alignment dimensions, column-level conservation statistics, and gap-statistics properties. The result serialises to FASTA or A3M through the standard export interface.
