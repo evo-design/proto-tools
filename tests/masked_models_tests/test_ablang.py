@@ -360,7 +360,7 @@ def test_ablang_score_and_gradient_agree_on_pll():
         AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=one_hot), temperature=0.6),
         AbLangGradientConfig(use_ste=True, compute_gradient=False),
     )
-    grad_pll = grad_result.metrics["log_likelihood"]
+    grad_pll = grad_result.metrics["avg_log_likelihood"]
 
     assert score_pll == pytest.approx(grad_pll, rel=1e-3)
 
@@ -556,7 +556,7 @@ def test_ablang_gradient_single_chain():
     assert result.metrics["sequence_length"] == seq_len
     assert result.metrics["model_choice"] == "ablang1-heavy"
     assert result.metrics["objective"] == "masked_pll"
-    assert result.metrics["log_likelihood"] == pytest.approx(-result.loss, rel=1e-6)
+    assert result.metrics["avg_log_likelihood"] == pytest.approx(-result.loss, rel=1e-6)
 
 
 @pytest.mark.uses_gpu
