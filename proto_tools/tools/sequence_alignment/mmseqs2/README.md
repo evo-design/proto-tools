@@ -1,214 +1,98 @@
-<a href="https://bio-pro.mintlify.app/tools/sequence-alignment/mmseqs2"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/sequence-alignment/mmseqs2"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # MMseqs2
 
+![MMseqs2](https://raw.githubusercontent.com/soedinglab/mmseqs2/master/.github/mmseqs2_logo.png)
+
+> *Image source: [soedinglab/MMseqs2](https://github.com/soedinglab/MMseqs2)*
+
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** MMseqs2 is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/soedinglab/MMseqs2/blob/master/LICENSE.md) for full terms.
 
 ## Overview
 
-[MMseqs2](https://mmseqs.com/) (Many-against-Many sequence searching) is an ultra-fast tool for searching and clustering huge protein and nucleotide sequence sets. It performs BLAST-like searches at ~100× the speed while maintaining comparable sensitivity. The GPU build ([Kallenborn et al. 2024](https://doi.org/10.1038/s41592-025-02819-8)) brings further speedups on Turing+ NVIDIA GPUs.
-
-This module exposes four registered tools, all backed by a single MMseqs2 install plus the ColabFold pipeline. Pick by what you need:
-
-- **Free-form FASTA / pre-built DB?** → `mmseqs2-search-proteins` or `-search-genomes`. You provide the database path; output is per-query hits as Pydantic models / DataFrames. Default to CPU; flip `use_gpu=True` if you've built a `*.idx_pad` index.
-- **Need an MSA for structure prediction?** → `mmseqs2-homology-search`. Database is registry-driven (`uniref30-2302`, etc., provisioned via `setup_databases.py`); output is `MSA` objects (one per chain). GPU by default; the ColabFold iterative pipeline runs internally.
-- **Reduce redundancy in a sequence set?** → `mmseqs2-clustering`. CPU only; output is per-sequence cluster assignments.
-
-## Tool Catalog
-
-| Tool | Operation | Devices | Use Case |
-|------|-----------|---------|----------|
-| `mmseqs2-search-proteins` | `mmseqs easy-search` against a user-supplied protein DB | CPU by default; opt-in `use_gpu=True` (requires `*.idx_pad`) | Ad-hoc protein-vs-database similarity search |
-| `mmseqs2-search-genomes` | Full nucleotide `createdb` + `search` + `convertalis` workflow | CPU | Genome-to-genome nucleotide comparisons |
-| `mmseqs2-clustering` | `mmseqs cluster` greedy set-cover | CPU | Group similar sequences and extract representatives |
-| `mmseqs2-homology-search` | ColabFold-style iterative MSA pipeline against a registry-provisioned DB | GPU by default (Turing+ Linux); CPU fallback | MSA generation feeding structure predictors (AF3, Boltz-2, Chai-1, Protenix, AF2, AlphaFast) |
-
-The four tools share one toolkit (`mmseqs2`) and one standalone env (`mmseqs2_env`). One persistent worker can serve all four operations.
+[MMseqs2](https://github.com/soedinglab/MMseqs2) (Many-against-Many sequence searching) is an ultra-fast protein and nucleotide sequence search and clustering toolkit from the [Steinegger](https://steineggerlab.com/) and [Söding](https://www.mpinat.mpg.de/soeding) labs. It searches very large databases at speeds substantially beyond BLAST with comparable sensitivity, supports GPU acceleration on recent NVIDIA hardware, and powers the homology-search step of the ColabFold structure-prediction pipeline. The toolkit exposes protein search, nucleotide-genome search, clustering, and ColabFold-style MSA generation as four registered tools.
 
 ## Background
 
-MMseqs2 ([Steinegger & Söding 2017](https://doi.org/10.1038/nbt.3988)) is the search engine: ~100× faster than BLAST at comparable sensitivity. It uses a cascaded prefilter-align approach to handle massive sequence sets:
+MMseqs2 ([Steinegger and Söding, 2017](https://doi.org/10.1038/nbt.3988)) implements sequence-similarity search and clustering through a cascaded prefilter-align approach. Short k-mer matches between the query and the database are located first, surviving candidates are scored with an ungapped extension, and final hits are realigned with gapped [Smith-Waterman](https://en.wikipedia.org/wiki/Smith%E2%80%93Waterman_algorithm) alignment. Clustering uses greedy [set cover](https://en.wikipedia.org/wiki/Set_cover_problem) over the alignment graph. The cascade reduces the search space by several orders of magnitude while retaining sensitivity comparable to BLAST, making analyses over databases with billions of sequences tractable on a single workstation.
 
-1. **K-mer matching** — fast index lookup over short amino acid / nucleotide words.
-2. **Ungapped prefilter** — score k-mer matches with ungapped alignment; keep the top hits.
-3. **Gapped (Smith–Waterman) alignment** — sensitive local alignment on the filtered set.
-4. **Clustering** — greedy [set-cover](https://en.wikipedia.org/wiki/Set_cover_problem) over the alignment graph.
+The GPU build ([Kallenborn et al., 2025](https://doi.org/10.1038/s41592-025-02819-8)) accelerates the prefilter and alignment stages on NVIDIA Turing-generation or newer hardware. On top of the search engine, the ColabFold homology-search pipeline ([Mirdita et al., 2022](https://doi.org/10.1038/s41592-022-01488-1)) iterates MMseqs2 searches against clustered reference databases such as UniRef30 to produce the multiple sequence alignments that AlphaFold-class structure predictors consume. This toolkit exposes that pipeline as `mmseqs2-homology-search` in addition to the more general search and clustering operations.
 
-This dramatically reduces search space while preserving sensitivity comparable to BLAST.
+### Learning Resources
 
-The GPU build ([Kallenborn et al. 2024](https://doi.org/10.1038/s41592-025-02819-8)) accelerates the prefilter and alignment stages on Turing+ NVIDIA GPUs. The ColabFold iterative pipeline ([Mirdita et al. 2022](https://doi.org/10.1038/s41592-022-01488-1)) layered on top adds profile-based re-search and forms the basis of `mmseqs2-homology-search`.
+- [soedinglab/MMseqs2](https://github.com/soedinglab/MMseqs2) (Söding and Steinegger labs). Official repository and the source of the `mmseqs` command-line program that this toolkit invokes.
+- [MMseqs2 wiki](https://github.com/soedinglab/MMseqs2/wiki) (Söding and Steinegger labs). The reference wiki for the command-line surface, including the workflow modules that the four registered tools wrap.
+- [ColabFold homology-search documentation](https://github.com/sokrypton/ColabFold/wiki) (Steinegger and Ovchinnikov labs). Walks through the iterative MSA pipeline that `mmseqs2-homology-search` runs internally.
 
 ## Tools
 
-### MMseqs2 Clustering (`mmseqs2-clustering`)
+### MMseqs2 Protein Search (`mmseqs2-search-proteins`)
 
-Perform sequence clustering using MMseqs2.
+Performs `mmseqs easy-search` of one or more protein query sequences against either a user-supplied target database or an inline list of target proteins. Returns the alignment hits per query, each with target identifier, percent identity, and E-value. The local execution mode runs on CPU by default and supports an opt-in GPU mode for searches against a prebuilt database with a GPU-padded index.
 
-Groups similar sequences based on sequence identity threshold and returns
-per-sequence cluster assignments.
+#### Applications
 
-### MMseqs2 Homology Search (`mmseqs2-homology-search`)
+This tool is appropriate for ad-hoc protein homology search at scale, ranking hits against a custom reference database, identifying functional homologs across a sequenced library, and any analysis in which the BLAST-style hit table is the deliverable. The MMseqs2 sensitivity model finds remote homologs that fall well below the sequence-identity range where standard BLAST searches lose signal.
 
-Execute homology search against the configured registered dataset(s).
+#### Usage Tips
+
+- **Targets are specified via either `mmseqs_db` or `target_sequences`, but not both.** Use `mmseqs_db` for a path to a FASTA file or a prebuilt MMseqs2 database when the target set is large or reused across calls. Use `target_sequences` for short inline lists.
+- **`sensitivity=5.7` is the wrapper default and matches upstream `easy-search`.** Higher values recover more distant homologs at the cost of additional runtime. The accepted range is 1.0 to 7.5.
+- **`only_top_hits=True` (the default) returns only the best hit per query by percent identity.** Set it to `False` to retain every hit that passes the configured thresholds.
+- **`use_gpu=True` requires a GPU-padded index alongside the target database.** Build the index once with `mmseqs makepaddedseqdb <db> <db>.idx_pad`. The configuration validator hard-errors when the `.idx_pad` companion is missing or when `use_gpu=True` is combined with inline `target_sequences` (the GPU path does not accept inline targets).
+- **`extra_args` accepts verbatim [`mmseqs easy-search`](https://github.com/soedinglab/MMseqs2/wiki#easy-search) CLI tokens.** Pass any flag not exposed as a typed field through this list (for example `["--alignment-mode", "3"]`). Tokens are appended after the typed flags.
 
 ### MMseqs2 Genome Search (`mmseqs2-search-genomes`)
 
-Execute nucleotide genome-to-genome search workflow.
+Performs the full MMseqs2 nucleotide search pipeline against either a user-supplied target database or an inline list of target genomes. The tool builds query and target databases with `createdb`, runs `search`, and converts the result to the BLAST-style tabular schema with `convertalis`. Runs on CPU only.
 
-Implements the full MMseqs2 nucleotide search pipeline including database
-creation, indexing, searching, and result conversion.
+#### Applications
 
-### MMseqs2 Protein Search (`mmseqs2-search-proteins`)
+This tool is appropriate for genome-to-genome similarity analysis, locating homologous regions between assembled genomes, comparative genomics over closely related strains, and any nucleotide analog of the protein-search workflow.
 
-Perform protein sequence search using MMseqs2.
+#### Usage Tips
 
-Searches query protein sequences against a target database and returns
-per-sequence results with all hits.
+- **Targets are specified via either `target_db` or `target_genomes`, but not both.** Use `target_db` for a FASTA file or a prebuilt MMseqs2 database; use `target_genomes` for inline nucleotide sequences.
+- **`sensitivity=7.5` is the wrapper default for nucleotide search.** This is a wrapper bias above the upstream MMseqs2 default of 5.7, chosen because nucleotide searches typically benefit from the higher sensitivity setting. The accepted range is 1.0 to 7.5.
+- **`strand=2` (both strands) is the wrapper default.** Upstream defaults to forward strand only. Set `strand=1` to restrict to the forward strand or `strand=0` for reverse only.
+- **`extra_args` accepts verbatim [`mmseqs search`](https://github.com/soedinglab/MMseqs2/wiki#search-workflow) CLI tokens.** Tokens are appended after the typed flags.
 
-## How It Works
+### MMseqs2 Clustering (`mmseqs2-clustering`)
 
-Each of the four tools dispatches to the same standalone env via a single persistent worker, but routes to a different MMseqs2 invocation:
+Performs `mmseqs cluster` over an inline list of sequences or a prebuilt MMseqs2 database and returns per-sequence cluster assignments. Each result records the cluster identifier and whether the sequence is the cluster representative. Runs on CPU only.
 
-- **`mmseqs2-search-proteins`** wraps `mmseqs easy-search`. Inputs: protein sequences (or FASTA path) and a target DB; output: per-query hits with target ID, percent identity, and E-value. With `use_gpu=True`, the dispatch validates that a GPU-padded sibling DB (`*.idx_pad`, built via `mmseqs makepaddedseqdb`) exists, swaps it in as the easy-search target, and adds `--gpu 1`.
-- **`mmseqs2-search-genomes`** runs the full nucleotide pipeline: `createdb` for query and target, `createindex`, `search`, then `convertalis` to m8 format. CPU-only.
-- **`mmseqs2-clustering`** runs `mmseqs cluster` with greedy set-cover, then `createsubdb` + `createtsv` to extract per-sequence cluster assignments. CPU-only.
-- **`mmseqs2-homology-search`** invokes the upstream `colabfold_search` CLI, which iterates `mmseqs search` against UniRef30 (or other ColabFold-format DBs), then merges into A3M files. The standalone env ships `colabfold[alphafold]` for this entry point. GPU-by-default.
+#### Applications
 
-The standalone env ships the GPU-capable MMseqs2 binary (`mmseqs-linux-gpu.tar.gz`) as canonical: it's a strict superset of the CPU build, runs CPU subcommands without `--gpu`, and only loads NVIDIA drivers lazily.
+This tool is appropriate for deduplicating a sequence set before downstream analysis, partitioning a protein library into functional families, selecting representative sequences from a redundant collection, and any analysis that benefits from a similarity-based grouping of sequences.
 
-## Quick Start Examples
+#### Usage Tips
 
-### Protein search (ad-hoc)
+- **Inputs are specified via either `input_sequences` or `mmseqs_db`, but not both.** Use `input_sequences` for inline sequences; use `mmseqs_db` for a prebuilt database that may be reused across calls.
+- **`min_seq_id=0.6` is the wrapper default.** This is a wrapper bias above the upstream MMseqs2 default of 0.0, chosen as a reasonable starting point for grouping proteins into functional families. Set it higher (for example `0.95`) to remove near-duplicates, or lower (for example `0.3`) to group remote homologs.
+- **`cluster_mode=0` (set-cover) is the default greedy algorithm.** Alternative modes are `1` (connected-component, BLASTclust-style) and `2` or `3` (greedy by length, CD-HIT-style).
+- **The cluster representative is the first sequence to cover the cluster during greedy set-cover.** It is not necessarily the longest or most central sequence. Choose an alternative `cluster_mode` if a different representative-selection policy is needed.
+- **`extra_args` accepts verbatim [`mmseqs cluster`](https://github.com/soedinglab/MMseqs2/wiki#clustering) CLI tokens.** Tokens are appended after the typed flags.
 
-```python
-from proto_tools.tools.sequence_alignment.mmseqs2 import (
-    Mmseqs2SearchProteinsConfig,
-    Mmseqs2SearchProteinsInput,
-    run_mmseqs2_search_proteins,
-)
+### MMseqs2 Homology Search (`mmseqs2-homology-search`)
 
-inputs = Mmseqs2SearchProteinsInput(
-    query_sequences=["MSKGEELFTGVVPIL", "MVSKGEELFTGVVPI"],
-    mmseqs_db="reference_proteins.faa",
-)
-result = run_mmseqs2_search_proteins(inputs, Mmseqs2SearchProteinsConfig())
-print(result.total_hits)
-```
+Generates a multiple sequence alignment per query protein by iterating MMseqs2 searches against a registry-provisioned reference database using the ColabFold homology-search pipeline. Returns one `MSA` object per query, suitable as the MSA input to AlphaFold-class structure predictors. GPU execution is the default on supported hardware.
 
-GPU mode (when the target DB has a `*.idx_pad` index built via `mmseqs makepaddedseqdb`):
+#### Applications
 
-```python
-config = Mmseqs2SearchProteinsConfig(use_gpu=True)
-result = run_mmseqs2_search_proteins(inputs, config)
-```
+This tool is the proto-tools entry point for generating the MSA input to structure-prediction tools. It also drives coevolutionary analyses that identify covarying residue pairs as candidate spatial contacts, conservation analyses that highlight functionally important residues, and homolog mining for protein engineering and design pipelines.
 
-### Genome-to-genome nucleotide search
+#### Usage Tips
 
-```python
-from proto_tools.tools.sequence_alignment.mmseqs2 import (
-    Mmseqs2SearchGenomesConfig,
-    Mmseqs2SearchGenomesInput,
-    run_mmseqs2_search_genomes,
-)
+- **The `datasets` field accepts a single registered dataset key.** The default is `uniref30-2302`. Configurations with multiple datasets or non-protein datasets are rejected by validation.
+- **GPU execution is the default.** The configuration validator hard-errors on macOS and Windows or when the configured dataset does not declare GPU support. Set `use_gpu=False` to force the CPU pipeline.
+- **The reference database must be provisioned once on the host machine before the first call.** Run `python -m proto_tools.tools.sequence_alignment.mmseqs2.setup_databases <dataset>`, where the dataset key matches the value of `Mmseqs2HomologySearchConfig.datasets`. The wrapper does not auto-download databases at call time.
+- **Each query produces an `MSA` object or `None`.** Always check `result.msas[i] is not None` before accessing alignment properties. The `num_homologs_found` list returns `0` for queries that produced no homologs. `MSA` objects serialise to A3M or FASTA through the standard export interface.
 
-inputs = Mmseqs2SearchGenomesInput(
-    query_genomes=["ATGCGT...", "ACCGGG..."],
-    target_genomes=["ATGCGT...", "CCCCGGGG..."],
-)
-result = run_mmseqs2_search_genomes(inputs, Mmseqs2SearchGenomesConfig(sensitivity=7.5))
-print(result.total_hits)
-```
+## Toolkit Notes
 
-### Sequence clustering
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-```python
-from proto_tools.tools.sequence_alignment.mmseqs2 import (
-    Mmseqs2ClusteringConfig,
-    Mmseqs2ClusteringInput,
-    run_mmseqs2_clustering,
-)
+These apply to every MMseqs2 tool in this toolkit (`mmseqs2-search-proteins`, `mmseqs2-search-genomes`, `mmseqs2-clustering`, `mmseqs2-homology-search`).
 
-inputs = Mmseqs2ClusteringInput(input_sequences=["MVLSPADKTN...", "MVLSPADKTN...", "MKLLVVAAAA..."])
-result = run_mmseqs2_clustering(inputs, Mmseqs2ClusteringConfig(min_seq_id=0.95))
-print(result.num_clusters)
-```
-
-### Homology search (MSA for structure prediction)
-
-```python
-from proto_tools.tools.sequence_alignment.mmseqs2 import (
-    Mmseqs2HomologySearchConfig,
-    Mmseqs2HomologySearchInput,
-    run_mmseqs2_homology_search,
-)
-
-inp = Mmseqs2HomologySearchInput(queries=["MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG"])
-result = run_mmseqs2_homology_search(inp, Mmseqs2HomologySearchConfig())
-grp = result.results[0]
-print(f"{grp.sequence_ids[0]}: {grp.num_homologs_found[0]} homologs found")
-```
-
-CPU fallback (skip GPU even when available):
-
-```python
-cfg = Mmseqs2HomologySearchConfig(use_gpu=False)
-result = run_mmseqs2_homology_search(inp, cfg)
-```
-
-## Configuration
-
-**Database provisioning (homology search only).** `mmseqs2-homology-search` does not auto-download databases. Provision UniRef30 once before running:
-
-```bash
-python -m proto_tools.tools.sequence_alignment.mmseqs2.setup_databases uniref30-2302
-```
-
-See `setup_databases.py --list` for available datasets and presets matching predictor preferences. The dataset cache lives under `$PROTO_MODEL_CACHE/databases/<name>/` and is shared with `colabfold-search` during the migration window.
-
-**GPU prerequisite (`mmseqs2-search-proteins`).** Opting into `use_gpu=True` requires the target DB to have a sibling `*.idx_pad` GPU-padded index. Build it once with `mmseqs makepaddedseqdb <db> <db>.idx_pad`. The tool validates at call time and raises with the exact remediation if missing.
-
-## Important Parameters
-
-**Sensitivity (`-s` / `sensitivity`):**
-
-| Value | Speed | Use Case |
-|-------|-------|----------|
-| `1.0` | Fastest | Near-identical matches only |
-| `4.0` | Balanced | `mmseqs2-clustering` default (matches upstream `easy-cluster`) |
-| `5.7` | Standard | `mmseqs2-search-proteins` default (matches upstream `easy-search`) |
-| `7.5` | Slower | `mmseqs2-search-genomes` default (wrapper bias for nucleotide search; upstream = 5.7) |
-
-GPU mode (`use_gpu=True` on `mmseqs2-search-proteins`) honors `-s` normally — the binary does not override sensitivity under `--gpu 1`.
-
-**Clustering identity (`min_seq_id`):**
-
-| Value | Use Case |
-|-------|----------|
-| `0.95` | Remove near-duplicates (sequencing errors, isoforms) |
-| `0.60` | Group proteins into functional families (`mmseqs2-clustering` wrapper default; upstream MMseqs2 = `0.0`) |
-| `0.30` | Remote homologs |
-
-## Best Practices & Gotchas
-
-- **Database vs FASTA:** `mmseqs2-search-proteins` accepts either a FASTA file or a pre-built MMseqs2 DB. Pre-build for repeated searches.
-- **Memory:** if `mmseqs easy-search` runs out of memory, raise `split` (e.g. `split=1`).
-- **Mismatched sequence types:** don't search proteins against a nucleotide DB or vice versa. `search_type=3` for nucleotide-only.
-- **Top-hits filter:** `mmseqs2-search-proteins` defaults to `only_top_hits=True`; flip it off if you need all hits per query.
-- **Clustering representatives:** the representative is *not* necessarily the "best" sequence — it's the first one to cover the cluster during greedy set-cover.
-- **GPU prerequisite:** `mmseqs2-search-proteins` opt-in `use_gpu=True` requires a `*.idx_pad` index alongside the DB; build with `mmseqs makepaddedseqdb`. Validation runs at call time and raises with the exact command if missing.
-- **Multi-dataset for homology search:** Phase 3 supports exactly one dataset per call. UniRef30 + ColabFoldDB merge support is planned.
-- **Escape hatch for niche flags:** every search/cluster tool exposes `extra_args: list[str]` for verbatim mmseqs CLI tokens not exposed as typed fields (e.g. `extra_args=["--alignment-mode", "3"]`). Tokens go through to `mmseqs easy-search` / `mmseqs search` / `mmseqs cluster` after the typed flags. `mmseqs2-homology-search` instead routes registry-driven `extra_args` via the dataset entry's `mmseqs_flags`.
-
-## References
-
-- Steinegger, M. & Söding, J. (2017). MMseqs2 enables sensitive protein sequence searching for the analysis of massive data sets. *Nature Biotechnology*, 35(11), 1026–1028. DOI: [10.1038/nbt.3988](https://doi.org/10.1038/nbt.3988)
-- Kallenborn, F., Chacon, A., Hundt, C., et al. (2024). GPU-accelerated homology search with MMseqs2. *Nature Methods*, in press. DOI: [10.1038/s41592-025-02819-8](https://doi.org/10.1038/s41592-025-02819-8)
-- Mirdita, M., Schütze, K., Moriwaki, Y., et al. (2022). ColabFold: making protein folding accessible to all. *Nature Methods*, 19(6), 679–682. DOI: [10.1038/s41592-022-01488-1](https://doi.org/10.1038/s41592-022-01488-1)
-
-## Related Tools
-
-- **`blast-search`**: smaller-scale searches with NCBI database access; lower throughput than MMseqs2 but a more familiar E-value-driven workflow.
-- **`pyhmmer-hmmsearch` / `pyhmmer-hmmscan`**: profile-based search for remote homologs (<30% identity) when MMseqs2 sensitivity isn't enough.
-- **`colabfold-search`**: the original wrapper of the homology-search backend; will be deprecated after structure-predictor migrations to `mmseqs2-homology-search` complete.
-- **`foldseek-search`** / **`foldseek-cluster`** / **`foldseek-multimer-search`** / **`foldseek-multimercluster`** / **`foldseek-rbh`**: structure-based search and clustering for remote homologs the sequence layer misses.
+- **All four tools share a single MMseqs2 binary installation.** The local installation downloads the GPU-capable MMseqs2 build, which is a strict superset of the CPU-only build and runs CPU subcommands without enabling GPU code paths.
