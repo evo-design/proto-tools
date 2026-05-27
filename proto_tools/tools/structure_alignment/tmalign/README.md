@@ -61,8 +61,8 @@ Run TMalign on two PDB structures.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `pdb_text_1` | `str` | *required* | PDB content of structure 1 (query). Full PDB text, not a file path. |
-| `pdb_text_2` | `str` | *required* | PDB content of structure 2 (reference). Full PDB text, not a file path. |
+| `query_structure` | `Structure` | *required* | Query / candidate structure. Accepts a `Structure` object, a file path, or raw PDB/CIF content. |
+| `reference_structure` | `Structure` | *required* | Reference / target structure. Accepts a `Structure` object, a file path, or raw PDB/CIF content. |
 
 ## Configuration
 
@@ -116,7 +116,7 @@ with open("predicted.pdb") as f:
 with open("reference.pdb") as f:
     reference_pdb = f.read()
 
-inputs = TMalignInput(pdb_text_1=query_pdb, pdb_text_2=reference_pdb)
+inputs = TMalignInput(query_structure=query_pdb, reference_structure=reference_pdb)
 result = run_tmalign(inputs, TMalignConfig())
 
 print(f"TM-score (norm by query):     {result.tm_score_chain_1:.3f}")
@@ -148,7 +148,7 @@ with open("target_fold.pdb") as f:
     target_pdb = f.read()
 
 tm_result = run_tmalign(
-    TMalignInput(pdb_text_1=predicted_pdb, pdb_text_2=target_pdb),
+    TMalignInput(query_structure=predicted_pdb, reference_structure=target_pdb),
     TMalignConfig(),
 )
 
@@ -172,7 +172,7 @@ for pdb_path in candidate_pdbs:
     with open(pdb_path) as f:
         cand_pdb = f.read()
     result = run_tmalign(
-        TMalignInput(pdb_text_1=cand_pdb, pdb_text_2=target_pdb),
+        TMalignInput(query_structure=cand_pdb, reference_structure=target_pdb),
         TMalignConfig(),
     )
     results.append((pdb_path, result.tm_score_chain_2))

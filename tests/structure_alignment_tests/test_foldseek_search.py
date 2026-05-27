@@ -117,7 +117,8 @@ def test_local_mode_dispatches_easy_search():
     """search_mode='local' dispatches operation=easy_search with structure_text + local_db."""
     from unittest.mock import patch
 
-    inputs = FoldseekSearchInput(structure_text="HEADER...\nATOM ...\nEND\n")
+    pdb_text = "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
+    inputs = FoldseekSearchInput(structure=pdb_text)
     config = FoldseekSearchConfig(search_mode="local", local_db="/path/to/db", num_threads=8)
 
     with patch("proto_tools.tools.structure_alignment.foldseek.foldseek_search.ToolInstance.dispatch") as mock_dispatch:
@@ -133,7 +134,7 @@ def test_local_mode_dispatches_easy_search():
     payload = mock_dispatch.call_args.args[1]
     assert payload == {
         "operation": "easy_search",
-        "structure_text": "HEADER...\nATOM ...\nEND\n",
+        "structure_text": pdb_text,
         "local_db": "/path/to/db",
         "evalue": 10.0,
         "sensitivity": 9.5,
@@ -194,7 +195,7 @@ def test_foldseek_search_end_to_end_with_tp53():
     assert afdb.success and afdb.structure is not None
 
     output = run_foldseek_search(
-        FoldseekSearchInput(structure_text=afdb.structure.structure_pdb),
+        FoldseekSearchInput(structure=afdb.structure.structure_pdb),
         FoldseekSearchConfig(databases=["pdb100"], timeout_seconds=600.0),
     )
 
@@ -231,7 +232,7 @@ def test_foldseek_search_local_mode_with_directory_db(tmp_path):
     (target_dir / "test_struct.pdb").write_text((fixtures / "test_structure_similarity.pdb").read_text())
 
     output = run_foldseek_search(
-        FoldseekSearchInput(structure_text=(fixtures / "renin_af3.pdb").read_text()),
+        FoldseekSearchInput(structure=(fixtures / "renin_af3.pdb").read_text()),
         FoldseekSearchConfig(search_mode="local", local_db=str(target_dir), num_threads=2),
     )
 

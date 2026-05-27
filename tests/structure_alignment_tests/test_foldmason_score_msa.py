@@ -127,6 +127,30 @@ def test_run_foldmason_score_msa_accepts_msa_object():
     assert mock_dispatch.call_args.args[1]["aa_msa_fasta"] == msa_obj.to_fasta_string()
 
 
+def test_run_foldmason_score_msa_accepts_structure_objects_and_paths(tmp_path):
+    """`structures` dual-accept: Structure objects and file paths normalize to PDB on the wire."""
+    from proto_tools.entities import Structure
+
+    pdb_file = tmp_path / "s.pdb"
+    pdb_file.write_text(_TINY_PDB)
+    structure_obj = Structure(structure=_TINY_PDB)
+    inputs = FoldmasonScoreMSAInput(structures=[structure_obj, pdb_file], msa=_TINY_MSA)
+    assert all(type(s).__name__ == "Structure" for s in inputs.structures)
+
+    with patch(
+        "proto_tools.tools.structure_alignment.foldmason.foldmason_score_msa.ToolInstance.dispatch"
+    ) as mock_dispatch:
+        mock_dispatch.return_value = {
+            "average_lddt": 1.0,
+            "columns_considered": 1,
+            "alignment_length": 1,
+            "column_scores": [1.0],
+        }
+        run_foldmason_score_msa(inputs, FoldmasonScoreMSAConfig())
+
+    assert mock_dispatch.call_args.args[1]["structures"] == [_TINY_PDB, _TINY_PDB]
+
+
 def test_run_foldmason_score_msa_uses_user_supplied_ids():
     """User-supplied structure_ids are forwarded verbatim to the standalone."""
     inputs = FoldmasonScoreMSAInput(

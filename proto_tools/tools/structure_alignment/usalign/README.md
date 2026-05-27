@@ -64,8 +64,8 @@ The tool runs with flags `-mm 1` (multimer mode) and `-ter 1` (treat each chain 
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `pdb_text_1` | `str` | *required* | PDB content of structure 1 (query). Full PDB text, not a file path. |
-| `pdb_text_2` | `str` | *required* | PDB content of structure 2 (reference). Full PDB text, not a file path. |
+| `query_structure` | `Structure` | *required* | Query / candidate structure. Accepts a `Structure` object, a file path, or raw PDB/CIF content. |
+| `reference_structure` | `Structure` | *required* | Reference / target structure. Accepts a `Structure` object, a file path, or raw PDB/CIF content. |
 
 ## Configuration
 
@@ -116,7 +116,7 @@ with open("predicted_dimer.pdb") as f:
 with open("reference_dimer.pdb") as f:
     reference_pdb = f.read()
 
-inputs = USalignInput(pdb_text_1=query_pdb, pdb_text_2=reference_pdb)
+inputs = USalignInput(query_structure=query_pdb, reference_structure=reference_pdb)
 result = run_usalign(inputs, USalignConfig())
 
 print(f"TM-score (norm by query):     {result.tm_score_structure_1:.3f}")
@@ -139,7 +139,7 @@ with open("experimental_4oo8.pdb") as f:
     experimental = f.read()
 
 result = run_usalign(
-    USalignInput(pdb_text_1=predicted, pdb_text_2=experimental),
+    USalignInput(query_structure=predicted, reference_structure=experimental),
     USalignConfig(),
 )
 
@@ -164,7 +164,7 @@ for path in candidates:
     with open(path) as f:
         cand_pdb = f.read()
     result = run_usalign(
-        USalignInput(pdb_text_1=cand_pdb, pdb_text_2=target_pdb),
+        USalignInput(query_structure=cand_pdb, reference_structure=target_pdb),
         USalignConfig(),
     )
     status = "PASS" if result.tm_score_structure_2 > 0.5 else "FAIL"

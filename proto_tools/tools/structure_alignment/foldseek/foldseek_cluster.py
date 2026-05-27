@@ -12,6 +12,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from proto_tools.entities import Structure
 from proto_tools.entities.structures.utils import detect_structure_format
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -69,9 +70,10 @@ class FoldseekClusterInput(BaseToolInput):
     go through Foldseek's built-in ProstT5 model to predict 3Di sequences.
 
     Attributes:
-        structures (list[str] | None): PDB, mmCIF, or single-record FASTA text
-            strings (≥2; format auto-detected). Mutually exclusive with
-            ``structures_dir``.
+        structures (list[str] | None): Items to cluster (≥2). Per item, accepts
+            a ``Structure`` object, a file path, or raw text (PDB / mmCIF /
+            single-record FASTA; format auto-detected per string). Mutually
+            exclusive with ``structures_dir``.
         structures_dir (str | None): Directory of ``.pdb``/``.cif``/``.mmcif``/
             ``.fasta``/``.fa``/``.faa`` files (incl. ``.gz``; ≥2). Filename
             stems become ``structure_ids``. Mutually exclusive with
@@ -83,7 +85,7 @@ class FoldseekClusterInput(BaseToolInput):
     structures: list[str] | None = InputField(
         default=None,
         title="Structures",
-        description="PDB, mmCIF, or single-record FASTA text strings (≥2). Mutually exclusive with structures_dir.",
+        description="Items to cluster (Structure objects, file paths, or PDB/mmCIF/FASTA text; ≥2)",
         min_length=2,
     )
     structures_dir: str | None = InputField(
@@ -100,6 +102,7 @@ class FoldseekClusterInput(BaseToolInput):
     @model_validator(mode="before")
     @classmethod
     def _resolve(cls, data: Any) -> Any:
+        data = _coerce_structure_items_to_text(data)
         return _resolve_structures_dir_in_data(data)
 
     @model_validator(mode="after")
@@ -330,6 +333,39 @@ def _read_structures_dir(
             structures.append(file_path.read_text(encoding="utf-8"))
         ids.append(stem)
     return structures, ids
+
+
+def _coerce_structure_items_to_text(data: Any) -> Any:
+    """``mode="before"`` helper: per-item, coerce ``Structure`` / ``Path`` entries in ``structures`` to text.
+
+    Structure objects emit their PDB representation. Paths to FASTA files are read
+    as text (so FASTA's leading-``>`` detection still works downstream); paths to
+    structure files load via :func:`Structure.from_file` and emit PDB. Strings
+    pass through unchanged (format auto-detected per-string at standalone dispatch).
+    """
+    if not isinstance(data, dict):
+        return data
+    items = data.get("structures")
+    if not isinstance(items, list):
+        return data
+    coerced: list[Any] = []
+    for item in items:
+        if isinstance(item, Structure):
+            coerced.append(item.structure_pdb)
+        elif isinstance(item, Path):
+            lower = item.name.lower()
+            if any(lower.endswith(ext) for ext in _FASTA_EXTENSIONS):
+                # Read FASTA (and gz) text verbatim so the leading-`>` check downstream still classifies it.
+                if lower.endswith(".gz"):
+                    with gzip.open(item, "rt") as f:
+                        coerced.append(f.read())
+                else:
+                    coerced.append(item.read_text())
+            else:
+                coerced.append(Structure.from_file(item).structure_pdb)
+        else:
+            coerced.append(item)
+    return {**data, "structures": coerced}
 
 
 def _resolve_structures_dir_in_data(data: Any, *, extensions: tuple[str, ...] = _SUPPORTED_EXTENSIONS) -> Any:

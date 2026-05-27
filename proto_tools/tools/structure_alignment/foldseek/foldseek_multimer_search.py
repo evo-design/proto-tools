@@ -14,6 +14,7 @@ from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
+from proto_tools.entities import Structure
 from proto_tools.tools.structure_alignment.foldseek.foldseek_search import (
     _BACKOFF_SECONDS,
     _FOLDSEEK_BASE,
@@ -59,14 +60,13 @@ class FoldseekMultimerSearchInput(BaseToolInput):
     """Input for Foldseek multimer (complex) search.
 
     Attributes:
-        structure_text (str): Multi-chain PDB-format text of the query complex.
-            Use ``alphafold-db-fetch`` (with `multimer` ID) or `pdb-fetch-entry`
-            for an experimental complex.
+        structure (Structure): Multi-chain query complex. Accepts a ``Structure``
+            object, a file path, or raw PDB/CIF content.
     """
 
-    structure_text: str = InputField(
-        title="Structure Text",
-        description="Multi-chain PDB-format text of the query complex",
+    structure: Structure = InputField(
+        title="Query Structure",
+        description="Multi-chain query complex (Structure object, file path, or raw PDB/CIF string)",
     )
 
 
@@ -257,8 +257,7 @@ _EXAMPLE_PDB_PATH = str(Path(__file__).parents[1] / "example_multimer_input_fixt
 
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    pdb_text = Path(_EXAMPLE_PDB_PATH).read_text()
-    return FoldseekMultimerSearchInput(structure_text=pdb_text)
+    return FoldseekMultimerSearchInput(structure=Structure.from_file(_EXAMPLE_PDB_PATH))
 
 
 @tool(
@@ -284,7 +283,7 @@ def run_foldseek_multimer_search(
     Foldseek CLI's ``easy-multimersearch`` based on ``config.search_mode``.
 
     Args:
-        inputs (FoldseekMultimerSearchInput): Multi-chain query PDB.
+        inputs (FoldseekMultimerSearchInput): Multi-chain query structure.
         config (FoldseekMultimerSearchConfig): Search-mode + per-mode options.
         instance (Any): Optional ToolInstance for subprocess execution.
 
@@ -311,7 +310,7 @@ def _remote_multimer_search(
     try:
         # Multimer wire mode is 'complex-{base}' (per MultimerSearch.vue); _submit is shared with single-chain.
         wire_mode = f"complex-{config.mode}"
-        ticket_id = _submit(inputs.structure_text, list(config.databases), wire_mode, session)
+        ticket_id = _submit(inputs.structure.structure_pdb, list(config.databases), wire_mode, session)
         poll_until_complete(
             session,
             f"{_FOLDSEEK_BASE}/api/ticket/{ticket_id}",
@@ -345,7 +344,7 @@ def _local_multimer_search(
         "foldseek",
         {
             "operation": "easy_multimersearch",
-            "structure_text": inputs.structure_text,
+            "structure_text": inputs.structure.structure_pdb,
             "local_db": config.local_db,
             "evalue": config.evalue,
             "sensitivity": config.sensitivity,

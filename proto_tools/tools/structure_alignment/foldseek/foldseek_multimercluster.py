@@ -15,6 +15,7 @@ from proto_tools.entities.structures.utils import detect_structure_format
 from proto_tools.tools.structure_alignment.foldseek.foldseek_cluster import (
     _STRUCTURE_EXTENSIONS,
     FoldseekCluster,
+    _coerce_structure_items_to_text,
     _parse_cluster_tsv,
     _resolve_structures_dir_in_data,
     _validate_resolved_input,
@@ -45,9 +46,10 @@ class FoldseekMultimerClusterInput(BaseToolInput):
     (whether user-supplied or filename-derived).
 
     Attributes:
-        structures (list[str] | None): Multi-chain PDB- or mmCIF-format text
-            strings (≥2; format auto-detected per string). Mutually exclusive
-            with ``structures_dir``.
+        structures (list[str] | None): Multi-chain items to cluster (≥2). Per
+            item, accepts a ``Structure`` object, a file path, or raw PDB/mmCIF
+            text (format auto-detected per string). Mutually exclusive with
+            ``structures_dir``.
         structures_dir (str | None): Directory of multimer ``.pdb``/``.cif``/
             ``.mmcif`` files (incl. ``.gz``; ≥2). Filename stems become
             ``structure_ids`` and must not contain ``_``. Mutually exclusive
@@ -60,7 +62,7 @@ class FoldseekMultimerClusterInput(BaseToolInput):
     structures: list[str] | None = InputField(
         default=None,
         title="Structures",
-        description="Multi-chain PDB or mmCIF text strings to cluster (≥2).",
+        description="Multi-chain items to cluster (Structure objects, file paths, or PDB/mmCIF text; ≥2)",
         min_length=2,
     )
     structures_dir: str | None = InputField(
@@ -77,6 +79,7 @@ class FoldseekMultimerClusterInput(BaseToolInput):
     @model_validator(mode="before")
     @classmethod
     def _resolve(cls, data: Any) -> Any:
+        data = _coerce_structure_items_to_text(data)
         return _resolve_structures_dir_in_data(data, extensions=_STRUCTURE_EXTENSIONS)
 
     @model_validator(mode="after")
