@@ -245,11 +245,12 @@ class RFdiffusion3Model:
 
         return {"designs": designs}
 
-    def _extract_sequence(self, content: str, is_cif: bool = False) -> str:
-        """Extract sequence from structure content (chains separated by /).
+    def _extract_sequence(self, content: str, is_cif: bool = False) -> list[str]:
+        """Extract per-chain sequences from structure content.
 
-        Uses 'X' for unknown residues (ligands, modified AAs, nucleotides) to preserve
-        index alignment with structure. Critical for all-atom design with RFdiffusion3.
+        Returns one entry per chain in PDB chain order. Uses 'X' for unknown
+        residues (ligands, modified AAs, nucleotides) to preserve index alignment
+        with structure. Critical for all-atom design with RFdiffusion3.
         """
         if is_cif:
             doc = gemmi.cif.read_string(content)
@@ -262,7 +263,7 @@ class RFdiffusion3Model:
             seq = "".join(self._AA_MAP.get(res.name, "X") for res in chain)
             if seq:
                 sequences.append(seq)
-        return "/".join(sequences)
+        return sequences
 
     def _strip_ext(self, filename: str) -> str:
         """Strip structure file extensions (.cif.gz, .pdb.gz, .cif, .pdb)."""

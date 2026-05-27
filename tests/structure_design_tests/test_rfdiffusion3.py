@@ -420,12 +420,15 @@ def test_rfdiffusion3_standalone_failure_reports_full_subprocess_output(monkeypa
 
 @pytest.mark.uses_gpu
 def test_rfdiffusion3_unconditional_design():
-    """Basic unconditional design produces a valid structure."""
-    inputs = RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(length="40")])
+    """Basic unconditional design produces a valid 2-chain structure (C2 symmetry)."""
+    # C2 symmetry yields 2 chains, exercising the per-chain list[str] output shape.
+    # sampler_kind="symmetry" is required upstream when the spec sets a symmetry group.
+    inputs = RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(length="40", symmetry="c2")])
     config = RFdiffusion3Config(
         n_batches=1,
         diffusion_batch_size=1,
         num_timesteps=50,
+        sampler_kind="symmetry",
     )
 
     output = run_rfdiffusion3(inputs, config)
@@ -437,7 +440,9 @@ def test_rfdiffusion3_unconditional_design():
     assert len(bundle.structures) > 0
     first_design = bundle[0]
     assert first_design.structure is not None
-    assert len(first_design.sequence) > 0
+    # Per-chain sequence list: C2 symmetry → 2 chains of 40 residues each.
+    assert len(first_design.sequence) == 2
+    assert all(len(chain_seq) == 40 for chain_seq in first_design.sequence)
 
 
 # ── Benchmark ─────────────────────────────────────────────────────────────────
@@ -465,4 +470,6 @@ def test_rfdiffusion3_design_benchmark(request: pytest.FixtureRequest) -> None:
     assert len(bundle.structures) == 8
     for design in bundle.structures:
         assert design.structure is not None
-        assert len(design.sequence) == 128
+        # Single-chain unconditional design → one entry in the per-chain sequence list.
+        assert len(design.sequence) == 1
+        assert len(design.sequence[0]) == 128

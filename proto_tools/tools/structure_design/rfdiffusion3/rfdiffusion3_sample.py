@@ -724,8 +724,9 @@ class RFdiffusion3Structure(BaseModel):
         structure (Structure): The designed 3D structure containing
             atomic coordinates in PDB/CIF format.
 
-        sequence (str): The designed amino acid sequence in single-letter code.
-            For multi-chain designs, chains are separated by ``/``.
+        sequence (list[str]): The designed amino acid sequences in single-letter
+            code, one entry per chain in the order chains appear in the emitted
+            PDB/CIF (which tracks the input contig).
 
         metadata (dict[str, Any]): Additional metadata from RFdiffusion3 output,
             including sampled contig, chain info, and any logged metrics.
@@ -735,9 +736,9 @@ class RFdiffusion3Structure(BaseModel):
         title="Designed Structure",
         description="The designed 3D structure",
     )
-    sequence: str = Field(
+    sequence: list[str] = Field(
         title="Sequence",
-        description="The designed amino acid sequence",
+        description="Designed amino acid sequences, one entry per chain in emitted PDB/CIF order",
     )
     metadata: dict[str, Any] = Field(
         default_factory=dict,
@@ -931,7 +932,7 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
         >>> result = run_rfdiffusion3(inputs, config)
         >>> bundle = result[0]  # one bundle per input spec
         >>> print(f"Spec {bundle.spec_key}: {len(bundle)} designs")
-        >>> print(f"First sequence: {bundle[0].sequence}")
+        >>> print(f"First sequence (chain A): {bundle[0].sequence[0]}")
 
     Note:
         - RFdiffusion3 generates both structure AND sequence
