@@ -572,7 +572,9 @@ class AbLangModel:
         if self._is_ablang1:
             tokens = self.model.tokenizer(formatted, pad=True, device=self.model.used_device)
         else:
-            tokens = self.model.tokenizer(formatted, pad=True, w_extra_tkns=False, device=self.model.used_device)
+            # ablang2 tokenizer with w_extra_tkns=False expects pre-joined "<H>|<L>" strings, not (H, L) tuples.
+            seqs = [f"<{heavy}>|<{light}>".replace("<>", "") for heavy, light in formatted]
+            tokens = self.model.tokenizer(seqs, pad=True, w_extra_tkns=False, device=self.model.used_device)
 
         with torch.no_grad():
             predictions = self.model.AbLang(tokens)[:, :, 1:21]  # AA columns only
