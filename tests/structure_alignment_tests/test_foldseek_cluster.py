@@ -12,13 +12,68 @@ from proto_tools.tools.structure_alignment import (
     FoldseekClusterInput,
     run_foldseek_cluster,
 )
-from proto_tools.tools.structure_alignment.foldseek.foldseek_cluster import _parse_cluster_tsv
+from proto_tools.tools.structure_alignment.foldseek.foldseek_cluster import (
+    _coerce_structure_items_to_text,
+    _parse_cluster_tsv,
+)
 
 _TINY_PDB = "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
 _TINY_CIF = "data_TEST\nloop_\n_atom_site.id\n_atom_site.type_symbol\n1 C\n"
 _TINY_FASTA = ">protein_a\nMKTLLEVAEK\n"
 _TINY_FASTA_2 = ">protein_b\nMQTLLDVAEH\n"
 _FIXTURES = Path(__file__).parent.parent / "dummy_data"
+
+
+# ── _coerce_structure_items_to_text ──────────────────────────────────────────
+
+
+def test_coerce_passes_str_items_through_unchanged():
+    """Plain str items pass through; per-string format detection happens downstream."""
+    data = {"structures": [_TINY_PDB, _TINY_FASTA]}
+    out = _coerce_structure_items_to_text(data)
+    assert out["structures"] == [_TINY_PDB, _TINY_FASTA]
+
+
+def test_coerce_serializes_structure_objects_to_pdb():
+    """Structure inputs are serialized to PDB string via .structure_pdb."""
+    from proto_tools.entities import Structure
+
+    s = Structure(structure=_TINY_PDB)
+    out = _coerce_structure_items_to_text({"structures": [s, _TINY_PDB]})
+    assert out["structures"] == [_TINY_PDB, _TINY_PDB]
+
+
+def test_coerce_structure_path_loads_and_serializes_to_pdb(tmp_path):
+    """Path with a structure extension loads via Structure.from_file and emits PDB."""
+    p = tmp_path / "x.pdb"
+    p.write_text(_TINY_PDB)
+    out = _coerce_structure_items_to_text({"structures": [p]})
+    assert out["structures"] == [_TINY_PDB]
+
+
+def test_coerce_fasta_path_reads_text_verbatim(tmp_path):
+    """Path with a FASTA extension is read as text; no Structure parsing (which would reject FASTA)."""
+    p = tmp_path / "seqs.fasta"
+    p.write_text(_TINY_FASTA)
+    out = _coerce_structure_items_to_text({"structures": [p]})
+    assert out["structures"] == [_TINY_FASTA]
+
+
+def test_coerce_gzipped_fasta_path_reads_decompressed_text(tmp_path):
+    """Gzipped FASTA path is decompressed and read as text."""
+    p = tmp_path / "seqs.fasta.gz"
+    with gzip.open(p, "wt") as f:
+        f.write(_TINY_FASTA)
+    out = _coerce_structure_items_to_text({"structures": [p]})
+    assert out["structures"] == [_TINY_FASTA]
+
+
+def test_coerce_noop_when_structures_absent_or_not_list():
+    """Helper short-circuits when `structures` key missing or non-list (no error)."""
+    assert _coerce_structure_items_to_text({"structures_dir": "some/dir"}) == {"structures_dir": "some/dir"}
+    assert _coerce_structure_items_to_text({"structures": None}) == {"structures": None}
+    # Non-dict input passes through unchanged.
+    assert _coerce_structure_items_to_text("not a dict") == "not a dict"
 
 
 # ── _parse_cluster_tsv ────────────────────────────────────────────────────────

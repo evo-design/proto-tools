@@ -27,7 +27,7 @@ _TINY_MULTIMER_PDB = (
 
 def test_remote_multimer_search_wraps_mode_with_complex_prefix():
     """Remote multimer mode wraps config.mode='3diaa' as wire-mode 'complex-3diaa' on submit."""
-    inputs = FoldseekMultimerSearchInput(structure_text=_TINY_MULTIMER_PDB)
+    inputs = FoldseekMultimerSearchInput(structure=_TINY_MULTIMER_PDB)
 
     submitted_modes: list[str] = []
 
@@ -66,7 +66,7 @@ def test_remote_multimer_search_wraps_mode_with_complex_prefix():
 
 def test_local_multimer_search_dispatches_easy_multimersearch():
     """Local mode dispatches operation=easy_multimersearch with structure + local_db."""
-    inputs = FoldseekMultimerSearchInput(structure_text=_TINY_MULTIMER_PDB)
+    inputs = FoldseekMultimerSearchInput(structure=_TINY_MULTIMER_PDB)
     config = FoldseekMultimerSearchConfig(search_mode="local", local_db="/path/to/db")
 
     with patch(
@@ -111,7 +111,7 @@ def test_remote_multimer_search_finds_complex_neighbors_for_pdl1():
     multimer_pdb = _MULTIMER_FIXTURE.read_text()
 
     output = run_foldseek_multimer_search(
-        FoldseekMultimerSearchInput(structure_text=multimer_pdb),
+        FoldseekMultimerSearchInput(structure=multimer_pdb),
         FoldseekMultimerSearchConfig(databases=["pdb100"], timeout_seconds=600.0),
     )
 
@@ -146,7 +146,7 @@ def test_local_multimer_search_with_directory_db(tmp_path):
     (target_dir / "pdl1.pdb").write_text(multimer_pdb)
 
     output = run_foldseek_multimer_search(
-        FoldseekMultimerSearchInput(structure_text=multimer_pdb),
+        FoldseekMultimerSearchInput(structure=multimer_pdb),
         FoldseekMultimerSearchConfig(search_mode="local", local_db=str(target_dir), num_threads=2),
     )
 

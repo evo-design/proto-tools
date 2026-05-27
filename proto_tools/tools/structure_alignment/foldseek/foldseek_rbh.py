@@ -14,6 +14,7 @@ from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
+from proto_tools.entities import Structure
 from proto_tools.tools.structure_alignment.foldseek.foldseek_search import (
     _LOCAL_DB_PSEUDONAME,
     FoldseekHit,
@@ -41,12 +42,14 @@ class FoldseekRBHInput(BaseToolInput):
     """Input for Foldseek reciprocal-best-hits search.
 
     Attributes:
-        structure_text (str): PDB-format text of the single-chain query
-            structure. Use ``alphafold-db-fetch`` or ``pdb-fetch-entry``
-            upstream to obtain it.
+        structure (Structure): Single-chain query structure. Accepts a
+            ``Structure`` object, a file path, or raw PDB/CIF content.
     """
 
-    structure_text: str = InputField(title="Structure Text", description="PDB-format text of the query structure")
+    structure: Structure = InputField(
+        title="Query Structure",
+        description="Single-chain query structure (Structure object, file path, or raw PDB/CIF string)",
+    )
 
 
 class FoldseekRBHConfig(BaseConfig):
@@ -180,8 +183,7 @@ _EXAMPLE_PDB_PATH = str(Path(__file__).parents[1] / "example_input_fixture.pdb")
 
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    pdb_text = Path(_EXAMPLE_PDB_PATH).read_text()
-    return FoldseekRBHInput(structure_text=pdb_text)
+    return FoldseekRBHInput(structure=Structure.from_file(_EXAMPLE_PDB_PATH))
 
 
 @tool(
@@ -204,7 +206,7 @@ def run_foldseek_rbh(
     """Run a Foldseek reciprocal-best-hits search via the local CLI.
 
     Args:
-        inputs (FoldseekRBHInput): Single-chain query PDB.
+        inputs (FoldseekRBHInput): Single-chain query structure.
         config (FoldseekRBHConfig): Target DB + alignment parameters.
         instance (Any): Optional ToolInstance for subprocess execution.
 
@@ -216,7 +218,7 @@ def run_foldseek_rbh(
         "foldseek",
         {
             "operation": "easy_rbh",
-            "structure_text": inputs.structure_text,
+            "structure_text": inputs.structure.structure_pdb,
             "local_db": config.local_db,
             "evalue": config.evalue,
             "sensitivity": config.sensitivity,

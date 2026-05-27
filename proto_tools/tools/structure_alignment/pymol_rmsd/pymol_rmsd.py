@@ -27,10 +27,19 @@ class PyMOLRMSDInput(BaseToolInput):
     Attributes:
         target_structure (Structure): Target/reference structure.
         mobile_structure (Structure): Mobile/query structure to align against the target.
+
+    Both fields accept a ``Structure`` object, a file path, or raw PDB/CIF
+    content; each is normalised to a ``Structure``.
     """
 
-    target_structure: Structure = InputField(title="Target Structure", description="Target/reference structure.")
-    mobile_structure: Structure = InputField(title="Mobile Structure", description="Mobile/query structure to align.")
+    target_structure: Structure = InputField(
+        title="Target Structure",
+        description="Target/reference structure (Structure object, file path, or raw PDB/CIF string)",
+    )
+    mobile_structure: Structure = InputField(
+        title="Mobile Structure",
+        description="Mobile/query structure (Structure object, file path, or raw PDB/CIF string)",
+    )
 
 
 class PyMOLRMSDConfig(BaseConfig):

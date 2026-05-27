@@ -16,6 +16,7 @@ from typing import Any, Literal
 import requests
 from pydantic import Field, field_validator, model_validator
 
+from proto_tools.entities import Structure
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -49,16 +50,18 @@ class FoldmasonMSAInput(BaseToolInput):
     """Input for FoldMason multiple structure alignment.
 
     Attributes:
-        structures (list[str]): PDB-format text strings to align (≥2).
+        structures (list[Structure]): Structures to align (≥2). Accepts
+            ``Structure`` objects, file paths, or raw PDB/CIF content strings
+            per item; each is normalised to a ``Structure``.
         structure_ids (list[str] | None): Optional IDs per structure (default:
             ``'structure_0'``, ``'structure_1'``, ...). Length must match
             ``structures``. IDs become the FASTA record headers and Newick
             leaf labels in the output.
     """
 
-    structures: list[str] = InputField(
+    structures: list[Structure] = InputField(
         title="Structures",
-        description="PDB-format text strings to align (must provide at least 2)",
+        description="Structures to align (Structure objects, file paths, or raw PDB/CIF strings; ≥2)",
         min_length=2,
     )
     structure_ids: list[str] | None = InputField(
@@ -225,8 +228,8 @@ _EXAMPLE_PDB_PATH = str(Path(__file__).parents[1] / "example_input_fixture.pdb")
 
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    pdb_text = Path(_EXAMPLE_PDB_PATH).read_text()
-    return FoldmasonMSAInput(structures=[pdb_text, pdb_text])
+    structure = Structure.from_file(_EXAMPLE_PDB_PATH)
+    return FoldmasonMSAInput(structures=[structure, structure])
 
 
 @tool(
@@ -275,7 +278,8 @@ def _remote_msa(inputs: FoldmasonMSAInput, config: FoldmasonMSAConfig) -> Foldma
     )
     try:
         ids = inputs.structure_ids or [f"structure_{i}" for i in range(len(inputs.structures))]
-        ticket_id = _submit_foldmason(inputs.structures, ids, session)
+        pdb_texts = [s.structure_pdb for s in inputs.structures]
+        ticket_id = _submit_foldmason(pdb_texts, ids, session)
         poll_until_complete(
             session,
             f"{_FOLDMASON_BASE}/api/ticket/{ticket_id}",
@@ -312,7 +316,7 @@ def _local_msa(
         "foldmason",
         {
             "operation": "easy_msa",
-            "structures": inputs.structures,
+            "structures": [s.structure_pdb for s in inputs.structures],
             "structure_ids": ids,
             "gap_open": config.gap_open,
             "gap_extend": config.gap_extend,

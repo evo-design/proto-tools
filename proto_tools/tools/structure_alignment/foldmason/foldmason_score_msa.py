@@ -12,6 +12,7 @@ from typing import Any
 
 from pydantic import Field, field_validator, model_validator
 
+from proto_tools.entities import Structure
 from proto_tools.tools.sequence_alignment.msas import MSA
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -35,8 +36,9 @@ class FoldmasonScoreMSAInput(BaseToolInput):
     """Input for FoldMason MSA-LDDT scoring.
 
     Attributes:
-        structures (list[str]): PDB-format text strings (≥2). Order must match
-            the rows of ``msa``.
+        structures (list[Structure]): Structures (≥2). Accepts ``Structure``
+            objects, file paths, or raw PDB/CIF content strings per item; each
+            is normalised to a ``Structure``. Order must match the rows of ``msa``.
         structure_ids (list[str] | None): Optional IDs per structure (default:
             ``'structure_0'``, ...). Must match the FASTA record headers in
             ``msa`` so msa2lddt can resolve each row to its structure.
@@ -44,9 +46,9 @@ class FoldmasonScoreMSAInput(BaseToolInput):
             ``MSA`` object or a raw FASTA string.
     """
 
-    structures: list[str] = InputField(
+    structures: list[Structure] = InputField(
         title="Structures",
-        description="PDB-format text strings whose order matches the rows of `msa` (≥2)",
+        description="Structures whose order matches the rows of `msa` (Structure / path / PDB or CIF text; ≥2)",
         min_length=2,
     )
     structure_ids: list[str] | None = InputField(
@@ -175,9 +177,9 @@ _EXAMPLE_AA_SEQUENCE = "MRKKLDLKKFVEDKNQEYAARALGLSQKLIEEVLKRGLPVYVETNKDGNIKVYITQ
 
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    pdb_text = Path(_EXAMPLE_PDB_PATH).read_text()
+    structure = Structure.from_file(_EXAMPLE_PDB_PATH)
     return FoldmasonScoreMSAInput(
-        structures=[pdb_text, pdb_text],
+        structures=[structure, structure],
         msa=MSA(
             aligned_sequences=[_EXAMPLE_AA_SEQUENCE, _EXAMPLE_AA_SEQUENCE],
             sequence_ids=["structure_0", "structure_1"],
@@ -218,7 +220,7 @@ def run_foldmason_score_msa(
         "foldmason",
         {
             "operation": "msa2lddt",
-            "structures": inputs.structures,
+            "structures": [s.structure_pdb for s in inputs.structures],
             "structure_ids": ids,
             "aa_msa_fasta": inputs.msa.to_fasta_string(),
             "pair_threshold": config.pair_threshold,

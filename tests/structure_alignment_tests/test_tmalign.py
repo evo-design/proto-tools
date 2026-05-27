@@ -25,19 +25,19 @@ _MINIMAL_PDB = "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.
 # ── Validation ────────────────────────────────────────────────────────────────
 
 
-def test_tmalign_input_rejects_missing_pdb_text_1():
-    with pytest.raises(ValidationError, match="pdb_text_1"):
-        TMalignInput(pdb_text_2=_MINIMAL_PDB)
+def test_tmalign_input_rejects_missing_query_structure():
+    with pytest.raises(ValidationError, match="query_structure"):
+        TMalignInput(reference_structure=_MINIMAL_PDB)
 
 
-def test_tmalign_input_rejects_missing_pdb_text_2():
-    with pytest.raises(ValidationError, match="pdb_text_2"):
-        TMalignInput(pdb_text_1=_MINIMAL_PDB)
+def test_tmalign_input_rejects_missing_reference_structure():
+    with pytest.raises(ValidationError, match="reference_structure"):
+        TMalignInput(query_structure=_MINIMAL_PDB)
 
 
 def test_tmalign_input_rejects_extra_fields():
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
-        TMalignInput(pdb_text_1=_MINIMAL_PDB, pdb_text_2=_MINIMAL_PDB, extra_field="x")
+        TMalignInput(query_structure=_MINIMAL_PDB, reference_structure=_MINIMAL_PDB, extra_field="x")
 
 
 # ---------------------------------------------------------------------------
@@ -49,7 +49,7 @@ def test_tmalign_aligns_two_structures():
     """Align two different PDB structures and verify TM-scores."""
     pdb_1 = _PDB_1_PATH.read_text()
     pdb_2 = _PDB_2_PATH.read_text()
-    inputs = TMalignInput(pdb_text_1=pdb_1, pdb_text_2=pdb_2)
+    inputs = TMalignInput(query_structure=pdb_1, reference_structure=pdb_2)
     result = run_tmalign(inputs, TMalignConfig())
 
     validate_output(result)
@@ -61,7 +61,7 @@ def test_tmalign_aligns_two_structures():
 def test_tmalign_self_alignment_perfect_score():
     """Aligning a structure to itself should give TM-score = 1.0."""
     pdb_1 = _PDB_1_PATH.read_text()
-    inputs = TMalignInput(pdb_text_1=pdb_1, pdb_text_2=pdb_1)
+    inputs = TMalignInput(query_structure=pdb_1, reference_structure=pdb_1)
     result = run_tmalign(inputs, TMalignConfig())
 
     validate_output(result)
@@ -78,7 +78,7 @@ def test_tmalign_alignment_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark tmalign-alignment: 20 sequential alignments of pdl1 vs renin_af3 (~340 aa) (cold + warm)."""
     pdb_1 = _PDB_1_PATH.read_text()
     pdb_2 = _PDB_2_PATH.read_text()
-    inputs = TMalignInput(pdb_text_1=pdb_1, pdb_text_2=pdb_2)
+    inputs = TMalignInput(query_structure=pdb_1, reference_structure=pdb_2)
     config = TMalignConfig()
 
     def run_batch():

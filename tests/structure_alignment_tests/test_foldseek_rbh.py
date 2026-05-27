@@ -24,7 +24,7 @@ _FIXTURES = Path(__file__).parent.parent / "dummy_data"
 
 def test_run_foldseek_rbh_dispatches_easy_rbh():
     """The wrapper sends operation=easy_rbh + structure_text + local_db; output is parsed FoldseekHits."""
-    inputs = FoldseekRBHInput(structure_text=_TINY_PDB)
+    inputs = FoldseekRBHInput(structure=_TINY_PDB)
     config = FoldseekRBHConfig(local_db="/path/to/db", sensitivity=7.0, num_threads=8)
 
     with patch("proto_tools.tools.structure_alignment.foldseek.foldseek_rbh.ToolInstance.dispatch") as mock_dispatch:
@@ -55,7 +55,7 @@ def test_run_foldseek_rbh_dispatches_easy_rbh():
 
 def test_run_foldseek_rbh_normalizes_pident_to_fraction():
     """The standalone forces pident (0-100); the parser normalizes to [0, 1]."""
-    inputs = FoldseekRBHInput(structure_text=_TINY_PDB)
+    inputs = FoldseekRBHInput(structure=_TINY_PDB)
     config = FoldseekRBHConfig(local_db="/path/to/db")
 
     with patch("proto_tools.tools.structure_alignment.foldseek.foldseek_rbh.ToolInstance.dispatch") as mock_dispatch:
@@ -84,7 +84,7 @@ def test_foldseek_rbh_end_to_end_with_directory_target_db(tmp_path):
     (target_dir / "test_struct.pdb").write_text((_FIXTURES / "test_structure_similarity.pdb").read_text())
 
     output = run_foldseek_rbh(
-        FoldseekRBHInput(structure_text=(_FIXTURES / "renin_af3.pdb").read_text()),
+        FoldseekRBHInput(structure=(_FIXTURES / "renin_af3.pdb").read_text()),
         FoldseekRBHConfig(local_db=str(target_dir), num_threads=2),
     )
 

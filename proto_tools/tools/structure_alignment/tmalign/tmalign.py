@@ -12,6 +12,7 @@ from typing import Any, ClassVar
 
 from pydantic import Field
 
+from proto_tools.entities import Structure
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -32,12 +33,21 @@ class TMalignInput(BaseToolInput):
     """Input for TMalign pairwise structure alignment.
 
     Attributes:
-        pdb_text_1 (str): Raw PDB content of the first structure (query / candidate).
-        pdb_text_2 (str): Raw PDB content of the second structure (reference / target).
+        query_structure (Structure): Query / candidate structure.
+        reference_structure (Structure): Reference / target structure.
+
+    Both fields accept a ``Structure`` object, a file path, or raw PDB/CIF
+    content; each is normalised to a ``Structure``.
     """
 
-    pdb_text_1: str = InputField(title="Structure 1 PDB", description="PDB content of structure 1 (query)")
-    pdb_text_2: str = InputField(title="Structure 2 PDB", description="PDB content of structure 2 (reference)")
+    query_structure: Structure = InputField(
+        title="Query Structure",
+        description="Query / candidate structure (Structure object, file path, or raw PDB/CIF string)",
+    )
+    reference_structure: Structure = InputField(
+        title="Reference Structure",
+        description="Reference / target structure (Structure object, file path, or raw PDB/CIF string)",
+    )
 
 
 class TMalignConfig(BaseConfig):
@@ -110,8 +120,8 @@ _EXAMPLE_PDB_PATH = str(Path(__file__).parents[1] / "example_input_fixture.pdb")
 
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    _pdb_text = Path(_EXAMPLE_PDB_PATH).read_text()
-    return TMalignInput(pdb_text_1=_pdb_text, pdb_text_2=_pdb_text)
+    structure = Structure.from_file(_EXAMPLE_PDB_PATH)
+    return TMalignInput(query_structure=structure, reference_structure=structure)
 
 
 @tool(
@@ -132,8 +142,8 @@ def example_input() -> Any:
 def run_tmalign(inputs: TMalignInput, config: TMalignConfig, instance: Any = None) -> TMalignOutput:
     """Run TMalign on two PDB structures."""
     input_data = {
-        "pdb_text_1": inputs.pdb_text_1,
-        "pdb_text_2": inputs.pdb_text_2,
+        "pdb_text_1": inputs.query_structure.structure_pdb,
+        "pdb_text_2": inputs.reference_structure.structure_pdb,
     }
 
     input_data["device"] = "cpu"

@@ -18,6 +18,7 @@ from typing import Any, Literal
 import requests
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from proto_tools.entities import Structure
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -109,11 +110,14 @@ class FoldseekSearchInput(BaseToolInput):
     """Input for Foldseek structural search.
 
     Attributes:
-        structure_text (str): PDB-format text of the query structure. Use
-            ``alphafold-db-fetch`` or ``pdb-fetch-entry`` upstream to obtain it.
+        structure (Structure): Query structure. Accepts a ``Structure`` object,
+            a file path, or raw PDB/CIF content; normalised internally.
     """
 
-    structure_text: str = InputField(title="Structure Text", description="PDB-format text of the query structure")
+    structure: Structure = InputField(
+        title="Query Structure",
+        description="Query structure (Structure object, file path, or raw PDB/CIF string)",
+    )
 
 
 class FoldseekSearchConfig(BaseConfig):
@@ -302,8 +306,7 @@ _EXAMPLE_PDB_PATH = str(Path(__file__).parents[1] / "example_input_fixture.pdb")
 
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    pdb_text = Path(_EXAMPLE_PDB_PATH).read_text()
-    return FoldseekSearchInput(structure_text=pdb_text)
+    return FoldseekSearchInput(structure=Structure.from_file(_EXAMPLE_PDB_PATH))
 
 
 @tool(
@@ -329,7 +332,7 @@ def run_foldseek_search(
     on ``config.search_mode``.
 
     Args:
-        inputs (FoldseekSearchInput): Query structure as PDB-format text.
+        inputs (FoldseekSearchInput): Query structure.
         config (FoldseekSearchConfig): Search-mode + per-mode options.
         instance (Any): Optional ToolInstance for subprocess execution.
 
@@ -351,7 +354,7 @@ def _remote_search(inputs: FoldseekSearchInput, config: FoldseekSearchConfig) ->
         allowed_methods=["GET", "POST"],
     )
     try:
-        ticket_id = _submit(inputs.structure_text, list(config.databases), config.mode, session)
+        ticket_id = _submit(inputs.structure.structure_pdb, list(config.databases), config.mode, session)
         poll_until_complete(
             session,
             f"{_FOLDSEEK_BASE}/api/ticket/{ticket_id}",
@@ -385,7 +388,7 @@ def _local_search(
         "foldseek",
         {
             "operation": "easy_search",
-            "structure_text": inputs.structure_text,
+            "structure_text": inputs.structure.structure_pdb,
             "local_db": config.local_db,
             "evalue": config.evalue,
             "sensitivity": config.sensitivity,

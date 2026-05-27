@@ -106,6 +106,29 @@ def test_local_mode_dispatches_easy_msa():
     assert payload["num_threads"] == 8
 
 
+def test_local_mode_accepts_structure_objects_and_paths(tmp_path):
+    """`structures` dual-accept: Structure objects and file paths normalize to PDB on the wire."""
+    from proto_tools.entities import Structure
+
+    pdb_file = tmp_path / "s.pdb"
+    pdb_file.write_text(_TINY_PDB)
+    structure_obj = Structure(structure=_TINY_PDB)
+
+    inputs = FoldmasonMSAInput(structures=[structure_obj, pdb_file])
+    assert all(type(s).__name__ == "Structure" for s in inputs.structures)
+
+    with patch("proto_tools.tools.structure_alignment.foldmason.foldmason_msa.ToolInstance.dispatch") as mock_dispatch:
+        mock_dispatch.return_value = {
+            "aa_msa_fasta": ">structure_0\nM\n>structure_1\nM\n",
+            "three_di_msa_fasta": ">structure_0\nD\n>structure_1\nD\n",
+            "newick_tree": "(structure_0,structure_1);\n",
+        }
+        run_foldmason_msa(inputs, FoldmasonMSAConfig(search_mode="local"))
+
+    # Both entries normalize to PDB text on the wire payload.
+    assert mock_dispatch.call_args.args[1]["structures"] == [_TINY_PDB, _TINY_PDB]
+
+
 # ── run_foldmason_msa (remote, mocked HTTP) ──────────────────────────────────
 
 
