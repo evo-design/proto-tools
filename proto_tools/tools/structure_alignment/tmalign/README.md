@@ -1,224 +1,50 @@
-<a href="https://bio-pro.mintlify.app/tools/structure-alignment/tmalign"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/structure-alignment/tmalign"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # TMalign
 
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** TMalign is licensed under Custom (Zhang Lab academic-use license) and may require explicit attribution when utilized. Please refer to [the license](https://github.com/pylelab/USalign/blob/master/LICENSE) for full terms.
 
 ## Overview
 
-TMalign performs pairwise protein structure alignment using the [TM-score](https://en.wikipedia.org/wiki/Template_modeling_score) metric (`tmalign-alignment`). It aligns two monomeric protein structures and returns TM-scores normalized by the length of each chain, providing a length-independent measure of structural similarity. TMalign is a compiled C++ binary that runs on CPU with no external dependencies.
+[TMalign](https://zhanggroup.org/TM-align/) is a pairwise protein structure alignment program developed by the [Zhang Lab](https://zhanggroup.org/). It identifies the optimal structural superposition of two protein structures by directly maximising the Template Modeling score (TM-score), and reports the score normalised by the length of each input chain. This toolkit compiles TMalign from the canonical [pylelab/USalign](https://github.com/pylelab/USalign) distribution and runs it through a single registered tool that returns both length-normalised TM-scores.
 
 ## Background
 
-**What does this tool measure/predict?**
-TMalign computes the TM-score (Template Modeling score), which measures the topological similarity of two protein structures. It performs a [structural superposition](https://en.wikipedia.org/wiki/Structural_alignment) that maximizes the TM-score, then reports scores normalized by each chain's length.
+The Template Modeling score (TM-score) ([Zhang and Skolnick, 2004](https://doi.org/10.1002/prot.20264)) is a length-independent measure of topological similarity between two protein structures. It scores each pair of corresponding residues with a distance-based weight that uses a protein-size-dependent normalisation, which eliminates the inherent length dependence of RMSD-style scores and lets the same TM-score value be compared across proteins of different sizes. The score ranges from 0 to 1, with 1 indicating identical structures.
 
-**Why is this important?**
-- Fold classification: TM-score > 0.5 reliably indicates proteins share the same fold topology, regardless of sequence similarity
-- Structure prediction validation: compare predicted structures to experimental references
-- Protein design: verify that designed proteins adopt the intended fold
-- Evolutionary analysis: detect structural homologs even when sequence similarity is low (<20% identity)
+TMalign ([Zhang and Skolnick, 2005](https://doi.org/10.1093/nar/gki524)) is a structure alignment algorithm that identifies the optimal pairwise structural superposition by combining a TM-score-based rotation matrix with dynamic programming. Three initial alignments are seeded from secondary-structure matching, gapless threading, and a hybrid scoring matrix, and the residue-to-residue correspondence is then iteratively refined by alternating rigid-body rotation with dynamic programming on the TM-score-weighted distance matrix until the alignment converges. Unlike alignment methods that optimise RMSD, TMalign directly optimises the TM-score, which decouples the alignment objective from chain length. The published benchmark reports that TMalign produces alignments with higher coverage and accuracy than CE, DALI, and SAL while running approximately four times faster than CE and twenty times faster than DALI on the same workload.
 
-**Scientific foundation:**
-TM-score uses a length-dependent distance weighting scheme that emphasizes well-aligned residues and penalizes outliers less harshly than [RMSD](https://en.wikipedia.org/wiki/Root-mean-square_deviation_of_atomic_positions). The score is normalized by protein length, making it comparable across proteins of different sizes. The alignment algorithm uses an iterative heuristic that directly optimizes TM-score rather than RMSD, finding the structural superposition that maximizes topological similarity. Key properties:
-- **Range:** (0, 1], where 1.0 = identical structures
-- **Length-independent:** Unlike RMSD, TM-score does not increase with protein size
-- **Fold discrimination:** TM-score > 0.5 reliably indicates the same fold (Zhang & Skolnick, 2004)
-- **Random baseline:** Expected TM-score for randomly related proteins is ~0.17
+A subsequent statistical analysis of the TM-score ([Xu and Zhang, 2010](https://doi.org/10.1093/bioinformatics/btq066)) provides quantitative interpretation guidance. The authors compare TM-scores across all pairs in a non-redundant set of 6,684 single-domain protein structures and report that the score follows an extreme value distribution. They show that a TM-score above 0.5 is a strong probabilistic indicator of shared SCOP and CATH fold classification, while scores below 0.5 mostly indicate different folds.
+
+### Learning Resources
+
+- [pylelab/USalign](https://github.com/pylelab/USalign) (Pyle Lab, Yale University). The canonical distribution that bundles TMalign together with USalign, MMalign, and TMscore. This toolkit compiles the TMalign program from this repository.
+- [Zhang Lab TMalign page](https://zhanggroup.org/TM-align/) (Zhang Lab). Background documentation and an online TMalign web service maintained by the original developers.
 
 ## Tools
 
 ### TMalign Structure Alignment (`tmalign-alignment`)
 
-Run TMalign on two PDB structures.
+Aligns two protein structures with TMalign and returns the Template Modeling score normalised by the length of each input chain. The tool takes a query and reference `Structure`, runs the compiled TMalign program, and reports `tm_score_chain_1` (normalised by the query length) and `tm_score_chain_2` (normalised by the reference length).
 
-## How It Works
+#### Applications
 
-**Method overview:**
-1. TMalign reads two PDB structures and extracts C-alpha coordinates
-2. An initial alignment is generated using secondary structure and sequence order heuristics
-3. The alignment is iteratively refined to maximize TM-score using [dynamic programming](https://en.wikipedia.org/wiki/Dynamic_programming) with TM-score-based distance matrices
-4. The final structural superposition is computed and TM-scores are reported normalized by each chain's length
+This tool is the standard method for pairwise protein structure comparison. Representative applications include validating that a designed protein adopts the intended fold, ranking predicted structures by topological similarity to a reference, classifying experimentally determined structures into known folds, and detecting distant structural homology where sequence similarity is too low for sequence-based comparison.
 
-**Key assumptions:**
-- Both input structures are monomeric proteins with C-alpha coordinates
-- Structures are in PDB format (text content, not file paths)
-- Both structures should represent folded, globular proteins for meaningful comparison
+#### Usage Tips
 
-**Limitations:**
-- Monomeric proteins only: cannot handle multi-chain complexes (use USalign)
-- Protein-only: no nucleic acid or ligand support
-- Requires C-alpha atoms in PDB format
-- Very short proteins (<20 residues) may produce unreliable TM-scores
+- **The two TM-scores differ when the query and reference have different lengths.** Each score is normalised by the length of the named chain, so the score normalised by the shorter chain is typically the larger of the two. Use the score normalised by the chain whose length matters for the comparison, typically the reference or target when ranking candidates against a fixed structure.
+- **A TM-score above 0.5 indicates the structures share the same fold.** This threshold is statistically derived from a non-redundant analysis of the Protein Data Bank ([Xu and Zhang, 2010](https://doi.org/10.1093/bioinformatics/btq066)) and is the standard fold-similarity cutoff in the literature. Scores above 0.3 are significantly above random with a P-value below 0.001, while scores below 0.17 are indistinguishable from random pairs (the random-pair distribution is centred near a TM-score of 0.15).
+- **TMalign is designed for monomeric protein chains.** Multi-chain assemblies are processed as a single chain and chain breaks are not preserved. For genuine multi-chain alignment use the [USalign](../usalign) tool in this category, which is built for protein complexes.
+- **Very short inputs produce unreliable scores.** The TM-score `d0` length-normalisation factor is calibrated for chains of approximately 15 residues and above and saturates rapidly for shorter chains, so short-chain comparisons lose the standard topological interpretation. Restrict comparison to chains of meaningful length before drawing fold-level conclusions.
 
-**Computational requirements:**
-- **Hardware:** CPU only; no GPU required
-- **Runtime:** <1 second per alignment, even for large proteins
-- **Scalability:** Extremely fast; suitable for all-vs-all comparisons of thousands of structures
+## Toolkit Notes
 
-## Input Parameters
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `query_structure` | `Structure` | *required* | Query / candidate structure. Accepts a `Structure` object, a file path, or raw PDB/CIF content. |
-| `reference_structure` | `Structure` | *required* | Reference / target structure. Accepts a `Structure` object, a file path, or raw PDB/CIF content. |
+These apply to every TMalign tool in this toolkit (`tmalign-alignment`).
 
-## Configuration
-
-TMalign uses default configuration inherited from `BaseConfig`. No tool-specific configuration parameters.
-
-## Output Specification
-
-```python
-# Return type: TMalignOutput
-TMalignOutput(
-    tm_score_chain_1: float,  # TM-score normalized by length of Chain 1 (query)
-    tm_score_chain_2: float,  # TM-score normalized by length of Chain 2 (reference)
-)
-```
-
-**Key output fields:**
-
-| Field | Type | Range | Interpretation |
-|-------|------|-------|----------------|
-| `tm_score_chain_1` | `float` | `0.0 - 1.0` | TM-score normalized by query length. Use when evaluating query against a reference. |
-| `tm_score_chain_2` | `float` | `0.0 - 1.0` | TM-score normalized by reference length. Use when evaluating how well a candidate matches a fixed target. |
-
-**Supported export formats:** `json`
-
-## Interpreting Results
-
-**Thresholds & decision boundaries:**
-- **Same fold:** `TM-score > 0.5`: Structures share the same fold topology with high confidence. This threshold is statistically validated and widely used in structural biology.
-- **Similar fold:** `0.3 < TM-score <= 0.5`: Structures may share a similar fold or superfold, but the relationship is not definitive. Inspect visually.
-- **Different fold:** `TM-score <= 0.3`: Structures are structurally unrelated or share only local structural motifs.
-- **Near-identical:** `TM-score > 0.9`: Structures are nearly identical in topology; differences are in loop regions or minor conformational changes.
-- **Random baseline:** `TM-score ~ 0.17`: Expected for randomly related proteins of typical length.
-
-**Interpreting edge cases:**
-- The two TM-scores (normalized by Chain 1 vs Chain 2) differ when chains have different lengths. The score normalized by the shorter chain is always higher.
-- For comparing a designed protein to a target, use the score normalized by the **target** length (`tm_score_chain_2` if the target is structure 2).
-- Very short proteins (<30 residues) may have artificially high TM-scores because the length normalization amplifies small alignments.
-- TM-score measures **topological** similarity, not RMSD. Two structures can have high TM-score but moderate RMSD if the core is well-aligned with divergent loops.
-
-## Quick Start Examples
-
-**Example 1: Compare two structures**
-```python
-from proto_tools.tools.structure_alignment.tmalign import (
-    TMalignInput, TMalignConfig, run_tmalign,
-)
-
-# Load PDB content (from files, predictions, or databases)
-with open("predicted.pdb") as f:
-    query_pdb = f.read()
-with open("reference.pdb") as f:
-    reference_pdb = f.read()
-
-inputs = TMalignInput(query_structure=query_pdb, reference_structure=reference_pdb)
-result = run_tmalign(inputs, TMalignConfig())
-
-print(f"TM-score (norm by query):     {result.tm_score_chain_1:.3f}")
-print(f"TM-score (norm by reference): {result.tm_score_chain_2:.3f}")
-
-if result.tm_score_chain_2 > 0.5:
-    print("Structures share the same fold")
-```
-
-**Example 2: Validate designed protein against target fold**
-```python
-from proto_tools.tools.structure_alignment.tmalign import (
-    TMalignInput, TMalignConfig, run_tmalign,
-)
-from proto_tools.tools.structure_prediction.esmfold import (
-    run_esmfold, ESMFoldInput, ESMFoldConfig,
-)
-
-# Predict structure of designed sequence
-designed_seq = "MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDI"
-pred_result = run_esmfold(
-    ESMFoldInput(complexes=[designed_seq]),
-    ESMFoldConfig(),
-)
-predicted_pdb = pred_result.structures[0].structure_pdb
-
-# Compare to target structure
-with open("target_fold.pdb") as f:
-    target_pdb = f.read()
-
-tm_result = run_tmalign(
-    TMalignInput(query_structure=predicted_pdb, reference_structure=target_pdb),
-    TMalignConfig(),
-)
-
-# Use TM-score normalized by target length
-print(f"TM-score vs target: {tm_result.tm_score_chain_2:.3f}")
-```
-
-**Example 3: Batch comparison of multiple candidates**
-```python
-from proto_tools.tools.structure_alignment.tmalign import (
-    TMalignInput, TMalignConfig, run_tmalign,
-)
-
-with open("target.pdb") as f:
-    target_pdb = f.read()
-
-candidate_pdbs = ["cand1.pdb", "cand2.pdb", "cand3.pdb"]
-results = []
-
-for pdb_path in candidate_pdbs:
-    with open(pdb_path) as f:
-        cand_pdb = f.read()
-    result = run_tmalign(
-        TMalignInput(query_structure=cand_pdb, reference_structure=target_pdb),
-        TMalignConfig(),
-    )
-    results.append((pdb_path, result.tm_score_chain_2))
-
-# Rank by TM-score (higher = better match to target)
-for path, score in sorted(results, key=lambda x: -x[1]):
-    status = "PASS" if score > 0.5 else "FAIL"
-    print(f"{path}: TM-score={score:.3f} [{status}]")
-```
-
-## Best Practices & Gotchas
-
-**Common mistakes:**
-1. **Passing file paths instead of PDB content:** TMalign expects PDB text content as strings, not file paths. Read the file first with `open(path).read()`.
-2. **Using TMalign for multimers:** TMalign only handles monomeric proteins. For multi-chain complexes, use USalign (`usalign-alignment`).
-3. **Comparing structures of vastly different sizes:** TM-score is length-independent, but aligning a 50-residue domain against a 500-residue protein may not be meaningful. Consider extracting the relevant domain first.
-4. **Ignoring which normalization to use:** The two TM-scores can differ significantly. Choose the one normalized by the length that matters for your application (usually the target/reference).
-
-**Tips for optimal results:**
-- For protein design validation, use TM-score > 0.5 as a minimum threshold and > 0.7 as a strong match
-- Combine with pLDDT filtering: first check that the predicted structure is well-folded (pLDDT > 0.8), then compare topology with TMalign
-- For all-vs-all comparisons, TMalign is fast enough to run thousands of pairwise alignments
-
-**Edge cases to watch for:**
-- Very short proteins (<20 residues): TM-score normalization may produce misleadingly high scores
-- Proteins with large disordered regions: the disordered tails will reduce TM-score even if structured domains match well
-- NMR ensembles: only the first model in the PDB will be used
-
-## References
-
-**Primary publication:**
-- Zhang, Y. & Skolnick, J. (2005). "TM-align: a protein structure alignment algorithm based on the TM-score." *Nucleic Acids Research*, 33(7), 2302-2309. [DOI: 10.1093/nar/gki524](https://doi.org/10.1093/nar/gki524)
-- Summary: Introduces TMalign, a structure alignment algorithm that directly optimizes TM-score rather than RMSD, providing length-independent structural comparison of proteins.
-
-**Implementation:**
-- GitHub: [https://github.com/pylelab/USalign](https://github.com/pylelab/USalign) (TMalign is included in the USalign package)
-
-**Additional resources:**
-- Zhang, Y. & Skolnick, J. (2004). "Scoring function for automated assessment of protein structure template quality." *Proteins*, 57(4), 702-710. [DOI: 10.1002/prot.20264](https://doi.org/10.1002/prot.20264): Original TM-score paper.
-
-## Related Tools
-
-**Tools often used together:**
-- **`esmfold-prediction`**: Predict structures from designed sequences, then compare to targets with TMalign
-- **`alphafold2-prediction`**: Higher-accuracy structure prediction for important targets
-- **`structure-tmscore` constraint**: Optimization constraint that uses TMalign internally for automated TM-score evaluation
-
-**Alternative tools (similar function):**
-- **`usalign-alignment`**: Universal structure alignment supporting multimers, nucleic acids, and mixed complexes. Use USalign when TMalign's monomer limitation is a problem.
+- **Outputs are returned as typed metric objects.** Each `TMalignMetrics` result carries both `tm_score_chain_1` and `tm_score_chain_2`. Results can be exported to JSON through the standard export method.
+- **Inputs accept a `Structure` object, a file path, or raw PDB or mmCIF content.** Each input is normalised to a `Structure` before scoring, and the corresponding PDB text is passed to TMalign through a temporary file.
+- **TMalign runs on CPU and is fast enough for all-against-all comparison of large structure sets.** No GPU is used, and per-pair runtime scales with the product of the two chain lengths.
