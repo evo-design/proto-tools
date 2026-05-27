@@ -19,6 +19,7 @@ from proto_tools.databases.entries import (
     tiny_test_colabfold,  # noqa: F401
     uniprot_2021_04,  # noqa: F401
     uniref30_2302,  # noqa: F401
+    uniref50_2026_01,  # noqa: F401
     uniref90_2022_05,  # noqa: F401
 )
 
