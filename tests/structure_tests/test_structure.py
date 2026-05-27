@@ -14,7 +14,7 @@ import pytest
 from pydantic import BaseModel
 
 from proto_tools.entities.structures import BFactorType, Structure
-from proto_tools.entities.structures.structure import _approx_equal_metric
+from proto_tools.entities.structures.structure import _approx_equal_metric, _detect_plddt_from_metadata
 from proto_tools.entities.structures.utils import (
     adjacent_distances,
     convert_cif_str_to_pdb_str,
@@ -706,6 +706,63 @@ def test_per_residue_plddt_none_for_non_plddt():
     """Returns None when B-factors don't represent pLDDT."""
     pdb = "\n".join([_pdb_line(1, "A", 1, 15.0), "END"])
     assert Structure(structure=pdb, b_factor_type=BFactorType.UNSPECIFIED).per_residue_plddt is None
+
+
+# ── b_factor_type auto-detection from header metadata ─────────────────────────
+
+
+def test_b_factor_type_auto_detected_from_alphafold_pdb_header():
+    """AlphaFold DB PDB header (TITLE with ALPHAFOLD) sets b_factor_type=PLDDT when unspecified."""
+    pdb = "\n".join(
+        [
+            "TITLE     ALPHAFOLD MONOMER V2.0 PREDICTION FOR TEST PROTEIN",
+            _pdb_line(1, "A", 1, 95.0),
+            "END",
+        ]
+    )
+    s = Structure(structure=pdb)
+    assert s.b_factor_type == BFactorType.PLDDT
+    assert s.per_residue_plddt == pytest.approx([0.95], abs=1e-2)
+
+
+def test_b_factor_type_auto_detected_from_ma_qa_metric_cif():
+    """An mmCIF declaring an _ma_qa_metric pLDDT block sets b_factor_type=PLDDT when unspecified."""
+    cif = "\n".join(
+        [
+            "data_test",
+            "loop_",
+            "_ma_qa_metric.id",
+            "_ma_qa_metric.name",
+            "_ma_qa_metric.type",
+            "_ma_qa_metric.mode",
+            "1 pLDDT pLDDT local",
+            "_atom_site.group_PDB",
+            "ATOM",
+        ]
+    )
+    # Construct with explicit format since the bare-atom mock is not a fully parseable mmCIF.
+    detected = _detect_plddt_from_metadata(cif, "cif")
+    assert detected == BFactorType.PLDDT
+
+
+def test_b_factor_type_auto_detection_skipped_for_explicit_type():
+    """Explicit non-UNSPECIFIED b_factor_type wins over auto-detection."""
+    pdb = "\n".join(
+        [
+            "TITLE     ALPHAFOLD MONOMER V2.0 PREDICTION FOR TEST PROTEIN",
+            _pdb_line(1, "A", 1, 15.0),
+            "END",
+        ]
+    )
+    s = Structure(structure=pdb, b_factor_type=BFactorType.TEMPERATURE_FACTOR)
+    assert s.b_factor_type == BFactorType.TEMPERATURE_FACTOR
+
+
+def test_b_factor_type_auto_detection_leaves_generic_pdb_unspecified():
+    """Generic PDB without AlphaFold metadata stays UNSPECIFIED."""
+    pdb = "\n".join([_pdb_line(1, "A", 1, 15.0), "END"])
+    s = Structure(structure=pdb)
+    assert s.b_factor_type == BFactorType.UNSPECIFIED
 
 
 # ── chain selection ───────────────────────────────────────────────────────────

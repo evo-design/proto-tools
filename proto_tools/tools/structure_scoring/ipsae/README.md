@@ -1,181 +1,48 @@
-<a href="https://bio-pro.mintlify.app/tools/structure-scoring/ipsae"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/structure-scoring/ipsae"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # IPSAE
 
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** IPSAE is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/DunbrackLab/IPSAE/blob/main/LICENSE) for full terms.
 
 ## Overview
 
-IPSAE (Dunbrack 2025) is a comprehensive interface-quality scoring tool for cofolded protein complexes. Given a predicted structure with its PAE (Predicted Aligned Error) matrix, per-residue pLDDT, and CA coordinates, it computes five complementary interface metrics: **ipSAE**, **pDockQ2** (Zhu 2023), **LIS** (Kim 2024), **pDockQ** (Bryant 2022), and **ipTM**. The primary metric, ipSAE, uses an adaptive d0 normalization derived from the PAE matrix to better distinguish correct from incorrect interfaces compared to earlier PAE-based scores.
-
-Supports structures from AlphaFold2, AlphaFold3, Chai-1, and Boltz.
-
-Tool registry key: `ipsae-scoring`. Category: `structure_scoring`.
+[IPSAE](https://github.com/DunbrackLab/IPSAE) is a scoring program for protein-protein interfaces in cofolded complexes from the [Dunbrack Lab](https://dunbrack.fccc.edu/lab/) at the Fox Chase Cancer Center. It takes a predicted complex along with its per-residue confidence scores and the predicted aligned error (PAE) matrix and reports five complementary interface-quality scores for a selected binder-target chain pair. This toolkit runs IPSAE through a single registered tool that returns the ipSAE score together with pDockQ, pDockQ2, the local interaction score (LIS), and interface pTM.
 
 ## Background
 
-**What does this tool measure?**
-Protein structure predictors emit per-residue pLDDT and a pairwise PAE matrix as confidence signals. Different scoring methods extract interface quality from these signals in different ways. IPSAE computes all of them in a single pass:
+IPSAE ([Dunbrack, 2025](https://doi.org/10.1101/2025.02.10.637595)) is a single program that computes five interface-quality scores for a cofolded protein complex from the structure together with its per-residue pLDDT and pairwise PAE matrix. The primary metric, ipSAE, recomputes an interface pTM-style score from PAE alone while replacing the chain-length-based reference distance with an adaptive reference distance derived from the size of the well-predicted interface. The published benchmark reports that ipSAE separates true and false complexes more efficiently than AlphaFold's interface pTM, in particular for domain-domain and domain-peptide interactions inside larger constructs that contain disordered or accessory regions.
 
-- **ipSAE** (interface predicted Structural Alignment Error): Analogous to TM-score but computed from the PAE matrix rather than superposed coordinates. Uses an adaptive d0 that accounts for interface geometry, making it more discriminative than ipTM for distinguishing near-native from incorrect interfaces.
-- **ipTM** (interface predicted TM-score): TM-score computed from PAE with d0 based on chain lengths.
-- **pDockQ2**: Combines interface pLDDT and normalized PAE through a sigmoid fit to DockQ ground truth (Zhu 2023).
-- **pDockQ**: Earlier version using interface pLDDT and log(number of contacts) (Bryant 2022).
-- **LIS** (Local Interaction Score): Fraction of interface residues with mean cross-chain PAE below a threshold (Kim 2024).
+Alongside ipSAE the program computes four additional interface-quality scores that the literature has converged on for cofolded complex assessment. The pDockQ2 score ([Zhu et al., 2023](https://doi.org/10.1093/bioinformatics/btad424)) estimates the quality of each interface in a multimer from interface pLDDT and PAE-derived signal. The pDockQ score ([Bryant et al., 2022](https://doi.org/10.1038/s41467-022-28865-w)) is an earlier variant that uses interface pLDDT and the logarithm of the number of contacts. The local interaction score ([Kim et al., 2024](https://doi.org/10.1101/2024.02.19.580970)) reports the fraction of interface residues with low mean cross-chain PAE. The interface pTM (`iptm_d0chn`) reports the original AlphaFold-style interface pTM recomputed from PAE with the chain-length reference distance.
 
-**When to use this tool:**
-- You have a cofolded complex and want a comprehensive set of interface-quality metrics in one call.
-- You want ipSAE as a more discriminative alternative to ipTM for ranking predictions.
-- You are building a binder-design filter cascade and want multiple complementary scores.
+### Learning Resources
 
-**When NOT to use:**
-- The structure lacks an interchain PAE matrix (e.g. single-chain predictions without PAE).
-- You need physics-based interface scoring -- use `pyrosetta-sap`, `pyrosetta-sasa`, or `pyrosetta-energy`.
+- [DunbrackLab/IPSAE](https://github.com/DunbrackLab/IPSAE) (Dunbrack Lab, Fox Chase Cancer Center). Official repository and the source of the reference scoring script that this toolkit invokes.
 
 ## Tools
 
 ### IPSAE Interface Scoring (`ipsae-scoring`)
 
-Compute IPSAE interface metrics for a cofolded protein complex.
+Scores a cofolded protein complex by computing ipSAE, pDockQ2, LIS, pDockQ, and interface pTM for a designated binder chain against one or more target chains. The tool takes a `Structure` with per-residue pLDDT in the B-factor column and the PAE matrix attached at `structure.metrics["pae"]`, runs the IPSAE scoring program, and returns the headline scores together with a full per-chain-pair breakdown.
 
-Dispatches to the vendored DunbrackLab/IPSAE script via ToolInstance,
-writing temporary PDB + PAE JSON files and parsing the output.
+#### Applications
 
-## How It Works
+This tool is appropriate for ranking and filtering cofolded complexes from structure-prediction tools such as AlphaFold 3, Chai-1, Boltz, or Protenix. Representative applications include scoring candidate protein binders from a design pipeline, identifying the most promising poses in a multi-chain prediction ensemble, and any analysis that benefits from multiple complementary interface-quality scores in a single call rather than running several scoring programs in sequence.
 
-1. Write the cofolded `Structure` as a temporary PDB and the PAE matrix as a JSON file.
-2. Dispatch to the vendored DunbrackLab/IPSAE script via `ToolInstance`, passing the PDB, PAE, and cutoff parameters.
-3. The IPSAE script computes all five metrics for every chain pair (both asymmetric/directional and symmetric/max variants).
-4. Extract the `max`-type (symmetric) scores for the binder-target chain pair as the top-level metrics.
-5. Return all per-chain-pair results in `chain_pair_results` for detailed inspection.
+#### Usage Tips
 
-## Execution Modes
+- **The PAE matrix is required and must be attached at `structure.metrics["pae"]` as a square `list[list[float]]`.** The dimension should match the total residue count of the structure. The input is rejected when the matrix is missing or not square.
+- **Per-residue pLDDT must be supplied via the B-factor column.** Structure predictors in proto-tools return the correct `b_factor_type` automatically, and `Structure.from_file()` auto-detects it for AlphaFold DB and ModelArchive files. For manually provided structures from other sources, pass `b_factor_type=BFactorType.PLDDT` (raw 0 to 100) or `BFactorType.NORMALIZED_PLDDT` (0 to 1) explicitly. The input is rejected when `b_factor_type` is any other value, since pDockQ and pDockQ2 would otherwise be computed incorrectly.
+- **Missing or duplicated chains are rejected.** The binder chain must not also appear in `target_chains`, and every requested chain must be present in the structure. Single-character chain identifiers are also required because IPSAE reads PDB-format input. Multi-character mmCIF chain labels should be shortened with `Structure.to_pdb_with_chain_mapping()` before scoring.
+- **The tool implementation does not check that the PAE matrix is aligned with the structure residue by residue.** It only confirms the matrix is square and two-dimensional. The caller is responsible for ensuring the PAE rows and columns match the residue order in the structure. A misaligned PAE matrix produces silently meaningless scores rather than an error.
+- **The top-level scores report the symmetric maximum value for the binder-target interface.** The full directional and symmetric breakdown for every chain pair is available on `result.metrics.chain_pair_results`. When no symmetric pair matches the binder-target combination, the top-level scores fall back to `0.0` and a warning is logged.
+- **`pae_cutoff` and `distance_cutoff` control the interface definition.** Both default to `10.0` Å. Lower values define a tighter interface and reduce the number of residues contributing to each score. Use a tighter cutoff when comparing interfaces of similar overall size or when assessing buried interfaces.
+- **An empty interface returns zeros for every score.** When no residues fall within both cutoffs across the binder-target chain pair, every metric is `0.0`. Verify the chain identifiers and cutoff values before interpreting an all-zero result as a poor interface.
 
-- **Hardware:** CPU only; runs in a standalone micromamba environment. No GPU required.
-- **Runtime:** sub-second per complex for typical sizes (<1000 residues).
-- **Scalability:** quadratic in total residue count due to pairwise distance and PAE computation.
+## Toolkit Notes
 
-## Input Parameters
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `structure` | `Structure` | *Required* | Cofolded complex. `b_factor_type` must be `PLDDT` or `NORMALIZED_PLDDT`. PAE matrix must be attached at `structure.metrics["pae"]` as a square `list[list[float]]` whose dimension matches the total residue count. |
-| `binder_chain` | `str` | *Required* | Single-character chain ID of the binder. |
-| `target_chains` | `list[str]` | *Required* | Target chain ID(s). Single-character entries; comma-separated strings are accepted and normalized. |
+These apply to every IPSAE tool in this toolkit (`ipsae-scoring`).
 
-## Configuration
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `pae_cutoff` | `float` | `10.0` | PAE cutoff in angstroms for interface residue detection. |
-| `distance_cutoff` | `float` | `10.0` | CA-CA distance cutoff in angstroms for contact detection. |
-
-## Output Specification
-
-```python
-# Return type: IPSAEScoringOutput
-{
-    "metrics": {
-        "ipsae": float,          # primary metric: ipSAE for binder-target interface [0, 1]
-        "pdockq2": float,        # pDockQ2 score [0, ~1.5]
-        "lis": float,            # Local Interaction Score [0, 1]
-        "pdockq": float,         # pDockQ score [0, 1]
-        "iptm_d0chn": float,     # ipTM from PAE with chain-length d0 [0, 1]
-        "chain_pair_results": [  # full per-chain-pair breakdown
-            {
-                "chain1": str,
-                "chain2": str,
-                "pair_type": str,      # "asym" or "max"
-                "ipsae": float,
-                "ipsae_d0chn": float,
-                "ipsae_d0dom": float,
-                "iptm_af": float,      # -1.0 if unavailable
-                "iptm_d0chn": float,
-                "pdockq": float,
-                "pdockq2": float,
-                "lis": float,
-            },
-            ...
-        ],
-    }
-}
-```
-
-## Interpreting Results
-
-- `ipsae > 0.4`: generally indicates a reliably predicted interface (Dunbrack 2025).
-- `ipsae` vs `iptm_d0chn`: ipSAE uses an adaptive d0 normalization that better separates correct from incorrect interfaces compared to ipTM. Prefer ipSAE as the primary ranking metric.
-- `pdockq2 > 0.23`: conventional "acceptable" threshold from Zhu 2023's benchmark.
-- `lis` close to 1.0: most interface residues have low cross-chain PAE, indicating high confidence in the interface geometry.
-- `chain_pair_results` with `pair_type="max"` gives the symmetric (direction-independent) score for each chain pair. `pair_type="asym"` gives the directional scores (useful for asymmetric complexes).
-- If no `max`-type pair is found for the binder-target combination, all top-level metrics default to 0.0 and a warning is logged.
-
-## Quick Start Examples
-
-```python
-from proto_tools.entities.structures.structure import BFactorType, Structure
-from proto_tools.tools.structure_scoring.ipsae import (
-    IPSAEScoringConfig,
-    IPSAEScoringInput,
-    run_ipsae_scoring,
-)
-
-# Load a cofolded complex; attach PAE from your structure predictor.
-structure = Structure.from_file(
-    "complex.pdb",
-    b_factor_type=BFactorType.PLDDT,
-    metrics={"pae": my_pae},  # list[list[float]], N x N
-)
-
-inputs = IPSAEScoringInput(
-    structure=structure,
-    binder_chain="A",
-    target_chains=["B"],
-)
-result = run_ipsae_scoring(inputs, IPSAEScoringConfig())
-
-# Top-level metrics
-print(f"ipSAE: {result.metrics.ipsae:.3f}")
-print(f"pDockQ2: {result.metrics.pdockq2:.3f}")
-print(f"LIS: {result.metrics.lis:.3f}")
-print(f"pDockQ: {result.metrics.pdockq:.3f}")
-print(f"ipTM: {result.metrics.iptm_d0chn:.3f}")
-```
-
-Adjust cutoffs for stricter interface definitions:
-
-```python
-config = IPSAEScoringConfig(pae_cutoff=8.0, distance_cutoff=8.0)
-result = run_ipsae_scoring(inputs, config)
-```
-
-Inspect the per-chain-pair breakdown:
-
-```python
-for pair in result.metrics.chain_pair_results:
-    print(f"{pair.chain1}-{pair.chain2} ({pair.pair_type}): "
-          f"ipSAE={pair.ipsae:.3f}, pDockQ2={pair.pdockq2:.3f}, LIS={pair.lis:.3f}")
-```
-
-## Best Practices & Gotchas
-
-- **Residue ordering invariant**: the PAE matrix must be indexed in the same residue order as the structure's residue iteration order. If your predictor emits PAE in a different order, remap it before attaching.
-- **pLDDT scale**: upstream predictors differ (AF2/AF3 emit 0-100, others may emit 0-1). Set `b_factor_type` correctly on the `Structure` so internal rescaling works.
-- **`binder_chain` must be single-character**: multi-character mmCIF chain labels need to be shortened via `Structure.to_pdb_with_chain_mapping()` before calling this tool.
-- **Empty interface**: if the binder and target chains have no contacts within the cutoffs, all scores will be 0.0. Verify chain IDs and cutoff values.
-- **Multiple target chains**: the tool finds the first `max`-type pair matching any binder-target combination. For multi-chain targets, inspect `chain_pair_results` for the full breakdown.
-
-## References
-
-- Dunbrack R.L. "Rēs ipSAE loquuntur: What's wrong with AlphaFold's ipTM score and how to fix it." *bioRxiv* (2025). [doi:10.1101/2025.02.10.637595](https://doi.org/10.1101/2025.02.10.637595)
-- Zhu W., Shenoy A., Kundrotas P., Elofsson A. "Evaluation of AlphaFold-Multimer prediction on multi-chain protein complexes." *Bioinformatics* 39(7):btad424 (2023). [doi:10.1093/bioinformatics/btad424](https://doi.org/10.1093/bioinformatics/btad424)
-- Bryant P., Pozzati G., Elofsson A. "Improved prediction of protein-protein interactions using AlphaFold2." *Nature Communications* 13:1265 (2022). [doi:10.1038/s41467-022-28865-w](https://doi.org/10.1038/s41467-022-28865-w)
-- Kim A.-R., Hu Y., Comjean A., Rodiger J., Mohr S.E., Perrimon N. "Enhanced Protein-Protein Interaction Discovery via AlphaFold-Multimer." *bioRxiv* (2024). [doi:10.1101/2024.02.19.580970](https://doi.org/10.1101/2024.02.19.580970)
-
-## Related Tools
-
-- `pdockq2` -- standalone pDockQ2 scoring (if you only need pDockQ2 without the full IPSAE suite).
-- `pyrosetta-sap` / `pyrosetta-sasa` / `pyrosetta-energy` -- physics-based interface scoring (complementary to IPSAE).
-- `structure-metrics` -- per-structure secondary-structure and compactness metrics.
-- Structure predictors that produce valid inputs: `alphafold3`, `chai1`, `boltz2`, `protenix`.
+- **Outputs are returned as typed metric objects.** Each `IPSAEMetrics` result carries the five top-level scores, the `chain_pair_results` breakdown for every chain pair, and the headline `primary_metric` (`ipsae`). Results can be exported to JSON through the standard export method.
