@@ -406,6 +406,11 @@ def _preprocess_structure_prediction_msas(
     colabfold_input = ColabfoldSearchInput(queries=queries)  # type: ignore[arg-type]
     colabfold_output = run_colabfold_search(colabfold_input, colabfold_search_config)
 
+    # Surface real errors on total failure; reading ``.results`` on a success=False output is opaque.
+    if colabfold_output.success is False:
+        errors = colabfold_output.errors or ["unknown error"]
+        raise RuntimeError(f"colabfold-search MSA generation failed: {' | '.join(errors)}")
+
     # Build MSA dict keyed by sequence
     name_to_seq = {v: k for k, v in unique_seqs.items()}
     msas: dict[str, MSA] = {}
