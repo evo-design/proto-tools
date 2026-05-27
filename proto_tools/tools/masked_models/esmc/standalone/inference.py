@@ -1,7 +1,7 @@
 """Local ESM C (Cambrian) inference implementation.
 
-Embedding-focused masked language model from EvolutionaryScale. Ships in the
-same ``esm`` package as ESM3 and shares the ``evolutionaryscale_esm`` env.
+Embedding-focused masked language model. Ships in the same ``esm`` package as
+ESM3 and shares the ``biohub_esm`` env.
 """
 
 import json

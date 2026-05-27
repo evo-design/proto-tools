@@ -221,14 +221,14 @@ The lookup key is built as `f"{platform.system().lower()}-{platform.machine()}"`
 
 ## Shared Environments
 
-Multiple tools may rely on the same dependencies. For example, ESM3 and ESM C, which both come from `evolutionaryscale/esm` can share a single micromamba environment on disk. This avoids duplicating environments when adding a sibling model.
+Multiple tools may rely on the same dependencies. For example, ESM3 and ESM C, which both come from `Biohub/esm` can share a single micromamba environment on disk. This avoids duplicating environments when adding a sibling model.
 
 **Layout:**
 
 ```
 proto_tools/
 ├── shared_envs/
-│   └── evolutionaryscale_esm/      # one env definition
+│   └── biohub_esm/                 # one env definition
 │       ├── setup.sh
 │       ├── requirements.txt
 │       └── python_version.txt
@@ -236,11 +236,11 @@ proto_tools/
     └── masked_models/
         ├── esm3/
         │   └── standalone/
-        │       ├── shared_env.txt   # contents: "evolutionaryscale_esm"
+        │       ├── shared_env.txt   # contents: "biohub_esm"
         │       └── inference.py     # ESM3-specific dispatch
         └── esmc/
             └── standalone/
-                ├── shared_env.txt   # contents: "evolutionaryscale_esm"
+                ├── shared_env.txt   # contents: "biohub_esm"
                 └── inference.py     # ESM C-specific dispatch
 ```
 
@@ -263,7 +263,7 @@ proto_tools/
 
 **When NOT to use:** Tools with conflicting Python versions, conflicting framework version pins, or genuinely independent dependency sets.
 
-**Migration note:** When a tool adopts a shared env (e.g. `esm3` migrated to `evolutionaryscale_esm`), its on-disk env directory changes from `<toolkit>_env/` to `<shared_name>_env/`. The old directory is orphaned but harmless; users can manually delete `PROTO_HOME/proto_tool_envs/<old_name>_env/` to reclaim disk.
+**Migration note:** When a tool adopts a shared env (e.g. `esm3` migrated to `biohub_esm`), its on-disk env directory changes from `<toolkit>_env/` to `<shared_name>_env/`. The old directory is orphaned but harmless; users can manually delete `PROTO_HOME/proto_tool_envs/<old_name>_env/` to reclaim disk.
 
 ## Binary Installation
 

@@ -41,6 +41,6 @@ The averaged embedding is a learned numerical representation of a protein, suita
 
 These apply to every ESM C tool in this toolkit (`esmc-embedding`).
 
-- **ESM C shares the EvolutionaryScale `esm` environment with ESM3.** Both are distributed in the same `esm` package and use a single shared on-disk environment (`evolutionaryscale_esm`); installing either tool installs the environment for both.
+- **ESM C shares the Biohub `esm` environment with ESM3.** Both are distributed in the same `esm` package and use a single shared on-disk environment (`biohub_esm`); installing either tool installs the environment for both.
 - **The license depends on the model size.** `esmc_300m` (the default) is under the Cambrian Open License, with commercial use permitted subject to the naming and attribution requirement; `esmc_600m` is under the Cambrian Non-Commercial License and must not be used commercially. The 6B model is available only through EvolutionaryScale's hosted Forge service and is not wrapped here.
 - **`batch_size` controls memory usage.** Lower it if you run out of GPU memory; raise it to process short sequences faster. For repeated single-batch calls, use `ToolInstance.persist_tool("esmc")` to keep the model loaded in memory between calls; for multi-GPU or large-batch runs, prefer `ToolPool`.
