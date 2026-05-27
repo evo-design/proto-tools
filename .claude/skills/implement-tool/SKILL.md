@@ -2,10 +2,11 @@
 name: implement-tool
 description: >
   Implements a new bioinformatics tool wrapper in proto-tools using a
-  parallelized agent pipeline. Orchestrates 6 phases: Research, Contract (core
-  tool file), Fan-out (5 parallel subagents), Verify, Self-Audit, and Ship. Use
-  when creating tools from GitHub issues, wrapping models, or implementing new
-  tool wrappers end-to-end.
+  parallelized agent pipeline. Orchestrates phases: Research, Contract (core
+  tool file), Fan-out (5 parallel subagents), Verify, then the decisive gates —
+  Config Field Audit, Temp Integration & Stress, Docs Verification, Self-Audit &
+  Full PR Review — and Ship. Use when creating tools from GitHub issues,
+  wrapping models, or implementing new tool wrappers end-to-end.
 allowed-tools:
   - Read
   - Write
@@ -25,8 +26,10 @@ You are implementing a new bioinformatics tool in the proto-tools codebase. This
 
 **Pipeline overview:**
 ```
-Phase 1: Research → Phase 2: Contract → Phase 3: Fan-out (5 parallel agents) → Phase 4: Verify → Phase 4.5: Self-Audit → Phase 5: Ship
+Phase 1: Research → Phase 2: Contract → Phase 3: Fan-out (5 parallel agents) → Phase 4: Verify → Phase 4.5: Config Field Audit → Phase 4.6: Temp Integration & Stress → Phase 4.7: Docs Verification → Phase 4.8: Self-Audit & Full PR Review → Phase 5: Ship
 ```
+
+**The Phase 4.x gates are decisive and non-negotiable** — they catch the failure modes that the fast fan-out reliably misses (invented config knobs, untested real workloads, hallucinated citations/licenses, missing `license.yaml`/`links.yaml`). Do not skip them to ship faster. Ground every decision in upstream source or a credible reference — never assume.
 
 **Key principle:** The core tool file (Input/Config/Output + `@tool()` + `run_*()`) is the **contract** everything else depends on. Write it first (sequential), then fan out to subagents (parallel).
 
@@ -74,6 +77,9 @@ The user provides EITHER:
    - Installation instructions (pip packages, dependencies)
    - Python API or CLI interface
    - Input/output formats
+   - **License** — read the repo's actual `LICENSE`/`COPYING` file (not just the README badge) and the weights license if it differs. Record the SPDX id (or note it's non-standard) and the file URL. Feeds `license.yaml` and the README License callout.
+   - **Canonical links** — the repo URL, project homepage/docs, paper DOI or preprint URL, HuggingFace model page, affiliated orgs. Feeds `links.yaml`. Verify each resolves.
+   - **The full upstream parameter surface** — which knobs the upstream CLI/Python API actually exposes to *end users*, with their defaults and valid ranges. This is the ground truth for Phase 4.5's config audit; capture it now while reading the source.
    - Model weights location (HuggingFace, GitHub releases, etc.) — determines which weight management pattern to use:
      - **HuggingFace `from_pretrained`** → no weight code needed (HF_HOME set automatically). Example: `tools/masked_models/esm2/`
      - **Direct download in setup.sh** → must implement `PROTO_MODEL_CACHE` pattern. Example: `tools/inverse_folding/fampnn/standalone/setup.sh`
@@ -141,6 +147,8 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
    |   +-- __init__.py
    |   +-- {tool_key_snake}.py # Core tool file (Input/Config/Output + @tool + run_*); one per registered tool
    |   +-- cite.bib            # BibTeX citation (required)
+   |   +-- license.yaml        # License metadata (required — enforced by test_license_consistency.py)
+   |   +-- links.yaml          # Canonical upstream links (required — github/website/paper/huggingface/...)
    |   +-- README.md
    |   +-- examples/
    |   |   +-- example.ipynb   # Working example notebook (required)
@@ -473,28 +481,32 @@ This runs the tool's functional tests AND the parametrized infra tests (`example
 
 ---
 
-### Subagent 2: README + cite.bib
+### Subagent 2: README + cite.bib + license.yaml + links.yaml
 
-**What it produces:** `README.md`, `cite.bib`
+**What it produces:** `README.md`, `cite.bib`, `license.yaml`, `links.yaml`
+
+`license.yaml` and `links.yaml` are **required** for every toolkit — `tests/style_consistency_tests/test_license_consistency.py` enforces `license.yaml`'s existence and schema, and the registry/docs surface both files. A toolkit missing either fails CI. Every value in all four files must be **grounded in a credible source** (the upstream repo, its `LICENSE`/`COPYING`, the paper, the SPDX registry) — never guess a license, DOI, or URL. The deeper triple-check happens in Phase 4.7; this subagent's job is to get them right the first time.
 
 **Prompt template:**
 
 ```
-You are writing the documentation for a bioinformatics tool.
+You are writing the documentation and metadata for a bioinformatics tool.
 
 ## Your Task
-Create README.md and cite.bib for the {tool_display_name} tool in:
+Create README.md, cite.bib, license.yaml, and links.yaml for the {tool_display_name}
+tool in:
   proto_tools/tools/{category}/{toolkit}/
 
 ## Contract (the tool's API)
 <paste full tool file content here>
 
-## Reference README
-Here is the README from {reference_tool} to use as a structural template:
-<paste reference README.md content>
+## Reference files
+Here are the same files from {reference_tool} to use as structural templates:
+<paste reference README.md, cite.bib, license.yaml, links.yaml content>
 
 ## Research Context
-<paste tool description, paper info, biological context from Phase 1>
+<paste tool description, paper info, biological context, AND the verified upstream
+ license + canonical links from Phase 1>
 
 ## README.md Structure
 Follow the structured template in TEMPLATES.md exactly. Four canonical H2 sections in order:
@@ -504,10 +516,10 @@ Follow the structured template in TEMPLATES.md exactly. Four canonical H2 sectio
 4. `## Tools` — one `### {Tool Display Name} (\`{tool-key}\`)` block per registered tool, each with `#### Applications` and `#### Usage Tips` (critical-knob tips in bold)
 5. `## Toolkit Notes` — Toolkit-wide guide badges row + bulleted notes that apply to every tool in the toolkit
 
-DO NOT add other H2 sections — schemas, configs, and output specs are auto-generated from Pydantic field descriptions. Read `gene_annotation/pyhmmer/README.md` for the canonical example before drafting.
+DO NOT add other H2 sections — schemas, configs, and output specs are auto-generated from Pydantic field descriptions. Read `gene_annotation/pyhmmer/README.md` for the canonical example before drafting. The `> [!NOTE] License: ...` callout MUST agree with `license.yaml`.
 
 ## cite.bib
-Look up the paper's BibTeX citation using the DOI. Format:
+Look up the paper's BibTeX citation using the DOI (verify the DOI resolves — do not fabricate). Format:
 @article{firstauthor_year_toolname,
   title={...},
   author={...},
@@ -515,6 +527,18 @@ Look up the paper's BibTeX citation using the DOI. Format:
   year={...},
   doi={...}
 }
+
+## license.yaml
+Capture the upstream license verified from the repo's LICENSE/COPYING (and any
+weights/data license, which can differ from the code license). Schema and the
+SPDX allowlist are in TEMPLATES.md → "license.yaml Template". SPDX-allowlisted
+licenses must NOT inline text (it lives in proto_tools/tools/_licenses/{spdx}.txt);
+non-SPDX terms use a "Custom (...)" spdx string with inline `text:`.
+
+## links.yaml
+Canonical upstream links, verified to resolve. Common keys: `github`, `website`,
+`paper` / `preprint` (DOI or arXiv URL), `huggingface`, `organizations` (list).
+See TEMPLATES.md → "links.yaml Template".
 ```
 
 ---
@@ -748,11 +772,74 @@ CRITICAL RULES:
 
 ---
 
-## Phase 4.5: Self-Audit
+## Phase 4.5: Config Field Audit
 
-**Goal:** Catch convention violations, dead fields, hardcoded assumptions, and consistency gaps before shipping.
+**Goal:** Guarantee every Input/Config field is real, correctly typed, correctly defaulted, and earns its place. The fast fan-out tends to invent knobs the upstream tool doesn't have, copy defaults/ranges blindly, and leave types loose (`str` where a `Literal` belongs).
 
-**When:** After Phase 4 passes (imports work, tests pass, registry OK). Before Phase 5 (Ship).
+**When:** After Phase 4 passes. Before Phase 4.6 — pruning/retyping a field changes the surface the temp tests exercise.
+
+**How:** Walk **every field, one at a time** — do NOT batch-approve. Check each against the upstream parameter surface captured in Phase 1 (re-read the upstream source if Phase 1 didn't fully capture it). Make no assumptions; ground each decision in the source.
+
+Per-field checklist:
+
+1. **Real upstream knob?** Is this parameter actually exposed to *end users* upstream? If it's an internal implementation detail (a managed path, a fixed buffer, a constant the upstream API never surfaces), **delete it** — do not manufacture complexity the tool doesn't have. Keep only what a user would meaningfully set.
+2. **Default matches upstream.** The default must equal the upstream default, or be a deliberate deviation noted in the description. Never invent a default.
+3. **Range/constraints match upstream.** `ge`/`le`/`gt`/`lt` bounds must reflect the real valid range from the source, not a guess.
+4. **Type is as tight as the domain allows.** Prefer `Literal[...]` over `str`, and `list[Literal[...]]` over `list[str]`, whenever upstream accepts a fixed enumerated set. Use bounded `int`/`float` over unbounded numerics. Use `X | None` only when `None` is genuinely meaningful.
+5. **Description is concise + dual-audience.** One line, accurate, useful to both a human and an agent: what the field does and (when non-obvious) the effect of changing it. No restating the field name; no prose paragraphs.
+6. **Flags set deliberately** (decide each, don't default-copy):
+   - `reload_on_change=True` only for fields that require a worker restart (model checkpoint / anything that reloads the model).
+   - `include_in_key=False` for fields that don't affect results (`device`, `verbose`, `timeout` are already excluded on `BaseConfig`; a tool-level `device` override must re-set it).
+   - `xor_group="<slug>"` for mutually exclusive siblings, paired with the `@model_validator`.
+   - **`advanced` / `hidden` / `depends_on` are NOT accepted** by `ConfigField`/`InputField` — they raise `TypeError` (rejected in `proto_tools/utils/tool_io.py`). Advanced/hidden/conditional visibility lives in the proto-ui overlay, not the field helper. Do not add them.
+7. **Inherited fields** — confirm the Phase 2 inherited-field audit holds: every field from a shared base is implemented or rejected with `ValueError`, never silently ignored.
+
+**Output:** edit the contract directly. If you remove/rename/retype a field, propagate to standalone `dispatch()`, README, notebook, tests, and the export chain — leave no dangling references. Re-run Phase 4 import/test checks. Do this deliberately yourself, or delegate to a focused subagent given the Phase 1 upstream param surface + the contract.
+
+---
+
+## Phase 4.6: Temp Integration & Stress Tests
+
+**Goal:** Prove the tool behaves correctly under a real user's workload — realistic data, batch/large inputs, edge sizes — beyond the committed unit tests. These are **throwaway**: write, run, read, delete. The committed suite stays as Subagent 4 wrote it.
+
+**When:** After the config surface is final (4.5), on a host that can actually run the tool (GPU if `uses_gpu=True`).
+
+**How:**
+
+1. **Direct-call driver script** — write a temp script (e.g. `scratch/drive_{toolkit}.py`) that imports `run_{tool_key_snake}` and calls it exactly as a user would: realistic biological inputs, default config, then a couple of non-default configs exercising the knobs you just audited. Print key output fields and `result.success`. Run it; confirm the output is scientifically sensible, not just non-erroring.
+2. **Temp integration + stress tests** emulating real usage — run them:
+   - A realistic end-to-end call on representative data.
+   - Batch / large-input behavior (many sequences, a long sequence, multiple structures) to surface batching or memory bugs.
+   - Boundary inputs (minimal, maximal-within-range) and the validation / `xor_group` paths.
+   - Stochastic tools: seeded reproducibility + unseeded divergence.
+3. **Concise and meaningful only** — every test asserts something real about behavior. No slop, no bloat, no re-testing Pydantic. Delete any test that doesn't earn its place.
+4. **Trace the logic against upstream source** — follow the dispatch path end-to-end and confirm it matches what the upstream code does (argument order, units, 1-indexed coordinates, output shape). Don't assume — read the source. Strip overly-defensive code (the `@tool` decorator owns errors; no try/except in tool logic) and keep comments/docstrings brief.
+5. **Clean up** — delete the temp script and temp tests. Fold any genuinely valuable case into the committed suite (Subagent 4's file); do not leave scratch artifacts in the PR.
+
+---
+
+## Phase 4.7: Docs Verification (citations, links, licenses, READMEs)
+
+**Goal:** Triple-check every external claim in `cite.bib`, `links.yaml`, `license.yaml`, and `README.md` against credible, verifiable sources. Hallucinated DOIs, wrong licenses, dead links, and invented capabilities are common fan-out failures and are user-facing.
+
+**How — verify, never trust:**
+
+1. **cite.bib** — resolve the DOI; it must point to the actual paper (confirm title/authors/year/venue). No DOI → use the arXiv/bioRxiv id. Don't fabricate volume/pages.
+2. **license.yaml** — open the upstream repo's real `LICENSE`/`COPYING` and confirm the SPDX id, `commercial_use`, `redistribution`, and `attribution_required`. Confirm separate weights/data licenses where they differ. Confirm `_licenses/{spdx}.txt` exists for any SPDX id, and that the README `> [!NOTE] License:` callout agrees.
+3. **links.yaml** — every URL resolves (github, homepage, paper, huggingface). No placeholders, no links copied from the reference tool.
+4. **README.md** — Overview/Background claims are accurate (who built it, what it does, the science); inline paper citations resolve; no invented benchmarks or capabilities.
+
+Use WebFetch / WebSearch to verify and ground each fact in a source. Fix discrepancies in place, then re-run `test_license_consistency.py` / `test_readme_consistency.py` if touched.
+
+---
+
+## Phase 4.8: Self-Audit & Full PR Review
+
+**Goal:** Catch convention violations, dead fields, hardcoded assumptions, and consistency gaps — then do a final file-by-file review of the entire PR diff against the quality established in the rest of the repo. Last gate before Ship.
+
+**When:** After Phases 4.5–4.7. Before Phase 5 (Ship).
+
+### Part A — Convention audit
 
 Launch a single audit agent via `Task()`:
 
@@ -795,8 +882,19 @@ Print a JSON array of issues:
 If no issues found, print: []
 ```
 
-**After the audit agent returns:**
-1. Read the agent's output
+### Part B — Full PR diff review (parallel, file-by-file)
+
+Review the **actual diff**, not just the files in isolation, against the quality bar set by the rest of the repo.
+
+1. Stage everything and capture the diff:
+   ```bash
+   git add -A && git diff --cached --stat
+   git diff --cached -- <each changed file>   # review file-by-file
+   ```
+2. Launch review subagents **in parallel (single message)**, each owning a slice of the diff. Give each agent the file's diff, the equivalent file from `{reference_tool}`, and instructions to (a) flag any drift from established repo conventions, (b) re-check everything flagged earlier in this session, and (c) confirm the change reads like world-class code already in the repo. Prefer the repo's `pr-review-toolkit` agents where the diff warrants — `code-reviewer` (conventions/correctness), `silent-failure-hunter` (error handling), `type-design-analyzer` (the audited types), `comment-analyzer` (docstring/comment accuracy) — falling back to generic `Task()` review agents otherwise. Each returns the same JSON issue array as Part A.
+
+**After the audit and review agents return:**
+1. Read every agent's output and consolidate the issues
 2. Fix all `"fix"` severity issues directly
 3. Fix `"cosmetic"` issues if quick (< 1 minute each)
 4. Re-run Phase 4 import/test checks if any fixes touched the tool file or standalone code

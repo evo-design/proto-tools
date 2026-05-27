@@ -335,7 +335,7 @@ def test_gpu_execution():
 
 ---
 
-## README.md Template — [Subagent 2: README + cite.bib]
+## README.md Template — [Subagent 2: README + cite.bib + license.yaml + links.yaml]
 
 Create `tools/{category}/{toolkit}/README.md` using the structured template. Schemas / configs / output specs are auto-generated from Pydantic field descriptions, so the README focuses on prose — biology, when to use, and per-tool tips. The four H2 sections are canonical: `Overview`, `Background`, `Tools`, `Toolkit Notes`.
 
@@ -399,7 +399,7 @@ Conventions:
 
 ---
 
-## cite.bib Template — [Subagent 2: README + cite.bib]
+## cite.bib Template — [Subagent 2: README + cite.bib + license.yaml + links.yaml]
 
 Create `tools/{category}/{toolkit}/cite.bib`:
 
@@ -421,6 +421,48 @@ Create `tools/{category}/{toolkit}/cite.bib`:
 - Use the paper's DOI to find the correct BibTeX entry (most publishers provide this)
 - If multiple tools in the same directory cite the same paper, they share the same `cite.bib`
 - The BibTeX key format is typically `{firstauthor}{year}{toolname}` (e.g., `altschul1990blast`)
+
+---
+
+## license.yaml Template — [Subagent 2: README + cite.bib + license.yaml + links.yaml]
+
+Create `tools/{category}/{toolkit}/license.yaml`. **Required** — `test_license_consistency.py` enforces existence and schema. Verify the license from the upstream repo's `LICENSE`/`COPYING`; do not guess.
+
+```yaml
+code:
+  spdx: MIT                         # SPDX id from the allowlist, or "Custom (<name>)"
+  url: https://github.com/org/repo/blob/main/LICENSE
+commercial_use: 'yes'               # 'yes' | 'no' | 'restricted'
+redistribution: true
+attribution_required: false
+notes: One line on anything non-obvious (e.g. bundled deps under a different license).
+last_updated: '2026-05-27'          # ISO YYYY-MM-DD; today's date
+```
+
+Schema rules (enforced by `test_license_consistency.py`):
+- **Required top-level keys:** `code`, `commercial_use`, `redistribution`, `last_updated`.
+- **`code` / `weights` / `data` blocks** each require `spdx` + `url`.
+- **SPDX allowlist** (else use `spdx: "Custom (<name>)"`): `Apache-2.0`, `MIT`, `BSD-2-Clause`, `BSD-3-Clause`, `GPL-3.0`, `LGPL-3.0`, `MPL-2.0`, `CC0-1.0`, `CC-BY-4.0`, `CC-BY-SA-4.0`, `CC-BY-NC-4.0`, `CC-BY-NC-SA-4.0`, `AGPL-3.0`, `ISC`, `Unlicense`.
+- **Text placement:** SPDX-allowlisted licenses must NOT inline a `text:` field — the canonical copy lives at `proto_tools/tools/_licenses/{spdx}.txt` (must exist; add it if introducing a new SPDX id). `Custom (...)` licenses MUST inline `text:`.
+- **`commercial_use`** ∈ `{'yes', 'no', 'restricted'}`. **`weights.access`** (optional) ∈ `{'hf-gated', 'request'}`.
+- Add an optional `weights:` block when the model weights carry a different license than the code, and a `data:` block (with `name`) for API-wrapper toolkits that fetch an external dataset.
+
+---
+
+## links.yaml Template — [Subagent 2: README + cite.bib + license.yaml + links.yaml]
+
+Create `tools/{category}/{toolkit}/links.yaml`. **Required.** Canonical upstream links, each verified to resolve. Include only keys that apply:
+
+```yaml
+github: https://github.com/org/repo
+website: https://tool.example.org          # optional homepage/docs
+paper: https://doi.org/10.1234/example     # or `preprint:` for an arXiv/bioRxiv URL
+huggingface: https://huggingface.co/org/model   # optional
+organizations:                             # optional list of affiliated orgs/labs
+  - Example Lab
+```
+
+Observed keys across the repo (use the right one, don't invent): `github`, `website`, `organizations`, `image`, `huggingface`, `paper`, `preprint`, `zenodo`, `model`, `blog`.
 
 ---
 
