@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from proto_tools.entities.structures import Structure
+from proto_tools.entities.structures import ChainSelection, SingleChainSelection, Structure
 from proto_tools.entities.structures.structure import BFactorType
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -131,46 +131,37 @@ class PDockQ2Input(BaseToolInput):
             ``NORMALIZED_PLDDT``) and the PAE matrix attached at
             ``structure.metrics['pae']`` as a square ``list[list[float]]``
             whose dimension matches the structure's total residue count.
-        binder_chain (str): Single-character chain ID of the binder (e.g. VHH).
-        target_chains (list[str]): Target chain IDs (single character each).
+        binder_chain (SingleChainSelection): Single-character chain ID of the
+            binder (e.g. VHH).
+        target_chains (ChainSelection): Target chain IDs (single character each).
     """
 
     structure: Structure = InputField(
         title="Input Structure",
         description="Cofolded complex with pLDDT in B-factors and the PAE matrix at metrics['pae']",
     )
-    binder_chain: str = InputField(
+    binder_chain: SingleChainSelection = InputField(
         title="Binder Chain",
         description="Single-character chain ID of the binder",
     )
-    target_chains: list[str] = InputField(
+    target_chains: ChainSelection = InputField(
         title="Target Chains",
         description="Target chain ID(s)",
     )
 
-    @field_validator("target_chains", mode="before")
-    @classmethod
-    def _normalize_target_chains(cls, value: Any) -> list[str]:
-        """Accept comma-separated strings or explicit lists; store a clean chain list."""
-        raw_chain_ids = [value] if isinstance(value, str) else value
-        if not isinstance(raw_chain_ids, (list, tuple)) or not all(isinstance(c, str) for c in raw_chain_ids):
-            raise ValueError("target_chains must be a string or list of strings")
-        target_chains = [chain.strip() for raw in raw_chain_ids for chain in raw.split(",") if chain.strip()]
-        if not target_chains:
-            raise ValueError("target_chains must contain at least one chain ID")
-        return target_chains
-
     @model_validator(mode="after")
     def _validate(self) -> "PDockQ2Input":
         """Validate chain IDs exist and required confidence signals are attached."""
-        for cid in (self.binder_chain, *self.target_chains):
+        binder = self.binder_chain.chain
+        targets = list(self.target_chains.chains)
+        for cid in (binder, *targets):
             if len(cid) != 1:
                 raise ValueError(f"chain IDs must be a single character, got {cid!r}")
-        if self.binder_chain in self.target_chains:
-            raise ValueError(f"binder_chain {self.binder_chain!r} must not appear in target_chains")
+        if binder in targets:
+            raise ValueError(f"binder_chain {binder!r} must not appear in target_chains")
 
         available = set(self.structure.get_chain_ids())
-        missing = {self.binder_chain, *self.target_chains} - available
+        missing = {binder, *targets} - available
         if missing:
             raise ValueError(f"Chain ID(s) {sorted(missing)} not found in structure. Available: {sorted(available)}")
 
@@ -244,7 +235,11 @@ def example_input() -> Any:
     fixture = Path(__file__).parent / "example_input_fixture.pdb"
     pae = json.loads((Path(__file__).parent / "example_input_fixture_pae.json").read_text())
     structure = Structure.from_file(fixture, b_factor_type=BFactorType.PLDDT, metrics={"pae": pae})
-    return PDockQ2Input(structure=structure, binder_chain="A", target_chains=["B"])
+    return PDockQ2Input(
+        structure=structure,
+        binder_chain=SingleChainSelection(chain="A"),
+        target_chains=ChainSelection(chains=["B"]),
+    )
 
 
 @tool(
@@ -279,8 +274,8 @@ def run_pdockq2(
         PDockQ2Output: Scalar pDockQ2 plus per-target-chain breakdown.
     """
     structure = inputs.structure
-    binder_chain = inputs.binder_chain
-    target_chains = set(inputs.target_chains)
+    binder_chain = inputs.binder_chain.chain
+    target_chains = set(inputs.target_chains.chains)
     cutoff = config.distance_cutoff
 
     per_residue_plddt = structure.per_residue_plddt
@@ -367,7 +362,7 @@ def run_pdockq2(
     return PDockQ2Output(
         metadata={
             "binder_chain": binder_chain,
-            "target_chains": inputs.target_chains,
+            "target_chains": list(inputs.target_chains.chains),
             "distance_cutoff": cutoff,
         },
         metrics=metrics,

@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
+from proto_tools.entities.structures import ChainSelection, SingleChainSelection
 from proto_tools.entities.structures.structure import BFactorType, Structure
 from proto_tools.tools.structure_scoring.pdockq2 import PDockQ2Config, PDockQ2Input, run_pdockq2
 from proto_tools.tools.structure_scoring.pdockq2.pdockq2 import _pmidockq_sigmoid, example_input
@@ -69,6 +70,31 @@ def test_input_validator_rejects(overrides, message):
         kwargs[key] = value() if callable(value) else value
     with pytest.raises(ValidationError, match=message):
         PDockQ2Input(**kwargs)
+
+
+def test_chain_fields_are_selection_types():
+    """binder_chain/target_chains are the typed selection models.
+
+    They accept both shorthand (str / list) and explicit objects, so a saved
+    program round-trips either way.
+    """
+    structure = _bundled_structure()
+    # Bare-string / list shorthand coerces (what the UI and most callers send).
+    coerced = PDockQ2Input(structure=structure, binder_chain="A", target_chains=["B"])
+    assert isinstance(coerced.binder_chain, SingleChainSelection)
+    assert isinstance(coerced.target_chains, ChainSelection)
+    assert coerced.binder_chain.chain == "A"
+    assert coerced.target_chains.chains == ["B"]
+    # Explicit selection objects are equivalent.
+    explicit = PDockQ2Input(
+        structure=structure,
+        binder_chain=SingleChainSelection(chain="A"),
+        target_chains=ChainSelection(chains=["B"]),
+    )
+    assert explicit.binder_chain == coerced.binder_chain
+    # A list for the single-chain binder is a usage error → points at ChainSelection.
+    with pytest.raises(ValidationError, match="single chain"):
+        PDockQ2Input(structure=structure, binder_chain=["A", "B"], target_chains=["C"])
 
 
 # ── Sigmoid constants (unit test of the ported formula) ──────────────────────

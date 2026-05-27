@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from proto_tools.entities.complex import Chain
+from proto_tools.entities.structures import SingleChainSelection
 from proto_tools.entities.structures.structure import Structure
 from proto_tools.tools.inverse_folding.esm_if1 import (
     ESMIF1SampleConfig,
@@ -420,6 +421,24 @@ def test_esm_if1_score_unknown_target_chain(multichain_structure: Structure):
     """Naming a chain that isn't in the structure raises a clear error at pair construction."""
     with pytest.raises(ValueError, match="not in the structure's chains"):
         ESMIF1ScoringPair(sequence="AAA", structure=multichain_structure, target_chain="Z")
+
+
+def test_esm_if1_score_target_chain_is_single_chain_selection(multichain_structure: Structure):
+    """target_chain is a SingleChainSelection.
+
+    A bare string coerces, an explicit object is equivalent, and a list is a
+    usage error pointing at ChainSelection.
+    """
+    seq = multichain_structure.get_chain_sequence("A")
+    coerced = ESMIF1ScoringPair(sequence=seq, structure=multichain_structure, target_chain="A")
+    assert isinstance(coerced.target_chain, SingleChainSelection)
+    assert coerced.target_chain.chain == "A"
+    explicit = ESMIF1ScoringPair(
+        sequence=seq, structure=multichain_structure, target_chain=SingleChainSelection(chain="A")
+    )
+    assert explicit.target_chain == coerced.target_chain
+    with pytest.raises(ValueError, match="single chain"):
+        ESMIF1ScoringPair(sequence=seq, structure=multichain_structure, target_chain=["A", "B"])
 
 
 # ── Benchmarks ──────────────────────────────────────────────────────────────

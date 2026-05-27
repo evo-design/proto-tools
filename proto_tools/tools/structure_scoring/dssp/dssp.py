@@ -4,9 +4,9 @@ import logging
 from pathlib import Path
 from typing import Any, ClassVar
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 
-from proto_tools.entities.structures import Structure
+from proto_tools.entities.structures import SingleChainSelection, Structure, StructureInputBase
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -45,43 +45,41 @@ class DSSPSecondaryStructureMetrics(Metrics):
     chain_id: str = Field(title="Chain ID", description="Analyzed chain label in the input structure namespace")
 
 
-class DSSPStructureInput(BaseModel):
-    """A structure plus the chain to assign with DSSP.
+class DSSPStructureInput(StructureInputBase):
+    """A structure plus the single chain to assign with DSSP.
 
     Attributes:
         structure (Structure): Protein structure to analyze.
-        chain_id (str): Chain label to analyze.
+        chain (SingleChainSelection | None): Chain to analyze. ``None`` analyzes the
+            first chain in the structure. ``mkdssp`` always runs on the whole
+            structure, so this only selects which chain's percentages are reported.
     """
 
-    model_config = ConfigDict(extra="forbid")
-
-    structure: Structure = Field(title="Input Structure", description="Protein structure to analyze")
-    chain_id: str = Field(default="A", title="Chain ID", description="Chain label to analyze")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _coerce_structure(cls, data: Any) -> Any:
-        if isinstance(data, (str, Path)):
-            return {"structure": Structure(structure=str(data))}
-        if isinstance(data, Structure):
-            return {"structure": data}
-        if isinstance(data, dict):
-            structure = data.get("structure")
-            if isinstance(structure, (str, Path)):
-                data = {**data, "structure": Structure(structure=str(structure))}
-        return data
+    chain: SingleChainSelection | None = Field(
+        default=None,
+        title="Chain",
+        description="Chain to analyze. Leave empty to analyze the first chain in the structure.",
+    )
 
     @model_validator(mode="after")
-    def _validate_chain(self) -> "DSSPStructureInput":
-        available = set(self.structure.get_chain_ids())
-        if len(available) > MAX_CHAINS_FOR_PDB:
+    def _reject_too_many_chains(self) -> "DSSPStructureInput":
+        # DSSP dispatch runs on PDB-format text, which represents a chain ID as a
+        # single character (A-Z, a-z, 0-9). Structures with more chains can't be
+        # dispatched at all, so reject up front with a clear message.
+        n_chains = len(self.structure.get_chain_ids())
+        if n_chains > MAX_CHAINS_FOR_PDB:
             raise ValueError(
-                f"Structure has {len(available)} chains, but DSSP dispatch uses PDB format which supports "
+                f"Structure has {n_chains} chains, but DSSP dispatch uses PDB format which supports "
                 f"at most {MAX_CHAINS_FOR_PDB} single-character chain IDs.",
             )
-        if self.chain_id not in available:
-            raise ValueError(f"Chain {self.chain_id!r} not found in structure. Available chains: {sorted(available)}")
         return self
+
+    @property
+    def analyzed_chain_id(self) -> str:
+        """Chain to analyze — the explicit selection, or the first chain when unset."""
+        if self.chain is not None:
+            return self.chain.chain
+        return self.structure.get_chain_ids()[0]
 
 
 class DSSPSecondaryStructureInput(BaseToolInput):
@@ -158,7 +156,7 @@ def example_input() -> Any:
                 structure=Structure(
                     structure=str(Path(__file__).parent.parent / "structure_metrics" / "example_input_fixture.pdb")
                 ),
-                chain_id="A",
+                chain=SingleChainSelection(chain="A"),
             )
         ]
     )
@@ -191,9 +189,12 @@ def run_dssp_secondary_structure(
     chain_ids: list[str] = []
     for inp in inputs.inputs:
         pdb_content, mmcif_to_pdb = inp.structure.to_pdb_with_chain_mapping()
+        # One result per input. mkdssp runs on the whole structure; we extract the
+        # selected chain's percentages from that single pass.
+        chain_id = inp.analyzed_chain_id
         pdb_contents.append(pdb_content)
-        pdb_chain_ids.append(mmcif_to_pdb[inp.chain_id])
-        chain_ids.append(inp.chain_id)
+        pdb_chain_ids.append(mmcif_to_pdb[chain_id])
+        chain_ids.append(chain_id)
 
     input_data = {
         "pdb_contents": pdb_contents,

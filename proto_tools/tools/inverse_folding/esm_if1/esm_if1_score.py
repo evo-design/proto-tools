@@ -9,7 +9,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from proto_tools.entities.structures import Structure
+from proto_tools.entities.structures import SingleChainSelection, Structure
 from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingScoringMetrics,
     InverseFoldingScoringOutput,
@@ -72,10 +72,10 @@ class ESMIF1ScoringPair(BaseModel):
             number of residues in the chain identified by ``target_chain``.
         structure (Structure): Protein structure providing the (optionally
             multi-chain) coordinate context.
-        target_chain (str | None): Chain ID within ``structure`` whose sequence
-            is being scored. ``None`` is permitted only for single-chain
-            structures, in which case the sole chain is used. For multi-chain
-            structures this field is required.
+        target_chain (SingleChainSelection | None): Chain within ``structure``
+            whose sequence is being scored. ``None`` is permitted only for
+            single-chain structures, in which case the sole chain is used. For
+            multi-chain structures this field is required.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -84,10 +84,10 @@ class ESMIF1ScoringPair(BaseModel):
     structure: Structure = Field(
         title="Input Structure", description="Structure providing the (multi-chain) coordinate context"
     )
-    target_chain: str | None = Field(
+    target_chain: SingleChainSelection | None = Field(
         default=None,
         title="Target Chain",
-        description="Chain ID whose sequence is scored. Required for multi-chain structures.",
+        description="Chain whose sequence is scored. Required for multi-chain structures.",
     )
 
     @model_validator(mode="after")
@@ -168,7 +168,7 @@ def example_input() -> Any:
             ESMIF1ScoringPair(
                 sequence=sequence,
                 structure=structure,
-                target_chain=target_chain,
+                target_chain=SingleChainSelection(chain=target_chain),
             )
         ]
     )
@@ -247,11 +247,11 @@ def run_esm_if1_score(
     return ESMIF1ScoringOutput(scores=scores)
 
 
-def _resolve_target_chain(target_chain: str | None, chain_ids: list[str]) -> str:
+def _resolve_target_chain(target_chain: SingleChainSelection | None, chain_ids: list[str]) -> str:
     """Pick the target chain for scoring, validating against the structure's chains.
 
     Args:
-        target_chain (str | None): User-supplied chain ID, or ``None``.
+        target_chain (SingleChainSelection | None): User-supplied chain, or ``None``.
         chain_ids (list[str]): Chain IDs present in the structure.
 
     Returns:
@@ -269,8 +269,7 @@ def _resolve_target_chain(target_chain: str | None, chain_ids: list[str]) -> str
                 f"to the chain whose sequence you want to score."
             )
         return chain_ids[0]
-    if target_chain not in chain_ids:
-        raise ValueError(
-            f"esm-if1-score: `target_chain={target_chain!r}` is not in the structure's chains {chain_ids}."
-        )
-    return target_chain
+    chain = target_chain.chain
+    if chain not in chain_ids:
+        raise ValueError(f"esm-if1-score: `target_chain={chain!r}` is not in the structure's chains {chain_ids}.")
+    return chain

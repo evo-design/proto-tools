@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from proto_tools.entities.structures import (
     ChainSelection,
     ResidueSelection,
+    SingleChainSelection,
     Structure,
     StructureInputBase,
 )
@@ -201,12 +202,68 @@ def test_residue_selection_validate_against_bad_position(structure: Structure) -
 
 
 # ============================================================================
+# SingleChainSelection
+# ============================================================================
+def test_single_chain_selection_coerces_string() -> None:
+    sel = SingleChainSelection.model_validate("A")
+    assert sel.chain == "A"
+
+
+def test_single_chain_selection_canonical_kwargs() -> None:
+    sel = SingleChainSelection(chain="A")
+    assert sel.chain == "A"
+
+
+def test_single_chain_selection_passthrough() -> None:
+    original = SingleChainSelection(chain="A")
+    sel = SingleChainSelection.model_validate(original)
+    assert sel.chain == "A"
+
+
+def test_single_chain_selection_rejects_list() -> None:
+    """A list is multi-chain; point the caller at ChainSelection."""
+    with pytest.raises(ValidationError, match="ChainSelection for more than one chain"):
+        SingleChainSelection.model_validate(["A", "B"])
+
+
+def test_single_chain_selection_rejects_int() -> None:
+    with pytest.raises(ValidationError, match="Cannot coerce int to SingleChainSelection"):
+        SingleChainSelection.model_validate(42)
+
+
+def test_single_chain_selection_rejects_mixed_keys() -> None:
+    with pytest.raises(ValidationError, match=r"must use only the 'chain' key"):
+        SingleChainSelection.model_validate({"chain": "A", "extra_key": "foo"})
+
+
+def test_single_chain_selection_rejects_empty_string() -> None:
+    """An empty chain ID is never a real chain; reject it at construction."""
+    with pytest.raises(ValidationError, match="non-empty"):
+        SingleChainSelection.model_validate("")
+
+
+def test_single_chain_selection_rejects_empty_canonical() -> None:
+    with pytest.raises(ValidationError, match="non-empty"):
+        SingleChainSelection(chain="")
+
+
+def test_single_chain_selection_validate_against_good(structure: Structure) -> None:
+    SingleChainSelection(chain="A").validate_against(structure)
+
+
+def test_single_chain_selection_validate_against_bad_chain(structure: Structure) -> None:
+    with pytest.raises(ValueError, match=r"myfield: chain 'Z' not in structure"):
+        SingleChainSelection(chain="Z").validate_against(structure, label="myfield")
+
+
+# ============================================================================
 # StructureInputBase
 # ============================================================================
 class _SubInput(StructureInputBase):
     """Fixture subclass with one of each selection role for auto-validation tests."""
 
     chain_role: ChainSelection | None = None
+    single_chain_role: SingleChainSelection | None = None
     residue_role: ResidueSelection | None = None
 
 
@@ -237,6 +294,11 @@ def test_base_auto_validates_chain_role() -> None:
         _SubInput(structure=str(EXAMPLE_PDB), chain_role=["Z"])
 
 
+def test_base_auto_validates_single_chain_role() -> None:
+    with pytest.raises(ValidationError, match=r"single_chain_role: chain 'Z'"):
+        _SubInput(structure=str(EXAMPLE_PDB), single_chain_role="Z")
+
+
 def test_base_auto_validates_residue_role() -> None:
     with pytest.raises(ValidationError, match=r"residue_role.*invalid positions"):
         _SubInput(structure=str(EXAMPLE_PDB), residue_role={"A": [9999]})
@@ -252,11 +314,14 @@ def test_base_accepts_valid_selections() -> None:
     inp = _SubInput(
         structure=str(EXAMPLE_PDB),
         chain_role="A",
+        single_chain_role="B",
         residue_role={"A": [1, 2, 3]},
     )
     assert inp.chain_role is not None
+    assert inp.single_chain_role is not None
     assert inp.residue_role is not None
     assert inp.chain_role.chains == ["A"]
+    assert inp.single_chain_role.chain == "B"
     assert inp.residue_role.chains == {"A": [1, 2, 3]}
 
 

@@ -4,6 +4,7 @@ from proto_tools.entities.structures.examples import GFP_CIF_PATH, get_gfp_struc
 from proto_tools.entities.structures.selection import (
     ChainSelection,
     ResidueSelection,
+    SingleChainSelection,
     StructureInputBase,
 )
 from proto_tools.entities.structures.structure import BFactorType, Structure
@@ -45,6 +46,7 @@ __all__ = [
     "StructureEnsemble",
     # Selection
     "ChainSelection",
+    "SingleChainSelection",
     "ResidueSelection",
     "StructureInputBase",
     # Examples

@@ -57,8 +57,8 @@ that contact `binder_chain`, plus per-chain debug rows.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `structure` | `Structure` | *Required* | Cofolded complex. `b_factor_type` must be `PLDDT` or `NORMALIZED_PLDDT`. PAE matrix must be attached at `structure.metrics["pae"]` as a square `list[list[float]]` whose dimension matches the total residue count. |
-| `binder_chain` | `str` | *Required* | Single-character chain ID of the binder. |
-| `target_chains` | `list[str]` | *Required* | Target chain ID(s). Single-character entries; comma-separated strings are accepted and normalized. |
+| `binder_chain` | `SingleChainSelection` | *Required* | Single-character chain ID of the binder. Accepts a bare `"A"` or `{"chain": "A"}`. |
+| `target_chains` | `ChainSelection` | *Required* | Target chain ID(s), single-character each. Accepts a bare `"A"` or a list `["A", "B"]`. |
 
 ## Configuration
 

@@ -32,7 +32,7 @@ This tool is appropriate for filtering designed proteins by their secondary-stru
 
 #### Usage Tips
 
-- **The selected chain must exist in the input structure.** The input validator hard-errors when `chain_id` is not present and lists the available chains. The default `chain_id` is `"A"`.
+- **Select the chain to analyze, or leave `chain` empty to analyze the first chain.** `chain` is a `SingleChainSelection` (e.g. `"A"`); each input structure yields one result row for its selected chain. The input validator hard-errors when the selected chain is not present and lists the available chains. Omitting `chain` analyzes the first chain in the structure.
 - **Structures with more than 62 chains are rejected.** The DSSP standalone runs on PDB-format text, which represents a chain identifier as a single character from `A-Z`, `a-z`, or `0-9`. Structures exceeding this limit cannot be dispatched through the wrapper.
 - **Helix percentage counts DSSP states `H`, `G`, and `I`.** Sheet percentage counts state `E`. Loop percentage counts every remaining state, including `B`, `T`, `S`, the unassigned state, and the `P` polyproline-II state introduced in DSSP 4. The three percentages sum to 100 for the counted residues of the selected chain.
 - **The first model is used for multi-model structures.** Only the first model parsed by Biopython contributes to the residue counts. To analyse a specific model in an NMR ensemble or a multi-state file, extract that model into its own `Structure` before passing it in.

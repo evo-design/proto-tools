@@ -38,19 +38,28 @@ def test_dssp_tool_is_registered() -> None:
     assert ToolRegistry.get_links("dssp-secondary-structure") == {"github": "https://github.com/PDB-REDO/dssp"}
 
 
-def test_dssp_input_accepts_single_path_and_defaults_chain() -> None:
-    """Path inputs are wrapped, coerced to Structure, and default to chain A."""
+def test_dssp_input_accepts_single_path_and_defaults_to_first_chain() -> None:
+    """Path inputs are wrapped, coerced to Structure, and analyze the first chain by default."""
     inp = DSSPSecondaryStructureInput(inputs=FIXTURE)  # type: ignore[arg-type]
 
     assert len(inp.inputs) == 1
     assert isinstance(inp.inputs[0].structure, Structure)
-    assert inp.inputs[0].chain_id == "A"
+    assert inp.inputs[0].chain is None
+    assert inp.inputs[0].analyzed_chain_id == inp.inputs[0].structure.get_chain_ids()[0]
+
+
+def test_dssp_structure_input_accepts_explicit_chain() -> None:
+    """An explicit chain selection is preserved and surfaced via analyzed_chain_id."""
+    inp = DSSPStructureInput(structure=FIXTURE, chain="A")  # type: ignore[arg-type]
+
+    assert inp.chain is not None
+    assert inp.analyzed_chain_id == "A"
 
 
 def test_dssp_structure_input_rejects_missing_chain() -> None:
-    """DSSPStructureInput validates that the requested chain exists."""
-    with pytest.raises(ValidationError, match="Chain 'Z' not found"):
-        DSSPStructureInput(structure=FIXTURE, chain_id="Z")  # type: ignore[arg-type]
+    """DSSPStructureInput validates that the requested chain exists in the structure."""
+    with pytest.raises(ValidationError, match="not in structure"):
+        DSSPStructureInput(structure=FIXTURE, chain="Z")  # type: ignore[arg-type]
 
 
 def test_export_dssp_output_csv_and_json(tmp_path: Path) -> None:
@@ -82,7 +91,8 @@ def test_dssp_secondary_structure_benchmark(request: pytest.FixtureRequest) -> N
     # Distinct metrics break the @tool iterable-input dedup that would otherwise
     # collapse N identical structures to a single compute, defeating the benchmark.
     structures = [
-        {"structure": Structure(structure=str(_BENCH_RENIN_PDB), metrics={"_bench_id": i})} for i in range(50)
+        {"structure": Structure(structure=str(_BENCH_RENIN_PDB), metrics={"_bench_id": i}), "chain": "A"}
+        for i in range(50)
     ]
     inputs = DSSPSecondaryStructureInput(inputs=structures)
 

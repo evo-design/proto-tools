@@ -87,6 +87,71 @@ class ChainSelection(BaseModel):
             )
 
 
+class SingleChainSelection(BaseModel):
+    """Selection of exactly one whole chain.
+
+    The single-chain analog of ``ChainSelection``, for tools that operate on one
+    chain at a time (e.g. DSSP, which reports percentages for one chain). The
+    absent-selection state is the parent field being ``None``.
+
+    Accepts shorthand at construction:
+
+    - ``"A"``          → ``SingleChainSelection(chain="A")``
+    - ``{"chain": "A"}`` → ``SingleChainSelection(chain="A")``
+
+    Attributes:
+        chain (str): The selected chain ID.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    chain: str = Field(title="Chain", description="Chain ID to select.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce(cls, data: Any) -> Any:
+        if isinstance(data, SingleChainSelection):
+            return {"chain": data.chain}
+        if isinstance(data, str):
+            return {"chain": data}
+        if isinstance(data, list):
+            raise ValueError(
+                "SingleChainSelection takes a single chain ID; use ChainSelection for more than one chain.",
+            )
+        if isinstance(data, dict):
+            keys = set(data.keys())
+            if keys == {"chain"}:
+                return data
+            raise ValueError(
+                f"SingleChainSelection dict must use only the 'chain' key; got {sorted(keys)}.",
+            )
+        raise ValueError(f"Cannot coerce {type(data).__name__} to SingleChainSelection")
+
+    @model_validator(mode="after")
+    def _reject_empty(self) -> SingleChainSelection:
+        if not self.chain:
+            raise ValueError(
+                "SingleChainSelection chain must be a non-empty string; use None at the parent field instead.",
+            )
+        return self
+
+    def validate_against(self, structure: Structure, label: str = "selection") -> None:
+        """Raise if the selected chain is missing from ``structure``.
+
+        Args:
+            structure (Structure): The structure to check against.
+            label (str): Prefix for error messages, typically the parent field name.
+
+        Raises:
+            ValueError: If the selected chain ID is absent from ``structure``.
+        """
+        available = set(structure.get_chain_ids())
+        if self.chain not in available:
+            raise ValueError(
+                f"{label}: chain {self.chain!r} not in structure (available: {sorted(available)})",
+            )
+
+
 class ResidueSelection(BaseModel):
     """Selection of explicit per-chain residue positions.
 
@@ -268,7 +333,7 @@ class StructureInputBase(BaseModel):
     def _validate_selections(self) -> StructureInputBase:
         for name in type(self).model_fields:
             value = getattr(self, name, None)
-            if isinstance(value, (ChainSelection, ResidueSelection)):
+            if isinstance(value, (ChainSelection, SingleChainSelection, ResidueSelection)):
                 value.validate_against(self.structure, label=name)
         return self
 
