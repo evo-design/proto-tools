@@ -44,6 +44,6 @@ Use this to confirm and catalog CRISPR loci across newly sequenced bacterial and
 
 These apply to every MinCED tool in this toolkit (`minced-crispr`).
 
-- **Runs on CPU only.** MinCED is a Java program; the standalone install bundles a Java runtime alongside the `minced` binary. There is no GPU acceleration to enable, and runtime is seconds per typical bacterial genome.
-- **Self-contained after install.** The standalone `setup.sh` downloads the `minced` binary once; subsequent runs need no network access and no model weights or reference databases.
+- **Runs on CPU only.** MinCED is a Java program; the standalone install bundles a Java runtime alongside the `minced` program. There is no GPU acceleration to enable, and runtime is seconds per typical bacterial genome.
+- **Self-contained after install.** The standalone `setup.sh` downloads the `minced` program once; subsequent runs need no network access and no model weights or reference databases.
 - **Sequences are processed one at a time.** The wrapper iterates over `inputs.sequences` sequentially rather than parallelizing across them. For large batches, run independent calls in parallel from the caller side.

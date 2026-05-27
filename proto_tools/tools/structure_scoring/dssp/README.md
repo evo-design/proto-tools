@@ -1,130 +1,47 @@
-<a href="https://bio-pro.mintlify.app/tools/structure-scoring/dssp"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/structure-scoring/dssp"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
-# DSSP Secondary Structure
+# DSSP
 
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** DSSP is open source and free for academic and commercial use under a BSD-2-Clause license. Please refer to [the license](https://github.com/PDB-REDO/dssp/blob/trunk/LICENSE) for full terms.
 
 ## Overview
 
-DSSP assigns protein secondary structure from 3D coordinates using hydrogen-bond and geometry rules. It is an assignment program for structures with coordinates, not a sequence-based secondary-structure predictor. This module exposes `dssp-secondary-structure`, which reports helix, sheet, and loop percentages for a selected chain in each input structure.
-
-- **Tool key**: `dssp-secondary-structure`
-- **Input**: Protein `Structure` objects or structure paths with a `chain_id`
-- **Output**: Per-chain `helix_pct`, `sheet_pct`, and `loop_pct`
-- **Execution**: CPU only, local standalone environment via `ToolInstance`
+[DSSP](https://github.com/PDB-REDO/dssp) (Dictionary of Protein Secondary Structure) is a standard program for assigning protein secondary structure from atomic coordinates. It identifies hydrogen-bonding and geometric patterns in a protein backbone and labels each residue as helix, strand, turn, or another defined state. This toolkit runs DSSP and collapses those assignments into helix, sheet, and loop percentages for a selected chain in each input structure.
 
 ## Background
 
-**What does this tool assign?**
-DSSP classifies each protein residue into secondary-structure states from atomic coordinates. This wrapper collapses those assignments into helix (`H`, `G`, `I`), sheet (`E`), and loop percentages for the selected chain.
+DSSP ([Kabsch and Sander, 1983](https://doi.org/10.1002/bip.360221211)) is an assignment program that classifies each residue of a protein into a secondary-structure state by inspecting the geometry and the hydrogen-bond pattern of the protein backbone. Recurring turns are assigned as helices (states `H`, `G`, and `I` for alpha, 3-10, and pi helices respectively), recurring bridges between residues form ladders that are assigned as strand (`E`), and isolated bridges, turns, bends, and unassigned residues form the remaining states. DSSP works only from atomic coordinates and does not predict secondary structure from sequence alone. The modern implementation ([Hekkelman et al., 2025](https://doi.org/10.1002/pro.70208)) is maintained by the [PDB-REDO project](https://www.pdb-redo.eu/) at the Netherlands Cancer Institute and ships as the `mkdssp` command-line program with extended mmCIF support and FAIR annotation.
 
-**Why is this important?**
-- Protein design: filter designs with undesired helix, sheet, or loop composition.
-- Pipeline compatibility: use the DSSP executable through the standard Proto `ToolInstance` interface.
-- Structural analysis: summarize secondary-structure content from experimentally solved or predicted structures.
+This toolkit collapses the per-residue DSSP states into a coarse three-class summary for the chain of interest. Helix percentage counts residues assigned `H`, `G`, or `I`. Sheet percentage counts residues assigned `E`. Loop percentage counts every other DSSP state (`B`, `T`, `S`, the unassigned state, and the `P` polyproline-II state introduced in DSSP 4). The three percentages sum to 100 for the counted residues of the selected chain.
 
-**Scientific foundation:**
-DSSP identifies recurring hydrogen-bonding and geometric patterns in protein backbones. Repeating turns are assigned as helices, repeating bridges form ladders/sheets, and other assigned states are treated here as loop/coil for coarse composition scoring.
+### Learning Resources
 
-**Primary use cases:**
-- Match pipelines that require DSSP-backed secondary-structure assignment.
-- Score designed binder chains for helix/sheet/loop composition.
-- Compare one chain's assigned secondary-structure composition across a batch of structures.
+- [PDB-REDO/dssp](https://github.com/PDB-REDO/dssp) (PDB-REDO project, Netherlands Cancer Institute). Official repository and the source of the `mkdssp` command-line program that this toolkit invokes.
+- [`mkdssp` command-line reference](https://github.com/PDB-REDO/dssp/blob/trunk/doc/mkdssp.md) (PDB-REDO project). Reference documentation for the DSSP state alphabet and the command-line interface of the program that this toolkit invokes.
 
 ## Tools
 
 ### DSSP Secondary Structure (`dssp-secondary-structure`)
 
-Assign secondary structure with DSSP in a standalone tool environment.
+Assigns secondary structure with the `mkdssp` program for a selected chain in each input structure and returns the resulting helix, sheet, and loop percentages. Inputs are supplied as one or more `DSSPStructureInput` objects, each carrying a `Structure` (or a path / coordinate string accepted by `Structure`) plus the chain identifier to analyse. Multiple structures in one call are processed independently and the results are returned in input order.
 
-## How It Works
+#### Applications
 
-**Method overview:**
-The tool converts each input structure to PDB text, preserving a mapping from original chain labels to PDB-compatible single-character labels. The standalone runner writes each PDB to a temporary file, calls Biopython's `Bio.PDB.DSSP` wrapper against the DSSP executable, counts residue assignments for the selected chain, rounds percentages to two decimals, and removes the temporary file.
+This tool is appropriate for filtering designed proteins by their secondary-structure composition, for summarising the helical or beta-sheet content of a predicted structure ensemble, and for any analysis that requires a DSSP-backed secondary-structure assignment as an upstream step in a larger pipeline. The collapsed three-class summary is the right shape for ranking or filtering large structure batches by composition.
 
-**Key assumptions:**
-- Inputs contain protein backbone atoms for the selected chain.
-- The selected chain exists in the input structure.
-- PDB conversion can represent all chains with single-character labels.
+#### Usage Tips
 
-**Limitations:**
-- Reports coarse helix/sheet/loop percentages, not per-residue DSSP assignments.
-- Counts `E` as sheet; DSSP `B`, `T`, `S`, unassigned states, and `P` from DSSP 4 are grouped as loop.
-- Uses the first model parsed by Biopython for multi-model structures.
+- **The selected chain must exist in the input structure.** The input validator hard-errors when `chain_id` is not present and lists the available chains. The default `chain_id` is `"A"`.
+- **Structures with more than 62 chains are rejected.** The DSSP standalone runs on PDB-format text, which represents a chain identifier as a single character from `A-Z`, `a-z`, or `0-9`. Structures exceeding this limit cannot be dispatched through the wrapper.
+- **Helix percentage counts DSSP states `H`, `G`, and `I`.** Sheet percentage counts state `E`. Loop percentage counts every remaining state, including `B`, `T`, `S`, the unassigned state, and the `P` polyproline-II state introduced in DSSP 4. The three percentages sum to 100 for the counted residues of the selected chain.
+- **The first model is used for multi-model structures.** Only the first model parsed by Biopython contributes to the residue counts. To analyse a specific model in an NMR ensemble or a multi-state file, extract that model into its own `Structure` before passing it in.
 
-**Computational requirements:**
-- **Hardware:** CPU only
-- **Runtime:** Depends on structure size, file I/O, and external DSSP execution time
-- **Scalability:** Batched inputs dispatch through one standalone DSSP worker
+## Toolkit Notes
 
-## Input Parameters
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `inputs` | `list[DSSPStructureInput]` | Structures and chains to analyze. A single structure input is auto-wrapped into a list. |
-| `structure` | `Structure` | Protein structure object, structure path, or structure content accepted by `Structure`. |
-| `chain_id` | `str` | Chain label to analyze. Defaults to `A`. |
+These apply to every DSSP tool in this toolkit (`dssp-secondary-structure`).
 
-## Configuration
-
-No DSSP-specific configuration parameters are needed. Standard `BaseConfig` fields such as `timeout` and `verbose` are still available.
-
-## Output Specification
-
-| Field | Type | Units | Interpretation |
-|-------|------|-------|----------------|
-| `chain_id` | `str` | none | Original input chain label analyzed. |
-| `helix_pct` | `float` | percent | Fraction of counted residues assigned DSSP `H`, `G`, or `I`. |
-| `sheet_pct` | `float` | percent | Fraction of counted residues assigned DSSP `E`. |
-| `loop_pct` | `float` | percent | Fraction of counted residues assigned any other DSSP state. |
-
-Supported export formats: `csv`, `json`.
-
-## Quick Start Examples
-
-```python
-from proto_tools.entities.structures import Structure
-from proto_tools.tools.structure_scoring.dssp import (
-    DSSPSecondaryStructureConfig,
-    DSSPSecondaryStructureInput,
-    DSSPStructureInput,
-    run_dssp_secondary_structure,
-)
-
-result = run_dssp_secondary_structure(
-    DSSPSecondaryStructureInput(
-        inputs=[
-            DSSPStructureInput(
-                structure=Structure(structure="/path/to/complex.pdb"),
-                chain_id="B",
-            )
-        ]
-    ),
-    DSSPSecondaryStructureConfig(),
-)
-
-metrics = result.results[0]
-print(metrics.helix_pct, metrics.sheet_pct, metrics.loop_pct)
-```
-
-## Best Practices & Gotchas
-
-- Use `chain_id` to score the designed or analyzed chain explicitly; the default is chain `A`.
-- Provide a 3D coordinate structure. DSSP does not predict secondary structure from sequence alone.
-- Use `structure-metrics` when you need lightweight in-process metrics without installing DSSP.
-- Use PyRosetta structure-scoring tools for energy, SASA, SAP, relax, or interface metrics. DSSP only assigns secondary structure.
-- Multi-character chain labels are mapped to PDB-compatible chain IDs before the standalone DSSP runner executes.
-
-## References
-
-- Hekkelman, M. L., Alvarez Salmoral, D., Perrakis, A. & Joosten, R. P. (2025). DSSP 4: FAIR annotation of protein secondary structure. *Protein Science*, 34(8), e70208. DOI: [10.1002/pro.70208](https://doi.org/10.1002/pro.70208)
-- Kabsch, W. & Sander, C. (1983). Dictionary of protein secondary structure: Pattern recognition of hydrogen-bonded and geometrical features. *Biopolymers*, 22(12), 2577-2637. DOI: [10.1002/bip.360221211](https://doi.org/10.1002/bip.360221211)
-- Biopython `Bio.PDB.DSSP` API documentation: [https://biopython.org/docs/dev/api/Bio.PDB.DSSP.html](https://biopython.org/docs/dev/api/Bio.PDB.DSSP.html)
-- PDB-REDO `mkdssp` documentation: [https://github.com/PDB-REDO/dssp/blob/trunk/doc/mkdssp.md](https://github.com/PDB-REDO/dssp/blob/trunk/doc/mkdssp.md)
-- PDB-REDO DSSP repository: [https://github.com/PDB-REDO/dssp](https://github.com/PDB-REDO/dssp)
-
-## Related Tools
-
-- `structure-metrics` - in-process secondary-structure and compactness metrics.
-- `pyrosetta` - physics-based structure-scoring tools for energies, SASA, SAP, and relax workflows.
+- **Structure inputs accept either typed `Structure` objects or a path / coordinate string.** A field validator normalises raw paths and `Structure`-coercible values into `Structure` instances at input time. The wrapper writes each parsed structure to a temporary PDB file for the DSSP program and removes it after the call.
+- **Outputs are returned as typed metric objects.** Each `DSSPSecondaryStructureMetrics` result carries the analysed chain identifier and the three secondary-structure percentages, with `helix_pct`, `sheet_pct`, and `loop_pct` constrained to the range 0 to 100. Results serialise to CSV or JSON through the standard export interface.

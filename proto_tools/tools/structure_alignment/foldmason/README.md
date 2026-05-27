@@ -24,7 +24,7 @@ Alignment quality is summarised with the [Local Distance Difference Test (lDDT)]
 
 ### FoldMason MSA (`foldmason-msa`)
 
-Aligns two or more PDB structures and returns the amino-acid and 3Di MSAs as FASTA strings together with the Newick guide tree, the alignment length, and the number of sequences aligned. The tool executes against the public Steinegger Lab web service in `remote` mode and against the bundled `foldmason easy-msa` binary in `local` mode.
+Aligns two or more PDB structures and returns the amino-acid and 3Di MSAs as FASTA strings together with the Newick guide tree, the alignment length, and the number of sequences aligned. The tool executes against the public Steinegger Lab web service in `remote` mode and against the bundled `foldmason easy-msa` program in `local` mode.
 
 #### Applications
 
@@ -32,7 +32,7 @@ This tool is appropriate for aligning a fold family retrieved from a Foldseek se
 
 #### Usage Tips
 
-- **`foldmason-msa` supports both remote (`search_mode="remote"`, the default) and local (`search_mode="local"`) execution.** Remote mode targets the Steinegger Lab web service. Local mode runs the bundled FoldMason binary and accepts the full set of alignment parameters.
+- **`foldmason-msa` supports both remote (`search_mode="remote"`, the default) and local (`search_mode="local"`) execution.** Remote mode targets the Steinegger Lab web service. Local mode runs the bundled FoldMason program and accepts the full set of alignment parameters.
 - **The Steinegger Lab web service does not accept alignment parameters.** The configuration fields `gap_open`, `gap_extend`, `refine_iters`, `precluster`, and `guide_tree_newick` therefore require `search_mode="local"`.
 - **`refine_iters` controls how many iterative LDDT-maximising refinement passes run after the initial progressive alignment.** Each pass adds runtime, and the default of `0` is appropriate for most workflows. Increase it only when an alignment shows poor quality in difficult regions.
 - **The remote service has no authentication and no published rate limit.** `search.foldseek.com/foldmason` is a free public academic resource. High-throughput or batch workloads should be performed in `local` mode to avoid overloading the shared service.
@@ -49,7 +49,7 @@ This tool is appropriate for assigning a structural quality score to an MSA prod
 
 - **FASTA record headers must match `structure_ids`.** `msa2lddt` resolves each MSA row to its corresponding structure by matching the header against the supplied identifiers. Headers that do not correspond to a supplied structure are not scored, which can produce a misleadingly high score derived from a partial alignment.
 - **`only_scoring_cols=True` normalises the average LDDT by the number of scored columns rather than by the total alignment length.** Use this option when comparing alignments with different gap content. Leaving it `False` (the default) includes gap columns in the denominator.
-- **This tool runs only in local mode.** The public web service does not provide an `msa2lddt` endpoint, so every `foldmason-score-msa` call requires the local FoldMason binary.
+- **This tool runs only in local mode.** The public web service does not provide an `msa2lddt` endpoint, so every `foldmason-score-msa` call requires the local FoldMason program.
 
 ## Toolkit Notes
 
@@ -57,5 +57,5 @@ This tool is appropriate for assigning a structural quality score to an MSA prod
 
 These apply to every FoldMason tool in this toolkit (`foldmason-msa`, `foldmason-score-msa`).
 
-- **FoldMason runs on CPU only.** Neither the remote service nor the local binary uses a GPU. Local-mode runtime grows with both the number of structures and their lengths, since each progressive merge step performs a pairwise structural alignment.
+- **FoldMason runs on CPU only.** Neither the remote service nor the local program uses a GPU. Local-mode runtime grows with both the number of structures and their lengths, since each progressive merge step performs a pairwise structural alignment.
 - **Inputs are PDB-format text strings.** Each entry is written to disk as `{structure_id}.pdb` before alignment, so each structure should be supplied as PDB-format text in `structures`. The upstream FoldMason CLI also accepts mmCIF, but this toolkit does not currently support mmCIF input.
