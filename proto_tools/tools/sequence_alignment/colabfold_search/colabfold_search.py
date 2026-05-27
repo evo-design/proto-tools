@@ -471,6 +471,19 @@ class ColabfoldSearchConfig(BaseConfig):
             )
         return self
 
+    @model_validator(mode="after")
+    def warn_extra_args_in_remote_mode(self) -> "ColabfoldSearchConfig":
+        """Warn when ``extra_args`` is set in remote mode (it has no effect there).
+
+        The remote ColabFold MMseqs2 API does not accept arbitrary CLI tokens, so
+        ``extra_args`` is silently dropped on the remote path. Emit a log warning
+        rather than hard-erroring, since the rest of the configuration is still
+        valid for a remote search.
+        """
+        if self.search_mode == "remote" and self.extra_args:
+            logger.warning("Config field 'extra_args' is local-only and will be ignored in remote search mode.")
+        return self
+
     @property
     def gpus_per_instance(self) -> int:
         """Number of GPUs the configured search uses.
