@@ -34,7 +34,8 @@ class ProteinMPNNScoringInput(BaseToolInput):
 
     Attributes:
         sequence_structure_pairs (list[SequenceStructurePair]): List of sequence-structure pairs to score.
-            Each pair contains a sequence and a structure to score the sequence against.
+            Each pair contains a sequence, a structure, and optional per-pair ``fixed_positions``
+            excluded from the scoring metrics.
     """
 
     sequence_structure_pairs: list[SequenceStructurePair] = InputField(
@@ -55,11 +56,6 @@ class ProteinMPNNScoringConfig(BaseConfig):
     using ProteinMPNN's structure-conditioned language model.
 
     Attributes:
-        fixed_positions (dict[str, list[int]] | None): Dictionary mapping chain
-            IDs to fixed positions in the sequence. If None, no positions will be fixed.
-            In scoring, fixed positions are excluded from average and total likelihood metrics.
-            NOTE: Positions should match positions in the structure (generally 1-indexed).
-
         device (str): Device to run the model on. Options include ``"cuda"`` (NVIDIA GPU),
             ``"cpu"`` (CPU execution). Default: ``"cuda"``.
 
@@ -77,13 +73,6 @@ class ProteinMPNNScoringConfig(BaseConfig):
         - Vocab order: ARNDCQEGHILKMFPSTWYVX
         - Logits are structure-conditioned: P(aa_i | structure, context)
     """
-
-    fixed_positions: dict[str, list[int]] | None = ConfigField(
-        title="Fixed Positions",
-        default=None,
-        description="Dictionary mapping chain IDs to fixed positions excluded from scoring metrics",
-        examples=[{"A": [1, 2, 3]}, {"A": [10, 20], "B": [5]}],
-    )
 
     device: str = ConfigField(
         title="Device",
@@ -151,8 +140,8 @@ def run_proteinmpnn_score(
     Args:
         inputs (ProteinMPNNScoringInput): Validated input containing sequence-structure
             pairs to score.
-        config (ProteinMPNNScoringConfig): Scoring configuration specifying fixed
-            positions, device settings, and whether to return logits.
+        config (ProteinMPNNScoringConfig): Scoring configuration specifying device,
+            model choice, and whether to return logits.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
@@ -206,7 +195,11 @@ def run_proteinmpnn_score(
                 "chain_ids": sequence_structure_pair.structure.get_chain_ids(),
                 "sequence": sequence_structure_pair.sequence,
                 "seed": seed,
-                "fixed_positions": config.fixed_positions,
+                "fixed_positions": (
+                    sequence_structure_pair.fixed_positions.chains
+                    if sequence_structure_pair.fixed_positions is not None
+                    else None
+                ),
                 "device": config.device,
                 "model_choice": config.model_choice,
                 "return_logits": config.return_logits,

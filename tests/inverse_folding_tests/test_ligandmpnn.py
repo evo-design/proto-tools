@@ -166,10 +166,15 @@ def test_ligandmpnn_score_dispatch_contract(monkeypatch):
 
     output = run_ligandmpnn_score(
         LigandMPNNScoringInput(
-            sequence_structure_pairs=[SequenceStructurePair(sequence=sequence, structure=structure)]
+            sequence_structure_pairs=[
+                SequenceStructurePair(
+                    sequence=sequence,
+                    structure=structure,
+                    fixed_positions={"A": [1]},
+                )
+            ]
         ),
         LigandMPNNScoringConfig(
-            fixed_positions={"A": [1]},
             seed=42,
             device="cpu",
             return_logits=True,

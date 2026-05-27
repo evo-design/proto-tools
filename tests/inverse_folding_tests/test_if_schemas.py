@@ -270,11 +270,56 @@ def test_proteinmpnn_sample_input_roundtrip():
 
 
 def test_sequence_structure_pair_roundtrip():
-    """Scoring path has no custom validator — pin that native Pydantic coercion works."""
-    original = SequenceStructurePair(sequence="MVLSP", structure=Structure.from_file(TEST_PDB_FILE))
+    """Native Pydantic coercion + fixed_positions survive a JSON round-trip."""
+    original = SequenceStructurePair(
+        sequence="MVLSP",
+        structure=Structure.from_file(TEST_PDB_FILE),
+        fixed_positions={"A": [1, 2, 3]},
+    )
     restored = SequenceStructurePair(**original.model_dump(mode="json"))
     assert restored.sequence == "MVLSP"
     assert restored.structure.structure == original.structure.structure
+    assert restored.fixed_positions is not None
+    assert restored.fixed_positions.chains == {"A": [1, 2, 3]}
+
+
+def test_sequence_structure_pair_accepts_fixed_positions():
+    """fixed_positions accepts the {chain: [positions]} shorthand and exposes .chains."""
+    pair = SequenceStructurePair(
+        sequence="MVLSP",
+        structure=Structure.from_file(TEST_PDB_FILE),
+        fixed_positions={"A": [1, 2, 3]},
+    )
+    assert pair.fixed_positions is not None
+    assert pair.fixed_positions.chains == {"A": [1, 2, 3]}
+
+
+def test_sequence_structure_pair_rejects_invalid_fixed_chain():
+    with pytest.raises(ValueError, match="not in structure"):
+        SequenceStructurePair(
+            sequence="MVLSP",
+            structure=Structure.from_file(TEST_PDB_FILE),
+            fixed_positions={"Z": [1]},
+        )
+
+
+def test_sequence_structure_pair_rejects_invalid_fixed_residues():
+    with pytest.raises(ValueError, match="invalid positions"):
+        SequenceStructurePair(
+            sequence="MVLSP",
+            structure=Structure.from_file(TEST_PDB_FILE),
+            fixed_positions={"A": [99999]},
+        )
+
+
+def test_sequence_structure_pair_fixed_positions_distinguishes_cache_key():
+    """Per-pair fixed_positions enters the per-item cache key, preventing collisions."""
+    from proto_tools.utils.tool_cache import _serialize_for_cache_key
+
+    structure = Structure.from_file(TEST_PDB_FILE)
+    base = SequenceStructurePair(sequence="MVLSP", structure=structure)
+    fixed = SequenceStructurePair(sequence="MVLSP", structure=structure, fixed_positions={"A": [1, 2, 3]})
+    assert _serialize_for_cache_key(base) != _serialize_for_cache_key(fixed)
 
 
 # ── Per-tool concrete output round-trip ───────────────────────────────────────

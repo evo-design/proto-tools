@@ -53,7 +53,7 @@ Use this to rank candidate sequences or point mutations by structural compatibil
 
 #### Usage Tips
 
-- **Use `fixed_positions` to score only part of a chain.** Any positions you list are skipped when computing log-likelihood and perplexity, so the score reflects just the residues you care about instead of the whole sequence. **NOTE:** Positions are per chain and counted from 1, not 0 to match biological residue selection conventions.
+- **Set `fixed_positions` per (sequence, structure) pair to score only part of a chain.** It lives on each input pair as a `{chain: [positions]}` selection, not in the config. Listed positions are skipped when computing log-likelihood and perplexity, so the score reflects just the residues you care about instead of the whole sequence. **NOTE:** Positions are per chain and counted from 1, not 0, to match biological residue selection conventions.
 - **`return_logits` (default `False`) has a size trade-off.** Enabling it returns a per-position `(sequence length x 21)` logit array per sequence for residue-level analysis. That array dominates output size and memory for long sequences or large batches, so leave it off unless you need it.
 
 ### ProteinMPNN Gradient (`proteinmpnn-gradient`)

@@ -235,11 +235,19 @@ def test_proteinmpnn_score(pdb_structure: Structure):
 
     inp = ProteinMPNNScoringInput(
         sequence_structure_pairs=[
-            SequenceStructurePair(sequence=original_sequence, structure=pdb_structure),
-            SequenceStructurePair(sequence=modified_sequence, structure=pdb_structure),
+            SequenceStructurePair(
+                sequence=original_sequence,
+                structure=pdb_structure,
+                fixed_positions=fixed_positions,
+            ),
+            SequenceStructurePair(
+                sequence=modified_sequence,
+                structure=pdb_structure,
+                fixed_positions=fixed_positions,
+            ),
         ]
     )
-    config = ProteinMPNNScoringConfig(fixed_positions=fixed_positions, seed=42, return_logits=True)
+    config = ProteinMPNNScoringConfig(seed=42, return_logits=True)
     output = run_proteinmpnn_score(inp, config)
     assert output.success, f"Failed to score: {output}"
 

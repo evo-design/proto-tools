@@ -52,7 +52,7 @@ Use this to rank designs or assess mutations near ligands, nucleic acids, or met
 #### Usage Tips
 
 - **`scoring_mode` changes what the score means.** `single_aa` (the default) scores each position from its own conditional probability and is order-independent, which is what you usually want for ranking. `autoregressive` scores along one seed-determined decoding order, so it depends on the seed.
-- **`fixed_positions` excludes residues from the aggregate score.** Provide a `{chain: [positions]}` map with positions counted from 1, not 0, to match biological residue selection conventions, so the score reflects only the residues you care about.
+- **`fixed_positions` excludes residues from the aggregate score.** Set it per (sequence, structure) input pair as a `{chain: [positions]}` selection counted from 1, not 0, to match biological residue selection conventions, so the score reflects only the residues you care about.
 - **`return_logits` (default `False`) has a size trade-off.** Enabling it adds a per-position logit array per sequence for residue-level analysis, which dominates output size and memory for long sequences, so leave it off unless you need it.
 
 ## Toolkit Notes

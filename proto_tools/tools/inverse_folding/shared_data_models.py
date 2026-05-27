@@ -39,10 +39,24 @@ class SequenceStructurePair(BaseModel):
     Attributes:
         sequence (str): Protein sequence to score against the structure.
         structure (Structure): Protein structure to score the sequence against.
+        fixed_positions (ResidueSelection | None): Per-chain 1-indexed positions
+            excluded from the aggregate scoring metrics. Accepts ``{"A": [1, 2]}``.
     """
 
     sequence: str = Field(title="Sequence", description="Sequence to score against the structure")
     structure: Structure = Field(title="Input Structure", description="Structure to score the sequence against")
+    fixed_positions: ResidueSelection | None = Field(
+        default=None,
+        title="Fixed Positions",
+        description="Per-chain 1-indexed positions excluded from scoring metrics.",
+    )
+
+    @model_validator(mode="after")
+    def _validate_fixed_positions(self) -> "SequenceStructurePair":
+        """Reject fixed positions that aren't real residues in ``structure``."""
+        if self.fixed_positions is not None:
+            self.fixed_positions.validate_against(self.structure, label="fixed_positions")
+        return self
 
 
 class InverseFoldingStructureInput(StructureInputBase):

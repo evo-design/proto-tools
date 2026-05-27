@@ -25,7 +25,8 @@ class LigandMPNNScoringInput(BaseToolInput):
     """Input for LigandMPNN scoring.
 
     Attributes:
-        sequence_structure_pairs (list[SequenceStructurePair]): Sequence and structure pairs to score.
+        sequence_structure_pairs (list[SequenceStructurePair]): Sequence and structure pairs to
+            score; each pair may carry per-pair ``fixed_positions`` excluded from the metrics.
     """
 
     sequence_structure_pairs: list[SequenceStructurePair] = InputField(
@@ -41,18 +42,11 @@ class LigandMPNNScoringConfig(BaseConfig):
     """Configuration for LigandMPNN structure-conditioned scoring.
 
     Attributes:
-        fixed_positions (dict[str, list[int]] | None): Residues excluded from score aggregation.
         device (str): Device to run the model on.
         return_logits (bool): Whether to include per-position logits.
         scoring_mode (LigandMPNNScoringMode): Single-position or autoregressive scoring mode.
     """
 
-    fixed_positions: dict[str, list[int]] | None = ConfigField(
-        title="Fixed Positions",
-        default=None,
-        description="Dictionary mapping chain IDs to fixed positions excluded from scoring.",
-        examples=[{"A": [1, 2, 3]}, {"A": [10, 20], "B": [5]}],
-    )
     device: str = ConfigField(
         title="Device",
         default="cuda",
@@ -122,7 +116,7 @@ def run_ligandmpnn_score(
                     "chain_ids": pair.structure.get_chain_ids(),
                     "sequence": pair.sequence,
                     "seed": seed,
-                    "fixed_positions": config.fixed_positions,
+                    "fixed_positions": (pair.fixed_positions.chains if pair.fixed_positions is not None else None),
                     "device": config.device,
                     "return_logits": config.return_logits,
                     "verbose": config.verbose,
