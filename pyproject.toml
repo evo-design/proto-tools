@@ -352,4 +352,4 @@ include = ["proto_tools*"]
 
 [tool.setuptools.package-data]
 # *.md / *.ipynb ship per-tool READMEs + example notebooks so tool_docs works on a non-editable install.
-"*" = ["*.sh", "*.txt", "*.csv", "*.smi", "*.cif", "*.bib", "*.yaml", "*.md", "*.ipynb"]
+"*" = ["*.sh", "*.txt", "*.csv", "*.smi", "*.cif", "*.bib", "*.yaml", "*.md", "*.ipynb", "*.pkl"]
