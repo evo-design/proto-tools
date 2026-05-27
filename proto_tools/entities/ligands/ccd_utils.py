@@ -13,7 +13,9 @@ Data source: https://files.wwpdb.org/pub/pdb/data/monomers/Components-smiles-ste
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import pickle
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -23,6 +25,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 CCD_DATABASE_PATH = Path(__file__).parent / "ccd_maps" / "Components-smiles-stereo-oe.smi"
+CCD_CACHE_PICKLE_PATH = Path(__file__).parent / "ccd_maps" / "ccd_caches.pkl"
+_CCD_CACHE_PICKLE_VERSION = 1
 
 
 def _ensure_ccd_database() -> None:
@@ -130,16 +134,80 @@ def _build_caches() -> tuple[set[str], dict[str, str], dict[str, str], dict[str,
     return all_codes, smiles_to_ccd, ccd_to_smiles, inchikey_to_ccd
 
 
+def _smi_sha256() -> str:
+    """SHA256 hex digest of the source .smi file used to invalidate the pickled cache."""
+    return hashlib.sha256(CCD_DATABASE_PATH.read_bytes()).hexdigest()
+
+
+def _load_pickled_caches() -> tuple[set[str], dict[str, str], dict[str, str], dict[str, str]] | None:
+    """Return the four caches from the prebuilt pickle, or None on miss/mismatch."""
+    if not CCD_CACHE_PICKLE_PATH.exists():
+        return None
+    try:
+        with CCD_CACHE_PICKLE_PATH.open("rb") as fh:
+            payload = pickle.load(fh)  # noqa: S301 -- pickle is a repo-checked-in build artifact
+    except Exception as exc:
+        logger.warning("CCD cache pickle at %s failed to load (%s); rebuilding from .smi", CCD_CACHE_PICKLE_PATH, exc)
+        return None
+    if payload.get("version") != _CCD_CACHE_PICKLE_VERSION:
+        logger.warning("CCD cache pickle schema mismatch; rebuilding from .smi")
+        return None
+    if payload.get("smi_sha256") != _smi_sha256():
+        logger.warning("CCD cache pickle is stale (source .smi changed); rebuilding from .smi")
+        return None
+    return (
+        set(payload["all_codes"]),
+        payload["smiles_to_ccd"],
+        payload["ccd_to_smiles"],
+        payload["inchikey_to_ccd"],
+    )
+
+
+def _write_pickled_caches(
+    all_codes: set[str],
+    smiles_to_ccd: dict[str, str],
+    ccd_to_smiles: dict[str, str],
+    inchikey_to_ccd: dict[str, str],
+) -> None:
+    """Atomically write the four caches to ``CCD_CACHE_PICKLE_PATH``. Silently no-op on read-only filesystems."""
+    import os
+
+    import rdkit
+
+    payload = {
+        "version": _CCD_CACHE_PICKLE_VERSION,
+        "smi_sha256": _smi_sha256(),
+        "rdkit_version": rdkit.__version__,
+        # Sort everything so the pickle bytes are stable across rebuilds on different machines.
+        "all_codes": sorted(all_codes),
+        "smiles_to_ccd": dict(sorted(smiles_to_ccd.items())),
+        "ccd_to_smiles": dict(sorted(ccd_to_smiles.items())),
+        "inchikey_to_ccd": dict(sorted(inchikey_to_ccd.items())),
+    }
+    tmp_path = CCD_CACHE_PICKLE_PATH.with_suffix(CCD_CACHE_PICKLE_PATH.suffix + f".tmp.{os.getpid()}")
+    try:
+        with tmp_path.open("wb") as fh:
+            pickle.dump(payload, fh, protocol=pickle.HIGHEST_PROTOCOL)
+        os.replace(tmp_path, CCD_CACHE_PICKLE_PATH)
+    except OSError as exc:
+        logger.debug(
+            "Could not persist CCD cache pickle at %s (%s); continuing without it.", CCD_CACHE_PICKLE_PATH, exc
+        )
+        tmp_path.unlink(missing_ok=True)
+
+
 def _ensure_caches() -> None:
-    """Lazy-initialize all caches on first use."""
+    """Lazy-initialize all caches on first use; rebuild + persist if the pickle is missing or stale."""
     global _ALL_CCD_CODES, _RDKIT_CANONICAL_TO_CCD, _CCD_TO_RDKIT_CANONICAL, _INCHIKEY_TO_CCD
-    if _ALL_CCD_CODES is None:
-        (
-            _ALL_CCD_CODES,
-            _RDKIT_CANONICAL_TO_CCD,
-            _CCD_TO_RDKIT_CANONICAL,
-            _INCHIKEY_TO_CCD,
-        ) = _build_caches()
+    if _ALL_CCD_CODES is not None:
+        return
+    cached = _load_pickled_caches()
+    if cached is not None:
+        _ALL_CCD_CODES, _RDKIT_CANONICAL_TO_CCD, _CCD_TO_RDKIT_CANONICAL, _INCHIKEY_TO_CCD = cached
+        return
+    logger.warning("Building CCD lookup tables from .smi (one-time, ~30s)...")
+    _ALL_CCD_CODES, _RDKIT_CANONICAL_TO_CCD, _CCD_TO_RDKIT_CANONICAL, _INCHIKEY_TO_CCD = _build_caches()
+    _write_pickled_caches(_ALL_CCD_CODES, _RDKIT_CANONICAL_TO_CCD, _CCD_TO_RDKIT_CANONICAL, _INCHIKEY_TO_CCD)
 
 
 def _get_canonical_caches() -> tuple[dict[str, str], dict[str, str]]:
