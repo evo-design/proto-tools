@@ -33,7 +33,7 @@ Predicts the 3D structure of one or more protein chains from their sequences. Ea
 
 #### Applications
 
-This tool folds a protein sequence into a 3D model for structural analysis or as input to downstream structure based tools, and is fast enough to screen large sets of designs. Because ESMFold does not use an MSA, it is well suited to de novo or heavily engineered sequences that have no natural homologs for an alignment to capture.
+This tool folds a protein sequence into a 3D model for structural analysis or as input to downstream structure based tools. Because ESMFold does not use an MSA, it is well suited to de novo or heavily engineered sequences that have no natural homologs for an alignment to capture.
 
 #### Usage Tips
 
@@ -66,5 +66,5 @@ These apply to every ESMFold tool in this toolkit (`esmfold-prediction`, `esmfol
 
 - **Requires a GPU.** Both tools run ESMFold through a PyTorch backend and need an NVIDIA GPU (roughly 16 GB of VRAM or more for longer sequences); CPU execution is not practical.
 - **`max_batch_residues` is a starting cap, not a hard ceiling.** On CUDA OOM the wrapper halves the cap (floor = longest single complex) and re-splits the offending sub-batch, so the default `1200` is usually fine to leave in place.
-- **MSA-free and single-sequence.** ESMFold folds from one sequence with no alignment or template search, which makes it much faster than AlphaFold2 but less accurate for targets where a deep, diverse MSA would help.
+- **MSA-free and single-sequence.** ESMFold folds from one sequence with no alignment or template search. Accuracy is generally lower than MSA-based methods on targets where a deep, diverse MSA would help.
 - **`num_recycles` (default `4`) applies to both tools.** Each recycling iteration refines the structure; raising it improves accuracy at higher runtime.
