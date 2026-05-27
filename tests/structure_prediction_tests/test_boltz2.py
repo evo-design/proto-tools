@@ -3,9 +3,13 @@
 Tests for Boltz2.
 """
 
+from pathlib import Path
+from unittest.mock import patch
+
 import pytest
 
 from proto_tools.entities.structures import is_valid_structure
+from proto_tools.tools.sequence_alignment.msas import MSA
 from proto_tools.tools.structure_prediction import (
     Boltz2Config,
     Boltz2Input,
@@ -13,6 +17,7 @@ from proto_tools.tools.structure_prediction import (
     Complex,
     run_boltz2,
 )
+from proto_tools.tools.structure_prediction.boltz2.boltz2 import run_boltz2_on_complex
 from tests.conftest import benchmark_twice
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
@@ -56,6 +61,49 @@ def test_boltz2_ligand_falls_back_to_smiles_when_no_ccd_match():
 
     [ligand_entry] = _boltz2_ligand_entries([Chain(sequence="MKTLPGCDA", entity_type="protein"), novel])
     assert ligand_entry == {"id": "B", "smiles": novel.smiles}
+
+
+# ── MSA file assignment: identical chains share one MSA ──────────────────────
+
+
+class _StopAfterDispatch(Exception):
+    """Short-circuit run_boltz2_on_complex once the input YAML + MSAs are written."""
+
+
+@pytest.mark.parametrize(
+    ("seqs", "n_files"),
+    [
+        pytest.param((_CRO_SEQUENCE, _CRO_SEQUENCE), 1, id="homodimer_shares_one_msa"),
+        pytest.param((_CRO_SEQUENCE, "MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ"), 2, id="heterodimer_keeps_distinct"),
+    ],
+)
+def test_boltz2_writes_one_msa_per_unique_sequence(seqs, n_files):
+    """Identical chains share one MSA file (boltz rejects per-chain MSAs); distinct sequences stay separate."""
+    import yaml
+
+    complex_ = Complex(chains=[Chain(sequence=s, entity_type="protein") for s in seqs])
+    msas = {s: MSA(aligned_sequences=[s, s]) for s in seqs}
+    captured: dict = {}
+
+    def fake_dispatch(_name, input_data, **_kwargs):
+        yaml_path = Path(input_data["input_yaml_path"])
+        captured["yaml"] = yaml.safe_load(yaml_path.read_text())
+        captured["csv_files"] = sorted(p.name for p in (yaml_path.parent / "msas").iterdir())
+        raise _StopAfterDispatch
+
+    with (
+        patch(
+            "proto_tools.tools.structure_prediction.boltz2.boltz2.ToolInstance.dispatch",
+            side_effect=fake_dispatch,
+        ),
+        pytest.raises(_StopAfterDispatch),
+    ):
+        run_boltz2_on_complex(Boltz2Config(use_msa=True), complex_, msas=msas)
+
+    msa_paths = [e["protein"]["msa"] for e in captured["yaml"]["sequences"] if "protein" in e]
+    assert len(captured["csv_files"]) == n_files
+    assert len(set(msa_paths)) == n_files
+    assert "empty" not in msa_paths
 
 
 # ── GPU tests ───────────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@ Example:
     >>> print(f"Confidence: {result.confidence_score:.2f}")
 """
 
+import hashlib
 import os
 import tempfile
 import warnings
@@ -394,10 +395,15 @@ def run_boltz2_on_complex(
             if protein_seqs and msas:
                 msa_dir = os.path.join(temp_dir, "msas")
                 os.makedirs(msa_dir, exist_ok=True)
+                seq_to_csv: dict[str, str] = {}
                 for seq, chain_id in zip(protein_seqs, protein_chain_ids, strict=False):
                     if seq in msas:
-                        csv_path = os.path.join(msa_dir, f"{chain_id}.csv")
-                        _msa_to_csv_file(msa=msas[seq], csv_path=csv_path, query_index=0)
+                        csv_path = seq_to_csv.get(seq)
+                        if csv_path is None:
+                            # boltz requires identical chains to share one MSA file: key by sequence, not chain.
+                            csv_path = os.path.join(msa_dir, f"{hashlib.sha256(seq.encode()).hexdigest()}.csv")
+                            _msa_to_csv_file(msa=msas[seq], csv_path=csv_path, query_index=0)
+                            seq_to_csv[seq] = csv_path
                         chain_msa_paths[chain_id] = csv_path
                         if config.verbose:
                             logger.info(f"Assigned MSA to chain {chain_id} ({len(msas[seq])} sequences)")
