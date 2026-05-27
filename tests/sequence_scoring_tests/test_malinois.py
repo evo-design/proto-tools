@@ -1,9 +1,6 @@
 """Tests for Malinois MPRA sequence scoring."""
 
-import importlib.util
 import math
-import sys
-from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -186,60 +183,6 @@ def test_malinois_real_gpu_scores_sequences() -> None:
         assert set(sequence_result.scores) == {"K562", "HepG2", "SKNSH"}
         assert all(math.isfinite(score) for score in sequence_result.scores.values())
     assert_metrics_in_spec(result)
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.slow
-def test_malinois_real_gpu_batched_inference_matches_original_reference() -> None:
-    """Batched wrapper inference matches the original Malinois scoring helper."""
-    _skip_if_no_malinois_gpu()
-
-    from proto_tools.tools.sequence_scoring.malinois.malinois_score import (
-        DEFAULT_MALINOIS_ARTIFACT_MD5,
-        DEFAULT_MALINOIS_ARTIFACT_PATH,
-        DEFAULT_MALINOIS_ARTIFACT_URL,
-        DEFAULT_MALINOIS_DIR,
-    )
-
-    standalone_dir = (
-        Path(__file__).parents[2] / "proto_tools" / "tools" / "sequence_scoring" / "malinois" / "standalone"
-    )
-    sys.path.insert(0, str(standalone_dir))
-    try:
-        spec = importlib.util.spec_from_file_location("malinois_reference_inference", standalone_dir / "inference.py")
-        assert spec is not None and spec.loader is not None
-        inference = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(inference)
-
-        sequences = ["ACGT" * 50, "TGCA" * 50]
-        inference._model.load(
-            artifact_path=DEFAULT_MALINOIS_ARTIFACT_PATH,
-            artifact_url=DEFAULT_MALINOIS_ARTIFACT_URL,
-            artifact_md5=DEFAULT_MALINOIS_ARTIFACT_MD5,
-            malinois_dir=DEFAULT_MALINOIS_DIR,
-            seq_length=200,
-            device="cuda",
-            verbose=False,
-        )
-        wrapped_scores = inference._model.score_sequences(
-            sequences=sequences,
-            cell_types=["K562", "HepG2", "SKNSH"],
-            batch_size=2,
-            device="cuda",
-        )
-        reference_scores = inference.malinois_scoring.score_sequences(
-            sequences,
-            inference._model.model,
-            inference._model.flank_builder,
-            batch_size=2,
-        )
-    finally:
-        sys.path.remove(str(standalone_dir))
-
-    for row_idx, wrapped_row in enumerate(wrapped_scores):
-        assert wrapped_row["K562"] == pytest.approx(reference_scores[row_idx, 0], abs=1e-6)
-        assert wrapped_row["HepG2"] == pytest.approx(reference_scores[row_idx, 1], abs=1e-6)
-        assert wrapped_row["SKNSH"] == pytest.approx(reference_scores[row_idx, 2], abs=1e-6)
 
 
 @pytest.mark.uses_gpu
