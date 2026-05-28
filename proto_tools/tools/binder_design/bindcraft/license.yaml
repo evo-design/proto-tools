@@ -4,6 +4,9 @@ code:
 weights:
   spdx: CC-BY-4.0
   url: https://github.com/google-deepmind/alphafold#model-parameters-license
+bundled_dependencies:
+  - name: PyRosetta
+    tool: structure_scoring/pyrosetta
 commercial_use: restricted
 redistribution: false
 attribution_required: true
