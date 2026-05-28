@@ -1,0 +1,6 @@
+# TF/Keras + spliceai are installed by setup.sh (spliceai with --no-deps); its runtime deps pinned here.
+pyfaidx>=0.5.0
+pysam>=0.10.0
+pandas>=0.24.2
+numpy<2.0
+setuptools<81  # provides pkg_resources (dropped in setuptools 81+), which spliceai imports

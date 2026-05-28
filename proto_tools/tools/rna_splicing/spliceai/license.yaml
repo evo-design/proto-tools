@@ -1,0 +1,17 @@
+code:
+  spdx: Custom (PolyForm Strict License 1.0.0)
+  url: https://github.com/Illumina/SpliceAI/blob/master/LICENSE
+  text: |
+    PolyForm Strict License 1.0.0 (source-available, noncommercial). Use is
+    permitted for noncommercial purposes only. Distribution of the software
+    (modified or unmodified) and creation of derivative works for distribution
+    are prohibited, and patent/trademark grants are limited. Full terms at the
+    canonical URL above.
+weights:
+  spdx: CC-BY-NC-4.0
+  url: https://creativecommons.org/licenses/by-nc/4.0/
+commercial_use: 'no'
+redistribution: false
+attribution_required: true
+notes: SpliceAI source code is under the PolyForm Strict License 1.0.0 (noncommercial; no redistribution). The bundled trained models (spliceai/models) are separately licensed CC-BY-NC-4.0 for academic and non-commercial use; commercial use requires a license from Illumina. GENCODE annotations also ship in the pip package.
+last_updated: '2026-05-27'
