@@ -644,14 +644,10 @@ def _count_sequences_in_a3m(a3m_path: str | Path) -> int:
 
 
 def _replace_query_header_in_a3m(a3m_path: str | Path, seq_id: str) -> None:
-    """Replace the first header line in an A3M file with the real sequence ID.
+    """Rewrite the query (first) header line in an A3M to ``seq_id``, leaving homologs untouched.
 
-    Since we use numeric indices in the query FASTA for predictable output
-    filenames, this restores the original sequence ID in the A3M content.
-
-    Args:
-        a3m_path (str | Path): Path to the A3M file to modify.
-        seq_id (str): Sequence identifier to set as the query header.
+    Local mode uses numeric FASTA indices, remote mode gets ColabFold's internal
+    index (e.g. ``101``); both need the resolved sequence_id restored.
     """
     with open(a3m_path) as f:
         lines = f.readlines()
@@ -852,6 +848,9 @@ def _remote_search(
     for seq_id in sequence_ids:
         if seq_id in msa_paths:
             msa_path = msa_paths[seq_id]
+
+            # Remote A3M labels the query row ">101"; restore the resolved sequence_id.
+            _replace_query_header_in_a3m(msa_path, seq_id)
 
             # Check if the A3M file contains at least 2 sequences (query + at least one homolog)
             num_sequences = _count_sequences_in_a3m(msa_path)

@@ -3,8 +3,11 @@
 Tests for remote ColabFold MSA search.
 """
 
+from pathlib import Path
+
 import pytest
 
+from proto_tools.tools.sequence_alignment.colabfold_search import colabfold_search as cfs
 from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
     ColabfoldSearchConfig,
     ColabfoldSearchInput,
@@ -18,6 +21,44 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # Small protein sequence that should have homologs
 SAMPLE_PROTEIN_SEQ = "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"
+
+# Canonical UniRef homolog header — must survive the query-row rewrite.
+HOMOLOG_HEADER = "UniRef100_Q43227"
+HOMOLOG_SEQ = "MVLSAKDKTNIKTAWGKIGGHAAEYGAEALERMFVVYPTT"
+
+
+# ---------------------------------------------------------------------------
+# Unit tests (no network)
+# ---------------------------------------------------------------------------
+
+
+def test_remote_query_header_rewritten_to_sequence_id(tmp_path, monkeypatch):
+    """Remote A3M query row echoes the resolved sequence_id, not ColabFold's ``101``."""
+    seq_id = "my_protein"
+
+    def fake_dispatch(toolkit, input_data, **kwargs):
+        out_dir = Path(input_data["output_dir"]) / "msas"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        a3m_path = out_dir / f"{seq_id}.a3m"
+        a3m_path.write_text(f">101\n{SAMPLE_PROTEIN_SEQ}\n>{HOMOLOG_HEADER}\t101\t0.8\n{HOMOLOG_SEQ}\n")
+        return {"msa_paths": {seq_id: str(a3m_path)}, "success": True, "num_successful": 1, "num_failed": 0}
+
+    monkeypatch.setattr(cfs.ToolInstance, "dispatch", fake_dispatch)
+
+    inputs = ColabfoldSearchInput(queries=[(SAMPLE_PROTEIN_SEQ, seq_id)])
+    config = ColabfoldSearchConfig(search_mode="remote", output_dir=str(tmp_path))
+
+    result = run_colabfold_search(inputs, config)
+    validate_output(result)
+
+    msa = result.results[0].msa
+    assert msa is not None
+    assert msa.sequence_ids[0] == seq_id
+    assert msa.sequence_ids[1].startswith(HOMOLOG_HEADER)
+
+    lines = (tmp_path / "msas" / f"{seq_id}.a3m").read_text().splitlines()
+    assert lines[0] == f">{seq_id}"
+    assert lines[2].startswith(f">{HOMOLOG_HEADER}")
 
 
 # ---------------------------------------------------------------------------
