@@ -51,7 +51,7 @@ def _build_upstream_input(
 
     sequences: list[Any] = []
     for idx, chain in enumerate(chains):
-        chain_id = str(idx)
+        chain_id = str(chain["id"])
         entity_type = chain["entity_type"]
 
         if entity_type == "ligand":

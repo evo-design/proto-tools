@@ -8,7 +8,28 @@ A model-generated biological design should be treated as a computational candida
 
 ---
 
-## 1. Core Selection Principles
+## 1. Safety And Scope Check
+
+Before selecting models, determine whether the requested design task is allowed.
+
+Do not proceed with model selection if the task involves forbidden or high-risk biological assistance, including but not limited to:
+
+* pathogen enhancement,
+* toxin optimization,
+* immune evasion,
+* host-range expansion,
+* harmful delivery optimization,
+* uncontrolled gene drive design,
+* evasion of detection,
+* or other disallowed biological engineering goals.
+
+If the request is not allowed, stop and redirect to a safe alternative such as literature review, non-actionable conceptual explanation, safety analysis, benign assay design, or risk-screening methodology.
+
+If the task is allowed, continue with model selection.
+
+---
+
+## 2. Core Selection Principles
 
 Do not select a model by biological domain alone.
 
@@ -38,7 +59,7 @@ Do not present a candidate as validated unless the validation method measured th
 
 ---
 
-## 2. Required Response Contract
+## 3. Required Response Contract
 
 For every biological design task, report the following:
 
@@ -55,7 +76,7 @@ For every biological design task, report the following:
 
 ---
 
-## 3. Quick Decision Table
+## 4. Quick Decision Table
 
 | Task class                                                        | Proposal models or methods                                                                                                                                                                                                                        | Validation and ranking                                                                                                                                                                  | Avoid as primary evidence                                                                                          |
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -64,7 +85,7 @@ For every biological design task, report the following:
 | Scaffold and motif-grafting design                                | RFdiffusion-family motif scaffolding; fragment assembly; Rosetta-style motif grafting; constrained backbone generation                                                                                                                            | Motif RMSD, active-site/contact geometry, refolding agreement, topology checks, Foldseek novelty                                                                                        | Fold confidence without motif placement validation                                                                 |
 | Enzyme design                                                     | Active-site or transition-state-guided design; RFdiffusion-family motif scaffolding; Rosetta enzyme design; LigandMPNN around substrates/cofactors; directed-evolution-inspired variant proposal                                                  | Catalytic geometry, substrate/cofactor placement, active-site residue geometry, docking/transition-state analog checks, stability and expression checks, experimental assay requirement | pLDDT alone, substrate docking alone, or motif presence alone                                                      |
 | Stability, solubility, and expression optimization                | ProteinMPNN soluble weights, ESM/ProGen-style variant proposal, Rosetta/ddG tools, aggregation-aware filters, consensus design                                                                                                                    | Refolding, ddG/stability predictors, solubility/aggregation predictors, expression/developability checks, preservation of function                                                      | Improving global confidence while losing function                                                                  |
-| Generic de novo protein binder                                    | BindCraft when target-conditioned hallucination fits; Protein Hunter for fast all-X or partially constrained protein-protein design; RFdiffusion-family methods when explicit geometry or motifs matter; AlphaProteo-style systems when available | AF2-multimer/AF3-family predictors; Boltz/Chai/Protenix; interface PAE/ipTM; pDockQ2; hotspot contact recovery; PyRosetta/interface geometry; novelty and specificity checks            | Monomer pLDDT; generator score alone; one model’s interface score without independent validation                   |
+| Generic de novo protein binder                                    | BindCraft when target-conditioned hallucination fits; Protein Hunter for fast all-X, partially constrained, or contact-conditioned protein-protein binder search; RFdiffusion-family methods when explicit geometry or motifs matter; AlphaProteo-style systems when available | AF2-multimer/AF3-family predictors; Boltz/Chai/Protenix; interface PAE/ipTM; pDockQ2; hotspot contact recovery; PyRosetta/interface geometry; novelty and specificity checks            | Monomer pLDDT; generator score alone; one model’s interface score without independent validation                   |
 | Epitope-targeted antibody, VHH, or scFv                           | Germinal; antibody-specific hallucination/redesign; AbMPNN/AbLang/antibody-specific MPNNs for local redesign and naturalness                                                                                                                      | Antibody-antigen cofolding; epitope contact recovery; interface PAE; pDockQ2; CDR/framework checks; developability and antibody-sequence naturalness                                    | Generic binder workflows when antibody architecture matters; cofolding score without antibody-specific checks      |
 | Fast exploratory protein-protein design                           | Protein Hunter; BindCraft broad sampling; lightweight RFdiffusion/MPNN pipelines                                                                                                                                                                  | Cheap complex-prediction triage first, then independent final validators for top candidates; contact recovery and interface metrics                                                     | Treating fast in silico success as final validation                                                                |
 | Peptide design                                                    | Peptide-specific generative models; protein language models for short sequences; constrained motif design; docking-guided or structure-guided peptide design; AMP/CPP classifiers for specific peptide classes                                    | Peptide structure/ensemble checks, target binding if relevant, toxicity/hemolysis filters for AMPs, uptake predictors for CPPs, solubility and stability checks                         | Treating peptide design as ordinary folded-protein design                                                          |
@@ -86,7 +107,7 @@ For every biological design task, report the following:
 
 ---
 
-## 4. Protein Structure Prediction Defaults
+## 5. Protein Structure Prediction Defaults
 
 Use ESMFold for fast, MSA-free protein triage, especially on de novo or heavily engineered sequences where alignment search is weak or expensive. Use ESMFold2 when the local tool is available and a fast, high-accuracy all-atom structure and interaction predictor is useful for proteins, DNA, RNA, ligands, or antibody-antigen complexes; prefer `esmfold2-fast` for high-throughput triage and the MSA-capable `esmfold2` checkpoint for harder final checks when runtime allows.
 
@@ -104,7 +125,7 @@ Use multiple final validators when final ranking depends on complex placement, l
 
 ---
 
-## 4.1 Structure Predictor Selection Details
+## 5.1 Structure Predictor Selection Details
 
 Use AlphaFold2 when the problem is protein-only and the target validator,
 reference workflow, or local tooling is AF2-like. Use AF2-multimer for
@@ -146,7 +167,7 @@ alignment, motif RMSD, clashes, and geometric plausibility.
 
 ---
 
-## 5. Protein Design Defaults
+## 6. Protein Design Defaults
 
 For fixed-backbone redesign, ProteinMPNN is the default workhorse when the design context is protein-only. It is fast, robust to imperfect backbones, supports fixed positions, and produces both sampled sequences and structure-conditioned likelihoods.
 
@@ -158,7 +179,7 @@ Use LigandMPNN instead of ProteinMPNN when non-protein atoms are part of the des
 
 For de novo backbones, use RFdiffusion-family models when the output is a new structure with spatial constraints, motifs, symmetry, active-site geometry, or target contacts. In current proto-tools, RFdiffusion3 exposes typed controls for contigs, hotspots, unindexed motifs, symmetry, origin placement, classifier-free guidance, sampler kind, stochasticity, timesteps, batch count, and low-memory mode; use these fields directly instead of raw Hydra strings when they express the task.
 
-Use Protein Hunter when the task benefits from fast search over all-X or partially specified sequences using structure-prediction feedback. Treat it as a proposal or exploration workflow unless independent validation is also run.
+Use Protein Hunter when the task benefits from fast search over all-X or partially specified sequences using structure-prediction feedback. For protein-protein binder or interacting-protein tasks, consider it as a first-class proposal method alongside BindCraft and RFdiffusion-family workflows rather than only as a generic fold explorer. Treat it as a proposal or exploration workflow unless independent validation is also run.
 
 Validate generated backbones by refolding the designed sequence and comparing the predicted structure to the intended backbone. A generated backbone is a proposal, not final proof.
 
@@ -168,7 +189,7 @@ Do not replace structural or functional validators with sequence priors when the
 
 ---
 
-## 5.1 Sequence Prior And Inverse-Folding Model Details
+## 6.1 Sequence Prior And Inverse-Folding Model Details
 
 Use ProteinMPNN for backbone-conditioned protein sequence design. Set fixed
 positions for catalytic residues, binding motifs, framework residues, or other
@@ -222,7 +243,7 @@ binding validation, or enzyme activity validation.
 
 ---
 
-## 6. Scaffold And Motif-Grafting Design Defaults
+## 7. Scaffold And Motif-Grafting Design Defaults
 
 Use scaffold design when the objective is to create or find a protein backbone that presents a functional motif, epitope, active site, binding loop, or structural element in a required geometry.
 
@@ -236,7 +257,7 @@ Do not accept a scaffold because the global fold looks confident if the function
 
 ---
 
-## 7. Enzyme Design Defaults
+## 8. Enzyme Design Defaults
 
 Use enzyme design workflows when the objective is catalytic activity, altered substrate specificity, improved catalytic efficiency, or creation of activity for a non-natural reaction.
 
@@ -254,7 +275,7 @@ Do not use pLDDT, protein language-model score, or substrate docking alone as ev
 
 ---
 
-## 8. Stability, Solubility, Expression, And Developability Defaults
+## 9. Stability, Solubility, Expression, And Developability Defaults
 
 Use stability/solubility optimization when the objective is to improve expression, thermostability, solubility, aggregation behavior, manufacturability, or developability without changing the intended function.
 
@@ -270,7 +291,7 @@ A stability-improved candidate should be marked invalid if it no longer preserve
 
 ---
 
-## 9. Binder, Antibody, And Protein Hunter Design Defaults
+## 10. Binder, Antibody, And Protein Hunter Design Defaults
 
 Use the binder workflow that matches the biological object and output contract.
 
@@ -286,7 +307,7 @@ Do not use a generic protein-binder workflow as a substitute for antibody archit
 
 ---
 
-## 10. BindCraft Defaults
+## 11. BindCraft Defaults
 
 Use BindCraft when the task is to design a de novo amino-acid binder against a fixed protein target and the user does not require antibody architecture.
 
@@ -309,7 +330,7 @@ Do not use BindCraft as the default if antibody chain architecture is required, 
 
 ---
 
-## 11. Germinal And Antibody-Specific Defaults
+## 12. Germinal And Antibody-Specific Defaults
 
 Use Germinal when the task is to design de novo antibodies, VHHs, nanobodies, or scFvs against a specified epitope on a protein target.
 
@@ -332,19 +353,19 @@ Do not treat antibody cofolding alone as sufficient validation. A final antibody
 
 ---
 
-## 12. Protein Hunter Defaults
+## 13. Protein Hunter Defaults
 
-Use Protein Hunter when the task benefits from fast de novo protein design using structure-prediction feedback, especially when starting from an all-X sequence, a partially specified sequence, or a protein-protein contact objective.
+Use Protein Hunter when the task benefits from fast de novo protein design using structure-prediction feedback, especially when starting from an all-X sequence, a partially specified sequence, a target protein plus designable binder chain, or a protein-protein contact objective.
 
-Protein Hunter-style workflows are appropriate when the goal is fast de novo protein design, protein-protein interaction design, partially constrained sequence design, exploring many candidate binders quickly, fold or contact pattern exploration, or using structure-prediction feedback without fine-tuning a new model.
+Protein Hunter-style workflows are appropriate when the goal is fast de novo protein design, protein-protein interaction design, target-conditioned binder hallucination, generation of a new interacting protein chain, partially constrained sequence design, exploring many candidate binders quickly, fold or contact pattern exploration, or using structure-prediction feedback without fine-tuning a new model.
 
 A Protein Hunter-style pipeline usually includes:
 
-1. **Input specification**: define target structure or design context, define the designable chain, mark unknown residues as X when appropriate, optionally fix residues, motifs, contacts, or regions, and specify chain length and immutable sequence constraints.
-2. **Search / hallucination**: start from an all-X or partially specified sequence, search sequence space using structure-prediction feedback, optimize toward desired fold, complex, or contact pattern, and retain candidate diversity rather than only the single top-scoring trajectory.
+1. **Input specification**: define target structure or design context, define the designable chain, mark unknown residues as X when appropriate, optionally fix residues, motifs, contacts, hotspot-facing regions, or framework regions, and specify chain length and immutable sequence constraints.
+2. **Search / hallucination**: start from an all-X or partially specified sequence, search sequence space using structure-prediction feedback, optimize toward desired fold, complex, interface, or contact pattern, and retain candidate diversity rather than only the single top-scoring trajectory.
 3. **Constraint enforcement**: preserve fixed residues, enforce required contact residues, enforce chain length and format, and reject candidates that violate target, motif, sequence, or residue constraints.
 4. **Independent validation**: validate with a predictor not identical to the inner-loop objective when possible, inspect interface confidence if designing binders, inspect backbone agreement if designing a fold, and inspect contact recovery if designing a constrained interface.
-5. **Comparison to other workflows**: compare top Protein Hunter candidates against BindCraft or RFdiffusion-family candidates when compute allows, and prioritize candidates that score well across workflows rather than only within one search method.
+5. **Comparison to other workflows**: compare top Protein Hunter candidates against BindCraft, Germinal when antibody architecture is intended, or RFdiffusion-family candidates when compute allows, and prioritize candidates that score well across workflows rather than only within one search method.
 
 Treat Protein Hunter as a proposal or search workflow. It can be useful for fast exploration, but final candidates still require independent validation, novelty checks, and task-specific filtering.
 
@@ -352,13 +373,13 @@ Do not rely on Protein Hunter alone for final therapeutic binder claims, antibod
 
 ---
 
-## 13. Binder Workflow Selection Rules
+## 14. Binder Workflow Selection Rules
 
 Choose BindCraft when the output should be a de novo protein binder, the target is a protein surface, the binder does not need antibody architecture, the task is mostly target-conditioned interface generation, and AF2-style complex filtering is allowed.
 
 Choose Germinal when the output should be an antibody, VHH, nanobody, or scFv; the user specifies an epitope; CDR/framework constraints matter; antibody naturalness or developability matters; or low-n antibody experimental testing is the intended downstream path.
 
-Choose Protein Hunter when fast exploration is useful, the design starts from all-X or partially specified sequences, the user wants protein-protein design or contact-conditioned design, the workflow can quickly generate diverse computational candidates, and final validation will be performed by independent predictors.
+Choose Protein Hunter when fast exploration is useful, the design starts from all-X or partially specified sequences, the user wants protein-protein binder design, target-conditioned interacting-protein generation, or contact-conditioned design, the workflow can quickly generate diverse computational candidates, and final validation will be performed by independent predictors.
 
 Choose RFdiffusion-family binder design when explicit 3D geometry matters, backbone topology matters, motifs must be preserved, hotspot contacts must be positioned precisely, symmetry is required, or the binder must satisfy constraints that are hard to express in BindCraft or Protein Hunter.
 
@@ -368,7 +389,7 @@ Choose antibody-specific local-redesign tools when the starting point is already
 
 ---
 
-## 14. Peptide Design Defaults
+## 15. Peptide Design Defaults
 
 Treat peptide design as related to protein design but not identical to it.
 
@@ -390,7 +411,7 @@ Do not claim peptide activity from sequence class alone. A peptide that looks ca
 
 ---
 
-## 15. Protein-Ligand, Metal, Cofactor, And Nucleic-Acid Contexts
+## 16. Protein-Ligand, Metal, Cofactor, And Nucleic-Acid Contexts
 
 Use LigandMPNN instead of ProteinMPNN when non-protein atoms are part of the design context.
 
@@ -404,11 +425,9 @@ If the output is a chemical compound, use chemistry-aware generation, docking, l
 
 If the output is a protein sequence that binds a ligand or cofactor, use a ligand-context-aware protein design workflow and validate the resulting complex.
 
-For scoring, prefer models that can co-fold ligands and nucleic acids with proteins, such as AlphaFold 3, Proteinix, and Boltz.
-
 ---
 
-## 16. Promoter, Enhancer, And Regulatory DNA Design Defaults
+## 17. Promoter, Enhancer, And Regulatory DNA Design Defaults
 
 For human or mouse regulatory design, choose the predictor whose outputs match the requested biological quantity.
 
@@ -458,11 +477,11 @@ Additional regulatory model details:
 
 ---
 
-## 17. Splicing And Intron Design Defaults
+## 18. Splicing And Intron Design Defaults
 
 Use AlphaGenome when splice-site usage, splice junctions, RNA-seq, or retention are the target and the model is available and allowed.
 
-Use SpliceTransformer, SpliceAI, and Pangolin for local splice-site proposal and triage. SpliceAI is strong for donor/acceptor probability and variant delta scores with 10 kb context. Treat Pangolin as a splice-site usage/P(splice) predictor and variant gain/loss scorer, not as a general tissue-specific splicing, junction, retention, or expression model.
+Use SpliceTransformer, SpliceAI, and Pangolin for local splice-site proposal and triage. SpliceAI is strong for donor/acceptor probability and variant delta scores with 10 kb context. Treat Pangolin as a splice-site usage/P(splice) predictor and variant gain/loss scorer, not as a general tissue-specific splicing, junction, retention, or expression model. Use these tools as direct splicing validators when AlphaGenome is unavailable, forbidden, too expensive for the inner loop, or useful only as final confirmation.
 
 Use Borzoi or Enformer only as expression-like support unless the task target is actually expression, coverage, chromatin accessibility, or track prediction.
 
@@ -476,7 +495,7 @@ If expression is strong but splice usage is weak, do not promote the design for 
 
 ---
 
-## 18. Codon Optimization Defaults
+## 19. Codon Optimization Defaults
 
 Use codon optimization when the amino-acid sequence is fixed or mostly fixed and the goal is to rewrite the coding DNA or mRNA sequence for a host, expression system, or manufacturing context.
 
@@ -492,7 +511,7 @@ Do not report a codon-optimized sequence as better solely because it has the hig
 
 ---
 
-## 19. Guide RNA Design Defaults
+## 20. Guide RNA Design Defaults
 
 Use guide RNA design workflows when the output is a CRISPR guide, base-editing guide, prime-editing guide, CRISPRi guide, CRISPRa guide, or RNA-targeting guide.
 
@@ -510,7 +529,7 @@ Do not design guides without specifying the nuclease/editor and genome context u
 
 ---
 
-## 20. Primer And Probe Design Defaults
+## 21. Primer And Probe Design Defaults
 
 Use primer/probe design workflows when the output is a PCR primer pair, qPCR primer/probe set, sequencing primer, hybridization probe, FISH probe, genotyping probe, or detection assay oligo.
 
@@ -526,7 +545,7 @@ Do not accept primers based only on Tm and GC.
 
 ---
 
-## 21. mRNA Design Defaults
+## 22. mRNA Design Defaults
 
 Use mRNA design workflows when the output is a coding mRNA, therapeutic mRNA, vaccine mRNA, reporter mRNA, or expression-optimized transcript.
 
@@ -542,20 +561,63 @@ For vaccine-like or therapeutic mRNA contexts, final claims require experimental
 
 ---
 
-## 22. Structured RNA Design Defaults
+## 23. Structured RNA Design Defaults
 
 Use structured RNA design when the objective is for an RNA sequence to fold into a specified secondary or tertiary structure.
 
 Common tasks include inverse folding to a target secondary structure, tertiary RNA motif design, RNA scaffold design, RNA switch element design, and local redesign of structured RNAs.
 
-Appropriate proposal methods include RNA inverse-folding tools such as NAMPNN, secondary-structure design algorithms, sequence priors from RNA language models, tertiary-structure-aware design when available, and constraint-aware mutation search.
+Appropriate proposal methods include RNA inverse-folding tools, secondary-structure design algorithms, sequence priors from RNA language models, tertiary-structure-aware design when available, and constraint-aware mutation search.
 
-Required validation includes target structure recovery, MFE structure from ViennaRNA, partition-function or ensemble metrics, ensemble defect, base-pair probability agreement, alternative-structure penalties, sequence constraints, motif preservation, and tertiary modeling when tertiary structure matters.
+Required validation includes target structure recovery, MFE structure, partition-function or ensemble metrics, ensemble defect, base-pair probability agreement, alternative-structure penalties, sequence constraints, motif preservation, and tertiary modeling when tertiary structure matters.
 
 Do not rely on MFE alone. A sequence whose minimum-energy structure matches the target may still spend substantial probability mass in off-target folds.
 
+---
 
-## 23. Operon And Genetic Circuit Design Defaults
+## 24. Aptamer Design Defaults
+
+Use aptamer design when the output is an RNA or DNA sequence intended to bind a target molecule, protein, cell-surface marker, or small molecule.
+
+Aptamer design is a nucleic-acid binder problem, not a generic regulatory DNA or mRNA problem.
+
+Appropriate proposal methods include SELEX-informed sequence priors, RNA/DNA language models, structure-guided aptamer design, motif-preserving mutation, docking or complex prediction when available, and target-specific binding models when available.
+
+Required validation includes predicted secondary or tertiary structure, preservation of binding motifs if known, target-binding prediction or docking when available, specificity/off-target checks, folding ensemble stability, sequence synthesis constraints, nuclease-stability considerations if relevant, and experimental binding assay requirement for final validation.
+
+Do not claim aptamer binding from motif presence, sequence novelty, or favorable folding alone.
+
+---
+
+## 25. Ribozyme Design Defaults
+
+Use ribozyme design when the output is a catalytic RNA sequence intended to cleave, ligate, process, or otherwise catalyze an RNA-mediated reaction.
+
+Ribozyme design requires both folding and catalytic geometry. A correctly folded-looking RNA is not automatically catalytically active.
+
+Appropriate proposal methods include known ribozyme scaffold engineering, catalytic motif preservation, structure-guided sequence redesign, local mutation search, RNA inverse folding, and tertiary-structure-aware modeling when available.
+
+Required validation includes catalytic motif identity, active-site or cleavage-site geometry, secondary-structure recovery, tertiary contacts when relevant, folding ensemble, substrate accessibility, sequence constraints, and experimental assay requirement for final validation.
+
+Do not treat structure prediction alone as evidence of catalytic function.
+
+---
+
+## 26. Riboswitch Design Defaults
+
+Use riboswitch design when the output is an RNA element whose structure or function changes in response to a ligand, metabolite, protein, temperature, or other input.
+
+Riboswitch design usually has two coupled components: an aptamer or sensing domain and an expression platform that converts binding into a regulatory output.
+
+Appropriate proposal methods include aptamer-domain design or selection, RNA switch design, sequence optimization for alternative structures, terminator/anti-terminator design, ribosome-binding-site sequestration design, splice-switch design when relevant, and kinetic or thermodynamic modeling of competing states.
+
+Required validation includes ligand-bound structure, ligand-free structure, predicted structural switching, dynamic range, leakage in the off state, activation or repression in the on state, expression-platform compatibility, target gene context, and experimental reporter validation for final claims.
+
+Do not validate a riboswitch by aptamer binding alone. Binding must be coupled to the intended regulatory output.
+
+---
+
+## 27. Operon And Genetic Circuit Design Defaults
 
 Use operon or genetic circuit design workflows when the task combines multiple biological parts into a functional regulatory unit.
 
@@ -569,11 +631,43 @@ For operons, validate gene order, intergenic regions, RBS strengths, polar effec
 
 For circuits, validate logic behavior, dose response, response time, hysteresis if relevant, noise sensitivity, and robustness to expression variability.
 
-Start by optimizing isolated parts and then move towards optimizing the assembled circuit, iterating on individual parts till both indvidual part components and the overall circuit complies with constraints.
+Do not optimize isolated parts and assume the assembled circuit will work.
 
 ---
 
-## 24. Novelty And Similarity Defaults
+## 28. Metabolic Pathway Design Defaults
+
+Use metabolic pathway design when the objective is to produce, consume, transform, or regulate a target compound through a set of enzymatic steps.
+
+Pathway design is a system-level problem. Choosing enzymes by annotation is not enough.
+
+Appropriate proposal methods include retrosynthetic pathway search, enzyme database search, reaction rule mining, host-aware enzyme selection, flux-balance analysis, kinetic modeling when parameters are available, thermodynamic feasibility analysis, cofactor balancing, and combinatorial pathway variant design.
+
+Required validation includes reaction feasibility, pathway completeness, thermodynamic favorability, enzyme availability, substrate specificity, cofactor balance, host compatibility, transport requirements, toxicity of intermediates or products, competing pathways, side products, expression burden, and pathway flux.
+
+When designing pathway DNA, also validate promoter/RBS/terminator choices, gene order, codon optimization, assembly constraints, and host burden.
+
+Do not present a pathway as functional because every reaction has an enzyme annotation. Enzyme promiscuity, expression, localization, cofactors, and host metabolism can dominate success or failure.
+
+---
+
+## 29. Synthetic Genome Design Defaults
+
+Use synthetic genome design workflows when the objective is genome-scale recoding, minimal genome design, large-scale refactoring, synthetic chromosome design, or multi-locus genome engineering.
+
+Synthetic genome design is high-scope and requires stricter safety, viability, and review assumptions than single-sequence design.
+
+Appropriate proposal methods include genome-scale recoding tools, constraint-aware synonymous rewriting, essential-gene preservation, genome minimization analysis, repeat and recombination reduction, regulatory architecture preservation, and synthesis/assembly planning.
+
+Required validation includes safety and scope review, essentiality analysis, preservation of required genes and regulatory elements, codon usage and translation constraints, repeat and recombination checks, mobile element screening, restriction-site constraints, operon and gene-neighborhood preservation when relevant, replication/segregation features, genome stability, synthesis constraints, assembly constraints, and host viability assumptions.
+
+Do not treat local sequence-level success as genome-level viability.
+
+Do not proceed with genome-scale designs that create, enhance, or enable harmful organisms or capabilities.
+
+---
+
+## 30. Novelty And Similarity Defaults
 
 Choose novelty checks based on what could make the candidate non-novel.
 
@@ -606,7 +700,7 @@ BLAST/MMseqs/Foldseek/TM-score criteria.
 
 ---
 
-## 25. Handling Predictor Disagreement
+## 31. Handling Predictor Disagreement
 
 If a cheap proxy and a final validator disagree, trust the final validator for final ranking.
 
@@ -634,7 +728,7 @@ For gRNA tasks, inspect PAM validity, on-target score, off-target profile, edit-
 
 For primer/probe tasks, inspect Tm, specificity, dimers, hairpins, amplicon constraints, and assay context.
 
-For structured RNA tasks, inspect target fold recovery, ensemble defect, competing structures, ligand/substrate interaction, switching behavior when relevant, and catalytic geometry when relevant.
+For structured RNA, aptamer, ribozyme, and riboswitch tasks, inspect target fold recovery, ensemble defect, competing structures, ligand/substrate interaction, switching behavior when relevant, and catalytic geometry when relevant.
 
 For pathway and circuit tasks, inspect part-level predictions, system-level simulation, burden, crosstalk, flux, thermodynamics, toxicity, and host compatibility.
 
@@ -642,7 +736,7 @@ If disagreement remains unresolved, mark the candidate as uncertain rather than 
 
 ---
 
-## 26. Fallback Rules
+## 32. Fallback Rules
 
 If the preferred generator is unavailable:
 
@@ -678,11 +772,11 @@ If the design loop fails to produce enough passing candidates:
 
 ---
 
-## 27. Budget Modes
+## 33. Budget Modes
 
 ### Fast Mode
 
-Use when the user wants a quick first-pass answer or compute is severly limited.
+Use when the user wants a quick first-pass answer or compute is limited.
 
 Workflow:
 
@@ -695,7 +789,7 @@ Do not present fast-mode outputs as final validated designs.
 
 ### Standard Mode
 
-Use for basic design tasks.
+Use for most design tasks.
 
 Workflow:
 
@@ -707,7 +801,7 @@ Workflow:
 
 ### Strict Mode
 
-Use when final candidate quality matters and for general candidate design, or when the user asks for robust validation.
+Use when final candidate quality matters, the task is high-stakes, or the user asks for robust validation.
 
 Workflow:
 
@@ -722,27 +816,27 @@ Workflow:
 
 ---
 
-## 28. Execution Pattern For Design Scripts
+## 34. Execution Pattern For Design Scripts
 
 For design scripts, prefer this execution pattern:
 
 1. Generate a broad candidate pool from the most task-matched generator.
 2. Run deterministic checks and cheap proxies first.
 3. Score the surviving pool with the strongest allowed validators.
-4. Require agreement across predictors for final candidates when feasible.
+4. Require agreement across predictors for final candidates when feasible; default to multiple task-matched oracles for learned or context-dependent properties.
 5. Keep all submetrics visible.
 6. If one submetric is starving the pool, change the proposal distribution or objective around that submetric before spending the rest of the budget.
-7. Keep sampling in bounded replenishment rounds until the requested final count is reached or an explicit time, proposal, or compute cap is hit. Implement this as executable control flow, not only as a plan: checkpoint survivors, count unique final-equivalent candidates after every round, and launch additional rounds with more or more diverse proposals when yield is low.
+7. Keep sampling in bounded replenishment rounds until the requested final count is reached or an explicit time, proposal, or compute cap is hit. Implement this as executable control flow, not only as a plan: checkpoint survivors, count unique final-equivalent candidates after every round, estimate observed yield, and launch additional rounds with more or more diverse proposals when yield is low. Size caps from the available execution budget and observed validator yield; a few dozen heavy validations is not a sufficient stop condition when hours remain and at least some candidates are passing.
 8. Compile, import, and smoke-test generated scripts before expensive runs.
 9. Save intermediate outputs.
 10. Record skipped candidates and failure reasons.
 11. Record unavailable tools and validation gaps.
 
-A generated script should not be considered ready for a long run until it imports successfully, compiles or passes syntax checks, runs a small smoke test, writes output in the expected schema, and handles missing files, empty batches, and failed predictions without crashing the full job.
+A generated script should not be considered ready for a long run until it imports successfully, compiles or passes syntax checks, runs a small smoke test, writes output in the expected schema, and handles missing files, empty batches, and failed predictions without crashing the full job. Candidate-level validator or parser failures should reject that candidate, log the reason, and continue replenishing; reserve whole-script failure for systemic tool, database, or wrapper failures.
 
 ---
 
-## 29. Minimum Validation By Task
+## 35. Minimum Validation By Task
 
 A final protein binder candidate requires target-conditioned proposal or explicit interface design, complex prediction, interface confidence metrics, hotspot/contact checks when applicable, monomer plausibility, sequence novelty check, specificity check when relevant, and stated failure modes.
 
@@ -760,7 +854,7 @@ A final stability/solubility candidate requires original function-preservation c
 
 A final peptide candidate requires peptide task class definition, sequence and modification constraints, relevant peptide-specific predictors, solubility/stability checks, toxicity or hemolysis checks when relevant, target-binding validation when relevant, and synthesis constraints.
 
-A final splicing or intron design candidate requires donor and acceptor checks, splice-site probability or usage prediction, splice junction or retention prediction when available, expression or transcript-level support if relevant, forbidden ORF and repeat checks, exact sequence-format validation, and task-specific submetric reporting.
+A final splicing or intron design candidate requires donor and acceptor checks, splice-site probability or usage prediction from more than one splice oracle when available, splice junction or retention prediction when available, expression or transcript-level support if relevant, forbidden ORF and repeat checks, exact sequence-format validation, and task-specific submetric reporting. Pangolin predicts splice-site usage/probability, not tissue-specific expression; use tissue or expression models separately when that biology matters.
 
 A final regulatory sequence candidate requires prediction of the requested regulatory quantity, cell-type or tissue context when relevant, off-target or neighboring-track inspection when relevant, sequence novelty or similarity checks, repeat and low-complexity checks, forbidden ORF checks when relevant, and explicit reporting of the predictor used for final ranking.
 
@@ -774,11 +868,23 @@ A final mRNA candidate requires coding-sequence correctness if applicable, UTR a
 
 A final structured RNA candidate requires target structure definition, MFE structure check, ensemble defect or base-pair probability check, competing-structure analysis, sequence constraint checks, and tertiary validation if tertiary structure matters.
 
+A final aptamer candidate requires target definition, predicted structure, binding motif or docking validation when available, specificity checks, folding ensemble checks, synthesis constraints, and experimental binding validation for final claims.
+
+A final ribozyme candidate requires catalytic objective definition, catalytic motif preservation, substrate or cleavage-site constraints, structure and ensemble validation, catalytic geometry checks when available, and experimental assay validation for final claims.
+
+A final riboswitch candidate requires sensing-domain validation, expression-platform validation, ligand-bound and ligand-free state modeling, switching dynamic range, leakage assessment, and reporter or functional validation for final claims.
+
 A final operon/circuit candidate requires part list and ordering, part compatibility checks, expression balance modeling, burden checks, crosstalk checks, dynamic simulation when relevant, assembly constraints, and host-context assumptions.
+
+A final metabolic pathway candidate requires reaction sequence, enzyme candidates, thermodynamic feasibility, flux or kinetic analysis when available, cofactor balance, toxicity/side-product checks, host compatibility, and expression/assembly plan.
+
+A final synthetic genome candidate requires safety and scope review, essentiality analysis, regulatory architecture checks, genome stability checks, repeat/mobile-element screening, synthesis and assembly constraints, viability assumptions, and explicit review of risks introduced by the design.
+
+A final small-molecule candidate requires molecule-native generation or retrieval, identity and duplicate checks, physicochemical filters, docking or ligand-aware structural validation when relevant, chemical validity checks, and explicit statement of whether medicinal chemistry review was performed.
 
 ---
 
-## 30. Confidence Labels
+## 36. Confidence Labels
 
 ### Low confidence
 
@@ -798,7 +904,7 @@ Use “high computational confidence” instead.
 
 ---
 
-## 31. Common Failure Modes To Avoid
+## 37. Common Failure Modes To Avoid
 
 Avoid these mistakes:
 
@@ -825,14 +931,18 @@ Avoid these mistakes:
 * Accepting primers based only on Tm and GC.
 * Treating codon optimization alone as mRNA optimization.
 * Treating RNA MFE as sufficient without ensemble checks.
+* Treating aptamer motif presence as proof of binding.
+* Treating aptamer binding as proof of riboswitch function.
+* Treating pathway annotation as proof of pathway flux.
 * Treating isolated part optimization as proof of circuit behavior.
+* Treating local sequence checks as proof of synthetic genome viability.
 * Claiming novelty without database search.
 * Averaging disagreeing predictors without inspecting submetrics.
 * Continuing to sample from the same proposal distribution when one required submetric repeatedly fails.
 * Producing scripts that do not compile, import, or run a small smoke test before expensive jobs.
 * Stopping after an undersized passing batch when the user requested a fixed number of final candidates.
-* Fast structure proxies can disagree with more reliable models; use a consensus of several appropriate models for higher success.
-* Always use multiple oracles to increase success likelihoods.
+* Fast structure proxies can disagree with more reliable AlphaFold-family models; use a consensus of several appropriate models for higher success.
+* Motif-only genomic designs can miss learned splice or expression submetrics; use multiple task-matched oracles, such as independent splice predictors plus deterministic ORF/repeat/frame checks, to increase success likelihoods.
 * Good planning is insufficient if generated scripts import the wrong local API.
 * Candidate generation can stop too early after an undersized batch.
 * Binder workflows can over-rank candidates by global confidence while ignoring interface-specific failure.
@@ -846,7 +956,7 @@ The remedy is general:
 
 * choose validators that measure the actual biological quantity,
 * keep submetrics visible,
-* use independent predictors when feasible,
+* use independent predictors whenever feasible, especially for learned or context-dependent properties,
 * smoke-test executable code,
 * save intermediate outputs,
 * replenish candidates until either the requested final count or an explicit budget cap is reached,
@@ -854,7 +964,7 @@ The remedy is general:
 
 ---
 
-## 32. Source Anchors
+## 38. Source Anchors
 
 This guidance is based on proto-tools local docs and the following primary or
 official sources:
