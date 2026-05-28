@@ -5,11 +5,18 @@ MSA CSV file writing and YAML input generation.
 """
 
 import csv
+import hashlib
+import os
+import warnings
+from logging import getLogger
 from typing import Any
 
 from proto_tools.entities.complex import chain_label
 from proto_tools.entities.ligands import Fragment
-from proto_tools.tools.structure_prediction.shared_data_models import Chain
+from proto_tools.tools.structure_prediction.shared_data_models import Chain, Complex
+from proto_tools.utils import extract_msa_sequences
+
+logger = getLogger(__name__)
 
 
 def write_msa_csv(aligned_sequences: list[Any], csv_path: str) -> None:
@@ -30,9 +37,48 @@ def write_msa_csv(aligned_sequences: list[Any], csv_path: str) -> None:
             writer.writerow([seq, idx])
 
 
+def build_chain_msa_paths(
+    sp_complex: Complex,
+    msas: dict[str, Any] | None,
+    temp_dir: str,
+    verbose: int = 0,
+) -> dict[str, str]:
+    """Map each protein chain ID to its MSA CSV, one sha256-named file per unique sequence.
+
+    boltz requires identical chains to share a single MSA file.
+    """
+    chain_msa_paths: dict[str, str] = {}
+    protein_seqs, protein_chain_ids = sp_complex.extract_protein_chains()
+    if protein_seqs and msas:
+        msa_dir = os.path.join(temp_dir, "msas")
+        os.makedirs(msa_dir, exist_ok=True)
+        seq_to_csv: dict[str, str] = {}
+        for seq, chain_id in zip(protein_seqs, protein_chain_ids, strict=False):
+            if seq in msas:
+                csv_path = seq_to_csv.get(seq)
+                if csv_path is None:
+                    csv_path = os.path.join(msa_dir, f"{hashlib.sha256(seq.encode()).hexdigest()}.csv")
+                    sequences, _ids = extract_msa_sequences(msas[seq], 0)
+                    write_msa_csv(sequences, csv_path)
+                    seq_to_csv[seq] = csv_path
+                chain_msa_paths[chain_id] = csv_path
+                if verbose:
+                    logger.info(f"Assigned MSA to chain {chain_id} ({len(msas[seq])} sequences)")
+
+    for chain_id in protein_chain_ids:
+        if chain_id not in chain_msa_paths:
+            warnings.warn(
+                f"No homologs found for chain {chain_id} - setting msa='empty'.",
+                UserWarning,
+                stacklevel=2,
+            )
+    return chain_msa_paths
+
+
 def complex_to_yaml(
     chains: list[Chain | Fragment],
     chain_msa_paths: dict[str, Any] | None = None,
+    affinity_binder_chain_id: str | None = None,
 ) -> str:
     """Convert a list of chains to Boltz2 YAML input format.
 
@@ -42,6 +88,7 @@ def complex_to_yaml(
         chain_msa_paths (dict[str, Any] | None): Optional dict mapping chain IDs (A, B, C, ...) to
             MSA CSV file paths. Protein chains without a path get ``msa="empty"``
             (single-sequence mode). If None, all protein chains get ``msa="empty"``.
+        affinity_binder_chain_id (str | None): If set, emit a ``properties.affinity.binder`` block for that ligand.
 
     Returns:
         str: YAML-formatted string for Boltz2 input.
@@ -69,10 +116,8 @@ def complex_to_yaml(
 
         yaml_entries.append({e_type: entry})
 
-    return str(
-        yaml.dump(
-            {"sequences": yaml_entries, "predict": {"structure": {"enabled": True}}},
-            sort_keys=False,
-            default_flow_style=False,
-        )
-    )
+    payload: dict[str, Any] = {"sequences": yaml_entries, "predict": {"structure": {"enabled": True}}}
+    if affinity_binder_chain_id is not None:
+        payload["properties"] = [{"affinity": {"binder": affinity_binder_chain_id}}]
+
+    return str(yaml.dump(payload, sort_keys=False, default_flow_style=False))

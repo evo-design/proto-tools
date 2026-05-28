@@ -78,24 +78,107 @@ class Boltz2Model:
         Returns:
             Dictionary containing structure_cif_output and metrics
         """
-        # Lazy load on first call
+        captured = self._run_boltz_predict(
+            input_yaml_path=input_yaml_path,
+            output_dir=output_dir,
+            device=device,
+            recycling_steps=recycling_steps,
+            sampling_steps=sampling_steps,
+            diffusion_samples=diffusion_samples,
+            step_scale=step_scale,
+            max_msa_seqs=max_msa_seqs,
+            subsample_msa=subsample_msa,
+            num_workers=num_workers,
+            seed=seed,
+            verbose=verbose,
+        )
+        return self._extract_boltz_output(output_dir, input_yaml_path, include_pae_matrix, boltz_output=captured)
+
+    def predict_affinity(
+        self,
+        input_yaml_path: str,
+        output_dir: str,
+        device: str = "cuda",
+        recycling_steps: int = 3,
+        sampling_steps: int = 200,
+        diffusion_samples: int = 1,
+        step_scale: float = 1.5,
+        max_msa_seqs: int = 8192,
+        subsample_msa: bool = False,
+        num_workers: int = 4,
+        seed: int | None = None,
+        verbose: bool = False,
+        sampling_steps_affinity: int = 200,
+        diffusion_samples_affinity: int = 5,
+        affinity_mw_correction: bool = False,
+    ) -> dict[str, Any]:
+        """Run Boltz2 structure + binding-affinity prediction.
+
+        Structure args mirror ``__call__``; the affinity pass adds its own knobs.
+        Returns ``__call__``'s output plus ``affinity_metrics`` parsed from
+        ``affinity_<input>.json``.
+        """
+        extra_flags = [
+            f"--sampling_steps_affinity={sampling_steps_affinity}",
+            f"--diffusion_samples_affinity={diffusion_samples_affinity}",
+        ]
+        if affinity_mw_correction:
+            extra_flags.append("--affinity_mw_correction")
+
+        captured = self._run_boltz_predict(
+            input_yaml_path=input_yaml_path,
+            output_dir=output_dir,
+            device=device,
+            recycling_steps=recycling_steps,
+            sampling_steps=sampling_steps,
+            diffusion_samples=diffusion_samples,
+            step_scale=step_scale,
+            max_msa_seqs=max_msa_seqs,
+            subsample_msa=subsample_msa,
+            num_workers=num_workers,
+            seed=seed,
+            verbose=verbose,
+            extra_args=extra_flags,
+        )
+        result = self._extract_boltz_output(
+            output_dir, input_yaml_path, include_pae_matrix=False, boltz_output=captured
+        )
+        result["affinity_metrics"] = self._extract_affinity_json(output_dir, input_yaml_path, boltz_output=captured)
+        return result
+
+    def _run_boltz_predict(
+        self,
+        input_yaml_path: str,
+        output_dir: str,
+        device: str,
+        recycling_steps: int,
+        sampling_steps: int,
+        diffusion_samples: int,
+        step_scale: float,
+        max_msa_seqs: int,
+        subsample_msa: bool,
+        num_workers: int,
+        seed: int | None,
+        verbose: bool,
+        extra_args: list[str] | None = None,
+    ) -> str | None:
+        """Invoke the ``boltz predict`` CLI; ``extra_args`` appends affinity flags.
+
+        Returns boltz's captured stdout/stderr (or None), surfaced by callers if
+        no predictions are written.
+        """
         if not self._loaded:
             self.load(verbose)
 
         logger.debug("\n=== Boltz2 Prediction ===")
         logger.debug(f"Input YAML path: {input_yaml_path}")
         logger.debug(f"Output directory: {output_dir}")
-        logger.debug("Reading input YAML content...")
         with open(input_yaml_path) as f:
             yaml_content = f.read()
         logger.debug(f"\n--- Input YAML ---\n{yaml_content}\n------------------\n")
         sys.stdout.flush()
 
-        # Build the command
-        # Determine the number of devices
         num_devices = 1 if torch.cuda.is_available() else 0
-
-        # Base command
         cmd = [
             self.boltz_executable,
             "predict",
@@ -115,16 +198,16 @@ class Boltz2Model:
             cmd.append("--subsample_msa")
         if seed is not None:
             cmd.append(f"--seed={seed}")
+        if extra_args:
+            cmd.extend(extra_args)
 
         logger.debug(f"Running Boltz command: {' '.join(cmd)}")  # type: ignore[arg-type]
         sys.stdout.flush()
 
-        # Get subprocess environment with correct CUDA_VISIBLE_DEVICES
         from standalone_helpers import get_subprocess_device_env
 
         env = get_subprocess_device_env(device)
 
-        # Run the command with stdout/stderr visible
         try:
             result = subprocess.run(
                 cmd,  # type: ignore[arg-type]
@@ -141,12 +224,8 @@ class Boltz2Model:
 
         logger.debug("Boltz prediction completed")
         sys.stdout.flush()
-
         # boltz can exit 0 yet skip the input; pass its output so the missing-predictions error explains why.
-        captured = "\n".join(s for s in (result.stdout, result.stderr) if s)
-        return self._extract_boltz_output(
-            output_dir, input_yaml_path, include_pae_matrix, boltz_output=captured or None
-        )
+        return "\n".join(s for s in (result.stdout, result.stderr) if s) or None
 
     def _extract_boltz_output(
         self, output_dir: str, input_path: str, include_pae_matrix: bool, boltz_output: str | None = None
@@ -199,6 +278,19 @@ class Boltz2Model:
             "metrics": metrics,
         }
 
+    def _extract_affinity_json(
+        self, output_dir: str, input_path: str, boltz_output: str | None = None
+    ) -> dict[str, float]:
+        """Read ``affinity_<input>.json`` (log10 IC50 μM + binder probability, plus per-model variants)."""
+        input_name = Path(input_path).stem
+        prediction_dir = Path(output_dir) / f"boltz_results_{input_name}" / "predictions" / input_name
+        affinity_file = prediction_dir / f"affinity_{input_name}.json"
+        if not affinity_file.exists():
+            hint = f" boltz exited 0 but wrote no affinity output; output: {boltz_output}" if boltz_output else ""
+            raise FileNotFoundError(f"boltz2: affinity file not found: {affinity_file}.{hint}")
+        with open(affinity_file) as f:
+            return {k: float(v) for k, v in json.load(f).items()}
+
     def load(self, verbose: bool = False) -> None:  # noqa: ARG002 — required by tool interface
         """Load Boltz2 model components."""
         logger.debug("Initializing Boltz2")
@@ -244,7 +336,25 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             verbose=input_dict["verbose"],
             include_pae_matrix=input_dict["include_pae_matrix"],
         )
-    raise ValueError(f"boltz2: unknown operation {operation!r}; valid: ['predict']")
+    if operation == "predict_affinity":
+        return _model.predict_affinity(
+            input_yaml_path=input_dict["input_yaml_path"],
+            output_dir=input_dict["output_dir"],
+            device=input_dict["device"],
+            recycling_steps=input_dict["recycling_steps"],
+            sampling_steps=input_dict["sampling_steps"],
+            diffusion_samples=input_dict["diffusion_samples"],
+            step_scale=input_dict["step_scale"],
+            max_msa_seqs=input_dict["max_msa_seqs"],
+            subsample_msa=input_dict["subsample_msa"],
+            num_workers=input_dict["num_workers"],
+            seed=input_dict["seed"],
+            verbose=input_dict["verbose"],
+            sampling_steps_affinity=input_dict["sampling_steps_affinity"],
+            diffusion_samples_affinity=input_dict["diffusion_samples_affinity"],
+            affinity_mw_correction=input_dict["affinity_mw_correction"],
+        )
+    raise ValueError(f"boltz2: unknown operation {operation!r}; valid: ['predict', 'predict_affinity']")
 
 
 def to_device(device: str) -> dict[str, Any]:

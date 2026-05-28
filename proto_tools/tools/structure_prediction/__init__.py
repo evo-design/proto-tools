@@ -16,7 +16,17 @@ from proto_tools.tools.structure_prediction.alphafold3 import (
     AlphaFold3Output,
     run_alphafold3,
 )
-from proto_tools.tools.structure_prediction.boltz2 import Boltz2Config, Boltz2Input, Boltz2Output, run_boltz2
+from proto_tools.tools.structure_prediction.boltz2 import (
+    Boltz2AffinityConfig,
+    Boltz2AffinityInput,
+    Boltz2AffinityMetrics,
+    Boltz2AffinityOutput,
+    Boltz2Config,
+    Boltz2Input,
+    Boltz2Output,
+    run_boltz2,
+    run_boltz2_affinity,
+)
 from proto_tools.tools.structure_prediction.chai1 import Chai1Config, Chai1Input, Chai1Output, run_chai1
 from proto_tools.tools.structure_prediction.dispatch import predict_structures
 from proto_tools.tools.structure_prediction.esmfold import (
@@ -73,6 +83,11 @@ __all__ = [
     "Boltz2Input",
     "Boltz2Config",
     "Boltz2Output",
+    "run_boltz2_affinity",
+    "Boltz2AffinityInput",
+    "Boltz2AffinityConfig",
+    "Boltz2AffinityOutput",
+    "Boltz2AffinityMetrics",
     # Chai1
     "run_chai1",
     "Chai1Input",

@@ -1,29 +1,37 @@
 """tests/structure_prediction_tests/test_boltz2.py.
 
-Tests for Boltz2.
+Tests for Boltz2 (both ``boltz2-prediction`` and ``boltz2-affinity``).
 """
 
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import yaml
 
+from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures import is_valid_structure
 from proto_tools.tools.sequence_alignment.msas import MSA
 from proto_tools.tools.structure_prediction import (
+    Boltz2AffinityConfig,
+    Boltz2AffinityInput,
     Boltz2Config,
     Boltz2Input,
     Chain,
     Complex,
     run_boltz2,
+    run_boltz2_affinity,
 )
 from proto_tools.tools.structure_prediction.boltz2.boltz2 import run_boltz2_on_complex
+from proto_tools.tools.structure_prediction.boltz2.helpers import complex_to_yaml
 from tests.conftest import benchmark_twice
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 
 # Cro repressor from bacteriophage lambda. Short, well-folded test protein.
 _CRO_SEQUENCE = "MQTQNNSREKQAAALERLFLSCFLKDPVPKPLQEGTCDDVLCRELLNESETHLVQSIFRKESKVPGA"
+# L-tyrosine SMILES; resolves to CCD "TYR".
+_TYR_SMILES = "c1cc(ccc1C[C@@H](C(=O)O)N)O"
 
 
 # ── Ligand YAML shape: CCD-prefer dispatch ─────────────────────────────────
@@ -31,18 +39,12 @@ _CRO_SEQUENCE = "MQTQNNSREKQAAALERLFLSCFLKDPVPKPLQEGTCDDVLCRELLNESETHLVQSIFRKESK
 
 def _boltz2_ligand_entries(chains):
     """Build a Boltz2 YAML payload from ``chains`` and return its ligand entries (parsed)."""
-    import yaml
-
-    from proto_tools.tools.structure_prediction.boltz2.helpers import complex_to_yaml
-
     parsed = yaml.safe_load(complex_to_yaml(chains))
     return [entry["ligand"] for entry in parsed["sequences"] if "ligand" in entry]
 
 
 def test_boltz2_ligand_uses_ccd_code_when_available():
     """Fragment with a resolved ccd_code serializes to ``ccd: <code>``, not raw SMILES."""
-    from proto_tools.entities.ligands import Fragment
-
     atp = Fragment(ccd_code="ATP")
     assert atp.ccd_code == "ATP"  # invariant guard
 
@@ -52,8 +54,6 @@ def test_boltz2_ligand_uses_ccd_code_when_available():
 
 def test_boltz2_ligand_falls_back_to_smiles_when_no_ccd_match():
     """Novel ligand (SMILES with no wwPDB CCD entry) serializes as raw SMILES."""
-    from proto_tools.entities.ligands import Fragment
-
     # Synthetic perfluorinated terphenyl chain — not in the wwPDB CCD database.
     novel_smiles = "FC(F)(F)C(F)(F)C(F)(F)C(F)(F)C(F)(F)C(F)(F)C(F)(F)C(F)(F)c1ccc(-c2ccc(-c3ccccc3)cc2)cc1"
     novel = Fragment(smiles=novel_smiles)
@@ -106,6 +106,85 @@ def test_boltz2_writes_one_msa_per_unique_sequence(seqs, n_files):
     assert "empty" not in msa_paths
 
 
+# ── Affinity: YAML emission & validator ─────────────────────────────────────
+
+
+def test_complex_to_yaml_emits_affinity_block():
+    """A binder chain ID triggers the ``properties: [{affinity: {binder: ...}}]`` block."""
+    chains = [Chain(sequence="MKTLPGCDA", entity_type="protein"), Fragment(ccd_code="ATP")]
+    parsed = yaml.safe_load(complex_to_yaml(chains, affinity_binder_chain_id="B"))
+    assert parsed["properties"] == [{"affinity": {"binder": "B"}}]
+
+
+def test_complex_to_yaml_omits_affinity_block_by_default():
+    """Without a binder chain ID, the YAML has no ``properties`` key."""
+    chains = [Chain(sequence="MKTLPGCDA", entity_type="protein"), Fragment(ccd_code="ATP")]
+    parsed = yaml.safe_load(complex_to_yaml(chains))
+    assert "properties" not in parsed
+
+
+def test_affinity_auto_detects_single_ligand_binder():
+    """A complex with exactly one ligand resolves the binder automatically."""
+    inputs = Boltz2AffinityInput(complexes=[[_CRO_SEQUENCE, _TYR_SMILES]])
+    assert inputs.resolved_binder_chain_ids == ["B"]
+
+
+def test_affinity_explicit_binder_chain_selects_named_ligand():
+    """An explicit ``binder_chain`` naming a ligand resolves to that chain."""
+    inputs = Boltz2AffinityInput(complexes=[[_CRO_SEQUENCE, _TYR_SMILES]], binder_chain="B")
+    assert inputs.resolved_binder_chain_ids == ["B"]
+
+
+def test_affinity_binder_ids_track_model_copy_partition():
+    """resolved_binder_chain_ids re-resolves under model_copy so ToolPool partitions stay aligned."""
+    inputs = Boltz2AffinityInput(complexes=[[_CRO_SEQUENCE, _TYR_SMILES], [_CRO_SEQUENCE, _TYR_SMILES]])
+    partition = inputs.model_copy(update={"complexes": [inputs.complexes[0]]})
+    assert partition.resolved_binder_chain_ids == ["B"]
+
+
+def _two_ligand_complex():
+    return Complex(
+        chains=[
+            Chain(sequence=_CRO_SEQUENCE, entity_type="protein"),
+            Fragment(ccd_code="ATP"),
+            Fragment(ccd_code="MG"),
+        ]
+    )
+
+
+def _ligand_only_complex():
+    return Complex(chains=[Fragment(ccd_code="ATP")])
+
+
+def _oversized_ligand_complex():
+    return Complex(chains=[Chain(sequence=_CRO_SEQUENCE, entity_type="protein"), Fragment(smiles="C" + "C" * 150)])
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"complexes": [[_CRO_SEQUENCE, _TYR_SMILES]], "binder_chain": "A"}, r"not a ligand chain"),
+        ({"complexes": [[_CRO_SEQUENCE, _TYR_SMILES]], "binder_chain": "Z"}, r"not a chain in complex"),
+        ({"complexes": [[_CRO_SEQUENCE]]}, r"exactly one"),
+        ({"complexes": [_two_ligand_complex()]}, r"exactly one"),
+        ({"complexes": [_ligand_only_complex()]}, r"at least one protein chain"),
+        ({"complexes": [_oversized_ligand_complex()]}, r"heavy atoms"),
+    ],
+    ids=[
+        "non-ligand binder",
+        "unknown chain ID",
+        "zero ligands",
+        "multiple ligands without explicit binder",
+        "no protein target",
+        "ligand exceeds 128 heavy atoms",
+    ],
+)
+def test_affinity_validator_rejects_invalid_input(kwargs, match):
+    """The affinity validator rejects each upstream-enforced constraint with a clear error."""
+    with pytest.raises(ValueError, match=match):
+        Boltz2AffinityInput(**kwargs)
+
+
 # ── GPU tests ───────────────────────────────────────────────────────────────
 
 
@@ -120,8 +199,6 @@ def test_boltz2_ccd_vs_smiles_input_equivalent_predictions():
     implementation does this because AF3 with raw SMILES produces broken
     structures).
     """
-    from proto_tools.entities.ligands import Fragment
-
     # L-tyrosine — known CCD entry "TYR", small enough for fast inference
     tyr_smiles = "c1cc(ccc1C[C@@H](C(=O)O)N)O"
     protein = Chain(sequence=_CRO_SEQUENCE, entity_type="protein")
@@ -218,4 +295,30 @@ def test_boltz2_benchmark(request):
     assert result.success, "Boltz2 benchmark run failed"
     assert len(result.structures) == 1
     assert is_valid_structure(result.structures[0].structure_cif)
+    assert_metrics_in_spec(result)
+
+
+# ── Affinity: GPU smoke ──────────────────────────────────────────────────────
+
+
+@pytest.mark.uses_gpu
+def test_boltz2_affinity_end_to_end():
+    """End-to-end smoke: affinity scores are well-formed and the CIF is valid."""
+    inputs = Boltz2AffinityInput(complexes=[[_CRO_SEQUENCE, _TYR_SMILES]])
+    config = Boltz2AffinityConfig(
+        use_msa=False,
+        sampling_steps=50,
+        diffusion_samples=1,
+        sampling_steps_affinity=50,
+        diffusion_samples_affinity=2,
+        seed=42,
+    )
+
+    result = run_boltz2_affinity(inputs, config)
+
+    assert result.success
+    structure = result.structures[0]
+    assert is_valid_structure(structure.structure_cif)
+    assert isinstance(structure.metrics["affinity_pred_value"], float)
+    assert 0.0 <= structure.metrics["affinity_probability_binary"] <= 1.0
     assert_metrics_in_spec(result)

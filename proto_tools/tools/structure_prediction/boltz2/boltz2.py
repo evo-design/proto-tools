@@ -9,17 +9,15 @@ Example:
     >>> print(f"Confidence: {result.confidence_score:.2f}")
 """
 
-import hashlib
 import os
 import tempfile
-import warnings
 from logging import getLogger
 from typing import Any, ClassVar
 
 from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.tools.structure_prediction.boltz2.helpers import (
+    build_chain_msa_paths,
     complex_to_yaml,
-    write_msa_csv,
 )
 from proto_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
@@ -27,7 +25,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionOutput,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import ConfigField, ToolInstance, extract_msa_sequences
+from proto_tools.utils import ConfigField, ToolInstance
 from proto_tools.utils.progress import progress_bar
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
@@ -353,12 +351,6 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config, instance: Any = None) 
     return Boltz2Output(structures=results)
 
 
-def _msa_to_csv_file(msa: Any, csv_path: str, query_index: int = 0) -> None:
-    """Write an MSA object to Boltz's CSV format with pairing keys."""
-    sequences, _ids = extract_msa_sequences(msa, query_index)
-    write_msa_csv(sequences, csv_path)
-
-
 def run_boltz2_on_complex(
     config: Boltz2Config,
     sp_complex: Any,
@@ -387,35 +379,9 @@ def run_boltz2_on_complex(
         output_dir = os.path.join(temp_dir, "boltz2_output")
         os.makedirs(output_dir)
 
-        # Build chain_msa_paths for complex_to_yaml
         chain_msa_paths: dict[str, str] | None = None
         if config.use_msa:
-            chain_msa_paths = {}
-            protein_seqs, protein_chain_ids = sp_complex.extract_protein_chains()
-            if protein_seqs and msas:
-                msa_dir = os.path.join(temp_dir, "msas")
-                os.makedirs(msa_dir, exist_ok=True)
-                seq_to_csv: dict[str, str] = {}
-                for seq, chain_id in zip(protein_seqs, protein_chain_ids, strict=False):
-                    if seq in msas:
-                        csv_path = seq_to_csv.get(seq)
-                        if csv_path is None:
-                            # boltz requires identical chains to share one MSA file: key by sequence, not chain.
-                            csv_path = os.path.join(msa_dir, f"{hashlib.sha256(seq.encode()).hexdigest()}.csv")
-                            _msa_to_csv_file(msa=msas[seq], csv_path=csv_path, query_index=0)
-                            seq_to_csv[seq] = csv_path
-                        chain_msa_paths[chain_id] = csv_path
-                        if config.verbose:
-                            logger.info(f"Assigned MSA to chain {chain_id} ({len(msas[seq])} sequences)")
-
-            # Warn for protein chains without MSAs
-            for chain_id in protein_chain_ids:
-                if chain_id not in chain_msa_paths:
-                    warnings.warn(
-                        f"No homologs found for chain {chain_id} - setting msa='empty'.",
-                        UserWarning,
-                        stacklevel=2,
-                    )
+            chain_msa_paths = build_chain_msa_paths(sp_complex, msas, temp_dir, verbose=config.verbose)
 
         yaml_content = complex_to_yaml(sp_complex.chains, chain_msa_paths=chain_msa_paths)
 

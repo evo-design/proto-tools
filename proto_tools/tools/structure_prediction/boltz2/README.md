@@ -11,7 +11,7 @@
 
 ## Overview
 
-Boltz-2 is an openly licensed biomolecular structure prediction model from the [MIT Jameel Clinic](https://jclinic.mit.edu/) and [Recursion](https://www.recursion.com/), built in the AlphaFold3 family: a diffusion model that predicts the joint 3D structure of complexes mixing proteins, DNA, RNA, and small-molecule ligands. This toolkit runs Boltz-2 structure prediction on a local GPU, with optional ColabFold multiple-sequence alignments. (Boltz-2 the model also predicts binding affinity; this toolkit currently exposes its structure prediction.)
+Boltz-2 is an openly licensed biomolecular structure prediction model from the [MIT Jameel Clinic](https://jclinic.mit.edu/) and [Recursion](https://www.recursion.com/), built in the AlphaFold3 family: a diffusion model that predicts the joint 3D structure of complexes mixing proteins, DNA, RNA, and small-molecule ligands, together with the binding affinity of a small molecule against a protein target. This toolkit runs Boltz-2 structure and affinity prediction on a local GPU, with optional ColabFold multiple-sequence alignments.
 
 ## Background
 
@@ -43,12 +43,27 @@ This tool predicts the structure of multi-component assemblies such as protein-D
 - **Confidence is reported as a complex pLDDT, pTM, ipTM, and PAE.** `confidence_score`, the primary metric, is `iptm` for multi-chain complexes and `ptm` for a single chain; `complex_plddt` is on a 0 to 1 scale and PAE is in angstroms (0 to about 32). Set `include_pae_matrix` to attach the full per-token PAE matrix.
 - **Multi-modal inputs.** Protein, DNA, RNA, and ligand entities are supported; chain modifications are not.
 
+### Boltz-2 Affinity (`boltz2-affinity`)
+
+Predicts the binding affinity of a single small-molecule ligand against a protein target. Each input complex must contain at least one protein chain and at least one ligand chain; the binder is the complex's sole ligand (auto-detected) or the chain named by `binder_chain`. Each complex returns a predicted `Structure` with the binding pose in the CIF and the affinity scores on `structure.metrics`: `affinity_pred_value` (log10 IC50 in μM; lower is stronger binding) and `affinity_probability_binary` (binder probability in [0, 1]).
+
+#### Applications
+
+This tool ranks candidate ligands against a chosen protein target, pairing a predicted affinity with a predicted binding pose — supporting hit discovery, structure-activity studies, and library-screening loops over a list of SMILES.
+
+#### Usage Tips
+
+- **`affinity_pred_value` is on a log10-IC50 (μM) scale.** Values below `0` (sub-μM IC50) indicate strong binders; positive values indicate weaker binding. `affinity_probability_binary` is an independent binder probability and can stay high even when the IC50 estimate is uncertain.
+- **One binder ligand per complex.** The binder is auto-detected when a complex has exactly one ligand; set `binder_chain` (e.g. `"B"`) to name it when a complex has several. The binder must be a ligand chain with at most 128 heavy atoms.
+- **Structure-side and affinity-side knobs are independent.** `recycling_steps`, `sampling_steps`, `diffusion_samples`, and MSA settings control the structure pass that runs first; `sampling_steps_affinity` (default `200`) and `diffusion_samples_affinity` (default `5`) control the affinity pass. Set `affinity_mw_correction` to apply Boltz-2's molecular-weight correction to the affinity value head.
+- **Stochastic predictions.** The diffusion-based affinity head is stochastic; set `seed` for reproducibility.
+
 ## Toolkit Notes
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every Boltz-2 tool in this toolkit (`boltz2-prediction`).
+These apply to every Boltz-2 tool in this toolkit (`boltz2-prediction`, `boltz2-affinity`).
 
 - **Requires a GPU.** Boltz-2 runs through a PyTorch backend and needs an NVIDIA GPU; CPU execution is not practical.
 - **MSA-based and AlphaFold3-style.** Boltz-2 uses optional MSAs and a diffusion process. Predictions are stochastic, so set `seed` for reproducibility; `subsample_msa` and unseeded runs are intentionally non-deterministic.
-- **Structure prediction only.** This toolkit wraps Boltz-2's structure prediction; the model's separate binding-affinity prediction is not exposed here.
+- **Shared model weights.** Both tools run the same bundled Boltz-2 checkpoint; the affinity head ships with it, so `boltz2-affinity` needs no extra download or environment.
