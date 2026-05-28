@@ -377,3 +377,43 @@ def test_protenix_benchmark(request):
     assert len(result.structures) == 1
     assert is_valid_structure(result.structures[0].structure_cif)
     assert_metrics_in_spec(result)
+
+
+def _load_standalone_inference():
+    import importlib.util
+    import logging
+    import sys
+    import types
+    from pathlib import Path
+
+    _sh = sys.modules.setdefault("standalone_helpers", types.SimpleNamespace())
+    if not hasattr(_sh, "get_logger"):
+        _sh.get_logger = logging.getLogger
+    standalone_dir = (
+        Path(__file__).resolve().parents[2]
+        / "proto_tools"
+        / "tools"
+        / "structure_prediction"
+        / "protenix"
+        / "standalone"
+    )
+    spec = importlib.util.spec_from_file_location("_protenix_si_for_tests", standalone_dir / "inference.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_is_checkpoint_corruption_error_matches_stream_reader():
+    mod = _load_standalone_inference()
+    for msg in (
+        "PytorchStreamReader failed reading zip archive: failed finding central directory",
+        "BadZipFile: File is not a zip file",
+    ):
+        assert mod._is_checkpoint_corruption_error(RuntimeError(msg)), msg
+
+
+def test_is_checkpoint_corruption_error_rejects_unrelated_errors():
+    mod = _load_standalone_inference()
+    assert not mod._is_checkpoint_corruption_error(RuntimeError("CUDA out of memory"))
+    assert not mod._is_checkpoint_corruption_error(OSError("Permission denied"))
