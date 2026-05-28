@@ -69,8 +69,8 @@ def test_coerce_gzipped_fasta_path_reads_decompressed_text(tmp_path):
 
 
 def test_coerce_noop_when_structures_absent_or_not_list():
-    """Helper short-circuits when `structures` key missing or non-list (no error)."""
-    assert _coerce_structure_items_to_text({"structures_dir": "some/dir"}) == {"structures_dir": "some/dir"}
+    """Helper short-circuits when `structures` is missing or a non-list (e.g. a directory path)."""
+    assert _coerce_structure_items_to_text({"structures": "some/dir"}) == {"structures": "some/dir"}
     assert _coerce_structure_items_to_text({"structures": None}) == {"structures": None}
     # Non-dict input passes through unchanged.
     assert _coerce_structure_items_to_text("not a dict") == "not a dict"
@@ -104,23 +104,27 @@ def test_input_requires_at_least_two_structures():
         FoldseekClusterInput(structures=[_TINY_PDB])
 
 
-def test_input_requires_one_of_structures_or_dir():
-    with pytest.raises(ValidationError, match="exactly one"):
+def test_input_requires_structures():
+    with pytest.raises(ValidationError, match="required"):
         FoldseekClusterInput()
 
 
-def test_input_rejects_both_structures_and_dir(tmp_path):
-    (tmp_path / "a.pdb").write_text(_TINY_PDB)
-    (tmp_path / "b.pdb").write_text(_TINY_PDB)
-    with pytest.raises(ValidationError, match="exactly one"):
-        FoldseekClusterInput(structures=[_TINY_PDB, _TINY_PDB], structures_dir=str(tmp_path))
+def test_input_accepts_structure_objects():
+    """`Structure` objects in the list are accepted (typed-entity input) and coerced to text."""
+    from proto_tools.entities import Structure
+
+    s = Structure(structure=_TINY_PDB)
+    inputs = FoldseekClusterInput(structures=[s, s])
+    assert inputs.structures == [_TINY_PDB, _TINY_PDB]
+    # Schema exposes the Structure entity so the frontend can render a picker (str carries FASTA).
+    assert "Structure" in FoldseekClusterInput.model_json_schema().get("$defs", {})
 
 
 def test_input_rejects_ids_with_dir(tmp_path):
     (tmp_path / "a.pdb").write_text(_TINY_PDB)
     (tmp_path / "b.pdb").write_text(_TINY_PDB)
     with pytest.raises(ValidationError, match="may not be combined"):
-        FoldseekClusterInput(structures_dir=str(tmp_path), structure_ids=["x", "y"])
+        FoldseekClusterInput(structures=str(tmp_path), structure_ids=["x", "y"])
 
 
 def test_input_rejects_id_count_mismatch():
@@ -141,13 +145,13 @@ def test_input_rejects_unsafe_structure_ids(bad_id):
 
 def test_input_rejects_nonexistent_dir():
     with pytest.raises(ValidationError, match="not an existing directory"):
-        FoldseekClusterInput(structures_dir="/nonexistent/path/abcxyz")
+        FoldseekClusterInput(structures="/nonexistent/path/abcxyz")
 
 
 def test_input_rejects_dir_with_too_few_files(tmp_path):
     (tmp_path / "only.pdb").write_text(_TINY_PDB)
     with pytest.raises(ValidationError, match="at least 2"):
-        FoldseekClusterInput(structures_dir=str(tmp_path))
+        FoldseekClusterInput(structures=str(tmp_path))
 
 
 def test_input_rejects_duplicate_user_supplied_ids():
@@ -161,7 +165,7 @@ def test_input_rejects_dir_with_colliding_stems(tmp_path):
     (tmp_path / "protein.pdb").write_text(_TINY_PDB)
     (tmp_path / "protein.cif").write_text(_TINY_CIF)
     with pytest.raises(ValidationError, match="duplicated"):
-        FoldseekClusterInput(structures_dir=str(tmp_path))
+        FoldseekClusterInput(structures=str(tmp_path))
 
 
 def test_input_rejects_mixed_pdb_and_fasta():
@@ -174,13 +178,12 @@ def test_input_rejects_mixed_pdb_and_fasta():
 
 
 def test_input_resolves_dir_with_mixed_formats(tmp_path):
-    """Mixed .pdb + .cif: both read into structures, stems become structure_ids, structures_dir cleared."""
+    """Mixed .pdb + .cif: both read into structures, stems become structure_ids."""
     (tmp_path / "alpha.pdb").write_text(_TINY_PDB)
     (tmp_path / "beta.cif").write_text(_TINY_CIF)
 
-    inputs = FoldseekClusterInput(structures_dir=str(tmp_path))
+    inputs = FoldseekClusterInput(structures=str(tmp_path))
 
-    assert inputs.structures_dir is None
     assert sorted(inputs.structure_ids or []) == ["alpha", "beta"]
     assert _TINY_PDB in (inputs.structures or [])
     assert _TINY_CIF in (inputs.structures or [])
@@ -193,7 +196,7 @@ def test_input_resolves_dir_decompresses_gz_files(tmp_path):
     with gzip.open(tmp_path / "beta.cif.gz", "wt", encoding="utf-8") as f:
         f.write(_TINY_CIF)
 
-    inputs = FoldseekClusterInput(structures_dir=str(tmp_path))
+    inputs = FoldseekClusterInput(structures=str(tmp_path))
 
     assert sorted(inputs.structure_ids or []) == ["alpha", "beta"]
     assert _TINY_PDB in (inputs.structures or [])
@@ -207,7 +210,7 @@ def test_input_dir_skips_unsupported_files(tmp_path):
     (tmp_path / "README.md").write_text("just notes")
     (tmp_path / ".DS_Store").write_text("junk")
 
-    inputs = FoldseekClusterInput(structures_dir=str(tmp_path))
+    inputs = FoldseekClusterInput(structures=str(tmp_path))
 
     assert sorted(inputs.structure_ids or []) == ["alpha", "beta"]
 
@@ -217,11 +220,22 @@ def test_input_resolves_dir_with_fasta_files(tmp_path):
     (tmp_path / "alpha.fasta").write_text(_TINY_FASTA)
     (tmp_path / "beta.fa").write_text(_TINY_FASTA_2)
 
-    inputs = FoldseekClusterInput(structures_dir=str(tmp_path))
+    inputs = FoldseekClusterInput(structures=str(tmp_path))
 
     assert sorted(inputs.structure_ids or []) == ["alpha", "beta"]
     assert _TINY_FASTA in (inputs.structures or [])
     assert _TINY_FASTA_2 in (inputs.structures or [])
+
+
+def test_input_resolves_dir_from_path_object(tmp_path):
+    """A `Path` directory (not just a str) is accepted by the merged `structures` field."""
+    (tmp_path / "alpha.pdb").write_text(_TINY_PDB)
+    (tmp_path / "beta.cif").write_text(_TINY_CIF)
+
+    inputs = FoldseekClusterInput(structures=tmp_path)
+
+    assert sorted(inputs.structure_ids or []) == ["alpha", "beta"]
+    assert _TINY_PDB in (inputs.structures or [])
 
 
 # ── run_foldseek_cluster (mocked dispatch) ────────────────────────────────────
@@ -266,7 +280,7 @@ def test_run_foldseek_cluster_with_directory(tmp_path):
     """Directory input flows through the wrapper: stems → IDs, per-file format detected."""
     (tmp_path / "alpha.pdb").write_text(_TINY_PDB)
     (tmp_path / "beta.cif").write_text(_TINY_CIF)
-    inputs = FoldseekClusterInput(structures_dir=str(tmp_path))
+    inputs = FoldseekClusterInput(structures=str(tmp_path))
 
     with patch(
         "proto_tools.tools.structure_alignment.foldseek.foldseek_cluster.ToolInstance.dispatch"
@@ -309,7 +323,7 @@ def test_foldseek_cluster_end_to_end_with_directory(tmp_path):
     (tmp_path / "renin-cif.cif").write_text((_FIXTURES / "renin.cif").read_text())
 
     output = run_foldseek_cluster(
-        FoldseekClusterInput(structures_dir=str(tmp_path)),
+        FoldseekClusterInput(structures=str(tmp_path)),
         FoldseekClusterConfig(),
     )
 

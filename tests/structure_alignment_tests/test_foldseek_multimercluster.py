@@ -29,26 +29,27 @@ def test_input_requires_at_least_two_structures():
         FoldseekMultimerClusterInput(structures=[_TINY_MULTIMER_PDB])
 
 
-def test_input_requires_one_of_structures_or_dir():
-    with pytest.raises(ValidationError, match="exactly one"):
+def test_input_requires_structures():
+    with pytest.raises(ValidationError, match="required"):
         FoldseekMultimerClusterInput()
 
 
-def test_input_rejects_both_structures_and_dir(tmp_path):
-    (tmp_path / "a.pdb").write_text(_TINY_MULTIMER_PDB)
-    (tmp_path / "b.pdb").write_text(_TINY_MULTIMER_PDB)
-    with pytest.raises(ValidationError, match="exactly one"):
-        FoldseekMultimerClusterInput(
-            structures=[_TINY_MULTIMER_PDB, _TINY_MULTIMER_PDB],
-            structures_dir=str(tmp_path),
-        )
+def test_input_accepts_structure_objects():
+    """`Structure` objects in the list are accepted (typed-entity input) and coerced to text."""
+    from proto_tools.entities import Structure
+
+    s = Structure(structure=_TINY_MULTIMER_PDB)
+    inputs = FoldseekMultimerClusterInput(structures=[s, s])
+    assert inputs.structures == [_TINY_MULTIMER_PDB, _TINY_MULTIMER_PDB]
+    # Schema exposes the Structure entity so the frontend can render a picker.
+    assert "Structure" in FoldseekMultimerClusterInput.model_json_schema().get("$defs", {})
 
 
 def test_input_rejects_ids_with_dir(tmp_path):
     (tmp_path / "a.pdb").write_text(_TINY_MULTIMER_PDB)
     (tmp_path / "b.pdb").write_text(_TINY_MULTIMER_PDB)
     with pytest.raises(ValidationError, match="may not be combined"):
-        FoldseekMultimerClusterInput(structures_dir=str(tmp_path), structure_ids=["x", "y"])
+        FoldseekMultimerClusterInput(structures=str(tmp_path), structure_ids=["x", "y"])
 
 
 def test_input_rejects_id_count_mismatch():
@@ -73,31 +74,30 @@ def test_input_rejects_filename_stems_with_underscore(tmp_path):
     (tmp_path / "complex_a.pdb").write_text(_TINY_MULTIMER_PDB)
     (tmp_path / "complex_b.pdb").write_text(_TINY_MULTIMER_PDB)
     with pytest.raises(ValidationError, match="collides"):
-        FoldseekMultimerClusterInput(structures_dir=str(tmp_path))
+        FoldseekMultimerClusterInput(structures=str(tmp_path))
 
 
 def test_input_rejects_nonexistent_dir():
     with pytest.raises(ValidationError, match="not an existing directory"):
-        FoldseekMultimerClusterInput(structures_dir="/nonexistent/path/abcxyz")
+        FoldseekMultimerClusterInput(structures="/nonexistent/path/abcxyz")
 
 
 def test_input_rejects_dir_with_too_few_files(tmp_path):
     (tmp_path / "only.pdb").write_text(_TINY_MULTIMER_PDB)
     with pytest.raises(ValidationError, match="at least 2"):
-        FoldseekMultimerClusterInput(structures_dir=str(tmp_path))
+        FoldseekMultimerClusterInput(structures=str(tmp_path))
 
 
 # ── FoldseekMultimerClusterInput resolution from directory ────────────────────
 
 
 def test_input_resolves_dir_with_mixed_formats(tmp_path):
-    """Mixed .pdb + .cif: both read into structures, stems become structure_ids, structures_dir cleared."""
+    """Mixed .pdb + .cif: both read into structures, stems become structure_ids."""
     (tmp_path / "alpha.pdb").write_text(_TINY_MULTIMER_PDB)
     (tmp_path / "beta.cif").write_text(_TINY_MULTIMER_CIF)
 
-    inputs = FoldseekMultimerClusterInput(structures_dir=str(tmp_path))
+    inputs = FoldseekMultimerClusterInput(structures=str(tmp_path))
 
-    assert inputs.structures_dir is None
     assert sorted(inputs.structure_ids or []) == ["alpha", "beta"]
     assert _TINY_MULTIMER_PDB in (inputs.structures or [])
     assert _TINY_MULTIMER_CIF in (inputs.structures or [])
@@ -109,7 +109,7 @@ def test_input_dir_skips_fasta_files(tmp_path):
     (tmp_path / "beta.pdb").write_text(_TINY_MULTIMER_PDB)
     (tmp_path / "ignored.fasta").write_text(">seq\nMKTL\n")
 
-    inputs = FoldseekMultimerClusterInput(structures_dir=str(tmp_path))
+    inputs = FoldseekMultimerClusterInput(structures=str(tmp_path))
 
     assert sorted(inputs.structure_ids or []) == ["alpha", "beta"]
 
@@ -127,7 +127,7 @@ def test_input_resolves_dir_decompresses_gz_files(tmp_path):
     with gzip.open(tmp_path / "beta.pdb.gz", "wt", encoding="utf-8") as f:
         f.write(_TINY_MULTIMER_PDB)
 
-    inputs = FoldseekMultimerClusterInput(structures_dir=str(tmp_path))
+    inputs = FoldseekMultimerClusterInput(structures=str(tmp_path))
 
     assert sorted(inputs.structure_ids or []) == ["alpha", "beta"]
 
@@ -186,7 +186,7 @@ def test_foldseek_multimercluster_end_to_end_with_directory(tmp_path):
     (tmp_path / "renin.cif").write_text((_FIXTURES / "renin.cif").read_text())
 
     output = run_foldseek_multimercluster(
-        FoldseekMultimerClusterInput(structures_dir=str(tmp_path)),
+        FoldseekMultimerClusterInput(structures=str(tmp_path)),
         FoldseekMultimerClusterConfig(num_threads=2),
     )
 

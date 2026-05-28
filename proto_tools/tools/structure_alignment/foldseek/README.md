@@ -52,7 +52,7 @@ This tool is appropriate for deduplicating a set of designed structures before d
 
 #### Usage Tips
 
-- **`structures` and `structures_dir` are mutually exclusive.** Provide either an in-memory list of structure or FASTA text strings, or a path to a directory containing supported file types. When `structures_dir` is used, filename stems become the structure identifiers.
+- **`structures` accepts either a list or a directory path.** Provide an in-memory list of structure or FASTA text strings (Structure objects and file paths are also accepted per item), or a single path to a directory of supported files, in which case filename stems become the structure identifiers.
 - **A single call must use one input format.** Mixing FASTA inputs with PDB or mmCIF inputs is rejected by input validation. Format is auto-detected per input entry.
 - **`min_seq_id=0.0` is intentional and lets 3Di structural similarity dominate cluster assignment.** Raising it adds a sequence-identity floor to cluster membership. Use a non-zero value only when a sequence-similarity constraint is desired alongside structural similarity.
 - **There is no parameter that requests an exact cluster count.** Foldseek clusters by similarity threshold, not by a target count. To approximate a target number of clusters, sweep the `cov` field and select the run whose cluster count is closest to the target.
@@ -107,5 +107,5 @@ These apply to every Foldseek tool in this toolkit (`foldseek-search`, `foldseek
 - **Hits use a 12-column M8 tabular schema with `sequence_identity` normalised to the range 0 to 1.** Filtering structural hits by sequence identity defeats the purpose of structural search, since distant homologues commonly share fold without sharing sequence. `evalue` and `bit_score` are the appropriate ranking criteria.
 - **Accepted input formats differ by tool.** `foldseek-search`, `foldseek-multimer-search`, and `foldseek-rbh` currently accept only raw PDB text, `foldseek-cluster` accepts PDB, mmCIF, or FASTA, and `foldseek-multimercluster` accepts PDB or mmCIF.
 - **Local execution requires a user-supplied target.** Either a prebuilt Foldseek database or a directory of structure files must be provided through the `local_db` field. No reference database is bundled with the toolkit.
-- **`structures_dir` cache keys reflect file content, not directory paths.** Modifying files in place between calls correctly invalidates the cache, so structure-set updates do not produce stale results.
+- **A directory passed to `structures` caches by file content, not directory path.** Modifying files in place between calls correctly invalidates the cache, so structure-set updates do not produce stale results.
 - **Local search can use an NVIDIA GPU.** Set `use_gpu=True` on any local-mode tool; the GPU build auto-installs on Linux x86_64 hosts with a compatible NVIDIA driver (`>= 525.60.13`).

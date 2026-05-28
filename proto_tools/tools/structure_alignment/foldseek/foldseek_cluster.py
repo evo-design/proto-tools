@@ -71,40 +71,30 @@ class FoldseekClusterInput(BaseToolInput):
     go through Foldseek's built-in ProstT5 model to predict 3Di sequences.
 
     Attributes:
-        structures (list[str] | None): Items to cluster (≥2). Per item, accepts
-            a ``Structure`` object, a file path, or raw text (PDB / mmCIF /
-            single-record FASTA; format auto-detected per string). Mutually
-            exclusive with ``structures_dir``.
-        structures_dir (str | None): Directory of ``.pdb``/``.cif``/``.mmcif``/
-            ``.fasta``/``.fa``/``.faa`` files (incl. ``.gz``; ≥2). Filename
-            stems become ``structure_ids``. Mutually exclusive with
-            ``structures``.
-        structure_ids (list[str] | None): Optional IDs (only with
-            ``structures``; default ``'structure_0'``, ``'structure_1'``, ...).
+        structures (list[Structure | str] | str | Path | None): Items to cluster
+            (≥2) — a list of Structure objects / file paths / PDB·mmCIF·FASTA text,
+            or a directory path (filename stems become ``structure_ids``).
+        structure_ids (list[str] | None): Optional IDs for the list form (default
+            ``structure_0``, ...); derived from filename stems for a directory.
     """
 
-    structures: list[str] | None = InputField(
+    structures: list[Structure | str] | str | Path | None = InputField(
         default=None,
         title="Structures",
-        description="Items to cluster (Structure objects, file paths, or PDB/mmCIF/FASTA text; ≥2)",
+        description="Items to cluster (≥2): a list of Structure/path/PDB/mmCIF/FASTA-text items, or a directory path",
         min_length=2,
-    )
-    structures_dir: str | None = InputField(
-        default=None,
-        title="Structures Directory",
-        description="Directory of structure (.pdb/.cif) or FASTA (.fasta/.fa) files, incl. .gz; ≥2.",
     )
     structure_ids: list[str] | None = InputField(
         default=None,
         title="Structure IDs",
-        description="Optional IDs (only with `structures`; default: 'structure_0', 'structure_1', ...).",
+        description="Optional IDs (only with the list form; default: 'structure_0', 'structure_1', ...).",
     )
 
     @model_validator(mode="before")
     @classmethod
     def _resolve(cls, data: Any) -> Any:
         data = _coerce_structure_items_to_text(data)
-        return _resolve_structures_dir_in_data(data)
+        return _resolve_directory_structures(data)
 
     @model_validator(mode="after")
     def _check(self) -> "FoldseekClusterInput":
@@ -280,8 +270,8 @@ def run_foldseek_cluster(
     Returns:
         FoldseekClusterOutput: Clusters with their representatives + members.
     """
-    assert inputs.structures is not None  # noqa: S101 — guaranteed by model validator
-    structures = inputs.structures
+    assert isinstance(inputs.structures, list)  # noqa: S101 — directory paths are resolved to a list by the validator
+    structures = [s if isinstance(s, str) else s.structure_pdb for s in inputs.structures]
     ids = inputs.structure_ids or [f"structure_{i}" for i in range(len(structures))]
     formats = [_detect_input_format(s) for s in structures]
 
@@ -326,7 +316,7 @@ def _read_structures_dir(
     """Enumerate ``extensions``-matching files (sorted by filename); return (texts, stems)."""
     path = Path(dir_path).expanduser().resolve()
     if not path.is_dir():
-        raise ValueError(f"structures_dir {dir_path!r} is not an existing directory")
+        raise ValueError(f"structures path {dir_path!r} is not an existing directory")
 
     matches: list[tuple[Path, str]] = []
     for child in sorted(path.iterdir(), key=lambda p: p.name.lower()):
@@ -340,7 +330,7 @@ def _read_structures_dir(
 
     if len(matches) < 2:
         raise ValueError(
-            f"structures_dir {str(path)!r} must contain at least 2 structure files "
+            f"structures directory {str(path)!r} must contain at least 2 structure files "
             f"(extensions: {extensions}); found {len(matches)}"
         )
 
@@ -388,37 +378,35 @@ def _coerce_structure_items_to_text(data: Any) -> Any:
     return {**data, "structures": coerced}
 
 
-def _resolve_structures_dir_in_data(data: Any, *, extensions: tuple[str, ...] = _SUPPORTED_EXTENSIONS) -> Any:
-    """``mode="before"`` helper: enforce mutex, read ``structures_dir`` into ``structures`` + ``structure_ids``."""
+def _resolve_directory_structures(data: Any, *, extensions: tuple[str, ...] = _SUPPORTED_EXTENSIONS) -> Any:
+    """``mode="before"`` helper: read a directory-path ``structures`` (``str`` / ``Path``) into ``structures`` + ``structure_ids`` (filename stems); a list / ``None`` is left untouched."""
     if not isinstance(data, dict):
         return data
-    has_structures = data.get("structures") is not None
-    has_dir = data.get("structures_dir") is not None
-    if has_structures and has_dir:
-        raise ValueError("Provide exactly one of `structures` or `structures_dir`, not both.")
-    if not has_dir:
+    value = data.get("structures")
+    if not isinstance(value, (str, Path)):  # list / None → nothing to resolve
         return data
     if data.get("structure_ids") is not None:
         raise ValueError(
-            "`structure_ids` may not be combined with `structures_dir`; IDs are derived from filename stems."
+            "`structure_ids` may not be combined with a directory path; IDs are derived from filename stems."
         )
-    structures, ids = _read_structures_dir(data["structures_dir"], extensions=extensions)
-    return {**data, "structures": structures, "structure_ids": ids, "structures_dir": None}
+    structures, ids = _read_structures_dir(str(value), extensions=extensions)
+    return {**data, "structures": structures, "structure_ids": ids}
 
 
 def _validate_resolved_input(
-    structures: list[str] | None,
+    structures: list[Structure | str] | str | Path | None,
     structure_ids: list[str] | None,
     *,
     reject_underscore: bool = False,
     reject_fasta: bool = False,
 ) -> None:
-    """``mode="after"`` helper: require structures, validate IDs, enforce uniform format."""
-    if structures is None:
-        raise ValueError("Provide exactly one of `structures` or `structures_dir`.")
+    """``mode="after"`` helper: require structures (non-list ⇒ none given), validate IDs, enforce uniform format."""
+    if not isinstance(structures, list):
+        raise ValueError("`structures` is required: provide a list of items or a directory path.")
 
-    fasta_count = sum(1 for s in structures if _detect_input_format(s) == "fasta")
-    if 0 < fasta_count < len(structures):
+    texts = [s if isinstance(s, str) else s.structure_pdb for s in structures]
+    fasta_count = sum(1 for s in texts if _detect_input_format(s) == "fasta")
+    if 0 < fasta_count < len(texts):
         raise ValueError("Cannot mix FASTA with PDB/mmCIF inputs in a single call; all inputs must be the same kind.")
     if reject_fasta and fasta_count:
         raise ValueError("FASTA input is not supported here; pass PDB or mmCIF text/files.")
