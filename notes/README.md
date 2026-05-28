@@ -25,6 +25,9 @@ to notes/ when the knowledge benefits the whole team.
 - `testing.md`: Test structure, assertions, markers, naming conventions
 - `tool-environments.md`: standalone env setup, compute deps, GCC/nvcc, caches,
   binaries, `to_device()` protocol
+- `model-taste.md`: expanded model/tool selection guidance for biological
+  design classes, validator choice, model failure modes, and confidence labels
+
 ## Documentation
 
 User-facing documentation reference pages are auto-generated from Python

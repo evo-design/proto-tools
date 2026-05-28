@@ -52,6 +52,10 @@ This tool supplies the loss and gradient signal that gradient-based binder-desig
 
 #### Usage Tips
 
+- **Use this for protein binder objectives, not ligand generation.** The input
+  binder is an amino-acid chain and the returned losses describe a predicted
+  protein-protein interface. For small-molecule compounds, choose
+  chemistry-aware ligand tools instead.
 - **One binder configuration per call; this tool is not an optimization loop.** It evaluates a single binder against the fixed target. Drive it from a binder-design optimizer, or call it repeatedly, to actually design a binder.
 - **`compute_gradient` defaults to `True`.** It runs a forward and backward pass and returns the gradient with respect to the binder logits; set it `False` for forward-only scoring (`gradient=None`). The loss, metrics, and predicted structure are identical in both modes.
 - **`backend` selects the loss set.** `"base"` (the default) uses the upstream ColabDesign losses; `"germinal"` adds the Germinal fork's alpha, bias, framework-contact, and extension losses. `starting_binder_seq` is only valid with `"germinal"`.

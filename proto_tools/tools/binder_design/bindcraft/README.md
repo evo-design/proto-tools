@@ -15,6 +15,11 @@ In the binder-design landscape this is the leading "AF2-hallucination" approach.
 
 **Use cases:**
 
+- **De novo protein binder hallucination.** Use BindCraft when the desired
+  output is a new amino-acid binder against a fixed protein target and the
+  scoring goal depends on interface contacts, interface pTM/PAE, hotspot
+  placement, or complex geometry. This is a better fit than monomer-only
+  hallucination for target-conditioned protein-protein interaction tasks.
 - **One-off sample (smoke test / notebook demo).** Set `number_of_final_designs=1` and `max_trajectories=1` with tiny iteration counts (`soft_iterations=10`, `temporary_iterations=5`, `hard_iterations=2`, `greedy_iterations=2`). Returns a single design (or none) in ~10-30 min on an H100. Good for verifying installation, demos, and sanity-checking a target before investing compute.
 - **Quick scan / methods exploration.** A handful of designs (5-20) with a moderate trajectory cap (50-100) and medium iteration counts. Lets you compare hotspots, length ranges, helicity biases, or filter-override strategies without waiting two days.
 - **Production binder-design campaign.** Upstream defaults: `number_of_final_designs=100`, `max_trajectories=False` (unlimited), full iteration counts (75/45/5/15). Produces enough diverse accepted designs to triage and order for experimental validation.
@@ -24,6 +29,9 @@ In the binder-design landscape this is the leading "AF2-hallucination" approach.
 **When NOT to use BindCraft:**
 - You already have a PDB-bound binder that just needs sequence redesign — use `proteinmpnn-sample` instead.
 - You need an antibody (CDR-only redesign on a fixed framework) — use `alphafold2-binder` with the Germinal backend, or a dedicated Ig-design pipeline.
+- You need to generate a small-molecule ligand or other non-protein compound —
+  use chemistry-aware ligand generation, docking, and ligand-specific scoring
+  tools instead.
 - Your target is very large (>2000 residues) — AF2 multimer memory will become the bottleneck before BindCraft does anything useful; trim the target to its binder-accessible domain first.
 - You just want a backbone, not a sequence — use `rfdiffusion3-design`.
 
