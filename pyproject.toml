@@ -223,6 +223,10 @@ module = [
     "scipy.*",
     "umap.*",
     "hydra.*",
+    # SpliceAI (TensorFlow/Keras model, only installed in the spliceai standalone env)
+    "tensorflow.*",
+    "keras.*",
+    "spliceai.*",
     # Local sibling imports in standalone dirs (resolved at runtime via sys.path)
     "inference.*",
     "malinois_scoring",

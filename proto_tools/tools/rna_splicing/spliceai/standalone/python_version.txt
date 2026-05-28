@@ -1,0 +1,3 @@
+# TensorFlow 2.15 (required for Keras 2 to load SpliceAI's .h5 models) ships
+# wheels for Python 3.9-3.11 only — no 3.12. Pin to 3.11.
+default: 3.11

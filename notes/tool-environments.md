@@ -57,9 +57,23 @@ echo "Installing JAX: ${JAX_SPEC}"
 uv pip install "${JAX_SPEC}"
 ```
 
+### TensorFlow Setup Pattern
+
+There is no centralized TensorFlow recommendation (only PyTorch/JAX), so TF tools install it directly in setup.sh, branching on `DETECTED_COMPUTE_PLATFORM`. See `spliceai` for reference:
+
+```bash
+if [ "${DETECTED_COMPUTE_PLATFORM:-cpu}" = "cuda" ]; then
+    uv pip install "tensorflow[and-cuda]~=2.15.0"
+else
+    uv pip install "tensorflow~=2.15.0"
+fi
+```
+
+Pin `tensorflow~=2.15.0` to keep Keras 2 (Keras 3 in TF &ge;2.16 cannot load older `.h5` models); this forces `python_version.txt` to `3.11` (TF 2.15 has no py3.12 wheels).
+
 ### Tool-Specific Overrides
 
-Tools can override centralized recommendations via env_vars.txt or tool-specific environment variables (e.g., `SPLICE_TRANSFORMER_TORCH_SPEC`, `ALPHAGENOME_JAX_SPEC`).
+Tools can override centralized recommendations via env_vars.txt or tool-specific environment variables (e.g., `SPLICE_TRANSFORMER_TORCH_SPEC`, `ALPHAGENOME_JAX_SPEC`, `SPLICEAI_TF_SPEC`).
 
 ### Pinned-Version Tools
 
