@@ -1,193 +1,48 @@
-<a href="https://bio-pro.mintlify.app/tools/structure-scoring/structure-metrics"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/structure-scoring/structure-metrics"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # Structure Metrics
 
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** Structure Metrics is open source and free for academic and commercial use under an Apache-2.0 license. Please refer to [the license](https://github.com/proto-bio/proto-tools) for full terms.
 
 ## Overview
-Structure Metrics computes structural quality metrics from PDB files, specifically the longest alpha helix length and radius of gyration. These metrics are used to flag structural artifacts such as unrealistically long helices or disordered/extended conformations in predicted protein structures.
+
+Structure Metrics computes coarse geometric and secondary-structure descriptors for a protein structure: secondary-structure percentages (helix, sheet, loop), the length of the longest contiguous alpha helix, and the radius of gyration. The metrics are computed using the [Biotite](https://www.biotite-python.org/) Python library and are appropriate as a fast first-pass filter for catching common structure-prediction artifacts such as unrealistically long helices or extended, non-compact conformations.
 
 ## Background
 
-**What does this tool measure/predict?**
-This tool computes two structural properties from PDB files:
-1. **Longest alpha helix**: The length (in residues) of the longest contiguous [alpha-helical](https://en.wikipedia.org/wiki/Alpha_helix) segment, as determined by secondary structure assignment.
-2. **[Radius of gyration](https://en.wikipedia.org/wiki/Radius_of_gyration)**: A measure of the overall compactness of the protein structure; the root-mean-square distance of all atoms from the structure's center of mass.
+The tool assigns secondary structure using the P-SEA algorithm ([Labesse, Colloc'h, Pothier, and Mornon, 1997](https://doi.org/10.1093/bioinformatics/13.3.291)) implemented in [Biotite](https://www.biotite-python.org/), which classifies each protein residue as alpha helix, beta sheet, or loop from the Cα-atom trace alone using distance and angle patterns. The reported helix, sheet, and loop percentages summarise the overall secondary-structure composition of the structure, while the longest contiguous alpha-helix length is a separate scalar that captures the longest single helix without averaging across the structure.
 
-**Why is this important?**
-Structure prediction tools (ESMFold, AlphaFold2) can produce artifacts, especially for generated or unusual sequences. Two common failure modes are:
-- **Unrealistically long alpha helices**: Some structure predictors "default" to helical conformations for uncertain regions, producing single helices of 50+ residues that are unlikely in real proteins.
-- **Extended/disordered structures**: Proteins that fail to fold properly show high gyration radii, indicating the predicted structure is not compact.
+Radius of gyration is the mass-weighted root-mean-square distance of all atoms from the centre of mass and is a standard scalar measure of overall structural compactness used in small-angle X-ray scattering, polymer physics, and protein structural analysis. For proteins of a given length, compact native folds produce smaller gyration radii than disordered or partially folded conformations, which is what makes the metric useful as an artifact filter for predicted structures.
 
-These metrics provide fast, quantitative filters to catch these artifacts before more expensive downstream analyses.
+Both metrics are useful as inexpensive sanity checks on structures produced by sequence-based predictors such as ESMFold, AlphaFold, Chai, Boltz, and Protenix. Predictors can default to extended helical bundles for low-confidence regions, and failed folds frequently appear as extended conformations with elevated gyration radii. The Biotite Python library ([Kunzmann et al., 2023](https://doi.org/10.1186/s12859-023-05345-6)) provides the underlying secondary-structure annotation and gyration-radius implementations used by this tool.
 
-**Scientific foundation:**
-- **Secondary structure assignment** uses the [DSSP](https://en.wikipedia.org/wiki/DSSP_(hydrogen_bond_estimation_algorithm))-like algorithm implemented in Biotite, which assigns helix, sheet, and coil states based on backbone geometry and hydrogen bonding patterns.
-- **Radius of gyration** is a standard biophysical metric used in [small-angle X-ray scattering](https://en.wikipedia.org/wiki/Small-angle_X-ray_scattering) (SAXS) and polymer physics. For globular proteins, it scales approximately as R_g ∝ N^(0.4) where N is the number of residues.
+### Learning Resources
+
+- [Biotite documentation](https://www.biotite-python.org/) (TU Darmstadt). API reference for the secondary-structure annotation and gyration-radius computations used by this tool.
 
 ## Tools
 
 ### Structure Quality Metrics (`structure-metrics`)
 
-Compute structural quality metrics from PDB files.
+Computes five quality metrics for each input structure: `helix_pct`, `sheet_pct`, `loop_pct` (secondary-structure composition on the 0 to 100 scale), `longest_alpha_helix` (residue count of the longest contiguous alpha-helical segment), and `gyration_radius` (radius of gyration in Å). Inputs are passed as a list of structures and results are returned in the same order.
 
-Computes secondary structure percentages, longest alpha helix, and radius of
-gyration for each input structure. Used to filter out disordered or artifactual
-predicted structures.
+#### Applications
 
-## How It Works
+This tool is appropriate as a fast first-pass filter for batch screening of predicted protein structures. Representative applications include flagging predicted structures with unrealistically long alpha helices that often arise as artifacts on low-confidence regions, identifying extended or disordered conformations that fail to fold compactly, summarising the secondary-structure composition of a designed protein, and ranking generated structures by structural plausibility before more expensive downstream analyses.
 
-**Method overview:**
-The tool reads each PDB file using Biotite, assigns secondary structure elements using `annotate_sse()`, identifies the longest contiguous alpha-helical run, and computes the radius of gyration using `gyration_radius()`. Both metrics are computed independently for each input PDB.
+#### Usage Tips
 
-**Key assumptions:**
-- Input files are valid PDB format with atomic coordinates
-- Only the first model in multi-model PDB files is analyzed
-- Secondary structure assignment assumes standard protein backbone geometry
+- **Inputs accept a list of `Structure` objects, file paths, or raw PDB or mmCIF content strings.** A single bare input is automatically wrapped in a list. Each item is coerced to a `Structure` before analysis.
+- **All five metrics are computed over every chain of the input structure.** There is no per-chain breakdown at the tool level. To analyse a specific chain, extract that chain into its own `Structure` using `Structure.select_chain()` before passing it in.
+- **Filter thresholds depend on the protein family.** A 50-residue alpha helix is a strong artifact signal for a typical globular protein but is normal for coiled-coil and fibrous proteins. A gyration radius above 45 Å indicates failed folding for a 1000-residue protein but is expected for naturally elongated proteins. Calibrate thresholds against known structures of the protein family being screened.
+- **The `secondary_structure_percentages` summary and `longest_alpha_helix` use the same P-SEA assignment.** The helix percentage and longest contiguous helix length are derived from the same per-residue annotation, so a structure with `helix_pct=80` and `longest_alpha_helix=200` indicates that nearly the entire structure is one continuous helix.
 
-**Limitations:**
-- Does not assess side-chain quality, clashes, or hydrogen bonding
-- Thresholds are calibrated for Cas9-sized proteins (~1000-1400 residues); different protein families may need different thresholds
-- Cannot distinguish genuine long helices (e.g., coiled-coils) from prediction artifacts without additional context
-- Does not handle non-standard residues or nucleic acids
+## Toolkit Notes
 
-**Computational requirements:**
-- **Hardware:** CPU only; no GPU required
-- **Runtime:** ~1-2 seconds per PDB file
-- **Scalability:** Linear in number of PDB files; I/O bound for large batches
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-## Important Parameters
+These apply to every Structure Metrics tool in this toolkit (`structure-metrics`).
 
-**Input parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `pdb_paths` | `List[str]` | *Required* | List of PDB file paths to compute structure metrics for |
-
-**Configuration parameters:**
-
-No configuration parameters. Both metrics are computed deterministically from the input structure.
-
----
-
-**Output specification:**
-
-```python
-# Return type: StructureMetricsOutput
-{
-    "metrics": [
-        {
-            "pdb_path": str,              # Path to the PDB file analyzed
-            "longest_alpha_helix": int,   # Length in residues
-            "gyration_radius": float,     # Radius of gyration in Angstroms
-        },
-        ...
-    ]
-}
-```
-
-**Key output fields:**
-
-| Field | Type | Units | Interpretation |
-|-------|------|-------|----------------|
-| `pdb_path` | `str` |: | Path to the analyzed PDB file |
-| `longest_alpha_helix` | `int` | residues | Length of the longest contiguous alpha helix |
-| `gyration_radius` | `float` | Angstroms | Radius of gyration; lower = more compact |
-
-**Supported export formats:** `csv`, `json`
-
-**Thresholds & decision boundaries (calibrated for Cas9-sized proteins, ~1000-1400 residues):**
-- **Longest alpha helix:**
-  - **Normal (< 50 residues)**: Typical for globular proteins
-  - **Artifact (>= 50 residues)**: Likely a structure prediction artifact; real alpha helices rarely exceed 40-50 residues in globular proteins. Used as threshold in the Cas9 pipeline (`LONGEST_ALPHA_THRESHOLD = 50`).
-- **Radius of gyration:**
-  - **Compact (< 30 A)**: Well-folded, compact structure
-  - **Normal (30-45 A)**: Typical for large multi-domain proteins like Cas9
-  - **Disordered (>= 45 A)**: Extended or disordered conformation; likely a failed prediction. Used as threshold in the Cas9 pipeline (`GYRATION_RADIUS_THRESHOLD = 45.0`).
-
-## Best Practices & Gotchas
-
-**Common mistakes:**
-1. **Applying Cas9 thresholds to small proteins**: The default thresholds (helix > 50, gyration > 45 A) are calibrated for ~1000-1400 residue proteins. Small proteins naturally have lower gyration radii, and a 50-residue helix in a 100-residue protein is far more suspicious than in a 1400-residue protein.
-2. **Treating these metrics as definitive quality measures**: These are coarse filters. A structure passing both checks may still have local quality issues. Use pLDDT or MolProbity for detailed assessment.
-3. **Ignoring known structural features**: Coiled-coil proteins naturally have very long helices. Fibrous proteins have high gyration radii. Context matters.
-
-**Tips for optimal results:**
-- Use as an early, fast filter in pipelines before expensive analyses (molecular dynamics, docking)
-- Combine with pLDDT-based filtering for more robust artifact detection
-- For non-Cas9 proteins, calibrate thresholds based on known structures of the protein family
-
-**Edge cases to watch for:**
-- PDB files with no protein atoms (e.g., nucleic acid-only structures) will fail
-- Multi-chain PDB files: metrics are computed over all chains combined
-- Very small proteins (<50 residues) may have misleading gyration radius values
-
-## References
-
-**Primary publication:**
-- Kunzmann, P., Anter, J.M., Bergner, A. & Krivak, R. (2023). "Biotite: new tools for a versatile Python bioinformatics library." *BMC Bioinformatics* 24:236. [DOI: 10.1186/s12859-023-05345-6](https://doi.org/10.1186/s12859-023-05345-6)
-- Summary: Describes the Biotite Python library used for secondary structure assignment (`annotate_sse()`) and gyration radius computation (`gyration_radius()`).
-
-**Implementation:**
-- Biotite documentation: [https://www.biotite-python.org/](https://www.biotite-python.org/)
-
-## Quick Start Examples
-
-**Example 1: Analyze a single PDB file**
-```python
-from proto_tools.tools.structure_scoring.structure_metrics import (
-    run_structure_metrics, StructureMetricsInput, StructureMetricsConfig
-)
-
-inputs = StructureMetricsInput(pdb_paths=["/path/to/predicted_structure.pdb"])
-config = StructureMetricsConfig()
-
-result = run_structure_metrics(inputs, config)
-
-m = result.metrics[0]
-print(f"Longest alpha helix: {m.longest_alpha_helix} residues")
-print(f"Radius of gyration: {m.gyration_radius:.1f} A")
-```
-
-**Example 2: Batch filtering in a pipeline**
-```python
-from proto_tools.tools.structure_scoring.structure_metrics import (
-    run_structure_metrics, StructureMetricsInput, StructureMetricsConfig
-)
-
-LONGEST_ALPHA_THRESHOLD = 50
-GYRATION_RADIUS_THRESHOLD = 45.0
-
-pdb_files = ["struct_1.pdb", "struct_2.pdb", "struct_3.pdb"]
-inputs = StructureMetricsInput(pdb_paths=pdb_files)
-config = StructureMetricsConfig()
-
-result = run_structure_metrics(inputs, config)
-
-for m in result.metrics:
-    reasons = []
-    if m.longest_alpha_helix >= LONGEST_ALPHA_THRESHOLD:
-        reasons.append(f"long helix ({m.longest_alpha_helix} residues)")
-    if m.gyration_radius >= GYRATION_RADIUS_THRESHOLD:
-        reasons.append(f"high Rg ({m.gyration_radius:.1f} A)")
-
-    if reasons:
-        print(f"{m.pdb_path}: FILTERED; {', '.join(reasons)}")
-    else:
-        print(f"{m.pdb_path}: PASS")
-```
-
-## Related Tools
-
-**Tools often used together:**
-- **`esmfold`**: Predict structures from protein sequences, then analyze with Structure Metrics
-- **`prodigal`**: Find ORFs in generated DNA before structure prediction
-
-**Alternative tools (similar function):**
-- **pLDDT filtering**: Per-residue confidence from AlphaFold2/ESMFold; more granular but predictor-specific
-- **MolProbity**: Comprehensive structure validation; much more detailed but slower
-
----
-**Maintenance notes:**
-- Last updated: 2025-06-01
+- **Outputs are returned as typed metric objects.** Each `StructureQualityMetrics` entry carries `longest_alpha_helix` (integer residue count), `gyration_radius` (Å), `helix_pct`, `sheet_pct`, and `loop_pct` (all on the 0 to 100 scale). Results can be exported to CSV or JSON through the standard export method.
+- **The tool implementation runs entirely in-process and uses CPU only.** Computation is performed in pure Python through Biotite, with no standalone environment or separate program invoked. Per-structure runtime is sub-second for typical protein sizes and scales linearly with the number of input structures.
