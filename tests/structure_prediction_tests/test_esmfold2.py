@@ -5,8 +5,6 @@ Tests for ESMFold2 all-atom complex structure prediction.
 
 from __future__ import annotations
 
-from unittest.mock import Mock
-
 import pytest
 from pydantic import ValidationError
 
@@ -19,10 +17,7 @@ from proto_tools.tools.structure_prediction.esmfold2 import (
     ESMFold2Output,
     run_esmfold2,
 )
-from proto_tools.tools.structure_prediction.esmfold2.esmfold2 import (
-    _chain_to_payload,
-    _rename_output_chains_to_input_ids,
-)
+from proto_tools.tools.structure_prediction.esmfold2.esmfold2 import _chain_to_payload
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 
 # Ubiquitin (PDB 1UBQ), 76 aa: small, well-folded benchmark protein.
@@ -45,34 +40,13 @@ def test_esmfold2_config_forbids_msa_with_fast_variant():
 # ── Serialization tests (no GPU) ─────────────────────────────────────────────
 
 
-def test_esmfold2_payload_preserves_chain_ids_and_positional_fallbacks():
-    """ESMFold2 payloads should expose A/B-style IDs for downstream chain selection."""
-    explicit = Chain(id="T", sequence=_HELIX_A, entity_type="protein")
-    fallback = Chain(sequence=_HELIX_B, entity_type="protein")
-    ligand = Fragment(id="L", ccd_code="ATP")
+def test_esmfold2_chain_to_payload_stamps_resolved_id():
+    """The worker payload carries the resolved chain ID plus the chain's content."""
+    protein = _chain_to_payload(Chain(sequence=_HELIX_A, entity_type="protein"), "A")
+    assert protein == {"id": "A", "entity_type": "protein", "sequence": _HELIX_A}
 
-    assert _chain_to_payload(explicit, 0)["id"] == "T"
-    assert _chain_to_payload(fallback, 1)["id"] == "B"
-    assert _chain_to_payload(ligand, 2)["id"] == "L"
-
-
-def test_esmfold2_output_chain_ids_are_normalized_to_payload_ids():
-    """Returned ESMFold2 structures should be selectable using input payload chain IDs."""
-    structure = Mock()
-    renamed = Mock()
-    structure.get_chain_ids.return_value = ["1", "2"]
-    structure.with_renamed_chains.return_value = renamed
-
-    result = _rename_output_chains_to_input_ids(
-        structure,
-        [
-            {"id": "A", "entity_type": "protein"},
-            {"id": "B", "entity_type": "protein"},
-        ],
-    )
-
-    assert result is renamed
-    structure.with_renamed_chains.assert_called_once_with({"1": "A", "2": "B"})
+    ligand = _chain_to_payload(Fragment(ccd_code="ATP"), "L")
+    assert ligand == {"id": "L", "entity_type": "ligand", "ccd_code": "ATP"}
 
 
 # ── GPU integration tests ───────────────────────────────────────────────────

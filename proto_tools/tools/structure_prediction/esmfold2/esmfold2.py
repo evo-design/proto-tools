@@ -8,12 +8,13 @@ from typing import Any, ClassVar, Literal
 
 from pydantic import model_validator
 
-from proto_tools.entities.complex import chain_label
 from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
+    normalize_output_chain_ids,
+    resolve_chain_ids,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance
@@ -319,8 +320,9 @@ def _run_esmfold2_on_complex(
         logger.info("Using local GPU for ESMFold2 structure prediction...")
 
     # Serialize the complex into a JSON-safe payload for the worker.
+    chain_ids = resolve_chain_ids(sp_complex.chains)
     chains_payload: list[dict[str, Any]] = [
-        _chain_to_payload(chain, chain_idx) for chain_idx, chain in enumerate(sp_complex.chains)
+        _chain_to_payload(chain, chain_id) for chain, chain_id in zip(sp_complex.chains, chain_ids, strict=True)
     ]
 
     # MSAs are only meaningful for the MSA-capable checkpoint.
@@ -374,50 +376,27 @@ def _run_esmfold2_on_complex(
         metrics=ESMFold2Metrics(**metrics_dict),
         source="esmfold2-prediction",
     )
-    return _rename_output_chains_to_input_ids(structure, chains_payload)
+    return normalize_output_chain_ids(structure, sp_complex.chains)
 
 
-def _rename_output_chains_to_input_ids(structure: Structure, chains_payload: list[dict[str, Any]]) -> Structure:
-    """Normalize returned ESMFold2 polymer chain IDs to the input chain IDs.
-
-    Upstream ESMFold2 may emit positional or entity-derived chain names that do
-    not match the IDs supplied in the input payload. Downstream design scripts
-    routinely select target/binder chains by those payload IDs, so remap output
-    polymer chains by order when the counts match.
-    """
-    expected_ids = [str(chain["id"]) for chain in chains_payload if chain.get("entity_type") != "ligand"]
-    observed_ids = structure.get_chain_ids()
-    if observed_ids == expected_ids:
-        return structure
-    if len(observed_ids) != len(expected_ids):
-        logger.warning(
-            "ESMFold2 returned %d polymer chain(s), but input had %d; leaving chain IDs unchanged.",
-            len(observed_ids),
-            len(expected_ids),
-        )
-        return structure
-    return structure.with_renamed_chains(dict(zip(observed_ids, expected_ids, strict=True)))
-
-
-def _chain_to_payload(chain: Any, chain_idx: int) -> dict[str, Any]:
+def _chain_to_payload(chain: Any, chain_id: str) -> dict[str, Any]:
     """Serialize a Complex chain (Chain or Fragment) into a JSON-safe dict for the worker.
 
-    Preserve explicit chain IDs and otherwise use Complex positional fallback
-    IDs (A, B, ..., AA) so returned structures can be selected by the same
-    chain labels used by other structure predictors.
+    ``chain_id`` is the resolved chain label (see ``resolve_chain_ids``) the
+    worker uses for the upstream input and that downstream selection keys on.
     """
     from proto_tools.entities.ligands import Fragment
 
     if isinstance(chain, Fragment):
         # Prefer CCD when available; fall back to SMILES.
-        payload: dict[str, Any] = {"entity_type": "ligand", "id": chain.id or chain_label(chain_idx)}
+        payload: dict[str, Any] = {"entity_type": "ligand", "id": chain_id}
         if chain.ccd_code:
             payload["ccd_code"] = chain.ccd_code
         else:
             payload["smiles"] = chain.smiles
         return payload
     payload = {
-        "id": chain.id or chain_label(chain_idx),
+        "id": chain_id,
         "entity_type": chain.entity_type,
         "sequence": chain.sequence,
     }

@@ -7,7 +7,6 @@ from typing import Any, ClassVar
 
 from pydantic import model_validator
 
-from proto_tools.entities.complex import chain_label
 from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures import BFactorType, SingleChainSelection, Structure
 from proto_tools.tools.structure_prediction.boltz2.boltz2 import Boltz2Config
@@ -15,6 +14,8 @@ from proto_tools.tools.structure_prediction.boltz2.helpers import build_chain_ms
 from proto_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionInput,
     StructurePredictionOutput,
+    normalize_output_chain_ids,
+    resolve_chain_ids,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, InputField, ToolInstance
@@ -28,8 +29,8 @@ _AFFINITY_MAX_HEAVY_ATOMS = 128
 
 def _resolve_binder_chain_id(comp: Any, binder_chain: SingleChainSelection | None, index: int) -> str:
     """Resolve and validate one complex's binder ligand chain ID."""
-    chain_ids = [chain_label(j) for j in range(len(comp.chains))]
-    ligand_ids = [chain_label(j) for j, chain in enumerate(comp.chains) if isinstance(chain, Fragment)]
+    chain_ids = resolve_chain_ids(comp.chains)
+    ligand_ids = [cid for cid, chain in zip(chain_ids, comp.chains, strict=True) if isinstance(chain, Fragment)]
     if not any(not isinstance(chain, Fragment) and chain.entity_type == "protein" for chain in comp.chains):
         raise ValueError(
             f"Complex {index} must contain at least one protein chain (the affinity target); "
@@ -302,9 +303,10 @@ def run_boltz2_affinity_on_complex(
         affinity_raw = output_data["affinity_metrics"]
 
     metrics_dict: dict[str, Any] = {key: float(value) for key, value in affinity_raw.items()}
-    return Structure(
+    structure = Structure(
         structure=cif_output,
         b_factor_type=BFactorType.PLDDT,
         metrics=Boltz2AffinityMetrics(**metrics_dict),
         source="boltz2-affinity",
     )
+    return normalize_output_chain_ids(structure, sp_complex.chains)

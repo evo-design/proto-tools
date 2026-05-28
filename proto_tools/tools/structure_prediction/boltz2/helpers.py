@@ -11,9 +11,8 @@ import warnings
 from logging import getLogger
 from typing import Any
 
-from proto_tools.entities.complex import chain_label
 from proto_tools.entities.ligands import Fragment
-from proto_tools.tools.structure_prediction.shared_data_models import Chain, Complex
+from proto_tools.tools.structure_prediction.shared_data_models import Chain, Complex, resolve_chain_ids
 from proto_tools.utils import extract_msa_sequences
 
 logger = getLogger(__name__)
@@ -97,9 +96,10 @@ def complex_to_yaml(
 
     yaml_entries = []
 
+    chain_ids = resolve_chain_ids(chains)
     for i, chain in enumerate(chains):
         e_type = chain.entity_type
-        entry: dict[str, Any] = {"id": chain_label(i)}
+        entry: dict[str, Any] = {"id": chain_ids[i]}
 
         if isinstance(chain, Fragment):
             # Prefer CCD code: Boltz2 uses internal CCD parameterization,
@@ -111,7 +111,7 @@ def complex_to_yaml(
         else:
             entry["sequence"] = chain.sequence
             if e_type == "protein":
-                chain_id = chain_label(i)
+                chain_id = chain_ids[i]
                 entry["msa"] = chain_msa_paths[chain_id] if chain_msa_paths and chain_id in chain_msa_paths else "empty"
 
         yaml_entries.append({e_type: entry})

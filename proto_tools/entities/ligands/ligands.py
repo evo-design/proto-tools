@@ -42,6 +42,7 @@ class Fragment(BaseModel):
 
     id: str | None = Field(
         default=None,
+        min_length=1,
         description="Optional identifier (free-form; e.g. a chain letter for in-complex use).",
     )
     smiles: str | None = Field(default=None, description="SMILES string")

@@ -49,7 +49,7 @@ def split_into_safe_batches(complexes: list[dict[str, Any]], max_residues: int) 
     return batches
 
 
-def relabel_chains(pdb_str: str, chain_lengths: list[int]) -> str:
+def relabel_chains(pdb_str: str, chain_lengths: list[int], chain_ids: list[str] | None = None) -> str:
     """Relabel single-chain PDB output into multiple chains (A, B, C, ...).
 
     ESMFold predicts multi-chain complexes by linking chains together, producing
@@ -60,10 +60,19 @@ def relabel_chains(pdb_str: str, chain_lengths: list[int]) -> str:
         pdb_str (str): PDB file content as a string (assumed to be a single chain)
         chain_lengths (list[int]): List of residue counts for each desired chain.
                       Total must match the number of residues in pdb_str.
+        chain_ids (list[str] | None): Per-chain labels (see ``resolve_chain_ids``)
+                      so explicit input IDs are preserved. ``None`` falls back to
+                      positional ``chain_label(idx)``. PDB is single-character, so
+                      multi-character IDs are not supported here.
 
     Returns:
         str: PDB content with chains relabeled and written back to string format
     """
+    if chain_ids is not None:
+        multi_char = [cid for cid in chain_ids if len(cid) != 1]
+        if multi_char:
+            raise ValueError(f"PDB format requires single-character chain IDs; got {multi_char}.")
+
     from Bio import PDB
 
     parser = PDB.PDBParser(QUIET=True)  # type: ignore[attr-defined, no-untyped-call]
@@ -77,7 +86,8 @@ def relabel_chains(pdb_str: str, chain_lengths: list[int]) -> str:
     start = 0
 
     for idx, length in enumerate(chain_lengths):
-        new_chain = PDB.Chain.Chain(chain_label(idx))  # type: ignore[no-untyped-call]
+        label = chain_ids[idx] if chain_ids is not None else chain_label(idx)
+        new_chain = PDB.Chain.Chain(label)  # type: ignore[no-untyped-call]
         for residue in all_residues[start : start + length]:
             new_chain.add(residue)
         new_chains.append(new_chain)
