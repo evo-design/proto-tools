@@ -28,6 +28,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
+    normalize_output_chain_ids,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance, extract_msa_sequences
@@ -436,9 +437,10 @@ def run_chai1_on_complex(
 
         cif_output = result["cif_output"]
 
-    return Structure(
+    structure = Structure(
         structure=cif_output,
         b_factor_type=BFactorType.PLDDT,
         metrics=Chai1Metrics(**result["metrics"]),
         source="chai1-prediction",
     )
+    return normalize_output_chain_ids(structure, comp.chains)

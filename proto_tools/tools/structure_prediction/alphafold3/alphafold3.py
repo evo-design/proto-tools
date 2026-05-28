@@ -25,7 +25,8 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
-    chain_label,
+    normalize_output_chain_ids,
+    resolve_chain_ids,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance
@@ -342,14 +343,13 @@ def run_alphafold3(
                 pdb_path = output_data["structure_pdb"]
                 metrics = AlphaFold3Metrics(**output_data["metrics"])
 
-                output_structures.append(
-                    Structure.from_file(
-                        pdb_path,
-                        b_factor_type=BFactorType.PLDDT,
-                        metrics=metrics,
-                        source="alphafold3-prediction",
-                    )
+                structure = Structure.from_file(
+                    pdb_path,
+                    b_factor_type=BFactorType.PLDDT,
+                    metrics=metrics,
+                    source="alphafold3-prediction",
                 )
+                output_structures.append(normalize_output_chain_ids(structure, comp.chains))
 
     return AlphaFold3Output(
         structures=output_structures,
@@ -439,6 +439,7 @@ def _create_input_json_from_complex(
         "sequences": [],
     }
 
+    chain_ids = resolve_chain_ids(sp_complex.chains)
     for idx, chain in enumerate(sp_complex.chains):
         mol_type = chain.entity_type  # Currently, we use the same conventions as AlphaFold3.
 
@@ -453,7 +454,7 @@ def _create_input_json_from_complex(
                 )
             sequence_entry = {
                 "ligand": {
-                    "id": chain_label(idx),
+                    "id": chain_ids[idx],
                     "ccdCodes": [ccd_code],
                 }
             }
@@ -466,7 +467,7 @@ def _create_input_json_from_complex(
             # Ignore MSA fields for DNA and RNA.
             sequence_entry = {
                 mol_type: {
-                    "id": chain_label(idx),
+                    "id": chain_ids[idx],
                     "sequence": sequence,
                 }
             }
@@ -478,7 +479,7 @@ def _create_input_json_from_complex(
             # has run to populate them.
             sequence_entry = {
                 mol_type: {  # type: ignore[dict-item]
-                    "id": chain_label(idx),
+                    "id": chain_ids[idx],
                     "sequence": sequence,
                     "pairedMsa": "",
                     "unpairedMsa": "",

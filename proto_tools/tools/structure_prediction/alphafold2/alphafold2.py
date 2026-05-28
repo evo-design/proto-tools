@@ -15,6 +15,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
+    normalize_output_chain_ids,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -339,15 +340,15 @@ def run_alphafold2(
             pae=output_data.get("pae"),
         )
 
-        structure_outputs.append(
-            Structure(
-                structure=output_data["pdb"],
-                # ColabDesign's save_pdb writes B-factors as 100 * plddt (0-100 scale).
-                b_factor_type=BFactorType.PLDDT,
-                metrics=metrics,
-                source="alphafold2-prediction",
-            )
+        comp = inputs.complexes[complex_data["complex_idx"]]
+        structure = Structure(
+            structure=output_data["pdb"],
+            # ColabDesign's save_pdb writes B-factors as 100 * plddt (0-100 scale).
+            b_factor_type=BFactorType.PLDDT,
+            metrics=metrics,
+            source="alphafold2-prediction",
         )
+        structure_outputs.append(normalize_output_chain_ids(structure, comp.chains))
 
     return AlphaFold2Output(
         structures=structure_outputs,

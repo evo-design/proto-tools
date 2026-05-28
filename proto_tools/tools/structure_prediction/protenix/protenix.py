@@ -23,6 +23,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
+    normalize_output_chain_ids,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance
@@ -475,7 +476,7 @@ def run_protenix(
 
     # Parse results for each complex
     results = []
-    for _i, job_result in enumerate(output_data["results"]):
+    for comp, job_result in zip(inputs.complexes, output_data["results"], strict=True):
         raw_metrics = job_result.get("metrics", {})
 
         def _maybe_float(key: str, scale: float = 1.0, raw: dict[str, Any] = raw_metrics) -> float | None:
@@ -501,14 +502,13 @@ def run_protenix(
             has_clash=raw_metrics.get("has_clash"),
         )
 
-        results.append(
-            Structure(
-                structure=job_result["structure_cif_output"],
-                b_factor_type=BFactorType.PLDDT,
-                metrics=metrics,
-                source="protenix-prediction",
-            )
+        structure = Structure(
+            structure=job_result["structure_cif_output"],
+            b_factor_type=BFactorType.PLDDT,
+            metrics=metrics,
+            source="protenix-prediction",
         )
+        results.append(normalize_output_chain_ids(structure, comp.chains))
 
     return ProtenixOutput(structures=results)
 

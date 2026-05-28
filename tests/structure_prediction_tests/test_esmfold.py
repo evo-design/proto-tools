@@ -188,3 +188,11 @@ def test_esmfold_benchmark(request):
     assert len(result.structures) == 10
     for structure in result.structures:
         assert is_valid_structure(structure.structure_cif)
+
+
+def test_relabel_chains_rejects_multi_char_ids():
+    """PDB chain IDs are single-character; multi-char IDs must fail fast (no GPU)."""
+    from proto_tools.tools.structure_prediction.esmfold.helpers import relabel_chains
+
+    with pytest.raises(ValueError, match="single-character"):
+        relabel_chains("", [1], chain_ids=["AA"])

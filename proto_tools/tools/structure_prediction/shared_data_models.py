@@ -1,10 +1,14 @@
 """proto_tools/tools/structure_prediction/shared_data_models.py.
 
-Shared data models (configs and outputs) for structure prediction tools.
+Shared data models (configs, outputs) and helpers for structure prediction tools.
+
+Chain-ID convention (see ``resolve_chain_ids`` / ``normalize_output_chain_ids``):
+a predicted structure's chain IDs match the input ``Complex`` — explicit ``id``
+when set, else positional ``chain_label(i)``; PDB tools are single-character only.
 """
 
 import logging
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -15,6 +19,7 @@ from proto_tools.entities.complex import Chain as Chain
 from proto_tools.entities.complex import ChainModification as ChainModification
 from proto_tools.entities.complex import Complex as Complex
 from proto_tools.entities.complex import chain_label as chain_label
+from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
     ColabfoldSearchConfig,
@@ -425,3 +430,57 @@ def _preprocess_structure_prediction_msas(
                 logger.warning(f"No homologs found for {result.sequence_id}")
 
     return inputs.model_copy(update={"msas": msas}) if msas else inputs
+
+
+def resolve_chain_ids(chains: Sequence[Chain | Fragment]) -> list[str]:
+    """Per-chain IDs in order: explicit ``chain.id`` when set, else ``chain_label(i)``.
+
+    The single source of truth for the chain IDs predictors send to their worker
+    and select on, guaranteeing each is unique. A ligand whose id collides with
+    another chain — e.g. ``Complex.from_structure`` keys a bound ligand to its
+    polymer's chain id — is reassigned the next free positional label that no
+    other chain claims. Duplicate *polymer* ids are a caller error and raise.
+    """
+    preferred = [chain.id or chain_label(idx) for idx, chain in enumerate(chains)]
+    reserved = set(preferred)  # every id some chain wants; never hand these out as a fallback
+    used: set[str] = set()
+    ids: list[str] = []
+    for chain, preferred_id in zip(chains, preferred, strict=True):
+        cid = preferred_id
+        if cid in used:
+            if chain.entity_type != "ligand":
+                raise ValueError(
+                    f"complex has duplicate chain ID {cid!r} (an explicit 'id' collides with another "
+                    "chain's id or positional A/B/... label); give each chain a distinct 'id'."
+                )
+            free = 0
+            while chain_label(free) in reserved or chain_label(free) in used:
+                free += 1
+            cid = chain_label(free)
+        used.add(cid)
+        ids.append(cid)
+    return ids
+
+
+def normalize_output_chain_ids(structure: Structure, chains: Sequence[Chain | Fragment]) -> Structure:
+    """Remap a predicted structure's polymer chain IDs to ``resolve_chain_ids(chains)``.
+
+    Predictors may emit positional or entity-derived names that differ from the
+    IDs we sent. Remap output polymer chains by order when the counts match;
+    ligand-only chains are excluded on both sides (mirrors
+    :meth:`Structure.get_chain_ids`). No-op when already aligned or on count mismatch.
+    """
+    expected_ids = [
+        cid for chain, cid in zip(chains, resolve_chain_ids(chains), strict=True) if chain.entity_type != "ligand"
+    ]
+    observed_ids = structure.get_chain_ids()
+    if observed_ids == expected_ids:
+        return structure
+    if len(observed_ids) != len(expected_ids):
+        logger.warning(
+            "structure prediction returned %d polymer chain(s) but input had %d; leaving chain IDs unchanged.",
+            len(observed_ids),
+            len(expected_ids),
+        )
+        return structure
+    return structure.with_renamed_chains(dict(zip(observed_ids, expected_ids, strict=True)))

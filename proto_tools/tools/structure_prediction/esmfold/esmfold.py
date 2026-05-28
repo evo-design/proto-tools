@@ -31,6 +31,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
+    resolve_chain_ids,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -583,8 +584,9 @@ def run_esmfold(
     # Post-process: relabel chains and convert to CIF
     structure_outputs = []
     for result, metadata in zip(all_results, prepared_complexes, strict=False):
-        # Relabel chains (A, B, C, ...)
-        pdb_output = _relabel_chains(result["pdb"], metadata["seq_lengths"])
+        # Relabel chains using the input chain IDs (explicit id, else positional A/B/C).
+        comp = inputs.complexes[metadata["complex_idx"]]
+        pdb_output = _relabel_chains(result["pdb"], metadata["seq_lengths"], chain_ids=resolve_chain_ids(comp.chains))
 
         structure_outputs.append(
             Structure(

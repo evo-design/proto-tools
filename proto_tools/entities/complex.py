@@ -166,6 +166,7 @@ class Chain(BaseModel):
 
     id: str | None = Field(
         default=None,
+        min_length=1,
         description="Optional chain identifier; None when identifiers are assigned positionally.",
     )
     sequence: str = Field(description="Sequence of the chain (protein, DNA, RNA, or ligand SMILES)")

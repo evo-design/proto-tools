@@ -23,6 +23,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
+    normalize_output_chain_ids,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance
@@ -432,9 +433,10 @@ def run_boltz2_on_complex(
         if metric in formatted_metrics:
             metrics_dict[metric] = float(formatted_metrics[metric])
 
-    return Structure(
+    structure = Structure(
         structure=cif_output,
         b_factor_type=BFactorType.PLDDT,
         metrics=Boltz2Metrics(**metrics_dict),
         source="boltz2-prediction",
     )
+    return normalize_output_chain_ids(structure, sp_complex.chains)
