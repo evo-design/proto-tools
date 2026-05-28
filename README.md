@@ -166,6 +166,7 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 ├── <a href="proto_tools/tools/structure_prediction/boltz2/">boltz2/</a>
 ├── <a href="proto_tools/tools/structure_prediction/chai1/">chai1/</a>
 ├── <a href="proto_tools/tools/structure_prediction/esmfold/">esmfold/</a>
+├── <a href="proto_tools/tools/structure_prediction/esmfold2/">esmfold2/</a>
 ├── <a href="proto_tools/tools/structure_prediction/protenix/">protenix/</a>
 └── <a href="proto_tools/tools/structure_prediction/viennarna/">viennarna/</a>
 <a href="proto_tools/tools/structure_scoring/">structure_scoring/</a>              # Structure quality scoring

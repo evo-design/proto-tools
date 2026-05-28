@@ -26,6 +26,9 @@ from proto_tools.tools.structure_prediction import (
     Chai1Input,
     Chai1Output,
     Complex,
+    ESMFold2Config,
+    ESMFold2Input,
+    ESMFold2Output,
     ESMFoldConfig,
     ESMFoldInput,
     ESMFoldOutput,
@@ -38,6 +41,7 @@ from proto_tools.tools.structure_prediction import (
     run_boltz2,
     run_chai1,
     run_esmfold,
+    run_esmfold2,
     run_protenix,
 )
 from proto_tools.utils.standalone_helpers_source.standalone_helpers import resolve_weights_dir
@@ -55,6 +59,7 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _STRUCTURE_PREDICTORS = {
     "esmfold": (run_esmfold, ESMFoldInput, ESMFoldConfig, ESMFoldOutput),
+    "esmfold2": (run_esmfold2, ESMFold2Input, ESMFold2Config, ESMFold2Output),
     "alphafold2": (run_alphafold2, AlphaFold2Input, AlphaFold2Config, AlphaFold2Output),
     "alphafold3": (run_alphafold3, AlphaFold3Input, AlphaFold3Config, AlphaFold3Output),
     "chai1": (run_chai1, Chai1Input, Chai1Config, Chai1Output),
@@ -319,7 +324,11 @@ def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
 
     # Create config with MSA settings if supported
     if _supports_msa(config_class):
-        config = config_class(use_msa=use_msa, verbose=True)
+        # ESMFold2 ships two checkpoints; only the non-Fast one accepts MSA conditioning.
+        config_kwargs: dict = {"use_msa": use_msa, "verbose": True}
+        if predictor_name == "esmfold2" and use_msa:
+            config_kwargs["model_checkpoint"] = "esmfold2"
+        config = config_class(**config_kwargs)
 
         if use_msa and msa_search_mode is not None:
             from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
