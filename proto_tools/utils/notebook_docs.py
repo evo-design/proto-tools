@@ -38,11 +38,21 @@ def _model_table(doc: ModelDoc, kind: str) -> str:
     """Render a ``ModelDoc`` as a markdown table for notebook display."""
     if not doc.fields:
         return f"*No {kind} fields.*"
+
+    def esc(text: str) -> str:
+        """Escape ``|`` so a value stays inside one markdown table cell."""
+        return text.replace("|", "\\|")
+
     rows: list[str] = []
     for f in doc.fields:
-        default = "required" if f.required else (f"`{f.default!r}`" if f.default is not None else "`None`")
-        desc = (f.description or "").replace("\n", " ").replace("|", "\\|").strip()
-        rows.append(f"| `{f.name}` | `{f.type_str}` | {default} | {desc} |")
+        if f.required:
+            default = "required"
+        elif f.default is not None:
+            default = f"`{esc(repr(f.default))}`"
+        else:
+            default = "`None`"
+        desc = esc((f.description or "").replace("\n", " ")).strip()
+        rows.append(f"| `{f.name}` | `{esc(f.type_str)}` | {default} | {desc} |")
     header = (
         f"**{kind.capitalize()}** — `{doc.name}`\n\n"
         "| Field | Type | Default | Description |\n"
