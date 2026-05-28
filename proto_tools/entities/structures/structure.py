@@ -414,6 +414,56 @@ class Structure(BaseModel):
             values = [v / 100.0 for v in values]
         return values or None
 
+    def ca_coordinates_by_chain(self, model_index: int = 0) -> dict[str, list[tuple[float, float, float]]]:
+        """CA ``(x, y, z)`` coordinates (angstroms) per chain, read via gemmi.
+
+        Handles both PDB and mmCIF content; prefer this over a hand-rolled
+        fixed-column PDB parser, which finds zero atoms in mmCIF output (e.g.
+        from RFdiffusion3). Chains without a CA atom are omitted.
+
+        Args:
+            model_index (int): Model to read; defaults to the first.
+
+        Returns:
+            dict[str, list[tuple[float, float, float]]]: Chain ID to ordered CA
+                coordinates.
+
+        Raises:
+            ValueError: If ``model_index`` is out of range or the model has no CA atoms.
+        """
+        struct = self.gemmi_struct
+        if not 0 <= model_index < len(struct):
+            raise ValueError(
+                f"model_index {model_index} out of range for Structure with {len(struct)} model(s) "
+                f"(source={self.source!r})"
+            )
+        chains: dict[str, list[tuple[float, float, float]]] = {}
+        for chain in struct[model_index]:
+            coords: list[tuple[float, float, float]] = []
+            for residue in chain:
+                for atom in residue:
+                    if atom.name == "CA":
+                        coords.append((atom.pos.x, atom.pos.y, atom.pos.z))
+                        break
+            if coords:
+                chains[chain.name] = coords
+        if not chains:
+            raise ValueError(f"Structure contains no CA atoms in model {model_index} (source={self.source!r})")
+        return chains
+
+    def ca_coordinates(self, model_index: int = 0) -> list[tuple[float, float, float]]:
+        """Flat list of CA coordinates across all chains, in chain order.
+
+        Convenience wrapper over :meth:`ca_coordinates_by_chain`.
+
+        Args:
+            model_index (int): Model to read; defaults to the first.
+
+        Returns:
+            list[tuple[float, float, float]]: Ordered CA coordinates.
+        """
+        return [xyz for coords in self.ca_coordinates_by_chain(model_index).values() for xyz in coords]
+
     def select_chain(self, chain_id: str) -> Structure:
         """Return a new Structure with only the requested chain.
 
