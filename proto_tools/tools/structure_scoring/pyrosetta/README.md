@@ -1,459 +1,106 @@
-<a href="https://bio-pro.mintlify.app/tools/structure-scoring/pyrosetta"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/structure-scoring/pyrosetta"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a>
 
-# PyRosetta Scoring Functions
+# PyRosetta
 
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
-
-> [!IMPORTANT]
-> **License:** PyRosetta is distributed under the [Rosetta Software License](https://www.rosettacommons.org/software/license-and-download). Free for academic and non-commercial use. Commercial users must obtain a license from [UW CoMotion](https://els2.comotion.uw.edu/product/pyrosetta). By using this tool, you accept these terms.
+> **License:** PyRosetta is licensed under Custom (PyRosetta Software License) and has restrictions around commercial use and may require explicit attribution when utilized. Please refer to [the license](https://www.pyrosetta.org/home/licensing-pyrosetta) for full terms.
 
 ## Overview
 
-PyRosetta provides physics-based scoring of protein structures using the Rosetta molecular modeling suite. Five operations are available: Spatial Aggregation Propensity (SAP) scoring, Solvent Accessible Surface Area (SASA) computation, Rosetta energy scoring, standalone FastRelax that returns the relaxed structure, and interface analysis of two-chain complexes via `InterfaceAnalyzerMover`. The three scoring tools and the interface analyzer all expose an opt-in `pre_relax_structures` preprocess that calls `pyrosetta-relax` before scoring.
+[PyRosetta](https://www.pyrosetta.org/) is the Python interface to the [Rosetta](https://github.com/RosettaCommons/rosetta) molecular modelling suite from the [RosettaCommons](https://rosettacommons.org/) consortium. This toolkit exposes five physics-based operations: Spatial Aggregation Propensity (SAP) scoring, Solvent Accessible Surface Area (SASA) computation, full Rosetta energy scoring, FastRelax structural minimisation, and interface analysis of two-chain complexes through `InterfaceAnalyzerMover`. The scoring tools and the interface analyzer can run FastRelax first via an opt-in `pre_relax_structures` preprocess.
 
 ## Background
 
-**Spatial Aggregation Propensity (SAP)** quantifies how much hydrophobic surface area is exposed on a protein. Proteins with large patches of exposed hydrophobicity are prone to [aggregation](https://en.wikipedia.org/wiki/Protein_aggregation) -- a major concern in therapeutic protein development. SAP computes a per-atom hydrophobicity score weighted by solvent exposure, then sums across the surface. Higher SAP scores indicate greater aggregation risk.
+The Rosetta molecular modelling suite ([Alford et al., 2017](https://doi.org/10.1021/acs.jctc.7b00125)) provides an all-atom energy function that combines van der Waals interactions, hydrogen bonding, electrostatics, and an implicit solvation model into a single score reported in Rosetta Energy Units (REU). The current community-standard energy function, REF2015, is parametrised against small-molecule and X-ray crystal structure data and is the default score function used by every tool in this toolkit. PyRosetta ([Chaudhury, Lyskov, and Gray, 2010](https://doi.org/10.1093/bioinformatics/btq007)) exposes the Rosetta sampling and scoring functions through a Python interface, which this toolkit invokes to compute per-residue and overall energies together with a breakdown by score term.
 
-**Solvent Accessible Surface Area (SASA)** measures the total surface area of a protein that is accessible to solvent molecules (modeled as a spherical probe, typically 1.4 A radius for water). SASA is fundamental to understanding protein folding thermodynamics: buried residues contribute to the [hydrophobic core](https://en.wikipedia.org/wiki/Hydrophobic_core), while exposed residues interact with solvent and binding partners. Per-residue SASA values reveal which positions are buried vs. solvent-exposed.
+Spatial Aggregation Propensity (SAP) ([Chennamsetty, Voynov, Kayser, Helk, and Trout, 2009](https://doi.org/10.1073/pnas.0904191106)) quantifies how much hydrophobic surface area is exposed on a protein. SAP combines per-residue hydrophobicity with local solvent exposure within a sphere around each surface atom and aggregates the contributions across the protein, with higher values corresponding to greater aggregation risk. The published method was originally developed for therapeutic antibody engineering and has become a standard developability filter in protein design.
 
-**Rosetta Energy Scoring** evaluates protein structures using a physics-based [energy function](https://en.wikipedia.org/wiki/Force_field_(chemistry)) that combines van der Waals interactions, electrostatics, hydrogen bonding, solvation, and backbone torsion preferences. The score is reported in Rosetta Energy Units (REU). Lower (more negative) total energies indicate more favorable structures. [FastRelax](https://www.rosettacommons.org/docs/latest/scripting_documentation/RosettaScripts/Movers/movers_pages/FastRelaxMover) is optionally applied before scoring to resolve steric clashes and backbone strain.
+Solvent Accessible Surface Area (SASA) measures the surface area of a protein that is accessible to a spherical solvent probe (1.4 Å for water by default). Per-residue SASA values distinguish buried residues that contribute to the hydrophobic core from solvent-exposed residues that interact with the surroundings. Rosetta's FastRelax protocol performs many rounds of side-chain repacking and energy minimisation while gradually ramping the repulsive weight in the score function, which finds a low-energy conformation near the input structure and resolves the steric clashes that would otherwise dominate the energy. The `InterfaceAnalyzerMover` extracts a set of structural descriptors that characterise the binding interface of a two-chain complex, including binding-energy difference (`dG_separated`), interface buried SASA (`dSASA_int`), hydrogen bond count (`hbonds_int`), packing statistic (`packstat`), and shape complementarity (`sc_value`), and is widely used as the basis for filter cascades in binder-design pipelines.
 
-**Interface Analysis** quantifies the quality of protein-protein interfaces using Rosetta's `InterfaceAnalyzerMover` plus auxiliary residue-composition and surface-layer analyses. Seven metrics are emitted per complex: shape complementarity (`interface_sc`, 0-1), interface hydrogen-bond count (`interface_hbonds`), binding ΔG (`interface_dG`, in REU), buried SASA (`interface_dSASA`, Å²), interface packing statistic (`interface_packstat`, 0-1), interface-residue apolar fraction (`interface_hydrophobicity`, %), and binder surface apolar fraction (`surface_hydrophobicity`, 0-1).
+### Learning Resources
+
+- [PyRosetta documentation](https://www.pyrosetta.org/) (Gray Lab, Johns Hopkins University). Tutorials, API reference, and installation guidance for the underlying Python interface.
+- [RosettaCommons documentation](https://www.rosettacommons.org/docs/latest/Home) (RosettaCommons). Reference manual for the Rosetta scoring functions, movers, and protocols invoked by this toolkit.
+- [FastRelax mover reference](https://www.rosettacommons.org/docs/latest/scripting_documentation/RosettaScripts/Movers/movers_pages/FastRelaxMover) (RosettaCommons). Documentation of the FastRelax protocol exposed as `pyrosetta-relax`.
 
 ## Tools
 
 ### PyRosetta Energy Score (`pyrosetta-energy`)
 
-Compute Rosetta energy scores using PyRosetta.
+Scores one or more protein structures with a Rosetta score function and returns the total energy, a per-term breakdown (fa_atr, fa_rep, fa_sol, hbond_*, etc.), and a per-residue energy contribution. The full pose is always scored regardless of any chain selection. By default the input structure is scored as given. Set `pre_relax_structures=True` to run FastRelax first.
 
-Scores each protein structure using the specified Rosetta score function.
-To resolve steric clashes and strain before scoring, set
-`config.pre_relax_structures=True` — the framework's `Config.preprocess`
-hook then dispatches `pyrosetta-relax` and substitutes the relaxed
-structures before this function runs.
+#### Applications
 
-Chain selection only filters the per-residue breakdown; the whole pose
-is always scored, so `total_energy`/`energy_terms` are always the
-full-complex values and selected-residue energies are in-complex
-contributions, not isolated-chain energies. See :class:`PyRosettaEnergyMetrics`
-for details.
+This tool is appropriate for relative energy comparison across variants of the same protein. Representative applications include ranking sequence designs by predicted stability after a relax pass, identifying problematic residues through their per-residue energy contributions, and quantifying the energy cost of mutations or conformational changes.
+
+#### Usage Tips
+
+- **Compare REU values only across variants of the same protein with the same score function.** Rosetta energies are not absolute thermodynamic quantities and do not transfer across proteins of different sizes or across different score function settings. Switching `scorefxn` from `ref2015` to `beta_nov16` produces a different scale and the values are not comparable.
+- **Run with `pre_relax_structures=True` when scoring raw predicted complexes.** Predicted structures from AlphaFold, Chai, Boltz, and similar tools commonly carry steric clashes that produce extremely high `fa_rep` values and dominate the total energy. Relaxing first resolves these clashes so the other energy terms become interpretable.
+- **Chain selection filters the per-residue breakdown only.** When `chains_to_score` is set on a `ScoringStructureInput`, `total_energy` and `energy_terms` are still computed on the full pose. Each per-residue energy reflects that residue's contribution within the full complex, including pair interactions with the unselected chains. Score a chain in isolation by extracting it into its own `Structure` first.
 
 ### PyRosetta Interface Analyzer (`pyrosetta-interface-analyzer`)
 
-Compute interface-quality metrics for two-chain complexes using PyRosetta.
+Runs Rosetta's `InterfaceAnalyzerMover` on a two-chain complex and returns seven always-on interface descriptors together with an optional eighth (`delta_unsat_hbonds`, available when DAlphaBall is installed). The interface is defined by the `target_chain` and `binder_chain` fields on each `InterfaceStructureInput` and is validated at input construction.
 
-Runs Rosetta's `InterfaceAnalyzerMover` to compute shape complementarity,
-interface H-bond count, binding ΔG, buried SASA, and packing statistic;
-computes `interface_hydrophobicity` from interface-residue AA composition
-(binder residues with any atom within 4.0 Å of any target atom); and
-computes `surface_hydrophobicity` from `LayerSelector(pick_surface=True)`
-applied to the binder sub-pose.
+#### Applications
 
-The interface for each complex is defined by the `target_chain` and
-`binder_chain` fields on the corresponding :class:`InterfaceStructureInput`.
-Chain-label validity is enforced at input construction. To analyze an
-already-relaxed pose, pass it in directly; to relax-then-analyze in one
-dispatch, set `config.pre_relax_structures=True`.
+This tool is appropriate for filtering and ranking designed protein binders against a target. Representative applications include gating candidate binders on shape complementarity and hydrogen bond count, ranking by predicted binding-energy difference, and identifying poses with excessive interface-buried hydrophobic surface area.
+
+#### Usage Tips
+
+- **The seven always-on metrics span well-defined ranges.** `interface_sc` is in 0 to 1 (higher is better fit), `interface_packstat` is in 0 to 1 (higher is better packing), `interface_hydrophobicity` is in 0 to 100 (percent apolar plus aromatic interface residues), `surface_hydrophobicity` is in 0 to 1 (apolar plus aromatic fraction of the binder surface), `interface_hbonds` is an integer count, `interface_dSASA` is in Å², and `interface_dG` is in REU (more negative indicates more favourable binding).
+- **`delta_unsat_hbonds` requires DAlphaBall and is reported as `None` when the SASA dependency is unavailable.** The Rosetta `BuriedUnsatHbonds` filter uses DAlphaBall for accurate buried-surface SASA. The standalone environment installs DAlphaBall when possible. When the metric is `None`, the rest of the seven always-on metrics are still produced normally.
+- **Relax raw predicted complexes before reading the energy-derived metrics.** `interface_dG` and `interface_packstat` are sensitive to steric clashes in unrelaxed structures. Set `pre_relax_structures=True` on the configuration to run FastRelax first, or call `pyrosetta-relax` explicitly and pass the relaxed structure back in.
+- **Chain labels follow the input format.** PDB stores chain IDs as a single character, while mmCIF accepts multi-character labels. The tool transparently shortens multi-character labels to single characters when dispatching to PyRosetta and restores the originals in the output.
 
 ### PyRosetta FastRelax (`pyrosetta-relax`)
 
-Run FastRelax on protein structures and return the relaxed coordinates.
+Runs Rosetta's FastRelax protocol on one or more input structures and returns the relaxed coordinates as a `Structure` together with the total Rosetta energy. The returned structure preserves the original chain labels and source format so that it composes directly into any of the other tools in this toolkit or into geometric `Structure` methods.
 
-Designed for cofolding filter pipelines (Germinal-style binder design)
-where downstream geometric / energetic gates need to operate on a
-relaxed pose. The relaxed Structure chains cleanly into
-`run_pyrosetta_energy`, `run_pyrosetta_sap`, `run_pyrosetta_sasa`,
-or Structure-aware non-PyRosetta tools.
+#### Applications
+
+This tool is appropriate as a preprocessing step before downstream energy scoring, interface analysis, or geometric filtering of raw predicted structures. Representative applications include resolving steric clashes in cofolded complexes before binder-design filter cascades, generating a relaxed reference pose before screening sequence variants, and producing a stable starting point for further structural analyses.
+
+#### Usage Tips
+
+- **`relax_cycles` defaults to `1` and accepts integer values from 1 to 15.** A single FastRelax cycle matches the default used by the Germinal binder-design pipeline and is appropriate for most filter-cascade applications. Increase to 5 to 15 for higher-quality convergence at proportional runtime cost.
+- **`constrain_to_start=True` (the default) prevents FastRelax from drastically altering the structure.** This adds a coordinate-constraint term to the relax score function so atoms stay near their input positions. Set to `False` for unconstrained minimisation when the goal is to find the nearest energy minimum.
+- **Additional FastRelax controls are available on `PyRosettaRelaxConfig`.** Pass `disable_jumps=True` to lock the inter-chain rigid-body degrees of freedom during relaxation, `align_to_start=True` to superpose the relaxed pose back onto the starting pose after relaxation, or `copy_b_factors_from_start=True` to copy the per-residue B-factor values from the input.
 
 ### PyRosetta SAP Score (`pyrosetta-sap`)
 
-Compute Spatial Aggregation Propensity (SAP) scores using PyRosetta.
+Scores one or more protein structures with the Spatial Aggregation Propensity protocol from Rosetta's `core.pack.guidance_scoreterms.sap` module and returns the overall SAP score together with a per-residue SAP contribution breakdown. Higher values indicate greater predicted aggregation risk.
 
-SAP quantifies the aggregation propensity of a protein's surface by
-measuring exposed hydrophobicity. Higher scores indicate greater
-aggregation risk. Per-residue contributions identify which residues
-drive aggregation propensity.
+#### Applications
 
-Chain selection controls which residues are scored, while the full
-structure is always used for SASA and burial context.
+This tool is appropriate for developability assessment during therapeutic protein and antibody engineering, where surface aggregation propensity is a critical liability. Representative applications include ranking antibody variants by predicted aggregation risk, identifying surface mutations that reduce SAP without affecting binding, and screening computationally designed proteins for developability before experimental characterisation.
+
+#### Usage Tips
+
+- **SAP is size-dependent and only meaningfully compared across variants of the same protein.** Larger proteins naturally have higher absolute SAP values because more total surface area contributes. Comparisons across different proteins or different chain compositions are not informative.
+- **`chains_to_score` controls which residues contribute to the score.** Setting `chains_to_score=["A"]` on a `ScoringStructureInput` restricts the SAP sum to residues of chain A. The full structure is still loaded so the surrounding context informs the burial calculation, but only the selected chain's atoms contribute to the score.
 
 ### PyRosetta SASA (`pyrosetta-sasa`)
 
-Compute Solvent Accessible Surface Area (SASA) using PyRosetta.
+Computes total and per-residue Solvent Accessible Surface Area using Rosetta's `SasaCalc` module with a configurable probe radius. Returns the total SASA in Å² together with a per-residue breakdown of chain, 1-indexed residue index, three-letter residue name, and SASA value.
 
-Calculates total and per-residue SASA using the SasaCalc module with
-a configurable probe radius. SASA measures the surface area of a protein
-accessible to solvent molecules.
+#### Applications
 
-## Tool Catalog
+This tool is appropriate for identifying buried and exposed residues, characterising hydrophobic surface patches, and computing a surface-area baseline for downstream developability or interaction analyses. Representative applications include flagging exposed hydrophobic residues as redesign candidates, summarising the surface-residue composition of a designed protein, and computing the buried surface area difference between bound and unbound states.
 
-| Tool Key | Label | Description |
-|----------|-------|-------------|
-| `pyrosetta-sap` | PyRosetta SAP Score | Compute Spatial Aggregation Propensity scores |
-| `pyrosetta-sasa` | PyRosetta SASA | Compute Solvent Accessible Surface Area (total and per-residue) |
-| `pyrosetta-energy` | PyRosetta Energy Score | Compute Rosetta energy scores with optional FastRelax |
-| `pyrosetta-relax` | PyRosetta FastRelax | Run FastRelax and return the relaxed `Structure` plus its total score, for chaining into downstream filters or scorers |
-| `pyrosetta-interface-analyzer` | PyRosetta Interface Analyzer | Compute interface-quality metrics (shape complementarity, H-bonds, ΔG, dSASA, packing, hydrophobicity) for two-chain complexes with optional FastRelax |
+#### Usage Tips
 
-## Execution Modes
+- **`probe_radius` defaults to 1.4 Å.** This is the conventional water probe radius. Larger probe values are sometimes used to approximate the accessibility seen by larger solvent molecules or interaction partners.
+- **Per-residue SASA values near 0 indicate fully buried residues.** Values above approximately 100 Å² indicate significant solvent exposure for a typical residue. Combine with residue identity to identify exposed hydrophobic residues as aggregation hotspots.
+- **Total SASA scales with protein size.** Normalise by residue count or surface area when comparing across proteins of different sizes.
 
-| Mode | Backend | Device |
-|------|---------|--------|
-| Standalone env | `ToolInstance("pyrosetta")` running `standalone/inference.py` | CPU only |
+## Toolkit Notes
 
-All five tools share a single standalone micromamba environment with PyRosetta installed. PyRosetta initialization adds a few seconds of overhead on the first call; subsequent calls within a persistent `ToolInstance` skip this. The interface analyzer additionally depends on `scipy` (already installed in the env).
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-## How It Works
+These apply to every PyRosetta tool in this toolkit (`pyrosetta-energy`, `pyrosetta-interface-analyzer`, `pyrosetta-relax`, `pyrosetta-sap`, `pyrosetta-sasa`).
 
-**SAP (`pyrosetta-sap`)**: Loads the structure into a Rosetta Pose, then computes per-atom SAP scores using Rosetta's `core.pack.guidance_scoreterms.sap` module. The result is a single scalar SAP score per structure.
-
-**SASA (`pyrosetta-sasa`)**: Loads the structure into a Rosetta Pose, then runs `SasaCalc` with a configurable probe radius. Returns both the total SASA and a per-residue breakdown with chain, residue index, residue name, and SASA value.
-
-**Energy (`pyrosetta-energy`)**: Loads the structure and scores it with the specified score function (default `ref2015`). Returns the total energy, a breakdown by score term (fa_atr, fa_rep, fa_sol, etc.), and per-residue total energies. By default no FastRelax is applied — the input structure is scored as-given. To resolve steric clashes and strain in raw predicted structures, set `config.pre_relax_structures=True` (see Relax preprocess below).
-
-**Relax (`pyrosetta-relax`)**: Runs FastRelax and returns the relaxed coordinates as a `Structure` plus the total Rosetta energy. The returned `Structure` is a drop-in replacement for the input (chain labels and format preserved), so it composes cleanly into `pyrosetta-energy`, `pyrosetta-sap`, `pyrosetta-sasa`, or geometric `Structure` methods.
-
-**Interface analyzer (`pyrosetta-interface-analyzer`)**: Loads the structure into a Rosetta Pose, runs `InterfaceAnalyzerMover` to extract shape complementarity, interface H-bond count, binding ΔG, buried SASA, and packing statistic; computes `interface_hydrophobicity` from the composition of interface residues (binder residues with any atom within 4.0 Å of any target atom, scored against the apolar set `"ACFILMPVWY"`); and computes `surface_hydrophobicity` by applying `LayerSelector(pick_surface=True)` to the binder sub-pose and counting apolar + aromatic surface residues. Each input carries its own `target_chain` and `binder_chain` (see Input Parameters); input-native mmCIF chain labels (including multi-character labels) are supported and transparently shortened for PyRosetta's PDB-based internals.
-
-**Relax preprocess (on energy/sap/sasa)**: All three scoring tools and the interface analyzer accept `pre_relax_structures: bool` and `relax_config: PyRosettaRelaxConfig` on their config. When `pre_relax_structures=True`, the framework's `Config.preprocess` hook dispatches `pyrosetta-relax` on every input structure first and substitutes the relaxed structures before scoring. This composes the same `pyrosetta-relax` tool as a preprocess step — there is exactly one FastRelax implementation in the codebase. For batch workloads, run inside a persistent `ToolInstance` so the relax + scoring dispatches share one PyRosetta init.
-
-## Input Parameters
-
-### Scoring tools (`pyrosetta-sap`, `pyrosetta-sasa`, `pyrosetta-energy`, `pyrosetta-relax`)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `inputs` | `list[ScoringStructureInput]` | Protein structures to score, each with optional `chain_ids` for chain selection. Accepts PDB file paths, PDB content strings, Structure objects, or dicts with `structure` and `chain_ids` keys. A single input is automatically wrapped in a list. |
-
-### `pyrosetta-interface-analyzer`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `inputs` | `list[InterfaceStructureInput]` | Two-chain complexes to analyze. Each entry carries the `structure` plus the `target_chain` and `binder_chain` labels that define the interface. Chain labels are validated against the structure at construction time — a label not present in the structure raises `ValidationError` immediately. Accepts PDB/CIF file paths, content strings, `Structure` objects, or dicts with `structure` / `target_chain` / `binder_chain` keys. Bare structures default to `target_chain="A"`, `binder_chain="B"`. |
-
-Each `InterfaceStructureInput` has:
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `structure` | `Structure` | — | The complex (file path, content string, or `Structure` object). |
-| `target_chain` | `str` | `"A"` | Chain label for the target (e.g. receptor) side of the interface, in the structure's native namespace. |
-| `binder_chain` | `str` | `"B"` | Chain label for the binder side of the interface, in the structure's native namespace. Must differ from `target_chain`. |
-
-## Configuration
-
-### Shared `pre_relax_structures` preprocess (energy/sap/sasa/interface-analyzer)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `pre_relax_structures` | `bool` | `False` | If `True`, run `pyrosetta-relax` on each input structure before scoring. |
-| `relax_config` | `PyRosettaRelaxConfig` | `PyRosettaRelaxConfig()` (factory) | Settings used when `pre_relax_structures=True`. UI visibility gated on the toggle via the proto-ui overlay layer. |
-
-### `pyrosetta-sap`
-
-No tool-specific configuration parameters beyond the shared relax preprocess above.
-
-### `pyrosetta-sasa`
-
-| Parameter | Type | Default | Range | Description |
-|-----------|------|---------|-------|-------------|
-| `probe_radius` | `float` | `1.4` | > 0.0 | Solvent probe radius in Angstroms. Standard water probe is 1.4 A. |
-
-### `pyrosetta-energy`
-
-| Parameter | Type | Default | Range | Description |
-|-----------|------|---------|-------|-------------|
-| `scorefxn` | `str` | `"ref2015"` | -- | Rosetta score function name (e.g., `ref2015`, `beta_nov16`, `ref2015_cart`) |
-
-### `pyrosetta-relax`
-
-| Parameter | Type | Default | Range | Description |
-|-----------|------|---------|-------|-------------|
-| `scorefxn` | `str` | `"ref2015"` | -- | Rosetta score function name |
-| `relax_cycles` | `int` | `1` | 1-15 | Number of FastRelax repeats. Default `1` matches Germinal's `-relax:default_repeats 1` |
-| `constrain_to_start` | `bool` | `True` | -- | Add a coordinate-constraint term to the relax scorefxn so atoms stay near input positions |
-
-### `pyrosetta-interface-analyzer`
-
-| Parameter | Type | Default | Range | Description |
-|-----------|------|---------|-------|-------------|
-| `scorefxn` | `str` | `"ref2015"` | -- | Rosetta score function name |
-
-> **Note:** The interface chains (`target_chain` / `binder_chain`) live on each `InterfaceStructureInput` in `inputs`, not on the config — see Input Parameters.
-
-## Output Specification
-
-### `pyrosetta-sap`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `results` | `list[SAPResult]` | One per input structure |
-
-Each `SAPResult` contains:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `sap_score` | `float` | SAP score. Higher values indicate more aggregation-prone surface hydrophobicity. |
-
-### `pyrosetta-sasa`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `results` | `list[SASAResult]` | One per input structure |
-
-Each `SASAResult` contains:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `total_sasa` | `float` | Total SASA in Angstroms squared |
-| `per_residue` | `list[ResidueSASA]` | Per-residue SASA breakdown |
-
-Each `ResidueSASA` contains:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `chain_id` | `str` | Chain identifier |
-| `residue_index` | `int` | 1-indexed residue position |
-| `residue_name` | `str` | Three-letter residue code |
-| `sasa` | `float` | SASA in Angstroms squared |
-
-### `pyrosetta-energy`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `results` | `list[EnergyResult]` | One per input structure |
-
-Each `EnergyResult` contains:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `total_energy` | `float` | Total Rosetta energy in REU |
-| `energy_terms` | `dict[str, float]` | Breakdown by score term (fa_atr, fa_rep, fa_sol, etc.) |
-| `per_residue` | `list[ResidueEnergy]` | Per-residue energy breakdown |
-
-Each `ResidueEnergy` contains:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `chain_id` | `str` | Chain identifier |
-| `residue_index` | `int` | 1-indexed residue position |
-| `residue_name` | `str` | Three-letter residue code |
-| `total_energy` | `float` | Total residue energy in REU |
-
-### `pyrosetta-relax`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `results` | `list[PyRosettaRelaxMetrics]` | One per input structure |
-
-Each `PyRosettaRelaxMetrics` contains:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `total_score` | `float` | Total Rosetta energy of the relaxed pose, in REU |
-| `relaxed` | `bool` | Always `True` for outputs of this tool |
-| `relax` | `RelaxResult` | Relaxed structure and run metadata |
-
-Each `RelaxResult` contains:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `relaxed_structure` | `Structure` | Relaxed coordinates. Drop-in replacement for the input: chain labels match and the source format (PDB/CIF) is preserved. |
-| `relax_cycles` | `int` | Number of FastRelax repeats applied |
-
-### `pyrosetta-interface-analyzer`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `results` | `list[PyRosettaInterfaceAnalyzerMetrics]` | One per input structure |
-
-Each `PyRosettaInterfaceAnalyzerMetrics` contains seven metrics:
-
-| Field | Type | Range | Unit | Description |
-|-------|------|-------|------|-------------|
-| `interface_sc` | `float` | 0-1 | -- | Shape complementarity (1 = perfect fit) |
-| `interface_hbonds` | `int` | ≥ 0 | count | Hydrogen bonds across the interface |
-| `interface_dG` | `float` | -- | REU | Binding ΔG |
-| `interface_dSASA` | `float` | ≥ 0 | Å² | Interface buried SASA |
-| `interface_packstat` | `float` | 0-1 | -- | Interface packing statistic |
-| `interface_hydrophobicity` | `float` | 0-100 | % | Apolar + aromatic fraction of interface residues × 100 |
-| `surface_hydrophobicity` | `float` | 0-1 | -- | Apolar + aromatic fraction of binder surface residues |
-
-Export formats: `csv`, `json` (energy/sap/sasa/interface-analyzer); the relax tool returns a Structure that the caller persists separately.
-
-## Interpreting Results
-
-**SAP scores:**
-- SAP is unitless and relative. Lower is better for therapeutic developability.
-- Typical well-behaved antibodies have SAP scores below ~100. Values above ~150 suggest significant aggregation risk.
-- Compare SAP across design variants rather than relying on absolute thresholds, since scores depend on protein size and topology.
-
-**SASA values:**
-- Total SASA scales with protein size. Normalize by residue count for cross-protein comparisons.
-- Per-residue SASA near 0 indicates a fully buried residue. Values above ~100 A^2 indicate significant solvent exposure.
-- Hydrophobic residues with high SASA are candidates for aggregation hotspots or redesign targets.
-
-**Energy scores:**
-- Rosetta energies are in REU (not kcal/mol). More negative = more favorable.
-- Absolute energies are not meaningful across different proteins. Compare variants of the same protein.
-- Key energy terms: `fa_atr` (attractive van der Waals), `fa_rep` (repulsive van der Waals, penalizes clashes), `fa_sol` (solvation), `hbond_*` (hydrogen bonds).
-- High `fa_rep` values indicate steric clashes -- run with `pre_relax_structures=True` to resolve these before interpreting other terms.
-- Per-residue energies identify problematic positions (e.g., residues with high positive energy are under strain).
-- **Chain selection filters display, not computation.** When you set `chain_ids` on an energy input, `total_energy` and `energy_terms` are still computed on the full pose — the selection only filters which residues appear in `per_residue`. Each per-residue energy reflects that residue's contribution *in the context of the full complex* (including pair interactions with the un-selected chains), not the chain's energy in isolation. To score a chain as if it were isolated, extract it into its own Structure first and score it separately.
-
-**Interface-analysis metrics:**
-- Most metrics are in well-bounded ranges (`interface_sc`, `interface_packstat`, `surface_hydrophobicity` in [0, 1]; `interface_hydrophobicity` in [0, 100]). `interface_dG` is unbounded; more negative = more favorable binding.
-- Typical binder-design filter gates: `interface_sc ≥ 0.6`, `interface_hbonds ≥ 3`, `interface_hydrophobicity ≥ 45`, `surface_hydrophobicity ≤ 0.4`.
-- Raw predicted complexes often carry clashes that distort the energy-based metrics (`interface_dG`, `interface_packstat`). Use `pre_relax_structures=True` before reading these values.
-
-## Quick Start Examples
-
-**Compute SAP scores:**
-```python
-from proto_tools.tools.structure_scoring.pyrosetta import (
-    run_pyrosetta_sap, PyRosettaSAPInput,
-)
-
-result = run_pyrosetta_sap(PyRosettaSAPInput(inputs=["/path/to/protein.pdb"]))
-
-for r in result.results:
-    print(f"SAP score: {r.sap_score:.2f}")
-```
-
-**Compute SASA with custom probe radius:**
-```python
-from proto_tools.tools.structure_scoring.pyrosetta import (
-    run_pyrosetta_sasa, PyRosettaSASAInput, PyRosettaSASAConfig,
-)
-
-result = run_pyrosetta_sasa(
-    PyRosettaSASAInput(inputs=["/path/to/protein.pdb"]),
-    PyRosettaSASAConfig(probe_radius=1.4),
-)
-
-for r in result.results:
-    print(f"Total SASA: {r.total_sasa:.1f} A^2")
-    for res in r.per_residue[:5]:
-        print(f"  {res.chain_id}:{res.residue_name}{res.residue_index} = {res.sasa:.1f} A^2")
-```
-
-**Energy scoring (no relax — the default):**
-```python
-from proto_tools.tools.structure_scoring.pyrosetta import (
-    run_pyrosetta_energy, PyRosettaEnergyInput, PyRosettaEnergyConfig,
-)
-
-result = run_pyrosetta_energy(
-    PyRosettaEnergyInput(inputs=["/path/to/protein.pdb"]),
-    PyRosettaEnergyConfig(scorefxn="ref2015"),
-)
-
-for r in result.results:
-    print(f"Total energy: {r.total_energy:.1f} REU")
-    print(f"  fa_atr: {r.energy_terms.get('fa_atr', 0):.1f}")
-    print(f"  fa_rep: {r.energy_terms.get('fa_rep', 0):.1f}")
-    print(f"  fa_sol: {r.energy_terms.get('fa_sol', 0):.1f}")
-```
-
-**Energy scoring with the `pre_relax_structures` preprocess:**
-```python
-from proto_tools.tools.structure_scoring.pyrosetta import (
-    run_pyrosetta_energy, PyRosettaEnergyInput, PyRosettaEnergyConfig,
-    PyRosettaRelaxConfig,
-)
-
-# Set pre_relax_structures=True; the framework calls pyrosetta-relax
-# on each input before energy scoring (one PyRosetta init in persistent mode).
-result = run_pyrosetta_energy(
-    PyRosettaEnergyInput(inputs=["/path/to/raw_prediction.pdb"]),
-    PyRosettaEnergyConfig(
-        pre_relax_structures=True,
-        relax_config=PyRosettaRelaxConfig(relax_cycles=1),
-    ),
-)
-print(f"Energy on relaxed pose: {result.results[0].total_energy:.1f} REU")
-```
-
-**Explicit relax → chain into another scorer:**
-```python
-from proto_tools.tools.structure_scoring.pyrosetta import (
-    run_pyrosetta_relax, PyRosettaRelaxInput, PyRosettaRelaxConfig,
-    run_pyrosetta_energy, PyRosettaEnergyInput, PyRosettaEnergyConfig,
-)
-
-# 1. Relax the predicted structure once (e.g. cofold from Chai-1 or AF3).
-relax_out = run_pyrosetta_relax(
-    PyRosettaRelaxInput(inputs=["/path/to/cofold.pdb"]),
-    PyRosettaRelaxConfig(relax_cycles=1),    # Germinal default
-)
-relaxed = relax_out.results[0].relax.relaxed_structure
-
-# 2. Score the relaxed structure (default config = no further relax).
-score_out = run_pyrosetta_energy(PyRosettaEnergyInput(inputs=[relaxed]))
-print(f"Relaxed total energy: {score_out.results[0].total_energy:.1f} REU")
-```
-
-**Interface analysis of a two-chain complex:**
-```python
-from proto_tools.tools.structure_scoring.pyrosetta import (
-    InterfaceStructureInput,
-    PyRosettaInterfaceAnalyzerInput,
-    run_pyrosetta_interface_analyzer,
-)
-
-# target_chain / binder_chain live on the input (defaults "A" / "B").
-result = run_pyrosetta_interface_analyzer(
-    PyRosettaInterfaceAnalyzerInput(
-        inputs=[
-            InterfaceStructureInput(
-                structure="/path/to/binder_target_complex.pdb",
-                target_chain="A",
-                binder_chain="B",
-            ),
-        ],
-    ),
-)
-
-m = result.results[0]
-print(f"interface_sc:               {m.interface_sc:.3f}")
-print(f"interface_hbonds:           {m.interface_hbonds}")
-print(f"interface_dG:               {m.interface_dG:.1f} REU")
-print(f"interface_dSASA:            {m.interface_dSASA:.1f} Å²")
-print(f"interface_packstat:         {m.interface_packstat:.3f}")
-print(f"interface_hydrophobicity:   {m.interface_hydrophobicity:.1f} %")
-print(f"surface_hydrophobicity:     {m.surface_hydrophobicity:.3f}")
-```
-
-## Best Practices & Gotchas
-
-- **`linux-aarch64` runs a stale 2023.11 build.** The `conda.rosettacommons.org/linux-aarch64` channel has not been updated since March 2023 — the newest available pyrosetta on aarch64 is `2023.11` (Python 3.10), while `linux-64`, `osx-arm64`, and `osx-x86_64` ship the current `2026.06` builds. Scoring functions, FastRelax, and SAP have evolved over the past ~3 years, so values computed on `linux-aarch64` may differ slightly from values computed on other platforms. The setup script prints a warning banner on aarch64; reproduce final/published numbers on x86_64 or macOS.
-- **Relax before energy scoring on raw predictions.** Raw PDB structures from X-ray or structure prediction typically have steric clashes that produce extremely high `fa_rep` values. Set `pre_relax_structures=True` (or call `pyrosetta-relax` first) when scoring such inputs. The default is `pre_relax_structures=False` so that callers passing already-relaxed structures don't double-relax silently.
-- **PyRosetta initialization overhead.** The first call in a session takes a few seconds to initialize PyRosetta. Use `ToolInstance.persist()` for batch workloads to amortize this cost — especially important when `pre_relax_structures=True`, since each scored structure triggers two dispatches (relax + score) that both hit the same persistent worker.
-- **Seed-sensitive stochastic protocols.** `pyrosetta-relax` and `pyrosetta-interface-analyzer` depend on Rosetta's process-global RNG. When `config.seed is None`, repeated calls skip cache lookup/storage and iterable dedup so the RNG can advance naturally. When `config.seed` is set on a multi-input call, each input shares the seeded RNG state; if you need deterministic per-item seeds (rare — most callers pass distinct inputs, which diverge naturally), seed PyRosetta explicitly inside your own loop and call the tool per item.
-- **Chain labels round-trip through the original format.** PDB stores chain IDs as a single character, while mmCIF permits arbitrary-length labels (e.g. `"Heavy"`, `"Light"`, or PDB bundle names like `"AA"`). You can pass either format directly, reference chains by their native labels in `chain_ids`, and read the same labels back in `per_residue[i].chain_id`. The tool internally shortens multi-character chain IDs to fit PDB format when dispatching to PyRosetta and restores the originals in the output, so the conversion is invisible. Structures with more than 62 unique chain labels cannot be represented in PDB and are rejected up front with a clear error.
-- **SAP is size-dependent.** Larger proteins naturally have higher SAP scores. Compare SAP across variants of the same protein, not across proteins of different sizes.
-- **Energy comparisons require the same score function.** Never compare REU values computed with different `scorefxn` settings (e.g., `ref2015` vs. `beta_nov16`).
-- **Relax cycles trade off accuracy vs. speed.** The `pyrosetta-relax` default is 1 cycle (matches Germinal). Increase via `PyRosettaRelaxConfig(relax_cycles=N)` to 5–15 for higher-quality convergence at the cost of runtime.
-- **Constrain to start coordinates.** The `PyRosettaRelaxConfig.constrain_to_start=True` default prevents FastRelax from drastically altering the structure. Disable only if you want unconstrained relaxation (e.g., to find the nearest energy minimum).
-- **Coordinates are 1-indexed.** Per-residue output uses 1-indexed residue positions consistent with PDB numbering.
-- **Interface chains are validated at input construction.** `InterfaceStructureInput` raises `ValidationError` immediately if `target_chain` or `binder_chain` is not present in the structure, or if the two labels are equal — you don't have to wait for a PyRosetta dispatch to discover a typo.
-
-## References
-
-- Chaudhury, S., Lyskov, S., & Gray, J.J. (2010). PyRosetta: a script-based interface for implementing molecular modeling algorithms using Rosetta. *Bioinformatics*, 26(5), 689-691. DOI: [10.1093/bioinformatics/btq007](https://doi.org/10.1093/bioinformatics/btq007)
-- Alford, R.F., Leaver-Fay, A., Jeliazkov, J.R., et al. (2017). The Rosetta all-atom energy function for macromolecular modeling and design. *J. Chem. Theory Comput.*, 13(6), 3031-3048. DOI: [10.1021/acs.jctc.7b00125](https://doi.org/10.1021/acs.jctc.7b00125)
-- RosettaCommons: https://www.rosettacommons.org/
-- PyRosetta documentation: https://www.pyrosetta.org/
-
-## Related Tools
-
-**Often used together:**
-- **Structure prediction** (`esmfold-prediction`, `alphafold3-prediction`) -- Generate structures to score
-- **Inverse folding** (`proteinmpnn-sample`, `ligandmpnn-sample`) -- Design sequences, then score the resulting structures
-- **Structure metrics** (`structure-metrics`) -- Compute geometric quality metrics (longest alpha helix, radius of gyration)
-- **TM-align** (`tmalign-align`) -- Structural alignment and TM-score comparison
-
-**Alternatives:**
-- **Structure metrics** -- For coarse geometric filters (helix length, gyration radius) without physics-based energy
-- **ESM2 scoring** (`esm2-score`) -- Learned sequence-based fitness scoring (complementary to physics-based scoring)
+- **Every tool accepts a list of inputs in a single call.** The scoring, relaxation, and SASA tools take a list of `ScoringStructureInput` entries, and the interface analyzer takes a list of `InterfaceStructureInput` entries. Each entry independently accepts a `Structure` object, a file path, a PDB or mmCIF content string, or a dict shorthand. A single bare input is automatically wrapped in a list. Results are returned in the same order as the inputs.
+- **The four scoring and interface-analyzer tools share an opt-in `pre_relax_structures` preprocess that runs `pyrosetta-relax` first.** Set `pre_relax_structures=True` and optionally pass a `PyRosettaRelaxConfig` to relax every input structure before scoring. The framework's preprocess hook dispatches `pyrosetta-relax` and substitutes the relaxed structures, so there is exactly one FastRelax implementation in the codebase.
+- **Per-residue output uses 1-indexed positions consistent with PDB numbering.** Residue indices in the per-residue energy and per-residue SASA breakdowns correspond directly to the residue numbers in the input structure.
