@@ -1,145 +1,52 @@
-<a href="https://bio-pro.mintlify.app/tools/structure-scoring/pdockq2"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/structure-scoring/pdockq2"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a>
 
 # pDockQ2
 
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** pDockQ2 has an AGPL-3.0 license and may require explicit attribution when utilized. Please refer to [the license](https://gitlab.com/ElofssonLab/afm-benchmark/-/blob/main/LICENSE) for full terms.
 
 ## Overview
 
-pDockQ2 (Zhu et al. 2023) scores the interface quality of a predicted protein complex from AlphaFold-Multimer / AlphaFold3 / Chai-1 / Boltz-2 / Protenix outputs. It combines per-residue pLDDT and the PAE (Predicted Aligned Error) matrix into a single scalar in `[0, 1]`, where higher values indicate more reliably predicted interfaces. Commonly used as a filter gate in binder-design pipelines; a value above roughly `0.23` is typically treated as "acceptable" in published benchmarks.
-
-Tool registry key: `pdockq2`. Category: `structure_scoring`.
+[pDockQ2](https://gitlab.com/ElofssonLab/afm-benchmark) is an interface-quality score for cofolded protein complexes developed by the [Elofsson Lab](https://www.bioinfo.se/) at SciLifeLab and Stockholm University. It combines per-residue pLDDT and the Predicted Aligned Error (PAE) matrix into a single estimate of the per-interface DockQ score in the range 0 to 1, with higher values indicating more reliably predicted interfaces. This toolkit re-implements the published scoring formula in pure Python and exposes it through a single registered tool that returns the overall pDockQ2 score together with a per-interface breakdown.
 
 ## Background
 
-**What does this tool measure?**
-Protein-protein interface predictions can look geometrically reasonable while being unreliable. AlphaFold-Multimer (and successors) emit two orthogonal confidence signals: per-residue pLDDT (local-structure confidence) and PAE (pairwise residue-position confidence). pDockQ2 reduces both into one scalar per chain using two terms:
+DockQ ([Basu and Wallner, 2016](https://doi.org/10.1371/journal.pone.0161879)) is a continuous interface-quality measure for protein-protein docking models that combines the CAPRI quality indicators (fraction of native contacts, interface RMSD, and ligand RMSD) into a single score in the range 0 to 1. The published thresholds approximate the CAPRI quality classes of Acceptable (DockQ ≥ 0.23), Medium (DockQ ≥ 0.49), and High (DockQ ≥ 0.80). DockQ requires a known reference complex and cannot be computed when only the predicted structure is available.
 
-- Mean pLDDT over binder-side interface residues, penalizing flexible/unstructured interfaces.
-- Mean of `1 / (1 + (PAE / 10)^2)` over CA-CA residue pairs within the interface cutoff, penalizing interfaces with poor inter-chain geometric constraints.
+pDockQ ([Bryant, Pozzati, and Elofsson, 2022](https://doi.org/10.1038/s41467-022-28865-w)) was introduced as a predicted version of DockQ that uses only AlphaFold2 outputs, with no reference complex required. It estimates DockQ for a dimer from the mean pLDDT of interface residues together with the logarithm of the number of interface contacts, calibrated against ground-truth DockQ values on a benchmark of heterodimers.
 
-These feed a sigmoid whose parameters were fit by Zhu et al. 2023 against ground-truth DockQ values on the AlphaFold-Multimer benchmark.
+pDockQ2 ([Zhu, Shenoy, Kundrotas, and Elofsson, 2023](https://doi.org/10.1093/bioinformatics/btad424)) generalises pDockQ to larger multi-chain complexes and replaces the contact-count term with the Predicted Aligned Error (PAE) matrix, which captures pairwise residue-position uncertainty across chains. For each interface, the score combines the contact-weighted mean interface pLDDT with the mean of `1 / (1 + (PAE / 10)²)` over interface residue pairs, then passes the product through a logistic sigmoid whose parameters were fit against ground-truth DockQ values on the AlphaFold-Multimer benchmark. The published analysis demonstrates that pDockQ2 estimates DockQ for each interface in a multimer rather than only for a single dimer.
 
-**When to use this tool:**
-- You have a cofolded complex and need a fast scalar indicator of interface-prediction reliability.
-- You are building a binder-design or complex-prediction filter cascade that combines pLDDT and PAE into one gate.
+### Learning Resources
 
-**When NOT to use:**
-- The structure lacks an interchain PAE matrix (e.g. ESMFold single-chain prediction without PAE).
-- You need a physics-based interface score — use `pyrosetta-sap`, `pyrosetta-sasa`, or `pyrosetta-energy`.
+- [ElofssonLab/afm-benchmark](https://gitlab.com/ElofssonLab/afm-benchmark) (Elofsson Lab, Stockholm University). Reference implementation of pDockQ2 and the benchmark data from the original publication.
+- [bjornwallner/DockQ](https://github.com/bjornwallner/DockQ) (Wallner Lab, Linköping University). Reference implementation of the underlying DockQ measure that pDockQ2 estimates.
 
 ## Tools
 
 ### pDockQ2 Interface Quality (`pdockq2`)
 
-Compute pDockQ2 (Zhu 2023) for a cofolded protein complex.
+Scores the per-interface quality of a cofolded protein complex by computing pDockQ2 for each chain pair and aggregating the per-chain scores into a single overall score. The tool takes a `Structure` with per-residue pLDDT in the B-factor column and the PAE matrix attached at `structure.metrics["pae"]`, identifies CA-CA contacts between every pair of chains within a configurable distance cutoff, applies the published sigmoid, and returns the overall score together with a per-chain interface breakdown.
 
-Returns the mean per-chain `pmidockq` over chains in `target_chains`
-that contact `binder_chain`, plus per-chain debug rows.
+#### Applications
 
-## How It Works
+This tool is appropriate for filtering and ranking cofolded complexes from structure-prediction tools such as AlphaFold-Multimer, AlphaFold 3, Chai-1, Boltz-2, and Protenix. Representative applications include gating candidate protein binders from a design pipeline by predicted interface quality, ranking the most promising poses in a multi-chain prediction ensemble, and screening large sets of predicted complexes before committing to more expensive downstream analyses.
 
-1. Extract per-residue CA coordinates and per-residue pLDDT (0-1) from the cofolded `Structure`. The pLDDT is rescaled to 0-100 internally so the sigmoid parameters match the published fit.
-2. Read the full PAE matrix from `structure.metrics["pae"]`. The tool asserts the matrix is square and matches the total residue count emitted by `Structure.per_residue_plddt`.
-3. For each chain, find CA-CA contact residue pairs against every other chain within `distance_cutoff` (default 10.0 Å). Collect the per-chain interface pLDDT and the normalized-PAE average over those pairs.
-4. Apply the Zhu-2023 sigmoid to `if_plddt * norm_pae` for each chain to get `pmidockq`.
-5. Aggregate: average `pmidockq` over chains in `inputs.target_chains` that contact `inputs.binder_chain`.
+#### Usage Tips
 
-## Execution Modes
+- **The PAE matrix is required and must be attached at `structure.metrics["pae"]` as a square `list[list[float]]` whose dimension matches the total residue count of the structure.** The input is rejected when the matrix is missing, not square, or of the wrong dimension.
+- **Per-residue pLDDT must be supplied via the B-factor column.** Structure predictors in proto-tools return the correct `b_factor_type` automatically, and `Structure.from_file()` auto-detects it for AlphaFold DB and ModelArchive files. For manually provided structures from other sources, pass `b_factor_type=BFactorType.PLDDT` (raw 0 to 100) or `BFactorType.NORMALIZED_PLDDT` (0 to 1) explicitly. The input is rejected when `b_factor_type` is any other value, since the published sigmoid was fit on a 0 to 100 pLDDT scale.
+- **A pDockQ2 score above 0.23 corresponds to the "Acceptable" DockQ quality class.** The thresholds derive from the underlying DockQ measure ([Basu and Wallner, 2016](https://doi.org/10.1371/journal.pone.0161879)): scores above 0.49 correspond to "Medium" quality and scores above 0.80 to "High" quality. Scores below 0.23 typically reflect either low interface pLDDT or high cross-chain PAE.
+- **The overall score is the mean of `pmidockq` over target chains that contact the binder chain.** When no target chain in `target_chains` is within the distance cutoff of `binder_chain`, the overall score is set to `0.0`, `num_interface_contacts` is reported as `0`, and a warning is logged. Verify the chain identifiers and the cutoff before interpreting an all-zero result as a poor interface.
+- **`distance_cutoff` controls the CA-CA contact distance used to define interface residues.** The wrapper default of `10.0` Å is more permissive than the `8.0` Å default used by the Elofsson Lab reference implementation against which the published sigmoid was calibrated. The qualitative DockQ-quality interpretation still applies at `10.0` Å, but quantitative scores will not exactly match the published values. Set `distance_cutoff=8.0` for scores that match the original pDockQ2 calibration. The PAE normalisation distance inside the sigmoid is independently fixed at 10 Å per the published formula and is not affected by this setting.
+- **The interface pLDDT is contact-pair weighted, not residue-deduplicated.** A residue that contacts `k` cross-chain partners contributes its pLDDT `k` times to the interface mean. This matches the published pDockQ2 definition and is preserved by the wrapper.
+- **The per-chain breakdown is available on `result.metrics.interfaces`.** Each `InterfacePDockQ2` entry exposes `chain_id`, `neighbor_chains`, `if_plddt` (0 to 100 pLDDT scale), `norm_pae` (0 to 1 normalised confidence, higher is more confident), and `pmidockq` (0 to 1 DockQ-scale prediction) for one chain. Inspect this list when debugging multi-chain targets or when the overall mean masks variation across interfaces.
 
-- **Hardware:** CPU only; pure numpy math. No GPU, no standalone environment.
-- **Runtime:** sub-second per complex for typical sizes (<1000 residues).
-- **Scalability:** quadratic in total residue count due to pairwise distance computation.
+## Toolkit Notes
 
-## Input Parameters
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `structure` | `Structure` | *Required* | Cofolded complex. `b_factor_type` must be `PLDDT` or `NORMALIZED_PLDDT`. PAE matrix must be attached at `structure.metrics["pae"]` as a square `list[list[float]]` whose dimension matches the total residue count. |
-| `binder_chain` | `SingleChainSelection` | *Required* | Single-character chain ID of the binder. Accepts a bare `"A"` or `{"chain": "A"}`. |
-| `target_chains` | `ChainSelection` | *Required* | Target chain ID(s), single-character each. Accepts a bare `"A"` or a list `["A", "B"]`. |
+These apply to every pDockQ2 tool in this toolkit (`pdockq2`).
 
-## Configuration
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `distance_cutoff` | `float` | `10.0` | CA-CA distance cutoff in Å for interface residue detection (Zhu 2023). |
-
-## Output Specification
-
-```python
-# Return type: PDockQ2Output
-{
-    "metrics": {
-        "pdockq2": float,                  # overall score in [0, 1]
-        "avg_interface_plddt": float,      # mean target-chain interface pLDDT (0-100)
-        "avg_interface_pae": float,        # mean normalized PAE in [0, 1]
-        "num_interface_contacts": int,     # # binder x target residue pairs in contact
-        "interfaces": [
-            {"chain_id": str, "neighbor_chains": str,
-             "if_plddt": float, "norm_pae": float, "pmidockq": float},
-            ...
-        ],
-    }
-}
-```
-
-## Interpreting Results
-
-- `pdockq2 > 0.23`: conventional "acceptable" threshold from Zhu 2023's AlphaFold-Multimer benchmark; values above this gate are consistent with reliably predicted interfaces.
-- `pdockq2 < 0.1`: low-confidence interface; usually reflects either low interface pLDDT or high PAE between the binder and target.
-- `num_interface_contacts == 0`: binder and target chains are not in contact within `distance_cutoff` — score is set to 0.0 and a warning is logged. Verify `binder_chain` and `target_chains` correctness before interpreting.
-- `interfaces` rows expose the per-chain breakdown (useful when debugging multi-chain targets).
-
-## Quick Start Examples
-
-```python
-from proto_tools.entities.structures.structure import BFactorType, Structure
-from proto_tools.tools import PDockQ2Config, PDockQ2Input, run_pdockq2
-
-# Load a cofolded complex; attach PAE emitted by your structure predictor.
-structure = Structure.from_file(
-    "complex.pdb",
-    b_factor_type=BFactorType.PLDDT,
-    metrics={"pae": my_pae},  # list[list[float]], N x N over all residues
-)
-
-inputs = PDockQ2Input(structure=structure, binder_chain="A", target_chains=["B"])
-result = run_pdockq2(inputs, PDockQ2Config())
-print(result.metrics.pdockq2, result.metrics.num_interface_contacts)
-```
-
-Tighten the cutoff for stricter interface definitions:
-
-```python
-result = run_pdockq2(inputs, PDockQ2Config(distance_cutoff=8.0))
-```
-
-Inspect the per-chain breakdown (useful for multi-chain targets):
-
-```python
-for row in result.metrics.interfaces:
-    print(row.chain_id, row.neighbor_chains, row.if_plddt, row.norm_pae, row.pmidockq)
-```
-
-## Best Practices & Gotchas
-
-- **Residue ordering invariant**: the PAE matrix must be indexed in the same residue order as `Structure.per_residue_plddt` (i.e. gemmi model → chain → residue iteration order). If your structure predictor emits PAE in a different order, remap it before attaching.
-- **pLDDT scale**: upstream predictors differ (AF2/AF3 emit 0-100, ESMFold emits 0-1). `Structure.b_factor_type` captures this; the tool uses `Structure.per_residue_plddt` which normalizes to 0-1 and rescales internally to the 0-100 scale the sigmoid was fit on.
-- **`binder_chain` must be single-character**: multi-character mmCIF chain labels need to be shortened via `Structure.to_pdb_with_chain_mapping()` before calling this tool.
-- **Empty contact set**: a zero score with zero contacts typically means the caller passed `binder_chain`/`target_chains` that do not interact. Check structure orientation and cutoff.
-- **Contact detection uses CA atoms only**: every residue is treated by its CA position, without fallback to CB. This is appropriate for model-predicted structures where every modeled residue has CA; experimental structures with disordered backbones may skip residues with missing CA.
-- **Interface pLDDT is contact-pair weighted** (Zhu 2023). A residue that contacts `k` cross-chain partners contributes its pLDDT `k` times to the interface mean — not once per unique residue.
-- **Chains with no cross-chain contacts score exactly 0.0**. A caller comparing raw `pmidockq` values across predictions should be aware this short-circuits past the sigmoid.
-
-## References
-
-- Zhu W., Shenoy A., Kundrotas P., Elofsson A. "Evaluation of AlphaFold-Multimer prediction on multi-chain protein complexes." *Bioinformatics* 39(7):btad424 (2023). [doi:10.1093/bioinformatics/btad424](https://doi.org/10.1093/bioinformatics/btad424)
-- Bryant P., Pozzati G., Elofsson A. "Improved prediction of protein-protein interactions using AlphaFold2." *Nature Communications* 13:1265 (2022). [doi:10.1038/s41467-022-28865-w](https://doi.org/10.1038/s41467-022-28865-w)
-
-## Related Tools
-
-- `pyrosetta-sap` / `pyrosetta-sasa` / `pyrosetta-energy` — physics-based interface scoring (complementary to pDockQ2).
-- `structure-metrics` — per-structure secondary-structure and compactness metrics.
-- Structure predictors that produce valid inputs: `alphafold3`, `chai1`, `boltz2`, `protenix`.
+- **Outputs are returned as typed metric objects.** Each `PDockQ2Metrics` result carries the overall `pdockq2` score (0 to 1), `avg_interface_plddt` (0 to 100 pLDDT scale), `avg_interface_pae` (0 to 1 normalised confidence), and `num_interface_contacts` (integer count) together with a per-chain `interfaces` breakdown. The headline `primary_metric` is `pdockq2`, and results can be exported to JSON through the standard export method.
+- **The tool implementation runs entirely in-process and uses CPU only.** The scoring formula is re-implemented in pure Python with numpy, and no standalone environment or separate program is invoked. Per-call runtime is sub-second for typical complex sizes and scales quadratically with the total residue count because of the all-against-all CA-CA distance computation.
