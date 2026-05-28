@@ -1,8 +1,8 @@
 code:
   spdx: GPL-3.0
   url: https://github.com/tkzeng/Pangolin/blob/main/LICENSE
-commercial_use: restricted
+commercial_use: 'yes'
 redistribution: true
 attribution_required: true
-notes: Pangolin (Zeng & Li, Univ. of Chicago) is GPL-3.0; bundled model weights ship inside the pip package under the same license. GPL-3.0 is copyleft - derivative works must remain GPL-3.0 and source must be made available.
-last_updated: '2026-05-27'
+notes: Pangolin (Zeng & Li, Univ. of Chicago) is standard GPL-3.0; bundled model weights ship inside the pip package under the same license. GPL-3.0 permits commercial use; it is copyleft - derivative works must remain GPL-3.0 and source must be made available.
+last_updated: '2026-05-28'
