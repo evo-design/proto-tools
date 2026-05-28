@@ -27,6 +27,7 @@ from proto_tools.tools.structure_alignment.foldseek.foldseek_search import (
     FoldseekSearchMode,
     _parse_m8_archive,
     _parse_m8_text,
+    _require_linux_x86_64_for_gpu,
     _submit,
 )
 from proto_tools.tools.tool_registry import tool
@@ -96,6 +97,7 @@ class FoldseekMultimerSearchConfig(BaseConfig):
         lddt_threshold (float): Local-only — keep alignments with LDDT above
             this (0-1). 0.0 keeps all.
         num_threads (int): Local-only — CPU threads.
+        use_gpu (bool): Local-only — run with --gpu 1 on a Linux x86_64 NVIDIA GPU host.
     """
 
     search_mode: FoldseekSearchMode = ConfigField(
@@ -173,6 +175,11 @@ class FoldseekMultimerSearchConfig(BaseConfig):
     num_threads: int = ConfigField(
         title="Threads (local)", default=4, ge=1, description="CPU threads for local search", include_in_key=False
     )
+    use_gpu: bool = ConfigField(
+        title="Use GPU",
+        default=False,
+        description="Local-only — run `--gpu 1` on a Linux x86_64 NVIDIA GPU host (driver >= 525.60.13).",
+    )
 
     _REMOTE_ONLY_DEFAULTS = {  # noqa: RUF012
         "databases": ["pdb100"],
@@ -189,6 +196,7 @@ class FoldseekMultimerSearchConfig(BaseConfig):
         "tmscore_threshold": 0.0,
         "lddt_threshold": 0.0,
         "num_threads": 4,
+        "use_gpu": False,
     }
 
     @model_validator(mode="after")
@@ -202,7 +210,14 @@ class FoldseekMultimerSearchConfig(BaseConfig):
         for name, default in ignored_table.items():
             if getattr(self, name) != default:
                 logger.warning("Config field '%s' is %s and is ignored in %s mode.", name, kind, self.search_mode)
+        if self.search_mode == "local":
+            _require_linux_x86_64_for_gpu(self.use_gpu)
         return self
+
+    @property
+    def gpus_per_instance(self) -> int:
+        """Number of GPUs the configured search uses (1 for local GPU search, else 0)."""
+        return 1 if self.use_gpu and self.search_mode == "local" else 0
 
 
 class FoldseekMultimerSearchOutput(BaseToolOutput):
@@ -353,6 +368,8 @@ def _local_multimer_search(
             "tmscore_threshold": config.tmscore_threshold,
             "lddt_threshold": config.lddt_threshold,
             "num_threads": config.num_threads,
+            "use_gpu": config.use_gpu,
+            "device": "cuda" if config.use_gpu else "cpu",
         },
         instance=instance,
         config=config,

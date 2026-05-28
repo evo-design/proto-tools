@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from proto_tools.entities import Structure
 from proto_tools.entities.structures.utils import detect_structure_format
+from proto_tools.tools.structure_alignment.foldseek.foldseek_search import _require_linux_x86_64_for_gpu
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -134,6 +135,7 @@ class FoldseekClusterConfig(BaseConfig):
             ``resolve_weights_dir("foldseek")/prostt5/weights`` on first FASTA
             call (honors ``PROTO_FOLDSEEK_WEIGHTS_DIR`` / ``PROTO_MODEL_CACHE``).
         num_threads (int): CPU threads.
+        use_gpu (bool): Run with --gpu 1 on a Linux x86_64 NVIDIA GPU host (driver >= 525.60.13).
     """
 
     min_seq_id: float = ConfigField(
@@ -185,6 +187,22 @@ class FoldseekClusterConfig(BaseConfig):
         include_in_key=False,
     )
     num_threads: int = ConfigField(title="Threads", default=4, ge=1, description="CPU threads", include_in_key=False)
+    use_gpu: bool = ConfigField(
+        title="Use GPU",
+        default=False,
+        description="Run `--gpu 1` on a Linux x86_64 NVIDIA GPU host (driver >= 525.60.13); CPU otherwise.",
+    )
+
+    @model_validator(mode="after")
+    def _validate_use_gpu(self) -> "FoldseekClusterConfig":
+        """Reject use_gpu on hosts without the Linux x86_64 GPU build."""
+        _require_linux_x86_64_for_gpu(self.use_gpu)
+        return self
+
+    @property
+    def gpus_per_instance(self) -> int:
+        """Number of GPUs the configured run uses (1 if GPU, else 0)."""
+        return 1 if self.use_gpu else 0
 
 
 class FoldseekClusterOutput(BaseToolOutput):
@@ -283,6 +301,8 @@ def run_foldseek_cluster(
             "lddt_threshold": config.lddt_threshold,
             "prostt5_weights_dir": config.prostt5_weights_dir,
             "num_threads": config.num_threads,
+            "use_gpu": config.use_gpu,
+            "device": "cuda" if config.use_gpu else "cpu",
         },
         instance=instance,
         config=config,

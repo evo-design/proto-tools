@@ -19,6 +19,7 @@ from proto_tools.tools.structure_alignment.foldseek.foldseek_search import (
     _LOCAL_DB_PSEUDONAME,
     FoldseekHit,
     _parse_m8_text,
+    _require_linux_x86_64_for_gpu,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -78,6 +79,7 @@ class FoldseekRBHConfig(BaseConfig):
         lddt_threshold (float): Keep RBH pairs with LDDT above this (0-1).
             0.0 keeps all.
         num_threads (int): CPU threads.
+        use_gpu (bool): Run with --gpu 1 on a Linux x86_64 NVIDIA GPU host (driver >= 525.60.13).
     """
 
     local_db: str | None = ConfigField(
@@ -130,6 +132,11 @@ class FoldseekRBHConfig(BaseConfig):
         title="LDDT Threshold", default=0.0, ge=0.0, le=1.0, description="LDDT floor for RBH pairs (0-1). 0.0 keeps all"
     )
     num_threads: int = ConfigField(title="Threads", default=4, ge=1, description="CPU threads", include_in_key=False)
+    use_gpu: bool = ConfigField(
+        title="Use GPU",
+        default=False,
+        description="Run `--gpu 1` on a Linux x86_64 NVIDIA GPU host (driver >= 525.60.13); CPU otherwise.",
+    )
 
     @model_validator(mode="after")
     def _local_db_required(self) -> "FoldseekRBHConfig":
@@ -137,6 +144,17 @@ class FoldseekRBHConfig(BaseConfig):
         if not self.local_db:
             raise ValueError("local_db is required for foldseek-rbh (no remote mode exists)")
         return self
+
+    @model_validator(mode="after")
+    def _validate_use_gpu(self) -> "FoldseekRBHConfig":
+        """Reject use_gpu on hosts without the Linux x86_64 GPU build."""
+        _require_linux_x86_64_for_gpu(self.use_gpu)
+        return self
+
+    @property
+    def gpus_per_instance(self) -> int:
+        """Number of GPUs the configured search uses (1 if GPU, else 0)."""
+        return 1 if self.use_gpu else 0
 
 
 class FoldseekRBHOutput(BaseToolOutput):
@@ -229,6 +247,8 @@ def run_foldseek_rbh(
             "tmscore_threshold": config.tmscore_threshold,
             "lddt_threshold": config.lddt_threshold,
             "num_threads": config.num_threads,
+            "use_gpu": config.use_gpu,
+            "device": "cuda" if config.use_gpu else "cpu",
         },
         instance=instance,
         config=config,

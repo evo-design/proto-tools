@@ -11,6 +11,7 @@ database via the standalone env binary.
 import io
 import json
 import logging
+import platform
 import tarfile
 from pathlib import Path
 from typing import Any, Literal
@@ -54,6 +55,15 @@ FoldseekDatabase = Literal[
 ]
 FoldseekMode = Literal["3diaa", "tmalign", "lolalign"]
 FoldseekSearchMode = Literal["remote", "local"]
+
+
+def _require_linux_x86_64_for_gpu(use_gpu: bool) -> None:
+    """Raise unless use_gpu can run here — the Foldseek GPU build is Linux x86_64 only."""
+    if use_gpu and not (platform.system() == "Linux" and platform.machine() == "x86_64"):
+        raise ValueError(
+            "use_gpu=True requires a Linux x86_64 host with an NVIDIA GPU "
+            f"(current: {platform.system()} {platform.machine()}); set use_gpu=False to run on CPU."
+        )
 
 
 # ============================================================================
@@ -144,6 +154,7 @@ class FoldseekSearchConfig(BaseConfig):
         lddt_threshold (float): Local-only — keep alignments with LDDT above
             this (0-1). 0.0 keeps all.
         num_threads (int): Local-only — CPU threads.
+        use_gpu (bool): Local-only — run with --gpu 1 on a Linux x86_64 NVIDIA GPU host.
     """
 
     search_mode: FoldseekSearchMode = ConfigField(
@@ -221,6 +232,11 @@ class FoldseekSearchConfig(BaseConfig):
     num_threads: int = ConfigField(
         title="Threads (local)", default=4, ge=1, description="CPU threads for local search", include_in_key=False
     )
+    use_gpu: bool = ConfigField(
+        title="Use GPU",
+        default=False,
+        description="Local-only — run `--gpu 1` on a Linux x86_64 NVIDIA GPU host (driver >= 525.60.13).",
+    )
 
     _REMOTE_ONLY_DEFAULTS = {  # noqa: RUF012
         "databases": ["pdb100", "afdb50"],
@@ -237,6 +253,7 @@ class FoldseekSearchConfig(BaseConfig):
         "tmscore_threshold": 0.0,
         "lddt_threshold": 0.0,
         "num_threads": 4,
+        "use_gpu": False,
     }
 
     @model_validator(mode="after")
@@ -250,7 +267,14 @@ class FoldseekSearchConfig(BaseConfig):
         for name, default in ignored_table.items():
             if getattr(self, name) != default:
                 logger.warning("Config field '%s' is %s and is ignored in %s mode.", name, kind, self.search_mode)
+        if self.search_mode == "local":
+            _require_linux_x86_64_for_gpu(self.use_gpu)
         return self
+
+    @property
+    def gpus_per_instance(self) -> int:
+        """Number of GPUs the configured search uses (1 for local GPU search, else 0)."""
+        return 1 if self.use_gpu and self.search_mode == "local" else 0
 
 
 class FoldseekSearchOutput(BaseToolOutput):
@@ -397,6 +421,8 @@ def _local_search(
             "tmscore_threshold": config.tmscore_threshold,
             "lddt_threshold": config.lddt_threshold,
             "num_threads": config.num_threads,
+            "use_gpu": config.use_gpu,
+            "device": "cuda" if config.use_gpu else "cpu",
         },
         instance=instance,
         config=config,
