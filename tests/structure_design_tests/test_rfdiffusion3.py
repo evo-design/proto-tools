@@ -104,26 +104,38 @@ def test_rfdiffusion3_config_gamma_0_symmetry_constraint():
 def test_rfdiffusion3_config_get_cli_kwargs():
     """Sampler knobs emit under inference_sampler.* dotted paths; top-level toggles stay flat.
 
-    Conditional fields (cfg_features, cfg_t_max) only emit when explicitly
-    set so upstream defaults stand for None.
+    Optional sampler knobs (cfg_features, cfg_t_max, and the noise-schedule /
+    motif params) only emit when explicitly set so upstream defaults stand for None.
     """
-    # Defaults: conditionals omitted, required fields present
+    # Defaults: every opt-in sampler knob is omitted so upstream checkpoint defaults stand.
     default_kwargs = RFdiffusion3Config().get_cli_kwargs()
     for omitted in (
         "inference_sampler.cfg_features",
         "inference_sampler.cfg_t_max",
+        "inference_sampler.noise_scale",
+        "inference_sampler.p",
+        "inference_sampler.s_trans",
+        "inference_sampler.gamma_min",
+        "inference_sampler.allow_realignment",
+        "inference_sampler.s_jitter_origin",
     ):
         assert omitted not in default_kwargs
 
-    # Explicit override of every typed sampler + top-level toggle
+    # Explicit override of every typed sampler knob + top-level toggle.
     config = RFdiffusion3Config(
+        sampler_kind="symmetry",
         cfg_scale=2.0,
         gamma_0=0.7,
-        sampler_kind="symmetry",
         center_option="motif",
         use_classifier_free_guidance=True,
         cfg_features=["active_donor"],
         cfg_t_max=0.8,
+        noise_scale=1.01,
+        p=10,
+        s_trans=0.9,
+        gamma_min=0.8,
+        allow_realignment=True,
+        s_jitter_origin=0.5,
         dump_trajectories=True,
         align_trajectory_structures=True,
         prevalidate_inputs=True,
@@ -139,6 +151,12 @@ def test_rfdiffusion3_config_get_cli_kwargs():
         "inference_sampler.use_classifier_free_guidance": True,
         "inference_sampler.cfg_features": ["active_donor"],
         "inference_sampler.cfg_t_max": 0.8,
+        "inference_sampler.noise_scale": 1.01,
+        "inference_sampler.p": 10,
+        "inference_sampler.s_trans": 0.9,
+        "inference_sampler.gamma_min": 0.8,
+        "inference_sampler.allow_realignment": True,
+        "inference_sampler.s_jitter_origin": 0.5,
     }
     for key, value in expected_dotted.items():
         assert kwargs[key] == value, f"{key} not emitted as dotted path"
@@ -157,6 +175,12 @@ def test_rfdiffusion3_config_get_cli_kwargs():
         "use_classifier_free_guidance",
         "cfg_features",
         "cfg_t_max",
+        "noise_scale",
+        "p",
+        "s_trans",
+        "gamma_min",
+        "allow_realignment",
+        "s_jitter_origin",
     ):
         assert flat not in kwargs
 
