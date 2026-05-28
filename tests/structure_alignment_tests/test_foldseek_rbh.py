@@ -50,6 +50,8 @@ def test_run_foldseek_rbh_dispatches_easy_rbh():
         "tmscore_threshold": 0.0,
         "lddt_threshold": 0.0,
         "num_threads": 8,
+        "use_gpu": False,
+        "device": "cpu",
     }
 
 

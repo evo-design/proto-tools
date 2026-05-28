@@ -85,6 +85,19 @@ def _ensure_prostt5_weights(override: str | None) -> str:
 _M8_FORMAT_PIDENT = "query,target,pident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,evalue,bits"
 
 
+def _gpu_args(use_gpu: bool) -> list[str]:
+    """Return foldseek GPU flags for use_gpu, [] for CPU; raise if the GPU build is absent."""
+    if not use_gpu:
+        return []
+    marker = Path(sys.executable).parent / ".foldseek_build_variant"
+    if not (marker.is_file() and "gpu" in marker.read_text()):
+        raise RuntimeError(
+            "foldseek: use_gpu=True but the GPU build is not installed (no compatible NVIDIA GPU detected "
+            "at venv setup). Re-provision on a Linux x86_64 host with an NVIDIA driver >= 525.60.13."
+        )
+    return ["--gpu", "1", "--prefilter-mode", "1"]
+
+
 def run_easy_search(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run `foldseek easy-search` for a single query against a local Foldseek DB.
 
@@ -127,6 +140,7 @@ def run_easy_search(input_data: dict[str, Any]) -> dict[str, Any]:
                 str(input_data["lddt_threshold"]),
                 "--threads",
                 str(input_data["num_threads"]),
+                *_gpu_args(input_data["use_gpu"]),
             ],
             "easy-search",
         )
@@ -190,6 +204,7 @@ def run_easy_cluster(input_data: dict[str, Any]) -> dict[str, Any]:
         ]
         if is_fasta_mode:
             cmd += ["--prostt5-model", _ensure_prostt5_weights(input_data.get("prostt5_weights_dir"))]
+        cmd += _gpu_args(input_data["use_gpu"])
 
         _run_cmd(cmd, "easy-cluster")
         tsv_path = prefix.with_name(prefix.name + "_cluster.tsv")
@@ -238,6 +253,7 @@ def run_easy_multimersearch(input_data: dict[str, Any]) -> dict[str, Any]:
                 str(input_data["lddt_threshold"]),
                 "--threads",
                 str(input_data["num_threads"]),
+                *_gpu_args(input_data["use_gpu"]),
             ],
             "easy-multimersearch",
         )
@@ -293,6 +309,7 @@ def run_easy_multimercluster(input_data: dict[str, Any]) -> dict[str, Any]:
                 str(input_data["lddt_threshold"]),
                 "--threads",
                 str(input_data["num_threads"]),
+                *_gpu_args(input_data["use_gpu"]),
             ],
             "easy-multimercluster",
         )
@@ -351,6 +368,7 @@ def run_easy_rbh(input_data: dict[str, Any]) -> dict[str, Any]:
                 str(input_data["lddt_threshold"]),
                 "--threads",
                 str(input_data["num_threads"]),
+                *_gpu_args(input_data["use_gpu"]),
             ],
             "easy-rbh",
         )

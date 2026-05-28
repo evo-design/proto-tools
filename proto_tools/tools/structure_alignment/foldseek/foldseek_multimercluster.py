@@ -20,6 +20,7 @@ from proto_tools.tools.structure_alignment.foldseek.foldseek_cluster import (
     _resolve_structures_dir_in_data,
     _validate_resolved_input,
 )
+from proto_tools.tools.structure_alignment.foldseek.foldseek_search import _require_linux_x86_64_for_gpu
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -112,6 +113,7 @@ class FoldseekMultimerClusterConfig(BaseConfig):
         lddt_threshold (float): Keep chain-pair alignments with LDDT above
             this (0-1). 0.0 keeps all.
         num_threads (int): CPU threads.
+        use_gpu (bool): Run with --gpu 1 on a Linux x86_64 NVIDIA GPU host (driver >= 525.60.13).
     """
 
     multimer_tm_threshold: float = ConfigField(
@@ -155,6 +157,22 @@ class FoldseekMultimerClusterConfig(BaseConfig):
         description="LDDT floor for chain-pair alignments (0-1). 0.0 keeps all",
     )
     num_threads: int = ConfigField(title="Threads", default=4, ge=1, description="CPU threads", include_in_key=False)
+    use_gpu: bool = ConfigField(
+        title="Use GPU",
+        default=False,
+        description="Run `--gpu 1` on a Linux x86_64 NVIDIA GPU host (driver >= 525.60.13); CPU otherwise.",
+    )
+
+    @model_validator(mode="after")
+    def _validate_use_gpu(self) -> "FoldseekMultimerClusterConfig":
+        """Reject use_gpu on hosts without the Linux x86_64 GPU build."""
+        _require_linux_x86_64_for_gpu(self.use_gpu)
+        return self
+
+    @property
+    def gpus_per_instance(self) -> int:
+        """Number of GPUs the configured run uses (1 if GPU, else 0)."""
+        return 1 if self.use_gpu else 0
 
 
 class FoldseekMultimerClusterOutput(BaseToolOutput):
@@ -258,6 +276,8 @@ def run_foldseek_multimercluster(
             "tmscore_threshold": config.tmscore_threshold,
             "lddt_threshold": config.lddt_threshold,
             "num_threads": config.num_threads,
+            "use_gpu": config.use_gpu,
+            "device": "cuda" if config.use_gpu else "cpu",
         },
         instance=instance,
         config=config,

@@ -143,6 +143,8 @@ def test_local_mode_dispatches_easy_search():
         "tmscore_threshold": 0.0,
         "lddt_threshold": 0.0,
         "num_threads": 8,
+        "use_gpu": False,
+        "device": "cpu",
     }
 
 

@@ -40,6 +40,7 @@ This tool is the structural analogue of BLAST. It is the appropriate first step 
 - **The alignment algorithm is selected by `mode` in remote execution and by `alignment_type` in local execution.** For `mode`, the default `3diaa` performs 3Di-plus-amino-acid local alignment, `tmalign` runs the global TM-align, and `lolalign` runs the LoL-aligner local alignment. The local-mode equivalent `alignment_type` takes the integer values `0` (3Di), `1` (TM-align), `2` (3Di+AA, the default), and `3` (LoL).
 - **Local execution requires a target database.** Provide either a prebuilt Foldseek database or a directory of PDB files via the `local_db` configuration field. Foldseek constructs a temporary database from a directory of files at runtime, but a prebuilt database from `foldseek createdb` is more efficient for repeated queries.
 - **`sensitivity` controls the prefilter stage during local execution.** Higher values recover more distant homologues at the cost of additional runtime. The wrapper default of 9.5 matches the upstream `--sensitivity` default.
+- **Local execution can be GPU-accelerated.** Set `use_gpu=True` to run with `--gpu 1` on a compatible NVIDIA GPU host (see Toolkit Notes for requirements).
 
 ### Foldseek Cluster (`foldseek-cluster`)
 
@@ -107,3 +108,4 @@ These apply to every Foldseek tool in this toolkit (`foldseek-search`, `foldseek
 - **Accepted input formats differ by tool.** `foldseek-search`, `foldseek-multimer-search`, and `foldseek-rbh` currently accept only raw PDB text, `foldseek-cluster` accepts PDB, mmCIF, or FASTA, and `foldseek-multimercluster` accepts PDB or mmCIF.
 - **Local execution requires a user-supplied target.** Either a prebuilt Foldseek database or a directory of structure files must be provided through the `local_db` field. No reference database is bundled with the toolkit.
 - **`structures_dir` cache keys reflect file content, not directory paths.** Modifying files in place between calls correctly invalidates the cache, so structure-set updates do not produce stale results.
+- **Local search can use an NVIDIA GPU.** Set `use_gpu=True` on any local-mode tool; the GPU build auto-installs on Linux x86_64 hosts with a compatible NVIDIA driver (`>= 525.60.13`).
