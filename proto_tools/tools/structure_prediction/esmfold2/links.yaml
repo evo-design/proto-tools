@@ -1,0 +1,7 @@
+github: https://github.com/Biohub/esm
+paper: https://biohub.ai/papers/esm_protein.pdf
+huggingface:
+  - https://huggingface.co/biohub/ESMFold2
+  - https://huggingface.co/biohub/ESMFold2-Fast
+organizations:
+  - biohub

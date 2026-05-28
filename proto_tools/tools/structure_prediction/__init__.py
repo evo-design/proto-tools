@@ -29,6 +29,13 @@ from proto_tools.tools.structure_prediction.esmfold import (
     run_esmfold,
     run_esmfold_gradient,
 )
+from proto_tools.tools.structure_prediction.esmfold2 import (
+    ESMFold2Config,
+    ESMFold2Input,
+    ESMFold2Metrics,
+    ESMFold2Output,
+    run_esmfold2,
+)
 from proto_tools.tools.structure_prediction.protenix import ProtenixConfig, ProtenixInput, ProtenixOutput, run_protenix
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
@@ -80,6 +87,12 @@ __all__ = [
     "ESMFoldGradientInput",
     "ESMFoldGradientConfig",
     "ESMFoldGradientOutput",
+    # ESMFold2
+    "run_esmfold2",
+    "ESMFold2Input",
+    "ESMFold2Config",
+    "ESMFold2Output",
+    "ESMFold2Metrics",
     # Protenix
     "run_protenix",
     "ProtenixInput",

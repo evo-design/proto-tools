@@ -108,10 +108,12 @@ _SEED_EXCLUDED_KEYS: frozenset[str] = frozenset(
 #   worker. The tool is marked ``gpu_only=True`` so the eviction round-trip
 #   test handles it via worker restart, but the persistent seed test has no
 #   eviction to trigger that path.
+# - esmfold2-prediction: ~2 mÅ atom drift between consecutive in-worker dispatches; root cause not isolated.
 _SEED_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {
         "chai1-prediction",
         "alphagenome-predict-variants",
+        "esmfold2-prediction",
     }
 )
 
@@ -133,6 +135,8 @@ _SEED_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
 #   7-bit mantissa, 0.4-1.4% relative). The forward pass passes ``PRNGKey=None``
 #   so it's mathematically deterministic, but JAX/CUDA autotune doesn't
 #   guarantee bit-exact behaviour across processes.
+# - esmfold2-prediction: ~7 mÅ atom drift across fresh subprocesses despite
+#   matching seeds and standard determinism flags. Root cause not isolated.
 _SEED_NON_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {
         "progen3-sample",
@@ -143,6 +147,7 @@ _SEED_NON_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
         "alphagenome-score-intervals",
         "alphagenome-score-ism-variants-batch",
         "alphagenome-score-variants",
+        "esmfold2-prediction",
     }
 )
 

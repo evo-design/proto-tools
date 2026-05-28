@@ -1,0 +1,8 @@
+code:
+  spdx: MIT
+  url: https://github.com/Biohub/esm/blob/main/LICENSE.md
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: ESMFold2 code and HuggingFace weights (biohub/ESMFold2, biohub/ESMFold2-Fast) are MIT-licensed under Chan Zuckerberg Biohub copyright.
+last_updated: '2026-05-27'
