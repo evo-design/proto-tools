@@ -1,5 +1,20 @@
 """RNA splicing prediction tools."""
 
+from proto_tools.tools.rna_splicing.pangolin import (
+    PANGOLIN_FLANK,
+    PangolinPredictConfig,
+    PangolinPredictInput,
+    PangolinPredictOutput,
+    PangolinScoreVariantsConfig,
+    PangolinScoreVariantsInput,
+    PangolinScoreVariantsOutput,
+    PangolinTissue,
+    PangolinVariant,
+    PangolinVariantEffect,
+    PangolinVariantMetrics,
+    run_pangolin_predict,
+    run_pangolin_score_variants,
+)
 from proto_tools.tools.rna_splicing.splice_transformer import (
     CONTEXT_LENGTH,
     SPLICE_TISSUE_CHANNEL_INDEX,
@@ -13,6 +28,19 @@ from proto_tools.tools.rna_splicing.splice_transformer import (
 )
 
 __all__ = [
+    "PANGOLIN_FLANK",
+    "PangolinPredictConfig",
+    "PangolinPredictInput",
+    "PangolinPredictOutput",
+    "PangolinScoreVariantsConfig",
+    "PangolinScoreVariantsInput",
+    "PangolinScoreVariantsOutput",
+    "PangolinTissue",
+    "PangolinVariant",
+    "PangolinVariantEffect",
+    "PangolinVariantMetrics",
+    "run_pangolin_predict",
+    "run_pangolin_score_variants",
     "CONTEXT_LENGTH",
     "SPLICE_TISSUE_CHANNEL_INDEX",
     "TARGET_LENGTH",

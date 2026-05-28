@@ -213,6 +213,7 @@ module = [
     "bioemu.*",
     "enformer_pytorch.*",
     "borzoi_pytorch.*",
+    "pangolin.*",
     "alphagenome.*",
     "alphagenome_research.*",
     "axial_positional_embedding.*",

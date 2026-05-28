@@ -136,6 +136,7 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 ├── <a href="proto_tools/tools/orf_prediction/orfipy/">orfipy/</a>
 └── <a href="proto_tools/tools/orf_prediction/prodigal/">prodigal/</a>
 <a href="proto_tools/tools/rna_splicing/">rna_splicing/</a>                   # RNA splice site prediction
+├── <a href="proto_tools/tools/rna_splicing/pangolin/">pangolin/</a>
 └── <a href="proto_tools/tools/rna_splicing/splice_transformer/">splice_transformer/</a>
 <a href="proto_tools/tools/sequence_alignment/">sequence_alignment/</a>             # Sequence search and multiple sequence alignment
 ├── <a href="proto_tools/tools/sequence_alignment/blast/">blast/</a>

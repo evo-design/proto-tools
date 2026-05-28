@@ -1,0 +1,2 @@
+# Torch is installed separately by setup.sh with a driver-aware version range.
+numpy>=1.24.0
