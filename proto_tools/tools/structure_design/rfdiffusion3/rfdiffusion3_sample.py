@@ -98,9 +98,8 @@ class RFdiffusion3DesignSpec(BaseModel):
                 - ``"A1-100,50,A150-200"`` - scaffold around residues A1-100 and A150-200
                 - ``"50,/0,B1-50"`` - design 50 residues, chain break, then keep B1-50
 
-        length (str | None): Total design length constraint. Can be an integer
-            (exact length) or range ``"min-max"``. Used for unconditional design
-            when no contig is specified.
+        length (str | None): Per-asymmetric-unit length (int or
+            ``"min-max"``); per-protomer under ``symmetry``.
 
         ligand (str | None): Ligand selection by residue name from input structure.
             Comma-separated list of 3-letter codes (e.g., ``"HAX,OAA"``).
@@ -193,7 +192,7 @@ class RFdiffusion3DesignSpec(BaseModel):
     length: str | None = Field(
         default=None,
         title="Length",
-        description="Total design length constraint ('min-max' or int as string)",
+        description="Per-asymmetric-unit length (int or 'min-max'); per-protomer under symmetry",
         examples=["100", "80-120"],
     )
     ligand: str | None = Field(
