@@ -1436,3 +1436,58 @@ def test_ca_rmsd_no_superposition_different_chain_ids(pdl1_complex):
 def test_ca_rmsd_no_superposition_empty_chain_returns_inf(pdl1_complex):
     """Returns inf when one side has zero CA atoms (e.g. unknown chain id)."""
     assert pdl1_complex.ca_rmsd_no_superposition(pdl1_complex, self_chain_id="ZZ", other_chain_id="A") == float("inf")
+
+
+# ── ca_coordinates_by_chain / ca_coordinates ────────────────────────────────
+
+
+def test_ca_coordinates_by_chain_parses_cif():
+    """Parse CA coords from mmCIF content (no fixed-column ATOM records).
+
+    Regression guard for hand-rolled PDB parsers that find zero atoms in CIF
+    output from tools like RFdiffusion3.
+    """
+    structure = Structure(structure=synthetic_cif(["A", "B"]))
+    assert structure.structure_format == "cif"
+
+    chains = structure.ca_coordinates_by_chain()
+
+    assert set(chains) == {"A", "B"}
+    # synthetic_cif places each chain's CA at (chain_idx * 100 + 1.5, 0, 0).
+    assert chains["A"] == [pytest.approx((1.5, 0.0, 0.0))]
+    assert chains["B"] == [pytest.approx((101.5, 0.0, 0.0))]
+
+
+def test_ca_coordinates_by_chain_matches_across_formats():
+    """The same structure parsed as CIF or PDB returns identical CA coords."""
+    cif = synthetic_cif(["A", "B"])
+    from_cif = Structure(structure=cif).ca_coordinates_by_chain()
+    from_pdb = Structure(structure=convert_cif_str_to_pdb_str(cif), structure_format="pdb").ca_coordinates_by_chain()
+
+    assert from_cif.keys() == from_pdb.keys()
+    for chain_id, coords in from_cif.items():
+        assert coords == [pytest.approx(xyz) for xyz in from_pdb[chain_id]]
+
+
+def test_ca_coordinates_flattens_in_chain_order():
+    """``ca_coordinates`` concatenates per-chain coords in chain order."""
+    structure = Structure(structure=synthetic_cif(["A", "B"]))
+    by_chain = structure.ca_coordinates_by_chain()
+
+    assert structure.ca_coordinates() == [xyz for coords in by_chain.values() for xyz in coords]
+
+
+def test_ca_coordinates_on_real_structure_matches_chain_ids(protein_from_cif_file):
+    """Real prediction output exposes CA coords keyed by its own chain IDs."""
+    chains = protein_from_cif_file.ca_coordinates_by_chain()
+
+    assert chains
+    assert set(chains) == set(protein_from_cif_file.get_chain_ids())
+    assert all(coords for coords in chains.values())
+
+
+def test_ca_coordinates_by_chain_rejects_out_of_range_model():
+    """An out-of-range ``model_index`` raises rather than returning empty."""
+    structure = Structure(structure=synthetic_cif(["A"]))
+    with pytest.raises(ValueError, match="model_index"):
+        structure.ca_coordinates_by_chain(model_index=5)
