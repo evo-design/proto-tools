@@ -1,323 +1,90 @@
-<a href="https://bio-pro.mintlify.app/tools/masked-models/ablang"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/masked-models/ablang"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # AbLang
 
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** AbLang is open source and free for academic and commercial use under a BSD-3-Clause license. Please refer to [the license](https://github.com/oxpig/AbLang/blob/main/LICENSE) for full terms.
 
 ## Overview
-AbLang is an antibody-specific language model family from the Oxford Protein Informatics Group (OPIG), trained on antibody sequences from the Observed Antibody Space (OAS). Built on a BERT/MLM architecture, it provides antibody sequence embeddings, pseudo-log-likelihood scoring, and masked residue restoration. The tool wraps three model variants — ablang1-heavy, ablang1-light, and ablang2-paired — with automatic model routing based on which chains are provided on the `Antibody` input.
 
-This package also includes `ablang-gradient`, a relaxed-sequence gradient tool that computes a shifted cross-entropy objective over relaxed antibody logits (via `AntibodyLogits`). It supports all three model variants and uses an internal mapping from proto-language's canonical protein order `ACDEFGHIKLMNPQRSTVWY` into AbLang's token vocabulary order `ARNDCQEGHILKMFPSTWYV`.
+[AbLang](https://github.com/oxpig/AbLang) is a family of antibody-specific masked language models from the [Oxford Protein Informatics Group (OPIG)](https://opig.stats.ox.ac.uk/). The models are trained on antibody variable-domain sequences from the Observed Antibody Space (OAS) and capture antibody-specific patterns including CDR variability, framework conservation, and heavy-light chain pairing. This toolkit exposes four tools that use the AbLang heavy-chain, light-chain, and paired heavy-plus-light models for embedding extraction, masked-position sampling, pseudo-log-likelihood scoring, and relaxed-sequence gradient computation.
 
 ## Background
 
-**Why an antibody-specific language model?**
-General protein language models like ESM2 are trained on diverse protein families. Antibodies have a unique architecture (variable/constant domains, CDR loops, framework regions) and evolve through somatic hypermutation rather than standard evolutionary selection. AbLang captures antibody-specific patterns by training exclusively on antibody sequences, including:
-- **CDR variability**: Complementarity-determining regions that bind antigens
-- **Framework conservation**: Structural scaffold residues
-- **Chain pairing**: Co-evolutionary patterns between heavy and light chains
-- **Species-specific signatures**: Human, mouse, and other germline patterns
+AbLang ([Olsen, Moal, and Deane, 2022](https://doi.org/10.1093/bioadv/vbac046)) is a BERT-style masked language model trained exclusively on antibody variable-domain sequences from the OAS database. The published work demonstrates that AbLang restores residues missing from antibody sequence reads more accurately than germline-based imputation or the general-purpose ESM-1b protein language model, and runs approximately seven times faster than ESM-1b. Two single-chain checkpoints are provided, `ablang1-heavy` and `ablang1-light`, each with a 768-dimensional hidden representation.
 
-**Why paired models matter:**
-Heavy and light chains co-evolve to form functional antibodies. The paired model (`ablang2-paired`) processes both chains together, capturing inter-chain dependencies that single-chain models miss.
+AbLang-2 ([Olsen, Moal, and Deane, 2024](https://doi.org/10.1093/bioinformatics/btae618)) is trained on both unpaired and paired antibody sequence data and addresses a germline-residue bias observed in earlier antibody language models that overweighted germline positions during training. The published analysis shows that AbLang-2 suggests a diverse set of valid mutations with high cumulative probability and provides paired-chain context for antibody design. The `ablang2-paired` checkpoint exposed by this toolkit has a 480-dimensional hidden representation.
+
+### Learning Resources
+
+- [oxpig/AbLang](https://github.com/oxpig/AbLang) (OPIG, University of Oxford). Official AbLang repository, source code, and reference implementation of the heavy- and light-chain checkpoints.
+- [oxpig/AbLang2](https://github.com/oxpig/AbLang2) (OPIG, University of Oxford). Official AbLang-2 repository for the paired heavy-plus-light checkpoint.
+- [Observed Antibody Space](https://opig.stats.ox.ac.uk/webapps/oas/) (OPIG). Public antibody sequence database used to train the AbLang models.
 
 ## Tools
 
 ### AbLang Embeddings (`ablang-embedding`)
 
-Extract antibody sequence embeddings using AbLang.
+Computes per-sequence AbLang embeddings for a list of `Antibody` inputs. Each `Antibody` carries an optional heavy chain and an optional light chain, and the tool routes to `ablang1-heavy`, `ablang1-light`, or `ablang2-paired` based on which chains are present. The output is a list of mean-pooled embeddings (768-dimensional for the single-chain checkpoints, 480-dimensional for the paired checkpoint) together with attention masks that mark valid sequence positions.
 
-### AbLang Gradient (`ablang-gradient`)
+#### Applications
 
-Compute AbLang masked PLL gradient with respect to relaxed antibody logits.
+This tool is appropriate for any antibody-sequence analysis that benefits from a learned representation. Representative applications include clustering antibody repertoires by sequence similarity in embedding space, ranking humanization candidates by distance to a known humanised lead, identifying paired heavy-plus-light combinations with similar predicted binding behaviour, and providing input features to downstream classifiers for property prediction.
+
+#### Usage Tips
+
+- **Provide both chains when available to get the paired representation.** Setting both `heavy_chain` and `light_chain` on the `Antibody` input routes to `ablang2-paired`, which captures inter-chain co-evolutionary signals that the single-chain checkpoints cannot. Provide only one chain to use the corresponding single-chain model.
+- **Use the returned attention mask when pooling or comparing positions.** Variable-length sequences in a batch are padded to the longest input, and the attention mask flags which positions are real (1) versus padding (0). Downstream per-position analyses should respect the mask.
 
 ### AbLang Sampling (`ablang-sample`)
 
-Restore masked positions in antibody sequences using AbLang.
+Restores masked positions in antibody sequences using the AbLang masked-language-model head. Positions to be restored are marked with an underscore (`_`) in the input sequence, and the tool samples a replacement amino acid at each masked position from the model's predicted distribution. The sampling temperature is configurable, and greedy argmax decoding is selected by setting `temperature=0`.
+
+#### Applications
+
+This tool is appropriate for completing antibody sequences with missing residues, a common need when working with B-cell receptor sequencing reads that drop the first several N-terminal residues. Representative applications include filling sequencing-dropout positions before downstream structural prediction, exploring single-position substitutions in CDR or framework regions, and generating antibody-context-aware variants for humanisation or affinity-maturation campaigns.
+
+#### Usage Tips
+
+- **Use the underscore (`_`) as the mask character.** Other placeholders such as `*`, `X`, or `<mask>` are not recognised. Each underscore in the input sequence is replaced with a sample drawn from the model distribution at that position.
+- **`temperature` controls the sampling stochasticity.** The default of `1.0` samples from the unscaled model distribution, producing different sequences across repeated calls. Set `temperature=0` for greedy argmax decoding, which matches AbLang's native `restore` mode and produces deterministic output. Lower positive values sharpen toward the top prediction, higher values flatten toward uniform. Use `seed` to make stochastic runs reproducible.
+- **Set `align=True` to extend unknown-length termini.** When the input sequence is shorter than expected, enabling ANARCI-based alignment lets AbLang restore residues at the N or C terminus as well as in the middle of the sequence. Setting `align=True` forces greedy decoding regardless of the `temperature` setting, since the ANARCI alignment is incompatible with stochastic sampling.
+- **Set `return_logits=True` to recover the per-position amino-acid distribution.** When enabled, the output carries a per-position logit matrix of shape `(num_sequences, seq_len, 20)` alongside the sampled sequence, which is useful for downstream re-ranking or post-hoc analysis. The default omits the logits to keep the response small.
 
 ### AbLang Scoring (`ablang-score`)
 
-Score antibody sequences using AbLang language model.
+Computes per-sequence scores under the AbLang masked-language-model head. The `scoring_mode` configuration field selects between pseudo-log-likelihood (`"pseudo_log_likelihood"`) and confidence (`"confidence"`) scoring.
 
-## Tool Catalog
+#### Applications
 
-| Tool | Description | Output |
-|------|-------------|--------|
-| `ablang-embedding` | Extract antibody embeddings | Embeddings, attention masks |
-| `ablang-gradient` | AbLang relaxed-sequence gradient | Gradient, loss, metrics, vocab |
-| `ablang-sample` | Restore masked (`_`) positions | Completed sequences |
-| `ablang-score` | Score sequences via pseudo-log-likelihood | Per-sequence metrics |
+This tool is appropriate for ranking antibody sequences by how "natural" they look under the model. Representative applications include selecting humanisation candidates closer to natural human antibody repertoires, flagging candidate sequences with low predicted naturalness for redesign, and ranking ProteinMPNN- or design-pipeline-generated sequences by pseudo-log-likelihood before more expensive downstream analyses.
 
-## Model Variants
+#### Usage Tips
 
-All AbLang tools accept `Antibody` objects as input (from `proto_tools.entities.antibody`). The model variant is selected automatically based on which chains are provided:
+- **Pseudo-log-likelihood scores from different checkpoints sit on different scales and are not directly comparable.** Each of `ablang1-heavy`, `ablang1-light`, and `ablang2-paired` was trained independently and produces scores on its own scale, so heavy-chain scores cannot be compared against light-chain scores and single-chain scores cannot be compared against paired-chain scores. Only compare antibodies that were scored with the same model variant.
+- **Higher pseudo-log-likelihood corresponds to a more probable sequence under AbLang.** Use scores comparatively across variants of the same antibody rather than as an absolute developability or affinity score. A high score reflects sequence likeness to the training distribution, not predicted experimental performance.
 
-| Input | Model Selected |
-|-------|---------------|
-| `Antibody(heavy_chain="EVQL...")` | `ablang1-heavy` |
-| `Antibody(light_chain="DIQM...")` | `ablang1-light` |
-| `Antibody(heavy_chain="EVQL...", light_chain="DIQM...")` | `ablang2-paired` |
+### AbLang Gradient (`ablang-gradient`)
 
-At least one chain must be provided. For the gradient tool, use `AntibodyLogits` which accepts logit distributions instead of sequence strings.
+Computes the gradient of the AbLang masked pseudo-log-likelihood objective with respect to a relaxed antibody-logit input. The tool accepts an `AntibodyLogits` object whose `heavy_chain` and `light_chain` fields are per-position logit or probability matrices, masks each amino-acid position in turn, scores the bidirectional-context prediction with cross-entropy against the input distribution, and returns the gradient matrix together with the loss value and auxiliary metrics.
 
-| Checkpoint | Chain Type | Embedding Dim | Use Case |
-|------------|-----------|---------------|----------|
-| `ablang1-heavy` | Heavy chain only | 768 | When only VH sequences are available |
-| `ablang1-light` | Light chain only | 768 | When only VL/VK sequences are available |
-| `ablang2-paired` | Heavy + light | 480 | When both chains are available (recommended) |
+#### Applications
 
-## Execution Modes
+This tool is appropriate for differentiable antibody-design pipelines that update a continuous sequence representation by gradient descent. Representative applications include relaxed-logit hallucination for antibody design, joint optimisation of AbLang likelihood together with structure-based losses such as AlphaFold2 hallucination, and incorporating an antibody-specific naturalness term into broader binder-design objectives.
 
-- **Local GPU/CPU**: Loads the model on-demand. Use `device="cuda"`, `"cpu"`, or `"mps"`.
+#### Usage Tips
 
-## How It Works
+- **Input logits use the canonical protein order `ACDEFGHIKLMNPQRSTVWY`.** The tool implementation internally maps to AbLang's vocabulary order before the forward pass and returns the gradient in the same canonical order, so the user does not need to handle the AbLang-specific token order separately.
+- **Set `temperature` to apply a softmax before scoring.** When `temperature` is set, the tool implementation applies `softmax(input / temperature)` to the input logits before the forward pass. Leave `temperature=None` (the default) when the user already provides a normalised probability distribution.
+- **Use the Straight-Through Estimator option for discrete-token gradients.** Setting `use_ste=True` substitutes hard one-hot tokens in the forward pass while allowing gradients to flow through the soft probabilities, which can produce sharper update directions for some discrete-design loops. The default (`use_ste=False`) uses soft blended embeddings.
+- **Set `compute_gradient=False` for forward-only scoring.** This skips the backward pass and returns `gradient=None` together with the loss value, which is useful for ranking candidates from a Monte Carlo proposal without paying the backward-pass cost.
 
-AbLang is a masked language model (BERT architecture) trained on antibody sequences from OAS. It learns to predict masked amino acids from surrounding context, capturing antibody-specific evolutionary and structural patterns.
+## Toolkit Notes
 
-- **Embeddings**: A forward pass produces per-position hidden states. Mean-pooling across positions (ignoring padding) yields a fixed-length sequence descriptor (768-dim for ablang1, 480-dim for ablang2-paired).
-- **Sampling**: Masked positions (indicated by `_`) are filled in by the model's predicted distribution using greedy decoding (argmax).
-- **Scoring**: Each position is masked one at a time, and the model's log-probability of the true amino acid is recorded. Aggregated scores give pseudo-log-likelihood (higher = more "natural" antibody sequence).
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-## Input Parameters
+These apply to every AbLang tool in this toolkit (`ablang-embedding`, `ablang-gradient`, `ablang-sample`, `ablang-score`).
 
-### Embeddings, Sampling, and Scoring Tools
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `antibodies` | `list[Antibody]` | Antibody objects with `heavy_chain` and/or `light_chain` sequences |
-
-For the sampling tool, chain sequences should contain `_` at positions to restore.
-
-### Gradient Tool
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `antibody` | `AntibodyLogits` | Antibody with `heavy_chain` and/or `light_chain` as distribution or logit matrices with shape `(L, 20)` in canonical protein order |
-| `temperature` | `float \| null` | Optional softmax temperature. When set, applies `softmax(input / temperature)` before gradient computation. When `null` (default), input is used as-is — callers provide a pre-computed distribution |
-
-## Configuration
-
-### Embeddings Tool (`AbLangEmbeddingsConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
-| `device` | `str` | `"cuda"` | Device: `"cuda"`, `"cpu"`, `"mps"` |
-| `return_logits` | `bool` | `False` | Include per-position amino-acid logits in the output |
-
-### Sampling Tool (`AbLangSampleConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `batch_size` | `int` | `1` | Sequences per forward pass |
-| `device` | `str` | `"cuda"` | Device: `"cuda"`, `"cpu"`, `"mps"` |
-| `align` | `bool` | `False` | Run ANARCI alignment first; enables extending unknown-length termini |
-
-### Scoring Tool (`AbLangScoringConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `scoring_mode` | `str` | `"pseudo_log_likelihood"` | Scoring method: `"pseudo_log_likelihood"` or `"confidence"` |
-| `batch_size` | `int` | `1` | Sequences per forward pass |
-| `device` | `str` | `"cuda"` | Device: `"cuda"`, `"cpu"`, `"mps"` |
-
-### Gradient Tool (`AbLangGradientConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `use_ste` | `bool` | `false` | When true, uses a Straight-Through Estimator: hard one-hot tokens in the forward pass with gradients flowing through soft probabilities. When false, uses soft blended embeddings |
-| `compute_gradient` | `bool` | `true` | When true, runs backward pass and returns the gradient. Set `false` for forward-only log-likelihood scoring (e.g. MCMC proposal ranking); `gradient` is `None` in the output |
-| `seed` | `int \| null` | `null` | Optional PyTorch random seed for reproducibility |
-| `device` | `str` | `"cuda"` | Device: `"cuda"`, `"cpu"`, `"mps"` |
-
-## Output Specification
-
-### AbLangEmbeddingsOutput
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `results` | `list[SequenceEmbedding]` | Per-sequence embedding results |
-
-**`SequenceEmbedding` fields:**
-| Field | Type | Description |
-|-------|------|-------------|
-| `mean_embedding` | `list[float]` | Mean-pooled embedding vector (768-dim for ablang1, 480-dim for ablang2-paired) |
-| `attention_mask` | `list[int]` | Binary mask: 1 = valid position, 0 = padding |
-
-### AbLangSampleOutput
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `sequences` | `list[str]` | Sequences with masked positions restored |
-
-### AbLangScoringOutput
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `scores` | `list[MaskedModelScoringMetrics]` | One score object per input sequence |
-
-**`MaskedModelScoringMetrics` fields:**
-| Field | Type | Description |
-|-------|------|-------------|
-| `pseudo_log_likelihood`, `confidence` | `float` | Scoring metrics (attribute or mapping access: `score.pseudo_log_likelihood` or `score["pseudo_log_likelihood"]`) |
-
-### AbLangGradientOutput
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `gradient` | `list[list[float]] \| null` | Gradient matrix with the same shape as the input logits. `null` when `compute_gradient=False` (forward-only scoring) |
-| `loss` | `float` | Shifted cross-entropy loss |
-| `metrics` | `dict[str, Any]` | Auxiliary metrics: `log_likelihood`, `sequence_length`, `model_choice`, and `objective` |
-| `vocab` | `list[str]` | Amino-acid column order for both the input logits and the returned gradient; always canonical protein order `ACDEFGHIKLMNPQRSTVWY` |
-
-## Interpreting Results
-
-These thresholds are heuristics. Use them comparatively and validate for your task.
-
-**For sequence similarity (cosine similarity of embeddings):**
-- **Highly similar**: > 0.9 (same antibody lineage or near-identical CDRs)
-- **Related**: 0.7 - 0.9 (same germline family or similar binding properties)
-- **Distant**: 0.5 - 0.7 (different germline families)
-- **Unrelated**: < 0.5
-
-**For scoring (pseudo-log-likelihood):**
-- Higher pseudo-log-likelihood indicates a more "natural" antibody sequence
-- Compare scores across variants rather than interpreting absolute values
-- Useful for ranking humanization candidates or assessing developability
-
-## Quick Start Examples
-
-**Example 1: Heavy chain embeddings**
-```python
-from proto_tools.entities.antibody import Antibody
-from proto_tools.tools.masked_models.ablang import (
-    AbLangEmbeddingsInput, run_ablang_embeddings,
-)
-import numpy as np
-
-antibodies = [
-    Antibody(heavy_chain="EVQLVESGGGLVQPGGSLRLSCAASGFTFSSYAMSWVRQAPG"),
-    Antibody(heavy_chain="QVQLVESGGGVVQPGRSLRLSCAASGFTFSSYGMHWVRQAPG"),
-]
-
-result = run_ablang_embeddings(AbLangEmbeddingsInput(antibodies=antibodies))
-
-emb1 = np.array(result.results[0].mean_embedding)
-emb2 = np.array(result.results[1].mean_embedding)
-cosine_sim = np.dot(emb1, emb2) / (np.linalg.norm(emb1) * np.linalg.norm(emb2))
-print(f"Model used: {result.metadata['model_choice']}")  # ablang1-heavy
-print(f"Cosine similarity: {cosine_sim:.3f}")
-```
-
-**Example 2: Paired heavy+light chain embeddings**
-```python
-from proto_tools.entities.antibody import Antibody
-from proto_tools.tools.masked_models.ablang import (
-    AbLangEmbeddingsInput, run_ablang_embeddings,
-)
-
-antibodies = [
-    Antibody(heavy_chain="EVQLVESGGGLVQPGG", light_chain="DIQMTQSPSSLSASVG"),
-    Antibody(heavy_chain="QVQLVESGGGVVQPGR", light_chain="EIVLTQSPATLSLSPG"),
-]
-
-result = run_ablang_embeddings(AbLangEmbeddingsInput(antibodies=antibodies))
-print(f"Model used: {result.metadata['model_choice']}")  # ablang2-paired
-print(f"Embedding dim: {len(result.results[0].mean_embedding)}")  # 480
-```
-
-**Example 3: Score antibody sequences**
-```python
-from proto_tools.entities.antibody import Antibody
-from proto_tools.tools.masked_models.ablang import (
-    AbLangScoringInput, AbLangScoringConfig, run_ablang_score,
-)
-
-inputs = AbLangScoringInput(antibodies=[
-    Antibody(heavy_chain="EVQLVESGGGLVQPGGSLRLSCAASGFTFSSYAMSWVRQAPG"),
-    Antibody(heavy_chain="QVQLVESGGGVVQPGRSLRLSCAASGFTFSSYGMHWVRQAPG"),
-])
-config = AbLangScoringConfig(scoring_mode="pseudo_log_likelihood")
-
-result = run_ablang_score(inputs, config)
-for i, score in enumerate(result.scores):
-    print(f"Sequence {i}: {score.metrics}")
-```
-
-**Example 4: Restore masked CDR positions**
-```python
-from proto_tools.entities.antibody import Antibody
-from proto_tools.tools.masked_models.ablang import (
-    AbLangSampleInput, run_ablang_sample,
-)
-
-inputs = AbLangSampleInput(antibodies=[
-    Antibody(heavy_chain="EVQLVESGGGLVQPGGSLRLSCAASGFTFS___MSWVRQAPG"),
-])
-
-result = run_ablang_sample(inputs)
-print(f"Restored: {result.sequences[0]}")
-```
-
-**Example 5: Light chain embeddings**
-```python
-from proto_tools.entities.antibody import Antibody
-from proto_tools.tools.masked_models.ablang import (
-    AbLangEmbeddingsInput, run_ablang_embeddings,
-)
-
-inputs = AbLangEmbeddingsInput(antibodies=[Antibody(light_chain="DIQMTQSPSSLSASVGDRVTITC")])
-
-result = run_ablang_embeddings(inputs)
-print(f"Model used: {result.metadata['model_choice']}")  # ablang1-light
-print(f"Embedding dim: {len(result.results[0].mean_embedding)}")  # 768
-```
-
-## Best Practices & Gotchas
-
-**Auto-routing:**
-
-1. **No `model_choice` needed**: The model variant is selected automatically from which chains are provided on the `Antibody` input. Provide `heavy_chain` for ablang1-heavy, `light_chain` for ablang1-light, or both for ablang2-paired.
-
-**Gradient tool:**
-
-1. **Vocab order**: The gradient tool accepts and returns logits in canonical protein order `ACDEFGHIKLMNPQRSTVWY`. Internally it maps to AbLang's token vocabulary for the forward pass.
-
-2. **Paired sequences**: Provide both `heavy_chain` and `light_chain` on `AntibodyLogits` — the tool concatenates them and inserts the chain separator automatically.
-
-**Chain type matching:**
-
-1. **Match chains to purpose**: Use `heavy_chain` for heavy chains, `light_chain` for light chains. The model variant is auto-selected to match.
-
-**Batch processing:**
-
-1. **Variable lengths**: Sequences are padded to batch max length — group similar-length sequences for efficiency.
-
-2. **OOM errors**: Reduce `batch_size`. Antibody sequences are typically short (~120 residues per chain), so larger batches are feasible.
-
-3. **Attention masks**: Always use masks to ignore padding positions in downstream analysis.
-
-**Common mistakes:**
-
-1. **Wrong mask character**: Use `_` (underscore) for masked positions in the sampling tool, not `*`, `<mask>`, or `X`.
-
-2. **Mixing checkpoints**: Embeddings from different model variants (heavy vs. light vs. paired) are NOT comparable.
-
-## References
-
-**Primary publication:**
-- Olsen, T.H. et al. (2024). "AbLang2: Addressing the antibody language model." *Bioinformatics Advances*, 4(1), vbae040. DOI: [10.1093/bioadv/vbae040](https://doi.org/10.1093/bioadv/vbae040)
-
-**Implementation:**
-- GitHub: [https://github.com/oxpig/AbLang2](https://github.com/oxpig/AbLang2)
-
-## Related Tools
-
-**Tools often used together:**
-- `structure_prediction/esmfold`: Predict antibody structure from sequence
-- `inverse_folding/proteinmpnn`: Structure-conditioned antibody sequence design
-- `mmseqs2-clustering`: Cluster antibody sequences before/after embedding analysis
-
-**Alternative tools:**
-- `esm2`: General protein language model (broader training data, but not antibody-specific)
+- **All four tools route automatically among the three AbLang checkpoints based on the chains provided.** Providing only a heavy chain selects `ablang1-heavy`, providing only a light chain selects `ablang1-light`, and providing both selects the paired `ablang2-paired` checkpoint. At least one chain must be set on each input.
+- **Every antibody in a batched call must use the same chain configuration.** The embedding, scoring, and sampling tools accept a list of antibodies in a single call, and every antibody in that list must provide the same combination of heavy and light chains so that all entries route to the same checkpoint. Mixed lists are rejected at input construction with a clear error.
+- **AbLang is appropriate for antibody variable-domain sequences only.** Non-antibody proteins should be analysed with a general-purpose protein language model such as ESM2 rather than AbLang, which was trained exclusively on antibody sequences and produces unreliable scores or embeddings outside that distribution.
