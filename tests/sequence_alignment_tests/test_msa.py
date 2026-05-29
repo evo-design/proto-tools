@@ -6,10 +6,7 @@ Tests for MSA class.
 import pytest
 from pydantic import ValidationError
 
-from proto_tools.tools.sequence_alignment.msas import (
-    MSA,
-    convert_a3m_to_fasta,
-)
+from proto_tools.entities.msa import MSA, convert_a3m_to_fasta
 
 # ============================================================================
 # Fixtures

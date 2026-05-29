@@ -10,8 +10,8 @@ import pytest
 import yaml
 
 from proto_tools.entities.ligands import Fragment
+from proto_tools.entities.msa import MSA
 from proto_tools.entities.structures import is_valid_structure
-from proto_tools.tools.sequence_alignment.msas import MSA
 from proto_tools.tools.structure_prediction import (
     Boltz2AffinityConfig,
     Boltz2AffinityInput,

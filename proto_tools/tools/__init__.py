@@ -402,7 +402,6 @@ from proto_tools.tools.rna_splicing import (
 
 # Sequence alignment tools
 from proto_tools.tools.sequence_alignment import (
-    MSA,
     BlastSearchConfig,
     BlastSearchInput,
     BlastSearchOutput,
@@ -1295,8 +1294,6 @@ __all__ = [
     "Mmseqs2HomologySearchOutput",
     "Mmseqs2HomologySearchQuery",
     "Mmseqs2HomologySearchResult",
-    # Sequence alignment - Shared helpers
-    "MSA",
     # Structure design - RFdiffusion3
     "run_rfdiffusion3",
     "RFdiffusion3Input",

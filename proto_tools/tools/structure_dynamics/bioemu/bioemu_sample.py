@@ -265,7 +265,7 @@ class BioEmuConfig(StructurePredictionConfig):
 # ============================================================================
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    from proto_tools.tools.sequence_alignment.msas import MSA
+    from proto_tools.entities.msa import MSA
 
     a3m_path = Path(__file__).parent / "examples" / "example.a3m"
     fixture_msa = MSA.from_file(a3m_path)

@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 
-from proto_tools.tools.sequence_alignment.msas import MSA
+from proto_tools.entities.msa import MSA
 from proto_tools.tools.structure_alignment import (
     FoldmasonMSAConfig,
     FoldmasonMSAInput,

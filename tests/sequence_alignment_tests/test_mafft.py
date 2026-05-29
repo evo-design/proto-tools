@@ -5,13 +5,13 @@ Tests for MAFFT tool in proto_tools.tools.sequence_alignment.mafft
 
 import pytest
 
+from proto_tools.entities.msa import MSA
 from proto_tools.tools.sequence_alignment.mafft import (
     MafftConfig,
     MafftInput,
     MafftOutput,
     run_mafft_align,
 )
-from proto_tools.tools.sequence_alignment.msas import MSA
 from tests.conftest import benchmark_twice, random_protein_sequences
 from tests.tool_infra_tests.test_export_functionality import validate_output
 

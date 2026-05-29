@@ -16,7 +16,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from proto_tools.tools.sequence_alignment.msas import MSA
+from proto_tools.entities.msa import MSA
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,

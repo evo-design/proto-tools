@@ -20,11 +20,11 @@ from proto_tools.entities.complex import ChainModification as ChainModification
 from proto_tools.entities.complex import Complex as Complex
 from proto_tools.entities.complex import chain_label as chain_label
 from proto_tools.entities.ligands import Fragment
+from proto_tools.entities.msa import MSA
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
     ColabfoldSearchConfig,
 )
-from proto_tools.tools.sequence_alignment.msas import MSA
 from proto_tools.utils import (
     BaseConfig,
     BaseToolInput,

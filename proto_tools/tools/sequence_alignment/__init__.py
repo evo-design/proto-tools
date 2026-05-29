@@ -42,11 +42,8 @@ from proto_tools.tools.sequence_alignment.mmseqs2 import (
     run_mmseqs2_search_genomes,
     run_mmseqs2_search_proteins,
 )
-from proto_tools.tools.sequence_alignment.msas import MSA
 
 __all__ = [
-    # Schemas
-    "MSA",
     # BLAST
     "run_blast_search",
     "run_create_blast_db",
