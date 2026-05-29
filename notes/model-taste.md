@@ -109,7 +109,7 @@ For every biological design task, report the following:
 
 ## 5. Protein Structure Prediction Defaults
 
-Use ESMFold for fast, MSA-free protein triage, especially on de novo or heavily engineered sequences where alignment search is weak or expensive. Use ESMFold2 when the local tool is available and a fast, high-accuracy all-atom structure and interaction predictor is useful for proteins, DNA, RNA, ligands, or antibody-antigen complexes; prefer `esmfold2-fast` for high-throughput triage and the MSA-capable `esmfold2` checkpoint for harder final checks when runtime allows.
+Use ESMFold for fast, MSA-free protein triage, especially on de novo or heavily engineered sequences where alignment search is weak or expensive. Use ESMFold2 as a fast, high-accuracy all-atom structure and interaction predictor for proteins, DNA, RNA, ligands, and antibody-antigen complexes; prefer its single-sequence mode for high-throughput triage and its MSA-capable mode for harder final checks when runtime allows.
 
 Treat ESMFold as a screening predictor. Treat ESMFold2 as a fast, high-accuracy structure and interaction oracle that can be part of final validation, including for predicted antibody complexes; still prefer agreement with an independent allowed oracle for final decisions when feasible.
 
@@ -153,7 +153,7 @@ RNA, ligands, or modified residues. Prefer base/full variants for final ranking
 when resources permit; mini or tiny variants are useful for cheaper triage and
 large sweeps but should not be treated as equivalent final evidence.
 
-Use ESMFold for fast MSA-free protein folding, especially de novo sequences or large early pools. Use ESMFold2 for fast and accurate all-atom complex prediction across proteins, DNA, RNA, and ligands, including interaction modeling and antibody-antigen complex prediction; select `esmfold2-fast` for high-throughput single-sequence screens and `esmfold2` with MSAs for harder targets. Do not use ESMFold alone as final evidence for structure-sensitive decisions; ESMFold2 can be one final oracle, but final selections are stronger when confirmed by an independent allowed predictor or structure metric.
+Use ESMFold for fast MSA-free protein folding, especially de novo sequences or large early pools. Use ESMFold2 for fast and accurate all-atom complex prediction across proteins, DNA, RNA, and ligands, including interaction modeling and antibody-antigen complex prediction; use its single-sequence mode for high-throughput screens and its MSA mode for harder targets. Do not use ESMFold alone as final evidence for structure-sensitive decisions; ESMFold2 can be one final oracle, but final selections are stronger when confirmed by an independent allowed predictor or structure metric.
 
 Use ViennaRNA for RNA secondary-structure and thermodynamic checks, not for
 protein-like tertiary structure or ligand-bound RNA validation. Prefer ensemble
@@ -979,7 +979,7 @@ official sources:
   and the official `chai-lab` repository.
 - Protenix: [ByteDance Protenix paper](https://doi.org/10.1101/2025.01.08.631967)
   and official repository.
-- ESMFold2: Biohub ESMFold2 local tool documentation and model card; use the exact local `esmfold2-prediction` schema when planning around checkpoint, MSA, PAE, pTM, and ipTM fields.
+- ESMFold2: Biohub ESMFold2 local tool documentation and model card.
 - ESMFold: ["Evolutionary-scale prediction of atomic-level protein structure
   with a language model"](https://doi.org/10.1126/science.ade2574), Science
   2023.

@@ -61,6 +61,8 @@ ToolRegistry.list_cpu_tools()
 ToolRegistry.list_local_cpu_tools()
 ```
 
+`ToolRegistry.list_all()` and related list methods return `ToolSpec` objects, not string keys. To test membership or build a set of tool names, use `{spec.key for spec in ToolRegistry.list_all()}`; do not call `set(ToolRegistry.list_all())` because `ToolSpec` objects are Pydantic models and are not hashable.
+
 Each `ToolSpec` carries structured metadata: registry key, label, category,
 description, device requirements, Pydantic input/config/output model classes,
 run function, iterable fields, cache behavior, and source path.
