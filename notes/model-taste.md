@@ -481,7 +481,7 @@ Additional regulatory model details:
 
 Use AlphaGenome when splice-site usage, splice junctions, RNA-seq, or retention are the target and the model is available and allowed.
 
-SpliceAI, Pangolin, and SpliceTransformer are per-position splice-site predictors that differ mainly in tissue resolution. SpliceAI is tissue-agnostic (acceptor/donor probability and variant delta scores, 10 kb context); Pangolin resolves four tissues (heart, liver, brain, testis); SpliceTransformer resolves fifteen GTEx tissues and is state of the art on tissue-specific benchmarks. Match the model's tissue resolution to the objective: for a tissue- or cell-type-specific objective, drive selection by a tissue-resolved usage signal rather than generic donor/acceptor probability, which saturates on a strong consensus splice site and does not capture tissue-specific usage.
+SpliceAI, Pangolin, and SpliceTransformer are per-position splice-site predictors that differ mainly in tissue resolution. SpliceAI is tissue-agnostic (acceptor/donor probability and variant delta scores, 10 kb context); Pangolin resolves four tissues (heart, liver, brain, testis); SpliceTransformer resolves fifteen GTEx tissues and is state of the art on tissue-specific benchmarks. Match the model's tissue resolution to the objective: for a tissue- or cell-type-specific objective, make the matching tissue-resolved usage the primary selection signal and ranking objective rather than the generic donor/acceptor probability, which saturates on a strong consensus splice site and does not separate candidates by tissue-specific usage.
 
 Use Borzoi or Enformer only as expression-like support unless the task target is actually expression, coverage, chromatin accessibility, or track prediction.
 
