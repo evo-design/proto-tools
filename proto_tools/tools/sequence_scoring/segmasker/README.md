@@ -1,185 +1,46 @@
-<a href="https://bio-pro.mintlify.app/tools/sequence-scoring/segmasker"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/sequence-scoring/segmasker"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # Segmasker
 
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** Segmasker is licensed under Custom (NCBI BLAST+ public domain). Please refer to [the license](https://www.ncbi.nlm.nih.gov/IEB/ToolBox/CPP_DOC/lxr/source/scripts/projects/blast/LICENSE) for full terms.
 
 ## Overview
 
-Segmasker detects [low-complexity regions](https://en.wikipedia.org/wiki/Low_complexity_regions_in_proteins) in protein sequences using NCBI's SEG algorithm. Low-complexity regions are stretches of amino acids with biased composition (e.g., polyalanine runs, proline-rich regions, or glutamine repeats) that can cause spurious hits in homology searches and may indicate disordered or non-globular regions.
-
-- **Tool key**: `segmasker-score`
-- **Input**: Protein sequences
-- **Output**: Per-sequence low-complexity fractions, counts, and lengths
-- **Execution**: CPU only, local venv via `ToolInstance`
+Segmasker measures the low-complexity content of protein sequences using the SEG algorithm. [Low-complexity regions](https://en.wikipedia.org/wiki/Low_complexity_regions_in_proteins) are stretches of biased amino acid composition, such as homopolymeric runs or short-period repeats, that can produce spurious matches during sequence comparison. For each input sequence, segmasker identifies the residues that fall within low-complexity regions and reports their count, their fraction of the sequence, and the sequence length, giving a quantitative measure of compositional bias.
 
 ## Background
 
-Low-complexity regions (LCRs) are protein segments with reduced amino acid diversity compared to typical globular proteins. The SEG algorithm (Wootton & Federhen, 1993) identifies these regions by computing local compositional complexity using [Shannon entropy](https://en.wikipedia.org/wiki/Entropy_(information_theory)) within sliding windows.
+Most natural [proteins](https://en.wikipedia.org/wiki/Protein) contain regions whose [amino acid](https://en.wikipedia.org/wiki/Amino_acid) composition is strongly biased, including homopolymeric runs, short-period repeats, and segments dominated by a few residue types. These [low-complexity regions](https://en.wikipedia.org/wiki/Low_complexity_regions_in_proteins) are biologically real but cause difficulty in [sequence alignment](https://en.wikipedia.org/wiki/Sequence_alignment), because their similarity is driven by shared composition rather than by common ancestry, which inflates the apparent significance of matches between unrelated sequences.
 
-LCRs are common in eukaryotic proteomes (up to 20-25% of residues) and are associated with:
-- **[Intrinsically disordered regions](https://en.wikipedia.org/wiki/Intrinsically_disordered_proteins)** that lack stable 3D structure
-- **Repeat expansions** linked to neurodegenerative diseases (e.g., polyglutamine in [Huntington's](https://en.wikipedia.org/wiki/Huntington%27s_disease))
-- **Compositionally biased linkers** between structured domains
-- **False positives in BLAST** -- LCRs match other LCRs regardless of evolutionary relationship
+The SEG algorithm ([Wootton and Federhen, 1993](https://doi.org/10.1016/0097-8485(93)85006-x)) quantifies local compositional complexity along a protein sequence using a sliding window and partitions the sequence into segments of low and high complexity. Masking or down-weighting the low-complexity segments before a similarity search improves the specificity of the results. Segmasker is the SEG implementation distributed as a command-line program within the NCBI [BLAST+](https://en.wikipedia.org/wiki/BLAST_(biotechnology)) suite ([Camacho et al., 2009](https://doi.org/10.1186/1471-2105-10-421)), which reorganized the original BLAST applications into modular command-line tools. Within that suite, segmasker applies the SEG procedure to protein sequences and reports the low-complexity regions it identifies, which can then be excluded from similarity searches or used to flag compositionally biased designs.
 
-In protein design, high low-complexity content often signals poor sequence quality, since natural globular proteins typically have low-complexity fractions below 0.1.
+### Learning Resources
+
+- [NCBI BLAST+ Command Line Applications User Manual](https://www.ncbi.nlm.nih.gov/books/NBK279690/) - the reference manual for the BLAST+ suite that segmasker ships with, including its masking applications.
+- [BLAST Help (NCBI)](https://blast.ncbi.nlm.nih.gov/doc/blast-help/) - NCBI's documentation hub for BLAST concepts, including low-complexity filtering.
 
 ## Tools
 
 ### Segmasker Low-Complexity Detection (`segmasker-score`)
 
-Detect low-complexity regions in protein sequences using NCBI segmasker.
+Applies the SEG algorithm to one or more protein sequences and returns, for each sequence, the number of residues classified as low-complexity, the fraction of the sequence those residues represent, and the sequence length. The low-complexity fraction is the primary metric for ranking sequences by compositional bias.
 
-Uses NCBI's segmasker tool to identify compositionally biased and low-complexity
-regions in protein sequences. Low-complexity regions are often masked before
-homology searches to reduce false positive matches.
+#### Applications
 
-## How It Works
+- Screening designed protein sequences for compositional bias before further analysis.
+- Quantifying low-complexity content to flag homopolymeric runs or short-period repeats.
+- Prioritizing sequences for masking ahead of a protein similarity search to reduce spurious matches.
 
-1. **Sliding window**: A window of configurable size (default 12 residues) slides across the sequence
-2. **Entropy calculation**: For each window position, the Shannon entropy of amino acid composition is computed
-3. **Threshold classification**: Windows with entropy below `locut` are flagged as low-complexity; the `hicut` threshold defines the boundary for extending masked regions
-4. **Region merging**: Adjacent low-complexity windows are merged into contiguous regions
-5. **Fraction calculation**: The total number of low-complexity positions divided by sequence length gives the low-complexity fraction
+#### Usage Tips
 
-## Input Parameters
+- **`window` sets the scale of the regions detected.** A larger window targets broader low-complexity stretches, while a smaller window resolves shorter runs.
+- **`locut` and `hicut` set how aggressively regions are flagged.** Raising the cutoffs classifies more of the sequence as low-complexity, while lowering them applies a stricter criterion that flags only the most biased regions. `hicut` must be greater than or equal to `locut`.
+- **Very short and empty sequences are limited.** A sequence shorter than the window cannot be assessed reliably, and an empty sequence reports a low-complexity fraction of zero.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `sequences` | `List[str]` | Protein sequence(s) to analyze. Accepts a single string (auto-wrapped) or a list of strings. Each sequence should use standard amino acid characters. |
+## Toolkit Notes
 
-## Configuration
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-| Parameter | Type | Default | Range | Description |
-|-----------|------|---------|-------|-------------|
-| `window` | `int` | `12` | >= 1 | Sliding window size for complexity calculation. Larger windows are less sensitive to short LCRs. |
-| `locut` | `float` | `2.2` | Typical: 2.0-2.5 | Low-complexity threshold. Regions below this are classified as low-complexity. |
-| `hicut` | `float` | `2.5` | Typical: 2.5-3.5 | High-complexity threshold. Must be >= `locut`. Controls region boundary extension. |
-
-### Parameter Guides
-
-**Window size:**
-
-| Window | Effect | Use Case |
-|--------|--------|----------|
-| 10-12 | More sensitive, detects short LCRs (default = 12) | General-purpose screening |
-| 15 | Balanced | Mid-length stretches |
-| 18-25 | Less sensitive, ignores short LCRs | Focus on extended low-complexity stretches |
-
-**Threshold tuning:**
-
-| locut / hicut | Stringency | Effect |
-|---------------|------------|--------|
-| 1.8 / 2.2 | High | Flags only the most extreme compositional bias |
-| 2.2 / 2.5 | Default | Segmasker's protein-tuned SEG parameters |
-| 2.5 / 3.5 | Low | Flags moderate compositional bias as low-complexity |
-
-### Sweep Priorities
-
-When used as a constraint in optimization, low-complexity fraction is a filtering metric rather than a continuous objective. Typical usage:
-
-1. **Hard filter**: Reject sequences with `low_complexity_fraction > 0.15`
-2. **Soft penalty**: Penalize proportionally above a threshold (e.g., 0.05)
-
-## Output Specification
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `low_complexity_fractions` | `List[float]` | Fraction of each sequence classified as low-complexity (0.0-1.0) |
-| `low_complexity_counts` | `List[int]` | Number of residue positions classified as low-complexity per sequence |
-| `sequence_lengths` | `List[int]` | Length of each input sequence in amino acids |
-| `results_df` | `Optional[DataFrame]` | Detailed results with columns: `sequence_id`, `length`, `lowercase_count`, `low_complexity_fraction` |
-
-Export formats: `csv`, `json`
-
-## Interpreting Results
-
-| Fraction Range | Interpretation | Action |
-|----------------|---------------|--------|
-| 0.00 | No low-complexity content detected | Sequence has diverse composition |
-| 0.01-0.05 | Minimal LCR content | Typical for well-folded globular proteins |
-| 0.05-0.15 | Moderate LCR content | May contain linker regions or short repeats |
-| 0.15-0.30 | High LCR content | Likely contains disordered regions; review carefully |
-| > 0.30 | Very high LCR content | Sequence may be largely disordered or repetitive; likely a poor design |
-
-## Quick Start Examples
-
-**Basic usage -- single sequence:**
-```python
-from proto_tools.tools.sequence_scoring.segmasker import (
-    SegmaskerInput, SegmaskerConfig, run_segmasker,
-)
-
-inputs = SegmaskerInput(sequences="MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTK")
-config = SegmaskerConfig()
-result = run_segmasker(inputs, config)
-
-print(f"Low-complexity fraction: {result.low_complexity_fractions[0]:.3f}")
-print(f"Low-complexity residues: {result.low_complexity_counts[0]}/{result.sequence_lengths[0]}")
-```
-
-**Batch screening of designed sequences:**
-```python
-designed_sequences = [
-    "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTK",
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-    "PPPPPPGPPPPPPGPPPPPPGPPPPPPGPPPPPPPGPPPP",
-    "MKTFYLRNIAQHGEWDCPSTIVLAQELYNRGFSKTQE",
-]
-
-inputs = SegmaskerInput(sequences=designed_sequences)
-config = SegmaskerConfig()
-result = run_segmasker(inputs, config)
-
-for i, (frac, count, length) in enumerate(zip(
-    result.low_complexity_fractions,
-    result.low_complexity_counts,
-    result.sequence_lengths,
-)):
-    status = "PASS" if frac < 0.15 else "FAIL"
-    print(f"Seq {i}: {frac:.2f} ({count}/{length} residues) [{status}]")
-```
-
-**Custom thresholds for stringent filtering:**
-```python
-inputs = SegmaskerInput(sequences=["GSGSGSGSGSGSGSGSGSGSGSGSGS"])
-config = SegmaskerConfig(
-    window=12,
-    locut=1.4,
-    hicut=2.5,
-)
-result = run_segmasker(inputs, config)
-print(f"Fraction (stringent): {result.low_complexity_fractions[0]:.3f}")
-```
-
-**Export results to CSV:**
-```python
-result.export("/path/to/output", file_format="csv")
-```
-
-## Best Practices & Gotchas
-
-- **Default thresholds are well-calibrated.** Defaults (window=12, locut=2.2, hicut=2.5) are segmasker's own protein-tuned SEG parameters. Only adjust if you have a specific reason.
-- **Short sequences may not be informative.** Sequences shorter than the window size cannot be reliably assessed. Ensure input sequences are at least 12-15 residues.
-- **Low-complexity does not mean low-quality.** Some functional proteins naturally contain LCRs (e.g., collagen, spider silk). Context matters.
-- **Empty sequences return 0.0 fraction.** Empty strings are handled gracefully and assigned a fraction of 0.0 rather than raising an error.
-- **Results are cached.** Repeated calls with identical inputs and config will return cached results.
-
-## References
-
-- Wootton, J.C. & Federhen, S. (1993). Statistics of local complexity in amino acid sequences and sequence databases. *Computers & Chemistry*, 17(2), 149-163. DOI: [10.1016/0097-8485(93)85006-X](https://doi.org/10.1016/0097-8485(93)85006-X)
-- Wootton, J.C. & Federhen, S. (1996). Analysis of compositionally biased regions in sequence databases. *Methods in Enzymology*, 266, 554-571.
-- NCBI SEG/segmasker documentation: https://www.ncbi.nlm.nih.gov/IEB/ToolBox/CPP_DOC/
-
-## Related Tools
-
-**Often used together:**
-- **BLAST** (`blast-search`) -- Segmasker scores inform whether sequences need masking before homology search
-- **Inverse folding tools** (`ligandmpnn-sample`, `proteinmpnn-sample`) -- Screen designed sequences for compositional bias
-
-**Alternatives for related tasks:**
-- **IUPred** -- Predicts intrinsic disorder from sequence (different algorithm, different biological question)
-- **PONDR** -- Disorder prediction using neural networks
-- **DUST** -- Low-complexity filtering for nucleotide sequences (DNA/RNA equivalent of SEG)
+- **Detection runs on CPU and is deterministic.** Segmasker takes only protein sequences, runs without a GPU, and returns the same values for identical inputs on repeated calls.
+- **Results are index-aligned with the input.** Each result corresponds to the input sequence at the same position, so a batch of sequences returns metrics in the order they were supplied.
