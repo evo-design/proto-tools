@@ -1,352 +1,111 @@
-<a href="https://bio-pro.mintlify.app/tools/sequence-scoring/alphagenome"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/sequence-scoring/alphagenome"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a>
 
 # AlphaGenome
 
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** AlphaGenome uses Apache-2.0 for code and Custom (AlphaGenome Terms of Use) for model weights and has restrictions around commercial use and may require explicit attribution when utilized. Model weights are gated and require accepting the provider's terms and authenticating with a HuggingFace token. Please refer to the [code license](https://github.com/google-deepmind/alphagenome_research/blob/main/LICENSE) and [model weights license](https://deepmind.google.com/science/alphagenome/model-terms) for full terms.
 
 ## Overview
 
-AlphaGenome is Google DeepMind's multi-task genomic foundation model that predicts diverse regulatory signals from DNA sequence. It takes long genomic context windows (up to 1 Mb) and outputs spatial prediction tracks for [RNA-seq](https://en.wikipedia.org/wiki/RNA-Seq), [ATAC-seq](https://en.wikipedia.org/wiki/ATAC-seq), [DNase-seq](https://en.wikipedia.org/wiki/DNase-Seq), [CAGE](https://en.wikipedia.org/wiki/Cap_analysis_of_gene_expression), [ChIP-seq](https://en.wikipedia.org/wiki/ChIP_sequencing), splice sites, and 3D contact maps. This wrapper provides six batched tools covering interval prediction, variant-effect prediction, raw sequence prediction, and three scoring modes (variant, interval, ISM).
-
-This implementation uses **local GPU inference** with Hugging Face weights through an isolated standalone venv runtime (`ToolInstance("alphagenome")`).
+AlphaGenome is a [deep learning](https://en.wikipedia.org/wiki/Deep_learning) model for regulatory genomics developed by Google DeepMind. It predicts a broad range of functional genomic measurements directly from DNA sequence across context windows of up to roughly one million base pairs, spanning [gene expression](https://en.wikipedia.org/wiki/Gene_expression), [chromatin accessibility](https://en.wikipedia.org/wiki/ATAC-seq), [transcription factor](https://en.wikipedia.org/wiki/Transcription_factor) binding, histone modifications, [RNA splicing](https://en.wikipedia.org/wiki/RNA_splicing), and three-dimensional [chromatin contacts](https://en.wikipedia.org/wiki/Chromosome_conformation_capture). This tool implementation provides six operations covering interval, sequence, and variant prediction alongside three scoring modes.
 
 ## Background
 
-Gene regulation is controlled by a complex interplay of [cis-regulatory elements](https://en.wikipedia.org/wiki/Cis-regulatory_element) (promoters, enhancers, silencers) and [chromatin](https://en.wikipedia.org/wiki/Chromatin) state. Different experimental assays measure different aspects of this regulatory landscape:
+Gene regulation is encoded in non-coding DNA through [cis-regulatory elements](https://en.wikipedia.org/wiki/Cis-regulatory_element) such as promoters, [enhancers](https://en.wikipedia.org/wiki/Enhancer_(genetics)), and insulators, whose activity depends on sequence context that can extend across hundreds of kilobases. Relating a DNA sequence, or a non-coding [genetic variant](https://en.wikipedia.org/wiki/Mutation), to its functional consequences therefore requires models that read long stretches of sequence and predict many regulatory readouts together.
 
-- **RNA-seq** measures transcript abundance, reflecting gene expression levels
-- **ATAC-seq / DNase-seq** measure chromatin accessibility, indicating active regulatory regions
-- **CAGE** captures transcription start sites at single-nucleotide resolution
-- **ChIP-seq** maps protein-DNA interactions (histone modifications, transcription factor binding)
-- **Splice site assays** quantify alternative splicing patterns
-- **Contact maps ([Hi-C](https://en.wikipedia.org/wiki/Hi-C_(genomic_analysis_technique)))** capture 3D chromatin organization
+AlphaGenome ([Avsec et al., 2026](https://doi.org/10.1038/s41586-025-10014-0)) is a sequence-to-function model that accepts a genomic interval of up to roughly one megabase and predicts thousands of genome tracks at base or near-base resolution. The predicted assays span [RNA-seq](https://en.wikipedia.org/wiki/RNA-Seq) coverage, [CAGE](https://en.wikipedia.org/wiki/Cap_analysis_of_gene_expression) and PRO-cap transcription initiation, [ATAC-seq](https://en.wikipedia.org/wiki/ATAC-seq) and [DNase-seq](https://en.wikipedia.org/wiki/DNase-Seq) chromatin accessibility, [ChIP-seq](https://en.wikipedia.org/wiki/ChIP_sequencing) profiles for histone modifications and transcription factors, splice site positions, splice site usage and junctions, and [chromatin contact maps](https://en.wikipedia.org/wiki/Chromosome_conformation_capture). Because the model scores arbitrary sequence, the effect of a variant can be estimated by comparing predictions for the reference and alternate alleles, which supports interpretation of non-coding variation and systematic [in silico mutagenesis](https://en.wikipedia.org/wiki/Saturation_mutagenesis) of regulatory regions. Models are available for both the human and mouse genomes.
 
-AlphaGenome jointly predicts all of these signals from DNA sequence alone, leveraging long-range context (up to 1 Mb) to capture distal regulatory effects. This multi-task architecture allows it to model the relationships between regulatory layers -- for example, how a variant that disrupts a [CTCF](https://en.wikipedia.org/wiki/CTCF) binding site might alter both chromatin accessibility and 3D contact structure.
+### Learning Resources
+
+- [AlphaGenome overview](https://deepmind.google.com/science/alphagenome/) (Google DeepMind) - the official project page summarizing what AlphaGenome does, how to access it, and its model terms.
+- [AlphaGenome: AI for better understanding the genome](https://deepmind.google/blog/alphagenome-ai-for-better-understanding-the-genome/) (Google DeepMind) - the announcement blog post introducing the model, its capabilities, and intended research uses.
+- [AlphaGenome research code (GitHub)](https://github.com/google-deepmind/alphagenome_research) - the reference client and model code, with example notebooks for prediction, variant scoring, and in silico mutagenesis.
+- [AlphaGenome model weights (HuggingFace)](https://huggingface.co/google/alphagenome-all-folds) - the gated model card describing the released checkpoints and their terms of use.
 
 ## Tools
 
-### AlphaGenome Predict Intervals (`alphagenome-predict-intervals`)
+### Predict Intervals (`alphagenome-predict-intervals`)
 
-Predict genomic features for batched intervals using AlphaGenome.
+Predicts base-resolution regulatory signal tracks for one or more genomic intervals specified by chromosome and coordinates.
 
-### AlphaGenome Predict Sequences (`alphagenome-predict-sequences`)
+#### Applications
 
-Predict genomic features from batched raw DNA sequences using AlphaGenome.
+This tool surveys predicted chromatin accessibility, expression, transcription factor binding, and histone marks across a locus of interest, and supports comparison of predicted regulatory activity between cell types or tissues by restricting the prediction to chosen ontology terms. The resulting profiles also serve as references that later variant or mutagenesis analyses can be compared against.
 
-### AlphaGenome Predict Variants (`alphagenome-predict-variants`)
+#### Usage Tips
 
-Predict variant effects in batch using AlphaGenome.
+- **The requested outputs are configurable.** Any combination of the available output types may be requested together in a single call.
+- **Center the feature of interest.** The model has the most flanking context in both directions at the center of the requested interval, so predictions are best supported there.
 
-### AlphaGenome Score Intervals (`alphagenome-score-intervals`)
+### Predict Sequences (`alphagenome-predict-sequences`)
 
-Score genomic intervals in batch using AlphaGenome interval scorers.
+Predicts the same regulatory signal tracks directly from raw DNA sequences rather than from genome coordinates.
 
-### AlphaGenome Score ISM Variants Batch (`alphagenome-score-ism-variants-batch`)
+#### Applications
 
-Run batched in-silico mutagenesis using AlphaGenome variant scorers.
+This tool scores synthetic or edited sequences, such as designed promoters and enhancers, that do not correspond to a reference genome position, and it is well suited to evaluating candidate sequences from a generative model before committing to laboratory synthesis.
 
-### AlphaGenome Score Variants (`alphagenome-score-variants`)
+#### Usage Tips
 
-Score variant effects in batch using AlphaGenome variant scorers.
+- **Raw sequences are not resized.** Each sequence must already be exactly one of the supported context lengths.
+- **Only DNA bases are accepted.** Sequences may contain only the bases A, C, G, T, and N.
 
-## Tool Catalog
+### Predict Variants (`alphagenome-predict-variants`)
 
-| Tool Key | Description | Input | Output |
-|----------|-------------|-------|--------|
-| `alphagenome-predict-intervals` | Predict regulatory signals for batched genomic regions | List of intervals (auto-wraps single) | List of prediction matrices |
-| `alphagenome-predict-variants` | Predict signals for batched variant effects | List of variants (auto-wraps single) | List of prediction matrices + variant metadata |
-| `alphagenome-predict-sequences` | Predict signals from raw DNA sequence(s) | List of DNA sequences (auto-wraps single string) | List of prediction matrices |
-| `alphagenome-score-variants` | Score batched variant effects using variant scorers | List of variants (auto-wraps single) | List of tidy score records |
-| `alphagenome-score-intervals` | Score batched genomic intervals with interval scorers | List of intervals (auto-wraps single) | List of tidy score records |
-| `alphagenome-score-ism-variants-batch` | Batched in-silico mutagenesis | List of ISM requests (auto-wraps single) | List of tidy score records |
+Predicts regulatory signal tracks for both the reference and alternate alleles of a variant within its surrounding interval.
 
-All tools accept either a single input item (auto-wrapped into a list) or an explicit list for batch processing. All tools use `cacheable=True` on `@tool()` for per-item caching.
+#### Applications
 
-**Prediction tools** return raw spatial tracks (matrices) suitable for visualization and custom downstream analysis. **Scoring tools** return tidy tabular records (one row per scorer-track-gene combination) suitable for ranking and filtering.
+This tool shows how a non-coding variant reshapes predicted accessibility, expression, or splicing across a region, and it reveals the spatial extent of a variant's predicted effect rather than reducing it to a single number.
 
-## How It Works
+#### Usage Tips
 
-1. **Input preparation**: The tool accepts either genomic coordinates (chromosome + interval) or raw DNA sequence(s). If the interval length does not match one of AlphaGenome's supported context lengths (16 KB, 100 KB, 500 KB, 1 MB), it is automatically resized by the inference layer. Raw sequence inputs must already match one of these lengths.
-2. **Model inference**: The DNA sequence is passed through AlphaGenome's multi-task transformer architecture, which produces predictions for all requested output types in a single forward pass. Inference runs in an isolated venv on GPU.
-3. **Output formatting**: Prediction tools return the raw output matrices keyed by output type. Scoring tools apply recommended scorer functions that summarize the predictions into interpretable per-variant or per-interval scores.
-4. **Variant scoring**: For variant-effect tools, the model runs inference on both the reference and alternate sequences, and scorers compute the difference (e.g., log-fold-change in predicted signal).
+- **The variant must lie within the interval.** A wider interval captures more of the distal regulatory consequences of the variant.
+- **Use variant scoring for a ranked summary.** When only effect-size magnitudes are needed, the variant scoring operation is more direct than reading the raw tracks.
 
-Coordinates use **0-based indexing with exclusive end** ([BED](https://en.wikipedia.org/wiki/BED_(file_format))-style).
+### Score Variants (`alphagenome-score-variants`)
 
-## Input Parameters
+Summarizes variant effects into per-track records using the model's recommended variant scorers, comparing reference and alternate predictions.
 
-### Shared Inner Models
+#### Applications
 
-**`AlphaGenomeInterval`**; Base input for interval-based tools.
+This tool prioritizes candidate causal variants from a fine-mapping or [genome-wide association study](https://en.wikipedia.org/wiki/Genome-wide_association_study) and annotates lists of non-coding variants with predicted effects across many assays at once.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `chromosome` | `str` | Chromosome identifier, e.g. `"chr1"` |
-| `interval_start` | `int` | Interval start (0-based, inclusive) |
-| `interval_end` | `int` | Interval end (0-based, exclusive) |
+#### Usage Tips
 
-**`AlphaGenomeVariant`**; Extends `AlphaGenomeInterval` with variant alleles.
+- **`variant_scorers` defaults to the full recommended set.** Leaving it unset gives broad coverage but takes longer, while naming individual scorers restricts the analysis to the assays that matter for the question.
+- **The `_ACTIVE` suffix changes what is measured.** Standard scorers report the directional change between alleles (the log fold change of the alternate against the reference), whereas `_ACTIVE` scorers report the absolute activity level of the stronger allele and are non-directional.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `chromosome` | `str` | Chromosome identifier, e.g. `"chr1"` |
-| `interval_start` | `int` | Interval start (0-based, inclusive) |
-| `interval_end` | `int` | Interval end (0-based, exclusive) |
-| `variant_position` | `int` | Variant genomic position (0-based, must be within interval) |
-| `reference_bases` | `str` | Reference allele (A/C/G/T/N string) |
-| `alternate_bases` | `str` | Alternate allele (A/C/G/T/N string) |
+### Score Intervals (`alphagenome-score-intervals`)
 
-**`AlphaGenomeISM`**; Extends `AlphaGenomeInterval` with ISM sub-interval and optional variant context.
+Produces gene-level RNA-seq expression scores summarizing predicted activity across one or more genomic intervals.
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `chromosome` | `str` | *(required)* | Chromosome identifier, e.g. `"chr1"` |
-| `interval_start` | `int` | *(required)* | Interval start (0-based, inclusive) |
-| `interval_end` | `int` | *(required)* | Interval end (0-based, exclusive) |
-| `ism_interval_start` | `int` | *(required)* | ISM sub-interval start (0-based, inclusive, must be within interval) |
-| `ism_interval_end` | `int` | *(required)* | ISM sub-interval end (0-based, exclusive, must be within interval) |
-| `variant_position` | `Optional[int]` | `None` | Optional existing variant position for ISM context (0-based) |
-| `reference_bases` | `Optional[str]` | `None` | Optional existing variant reference allele |
-| `alternate_bases` | `Optional[str]` | `None` | Optional existing variant alternate allele |
+#### Applications
 
-### Interval Tools (`alphagenome-predict-intervals`, `alphagenome-score-intervals`)
+This tool estimates predicted expression for genes overlapping a region of interest and compares predicted activity across a panel of intervals on a common scale.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `intervals` | `List[AlphaGenomeInterval]` | Genomic intervals (single item auto-wrapped) |
+#### Usage Tips
 
-### Variant Tools (`alphagenome-predict-variants`, `alphagenome-score-variants`)
+- **Interval scoring is gene-centric.** It depends on a wide region of context, so intervals must be large enough to contain the surrounding gene. Very short intervals are not suitable.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `variants` | `List[AlphaGenomeVariant]` | Variants with interval context (single item auto-wrapped) |
+### Score ISM Variants Batch (`alphagenome-score-ism-variants-batch`)
 
-### Sequences Tool (`alphagenome-predict-sequences`)
+Performs in silico mutagenesis by scoring every single-base substitution across a chosen sub-window and returning the effects as per-track records.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `sequences` | `List[str]` | Raw DNA sequence strings (single string auto-wrapped) |
+#### Applications
 
-### ISM Tool (`alphagenome-score-ism-variants-batch`)
+This tool maps which exact positions within a promoter or enhancer drive a predicted regulatory signal and produces per-base importance profiles suitable for visualization as sequence logos.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `requests` | `List[AlphaGenomeISM]` | ISM requests (single item auto-wrapped) |
+#### Usage Tips
 
-## Configuration
+- **Keep the mutagenesis window narrow.** The sub-window must lie fully inside the surrounding interval, and because the number of scored substitutions grows with its width, windows of tens to low hundreds of bases keep each run tractable.
+- **An existing variant can be applied first.** A known variant may be set before mutagenesis to explore how it changes the local sensitivity landscape.
 
-### Prediction Configs (`AlphaGenomePredictIntervalsConfig` / `PredictVariantsConfig` / `PredictSequencesConfig`)
+## Toolkit Notes
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_version` | `str` | `"all_folds"` | HF model version |
-| `requested_outputs` | `List[str]` | required | Output types to predict (see table below) |
-| `organism` | `"human" \| "mouse"` | `"human"` | Organism setting |
-| `ontology_terms` | `Optional[List[str]]` | `None` | UBERON tissue/cell IDs (e.g. `UBERON:0001167`); `None` keeps all |
-| `device` | `str` | `"cuda"` | Inference device |
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-**Available output types:** `ATAC`, `CAGE`, `DNASE`, `RNA_SEQ`, `CHIP_HISTONE`, `CHIP_TF`, `SPLICE_SITES`, `SPLICE_SITE_USAGE`, `SPLICE_JUNCTIONS`, `CONTACT_MAPS`, `PROCAP`
-
-### Variant Scoring Config (`AlphaGenomeScoreVariantsConfig` / `AlphaGenomeScoreISMConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_version` | `str` | `"all_folds"` | HF model version |
-| `variant_scorers` | `Optional[List[str]]` | `None` | Scorer names (`None` = all recommended) |
-| `organism` | `"human" \| "mouse"` | `"human"` | Organism setting |
-| `device` | `str` | `"cuda"` | Inference device |
-
-**Available variant scorers:** `ATAC`, `CONTACT_MAPS`, `DNASE`, `CHIP_TF`, `CHIP_HISTONE`, `CAGE`, `PROCAP`, `RNA_SEQ`, `RNA_SEQ_ACTIVE`, `SPLICE_SITES`, `SPLICE_SITE_USAGE`, `SPLICE_JUNCTIONS`, `POLYADENYLATION`, `ATAC_ACTIVE`, `DNASE_ACTIVE`, `CHIP_TF_ACTIVE`, `CHIP_HISTONE_ACTIVE`, `CAGE_ACTIVE`, `PROCAP_ACTIVE`
-
-### Interval Scoring Config (`AlphaGenomeScoreIntervalsConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_version` | `str` | `"all_folds"` | HF model version |
-| `interval_scorers` | `Optional[List[str]]` | `None` | Scorer names (`None` = all recommended) |
-| `organism` | `"human" \| "mouse"` | `"human"` | Organism setting |
-| `device` | `str` | `"cuda"` | Inference device |
-
-**Available interval scorers:** `RNA_SEQ`
-
-## Output Specification
-
-### Prediction Outputs (`AlphaGenomePredictOutput`)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `chromosome` | `str` | Chromosome identifier |
-| `interval_start` | `int` | Interval start (0-based) |
-| `interval_end` | `int` | Interval end (0-based, exclusive) |
-| `requested_outputs` | `List[str]` | Output types that were requested |
-| `result` | `Dict[str, Any]` | Serialized prediction payload (spatial tracks) |
-| `variant` | `Optional[Dict]` | Variant metadata (variant prediction only) |
-
-Export formats: `json`, `npy`
-
-### Scoring Outputs (`AlphaGenomeScoreOutput`)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `scores` | `List[Dict[str, Any]]` | Tidy score records (one per scorer-track-gene combination) |
-
-Each score record contains keys such as `variant_id`, `scored_interval`, `gene_id`, `gene_name`, `output_type`, `variant_scorer` or `interval_scorer`, `track_name`, `raw_score`.
-
-Export formats: `json`, `csv`
-
-### Batched Output Wrappers
-
-All batched tools return an output with a `results` field (`List` of per-item outputs) that supports `__len__`, `__getitem__`, and `__iter__` for convenient iteration:
-
-```python
-result = run_alphagenome_predict_intervals(inputs, config)
-len(result)      # number of items
-result[0]        # first item
-for item in result:
-    print(item.chromosome)
-```
-
-## Interpreting Results
-
-**Prediction outputs** are spatial tracks (matrices) where each row corresponds to a genomic position and each column to a specific assay track. Higher values indicate stronger predicted signal (e.g., higher chromatin accessibility, higher expression). These tracks can be visualized in genome browsers or used for custom quantitative analysis.
-
-**Scoring outputs** provide pre-computed summary statistics:
-- **Variant scores** quantify the predicted effect of a variant on each regulatory signal. Larger absolute scores indicate stronger predicted effects. Positive/negative direction depends on the scorer type.
-- **ISM scores** provide a per-position, per-mutation breakdown of predicted regulatory effects. Useful for identifying the most functionally sensitive positions within a region.
-- **Interval scores** summarize predicted activity levels across a region.
-
-**Scorers with `_ACTIVE` suffix** (e.g., `RNA_SEQ_ACTIVE`, `ATAC_ACTIVE`) restrict scoring to tracks/genes that are predicted to be active, reducing noise from inactive loci.
-
-## Quick Start Examples
-
-**Example 1: Predict RNA-seq and ATAC for a genomic interval**
-```python
-from proto_tools import (
-    AlphaGenomeInterval,
-    AlphaGenomePredictIntervalsConfig,
-    AlphaGenomePredictIntervalsInput,
-    run_alphagenome_predict_intervals,
-)
-
-inputs = AlphaGenomePredictIntervalsInput(
-    intervals=AlphaGenomeInterval(
-        chromosome="chr19",
-        interval_start=10_587_331,
-        interval_end=11_635_907,
-    ),
-)
-config = AlphaGenomePredictIntervalsConfig(
-    requested_outputs=["RNA_SEQ", "ATAC"],
-    organism="human",
-)
-
-result = run_alphagenome_predict_intervals(inputs, config)
-print(result[0].requested_outputs)  # ['RNA_SEQ', 'ATAC']
-```
-
-**Example 2: Score a variant's regulatory impact**
-```python
-from proto_tools import (
-    AlphaGenomeScoreVariantsConfig,
-    AlphaGenomeScoreVariantsInput,
-    AlphaGenomeVariant,
-    run_alphagenome_score_variants,
-)
-
-inputs = AlphaGenomeScoreVariantsInput(
-    variants=AlphaGenomeVariant(
-        chromosome="chr19",
-        interval_start=10_587_331,
-        interval_end=11_635_907,
-        variant_position=11_000_000,
-        reference_bases="A",
-        alternate_bases="G",
-    ),
-)
-config = AlphaGenomeScoreVariantsConfig(
-    variant_scorers=["RNA_SEQ", "ATAC", "CAGE"],
-)
-
-result = run_alphagenome_score_variants(inputs, config)
-for score in result[0].scores[:3]:
-    print(f"{score['variant_scorer']} | {score['track_name']}: {score['raw_score']:.4f}")
-```
-
-**Example 3: Predict from raw DNA sequence(s)**
-```python
-from proto_tools import (
-    AlphaGenomePredictSequencesConfig,
-    AlphaGenomePredictSequencesInput,
-    run_alphagenome_predict_sequences,
-)
-
-inputs = AlphaGenomePredictSequencesInput(
-    sequences=["ACGT" * 4096],  # 16,384 bp
-)
-config = AlphaGenomePredictSequencesConfig(
-    requested_outputs=["DNASE", "CHIP_TF"],
-)
-
-result = run_alphagenome_predict_sequences(inputs, config)
-first_output = result[0]
-```
-
-**Example 4: In-silico mutagenesis over a promoter region**
-```python
-from proto_tools import (
-    AlphaGenomeISM,
-    AlphaGenomeScoreISMConfig,
-    AlphaGenomeScoreISMInput,
-    run_alphagenome_score_ism_variants_batch,
-)
-
-inputs = AlphaGenomeScoreISMInput(
-    requests=AlphaGenomeISM(
-        chromosome="chr19",
-        interval_start=10_587_331,
-        interval_end=11_635_907,
-        ism_interval_start=11_000_000,
-        ism_interval_end=11_000_050,
-    ),
-)
-config = AlphaGenomeScoreISMConfig(variant_scorers=["CAGE"])
-
-result = run_alphagenome_score_ism_variants_batch(inputs, config)
-print(f"ISM scores: {len(result[0].scores)} records")
-```
-
-## Best Practices & Gotchas
-
-- **Context length matters**: AlphaGenome supports 4 context lengths (16 KB to 1 MB). The 1 MB window captures the most distal regulatory effects. Shorter windows are faster but miss long-range interactions. Non-matching interval lengths are automatically resized.
-- **First run is slow**: Model weights are downloaded from Hugging Face on first use. Subsequent runs load from the local cache.
-- **GPU required**: AlphaGenome requires a CUDA GPU.
-- **Auto-wrapping**: All batched tools accept a single item (dict, model instance, or string) which is automatically wrapped into a one-element list. This avoids the need for explicit list syntax for single-input use cases.
-- **Per-item caching**: All tools use `cacheable=True` on `@tool()` which caches results per individual input item. Duplicate items in a batch are computed only once.
-- **Variant position validation**: The variant position must fall within `[interval_start, interval_end)`. The ISM sub-interval must be fully contained within the main interval.
-- **Scorer selection**: Passing `None` for `variant_scorers` or `interval_scorers` uses all recommended scorers, which provides comprehensive coverage but is slower. Specify individual scorers when you only need specific assay types.
-- **ISM sub-intervals**: Keep ISM windows small (tens to low hundreds of bp). Each position generates 3 alternate allele predictions, so computation scales linearly with window size.
-- **Ontology filtering**: Use `ontology_terms` to restrict predictions to specific cell types or tissues when you know the biological context, reducing output size and noise.
-- **Export**: Prediction outputs support `json` and `npy` formats. Scoring outputs support `json` and `csv`. Use `result.export("path", format="csv")` for downstream analysis in pandas.
-
-## References
-
-**Primary publication:**
-- Google DeepMind (2025). "AlphaGenome: multi-task foundation model for the genome." Preprint.
-- Summary: Multi-task genomic model predicting RNA-seq, ATAC-seq, DNase-seq, CAGE, ChIP-seq, splice sites, and 3D contact maps from DNA sequence with up to 1 Mb context.
-
-**Implementation:**
-- GitHub: [https://github.com/google-deepmind/alphagenome_research](https://github.com/google-deepmind/alphagenome_research)
-- Hugging Face: [https://huggingface.co/google/alphagenome](https://huggingface.co/google/alphagenome)
-
-## Related Tools
-
-**Used together:**
-- `enformer`, `borzoi`: compare expression predictions across models
-- `splice_transformer`: detailed splice-specific analysis alongside AlphaGenome's splice predictions
-- `evo2`: generate candidate DNA sequences, then score with AlphaGenome
-
-**Alternatives:**
-- `enformer`: lighter-weight expression prediction (200 KB context, Basenji-style architecture)
-- `borzoi`: mammalian expression prediction at 32 bp resolution with RNA-seq coverage tracks
-- `splice_transformer`: dedicated splice site prediction
+- **The model weights are gated.** Running any tool requires accepting the AlphaGenome Terms of Use and authenticating with a HuggingFace access token, and use is restricted to non-commercial scientific research.
+- **Coordinates are 0-based and half-open.** Genomic intervals follow the [BED](https://en.wikipedia.org/wiki/BED_(file_format)) convention used throughout genome browsers, where the start is inclusive and the end is exclusive.
+- **Context lengths are fixed.** AlphaGenome operates at 16,384, 131,072, 524,288, and 1,048,576 base pairs. Intervals that do not already match one of these lengths are centered and resized up to the smallest supported length that contains them, and longer windows capture more distal regulation at higher compute cost.
+- **Output can be filtered by tissue and organism.** The prediction tools restrict their tracks to particular cell types or tissues through [UBERON](https://en.wikipedia.org/wiki/Uberon) ontology terms, and every tool runs against either the human or mouse genome through the organism setting.
