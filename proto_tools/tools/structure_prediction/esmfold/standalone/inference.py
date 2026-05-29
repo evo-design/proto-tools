@@ -7,7 +7,6 @@ Usage:
     python inference.py <input_json_path> <output_json_path>
 """
 
-import gc
 import json
 import logging
 import sys
@@ -15,15 +14,7 @@ from contextlib import contextmanager
 from typing import Any
 
 import torch
-from standalone_helpers import AMINO_ACIDS_LIST, get_logger, move_model_to_device, serialize_output
-
-
-def _release_cuda_memory() -> None:
-    """``gc.collect()`` + ``torch.cuda.empty_cache()`` to drop autograd graph between worker requests."""
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-
+from standalone_helpers import AMINO_ACIDS_LIST, get_logger, move_model_to_device, release_cuda_memory, serialize_output
 
 logger = get_logger(__name__)
 # Suppress transformers logging
@@ -111,7 +102,7 @@ class ESMFoldModel:
             return [self._extract_result(outputs, idx, include_pae_matrix) for idx in range(len(batch_data))]
         finally:
             # Drop activations before the worker handles the next request (incl. after OOM).
-            _release_cuda_memory()
+            release_cuda_memory()
 
     def compute_gradient(
         self,
@@ -229,7 +220,7 @@ class ESMFoldModel:
             }
         finally:
             # Drop autograd graph + activations before the worker handles the next request.
-            _release_cuda_memory()
+            release_cuda_memory()
 
     def _run_discrete_forward(
         self,

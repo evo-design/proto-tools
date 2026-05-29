@@ -3,7 +3,6 @@
 import json
 import os
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -208,24 +207,21 @@ class Boltz2Model:
 
         env = get_subprocess_device_env(device)
 
-        try:
-            result = subprocess.run(
-                cmd,  # type: ignore[arg-type]
-                check=True,
-                text=True,
-                env=env,
-                encoding="utf-8",
-                stdout=sys.stdout if verbose else subprocess.PIPE,
-                stderr=sys.stderr if verbose else subprocess.PIPE,
-            )
-        except subprocess.CalledProcessError as e:
-            stderr_tail = " | ".join((e.stderr or "").strip().splitlines()[-10:]) or "<no stderr>"
-            raise RuntimeError(f"boltz2: failed (exit {e.returncode}): {stderr_tail}") from e
+        from standalone_helpers import is_cuda_oom, raise_oom, run_teed
+
+        # Always capture stdout/stderr (teed to the terminal when verbose) so a CUDA OOM is detected
+        # whether or not verbose streaming is on.
+        returncode, stdout, stderr = run_teed(cmd, env=env, verbose=verbose, encoding="utf-8")
+        if returncode != 0:
+            stderr_tail = " | ".join(stderr.strip().splitlines()[-10:]) or "<no stderr>"
+            if is_cuda_oom(stderr_tail):
+                raise_oom("boltz2", hint="Reduce the complex size or use a GPU with more memory.")
+            raise RuntimeError(f"boltz2: failed (exit {returncode}): {stderr_tail}")
 
         logger.debug("Boltz prediction completed")
         sys.stdout.flush()
         # boltz can exit 0 yet skip the input; pass its output so the missing-predictions error explains why.
-        return "\n".join(s for s in (result.stdout, result.stderr) if s) or None
+        return "\n".join(s for s in (stdout, stderr) if s) or None
 
     def _extract_boltz_output(
         self, output_dir: str, input_path: str, include_pae_matrix: bool, boltz_output: str | None = None

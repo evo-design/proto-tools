@@ -4,6 +4,7 @@ Tests for standalone_helpers.py.
 """
 
 import os
+import sys
 
 import pytest
 
@@ -364,6 +365,59 @@ def test_resolve_weights_dir_in_env_no_venv_raises(monkeypatch):
         resolve_weights_dir("fampnn")
 
 
+# ── oom (CUDA OOM detection / cleanup / actionable errors) ────────────────────
+
+from proto_tools.utils.standalone_helpers_source.standalone_helpers import (  # noqa: E402 -- grouped with tests below
+    GpuOutOfMemoryError,
+    is_cuda_oom,
+    oom_guard,
+    raise_oom,
+    release_cuda_memory,
+)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "CUDA out of memory. Tried to allocate 2.00 GiB",  # torch marker
+        "jaxlib.xla_extension.XlaRuntimeError: RESOURCE_EXHAUSTED: Failed to allocate 2GB",  # JAX marker
+    ],
+)
+def test_is_cuda_oom_detects_markers(text):
+    """Torch and JAX OOM markers are detected from both strings and exceptions."""
+    assert is_cuda_oom(text)
+    assert is_cuda_oom(RuntimeError(text))
+
+
+@pytest.mark.parametrize("text", ["ValueError: bad input", ""])
+def test_is_cuda_oom_ignores_non_oom(text):
+    assert not is_cuda_oom(text)
+
+
+def test_release_cuda_memory_never_raises():
+    # gc.collect + (if torch/CUDA present) empty_cache; safe in torch-free envs and after OOM.
+    release_cuda_memory()
+
+
+def test_raise_oom_is_actionable_and_chained():
+    cause = RuntimeError("CUDA out of memory")
+    with pytest.raises(GpuOutOfMemoryError) as exc_info:
+        raise_oom("protenix", cause, hint="lower num_diffusion_samples or use a larger GPU.")
+    msg = str(exc_info.value)
+    assert "protenix" in msg and "ran out of GPU memory" in msg and "lower num_diffusion_samples" in msg
+    assert exc_info.value.__cause__ is cause
+
+
+def test_oom_guard_converts_cuda_oom():
+    with pytest.raises(GpuOutOfMemoryError, match="chai1"), oom_guard("chai1", hint="reduce tokens"):
+        raise RuntimeError("CUDA out of memory")
+
+
+def test_oom_guard_passes_through_non_oom():
+    with pytest.raises(ValueError, match="bad input"), oom_guard("chai1"):
+        raise ValueError("bad input")
+
+
 def test_resolve_weights_dir_no_proto_home_falls_back_to_default(monkeypatch, tmp_path):
     """When PROTO_HOME is also unset, falls back to ~/.proto/proto_model_cache/."""
     monkeypatch.delenv("TOOL_VENV_PATH", raising=False)
@@ -390,3 +444,25 @@ def test_parse_cuda_indices_invalid():
 )
 def test_parse_cuda_indices_valid(device, expected):
     assert _parse_cuda_indices(device) == expected
+
+
+# ── run_teed (subprocess capture + verbose tee) ───────────────────────────────
+
+from proto_tools.utils.standalone_helpers_source.standalone_helpers import run_teed  # noqa: E402
+
+
+@pytest.mark.parametrize("verbose", [False, True])
+def test_run_teed_always_captures_output(verbose):
+    """stdout/stderr are captured regardless of verbose, so an OOM in stderr is always inspectable."""
+    code = "import sys; sys.stdout.write('out-marker'); sys.stderr.write('CUDA out of memory'); sys.exit(3)"
+    returncode, out, err = run_teed([sys.executable, "-c", code], verbose=verbose)
+    assert returncode == 3
+    assert "out-marker" in out
+    assert "CUDA out of memory" in err
+
+
+def test_run_teed_tees_to_terminal_when_verbose(capsys):
+    """verbose=True also streams the captured output to this process's streams."""
+    returncode, _out, _err = run_teed([sys.executable, "-c", "import sys; sys.stderr.write('teed-line')"], verbose=True)
+    assert returncode == 0
+    assert "teed-line" in capsys.readouterr().err

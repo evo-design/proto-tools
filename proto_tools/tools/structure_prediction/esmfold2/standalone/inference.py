@@ -1,13 +1,19 @@
 """Local ESMFold2 (Biohub) all-atom complex structure prediction model wrapper."""
 
-import gc
 import json
 import logging
 import sys
 from typing import Any
 
 import torch
-from standalone_helpers import get_logger, get_random_int, serialize_output, set_torch_seed
+from standalone_helpers import (
+    get_logger,
+    get_random_int,
+    is_cuda_oom,
+    release_cuda_memory,
+    serialize_output,
+    set_torch_seed,
+)
 
 logger = get_logger(__name__)
 
@@ -20,18 +26,6 @@ _CHECKPOINT_REPOS = {
     "esmfold2": "biohub/ESMFold2",
     "esmfold2-fast": "biohub/ESMFold2-Fast",
 }
-
-
-def _release_cuda_memory() -> None:
-    """Drop autograd graph + cached activations between worker requests."""
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-
-
-def _is_oom_error(exc: BaseException) -> bool:
-    """Match ``torch.OutOfMemoryError`` (modern) or ``RuntimeError("out of memory")`` (legacy)."""
-    return "out of memory" in str(exc).lower()
 
 
 def _build_upstream_input(
@@ -201,14 +195,14 @@ class ESMFold2Model:
                     )
                     break
                 except (torch.cuda.OutOfMemoryError, RuntimeError) as exc:
-                    if not _is_oom_error(exc) or steps <= 1:
+                    if not is_cuda_oom(exc) or steps <= 1:
                         raise
-                    _release_cuda_memory()
+                    release_cuda_memory()
                     new_steps = max(1, steps // 2)
                     logger.warning(f"esmfold2: CUDA OOM at num_sampling_steps={steps}; retrying with {new_steps}")
                     steps = new_steps
         finally:
-            _release_cuda_memory()
+            release_cuda_memory()
 
         # fold() returns a single result for diffusion_samples=1, else a list.
         if isinstance(raw, list):

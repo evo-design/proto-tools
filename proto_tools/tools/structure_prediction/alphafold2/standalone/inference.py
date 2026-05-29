@@ -452,7 +452,10 @@ class AlphaFold2Model:
         else:
             predict_kwargs["models"] = [model_num - 1]
 
-        af_model.predict(**predict_kwargs)
+        from standalone_helpers import oom_guard
+
+        with oom_guard("alphafold2", hint="Shorten the sequence or lower num_recycles."):
+            af_model.predict(**predict_kwargs)
 
         aux = getattr(af_model, "aux", {})
         metrics = _extract_metrics(aux, include_pae_matrix=include_pae_matrix)
@@ -521,7 +524,10 @@ class AlphaFold2Model:
         # num_recycles is read from opt, already set above.
         model_nums = [int(np.random.choice(5))] if sample_models else [model_num - 1]
         af_model._args["clear_prev"] = True
-        af_model.run(backprop=backprop, model_nums=model_nums)
+        from standalone_helpers import oom_guard
+
+        with oom_guard("alphafold2", hint="Shorten the binder/target or lower num_recycles."):
+            af_model.run(backprop=backprop, model_nums=model_nums)
         aux = af_model.aux
 
         gradient: list[list[float]] | None = None

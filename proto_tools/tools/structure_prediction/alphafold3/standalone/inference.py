@@ -17,7 +17,6 @@ Worker protocol implementation for ToolInstance integration.
 
 import json
 import os
-import subprocess
 import sys
 from typing import Any
 
@@ -328,25 +327,19 @@ class AlphaFold3Model:
         # Pin the subprocess to the caller-specified GPU via CUDA_VISIBLE_DEVICES
         env = get_subprocess_device_env(device)
 
-        # Inherit streams when verbose for real-time progress; capture when not
-        # verbose so we can surface stderr tail on failure.
-        process = subprocess.Popen(
-            run_cmds,
-            stdout=sys.stdout if verbose else subprocess.PIPE,
-            stderr=sys.stderr if verbose else subprocess.PIPE,
-            text=True,
-            env=env,
-        )
+        # Always capture stderr (teed to the terminal when verbose) so a CUDA OOM is detected
+        # whether or not verbose streaming is on.
+        from standalone_helpers import is_cuda_oom, raise_oom, run_teed
 
-        _stdout, stderr = process.communicate()
+        returncode, _stdout, stderr = run_teed(run_cmds, env=env, verbose=verbose)
 
-        if process.returncode != 0:
-            if stderr:
-                stderr_tail = " | ".join(stderr.strip().splitlines()[-10:])
-            else:
-                # verbose=True streamed stderr to terminal — no buffer to tail.
-                stderr_tail = "<streamed to terminal; rerun with verbose=False to capture>"
-            raise AlphaFold3ExecutionError(f"alphafold3: failed (exit {process.returncode}): {stderr_tail}")
+        if returncode != 0:
+            stderr_tail = " | ".join(stderr.strip().splitlines()[-10:]) or "<no stderr>"
+            if is_cuda_oom(stderr_tail):
+                raise_oom(
+                    "alphafold3", hint="Shorten the sequences / reduce ligand atoms, or use a GPU with more memory."
+                )
+            raise AlphaFold3ExecutionError(f"alphafold3: failed (exit {returncode}): {stderr_tail}")
 
         logger.debug("AlphaFold3 execution completed successfully.")
 

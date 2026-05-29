@@ -82,8 +82,9 @@ class ESMFoldInput(StructurePredictionInput):
     Note:
         ESMFold only supports protein sequences (amino acids). DNA, RNA, ligands,
         and glycans are not supported. Sequences can include 'X' for unknown amino
-        acids. Entity types are automatically inferred if not provided. The 2,400
-        residue limit is a hard constraint of the ESMFold architecture.
+        acids. Entity types are automatically inferred if not provided. The 2,400-residue
+        cap is a proto-tools memory limit (the batch is auto-halved on CUDA OOM), not an
+        ESMFold architectural constraint (ESM2 uses rotary positions, so it has no fixed cap).
     """
 
     # ESMFold only supports proteins
@@ -221,7 +222,8 @@ class ESMFoldConfig(StructurePredictionConfig):
             from ``StructurePredictionConfig``. Default: ``False``.
 
     Note:
-        ESMFold has a maximum total sequence length of 2,400 residues per complex.
+        proto-tools caps ESMFold input at 2,400 residues per complex (a memory limit,
+        not architectural; the batch is auto-halved on CUDA OOM).
         Unlike AlphaFold-based models, ESMFold does not use MSAs, making it much
         faster but potentially less accurate for some targets. A precomputed
         ``msas`` input is ignored and logs a single warning.

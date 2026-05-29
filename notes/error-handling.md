@@ -47,6 +47,16 @@ The wrapper retries `ConnectionError` (and any other entry in `_RETRYABLE_EXCEPT
 
 `proto_tools.cloud._route_to_cloud` raises on remote failure. The wrapper propagates that exception to the caller by default. Setting `PROTO_CAPTURE_ERRORS=1` packs the cloud exception into a `success=False` output, identical to the local-execution capture path.
 
+## GPU out-of-memory
+
+OOM is hardware/config-dependent (tokens x batch x precision x VRAM), so tools do not
+predict it with fixed caps. `standalone_helpers.oom` provides `is_cuda_oom`,
+`release_cuda_memory`, and `oom_guard` / `raise_oom`: on a real OOM a tool frees cached GPU
+memory and raises an actionable `GpuOutOfMemoryError` instead of a deep CUDA trace. OOM is
+**not** retried by the `@tool` decorator (a retry would hit the same limit); ESMFold and
+ESMFold2 do their own in-tool reactive recovery (batch / sampling-step halving) before
+surfacing the error.
+
 ## Files
 
 | File | Role |

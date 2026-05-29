@@ -267,7 +267,10 @@ class ProtenixModel:
             configs["input_json_path"] = processed_json
             configs["seeds"] = seeds_list
             configs["dump_dir"] = output_dir
-            infer_predict(self.runner, configs)
+            from standalone_helpers import oom_guard
+
+            with oom_guard("protenix", hint="Lower num_diffusion_samples or use a larger GPU."):
+                infer_predict(self.runner, configs)
         finally:
             os.chdir(prev_cwd)
 

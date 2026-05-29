@@ -71,24 +71,27 @@ class Chai1Model:
         sys.stdout.flush()
 
         # Run the model
-        candidates = self._chai1_run_inference(
-            fasta_file=Path(fasta_file),
-            output_dir=Path(output_dir),
-            use_esm_embeddings=use_esm_embeddings,
-            use_msa_server=False,
-            msa_directory=msa_directory,
-            constraint_path=None,
-            use_templates_server=False,
-            template_hits_path=None,
-            recycle_msa_subsample=recycle_msa_subsample,
-            num_trunk_recycles=num_trunk_recycles,
-            num_diffn_timesteps=num_diffn_timesteps,
-            num_diffn_samples=num_diffn_samples,
-            num_trunk_samples=num_trunk_samples,
-            device=self.device,
-            seed=seed,
-            low_memory=low_memory,
-        )
+        from standalone_helpers import oom_guard
+
+        with oom_guard("chai1", hint="Reduce the complex's token count (residues + ligand/glycan heavy atoms)."):
+            candidates = self._chai1_run_inference(
+                fasta_file=Path(fasta_file),
+                output_dir=Path(output_dir),
+                use_esm_embeddings=use_esm_embeddings,
+                use_msa_server=False,
+                msa_directory=msa_directory,
+                constraint_path=None,
+                use_templates_server=False,
+                template_hits_path=None,
+                recycle_msa_subsample=recycle_msa_subsample,
+                num_trunk_recycles=num_trunk_recycles,
+                num_diffn_timesteps=num_diffn_timesteps,
+                num_diffn_samples=num_diffn_samples,
+                num_trunk_samples=num_trunk_samples,
+                device=self.device,
+                seed=seed,
+                low_memory=low_memory,
+            )
 
         # Get the best model by score
         candidates = candidates.sorted()

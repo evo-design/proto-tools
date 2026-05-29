@@ -47,6 +47,7 @@ from .device import (
     resolve_jax_device,
 )
 from .memory import get_jax_memory_stats, get_pytorch_memory_stats
+from .oom import GpuOutOfMemoryError, is_cuda_oom, oom_guard, raise_oom, release_cuda_memory
 
 # ``iterative_sampling`` imports torch at module level and is NOT re-exported
 # from the package init, so CI's slim test env (no torch) can import this
@@ -64,6 +65,7 @@ from .serialization import (
     RNA_NUCLEOTIDES,
     serialize_output,
 )
+from .subprocess_utils import run_teed
 from .weights import resolve_weights_dir
 
 __all__ = [
@@ -83,6 +85,12 @@ __all__ = [
     # memory
     "get_jax_memory_stats",
     "get_pytorch_memory_stats",
+    # oom
+    "GpuOutOfMemoryError",
+    "is_cuda_oom",
+    "oom_guard",
+    "raise_oom",
+    "release_cuda_memory",
     # scoring
     "log_likelihood_metrics",
     # seeding
@@ -95,6 +103,8 @@ __all__ = [
     "DNA_NUCLEOTIDES",
     "RNA_NUCLEOTIDES",
     "serialize_output",
+    # subprocess
+    "run_teed",
     # weights
     "resolve_weights_dir",
 ]
