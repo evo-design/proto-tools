@@ -433,7 +433,7 @@ For human or mouse regulatory design, choose the predictor whose outputs match t
 
 Use AlphaGenome when the objective is one of its native outputs, such as RNA-seq, CAGE, accessibility, histone marks, TF tracks, splice sites, splice-site usage, splice junctions, polyadenylation, or contact maps.
 
-When AlphaGenome is forbidden, unavailable, or too expensive for the inner loop, use cheaper proxies during search and reserve AlphaGenome or the strongest task-matched predictor for final validation when allowed.
+AlphaGenome is expensive; use cheaper proxies during the inner-loop search and reserve the strongest task-matched predictor for final validation.
 
 Use Borzoi for long-context expression and RNA-seq coverage-style objectives, especially when exon/intron coverage shape and broad genomic context matter.
 
@@ -481,7 +481,7 @@ Additional regulatory model details:
 
 Use AlphaGenome when splice-site usage, splice junctions, RNA-seq, or retention are the target and the model is available and allowed.
 
-Use SpliceTransformer, SpliceAI, and Pangolin for local splice-site proposal and triage. SpliceAI is strong for donor/acceptor probability and variant delta scores with 10 kb context. Treat Pangolin as a splice-site usage/P(splice) predictor and variant gain/loss scorer, not as a general tissue-specific splicing, junction, retention, or expression model. Use these tools as direct splicing validators when AlphaGenome is unavailable, forbidden, too expensive for the inner loop, or useful only as final confirmation.
+SpliceAI, Pangolin, and SpliceTransformer are per-position splice-site predictors that differ mainly in tissue resolution. SpliceAI is tissue-agnostic (acceptor/donor probability and variant delta scores, 10 kb context); Pangolin resolves four tissues (heart, liver, brain, testis); SpliceTransformer resolves fifteen GTEx tissues and is state of the art on tissue-specific benchmarks. Match the model's tissue resolution to the objective: for a tissue- or cell-type-specific objective, drive selection by a tissue-resolved usage signal rather than generic donor/acceptor probability, which saturates on a strong consensus splice site and does not capture tissue-specific usage.
 
 Use Borzoi or Enformer only as expression-like support unless the task target is actually expression, coverage, chromatin accessibility, or track prediction.
 
@@ -679,7 +679,7 @@ Use TM-align or US-align for pairwise structural comparisons, symmetry checks, R
 
 Use task-specified databases and thresholds whenever they exist.
 
-If a named database is unavailable or a tool is forbidden, record the gap and use the closest allowed sequence or structure search rather than silently omitting novelty analysis.
+If a named database or tool is unavailable, record the gap and use the closest available sequence or structure search rather than silently omitting novelty analysis.
 
 Do not claim novelty from sampling seed, generator name, low language-model likelihood, low training-set likelihood, or absence of an obvious motif.
 
@@ -896,7 +896,7 @@ Use when the proposal method matched the task, at least one strong validator mea
 
 ### High computational confidence
 
-Use when the proposal method matched the task, deterministic checks passed, multiple validators agreed on the central quantity, novelty/similarity checks passed, key submetrics were inspected, and major failure modes were ruled out computationally.
+Use when the proposal method matched the task, deterministic checks passed, multiple validators agreed on the central quantity, novelty/similarity checks passed, key submetrics were inspected, and major failure modes were excluded computationally.
 
 Do not use “high confidence” to imply wet-lab validation.
 
