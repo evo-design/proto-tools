@@ -1,277 +1,68 @@
-<a href="https://bio-pro.mintlify.app/tools/sequence-scoring/borzoi"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/sequence-scoring/borzoi"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # Borzoi
 
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** Borzoi uses Apache-2.0 for code and CC-BY-4.0 for model weights and may require explicit attribution when utilized. Please refer to the [code license](https://github.com/calico/borzoi/blob/main/LICENSE) and [model weights license](https://huggingface.co/johahi/borzoi-replicate-0) for full terms.
 
 ## Overview
 
-Borzoi is a deep learning model that predicts gene expression and regulatory activity from a 524,288 bp DNA sequence. As the successor to Enformer, Borzoi uses dilated residual convolutional blocks combined with attention to achieve a 2.7x longer context window (524 kb vs. 196 kb), higher output resolution (6,144 bins), and improved accuracy, particularly for RNA-seq coverage prediction.
-
-- **Tool keys**: `borzoi-prediction` (single replicate), `borzoi-ensemble` (all 4 replicates)
-- **Model context**: 524,288 bp (fixed length, ~262 kb in each direction from center)
-- **Output resolution**: 6,144 bins x 32 bp per bin (~197 kb output span)
-- **Species heads**: `human`, `mouse`
-- **Replicates**: 4 independently trained models
-- **GPU required**: Yes
+[Borzoi](https://github.com/calico/borzoi) is a deep learning model that predicts cell-type and tissue-specific RNA-seq coverage and other regulatory genomics tracks directly from DNA sequence, developed by the Kelley lab at [Calico Life Sciences](https://www.calicolabs.com/). Given a fixed 524,288 bp input window, it returns activity across 6,144 bins of 32 bp each for thousands of human or mouse genomic assays. This toolkit exposes single-replicate prediction and a four-replicate ensemble for uncertainty estimation.
 
 ## Background
 
-Gene regulation involves interactions across a wide range of genomic distances. While most promoter-proximal elements act within a few kilobases, enhancers can regulate genes from distances exceeding 100 kb, and [topologically associating domains](https://en.wikipedia.org/wiki/Topologically_associating_domain) (TADs) organize chromatin contacts across megabase scales. Capturing these long-range interactions requires models with sufficient context windows.
+Gene regulation acts across a wide range of genomic distances. Most promoter-proximal elements operate within a few kilobases, yet enhancers can influence genes from more than 100 kb away, and [topologically associating domains](https://en.wikipedia.org/wiki/Topologically_associating_domain) organize chromatin contacts over megabase scales. Sequence-to-function models that aim to relate noncoding variation to molecular phenotype therefore require an input window broad enough to capture these long-range relationships at fine spatial resolution.
 
-Borzoi was trained to predict RNA-seq coverage directly from DNA sequence, rather than the processed experimental tracks used by Enformer. This training objective enables:
-- **Quantitative RNA-seq profiles**: Direct prediction of read coverage across gene bodies, capturing splicing patterns, alternative [TSS](https://en.wikipedia.org/wiki/Transcription_start_site) usage, and transcript isoform ratios
-- **Broader regulatory context**: The 524 kb window captures most enhancer-promoter interactions and some TAD-level organization
-- **Higher output resolution**: 6,144 bins at 32 bp resolution provide finer spatial detail than Enformer
+Borzoi ([Linder et al., 2025](https://doi.org/10.1038/s41588-024-02053-6)) learns to predict cell- and tissue-specific [RNA-seq](https://en.wikipedia.org/wiki/RNA-Seq) coverage from DNA sequence, serving as a unifying model of gene regulation. Using statistics computed from its predicted coverage, Borzoi isolates and accurately scores the DNA regulatory elements that modulate transcriptional processes including transcription, splicing, and polyadenylation, with greater accuracy than comparable models. Benchmarked against state-of-the-art models, it accurately predicts the influence of variants on RNA expression and splicing and recapitulates the causal variants underlying molecular quantitative trait loci. Alongside RNA-seq, the model predicts [CAGE](https://en.wikipedia.org/wiki/Cap_analysis_of_gene_expression), [DNase-seq](https://en.wikipedia.org/wiki/DNase-Seq), [ATAC-seq](https://en.wikipedia.org/wiki/ATAC-seq), and [histone modification](https://en.wikipedia.org/wiki/Histone_modification) tracks, making it a broad regulatory genomics predictor.
 
-The model also predicts [CAGE](https://en.wikipedia.org/wiki/Cap_analysis_of_gene_expression), [DNase-seq](https://en.wikipedia.org/wiki/DNase-Seq), [ATAC-seq](https://en.wikipedia.org/wiki/ATAC-seq), and [histone modification](https://en.wikipedia.org/wiki/Histone_modification) tracks, making it a general-purpose regulatory genomics predictor with improved long-range accuracy.
+The published model couples a convolutional sequence encoder with transformer-style attention to process the full 524,288 bp window, and separate output heads produce human and mouse track predictions. The Borzoi authors trained four model replicates from independent initializations, which this toolkit exposes both as a single-replicate tool and as a four-replicate ensemble. A separate [FlashAttention](https://github.com/Dao-AILab/flash-attention)-based distillation of Borzoi, named Flashzoi, reaches comparable accuracy at substantially higher speed. The human checkpoints exposed by this toolkit use the Flashzoi distillation, and the mouse checkpoints use the standard Borzoi architecture.
+
+### Learning Resources
+
+- [calico/borzoi](https://github.com/calico/borzoi) (Calico Life Sciences). Official repository with the reference model code, training data references, and usage documentation.
+- [Borzoi PyTorch weights](https://huggingface.co/collections/johahi/borzoi-models) (Hugging Face). The PyTorch-converted Borzoi and Flashzoi checkpoints that this toolkit loads at inference time.
 
 ## Tools
 
-### Borzoi Ensemble (`borzoi-ensemble`)
-
-Predict regulatory activity using all Borzoi replicates.
-
 ### Borzoi Prediction (`borzoi-prediction`)
 
-Predict regulatory activity using a single Borzoi replicate.
+Predicts regulatory track activity for one or more DNA sequences using a single Borzoi replicate. Each sequence may be supplied as an exact 524,288 bp model window, or as a longer source sequence paired with a sequence-relative target range that the tool uses to extract the fixed model window. For every input, the tool returns a per-bin activity matrix together with the source-sequence coordinates of the model input window and the output-bin span, so predictions can be mapped back onto the original sequence.
 
-## Tool Catalog
+#### Applications
 
-| Tool Key | Function | Description |
-|----------|----------|-------------|
-| `borzoi-prediction` | `run_borzoi` | Single replicate prediction. Fast, suitable for screening and optimization loops. |
-| `borzoi-ensemble` | `run_borzoi_ensemble` | All 4 replicates. Returns per-replicate predictions for uncertainty quantification. |
+This tool is appropriate for high-throughput screening and iterative sequence design, where a single forward pass per sequence keeps the analysis fast. Representative applications include predicting RNA-seq, CAGE, and chromatin-accessibility profiles for a locus of interest, comparing reference and alternate alleles to estimate the regulatory effect of a noncoding variant, and ranking candidate regulatory sequences inside an optimization loop. The single-replicate setting is well suited to the inner iterations of a design campaign before a final ensemble assessment.
 
-Use the single-replicate tool for iterative design and optimization. Use the ensemble tool when you need confidence estimates or are making final assessments.
+#### Usage Tips
 
-## Execution Modes
+- **Exact-window inputs must be exactly 524,288 bp.** When no target range is supplied, the provided sequence is treated as the literal model input and is rejected unless it matches the model context length. A longer genomic region should instead be paired with a target range so the tool can extract the fixed window.
+- **A target range places a region of interest inside the output bins.** Extraction is aligned to the start of the requested range rather than centered, and the window shifts left near the right edge of the source sequence so the full range remains covered. The returned context and output coordinates report where the model window landed in source coordinates.
+- **The region of interest is most informative near the center of the input window.** Predictions degrade toward the edges of the 524,288 bp context, so a target gene or variant is best positioned close to the midpoint of the supplied window.
+- **The `species` setting selects the checkpoint family.** A value of `"human"` loads the FlashAttention Flashzoi checkpoints and requires a CUDA device, while `"mouse"` loads the standard Borzoi checkpoints. The two heads predict different track panels, so the species must match the organism of the input sequence.
+- **`output_tracks` selects which assays are returned.** Track indices address the full Borzoi output panel (7611 human, 2608 mouse). Selecting a small set of relevant tracks is appropriate when only specific assays inform the analysis.
+- **`avg_output_tracks=True` collapses the selected tracks into a single composite signal.** This default is appropriate when a single objective is needed, for example when combining related assays into one optimization score. A value of `False` returns one row per requested track when per-assay resolution is required.
 
-Borzoi requires GPU acceleration for inference.
+### Borzoi Ensemble (`borzoi-ensemble`)
 
-| Mode | Backend | Setup |
-|------|---------|-------|
-| **Local venv** | Local CUDA GPU | Requires NVIDIA GPU with CUDA |
+Predicts regulatory track activity using all four Borzoi replicates and returns the per-replicate predictions stacked together for each input sequence. The four replicates are evaluated in sequence and share the input handling, coordinate reporting, and track-selection behavior of the single-replicate tool. The spread of predictions across replicates provides a measure of model confidence at each bin.
 
-For ensemble mode, all 4 replicates run sequentially.
+#### Applications
 
-## How It Works
+This tool is appropriate for final assessments and for any analysis that benefits from uncertainty quantification. Computing the dispersion across the four replicate predictions at each bin distinguishes positions where the model is confident from positions where the replicates disagree. Representative applications include reporting confidence intervals on a predicted regulatory profile, filtering candidate variants or designed sequences to those with consistent predicted effects, and producing the headline numbers for a locus after single-replicate screening has narrowed the candidates.
 
-1. **Input**: One or more 524,288 bp model-context sequences, or longer source sequences with `target_ranges`
-2. **One-hot encoding**: The sequence is converted to a 4-channel (A, C, G, T) representation; N bases are encoded as all zeros
-3. **Convolutional stem + dilated residual blocks**: Initial layers downsample and process the sequence using dilated convolutions for efficient long-range feature extraction
-4. **Attention layers**: Transformer-style attention captures dependencies across the full context window
-5. **Species-specific output heads**: Separate prediction heads for human and mouse tracks
-6. **Output**: A prediction matrix of shape `[num_tracks, 6144]` for single replicate, or `[4, num_tracks, 6144]` for ensemble
+#### Usage Tips
 
-## Input Parameters
+- **The ensemble runs four full forward passes per sequence.** Inference therefore takes roughly four times as long as a single replicate. The single-replicate tool is appropriate for iteration, and the ensemble is appropriate for the final reportable result.
+- **Confidence is read from agreement across replicates.** A low spread across the four predictions at a bin indicates a robust signal, while a high spread indicates lower model confidence at that position. The per-replicate predictions are returned in full so any dispersion statistic can be computed downstream.
+- **Replicate selection is not exposed for the ensemble.** All four replicates are always evaluated. The single-replicate tool is the appropriate choice when only one specific replicate is needed.
+- **The species, track-selection, and averaging behavior match the single-replicate tool.** The same `species`, `output_tracks`, and `avg_output_tracks` guidance applies, and the ensemble inherits the same input modes and coordinate reporting.
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `sequences` | `List[str]` | Yes | DNA source sequence(s). Without `target_ranges`, each sequence must be exactly 524,288 bp. With `target_ranges`, sequences may be longer and must contain enough context for a full Borzoi input window. Only A, T, C, G, N are allowed. |
-| `target_ranges` | `List[SequenceTargetRange]` | No | Sequence-relative target range(s) to keep inside the model output window. Each range has `start` (0-based inclusive) and `end` (0-based exclusive). A single range is auto-wrapped into a list. |
+## Toolkit Notes
 
-If `target_ranges` is omitted, the provided sequence is the exact model input. If `target_ranges` is provided, the tool extracts a 524,288 bp model input window from each source sequence. The returned result reports where that model input window and the model output window landed in source-sequence coordinates.
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-Target-range extraction is start-aligned, not midpoint-centered: when possible, bin 0 starts at `target_ranges[i].start`. Near the right edge, the context window shifts left so the full target range still fits.
+These apply to every Borzoi tool in this toolkit (`borzoi-prediction`, `borzoi-ensemble`).
 
-## Configuration
-
-### Single Replicate (`BorzoiConfig`)
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `output_tracks` | `List[int]` | `[0]` | Indices of Borzoi output tracks to extract (7611 human / 2608 mouse) |
-| `species` | `"human"` or `"mouse"` | `"human"` | Species model to use |
-| `replicate` | `"0"`, `"1"`, `"2"`, or `"3"` | `"0"` | Which replicate model to run |
-| `avg_output_tracks` | `bool` | `True` | Whether to average selected tracks into one output |
-| `batch_size` | `int` | `1` | Number of sequences to process simultaneously on GPU |
-| `device` | `str` | `"cuda"` | Inference device |
-| `verbose` | `bool` | `False` | Log status messages |
-
-### Ensemble (`BorzoiEnsembleConfig`)
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `output_tracks` | `List[int]` | `[0]` | Indices of Borzoi output tracks to extract (7611 human / 2608 mouse) |
-| `species` | `"human"` or `"mouse"` | `"human"` | Species model to use |
-| `avg_output_tracks` | `bool` | `True` | Whether to average selected tracks into one output |
-| `batch_size` | `int` | `1` | Number of sequences to process simultaneously on GPU |
-| `device` | `str` | `"cuda"` | Inference device |
-| `verbose` | `bool` | `False` | Log status messages |
-
-### Parameter Guides
-
-**`avg_output_tracks`**: When `True` (default), all requested tracks are averaged into a single output track per bin. This is useful for combining related tracks (e.g., multiple CAGE tracks) into a composite signal. Set to `False` to get individual predictions per track.
-
-Human Borzoi runs use FlashAttention-backed checkpoints automatically. Mouse Borzoi runs use the non-FlashAttention checkpoints because those are the available mouse checkpoints.
-
-**`replicate`**: Borzoi has 4 independently trained replicates (0-3). Each produces slightly different predictions. Replicate "0" is the default. For production analysis, use the ensemble tool to get all 4.
-
-### Sweep Priorities
-
-When using Borzoi in optimization loops:
-
-1. **`output_tracks`**: Most critical. Select tracks matching your biological objective.
-2. **`species`**: Must match the organism of your target sequence.
-3. **`avg_output_tracks`**: Set to `True` for a single optimization signal, `False` for multi-objective optimization across tracks.
-
-## Output Specification
-
-### `BorzoiOutput` (single replicate)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `results` | `List[BorzoiPredictionResult]` | Per-sequence prediction results |
-| `output_tracks` | `List[int]` | Track indices used |
-| `species` | `str` | Species head used |
-| `replicate` | `str` | Replicate ID used |
-| `avg_output_tracks` | `bool` | Whether averaging was applied |
-
-Each `BorzoiPredictionResult` contains `sequence`, `sequence_length`, coordinate metadata, and `prediction` with shape `[num_tracks, 6144]` (or `[1, 6144]` if `avg_output_tracks=True`).
-
-Coordinate metadata is relative to the input `sequence`:
-
-| Field | Meaning |
-|-------|---------|
-| `context_start`, `context_end` | The 524,288 bp model input window that was sent to Borzoi |
-| `output_start`, `output_end` | The source-sequence span covered by Borzoi output bins |
-| `output_resolution` | Base pairs per output bin (`32`) |
-| `target_start`, `target_end` | The requested `target_ranges` entry, if one was provided |
-
-### `BorzoiEnsembleOutput` (ensemble)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `results` | `List[BorzoiEnsemblePredictionResult]` | Per-sequence ensemble prediction results |
-| `output_tracks` | `List[int]` | Track indices used |
-| `species` | `str` | Species head used |
-| `avg_output_tracks` | `bool` | Whether averaging was applied |
-| `num_replicates` | `int` | Always 4 |
-
-Each `BorzoiEnsemblePredictionResult` contains the same coordinate metadata as `BorzoiPredictionResult`, plus `predictions` with shape `[4, num_tracks, 6144]`.
-
-## Interpreting Results
-
-Borzoi outputs are in **log(1 + x) transformed counts** space. Higher values indicate stronger predicted signal.
-
-**For variant effect analysis:**
-- Compare predictions between reference and alternate allele sequences
-- Compute log2 fold changes at bins overlapping the variant and its regulatory neighborhood
-- Use ensemble predictions to assess whether the effect is consistent across replicates
-
-**For RNA-seq profile prediction:**
-- The output captures read coverage patterns including exon/intron structure
-- Peaks in CAGE tracks indicate predicted transcription start sites
-- Track averaging (`avg_output_tracks=True`) gives a composite signal across related tracks
-
-**Spatial interpretation**: Bin index maps to source-sequence coordinates as:
-- Source coordinate = `output_start + bin_index * output_resolution`
-- With exact-window inputs, `output_start` is 163,840 and the center of the input (position 262,144) corresponds to bin 3,072
-
-**Ensemble uncertainty:**
-- Compute standard deviation across 4 replicate predictions per bin
-- High variance across replicates indicates lower model confidence at that position
-- Consistent predictions across all replicates suggest robust signal
-
-## Quick Start Examples
-
-**Single replicate prediction:**
-```python
-from proto_tools.tools.sequence_scoring.borzoi import (
-    BorzoiInput,
-    BorzoiConfig,
-    run_borzoi,
-)
-
-# 524,288 bp sequence (use real genomic sequence in practice)
-sequence = "ATCG" * 131072  # 524,288 bp
-
-inputs = BorzoiInput(sequences=[sequence])
-config = BorzoiConfig(
-    output_tracks=[0, 1, 2],
-    species="human",
-    replicate="0",
-    avg_output_tracks=True,
-)
-
-result = run_borzoi(inputs, config)
-prediction = result.results[0].prediction
-print(f"Output shape: {len(prediction)} x {len(prediction[0])}")
-# Output shape: 1 x 6144 (averaged tracks)
-```
-
-**Ensemble prediction for uncertainty estimation:**
-```python
-from proto_tools.tools.sequence_scoring.borzoi import (
-    BorzoiInput,
-    BorzoiEnsembleConfig,
-    run_borzoi_ensemble,
-)
-
-inputs = BorzoiInput(sequences=[sequence])
-config = BorzoiEnsembleConfig(
-    output_tracks=[0, 1, 2],
-    species="human",
-    avg_output_tracks=False,
-)
-
-result = run_borzoi_ensemble(inputs, config)
-predictions = result.results[0].predictions
-print(f"Ensemble shape: {len(predictions)} x "
-      f"{len(predictions[0])} x {len(predictions[0][0])}")
-# Ensemble shape: 4 x 3 x 6144
-
-# Compute per-bin variance across replicates
-import statistics
-bin_idx = 3072  # Center bin
-for track in range(3):
-    vals = [predictions[rep][track][bin_idx] for rep in range(4)]
-    print(f"Track {track}, bin {bin_idx}: "
-          f"mean={statistics.mean(vals):.3f}, std={statistics.stdev(vals):.3f}")
-```
-
-**Mouse prediction:**
-```python
-config = BorzoiConfig(
-    output_tracks=[0, 1, 2],
-    species="mouse",
-)
-
-result = run_borzoi(BorzoiInput(sequences=[sequence]), config)
-```
-
-**Export results:**
-```python
-result = run_borzoi(inputs, config)
-result.export("borzoi_output", file_format="json")
-```
-
-## Best Practices & Gotchas
-
-- **Exact-window inputs must be 524,288 bp**: If you do not pass `target_ranges`, each input sequence is treated as the exact Borzoi model input and must be exactly 524,288 bp.
-- **Use `target_ranges` for longer source sequences**: When your sequence includes extra flanking context, provide one sequence-relative target range per sequence. Borzoi will extract the fixed model input window and report where the context and output windows landed.
-- **Center your region of interest**: Like Enformer, predictions are most informative near the center of the input window. Place your target gene or variant at position ~262,144.
-- **Species selects the checkpoint family**: Human runs use FlashAttention-backed checkpoints automatically; mouse runs use the available non-FlashAttention checkpoints.
-- **Ensemble is 4x slower**: Each replicate runs a full forward pass. Use single replicate for iteration, ensemble for final analysis.
-- **Track averaging collapses dimensions**: With `avg_output_tracks=True`, each result's `prediction` shape is `[1, 6144]` regardless of how many tracks you requested. Set to `False` if you need per-track resolution.
-- **GPU memory**: A single replicate inference uses ~6-8 GB of GPU memory due to the longer context window. Ensemble runs replicates sequentially, so peak memory is the same as single replicate.
-- **N characters**: Accepted but degrade prediction quality. Minimize N content in your input.
-
-## References
-
-- Linder, J., Srivastava, D., Yuan, H. et al. "Predicting RNA-seq coverage from DNA sequence as a unifying model of gene regulation." *Nature Genetics* 57, 587-597 (2025). DOI: [10.1038/s41588-024-02053-6](https://doi.org/10.1038/s41588-024-02053-6)
-- GitHub: [calico/borzoi](https://github.com/calico/borzoi)
-- Model weights: [HuggingFace: johahi/borzoi-models](https://huggingface.co/collections/johahi/borzoi-models)
-
-## Related Tools
-
-**Used together:**
-- `enformer-prediction`: Cross-validate regulatory predictions between Enformer and Borzoi
-- `evo2-sample`: Generate candidate sequences, then score them with Borzoi
-
-**Alternatives:**
-- `enformer-prediction`: Shorter context (196 kb), faster inference. Use when long-range context is not needed.
-- `alphagenome`: Google DeepMind's next-generation genomics model
-- `splice-transformer`: Specialized for splice site prediction rather than general regulatory activity
+- **A CUDA GPU is required.** Both tools run on GPU, and human prediction uses FlashAttention kernels that are available only on CUDA hardware. The model checkpoints are downloaded from Hugging Face on first use and cached for subsequent runs.
+- **Input sequences accept only the bases A, C, G, T, and N.** Other characters are rejected during validation. The base N is permitted but encoded as the absence of any base, so a high N content reduces prediction quality and is best minimized.
+- **Predicted values are the model's raw track-activity outputs, returned without any additional post-processing.** Higher values correspond to stronger predicted signal. The values are best used for relative comparisons, for example between alleles or across positions, rather than as absolute experimental counts.
+- **Output bins map to source coordinates through the reported window.** Each result reports the output-bin span in source-sequence coordinates at a resolution of 32 bp per bin, so a bin index can be converted to a genomic position using the output start and the bin resolution.
