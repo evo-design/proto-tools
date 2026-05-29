@@ -87,9 +87,8 @@ class RFdiffusion3DesignSpec(BaseModel):
     https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
 
     Attributes:
-        input_structure (str | None): Path to input PDB/CIF file or PDB content string.
-            Required for motif scaffolding, binder design, or any task that needs
-            structural context. Can be omitted for unconditional de novo design.
+        input_structure (Structure | None): Input structure (path, PDB/CIF content,
+            ``Structure``, or model_dump dict). Omit for unconditional de novo design.
 
         contig (str | None): Contig string specifying the design topology.
             Format: comma-separated segments with chain breaks as ``/0``.
@@ -179,10 +178,10 @@ class RFdiffusion3DesignSpec(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    input_structure: str | None = Field(
+    input_structure: Structure | None = Field(
         default=None,
         title="Input Structure",
-        description="Path to input PDB/CIF file or PDB content string",
+        description="Input structure (file path, PDB/CIF content, Structure, or model_dump dict).",
     )
     contig: str | None = Field(
         default=None,
@@ -380,7 +379,8 @@ class RFdiffusion3DesignSpec(BaseModel):
 
         # Add typed fields (these override extra kwargs if both provided)
         if self.input_structure is not None:
-            spec["input"] = _resolve_input_structure_path(self.input_structure)
+            # rfd3 accepts inline PDB/CIF content in the spec "input" field.
+            spec["input"] = self.input_structure.structure
         if self.contig is not None:
             spec["contig"] = self.contig
         if self.length is not None:

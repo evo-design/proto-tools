@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from proto_tools.entities.structures import Structure
 from proto_tools.tools.structure_design import (
     RFdiffusion3Config,
     RFdiffusion3DesignSpec,
@@ -65,12 +66,12 @@ def test_rfdiffusion3_design_spec_selections_require_input_structure():
         RFdiffusion3DesignSpec(unindex="A244,A274")
 
     # Happy path 1: input_structure alone with select_*
-    spec = RFdiffusion3DesignSpec(input_structure="target.pdb", select_hotspots="A24,A35,A50")
+    spec = RFdiffusion3DesignSpec(input_structure=synthetic_cif(["A"]), select_hotspots="A24,A35,A50")
     assert spec.select_hotspots == "A24,A35,A50"
 
     # Happy path 2: input_structure + contig + select_* (full motif scaffolding shape)
     spec = RFdiffusion3DesignSpec(
-        input_structure="target.pdb",
+        input_structure=synthetic_cif(["A"]),
         contig="A1-100",
         select_hbond_donor={"A40": ["NE2"]},
     )
@@ -194,7 +195,7 @@ def test_rfdiffusion3_typed_fields_override_extras_on_collision(tmp_path):
     target = tmp_path / "typed.pdb"
     target.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000\n", encoding="utf-8")
     spec = RFdiffusion3DesignSpec.model_validate({"input_structure": str(target), "input": "extra.pdb"})
-    assert spec.to_dict()["input"] == str(target)
+    assert spec.to_dict()["input"] == target.read_text()
 
 
 # ── DesignSpec: JSON spec emission ──────────────────────────────────────────
@@ -265,13 +266,13 @@ def test_rfdiffusion3_design_spec_ori_token_must_be_xyz():
 def test_rfdiffusion3_design_spec_rejects_literal_nul_chain_break():
     """RFdiffusion3 chain breaks use /0, never a Python literal NUL byte."""
     with pytest.raises(ValueError, match="/0"):
-        RFdiffusion3DesignSpec(input_structure="target.pdb", contig="50,\0,A1-10")
+        RFdiffusion3DesignSpec(input_structure=synthetic_cif(["A"]), contig="50,\0,A1-10")
 
 
 def test_rfdiffusion3_design_spec_rejects_backslash_zero_chain_break():
     r"""RFdiffusion3 chain breaks use /0, not the text token "\\0"."""
     with pytest.raises(ValueError, match="/0"):
-        RFdiffusion3DesignSpec(input_structure="target.pdb", contig=r"50,\0,A1-10")
+        RFdiffusion3DesignSpec(input_structure=synthetic_cif(["A"]), contig=r"50,\0,A1-10")
 
 
 def test_rfdiffusion3_design_spec_symmetry_serializes_to_id_dict():
@@ -329,46 +330,15 @@ def test_rfdiffusion3_json_spec_generation(tmp_path, monkeypatch):
     assert "spec-1" in spec
     assert spec["spec-0"]["length"] == "100"
     assert spec["spec-1"]["contig"] == "50-80"
-    assert spec["spec-1"]["input"] == str(target)  # input_structure -> upstream's "input" key
+    assert spec["spec-1"]["input"] == target.read_text()  # input_structure content inlined under "input"
 
 
-def test_rfdiffusion3_json_spec_rejects_missing_path_like_input():
-    """Path-like input_structure values fail before rfd3 runs in a temp dir."""
-    inputs = RFdiffusion3Input(
-        design_specs=[
-            RFdiffusion3DesignSpec(
-                input_structure="benchmarks/assets/missing.pdb",
-                contig="50-80",
-            )
-        ]
-    )
-
-    with pytest.raises(FileNotFoundError, match="input_structure path does not exist"):
-        inputs.to_json_spec()
-
-
-def test_rfdiffusion3_json_spec_rejects_directory_input_structure(tmp_path):
-    inputs = RFdiffusion3Input(
-        design_specs=[
-            RFdiffusion3DesignSpec(
-                input_structure=str(tmp_path),
-                contig="50-80",
-            )
-        ]
-    )
-
-    with pytest.raises(ValueError, match="input_structure is not a file"):
-        inputs.to_json_spec()
-
-
-def test_rfdiffusion3_json_spec_preserves_inline_structure_content():
-    """Inline PDB/CIF strings are not treated as local paths."""
-    pdb_content = "ATOM      1  N   ALA A   1       0.000   0.000   0.000\nEND\n"
-    inputs = RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(input_structure=pdb_content, contig="50-80")])
-
+def test_rfdiffusion3_input_structure_accepts_structure_object():
+    """A Structure object is accepted and its content is emitted inline under "input"."""
+    structure = Structure(structure=synthetic_cif(["A"]))
+    inputs = RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(input_structure=structure, length="40")])
     spec = json.loads(inputs.to_json_spec())
-
-    assert spec["spec-0"]["input"] == pdb_content
+    assert spec["spec-0"]["input"] == structure.structure
 
 
 def test_rfdiffusion3_raw_json_resolves_relative_input_paths(tmp_path, monkeypatch):
