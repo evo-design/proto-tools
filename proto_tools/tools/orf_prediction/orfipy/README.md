@@ -1,269 +1,51 @@
-<a href="https://bio-pro.mintlify.app/tools/orf-prediction/orfipy"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/orf-prediction/orfipy"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # ORFipy
 
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** ORFipy is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/urmi-21/orfipy/blob/master/LICENSE) for full terms.
 
 ## Overview
-ORFipy is a fast, flexible ORF (Open Reading Frame) prediction tool that identifies potential coding regions in DNA sequences based on start and stop codons. Unlike gene prediction tools like Prodigal, ORFipy performs simple ORF finding without machine learning - it reports all ORFs matching your criteria, making it ideal for exploratory analysis and custom filtering.
+
+[ORFipy](https://github.com/urmi-21/orfipy) is a fast Python implementation of [open reading frame](https://en.wikipedia.org/wiki/Open_reading_frame) (ORF) extraction developed by [Singh and Wurtele](https://github.com/urmi-21/orfipy) at the Iowa State University Bioinformatics and Computational Biology Program. It scans DNA sequences for ORFs across both strands by default, identifies every stretch bounded by a configurable set of start and stop codons, and reports the resulting ORFs together with their translated protein sequences. This toolkit exposes ORFipy through a single registered tool that accepts one or more DNA sequences and returns the ORFs per sequence with both nucleotide and amino-acid output.
 
 ## Background
 
-**What is an ORF?**
-An [Open Reading Frame](https://en.wikipedia.org/wiki/Open_reading_frame) is a stretch of DNA between a [start codon](https://en.wikipedia.org/wiki/Start_codon) and an in-frame [stop codon](https://en.wikipedia.org/wiki/Stop_codon):
-- **Start codons**: ATG (standard), GTG, TTG (alternative)
-- **Stop codons**: TAA (ochre), TAG (amber), TGA (opal)
-- **[Reading frames](https://en.wikipedia.org/wiki/Reading_frame)**: 3 forward (+1, +2, +3) and 3 reverse (-1, -2, -3)
+ORFipy ([Singh and Wurtele, 2021](https://doi.org/10.1093/bioinformatics/btab090)) was developed as a fast and flexible replacement for older ORF-extraction tools that struggle with the scale of contemporary genomic and transcriptomic datasets. The published work emphasises customisable search criteria together with high throughput, and reports that ORFipy scales to whole-genome and de novo transcriptome inputs that exceed what earlier ORF finders can comfortably process. The reference implementation is written in Python and is distributed through PyPI and bioconda.
 
-**ORF vs Gene:**
-- **ORF**: Any sequence matching start/stop pattern (may include non-coding)
-- **Gene**: Biologically functional coding sequence (subset of ORFs)
+An [open reading frame](https://en.wikipedia.org/wiki/Open_reading_frame) is a continuous stretch of DNA bounded by an in-frame [start](https://en.wikipedia.org/wiki/Start_codon) and [stop codon](https://en.wikipedia.org/wiki/Stop_codon). ORF extraction is mechanistic rather than predictive. Every region that begins at a recognised start codon and continues in frame to the first downstream stop codon is reported, regardless of whether the resulting region encodes a biologically functional protein. This stands in contrast to gene-prediction tools such as Prodigal, which apply learned models to score whether each candidate ORF is likely to correspond to a real gene. ORFipy is appropriate when the goal is exhaustive enumeration of every candidate ORF for downstream filtering or annotation; a gene-prediction tool is appropriate when the goal is a curated set of likely coding genes.
 
-ORFipy finds ORFs; gene predictors like Prodigal use additional signals to distinguish real genes.
+### Learning Resources
+
+- [urmi-21/orfipy](https://github.com/urmi-21/orfipy) (Wurtele Lab, Iowa State University). Official ORFipy repository and command-line reference.
 
 ## Tools
 
 ### Orfipy ORF Prediction (`orfipy-prediction`)
 
-Predict open reading frames (ORFs) in DNA sequences using Orfipy.
+Scans one or more DNA sequences across the configured strand setting (three forward and three reverse reading frames by default) and returns every open reading frame that satisfies the configured start codon, stop codon, strand, and length filters. Each returned ORF carries its nucleotide sequence, translated amino-acid sequence, 1-indexed start and end positions on the parent sequence, strand, reading frame, and the parent sequence identifier.
 
-Uses Orfipy, a fast ORF prediction tool, to identify potential coding regions.
-Processing is batched but caching is handled per-sequence via cacheable=True.
+#### Applications
 
-## How It Works
+This tool is appropriate for the upstream ORF-enumeration step of any analysis that begins with raw DNA sequences and needs candidate coding regions. Representative applications include cataloguing all ORFs in a newly assembled genome before annotation, extracting coding-sequence candidates from a de novo transcriptome assembly, generating an exhaustive ORF set for downstream filtering by length, codon usage, or homology to a known protein, and producing translated protein sequences for downstream language-model scoring or domain annotation.
 
-**Algorithm:**
-1. Scan sequence for start codons on specified strand(s)
-2. Find first in-frame stop codon after each start
-3. Apply length filters
-4. Output both nucleotide and amino acid sequences
+#### Usage Tips
 
-**Six-frame translation:**
-- Forward strand: Frames +1, +2, +3
-- Reverse strand: Frames -1, -2, -3
+- **`min_len` is the primary control on the number of reported ORFs.** At the default of `min_len=0`, every candidate region is reported, including many short ORFs that arise by chance in any DNA sequence and do not encode functional proteins. A threshold of `min_len=150` (approximately 50 amino acids) excludes the majority of these short ORFs. A threshold of `min_len=300` (approximately 100 amino acids) focuses the output on typical small proteins, and `min_len=900` (approximately 300 amino acids) restricts the output to larger proteins. The threshold is specified in nucleotides.
+- **`start_codons` should match the genetic context of the input.** The default of `["ATG", "GTG", "TTG"]` is appropriate for bacterial and archaeal sequences, in which alternative start codons account for approximately 15 to 20 percent of genes. A value of `["ATG"]` is appropriate for stringent eukaryotic ORF analyses, and the inclusion of `"CTG"` is appropriate for organisms that use a non-standard genetic code in which `CTG` functions as an alternative start codon.
+- **`strand` controls which DNA strands are scanned.** The default of `"b"` scans both strands and reports ORFs from both the forward sequence and its reverse complement. A value of `"f"` or `"r"` restricts the scan to a single strand, which approximately halves the number of ORFs returned and is appropriate when the coding strand of the input is known in advance.
+- **`translation_table` selects the genetic code used for amino-acid translation.** The default value of `None` applies the standard genetic code (NCBI table 1). A value of `"bacterial"` selects the bacterial, archaeal, and plant plastid code (NCBI table 11), `"vertebrate_mitochondrial"` selects the vertebrate mitochondrial code (NCBI table 2), and the remaining supported NCBI tables are appropriate for organisms that use the corresponding alternative codes.
+- **The partial-ORF flags allow incomplete reading frames at sequence boundaries.** A value of `partial_3=True` reports ORFs that begin at a recognised start codon and continue to the 3' end of the input without an in-frame stop codon. A value of `partial_5=True` reports ORFs that end at a recognised stop codon but begin at the 5' end of the input without a recognised start codon. Both flags are disabled by default and are appropriate when the input represents a fragment of a larger sequence, such as a transcriptome contig.
+- **`between_stops=True` reports every region between two in-frame stop codons regardless of whether a recognised start codon is present.** This is appropriate for ribosome-profiling analyses that aim to identify all potential translation regions, and implies that both `partial_3` and `partial_5` behave as if enabled.
+- **The output is exhaustive rather than curated.** ORFipy reports every candidate ORF that satisfies the configured filters. Confirming the biological relevance of any individual ORF requires subsequent analyses such as homology search with BLAST, domain annotation with HMMER, or gene prediction with Prodigal.
 
-## Input Parameters
+## Toolkit Notes
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sequences` | `str` or `List[str]` | DNA sequence(s) to scan |
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-## Configuration
+These apply to every ORFipy tool in this toolkit (`orfipy-prediction`).
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `start_codons` | `list[StartCodon]` | `["ATG", "GTG", "TTG"]` | Start codons to recognize (multi-select) |
-| `stop_codons` | `list[StopCodon]` | `["TAA", "TAG", "TGA"]` | Stop codons to recognize (multi-select) |
-| `strand` | `str` | `b` | Strand to scan: `f` (forward), `r` (reverse), `b` (both) |
-| `min_len` | `int` | `0` | Minimum ORF length in nucleotides |
-| `max_len` | `int` | `10000` | Maximum ORF length in nucleotides |
-| `include_stop` | `bool` | `True` | Include stop codon in reported sequence |
-| `translation_table` | `OrfipyTranslationTable \| None` | `None` | NCBI genetic code name (None = standard) |
-| `threads` | `int` | `4` | CPU threads per sequence |
-
-### Parameter Guides
-
-**Start codon selection:**
-| Setting | Codons | Use Case |
-|---------|--------|----------|
-| Standard | `["ATG"]` | Eukaryotic sequences, strict filtering |
-| Prokaryotic (default) | `["ATG", "GTG", "TTG"]` | Bacterial/archaeal sequences |
-| Extended | `["ATG", "GTG", "TTG", "CTG"]` | Specialized genetic codes |
-
-**Length filtering guidelines:**
-| min_len | Approximate proteins | Use case |
-|---------|---------------------|----------|
-| `0` | All ORFs | Comprehensive analysis |
-| `150` | >50 aa | Filter very short ORFs |
-| `300` | >100 aa | Typical small proteins |
-| `600` | >200 aa | Substantial proteins only |
-| `900` | >300 aa | Large proteins only |
-
-### Sweep Priorities
-
-1. `min_len`; Most impactful for controlling output volume and filtering noise
-2. `start_codons`; Controls whether alternative start codons are included
-3. `strand`; Reduce to `f` or `r` when coding strand is known
-
-## Output Specification
-
-**ORFipyOutput**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `predicted_orfs` | `List[List[Orf]]` | ORFs per input sequence |
-| `num_orfs` | `int` | Total ORFs across all sequences (computed) |
-| `num_orfs_per_sequence` | `List[int]` | ORFs per input sequence (computed) |
-
-**Orf object / DataFrame columns**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `parent_id` | `str` | Parent sequence ID (seq_0, seq_1, etc.) |
-| `orf_id` | `str` | ORF identifier within parent |
-| `strand` | `str` | '+' or '-' |
-| `frame` | `int` | Reading frame (1, 2, or 3) |
-| `amino_acid_sequence` | `str` | Translated protein |
-| `nucleotide_sequence` | `str` | DNA sequence |
-| `amino_acid_length` | `int` | Protein length |
-| `nucleotide_length` | `int` | ORF length in bp |
-| `nucleotide_start` | `int` | Start position (1-indexed) |
-| `nucleotide_end` | `int` | End position (1-indexed) |
-
-## Interpreting Results
-
-**Length-based filtering:**
-- ORFs < 150 nt (~50 aa) are usually spurious in prokaryotic contexts.
-- ORFs > 300 nt (~100 aa) are more likely to be real coding sequences.
-- The longest ORF per reading frame is often the best candidate for the real gene.
-
-**Codon variations:**
-- Standard: ATG only as start
-- Prokaryotic: ATG, GTG, TTG as starts (GTG and TTG account for ~15-20% of bacterial genes)
-- Custom: Any valid codons for specialized genetic codes
-
-**ORF vs gene prediction:**
-ORFipy reports all ORFs matching your criteria; it does not score or rank them. For distinguishing real genes from spurious ORFs, use Prodigal or annotate ORF translations against protein databases with BLAST/HMMER.
-
-## Quick Start Examples
-
-**Example 1: Basic ORF finding**
-```python
-from proto_tools.tools.orf_prediction.orfipy import (
-    run_orfipy_prediction, OrfipyInput, OrfipyConfig
-)
-
-sequence = "ATGAAACGTAAACTGGATCGTAACTAGATGCGTAAATAA"
-
-inputs = OrfipyInput(sequences=sequence)
-config = OrfipyConfig(min_len=30)  # At least 10 codons
-
-result = run_orfipy_prediction(inputs, config)
-
-print(f"Found {result.num_orfs} ORFs")
-for orf in result.predicted_orfs[0]:
-    print(f"  {orf.orf_id}: {orf.amino_acid_length} aa, frame {orf.frame}")
-```
-
-**Example 2: ATG-only starts**
-```python
-from proto_tools.tools.orf_prediction.orfipy import (
-    run_orfipy_prediction, OrfipyInput, OrfipyConfig
-)
-
-inputs = OrfipyInput(sequences="ATGCGTAAACTGATGTAA...")
-config = OrfipyConfig(
-    start_codons=["ATG"],  # Only standard start
-    min_len=150
-)
-
-result = run_orfipy_prediction(inputs, config)
-print(f"Found {result.num_orfs} ATG-initiated ORFs")
-```
-
-**Example 3: Forward strand only**
-```python
-from proto_tools.tools.orf_prediction.orfipy import (
-    run_orfipy_prediction, OrfipyInput, OrfipyConfig
-)
-
-inputs = OrfipyInput(sequences="ATGCGTAAACTG...")
-config = OrfipyConfig(
-    strand="f",  # Forward only
-    min_len=300
-)
-
-result = run_orfipy_prediction(inputs, config)
-```
-
-**Example 4: Process multiple sequences**
-```python
-from proto_tools.tools.orf_prediction.orfipy import (
-    run_orfipy_prediction, OrfipyInput, OrfipyConfig
-)
-
-sequences = [
-    "ATGAAACGTAAACTGGATCGTAACTAG",
-    "ATGCCCGTTAAAGGGCCCAAATGA",
-]
-
-inputs = OrfipyInput(sequences=sequences)
-config = OrfipyConfig(min_len=12)
-
-result = run_orfipy_prediction(inputs, config)
-
-# Access per-sequence results
-for i, orfs in enumerate(result.predicted_orfs):
-    print(f"Sequence {i}: {len(orfs)} ORFs")
-    for orf in orfs:
-        print(f"  {orf.orf_id}: {orf.amino_acid_length} aa, frame {orf.frame}")
-```
-
-**Example 5: Extract longest ORF per sequence**
-```python
-from proto_tools.tools.orf_prediction.orfipy import (
-    run_orfipy_prediction, OrfipyInput, OrfipyConfig
-)
-
-inputs = OrfipyInput(sequences=["ATGAAACGT...", "ATGCCCGTT..."])
-config = OrfipyConfig()
-
-result = run_orfipy_prediction(inputs, config)
-
-# Get longest ORF per sequence
-for i, orfs in enumerate(result.predicted_orfs):
-    if orfs:
-        longest = max(orfs, key=lambda x: x.amino_acid_length)
-        print(f"Seq {i}: Longest ORF is {longest.amino_acid_length} aa")
-```
-
-## Best Practices & Gotchas
-
-**Start codon selection:**
-
-1. **Standard (ATG only)**: Use for eukaryotic sequences or strict filtering.
-
-2. **Prokaryotic (ATG,GTG,TTG)**: Default, includes alternative bacterial starts.
-
-3. **Custom codons**: Can specify any valid codons.
-
-**Length filtering:**
-
-1. **Very short ORFs**: min_len=0 includes tiny ORFs that are usually spurious.
-
-2. **Reasonable minimum**: min_len=150 (~50 aa) filters most noise.
-
-3. **Balance sensitivity/specificity**: Adjust based on your analysis goals.
-
-**Strand selection:**
-
-1. **Both strands (b)**: Default, finds ORFs on forward and reverse.
-
-2. **Single strand (f/r)**: Use when you know the coding strand.
-
-**Common mistakes:**
-
-1. **Confusing ORFs with genes**: Not all ORFs are functional genes.
-
-2. **No length filter**: Getting thousands of tiny spurious ORFs.
-
-3. **Wrong genetic code**: Using standard code for mitochondrial sequences.
-
-## References
-
-**Primary publication:**
-- Singh & Wurtele (2021). "orfipy: a fast and flexible tool for extracting ORFs". *Bioinformatics*. DOI: 10.1093/bioinformatics/btab090
-
-**Resources:**
-- GitHub: https://github.com/urmi-21/orfipy
-
-## Related Tools
-
-**Tools often used together:**
-- `blast-search`: Annotate ORF translations against sequence databases to identify gene function.
-- `pyhmmer-hmmscan`: Annotate ORF translations with protein domain profiles from Pfam.
-- `esm2`: Score ORF translations with a protein language model to assess protein-likeness.
-
-**Alternative tools:**
-- `prodigal`: ML-based prokaryotic gene prediction: more accurate for bacteria/archaea but less flexible for custom ORF criteria.
+- **`max_len` defaults to 10000 nucleotides and silently filters longer ORFs.** Raise the limit (for example to `1_000_000_000`) for genome-scale inputs to avoid losing long open reading frames without an error.
+- **`threads` controls intra-sequence parallelism.** The default of `4` is reasonable for single-genome inputs. Raise this on multi-core hosts when processing very large sequences. The tool processes each input sequence independently, so additional sequence-level parallelism can be achieved by running multiple instances of `orfipy-prediction` concurrently through a `ToolPool`.
+- **Input sequences are normalised to uppercase and filtered to the four standard DNA nucleotides before scanning.** Ambiguity codes such as `N` and IUPAC mixture codes are silently removed from the sequence, as are non-DNA characters. The remaining nucleotides are passed to ORFipy in their original order.
+- **Position fields are 1-indexed to match standard biological residue numbering conventions.** ORF start and end positions on the parent sequence follow the conventions used in PDB files, GenBank annotations, and the published literature, so positions can be compared directly against external references without conversion.
