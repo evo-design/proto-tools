@@ -54,8 +54,10 @@ class Chai1Input(StructurePredictionInput):
             structures for. Inherited from ``StructurePredictionInput``. Each complex
             can contain multiple chains of proteins, ligands, and/or glycans. Total
             token count per complex must not exceed 2,048 (see ``Note`` below).
-        msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
-            Populated by preprocess() or supplied directly. Default: None.
+        msas (list[ComplexMSAs] | None): Pre-computed MSAs, one
+            entry per complex. Each entry is a ``ComplexMSAs`` (per-chain MSAs keyed by
+            chain index); ``paired=True`` marks rows taxonomy-aligned across chains. Populated by preprocess() or supplied directly.
+            Default: None.
 
     Note:
         Chai1 supports entity types: ``"protein"``, ``"ligand"``, and ``"glycan"``.
@@ -324,7 +326,7 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config, instance: Any = None) -> 
         run_chai1_on_complex(
             comp=comp,
             config=config,
-            msas=inputs.msas,
+            complex_msas=inputs.msas[dispatch_idx] if inputs.msas else None,
             instance=instance,
             seed=base_seed + dispatch_idx,
         )
@@ -339,10 +341,30 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config, instance: Any = None) -> 
     )
 
 
-def _msa_to_pqt_file(msa: Any, pqt_path: str, query_index: int = 0, source_database: str = "uniref90") -> None:
-    """Write an MSA object to Chai1's .aligned.pqt Parquet format."""
+def _msa_to_pqt_file(
+    msa: Any,
+    pqt_path: str,
+    query_index: int = 0,
+    source_database: str = "uniref90",
+    paired: bool = False,
+) -> None:
+    """Write an MSA object to Chai1's .aligned.pqt Parquet format.
+
+    When ``paired=True``, each non-query row receives a pairing_key equal to its
+    row index so chai_lab matches rows across chains by index.
+    """
     sequences, seq_ids = extract_msa_sequences(msa, query_index)
-    write_msa_pqt(sequences, pqt_path, source_database=source_database, comments=seq_ids)
+    pairing_keys = None
+    if paired:
+        # Row 0 is the query; chai_lab pairs rows whose pairing_key is non-empty and equal.
+        pairing_keys = [""] + [str(i) for i in range(1, len(sequences))]
+    write_msa_pqt(
+        sequences,
+        pqt_path,
+        source_database=source_database,
+        comments=seq_ids,
+        pairing_keys=pairing_keys,
+    )
 
 
 def _generate_fasta_content(comp: Complex) -> str:
@@ -353,7 +375,7 @@ def _generate_fasta_content(comp: Complex) -> str:
 def run_chai1_on_complex(
     comp: Complex,
     config: Chai1Config,
-    msas: dict[str, Any] | None = None,
+    complex_msas: Any = None,
     instance: Any = None,
     seed: int | None = None,
 ) -> Structure:
@@ -364,10 +386,11 @@ def run_chai1_on_complex(
     Args:
         comp (Complex): The complex to fold.
         config (Chai1Config): Chai1 configuration.
-        msas (dict[str, Any] | None): Pre-computed MSAs keyed by protein sequence.
+        complex_msas (Any): Pre-computed ``ComplexMSAs`` for this complex, keyed by
+            chain index. Row N across chains pairs by taxonomy when ``paired``.
         instance (Any): Optional ToolInstance for persistent execution.
         seed (int | None): Per-complex seed forwarded to the standalone. When ``None``,
-            falls back to ``config.seed`` (preserves legacy single-complex behavior).
+            falls back to ``config.seed``.
     """
     if seed is None:
         seed = config.seed
@@ -387,24 +410,32 @@ def run_chai1_on_complex(
         output_dir = os.path.join(temp_dir, "output")
         os.makedirs(output_dir, exist_ok=True)
 
+        from proto_tools.tools.structure_prediction.shared_data_models import unwrap_complex_msas
+
+        per_chain_msas, is_paired = unwrap_complex_msas(complex_msas)
+
         # Write pre-computed MSAs to Parquet files
         msa_directory = None
-        if config.use_msa and msas:
+        if config.use_msa and per_chain_msas:
             pqt_dir = os.path.join(temp_dir, "msa_pqt")
             os.makedirs(pqt_dir, exist_ok=True)
-            for chain in comp.chains:
+            for ch_idx, chain in enumerate(comp.chains):
                 if not isinstance(chain, Chain) or chain.entity_type != "protein":
                     continue
-                if chain.sequence in msas:
-                    seq_hash = _hash_sequence(chain.sequence.upper())
-                    pqt_path = os.path.join(pqt_dir, f"{seq_hash}.aligned.pqt")
-                    _msa_to_pqt_file(
-                        msa=msas[chain.sequence],
-                        pqt_path=pqt_path,
-                        query_index=0,
-                    )
-                    if config.verbose:
-                        logger.info(f"Assigned MSA to protein chain ({len(msas[chain.sequence])} sequences)")
+                msa = per_chain_msas.get(ch_idx)
+                if msa is None:
+                    continue
+                seq_hash = _hash_sequence(chain.sequence.upper())
+                pqt_path = os.path.join(pqt_dir, f"{seq_hash}.aligned.pqt")
+                # Only set pairing_keys when MSAs are actually row-aligned across chains.
+                _msa_to_pqt_file(
+                    msa=msa,
+                    pqt_path=pqt_path,
+                    query_index=0,
+                    paired=is_paired,
+                )
+                if config.verbose:
+                    logger.info(f"Assigned MSA to protein chain {ch_idx} ({len(msa)} sequences)")
             if os.listdir(pqt_dir):
                 msa_directory = pqt_dir
 

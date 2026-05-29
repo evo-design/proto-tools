@@ -6,7 +6,7 @@ Tests for MSA class.
 import pytest
 from pydantic import ValidationError
 
-from proto_tools.entities.msa import MSA, convert_a3m_to_fasta
+from proto_tools.entities.msa import MSA, PairedMSA, convert_a3m_to_fasta
 
 # ============================================================================
 # Fixtures
@@ -878,3 +878,38 @@ def test_msa_sequence_ids_length_mismatch():
     # Pydantic now validates that sequence_ids length matches aligned_sequences length
     with pytest.raises(ValidationError):
         MSA(aligned_sequences=sequences, sequence_ids=seq_ids)
+
+
+# ── PairedMSA ─────────────────────────────────────────────────────────────────
+
+
+def test_paired_msa_row_count_and_sequence_interface():
+    """row_count, len, getitem, and iteration expose the ordered member MSAs."""
+    paired = PairedMSA(
+        msas=[
+            MSA(aligned_sequences=["MKTL", "MITL", "MKAL"]),
+            MSA(aligned_sequences=["ACDE", "ACSE", "ACDQ"]),
+        ]
+    )
+    assert paired.row_count == 3
+    assert len(paired) == 2
+    assert paired[0].num_sequences == 3
+    assert [m.num_sequences for m in paired] == [3, 3]
+
+
+def test_paired_msa_rejects_unequal_row_counts():
+    """All member MSAs must share the same number of rows (row-alignment invariant)."""
+    with pytest.raises(ValidationError, match="equal row counts"):
+        PairedMSA(
+            msas=[
+                MSA(aligned_sequences=["MKTL", "MITL", "MKAL"]),  # 3 rows
+                MSA(aligned_sequences=["ACDE", "ACSE"]),  # 2 rows
+            ]
+        )
+
+
+def test_paired_msa_empty_is_valid_with_zero_rows():
+    """An empty paired set skips the row-count check and reports row_count 0."""
+    paired = PairedMSA(msas=[])
+    assert paired.row_count == 0
+    assert len(paired) == 0

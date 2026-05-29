@@ -31,7 +31,7 @@ This toolkit exposes the search step in two execution modes. Remote execution ta
 
 ### ColabFold MSA Search (`colabfold-search`)
 
-Generates a multiple sequence alignment for each input protein sequence by searching reference databases for homologs. Remote execution submits the query to the public ColabFold MMseqs2 API. Local execution runs the bundled `colabfold_search` command-line tool against a local MMseqs2 database. The tool returns one result per query, each carrying an `MSA` object that can be exported to A3M or FASTA. Inputs accept raw sequence strings, `(sequence, sequence_id)` tuples, or `ColabfoldSearchQuery` objects, and identifiers are auto-generated from a hash of the sequence when not supplied.
+Generates a multiple sequence alignment for each input protein sequence by searching reference databases for homologs. Remote execution submits the query to the public ColabFold MMseqs2 API. Local execution runs the bundled `colabfold_search` command-line tool against a local MMseqs2 database. The tool returns one result per query in input order, each carrying a list of per-chain `MSA` objects (one for an unpaired query; row-aligned per-chain MSAs for a paired group) that can be exported to A3M or FASTA. Inputs accept raw sequence strings (one unpaired query each), a nested list of sequences (one taxonomy-paired group), or `ColabfoldSearchQuery` objects.
 
 #### Applications
 

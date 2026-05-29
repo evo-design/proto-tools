@@ -74,8 +74,10 @@ class ESMFoldInput(StructurePredictionInput):
             can contain one or more protein chains. The linked length actually
             folded (summed chain residues plus the inter-chain ``chain_linker``,
             i.e. ``len(chain_linker) * (num_chains - 1)``) must not exceed 2,400.
-        msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
-            Populated by preprocess() or supplied directly. Default: None.
+        msas (list[ComplexMSAs] | None): Pre-computed MSAs, one
+            entry per complex. Each entry is a ``ComplexMSAs`` (per-chain MSAs keyed by
+            chain index); ``paired=True`` marks rows taxonomy-aligned across chains. Populated by preprocess() or supplied directly.
+            Default: None.
 
     Note:
         ESMFold only supports protein sequences (amino acids). DNA, RNA, ligands,

@@ -45,8 +45,10 @@ class AlphaFold2Input(StructurePredictionInput):
         complexes (list[Complex]): List of complexes to predict
             structures for. Inherited from ``StructurePredictionInput``. Each complex
             can contain one or more protein chains.
-        msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
-            Populated by preprocess() or supplied directly. Default: None.
+        msas (list[ComplexMSAs] | None): Pre-computed MSAs, one
+            entry per complex. Each entry is a ``ComplexMSAs`` (per-chain MSAs keyed by
+            chain index); ``paired=True`` marks rows taxonomy-aligned across chains. Populated by preprocess() or supplied directly.
+            Default: None.
 
     Note:
         AlphaFold2 only supports protein sequences (amino acids). DNA, RNA, ligands,
@@ -302,8 +304,10 @@ def run_alphafold2(
             if complex_data["num_chains"] > 1:
                 logger.info("MSA not yet supported for multi-chain complexes, running without MSA")
             else:
-                protein_seq = inputs.complexes[complex_data["complex_idx"]].chains[0].sequence
-                msa = inputs.msas.get(protein_seq)
+                from proto_tools.tools.structure_prediction.shared_data_models import unwrap_complex_msas
+
+                per_chain, _ = unwrap_complex_msas(inputs.msas[complex_data["complex_idx"]])
+                msa = per_chain.get(0)
                 if msa is not None:
                     msa_a3m_content = msa.to_a3m_string()
                     if config.verbose:

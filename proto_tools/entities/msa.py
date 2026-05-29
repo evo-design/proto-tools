@@ -303,6 +303,58 @@ class MSA(BaseModel):
             f.writelines(f">{seq_id}\n{a3m_seq}\n" for seq_id, a3m_seq in self._a3m_lines(query_index))
 
 
+class PairedMSA(BaseModel):
+    """An ordered set of row-aligned MSAs.
+
+    Holds several ordinary :class:`MSA` objects with the invariant that they all
+    share the same row count. Row N of every member MSA corresponds to the same
+    source (e.g. the same organism), so the set carries cross-MSA coevolutionary
+    signal usable for paired-MSA structure prediction, direct-coupling analysis,
+    and similar tasks. The members are ordered; what each position means (which
+    chain, which gene) is left to the caller.
+
+    Attributes:
+        msas (list[MSA]): The row-aligned member MSAs, in order. All must have the
+            same number of rows.
+
+    Examples:
+        >>> a = MSA(aligned_sequences=["MKTL", "MITL", "MKTL"])
+        >>> b = MSA(aligned_sequences=["ACDE", "ACSE", "ACDE"])
+        >>> paired = PairedMSA(msas=[a, b])
+        >>> paired.row_count
+        3
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    msas: list[MSA] = Field(description="Row-aligned member MSAs, in order; row N is the same source across all.")
+
+    @model_validator(mode="after")
+    def _validate_equal_row_counts(self) -> "PairedMSA":
+        """Enforce that all member MSAs share the same number of rows."""
+        depths = {msa.num_sequences for msa in self.msas}
+        if len(depths) > 1:
+            raise ValueError(f"PairedMSA requires all member MSAs to have equal row counts; got {sorted(depths)}")
+        return self
+
+    @property
+    def row_count(self) -> int:
+        """Number of rows in each member MSA (equal across members)."""
+        return self.msas[0].num_sequences if self.msas else 0
+
+    def __len__(self) -> int:
+        """Number of member MSAs."""
+        return len(self.msas)
+
+    def __getitem__(self, index: int) -> MSA:
+        """Get a member MSA by position."""
+        return self.msas[index]
+
+    def __iter__(self) -> Iterator[MSA]:  # type: ignore[override]
+        """Iterate over member MSAs."""
+        return iter(self.msas)
+
+
 # ============================================================================
 # File Parsing
 # ============================================================================

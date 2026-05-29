@@ -33,6 +33,7 @@ def write_msa_pqt(
     pqt_path: str,
     source_database: str = "uniref90",
     comments: list[Any] | None = None,
+    pairing_keys: list[str] | None = None,
 ) -> None:
     """Write aligned sequences as Chai1-format Parquet (.aligned.pqt).
 
@@ -48,17 +49,22 @@ def write_msa_pqt(
             "bfd_uniclust", "mgnify".
         comments (list[Any] | None): Optional list of comment strings (e.g., sequence IDs from
             the original MSA). If None, uses synthetic ``seq_0``, ``seq_1``, etc.
+        pairing_keys (list[str] | None): Optional per-row pairing key strings.
+            When supplied, rows whose pairing_key matches across chains are paired
+            by chai_lab. The query row (index 0) should carry an empty pairing_key.
+            When ``None``, all rows get an empty pairing_key (no cross-chain pairing).
     """
     import pandas as pd
 
     records = []
     for idx, seq in enumerate(aligned_sequences):
         comment = comments[idx] if comments else f"seq_{idx}"
+        pairing_key = pairing_keys[idx] if pairing_keys else ""
         records.append(
             {
                 "sequence": seq,
                 "source_database": "query" if idx == 0 else source_database,
-                "pairing_key": "",
+                "pairing_key": pairing_key,
                 "comment": comment,
             }
         )

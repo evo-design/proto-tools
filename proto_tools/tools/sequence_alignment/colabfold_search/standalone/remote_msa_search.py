@@ -58,8 +58,7 @@ class ColabFoldRemoteSearchWrapper:
 
     def __call__(
         self,
-        sequences: list[str],
-        sequence_ids: list[str],
+        queries: list[dict[str, Any]],
         output_dir: str | Path,
         use_metagenomic_db: bool = False,
         verbose: bool = False,
@@ -67,14 +66,17 @@ class ColabFoldRemoteSearchWrapper:
         """Run ColabFold remote MSA search.
 
         Args:
-            sequences: List of protein sequences to search
-            sequence_ids: List of sequence identifiers
-            output_dir: Directory to write MSA output files
-            use_metagenomic_db: Whether to include environmental sequences
-            verbose: Whether to print status messages
+            queries: List of query dicts. Each entry has:
+                - ``sequences``: str (unpaired query) OR list[str] (paired group).
+            output_dir: Directory to write MSA output files.
+            use_metagenomic_db: Whether to include environmental sequences.
+            verbose: Whether to print status messages.
 
         Returns:
-            Dictionary containing output paths and success status
+            Dictionary with ``msa_paths`` (query-index str → path for unpaired
+            queries), ``paired_msa_paths`` (query-index str → per-chain path list
+            for paired queries), ``success``, ``num_successful``, ``num_failed``,
+            optional ``errors``.
         """
         # Lazy load on first call
         if not self._loaded:
@@ -84,25 +86,47 @@ class ColabFoldRemoteSearchWrapper:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Create msas subdirectory
         msas_dir = output_dir / "msas"
         msas_dir.mkdir(exist_ok=True)
 
-        msa_paths = {}
-        errors = []
+        msa_paths: dict[str, str] = {}
+        paired_msa_paths: dict[str, list[str]] = {}
+        errors: list[tuple[str, str]] = []
 
-        for sequence, seq_id in zip(sequences, sequence_ids, strict=False):
+        for q_idx, query in enumerate(queries):
+            sequences = query["sequences"]
+            label = f"query_{q_idx}"
+
+            # Paired query: sequences is a list. One API call with use_pairing=True.
+            if isinstance(sequences, list):
+                msas_paired_dir = output_dir / "msas_paired"
+                msas_paired_dir.mkdir(exist_ok=True)
+                try:
+                    paired_msa_paths[str(q_idx)] = self._run_paired_group(
+                        sequences,
+                        q_idx,
+                        output_dir,
+                        msas_paired_dir,
+                        use_metagenomic_db=use_metagenomic_db,
+                    )
+                except Exception as e:
+                    errors.append((label, f"Paired MSA failed: {e!s}"))
+                    logger.debug(f"Paired MSA error in {label}: {e}")
+                continue
+
+            # Unpaired query: single string.
+            seq = sequences
             try:
-                logger.debug(f"Running remote MSA search for {seq_id}...")
+                logger.debug(f"Running remote MSA search for {label}...")
 
                 # Use a temporary prefix for ColabFold output
-                temp_output_prefix = str(output_dir / seq_id)
+                temp_output_prefix = str(output_dir / label)
 
                 # Run remote MSA search, retrying transient API/network blips.
                 _run_with_retry(
                     self.run_mmseqs2,
-                    seq_id,
-                    sequence,
+                    label,
+                    seq,
                     temp_output_prefix,
                     use_env=use_metagenomic_db,
                 )
@@ -139,7 +163,7 @@ class ColabFoldRemoteSearchWrapper:
                 if not a3m_files:
                     error_msg = f"Remote MSA generation completed but no .a3m files found in {temp_results_dir}"
                     logger.debug(f"Warning: {error_msg}")
-                    errors.append((seq_id, error_msg))
+                    errors.append((label, error_msg))
 
                     # Clean up temp directory
                     if Path(temp_results_dir).exists():
@@ -151,28 +175,29 @@ class ColabFoldRemoteSearchWrapper:
 
                 logger.debug(f"Found MSA file: {old_msa_path.relative_to(temp_results_path)}")
 
-                # Move to clean 'msas/' sub-directory
-                new_msa_path = msas_dir / f"{seq_id}.a3m"
+                # Move to clean 'msas/' sub-directory, named by query index.
+                new_msa_path = msas_dir / f"{q_idx}.a3m"
                 shutil.copyfile(old_msa_path, new_msa_path)
 
-                msa_paths[seq_id] = str(new_msa_path)
+                msa_paths[str(q_idx)] = str(new_msa_path)
 
-                logger.debug(f"Successfully generated MSA for {seq_id}")
+                logger.debug(f"Successfully generated MSA for {label}")
 
                 # Clean up temp directory after success
                 if Path(temp_results_dir).exists():
                     shutil.rmtree(temp_results_dir, ignore_errors=True)
 
             except Exception as e:
-                error_msg = f"Failed to generate MSA for {seq_id}: {e!s}"
+                error_msg = f"Failed to generate MSA for {label}: {e!s}"
                 logger.debug(f"Error: {error_msg}")
-                errors.append((seq_id, error_msg))
+                errors.append((label, error_msg))
 
-        success = len(msa_paths) > 0
-        result = {
+        success = (len(msa_paths) + len(paired_msa_paths)) > 0
+        result: dict[str, Any] = {
             "msa_paths": msa_paths,
+            "paired_msa_paths": paired_msa_paths,
             "success": success,
-            "num_successful": len(msa_paths),
+            "num_successful": len(msa_paths) + len(paired_msa_paths),
             "num_failed": len(errors),
         }
 
@@ -180,6 +205,54 @@ class ColabFoldRemoteSearchWrapper:
             result["errors"] = dict(errors)
 
         return result
+
+    def _run_paired_group(
+        self,
+        group_seqs: list[str],
+        group_idx: int,
+        output_dir: Path,
+        msas_paired_dir: Path,
+        use_metagenomic_db: bool,
+    ) -> list[str]:
+        """Submit one paired query and parse the per-chain row-aligned blocks.
+
+        Returns the per-chain A3M paths in input chain order. Each per-chain A3M
+        preserves row order so downstream tools can pair rows by position. Raises
+        on failure (caller catches and records in `errors`).
+        """
+        # Prefix lives under output_dir so it doesn't collide with unpaired runs.
+        temp_prefix = str(output_dir / f"pair_group_{group_idx}")
+        _run_with_retry(
+            self.run_mmseqs2,
+            f"pair_group_{group_idx}",
+            group_seqs,
+            temp_prefix,
+            use_env=use_metagenomic_db,
+            use_pairing=True,
+        )
+
+        # api.colabfold.com writes a single `pair.a3m` under `{prefix}_pairgreedy/`.
+        pair_dir = Path(f"{temp_prefix}_pairgreedy")
+        pair_a3m = pair_dir / "pair.a3m"
+        if not pair_a3m.exists():
+            candidates = list(pair_dir.rglob("*.a3m")) if pair_dir.exists() else []
+            if not candidates:
+                raise RuntimeError(f"colabfold paired query returned no .a3m file in {pair_dir}")
+            pair_a3m = candidates[0]
+
+        per_chain_blocks = _parse_pair_a3m(pair_a3m, num_chains=len(group_seqs))
+
+        written: list[str] = []
+        for chain_idx, block_bytes in enumerate(per_chain_blocks):
+            chain_a3m = msas_paired_dir / f"{group_idx}_chain_{chain_idx}.a3m"
+            chain_a3m.write_bytes(block_bytes)
+            written.append(str(chain_a3m))
+
+        # Clean up the temp pairgreedy dir.
+        if pair_dir.exists():
+            shutil.rmtree(pair_dir, ignore_errors=True)
+
+        return written
 
     def load(self, verbose: bool = False) -> None:  # noqa: ARG002 — required by tool interface
         """Load ColabFold remote search module."""
@@ -199,12 +272,34 @@ class ColabFoldRemoteSearchWrapper:
         logger.debug("ColabFold remote search initialized")
 
 
+def _parse_pair_a3m(pair_a3m: Path, num_chains: int) -> list[bytes]:
+    r"""Split a paired `pair.a3m` into per-chain row-aligned blocks.
+
+    Format observed empirically against api.colabfold.com: a single file with
+    `\x00`-separated chain blocks, each block a standard A3M with the chain
+    query as the first sequence. Trailing empty block from the final delimiter
+    is dropped. Asserts `num_chains` blocks were produced.
+    """
+    raw = pair_a3m.read_bytes()
+    blocks = [b for b in raw.split(b"\x00") if b.strip()]
+    if len(blocks) != num_chains:
+        raise RuntimeError(f"colabfold pair.a3m: expected {num_chains} chain blocks, got {len(blocks)}")
+
+    # Optional sanity check: equal row counts across blocks.
+    row_counts = [b.count(b"\n>") + (1 if b.startswith(b">") else 0) for b in blocks]
+    if len(set(row_counts)) != 1:
+        raise RuntimeError(
+            f"colabfold pair.a3m: chain blocks have unequal row counts {row_counts}; expected row-aligned paired output"
+        )
+
+    return blocks
+
+
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for persistent-worker execution."""
     wrapper = ColabFoldRemoteSearchWrapper()
     return wrapper(
-        sequences=input_dict["sequences"],
-        sequence_ids=input_dict["sequence_ids"],
+        queries=input_dict["queries"],
         output_dir=input_dict["output_dir"],
         use_metagenomic_db=input_dict.get("use_metagenomic_db", False),
         verbose=input_dict.get("verbose", True),
@@ -227,8 +322,7 @@ if __name__ == "__main__":
     # Create wrapper and run search
     wrapper = ColabFoldRemoteSearchWrapper()
     output_data = wrapper(
-        sequences=input_data["sequences"],
-        sequence_ids=input_data["sequence_ids"],
+        queries=input_data["queries"],
         output_dir=input_data["output_dir"],
         use_metagenomic_db=input_data.get("use_metagenomic_db", False),
         verbose=input_data.get("verbose", True),

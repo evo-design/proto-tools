@@ -11,8 +11,15 @@ import warnings
 from logging import getLogger
 from typing import Any
 
+from proto_tools.entities.complex import chain_label
 from proto_tools.entities.ligands import Fragment
-from proto_tools.tools.structure_prediction.shared_data_models import Chain, Complex, resolve_chain_ids
+from proto_tools.tools.structure_prediction.shared_data_models import (
+    Chain,
+    Complex,
+    ComplexMSAs,
+    resolve_chain_ids,
+    unwrap_complex_msas,
+)
 from proto_tools.utils import extract_msa_sequences
 
 logger = getLogger(__name__)
@@ -38,32 +45,42 @@ def write_msa_csv(aligned_sequences: list[Any], csv_path: str) -> None:
 
 def build_chain_msa_paths(
     sp_complex: Complex,
-    msas: dict[str, Any] | None,
+    complex_msas: "ComplexMSAs | None",
     temp_dir: str,
     verbose: int = 0,
 ) -> dict[str, str]:
     """Map each protein chain ID to its MSA CSV, one sha256-named file per unique sequence.
 
-    boltz requires identical chains to share a single MSA file.
+    boltz requires identical chains to share a single MSA file. The ``key=<row_idx>``
+    column written by ``write_msa_csv`` lets Boltz pair rows across chains by
+    position; when rows are taxonomy-aligned by upstream preprocess, that
+    pairing carries through automatically.
     """
+    per_chain_msas, _is_paired = unwrap_complex_msas(complex_msas)
     chain_msa_paths: dict[str, str] = {}
-    protein_seqs, protein_chain_ids = sp_complex.extract_protein_chains()
-    if protein_seqs and msas:
+    if per_chain_msas:
         msa_dir = os.path.join(temp_dir, "msas")
         os.makedirs(msa_dir, exist_ok=True)
         seq_to_csv: dict[str, str] = {}
-        for seq, chain_id in zip(protein_seqs, protein_chain_ids, strict=False):
-            if seq in msas:
-                csv_path = seq_to_csv.get(seq)
-                if csv_path is None:
-                    csv_path = os.path.join(msa_dir, f"{hashlib.sha256(seq.encode()).hexdigest()}.csv")
-                    sequences, _ids = extract_msa_sequences(msas[seq], 0)
-                    write_msa_csv(sequences, csv_path)
-                    seq_to_csv[seq] = csv_path
-                chain_msa_paths[chain_id] = csv_path
-                if verbose:
-                    logger.info(f"Assigned MSA to chain {chain_id} ({len(msas[seq])} sequences)")
+        for ch_idx, chain in enumerate(sp_complex.chains):
+            if not (isinstance(chain, Chain) and chain.entity_type == "protein"):
+                continue
+            msa = per_chain_msas.get(ch_idx)
+            if msa is None:
+                continue
+            chain_id = chain.id if chain.id is not None else chain_label(ch_idx)
+            seq = chain.sequence
+            csv_path = seq_to_csv.get(seq)
+            if csv_path is None:
+                csv_path = os.path.join(msa_dir, f"{hashlib.sha256(seq.encode()).hexdigest()}.csv")
+                sequences, _ids = extract_msa_sequences(msa, 0)
+                write_msa_csv(sequences, csv_path)
+                seq_to_csv[seq] = csv_path
+            chain_msa_paths[chain_id] = csv_path
+            if verbose:
+                logger.info(f"Assigned MSA to chain {chain_id} ({len(msa)} sequences)")
 
+    _, protein_chain_ids = sp_complex.extract_protein_chains()
     for chain_id in protein_chain_ids:
         if chain_id not in chain_msa_paths:
             warnings.warn(

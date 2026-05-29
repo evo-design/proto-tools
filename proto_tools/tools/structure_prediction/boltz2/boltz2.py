@@ -49,8 +49,10 @@ class Boltz2Input(StructurePredictionInput):
         complexes (list[Complex]): List of complexes to predict
             structures for. Inherited from ``StructurePredictionInput``. Each complex
             can contain multiple chains of proteins, DNA, RNA, and/or ligands.
-        msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
-            Populated by preprocess() or supplied directly. Default: None.
+        msas (list[ComplexMSAs] | None): Pre-computed MSAs, one
+            entry per complex. Each entry is a ``ComplexMSAs`` (per-chain MSAs keyed by
+            chain index); ``paired=True`` marks rows taxonomy-aligned across chains. Populated by preprocess() or supplied directly.
+            Default: None.
 
     Note:
         Boltz2 supports entity types: ``"protein"``, ``"dna"``, ``"rna"``, and ``"ligand"``.
@@ -339,7 +341,7 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config, instance: Any = None) 
         run_boltz2_on_complex(
             config=config,
             sp_complex=comp,
-            msas=inputs.msas,
+            complex_msas=inputs.msas[dispatch_idx] if inputs.msas else None,
             instance=instance,
             seed=base_seed + dispatch_idx,
         )
@@ -355,7 +357,7 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config, instance: Any = None) 
 def run_boltz2_on_complex(
     config: Boltz2Config,
     sp_complex: Any,
-    msas: dict[str, Any] | None = None,
+    complex_msas: Any = None,
     instance: Any = None,
     seed: int | None = None,
 ) -> Structure:
@@ -366,10 +368,12 @@ def run_boltz2_on_complex(
     Args:
         config (Boltz2Config): Boltz2 configuration
         sp_complex (Any): Complex instance containing chain information
-        msas (dict[str, Any] | None): Pre-computed MSAs keyed by protein sequence
+        complex_msas (Any): Pre-computed ``ComplexMSAs`` for this complex, keyed by
+            chain index. When ``paired``, row N of each chain's MSA pairs with row N
+            of the other chains.
         instance (Any): Optional ToolInstance for persistent execution
         seed (int | None): Per-complex seed to pass to the standalone. When ``None``,
-            falls back to ``config.seed`` (preserves legacy single-complex behavior).
+            falls back to ``config.seed``.
     """
     if seed is None:
         seed = config.seed
@@ -382,7 +386,7 @@ def run_boltz2_on_complex(
 
         chain_msa_paths: dict[str, str] | None = None
         if config.use_msa:
-            chain_msa_paths = build_chain_msa_paths(sp_complex, msas, temp_dir, verbose=config.verbose)
+            chain_msa_paths = build_chain_msa_paths(sp_complex, complex_msas, temp_dir, verbose=config.verbose)
 
         yaml_content = complex_to_yaml(sp_complex.chains, chain_msa_paths=chain_msa_paths)
 

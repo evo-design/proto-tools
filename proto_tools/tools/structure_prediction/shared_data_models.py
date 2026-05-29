@@ -12,7 +12,7 @@ from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any, ClassVar
 
-from pydantic import Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from proto_tools.entities.complex import CHAIN_IDS as CHAIN_IDS
 from proto_tools.entities.complex import Chain as Chain
@@ -20,7 +20,7 @@ from proto_tools.entities.complex import ChainModification as ChainModification
 from proto_tools.entities.complex import Complex as Complex
 from proto_tools.entities.complex import chain_label as chain_label
 from proto_tools.entities.ligands import Fragment
-from proto_tools.entities.msa import MSA
+from proto_tools.entities.msa import MSA, PairedMSA
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
     ColabfoldSearchConfig,
@@ -34,6 +34,39 @@ from proto_tools.utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class ComplexMSAs(BaseModel):
+    """MSAs for one complex's protein chains, keyed by chain index.
+
+    ``paired`` marks the per-chain MSAs as row-aligned across chains by taxonomy
+    (row N of every chain is the same organism), which lets downstream predictors
+    engage cross-chain pairing. Unpaired MSAs are independent per chain. A bare
+    ``dict[int, MSA]`` supplied to ``StructurePredictionInput.msas`` is coerced to
+    an unpaired ``ComplexMSAs``.
+
+    Attributes:
+        per_chain (dict[int, MSA]): Chain index (position in ``Complex.chains``)
+            → its MSA.
+        paired (bool): Whether the per-chain MSAs are row-aligned across chains.
+            When ``True``, all chains must share the same row count.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    per_chain: dict[int, MSA] = Field(description="Chain index → MSA for each protein chain.")
+    paired: bool = Field(default=False, description="Whether rows are taxonomy-aligned across chains.")
+
+    @model_validator(mode="after")
+    def _validate_paired_row_counts(self) -> "ComplexMSAs":
+        """A paired complex's chain MSAs must form a valid (row-aligned) PairedMSA."""
+        if self.paired:
+            PairedMSA(msas=list(self.per_chain.values()))
+        return self
+
+    def as_paired_msa(self) -> PairedMSA:
+        """Return the chain MSAs in chain-index order as a general :class:`PairedMSA`."""
+        return PairedMSA(msas=[self.per_chain[idx] for idx in sorted(self.per_chain)])
 
 
 class StructurePredictionInput(BaseToolInput):
@@ -55,9 +88,11 @@ class StructurePredictionInput(BaseToolInput):
             corresponding entity types. After validation, always a list of
             ``Complex`` instances regardless of input format.
 
-        msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence
-            string. Populated by ``Config.preprocess()`` via ColabFold search, or
-            supplied directly to skip MSA generation. Default: ``None``.
+        msas (list[ComplexMSAs] | None): Pre-computed MSAs, one
+            :class:`ComplexMSAs` per complex (parallel to ``complexes``). A bare
+            ``dict[int, MSA]`` per entry is accepted and coerced to an unpaired
+            ``ComplexMSAs``. Populated by ``Config.preprocess()`` via ColabFold
+            search, or supplied directly to skip MSA generation. Default: ``None``.
 
         SUPPORTED_ENTITY_TYPES: Set of entity types supported by this tool.
             Must be defined by subclasses. Valid options: "protein", "dna", "rna",
@@ -119,11 +154,27 @@ class StructurePredictionInput(BaseToolInput):
         title="Complexes",
         description="List of complexes to predict structure for containing chains and entity types.",
     )
-    msas: dict[str, MSA] | None = InputField(
+    msas: list[ComplexMSAs] | None = InputField(
         default=None,
         title="MSAs",
-        description="Pre-computed MSAs keyed by sequence. Populated by preprocess() or supplied directly.",
+        description="Per-complex MSAs; a bare dict[int, MSA] is coerced to an unpaired ComplexMSAs.",
     )
+
+    @field_validator("msas", mode="before")
+    @classmethod
+    def _coerce_msas(cls, value: Any) -> Any:
+        """Accept a bare ``dict[int, MSA]`` per complex; wrap it as an unpaired ``ComplexMSAs``.
+
+        A serialized ``ComplexMSAs`` (``{"per_chain": ..., "paired": ...}``, e.g. from a
+        ``model_dump`` round-trip) is left for Pydantic to validate; only a bare chain dict
+        (no ``per_chain`` key) is wrapped.
+        """
+        if not isinstance(value, list):
+            return value  # let Pydantic raise the canonical "should be a list" error
+        return [
+            ComplexMSAs(per_chain=entry) if isinstance(entry, dict) and "per_chain" not in entry else entry
+            for entry in value
+        ]
 
     @classmethod
     def item_cost(cls, item: Complex) -> float:
@@ -370,11 +421,12 @@ def _preprocess_structure_prediction_msas(
     colabfold_search_config: Any,
     verbose: int = 0,
 ) -> StructurePredictionInput:
-    """Generate MSAs for all unique protein sequences and attach to inputs.
+    """Generate per-complex MSAs and attach them as ``list[dict[int, MSA]]``.
 
-    Collects unique protein sequences across all complexes, runs ColabFold
-    search once, and stores the raw MSA objects on ``inputs.msas`` keyed by
-    sequence string. Skips ColabFold if MSAs are already supplied.
+    Heterocomplex protein chains within the same complex are submitted as one
+    taxonomy-paired query so the model can exploit cross-chain co-evolutionary
+    signal. Single-chain and homo-multimer complexes use the unpaired path with
+    cross-complex sequence deduplication.
 
     Args:
         inputs (StructurePredictionInput): Structure prediction input containing complexes.
@@ -382,11 +434,19 @@ def _preprocess_structure_prediction_msas(
         verbose (int): Verbosity level (truthy = log progress); see :class:`BaseConfig`.
 
     Returns:
-        StructurePredictionInput: Updated inputs with ``msas`` field populated.
+        StructurePredictionInput: Updated inputs with ``msas`` set to a list of
+            ``ComplexMSAs`` parallel to ``complexes``; ``paired=True`` for
+            heterocomplexes searched as one taxonomy-paired query.
     """
     if inputs.msas is not None:
+        if len(inputs.msas) != len(inputs.complexes):
+            raise ValueError(
+                f"Pre-supplied msas length ({len(inputs.msas)}) does not match "
+                f"complexes length ({len(inputs.complexes)})."
+            )
         if verbose:
-            logger.info(f"Using {len(inputs.msas)} pre-supplied MSA(s), skipping ColabFold search")
+            total = sum(len(cm.per_chain) for cm in inputs.msas)
+            logger.info(f"Using {total} pre-supplied chain MSA(s), skipping ColabFold search")
         return inputs
 
     from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
@@ -394,42 +454,130 @@ def _preprocess_structure_prediction_msas(
         run_colabfold_search,
     )
 
-    # Collect unique protein sequences across all complexes
-    unique_seqs: dict[str, str] = {}  # sequence -> query name
-    for comp in inputs.complexes:
-        for chain in comp.chains:
-            if isinstance(chain, Chain) and chain.entity_type == "protein" and chain.sequence not in unique_seqs:
-                unique_seqs[chain.sequence] = f"seq_{len(unique_seqs)}"
+    # Build the query list and a per-complex plan for reassembling results by position.
+    # Heterocomplex protein chains → one paired query (a list); single-chain / homo-multimer
+    # → one unpaired query (a str), deduplicated across complexes by sequence.
+    queries_input: list[str | list[str]] = []
+    unpaired_seq_to_query_idx: dict[str, int] = {}
+    # Per complex: (protein chains as (chain_idx, sequence), paired query index or None).
+    complex_plans: list[tuple[list[tuple[int, str]], int | None]] = []
 
-    if not unique_seqs:
+    for comp in inputs.complexes:
+        protein_chains: list[tuple[int, str]] = [
+            (ci, ch.sequence)
+            for ci, ch in enumerate(comp.chains)
+            if isinstance(ch, Chain) and ch.entity_type == "protein"
+        ]
+        if not protein_chains:
+            complex_plans.append(([], None))
+            continue
+
+        unique_seqs_in_complex = {seq for _, seq in protein_chains}
+        if len(unique_seqs_in_complex) == 1:
+            seq = protein_chains[0][1]
+            if seq not in unpaired_seq_to_query_idx:
+                unpaired_seq_to_query_idx[seq] = len(queries_input)
+                queries_input.append(seq)
+            complex_plans.append((protein_chains, None))
+        else:
+            queries_input.append([seq for _, seq in protein_chains])
+            complex_plans.append((protein_chains, len(queries_input) - 1))
+
+    if not queries_input:
         return inputs
 
     if verbose:
-        logger.info(f"Generating MSAs for {len(unique_seqs)} unique protein sequence(s) using ColabFold search...")
+        n_paired = sum(1 for _, qi in complex_plans if qi is not None)
+        logger.info(
+            f"Generating MSAs: {len(unpaired_seq_to_query_idx)} unpaired sequence(s), "
+            f"{n_paired} paired group(s) for heterocomplexes..."
+        )
 
-    queries = list(unique_seqs.items())
-    colabfold_input = ColabfoldSearchInput(queries=queries)  # type: ignore[arg-type]
-    colabfold_output = run_colabfold_search(colabfold_input, colabfold_search_config)
+    # queries accepts raw str / list[str] entries; the field validator coerces to ColabfoldSearchQuery.
+    colabfold_output = run_colabfold_search(
+        ColabfoldSearchInput(queries=queries_input),  # type: ignore[arg-type]
+        colabfold_search_config,
+    )
 
-    # Surface real errors on total failure; reading ``.results`` on a success=False output is opaque.
     if colabfold_output.success is False:
         errors = colabfold_output.errors or ["unknown error"]
         raise RuntimeError(f"colabfold-search MSA generation failed: {' | '.join(errors)}")
 
-    # Build MSA dict keyed by sequence
-    name_to_seq = {v: k for k, v in unique_seqs.items()}
-    msas: dict[str, MSA] = {}
-    for result in colabfold_output.results:
-        if result.msa is not None:
-            seq = name_to_seq[result.sequence_id]
-            msas[seq] = result.msa
-            if verbose:
-                logger.info(f"Generated MSA for {result.sequence_id}: {result.num_homologs_found} homologs found")
-        else:
-            if verbose:
-                logger.warning(f"No homologs found for {result.sequence_id}")
+    # Results are parallel to queries_input; each result's msas list is parallel to its chains.
+    results = colabfold_output.results
+    seq_to_msa: dict[str, MSA] = {}
+    for seq, query_idx in unpaired_seq_to_query_idx.items():
+        msa = results[query_idx].msas[0]  # unpaired query → single-chain result
+        if msa is not None:
+            seq_to_msa[seq] = msa
 
-    return inputs.model_copy(update={"msas": msas}) if msas else inputs
+    # Reassemble per-complex MSAs parallel to inputs.complexes, one ComplexMSAs each.
+    msas_list: list[ComplexMSAs] = []
+    for protein_chains, paired_query_idx in complex_plans:
+        per_chain: dict[int, MSA] = {}
+        if paired_query_idx is not None:
+            for (ch_idx, _seq), msa in zip(protein_chains, results[paired_query_idx].msas, strict=True):
+                if msa is not None:
+                    per_chain[ch_idx] = msa
+            # A heterocomplex query is paired regardless of how many chains found homologs.
+            msas_list.append(ComplexMSAs(per_chain=per_chain, paired=True))
+        else:
+            for ch_idx, seq in protein_chains:
+                msa = seq_to_msa.get(seq)
+                if msa is not None:
+                    per_chain[ch_idx] = msa
+            msas_list.append(ComplexMSAs(per_chain=per_chain, paired=False))
+
+    has_any = any(m.per_chain for m in msas_list)
+    return inputs.model_copy(update={"msas": msas_list}) if has_any else inputs
+
+
+def unwrap_complex_msas(complex_msas: "ComplexMSAs | None") -> tuple[dict[int, MSA], bool]:
+    """Return ``(per_chain_dict, is_paired)`` from a per-complex MSA bundle.
+
+    Helper for downstream structure-prediction tools that need uniform access to a
+    complex's MSAs and a flag indicating whether the MSAs are taxonomy-paired (so
+    they should populate pairing slots on the per-tool input format).
+    """
+    if complex_msas is None:
+        return {}, False
+    return complex_msas.per_chain, complex_msas.paired
+
+
+_BASE36 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+
+def _row_to_base36_5(n: int) -> str:
+    """5-char uppercase base36 of n, zero-padded. Covers 36**5 ≈ 60M rows."""
+    out = []
+    while n > 0:
+        n, r = divmod(n, 36)
+        out.append(_BASE36[r])
+    return "".join(reversed(out)).rjust(5, "0")
+
+
+def write_paired_a3m_with_uniprot_headers(msa: MSA, paired_a3m_path: str) -> None:
+    r"""Write A3M with UniProt-format headers so species-id-based predictors engage cross-chain pairing.
+
+    AlphaFold3 and Protenix pair MSA rows by extracting a species token from each
+    sequence header via regex ``(?:tr|sp)\|[A-Z0-9]{6,10}(?:_\d+)?\|[A-Z0-9]{1,10}_[A-Z0-9]{1,5}``;
+    rows whose species appears in ≥2 chains become paired rows. Raw ColabFold
+    ``pair.a3m`` headers (``UniRef100_*``) do not match the regex, so we
+    synthesize ``>tr|PAIR{B36}|P_{B36}`` for each non-query row where
+    ``{B36}`` is the 5-char base36 encoding of the row index. Identical B36
+    across chains for matching rows engages pairing by row position (which is
+    how ColabFold's paired output is already aligned by taxonomy upstream).
+    The query row keeps an inert ``>query`` header; both predictors special-case
+    row 0 as the query regardless.
+    """
+    sequences = msa.aligned_sequences
+    lines = [">query", sequences[0]]
+    for row_idx, seq in enumerate(sequences[1:], start=1):
+        token = _row_to_base36_5(row_idx)
+        lines.append(f">tr|PAIR{token}|P_{token}")
+        lines.append(seq)
+    with open(paired_a3m_path, "w") as f:
+        f.write("\n".join(lines) + "\n")
 
 
 def resolve_chain_ids(chains: Sequence[Chain | Fragment]) -> list[str]:

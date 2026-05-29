@@ -118,9 +118,9 @@ def test_config_rejects_invalid_model_name():
 
 def test_config_passes_new_fields_to_dispatch():
     """All five new Config fields must flow to the dispatch payload."""
-    # Pre-supply an empty MSA dict so preprocess() skips ColabFold (network-free test).
+    # Pre-supply an empty per-complex MSA entry so preprocess() skips ColabFold.
     complex_ = Complex(chains=[{"sequence": _SAMPLE_SEQUENCE, "entity_type": "protein"}])
-    bioemu_input = BioEmuInput(complexes=[complex_], msas={})
+    bioemu_input = BioEmuInput(complexes=[complex_], msas=[{}])
     bioemu_config = BioEmuConfig(
         num_samples=2,
         model_name="bioemu-v1.2",

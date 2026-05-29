@@ -23,7 +23,10 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
+    chain_label,
     normalize_output_chain_ids,
+    unwrap_complex_msas,
+    write_paired_a3m_with_uniprot_headers,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance
@@ -60,8 +63,10 @@ class ProtenixInput(StructurePredictionInput):
         complexes (list[Complex]): List of complexes to predict
             structures for. Inherited from ``StructurePredictionInput``. Each complex
             can contain multiple chains of proteins, DNA, RNA, and/or ligands.
-        msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
-            Populated by preprocess() or supplied directly. Default: None.
+        msas (list[ComplexMSAs] | None): Pre-computed MSAs, one
+            entry per complex. Each entry is a ``ComplexMSAs`` (per-chain MSAs keyed by
+            chain index); ``paired=True`` marks rows taxonomy-aligned across chains. Populated by preprocess() or supplied directly.
+            Default: None.
 
     Note:
         Protenix supports entity types: ``"protein"``, ``"dna"``, ``"rna"``, and ``"ligand"``.
@@ -522,7 +527,11 @@ def _write_msas_to_batch_json(
     config: ProtenixConfig,
     temp_dir: str,
 ) -> None:
-    """Write pre-computed MSAs to A3M files and inject paths into batch JSON.
+    """Write per-complex MSAs to A3M files and inject paths into batch JSON.
+
+    For complexes with multiple protein chains the per-chain MSAs are also
+    written as the ``pairedMsaPath`` (rows are taxonomy-aligned by position
+    when sourced from a paired query).
 
     Args:
         batch_json (list[dict[str, Any]]): List of Protenix job dicts (modified in place).
@@ -530,33 +539,55 @@ def _write_msas_to_batch_json(
         config (ProtenixConfig): ProtenixConfig with verbose setting.
         temp_dir (str): Directory for writing A3M files.
     """
+    if inputs.msas is None:
+        return
+
     msa_dir = os.path.join(temp_dir, "msas")
     os.makedirs(msa_dir, exist_ok=True)
 
     for job_idx, job in enumerate(batch_json):
         sp_complex = inputs.complexes[job_idx]
-        protein_seqs, protein_chain_ids = sp_complex.extract_protein_chains()
+        per_chain_msas, is_paired = unwrap_complex_msas(inputs.msas[job_idx])
 
-        if not protein_seqs:
+        protein_chain_indices = [
+            i for i, ch in enumerate(sp_complex.chains) if hasattr(ch, "entity_type") and ch.entity_type == "protein"
+        ]
+        if not protein_chain_indices:
             continue
+        n_protein_chains = len(protein_chain_indices)
 
-        msa_paths: dict[str, str] = {}
-        for seq, chain_id in zip(protein_seqs, protein_chain_ids, strict=False):
-            if seq in inputs.msas:  # type: ignore[operator]
-                a3m_path = os.path.join(msa_dir, f"job_{job_idx}_{chain_id}.a3m")
-                inputs.msas[seq].to_a3m_file(a3m_path, query_index=0)  # type: ignore[index]
-                msa_paths[chain_id] = a3m_path
+        # Map chain_idx -> a3m path written for that chain.
+        chain_idx_to_path: dict[int, str] = {}
+        chain_idx_to_paired_path: dict[int, str] = {}
+        for chain_idx in protein_chain_indices:
+            msa = per_chain_msas.get(chain_idx)
+            if msa is None:
+                continue
+            chain_id = (
+                sp_complex.chains[chain_idx].id
+                if getattr(sp_complex.chains[chain_idx], "id", None)
+                else chain_label(chain_idx)
+            )
+            a3m_path = os.path.join(msa_dir, f"job_{job_idx}_chain_{chain_id}_{chain_idx}.a3m")
+            msa.to_a3m_file(a3m_path, query_index=0)
+            chain_idx_to_path[chain_idx] = a3m_path
+            if is_paired:
+                paired_a3m_path = os.path.join(msa_dir, f"job_{job_idx}_chain_{chain_id}_{chain_idx}.paired.a3m")
+                write_paired_a3m_with_uniprot_headers(msa, paired_a3m_path)
+                chain_idx_to_paired_path[chain_idx] = paired_a3m_path
 
-                if config.verbose:
-                    logger.info(
-                        f"Assigned MSA to chain {chain_id} in complex {job_idx} ({len(inputs.msas[seq])} sequences)"  # type: ignore[index]
-                    )
+            if config.verbose:
+                logger.info(f"Assigned MSA to chain {chain_id} in complex {job_idx} ({len(msa)} sequences)")
 
-        # Inject MSA paths into the job's proteinChain entries
-        for seq_entry in job["sequences"]:
-            if "proteinChain" in seq_entry:
-                chain_seq = seq_entry["proteinChain"]["sequence"]
-                for chain_id, protein_seq in zip(protein_chain_ids, protein_seqs, strict=False):
-                    if protein_seq == chain_seq and chain_id in msa_paths:
-                        seq_entry["proteinChain"]["unpairedMsaPath"] = msa_paths[chain_id]
-                        break
+        # Inject MSA paths into the job's proteinChain entries in positional order.
+        proto_entry_iter = (s for s in job["sequences"] if "proteinChain" in s)
+        for proto_pos, seq_entry in enumerate(proto_entry_iter):
+            if proto_pos >= n_protein_chains:
+                break
+            chain_idx = protein_chain_indices[proto_pos]
+            path = chain_idx_to_path.get(chain_idx)
+            if path is None:
+                continue
+            seq_entry["proteinChain"]["unpairedMsaPath"] = path
+            if is_paired:
+                seq_entry["proteinChain"]["pairedMsaPath"] = chain_idx_to_paired_path[chain_idx]

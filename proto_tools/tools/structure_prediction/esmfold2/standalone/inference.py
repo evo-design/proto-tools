@@ -37,6 +37,7 @@ def _is_oom_error(exc: BaseException) -> bool:
 def _build_upstream_input(
     chains: list[dict[str, Any]],
     msas: dict[str, list[str]] | None,
+    msas_paired: bool,
 ) -> Any:
     """Convert the JSON chains payload into an upstream ``StructurePredictionInput``."""
     from esm.models.esmfold2 import (
@@ -74,10 +75,18 @@ def _build_upstream_input(
         )
 
         if entity_type == "protein":
-            # Attach pre-computed MSA when present for this exact query sequence.
             msa_obj = None
-            if msas is not None and sequence in msas:
-                msa_obj = MSA.from_sequences(msas[sequence])
+            chain_msa_rows = msas.get(str(idx)) if msas else None
+            if chain_msa_rows:
+                from esm.utils.parsing import FastaEntry
+
+                # `key=<row_idx>` headers engage upstream paired_msa.py cross-chain pairing.
+                header_fmt = "key={row}" if msas_paired else "seq_{row}"
+                entries = [
+                    FastaEntry(header=header_fmt.format(row=row_idx), sequence=seq)
+                    for row_idx, seq in enumerate(chain_msa_rows)
+                ]
+                msa_obj = MSA(entries=entries)
             sequences.append(ProteinInput(id=chain_id, sequence=sequence, modifications=mods, msa=msa_obj))
         elif entity_type == "dna":
             sequences.append(DNAInput(id=chain_id, sequence=sequence, modifications=mods))
@@ -141,6 +150,7 @@ class ESMFold2Model:
         self,
         chains: list[dict[str, Any]],
         msas: dict[str, list[str]] | None,
+        msas_paired: bool,
         num_loops: int,
         num_sampling_steps: int,
         diffusion_samples: int,
@@ -163,7 +173,7 @@ class ESMFold2Model:
         effective_seed = seed if seed is not None else get_random_int()
         set_torch_seed(effective_seed)
 
-        upstream_input = _build_upstream_input(chains, msas)
+        upstream_input = _build_upstream_input(chains, msas, msas_paired)
 
         # Optional sampler overrides: upstream consumes them only when non-None.
         sampler_kwargs: dict[str, Any] = {}
@@ -254,6 +264,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         return _model(
             chains=input_dict["chains"],
             msas=input_dict.get("msas"),
+            msas_paired=input_dict.get("msas_paired", False),
             num_loops=input_dict["num_loops"],
             num_sampling_steps=input_dict["num_sampling_steps"],
             diffusion_samples=input_dict.get("diffusion_samples", 1),

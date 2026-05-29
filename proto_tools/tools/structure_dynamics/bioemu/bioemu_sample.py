@@ -47,8 +47,10 @@ class BioEmuInput(StructurePredictionInput):
         complexes (list[Complex]): Protein complexes to sample.
             BioEmu supports monomer-only inputs, so each complex must contain one
             protein chain.
-        msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
-            Populated by preprocess() or supplied directly. Default: None.
+        msas (list[ComplexMSAs] | None): Pre-computed MSAs, one
+            entry per complex. Each entry maps chain index to its MSA. BioEmu is
+            single-chain, so only chain index ``0`` is read. Populated by
+            ``preprocess()`` or supplied directly. Default: ``None``.
     """
 
     SUPPORTED_ENTITY_TYPES: ClassVar[set[str]] = {"protein"}
@@ -270,7 +272,7 @@ def example_input() -> Any:
     a3m_path = Path(__file__).parent / "examples" / "example.a3m"
     fixture_msa = MSA.from_file(a3m_path)
     sequence = "MKTL"
-    return BioEmuInput(complexes=[sequence], msas={sequence: fixture_msa})  # type: ignore[list-item]
+    return BioEmuInput(complexes=[sequence], msas=[{0: fixture_msa}])  # type: ignore[list-item]
 
 
 @tool(
@@ -291,12 +293,15 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance: Any = None) 
     """Generate protein conformational ensembles using BioEmu."""
     logger.debug("Using local venv for BioEmu conformational sampling")
 
-    # Extract pre-computed MSA A3M strings (populated by preprocess or user)
-    msa_a3m_contents = {}
+    from proto_tools.tools.structure_prediction.shared_data_models import unwrap_complex_msas
+
+    # BioEmu is single-chain, so always read chain index 0.
+    msa_a3m_contents: dict[str, str] = {}
     if inputs.msas:
-        for complex_ in inputs.complexes:
+        for cplx_idx, complex_ in enumerate(inputs.complexes):
             seq = complex_.chain_sequences[0]
-            msa = inputs.msas.get(seq)
+            per_chain, _ = unwrap_complex_msas(inputs.msas[cplx_idx])
+            msa = per_chain.get(0)
             if msa is not None:
                 msa_a3m_contents[seq] = msa.to_a3m_string()
                 if config.verbose:

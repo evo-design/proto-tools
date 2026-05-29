@@ -38,9 +38,10 @@ class ESMFold2Input(StructurePredictionInput):
     Attributes:
         complexes (list[Complex]): List of biomolecular complexes to fold.
             Inherited from ``StructurePredictionInput``.
-        msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein
-            sequence. Populated by ``Config.preprocess()`` or supplied directly.
-            Only consumed when ``Config.model_checkpoint == "esmfold2"``.
+        msas (list[ComplexMSAs] | None): Pre-computed MSAs, one
+            entry per complex. Each entry is a ``ComplexMSAs`` (per-chain MSAs keyed by
+            chain index); ``paired=True`` marks rows taxonomy-aligned across chains. Populated by ``Config.preprocess()`` or supplied
+            directly. Only consumed when ``Config.model_checkpoint == "esmfold2"``.
             Default: ``None``.
     """
 
@@ -277,7 +278,7 @@ def run_esmfold2(inputs: ESMFold2Input, config: ESMFold2Config, instance: Any = 
         _run_esmfold2_on_complex(
             config=config,
             sp_complex=comp,
-            msas=inputs.msas,
+            complex_msas=inputs.msas[dispatch_idx] if inputs.msas else None,
             instance=instance,
             seed=base_seed + dispatch_idx,
         )
@@ -296,7 +297,7 @@ def run_esmfold2(inputs: ESMFold2Input, config: ESMFold2Config, instance: Any = 
 def _run_esmfold2_on_complex(
     config: ESMFold2Config,
     sp_complex: Any,
-    msas: dict[str, Any] | None = None,
+    complex_msas: Any = None,
     instance: Any = None,
     seed: int | None = None,
 ) -> Structure:
@@ -305,8 +306,11 @@ def _run_esmfold2_on_complex(
     Args:
         config (ESMFold2Config): Tool configuration.
         sp_complex (Any): The ``Complex`` to fold.
-        msas (dict[str, Any] | None): Pre-computed MSAs keyed by protein
-            sequence. Ignored when ``config.model_checkpoint == 'esmfold2-fast'``.
+        complex_msas (Any): Pre-computed ``ComplexMSAs`` for this complex,
+            keyed by chain index. When ``paired``, rows are row-aligned across
+            chains by taxonomy and ``key=<row_idx>`` headers are synthesized to
+            engage upstream pair-aware code. Ignored when
+            ``config.model_checkpoint == 'esmfold2-fast'``.
         instance (Any): Optional ``ToolInstance`` for persistent subprocess
             execution.
         seed (int | None): Per-complex RNG seed forwarded to the worker.
@@ -314,6 +318,8 @@ def _run_esmfold2_on_complex(
     Returns:
         Structure: Predicted structure with ``ESMFold2Metrics`` attached.
     """
+    from proto_tools.tools.structure_prediction.shared_data_models import unwrap_complex_msas
+
     if seed is None:
         seed = config.seed
     if config.verbose:
@@ -325,17 +331,20 @@ def _run_esmfold2_on_complex(
         _chain_to_payload(chain, chain_id) for chain, chain_id in zip(sp_complex.chains, chain_ids, strict=True)
     ]
 
+    per_chain_msas, is_paired = unwrap_complex_msas(complex_msas)
+
     # MSAs are only meaningful for the MSA-capable checkpoint.
     msa_payload: dict[str, list[str]] | None = None
-    if config.model_checkpoint == "esmfold2" and msas:
-        msa_payload = _serialize_msas_for_worker(msas)
-    elif config.model_checkpoint == "esmfold2-fast" and msas:
+    if config.model_checkpoint == "esmfold2" and per_chain_msas:
+        msa_payload = _serialize_msas_for_worker(per_chain_msas)
+    elif config.model_checkpoint == "esmfold2-fast" and per_chain_msas:
         logger.warning("ESMFold2-Fast is single-sequence; ignoring supplied MSAs.")
 
     input_data: dict[str, Any] = {
         "operation": "predict",
         "chains": chains_payload,
         "msas": msa_payload,
+        "msas_paired": is_paired,
         "model_checkpoint": config.model_checkpoint,
         "num_loops": config.num_loops,
         "num_sampling_steps": config.num_sampling_steps,
@@ -407,12 +416,12 @@ def _chain_to_payload(chain: Any, chain_id: str) -> dict[str, Any]:
     return payload
 
 
-def _serialize_msas_for_worker(msas: dict[str, Any]) -> dict[str, list[str]]:
-    """Convert proto_tools MSA objects to plain lists of aligned sequences keyed by query sequence."""
+def _serialize_msas_for_worker(complex_msas: dict[int, Any]) -> dict[str, list[str]]:
+    """Convert per-chain MSAs into row-ordered sequence lists keyed by chain index (as str)."""
     from proto_tools.utils import extract_msa_sequences
 
     serialized: dict[str, list[str]] = {}
-    for query_seq, msa in msas.items():
+    for chain_idx, msa in complex_msas.items():
         aligned, _ids = extract_msa_sequences(msa, query_index=0)
-        serialized[query_seq] = list(aligned)
+        serialized[str(chain_idx)] = list(aligned)
     return serialized

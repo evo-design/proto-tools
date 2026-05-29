@@ -4,7 +4,6 @@ This module provides a standardized interface for generating Multiple Sequence
 Alignments (MSAs) using ColabFold's local database search with MMSeqs2.
 """
 
-import hashlib
 import logging
 import os
 import platform
@@ -59,120 +58,104 @@ def _default_msa_db_dir() -> Path:
 
 
 class ColabfoldSearchQuery(BaseModel):
-    """Represents a single protein sequence to search for homologs.
+    """One search unit; one or more chains searched together.
 
-    This class defines a query for MSA generation. Each query consists of a
-    protein sequence and an optional identifier.
+    ``sequences`` is always normalized to a ``list[str]``: a bare ``str`` is
+    accepted and wrapped into a one-element list. A single chain is searched via
+    the unpaired API endpoint; two or more chains are submitted in a single
+    ``use_pairing=True`` call and the resulting per-chain MSAs are row-aligned
+    across the group by taxonomy.
 
     Attributes:
-        sequence (str): Protein sequence to search for homologs. Must be a
-            non-empty string containing amino acid characters.
-        sequence_id (str | None): Optional identifier for this sequence.
-            Used for output file naming and result tracking. If not provided,
-            will be auto-generated as seq_0, seq_1, etc.
+        sequences (list[str]): The chain sequence(s) for this query. One chain is
+            an unpaired search; two or more is one taxonomy-paired group. A bare
+            ``str`` is accepted and normalized to ``[str]``.
     """
 
-    sequence: str = Field(title="Sequence", description="Protein sequence to search for homologs")
-    sequence_id: str | None = Field(
-        default=None,
-        title="Sequence ID",
-        description="Optional sequence identifier (auto-generated if not provided)",
+    sequences: list[str] = Field(
+        title="Sequences",
+        description="Chain sequence(s) for this query; one is unpaired, two or more is one paired group.",
     )
 
-    @field_validator("sequence")
+    @field_validator("sequences", mode="before")
     @classmethod
-    def validate_sequence(cls, v: str) -> str:
-        """Validate that sequence is a non-empty string."""
-        if not isinstance(v, str):
-            raise ValueError(f"Sequence must be a string, got {type(v)}")
-        if not v or not v.strip():
-            raise ValueError("Sequence cannot be empty")
-        return v.strip()
+    def validate_sequences(cls, v: Any) -> Any:
+        """Normalize a bare ``str`` to ``[str]`` and validate non-empty, stripped chains."""
+        if isinstance(v, str):
+            v = [v]
+        if not isinstance(v, list):
+            raise ValueError(f"sequences must be str or list[str], got {type(v).__name__}")
+        if len(v) < 1:
+            raise ValueError("sequences must contain at least one chain")
+        cleaned: list[str] = []
+        for item in v:
+            if not isinstance(item, str):
+                raise ValueError(f"sequences elements must be strings, got {type(item).__name__}")
+            stripped = item.strip()
+            if not stripped:
+                raise ValueError("Sequence cannot be empty")
+            cleaned.append(stripped)
+        return cleaned
+
+    @property
+    def is_paired(self) -> bool:
+        """True when this query represents a multi-chain paired group."""
+        return len(self.sequences) > 1
+
+    @property
+    def chain_count(self) -> int:
+        """Number of chains in this query (1 for unpaired, N for paired)."""
+        return len(self.sequences)
 
 
 class ColabfoldSearchInput(BaseToolInput):
     """Input object for ColabFold MSA search.
 
-    This class provides a flexible interface for specifying one or more protein
-    sequences to search for homologs. After validation, always contains a list
-    of ColabfoldSearchQuery instances.
+    A list of :class:`ColabfoldSearchQuery` units. Each unit is either:
 
-    Supports multiple input formats:
-    - List of ColabfoldSearchQuery instances or single ColabfoldSearchQuery instance  (explicit format)
-    - List of sequence strings or single sequence string (each auto-assigned seq_0, seq_1, ...)
-    - List of tuples or single tuple of the form (sequence, sequence_id)
-    - List of dicts or single dict of the form ``{"sequence": str, "sequence_id": str | None}``
-      (the shape produced by ``model_dump`` when the input is round-tripped through JSON)
+    - A single sequence (unpaired): one independent search.
+    - A list of sequences (paired): submitted together as one
+      ``use_pairing=True`` API call; the resulting per-chain MSAs are
+      row-aligned across the group by taxonomy.
+
+    Supports multiple input shapes per outer-list element:
+
+    - Sequence string → unpaired query
+    - ``{"sequences": ...}`` dict (round-tripped JSON shape)
+    - :class:`ColabfoldSearchQuery` instance (explicit, may be either kind)
+    - **List of sequence strings** → one taxonomy-paired group
 
     Attributes:
-        queries (list[ColabfoldSearchQuery]): List of search queries. Each query
-            contains a protein sequence and optional identifier. After validation,
-            always a list of ColabfoldSearchQuery instances regardless of input format.
+        queries (list[ColabfoldSearchQuery]): Search queries in original input order.
+            Each query is unpaired (one chain) or paired (``q.is_paired``, two or
+            more chains). Results are returned parallel to this list.
 
     Examples:
-        >>> # Simple format - just sequences
-        >>> inputs = ColabfoldSearchInput(queries=["MVLSPADKTN", "ACDEFGHIKL"])
+        >>> # Three independent unpaired searches
+        >>> ColabfoldSearchInput(queries=["MVLSPADKTN", "ACDEFGHIKL", "MKTAYIAKQR"])
         >>>
-        >>> # Explicit format with IDs
-        >>> query1 = ColabfoldSearchQuery(sequence="MVLSPADKTN", sequence_id="protein_A")
-        >>> inputs = ColabfoldSearchInput(queries=[query1])
+        >>> # One unpaired + one paired group of two heterocomplex chains
+        >>> ColabfoldSearchInput(queries=["MVLSPADKTN", ["MKTAYIAKQR", "GSSGSSGSS"]])
+        >>>
+        >>> # Single paired group of three chains
+        >>> ColabfoldSearchInput(queries=[["SEQ_A", "SEQ_B", "SEQ_C"]])
     """
 
     queries: list[ColabfoldSearchQuery] = InputField(
         title="Queries",
-        description="List of protein sequences to search for homologs",
+        description="List of search queries; each is one sequence (unpaired) or a list of sequences (paired group).",
     )
 
     @field_validator("queries", mode="before")
     @classmethod
     def normalize_queries(cls, value: Any) -> Any:
-        """Normalize various input formats to List[ColabfoldSearchQuery]."""
-        # If single instance, immediately convert to list
+        """Normalize various input formats to a list of ColabfoldSearchQuery."""
         if not isinstance(value, list):
             value = [value]
-
         if len(value) == 0:
-            raise ValueError("At least one query sequence is required")
+            raise ValueError("At least one query is required")
 
-        # Validate each query
-        validated_queries = []
-        for raw_query in value:
-            if isinstance(raw_query, str):
-                query = ColabfoldSearchQuery(sequence=raw_query)
-            elif isinstance(raw_query, tuple):
-                query = ColabfoldSearchQuery(sequence=raw_query[0], sequence_id=raw_query[1])
-            elif isinstance(raw_query, dict):
-                # JSON round-trip case: model_dump serializes ColabfoldSearchQuery
-                # as {"sequence": str, "sequence_id": str | None}.
-                query = ColabfoldSearchQuery(**raw_query)
-            elif isinstance(raw_query, ColabfoldSearchQuery):
-                query = raw_query
-            else:
-                raise ValueError(
-                    f"Invalid query input: {raw_query}. Must be a string, tuple, dict, or ColabfoldSearchQuery instance."
-                )
-            validated_queries.append(query)
-
-        return validated_queries
-
-    @model_validator(mode="after")
-    def populate_sequence_ids(self) -> Any:
-        """Auto-generate sequence IDs if not provided."""
-        # Auto-generate sequence IDs from hash of sequence
-        for query in self.queries:
-            if query.sequence_id is None:
-                query.sequence_id = "seq_" + hashlib.sha256(query.sequence.encode()).hexdigest()[:10]
-
-        # Ensure that no two queries have the same sequence ID
-        seen_ids = set()
-        for query in self.queries:
-            if query.sequence_id in seen_ids:
-                raise ValueError(
-                    f"Sequence ID {query.sequence_id} is not unique. Please provide a unique sequence ID for each query."
-                )
-            seen_ids.add(query.sequence_id)
-
-        return self
+        return [_coerce_query(raw) for raw in value]
 
     def __len__(self) -> int:
         """Get the number of queries."""
@@ -187,33 +170,72 @@ class ColabfoldSearchInput(BaseToolInput):
         return iter(self.queries)
 
 
+def _coerce_query(raw: Any) -> ColabfoldSearchQuery:
+    """Coerce a single outer-list element into a ColabfoldSearchQuery.
+
+    Accepted shapes:
+        - str → unpaired query
+        - ``{"sequences": ...}`` dict (round-tripped JSON shape) → ColabfoldSearchQuery(**raw)
+        - ColabfoldSearchQuery instance → passed through
+        - list of strings → one paired query over those chains
+    """
+    if isinstance(raw, ColabfoldSearchQuery):
+        return raw
+    if isinstance(raw, str):
+        return ColabfoldSearchQuery(sequences=[raw])
+    if isinstance(raw, dict):
+        return ColabfoldSearchQuery(**raw)
+    if isinstance(raw, list):
+        return ColabfoldSearchQuery(sequences=raw)
+    raise ValueError(f"Invalid query input: {raw!r}. Must be a string, dict, list, or ColabfoldSearchQuery.")
+
+
 # Output:
 
 
 class ColabfoldSearchResult(BaseModel):
-    """Result from searching a single protein sequence.
+    """Result for one :class:`ColabfoldSearchQuery`, returned in the input query order.
+
+    Both fields are always lists, parallel to each other and to the query's
+    chains: index ``i`` is chain ``i``. An unpaired query has one element; a
+    paired query has one per chain, row-aligned across chains by taxonomy.
+    Supports ``len()``, indexing, and iteration over the per-chain MSAs.
 
     Attributes:
-        msa (MSA | None): The Multiple Sequence Alignment object containing the homologous sequences.
-            None if no homologs were found (only the query sequence would be present).
-        sequence_id (str): Identifier for the sequence that was searched.
+        query_sequences (list[str]): The query chain sequence(s) this result is for.
+        msas (list[MSA | None]): One MSA per chain (``None`` for a chain with no
+            homologs beyond the query row).
     """
 
-    msa: MSA | None = Field(
-        title="MSA Result",
-        description="Multiple Sequence Alignment containing homologous sequences, or None if no homologs found",
+    query_sequences: list[str] = Field(
+        title="Query Sequences", description="The query chain sequence(s) this result is for."
     )
-    sequence_id: str = Field(title="Sequence ID", description="Identifier for the searched sequence")
+    msas: list[MSA | None] = Field(
+        title="MSA Results",
+        description="One MSA per chain (None when a chain has no homologs); row-aligned for paired queries.",
+    )
 
     @property
     def num_homologs_found(self) -> int:
-        """Number of homologous sequences found in the MSA (count excludes the query sequence.
+        """Homolog count of the first chain's MSA, excluding the query row.
 
-        which will always be the first sequence in the MSA). Returns 0 if msa is None.
+        Paired chains share the same row count by construction, so the first
+        chain is representative. Returns 0 when that chain has no MSA.
         """
-        if self.msa is None:
-            return 0
-        return len(self.msa) - 1
+        first = self.msas[0] if self.msas else None
+        return len(first) - 1 if first is not None else 0
+
+    def __len__(self) -> int:
+        """Number of chains in this query."""
+        return len(self.msas)
+
+    def __getitem__(self, index: int) -> MSA | None:
+        """Get a chain's MSA by index."""
+        return self.msas[index]
+
+    def __iter__(self) -> Iterator[MSA | None]:  # type: ignore[override]
+        """Iterate over per-chain MSAs."""
+        return iter(self.msas)
 
 
 class ColabfoldSearchOutput(BaseToolOutput):
@@ -246,13 +268,18 @@ class ColabfoldSearchOutput(BaseToolOutput):
 
         path = Path(export_path)
         path.mkdir(parents=True, exist_ok=True)
-        for res in self.results:
-            if res.msa:
-                out_file = path / f"{res.sequence_id}.{file_format}"
+        for query_idx, res in enumerate(self.results):
+            # Name files by query index; paired queries (>1 chain) also get a chain index.
+            paired = len(res.msas) > 1
+            for chain_idx, msa in enumerate(res.msas):
+                if msa is None:
+                    continue
+                stem = f"query_{query_idx}_chain_{chain_idx}" if paired else f"query_{query_idx}"
+                out_file = path / f"{stem}.{file_format}"
                 if file_format == "a3m":
-                    res.msa.to_a3m_file(str(out_file))
+                    msa.to_a3m_file(str(out_file))
                 elif file_format == "fasta":
-                    res.msa.to_fasta_file(str(out_file))
+                    msa.to_fasta_file(str(out_file))
 
     def __len__(self) -> int:
         """Get the number of results."""
@@ -561,8 +588,8 @@ def run_colabfold_search(
         >>> inputs = ColabfoldSearchInput(queries=["MVLSPADKTN", "MKTAYIAKQR"])
         >>> config = ColabfoldSearchConfig(msa_db_dir="/path/to/db")
         >>> output = run_colabfold_search(inputs, config)
-        >>> # Access the MSA object directly
-        >>> msa = output.results[0].msa
+        >>> # Each result is a list of per-chain MSAs; an unpaired query has one.
+        >>> msa = output.results[0][0]
         >>> print(f"Found {msa.num_sequences} homologous sequences")
         >>> # Iterate through aligned sequences
         >>> for seq in msa:
@@ -574,20 +601,43 @@ def run_colabfold_search(
     # Cleanup leftover files from previous runs if using default directory and cache is empty
     _cleanup_default_output_dir_if_cache_empty(config)
 
-    # Extract sequences and IDs from queries
-    sequences = [query.sequence for query in inputs.queries]
-    sequence_ids = [query.sequence_id for query in inputs.queries]
-
     # Create output directory structure
     os.makedirs(config.output_dir, exist_ok=True)  # type: ignore[arg-type]
     msa_out_dir = os.path.join(config.output_dir, "msas")  # type: ignore[arg-type]
     os.makedirs(msa_out_dir, exist_ok=True)
 
-    if config.search_mode == "local":
-        return _local_search(sequences, sequence_ids, config, msa_out_dir, instance=instance)  # type: ignore[arg-type]
-    if config.search_mode == "remote":
-        return _remote_search(sequences, sequence_ids, config, msa_out_dir, instance=instance)  # type: ignore[arg-type]
-    raise ValueError(f"colabfold-search: invalid search_mode {config.search_mode!r}; expected 'local' or 'remote'")
+    if config.search_mode not in ("local", "remote"):
+        raise ValueError(f"colabfold-search: invalid search_mode {config.search_mode!r}; expected 'local' or 'remote'")
+
+    unpaired_indices = [i for i, q in enumerate(inputs.queries) if not q.is_paired]
+    paired_indices = [i for i, q in enumerate(inputs.queries) if q.is_paired]
+
+    if paired_indices and config.search_mode == "local":
+        raise NotImplementedError(
+            "colabfold-search: paired queries (list-shaped sequences) require search_mode='remote'; "
+            "local paired support is pending env-pairing DB provisioning."
+        )
+
+    # Results are assembled parallel to inputs.queries (by position).
+    ordered: list[ColabfoldSearchResult | None] = [None] * len(inputs.queries)
+
+    if unpaired_indices:
+        # An unpaired query has exactly one chain; pass the bare sequence string.
+        unpaired_seqs = [inputs.queries[i].sequences[0] for i in unpaired_indices]
+        if config.search_mode == "local":
+            unpaired_out = _local_search(unpaired_seqs, config, msa_out_dir, instance=instance)
+        else:
+            unpaired_out = _remote_search(unpaired_seqs, config, msa_out_dir, instance=instance)
+        for query_idx, result in zip(unpaired_indices, unpaired_out.results, strict=True):
+            ordered[query_idx] = result
+
+    for query_idx in paired_indices:
+        ordered[query_idx] = _remote_search_paired(inputs.queries[query_idx], config, instance=instance)
+
+    # Every slot must be filled; results stay parallel to inputs.queries.
+    assert all(r is not None for r in ordered), "internal: missing result for at least one query"
+    results = [r for r in ordered if r is not None]  # narrows None out for the type checker
+    return ColabfoldSearchOutput(results=results)
 
 
 # ============================================================================
@@ -643,16 +693,16 @@ def _count_sequences_in_a3m(a3m_path: str | Path) -> int:
     return count
 
 
-def _replace_query_header_in_a3m(a3m_path: str | Path, seq_id: str) -> None:
-    """Rewrite the query (first) header line in an A3M to ``seq_id``, leaving homologs untouched.
+def _replace_query_header_in_a3m(a3m_path: str | Path, label: str) -> None:
+    """Rewrite the query (first) header line in an A3M to ``label``, leaving homologs untouched.
 
-    Local mode uses numeric FASTA indices, remote mode gets ColabFold's internal
-    index (e.g. ``101``); both need the resolved sequence_id restored.
+    Local mode uses numeric FASTA indices and remote mode gets ColabFold's internal
+    index (e.g. ``101``) for the query row; both are normalized to a stable label.
     """
     with open(a3m_path) as f:
         lines = f.readlines()
     if lines and lines[0].startswith(">"):
-        lines[0] = f">{seq_id}\n"
+        lines[0] = f">{label}\n"
         with open(a3m_path, "w") as f:
             f.writelines(lines)
 
@@ -708,12 +758,14 @@ def detect_available_local_databases(msa_db_dir: str | Path, verbose: bool = Fal
 
 def _local_search(
     sequences: list[str],
-    sequence_ids: list[str],
     config: ColabfoldSearchConfig,
     msa_out_dir: str,
     instance: Any = None,
 ) -> ColabfoldSearchOutput:
-    """Performs local search for homologous sequences and generates Multiple Sequence Alignments (MSAs)."""
+    """Performs local search for homologous sequences and generates Multiple Sequence Alignments (MSAs).
+
+    Returns results parallel to ``sequences`` (by position).
+    """
     logger.debug(f"Generating local MSAs for {len(sequences)} sequence(s)...")
 
     # Use ToolInstance to run colabfold_search in isolated environment
@@ -759,62 +811,44 @@ def _local_search(
             error_msg = output_data.get("error", "Unknown error")
             raise RuntimeError(f"colabfold_search failed: {error_msg}")
 
-    # Process results: colabfold_search outputs files as 0.a3m, 1.a3m, etc.
+    # colabfold_search writes one file per query, named by FASTA index (0.a3m, 1.a3m, ...).
     results = []
-    for idx, seq_id in enumerate(sequence_ids):
-        # Collect and convert the A3M file to an MSA object
+    for idx, seq in enumerate(sequences):
         numbered_a3m = os.path.join(msa_out_dir, f"{idx}.a3m")
-        named_a3m = os.path.join(msa_out_dir, f"{seq_id}.a3m")
-
-        # Rename the numbered file to use the sequence ID for better user experience
         if os.path.exists(numbered_a3m):
-            # Restore the real sequence ID in the query header (first line)
-            # since we used numeric indices in the FASTA input
-            _replace_query_header_in_a3m(numbered_a3m, seq_id)
-            shutil.move(numbered_a3m, named_a3m)
+            _replace_query_header_in_a3m(numbered_a3m, "query")
 
-        # Check if the A3M file contains at least 2 sequences (query + at least one homolog)
-        # If only the query sequence is present, return None instead of creating an MSA
-        num_sequences = _count_sequences_in_a3m(named_a3m)
-
-        msa = None if num_sequences < 2 else MSA.from_file(named_a3m)
-
-        results.append(
-            ColabfoldSearchResult(
-                msa=msa,
-                sequence_id=seq_id,
-            )
-        )
+        # Only the query row means no homologs were found → no MSA.
+        num_sequences = _count_sequences_in_a3m(numbered_a3m) if os.path.exists(numbered_a3m) else 0
+        msa = None if num_sequences < 2 else MSA.from_file(numbered_a3m)
+        results.append(ColabfoldSearchResult(query_sequences=[seq], msas=[msa]))
 
     return ColabfoldSearchOutput(results=results)
 
 
 def _remote_search(
     sequences: list[str],
-    sequence_ids: list[str],
     config: ColabfoldSearchConfig,
     msa_out_dir: str,  # noqa: ARG001 — required by tool interface
     instance: Any = None,
 ) -> ColabfoldSearchOutput:
-    """Performs remote search for homologous sequences and generates Multiple Sequence Alignments (MSAs)."""
+    """Performs remote search for homologous sequences and generates Multiple Sequence Alignments (MSAs).
+
+    The standalone keys ``msa_paths`` by query index; results are returned
+    parallel to ``sequences`` (by position).
+    """
     logger.debug(f"Generating remote MSAs for {len(sequences)} sequence(s)...")
 
-    # Use ToolInstance to run remote search in isolated environment
-
-    # Get the standalone script path
     standalone_script = Path(__file__).parent / "standalone" / "remote_msa_search.py"
 
-    # Prepare input data for standalone script
     input_data = {
-        "sequences": sequences,
-        "sequence_ids": sequence_ids,
+        "queries": [{"sequences": seq} for seq in sequences],
         "output_dir": str(config.output_dir),
         "use_metagenomic_db": config.use_metagenomic_db,
         "verbose": config.verbose,
+        "device": "cpu",
     }
 
-    # Execute remote search via standalone script
-    input_data["device"] = "cpu"
     output_data = ToolInstance.dispatch(
         "colabfold_search",
         input_data,
@@ -824,54 +858,101 @@ def _remote_search(
     )
 
     if not output_data.get("success", False):
-        # Check if we have partial results
         num_successful = output_data.get("num_successful", 0)
         num_failed = output_data.get("num_failed", 0)
-
         if num_successful == 0:
-            # Total failure
             error_msg = f"colabfold-search: remote MSA search failed for all {num_failed} sequence(s)"
             if "errors" in output_data:
                 error_msg += f"; errors: {output_data['errors']}"
             raise RuntimeError(error_msg)
-        # Partial failure - log warning but continue
         if config.verbose:
             logger.warning(f"Remote MSA search partially failed: {num_successful} succeeded, {num_failed} failed")
             if "errors" in output_data:
-                for seq_id, error in output_data["errors"].items():
-                    logger.warning(f"  {seq_id}: {error}")
+                for label, error in output_data["errors"].items():
+                    logger.warning(f"  {label}: {error}")
 
-    # Process results
+    # Standalone keys msa_paths by query index (as str).
     msa_paths = output_data.get("msa_paths", {})
     results = []
-
-    for seq_id in sequence_ids:
-        if seq_id in msa_paths:
-            msa_path = msa_paths[seq_id]
-
-            # Remote A3M labels the query row ">101"; restore the resolved sequence_id.
-            _replace_query_header_in_a3m(msa_path, seq_id)
-
-            # Check if the A3M file contains at least 2 sequences (query + at least one homolog)
-            num_sequences = _count_sequences_in_a3m(msa_path)
-
-            msa = None if num_sequences < 2 else MSA.from_file(msa_path)
-
-            results.append(
-                ColabfoldSearchResult(
-                    msa=msa,
-                    sequence_id=seq_id,
-                )
-            )
-        else:
-            # No MSA generated for this sequence
+    for idx, seq in enumerate(sequences):
+        msa_path = msa_paths.get(str(idx))
+        if msa_path is None:
             if config.verbose:
-                logger.warning(f"No MSA generated for sequence {seq_id}")
-            results.append(
-                ColabfoldSearchResult(
-                    msa=None,
-                    sequence_id=seq_id,
-                )
-            )
+                logger.warning(f"No MSA generated for query {idx}")
+            results.append(ColabfoldSearchResult(query_sequences=[seq], msas=[None]))
+            continue
+        # Remote A3M labels the query row ">101"; normalize it to a stable label.
+        _replace_query_header_in_a3m(msa_path, "query")
+        num_sequences = _count_sequences_in_a3m(msa_path)
+        msa = None if num_sequences < 2 else MSA.from_file(msa_path)
+        results.append(ColabfoldSearchResult(query_sequences=[seq], msas=[msa]))
 
     return ColabfoldSearchOutput(results=results)
+
+
+def _remote_search_paired(
+    query: ColabfoldSearchQuery,
+    config: ColabfoldSearchConfig,
+    instance: Any = None,
+) -> ColabfoldSearchResult:
+    r"""Submit one paired query to the remote API; return one result with row-aligned MSAs.
+
+    Hits the ``ticket/pair`` endpoint via ``run_mmseqs2(use_pairing=True)``. The API
+    returns one ``pair.a3m`` containing N chain blocks separated by ``\x00``; rows
+    are taxonomy-paired across blocks by position. ``result.msas`` is a list of N
+    MSAs in input chain order.
+    """
+    assert query.is_paired, "_remote_search_paired requires a list-sequences query"
+    assert isinstance(query.sequences, list)
+
+    logger.debug(f"Generating paired remote MSAs ({len(query.sequences)} chains)...")
+    standalone_script = Path(__file__).parent / "standalone" / "remote_msa_search.py"
+
+    input_data = {
+        "queries": [query.model_dump()],
+        "output_dir": str(config.output_dir),
+        "use_metagenomic_db": config.use_metagenomic_db,
+        "verbose": config.verbose,
+        "device": "cpu",
+    }
+
+    output_data = ToolInstance.dispatch(
+        "colabfold_search",
+        input_data,
+        instance=instance,
+        script_path=standalone_script,
+        config=config,
+    )
+
+    if not output_data.get("success", False):
+        errors = output_data.get("errors", {})
+        raise RuntimeError(f"colabfold-search: paired query failed; errors: {errors!r}")
+
+    # Standalone keys paired_msa_paths by query index → per-chain paths in input order.
+    chain_paths = output_data.get("paired_msa_paths", {}).get("0", [])
+    if len(chain_paths) != len(query.sequences):
+        raise RuntimeError(
+            f"colabfold-search: paired standalone returned {len(chain_paths)} chain MSA path(s), "
+            f"expected {len(query.sequences)} (one per chain)."
+        )
+
+    per_chain_msas: list[MSA | None] = []
+    for chain_idx, msa_path in enumerate(chain_paths):
+        num_seqs = _count_sequences_in_a3m(msa_path)
+        if num_seqs < 2:
+            if config.verbose:
+                logger.warning(f"No paired MSA produced for chain {chain_idx}")
+            per_chain_msas.append(None)
+        else:
+            per_chain_msas.append(MSA.from_file(msa_path))
+
+    # Partial pairing (some chains found, others empty) breaks row-alignment for consumers.
+    n_found = sum(m is not None for m in per_chain_msas)
+    if 0 < n_found < len(per_chain_msas):
+        raise RuntimeError(
+            f"colabfold-search: paired query produced partial MSAs "
+            f"({len(per_chain_msas) - n_found} of {len(per_chain_msas)} chains failed); "
+            "paired downstream consumers require all per-chain MSAs to be present."
+        )
+
+    return ColabfoldSearchResult(query_sequences=query.sequences, msas=per_chain_msas)

@@ -19,6 +19,7 @@ from proto_tools.tools.structure_prediction import (
     Boltz2Input,
     Chain,
     Complex,
+    ComplexMSAs,
     run_boltz2,
     run_boltz2_affinity,
 )
@@ -82,7 +83,7 @@ def test_boltz2_writes_one_msa_per_unique_sequence(seqs, n_files):
     import yaml
 
     complex_ = Complex(chains=[Chain(sequence=s, entity_type="protein") for s in seqs])
-    msas = {s: MSA(aligned_sequences=[s, s]) for s in seqs}
+    complex_msas = ComplexMSAs(per_chain={ch_idx: MSA(aligned_sequences=[s, s]) for ch_idx, s in enumerate(seqs)})
     captured: dict = {}
 
     def fake_dispatch(_name, input_data, **_kwargs):
@@ -98,7 +99,7 @@ def test_boltz2_writes_one_msa_per_unique_sequence(seqs, n_files):
         ),
         pytest.raises(_StopAfterDispatch),
     ):
-        run_boltz2_on_complex(Boltz2Config(use_msa=True), complex_, msas=msas)
+        run_boltz2_on_complex(Boltz2Config(use_msa=True), complex_, complex_msas=complex_msas)
 
     msa_paths = [e["protein"]["msa"] for e in captured["yaml"]["sequences"] if "protein" in e]
     assert len(captured["csv_files"]) == n_files

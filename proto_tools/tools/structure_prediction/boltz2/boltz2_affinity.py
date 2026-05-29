@@ -72,7 +72,8 @@ class Boltz2AffinityInput(StructurePredictionInput):
 
     Attributes:
         complexes (list[Complex]): Each needs >=1 protein target and >=1 ligand chain.
-        msas (dict[str, MSA] | None): Inherited pre-computed MSAs keyed by sequence.
+        msas (list[ComplexMSAs] | None): Inherited per-complex MSAs;
+            each entry is a ``ComplexMSAs`` (``paired=True`` for taxonomy-paired heterocomplexes).
         binder_chain (SingleChainSelection | None): Ligand to score; None auto-detects the sole ligand.
     """
 
@@ -229,7 +230,7 @@ def run_boltz2_affinity(
             config=config,
             sp_complex=comp,
             binder_chain_id=binder_id,
-            msas=inputs.msas,
+            complex_msas=inputs.msas[dispatch_idx] if inputs.msas else None,
             instance=instance,
             seed=base_seed + dispatch_idx,
         )
@@ -249,7 +250,7 @@ def run_boltz2_affinity_on_complex(
     config: Boltz2AffinityConfig,
     sp_complex: Any,
     binder_chain_id: str,
-    msas: dict[str, Any] | None = None,
+    complex_msas: Any = None,
     instance: Any = None,
     seed: int | None = None,
 ) -> Structure:
@@ -265,7 +266,7 @@ def run_boltz2_affinity_on_complex(
 
         chain_msa_paths: dict[str, str] | None = None
         if config.use_msa:
-            chain_msa_paths = build_chain_msa_paths(sp_complex, msas, temp_dir, verbose=config.verbose)
+            chain_msa_paths = build_chain_msa_paths(sp_complex, complex_msas, temp_dir, verbose=config.verbose)
 
         yaml_content = complex_to_yaml(
             sp_complex.chains,
