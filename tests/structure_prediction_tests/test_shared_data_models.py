@@ -15,10 +15,13 @@ from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search impo
 from proto_tools.tools.structure_prediction import shared_data_models as sdm
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
+    ChainModification,
     Complex,
     ComplexMSAs,
+    Fragment,
     StructurePredictionInput,
     _row_to_base36_5,
+    count_structure_tokens,
     unwrap_complex_msas,
     write_paired_a3m_with_uniprot_headers,
 )
@@ -214,3 +217,38 @@ def test_preprocess_rejects_presupplied_length_mismatch(monkeypatch):
 
     with pytest.raises(ValueError, match="does not match"):
         sdm._preprocess_structure_prediction_msas(inputs, ColabfoldSearchConfig(), verbose=0)
+
+
+# ── AF3-style token counting ──────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("chains", "expected"),
+    [
+        pytest.param([Chain(sequence="MKTL", entity_type="protein")], 4, id="protein_residues"),
+        pytest.param(
+            [
+                Chain(sequence="MKTL", entity_type="protein"),
+                Fragment(ccd_code="ATP"),  # 31 heavy atoms
+                Fragment(ccd_code="MG"),  # 1 heavy atom
+                Fragment(smiles="CCO"),  # ethanol: 3 heavy atoms
+            ],
+            4 + 31 + 1 + 3,
+            id="ligand_heavy_atoms",
+        ),
+        pytest.param(
+            [
+                Chain(
+                    sequence="MVLSPADKTN",
+                    entity_type="protein",
+                    modifications=[ChainModification(position=4, modification_code="SEP")],  # SEP: 11 heavy atoms
+                )
+            ],
+            9 + 11,
+            id="modified_residue",
+        ),
+    ],
+)
+def test_count_structure_tokens(chains, expected):
+    """1 token per residue/nucleotide; heavy-atom count per ligand and modified residue."""
+    assert count_structure_tokens(chains) == expected

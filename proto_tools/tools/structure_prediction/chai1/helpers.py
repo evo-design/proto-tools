@@ -1,8 +1,7 @@
 """proto_tools/tools/structure_prediction/chai1/helpers.py.
 
 Shared helpers for Chai-1 structure prediction. Provides utilities for
-sequence hashing, MSA Parquet file writing, FASTA generation, and token
-counting under Chai-1's AlphaFold3-style tokenization scheme.
+sequence hashing, MSA Parquet file writing, FASTA generation, and glycan-aware token counting.
 """
 
 import hashlib
@@ -10,7 +9,7 @@ import re
 from typing import Any
 
 from proto_tools.entities.ligands import Fragment, count_heavy_atoms_for_ccd
-from proto_tools.tools.structure_prediction.shared_data_models import Chain
+from proto_tools.tools.structure_prediction.shared_data_models import Chain, count_structure_tokens
 
 
 def hash_sequence(seq: str) -> str:
@@ -93,33 +92,20 @@ def complex_to_fasta(chains: list[Chain | Fragment]) -> str:
 
 
 def count_chai1_tokens(chains: list[Chain | Fragment]) -> int:
-    """Count tokens for a complex under Chai-1's AlphaFold3-style tokenization.
+    """Token count for a Chai-1 complex: shared structure tokens plus glycan sugars.
 
-    Standard amino acids and nucleotides count as 1 token each; ligand Fragments,
-    glycan sugars, and modified residues each contribute their heavy-atom count.
-
-    Args:
-        chains (list[Chain | Fragment]): Chains in the complex.
-
-    Returns:
-        int: Total token count.
-
-    Raises:
-        ValueError: If a glycan string or modification CCD code cannot be resolved.
+    Glycans use Chai-1's string format (e.g. ``"MAN(6-1 FUC)(4-1 MAN)"``), each sugar
+    contributing its heavy-atom count; every other chain is counted by
+    :func:`count_structure_tokens`.
     """
-    total = 0
+    glycan_tokens = 0
+    non_glycan: list[Chain | Fragment] = []
     for chain in chains:
-        if isinstance(chain, Fragment):
-            total += chain.heavy_atom_count
-            continue
-        if chain.entity_type == "glycan":
-            total += _glycan_string_heavy_atom_count(chain.sequence)
-            continue
-        modified_positions = {mod.position for mod in chain.modifications}
-        standard_count = len(chain.sequence) - len(modified_positions)
-        modified_token_count = sum(count_heavy_atoms_for_ccd(mod.modification_code) for mod in chain.modifications)
-        total += standard_count + modified_token_count
-    return total
+        if not isinstance(chain, Fragment) and chain.entity_type == "glycan":
+            glycan_tokens += _glycan_string_heavy_atom_count(chain.sequence)
+        else:
+            non_glycan.append(chain)
+    return glycan_tokens + count_structure_tokens(non_glycan)
 
 
 def _glycan_string_heavy_atom_count(glycan_string: str) -> int:

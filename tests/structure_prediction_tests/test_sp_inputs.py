@@ -263,6 +263,15 @@ def test_chain_rejects_modification_position_beyond_sequence():
         Chain(sequence=_PROTEIN_SEQ_SHORT, modifications=[mod])
 
 
+def test_chain_rejects_duplicate_modification_positions():
+    mods = [
+        ChainModification(position=4, modification_code="SEP"),
+        ChainModification(position=4, modification_code="SEP"),
+    ]
+    with pytest.raises(ValueError, match="Multiple modifications target position 4"):
+        Chain(sequence="MVLSPADKTNVKAAW", modifications=mods)
+
+
 def test_chain_accepts_modification_at_last_position():
     mod = ChainModification(position=4, modification_code="SEP")
     chain = Chain(sequence=_PROTEIN_SEQ_SHORT, modifications=[mod])

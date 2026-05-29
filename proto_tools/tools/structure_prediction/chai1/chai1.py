@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 from proto_tools.entities.structures.structure import BFactorType, Structure
 from proto_tools.tools.structure_prediction.chai1.helpers import (
     complex_to_fasta,
+    count_chai1_tokens,
     write_msa_pqt,
 )
 from proto_tools.tools.structure_prediction.chai1.helpers import (
@@ -74,8 +75,6 @@ class Chai1Input(StructurePredictionInput):
     @classmethod
     def validate_token_count(cls, complexes: list[Complex]) -> list[Complex]:
         """Reject complexes that exceed Chai-1's 2048-token limit."""
-        from proto_tools.tools.structure_prediction.chai1.helpers import count_chai1_tokens
-
         for comp_idx, comp in enumerate(complexes):
             n_tokens = count_chai1_tokens(comp.chains)
             if n_tokens > 2048:

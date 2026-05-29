@@ -238,7 +238,15 @@ class Chain(BaseModel):
                 raise ValueError(f"Ligands cannot have modifications. Found: {self.modifications}")
             return self
 
+        seen_positions: set[int] = set()
         for mod in self.modifications:
+            # A residue carries at most one modification (keeps token counting deterministic).
+            if mod.position in seen_positions:
+                raise ValueError(
+                    f"Multiple modifications target position {mod.position}; each position allows at most one."
+                )
+            seen_positions.add(mod.position)
+
             # Check position is within bounds
             if mod.position > seq_length:
                 raise ValueError(

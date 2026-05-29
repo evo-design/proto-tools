@@ -20,10 +20,12 @@ from pydantic import model_validator
 from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.tools.structure_prediction.shared_data_models import (
+    Complex,
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
     chain_label,
+    count_structure_tokens,
     normalize_output_chain_ids,
     unwrap_complex_msas,
     write_paired_a3m_with_uniprot_headers,
@@ -45,6 +47,11 @@ ProtenixModelName = Literal[
     "protenix_tiny_default_v0.5.0",
     "protenix-v2",
 ]
+
+# Only protenix-v2 hard-rejects oversized inputs upstream (runner/inference.py:
+# n_token > 2560 raises); other models adjust precision for large inputs instead.
+_PROTENIX_V2_MODEL = "protenix-v2"
+_PROTENIX_V2_MAX_TOKENS = 2560
 
 
 # ============================================================================
@@ -242,7 +249,9 @@ class ProtenixConfig(MSAStructurePredictionConfig):
 
             - ``"protenix-v2"``: Wider representation (``c_z=256``) with scaled-up
               modules. v2 weights are not currently distributed publicly; if you have
-              a copy, place it under the configured weights directory.
+              a copy, place it under the configured weights directory. Inputs are
+              capped at 2,560 tokens for this model (a hard upstream limit); the other
+              models have no token cap.
 
             Default: ``"protenix_base_default_v1.0.0"``.
 
@@ -430,6 +439,7 @@ def run_protenix(
         >>> result = run_protenix(inputs, config)
         >>> print(f"Confidence: {result.structures[0].metrics['confidence_score']:.2f}")
     """
+    _enforce_token_limit(inputs.complexes, config.model_name)
     with tempfile.TemporaryDirectory() as temp_dir:
         output_dir = os.path.join(temp_dir, "protenix_output")
         os.makedirs(output_dir)
@@ -521,6 +531,19 @@ def run_protenix(
 # ============================================================================
 # Helper Functions
 # ============================================================================
+def _enforce_token_limit(complexes: list[Complex], model_name: str) -> None:
+    """Reject inputs over protenix-v2's hard 2,560-token cap; other models are uncapped."""
+    if model_name != _PROTENIX_V2_MODEL:
+        return
+    for comp_idx, comp in enumerate(complexes):
+        n_tokens = count_structure_tokens(comp.chains)
+        if n_tokens > _PROTENIX_V2_MAX_TOKENS:
+            raise ValueError(
+                f"Complex {comp_idx} has {n_tokens} tokens, exceeding the protenix-v2 "
+                f"model's {_PROTENIX_V2_MAX_TOKENS}-token limit."
+            )
+
+
 def _write_msas_to_batch_json(
     batch_json: list[dict[str, Any]],
     inputs: ProtenixInput,

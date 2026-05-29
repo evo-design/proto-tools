@@ -19,7 +19,7 @@ from proto_tools.entities.complex import Chain as Chain
 from proto_tools.entities.complex import ChainModification as ChainModification
 from proto_tools.entities.complex import Complex as Complex
 from proto_tools.entities.complex import chain_label as chain_label
-from proto_tools.entities.ligands import Fragment
+from proto_tools.entities.ligands import Fragment, count_heavy_atoms_for_ccd
 from proto_tools.entities.msa import MSA, PairedMSA
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
@@ -632,3 +632,37 @@ def normalize_output_chain_ids(structure: Structure, chains: Sequence[Chain | Fr
         )
         return structure
     return structure.with_renamed_chains(dict(zip(observed_ids, expected_ids, strict=True)))
+
+
+# ============================================================================
+# AF3-style token counting
+# ============================================================================
+def count_structure_tokens(chains: list[Chain | Fragment]) -> int:
+    """Count tokens for a complex under AlphaFold3-style tokenization.
+
+    1 token per amino acid / nucleotide; heavy-atom count per ligand Fragment and
+    per modified residue (from the free CCD component — exact for Protenix, a safe
+    +1 over-estimate for Chai-1). Shared by the AF3-family predictors that enforce a
+    token budget; callers tokenize any tool-specific entity types (e.g. Chai-1
+    glycans) themselves.
+
+    Args:
+        chains (list[Chain | Fragment]): Chains in the complex.
+
+    Returns:
+        int: Total token count.
+
+    Raises:
+        ValueError: If a modification CCD code cannot be resolved.
+    """
+    total = 0
+    for chain in chains:
+        if isinstance(chain, Fragment):
+            total += chain.heavy_atom_count
+            continue
+        # Dedupe by position so the residue-token removal and heavy-atom addition stay consistent.
+        mods_by_position = {mod.position: mod.modification_code for mod in chain.modifications}
+        standard_count = len(chain.sequence) - len(mods_by_position)
+        modified_token_count = sum(count_heavy_atoms_for_ccd(code) for code in mods_by_position.values())
+        total += standard_count + modified_token_count
+    return total

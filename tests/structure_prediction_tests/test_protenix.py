@@ -14,6 +14,7 @@ from proto_tools.tools.structure_prediction import (
     ProtenixInput,
     run_protenix,
 )
+from proto_tools.tools.structure_prediction.protenix.protenix import _PROTENIX_V2_MAX_TOKENS, _enforce_token_limit
 from proto_tools.utils import ToolInstance
 from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
@@ -127,6 +128,27 @@ def test_protenix_input_accepts_chain_objects():
     inputs = ProtenixInput(complexes=[complex_])
     assert len(inputs.complexes) == 1
     assert inputs.complexes[0].chains[0].entity_type == "protein"
+
+
+# ── protenix-v2 token limit (no GPU) ─────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("model_name", "n_residues", "rejected"),
+    [
+        ("protenix-v2", _PROTENIX_V2_MAX_TOKENS + 1, True),  # over the cap
+        ("protenix-v2", _PROTENIX_V2_MAX_TOKENS, False),  # boundary is inclusive
+        ("protenix_base_default_v1.0.0", _PROTENIX_V2_MAX_TOKENS + 1, False),  # other models are uncapped
+    ],
+)
+def test_protenix_v2_token_limit(model_name, n_residues, rejected):
+    """Only protenix-v2 enforces the 2,560-token cap; the boundary is inclusive."""
+    complexes = [Complex(chains=[Chain(sequence="A" * n_residues, entity_type="protein")])]
+    if rejected:
+        with pytest.raises(ValueError, match="exceeding the protenix-v2"):
+            _enforce_token_limit(complexes, model_name)
+    else:
+        _enforce_token_limit(complexes, model_name)
 
 
 # ── Ligand JSON shape: CCD-prefer dispatch ─────────────────────────────────
