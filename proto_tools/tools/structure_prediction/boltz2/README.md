@@ -65,5 +65,5 @@ This tool ranks candidate ligands against a chosen protein target, pairing a pre
 These apply to every Boltz-2 tool in this toolkit (`boltz2-prediction`, `boltz2-affinity`).
 
 - **Requires a GPU.** Boltz-2 runs through a PyTorch backend and needs an NVIDIA GPU; CPU execution is not practical.
-- **MSA-based and AlphaFold3-style.** Boltz-2 uses optional MSAs and a diffusion process. Predictions are stochastic, so set `seed` for reproducibility; `subsample_msa` and unseeded runs are intentionally non-deterministic.
+- **MSA-based and AlphaFold3-style.** Boltz-2 uses optional MSAs and a diffusion process. `subsample_msa` and unseeded runs are intentionally non-deterministic.
 - **Shared model weights.** Both tools run the same bundled Boltz-2 checkpoint; the affinity head ships with it, so `boltz2-affinity` needs no extra download or environment.

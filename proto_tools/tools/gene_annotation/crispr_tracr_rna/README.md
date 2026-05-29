@@ -3,7 +3,13 @@
 # CRISPRtracrRNA
 
 > [!NOTE]
-> **License:** CRISPRtracrRNA is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/BackofenLab/CRISPRtracrRNA/blob/main/LICENSE) for full terms.
+> **License:** CRISPRtracrRNA's own code is licensed under MIT, and it federates over bundled data sources and components, each under its own license terms.
+>
+> Bundled dependencies, each under its own license:
+>
+> - [CRISPRcasIdentifier](https://github.com/BackofenLab/CRISPRcasIdentifier/blob/master/LICENSE.txt): GPL-3.0
+>
+> Review each source's terms before commercial use or redistribution.
 
 ## Overview
 

@@ -1,8 +1,12 @@
 code:
   spdx: MIT
   url: https://github.com/BackofenLab/CRISPRtracrRNA/blob/main/LICENSE
+bundled_dependencies:
+  - name: CRISPRcasIdentifier
+    spdx: GPL-3.0
+    url: https://github.com/BackofenLab/CRISPRcasIdentifier/blob/master/LICENSE.txt
 commercial_use: 'yes'
 redistribution: true
 attribution_required: false
-notes: Backofen Lab CRISPRtracrRNA is MIT-licensed.
-last_updated: '2026-05-01'
+notes: Backofen Lab CRISPRtracrRNA is MIT-licensed; CRISPRidentify (the array-detection step) is also MIT. The Cas-cassette step in complete_run mode invokes CRISPRcasIdentifier (Backofen Lab), which is GPL-3.0 (copyleft), so it is surfaced as a bundled dependency. GPL-3.0 does not restrict commercial use.
+last_updated: '2026-05-29'

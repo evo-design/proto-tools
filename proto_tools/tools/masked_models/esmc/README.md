@@ -31,7 +31,7 @@ The averaged embedding is a learned numerical representation of a protein, suita
 
 #### Usage Tips
 
-- **`model_checkpoint` selects the model size and its license.** `esmc_300m` (the default, embedding size 960) is under the Cambrian Open License with commercial use permitted; `esmc_600m` (embedding size 1152) is Cambrian Non-Commercial only. Use `esmc_300m` for any commercial use.
+- **`model_checkpoint` selects the model size.** `esmc_300m` (the default) has embedding size 960 and `esmc_600m` has embedding size 1152. The two checkpoints carry different licenses (see Toolkit Notes), so `esmc_300m` is the choice for any commercial use.
 - **`repr_layer` selects which internal model layer the embedding is taken from.** The default `-1` uses the final layer; other values select earlier layers.
 - **Per-position scores are large.** Enabling `return_logits` adds an array of size (sequence length by 20) per sequence, which dominates runtime and memory for long inputs. Leave it set to `False` unless you need the per-position scores.
 
