@@ -25,7 +25,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from proto_tools.entities.complex import chain_label
+from proto_tools.entities.complex import Complex, chain_label
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -787,24 +787,19 @@ class RFdiffusion3Structure(BaseModel):
     the position of the originating spec in ``RFdiffusion3Input.design_specs``.
 
     Attributes:
-        structure (Structure): The designed 3D structure containing
-            atomic coordinates in PDB/CIF format.
-
-        sequence (list[str]): The designed amino acid sequences in single-letter
-            code, one entry per chain in the order chains appear in the emitted
-            PDB/CIF (which tracks the input contig).
-
-        metadata (dict[str, Any]): Additional metadata from RFdiffusion3 output,
-            including sampled contig, chain info, and any logged metrics.
+        structure (Structure): The designed 3D structure (PDB/CIF coordinates).
+        complex (Complex): Predictor-ready chains + per-chain sequences; feed
+            directly to a structure predictor.
+        metadata (dict[str, Any]): Additional RFdiffusion3 output metadata.
     """
 
     structure: Structure = Field(
         title="Designed Structure",
         description="The designed 3D structure",
     )
-    sequence: list[str] = Field(
-        title="Sequence",
-        description="Designed amino acid sequences, one entry per chain in emitted PDB/CIF order",
+    complex: Complex = Field(
+        title="Designed Complex",
+        description="Predictor-ready chains and per-chain sequences.",
     )
     metadata: dict[str, Any] = Field(
         default_factory=dict,
@@ -998,7 +993,7 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
               a list of ``RFdiffusion3Structure``s (one per generated design).
             - Each ``RFdiffusion3Structure`` includes:
                 - 3D coordinates (as Structure)
-                - Designed sequence
+                - Predictor-ready complex (as Complex)
                 - Metadata (sampled contig, chain info, etc.)
 
     See Also:
@@ -1012,7 +1007,7 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
         >>> result = run_rfdiffusion3(inputs, config)
         >>> bundle = result[0]  # one bundle per input spec
         >>> print(f"Spec {bundle.spec_key}: {len(bundle)} designs")
-        >>> print(f"First sequence (chain A): {bundle[0].sequence[0]}")
+        >>> print(f"First sequence (chain A): {bundle[0].complex.chains[0].sequence}")
 
     Note:
         - RFdiffusion3 generates both structure AND sequence
@@ -1063,7 +1058,7 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
         buckets[design_data["spec_key"]].append(
             RFdiffusion3Structure(
                 structure=structure,
-                sequence=design_data["sequence"],
+                complex=Complex.from_structure(structure),
                 metadata=design_data.get("metadata", {}),
             )
         )

@@ -383,7 +383,6 @@ def test_rfdiffusion3_output_chain_ids_canonicalized(monkeypatch):
             "designs": [
                 {
                     "structure_content": synthetic_cif(["A1", "A2", "A3"]),
-                    "sequence": ["G", "G", "G"],
                     "spec_key": "spec-0",
                     "design_index": 0,
                     "metadata": {},
@@ -396,7 +395,10 @@ def test_rfdiffusion3_output_chain_ids_canonicalized(monkeypatch):
         RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(length="40")]), RFdiffusion3Config()
     )
 
-    assert output.designed_structures[0].structures[0].structure.get_chain_ids() == ["A", "B", "C"]
+    design = output.designed_structures[0].structures[0]
+    assert design.structure.get_chain_ids() == ["A", "B", "C"]
+    # complex is the primary downstream interface — it must carry the canonicalized IDs too.
+    assert [c.id for c in design.complex.chains] == ["A", "B", "C"]
 
 
 def test_rfdiffusion3_standalone_failure_reports_full_subprocess_output(monkeypatch, tmp_path):
@@ -465,9 +467,9 @@ def test_rfdiffusion3_unconditional_design():
     assert len(bundle.structures) > 0
     first_design = bundle[0]
     assert first_design.structure is not None
-    # Per-chain sequence list: C2 symmetry → 2 chains of 40 residues each.
-    assert len(first_design.sequence) == 2
-    assert all(len(chain_seq) == 40 for chain_seq in first_design.sequence)
+    # C2 symmetry → 2 designed chains of 40 residues each.
+    assert len(first_design.complex.chains) == 2
+    assert all(len(c.sequence) == 40 for c in first_design.complex.chains)
 
 
 # ── Benchmark ─────────────────────────────────────────────────────────────────
@@ -495,6 +497,6 @@ def test_rfdiffusion3_design_benchmark(request: pytest.FixtureRequest) -> None:
     assert len(bundle.structures) == 8
     for design in bundle.structures:
         assert design.structure is not None
-        # Single-chain unconditional design → one entry in the per-chain sequence list.
-        assert len(design.sequence) == 1
-        assert len(design.sequence[0]) == 128
+        # Single-chain unconditional design → one designed chain of 128 residues.
+        assert len(design.complex.chains) == 1
+        assert len(design.complex.chains[0].sequence) == 128
