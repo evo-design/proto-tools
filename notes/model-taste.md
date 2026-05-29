@@ -448,11 +448,7 @@ Do not treat transcription-factor motif sprinkling as sufficient evidence of enh
 
 Additional regulatory model details:
 
-- Use AlphaGenome interval or raw-sequence prediction when the designed sequence
-  must be scored in genomic context, and variant/ISM scoring when the task is
-  naturally framed as edits relative to a reference. Choose requested outputs
-  and ontology terms deliberately; a broad all-track run can be expensive and
-  harder to interpret.
+- Use AlphaGenome interval or raw-sequence prediction when the designed sequence must be scored in genomic context, and variant/ISM scoring when the task is naturally framed as edits relative to a reference. Choose requested outputs and ontology terms deliberately: match the ontology term to the objective's cell type or tissue, since tracks are per-biosample.
 - Use Borzoi single-replicate predictions for iterative search and the ensemble
   for final uncertainty. Its long context and RNA-seq coverage objective make it
   more appropriate for transcript coverage and expression-shape questions than
