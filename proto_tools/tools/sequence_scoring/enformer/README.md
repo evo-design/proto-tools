@@ -1,226 +1,49 @@
-<a href="https://bio-pro.mintlify.app/tools/sequence-scoring/enformer"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/sequence-scoring/enformer"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # Enformer
 
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** Enformer uses Apache-2.0 for code and CC-BY-4.0 for model weights and may require explicit attribution when utilized. Please refer to the [code license](https://github.com/google-deepmind/deepmind-research/blob/master/LICENSE) and [model weights license](https://github.com/google-deepmind/deepmind-research/blob/master/enformer/README.md) for full terms.
 
 ## Overview
 
-Enformer is a transformer-based deep learning model that predicts gene expression and chromatin accessibility directly from a 196,608 bp DNA sequence. It uses [self-attention](https://en.wikipedia.org/wiki/Attention_(machine_learning)) to capture long-range regulatory interactions up to ~100 kb away, enabling accurate prediction of how distal enhancers, silencers, and other regulatory elements influence gene expression.
-
-- **Tool key**: `enformer-prediction`
-- **Model context**: 196,608 bp (fixed length, ~98 kb in each direction from center)
-- **Output resolution**: 896 bins x 128 bp per bin
-- **Species heads**: `human` (5,313 tracks), `mouse` (1,643 tracks)
-- **GPU required**: Yes
+[Enformer](https://github.com/google-deepmind/deepmind-research/tree/master/enformer) is a deep learning model that predicts [gene expression](https://en.wikipedia.org/wiki/Gene_expression) and chromatin activity directly from DNA sequence, developed by Google DeepMind and Calico Life Sciences. It reads a fixed 196,608 base-pair input window and predicts activity across thousands of genomic measurement tracks, summarized over 896 output bins of 128 base pairs each. This toolkit exposes Enformer through a single registered tool that returns the predicted track activity for one or more sequences.
 
 ## Background
 
-Gene expression is controlled by a complex interplay of promoters, [enhancers](https://en.wikipedia.org/wiki/Enhancer_(genetics)), [silencers](https://en.wikipedia.org/wiki/Silencer_(genetics)), [insulators](https://en.wikipedia.org/wiki/Insulator_(genetics)), and chromatin state. These regulatory elements can act over distances of tens to hundreds of kilobases. Traditional motif-based models capture local sequence features but miss long-range interactions.
+Enformer ([Avsec et al., 2021](https://doi.org/10.1038/s41592-021-01252-x)) is a neural network that predicts [gene expression](https://en.wikipedia.org/wiki/Gene_expression) and chromatin state from genomic DNA sequence. Its architecture combines convolutional layers with [transformer](https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)) self-attention, which allows the model to integrate the influence of distal [cis-regulatory elements](https://en.wikipedia.org/wiki/Cis-regulatory_element) such as [enhancers](https://en.wikipedia.org/wiki/Enhancer_(genetics)) located up to 100 kilobases away from a [promoter](https://en.wikipedia.org/wiki/Promoter_(genetics)). The published work reports that this long-range modeling substantially improves gene expression prediction accuracy relative to earlier convolutional models, and that it yields more accurate predictions of the effect of genetic variants on expression for both natural variants and saturation mutagenesis measured by reporter assays.
 
-Enformer addresses this by processing 196,608 bp of genomic context through a transformer architecture. The model was trained on 5,313 human and 1,643 mouse experimental tracks from [ENCODE](https://en.wikipedia.org/wiki/ENCODE) and Roadmap Epigenomics, covering:
-- **Gene expression**: [CAGE](https://en.wikipedia.org/wiki/Cap_analysis_of_gene_expression) (promoter-level transcription initiation)
-- **Chromatin accessibility**: [DNase-seq](https://en.wikipedia.org/wiki/DNase-Seq), [ATAC-seq](https://en.wikipedia.org/wiki/ATAC-seq)
-- **Histone modifications**: H3K4me3, H3K27ac, H3K36me3, H3K27me3, and others
-- **Transcription factor binding**: [ChIP-seq](https://en.wikipedia.org/wiki/ChIP_sequencing) for hundreds of TFs
+Enformer predicts activity across 896 output bins, each summarizing 128 base pairs, for a large panel of functional genomics assays. The human output head covers 5,313 tracks spanning [chromatin accessibility](https://en.wikipedia.org/wiki/DNase_I_hypersensitive_site), [transcription factor](https://en.wikipedia.org/wiki/Transcription_factor) binding, [histone modifications](https://en.wikipedia.org/wiki/Histone), and [CAGE](https://en.wikipedia.org/wiki/Cap_analysis_gene_expression) expression measurements, and the mouse output head covers 1,643 tracks. Because the model maps sequence directly to these signals, it can be used to compare the predicted regulatory activity of alternative alleles at the same locus, which is the basis for its use in interpreting noncoding genetic variation. The published analysis additionally shows that Enformer learns enhancer-promoter relationships directly from the input sequence.
 
-Each output track corresponds to a specific assay in a specific cell type or tissue. The 896 output bins (128 bp each) tile the central ~114 kb of the input window, providing spatial resolution of predicted regulatory activity.
+### Learning Resources
+
+- [Predicting gene expression with AI](https://deepmind.google/blog/predicting-gene-expression-with-ai/) (Google DeepMind). The announcement blog post introducing Enformer, its long-range modeling, and its use in interpreting genetic variants.
+- [Enformer model repository](https://github.com/google-deepmind/deepmind-research/tree/master/enformer) (Google DeepMind). Official Enformer code, model card, and usage guidance.
+- [enformer-pytorch](https://github.com/lucidrains/enformer-pytorch) (Phil Wang). The PyTorch implementation and pretrained weight loader that this toolkit uses to run the model.
 
 ## Tools
 
 ### Enformer Prediction (`enformer-prediction`)
 
-Predict regulatory activity with Enformer.
+Predicts regulatory track activity for one or more DNA sequences. The tool accepts input in two forms. In exact-window form, each sequence is exactly 196,608 base pairs, the full Enformer model context, and is passed to the model directly. In target-range form, each sequence is longer than the model context and is paired with a target range, and the tool extracts the 196,608 base-pair context window that keeps the requested range inside the model's output bins. Each result carries the predicted activity matrix of shape 896 bins by the number of selected tracks, together with the coordinates that map the output bins back onto the source sequence.
 
-## Execution Modes
+#### Applications
 
-Enformer requires GPU acceleration for inference.
+This tool is appropriate for analyses that relate noncoding DNA sequence to predicted regulatory activity. Representative applications include predicting the effect of a candidate variant by comparing the activity of the reference and alternate sequences, prioritizing noncoding variants for follow-up by the magnitude of their predicted regulatory change, screening designed or synthetic regulatory sequences for predicted promoter or enhancer activity, and surveying the predicted chromatin and expression landscape across a genomic locus of interest.
 
-| Mode | Backend | Setup |
-|------|---------|-------|
-| **Local venv** | Local CUDA GPU | Requires NVIDIA GPU with CUDA |
+#### Usage Tips
 
-## How It Works
+- **Each input sequence must provide a full 196,608 base-pair model context.** A sequence supplied in exact-window form must be exactly this length. A longer sequence must be paired with a `target_range`, and the tool then extracts the model context window around that range. The tool does not pad missing context, so a sequence shorter than the model context without a target range is rejected.
+- **`output_tracks` selects which of the model's tracks are returned and defaults to the single track at index 0.** The human head exposes 5,313 tracks and the mouse head exposes 1,643 tracks. Selecting only the tracks of interest, rather than all of them, keeps the returned activity matrix small and the analysis focused on the relevant assays.
+- **`species` selects the human or mouse output head and defaults to human.** The track index meanings differ between the two heads, so the `output_tracks` indices should be chosen to match the selected species.
+- **`batch_size` controls how many sequences are processed together on the GPU and defaults to 1.** Larger values increase throughput when many sequences are scored in one call, subject to the available GPU memory.
+- **The output covers a 114,688 base-pair central window, narrower than the input context.** The 896 output bins span the central portion of the input, and the per-result `output_start` and `output_end` coordinates report exactly which part of the source sequence the bins cover. A feature of interest must fall within this central window to receive a prediction.
 
-1. **Input**: One or more 196,608 bp model-context sequences, or longer source sequences with `target_ranges`
-2. **One-hot encoding**: The sequence is converted to a 4-channel (A, C, G, T) binary representation; N bases are encoded as all zeros
-3. **Convolutional stem**: Initial layers downsample the sequence by 2x, producing a 98,304-length feature map
-4. **Transformer tower**: 11 transformer blocks with attention capture long-range dependencies across the sequence
-5. **Pointwise heads**: Species-specific output heads project features to track predictions
-6. **Output**: A [896, num_tracks] matrix of predicted signal values for the requested tracks
+## Toolkit Notes
 
-The central 114,688 bp of the input maps to the 896 output bins. The flanking sequence on each side (~41 kb) provides context but does not have direct output bins.
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-## Input Parameters
+These apply to every Enformer tool in this toolkit (`enformer-prediction`).
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `sequences` | `List[str]` | Yes | DNA source sequence(s). Without `target_ranges`, each sequence must be exactly 196,608 bp. With `target_ranges`, sequences may be longer and must contain enough context for a full Enformer input window. Only A, T, C, G, N are allowed. |
-| `target_ranges` | `List[SequenceTargetRange]` | No | Sequence-relative target range(s) to keep inside the model output window. Each range has `start` (0-based inclusive) and `end` (0-based exclusive). A single range is auto-wrapped into a list. |
-
-If `target_ranges` is omitted, the provided sequence is the exact model input. If `target_ranges` is provided, the tool extracts a 196,608 bp model input window from each source sequence. The returned result reports where that model input window and the model output window landed in source-sequence coordinates.
-
-Target-range extraction is start-aligned, not midpoint-centered: when possible, bin 0 starts at `target_ranges[i].start`. Near the right edge, the context window shifts left so the full target range still fits.
-
-## Configuration
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `output_tracks` | `List[int]` | `[0]` | Indices of Enformer output tracks to extract (5313 human / 1643 mouse) |
-| `species` | `"human"` or `"mouse"` | `"human"` | Species output head to use |
-| `batch_size` | `int` | `1` | Number of sequences to process simultaneously on GPU |
-| `device` | `str` | `"cuda"` | Inference device |
-| `verbose` | `bool` | `False` | Whether to log status messages during execution |
-
-### Track Selection Guide
-
-Enformer has thousands of output tracks. You must specify which tracks to extract via `output_tracks`. Common track categories for the human head:
-
-| Track Range | Assay Type | Example Use Case |
-|-------------|-----------|-----------------|
-| 0-674 | CAGE (gene expression) | Promoter activity across tissues |
-| 675-4674 | DNase / ATAC (accessibility) | Open chromatin scoring |
-| 4675-5312 | Histone ChIP-seq | Enhancer marks (H3K27ac), repressive marks (H3K27me3) |
-
-Consult the [Enformer track table](https://github.com/google-deepmind/deepmind-research/tree/master/enformer) for the full mapping of track index to assay and cell type.
-
-### Sweep Priorities
-
-When using Enformer in optimization loops, prioritize sweeping:
-
-1. **`output_tracks`**: The most important parameter. Choose tracks matching your biological objective (e.g., CAGE tracks for expression, DNase tracks for accessibility).
-2. **`species`**: Use `"human"` for human regulatory elements, `"mouse"` for mouse. Cross-species predictions are not supported.
-
-## Output Specification
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `results` | `List[EnformerPredictionResult]` | Per-sequence prediction results |
-| `output_tracks` | `List[int]` | Track indices that were extracted |
-| `species` | `str` | Species head used (`"human"` or `"mouse"`) |
-
-Each `EnformerPredictionResult` contains `sequence`, `sequence_length`, coordinate metadata, and `prediction` with shape `[896, num_tracks]`.
-
-The `prediction` matrix is indexed as `prediction[bin][track]`, where:
-- `bin` ranges from 0 to 895 (896 spatial bins, each covering 128 bp)
-- `track` ranges from 0 to `len(output_tracks) - 1`
-
-Coordinate metadata is relative to the input `sequence`:
-
-| Field | Meaning |
-|-------|---------|
-| `context_start`, `context_end` | The 196,608 bp model input window that was sent to Enformer |
-| `output_start`, `output_end` | The source-sequence span covered by Enformer output bins |
-| `output_resolution` | Base pairs per output bin (`128`) |
-| `target_start`, `target_end` | The requested `target_ranges` entry, if one was provided |
-
-## Interpreting Results
-
-Enformer outputs are in **log(1 + x) transformed counts** space, matching the training targets. Higher values indicate stronger predicted signal.
-
-**For variant effect analysis**, compare predictions between reference and alternate sequences:
-- Compute the log2 fold change: `log2(alt_pred / ref_pred)` per bin and track
-- Focus on bins near the variant position (center of the window)
-- A fold change > 0.5 or < -0.5 in relevant tracks suggests a functional effect
-
-**For promoter/enhancer design**, maximize the predicted signal at the central bins for expression-related tracks (CAGE) or accessibility tracks (DNase/ATAC).
-
-**Spatial interpretation**: Bin index maps to source-sequence coordinates as:
-- Source coordinate = `output_start + bin_index * output_resolution`
-- With exact-window inputs, `output_start` is 40,960 and the center of the input (position 98,304) corresponds approximately to bin 448
-
-## Quick Start Examples
-
-**Basic prediction with CAGE tracks:**
-```python
-from proto_tools.tools.sequence_scoring.enformer import (
-    EnformerInput,
-    EnformerConfig,
-    run_enformer,
-)
-
-# 196,608 bp sequence (use real genomic sequence in practice)
-sequence = "ATCG" * 49152  # 196,608 bp
-
-inputs = EnformerInput(sequences=[sequence])
-config = EnformerConfig(
-    output_tracks=[0, 1, 2],  # First 3 CAGE tracks
-    species="human",
-)
-
-result = run_enformer(inputs, config)
-prediction = result.results[0].prediction
-print(f"Output shape: {len(prediction)} x {len(prediction[0])}")
-# Output shape: 896 x 3
-```
-
-**Variant effect prediction (reference vs. alternate):**
-```python
-import copy
-
-# Assume ref_seq is a 196,608 bp reference sequence
-ref_seq = "A" * 98304 + "C" + "T" * 98303  # Simplified example
-
-# Create alternate sequence with a single nucleotide change at center
-alt_seq = ref_seq[:98304] + "G" + ref_seq[98305:]
-
-config = EnformerConfig(output_tracks=[0, 1, 2], species="human")
-
-ref_result = run_enformer(EnformerInput(sequences=[ref_seq]), config)
-alt_result = run_enformer(EnformerInput(sequences=[alt_seq]), config)
-
-# Compare central bins (around position 98,304 -> bin ~448)
-import math
-center_bin = 448
-for track_idx in range(3):
-    ref_val = ref_result.results[0].prediction[center_bin][track_idx]
-    alt_val = alt_result.results[0].prediction[center_bin][track_idx]
-    if ref_val > 0 and alt_val > 0:
-        lfc = math.log2(alt_val / ref_val)
-        print(f"Track {track_idx}: log2FC = {lfc:.3f}")
-```
-
-**Mouse species head:**
-```python
-config = EnformerConfig(
-    output_tracks=[0, 1, 2, 3, 4],
-    species="mouse",
-)
-
-result = run_enformer(EnformerInput(sequences=[sequence]), config)
-prediction = result.results[0].prediction
-print(f"Mouse prediction shape: {len(prediction)} x {len(prediction[0])}")
-```
-
-**Export results:**
-```python
-result = run_enformer(inputs, config)
-result.export("enformer_output", file_format="json")
-```
-
-## Best Practices & Gotchas
-
-- **Exact-window inputs must be 196,608 bp**: If you do not pass `target_ranges`, each input sequence is treated as the exact Enformer model input and must be exactly 196,608 bp.
-- **Use `target_ranges` for longer source sequences**: When your sequence includes extra flanking context, provide one sequence-relative target range per sequence. Enformer will extract the fixed model input window and report where the context and output windows landed.
-- **Center your region of interest**: Enformer's predictions are most accurate near the center of the window. Place your gene, variant, or regulatory element at position ~98,304.
-- **N characters reduce accuracy**: While N is accepted, regions with many Ns (e.g., assembly gaps) will have unreliable predictions. Minimize N content.
-- **Track indices are 0-based**: `output_tracks=[0]` extracts the first track, not a track labeled "0" in external databases.
-- **Predictions are not absolute expression values**: Outputs are in model-specific units. Use them for relative comparisons (e.g., variant vs. reference, design A vs. design B), not as direct RPM or TPM estimates.
-- **GPU memory**: A single inference uses ~4-6 GB of GPU memory. Increase `batch_size` only when your GPU has enough memory for multiple 196,608 bp model inputs.
-
-## References
-
-- Avsec, Z., Agarwal, V., Visentin, D. et al. "Effective gene expression prediction from sequence by integrating long-range interactions." *Nature Methods* 18, 1196-1203 (2021). DOI: [10.1038/s41592-021-01252-x](https://doi.org/10.1038/s41592-021-01252-x)
-- GitHub: [google-deepmind/deepmind-research/enformer](https://github.com/google-deepmind/deepmind-research/tree/master/enformer)
-
-## Related Tools
-
-**Used together:**
-- `borzoi-prediction`: Compare Enformer and Borzoi predictions for cross-validation of regulatory effects
-- `evo2-sample`: Generate candidate sequences, then score them with Enformer
-
-**Alternatives:**
-- `borzoi-prediction`: Longer context (524 kb), higher resolution, trained on RNA-seq. Preferred for most new analyses.
-- `alphagenome`: Google DeepMind's next-generation genomics model
-- `splice-transformer`: Specialized for splice site prediction rather than general regulatory activity
+- **Enformer runs on a GPU and downloads its published weights on first use.** The model parameters are retrieved from the hosted `enformer-official-rough` checkpoint the first time the tool runs and are reused on subsequent runs. A CUDA-capable GPU is recommended because the 196,608 base-pair context makes CPU inference slow.
+- **Output coordinates are 0-based with exclusive ends, following the genomics interval convention rather than the 1-based residue numbering used elsewhere in proto-tools.** The `context_start`, `context_end`, `output_start`, and `output_end` fields locate the model window and the output-bin span within the source sequence using this convention.
