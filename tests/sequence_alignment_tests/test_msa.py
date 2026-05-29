@@ -1,4 +1,4 @@
-"""tests/sequence_alignment_tests/test_msas.py.
+"""tests/sequence_alignment_tests/test_msa.py.
 
 Tests for MSA class.
 """
