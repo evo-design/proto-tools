@@ -127,43 +127,21 @@ Use multiple final validators when final ranking depends on complex placement, l
 
 ## 5.1 Structure Predictor Selection Details
 
-Use AlphaFold2 when the problem is protein-only and the target validator,
-reference workflow, or local tooling is AF2-like. Use AF2-multimer for
-protein-protein complexes and inspect interface metrics rather than monomer confidence. Use `alphafold2-binder`
-as a differentiable loss or scoring component for a custom optimization loop; it
-is not by itself a complete candidate-generation campaign.
+Use AlphaFold2 when the problem is protein-only and the target validator, reference workflow, or local tooling is AF2-like. Use AF2-multimer for protein-protein complexes and inspect interface metrics rather than monomer confidence. Use `alphafold2-binder` as a differentiable loss or scoring component for a custom optimization loop; it is not by itself a complete candidate-generation campaign.
 
-Use AlphaFold3 when broad biomolecular cofolding is allowed and accessible,
-especially for complexes with DNA, RNA, ligands, modified residues, or multiple
-entity types. Treat gated weights, licensing, runtime, and input-format support
-as practical constraints that must be checked before planning around it.
+Use AlphaFold3 when broad biomolecular cofolding is allowed and accessible, especially for complexes with DNA, RNA, ligands, modified residues, or multiple entity types. Treat gated weights, licensing, runtime, and input-format support as practical constraints that must be checked before planning around it.
 
-Use Boltz-2 when an open AlphaFold3-style predictor is needed for protein, DNA,
-RNA, or ligand complexes. Prefer it for final validation over monomer-only tools
-when interface placement or ligand pose matters. In proto-tools, Boltz-2 exposes structure prediction and confidence metrics, and recent versions also expose `boltz2-affinity` for protein-small-molecule ligand affinity. Use affinity metrics only for ligand binders, not protein-protein binders; lower `affinity_pred_value` means stronger predicted binding, while `affinity_probability_binary` is a separate binder-probability signal. Increase diffusion samples, sampling steps, or recycling for final validation when compute allows.
+Use Boltz-2 when an open AlphaFold3-style predictor is needed for protein, DNA, RNA, or ligand complexes. Prefer it for final validation over monomer-only tools when interface placement or ligand pose matters. In proto-tools, Boltz-2 exposes structure prediction and confidence metrics, and recent versions also expose `boltz2-affinity` for protein-small-molecule ligand affinity. Use affinity metrics only for ligand binders, not protein-protein binders; lower `affinity_pred_value` means stronger predicted binding, while `affinity_probability_binary` is a separate binder-probability signal. Increase diffusion samples, sampling steps, or recycling for final validation when compute allows.
 
-Use Chai-1 when protein-ligand or protein-glycan cofolding is central and the
-local wrapper supports the requested entity types. Chai uses ESM embeddings and
-optional MSAs and is useful as an independent complex validator. In proto-tools,
-verify whether nucleic acids or modifications are supported by the wrapper before
-selecting it for DNA/RNA complexes.
+Use Chai-1 when protein-ligand or protein-glycan cofolding is central and the local wrapper supports the requested entity types. Chai uses ESM embeddings and optional MSAs and is useful as an independent complex validator. In proto-tools, verify whether nucleic acids or modifications are supported by the wrapper before selecting it for DNA/RNA complexes.
 
-Use Protenix when open AlphaFold3-like prediction is needed for proteins, DNA,
-RNA, ligands, or modified residues. Prefer base/full variants for final ranking
-when resources permit; mini or tiny variants are useful for cheaper triage and
-large sweeps but should not be treated as equivalent final evidence.
+Use Protenix when open AlphaFold3-like prediction is needed for proteins, DNA, RNA, ligands, or modified residues. Prefer base/full variants for final ranking when resources permit; mini or tiny variants are useful for cheaper triage and large sweeps but should not be treated as equivalent final evidence.
 
 Use ESMFold for fast MSA-free protein folding, especially de novo sequences or large early pools. Use ESMFold2 for fast and accurate all-atom complex prediction across proteins, DNA, RNA, and ligands, including interaction modeling and antibody-antigen complex prediction; use its single-sequence mode for high-throughput screens and its MSA mode for harder targets. Do not use ESMFold alone as final evidence for structure-sensitive decisions; ESMFold2 can be one final oracle, but final selections are stronger when confirmed by an independent allowed predictor or structure metric.
 
-Use ViennaRNA for RNA secondary-structure and thermodynamic checks, not for
-protein-like tertiary structure or ligand-bound RNA validation. Prefer ensemble
-metrics, base-pair probabilities, and alternative-fold penalties over MFE alone.
+Use ViennaRNA for RNA secondary-structure and thermodynamic checks, not for protein-like tertiary structure or ligand-bound RNA validation. Prefer ensemble metrics, base-pair probabilities, and alternative-fold penalties over MFE alone.
 
-Use structure metrics, DSSP, pDockQ2, ipSAE, PyRosetta, TM-align, US-align, and
-PyMOL RMSD as interpreters of predicted or designed structures. These tools do
-not replace structure prediction; they answer more specific questions such as
-secondary structure content, compactness, interface confidence, pairwise
-alignment, motif RMSD, clashes, and geometric plausibility.
+Use structure metrics, DSSP, pDockQ2, ipSAE, PyRosetta, TM-align, US-align, and PyMOL RMSD as interpreters of predicted or designed structures. These tools do not replace structure prediction; they answer more specific questions such as secondary structure content, compactness, interface confidence, pairwise alignment, motif RMSD, clashes, and geometric plausibility.
 
 ---
 
@@ -191,55 +169,25 @@ Do not replace structural or functional validators with sequence priors when the
 
 ## 6.1 Sequence Prior And Inverse-Folding Model Details
 
-Use ProteinMPNN for backbone-conditioned protein sequence design. Set fixed
-positions for catalytic residues, binding motifs, framework residues, or other
-user-specified constraints. Use soluble weights for water-soluble proteins and
-higher-noise or higher-temperature sampling when diversity is more important
-than native-like recovery. Score with ProteinMPNN as a compatibility signal, not
-as a substitute for refolding or functional validation.
+Use ProteinMPNN for backbone-conditioned protein sequence design. Set fixed positions for catalytic residues, binding motifs, framework residues, or other user-specified constraints. Use soluble weights for water-soluble proteins and higher-noise or higher-temperature sampling when diversity is more important than native-like recovery. Score with ProteinMPNN as a compatibility signal, not as a substitute for refolding or functional validation.
 
-Use LigandMPNN when the backbone is embedded in non-protein context. It is the
-right inverse-folding choice for enzyme active sites, metal coordination,
-protein-DNA/RNA interfaces, cofactor pockets, and ligand-contacting residues. It
-requires the relevant non-protein atoms to be present in the input structure; if
-they are absent, it cannot infer the missing chemical context.
+Use LigandMPNN when the backbone is embedded in non-protein context. It is the right inverse-folding choice for enzyme active sites, metal coordination, protein-DNA/RNA interfaces, cofactor pockets, and ligand-contacting residues. It requires the relevant non-protein atoms to be present in the input structure; if they are absent, it cannot infer the missing chemical context.
 
-Use ESM-IF1 for inverse folding or sequence scoring when a lightweight
-structure-conditioned sequence model is useful, especially for rapid comparison
-or when its handling of complexes/interfaces fits the input. Prefer ProteinMPNN
-or LigandMPNN when their conditioning more directly matches the design context.
+Use ESM-IF1 for inverse folding or sequence scoring when a lightweight structure-conditioned sequence model is useful, especially for rapid comparison or when its handling of complexes/interfaces fits the input. Prefer ProteinMPNN or LigandMPNN when their conditioning more directly matches the design context.
 
-Use FAMPNN when side-chain packing, all-atom mutation scoring, or mutation scans
-are central to the question. It is useful for local redesign and mutation
-triage, but final claims still need refolding, function, interface, or
-property-specific validation.
+Use FAMPNN when side-chain packing, all-atom mutation scoring, or mutation scans are central to the question. It is useful for local redesign and mutation triage, but final claims still need refolding, function, interface, or property-specific validation.
 
-Use ESM2 for embeddings, masked local mutation proposals, pseudo-perplexity,
-and differentiable naturalness priors. It is fast and broadly useful for
-protein sequence plausibility, but it is not a fold, binding, or activity
-validator.
+Use ESM2 for embeddings, masked local mutation proposals, pseudo-perplexity, and differentiable naturalness priors. It is fast and broadly useful for protein sequence plausibility, but it is not a fold, binding, or activity validator.
 
-Use ESM3 when masked generative editing or joint sequence/structure/function
-pretraining is useful and the gated checkpoint is available. The local
-proto-tools wrapper exposes sequence-track operations, so do not assume the full
-closed ESM3 model or structure/function-track generation is available.
+Use ESM3 when masked generative editing or joint sequence/structure/function pretraining is useful and the gated checkpoint is available. The local proto-tools wrapper exposes sequence-track operations, so do not assume the full closed ESM3 model or structure/function-track generation is available.
 
-Use ESMC for embeddings and representation tasks rather than generation. It is
-appropriate for clustering, retrieval, supervised downstream models, or
-similarity features, not as a standalone design generator.
+Use ESMC for embeddings and representation tasks rather than generation. It is appropriate for clustering, retrieval, supervised downstream models, or similarity features, not as a standalone design generator.
 
-Use ProGen-family causal protein models for protein sequence generation,
-completion, or likelihood-style priors when an autoregressive prior is useful.
-Validate generated proteins with structure and task-specific validators.
+Use ProGen-family causal protein models for protein sequence generation, completion, or likelihood-style priors when an autoregressive prior is useful. Validate generated proteins with structure and task-specific validators.
 
-Use AbLang only for antibody-like sequences. It is useful for antibody
-embeddings, masked restoration, pseudo-log-likelihood, and gradient-based
-naturalness pressure. Prefer paired heavy/light models when both chains are
-available; do not use AbLang as evidence that an antibody binds the antigen.
+Use AbLang only for antibody-like sequences. It is useful for antibody embeddings, masked restoration, pseudo-log-likelihood, and gradient-based naturalness pressure. Prefer paired heavy/light models when both chains are available; do not use AbLang as evidence that an antibody binds the antigen.
 
-Use AlphaMissense DB for interpreting human missense variant pathogenicity or
-variant-effect context, not for de novo protein design, non-human proteins,
-binding validation, or enzyme activity validation.
+Use AlphaMissense DB for interpreting human missense variant pathogenicity or variant-effect context, not for de novo protein design, non-human proteins, binding validation, or enzyme activity validation.
 
 ---
 
@@ -449,27 +397,12 @@ Do not treat transcription-factor motif sprinkling as sufficient evidence of enh
 Additional regulatory model details:
 
 - Use AlphaGenome interval or raw-sequence prediction when the designed sequence must be scored in genomic context, and variant/ISM scoring when the task is naturally framed as edits relative to a reference. Choose requested outputs and ontology terms deliberately: match the ontology term to the objective's cell type or tissue, since tracks are per-biosample.
-- Use Borzoi single-replicate predictions for iterative search and the ensemble
-  for final uncertainty. Its long context and RNA-seq coverage objective make it
-  more appropriate for transcript coverage and expression-shape questions than
-  for isolated short motif design.
-- Use Enformer when the desired assay tracks and cell type are represented in
-  its track table and its context window is sufficient. Its output is track- and
-  bin-specific; choose tracks before optimization rather than averaging unrelated
-  assays.
-- Use Malinois for MPRA-like regulatory activity or gradient-guided short
-  regulatory sequence optimization when its training objective matches the
-  assay. Do not use it as a generic long-context enhancer, splicing, or RNA-seq
-  validator.
-- Use Puffin for promoter/TSS-proximal prediction tasks when the objective is
-  promoter architecture or transcription-initiation behavior. Do not use it as a
-  substitute for distal enhancer, splice, or transcript-coverage predictors.
-- Use Segmasker as a deterministic low-complexity and repeat guard. It is a
-  quality filter, not a predictor of regulatory function.
-- Use Ensembl, NCBI, UniProt, AlphaFold DB, PDB, PubChem, CCD lookup, and
-  sequence-fetch tools to ground starting materials and entity identities.
-  Retrieval tools establish provenance and context; they are not validators of
-  designed function.
+- Use Borzoi single-replicate predictions for iterative search and the ensemble for final uncertainty. Its long context and RNA-seq coverage objective make it more appropriate for transcript coverage and expression-shape questions than for isolated short motif design.
+- Use Enformer when the desired assay tracks and cell type are represented in its track table and its context window is sufficient. Its output is track- and bin-specific; choose tracks before optimization rather than averaging unrelated assays.
+- Use Malinois for MPRA-like regulatory activity or gradient-guided short regulatory sequence optimization when its training objective matches the assay. Do not use it as a generic long-context enhancer, splicing, or RNA-seq validator.
+- Use Puffin for promoter/TSS-proximal prediction tasks when the objective is promoter architecture or transcription-initiation behavior. Do not use it as a substitute for distal enhancer, splice, or transcript-coverage predictors.
+- Use Segmasker as a deterministic low-complexity and repeat guard. It is a quality filter, not a predictor of regulatory function.
+- Use Ensembl, NCBI, UniProt, AlphaFold DB, PDB, PubChem, CCD lookup, and sequence-fetch tools to ground starting materials and entity identities. Retrieval tools establish provenance and context; they are not validators of designed function.
 
 ---
 
@@ -680,19 +613,11 @@ If a named database or tool is unavailable, record the gap and use the closest a
 Do not claim novelty from sampling seed, generator name, low language-model likelihood, low training-set likelihood, or absence of an obvious motif.
 
 
-Use ColabFold search when MSA generation is the bottleneck for AlphaFold-style
-protein prediction. Cache and reuse MSAs when many variants share a scaffold or
-family context, and do not confuse MSA depth with validation of the designed
-function.
+Use ColabFold search when MSA generation is the bottleneck for AlphaFold-style protein prediction. Cache and reuse MSAs when many variants share a scaffold or family context, and do not confuse MSA depth with validation of the designed function.
 
-Use MAFFT for family or panel alignment, conserved-position analysis, and
-formatting homologous sequences before downstream scoring. It is not a novelty
-search tool by itself.
+Use MAFFT for family or panel alignment, conserved-position analysis, and formatting homologous sequences before downstream scoring. It is not a novelty search tool by itself.
 
-Use FoldMason when structural multiple sequence alignment is needed across
-related structures or designed folds. It helps compare structural families but
-should not replace explicit pairwise novelty thresholds when a task specifies
-BLAST/MMseqs/Foldseek/TM-score criteria.
+Use FoldMason when structural multiple sequence alignment is needed across related structures or designed folds. It helps compare structural families but should not replace explicit pairwise novelty thresholds when a task specifies BLAST/MMseqs/Foldseek/TM-score criteria.
 
 ---
 
@@ -962,58 +887,27 @@ The remedy is general:
 
 ## 38. Source Anchors
 
-This guidance is based on proto-tools local docs and the following primary or
-official sources:
+This guidance is based on proto-tools local docs and the following primary or official sources:
 
-- AlphaFold3: ["Accurate structure prediction of biomolecular interactions with
-  AlphaFold 3"](https://www.nature.com/articles/s41586-024-07487-w), Nature
-  2024.
-- Boltz-2: ["Boltz-2: Towards Accurate and Efficient Binding Affinity
-  Prediction"](https://pmc.ncbi.nlm.nih.gov/articles/PMC12262699/) and the
-  [official Boltz-2 overview](https://boltz.bio/boltz2).
-- Chai-1: [Chai-1 technical report](https://chaiassets.com/chai-1/paper/technical_report_v1.pdf)
-  and the official `chai-lab` repository.
-- Protenix: [ByteDance Protenix paper](https://doi.org/10.1101/2025.01.08.631967)
-  and official repository.
+- AlphaFold3: ["Accurate structure prediction of biomolecular interactions with AlphaFold 3"](https://www.nature.com/articles/s41586-024-07487-w), Nature 2024.
+- Boltz-2: ["Boltz-2: Towards Accurate and Efficient Binding Affinity Prediction"](https://pmc.ncbi.nlm.nih.gov/articles/PMC12262699/) and the [official Boltz-2 overview](https://boltz.bio/boltz2).
+- Chai-1: [Chai-1 technical report](https://chaiassets.com/chai-1/paper/technical_report_v1.pdf) and the official `chai-lab` repository.
+- Protenix: [ByteDance Protenix paper](https://doi.org/10.1101/2025.01.08.631967) and official repository.
 - ESMFold2: Biohub ESMFold2 local tool documentation and model card.
-- ESMFold: ["Evolutionary-scale prediction of atomic-level protein structure
-  with a language model"](https://doi.org/10.1126/science.ade2574), Science
-  2023.
-- ESM3: [EvolutionaryScale ESM3 release materials](https://www.evolutionaryscale.ai/blog/esm3-release)
-  and Science 2025 paper.
-- RFdiffusion: ["De novo design of protein structure and function with
-  RFdiffusion"](https://www.nature.com/articles/s41586-023-06415-8), Nature
-  2023.
-- BindCraft: ["One-shot design of functional protein binders with
-  BindCraft"](https://www.nature.com/articles/s41586-025-09429-6), Nature
-  2025.
-- Germinal: ["Efficient generation of epitope-targeted de novo antibodies with
-  Germinal"](https://pmc.ncbi.nlm.nih.gov/articles/PMC12485712/), 2025.
-- ProteinMPNN: ["Robust deep learning-based protein sequence design using
-  ProteinMPNN"](https://doi.org/10.1126/science.add2187), Science 2022.
-- LigandMPNN: ["Atomic context-conditioned protein sequence design using
-  LigandMPNN"](https://pmc.ncbi.nlm.nih.gov/articles/PMC11978504/), Nature
-  Methods 2025.
-- AlphaGenome: [Google DeepMind AlphaGenome materials](https://deepmind.google/discover/blog/alphagenome-ai-for-better-understanding-the-genome/)
-  and ["Advancing regulatory variant effect prediction with
-  AlphaGenome"](https://www.nature.com/articles/s41586-025-10014-0), Nature
-  2026.
-- Borzoi: ["Predicting RNA-seq coverage from DNA sequence as a unifying model
-  of gene regulation"](https://pmc.ncbi.nlm.nih.gov/articles/PMC11985352/),
-  2025.
-- Enformer: ["Effective gene expression prediction from sequence by integrating
-  long-range interactions"](https://www.nature.com/articles/s41592-021-01252-x),
-  Nature Methods 2021.
+- ESMFold: ["Evolutionary-scale prediction of atomic-level protein structure with a language model"](https://doi.org/10.1126/science.ade2574), Science 2023.
+- ESM3: [EvolutionaryScale ESM3 release materials](https://www.evolutionaryscale.ai/blog/esm3-release) and Science 2025 paper.
+- RFdiffusion: ["De novo design of protein structure and function with RFdiffusion"](https://www.nature.com/articles/s41586-023-06415-8), Nature 2023.
+- BindCraft: ["One-shot design of functional protein binders with BindCraft"](https://www.nature.com/articles/s41586-025-09429-6), Nature 2025.
+- Germinal: ["Efficient generation of epitope-targeted de novo antibodies with Germinal"](https://pmc.ncbi.nlm.nih.gov/articles/PMC12485712/), 2025.
+- ProteinMPNN: ["Robust deep learning-based protein sequence design using ProteinMPNN"](https://doi.org/10.1126/science.add2187), Science 2022.
+- LigandMPNN: ["Atomic context-conditioned protein sequence design using LigandMPNN"](https://pmc.ncbi.nlm.nih.gov/articles/PMC11978504/), Nature Methods 2025.
+- AlphaGenome: [Google DeepMind AlphaGenome materials](https://deepmind.google/discover/blog/alphagenome-ai-for-better-understanding-the-genome/) and ["Advancing regulatory variant effect prediction with AlphaGenome"](https://www.nature.com/articles/s41586-025-10014-0), Nature 2026.
+- Borzoi: ["Predicting RNA-seq coverage from DNA sequence as a unifying model of gene regulation"](https://pmc.ncbi.nlm.nih.gov/articles/PMC11985352/), 2025.
+- Enformer: ["Effective gene expression prediction from sequence by integrating long-range interactions"](https://www.nature.com/articles/s41592-021-01252-x), Nature Methods 2021.
 - SpliceAI: ["Predicting splicing from primary sequence with deep learning"](https://doi.org/10.1016/j.cell.2018.12.015), Cell 2019, plus local `spliceai-predict` and `spliceai-score` docs.
 - Pangolin: ["Predicting RNA splicing from DNA sequence using Pangolin"](https://doi.org/10.1186/s13059-022-02664-4), Genome Biology 2022, plus local `pangolin-predict` and `pangolin-score-variants` docs.
-- SpliceTransformer: ["SpliceTransformer predicts tissue-specific splicing
-  linked to human diseases"](https://pmc.ncbi.nlm.nih.gov/articles/PMC11500173/),
-  2024.
-- Foldseek: ["Fast and accurate protein structure search with
-  Foldseek"](https://www.nature.com/articles/s41587-023-01773-0), Nature
-  Biotechnology 2023.
-- MMseqs2: ["MMseqs2 enables sensitive protein sequence searching for the
-  analysis of massive data sets"](https://www.nature.com/articles/nbt.3988),
-  Nature Biotechnology 2017.
+- SpliceTransformer: ["SpliceTransformer predicts tissue-specific splicing linked to human diseases"](https://pmc.ncbi.nlm.nih.gov/articles/PMC11500173/), 2024.
+- Foldseek: ["Fast and accurate protein structure search with Foldseek"](https://www.nature.com/articles/s41587-023-01773-0), Nature Biotechnology 2023.
+- MMseqs2: ["MMseqs2 enables sensitive protein sequence searching for the analysis of massive data sets"](https://www.nature.com/articles/nbt.3988), Nature Biotechnology 2017.
 
 When available, prefer local tool documentation, task-matched validation studies, and the exact tools exposed in the runtime over generic model reputation.
