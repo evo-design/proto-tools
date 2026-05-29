@@ -16,6 +16,7 @@ from proto_tools.tools.structure_design import (
     RFdiffusion3Input,
     run_rfdiffusion3,
 )
+from tests._structure_fixtures import synthetic_cif
 from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -396,6 +397,36 @@ def test_rfdiffusion3_dispatch_operation_is_design(monkeypatch):
     run_rfdiffusion3(RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(length="40")]), RFdiffusion3Config())
 
     assert captured["operation"] == "design"
+
+
+def test_rfdiffusion3_output_chain_ids_canonicalized(monkeypatch):
+    """Symmetric outputs carry transformation-suffixed chain IDs; normalize to positional.
+
+    rfd3 suffixes chain IDs with the transformation index for multi-transformation
+    (symmetric) designs (``A1, A2, A3`` for a C3 trimer); the wrapper remaps these
+    to positional labels by emission order.
+    """
+    from proto_tools.tools.structure_design.rfdiffusion3 import rfdiffusion3_sample as mod
+
+    def fake(tool_id, input_data, **kw):
+        return {
+            "designs": [
+                {
+                    "structure_content": synthetic_cif(["A1", "A2", "A3"]),
+                    "sequence": ["G", "G", "G"],
+                    "spec_key": "spec-0",
+                    "design_index": 0,
+                    "metadata": {},
+                }
+            ]
+        }
+
+    monkeypatch.setattr(mod.ToolInstance, "dispatch", fake)
+    output = run_rfdiffusion3(
+        RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(length="40")]), RFdiffusion3Config()
+    )
+
+    assert output.designed_structures[0].structures[0].structure.get_chain_ids() == ["A", "B", "C"]
 
 
 def test_rfdiffusion3_standalone_failure_reports_full_subprocess_output(monkeypatch, tmp_path):
