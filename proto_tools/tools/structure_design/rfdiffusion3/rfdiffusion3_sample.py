@@ -25,6 +25,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from proto_tools.entities.complex import chain_label
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -938,6 +939,20 @@ def example_input() -> Any:
     return RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(length="100")])
 
 
+def _canonicalize_design_chain_ids(structure: Structure) -> Structure:
+    """Relabel polymer chains to positional IDs (``A``, ``B``, ...) by emission order.
+
+    Symmetric rfd3 outputs suffix chain IDs with the transformation index (e.g.
+    ``A1, A2, A3`` for a C3 trimer); this restores a predictable ``A, B, C`` /
+    ``select_chain`` contract. No-op when already canonical.
+    """
+    observed = structure.get_chain_ids()
+    target = [chain_label(i) for i in range(len(observed))]
+    if observed == target:
+        return structure
+    return structure.with_renamed_chains(dict(zip(observed, target, strict=True)))
+
+
 @tool(
     key="rfdiffusion3-design",
     label="RFdiffusion3 Structure Design",
@@ -1044,6 +1059,7 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
             structure=design_data["structure_content"],
             source="rfdiffusion3-design",
         )
+        structure = _canonicalize_design_chain_ids(structure)
         buckets[design_data["spec_key"]].append(
             RFdiffusion3Structure(
                 structure=structure,
