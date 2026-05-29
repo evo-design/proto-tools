@@ -119,7 +119,7 @@ mirrors that surface through `proto-tools ...` commands.
 
 Read `notes/runtime-api.md` for identifier resolution, registry methods,
 README/doc extraction, schemas, JSON surfaces, gated weights, and calling
-patterns.
+patterns. Registry list methods return `ToolSpec` objects; use `spec.key` when comparing registered tool names.
 
 ## Documentation
 
