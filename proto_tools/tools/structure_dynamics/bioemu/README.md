@@ -1,250 +1,48 @@
-<a href="https://bio-pro.mintlify.app/tools/structure-dynamics/bioemu"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/structure-dynamics/bioemu"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # BioEmu
 
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** BioEmu is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/microsoft/bioemu/blob/main/LICENSE) for full terms.
 
 ## Overview
 
-BioEmu generates protein conformational ensembles using a diffusion generative model trained on [molecular dynamics](https://en.wikipedia.org/wiki/Molecular_dynamics) (MD) simulation data. Given a protein sequence, it produces an ensemble of 3D backbone structures representing the [equilibrium distribution](https://en.wikipedia.org/wiki/Boltzmann_distribution) of conformations the protein adopts -- capturing folded states, alternative conformations, and conformational heterogeneity without running explicit MD simulations.
-
-- **Tool key**: `bioemu-sample`
-- **Input**: Single-chain protein sequences (monomers only, recommended <= 500 residues)
-- **Output**: `StructureEnsemble` objects containing sampled backbone conformations
-- **Execution**: GPU required
+BioEmu is a generative deep learning model from Microsoft Research that samples the [equilibrium](https://en.wikipedia.org/wiki/Boltzmann_distribution) conformational ensemble of a protein from its sequence. Rather than predicting a single static structure, it draws many independent backbone conformations that approximate the distribution of states a protein populates in solution, providing a fast alternative to [molecular dynamics](https://en.wikipedia.org/wiki/Molecular_dynamics) for surveying [conformational flexibility](https://en.wikipedia.org/wiki/Protein_dynamics). This tool implementation exposes a single operation that samples ensembles for one or more monomeric protein sequences.
 
 ## Background
 
-Proteins are not static objects. In solution, a protein constantly fluctuates between conformational states, and this dynamics is essential for function: enzyme catalysis, [allosteric regulation](https://en.wikipedia.org/wiki/Allosteric_regulation), molecular recognition, and signal transduction all depend on conformational changes.
+A protein in solution is not a single fixed shape. It fluctuates among many [conformations](https://en.wikipedia.org/wiki/Protein_dynamics), and this flexibility underlies catalysis, [allosteric regulation](https://en.wikipedia.org/wiki/Allosteric_regulation), and molecular recognition. Characterizing this ensemble experimentally is difficult, and physically simulating it with [molecular dynamics](https://en.wikipedia.org/wiki/Molecular_dynamics) is accurate but computationally demanding, since the timescales of biologically relevant motions can require enormous amounts of simulation.
 
-Traditional approaches to studying protein dynamics include:
-- **Molecular dynamics (MD)**: Physically rigorous but computationally expensive (microseconds of simulation can take weeks of GPU time)
-- **[NMR spectroscopy](https://en.wikipedia.org/wiki/Nuclear_magnetic_resonance_spectroscopy_of_proteins)**: Experimental ensemble methods, but limited to small proteins
-- **[Normal mode analysis](https://en.wikipedia.org/wiki/Normal_mode)**: Fast but limited to harmonic fluctuations around a single structure
+BioEmu ([Lewis et al., 2025](https://doi.org/10.1126/science.adv9817)) approaches the problem with a [diffusion-based generative model](https://en.wikipedia.org/wiki/Diffusion_model) that learns to emulate protein equilibrium ensembles directly. Starting from noise, the model iteratively denoises protein backbone coordinates conditioned on a sequence embedding, producing thousands of statistically independent structures per hour on a single [graphics processing unit](https://en.wikipedia.org/wiki/Graphics_processing_unit). The published model was trained on a large corpus of molecular dynamics simulation alongside static structures and experimental protein stability measurements, and it reproduces functional motions such as cryptic pocket formation, local unfolding, and domain rearrangements while approximating relative free energies. The conditioning sequence embedding is derived from a [multiple sequence alignment](https://en.wikipedia.org/wiki/Multiple_sequence_alignment), so each sequence is first searched against sequence databases to assemble its alignment.
 
-BioEmu takes a fundamentally different approach: it learns the equilibrium conformational distribution directly from MD training data using a score-based diffusion model. Given only a protein sequence, it generates an ensemble of backbone conformations that approximate the [Boltzmann distribution](https://en.wikipedia.org/wiki/Boltzmann_distribution) -- the thermodynamically correct distribution of states the protein visits at equilibrium.
+### Learning Resources
 
-This makes BioEmu orders of magnitude faster than MD while capturing the same large-scale conformational heterogeneity (though it does not model explicit time-dependent dynamics or rare events).
+- [BioEmu repository](https://github.com/microsoft/bioemu) (Microsoft Research) - the reference implementation, model checkpoints, and usage examples.
 
 ## Tools
 
-### BioEmu Conformational Ensemble Sampling (`bioemu-sample`)
+### Conformational Ensemble Sampling (`bioemu-sample`)
 
-Generate protein conformational ensembles using BioEmu.
+Samples a conformational ensemble of protein backbone structures for one or more single-chain protein sequences. Each sequence yields an independent ensemble whose members represent distinct conformations drawn from the model's learned equilibrium distribution.
 
-## Model Variants
+#### Applications
 
-| Model | Description | Recommended |
-|-------|-------------|-------------|
-| `bioemu-v1.0` | Initial preprint release | No |
-| `bioemu-v1.1` | Weights from the published Science paper | Yes (default) |
-| `bioemu-v1.2` | Trained on extended MD + folding free-energy data | Use when folding-state thermodynamics matter |
+- Surveying the conformational flexibility of a protein, including the relative populations of folded and alternative states.
+- Revealing functional motions such as cryptic pocket opening, local unfolding, and domain rearrangements that a single predicted structure does not show.
+- Generating a structural ensemble for downstream analysis such as clustering into metastable states or estimating per-residue flexibility.
 
-All three variants accept the same inputs and produce the same output format. v1.1 generally produces higher-quality ensembles than v1.0; v1.2 is recommended when comparing predictions against folding-free-energy measurements.
+#### Usage Tips
 
-## Execution Modes
+- **The input must be a single-chain monomer of standard amino acids.** Multi-chain complexes, non-protein chains, and non-standard residues are rejected, and sequences beyond roughly 500 residues raise a warning because quality and cost both degrade with length.
+- **`num_samples` sets the size of the ensemble.** A few tens of samples give a quick read on conformational diversity, while several hundred or more give the coverage needed to estimate state populations or free-energy differences.
+- **`filter_samples` removes unphysical structures.** Leaving it enabled drops samples with steric clashes or broken chain geometry, so the returned ensemble may hold fewer structures than `num_samples` requested. Disabling it returns the raw samples for inspection.
+- **`model_name` selects the checkpoint.** The default `bioemu-v1.1` matches the published Science paper. `bioemu-v1.2` is trained on additional molecular dynamics and folding free-energy data and is preferable when folding-state thermodynamics matter, while `bioemu-v1.0` reproduces the earlier preprint.
+- **`denoiser_config` enables physical steering.** Pointing it at a steering configuration biases sampling toward more physically plausible structures and overrides `denoiser_type`, which otherwise selects the deterministic `dpm` or stochastic `heun` sampler.
 
-| Mode | Backend | Device |
-|------|---------|--------|
-| Local venv | `ToolInstance("bioemu")` running `standalone/inference.py` | Local GPU (`cuda`) |
+## Toolkit Notes
 
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-## How It Works
-
-1. **Sequence encoding**: The input amino acid sequence is encoded into a representation that conditions the generative model
-2. **Diffusion sampling**: Starting from random noise, the model iteratively denoises 3D backbone coordinates through a learned reverse diffusion process, guided by the sequence embedding
-3. **Ensemble generation**: The process is repeated `num_samples` times (default 500), each producing an independent backbone conformation drawn from the learned equilibrium distribution
-4. **Quality filtering**: If `filter_samples=True` (default), BioEmu applies internal quality checks to remove poorly generated samples (e.g., structures with steric clashes or broken chain geometry)
-5. **Structure packaging**: Filtered conformations are returned as `Structure` objects within a `StructureEnsemble`
-
-## Input Parameters
-
-`BioEmuInput` extends `StructurePredictionInput`:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `complexes` | `List[Complex]` | Protein complexes to sample. Each must be a single-chain monomer with standard amino acids only. |
-
-**Constraints:**
-- Each complex must contain exactly one protein chain (monomers only)
-- Only standard amino acid characters are allowed
-- Sequences > 500 residues will produce a warning (quality may degrade)
-- Chain modifications are not supported
-
-## Configuration
-
-| Parameter | Type | Default | Range | Description |
-|-----------|------|---------|-------|-------------|
-| `num_samples` | `int` | `500` | >= 1 | Number of conformations to sample per sequence |
-| `model_name` | `"bioemu-v1.0"` \| `"bioemu-v1.1"` \| `"bioemu-v1.2"` | `"bioemu-v1.1"` | -- | BioEmu checkpoint variant |
-| `filter_samples` | `bool` | `True` | -- | Drop unphysical samples (steric clashes, chain discontinuities) |
-| `batch_size` | `int` | `10` | >= 1 | Batch size at L=100; effective batch scales as `batch_size * (100/L)^2` |
-| `denoiser_type` | `"dpm"` \| `"heun"` | `"dpm"` | -- | Diffusion sampler algorithm (dpm = 50 deterministic steps; heun = stochastic) |
-| `denoiser_config` | `Optional[str]` | `None` | -- | Path to a custom denoiser/steering YAML (e.g. `physical_steering.yaml`); overrides `denoiser_type` when set |
-| `msa_host_url` | `Optional[str]` | `None` | -- | Override the ColabFold MMseqs2 MSA server URL |
-| `cache_embeds_dir` | `Optional[str]` | `None` | -- | Directory to cache MSA embeddings across runs |
-| `cache_so3_dir` | `Optional[str]` | `None` | -- | Directory to cache SO3 precomputations across runs |
-| `output_dir` | `Optional[str]` | `None` | -- | Optional directory for raw BioEmu output files |
-| `device` | `str` | `"cuda"` | `"cuda"`, `"cpu"` | Inference device (inherited from StructurePredictionConfig) |
-| `verbose` | `bool` | `False` | -- | Verbose logging (inherited from StructurePredictionConfig) |
-
-### Parameter Guides
-
-**Number of samples:**
-
-| num_samples | Use Case | Compute Time |
-|-------------|----------|--------------|
-| 10-50 | Quick check of conformational diversity | Seconds |
-| 100-200 | Moderate ensemble for visualization | Minutes |
-| 500 (default) | Publication-quality ensemble | Minutes |
-| 1000-5000 | Detailed free-energy landscape analysis | Tens of minutes |
-
-**Batch size:**
-
-The `batch_size` parameter controls how many samples are generated in parallel on the GPU. Larger values use more GPU memory but are faster. If you encounter out-of-memory errors, reduce `batch_size`.
-
-| batch_size | GPU Memory | Speed |
-|------------|------------|-------|
-| 1 | Minimal | Slow |
-| 10 (default) | Moderate | Good balance |
-| 50 | High | Fast (if memory allows) |
-
-**Steering (`denoiser_config`):**
-
-BioEmu ships a Sequential Monte Carlo (SMC) steering system that biases sampling toward more physically plausible structures (fewer steric clashes, fewer chain breaks). To enable it, set `denoiser_config` to the path of a steering YAML (e.g. `src/bioemu/config/steering/physical_steering.yaml` from the upstream package). The YAML — not the wrapper — controls the particle count (`num_particles`, typically 3–10), the potential set, and start/end timesteps; the wrapper just forwards the path to upstream.
-
-## Output Specification
-
-`BioEmuOutput` contains:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `ensembles` | `List[StructureEnsemble]` | One ensemble per input complex |
-
-Each `StructureEnsemble` contains:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `structures` | `List[Structure]` | Individual backbone conformations |
-| `sequence` | `str` | The input protein sequence |
-
-Each `Structure` in the ensemble has metadata:
-
-| Key | Description |
-|-----|-------------|
-| `ensemble_idx` | Index of the input complex |
-| `frame_idx` | Index of this conformation within the ensemble |
-
-Output metadata:
-
-| Key | Description |
-|-----|-------------|
-| `num_complexes` | Number of input complexes processed |
-| `total_structures` | Total number of conformations generated across all complexes |
-| `model_name` | BioEmu model variant used |
-
-Export formats: `pdb`, `json`
-
-## Interpreting Results
-
-- **Ensemble size**: The number of structures in the ensemble may be less than `num_samples` if `filter_samples=True`, since poor-quality samples are removed.
-- **Conformational clusters**: Superimpose the ensemble structures to identify clusters of similar conformations, which correspond to metastable states.
-- **RMSD distribution**: Calculate pairwise RMSD across the ensemble to quantify conformational diversity. A narrow distribution suggests a rigid protein; a broad distribution suggests flexibility.
-- **Per-residue flexibility**: Calculate per-residue [RMSF](https://en.wikipedia.org/wiki/Root-mean-square_deviation_of_atomic_positions) (root-mean-square fluctuation) across the ensemble to identify flexible loops and rigid core regions.
-- **Backbone only**: BioEmu outputs backbone atoms (N, CA, C, O). Side-chain coordinates are not included. Use a side-chain packing tool (e.g., SCWRL or Rosetta) if side-chain conformations are needed.
-
-## Quick Start Examples
-
-**Basic ensemble sampling:**
-```python
-from proto_tools.tools.structure_prediction.shared_data_models import (
-    Complex,
-)
-from proto_tools.tools.structure_dynamics.bioemu import (
-    BioEmuInput, BioEmuConfig, run_bioemu,
-)
-
-complex_ = Complex(
-    chains=[{"sequence": "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTK", "entity_type": "protein"}],
-)
-
-inputs = BioEmuInput(complexes=[complex_])
-config = BioEmuConfig(num_samples=100, model_name="bioemu-v1.1")
-result = run_bioemu(inputs, config)
-
-ensemble = result.ensembles[0]
-print(f"Generated {len(ensemble.structures)} conformations")
-print(f"Sequence: {ensemble.sequence}")
-```
-
-**Multiple proteins in one call:**
-```python
-complexes = [
-    Complex(chains=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTK"]),
-    Complex(chains=["MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQAPILSRVG"]),
-]
-
-inputs = BioEmuInput(complexes=complexes)
-config = BioEmuConfig(num_samples=200)
-result = run_bioemu(inputs, config)
-
-for i, ensemble in enumerate(result.ensembles):
-    print(f"Protein {i}: {len(ensemble.structures)} conformations")
-```
-
-**Export ensemble to PDB files:**
-```python
-result.export("/path/to/output_dir", file_format="pdb")
-# Creates: output_dir/ensemble_0/conformation_0.pdb, conformation_1.pdb, ...
-```
-
-**Access individual conformations:**
-```python
-ensemble = result.ensembles[0]
-
-# Get PDB string for a specific conformation
-pdb_string = ensemble.structures[0].structure_pdb
-
-# Write a specific conformation to file
-with open("conformation_0.pdb", "w") as f:
-    f.write(pdb_string)
-```
-
-**Quick sampling for visualization:**
-```python
-config = BioEmuConfig(
-    num_samples=20,
-    batch_size=20,
-    filter_samples=False,
-)
-result = run_bioemu(inputs, config)
-```
-
-## Best Practices & Gotchas
-
-- **Monomers only.** BioEmu does not support multi-chain complexes. Each input complex must contain exactly one protein chain. Attempting to pass multi-chain inputs will raise a validation error.
-- **500 residues is the practical limit.** Sequences longer than 500 residues will produce a warning. Quality and computational cost both degrade for longer sequences.
-- **Backbone only.** BioEmu generates backbone coordinates (N, CA, C, O) without side chains. This is sufficient for assessing conformational diversity but not for detailed binding analysis.
-- **Default 500 samples is well-calibrated.** The default provides good coverage of the conformational landscape for most proteins. Reduce to 50-100 for quick checks; increase to 1000+ only if you need detailed free-energy analysis.
-- **Filter samples by default.** Keep `filter_samples=True` unless you specifically want to analyze the raw model output. Unfiltered ensembles may contain structures with steric clashes.
-- **Standard amino acids only.** Non-standard residues, modified amino acids, and non-protein chains are not supported and will raise validation errors.
-- **GPU is required.** Diffusion sampling is computationally intensive. CPU execution is technically possible but impractically slow.
-- **Batch size affects memory, not output.** The `batch_size` parameter controls GPU parallelism during sampling. Reduce it if you encounter CUDA out-of-memory errors; increasing it beyond 50 rarely helps.
-
-## References
-
-- Zheng, S., He, J., Liu, C., et al. (2024). Predicting equilibrium distributions for molecular systems with deep learning. *Nature Machine Intelligence*. DOI: [10.1038/s42256-024-00837-3](https://doi.org/10.1038/s42256-024-00837-3)
-- Also published in *Science*: https://www.science.org/doi/10.1126/science.adv9817
-- GitHub: https://github.com/microsoft/bioemu
-
-## Related Tools
-
-**Often used together:**
-- **AlphaFold** (`alphafold3-prediction`) -- Predict a single high-confidence structure; compare against BioEmu ensemble
-- **ESMFold** (`esmfold-prediction`) -- Fast single-structure prediction for initial screening before ensemble sampling
-- **Segmasker** (`segmasker-score`) -- Screen sequences for low-complexity before ensemble generation
-
-**Alternatives for dynamics:**
-- **Molecular dynamics** (GROMACS, OpenMM) -- Explicit time-resolved dynamics; more accurate but orders of magnitude slower
-- **Normal mode analysis** -- Fast harmonic approximation of dynamics around a single structure; less accurate than BioEmu for large conformational changes
+- **A multiple sequence alignment is always required.** Each sequence is searched against the ColabFold MMseqs2 server during preprocessing to build its alignment, unless an alignment is supplied directly on the input, so network access is needed when alignments are not provided.
+- **Sampling is stochastic and seeded.** Results depend on the configured seed, so repeating a run with the same seed reproduces the ensemble while changing it explores new conformations.
+- **Output is backbone only and runs on GPU.** The model returns backbone coordinates without side chains and requires a CUDA GPU, since diffusion sampling is impractical on CPU.
