@@ -53,4 +53,4 @@ These apply to every Protenix tool in this toolkit (`protenix-prediction`).
 
 - **Requires a GPU.** Protenix runs through a PyTorch backend and needs an NVIDIA GPU; base models are memory-intensive and slower, while mini and tiny variants run on more modest hardware. CPU execution is not practical.
 - **Open AlphaFold3 reproduction.** Unlike AlphaFold3, whose weights are gated and non-commercial, Protenix releases both code and weights under Apache-2.0 for academic and commercial use. Like Boltz-2 it follows the AlphaFold3 diffusion architecture, and additionally accepts modified residues.
-- **Predictions are stochastic.** Structures come from a diffusion process; set `seed` (or `seeds`) for reproducible sampling.
+- **Predictions are stochastic.** Structures come from a diffusion process, so repeated runs vary unless sampling is seeded.

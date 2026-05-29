@@ -40,7 +40,7 @@ This tool performs de novo therapeutic antibody discovery: generating epitope-ta
 
 - **`design_type` selects the run preset.** `"vhh"` (single-domain nanobody, the default) or `"scfv"`; each loads the upstream preset with different filter thresholds, so leave the `*_threshold` fields set to `None` to let the correct preset apply.
 - **Reduce `max_trajectories` when testing.** The upstream default of `10000` corresponds to a run that takes hours to days; use a small value while testing, and set `max_passing_designs` below `max_trajectories` to stop early once enough designs pass the filters.
-- **`structure_model` selects the structure-validation model.** `"chai"` (the default) installs automatically; `"af3"` and `"protenix"` require model weights and environments that you must install yourself. The published filter thresholds are calibrated against AlphaFold3, so the thresholds may need adjusting when using Chai-1 to match the reported acceptance rates.
+- **`structure_model` selects the structure-validation model.** Validation uses a model independent of the hallucination step. The published filter thresholds were calibrated against AlphaFold3, so acceptance rates may differ under the `"chai"` default and the `*_threshold` fields may need adjusting to match the reported rates.
 - **`germinal_overrides` passes additional settings to the underlying pipeline.** Any upstream configuration option that is not exposed as a dedicated field can be supplied here as a `<key>=<value>` pair.
 
 ## Toolkit Notes
