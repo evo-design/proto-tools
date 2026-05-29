@@ -1,295 +1,53 @@
-<a href="https://bio-pro.mintlify.app/tools/orf-prediction/prodigal"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/orf-prediction/prodigal"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a>
 
 # Prodigal
 
 > [!NOTE]
-> **TODO:** This README still needs to be reviewed and quality checked
+> **License:** Prodigal has a GPL-3.0 license. Please refer to [the license](https://github.com/hyattpd/Prodigal/blob/GoogleImport/LICENSE) for full terms.
 
 ## Overview
-Prodigal (Prokaryotic Dynamic Programming Genefinding Algorithm) is a fast, reliable gene prediction tool specifically designed for [prokaryotic](https://en.wikipedia.org/wiki/Prokaryote) genomes (bacteria and archaea). It identifies protein-coding genes using dynamic programming, including partial genes at sequence ends, and provides detailed annotations including ribosome binding sites and start codon types.
+
+[Prodigal](https://github.com/hyattpd/Prodigal) is a [gene-prediction](https://en.wikipedia.org/wiki/Gene_prediction) program for [bacterial](https://en.wikipedia.org/wiki/Bacteria) and [archaeal](https://en.wikipedia.org/wiki/Archaea) genomes developed by Hyatt and colleagues at Oak Ridge National Laboratory. It predicts protein-coding genes using a [dynamic-programming](https://en.wikipedia.org/wiki/Dynamic_programming) algorithm that scores candidates by their coding potential, ribosome binding site strength, and [start codon](https://en.wikipedia.org/wiki/Start_codon) usage. This toolkit invokes Prodigal through the [pyrodigal](https://github.com/althonos/pyrodigal) Python interface and exposes a single registered tool that returns the predicted genes per input sequence together with their nucleotide and amino-acid sequences and Prodigal-specific annotations.
 
 ## Background
 
-**Prokaryotic gene structure:**
-Prokaryotic genes are simpler than eukaryotic genes:
-- No introns (continuous coding sequence)
-- [Ribosome binding site](https://en.wikipedia.org/wiki/Ribosome-binding_site) (RBS) upstream of start codon
-- Start codons: ATG (most common), GTG, TTG
-- Stop codons: TAA, TAG, TGA
+Prodigal ([Hyatt, Chen, LoCascio, Land, Larimer, and Hauser, 2010](https://doi.org/10.1186/1471-2105-11-119)) was developed as a fast and accurate replacement for earlier prokaryotic gene-prediction programs. The published method targets three specific objectives, namely improved gene-structure prediction, improved translation initiation site recognition, and reduction in the false-positive rate. The authors report that Prodigal achieves favourable results against the gene finders that were the established standard at the time of publication, and the program has since become one of the most widely used tools for automated prokaryotic genome annotation.
 
-**What Prodigal predicts:**
-- Gene boundaries (start and end positions)
-- Reading frame and strand
-- Start codon type (ATG, GTG, TTG)
-- Ribosome binding site motif and spacing
-- Partial gene status (truncated at sequence edges)
+Prokaryotic gene prediction is straightforward relative to eukaryotic gene prediction because prokaryotic genes are contiguous, are not interrupted by [introns](https://en.wikipedia.org/wiki/Intron), and often begin with a [Shine-Dalgarno ribosome binding site](https://en.wikipedia.org/wiki/Shine-Dalgarno_sequence) located a short distance upstream of the start codon, typically around 5 to 10 nucleotides. Prodigal exploits these regularities by combining a dynamic-programming search across candidate [open reading frames](https://en.wikipedia.org/wiki/Open_reading_frame) with scoring terms for coding-region hexamer frequencies, the presence and strength of a recognised ribosome binding site motif, and the identity of the start codon. The program supports two operating modes. In single-genome mode it first trains its scoring parameters on the input sequence itself and then predicts genes using those trained parameters, which requires at least approximately 100 kilobases of input sequence for reliable training. In meta mode it applies a set of pre-trained parameters from a curated panel of reference genomes, which is appropriate for short contigs, draft assemblies, and [metagenomic](https://en.wikipedia.org/wiki/Metagenomics) samples.
 
-**Meta vs single-genome mode:**
-- **Meta mode**: Uses pre-trained parameters, works on short contigs and mixed samples
-- **Single-genome mode**: Trains on input sequence, requires >100kb for reliable training
+This toolkit uses [pyrodigal](https://github.com/althonos/pyrodigal) ([Larralde, 2022](https://doi.org/10.21105/joss.04296)), a Python interface to Prodigal that exposes the original C implementation through Python bindings with SIMD-accelerated coding-region scoring. The interface reproduces the predictions of the reference Prodigal program while removing the need to manage an external command-line invocation.
+
+### Learning Resources
+
+- [hyattpd/Prodigal](https://github.com/hyattpd/Prodigal) (Hyatt, Oak Ridge National Laboratory). Official Prodigal source code and command-line reference.
+- [althonos/pyrodigal](https://github.com/althonos/pyrodigal) (Larralde, EMBL). Python interface to Prodigal used by this toolkit, with extended documentation and API reference at [pyrodigal.readthedocs.io](https://pyrodigal.readthedocs.io/).
 
 ## Tools
 
 ### Prodigal ORF Prediction (`prodigal-prediction`)
 
-Predict genes in prokaryotic DNA sequences using Prodigal.
+Predicts protein-coding genes in one or more prokaryotic DNA sequences using Prodigal through the pyrodigal interface. Each returned gene carries its nucleotide and translated amino-acid sequence, 1-indexed start and end coordinates on the parent sequence, strand, reading frame, partial-gene status, [GC content](https://en.wikipedia.org/wiki/GC-content), start codon identity, and the detected ribosome binding site motif and spacer.
 
-Uses pyrodigal Python bindings for gene prediction in bacterial and archaeal
-genomes. Prodigal identifies protein-coding genes, including partial genes
-at sequence ends, and provides detailed annotations including ribosome binding
-sites and start codon types.
+#### Applications
 
-## How It Works
+This tool is appropriate for the gene-calling step of any analysis that begins with raw prokaryotic DNA sequences and needs a curated set of protein-coding genes rather than an exhaustive enumeration of all open reading frames. Representative applications include initial gene annotation of a newly assembled bacterial or archaeal genome, recovery of protein-coding genes from metagenomic contigs for downstream functional or taxonomic analysis, and generation of translated protein sequences for subsequent homology search or domain annotation.
 
-**Algorithm:**
-1. Find all potential start and stop codons
-2. Score each potential gene using:
-   - Coding potential (hexamer frequencies)
-   - RBS motif strength
-   - Start codon type
-3. Use [dynamic programming](https://en.wikipedia.org/wiki/Dynamic_programming) to find optimal gene set
-4. Handle overlapping genes and partial genes at edges
+#### Usage Tips
 
-**Parallel processing:**
-When multiple sequences are provided, Prodigal processes them in parallel using multiple CPU threads.
+- **`meta_mode` selects the operating mode and is the most consequential setting.** The default of `meta_mode=True` applies a panel of pre-trained parameters that is appropriate for short contigs, draft assemblies, and metagenomic samples. A value of `meta_mode=False` instead trains scoring parameters on the input sequence itself and requires at least approximately 100 kilobases of input for reliable training. The single-genome mode is appropriate for complete or near-complete genomes when sufficient training sequence is available.
+- **`translation_table` selects the [genetic code](https://en.wikipedia.org/wiki/Genetic_code) and is only consulted in single-genome mode.** In meta mode the pre-trained metagenomic models carry their own internal translation tables, and this parameter has no effect on the output. The default value of `"bacterial"` corresponds to NCBI table 11 (bacterial, archaeal, and plant plastid code). A value of `"mycoplasma"` selects NCBI table 4 (Mycoplasma and Spiroplasma), and `"standard"` selects NCBI table 1 (the standard genetic code). Additional supported NCBI tables are appropriate for organisms that use the corresponding alternative codes.
+- **`closed_ends` controls whether partial genes at sequence boundaries are reported.** The default of `closed_ends=False` allows partial genes at the 5' and 3' ends of each input sequence, which is appropriate for linear contigs and draft assemblies in which real genes may extend across the assembly boundary. A value of `closed_ends=True` prevents partial-gene predictions and is appropriate for complete circular genomes such as bacterial chromosomes and plasmids, in which there are no true sequence ends.
+- **`min_gene` is the minimum gene length in nucleotides and defaults to 90.** This corresponds to approximately 30 amino acids. Lower values can be considered for draft assemblies in which short gene fragments are expected at contig boundaries, while higher values are appropriate when only larger, well-defined genes are of interest.
+- **`mask=True` excludes regions of unresolved nucleotides from gene calling.** When the input contains runs of `N` characters representing low-quality or gap regions, a value of `mask=True` prevents Prodigal from calling genes that span those regions, which is appropriate for draft assemblies with significant unresolved sequence content.
+- **Partial-gene status is reported as a two-digit code on each predicted gene.** A status of `00_00` indicates a complete gene with both a start and a stop codon present in the input. A status of `10_00` indicates a gene that is truncated at the 5' end of the input, `00_01` indicates truncation at the 3' end, and `10_01` indicates truncation at both ends. Partial genes commonly represent real coding sequences that extend beyond the boundary of the input and should not be excluded from downstream analyses without consideration.
 
-## Input Parameters
+## Toolkit Notes
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `input_sequences` | `str` or `List[str]` | DNA sequence(s) to analyze |
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-## Configuration
+These apply to every Prodigal tool in this toolkit (`prodigal-prediction`).
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `meta_mode` | `bool` | `True` | Use meta mode (True) or single-genome mode (False) |
-| `translation_table` | `TranslationTable` | `"bacterial"` | NCBI genetic code (e.g. `"bacterial"`, `"mycoplasma"`, `"standard"`) |
-| `closed_ends` | `bool` | `False` | Prevent partial genes at sequence ends |
-| `num_threads` | `int` | auto | CPU threads for parallel processing |
-
-### Parameter Guides
-
-**Mode selection:**
-| Mode | When to Use |
-|------|-------------|
-| Meta mode (`True`) | Contigs, draft assemblies, metagenomic data, mixed samples |
-| Single-genome mode (`False`) | Complete/near-complete genomes (>100kb) |
-
-**Translation table options:**
-| Name | NCBI Code | Description |
-|------|-----------|-------------|
-| `"bacterial"` | 11 | Bacterial, archaeal, plant plastid (default) |
-| `"mycoplasma"` | 4 | Mycoplasma/Spiroplasma |
-| `"standard"` | 1 | Standard genetic code |
-| `"candidate_division_sr1"` | 25 | Candidate division SR1, Gracilibacteria |
-
-See `TRANSLATION_TABLE_MAP` for the complete list of all 19 supported NCBI genetic codes.
-
-**Closed ends:**
-| Setting | When to Use |
-|---------|-------------|
-| `False` (default) | Linear contigs, draft assemblies (allows partial genes at edges) |
-| `True` | Complete circular genomes (chromosomes, plasmids) |
-
-### Sweep Priorities
-
-1. `meta_mode`; Most impactful; determines whether model trains on input or uses pre-trained parameters
-2. `translation_table`; Must match organism; incorrect code produces wrong translations
-3. `closed_ends`; Only relevant for complete circular genomes
-
-## Output Specification
-
-**ProdigalOutput**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `predicted_orfs` | `List[List[ORF]]` | List of ORF results per input sequence |
-| `num_orfs` | `int` | Total genes predicted across all sequences (computed) |
-| `num_orfs_per_sequence` | `List[int]` | Gene count per sequence (computed) |
-
-**ORF / DataFrame columns**
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `parent_id` | `str` | Parent sequence ID (seq_0, seq_1, etc.) |
-| `orf_id` | `str` | ORF identifier within parent (gene_1, gene_2, etc.) |
-| `amino_acid_sequence` | `str` | Translated protein sequence |
-| `nucleotide_sequence` | `str` | DNA sequence of the gene |
-| `amino_acid_length` | `int` | Protein length in amino acids |
-| `nucleotide_length` | `int` | Gene length in nucleotides |
-| `nucleotide_start` | `int` | Start position (1-indexed) |
-| `nucleotide_end` | `int` | End position (1-indexed) |
-| `strand` | `str` | '+' or '-' |
-| `frame` | `int` | Reading frame (1, 2, or 3) |
-| `partial` | `str` | Partial status (00_00 = complete, computed) |
-| `partial_begin` | `int` | 0 = complete, 1 = truncated at 5' |
-| `partial_end` | `int` | 0 = complete, 1 = truncated at 3' |
-| `gc_content` | `float` | GC content (0.0-1.0) |
-| `start_type` | `str` | Start codon (ATG, GTG, TTG) |
-| `rbs_motif` | `str` | RBS motif detected |
-| `rbs_spacer` | `str` | Spacing between RBS and start |
-| `description` | `str` | Full Prodigal annotation string |
-
-## Interpreting Results
-
-**Sequence length recommendations:**
-- **Meta mode**: Works on any length, but very short sequences (<500bp) may miss genes
-- **Single-genome mode**: Requires >100kb for reliable training (>20kb minimum)
-
-**Partial gene handling:**
-| Partial Code | Meaning |
-|-------------|---------|
-| `00_00` | Complete gene |
-| `10_00` | Truncated at 5' end |
-| `00_01` | Truncated at 3' end |
-| `10_01` | Both ends truncated |
-
-Partial genes are real genes that extend beyond contig boundaries; do not automatically discard them.
-
-**Start codon distribution:**
-In typical bacterial genomes, ~80% of genes use ATG, ~10-15% use GTG, and ~5-10% use TTG. Significant deviations may indicate the wrong translation table.
-
-**RBS motifs:**
-Strong RBS motifs (e.g., AGGAG) with 5-10 bp spacers indicate high-confidence gene starts. Weak or absent RBS may indicate leaderless mRNAs or alternative initiation.
-
-## Quick Start Examples
-
-**Example 1: Basic gene prediction**
-```python
-from proto_tools.tools.orf_prediction.prodigal import (
-    run_prodigal_prediction, ProdigalInput, ProdigalConfig
-)
-
-sequence = "ATGAAACGTAAACTGGATCGTAACTAGATGCGTAAATAA..."  # Your DNA
-
-inputs = ProdigalInput(input_sequences=sequence)
-config = ProdigalConfig(meta_mode=True)
-
-result = run_prodigal_prediction(inputs, config)
-
-print(f"Found {result.num_orfs} genes")
-for orfs in result.predicted_orfs:
-    for orf in orfs:
-        print(f"{orf.orf_id}: {orf.nucleotide_start}-{orf.nucleotide_end} ({orf.strand}), {orf.amino_acid_length} aa")
-```
-
-**Example 2: Process multiple sequences**
-```python
-from proto_tools.tools.orf_prediction.prodigal import (
-    run_prodigal_prediction, ProdigalInput, ProdigalConfig
-)
-
-sequences = [
-    "ATGAAACGTAAACTGGATCGTAACTAG...",
-    "ATGCCCGTTAAAGGGCCCAAATGA...",
-    "ATGGGGTTTCCCAAAGGGTTTTAG..."
-]
-
-inputs = ProdigalInput(input_sequences=sequences)
-config = ProdigalConfig(
-    meta_mode=True,
-    num_threads=4
-)
-
-result = run_prodigal_prediction(inputs, config)
-
-for i, (count, orfs) in enumerate(zip(result.num_orfs_per_sequence,
-                                       result.predicted_orfs)):
-    print(f"Sequence {i}: {count} genes")
-```
-
-**Example 3: Complete circular genome**
-```python
-from proto_tools.tools.orf_prediction.prodigal import (
-    run_prodigal_prediction, ProdigalInput, ProdigalConfig
-)
-
-# Complete circular bacterial chromosome
-with open("chromosome.fasta") as f:
-    sequence = "".join(line.strip() for line in f if not line.startswith(">"))
-
-inputs = ProdigalInput(input_sequences=sequence)
-config = ProdigalConfig(
-    meta_mode=False,  # Single-genome mode for complete genome
-    closed_ends=True,  # No partial genes (circular)
-    translation_table="bacterial"
-)
-
-result = run_prodigal_prediction(inputs, config)
-print(f"Predicted {result.num_orfs} complete genes")
-```
-
-**Example 4: Extract proteins for downstream analysis**
-```python
-from proto_tools.tools.orf_prediction.prodigal import (
-    run_prodigal_prediction, ProdigalInput, ProdigalConfig
-)
-
-inputs = ProdigalInput(input_sequences="ATGAAACGT...")
-config = ProdigalConfig()
-
-result = run_prodigal_prediction(inputs, config)
-
-# Get all proteins as FASTA
-for orf in result.predicted_orfs[0]:
-    print(f">{orf.parent_id}_{orf.orf_id}")
-    print(orf.amino_acid_sequence)
-
-# Or use the DataFrame for tabular access
-df = result.results_df
-print(df[['parent_id', 'orf_id', 'amino_acid_length', 'strand']])
-```
-
-## Best Practices & Gotchas
-
-**Mode selection:**
-
-1. **Default to meta mode**: For contigs, draft assemblies, or metagenomic data.
-
-2. **Single-genome mode**: Only for complete/near-complete genomes (>100kb).
-
-3. **Mixed samples**: Always use meta mode for metagenomes.
-
-**Handling short sequences:**
-
-1. **Very short contigs (<500bp)**: May not contain complete genes.
-
-2. **Edge genes**: In meta mode, partial genes are allowed by default.
-
-3. **Circular genomes**: Set closed_ends=True for complete circular genomes.
-
-**Post-processing:**
-
-1. **Filter by length**: Very short predicted proteins may be spurious.
-
-2. **Check partial status**: Be aware of truncated genes at contig edges.
-
-3. **Translation table**: Use correct genetic code for your organism.
-
-**Common mistakes:**
-
-1. **Wrong mode for short contigs**: Using single-genome mode on <100kb sequences.
-
-2. **closed_ends on linear fragments**: Losing real genes at contig ends.
-
-3. **Ignoring partial genes**: Partial genes are real; don't automatically discard them.
-
-## References
-
-**Primary publication:**
-- Hyatt et al. (2010). "Prodigal: prokaryotic gene recognition and translation initiation site identification". *BMC Bioinformatics*. DOI: 10.1186/1471-2105-11-119
-
-**Resources:**
-- Pyrodigal documentation: https://pyrodigal.readthedocs.io/
-- Original Prodigal: https://github.com/hyattpd/Prodigal
-
-## Related Tools
-
-**Tools often used together:**
-- `blast-search`: Annotate predicted proteins against sequence databases.
-- `pyhmmer-hmmscan`: Annotate predicted proteins with protein domain profiles from Pfam.
-- `esm2`: Score predicted proteins with a protein language model.
-
-**Alternative tools:**
-- `orfipy`: General ORF prediction: more flexible for custom start/stop codons but less accurate for prokaryotic gene calling.
+- **Prodigal is appropriate for prokaryotic genomes only.** The scoring model is calibrated for bacterial and archaeal gene structure, and the program does not handle introns. Eukaryotic gene prediction requires a dedicated eukaryotic gene finder.
+- **Input sequences are accepted as a single string or a list of strings and are normalised to uppercase before gene calling.** IUPAC ambiguity codes are permitted in the input. The validator raises an error when the input contains characters that are not recognised DNA nucleotides or IUPAC codes.
+- **`num_threads` controls the parallelism used to process multiple input sequences.** Each input sequence is processed by an independent worker, so increasing the thread count benefits batches of many sequences but has no effect on a single input. The default automatically detects the number of available CPU cores.
+- **Position fields are 1-indexed to match standard biological residue numbering conventions.** Gene start and end positions on the parent sequence follow the conventions used in GenBank annotations and the published literature, so positions can be compared directly against external references without conversion.
