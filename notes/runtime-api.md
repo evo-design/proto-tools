@@ -1,10 +1,6 @@
 # Runtime API
 
-`proto_tools` exposes a uniform runtime API around every registered tool:
-discovery, prose documentation, Pydantic schemas, example inputs, citations,
-links, license/access metadata, and run functions. The same API supports
-in-process Python callers, scripts, notebooks, MCP/wire consumers, and the
-`proto-tools` CLI.
+`proto_tools` exposes a uniform runtime API around every registered tool: discovery, prose documentation, Pydantic schemas, example inputs, citations, links, license/access metadata, and run functions. The same API supports in-process Python callers, scripts, notebooks, MCP/wire consumers, and the `proto-tools` CLI.
 
 ## Python Entry Point
 
@@ -12,9 +8,7 @@ in-process Python callers, scripts, notebooks, MCP/wire consumers, and the
 from proto_tools.tools.tool_registry import ToolRegistry
 ```
 
-Returned values are Pydantic v2 `BaseModel` instances or plain
-JSON-serializable types. Outputs should round-trip through `.model_dump()` or
-`.model_dump_json()`.
+Returned values are Pydantic v2 `BaseModel` instances or plain JSON-serializable types. Outputs should round-trip through `.model_dump()` or `.model_dump_json()`.
 
 ## CLI
 
@@ -28,9 +22,7 @@ proto-tools example-input esm2-embedding
 proto-tools access esm3-embedding
 ```
 
-`python -m proto_tools` is equivalent when the `proto-tools` executable is
-shadowed. Use `--json` on commands that return structured payloads when a
-script or agent needs machine-readable output.
+`python -m proto_tools` is equivalent when the `proto-tools` executable is shadowed. Use `--json` on commands that return structured payloads when a script or agent needs machine-readable output.
 
 ## Identifier Resolution
 
@@ -44,9 +36,7 @@ Most registry APIs accept multiple identifier forms.
 | Docs path | `"masked-models/esm2"` | yes | yes if single-tool toolkit |
 | Toolkit directory name | `"esm2"` | yes | raises if ambiguous |
 
-Toolkit-level README APIs resolve to the toolkit directory. Per-tool APIs must
-identify one registered operation; multi-tool toolkit names raise `ValueError`
-with the valid tool keys.
+Toolkit-level README APIs resolve to the toolkit directory. Per-tool APIs must identify one registered operation; multi-tool toolkit names raise `ValueError` with the valid tool keys.
 
 ## Discovery
 
@@ -63,9 +53,7 @@ ToolRegistry.list_local_cpu_tools()
 
 `ToolRegistry.list_all()` and related list methods return `ToolSpec` objects, not string keys. To test membership or build a set of tool names, use `{spec.key for spec in ToolRegistry.list_all()}`; do not call `set(ToolRegistry.list_all())` because `ToolSpec` objects are Pydantic models and are not hashable.
 
-Each `ToolSpec` carries structured metadata: registry key, label, category,
-description, device requirements, Pydantic input/config/output model classes,
-run function, iterable fields, cache behavior, and source path.
+Each `ToolSpec` carries structured metadata: registry key, label, category, description, device requirements, Pydantic input/config/output model classes, run function, iterable fields, cache behavior, and source path.
 
 ## Documentation Extraction
 
@@ -81,9 +69,7 @@ ToolRegistry.get_config_doc("esm2-embedding")
 ToolRegistry.get_output_doc("esm2-embedding")
 ```
 
-`get_tool_docs()` returns one registered tool's README section plus toolkit
-notes and parsed license metadata by default. Pass
-`include_toolkit_notes=False` when only tool-specific prose is needed.
+`get_tool_docs()` returns one registered tool's README section plus toolkit notes and parsed license metadata by default. Pass `include_toolkit_notes=False` when only tool-specific prose is needed.
 
 ## Schemas and Examples
 
@@ -95,8 +81,7 @@ ToolRegistry.get_output_schema("esm2-embedding")
 ToolRegistry.get_example_input("esm2-embedding")
 ```
 
-`example_input()` values are minimal valid `Input` objects, useful for smoke
-tests, notebooks, and script templates.
+`example_input()` values are minimal valid `Input` objects, useful for smoke tests, notebooks, and script templates.
 
 ## Citation, Links, License, and Access
 
@@ -150,26 +135,17 @@ run_tool = spec.function
 result = run_tool(Input(sequences=["MKTLIIA..."]), Config())
 ```
 
-`Config` is optional at the public call site; the decorator supplies defaults.
-Output models inherit standard metadata (`tool_id`, `execution_time`,
-`success`, `errors`) plus tool-specific payload fields.
+`Config` is optional at the public call site; the decorator supplies defaults. Output models inherit standard metadata (`tool_id`, `execution_time`, `success`, `errors`) plus tool-specific payload fields.
 
 ## Persistence and Devices
 
-Tool calls dispatch into isolated environments by default when a toolkit has a
-`standalone/` directory. For repeated or batched calls, use persistence or
-tool pools so models and environments stay warm. Read
-`notes/tool-environments.md` for environment setup and device movement, and
-the tutorials for runtime examples.
+Tool calls dispatch into isolated environments by default when a toolkit has a `standalone/` directory. For repeated or batched calls, use persistence or tool pools so models and environments stay warm. Read `notes/tool-environments.md` for environment setup and device movement, and the tutorials for runtime examples.
 
-GPU tools default to `device="cuda"` when their config supports device
-selection. Inspect `ToolSpec.uses_gpu`, list CPU/GPU subsets through the
-registry, and check storage/access requirements before dispatch.
+GPU tools default to `device="cuda"` when their config supports device selection. Inspect `ToolSpec.uses_gpu`, list CPU/GPU subsets through the registry, and check storage/access requirements before dispatch.
 
 ## JSON and Wire Consumers
 
-Registry docs, schemas, example inputs, and outputs are Pydantic or
-JSON-serializable objects:
+Registry docs, schemas, example inputs, and outputs are Pydantic or JSON-serializable objects:
 
 ```python
 ToolRegistry.get_tool_docs("esm2-embedding").model_dump_json()
@@ -177,5 +153,4 @@ ToolRegistry.get_config_doc("esm2-embedding").model_dump_json()
 ToolRegistry.get_schemas("esm2-embedding")
 ```
 
-Output fields must remain primitives, lists, dictionaries, or nested Pydantic
-models so JSON Schema generation and wire-protocol consumers stay reliable.
+Output fields must remain primitives, lists, dictionaries, or nested Pydantic models so JSON Schema generation and wire-protocol consumers stay reliable.

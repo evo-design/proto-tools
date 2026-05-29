@@ -4,24 +4,17 @@ How seeds, caching, and dedup interact in proto-tools.
 
 ## The two categories
 
-A `@tool()` registration either declares `stochastic=True` or it doesn't.
-The flag drives three framework behaviors:
+A `@tool()` registration either declares `stochastic=True` or it doesn't. The flag drives three framework behaviors:
 
 1. Cache-skip when `seed is None`.
 2. Skip dedup for iterable inputs.
 3. Use whole-call cache instead of per-item cache.
 
-`seed` lives on `BaseConfig`, so every config accepts a `seed` kwarg.
-Tools that don't actually sample (BLAST, DSSP, etc.) inherit the field
-but ignore it in their inference; passing `seed=42` to them is a no-op.
+`seed` lives on `BaseConfig`, so every config accepts a `seed` kwarg. Tools that don't actually sample (BLAST, DSSP, etc.) inherit the field but ignore it in their inference; passing `seed=42` to them is a no-op.
 
 ### Deterministic tools (no flag)
 
-Tools whose inference doesn't sample. Some may still call
-`set_torch_seed(config.seed)` defensively for persistent-worker
-consistency, but their output is mathematically determined by input +
-config (modulo GPU float noise). Cache + dedup behave normally: always
-cacheable; identical iterable items deduplicate.
+Tools whose inference doesn't sample. Some may still call `set_torch_seed(config.seed)` defensively for persistent-worker consistency, but their output is mathematically determined by input + config (modulo GPU float noise). Cache + dedup behave normally: always cacheable; identical iterable items deduplicate.
 
 **Examples (by category):**
 
@@ -36,9 +29,7 @@ cacheable; identical iterable items deduplicate.
 
 ### Stochastic tools (`stochastic=True`)
 
-Tools whose algorithm explicitly samples — `torch.multinomial`,
-`torch.randn`, JAX `random.PRNGKey`, `pyrosetta.rg().set_seed`, etc.
-Different seeds produce different outputs.
+Tools whose algorithm explicitly samples — `torch.multinomial`, `torch.randn`, JAX `random.PRNGKey`, `pyrosetta.rg().set_seed`, etc. Different seeds produce different outputs.
 
 **Examples (by category):**
 
@@ -54,34 +45,16 @@ Different seeds produce different outputs.
 
 ## RNG vs hardware non-determinism
 
-Two unrelated sources of variation can make a tool appear
-"non-deterministic." Only the first is controllable by a seed, and only
-the first warrants the `stochastic=True` flag.
+Two unrelated sources of variation can make a tool appear "non-deterministic." Only the first is controllable by a seed, and only the first warrants the `stochastic=True` flag.
 
-1. **Algorithmic RNG.** The tool's inference calls `torch.multinomial`,
-   `torch.randn`, JAX `random.PRNGKey`, or any other explicit RNG that
-   meaningfully affects the output. A seed controls this. Tools in
-   this category get `stochastic=True`.
-2. **Hardware / numerical noise.** Bit-level variation in floating-point
-   arithmetic from fused GPU kernels (FlashAttention, cuDNN autotune,
-   JAX bfloat16, reduction-order in matmul). The algorithm is
-   mathematically deterministic; the chip just doesn't compute it
-   bit-exact between runs. **No seed controls this.** The only fix is
-   `torch.use_deterministic_algorithms(True)`, which carries significant
-   performance cost and is intentionally not enabled.
-   `BaseToolOutput.approx_equal` is the contract for this — outputs are
-   "equal" up to small float noise.
+1. **Algorithmic RNG.** The tool's inference calls `torch.multinomial`, `torch.randn`, JAX `random.PRNGKey`, or any other explicit RNG that meaningfully affects the output. A seed controls this. Tools in this category get `stochastic=True`.
+2. **Hardware / numerical noise.** Bit-level variation in floating-point arithmetic from fused GPU kernels (FlashAttention, cuDNN autotune, JAX bfloat16, reduction-order in matmul). The algorithm is mathematically deterministic; the chip just doesn't compute it bit-exact between runs. **No seed controls this.** The only fix is `torch.use_deterministic_algorithms(True)`, which carries significant performance cost and is intentionally not enabled. `BaseToolOutput.approx_equal` is the contract for this — outputs are "equal" up to small float noise.
 
-Reproducibility and diversification testing
-(`test_seed_reproducibility.py` and `test_seed_diversification.py`)
-runs only against `stochastic=True` tools. Unflagged tools are assumed
-reproducible by construction — testing them is testing GPU determinism,
-which is out of scope.
+Reproducibility and diversification testing (`test_seed_reproducibility.py` and `test_seed_diversification.py`) runs only against `stochastic=True` tools. Unflagged tools are assumed reproducible by construction — testing them is testing GPU determinism, which is out of scope.
 
 ## Behavior — deterministic tools (no flag)
 
-Seed is accepted but ignored (no-op). Cache + dedup always on; behavior
-is identical regardless of whether `seed` is passed.
+Seed is accepted but ignored (no-op). Cache + dedup always on; behavior is identical regardless of whether `seed` is passed.
 
 ### Non-iterable input
 
@@ -111,8 +84,7 @@ Repeat call: same result for each input.
 
 ### Iterable input — tool's internal batching
 
-For tools that batch internally (e.g., score tools running model forward
-passes on chunks of inputs):
+For tools that batch internally (e.g., score tools running model forward passes on chunks of inputs):
 
 ```
 Input([s1, s1, s2, s3, s4]) + Config()
@@ -123,14 +95,11 @@ Input([s1, s1, s2, s3, s4]) + Config()
   Output([r1, r1, r2, r3, r4])
 ```
 
-Two distinct layers: the framework's dedup runs before the tool sees the
-input; the tool's internal batching (`batch_size` config) runs over the
-post-dedup list.
+Two distinct layers: the framework's dedup runs before the tool sees the input; the tool's internal batching (`batch_size` config) runs over the post-dedup list.
 
 ## Behavior — stochastic tools (`stochastic=True`), `seed=None`
 
-When `seed` is `None`, the cache and dedup are both skipped. Each call
-draws a fresh random base.
+When `seed` is `None`, the cache and dedup are both skipped. Each call draws a fresh random base.
 
 ### Non-iterable input
 
@@ -160,18 +129,13 @@ Tool sees `[i1, i1, i1]`
 
 `Output([X1, Y1, Z1])`
 
-Different results for each position. Repeat calls produce yet another
-fresh set (no reproducibility — that's the whole point of `seed=None`).
+Different results for each position. Repeat calls produce yet another fresh set (no reproducibility — that's the whole point of `seed=None`).
 
-**Caveat**: this diverse-output behavior depends on the tool's internal
-RNG advancement (see [Per-Tool Diversification Contract](#per-tool-diversification-contract)
-below). For tools that don't naturally diversify, identical inputs produce
-identical outputs even with `seed=None`. Those tools need internal fixes.
+**Caveat**: this diverse-output behavior depends on the tool's internal RNG advancement (see [Per-Tool Diversification Contract](#per-tool-diversification-contract) below). For tools that don't naturally diversify, identical inputs produce identical outputs even with `seed=None`. Those tools need internal fixes.
 
 ## Behavior — stochastic tools (`stochastic=True`), `seed=2`
 
-When `seed` is set, output is reproducible across calls. Cache + dedup
-are enabled.
+When `seed` is set, output is reproducible across calls. Cache + dedup are enabled.
 
 ### Non-iterable input
 
@@ -209,14 +173,9 @@ Tool sees `[i1, i1, i1]`
 
 `Output([r1, x1, y1])`
 
-Diverse outputs (per-item RNG advancement) AND reproducible across
-calls (same seed → same multinomial draw sequence).
+Diverse outputs (per-item RNG advancement) AND reproducible across calls (same seed → same multinomial draw sequence).
 
-Mechanism: one seed enters the tool. Per-item sampling primitives
-(`torch.multinomial` or equivalent) consume and advance the global RNG
-state between batch elements, so identical inputs in the same batch
-diverge. Same seed → same sequence of multinomial draws → reproducible
-across calls.
+Mechanism: one seed enters the tool. Per-item sampling primitives (`torch.multinomial` or equivalent) consume and advance the global RNG state between batch elements, so identical inputs in the same batch diverge. Same seed → same sequence of multinomial draws → reproducible across calls.
 
 ### Iterable input — tool's internal batching
 
@@ -234,68 +193,37 @@ Tool internal results: `[r1, x1]`, `[r2, r3]`, `[r4]`
 
 `Output([r1, x1, r2, r3, r4])`
 
-The duplicates in the same internal batch (`[s1, s1]`) diverge because
-the tool's per-item multinomial advances RNG between them.
+The duplicates in the same internal batch (`[s1, s1]`) diverge because the tool's per-item multinomial advances RNG between them.
 
 ## Architectural invariants
 
-Three invariants underpin the design. They are listed here so future
-maintainers can spot a regression at code-review time.
+Three invariants underpin the design. They are listed here so future maintainers can spot a regression at code-review time.
 
 ### 1. The seed is set once per dispatch, not per element
 
-The framework MUST NOT call `set_torch_seed`, derive per-item seeds, or
-otherwise inject seed manipulation between batch elements. The seed
-that enters a `stochastic=True` tool's inference is the user-supplied
-`config.seed` (or a fresh random base when `seed is None`), set **once**
-at the top of the tool's inference.
+The framework MUST NOT call `set_torch_seed`, derive per-item seeds, or otherwise inject seed manipulation between batch elements. The seed that enters a `stochastic=True` tool's inference is the user-supplied `config.seed` (or a fresh random base when `seed is None`), set **once** at the top of the tool's inference.
 
-**Enforcement:** architectural. `tool_registry.py` does not contain
-unroll/re-seed logic. Re-introducing it should be visible at
-code-review time.
+**Enforcement:** architectural. `tool_registry.py` does not contain unroll/re-seed logic. Re-introducing it should be visible at code-review time.
 
 ### 2. Per-item diversification is the tool's responsibility
 
-Once one seed enters the tool, the tool's existing per-item sampling
-primitives (`torch.multinomial`, JAX `random.split`, autoregressive
-decode loops, etc.) consume and advance RNG between items. This is what
-makes identical inputs in one batched call produce diverse outputs.
-Tools that do not naturally diversify (ProGen3, AbLang, Bindcraft,
-Germinal — see [Per-Tool Diversification Contract](#per-tool-diversification-contract))
-must fix this internally.
+Once one seed enters the tool, the tool's existing per-item sampling primitives (`torch.multinomial`, JAX `random.split`, autoregressive decode loops, etc.) consume and advance RNG between items. This is what makes identical inputs in one batched call produce diverse outputs. Tools that do not naturally diversify (ProGen3, AbLang, Bindcraft, Germinal — see [Per-Tool Diversification Contract](#per-tool-diversification-contract)) must fix this internally.
 
-**Enforcement:** functional. `test_seed_diversification.py`
-parameterizes across all `stochastic=True` tools and asserts three
-pairwise-distinct outputs from three identical inputs.
+**Enforcement:** functional. `test_seed_diversification.py` parameterizes across all `stochastic=True` tools and asserts three pairwise-distinct outputs from three identical inputs.
 
 ### 3. GPU batching is preserved
 
-A tool receiving an N-item iterable produces N outputs via the same
-forward-pass batching it would use for distinct items. The framework
-does not split an N-item dispatch into N single-item calls — that
-would erase the throughput advantage of batched generation and the
-amortization of fixed per-call overhead (model warmup, KV-cache setup).
+A tool receiving an N-item iterable produces N outputs via the same forward-pass batching it would use for distinct items. The framework does not split an N-item dispatch into N single-item calls — that would erase the throughput advantage of batched generation and the amortization of fixed per-call overhead (model warmup, KV-cache setup).
 
-**Enforcement:** architectural, same code-path as invariant 1. The
-diversification test does **not** directly verify batching is preserved
-— a framework that serialized batches would still pass the
-diversification check, it would just be slower. Code review on changes
-to `tool_registry.py` and any new dispatch helpers is the catching
-mechanism. If we ever want a functional check, the cheap option is a
-single wall-clock smoke test on Evo2 beam search.
+**Enforcement:** architectural, same code-path as invariant 1. The diversification test does **not** directly verify batching is preserved — a framework that serialized batches would still pass the diversification check, it would just be slower. Code review on changes to `tool_registry.py` and any new dispatch helpers is the catching mechanism. If we ever want a functional check, the cheap option is a single wall-clock smoke test on Evo2 beam search.
 
 ## Per-tool diversification contract
 
-The "skip dedup, tool diversifies naturally" mechanism above assumes
-the tool's internal sampling primitives advance RNG between items in a
-batched call. This is a **per-tool implementation property**, not a
-framework guarantee.
+The "skip dedup, tool diversifies naturally" mechanism above assumes the tool's internal sampling primitives advance RNG between items in a batched call. This is a **per-tool implementation property**, not a framework guarantee.
 
 ### Tools that satisfy the contract
 
-Per-item RNG advancement happens naturally inside the tool's
-implementation. Skipping framework dedup gives the diverse-and-reproducible
-behavior described above with no tool changes needed.
+Per-item RNG advancement happens naturally inside the tool's implementation. Skipping framework dedup gives the diverse-and-reproducible behavior described above with no tool changes needed.
 
 | Tool | Mechanism |
 |---|---|
@@ -314,9 +242,7 @@ behavior described above with no tool changes needed.
 
 ### Tools that violate the contract
 
-These tools have internal-implementation issues that prevent per-item
-diversification. Identical inputs produce identical outputs even when
-the framework correctly passes the duplicates through.
+These tools have internal-implementation issues that prevent per-item diversification. Identical inputs produce identical outputs even when the framework correctly passes the duplicates through.
 
 | Tool | Issue |
 |---|---|
@@ -327,79 +253,42 @@ the framework correctly passes the duplicates through.
 
 ### Tools with undetermined behavior
 
-The internal SDK behavior for these tools is undetermined from source.
-The diversification test resolves them empirically when it runs.
+The internal SDK behavior for these tools is undetermined from source. The diversification test resolves them empirically when it runs.
 
 - LigandMPNN-sample
 
 ### ESMFold
 
-ESMFold has two registered tools in `esmfold.py`. The prediction tool
-is a single-pass forward pass and does not carry the flag; the gradient
-tool reads `config.seed` and is registered with `stochastic=True`. They
-share a config-class hierarchy (`ESMFoldGradientConfig` extends
-`ESMFoldConfig`), and both inherit `seed` from `BaseConfig`; the
-prediction tool simply ignores the inherited field.
+ESMFold has two registered tools in `esmfold.py`. The prediction tool is a single-pass forward pass and does not carry the flag; the gradient tool reads `config.seed` and is registered with `stochastic=True`. They share a config-class hierarchy (`ESMFoldGradientConfig` extends `ESMFoldConfig`), and both inherit `seed` from `BaseConfig`; the prediction tool simply ignores the inherited field.
 
 ## Reproducibility caveats
 
 A few subtleties worth knowing:
 
-1. **Ordering matters.** Reproducibility holds for `(inputs in order, config)`.
-   `[i1, i2, i3]` and `[i2, i1, i3]` with the same seed produce different
-   outputs because per-item RNG advancement is sequential.
-2. **Bit-exact reproducibility on GPU is not promised.** Float noise from
-   fused kernels, cuDNN autotune, and bfloat16 reductions can cause small
-   variation between runs. `BaseToolOutput.approx_equal` (used by
-   `test_seed_reproducibility.py`) handles this contractually.
-3. **Per-item cache is incompatible with skip-dedup for `stochastic=True`
-   tools.** Per-item cache keys are position-independent (`(item,
-   config)`). For stochastic tools, two identical items in one call
-   produce different outputs (per-item RNG advancement), so caching
-   item 0's result as `(i1, seed=2)` and later reusing it at position
-   1 would be wrong. Stochastic tools use whole-call cache only
-   (key = `(full_input_iterable, config)`), not per-item cache. The
-   realistic call pattern for samplers doesn't exercise partial-batch
-   re-runs, so the loss is minimal.
+1. **Ordering matters.** Reproducibility holds for `(inputs in order, config)`. `[i1, i2, i3]` and `[i2, i1, i3]` with the same seed produce different outputs because per-item RNG advancement is sequential.
+2. **Bit-exact reproducibility on GPU is not promised.** Float noise from fused kernels, cuDNN autotune, and bfloat16 reductions can cause small variation between runs. `BaseToolOutput.approx_equal` (used by `test_seed_reproducibility.py`) handles this contractually.
+3. **Per-item cache is incompatible with skip-dedup for `stochastic=True` tools.** Per-item cache keys are position-independent (`(item, config)`). For stochastic tools, two identical items in one call produce different outputs (per-item RNG advancement), so caching item 0's result as `(i1, seed=2)` and later reusing it at position 1 would be wrong. Stochastic tools use whole-call cache only (key = `(full_input_iterable, config)`), not per-item cache. The realistic call pattern for samplers doesn't exercise partial-batch re-runs, so the loss is minimal.
 
 ## Testing
 
-Reproducibility and diversification tests parameterize across
-**`stochastic=True` tools only**. Unflagged tools are assumed
-reproducible by construction; testing them is testing GPU determinism,
-which is out of scope.
+Reproducibility and diversification tests parameterize across **`stochastic=True` tools only**. Unflagged tools are assumed reproducible by construction; testing them is testing GPU determinism, which is out of scope.
 
-Cross-tool parametrized tests are marked `@pytest.mark.extensive` —
-they run opt-in via `pytest --ext` / `--extensive` (not on every PR).
-They are not enabled by `--all` or `--slow`. This matches the existing
-pattern for combinatorial tests that fan out across every registered
-tool.
+Cross-tool parametrized tests are marked `@pytest.mark.extensive` — they run opt-in via `pytest --ext` / `--extensive` (not on every PR). They are not enabled by `--all` or `--slow`. This matches the existing pattern for combinatorial tests that fan out across every registered tool.
 
-`tests/seed_tests/test_seed_diversification.py` parameterizes
-across all `stochastic=True` tools and asserts:
+`tests/seed_tests/test_seed_diversification.py` parameterizes across all `stochastic=True` tools and asserts:
 
-- `[i1, i1, i1] + seed=2` produces three pairwise-distinct outputs
-  (the diversification claim — one distinct result per input position).
-- `[i1, i1, i1] + seed=2` is reproducible across calls (per-batch
-  reproducibility — running the same call twice gives the same triple).
+- `[i1, i1, i1] + seed=2` produces three pairwise-distinct outputs (the diversification claim — one distinct result per input position).
+- `[i1, i1, i1] + seed=2` is reproducible across calls (per-batch reproducibility — running the same call twice gives the same triple).
 - `seed=None` repeat calls produce different results (cache must skip).
 
-`tests/seed_tests/test_seed_reproducibility.py` filters its
-parametrization to `stochastic=True` tools — same-seed-same-output is
-meaningful only there.
+`tests/seed_tests/test_seed_reproducibility.py` filters its parametrization to `stochastic=True` tools — same-seed-same-output is meaningful only there.
 
-`tests/seed_tests/test_stochastic_iterable_routing.py` exercises
-the framework's cache / dedup / routing using three pure-CPU mock tools
-in `proto_tools/tools/testing/`:
+`tests/seed_tests/test_stochastic_iterable_routing.py` exercises the framework's cache / dedup / routing using three pure-CPU mock tools in `proto_tools/tools/testing/`:
 
 - `mock-iterable-stochastic` — internal batched sampling
 - `mock-iterable-stochastic-serial` — pure serial loop, no batching
 - `mock-iterable-deterministic` — deterministic per-prompt scoring
 
-These mocks expose an `items_processed` field so tests can directly
-observe whether the framework dedup'd before the tool ran. They run in
-under a second total and aren't marked `extensive`.
+These mocks expose an `items_processed` field so tests can directly observe whether the framework dedup'd before the tool ran. They run in under a second total and aren't marked `extensive`.
 
-Tools with confirmed bugs are marked `@pytest.mark.xfail` with the
-issue tracker link in the `reason=` string. The xfail list IS the bug
-tracker.
+Tools with confirmed bugs are marked `@pytest.mark.xfail` with the issue tracker link in the `reason=` string. The xfail list IS the bug tracker.
