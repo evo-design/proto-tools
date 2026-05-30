@@ -483,8 +483,16 @@ def _build_homology_command(
     extra_args: list[str],
     num_threads: int,
     use_gpu: bool,
+    pairing_strategy: int | None = None,
 ) -> list[str]:
-    """Assemble the colabfold_search CLI command from registry-driven flags."""
+    """Assemble the colabfold_search CLI command from registry-driven flags.
+
+    When ``pairing_strategy`` is set, the query FASTA is a colon-joined complex
+    record and cross-chain paired MSAs are produced using the UniRef30 taxonomy DB;
+    ``--use-env-pairing`` stays off (env-pairing deferred). ``--unpack 0`` keeps the
+    result DBs (``final.a3m``, ``pair.a3m``) so the caller can unpack them into loose
+    per-chain files itself, instead of colabfold merging them into one combined a3m.
+    """
     cmd = [colabfold_path, "--mmseqs", mmseqs_path, "--threads", str(num_threads)]
     if sensitivity is not None:
         cmd += ["-s", str(sensitivity)]
@@ -492,14 +500,41 @@ def _build_homology_command(
         cmd += ["--prefilter-mode", str(prefilter_mode)]
     if max_seqs is not None:
         cmd += ["--max-accept", str(max_seqs)]
-    # Phase 3: env DB not used (no metagenomic support yet)
+    # env DB not used (no metagenomic support yet)
     cmd += ["--use-env", "0"]
+    if pairing_strategy is not None:
+        cmd += ["--pair-mode", "unpaired_paired", "--pairing_strategy", str(pairing_strategy), "--unpack", "0"]
     cmd += ["--db1", db_name]
     cmd += [str(query_fasta), str(dataset_dir), str(output_dir)]
     if use_gpu:
         cmd += ["--gpu", "1"]
     cmd += list(extra_args)
     return cmd
+
+
+def _unpack_paired_dbs(mmseqs_path: str, output_dir: Path) -> None:
+    """Unpack the paired-search result DBs into loose per-chain a3m files.
+
+    A paired search runs with ``--unpack 0``, so colabfold leaves the MSA result
+    DBs packed. Unpack them by db key (0, 1, ...): the unpaired monomer MSAs as
+    ``{id}.a3m`` and the row-aligned paired MSAs as ``{id}.paired.a3m`` (exactly
+    the files colabfold's own ``--unpack`` produces before its merge step).
+    """
+    for db_name, out_suffix in (("final.a3m", ".a3m"), ("pair.a3m", ".paired.a3m")):
+        if (output_dir / f"{db_name}.dbtype").exists():
+            _run_cmd(
+                [
+                    mmseqs_path,
+                    "unpackdb",
+                    str(output_dir / db_name),
+                    str(output_dir),
+                    "--unpack-name-mode",
+                    "0",
+                    "--unpack-suffix",
+                    out_suffix,
+                ],
+                f"mmseqs unpackdb ({db_name})",
+            )
 
 
 def _backfill_empty_a3ms(query_fasta: Path, output_dir: Path) -> None:
@@ -557,6 +592,8 @@ def run_homology_search(input_dict: dict[str, Any]) -> dict[str, Any]:
     prefilter_mode = input_dict.get("prefilter_mode")
     max_seqs = input_dict.get("max_seqs")
     extra_args: list[str] = list(input_dict.get("extra_args", []))
+    # When set (mmseqs pairaln --pairing-mode int), `sequences` is one complex's chains, submitted as one colon-joined record.
+    pairing_strategy: int | None = input_dict.get("pairing_strategy")
     # Inner timeout fires before the framework's outer ToolInstance timeout so
     # we can return a structured error (with cleanup) instead of being
     # hard-killed mid-subprocess. None disables the inner timeout entirely.
@@ -567,7 +604,11 @@ def run_homology_search(input_dict: dict[str, Any]) -> dict[str, Any]:
     db_name = _detect_database_name(dataset_dir, db_prefix)
 
     query_fasta = output_dir / "query.fasta"
-    _write_query_fasta(sequences, query_fasta)
+    if pairing_strategy is not None:
+        # One colon-joined record => colabfold treats it as a complex (is_complex).
+        query_fasta.write_text(">0\n" + ":".join(sequences) + "\n")
+    else:
+        _write_query_fasta(sequences, query_fasta)
 
     cmd = _build_homology_command(
         colabfold_path=colabfold_path,
@@ -582,6 +623,7 @@ def run_homology_search(input_dict: dict[str, Any]) -> dict[str, Any]:
         extra_args=extra_args,
         num_threads=num_threads,
         use_gpu=use_gpu,
+        pairing_strategy=pairing_strategy,
     )
 
     try:
@@ -594,6 +636,9 @@ def run_homology_search(input_dict: dict[str, Any]) -> dict[str, Any]:
                 print(completed.stdout)
             if completed.stderr:
                 print(completed.stderr, file=sys.stderr)
+        # Paired search ran with --unpack 0; unpack the result DBs ourselves.
+        if pairing_strategy is not None:
+            _unpack_paired_dbs(mmseqs_path, output_dir)
         return {"success": True, "output_dir": str(output_dir), "db_name": db_name}
     except subprocess.TimeoutExpired as e:
         return {

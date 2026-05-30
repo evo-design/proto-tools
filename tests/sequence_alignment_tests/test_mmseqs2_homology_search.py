@@ -1,8 +1,9 @@
-"""Tests for the mmseqs2-homology-search tool (Phase 3: protein, unpaired)."""
+"""Tests for the mmseqs2-homology-search tool (protein; unpaired + taxonomy-paired)."""
 
 import logging
 import platform
 from pathlib import Path
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -15,9 +16,11 @@ from proto_tools.tools.sequence_alignment.mmseqs2 import (
     run_mmseqs2_homology_search,
 )
 from proto_tools.tools.sequence_alignment.mmseqs2.homology_search import (
+    _assemble_paired_result,
     _check_dataset_provisioned,
     _rename_a3m_to_sequence_id,
 )
+from proto_tools.utils.tool_instance import ToolInstance
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +31,68 @@ logger = logging.getLogger(__name__)
 
 UBIQUITIN = "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG"
 HEMOGLOBIN_ALPHA = "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"
+
+# Full-length human hemoglobin alpha/beta: a vertebrate-wide heterodimer, so the chains pair into deep, row-aligned MSAs.
+HBA_HUMAN = "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSHGSAQVKGHGKKVADALTNAVAHVDDMPNALSALSDLHAHKLRVDPVNFKLLSHCLLVTLAAHLPAEFTPAVHASLDKFLASVSTVLTSKYR"
+HBB_HUMAN = "MVHLTPEEKSAVTALWGKVNVDEVGGEALGRLLVVYPWTQRFFESFGDLSTPDAVMGNPKVKAHGKKVLGAFSDGLAHLDNLKGTFATLSELHCDKLHVDPENFRLLGNVLVCVLAHHFGKEFTPPVQAAYQKVVAGVANALAHKYH"
+
+
+# ============================================================================
+# Mocking helpers (no GPU / no provisioned DB needed)
+# ============================================================================
+
+
+def _write_a3m(path: Path, query_seq: str, n_rows: int) -> None:
+    """Write an A3M with a query row plus ``n_rows - 1`` equal-length homolog rows."""
+    lines = [f">query\n{query_seq}"]
+    lines += [f">hom{i}\n{query_seq}" for i in range(n_rows - 1)]
+    path.write_text("\n".join(lines) + "\n")
+
+
+def _provision_fake_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Create a minimal on-disk cache so the pre-dispatch provisioning check passes."""
+    entry = DatasetRegistry.get("uniref30-2302")
+    cache = tmp_path / dataset_slug("uniref30-2302")
+    cache.mkdir()
+    for out in entry.index_recipe.output_files or []:
+        (cache / out.replace("{name}", dataset_slug("uniref30-2302"))).write_bytes(b"")
+    monkeypatch.setattr(
+        "proto_tools.tools.sequence_alignment.mmseqs2.homology_search.get_dataset_dir",
+        lambda _: cache,
+    )
+    return cache
+
+
+def _install_fake_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+    captured: list[dict[str, Any]],
+    *,
+    paired_depth: int = 3,
+    drop_paired_for_chain: int | None = None,
+) -> None:
+    """Patch ``ToolInstance.dispatch`` to drop synthetic per-chain A3M files.
+
+    A paired call (``pairing_strategy`` set) writes ``{i}.a3m`` (unpaired) and
+    ``{i}.paired.a3m`` (row-aligned) per chain; an unpaired batch writes
+    ``__q{idx}.a3m`` per sequence. ``drop_paired_for_chain`` omits one chain's
+    paired file to simulate partial pairing.
+    """
+
+    def fake(toolkit: str, payload: dict[str, Any], **_: Any) -> dict[str, Any]:
+        captured.append(payload)
+        out_dir = Path(payload["output_dir"])
+        sequences = payload["sequences"]
+        if payload.get("pairing_strategy") is not None:
+            for i, seq in enumerate(sequences):
+                _write_a3m(out_dir / f"{i}.a3m", seq, 4)
+                if i != drop_paired_for_chain:
+                    _write_a3m(out_dir / f"{i}.paired.a3m", seq, paired_depth)
+        else:
+            for idx, seq in enumerate(sequences):
+                _write_a3m(out_dir / f"__q{idx}.a3m", seq, 4)
+        return {"success": True, "output_dir": payload["output_dir"], "db_name": "uniref30_2302_db"}
+
+    monkeypatch.setattr(ToolInstance, "dispatch", staticmethod(fake))
 
 
 def _uniref30_provisioned() -> bool:
@@ -76,17 +141,19 @@ def test_duplicate_sequence_ids_rejected() -> None:
         Mmseqs2HomologySearchInput(queries=[(UBIQUITIN, "x"), (HEMOGLOBIN_ALPHA, "x")])
 
 
-def test_paired_group_rejected_in_phase_3() -> None:
-    """Phase 3 rejects paired groups with a clear error message."""
-    with pytest.raises(ValidationError, match=r"Paired-MSA queries .* are not yet supported"):
-        Mmseqs2HomologySearchInput(
-            queries=[
-                [
-                    Mmseqs2HomologySearchQuery(sequence=UBIQUITIN, sequence_id="a"),
-                    Mmseqs2HomologySearchQuery(sequence=HEMOGLOBIN_ALPHA, sequence_id="b"),
-                ]
+def test_paired_group_accepted_as_nested_list() -> None:
+    """A nested list of chains is accepted as one paired group."""
+    inp = Mmseqs2HomologySearchInput(
+        queries=[
+            [
+                Mmseqs2HomologySearchQuery(sequence=UBIQUITIN, sequence_id="a"),
+                Mmseqs2HomologySearchQuery(sequence=HEMOGLOBIN_ALPHA, sequence_id="b"),
             ]
-        )
+        ]
+    )
+    assert len(inp) == 1
+    assert isinstance(inp.queries[0], list)
+    assert [q.sequence_id for q in inp.queries[0]] == ["a", "b"]
 
 
 # ============================================================================
@@ -100,9 +167,9 @@ def test_unknown_dataset_rejected() -> None:
         Mmseqs2HomologySearchConfig(datasets=["does-not-exist"])
 
 
-def test_multi_dataset_rejected_in_phase_3() -> None:
-    """Phase 3 supports exactly one dataset."""
-    with pytest.raises(ValidationError, match="exactly one dataset"):
+def test_multi_dataset_rejected() -> None:
+    """Exactly one dataset is supported per call."""
+    with pytest.raises(ValidationError, match=r"[Ee]xactly one dataset"):
         Mmseqs2HomologySearchConfig(datasets=["uniref30-2302", "uniref30-2302"])
 
 
@@ -257,9 +324,7 @@ def test_e2e_search_against_provisioned_protein_dataset(dataset_name: str) -> No
     if not entry.supports_gpu:
         pytest.skip(f"{dataset_name} declares supports_gpu=False")
     if entry.a3m_adapter != "colabfold":
-        pytest.skip(
-            f"{dataset_name} uses a3m_adapter={entry.a3m_adapter!r}; tool currently only handles colabfold-style DBs (Phase 4)"
-        )
+        pytest.skip(f"{dataset_name} uses a3m_adapter={entry.a3m_adapter!r}; tool only handles colabfold-style DBs")
 
     inp = Mmseqs2HomologySearchInput(queries=[(UBIQUITIN, "ubiquitin")])
     cfg = Mmseqs2HomologySearchConfig(datasets=[dataset_name], use_gpu=True)
@@ -275,6 +340,136 @@ def test_e2e_search_against_provisioned_protein_dataset(dataset_name: str) -> No
         f"{dataset_name} returned only {grp.num_homologs_found[0]} homologs for ubiquitin "
         "(expected >5 — universally conserved protein)"
     )
+
+
+# ============================================================================
+# Paired (multi-chain) groups — mocked dispatch, no GPU / DB needed
+# ============================================================================
+
+
+def test_paired_group_produces_row_aligned_paired_msas(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 2-chain paired group yields per-chain unpaired + row-aligned paired MSAs."""
+    _provision_fake_cache(tmp_path, monkeypatch)
+    captured: list[dict[str, Any]] = []
+    _install_fake_dispatch(monkeypatch, captured, paired_depth=3)
+
+    inp = Mmseqs2HomologySearchInput(queries=[[(UBIQUITIN, "chainA"), (HEMOGLOBIN_ALPHA, "chainB")]])
+    out = run_mmseqs2_homology_search(inp, Mmseqs2HomologySearchConfig(use_gpu=False))
+
+    assert len(out.results) == 1
+    grp = out.results[0]
+    assert grp.sequence_ids == ["chainA", "chainB"]
+    assert all(m is not None for m in grp.msas)
+    assert all(m is not None for m in grp.paired_msas)
+    # Paired MSAs are row-aligned: equal depth across chains.
+    depths = {m.num_sequences for m in grp.paired_msas if m is not None}
+    assert depths == {3}
+    # Exactly one paired dispatch (the group), submitted as a complex.
+    assert len(captured) == 1
+    assert captured[0]["pairing_strategy"] == 0  # greedy default
+    assert captured[0]["sequences"] == [UBIQUITIN, HEMOGLOBIN_ALPHA]
+
+
+@pytest.mark.parametrize(("strategy", "expected_int"), [("greedy", 0), ("complete", 1)])
+def test_pairing_strategy_maps_to_mmseqs_int(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, strategy: str, expected_int: int
+) -> None:
+    """``pairing_strategy`` reaches the dispatch payload as the mmseqs pairing-mode int."""
+    _provision_fake_cache(tmp_path, monkeypatch)
+    captured: list[dict[str, Any]] = []
+    _install_fake_dispatch(monkeypatch, captured)
+
+    inp = Mmseqs2HomologySearchInput(queries=[[(UBIQUITIN, "a"), (HEMOGLOBIN_ALPHA, "b")]])
+    run_mmseqs2_homology_search(inp, Mmseqs2HomologySearchConfig(use_gpu=False, pairing_strategy=strategy))
+
+    assert captured[0]["pairing_strategy"] == expected_int
+
+
+def test_singletons_batch_while_paired_group_dispatches_separately(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Singletons share one unpaired batch; the paired group dispatches on its own, order preserved."""
+    _provision_fake_cache(tmp_path, monkeypatch)
+    captured: list[dict[str, Any]] = []
+    _install_fake_dispatch(monkeypatch, captured)
+
+    inp = Mmseqs2HomologySearchInput(
+        queries=[
+            (UBIQUITIN, "solo1"),
+            [(UBIQUITIN, "pairA"), (HEMOGLOBIN_ALPHA, "pairB")],
+            (HEMOGLOBIN_ALPHA, "solo2"),
+        ]
+    )
+    out = run_mmseqs2_homology_search(inp, Mmseqs2HomologySearchConfig(use_gpu=False))
+
+    # Results stay parallel to input groups.
+    assert [r.sequence_ids for r in out.results] == [["solo1"], ["pairA", "pairB"], ["solo2"]]
+    # Singleton groups carry no paired MSAs; the paired group does.
+    assert out.results[0].paired_msas == [None]
+    assert out.results[2].paired_msas == [None]
+    assert all(m is not None for m in out.results[1].paired_msas)
+    # One batched unpaired dispatch (both singletons) + one paired dispatch.
+    unpaired = [p for p in captured if p["pairing_strategy"] is None]
+    paired = [p for p in captured if p["pairing_strategy"] is not None]
+    assert len(unpaired) == 1 and unpaired[0]["sequences"] == [UBIQUITIN, HEMOGLOBIN_ALPHA]
+    assert len(paired) == 1 and paired[0]["sequences"] == [UBIQUITIN, HEMOGLOBIN_ALPHA]
+
+
+def test_assemble_paired_result_partial_pairing_hard_fails(tmp_path: Path) -> None:
+    """One chain paired, the other empty → hard-fail (matches colabfold-search)."""
+    members = [
+        Mmseqs2HomologySearchQuery(sequence=UBIQUITIN, sequence_id="a"),
+        Mmseqs2HomologySearchQuery(sequence=HEMOGLOBIN_ALPHA, sequence_id="b"),
+    ]
+    # Chain 0 gets a paired MSA; chain 1 gets none.
+    _write_a3m(tmp_path / "0.a3m", UBIQUITIN, 4)
+    _write_a3m(tmp_path / "0.paired.a3m", UBIQUITIN, 3)
+    _write_a3m(tmp_path / "1.a3m", HEMOGLOBIN_ALPHA, 4)
+    with pytest.raises(RuntimeError, match="partial MSAs"):
+        _assemble_paired_result(tmp_path, members, "uniref30-2302")
+
+
+def test_assemble_paired_result_no_pairing_returns_all_none(tmp_path: Path) -> None:
+    """No paired files at all (no shared species) → paired_msas all None, no error."""
+    members = [
+        Mmseqs2HomologySearchQuery(sequence=UBIQUITIN, sequence_id="a"),
+        Mmseqs2HomologySearchQuery(sequence=HEMOGLOBIN_ALPHA, sequence_id="b"),
+    ]
+    _write_a3m(tmp_path / "0.a3m", UBIQUITIN, 4)
+    _write_a3m(tmp_path / "1.a3m", HEMOGLOBIN_ALPHA, 4)
+    result = _assemble_paired_result(tmp_path, members, "uniref30-2302")
+    assert result.paired_msas == [None, None]
+    assert all(m is not None for m in result.msas)  # unpaired still present
+
+
+@pytest.mark.integration
+@pytest.mark.uses_cpu
+@pytest.mark.slow
+@pytest.mark.skip_ci
+def test_real_paired_search_against_mini_db() -> None:
+    """Real taxonomy-paired search against the auto-provisioning mini SwissProt DB.
+
+    Exercises the full ``--unpack 0`` + ``unpackdb`` paired pipeline end-to-end
+    (no GPU, no manual DB setup — the ``tiny-test-colabfold`` fixture
+    auto-provisions on first run). Hemoglobin alpha+beta pair into deep,
+    row-aligned MSAs.
+    """
+    inp = Mmseqs2HomologySearchInput(queries=[[(HBA_HUMAN, "hba"), (HBB_HUMAN, "hbb")]])
+    cfg = Mmseqs2HomologySearchConfig(datasets=["tiny-test-colabfold"], use_gpu=False)
+    out = run_mmseqs2_homology_search(inp, cfg)
+
+    assert out.success, f"paired search failed: {out.errors}"
+    assert len(out.results) == 1
+    grp = out.results[0]
+    assert grp.sequence_ids == ["hba", "hbb"]
+    # Both chains paired and row-aligned: one depth shared across the group.
+    assert all(m is not None for m in grp.paired_msas)
+    depths = {m.num_sequences for m in grp.paired_msas if m is not None}
+    assert len(depths) == 1 and next(iter(depths)) > 5, (
+        f"expected deep equal-depth paired MSAs, got {[m.num_sequences for m in grp.paired_msas if m]}"
+    )
+    # Unpaired per-chain MSAs are present alongside the paired ones.
+    assert all(m is not None for m in grp.msas)
 
 
 def test_rename_a3m_avoids_collision_with_adversarial_numeric_ids(tmp_path: Path) -> None:

@@ -94,6 +94,7 @@ class ColabFoldSearchWrapper:
         use_gpu: bool = False,
         verbose: bool = False,
         extra_args: list[str] | None = None,
+        pairing_strategy: int | None = None,
     ) -> dict[str, Any]:
         """Run ColabFold MSA search.
 
@@ -108,6 +109,10 @@ class ColabFoldSearchWrapper:
             use_gpu: Whether to enable GPU acceleration
             verbose: Whether to print status messages
             extra_args: Verbatim colabfold_search CLI tokens appended after typed flags
+            pairing_strategy: When set (mmseqs ``pairaln --pairing-mode`` int: 0=greedy,
+                1=complete), the FASTA is treated as a complex (colon-joined chains) and
+                cross-chain paired MSAs are produced as ``{id}.paired.a3m``. ``None`` runs
+                an unpaired search only.
 
         Returns:
             Dictionary containing output_dir and success status
@@ -140,6 +145,10 @@ class ColabFoldSearchWrapper:
         # Add metagenomic database parameter if provided
         if not use_metagenomic_db:
             cmd.extend(["--use-env", "0"])
+
+        # Paired (complex) search: request unpaired+paired MSAs and keep the result DBs (--unpack 0) to unpack ourselves below.
+        if pairing_strategy is not None:
+            cmd.extend(["--pair-mode", "unpaired_paired", "--pairing_strategy", str(pairing_strategy), "--unpack", "0"])
 
         # Add database name
         if database_name:
@@ -183,6 +192,27 @@ class ColabFoldSearchWrapper:
             )
 
             logger.debug("ColabFold search completed successfully")
+
+            # Unpack the result DBs into per-chain {id}.a3m (unpaired) and {id}.paired.a3m (row-aligned).
+            if pairing_strategy is not None:
+                assert self.mmseqs_executable is not None  # set by load()
+                for result_db, out_suffix in (("final.a3m", ".a3m"), ("pair.a3m", ".paired.a3m")):
+                    if (output_dir / f"{result_db}.dbtype").exists():
+                        subprocess.run(
+                            [
+                                self.mmseqs_executable,
+                                "unpackdb",
+                                str(output_dir / result_db),
+                                str(output_dir),
+                                "--unpack-name-mode",
+                                "0",
+                                "--unpack-suffix",
+                                out_suffix,
+                            ],
+                            check=True,
+                            capture_output=not verbose,
+                            text=True,
+                        )
 
             return {
                 "output_dir": str(output_dir),
@@ -296,6 +326,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         use_gpu=input_dict.get("use_gpu", False),
         verbose=input_dict.get("verbose", True),
         extra_args=input_dict.get("extra_args"),
+        pairing_strategy=input_dict.get("pairing_strategy"),
     )
 
 
@@ -325,6 +356,7 @@ if __name__ == "__main__":
         use_gpu=input_data.get("use_gpu", False),
         verbose=input_data.get("verbose", True),
         extra_args=input_data.get("extra_args"),
+        pairing_strategy=input_data.get("pairing_strategy"),
     )
 
     # Write the output to a json file

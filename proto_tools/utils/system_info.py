@@ -113,6 +113,21 @@ def _get_ram_gb() -> float:
     return 0.0
 
 
+def resolve_num_threads(configured: int | None) -> int:
+    """Return ``configured`` if set, else the CPU count this process may use (always >= 1).
+
+    Auto-detection prefers ``os.sched_getaffinity(0)`` (cgroup/Slurm-aware on
+    Linux: the allocated cores), falling back to ``os.cpu_count()`` on platforms
+    where it is unavailable (macOS, Windows).
+    """
+    if configured is not None:
+        return configured
+    try:
+        return len(os.sched_getaffinity(0)) or 1
+    except AttributeError:
+        return os.cpu_count() or 1
+
+
 # ============================================================================
 # GPU Info
 # ============================================================================

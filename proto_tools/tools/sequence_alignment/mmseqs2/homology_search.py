@@ -2,9 +2,9 @@
 
 The MSA-generation entry point of the unified ``mmseqs2`` toolkit, alongside
 ``mmseqs2-search-proteins`` / ``mmseqs2-search-genomes`` / ``mmseqs2-clustering``.
-Replaces ``colabfold-search`` in structure predictors. This implementation
-supports protein search via the registry's UniRef30 entry, GPU by default,
-and unpaired MSAs.
+Replaces ``colabfold-search`` in structure predictors. Searches protein queries
+against the registry's UniRef30 entry (GPU by default), producing unpaired MSAs
+for singleton queries and taxonomy-paired MSAs for multi-chain groups.
 """
 
 import hashlib
@@ -28,9 +28,13 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
     ToolInstance,
+    resolve_num_threads,
 )
 
 logger = logging.getLogger(__name__)
+
+# colabfold_search `--pairing_strategy` maps to mmseqs `pairaln --pairing-mode`: greedy=0, complete=1.
+_PAIRING_MODE_INT = {"greedy": 0, "complete": 1}
 
 
 # ============================================================================
@@ -76,10 +80,7 @@ class Mmseqs2HomologySearchInput(BaseToolInput):
     - A flat ``Mmseqs2HomologySearchQuery`` (or string / tuple sugar) is a
       *singleton* group — one chain, unpaired MSA.
     - A list of queries is a *paired* group — multiple chains whose MSAs
-      should be row-synchronized by taxonomy.
-
-    Phase 3 supports singleton groups only. Paired groups are validator-rejected;
-    full support lands when the paired-MSA local path is implemented.
+      are row-synchronized by taxonomy.
 
     Attributes:
         queries (list[Mmseqs2HomologySearchQuery | list[Mmseqs2HomologySearchQuery]]):
@@ -126,17 +127,6 @@ class Mmseqs2HomologySearchInput(BaseToolInput):
                 seen.add(q.sequence_id)
         return self
 
-    @model_validator(mode="after")
-    def _reject_paired_groups_in_phase_3(self) -> Any:
-        """Phase 3: reject paired groups; full support lands with the paired-MSA local path."""
-        for i, group in enumerate(self.queries):
-            if isinstance(group, list) and len(group) >= 2:
-                raise ValueError(
-                    f"Paired-MSA queries (group #{i} has {len(group)} chains) are not yet supported. "
-                    "For unpaired multimer search, pass each chain as a singleton (top-level) entry."
-                )
-        return self
-
     def all_queries(self) -> list[Mmseqs2HomologySearchQuery]:
         """Flatten groups → list of every query in input order."""
         flat: list[Mmseqs2HomologySearchQuery] = []
@@ -179,15 +169,16 @@ class Mmseqs2HomologySearchResult(BaseModel):
 
     A *singleton* group produces one entry in each of ``sequence_ids``, ``msas``,
     and ``num_homologs_found``, with ``paired_msas == [None]``. A *paired* group
-    (Phase 4+) produces one entry per chain, with ``paired_msas`` row-synchronized
-    across the group's chains.
+    produces one entry per chain, with ``paired_msas`` row-synchronized across the
+    group's chains by taxonomy.
 
     Attributes:
         sequence_ids (list[str]): Identifiers for the chains in this group.
         msas (list[MSA | None]): Per-chain unpaired MSAs. ``None`` when no
             homologs were found beyond the query itself.
-        paired_msas (list[MSA | None]): Per-chain paired MSAs (Phase 4+). For
-            singleton groups, always ``[None]``.
+        paired_msas (list[MSA | None]): Per-chain taxonomy-paired MSAs,
+            row-aligned across the group's chains. ``[None]`` for singleton
+            groups (nothing to pair).
         datasets_searched (list[str]): Registry keys of datasets hit for this group.
         num_homologs_found (list[int]): Number of homologs per chain (excludes
             the query itself).
@@ -196,7 +187,7 @@ class Mmseqs2HomologySearchResult(BaseModel):
     sequence_ids: list[str] = Field(title="Sequence IDs", description="Chain identifiers in this group")
     msas: list[MSA | None] = Field(title="Unpaired MSAs", description="Per-chain unpaired MSAs")
     paired_msas: list[MSA | None] = Field(
-        title="Paired MSAs", description="Per-chain paired MSAs (Phase 4+); None in Phase 3"
+        title="Paired MSAs", description="Per-chain taxonomy-paired MSAs; [None] for singleton groups"
     )
     datasets_searched: list[str] = Field(
         title="Datasets Searched",
@@ -267,12 +258,14 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
     """Configuration for ``mmseqs2-homology-search``.
 
     Attributes:
-        datasets (list[str]): Registered dataset keys; Phase 3 accepts
-            exactly one protein dataset.
+        datasets (list[str]): Registered dataset keys; accepts exactly one
+            protein dataset.
         use_gpu (bool): Run MMseqs2-GPU; requires a ``.idx_pad`` index,
             an NVIDIA GPU (Turing+), and a Linux host.
-        pairing_strategy (Literal["greedy", "complete"]): Paired-MSA strategy
-            (used in Phase 4; ignored in Phase 3).
+        pairing_strategy (Literal["greedy", "complete"]): Cross-chain pairing
+            strategy for paired (multi-chain) groups. ``"greedy"`` pairs a
+            species found in at least two chains; ``"complete"`` only pairs a
+            species present in every chain. Ignored for singleton groups.
         sensitivity (float | None): MMseqs2 ``-s`` override; ignored under
             ``use_gpu=True``. ``None`` uses the dataset's registered default.
         num_threads (int | None): CPU threads; ``None`` auto-detects all cores.
@@ -289,7 +282,7 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
     datasets: list[str] = ConfigField(
         title="Datasets",
         default=["uniref30-2302"],
-        description="Registered dataset keys (e.g. `uniref30-2302`). Phase 3: exactly one protein dataset.",
+        description="Registered dataset keys (e.g. `uniref30-2302`); exactly one protein dataset per call.",
     )
     use_gpu: bool = ConfigField(
         title="Use GPU",
@@ -299,7 +292,7 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
     pairing_strategy: Literal["greedy", "complete"] = ConfigField(
         title="Pairing Strategy",
         default="greedy",
-        description="Paired-MSA strategy (forward-compat field; not yet wired up).",
+        description="Cross-chain pairing for paired groups: `greedy` (species in >=2 chains) or `complete` (all).",
     )
     sensitivity: float | None = ConfigField(
         title="MMseqs2 Sensitivity",
@@ -333,12 +326,12 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
         return self
 
     @model_validator(mode="after")
-    def _validate_single_dataset_phase_3(self) -> Any:
-        """Phase 3 supports exactly one dataset; multi-dataset is a follow-up."""
+    def _validate_single_dataset(self) -> Any:
+        """Exactly one dataset per call; multi-dataset merge is not supported."""
         if len(self.datasets) != 1:
             raise ValueError(
-                f"Phase 3 supports exactly one dataset, got {len(self.datasets)}: {self.datasets}. "
-                "Multi-dataset support (UniRef30 + envdb + BFD merge) ships in a follow-up PR."
+                f"Exactly one dataset is supported, got {len(self.datasets)}: {self.datasets}. "
+                "Multi-dataset search (UniRef30 + envdb + BFD merge) is not yet available."
             )
         return self
 
@@ -354,13 +347,13 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
         return self
 
     @model_validator(mode="after")
-    def _validate_a3m_adapter_supported_in_phase_3(self) -> Any:
-        """Phase 3 only handles ColabFold-style profile DBs.
+    def _validate_a3m_adapter_supported(self) -> Any:
+        """Only ColabFold-style profile DBs are searchable.
 
         The standalone wraps colabfold_search's iterative pipeline, which only
         works against UniRef30 / ColabFoldDB envdb. AF3-style and RNA datasets
-        need a different MMseqs2 invocation pattern, landing in Phase 4. Block
-        them at config time with a clear hint.
+        need a different MMseqs2 invocation pattern. Block them at config time
+        with a clear hint.
         """
         unsupported = [
             (name, DatasetRegistry.get(name).a3m_adapter)
@@ -369,10 +362,9 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
         ]
         if unsupported:
             raise ValueError(
-                f"Phase 3 only supports datasets with a3m_adapter='colabfold' (UniRef30, "
-                f"ColabFoldDB envdb). Got: {unsupported}. AF3-style protein and RNA "
-                "datasets are registered and provisionable but not yet searchable — "
-                "tracked for Phase 4 of the mmseqs2-homology-search rollout."
+                f"Only datasets with a3m_adapter='colabfold' (UniRef30, ColabFoldDB envdb) "
+                f"are searchable. Got: {unsupported}. AF3-style protein and RNA datasets are "
+                "registered and provisionable but not yet searchable."
             )
         return self
 
@@ -456,16 +448,18 @@ def run_mmseqs2_homology_search(
     """Execute homology search against the configured registered dataset(s).
 
     Args:
-        inputs (Mmseqs2HomologySearchInput): Query groups (singleton only in Phase 3).
+        inputs (Mmseqs2HomologySearchInput): Query groups; singletons yield
+            unpaired MSAs, multi-chain groups yield taxonomy-paired MSAs.
         config (Mmseqs2HomologySearchConfig): Search configuration; ``datasets``
-            picks the registered DB(s), ``use_gpu`` toggles MMseqs2-GPU.
+            picks the registered DB, ``use_gpu`` toggles MMseqs2-GPU,
+            ``pairing_strategy`` controls cross-chain pairing.
         instance (Any): Optional persistent ``ToolInstance`` for batch workloads.
 
     Returns:
         Mmseqs2HomologySearchOutput: One result per input group, with per-chain
-            ``msas`` and (in Phase 4+) ``paired_msas``.
+            ``msas`` and (for paired groups) ``paired_msas``.
     """
-    # Phase 3 validators guarantee exactly one dataset, all singleton groups
+    # Validators guarantee exactly one colabfold-style protein dataset.
     dataset_name = config.datasets[0]
     entry: DatasetEntry = DatasetRegistry.get(dataset_name)
     cache_dir = get_dataset_dir(dataset_name)
@@ -480,12 +474,7 @@ def run_mmseqs2_homology_search(
         _auto_provision(dataset_name, cache_dir, require_idx_pad=config.use_gpu)
     _check_dataset_provisioned(dataset_name, entry, cache_dir, require_idx_pad=config.use_gpu)
 
-    flat_queries = inputs.all_queries()
-    sequences = [q.sequence for q in flat_queries]
-
-    num_threads = config.num_threads
-    if num_threads is None:
-        num_threads = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count() or 1
+    num_threads = resolve_num_threads(config.num_threads)
 
     # Sensitivity: user override > registry default
     sensitivity = config.sensitivity if config.sensitivity is not None else entry.mmseqs_flags.sensitivity
@@ -497,74 +486,148 @@ def run_mmseqs2_homology_search(
     _OUTER_TIMEOUT_GRACE_S = 30
     inner_timeout = None if config.timeout is None else max(1, config.timeout - _OUTER_TIMEOUT_GRACE_S)
 
+    # Shared dispatch payload; each search adds sequences/output_dir/pairing_strategy.
+    base_payload = {
+        "operation": "homology_search",
+        "dataset_dir": str(cache_dir),
+        "db_prefix": entry.db_prefix,
+        "num_threads": num_threads,
+        "use_gpu": config.use_gpu,
+        "verbose": config.verbose,
+        "sensitivity": sensitivity,
+        "prefilter_mode": entry.mmseqs_flags.prefilter_mode,
+        "max_seqs": entry.mmseqs_flags.max_seqs,
+        "extra_args": list(entry.mmseqs_flags.extra_args),
+        "colabfold_timeout": inner_timeout,
+        "device": "cuda" if config.use_gpu else "cpu",
+    }
+
+    def _dispatch(sequences: list[str], output_dir: Path, pairing_strategy: int | None) -> None:
+        payload = {
+            **base_payload,
+            "sequences": sequences,
+            "output_dir": str(output_dir),
+            "pairing_strategy": pairing_strategy,
+        }
+        out = ToolInstance.dispatch("mmseqs2", payload, instance=instance, config=config)
+        if not out.get("success", False):
+            raise RuntimeError(f"mmseqs2-homology-search failed: {out.get('error', 'unknown error')}")
+
+    # Singletons share one batched unpaired search; each paired group (>=2 chains) dispatches on its own.
+    singletons: list[tuple[int, Mmseqs2HomologySearchQuery]] = []
+    paired_groups: list[tuple[int, list[Mmseqs2HomologySearchQuery]]] = []
+    for group_idx, group in enumerate(inputs.queries):
+        members = group if isinstance(group, list) else [group]
+        if isinstance(group, list) and len(members) >= 2:
+            paired_groups.append((group_idx, members))
+        else:
+            singletons.append((group_idx, members[0]))
+
+    pairing_int = _PAIRING_MODE_INT[config.pairing_strategy]
+
     # A3M files are intermediates: the standalone writes them, the tool layer
     # parses them into in-memory MSA objects, then the tempdir auto-cleans.
     # Persistence goes through `result.export(path, "a3m")` — same pattern as
     # every other tool with file outputs.
+    results: list[Mmseqs2HomologySearchResult | None] = [None] * len(inputs.queries)
     with tempfile.TemporaryDirectory(prefix="mmseqs2_homology_search_") as tmp_dir_str:
-        msa_out_dir = Path(tmp_dir_str)
-        payload = {
-            "operation": "homology_search",
-            "sequences": sequences,
-            "dataset_dir": str(cache_dir),
-            "db_prefix": entry.db_prefix,
-            "output_dir": str(msa_out_dir),
-            "num_threads": num_threads,
-            "use_gpu": config.use_gpu,
-            "verbose": config.verbose,
-            "sensitivity": sensitivity,
-            "prefilter_mode": entry.mmseqs_flags.prefilter_mode,
-            "max_seqs": entry.mmseqs_flags.max_seqs,
-            "extra_args": list(entry.mmseqs_flags.extra_args),
-            "colabfold_timeout": inner_timeout,
-            "device": "cuda" if config.use_gpu else "cpu",
-        }
+        tmp_root = Path(tmp_dir_str)
 
-        output = ToolInstance.dispatch(
-            "mmseqs2",
-            payload,
-            instance=instance,
-            config=config,
-        )
-
-        if not output.get("success", False):
-            raise RuntimeError(f"mmseqs2-homology-search failed: {output.get('error', 'unknown error')}")
-
-        # Parse A3Ms back into MSA objects, one per query. The standalone writes
-        # outputs as ``__q{idx}.a3m`` (internal header, decoupled from user
-        # sequence_id) so that user-chosen IDs can never collide with
-        # colabfold_search's positional file naming. We rewrite each file's
-        # query header to the user's sequence_id and parse fully into memory
-        # before the tempdir is cleaned up on context exit.
-        results: list[Mmseqs2HomologySearchResult] = []
-        for idx, query in enumerate(flat_queries):
-            assert query.sequence_id is not None  # populated by Mmseqs2HomologySearchInput validator
-            a3m_path = _rename_a3m_to_sequence_id(msa_out_dir, idx, query.sequence_id)
-
-            msa: MSA | None = None
-            homologs = 0
-            if a3m_path is not None:
-                num_seqs = _count_sequences_in_a3m(a3m_path)
-                if num_seqs >= 2:
-                    msa = MSA.from_file(str(a3m_path))
-                    homologs = num_seqs - 1
-
-            results.append(
-                Mmseqs2HomologySearchResult(
+        # Batched unpaired search over all singletons; outputs use internal __q{idx}.a3m names, renamed to sequence_id below.
+        if singletons:
+            unpaired_dir = tmp_root / "unpaired"
+            unpaired_dir.mkdir()
+            _dispatch([q.sequence for _, q in singletons], unpaired_dir, None)
+            for flat_idx, (group_idx, query) in enumerate(singletons):
+                assert query.sequence_id is not None  # populated by the input validator
+                a3m_path = _rename_a3m_to_sequence_id(unpaired_dir, flat_idx, query.sequence_id)
+                msa, homologs = _parse_a3m(a3m_path)
+                results[group_idx] = Mmseqs2HomologySearchResult(
                     sequence_ids=[query.sequence_id],
                     msas=[msa],
-                    paired_msas=[None],  # Phase 3 only emits singletons
+                    paired_msas=[None],
                     datasets_searched=[dataset_name],
                     num_homologs_found=[homologs],
                 )
-            )
 
-    return Mmseqs2HomologySearchOutput(results=results)
+        # One paired search per multi-chain group; standalone emits per-chain {i}.a3m (unpaired) and {i}.paired.a3m (row-aligned).
+        for group_idx, members in paired_groups:
+            group_dir = tmp_root / f"paired_{group_idx}"
+            group_dir.mkdir()
+            _dispatch([q.sequence for q in members], group_dir, pairing_int)
+            results[group_idx] = _assemble_paired_result(group_dir, members, dataset_name)
+
+    assert all(r is not None for r in results), "internal: missing result for at least one group"
+    return Mmseqs2HomologySearchOutput(results=[r for r in results if r is not None])
 
 
 # ============================================================================
 # Helpers
 # ============================================================================
+
+
+def _parse_a3m(a3m_path: Path | None) -> tuple[MSA | None, int]:
+    """Parse an A3M into an ``(MSA, homolog_count)`` pair.
+
+    Returns ``(None, 0)`` when the file is missing or holds only the query row
+    (no homologs); otherwise the parsed MSA and its homolog count (rows beyond
+    the query).
+    """
+    if a3m_path is None or not a3m_path.exists():
+        return None, 0
+    num_seqs = _count_sequences_in_a3m(a3m_path)
+    if num_seqs < 2:
+        return None, 0
+    return MSA.from_file(str(a3m_path)), num_seqs - 1
+
+
+def _assemble_paired_result(
+    group_dir: Path,
+    members: list[Mmseqs2HomologySearchQuery],
+    dataset_name: str,
+) -> Mmseqs2HomologySearchResult:
+    """Build a per-group result from a paired search's per-chain A3M files.
+
+    The standalone unpacks one ``{i}.a3m`` (unpaired) and ``{i}.paired.a3m``
+    (row-aligned paired) per chain, keyed by chain index ``i``. Each file's
+    query header is rewritten to the chain's sequence_id before parsing.
+
+    Partial pairing (some chains paired, others empty) breaks row-alignment for
+    downstream consumers, so it hard-fails, matching ``colabfold-search``.
+    """
+    sequence_ids: list[str] = []
+    msas: list[MSA | None] = []
+    paired_msas: list[MSA | None] = []
+    num_homologs: list[int] = []
+    for chain_idx, query in enumerate(members):
+        assert query.sequence_id is not None  # populated by the input validator
+        sequence_ids.append(query.sequence_id)
+        unpaired_path = group_dir / f"{chain_idx}.a3m"
+        paired_path = group_dir / f"{chain_idx}.paired.a3m"
+        for path in (unpaired_path, paired_path):
+            if path.exists():
+                _replace_query_header_in_a3m(path, query.sequence_id)
+        unpaired_msa, homologs = _parse_a3m(unpaired_path)
+        paired_msa, _ = _parse_a3m(paired_path)
+        msas.append(unpaired_msa)
+        paired_msas.append(paired_msa)
+        num_homologs.append(homologs)
+
+    n_found = sum(m is not None for m in paired_msas)
+    if 0 < n_found < len(paired_msas):
+        raise RuntimeError(
+            f"mmseqs2-homology-search: paired group produced partial MSAs "
+            f"({len(paired_msas) - n_found} of {len(paired_msas)} chains failed); "
+            "paired downstream consumers require all per-chain MSAs to be present."
+        )
+
+    return Mmseqs2HomologySearchResult(
+        sequence_ids=sequence_ids,
+        msas=msas,
+        paired_msas=paired_msas,
+        datasets_searched=[dataset_name],
+        num_homologs_found=num_homologs,
+    )
 
 
 def _count_sequences_in_a3m(a3m_path: Path) -> int:
