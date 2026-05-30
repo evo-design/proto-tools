@@ -25,9 +25,13 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
     has_cached_entries,
+    resolve_num_threads,
 )
 
 logger = logging.getLogger(__name__)
+
+# colabfold_search `--pairing_strategy` maps to mmseqs `pairaln --pairing-mode`: greedy=0, complete=1.
+_PAIRING_MODE_INT = {"greedy": 0, "complete": 1}
 
 
 # ============================================================================
@@ -309,7 +313,13 @@ class ColabfoldSearchConfig(BaseConfig):
         use_metagenomic_db (bool): Include metagenomic/environmental DBs
             (ColabFoldDB envdb / SPIRE) in the search. Off for speed; upstream
             colabfold defaults this on (``--use-env=1``). Supported in both
-            local and remote modes.
+            local and remote modes. Deepens the *unpaired* per-chain MSAs only;
+            it does not affect cross-chain pairing.
+        pairing_strategy (Literal['greedy', 'complete']): Cross-chain pairing
+            strategy for paired (multi-chain) queries. ``"greedy"`` pairs a
+            species found in at least two chains; ``"complete"`` only pairs a
+            species present in every chain. ``"greedy"`` (the default) typically
+            yields more paired rows and better predictions.
         output_dir (str | None): Directory where output MSA files are saved.
             An ``msas`` subdirectory is created to store A3M files, one per
             sequence ID. ``None`` resolves to ``$PROTO_HOME/colabfold_search``.
@@ -348,6 +358,11 @@ class ColabfoldSearchConfig(BaseConfig):
         title="Use Metagenomic Database",
         default=False,
         description="Include metagenomic DBs (envdb/SPIRE). Off by default for speed (upstream = on).",
+    )
+    pairing_strategy: Literal["greedy", "complete"] = ConfigField(
+        title="Pairing Strategy",
+        default="greedy",
+        description="Cross-chain pairing for paired queries: `greedy` (species in >=2 chains) or `complete` (all).",
     )
     output_dir: str | None = ConfigField(
         title="Output Directory",
@@ -612,12 +627,6 @@ def run_colabfold_search(
     unpaired_indices = [i for i, q in enumerate(inputs.queries) if not q.is_paired]
     paired_indices = [i for i, q in enumerate(inputs.queries) if q.is_paired]
 
-    if paired_indices and config.search_mode == "local":
-        raise NotImplementedError(
-            "colabfold-search: paired queries (list-shaped sequences) require search_mode='remote'; "
-            "local paired support is pending env-pairing DB provisioning."
-        )
-
     # Results are assembled parallel to inputs.queries (by position).
     ordered: list[ColabfoldSearchResult | None] = [None] * len(inputs.queries)
 
@@ -631,8 +640,9 @@ def run_colabfold_search(
         for query_idx, result in zip(unpaired_indices, unpaired_out.results, strict=True):
             ordered[query_idx] = result
 
+    search_paired = _local_search_paired if config.search_mode == "local" else _remote_search_paired
     for query_idx in paired_indices:
-        ordered[query_idx] = _remote_search_paired(inputs.queries[query_idx], config, instance=instance)
+        ordered[query_idx] = search_paired(inputs.queries[query_idx], config, instance=instance)
 
     # Every slot must be filled; results stay parallel to inputs.queries.
     assert all(r is not None for r in ordered), "internal: missing result for at least one query"
@@ -780,9 +790,7 @@ def _local_search(
             f.writelines(f">{idx}\n{seq}\n" for idx, seq in enumerate(sequences))
 
         # Prepare input data for standalone script
-        num_threads = config.num_threads
-        if num_threads is None:
-            num_threads = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count() or 1
+        num_threads = resolve_num_threads(config.num_threads)
 
         input_data = {
             "query_fasta_path": str(fasta_path),
@@ -824,6 +832,91 @@ def _local_search(
         results.append(ColabfoldSearchResult(query_sequences=[seq], msas=[msa]))
 
     return ColabfoldSearchOutput(results=results)
+
+
+def _assert_db_supports_pairing(config: ColabfoldSearchConfig) -> None:
+    """Raise if the configured local DB is known to lack a taxonomy index (no pairing)."""
+    from proto_tools.databases import DatasetRegistry
+
+    for name in DatasetRegistry.list_all():
+        entry = DatasetRegistry.get(name)
+        if entry.db_prefix == config.database_name and not entry.supports_pairing:
+            raise RuntimeError(
+                f"colabfold-search: local paired search requires a taxonomy-tagged database, but "
+                f"{config.database_name!r} ({name}) has supports_pairing=False. Use a pairing-capable "
+                f"dataset (e.g. uniref30-2302)."
+            )
+
+
+def _local_search_paired(
+    query: ColabfoldSearchQuery,
+    config: ColabfoldSearchConfig,
+    instance: Any = None,
+) -> ColabfoldSearchResult:
+    """Run one paired (multi-chain) query locally; return one result with row-aligned MSAs.
+
+    Submits the chains as a single colon-joined complex record to ``colabfold_search``,
+    which runs ``mmseqs_search_pair`` against the UniRef30 taxonomy DB and emits one
+    ``{id}.paired.a3m`` per chain. ``result.msas`` is a list of N MSAs in input chain order.
+    """
+    assert query.is_paired, "_local_search_paired requires a list-sequences query"
+    assert isinstance(query.sequences, list)
+    _assert_db_supports_pairing(config)
+
+    logger.debug(f"Generating paired local MSAs ({len(query.sequences)} chains)...")
+    standalone_script = Path(__file__).parent / "standalone" / "local_msa_search.py"
+
+    num_threads = resolve_num_threads(config.num_threads)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # One colon-joined FASTA record => colabfold treats it as a complex (is_complex).
+        fasta_path = os.path.join(tmpdir, "query.fasta")
+        with open(fasta_path, "w") as f:
+            f.write(">0\n" + ":".join(query.sequences) + "\n")
+
+        paired_out_dir = os.path.join(tmpdir, "out")
+        input_data = {
+            "query_fasta_path": str(fasta_path),
+            "msa_db_dir": str(config.msa_db_dir),
+            "output_dir": str(paired_out_dir),
+            "num_threads": num_threads,
+            "use_metagenomic_db": config.use_metagenomic_db,
+            "sensitivity": config.sensitivity,
+            "database_name": config.database_name,
+            "use_gpu": config.use_gpu,
+            "extra_args": list(config.extra_args),
+            "verbose": config.verbose,
+            "pairing_strategy": _PAIRING_MODE_INT[config.pairing_strategy],
+            "device": "cuda" if config.use_gpu else "cpu",
+        }
+
+        output_data = ToolInstance.dispatch(
+            "colabfold_search",
+            input_data,
+            instance=instance,
+            script_path=standalone_script,
+            config=config,
+        )
+        if not output_data.get("success", False):
+            raise RuntimeError(f"colabfold-search: local paired search failed: {output_data.get('error', 'unknown')}")
+
+        # colabfold_search --unpack writes one {id}.paired.a3m per chain, in input order.
+        per_chain_msas: list[MSA | None] = []
+        for chain_idx in range(len(query.sequences)):
+            paired_a3m = os.path.join(paired_out_dir, f"{chain_idx}.paired.a3m")
+            num_seqs = _count_sequences_in_a3m(paired_a3m) if os.path.exists(paired_a3m) else 0
+            per_chain_msas.append(MSA.from_file(paired_a3m) if num_seqs >= 2 else None)
+
+    # Partial pairing (some chains found, others empty) breaks row-alignment for consumers.
+    n_found = sum(m is not None for m in per_chain_msas)
+    if 0 < n_found < len(per_chain_msas):
+        raise RuntimeError(
+            f"colabfold-search: paired query produced partial MSAs "
+            f"({len(per_chain_msas) - n_found} of {len(per_chain_msas)} chains failed); "
+            "paired downstream consumers require all per-chain MSAs to be present."
+        )
+
+    return ColabfoldSearchResult(query_sequences=query.sequences, msas=per_chain_msas)
 
 
 def _remote_search(

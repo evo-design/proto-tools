@@ -47,6 +47,7 @@ from proto_tools.utils.system_info import (
     get_parent_process_env,
     get_platform_id,
     get_platform_info,
+    resolve_num_threads,
 )
 from proto_tools.utils.tool_cache import ToolCache, clear_cache, clear_tool_cache, get_cache_info, has_cached_entries
 from proto_tools.utils.tool_instance import ToolInstance
@@ -64,6 +65,7 @@ __all__ = [
     "get_platform_id",
     "get_git_info",
     "collect_system_info",
+    "resolve_num_threads",
     # Environment capture
     "capture_parent_env",
     "capture_subprocess_env",

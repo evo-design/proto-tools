@@ -12,12 +12,15 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from proto_tools.entities.msa import MSA
 from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
     ColabfoldSearchConfig,
     ColabfoldSearchInput,
     ColabfoldSearchQuery,
+    _local_search_paired,
     run_colabfold_search,
 )
+from proto_tools.utils.tool_instance import ToolInstance
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 logger = logging.getLogger(__name__)
@@ -165,6 +168,94 @@ def test_colabfold_input_list_like_interface():
     assert inputs[1].sequences == [SAMPLE_PROTEIN_SEQ_2]
     sequences = [q.sequences for q in inputs]
     assert sequences == [[SAMPLE_PROTEIN_SEQ_1], [SAMPLE_PROTEIN_SEQ_2]]
+
+
+# ============================================================================
+# Local paired search — mocked dispatch (no DB / GPU needed)
+# ============================================================================
+
+
+def _write_a3m(path: Path, query_seq: str, n_rows: int) -> None:
+    """Write an A3M with a query row plus ``n_rows - 1`` equal-length homolog rows."""
+    lines = [f">query\n{query_seq}"]
+    lines += [f">hom{i}\n{query_seq}" for i in range(n_rows - 1)]
+    path.write_text("\n".join(lines) + "\n")
+
+
+def _paired_config(tmp_path: Path, **overrides) -> ColabfoldSearchConfig:
+    """Local config pointed at a sentinel DB dir so validators + pairing gate pass."""
+    db_dir = tmp_path / "db"
+    db_dir.mkdir()
+    (db_dir / "uniref30_2302_db.dbtype").write_bytes(b"")  # detected as database_name; supports_pairing=True
+    return ColabfoldSearchConfig(
+        search_mode="local",
+        msa_db_dir=str(db_dir),
+        output_dir=str(tmp_path / "out"),
+        use_gpu=False,
+        verbose=False,
+        **overrides,
+    )
+
+
+def _install_paired_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+    captured: list[dict],
+    *,
+    paired_depth: int = 3,
+    drop_chain: int | None = None,
+) -> None:
+    """Patch ``ToolInstance.dispatch`` to drop synthetic per-chain ``{i}.paired.a3m`` files."""
+
+    def fake(toolkit, input_data, **_):  # test stub
+        captured.append(input_data)
+        out_dir = Path(input_data["output_dir"])
+        out_dir.mkdir(parents=True, exist_ok=True)
+        seq_line = next(
+            ln for ln in Path(input_data["query_fasta_path"]).read_text().splitlines() if not ln.startswith(">")
+        )
+        for i, chain in enumerate(seq_line.split(":")):
+            if i != drop_chain:
+                _write_a3m(out_dir / f"{i}.paired.a3m", chain, paired_depth)
+        return {"success": True, "output_dir": input_data["output_dir"]}
+
+    monkeypatch.setattr(ToolInstance, "dispatch", staticmethod(fake))
+
+
+def test_local_paired_produces_row_aligned_msas(tmp_path, monkeypatch):
+    """A 2-chain paired query returns one row-aligned MSA per chain."""
+    captured: list[dict] = []
+    _install_paired_dispatch(monkeypatch, captured, paired_depth=3)
+
+    query = ColabfoldSearchQuery(sequences=[SAMPLE_PROTEIN_SEQ_1, SAMPLE_PROTEIN_SEQ_2])
+    result = _local_search_paired(query, _paired_config(tmp_path))
+
+    assert result.query_sequences == [SAMPLE_PROTEIN_SEQ_1, SAMPLE_PROTEIN_SEQ_2]
+    assert len(result.msas) == 2
+    assert all(isinstance(m, MSA) for m in result.msas)
+    assert {m.num_sequences for m in result.msas} == {3}  # row-aligned: equal depth
+    # Submitted as one colon-joined complex with greedy (default) pairing.
+    assert captured[0]["pairing_strategy"] == 0
+
+
+@pytest.mark.parametrize(("strategy", "expected_int"), [("greedy", 0), ("complete", 1)])
+def test_local_paired_strategy_maps_to_mmseqs_int(tmp_path, monkeypatch, strategy, expected_int):
+    """``pairing_strategy`` reaches the dispatch payload as the mmseqs pairing-mode int."""
+    captured: list[dict] = []
+    _install_paired_dispatch(monkeypatch, captured)
+
+    config = _paired_config(tmp_path, pairing_strategy=strategy)
+    _local_search_paired(ColabfoldSearchQuery(sequences=[SAMPLE_PROTEIN_SEQ_1, SAMPLE_PROTEIN_SEQ_2]), config)
+
+    assert captured[0]["pairing_strategy"] == expected_int
+
+
+def test_local_paired_partial_pairing_hard_fails(tmp_path, monkeypatch):
+    """One chain paired, the other empty → hard-fail (paired consumers need all chains)."""
+    _install_paired_dispatch(monkeypatch, [], drop_chain=1)
+
+    query = ColabfoldSearchQuery(sequences=[SAMPLE_PROTEIN_SEQ_1, SAMPLE_PROTEIN_SEQ_2])
+    with pytest.raises(RuntimeError, match="partial MSAs"):
+        _local_search_paired(query, _paired_config(tmp_path))
 
 
 # ============================================================================
