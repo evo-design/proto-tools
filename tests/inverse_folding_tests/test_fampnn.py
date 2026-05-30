@@ -196,7 +196,7 @@ def test_fampnn_design_structure_and_metrics():
     assert design.designed[1] is False
     assert design.designed_chains == [design.chains[0]]
     assert design.chain_sequences == ["AGS", "MKT"]
-    assert design.as_chain_map() == {"A": "AGS", "B": "MKT"}
+    assert design.chain_sequence_map() == {"A": "AGS", "B": "MKT"}
 
     assert design.structure is not None
     assert design.structure.structure_format == "pdb"

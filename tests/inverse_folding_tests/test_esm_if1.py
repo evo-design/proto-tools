@@ -196,7 +196,7 @@ def test_esm_if1_design_single_target_chain_structure():
     # Chain ids and order are preserved from the input structure.
     assert [c.id for c in design.chains] == ["A", "B", "C"]
     assert design.chain_sequences == ["MKTAYIAK", "GGGSSSGG", "LLLVVVLL"]
-    assert design.as_chain_map() == {"A": "MKTAYIAK", "B": "GGGSSSGG", "C": "LLLVVVLL"}
+    assert design.chain_sequence_map() == {"A": "MKTAYIAK", "B": "GGGSSSGG", "C": "LLLVVVLL"}
 
     # Metrics expose the standard triple; perplexity is the primary value.
     assert design.metrics["log_likelihood"] == -9.6

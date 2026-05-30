@@ -126,10 +126,10 @@ def test_design_set_routes_metrics():
 
 
 def test_designed_complex_helpers():
-    """chain_sequences, as_chain_map, designed_chains, design_metrics."""
+    """chain_sequences, chain_sequence_map, designed_chains, design_metrics."""
     complex_ = _mock_complex()
     assert complex_.chain_sequences == ["MVLSP", "GGGS"]
-    assert complex_.as_chain_map() == {"A": "MVLSP", "B": "GGGS"}
+    assert complex_.chain_sequence_map() == {"A": "MVLSP", "B": "GGGS"}
     redesigned = complex_.designed_chains
     assert [c.id for c in redesigned] == ["A"]
     assert complex_.design_metrics()["perplexity"] == 1.5

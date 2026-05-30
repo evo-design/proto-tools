@@ -418,7 +418,7 @@ def test_proteinmpnn_multichain_design_structure():
 
     # Chain-level helpers.
     assert design.chain_sequences == ["MKTL", "GGSS"]
-    assert design.as_chain_map() == {"A": "MKTL", "B": "GGSS"}
+    assert design.chain_sequence_map() == {"A": "MKTL", "B": "GGSS"}
     assert [c.id for c in design.designed_chains] == ["A"]
 
     # Metric access via mapping, attribute, and primary value.

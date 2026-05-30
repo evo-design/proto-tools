@@ -469,7 +469,7 @@ class Complex(BaseModel):
         """Set of unique entity types in the complex."""
         return set(self.entity_types)
 
-    def as_chain_map(self) -> dict[str, str]:
+    def chain_sequence_map(self) -> dict[str, str]:
         """Mapping of ``id`` to sequence (or SMILES/CCD for ligands); entries without ``id`` are skipped."""
         out: dict[str, str] = {}
         for c in self.chains:

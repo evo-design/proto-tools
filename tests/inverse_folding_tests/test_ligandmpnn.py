@@ -232,7 +232,7 @@ def test_ligandmpnn_multichain_design_structure():
     assert [chain.id for chain in design.chains] == ["A", "B"]
     assert design.designed == [True, False]
     assert design.chain_sequences == ["MKTL", "GGSG"]
-    assert design.as_chain_map() == {"A": "MKTL", "B": "GGSG"}
+    assert design.chain_sequence_map() == {"A": "MKTL", "B": "GGSG"}
     assert [chain.id for chain in design.designed_chains] == ["A"]
     assert design.metrics["sequence_recovery"] == 0.5
     assert design.metrics["ligand_interface_sequence_recovery"] == 0.3
