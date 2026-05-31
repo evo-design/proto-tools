@@ -556,7 +556,7 @@ class PyRosettaScorer:
         self,
         pose: Any,
         binder_chain: str,
-        target_chain: str,
+        target_chains: list[str],
         cutoff: float = 4.0,
     ) -> dict[int, str]:
         """Identify binder interface residues by all-atom proximity to the target.
@@ -570,7 +570,7 @@ class PyRosettaScorer:
         Args:
             pose (Any): PyRosetta pose object.
             binder_chain (str): Binder chain label (single character).
-            target_chain (str): Target chain label (single character).
+            target_chains (list[str]): Target-side chain labels (binder-vs-rest).
             cutoff (float): Atom-atom distance cutoff in angstroms.
 
         Returns:
@@ -598,7 +598,7 @@ class PyRosettaScorer:
                 for atom_idx in range(1, pose.residue(res_idx).natoms() + 1):
                     xyz = pose.residue(res_idx).atom(atom_idx).xyz()
                     binder_atoms.append((resnum, resname, xyz.x, xyz.y, xyz.z))
-            elif chain == target_chain:
+            elif chain in target_chains:
                 for atom_idx in range(1, pose.residue(res_idx).natoms() + 1):
                     xyz = pose.residue(res_idx).atom(atom_idx).xyz()
                     target_coords.append([xyz.x, xyz.y, xyz.z])
@@ -690,11 +690,11 @@ class PyRosettaScorer:
         self,
         pdb_contents: list[str],
         binder_chains: list[str],
-        target_chains: list[str],
+        target_chains: list[list[str]],
         scorefxn_name: str = "ref2015",
         seed: int | None = None,
     ) -> dict[str, Any]:
-        """Compute interface-analysis metrics for a list of two-chain complexes.
+        """Compute interface-analysis metrics for a list of complexes.
 
         Runs InterfaceAnalyzerMover for shape complementarity, H-bonds, ΔG,
         dSASA, and packstat; computes interface_hydrophobicity from
@@ -706,8 +706,8 @@ class PyRosettaScorer:
             pdb_contents (list[str]): PDB-format content strings.
             binder_chains (list[str]): Per-input binder chain labels
                 (PDB-shortened, single character).
-            target_chains (list[str]): Per-input target chain labels
-                (PDB-shortened, single character).
+            target_chains (list[list[str]]): Per-input target-side chain labels
+                (PDB-shortened); multiple = binder-vs-rest (e.g. ``["A", "B"]``).
             scorefxn_name (str): Rosetta score function name.
             seed (int | None): Seed for PyRosetta's C++ RNG, applied via
                 ``rg().set_seed(seed)`` before ``InterfaceAnalyzerMover.apply``.
@@ -738,10 +738,10 @@ class PyRosettaScorer:
             pose = self._pdb_content_to_pose(pdb_content)
             dropped_residues = self._find_dropped_residues(pose)
             binder_chain = binder_chains[i]
-            target_chain = target_chains[i]
+            target_side = target_chains[i]
 
             iam = InterfaceAnalyzerMover()
-            iam.set_interface(f"{target_chain}_{binder_chain}")
+            iam.set_interface(f"{''.join(target_side)}_{binder_chain}")
             sfxn = pyrosetta.create_score_function(scorefxn_name)
             iam.set_scorefunction(sfxn)
             iam.set_compute_packstat(True)
@@ -758,7 +758,7 @@ class PyRosettaScorer:
             interface_dSASA = float(iam.get_interface_delta_sasa())
             interface_packstat = float(iam.get_interface_packstat())
 
-            interface_residues = self._hotspot_residues_from_pose(pose, binder_chain, target_chain)
+            interface_residues = self._hotspot_residues_from_pose(pose, binder_chain, target_side)
             interface_nres = len(interface_residues)
             apolar_aa = set("ACFILMPVWY")
             hydrophobic_count = sum(1 for aa in interface_residues.values() if aa in apolar_aa)
