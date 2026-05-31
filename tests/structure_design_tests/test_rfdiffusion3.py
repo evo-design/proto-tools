@@ -195,7 +195,11 @@ def test_rfdiffusion3_typed_fields_override_extras_on_collision(tmp_path):
     target = tmp_path / "typed.pdb"
     target.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000\n", encoding="utf-8")
     spec = RFdiffusion3DesignSpec.model_validate({"input_structure": str(target), "input": "extra.pdb"})
-    assert spec.to_dict()["input"] == target.read_text()
+    # input_structure is materialized to a real file path by to_json_spec, overriding the extra "input".
+    emitted = json.loads(RFdiffusion3Input(design_specs=[spec]).to_json_spec(input_dir=tmp_path))["spec-0"]
+    assert emitted["input"] != "extra.pdb"
+    assert Path(emitted["input"]).is_file()
+    assert Path(emitted["input"]).read_text() == target.read_text()
 
 
 # ── DesignSpec: JSON spec emission ──────────────────────────────────────────
@@ -221,7 +225,7 @@ def test_rfdiffusion3_design_spec_typed_fields_propagate_to_json():
         is_non_loopy=True,
     )
     d = spec.to_dict()
-    assert d["input"] == pdb_content
+    assert "input" not in d  # input_structure is materialized to a path by to_json_spec, not inlined in to_dict
     assert d["symmetry"] == {"id": "C3"}  # string normalized to SymmetryConfig dict
     assert d["select_buried"] == "A1-50"
     assert d["select_partially_buried"] == "A51-70"
@@ -324,21 +328,28 @@ def test_rfdiffusion3_json_spec_generation(tmp_path, monkeypatch):
         ]
     )
 
-    spec = json.loads(inputs.to_json_spec())
+    spec = json.loads(inputs.to_json_spec(input_dir=tmp_path))
 
     assert "spec-0" in spec
     assert "spec-1" in spec
     assert spec["spec-0"]["length"] == "100"
     assert spec["spec-1"]["contig"] == "50-80"
-    assert spec["spec-1"]["input"] == target.read_text()  # input_structure content inlined under "input"
+    # input_structure is written to a real file under input_dir; "input" is that path (rfd3 needs a path).
+    input_path = Path(spec["spec-1"]["input"])
+    assert input_path.is_file() and input_path.suffix == ".pdb"
+    assert input_path.read_text() == target.read_text()
+    assert "\n" not in spec["spec-1"]["input"]  # a path, never inline multi-line content
 
 
-def test_rfdiffusion3_input_structure_accepts_structure_object():
-    """A Structure object is accepted and its content is emitted inline under "input"."""
+def test_rfdiffusion3_input_structure_accepts_structure_object(tmp_path):
+    """A Structure object is materialized to a file; "input" is that path (rfd3 needs a path, not content)."""
     structure = Structure(structure=synthetic_cif(["A"]))
     inputs = RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(input_structure=structure, length="40")])
-    spec = json.loads(inputs.to_json_spec())
-    assert spec["spec-0"]["input"] == structure.structure
+    spec = json.loads(inputs.to_json_spec(input_dir=tmp_path))
+    input_path = Path(spec["spec-0"]["input"])
+    assert input_path.is_file() and input_path.suffix == ".cif"  # synthetic_cif → cif format
+    assert input_path.read_text() == structure.structure
+    assert spec["spec-0"]["input"] != structure.structure  # a path, not inline content
 
 
 def test_rfdiffusion3_raw_json_resolves_relative_input_paths(tmp_path, monkeypatch):
