@@ -87,8 +87,8 @@ class RFdiffusion3DesignSpec(BaseModel):
     https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
 
     Attributes:
-        input_structure (Structure | None): Input structure (path, PDB/CIF content,
-            ``Structure``, or model_dump dict). Omit for unconditional de novo design.
+        input_structure (Structure | None): Input structure (``Structure`` or PDB/CIF file path)
+            for motif/binder design; written to a file before rfd3 (reads a path). Omit for de novo.
 
         contig (str | None): Contig string specifying the design topology.
             Format: comma-separated segments with chain breaks as ``/0``.
@@ -181,7 +181,7 @@ class RFdiffusion3DesignSpec(BaseModel):
     input_structure: Structure | None = Field(
         default=None,
         title="Input Structure",
-        description="Input structure (file path, PDB/CIF content, Structure, or model_dump dict).",
+        description="Input structure (Structure or PDB/CIF file path) for motif/binder design. Omit for de novo.",
     )
     contig: str | None = Field(
         default=None,
@@ -368,7 +368,8 @@ class RFdiffusion3DesignSpec(BaseModel):
     def to_dict(self) -> dict[str, Any]:
         """Convert design spec to RFdiffusion3 JSON format.
 
-        Returns a dictionary compatible with RFdiffusion3's InputSpecification format.
+        Returns a dict in RFdiffusion3's InputSpecification format. ``input_structure`` is
+        emitted by ``to_json_spec`` (as a file path), not here.
         See https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
         """
         spec: dict[str, Any] = {}
@@ -377,10 +378,7 @@ class RFdiffusion3DesignSpec(BaseModel):
         if self.model_extra:
             spec.update(self.model_extra)
 
-        # Add typed fields (these override extra kwargs if both provided)
-        if self.input_structure is not None:
-            # rfd3 accepts inline PDB/CIF content in the spec "input" field.
-            spec["input"] = self.input_structure.structure
+        # Add typed fields (override extra kwargs). input_structure is emitted by to_json_spec.
         if self.contig is not None:
             spec["contig"] = self.contig
         if self.length is not None:
@@ -475,8 +473,8 @@ class RFdiffusion3Input(BaseToolInput):
             raise ValueError("Either 'design_specs' (non-empty) or 'raw_json' must be provided")
         return self
 
-    def to_json_spec(self) -> str:
-        """Convert input to RFdiffusion3 JSON specification format."""
+    def to_json_spec(self, input_dir: Path | None = None) -> str:
+        """Convert input to RFdiffusion3 JSON spec, materializing any ``input_structure`` to a file path."""
         if self.raw_json:
             spec = json.loads(self.raw_json)
             for item in spec.values() if isinstance(spec, dict) else []:
@@ -484,9 +482,18 @@ class RFdiffusion3Input(BaseToolInput):
                     item["input"] = _resolve_input_structure_path(item["input"])
             return json.dumps(spec, indent=2)
 
+        dest = Path(input_dir) if input_dir is not None else Path(tempfile.mkdtemp(prefix="rfd3_input_"))
+        dest.mkdir(parents=True, exist_ok=True)
         spec_dict: dict[str, Any] = {}
         for i, spec in enumerate(self.design_specs):
-            spec_dict[f"spec-{i}"] = spec.to_dict()
+            spec_key = f"spec-{i}"
+            spec_dict[spec_key] = spec.to_dict()
+            if spec.input_structure is not None:
+                # rfd3 needs a path: write the structure to a file, set "input" to it.
+                ext = spec.input_structure.structure_format or "pdb"
+                structure_path = dest / f"{spec_key}_input.{ext}"
+                structure_path.write_text(spec.input_structure.structure)
+                spec_dict[spec_key]["input"] = str(structure_path)
 
         return json.dumps(spec_dict, indent=2)
 
@@ -1014,8 +1021,6 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
         - Memory usage scales with batch size and protein length
         - Dependency isolation is handled automatically via venv subprocess
     """
-    json_spec = inputs.to_json_spec()
-
     logger.debug("Using local GPU for RFdiffusion3 structure design...")
 
     with tempfile.TemporaryDirectory() as temp_dir_str:
@@ -1024,6 +1029,8 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
         output_dir = Path(config.output_dir) if config.output_dir else temp_dir / "rfdiffusion3_output"
         input_dir.mkdir(parents=True, exist_ok=True)
         output_dir.mkdir(parents=True, exist_ok=True)
+        # Inside the tempdir so input_structure files land in input_dir and outlive the dispatch.
+        json_spec = inputs.to_json_spec(input_dir=input_dir)
         input_json_path = input_dir / "rfdiffusion3_input.json"
 
         with open(input_json_path, "w") as f:

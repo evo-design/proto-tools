@@ -183,7 +183,8 @@ def run_proteinmpnn_sample(
             each with optional ``chains_to_redesign`` and ``fixed_positions`` selections.
         config (ProteinMPNNSampleConfig): Configuration for sampling (temperature, batch_size, etc.).
 
-        instance (Any): Optional ToolInstance for subprocess execution.
+        instance (Any): A ToolInstance, or a string referencing one pre-registered via
+            ToolInstance.get/persist_tool (unknown names raise); None runs one-shot.
 
     Returns:
         ProteinMPNNSampleOutput: ProteinMPNNSampleOutput with one design set per input structure.

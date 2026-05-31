@@ -261,7 +261,8 @@ def run_alphafold2(
             complexes to predict structures for.
         config (AlphaFold2Config): Validated AlphaFold2 configuration specifying
             MSA settings, recycling, and model parameters.
-        instance (Any): Optional tool instance name for persistent workers.
+        instance (Any): A ToolInstance, or a string referencing one pre-registered via
+            ToolInstance.get/persist_tool (unknown names raise); None runs one-shot.
 
     Returns:
         AlphaFold2Output: Structured output containing:
