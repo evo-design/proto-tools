@@ -248,6 +248,13 @@ def _configure_extension_losses(af_model: Any, loss_weights: dict[str, float], *
         _add_termini_distance_loss(af_model, loss_weights["NC"])
 
 
+def _binder_template_prep_kwargs(binder_chain: str | None) -> dict[str, Any]:
+    """prep_inputs binder override: empty for de-novo (None), template-redesign kwargs for a set chain."""
+    if binder_chain is None:
+        return {}
+    return {"binder_chain": binder_chain, "rm_binder": False, "rm_binder_seq": True, "rm_binder_sc": True}
+
+
 class AlphaFold2Model:
     """Persistent ColabDesign-backed AlphaFold2 worker."""
 
@@ -557,7 +564,7 @@ class AlphaFold2Model:
         target_pdb: str,
         target_chain: str = "A",
         target_hotspot: str | None = None,
-        binder_chain: str,
+        binder_chain: str | None = None,
         design_positions: list[int] | None = None,
         bias_redesign: float | None = None,
         omit_aas: str | None = None,
@@ -594,6 +601,8 @@ class AlphaFold2Model:
         """
         if target_pdb is None:
             raise ValueError("alphafold2: target_pdb is required for binder gradient computation")
+        if backend == "germinal" and binder_chain is None:
+            raise ValueError("alphafold2: backend='germinal' requires binder_chain (template-based binder redesign).")
 
         self._ensure_loaded(device, backend=backend, verbose=verbose)
         key = ("binder", use_multimer, False, recycle_mode, self._backend)
@@ -612,13 +621,10 @@ class AlphaFold2Model:
             "pdb_filename": target_pdb,
             "target_chain": target_chain,
             "binder_len": len(logits),
-            "binder_chain": binder_chain,
             "rm_target_seq": rm_target_seq,
             "rm_target_sc": rm_target_sc,
-            "rm_binder": False,
-            "rm_binder_seq": True,
-            "rm_binder_sc": True,
             "rm_template_ic": rm_template_ic,
+            **_binder_template_prep_kwargs(binder_chain),
         }
         if target_hotspot:
             prep_kwargs["hotspot"] = target_hotspot
@@ -718,7 +724,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             target_pdb=input_dict["target_pdb"],
             target_chain=input_dict["target_chain"],
             target_hotspot=input_dict.get("target_hotspot"),
-            binder_chain=input_dict["binder_chain"],
+            binder_chain=input_dict.get("binder_chain"),
             design_positions=input_dict.get("design_positions"),
             bias_redesign=input_dict.get("bias_redesign"),
             omit_aas=input_dict.get("omit_aas"),

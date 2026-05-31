@@ -69,7 +69,7 @@ class AlphaFold2BinderInput(GradientInput):
             shape produced by ``Structure.model_dump(mode='json')``.
         target_chain (str): Chain ID(s) of the frozen target in the PDB.
         target_hotspot (str | None): Comma-separated hotspot residue indices on the target.
-        binder_chain (str): Binder chain ID in the template PDB.
+        binder_chain (str | None): Binder chain to redesign from its PDB template; None designs de novo.
         design_positions (list[int] | None): Zero-based binder residue indices
             for loss focus (e.g. CDR loops). Germinal backend only.
     """
@@ -88,10 +88,10 @@ class AlphaFold2BinderInput(GradientInput):
         title="Target Hotspot",
         description="Comma-separated hotspot residue indices on the target (e.g. '10,25,42').",
     )
-    binder_chain: str = InputField(
+    binder_chain: str | None = InputField(
         default="H",
         title="Binder Chain",
-        description="Binder chain ID for template-based binder redesign.",
+        description="Binder chain to redesign from its PDB template; None designs the binder de novo (no template).",
     )
     design_positions: list[int] | None = InputField(
         default=None,

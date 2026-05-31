@@ -92,6 +92,55 @@ def test_gradient_input_requires_target_pdb():
         AlphaFold2BinderInput(logits=[[0.0] * 20], temperature=1.0)
 
 
+def _load_af2_standalone():
+    """Load the AF2 standalone inference module with standalone_helpers mocked."""
+    import importlib.util
+    import logging as _logging
+
+    if not hasattr(_sh, "get_logger"):
+        _sh.get_logger = lambda name=None: _logging.getLogger(name)
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "proto_tools/tools/structure_prediction/alphafold2/standalone/inference.py"
+    )
+    spec = importlib.util.spec_from_file_location("_af2_si_for_tests", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_binder_input_allows_denovo_none_binder_chain():
+    """binder_chain=None is accepted, signalling de-novo design (no template)."""
+    inp = AlphaFold2BinderInput(
+        logits=[[0.0] * 20, [1.0] * 20], target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, binder_chain=None
+    )
+    assert inp.binder_chain is None
+
+
+def test_binder_template_prep_kwargs_denovo_vs_redesign():
+    """De-novo (None) returns no override; a set chain returns template-redesign kwargs."""
+    si = _load_af2_standalone()
+    assert si._binder_template_prep_kwargs(None) == {}
+    assert si._binder_template_prep_kwargs("H") == {
+        "binder_chain": "H",
+        "rm_binder": False,
+        "rm_binder_seq": True,
+        "rm_binder_sc": True,
+    }
+
+
+def test_germinal_backend_rejects_denovo_binder_chain():
+    """backend='germinal' with binder_chain=None fails fast (template redesign needs a chain)."""
+    si = _load_af2_standalone()
+    with pytest.raises(ValueError, match="backend='germinal' requires binder_chain"):
+        si.AlphaFold2Model().compute_binder_gradient(
+            logits=[[0.0] * 20] * 2,
+            target_pdb="dummy.pdb",
+            binder_chain=None,
+            backend="germinal",
+        )
+
+
 # -- Dispatch contracts --------------------------------------------------------
 
 
