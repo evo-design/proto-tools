@@ -77,4 +77,21 @@ if [ "$ARCH" = "aarch64" ]; then
     }
 fi
 
+# Wrap DAlphaBall.gcc (run by Rosetta for the BUNS surf_vol calc) so it finds libgfortran.so.5 in
+# the conda env lib/ — scoped to this helper, since LD_LIBRARY_PATH is stripped for JAX/CUDA tools.
+# Idempotent: only wraps a real ELF.
+DAB="$BINDCRAFT_DIR/functions/DAlphaBall.gcc"
+if [ -f "$DAB" ] && head -c4 "$DAB" | grep -q "ELF"; then
+    mv -f "$DAB" "$BINDCRAFT_DIR/functions/DAlphaBall.real"
+    cat > "$DAB" <<'SHIM'
+#!/bin/sh
+# proto-tools: resolve libgfortran from the conda env lib/ for this helper only.
+here="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+export LD_LIBRARY_PATH="$here/../../../lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+exec "$here/DAlphaBall.real" "$@"
+SHIM
+    chmod +x "$DAB"
+    echo "Wrapped DAlphaBall.gcc to resolve libgfortran from the conda env lib/."
+fi
+
 echo "BindCraft setup complete!"
