@@ -41,15 +41,18 @@ class PyRosettaScorer:
                 during PDB load. Matches BindCraft's init (defensive default
                 for heterogeneous PDB sources).
             ``-corrections::beta_nov16 true``: Enable the November 2016 beta
-                corrections to ref2015 (refined HBnet, disulfide, solvation
-                terms). This is the default score function for production
-                binder-design pipelines (BindCraft, Germinal, RFdiffusion).
-                Affects the values returned by ``pr.get_fa_scorefxn()`` and
-                ``create_score_function("ref2015")`` — used here by the
-                FastRelax mover, InterfaceAnalyzerMover, TotalEnergyMetric,
-                and the BuriedUnsatHbonds filter. Without this flag,
-                ``Binder_Energy_Score``, ``interface_dG``, and
-                ``delta_unsat_hbonds`` will not match BindCraft.
+                corrections (refined HBnet, disulfide, solvation terms). REQUIRED
+                for ``create_score_function("beta_nov16")`` — without it PyRosetta
+                exits ("garbage scorefunction"). It also makes the default
+                ``pr.get_fa_scorefxn()`` return beta_nov16, but scoring here always
+                names its score function via ``config.scorefxn`` and never calls
+                ``get_fa_scorefxn()``, so an explicitly-named
+                ``create_score_function("ref2015")`` is NOT remapped — it stays
+                genuine ref2015. The beta_nov16 metrics (``Binder_Energy_Score``,
+                ``interface_dG``, ``delta_unsat_hbonds``) therefore require
+                ``scorefxn="beta_nov16"``; the default ``"ref2015"`` yields ref2015.
+                Matches BindCraft/Germinal, which init the same flag and relax/score
+                via ``get_fa_scorefxn()`` (= beta_nov16).
         """
         if self._initialized:
             return
