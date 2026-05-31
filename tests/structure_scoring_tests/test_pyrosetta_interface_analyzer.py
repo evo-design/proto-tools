@@ -19,6 +19,24 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_PDB = str(Path(__file__).parent.parent / "dummy_data" / "pdl1.pdb")
 
+
+def _split_pdl1_target() -> Structure:
+    """pdl1 with target chain A split into A+B and binder B relabeled C (3-chain fixture)."""
+    lines = Path(TEST_PDB).read_text().splitlines()
+    a_res = sorted({int(ln[22:26]) for ln in lines if ln.startswith("ATOM") and ln[21] == "A"})
+    mid = a_res[len(a_res) // 2]
+    out = []
+    for ln in lines:
+        new = ln
+        if ln.startswith(("ATOM", "HETATM")):
+            if ln[21] == "A":
+                new = ln[:21] + ("A" if int(ln[22:26]) < mid else "B") + ln[22:]
+            elif ln[21] == "B":
+                new = ln[:21] + "C" + ln[22:]
+        out.append(new)
+    return Structure(structure="\n".join(out))
+
+
 # ── Validation ────────────────────────────────────────────────────────────────
 
 
@@ -28,20 +46,20 @@ def test_interface_analyzer_input_normalizes_single_structure():
     inp = PyRosettaInterfaceAnalyzerInput(inputs=structure)
     assert len(inp.inputs) == 1
     assert isinstance(inp.inputs[0], InterfaceStructureInput)
-    assert inp.inputs[0].target_chain == "A"
+    assert inp.inputs[0].target_chains == ["A"]
     assert inp.inputs[0].binder_chain == "B"
 
 
 def test_interface_analyzer_rejects_missing_chain():
-    """target_chain/binder_chain absent from the structure raises at input construction."""
+    """A target/binder chain absent from the structure raises at input construction."""
     with pytest.raises(ValidationError, match="not found in structure"):
-        PyRosettaInterfaceAnalyzerInput(inputs=[{"structure": TEST_PDB, "target_chain": "Z", "binder_chain": "B"}])
+        PyRosettaInterfaceAnalyzerInput(inputs=[{"structure": TEST_PDB, "target_chains": ["Z"], "binder_chain": "B"}])
 
 
-def test_interface_analyzer_rejects_equal_chains():
-    """target_chain == binder_chain is rejected — an interface requires two distinct chains."""
-    with pytest.raises(ValidationError, match="must differ"):
-        PyRosettaInterfaceAnalyzerInput(inputs=[{"structure": TEST_PDB, "target_chain": "A", "binder_chain": "A"}])
+def test_interface_analyzer_rejects_binder_in_target_set():
+    """A binder chain that is also a target chain is rejected — the two sides must be disjoint."""
+    with pytest.raises(ValidationError, match="cannot also be a target chain"):
+        PyRosettaInterfaceAnalyzerInput(inputs=[{"structure": TEST_PDB, "target_chains": ["A"], "binder_chain": "A"}])
 
 
 def test_interface_analyzer_input_accepts_multiple_structures():
@@ -49,14 +67,21 @@ def test_interface_analyzer_input_accepts_multiple_structures():
     inp = PyRosettaInterfaceAnalyzerInput(
         inputs=[
             TEST_PDB,
-            {"structure": TEST_PDB, "target_chain": "B", "binder_chain": "A"},
+            {"structure": TEST_PDB, "target_chains": ["B"], "binder_chain": "A"},
         ],
     )
     assert len(inp.inputs) == 2
-    assert inp.inputs[0].target_chain == "A"
+    assert inp.inputs[0].target_chains == ["A"]
     assert inp.inputs[0].binder_chain == "B"
-    assert inp.inputs[1].target_chain == "B"
+    assert inp.inputs[1].target_chains == ["B"]
     assert inp.inputs[1].binder_chain == "A"
+
+
+def test_interface_analyzer_accepts_multi_chain_target():
+    """A multi-chain target (binder-vs-rest) constructs when all chains exist and are disjoint."""
+    inp = InterfaceStructureInput(structure=_split_pdl1_target(), target_chains=["A", "B"], binder_chain="C")
+    assert inp.target_chains == ["A", "B"]
+    assert inp.binder_chain == "C"
 
 
 # ── Integration ───────────────────────────────────────────────────────────────
@@ -103,6 +128,22 @@ def test_interface_analyzer_with_pre_relax_preprocess():
         f"interface_dG unchanged after relax: raw={raw.results[0].interface_dG}, "
         f"relaxed={relaxed.results[0].interface_dG}"
     )
+
+
+@pytest.mark.integration
+def test_interface_analyzer_binder_vs_rest_matches_unsplit_target():
+    """Splitting the target into A+B (binder->C) preserves the binder-vs-rest interface dSASA."""
+    base = run_pyrosetta_interface_analyzer(
+        PyRosettaInterfaceAnalyzerInput(inputs=[{"structure": TEST_PDB, "target_chains": ["A"], "binder_chain": "B"}])
+    )
+    split = run_pyrosetta_interface_analyzer(
+        PyRosettaInterfaceAnalyzerInput(
+            inputs=[{"structure": _split_pdl1_target(), "target_chains": ["A", "B"], "binder_chain": "C"}]
+        )
+    )
+    assert base.success and split.success
+    assert split.results[0].interface_dSASA > 0.0
+    assert split.results[0].interface_dSASA == pytest.approx(base.results[0].interface_dSASA, rel=0.05)
 
 
 # ── Benchmark ─────────────────────────────────────────────────────────────────

@@ -41,7 +41,7 @@ This tool is appropriate for relative energy comparison across variants of the s
 
 ### PyRosetta Interface Analyzer (`pyrosetta-interface-analyzer`)
 
-Runs Rosetta's `InterfaceAnalyzerMover` on a two-chain complex and returns seven always-on interface descriptors together with an optional eighth (`delta_unsat_hbonds`, available when DAlphaBall is installed). The interface is defined by the `target_chain` and `binder_chain` fields on each `InterfaceStructureInput` and is validated at input construction.
+Runs Rosetta's `InterfaceAnalyzerMover` on a complex and returns seven always-on interface descriptors together with an optional eighth (`delta_unsat_hbonds`, available when DAlphaBall is installed). The interface is defined by the `target_chains` and `binder_chain` fields on each `InterfaceStructureInput` (multiple target chains score the binder against all of them, binder-vs-rest) and is validated at input construction.
 
 #### Applications
 

@@ -134,10 +134,9 @@ class InterfaceStructureInput(BaseModel):
     Attributes:
         structure (Structure): The complex to analyze. Accepts a ``Structure``
             object, a file path, or a PDB/CIF content string.
-        target_chain (str): Chain label for the target (e.g. receptor) side of
-            the interface, in the structure's native namespace. Default ``"A"``.
-        binder_chain (str): Chain label for the binder side of the interface,
-            in the structure's native namespace. Default ``"B"``.
+        target_chains (list[str]): Target-side chain label(s); multiple chains
+            score the binder against all of them (binder-vs-rest). Default ``["A"]``.
+        binder_chain (str): Binder-side chain label. Default ``"B"``.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -146,10 +145,10 @@ class InterfaceStructureInput(BaseModel):
         title="Complex Structure",
         description="Protein complex (file path, content string, or Structure object).",
     )
-    target_chain: str = Field(
-        default="A",
-        title="Target Chain",
-        description="Chain label for the target side of the interface.",
+    target_chains: list[str] = Field(
+        default_factory=lambda: ["A"],
+        title="Target Chains",
+        description="Target-side chain label(s); multiple = binder-vs-rest.",
     )
     binder_chain: str = Field(
         default="B",
@@ -173,10 +172,12 @@ class InterfaceStructureInput(BaseModel):
 
     @model_validator(mode="after")
     def _validate_interface_chains(self) -> InterfaceStructureInput:
-        """Assert target/binder exist in the structure, differ from each other, and the structure fits in PDB."""
-        if self.target_chain == self.binder_chain:
+        """Assert target/binder chains exist, are disjoint, and the structure fits in PDB."""
+        if not self.target_chains:
+            raise ValueError("target_chains must name at least one chain.")
+        if self.binder_chain in self.target_chains:
             raise ValueError(
-                f"target_chain and binder_chain must differ (both = {self.target_chain!r})",
+                f"binder_chain {self.binder_chain!r} cannot also be a target chain ({self.target_chains}).",
             )
         available = set(self.structure.get_chain_ids())
         # PyRosetta runs on PDB-format poses, which cap chain IDs at 62 unique
@@ -187,7 +188,7 @@ class InterfaceStructureInput(BaseModel):
                 f"requires PDB format which supports at most {MAX_CHAINS_FOR_PDB} "
                 f"single-character chain IDs.",
             )
-        missing = {self.target_chain, self.binder_chain} - available
+        missing = {self.binder_chain, *self.target_chains} - available
         if missing:
             raise ValueError(
                 f"Chain(s) {sorted(missing)} not found in structure. Available chains: {sorted(available)}",
@@ -199,16 +200,15 @@ class PyRosettaInterfaceAnalyzerInput(BaseToolInput):
     """Input for PyRosetta interface analysis.
 
     Attributes:
-        inputs (list[InterfaceStructureInput]): Two-chain complexes to analyze,
-            each paired with the ``target_chain`` and ``binder_chain`` labels
-            that define its interface. A bare ``Structure`` / path / content
-            string / dict is wrapped into a single-element list with default
-            chain labels ``"A"`` / ``"B"``.
+        inputs (list[InterfaceStructureInput]): Complexes to analyze, each paired
+            with the ``target_chains`` and ``binder_chain`` labels that define its
+            interface. A bare ``Structure`` / path / content string / dict is
+            wrapped into a single-element list with default chains ``["A"]`` / ``"B"``.
     """
 
     inputs: list[InterfaceStructureInput] = InputField(
         title="Complexes",
-        description="Two-chain complexes to analyze, each with target_chain/binder_chain labels",
+        description="Complexes to analyze, each with target_chains/binder_chain labels",
     )
 
     @field_validator("inputs", mode="before")
@@ -276,7 +276,7 @@ class PyRosettaInterfaceAnalyzerConfig(BaseConfig):
                 "inputs": [
                     InterfaceStructureInput(
                         structure=relaxed[i].structure,
-                        target_chain=inp.target_chain,
+                        target_chains=inp.target_chains,
                         binder_chain=inp.binder_chain,
                     )
                     for i, inp in enumerate(inputs.inputs)
@@ -380,8 +380,9 @@ def run_pyrosetta_interface_analyzer(
     computes ``surface_hydrophobicity`` from ``LayerSelector(pick_surface=True)``
     applied to the binder sub-pose.
 
-    The interface for each complex is defined by the ``target_chain`` and
-    ``binder_chain`` fields on the corresponding :class:`InterfaceStructureInput`.
+    The interface for each complex is defined by the ``target_chains`` and
+    ``binder_chain`` fields on the corresponding :class:`InterfaceStructureInput`
+    (multiple target chains score the binder against all of them, binder-vs-rest).
     Chain-label validity is enforced at input construction. To analyze an
     already-relaxed pose, pass it in directly; to relax-then-analyze in one
     dispatch, set ``config.pre_relax_structures=True``.
@@ -399,19 +400,20 @@ def run_pyrosetta_interface_analyzer(
     logger.debug("Using local venv for PyRosetta interface analysis")
 
     pdb_contents: list[str] = []
-    target_chains: list[str] = []
+    target_sides: list[list[str]] = []
     binder_chains: list[str] = []
     for inp in inputs.inputs:
         pdb_content, mmcif_to_pdb = inp.structure.to_pdb_with_chain_mapping()
         pdb_contents.append(pdb_content)
-        target_chains.append(mmcif_to_pdb[inp.target_chain])
+        # PDB-shortened target chains form one binder-vs-rest interface side.
+        target_sides.append([mmcif_to_pdb[chain] for chain in inp.target_chains])
         binder_chains.append(mmcif_to_pdb[inp.binder_chain])
 
     input_data = {
         "operation": "interface_analyzer",
         "pdb_contents": pdb_contents,
         "binder_chains": binder_chains,
-        "target_chains": target_chains,
+        "target_chains": target_sides,
         "scorefxn": config.scorefxn,  # type: ignore[union-attr]
         "seed": config.seed,  # type: ignore[union-attr]
         "device": "cpu",
