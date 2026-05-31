@@ -529,31 +529,11 @@ class RFdiffusion3Config(BaseConfig):
         center_option (Literal['all', 'motif', 'diffuse']): Coordinate-frame
             centering — ``all`` (whole structure), ``motif`` (input motif),
             ``diffuse`` (diffused region only).
-        use_classifier_free_guidance (bool): Enable CFG sampling. ``cfg_scale``,
-            ``cfg_features``, and ``cfg_t_max`` are no-ops when ``False``.
-        cfg_scale (float): CFG scale factor (typical 1.0-3.0).
-        cfg_features (list[Literal['active_donor', 'active_acceptor', 'ref_atomwise_rasa']] | None):
-            CFG feature names; ``None`` keeps upstream default (all three).
-        cfg_t_max (float | None): Diffusion-timestep cap for CFG (0.0-1.0);
-            ``None`` keeps upstream default.
+        use_classifier_free_guidance (bool): Enable CFG sampling.
+        cfg_scale (float): CFG scale factor (typical 1.0-3.0); no-op when CFG is off.
         gamma_0 (float): Sampler stochasticity; lower = more designable,
             less diverse; ``0.0`` = deterministic ODE. Must be ``> 0.5``
             when ``sampler_kind="symmetry"``.
-        gamma_min (float | None): Diffusion-time threshold above which the
-            ``gamma_0`` stochasticity factor is applied; ``None`` keeps upstream
-            default (1.0).
-        noise_scale (float | None): Inference noise scale; lower = less
-            diversity; ``None`` keeps upstream default (1.003).
-        p (int | None): Noise-schedule shape exponent; ``None`` keeps upstream
-            default (7).
-        s_trans (float | None): Translational noise scale for augmentation;
-            ``None`` keeps upstream default (1.0).
-        allow_realignment (bool | None): Realign the noised structure to the
-            motif (motif-conditioned designs only); ``None`` keeps upstream
-            default (False).
-        s_jitter_origin (float | None): Gaussian sigma to jitter the motif
-            offset (motif-conditioned designs only); ``None`` keeps upstream
-            default (0.0).
         low_memory_mode (bool): Memory-efficient tokenization (slower);
             enable only if GPU RAM is tight.
         dump_trajectories (bool): Save diffusion trajectory frames (debugging).
@@ -566,11 +546,11 @@ class RFdiffusion3Config(BaseConfig):
         device (str): ``"cuda"`` or ``"cpu"``.
 
     Note:
-        Common sampler knobs are typed fields (emitted under their
-        ``inference_sampler.*`` Hydra paths). Any other Hydra override passes
-        through ``extra="allow"`` as a keyword argument — a top-level key
-        (e.g. ``RFdiffusion3Config(skip_existing=False)``) or an undocumented
-        sampler sub-key via its dotted path (``inference_sampler.<key>``). See
+        Common sampler knobs are typed fields, emitted under their
+        ``inference_sampler.*`` Hydra paths. Niche sampler internals (and any other
+        Hydra override) are reachable via the dotted passthrough, which
+        ``extra="allow"`` forwards verbatim, e.g.
+        ``RFdiffusion3Config(**{"inference_sampler.noise_scale": 1.003})``. See
         https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
     """
 
@@ -622,65 +602,11 @@ class RFdiffusion3Config(BaseConfig):
         ge=0.0,
         description="CFG scale (typical: 1.0-3.0); requires use_classifier_free_guidance=True",
     )
-    cfg_features: list[Literal["active_donor", "active_acceptor", "ref_atomwise_rasa"]] | None = ConfigField(
-        title="CFG Features",
-        default=None,
-        description="CFG steering feature names; None uses upstream default (donor/acceptor/RASA)",
-        examples=[["active_donor", "active_acceptor", "ref_atomwise_rasa"]],
-    )
-    cfg_t_max: float | None = ConfigField(
-        title="CFG t_max",
-        default=None,
-        ge=0.0,
-        le=1.0,
-        description="Maximum diffusion timestep (0.0-1.0) at which CFG is applied",
-    )
     gamma_0: float = ConfigField(
         title="Gamma 0",
         default=0.6,
         ge=0.0,
         description="Sampler stochasticity (lower = more designable, less diverse); >0.5 for symmetry sampler",
-    )
-    gamma_min: float | None = ConfigField(
-        title="Gamma Min",
-        default=None,
-        ge=0.0,
-        description="Diffusion-time threshold above which gamma_0 is applied; None keeps upstream default (1.0)",
-        examples=[1.0],
-    )
-    noise_scale: float | None = ConfigField(
-        title="Noise Scale",
-        default=None,
-        ge=0.0,
-        description="Inference noise scale; lower = less diversity; None keeps upstream default (1.003)",
-        examples=[1.003],
-    )
-    p: int | None = ConfigField(
-        title="Noise Schedule Shape",
-        default=None,
-        ge=1,
-        description="Noise-schedule shape exponent; None keeps upstream default (7)",
-        examples=[7],
-    )
-    s_trans: float | None = ConfigField(
-        title="Translational Noise",
-        default=None,
-        ge=0.0,
-        description="Translational noise scale for augmentation; None keeps upstream default (1.0)",
-        examples=[1.0],
-    )
-    allow_realignment: bool | None = ConfigField(
-        title="Allow Realignment",
-        default=None,
-        description="Realign noised structure to the motif (motif designs only); None keeps upstream default (False)",
-        examples=[True],
-    )
-    s_jitter_origin: float | None = ConfigField(
-        title="Jitter Origin Sigma",
-        default=None,
-        ge=0.0,
-        description="Gaussian sigma to jitter the motif offset (motif designs only); None keeps upstream default (0.0)",
-        examples=[0.5],
     )
     low_memory_mode: bool = ConfigField(
         title="Low Memory Mode",
@@ -739,8 +665,8 @@ class RFdiffusion3Config(BaseConfig):
     def get_cli_kwargs(self) -> dict[str, Any]:
         """Build CLI args for the rfd3 inference script.
 
-        Sampler knobs use dotted Hydra paths (``inference_sampler.<key>``);
-        optional knobs emit only when set so upstream defaults stand. On
+        Typed sampler knobs use dotted Hydra paths (``inference_sampler.<key>``);
+        any ``model_extra`` passthrough keys are forwarded verbatim. On
         collision, typed fields win over ``model_extra``.
         """
         cli_kwargs: dict[str, Any] = {}
@@ -765,20 +691,6 @@ class RFdiffusion3Config(BaseConfig):
                 "inference_sampler.gamma_0": self.gamma_0,
             }
         )
-        # Optional sampler knobs: emit only when set so upstream defaults stand.
-        for name in (
-            "cfg_features",
-            "cfg_t_max",
-            "gamma_min",
-            "noise_scale",
-            "p",
-            "s_trans",
-            "allow_realignment",
-            "s_jitter_origin",
-        ):
-            value = getattr(self, name)
-            if value is not None:
-                cli_kwargs[f"inference_sampler.{name}"] = value
         return cli_kwargs
 
 
