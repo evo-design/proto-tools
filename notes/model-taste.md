@@ -14,14 +14,14 @@ Before selecting models, determine whether the requested design task is allowed.
 
 Do not proceed with model selection if the task involves forbidden or high-risk biological assistance, including but not limited to:
 
-* pathogen enhancement,
-* toxin optimization,
-* immune evasion,
-* host-range expansion,
-* harmful delivery optimization,
-* uncontrolled gene drive design,
-* evasion of detection,
-* or other disallowed biological engineering goals.
+- pathogen enhancement,
+- toxin optimization,
+- immune evasion,
+- host-range expansion,
+- harmful delivery optimization,
+- uncontrolled gene drive design,
+- evasion of detection,
+- or other disallowed biological engineering goals.
 
 If the request is not allowed, stop and redirect to a safe alternative such as literature review, non-actionable conceptual explanation, safety analysis, benign assay design, or risk-screening methodology.
 
@@ -39,7 +39,7 @@ Select models based on:
 2. the biological quantity being optimized,
 3. the conditioning information available,
 4. the validation metric required,
-5. the allowed tools,
+5. the available tools,
 6. the available compute budget,
 7. and the required confidence level.
 
@@ -78,32 +78,34 @@ For every biological design task, report the following:
 
 ## 4. Quick Decision Table
 
-| Task class                                                        | Proposal models or methods                                                                                                                                                                                                                        | Validation and ranking                                                                                                                                                                  | Avoid as primary evidence                                                                                          |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Fixed-backbone protein redesign                                   | ProteinMPNN; LigandMPNN when ligands, metals, cofactors, nucleic acids, or other non-protein atoms matter; ESM3/ESM2 for local masked edits                                                                                                       | AF2/AF3-family predictors; ESMFold for fast triage; TM-align/US-align to intended backbone; ProteinMPNN perplexity as compatibility signal                                              | Random mutation plus pLDDT only                                                                                    |
-| De novo protein backbone or fold                                  | RFdiffusion-family models; Protein Hunter for fast all-X or partially constrained exploration; ProteinGenerator-style sequence-structure generators when available; ProteinMPNN or LigandMPNN for sequence design as needed                       | Boltz, Chai, Protenix, AlphaFold-family predictors when available; ESMFold as fast first pass; Foldseek/TM-align/US-align for novelty and topology                                      | Protein language models alone for backbone design                                                                  |
-| Scaffold and motif-grafting design                                | RFdiffusion-family motif scaffolding; fragment assembly; Rosetta-style motif grafting; constrained backbone generation                                                                                                                            | Motif RMSD, active-site/contact geometry, refolding agreement, topology checks, Foldseek novelty                                                                                        | Fold confidence without motif placement validation                                                                 |
-| Enzyme design                                                     | Active-site or transition-state-guided design; RFdiffusion-family motif scaffolding; Rosetta enzyme design; LigandMPNN around substrates/cofactors; directed-evolution-inspired variant proposal                                                  | Catalytic geometry, substrate/cofactor placement, active-site residue geometry, docking/transition-state analog checks, stability and expression checks, experimental assay requirement | pLDDT alone, substrate docking alone, or motif presence alone                                                      |
-| Stability, solubility, and expression optimization                | ProteinMPNN soluble weights, ESM/ProGen-style variant proposal, Rosetta/ddG tools, aggregation-aware filters, consensus design                                                                                                                    | Refolding, ddG/stability predictors, solubility/aggregation predictors, expression/developability checks, preservation of function                                                      | Improving global confidence while losing function                                                                  |
-| Generic de novo protein binder                                    | BindCraft when target-conditioned hallucination fits; Protein Hunter for fast all-X, partially constrained, or contact-conditioned protein-protein binder search; RFdiffusion-family methods when explicit geometry or motifs matter; AlphaProteo-style systems when available | AF2-multimer/AF3-family predictors; Boltz/Chai/Protenix; interface PAE/ipTM; pDockQ2; hotspot contact recovery; PyRosetta/interface geometry; novelty and specificity checks            | Monomer pLDDT; generator score alone; one model’s interface score without independent validation                   |
-| Epitope-targeted antibody, VHH, or scFv                           | Germinal; antibody-specific hallucination/redesign; AbMPNN/AbLang/antibody-specific MPNNs for local redesign and naturalness                                                                                                                      | Antibody-antigen cofolding; epitope contact recovery; interface PAE; pDockQ2; CDR/framework checks; developability and antibody-sequence naturalness                                    | Generic binder workflows when antibody architecture matters; cofolding score without antibody-specific checks      |
-| Fast exploratory protein-protein design                           | Protein Hunter; BindCraft broad sampling; lightweight RFdiffusion/MPNN pipelines                                                                                                                                                                  | Cheap complex-prediction triage first, then independent final validators for top candidates; contact recovery and interface metrics                                                     | Treating fast in silico success as final validation                                                                |
-| Peptide design                                                    | Peptide-specific generative models; protein language models for short sequences; constrained motif design; docking-guided or structure-guided peptide design; AMP/CPP classifiers for specific peptide classes                                    | Peptide structure/ensemble checks, target binding if relevant, toxicity/hemolysis filters for AMPs, uptake predictors for CPPs, solubility and stability checks                         | Treating peptide design as ordinary folded-protein design                                                          |
-| Protein-ligand, metal, cofactor, or nucleic-acid contact redesign | LigandMPNN for sequence design around supplied non-protein context; RFdiffusion-family methods when designing a new pocket or backbone                                                                                                            | Ligand-aware or all-atom complex predictors; ligand/contact geometry; docking or PyRosetta when available; identity and chemistry checks for small molecules                            | ProteinMPNN if decisive residues see non-protein atoms; protein binder hallucination for small-molecule generation |
-| Small-molecule ligand generation                                  | Chemistry-aware generation or retrieval tools when allowed; molecule-native design workflows                                                                                                                                                      | Docking; ligand-aware structure prediction; identity checks against PubChem/CCD or relevant databases; physicochemical filters; medicinal chemistry constraints                         | Protein-design tools as substitutes for molecule generation                                                        |
-| Promoter, enhancer, or regulatory DNA design                      | AlphaGenome when the objective is a native output; Borzoi or Enformer for long-context expression/accessibility proxies; Evo-style nucleotide LMs for sequence priors and proposals                                                               | Exact allowed genomic predictor first; track-specific scores; BLAST/MMseqs-style novelty; repeat/low-complexity/ORF checks                                                              | Motif sprinkling or nucleotide LM likelihood as the only validator                                                 |
-| Codon optimization                                                | Host-specific codon optimization tools; CAI/tAI-guided rewriting; mRNA-aware codon design; constraint-aware synonymous editing                                                                                                                    | CAI/tAI, GC content, codon-pair bias, RNA structure, forbidden motifs, restriction sites, repeat filters, preservation of amino-acid sequence                                           | Maximizing CAI alone                                                                                               |
-| Guide RNA design                                                  | CRISPR-specific gRNA design tools for the nuclease/editor; genome-indexed guide search; base/prime-editing-aware proposal tools when relevant                                                                                                     | PAM validity, on-target score, off-target search, edit-window constraints, bystander edits, genomic uniqueness, delivery constraints                                                    | PAM match alone or guide GC alone                                                                                  |
-| Primer/probe design                                               | Primer3-style design; qPCR/probe-specific design tools; tiling/probe design workflows                                                                                                                                                             | Tm, GC, amplicon length, specificity, hairpins, self-dimers, heterodimers, probe quenching/fluorophore constraints, genome/transcriptome uniqueness                                     | Tm and GC alone                                                                                                    |
-| mRNA design                                                       | UTR design models, codon optimization, RNA-structure-aware sequence design, stability/translation predictors, immunogenicity motif filters                                                                                                        | Translation efficiency, RNA stability, secondary structure, UTR constraints, codon usage, GC, repeats, cryptic splice/polyA motifs, innate immune motif filters                         | Codon optimization alone                                                                                           |
-| Structured RNA design                                             | RNA inverse folding, secondary-structure design, tertiary-structure-aware design when available, sequence priors                                                                                                                                  | Target structure recovery, ensemble defect, MFE and partition-function metrics, alternative-structure penalties, sequence constraints                                                   | MFE alone without ensemble checks                                                                                  |
-| Aptamer design                                                    | RNA/DNA binder selection models, structure-guided aptamer design, SELEX-informed priors, docking when appropriate                                                                                                                                 | Target binding predictions, structure ensemble, specificity/off-target checks, motif/structure preservation, synthesis constraints                                                      | Sequence novelty or motif presence alone                                                                           |
-| Ribozyme design                                                   | RNA catalytic motif design, structure-guided ribozyme engineering, local mutation/optimization                                                                                                                                                    | Catalytic motif geometry, secondary/tertiary structure, cleavage/ligation site constraints, folding ensemble, experimental assay requirement                                            | Fold prediction alone                                                                                              |
-| Riboswitch design                                                 | Aptamer-domain design plus expression-platform design; ligand-responsive RNA structure design                                                                                                                                                     | Ligand-bound/unbound structure shift, terminator/sequestering behavior, dynamic range, leakage, target gene context                                                                     | Aptamer binding alone                                                                                              |
-| Operon and genetic circuit design                                 | Combinatorial part design; promoter/RBS/CDS/terminator assembly; circuit simulators; rule-based or learned expression models                                                                                                                      | Part compatibility, expression balance, burden, crosstalk, dynamic behavior, insulation, host context, assembly constraints                                                             | Optimizing isolated parts without circuit simulation                                                               |
-| Metabolic pathway design                                          | Retrosynthesis/pathway search; enzyme selection; host-aware pathway assembly; flux-balance or kinetic models                                                                                                                                      | Thermodynamics, flux, enzyme availability, cofactor balance, toxicity, host burden, side products, pathway expression balance                                                           | Choosing enzymes by annotation alone                                                                               |
-| Synthetic genome design                                           | Genome-scale recoding/design tools; constraint-aware genome editing/planning; safety and viability screens                                                                                                                                        | Essentiality, codon usage, regulatory architecture, repeats, mobile elements, restriction sites, synthesis constraints, safety review                                                   | Local sequence metrics alone                                                                                       |
-| Sequence novelty and database distance                            | MMseqs2/BLAST for sequence novelty; Foldseek for structural novelty; TM-align/US-align for pairwise structural comparison                                                                                                                         | Use the task-specified database and identity/TM-score thresholds                                                                                                                        | Claims of novelty from sampling seed, generator name, or low language-model likelihood                             |
+
+| Task class                                                        | Proposal models or methods                                                                                                                                                                                                                                      | Validation and ranking                                                                                                                                                                  | Avoid as primary evidence                                                                                          |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Fixed-backbone protein redesign                                   | ProteinMPNN; LigandMPNN when ligands, metals, cofactors, nucleic acids, or other non-protein atoms matter; ESM3/ESM2 for local masked edits                                                                                                                     | AF2/AF3-family predictors; ESMFold for fast triage; TM-align/US-align to intended backbone; ProteinMPNN perplexity as compatibility signal                                              | Random mutation plus pLDDT only                                                                                    |
+| De novo protein backbone or fold                                  | Protein Hunter for fast all-X or partially constrained exploration; RFdiffusion-family models; ProteinGenerator-style sequence-structure generators; ProteinMPNN or LigandMPNN for strcutre-conditioned sequence design as needed                               | Boltz, Chai, Protenix, AlphaFold-family predictors; ESMFold as fast first pass; Foldseek/TM-align/US-align for novelty and topology                                                     | Protein language models alone for backbone design                                                                  |
+| Scaffold and motif-grafting design                                | RFdiffusion-family motif scaffolding; fragment assembly; Rosetta-style motif grafting; constrained backbone generation                                                                                                                                          | Motif RMSD, active-site/contact geometry, refolding agreement, topology checks, Foldseek novelty                                                                                        | Fold confidence without motif placement validation                                                                 |
+| Enzyme design                                                     | Active-site or transition-state-guided design; RFdiffusion-family motif scaffolding; Rosetta enzyme design; LigandMPNN around substrates/cofactors; directed-evolution-inspired variant proposal                                                                | Catalytic geometry, substrate/cofactor placement, active-site residue geometry, docking/transition-state analog checks, stability and expression checks, experimental assay requirement | pLDDT alone, substrate docking alone, or motif presence alone                                                      |
+| Stability, solubility, and expression optimization                | ProteinMPNN soluble weights, ESM/ProGen-style variant proposal, Rosetta/ddG tools, aggregation-aware filters, consensus design                                                                                                                                  | Refolding, ddG/stability predictors, solubility/aggregation predictors, expression/developability checks, preservation of function                                                      | Improving global confidence while losing function                                                                  |
+| Generic de novo protein binder                                    | BindCraft when target-conditioned hallucination fits; Protein Hunter for fast all-X, partially constrained, or contact-conditioned protein-protein binder search; RFdiffusion-family methods when explicit geometry or motifs matter; AlphaProteo-style systems | AF2-multimer/AF3-family predictors; Boltz/Chai/Protenix; interface PAE/ipTM; pDockQ2; hotspot contact recovery; PyRosetta/interface geometry; novelty and specificity checks            | Monomer pLDDT; generator score alone; one model’s interface score without independent validation                   |
+| Epitope-targeted antibody, VHH, or scFv                           | Germinal; antibody-specific hallucination/redesign; AbMPNN/AbLang/antibody-specific MPNNs for local redesign and naturalness                                                                                                                                    | Antibody-antigen cofolding; epitope contact recovery; interface PAE; pDockQ2; CDR/framework checks; developability and antibody-sequence naturalness                                    | Generic binder workflows when antibody architecture matters; cofolding score without antibody-specific checks      |
+| Fast exploratory protein-protein design                           | Protein Hunter; BindCraft broad sampling; lightweight RFdiffusion/MPNN pipelines                                                                                                                                                                                | Cheap complex-prediction triage first, then independent final validators for top candidates; contact recovery and interface metrics                                                     | Treating fast in silico success as final validation                                                                |
+| Peptide design                                                    | Peptide-specific generative models; protein language models for short sequences; constrained motif design; docking-guided or structure-guided peptide design; AMP/CPP classifiers for specific peptide classes                                                  | Peptide structure/ensemble checks, target binding if relevant, toxicity/hemolysis filters for AMPs, uptake predictors for CPPs, solubility and stability checks                         | Treating peptide design as ordinary folded-protein design                                                          |
+| Protein-ligand, metal, cofactor, or nucleic-acid contact redesign | LigandMPNN for sequence design around supplied non-protein context; RFdiffusion-family methods when designing a new pocket or backbone                                                                                                                          | Ligand-aware or all-atom complex predictors; ligand/contact geometry; docking or PyRosetta; identity and chemistry checks for small molecules                                           | ProteinMPNN if decisive residues see non-protein atoms; protein binder hallucination for small-molecule generation |
+| Small-molecule ligand generation                                  | Chemistry-aware generation or retrieval tools; molecule-native design workflows                                                                                                                                                                                 | Docking; ligand-aware structure prediction; identity checks against PubChem/CCD or relevant databases; physicochemical filters; medicinal chemistry constraints                         | Protein-design tools as substitutes for molecule generation                                                        |
+| Promoter, enhancer, or regulatory DNA design                      | AlphaGenome when the objective is a native output; Borzoi or Enformer for long-context expression/accessibility proxies; Evo-style nucleotide LMs for sequence priors and proposals                                                                             | Exact available genomic predictor first; track-specific scores; BLAST/MMseqs-style novelty; repeat/low-complexity/ORF checks                                                            | Motif sprinkling or nucleotide LM likelihood as the only validator                                                 |
+| Codon optimization                                                | Host-specific codon optimization tools; CAI/tAI-guided rewriting; mRNA-aware codon design; constraint-aware synonymous editing                                                                                                                                  | CAI/tAI, GC content, codon-pair bias, RNA structure, forbidden motifs, restriction sites, repeat filters, preservation of amino-acid sequence                                           | Maximizing CAI alone                                                                                               |
+| Guide RNA design                                                  | CRISPR-specific gRNA design tools for the nuclease/editor; genome-indexed guide search; base/prime-editing-aware proposal tools when relevant                                                                                                                   | PAM validity, on-target score, off-target search, edit-window constraints, bystander edits, genomic uniqueness, delivery constraints                                                    | PAM match alone or guide GC alone                                                                                  |
+| Primer/probe design                                               | Primer3-style design; qPCR/probe-specific design tools; tiling/probe design workflows                                                                                                                                                                           | Tm, GC, amplicon length, specificity, hairpins, self-dimers, heterodimers, probe quenching/fluorophore constraints, genome/transcriptome uniqueness                                     | Tm and GC alone                                                                                                    |
+| mRNA design                                                       | UTR design models, codon optimization, RNA-structure-aware sequence design, stability/translation predictors, immunogenicity motif filters                                                                                                                      | Translation efficiency, RNA stability, secondary structure, UTR constraints, codon usage, GC, repeats, cryptic splice/polyA motifs, innate immune motif filters                         | Codon optimization alone                                                                                           |
+| Structured RNA design                                             | RNA inverse folding, secondary-structure design, tertiary-structure-aware design, sequence priors                                                                                                                                                               | Target structure recovery, ensemble defect, MFE and partition-function metrics, alternative-structure penalties, sequence constraints                                                   | MFE alone without ensemble checks                                                                                  |
+| Aptamer design                                                    | RNA/DNA binder selection models, structure-guided aptamer design, SELEX-informed priors, docking when appropriate                                                                                                                                               | Target binding predictions, structure ensemble, specificity/off-target checks, motif/structure preservation, synthesis constraints                                                      | Sequence novelty or motif presence alone                                                                           |
+| Ribozyme design                                                   | RNA catalytic motif design, structure-guided ribozyme engineering, local mutation/optimization                                                                                                                                                                  | Catalytic motif geometry, secondary/tertiary structure, cleavage/ligation site constraints, folding ensemble, experimental assay requirement                                            | Fold prediction alone                                                                                              |
+| Riboswitch design                                                 | Aptamer-domain design plus expression-platform design; ligand-responsive RNA structure design                                                                                                                                                                   | Ligand-bound/unbound structure shift, terminator/sequestering behavior, dynamic range, leakage, target gene context                                                                     | Aptamer binding alone                                                                                              |
+| Operon and genetic circuit design                                 | Combinatorial part design; promoter/RBS/CDS/terminator assembly; circuit simulators; rule-based or learned expression models                                                                                                                                    | Part compatibility, expression balance, burden, crosstalk, dynamic behavior, insulation, host context, assembly constraints                                                             | Optimizing isolated parts without circuit simulation                                                               |
+| Metabolic pathway design                                          | Retrosynthesis/pathway search; enzyme selection; host-aware pathway assembly; flux-balance or kinetic models                                                                                                                                                    | Thermodynamics, flux, enzyme availability, cofactor balance, toxicity, host burden, side products, pathway expression balance                                                           | Choosing enzymes by annotation alone                                                                               |
+| Synthetic genome design                                           | Genome-scale recoding/design tools; constraint-aware genome editing/planning; safety and viability screens                                                                                                                                                      | Essentiality, codon usage, regulatory architecture, repeats, mobile elements, restriction sites, synthesis constraints, safety review                                                   | Local sequence metrics alone                                                                                       |
+| Sequence novelty and database distance                            | MMseqs2/BLAST for sequence novelty; Foldseek for structural novelty; TM-align/US-align for pairwise structural comparison                                                                                                                                       | Use the task-specified database and identity/TM-score thresholds                                                                                                                        | Claims of novelty from sampling seed, generator name, or low language-model likelihood                             |
+
 
 ---
 
@@ -111,9 +113,9 @@ For every biological design task, report the following:
 
 Use ESMFold for fast, MSA-free protein triage, especially on de novo or heavily engineered sequences where alignment search is weak or expensive. Use ESMFold2 as a fast, high-accuracy all-atom structure and interaction predictor for proteins, DNA, RNA, ligands, and antibody-antigen complexes; prefer its single-sequence mode for high-throughput triage and its MSA-capable mode for harder final checks when runtime allows.
 
-Treat ESMFold as a screening predictor. Treat ESMFold2 as a fast, high-accuracy structure and interaction oracle that can be part of final validation, including for predicted antibody complexes; still prefer agreement with an independent allowed oracle for final decisions when feasible.
+Treat ESMFold as a screening predictor. Treat ESMFold2 as a fast, high-accuracy structure and interaction oracle that can be part of final validation, including for predicted antibody complexes; still prefer agreement with an independent available oracle for final decisions when feasible.
 
-Use AlphaFold2, AlphaFold3-family predictors, Boltz, Chai, Protenix, or similar high-capability structure predictors for final structure evidence when allowed. Prefer agreement between at least two allowed structure predictors for final candidates; when only one high-capability predictor can run, pair it with explicit independent proxies such as TM-align/US-align to the intended backbone, ProteinMPNN perplexity, interface geometry, radius of gyration, or novelty searches.
+Use AlphaFold2, AlphaFold3-family predictors, Boltz, Chai, Protenix, or similar high-capability structure predictors for final structure evidence. Prefer agreement between at least two available structure predictors for final candidates; when only one high-capability predictor can run, pair it with explicit independent proxies such as TM-align/US-align to the intended backbone, ProteinMPNN perplexity, interface geometry, radius of gyration, or novelty searches.
 
 For complexes involving proteins with DNA, RNA, ligands, glycans, metals, modified residues, or other non-protein components, prefer all-atom or complex-aware predictors over monomer-focused tools.
 
@@ -129,15 +131,15 @@ Use multiple final validators when final ranking depends on complex placement, l
 
 Use AlphaFold2 when the problem is protein-only and the target validator, reference workflow, or local tooling is AF2-like. Use AF2-multimer for protein-protein complexes and inspect interface metrics rather than monomer confidence. Use `alphafold2-binder` as a differentiable loss or scoring component for a custom optimization loop; it is not by itself a complete candidate-generation campaign.
 
-Use AlphaFold3 when broad biomolecular cofolding is allowed and accessible, especially for complexes with DNA, RNA, ligands, modified residues, or multiple entity types. Treat gated weights, licensing, runtime, and input-format support as practical constraints that must be checked before planning around it.
+Use AlphaFold3 when broad biomolecular cofolding is available and accessible, especially for complexes with DNA, RNA, ligands, modified residues, or multiple entity types. Treat gated weights, runtime, and input-format support as practical constraints that must be checked before planning around it.
 
-Use Boltz-2 when an open AlphaFold3-style predictor is needed for protein, DNA, RNA, or ligand complexes. Prefer it for final validation over monomer-only tools when interface placement or ligand pose matters. In proto-tools, Boltz-2 exposes structure prediction and confidence metrics, and recent versions also expose `boltz2-affinity` for protein-small-molecule ligand affinity. Use affinity metrics only for ligand binders, not protein-protein binders; lower `affinity_pred_value` means stronger predicted binding, while `affinity_probability_binary` is a separate binder-probability signal. Increase diffusion samples, sampling steps, or recycling for final validation when compute allows.
+Use Boltz-2 when an open AlphaFold3-style predictor is needed for protein, DNA, RNA, or ligand complexes. Prefer it for final validation over monomer-only tools when interface placement or ligand pose matters. Boltz-2 exposes structure prediction and confidence metrics as well as `boltz2-affinity` for protein-small-molecule ligand affinity. Use affinity metrics only for ligand binders, not protein-protein binders; lower `affinity_pred_value` means stronger predicted binding, while `affinity_probability_binary` is a separate binder-probability signal. Increase diffusion samples, sampling steps, or recycling for final validation when compute allows.
 
 Use Chai-1 when protein-ligand or protein-glycan cofolding is central and the local wrapper supports the requested entity types. Chai uses ESM embeddings and optional MSAs and is useful as an independent complex validator. In proto-tools, verify whether nucleic acids or modifications are supported by the wrapper before selecting it for DNA/RNA complexes.
 
 Use Protenix when open AlphaFold3-like prediction is needed for proteins, DNA, RNA, ligands, or modified residues. Prefer base/full variants for final ranking when resources permit; mini or tiny variants are useful for cheaper triage and large sweeps but should not be treated as equivalent final evidence.
 
-Use ESMFold for fast MSA-free protein folding, especially de novo sequences or large early pools. Use ESMFold2 for fast and accurate all-atom complex prediction across proteins, DNA, RNA, and ligands, including interaction modeling and antibody-antigen complex prediction; use its single-sequence mode for high-throughput screens and its MSA mode for harder targets. Do not use ESMFold alone as final evidence for structure-sensitive decisions; ESMFold2 can be one final oracle, but final selections are stronger when confirmed by an independent allowed predictor or structure metric.
+Use ESMFold for fast MSA-free protein folding, especially de novo sequences or large early pools. Use ESMFold2 for fast and accurate all-atom complex prediction across proteins, DNA, RNA, and ligands, including interaction modeling and antibody-antigen complex prediction; use its single-sequence mode for high-throughput screens and its MSA mode for harder targets. Do not use ESMFold alone as final evidence for structure-sensitive decisions; ESMFold2 can be one final oracle, but final selections are stronger when confirmed by an independent available predictor or structure metric.
 
 Use ViennaRNA for RNA secondary-structure and thermodynamic checks, not for protein-like tertiary structure or ligand-bound RNA validation. Prefer ensemble metrics, base-pair probabilities, and alternative-fold penalties over MFE alone.
 
@@ -155,7 +157,7 @@ Increase temperature and sample count when diversity is needed, but validate top
 
 Use LigandMPNN instead of ProteinMPNN when non-protein atoms are part of the design context. If residues contact a ligand, nucleotide, metal, cofactor, or other non-protein component, the model should see those atoms during sequence design and scoring.
 
-For de novo backbones, use RFdiffusion-family models when the output is a new structure with spatial constraints, motifs, symmetry, active-site geometry, or target contacts. In current proto-tools, RFdiffusion3 exposes typed controls for contigs, hotspots, unindexed motifs, symmetry, origin placement, classifier-free guidance, sampler kind, stochasticity, timesteps, batch count, and low-memory mode; use these fields directly instead of raw Hydra strings when they express the task. When a generator's yield for the target property is low or unverified, prefer a feedback-driven optimizer (cycling, MCMC, or gradient) over one-shot rejection sampling.
+For de novo backbones, use RFdiffusion-family models when the output is a new structure with spatial constraints, motifs, symmetry, active-site geometry, or target contacts. RFdiffusion3 exposes typed controls for contigs, hotspots, unindexed motifs, symmetry, origin placement, classifier-free guidance, sampler kind, stochasticity, timesteps, batch count, and low-memory mode; use these fields directly instead of raw Hydra strings when they express the task. When a generator's yield for the target property is low or unverified, prefer a feedback-driven optimizer (cycling, MCMC, or gradient) over one-shot rejection sampling.
 
 Use Protein Hunter when the task benefits from fast search over all-X or partially specified sequences using structure-prediction feedback. For protein-protein binder or interacting-protein tasks, consider it as a first-class proposal method alongside BindCraft and RFdiffusion-family workflows rather than only as a generic fold explorer. Treat it as a proposal or exploration workflow unless independent validation is also run.
 
@@ -179,15 +181,13 @@ Use FAMPNN when side-chain packing, all-atom mutation scoring, or mutation scans
 
 Use ESM2 for embeddings, masked local mutation proposals, pseudo-perplexity, and differentiable naturalness priors. It is fast and broadly useful for protein sequence plausibility, but it is not a fold, binding, or activity validator.
 
-Use ESM3 when masked generative editing or joint sequence/structure/function pretraining is useful and the gated checkpoint is available. The local proto-tools wrapper exposes sequence-track operations, so do not assume the full closed ESM3 model or structure/function-track generation is available.
+Use ESM3 when masked generative editing or joint sequence/structure/function pretraining is useful. The local proto-tools wrapper only exposes sequence-track operations.
 
 Use ESMC for embeddings and representation tasks rather than generation. It is appropriate for clustering, retrieval, supervised downstream models, or similarity features, not as a standalone design generator.
 
 Use ProGen-family causal protein models for protein sequence generation, completion, or likelihood-style priors when an autoregressive prior is useful. Validate generated proteins with structure and task-specific validators.
 
-Use AbLang only for antibody-like sequences. It is useful for antibody embeddings, masked restoration, pseudo-log-likelihood, and gradient-based naturalness pressure. Prefer paired heavy/light models when both chains are available; do not use AbLang as evidence that an antibody binds the antigen.
-
-Use AlphaMissense DB for interpreting human missense variant pathogenicity or variant-effect context, not for de novo protein design, non-human proteins, binding validation, or enzyme activity validation.
+Use AbLang and other antibody-LMs for antibody-like sequences. It is useful for antibody embeddings, masked restoration, pseudo-log-likelihood, and gradient-based naturalness pressure. Prefer paired heavy/light models when both chains are available; do not use AbLang as evidence that an antibody binds the antigen.
 
 ---
 
@@ -323,7 +323,7 @@ Do not rely on Protein Hunter alone for final therapeutic binder claims, antibod
 
 ## 14. Binder Workflow Selection Rules
 
-Choose BindCraft when the output should be a de novo protein binder, the target is a protein surface, the binder does not need antibody architecture, the task is mostly target-conditioned interface generation, and AF2-style complex filtering is allowed.
+Choose BindCraft when the output should be a de novo protein binder, the target is a protein surface, the binder does not need antibody architecture, the task is mostly target-conditioned interface generation, and AF2-style complex filtering is available.
 
 Choose Germinal when the output should be an antibody, VHH, nanobody, or scFv; the user specifies an epitope; CDR/framework constraints matter; antibody naturalness or developability matters; or low-n antibody experimental testing is the intended downstream path.
 
@@ -345,7 +345,7 @@ Peptides are often short, flexible, partially disordered, chemically modified, o
 
 Common peptide task classes include therapeutic peptide design, antimicrobial peptide design, cell-penetrating peptide design, peptide binder design, constrained or cyclic peptide design, and peptide motif optimization.
 
-Appropriate proposal methods include peptide-specific generative models, protein language models for short-sequence priors, motif-constrained sequence design, docking-guided peptide design, structure-guided peptide binder design, AMP or CPP classifier-guided proposal, and constrained/cyclic peptide design workflows when modifications are allowed.
+Appropriate proposal methods include peptide-specific generative models, protein language models for short-sequence priors, motif-constrained sequence design, docking-guided peptide design, structure-guided peptide binder design, AMP or CPP classifier-guided proposal, and constrained/cyclic peptide design workflows when modifications are available.
 
 For therapeutic peptide design, validate target engagement if relevant, stability or protease-resistance proxies, solubility, aggregation, charge and hydrophobicity, liability motifs, synthesis constraints, and off-target or toxicity risk where relevant.
 
@@ -393,7 +393,6 @@ Required deterministic checks for regulatory design may include BLAST/MMseqs nov
 
 Do not treat transcription-factor motif sprinkling as sufficient evidence of enhancer or promoter function.
 
-
 Additional regulatory model details:
 
 - Use AlphaGenome interval or raw-sequence prediction when the designed sequence must be scored in genomic context, and variant/ISM scoring when the task is naturally framed as edits relative to a reference. Choose requested outputs and ontology terms deliberately: match the ontology term to the objective's cell type or tissue, since tracks are per-biosample.
@@ -408,7 +407,7 @@ Additional regulatory model details:
 
 ## 18. Splicing And Intron Design Defaults
 
-Use AlphaGenome when splice-site usage, splice junctions, RNA-seq, or retention are the target and the model is available and allowed.
+Use AlphaGenome when splice-site usage, splice junctions, RNA-seq, or retention are the target and the model is available.
 
 SpliceAI, Pangolin, and SpliceTransformer are per-position splice-site predictors that differ mainly in tissue resolution. SpliceAI is tissue-agnostic (acceptor/donor probability and variant delta scores, 10 kb context); Pangolin resolves four tissues (heart, liver, brain, testis); SpliceTransformer resolves fifteen GTEx tissues and is state of the art on tissue-specific benchmarks. Match the model's tissue resolution to the objective: for a tissue- or cell-type-specific objective, make the matching tissue-resolved usage the primary selection signal and ranking objective rather than the generic donor/acceptor probability, which saturates on a strong consensus splice site and does not separate candidates by tissue-specific usage.
 
@@ -480,7 +479,7 @@ Use mRNA design workflows when the output is a coding mRNA, therapeutic mRNA, va
 
 mRNA design combines coding-sequence design, UTR design, RNA structure, stability, translation, innate immune motif management, and delivery/manufacturing constraints.
 
-Appropriate proposal methods include codon optimization, UTR design or selection, RNA-structure-aware sequence design, translation-efficiency predictors, RNA stability predictors, immunogenic motif filters, synonymous variant search, and task-specific mRNA design tools when available.
+Appropriate proposal methods include codon optimization, UTR design or selection, RNA-structure-aware sequence design, translation-efficiency predictors, RNA stability predictors, immunogenic motif filters, synonymous variant search, and task-specific mRNA design tools.
 
 Required validation includes preservation of protein sequence if applicable, host or cell-type-specific codon usage, 5-prime UTR constraints, Kozak or translation-initiation context when relevant, 3-prime UTR constraints, polyA assumptions, RNA secondary structure near the 5-prime end, global RNA folding or accessibility metrics, GC content and distribution, repeat and homopolymer checks, cryptic splice sites, cryptic polyA sites, premature termination or unwanted ORFs, innate immune motifs when relevant, modified-nucleotide assumptions if applicable, and synthesis/manufacturing constraints.
 
@@ -510,7 +509,7 @@ Use aptamer design when the output is an RNA or DNA sequence intended to bind a 
 
 Aptamer design is a nucleic-acid binder problem, not a generic regulatory DNA or mRNA problem.
 
-Appropriate proposal methods include SELEX-informed sequence priors, RNA/DNA language models, structure-guided aptamer design, motif-preserving mutation, docking or complex prediction when available, and target-specific binding models when available.
+Appropriate proposal methods include SELEX-informed sequence priors, RNA/DNA language models, structure-guided aptamer design, motif-preserving mutation, docking or complex prediction, and target-specific binding models when available.
 
 Required validation includes predicted secondary or tertiary structure, preservation of binding motifs if known, target-binding prediction or docking when available, specificity/off-target checks, folding ensemble stability, sequence synthesis constraints, nuclease-stability considerations if relevant, and experimental binding assay requirement for final validation.
 
@@ -524,7 +523,7 @@ Use ribozyme design when the output is a catalytic RNA sequence intended to clea
 
 Ribozyme design requires both folding and catalytic geometry. A correctly folded-looking RNA is not automatically catalytically active.
 
-Appropriate proposal methods include known ribozyme scaffold engineering, catalytic motif preservation, structure-guided sequence redesign, local mutation search, RNA inverse folding, and tertiary-structure-aware modeling when available.
+Appropriate proposal methods include known ribozyme scaffold engineering, catalytic motif preservation, structure-guided sequence redesign, local mutation search, RNA inverse folding, and tertiary-structure-aware modeling.
 
 Required validation includes catalytic motif identity, active-site or cleavage-site geometry, secondary-structure recovery, tertiary contacts when relevant, folding ensemble, substrate accessibility, sequence constraints, and experimental assay requirement for final validation.
 
@@ -602,7 +601,7 @@ Choose novelty checks based on what could make the candidate non-novel.
 
 Use BLAST or MMseqs2 for amino-acid or nucleotide sequence identity, coverage, and nearest-neighbor searches.
 
-Use Foldseek for structural novelty against large structure databases when allowed. Current local Foldseek wrappers support search, reciprocal-best-hits, clustering, multimer search, and multimer clustering, with GPU acceleration in local mode; choose single-chain versus multimer tools according to the biological object and do not approximate multimer novelty with monomer-only search when interface architecture matters.
+Use Foldseek for structural novelty against large structure databases when available. Current local Foldseek wrappers support search, reciprocal-best-hits, clustering, multimer search, and multimer clustering, with GPU acceleration in local mode; choose single-chain versus multimer tools according to the biological object and do not approximate multimer novelty with monomer-only search when interface architecture matters.
 
 Use TM-align or US-align for pairwise structural comparisons, symmetry checks, RMSD, and TM-score against specific references.
 
@@ -611,7 +610,6 @@ Use task-specified databases and thresholds whenever they exist.
 If a named database or tool is unavailable, record the gap and use the closest available sequence or structure search rather than silently omitting novelty analysis.
 
 Do not claim novelty from sampling seed, generator name, low language-model likelihood, low training-set likelihood, or absence of an obvious motif.
-
 
 Use ColabFold search when MSA generation is the bottleneck for AlphaFold-style protein prediction. Cache and reuse MSAs when many variants share a scaffold or family context, and do not confuse MSA depth with validation of the designed function.
 
@@ -716,7 +714,7 @@ Workflow:
 
 1. Generate a broad candidate pool.
 2. Run deterministic checks and cheap proxies.
-3. Score the surviving pool with the strongest allowed validator.
+3. Score the surviving pool with the strongest available validator.
 4. Keep submetrics separate.
 5. Return ranked candidates with stated limitations.
 
@@ -743,7 +741,7 @@ For design scripts, prefer this execution pattern:
 
 1. Generate a broad candidate pool from the most task-matched generator.
 2. Run deterministic checks and cheap proxies first.
-3. Score the surviving pool with the strongest allowed validators.
+3. Score the surviving pool with the strongest available validators.
 4. Require agreement across predictors for final candidates when feasible; default to multiple task-matched oracles for learned or context-dependent properties.
 5. Keep all submetrics visible.
 6. If one submetric is starving the pool, change the proposal distribution or objective around that submetric before spending the rest of the budget.
@@ -775,7 +773,7 @@ A final stability/solubility candidate requires original function-preservation c
 
 A final peptide candidate requires peptide task class definition, sequence and modification constraints, relevant peptide-specific predictors, solubility/stability checks, toxicity or hemolysis checks when relevant, target-binding validation when relevant, and synthesis constraints.
 
-A final splicing or intron design candidate requires donor and acceptor checks, splice-site probability or usage prediction from more than one splice oracle when available, splice junction or retention prediction when available, expression or transcript-level support if relevant, forbidden ORF and repeat checks, exact sequence-format validation, and task-specific submetric reporting. Pangolin predicts splice-site usage/probability, not tissue-specific expression; use tissue or expression models separately when that biology matters.
+A final splicing or intron design candidate requires donor and acceptor checks, splice-site probability or usage prediction from more than one splice oracle, splice junction or retention prediction, expression or transcript-level support if relevant, forbidden ORF and repeat checks, exact sequence-format validation, and task-specific submetric reporting. Pangolin predicts splice-site usage/probability, not tissue-specific expression; use tissue or expression models separately when that biology matters.
 
 A final regulatory sequence candidate requires prediction of the requested regulatory quantity, cell-type or tissue context when relevant, off-target or neighboring-track inspection when relevant, sequence novelty or similarity checks, repeat and low-complexity checks, forbidden ORF checks when relevant, and explicit reporting of the predictor used for final ranking.
 
@@ -829,59 +827,59 @@ Use “high computational confidence” instead.
 
 Avoid these mistakes:
 
-* Treating generator likelihood as functional validation.
-* Treating motif presence as proof of biological activity.
-* Using monomer pLDDT to validate a protein-protein interface.
-* Using global pLDDT instead of interface-specific metrics for binders.
-* Using BindCraft scores as final proof of binding without independent complex validation.
-* Using Protein Hunter as both the generator and the only validator.
-* Using Germinal outputs without checking antibody framework, CDR geometry, and developability.
-* Using generic protein-binder workflows when the requested output is specifically an antibody, VHH, nanobody, or scFv.
-* Treating epitope targeting as successful without checking whether predicted contacts actually land on the requested epitope.
-* Comparing binder candidates only by global structure confidence instead of interface-specific metrics.
-* Using ProteinMPNN when decisive residues contact non-protein atoms that the model cannot see.
-* Using generic binder workflows for antibody tasks with important CDR/framework constraints.
-* Accepting an enzyme design because the fold is confident while catalytic geometry fails.
-* Accepting a scaffold because the global fold is confident while the motif is misplaced.
-* Optimizing stability while destroying the function that should be preserved.
-* Treating peptide design as ordinary folded-protein design.
-* Using expression models as substitutes for splice-site usage or splice junction predictors.
-* Using regulatory motif sprinkling as the only evidence for enhancer or promoter function.
-* Maximizing CAI while ignoring RNA structure, forbidden motifs, and host context.
-* Designing guide RNAs without the nuclease/editor and genome build.
-* Accepting primers based only on Tm and GC.
-* Treating codon optimization alone as mRNA optimization.
-* Treating RNA MFE as sufficient without ensemble checks.
-* Treating aptamer motif presence as proof of binding.
-* Treating aptamer binding as proof of riboswitch function.
-* Treating pathway annotation as proof of pathway flux.
-* Treating isolated part optimization as proof of circuit behavior.
-* Treating local sequence checks as proof of synthetic genome viability.
-* Claiming novelty without database search.
-* Averaging disagreeing predictors without inspecting submetrics.
-* Continuing to sample from the same proposal distribution when one required submetric repeatedly fails.
-* Producing scripts that do not compile, import, or run a small smoke test before expensive jobs.
-* Stopping after an undersized passing batch when the user requested a fixed number of final candidates.
-* Fast structure proxies can disagree with more reliable AlphaFold-family models; use a consensus of several appropriate models for higher success.
-* Motif-only genomic designs can miss learned splice or expression submetrics; use multiple task-matched oracles, such as independent splice predictors plus deterministic ORF/repeat/frame checks, to increase success likelihoods.
-* Good planning is insufficient if generated scripts import the wrong local API.
-* Candidate generation can stop too early after an undersized batch.
-* Binder workflows can over-rank candidates by global confidence while ignoring interface-specific failure.
-* Antibody workflows can look plausible structurally while failing CDR/framework or epitope-specific constraints.
-* Search workflows can overfit to the same predictor used inside the generation loop.
-* Enzyme workflows can pass fold filters while failing catalytic geometry.
-* Codon and mRNA workflows can optimize one metric while creating cryptic motifs or poor RNA structure.
-* Circuit/pathway workflows can optimize components while failing at system-level behavior.
+- Treating generator likelihood as functional validation.
+- Treating motif presence as proof of biological activity.
+- Using monomer pLDDT to validate a protein-protein interface.
+- Using global pLDDT instead of interface-specific metrics for binders.
+- Using BindCraft scores as final proof of binding without independent complex validation.
+- Using Protein Hunter as both the generator and the only validator.
+- Using Germinal outputs without checking antibody framework, CDR geometry, and developability.
+- Using generic protein-binder workflows when the requested output is specifically an antibody, VHH, nanobody, or scFv.
+- Treating epitope targeting as successful without checking whether predicted contacts actually land on the requested epitope.
+- Comparing binder candidates only by global structure confidence instead of interface-specific metrics.
+- Using ProteinMPNN when decisive residues contact non-protein atoms that the model cannot see.
+- Using generic binder workflows for antibody tasks with important CDR/framework constraints.
+- Accepting an enzyme design because the fold is confident while catalytic geometry fails.
+- Accepting a scaffold because the global fold is confident while the motif is misplaced.
+- Optimizing stability while destroying the function that should be preserved.
+- Treating peptide design as ordinary folded-protein design.
+- Using expression models as substitutes for splice-site usage or splice junction predictors.
+- Using regulatory motif sprinkling as the only evidence for enhancer or promoter function.
+- Maximizing CAI while ignoring RNA structure, forbidden motifs, and host context.
+- Designing guide RNAs without the nuclease/editor and genome build.
+- Accepting primers based only on Tm and GC.
+- Treating codon optimization alone as mRNA optimization.
+- Treating RNA MFE as sufficient without ensemble checks.
+- Treating aptamer motif presence as proof of binding.
+- Treating aptamer binding as proof of riboswitch function.
+- Treating pathway annotation as proof of pathway flux.
+- Treating isolated part optimization as proof of circuit behavior.
+- Treating local sequence checks as proof of synthetic genome viability.
+- Claiming novelty without database search.
+- Averaging disagreeing predictors without inspecting submetrics.
+- Continuing to sample from the same proposal distribution when one required submetric repeatedly fails.
+- Producing scripts that do not compile, import, or run a small smoke test before expensive jobs.
+- Stopping after an undersized passing batch when the user requested a fixed number of final candidates.
+- Fast structure proxies can disagree with more reliable AlphaFold-family models; use a consensus of several appropriate models for higher success.
+- Motif-only genomic designs can miss learned splice or expression submetrics; use multiple task-matched oracles, such as independent splice predictors plus deterministic ORF/repeat/frame checks, to increase success likelihoods.
+- Good planning is insufficient if generated scripts import the wrong local API.
+- Candidate generation can stop too early after an undersized batch.
+- Binder workflows can over-rank candidates by global confidence while ignoring interface-specific failure.
+- Antibody workflows can look plausible structurally while failing CDR/framework or epitope-specific constraints.
+- Search workflows can overfit to the same predictor used inside the generation loop.
+- Enzyme workflows can pass fold filters while failing catalytic geometry.
+- Codon and mRNA workflows can optimize one metric while creating cryptic motifs or poor RNA structure.
+- Circuit/pathway workflows can optimize components while failing at system-level behavior.
 
 The remedy is general:
 
-* choose validators that measure the actual biological quantity,
-* keep submetrics visible,
-* use independent predictors whenever feasible, especially for learned or context-dependent properties,
-* smoke-test executable code,
-* save intermediate outputs,
-* replenish candidates until either the requested final count or an explicit budget cap is reached,
-* and label computational outputs honestly when experimental validation is absent.
+- choose validators that measure the actual biological quantity,
+- keep submetrics visible,
+- use independent predictors whenever feasible, especially for learned or context-dependent properties,
+- smoke-test executable code,
+- save intermediate outputs,
+- replenish candidates until either the requested final count or an explicit budget cap is reached,
+- and label computational outputs honestly when experimental validation is absent.
 
 ---
 
@@ -910,4 +908,4 @@ This guidance is based on proto-tools local docs and the following primary or of
 - Foldseek: ["Fast and accurate protein structure search with Foldseek"](https://www.nature.com/articles/s41587-023-01773-0), Nature Biotechnology 2023.
 - MMseqs2: ["MMseqs2 enables sensitive protein sequence searching for the analysis of massive data sets"](https://www.nature.com/articles/nbt.3988), Nature Biotechnology 2017.
 
-When available, prefer local tool documentation, task-matched validation studies, and the exact tools exposed in the runtime over generic model reputation.
+Prefer local tool documentation, task-matched validation studies, and the exact tools exposed in the runtime over generic model reputation.
