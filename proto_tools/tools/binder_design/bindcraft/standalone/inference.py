@@ -288,7 +288,11 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 stderr=sys.stderr if verbose else subprocess.PIPE,
             )
         except subprocess.CalledProcessError as e:
-            stderr_tail = " | ".join((e.stderr or "").strip().splitlines()[-10:]) or "<no stderr>"
+            full_stderr = (e.stderr or "").strip()
+            if full_stderr:
+                # Surface full stderr; a 10-line tail previously hid the root cause.
+                print(full_stderr, file=sys.stderr)
+            stderr_tail = " | ".join(full_stderr.splitlines()[-40:]) or "<no stderr>"
             raise RuntimeError(f"bindcraft: failed (exit {e.returncode}): {stderr_tail}") from e
 
         return _parse_outputs(work_dir / "designs")
