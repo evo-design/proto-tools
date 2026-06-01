@@ -42,12 +42,10 @@ ENTRY = DatasetEntry(
             "uniprot_padded.dbtype",
             "uniprot_padded.index",
         ],
-        paired_output_files=[],
     ),
     mmseqs_flags=MmseqsFlags(sensitivity=8.0, prefilter_mode=0, max_seqs=300),
     db_prefix="uniprot_padded",
     supports_gpu=True,
-    supports_pairing=True,  # paired-MSA path uses UniProt for cross-chain coevolution
     min_gpu_memory_gb=10.0,
     a3m_adapter="plain",
 )

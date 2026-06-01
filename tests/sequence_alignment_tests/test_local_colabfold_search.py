@@ -17,6 +17,7 @@ from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search impo
     ColabfoldSearchConfig,
     ColabfoldSearchInput,
     ColabfoldSearchQuery,
+    _assert_db_supports_pairing,
     _local_search_paired,
     run_colabfold_search,
 )
@@ -186,7 +187,8 @@ def _paired_config(tmp_path: Path, **overrides) -> ColabfoldSearchConfig:
     """Local config pointed at a sentinel DB dir so validators + pairing gate pass."""
     db_dir = tmp_path / "db"
     db_dir.mkdir()
-    (db_dir / "uniref30_2302_db.dbtype").write_bytes(b"")  # detected as database_name; supports_pairing=True
+    (db_dir / "uniref30_2302_db.dbtype").write_bytes(b"")  # detected as database_name
+    (db_dir / "uniref30_2302_db_mapping").write_bytes(b"")  # taxonomy mapping => pairing-capable
     return ColabfoldSearchConfig(
         search_mode="local",
         msa_db_dir=str(db_dir),
@@ -203,8 +205,15 @@ def _install_paired_dispatch(
     *,
     paired_depth: int = 3,
     drop_chain: int | None = None,
+    write_paired: bool = True,
+    unpaired_depth: int = 0,
 ) -> None:
-    """Patch ``ToolInstance.dispatch`` to drop synthetic per-chain ``{i}.paired.a3m`` files."""
+    """Patch ``ToolInstance.dispatch`` to drop synthetic per-chain a3m files.
+
+    Writes ``{i}.paired.a3m`` (paired) unless ``write_paired=False`` or ``i == drop_chain``.
+    When ``unpaired_depth > 0``, also writes ``{i}.a3m`` (unpaired) at that depth — the
+    files the n_found==0 fallback reads.
+    """
 
     def fake(toolkit, input_data, **_):  # test stub
         captured.append(input_data)
@@ -214,8 +223,10 @@ def _install_paired_dispatch(
             ln for ln in Path(input_data["query_fasta_path"]).read_text().splitlines() if not ln.startswith(">")
         )
         for i, chain in enumerate(seq_line.split(":")):
-            if i != drop_chain:
+            if write_paired and i != drop_chain:
                 _write_a3m(out_dir / f"{i}.paired.a3m", chain, paired_depth)
+            if unpaired_depth:
+                _write_a3m(out_dir / f"{i}.a3m", chain, unpaired_depth)
         return {"success": True, "output_dir": input_data["output_dir"]}
 
     monkeypatch.setattr(ToolInstance, "dispatch", staticmethod(fake))
@@ -230,6 +241,7 @@ def test_local_paired_produces_row_aligned_msas(tmp_path, monkeypatch):
     result = _local_search_paired(query, _paired_config(tmp_path))
 
     assert result.query_sequences == [SAMPLE_PROTEIN_SEQ_1, SAMPLE_PROTEIN_SEQ_2]
+    assert result.paired is True
     assert len(result.msas) == 2
     assert all(isinstance(m, MSA) for m in result.msas)
     assert {m.num_sequences for m in result.msas} == {3}  # row-aligned: equal depth
@@ -249,13 +261,43 @@ def test_local_paired_strategy_maps_to_mmseqs_int(tmp_path, monkeypatch, strateg
     assert captured[0]["pairing_strategy"] == expected_int
 
 
-def test_local_paired_partial_pairing_hard_fails(tmp_path, monkeypatch):
-    """One chain paired, the other empty → hard-fail (paired consumers need all chains)."""
-    _install_paired_dispatch(monkeypatch, [], drop_chain=1)
+def test_paired_gate_requires_taxonomy_mapping(tmp_path):
+    """A DB without a {db}_mapping file is rejected for paired search with a clear error."""
+    db_dir = tmp_path / "db"
+    db_dir.mkdir()
+    (db_dir / "uniref30_2302_db.dbtype").write_bytes(b"")  # valid DB, but no _mapping
+    config = ColabfoldSearchConfig(search_mode="local", msa_db_dir=str(db_dir), use_gpu=False)
+    with pytest.raises(RuntimeError, match="no taxonomy mapping"):
+        _assert_db_supports_pairing(config)
+
+
+def test_paired_gate_accepts_db_with_mapping(tmp_path):
+    """A DB with a {db}_mapping file passes the pairing gate (no raise)."""
+    _assert_db_supports_pairing(_paired_config(tmp_path))  # _paired_config writes the _mapping file
+
+
+def test_local_paired_no_pairing_falls_back_to_unpaired(tmp_path, monkeypatch):
+    """No chain paired (n_found==0) → return the already-computed unpaired MSAs, paired=False."""
+    # No .paired.a3m written; unpaired {i}.a3m present at depth 5.
+    _install_paired_dispatch(monkeypatch, [], write_paired=False, unpaired_depth=5)
 
     query = ColabfoldSearchQuery(sequences=[SAMPLE_PROTEIN_SEQ_1, SAMPLE_PROTEIN_SEQ_2])
-    with pytest.raises(RuntimeError, match="partial MSAs"):
-        _local_search_paired(query, _paired_config(tmp_path))
+    result = _local_search_paired(query, _paired_config(tmp_path))
+
+    assert result.paired is False
+    assert all(isinstance(m, MSA) for m in result.msas)
+    assert {m.num_sequences for m in result.msas} == {5}  # the unpaired MSAs
+
+
+def test_local_paired_some_pairing_stays_paired(tmp_path, monkeypatch):
+    """At least one chain paired → still a paired result (no hard-fail); empty chains stay None."""
+    _install_paired_dispatch(monkeypatch, [], drop_chain=1, unpaired_depth=5)
+
+    query = ColabfoldSearchQuery(sequences=[SAMPLE_PROTEIN_SEQ_1, SAMPLE_PROTEIN_SEQ_2])
+    result = _local_search_paired(query, _paired_config(tmp_path))
+
+    assert result.paired is True
+    assert isinstance(result.msas[0], MSA) and result.msas[1] is None
 
 
 # ============================================================================

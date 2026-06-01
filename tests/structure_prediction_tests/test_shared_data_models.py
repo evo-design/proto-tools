@@ -56,7 +56,7 @@ def _stub_colabfold_search(monkeypatch):
         for q in colabfold_input.queries:
             # One 3-row MSA per chain (equal depth → row-aligned for paired groups).
             chain_msas = [MSA(aligned_sequences=[s, s, s]) for s in q.sequences]
-            results.append(cfs.ColabfoldSearchResult(query_sequences=q.sequences, msas=chain_msas))
+            results.append(cfs.ColabfoldSearchResult(query_sequences=q.sequences, msas=chain_msas, paired=q.is_paired))
         return cfs.ColabfoldSearchOutput(results=results)
 
     monkeypatch.setattr(cfs, "run_colabfold_search", fake)
@@ -175,6 +175,27 @@ def test_preprocess_heterocomplex_is_paired(monkeypatch):
     assert entry.paired
     assert set(entry.per_chain) == {0, 1}
     assert entry.as_paired_msa().row_count == 3
+
+
+def test_preprocess_heterocomplex_unpaired_fallback(monkeypatch):
+    """A paired query that fell back to unpaired (result.paired=False) yields a paired=False ComplexMSAs."""
+
+    def fake(colabfold_input, config):
+        results = []
+        for q in colabfold_input.queries:
+            chain_msas = [MSA(aligned_sequences=[s, s, s]) for s in q.sequences]
+            # Simulate the n_found==0 fallback: a paired query returns unpaired MSAs, paired=False.
+            results.append(cfs.ColabfoldSearchResult(query_sequences=q.sequences, msas=chain_msas, paired=False))
+        return cfs.ColabfoldSearchOutput(results=results)
+
+    monkeypatch.setattr(cfs, "run_colabfold_search", fake)
+    inputs = _SPInput(complexes=[_protein_complex(_SEQ_A, _SEQ_B)])
+
+    out = sdm._preprocess_structure_prediction_msas(inputs, ColabfoldSearchConfig(), verbose=0)
+
+    entry = out.msas[0]
+    assert entry.paired is False
+    assert set(entry.per_chain) == {0, 1}
 
 
 def test_preprocess_two_heterocomplexes_not_deduped_across_complexes(monkeypatch):

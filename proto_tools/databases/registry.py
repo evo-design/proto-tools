@@ -71,15 +71,12 @@ class IndexRecipe(BaseModel):
             makepaddedseqdb, createtaxdb, etc.).
         output_files (list[str]): Files whose presence marks the dataset as
             indexed. Supports ``{name}`` substitution.
-        paired_output_files (list[str]): Additional files required for the
-            paired-MSA workflow (typically taxonomy files). Supports ``{name}``.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     steps: list[IndexStep] = Field(default_factory=list)
     output_files: list[str] = Field(default_factory=list)
-    paired_output_files: list[str] = Field(default_factory=list)
 
 
 class MmseqsFlags(BaseModel):
@@ -123,8 +120,6 @@ class DatasetEntry(BaseModel):
             (e.g. ``"uniref30_2302_db"`` → ``{cache_dir}/uniref30_2302_db*``).
         supports_gpu (bool): Whether a GPU-padded index is produced
             (``.idx_pad`` file present after indexing).
-        supports_pairing (bool): Whether a taxonomy-tagged index is produced
-            (required for cross-chain paired MSAs).
         min_gpu_memory_gb (float | None): Minimum GPU memory for GPU search.
             None when the dataset is CPU-only or negligible.
         gpu_padded_marker (str | None): Filename whose presence signals the
@@ -155,7 +150,6 @@ class DatasetEntry(BaseModel):
 
     db_prefix: str
     supports_gpu: bool
-    supports_pairing: bool
     min_gpu_memory_gb: float | None = None
     gpu_padded_marker: str | None = Field(
         default=None,

@@ -590,10 +590,9 @@ def _assemble_paired_result(
 
     The standalone unpacks one ``{i}.a3m`` (unpaired) and ``{i}.paired.a3m``
     (row-aligned paired) per chain, keyed by chain index ``i``. Each file's
-    query header is rewritten to the chain's sequence_id before parsing.
-
-    Partial pairing (some chains paired, others empty) breaks row-alignment for
-    downstream consumers, so it hard-fails, matching ``colabfold-search``.
+    query header is rewritten to the chain's sequence_id before parsing. Both the
+    unpaired ``msas`` and ``paired_msas`` are returned, so a consumer can fall back
+    to the unpaired MSAs when pairing found nothing (all ``paired_msas`` None).
     """
     sequence_ids: list[str] = []
     msas: list[MSA | None] = []
@@ -613,14 +612,7 @@ def _assemble_paired_result(
         paired_msas.append(paired_msa)
         num_homologs.append(homologs)
 
-    n_found = sum(m is not None for m in paired_msas)
-    if 0 < n_found < len(paired_msas):
-        raise RuntimeError(
-            f"mmseqs2-homology-search: paired group produced partial MSAs "
-            f"({len(paired_msas) - n_found} of {len(paired_msas)} chains failed); "
-            "paired downstream consumers require all per-chain MSAs to be present."
-        )
-
+    # Returns unpaired ``msas`` and ``paired_msas`` separately, so a consumer falls back to msas when pairing found nothing.
     return Mmseqs2HomologySearchResult(
         sequence_ids=sequence_ids,
         msas=msas,

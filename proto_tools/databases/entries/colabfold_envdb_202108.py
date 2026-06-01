@@ -56,15 +56,11 @@ ENTRY = DatasetEntry(
             "colabfold_envdb_202108_db.idx",
             "colabfold_envdb_202108_db_h",
         ],
-        paired_output_files=[
-            "colabfold_envdb_202108_db.idx_pad",
-        ],
     ),
     mmseqs_flags=MmseqsFlags(sensitivity=8.0, prefilter_mode=0, max_seqs=300),
     db_prefix="colabfold_envdb_202108_db",
     supports_gpu=True,
     gpu_padded_marker="colabfold_envdb_202108_db.idx_pad",
-    supports_pairing=False,
     min_gpu_memory_gb=10.0,
     a3m_adapter="colabfold",
 )

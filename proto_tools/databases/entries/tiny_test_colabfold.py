@@ -71,11 +71,6 @@ ENTRY = DatasetEntry(
                 command=["mv", "-f", "sprot2503_mapping", "uniref30_mini_db_mapping"],
                 description="Rename taxonomy mapping file",
             ),
-            # Binary taxonomy mapping that mmseqs ``pairaln`` consumes for cross-chain pairing.
-            IndexStep(
-                command=["mmseqs", "createbintaxmapping", "uniref30_mini_db_mapping", "uniref30_mini_db_mapping.bin"],
-                description="Build binary taxonomy mapping for pairing",
-            ),
             IndexStep(
                 command=["mmseqs", "makepaddedseqdb", "uniref30_mini_db", "uniref30_mini_db.idx_pad"],
                 description="Build GPU-padded sequence DB",
@@ -87,13 +82,11 @@ ENTRY = DatasetEntry(
             "uniref30_mini_db_h",
             "uniref30_mini_db_seq",
         ],
-        paired_output_files=["uniref30_mini_db_mapping.bin"],
     ),
     mmseqs_flags=MmseqsFlags(sensitivity=8.0, prefilter_mode=0, max_seqs=300),
     db_prefix="uniref30_mini_db",
     supports_gpu=True,
     gpu_padded_marker="uniref30_mini_db.idx_pad",
-    supports_pairing=True,
     min_gpu_memory_gb=0.5,
     a3m_adapter="colabfold",
     auto_provision=True,

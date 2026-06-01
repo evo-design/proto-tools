@@ -46,10 +46,6 @@ ENTRY = DatasetEntry(
                 command=["tar", "-xzvf", "uniref30_2302_newtaxonomy.tar.gz"],
                 description="Extract rebuilt taxonomy mapping (overwrites stale tarball mapping)",
             ),
-            IndexStep(
-                command=["mmseqs", "createbintaxmapping", "uniref30_2302_db_mapping", "uniref30_2302_db_mapping.bin"],
-                description="Binary taxonomy mapping for paired-MSA species intersection",
-            ),
         ],
         output_files=[
             "uniref30_2302_db.dbtype",
@@ -57,9 +53,6 @@ ENTRY = DatasetEntry(
             "uniref30_2302_db_seq",
             "uniref30_2302_db.idx_pad",
             "uniref30_2302_db.idx_pad.dbtype",
-        ],
-        paired_output_files=[
-            "uniref30_2302_db_mapping.bin",
         ],
     ),
     mmseqs_flags=MmseqsFlags(
@@ -70,7 +63,6 @@ ENTRY = DatasetEntry(
     db_prefix="uniref30_2302_db",
     supports_gpu=True,
     gpu_padded_marker="uniref30_2302_db.idx_pad",
-    supports_pairing=True,
     min_gpu_memory_gb=10.0,
     a3m_adapter="colabfold",
 )

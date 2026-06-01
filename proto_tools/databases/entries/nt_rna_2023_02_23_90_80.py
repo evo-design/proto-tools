@@ -62,12 +62,10 @@ ENTRY = DatasetEntry(
             "nt_rna.dbtype",
             "nt_rna.index",
         ],
-        paired_output_files=[],
     ),
     mmseqs_flags=MmseqsFlags(sensitivity=7.0, prefilter_mode=0, max_seqs=300),
     db_prefix="nt_rna",
     supports_gpu=False,
-    supports_pairing=False,
     min_gpu_memory_gb=None,
     a3m_adapter="rna",
 )
