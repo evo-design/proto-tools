@@ -304,14 +304,15 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance: Any = None) 
     from proto_tools.tools.structure_prediction.shared_data_models import unwrap_complex_msas
 
     # BioEmu is single-chain, so always read chain index 0.
-    msa_a3m_contents: dict[str, str] = {}
+    # Per-complex MSAs (index-aligned with complexes); keying by sequence would collide on duplicates.
+    msa_a3m_contents: list[str | None] = [None] * len(inputs.complexes)
     if inputs.msas:
         for cplx_idx, complex_ in enumerate(inputs.complexes):
             seq = complex_.chain_sequences[0]
             per_chain, _ = unwrap_complex_msas(inputs.msas[cplx_idx])
             msa = per_chain.get(0)
             if msa is not None:
-                msa_a3m_contents[seq] = msa.to_a3m_string()
+                msa_a3m_contents[cplx_idx] = msa.to_a3m_string()
                 if config.verbose:
                     logger.info(f"Loaded MSA for sequence (length {len(seq)}): {len(msa)} homologs")
 
@@ -347,6 +348,11 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance: Any = None) 
         result = raw_results[comp_idx]
 
         structures = _pdb_frames_to_structures(pdb_frames=result["pdb_frames"], comp_idx=comp_idx)
+        if not structures:
+            raise ValueError(
+                f"BioEmu produced no structures for complex {comp_idx} "
+                f"(all {config.num_samples} sampled frames were filtered out)."
+            )
         ensemble = StructureEnsemble(structures=structures, sequence=sequence)
         ensembles.append(ensemble)
         total_structures += len(structures)

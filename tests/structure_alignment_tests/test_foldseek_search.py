@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from pydantic import ValidationError
 
 from proto_tools.tools.database_retrieval import (
     AlphaFoldDBFetchConfig,
@@ -21,7 +22,9 @@ from proto_tools.tools.structure_alignment import (
     run_foldseek_search,
 )
 from proto_tools.tools.structure_alignment.foldseek.foldseek_search import (
+    FoldseekHit,
     _parse_m8_archive,
+    _parse_m8_text,
     _submit,
 )
 
@@ -41,6 +44,42 @@ def _make_archive(files: dict[str, str]) -> bytes:
 def _row(target_id: str, identity_pct: str = "55.0") -> str:
     """Build one tab-separated M8 row with sensible defaults."""
     return "\t".join(["query", target_id, identity_pct, "120", "10", "2", "1", "120", "5", "125", "1e-30", "150.0"])
+
+
+# ── _parse_m8_text (malformed-row handling + coordinate validation) ───────────
+
+
+def test_parse_m8_text_skips_malformed_rows():
+    """Non-numeric fields and out-of-range coordinates are skipped, not raised."""
+    good = "q\t1abc_A\t55.0\t120\t10\t2\t1\t120\t5\t125\t1e-30\t150.0"
+    non_numeric = "q\t1abc_B\tNOTNUM\t120\t10\t2\t1\t120\t5\t125\t1e-30\t150.0"
+    inverted = "q\t1abc_C\t55.0\t120\t10\t2\t120\t1\t5\t125\t1e-30\t150.0"
+    zero_coord = "q\t1abc_D\t55.0\t120\t10\t2\t0\t120\t5\t125\t1e-30\t150.0"
+    hits = _parse_m8_text("\n".join([good, non_numeric, inverted, zero_coord]), "testdb")
+    assert [h.target_id for h in hits] == ["1abc_A"]
+
+
+def test_foldseek_hit_rejects_invalid_coordinates():
+    """FoldseekHit enforces 1-indexed coordinates with start <= end."""
+    base = {
+        "database": "d",
+        "target_id": "t",
+        "sequence_identity": 0.5,
+        "alignment_length": 10,
+        "mismatches": 0,
+        "gap_openings": 0,
+        "query_start": 1,
+        "query_end": 10,
+        "target_start": 1,
+        "target_end": 10,
+        "evalue": 1e-5,
+        "bit_score": 50.0,
+    }
+    FoldseekHit(**base)
+    with pytest.raises(ValidationError):
+        FoldseekHit(**{**base, "query_start": 20})
+    with pytest.raises(ValidationError):
+        FoldseekHit(**{**base, "target_start": 0})
 
 
 # ── _parse_m8_archive ─────────────────────────────────────────────────────────

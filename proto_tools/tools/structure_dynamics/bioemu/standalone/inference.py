@@ -301,7 +301,7 @@ def run_bioemu_batch(input_data: dict[str, Any]) -> dict[str, Any]:
                 batch_size=input_data["batch_size"],
                 denoiser_type=input_data.get("denoiser_type", "dpm"),
                 denoiser_config=input_data.get("denoiser_config"),
-                msa_a3m=msa_a3m_contents.get(sequence),
+                msa_a3m=msa_a3m_contents[seq_idx],
                 msa_host_url=input_data.get("msa_host_url"),
                 cache_embeds_dir=input_data.get("cache_embeds_dir"),
                 cache_so3_dir=input_data.get("cache_so3_dir"),

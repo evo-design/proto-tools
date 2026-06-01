@@ -482,13 +482,15 @@ class RFdiffusion3Input(BaseToolInput):
                     item["input"] = _resolve_input_structure_path(item["input"])
             return json.dumps(spec, indent=2)
 
-        dest = Path(input_dir) if input_dir is not None else Path(tempfile.mkdtemp(prefix="rfd3_input_"))
-        dest.mkdir(parents=True, exist_ok=True)
         spec_dict: dict[str, Any] = {}
+        dest: Path | None = None  # created only when a structure must be materialized
         for i, spec in enumerate(self.design_specs):
             spec_key = f"spec-{i}"
             spec_dict[spec_key] = spec.to_dict()
             if spec.input_structure is not None:
+                if dest is None:
+                    dest = Path(input_dir) if input_dir is not None else Path(tempfile.mkdtemp(prefix="rfd3_input_"))
+                    dest.mkdir(parents=True, exist_ok=True)
                 # rfd3 needs a path: write the structure to a file, set "input" to it.
                 ext = spec.input_structure.structure_format or "pdb"
                 structure_path = dest / f"{spec_key}_input.{ext}"

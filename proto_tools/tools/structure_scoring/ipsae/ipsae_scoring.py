@@ -390,21 +390,29 @@ def _extract_binder_target_scores(
     binder_chain: str,
     target_chains: list[str],
 ) -> dict[str, float]:
-    """Extract the max-type scores for the binder-target interface."""
-    target_set = set(target_chains)
-    for result in chain_pair_results:
-        if result.pair_type != "max":
-            continue
-        if (result.chain1 == binder_chain and result.chain2 in target_set) or (
-            result.chain2 == binder_chain and result.chain1 in target_set
-        ):
-            return {
-                "ipsae": result.ipsae,
-                "pdockq2": result.pdockq2,
-                "lis": result.lis,
-                "pdockq": result.pdockq,
-                "iptm_d0chn": result.iptm_d0chn,
-            }
+    """Extract max-type scores for the binder-target interface.
 
-    logger.warning("No max-type chain pair found for binder=%r target=%s", binder_chain, sorted(target_set))
-    return {}
+    With multiple target chains, returns the highest-ipSAE pair (not an arbitrary first match).
+    """
+    target_set = set(target_chains)
+    matches = [
+        result
+        for result in chain_pair_results
+        if result.pair_type == "max"
+        and (
+            (result.chain1 == binder_chain and result.chain2 in target_set)
+            or (result.chain2 == binder_chain and result.chain1 in target_set)
+        )
+    ]
+    if not matches:
+        logger.warning("No max-type chain pair found for binder=%r target=%s", binder_chain, sorted(target_set))
+        return {}
+
+    best = max(matches, key=lambda result: result.ipsae)
+    return {
+        "ipsae": best.ipsae,
+        "pdockq2": best.pdockq2,
+        "lis": best.lis,
+        "pdockq": best.pdockq,
+        "iptm_d0chn": best.iptm_d0chn,
+    }

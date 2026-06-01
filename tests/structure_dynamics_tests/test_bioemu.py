@@ -158,6 +158,31 @@ def test_config_passes_new_fields_to_dispatch():
     assert payload["cache_so3_dir"] == "so3_cache"
 
 
+def test_identical_sequence_complexes_keep_distinct_msas():
+    """Two complexes sharing a sequence but with different MSAs must not collide in the dispatch payload."""
+    from proto_tools.entities.msa import MSA
+
+    seq = "MKTL"
+    msa_a = MSA(aligned_sequences=[seq, "MKTA"], sequence_ids=["q", "h"])
+    msa_b = MSA(aligned_sequences=[seq, "MKTG"], sequence_ids=["q", "h"])
+    bioemu_input = BioEmuInput(complexes=[seq, seq], msas=[{0: msa_a}, {0: msa_b}])
+
+    with patch(
+        "proto_tools.tools.structure_dynamics.bioemu.bioemu_sample.ToolInstance",
+    ) as mock_cls:
+        mock_cls.dispatch.return_value = {
+            "results": [
+                {"pdb_frames": [_SAMPLE_PDB_CONTENT], "num_frames": 1, "num_residues": len(seq)},
+                {"pdb_frames": [_SAMPLE_PDB_CONTENT], "num_frames": 1, "num_residues": len(seq)},
+            ]
+        }
+        run_bioemu(bioemu_input, BioEmuConfig(num_samples=1, verbose=False))
+
+    msa_contents = mock_cls.dispatch.call_args[0][1]["msa_a3m_contents"]
+    assert msa_contents == [msa_a.to_a3m_string(), msa_b.to_a3m_string()]
+    assert msa_contents[0] != msa_contents[1]
+
+
 def test_config_cache_key_invariants():
     """Cache dirs / output_dir excluded; msa_host_url INCLUDED (server change → different MSAs)."""
     base = BioEmuConfig().cache_key()
@@ -174,6 +199,21 @@ def test_config_cache_key_invariants():
 
     # Included — different MSA server can produce different MSAs → different ensembles
     assert BioEmuConfig(msa_host_url="https://other.example.com").cache_key() != base
+
+
+def test_all_frames_filtered_out_raises():
+    """If every sampled frame is filtered out, run_bioemu fails loudly instead of returning an empty ensemble."""
+    complex_ = Complex(chains=[{"sequence": _SAMPLE_SEQUENCE, "entity_type": "protein"}])
+    bioemu_input = BioEmuInput(complexes=[complex_])
+
+    with patch(
+        "proto_tools.tools.structure_dynamics.bioemu.bioemu_sample.ToolInstance",
+    ) as mock_cls:
+        mock_cls.dispatch.return_value = {
+            "results": [{"pdb_frames": [], "num_frames": 0, "num_residues": len(_SAMPLE_SEQUENCE)}]
+        }
+        with pytest.raises(ValueError, match="no structures"):
+            run_bioemu(bioemu_input, BioEmuConfig(num_samples=4, verbose=False))
 
 
 # ── Output assembly (mocked dispatch) ────────────────────────────────────────

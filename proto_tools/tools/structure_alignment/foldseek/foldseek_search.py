@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import requests
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from proto_tools.entities import Structure
 from proto_tools.tools.tool_registry import tool
@@ -104,16 +104,25 @@ class FoldseekHit(BaseModel):
     alignment_length: int = Field(title="Alignment Length", description="Aligned region length in residues", ge=0)
     mismatches: int = Field(title="Mismatches", description="Mismatched columns", ge=0)
     gap_openings: int = Field(title="Gap Openings", description="Gap-opening events", ge=0)
-    query_start: int = Field(title="Query Start", description="Query start (1-indexed)")
-    query_end: int = Field(title="Query End", description="Query end (1-indexed)")
-    target_start: int = Field(title="Target Start", description="Target start (1-indexed)")
-    target_end: int = Field(title="Target End", description="Target end (1-indexed)")
+    query_start: int = Field(title="Query Start", description="Query start (1-indexed)", ge=1)
+    query_end: int = Field(title="Query End", description="Query end (1-indexed)", ge=1)
+    target_start: int = Field(title="Target Start", description="Target start (1-indexed)", ge=1)
+    target_end: int = Field(title="Target End", description="Target end (1-indexed)", ge=1)
     evalue: float = Field(
         title="E-value",
         description="Foldseek e-value; smaller values are more significant",
         ge=0.0,
     )
     bit_score: float = Field(title="Bit Score", description="Foldseek alignment bit score; higher is better")
+
+    @model_validator(mode="after")
+    def _validate_ranges(self) -> "FoldseekHit":
+        """1-indexed alignment ranges must satisfy start <= end."""
+        if self.query_start > self.query_end:
+            raise ValueError(f"query_start ({self.query_start}) must be <= query_end ({self.query_end})")
+        if self.target_start > self.target_end:
+            raise ValueError(f"target_start ({self.target_start}) must be <= target_end ({self.target_end})")
+        return self
 
 
 class FoldseekSearchInput(BaseToolInput):
@@ -468,7 +477,8 @@ def _submit(
 def _parse_m8_text(text: str, database: str) -> list[FoldseekHit]:
     """Parse standard 12-column BLAST M8 text into FoldseekHit objects.
 
-    Rows with fewer than 12 columns are silently skipped. Sequence identity in
+    Rows with fewer than 12 columns, non-numeric fields, or out-of-range
+    coordinates are skipped (logged at warning level). Sequence identity in
     column 3 is encoded as a percentage (0-100); normalize to a fraction in
     [0, 1] for downstream consumers.
     """
@@ -477,22 +487,26 @@ def _parse_m8_text(text: str, database: str) -> list[FoldseekHit]:
         row = line.split("\t")
         if len(row) < 12:
             continue
-        hits.append(
-            FoldseekHit(
-                database=database,
-                target_id=row[1],
-                sequence_identity=float(row[2]) / 100.0,
-                alignment_length=int(row[3]),
-                mismatches=int(row[4]),
-                gap_openings=int(row[5]),
-                query_start=int(row[6]),
-                query_end=int(row[7]),
-                target_start=int(row[8]),
-                target_end=int(row[9]),
-                evalue=float(row[10]),
-                bit_score=float(row[11]),
+        try:
+            hits.append(
+                FoldseekHit(
+                    database=database,
+                    target_id=row[1],
+                    sequence_identity=float(row[2]) / 100.0,
+                    alignment_length=int(row[3]),
+                    mismatches=int(row[4]),
+                    gap_openings=int(row[5]),
+                    query_start=int(row[6]),
+                    query_end=int(row[7]),
+                    target_start=int(row[8]),
+                    target_end=int(row[9]),
+                    evalue=float(row[10]),
+                    bit_score=float(row[11]),
+                )
             )
-        )
+        except (ValueError, ValidationError) as exc:
+            logger.warning("Skipping malformed Foldseek M8 row %r: %s", line, exc)
+            continue
     return hits
 
 

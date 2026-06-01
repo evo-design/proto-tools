@@ -51,6 +51,34 @@ def test_missing_plddt_rejected():
         IPSAEScoringInput(structure=structure, binder_chain="A", target_chains=["B"])
 
 
+def test_extract_binder_target_scores_multi_target_picks_max_ipsae():
+    """With multiple targets the strongest (max-ipSAE) binder-target pair is reported, not the first."""
+    from proto_tools.tools.structure_scoring.ipsae.ipsae_scoring import (
+        ChainPairScores,
+        _extract_binder_target_scores,
+    )
+
+    def pair(chain2: str, ipsae: float) -> ChainPairScores:
+        return ChainPairScores(
+            chain1="A",
+            chain2=chain2,
+            pair_type="max",
+            ipsae=ipsae,
+            ipsae_d0chn=0.0,
+            ipsae_d0dom=0.0,
+            iptm_af=-1.0,
+            iptm_d0chn=0.0,
+            pdockq=0.0,
+            pdockq2=0.0,
+            lis=ipsae,
+        )
+
+    # B appears first with a lower score; C is the stronger interface and must win.
+    scores = _extract_binder_target_scores([pair("B", 0.2), pair("C", 0.8)], "A", ["B", "C"])
+    assert scores["ipsae"] == 0.8
+    assert scores["lis"] == 0.8
+
+
 # ── Integration ───────────────────────────────────────────────────────────────
 
 
