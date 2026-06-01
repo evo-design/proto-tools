@@ -22,3 +22,16 @@ For personal discoveries (debugging patterns, tool quirks found during a session
 User-facing documentation reference pages are auto-generated from Python docstrings and field descriptions in the source code.
 
 Developer reference docs live here in `notes/` as the canonical source for internal development guidance.
+
+### Hiding sections from the public docs
+
+A few Markdown sources here are published to the public docs site (docs.proto.bio); `storage.md` is one. When a published file has a developer-only section that should not appear on the site, wrap it in HTML comment markers:
+
+```markdown
+<!-- docs:ignore start -->
+## For tool authors
+...content the docs site should not show...
+<!-- docs:ignore end -->
+```
+
+The markers are invisible in the GitHub/IDE render, so the note still reads cleanly here, and the docs generator drops everything between them. See `storage.md` for a live example. The same markers work in toolkit `README.md` files. An unclosed marker fails the docs build.

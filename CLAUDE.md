@@ -127,6 +127,10 @@ Generated reference pages come from Python docstrings, Pydantic field
 descriptions, toolkit READMEs, notebooks, and metadata files. Update those
 sources rather than generated docs.
 
+To keep a developer-only region of a published Markdown source (toolkit
+`README.md`, `notes/storage.md`) off the docs site, wrap it in
+`<!-- docs:ignore start -->` / `<!-- docs:ignore end -->`. See `notes/README.md`.
+
 When behavior changes, update the matching docs in the same commit. Common
 targets are:
 

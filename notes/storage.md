@@ -74,6 +74,7 @@ export PROTO_FAMPNN_WEIGHTS_DIR=/custom/path/fampnn
 export PROTO_PROTENIX_WEIGHTS_DIR=/custom/path/protenix
 ```
 
+<!-- docs:ignore start -->
 ## For tool authors
 
 Non-HF tools call `resolve_weights_dir(toolkit)` from `standalone_helpers.py`:
@@ -102,3 +103,5 @@ wget -q -O "$WEIGHTS_DIR/model.pt" "https://example.com/model.pt"
 
 - **ProteinMPNN**: Weights (~150 MB) live inside pip-installed ColabDesign. Inherently venv-local.
 - **AlphaFold3**: User-provided paths (`model_dir`, `db_dir`, `sif_path`). Not managed by `PROTO_MODEL_CACHE`.
+<!-- docs:ignore end -->
+
