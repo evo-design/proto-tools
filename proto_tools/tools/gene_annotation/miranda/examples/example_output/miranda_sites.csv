@@ -1,0 +1,3 @@
+target_id,mirna_id,target_start,target_end,mirna_start,mirna_end,score,energy,alignment_length,identity,similarity
+seq_0,miR-bantam,1720,1740,2,20,161.0,-24.54,18,88.89,94.44
+seq_0,miR-bantam,883,905,1,22,154.0,-20.03,23,78.26,82.61

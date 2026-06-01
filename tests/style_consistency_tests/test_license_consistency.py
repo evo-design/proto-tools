@@ -43,6 +43,7 @@ _ALLOWED_SPDX = frozenset(
         "MIT",
         "BSD-2-Clause",
         "BSD-3-Clause",
+        "GPL-2.0",
         "GPL-3.0",
         "LGPL-3.0",
         "MPL-2.0",
@@ -487,6 +488,7 @@ _SPDX_FINGERPRINTS: dict[str, list[tuple[str, ...]]] = {
         # files whose header doesn't name the variant explicitly.
         ("may not be used to endorse or promote",),
     ],
+    "GPL-2.0": [("gnu general public license", "version 2")],
     "GPL-3.0": [("gnu general public license", "version 3")],
     "LGPL-3.0": [("gnu lesser general public license", "version 3")],
     "AGPL-3.0": [("gnu affero general public license", "version 3")],

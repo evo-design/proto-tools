@@ -21,6 +21,16 @@ from proto_tools.tools.gene_annotation.minced import (
     run_minced,
 )
 
+# miRanda tools
+from proto_tools.tools.gene_annotation.miranda import (
+    MirandaConfig,
+    MirandaInput,
+    MirandaOutput,
+    MirandaSequenceResult,
+    MirandaTargetSite,
+    run_miranda_scan,
+)
+
 # Promoter Calculator tools
 from proto_tools.tools.gene_annotation.promoter_calculator import (
     PromoterCalculatorConfig,
@@ -98,6 +108,13 @@ __all__ = [
     "MincedSequenceResult",
     "CrisprArray",
     "CrisprRepeatSpacer",
+    # miRanda
+    "run_miranda_scan",
+    "MirandaInput",
+    "MirandaConfig",
+    "MirandaOutput",
+    "MirandaSequenceResult",
+    "MirandaTargetSite",
     # Promoter Calculator
     "run_promoter_calculator",
     "PromoterCalculatorInput",
