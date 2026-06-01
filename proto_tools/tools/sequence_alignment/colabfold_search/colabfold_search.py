@@ -209,6 +209,9 @@ class ColabfoldSearchResult(BaseModel):
         query_sequences (list[str]): The query chain sequence(s) this result is for.
         msas (list[MSA | None]): One MSA per chain (``None`` for a chain with no
             homologs beyond the query row).
+        paired (bool): Whether ``msas`` are taxonomy-paired (row-aligned across
+            chains). ``False`` for unpaired queries, and for a paired query that
+            fell back to unpaired MSAs because no cross-chain pairing was found.
     """
 
     query_sequences: list[str] = Field(
@@ -217,6 +220,11 @@ class ColabfoldSearchResult(BaseModel):
     msas: list[MSA | None] = Field(
         title="MSA Results",
         description="One MSA per chain (None when a chain has no homologs); row-aligned for paired queries.",
+    )
+    paired: bool = Field(
+        default=False,
+        title="Paired",
+        description="Whether `msas` are taxonomy-paired (row-aligned across chains).",
     )
 
     @property
@@ -703,6 +711,13 @@ def _count_sequences_in_a3m(a3m_path: str | Path) -> int:
     return count
 
 
+def _read_chain_a3m(out_dir: str, chain_idx: int, suffix: str) -> MSA | None:
+    """Read ``{out_dir}/{chain_idx}{suffix}`` into an MSA, or None when absent or query-only."""
+    path = os.path.join(out_dir, f"{chain_idx}{suffix}")
+    num_seqs = _count_sequences_in_a3m(path) if os.path.exists(path) else 0
+    return MSA.from_file(path) if num_seqs >= 2 else None
+
+
 def _replace_query_header_in_a3m(a3m_path: str | Path, label: str) -> None:
     """Rewrite the query (first) header line in an A3M to ``label``, leaving homologs untouched.
 
@@ -835,17 +850,21 @@ def _local_search(
 
 
 def _assert_db_supports_pairing(config: ColabfoldSearchConfig) -> None:
-    """Raise if the configured local DB is known to lack a taxonomy index (no pairing)."""
-    from proto_tools.databases import DatasetRegistry
+    """Raise if the configured local DB lacks the taxonomy mapping pairing needs.
 
-    for name in DatasetRegistry.list_all():
-        entry = DatasetRegistry.get(name)
-        if entry.db_prefix == config.database_name and not entry.supports_pairing:
-            raise RuntimeError(
-                f"colabfold-search: local paired search requires a taxonomy-tagged database, but "
-                f"{config.database_name!r} ({name}) has supports_pairing=False. Use a pairing-capable "
-                f"dataset (e.g. uniref30-2302)."
-            )
+    mmseqs ``pairaln`` groups hits by per-sequence taxid read from a ``{db}_mapping``
+    file (its ``MappingReader`` requires that exact file and aborts without it). Its
+    presence on disk is the authoritative, registry-independent signal that a DB is
+    taxonomy-tagged, so this works for both registered and custom databases.
+    """
+    assert config.msa_db_dir is not None  # resolved by set_default_msa_db_dir
+    mapping = Path(config.msa_db_dir) / f"{config.database_name}_mapping"
+    if not mapping.exists():
+        raise RuntimeError(
+            f"colabfold-search: local paired search requires a taxonomy-tagged database, but "
+            f"{config.database_name!r} in {config.msa_db_dir} has no taxonomy mapping ({mapping.name}). "
+            f"Build one with `mmseqs createtaxdb`, or use a pairing-capable dataset (e.g. uniref30-2302)."
+        )
 
 
 def _local_search_paired(
@@ -900,23 +919,14 @@ def _local_search_paired(
         if not output_data.get("success", False):
             raise RuntimeError(f"colabfold-search: local paired search failed: {output_data.get('error', 'unknown')}")
 
-        # colabfold_search --unpack writes one {id}.paired.a3m per chain, in input order.
-        per_chain_msas: list[MSA | None] = []
-        for chain_idx in range(len(query.sequences)):
-            paired_a3m = os.path.join(paired_out_dir, f"{chain_idx}.paired.a3m")
-            num_seqs = _count_sequences_in_a3m(paired_a3m) if os.path.exists(paired_a3m) else 0
-            per_chain_msas.append(MSA.from_file(paired_a3m) if num_seqs >= 2 else None)
+        # The standalone unpacks both {id}.paired.a3m (paired) and {id}.a3m (unpaired) per chain; read paired first.
+        paired_msas = [_read_chain_a3m(paired_out_dir, i, ".paired.a3m") for i in range(len(query.sequences))]
 
-    # Partial pairing (some chains found, others empty) breaks row-alignment for consumers.
-    n_found = sum(m is not None for m in per_chain_msas)
-    if 0 < n_found < len(per_chain_msas):
-        raise RuntimeError(
-            f"colabfold-search: paired query produced partial MSAs "
-            f"({len(per_chain_msas) - n_found} of {len(per_chain_msas)} chains failed); "
-            "paired downstream consumers require all per-chain MSAs to be present."
-        )
-
-    return ColabfoldSearchResult(query_sequences=query.sequences, msas=per_chain_msas)
+        # Any pairing => return the row-aligned paired MSAs; if nothing paired, fall back to the already-computed unpaired MSAs.
+        if any(m is not None for m in paired_msas):
+            return ColabfoldSearchResult(query_sequences=query.sequences, msas=paired_msas, paired=True)
+        unpaired_msas = [_read_chain_a3m(paired_out_dir, i, ".a3m") for i in range(len(query.sequences))]
+        return ColabfoldSearchResult(query_sequences=query.sequences, msas=unpaired_msas, paired=False)
 
 
 def _remote_search(
@@ -993,7 +1003,9 @@ def _remote_search_paired(
     Hits the ``ticket/pair`` endpoint via ``run_mmseqs2(use_pairing=True)``. The API
     returns one ``pair.a3m`` containing N chain blocks separated by ``\x00``; rows
     are taxonomy-paired across blocks by position. ``result.msas`` is a list of N
-    MSAs in input chain order.
+    MSAs in input chain order. When pairing finds nothing (no shared taxonomy), a
+    second unpaired (``use_pairing=False``) call supplies per-chain MSAs and the
+    result is returned with ``paired=False``.
     """
     assert query.is_paired, "_remote_search_paired requires a list-sequences query"
     assert isinstance(query.sequences, list)
@@ -1039,13 +1051,12 @@ def _remote_search_paired(
         else:
             per_chain_msas.append(MSA.from_file(msa_path))
 
-    # Partial pairing (some chains found, others empty) breaks row-alignment for consumers.
-    n_found = sum(m is not None for m in per_chain_msas)
-    if 0 < n_found < len(per_chain_msas):
-        raise RuntimeError(
-            f"colabfold-search: paired query produced partial MSAs "
-            f"({len(per_chain_msas) - n_found} of {len(per_chain_msas)} chains failed); "
-            "paired downstream consumers require all per-chain MSAs to be present."
-        )
-
-    return ColabfoldSearchResult(query_sequences=query.sequences, msas=per_chain_msas)
+    # Any pairing => return paired MSAs; if nothing paired (disjoint taxa), fall back to a second unpaired call (mirrors local).
+    if any(m is not None for m in per_chain_msas):
+        return ColabfoldSearchResult(query_sequences=query.sequences, msas=per_chain_msas, paired=True)
+    unpaired_out = _remote_search(query.sequences, config, str(config.output_dir), instance=instance)
+    return ColabfoldSearchResult(
+        query_sequences=query.sequences,
+        msas=[res.msas[0] for res in unpaired_out.results],
+        paired=False,
+    )

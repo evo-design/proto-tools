@@ -63,12 +63,10 @@ ENTRY = DatasetEntry(
             "rnacentral.dbtype",
             "rnacentral.index",
         ],
-        paired_output_files=[],
     ),
     mmseqs_flags=MmseqsFlags(sensitivity=7.0, prefilter_mode=0, max_seqs=300),
     db_prefix="rnacentral",
     supports_gpu=False,  # AlphaFast uses CPU for RNA search
-    supports_pairing=False,
     min_gpu_memory_gb=None,
     a3m_adapter="rna",
 )

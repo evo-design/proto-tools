@@ -113,6 +113,41 @@ def test_remote_search_paired_rejects_chain_path_count_mismatch(tmp_path, monkey
         _remote_search_paired(query, config)
 
 
+def test_remote_search_paired_falls_back_to_unpaired_when_no_pairing(tmp_path, monkeypatch):
+    """No chain paired (n_found==0) => a gated second unpaired (use_pairing=False) call supplies MSAs, paired=False."""
+    calls: list[str] = []
+
+    def fake_dispatch(_name, input_data, **_kwargs):
+        out = Path(input_data["output_dir"])
+        out.mkdir(parents=True, exist_ok=True)
+        if isinstance(input_data["queries"][0]["sequences"], list):
+            # Paired call: query-only blocks per chain (no homologs => every chain None).
+            calls.append("paired")
+            paths = []
+            for i, s in enumerate(input_data["queries"][0]["sequences"]):
+                (out / f"pair_{i}.a3m").write_text(f">query\n{s}\n")
+                paths.append(str(out / f"pair_{i}.a3m"))
+            return {"success": True, "paired_msa_paths": {"0": paths}}
+        # Fallback unpaired call (one query per chain): real homologs.
+        calls.append("unpaired")
+        msa_paths = {}
+        for idx, q in enumerate(input_data["queries"]):
+            s = q["sequences"]
+            (out / f"unp_{idx}.a3m").write_text("".join([f">query\n{s}\n"] + [f">h{k}\n{s}\n" for k in range(4)]))
+            msa_paths[str(idx)] = str(out / f"unp_{idx}.a3m")
+        return {"success": True, "msa_paths": msa_paths, "num_successful": len(msa_paths), "num_failed": 0}
+
+    monkeypatch.setattr(cfs.ToolInstance, "dispatch", fake_dispatch)
+    query = ColabfoldSearchQuery(sequences=[SAMPLE_PROTEIN_SEQ, HBB_HUMAN])
+    config = ColabfoldSearchConfig(search_mode="remote", output_dir=str(tmp_path))
+
+    result = _remote_search_paired(query, config)
+
+    assert calls == ["paired", "unpaired"]  # the unpaired call is gated on pairing finding nothing
+    assert result.paired is False
+    assert all(m is not None and m.num_sequences == 5 for m in result.msas)
+
+
 # ---------------------------------------------------------------------------
 # Integration tests
 # ---------------------------------------------------------------------------

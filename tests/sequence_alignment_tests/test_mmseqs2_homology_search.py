@@ -68,14 +68,12 @@ def _install_fake_dispatch(
     captured: list[dict[str, Any]],
     *,
     paired_depth: int = 3,
-    drop_paired_for_chain: int | None = None,
 ) -> None:
     """Patch ``ToolInstance.dispatch`` to drop synthetic per-chain A3M files.
 
     A paired call (``pairing_strategy`` set) writes ``{i}.a3m`` (unpaired) and
     ``{i}.paired.a3m`` (row-aligned) per chain; an unpaired batch writes
-    ``__q{idx}.a3m`` per sequence. ``drop_paired_for_chain`` omits one chain's
-    paired file to simulate partial pairing.
+    ``__q{idx}.a3m`` per sequence.
     """
 
     def fake(toolkit: str, payload: dict[str, Any], **_: Any) -> dict[str, Any]:
@@ -85,8 +83,7 @@ def _install_fake_dispatch(
         if payload.get("pairing_strategy") is not None:
             for i, seq in enumerate(sequences):
                 _write_a3m(out_dir / f"{i}.a3m", seq, 4)
-                if i != drop_paired_for_chain:
-                    _write_a3m(out_dir / f"{i}.paired.a3m", seq, paired_depth)
+                _write_a3m(out_dir / f"{i}.paired.a3m", seq, paired_depth)
         else:
             for idx, seq in enumerate(sequences):
                 _write_a3m(out_dir / f"__q{idx}.a3m", seq, 4)
@@ -415,18 +412,19 @@ def test_singletons_batch_while_paired_group_dispatches_separately(
     assert len(paired) == 1 and paired[0]["sequences"] == [UBIQUITIN, HEMOGLOBIN_ALPHA]
 
 
-def test_assemble_paired_result_partial_pairing_hard_fails(tmp_path: Path) -> None:
-    """One chain paired, the other empty → hard-fail (matches colabfold-search)."""
+def test_assemble_paired_result_keeps_per_chain_paired_and_unpaired(tmp_path: Path) -> None:
+    """Per-chain paired and unpaired MSAs are both returned; an empty paired chain stays None (no hard-fail)."""
     members = [
         Mmseqs2HomologySearchQuery(sequence=UBIQUITIN, sequence_id="a"),
         Mmseqs2HomologySearchQuery(sequence=HEMOGLOBIN_ALPHA, sequence_id="b"),
     ]
-    # Chain 0 gets a paired MSA; chain 1 gets none.
+    # Chain 0 gets a paired MSA; chain 1 gets none. Both get unpaired MSAs.
     _write_a3m(tmp_path / "0.a3m", UBIQUITIN, 4)
     _write_a3m(tmp_path / "0.paired.a3m", UBIQUITIN, 3)
     _write_a3m(tmp_path / "1.a3m", HEMOGLOBIN_ALPHA, 4)
-    with pytest.raises(RuntimeError, match="partial MSAs"):
-        _assemble_paired_result(tmp_path, members, "uniref30-2302")
+    result = _assemble_paired_result(tmp_path, members, "uniref30-2302")
+    assert result.paired_msas[0] is not None and result.paired_msas[1] is None
+    assert all(m is not None for m in result.msas)  # unpaired present for both chains
 
 
 def test_assemble_paired_result_no_pairing_returns_all_none(tmp_path: Path) -> None:

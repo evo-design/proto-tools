@@ -516,11 +516,12 @@ def _preprocess_structure_prediction_msas(
     for protein_chains, paired_query_idx in complex_plans:
         per_chain: dict[int, MSA] = {}
         if paired_query_idx is not None:
-            for (ch_idx, _seq), msa in zip(protein_chains, results[paired_query_idx].msas, strict=True):
+            paired_result = results[paired_query_idx]
+            for (ch_idx, _seq), msa in zip(protein_chains, paired_result.msas, strict=True):
                 if msa is not None:
                     per_chain[ch_idx] = msa
-            # A heterocomplex query is paired regardless of how many chains found homologs.
-            msas_list.append(ComplexMSAs(per_chain=per_chain, paired=True))
+            # Usually paired; falls back to unpaired (paired=False) when no cross-chain pairing was found.
+            msas_list.append(ComplexMSAs(per_chain=per_chain, paired=paired_result.paired))
         else:
             for ch_idx, seq in protein_chains:
                 msa = seq_to_msa.get(seq)

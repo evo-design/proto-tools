@@ -32,6 +32,14 @@ builds and manages standalone tool environments automatically.
 Integration tests are skipped by default. See `notes/testing.md` for markers,
 selection flags, logs, and test layout.
 
+Before pushing any PR, run the full `tests/style_consistency_tests/` suite (fast,
+CPU-only, no env). These run in CI and enforce consistency checks (docstring style,
+config/schema field metadata including the <100-char description limit,
+README/license/version consistency, tool I/O round-trip, and more) that `ruff` and
+`mypy` do not catch (`ruff` ignores `E501`). Failures propagate through configs
+embedded by other tools, e.g. an over-long `ColabfoldSearchConfig` field description
+fails every predictor that nests it.
+
 ## Repository Map
 
 - `proto_tools/tools/{category}/{toolkit}/`: registered tools grouped by
