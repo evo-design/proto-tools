@@ -378,6 +378,20 @@ def test_legacy_unknown_operation(legacy_script: Path):
 # ── Worker lifecycle ─────────────────────────────────────────────────────────
 
 
+def test_send_cleans_up_when_response_unmatched_even_if_process_exited():
+    """On a failed/garbled response the worker is always stopped, even if the process already exited."""
+    worker = PersistentWorker(toolkit="t", env_path=Path("/x"), script_path=Path("/y"))
+    proc = MagicMock()
+    proc.poll.side_effect = [None] + [0] * 20  # alive at send() entry, then reports exited
+    proc.stdin = MagicMock()
+    proc.stdout = MagicMock()
+    proc.stdout.readline.return_value = ""  # closed stdout → RuntimeError, no matching response
+    worker._process = proc
+    with patch.object(worker, "stop") as mock_stop, pytest.raises(RuntimeError):
+        worker.send({"x": 1})
+    mock_stop.assert_called_once()
+
+
 def test_stop_and_restart(echo_script: Path):
     worker = _make_worker(echo_script)
     try:

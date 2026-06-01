@@ -235,6 +235,22 @@ def _parse_count_suffix(device: str, prefix: str) -> int:
     return num
 
 
+def _validate_cuda_index(idx_str: str, device: str) -> int:
+    """Parse a CUDA device index, rejecting empty, non-integer, or negative values.
+
+    Negatives are rejected because they would otherwise wrap to the last GPU via list indexing.
+    """
+    if not idx_str:
+        raise ValueError(f"Invalid device: '{device}' (missing index)")
+    try:
+        idx = int(idx_str)
+    except ValueError:
+        raise ValueError(f"Invalid device: '{device}' (index must be integer)") from None
+    if idx < 0:
+        raise ValueError(f"Invalid device: '{device}' (index must be non-negative, got {idx})")
+    return idx
+
+
 def parse_device_string(device: str) -> DeviceSpec:
     """Parse a device string into a structured :class:`DeviceSpec`.
 
@@ -289,15 +305,8 @@ def parse_device_string(device: str) -> DeviceSpec:
         # Single explicit device: "cuda:0"
         if not device.startswith("cuda:"):
             raise ValueError(f"Invalid device: '{device}'")
-        # Validate device index is not empty
-        idx_str = device.split(":", 1)[1]
-        if not idx_str:
-            raise ValueError(f"Invalid device: '{device}' (missing index)")
-        try:
-            int(idx_str)  # Validate it's a number
-        except ValueError:
-            raise ValueError(f"Invalid device: '{device}' (index must be integer)") from None
-        return DeviceSpec(kind="cuda", devices=[device], count=1)
+        idx = _validate_cuda_index(device.split(":", 1)[1], device)
+        return DeviceSpec(kind="cuda", devices=[f"cuda:{idx}"], count=1)
 
     # Multiple explicit devices: "cuda:0,1" or "cuda:0,cuda:1"
     parts = [p.strip() for p in device.split(",")]
@@ -309,14 +318,15 @@ def parse_device_string(device: str) -> DeviceSpec:
             # Explicit "cuda:N"
             if not part.startswith("cuda:"):
                 raise ValueError(f"Invalid device: '{part}'")
-            devices.append(part)
+            idx = _validate_cuda_index(part.split(":", 1)[1], device)
             if i == 0:
                 prefix = "cuda"
         elif prefix:
             # Shorthand "N" after "cuda:N"
-            devices.append(f"cuda:{part}")
+            idx = _validate_cuda_index(part, device)
         else:
             raise ValueError(f"Invalid device string '{device}': shorthand '{part}' without prefix")
+        devices.append(f"cuda:{idx}")
 
     return DeviceSpec(kind="cuda", devices=devices, count=len(devices))
 
@@ -347,6 +357,9 @@ def _validate_and_map_cuda_indices(
     """
     if not cuda_indices:
         return []
+
+    if min(cuda_indices) < 0:
+        raise ValueError(f"CUDA indices must be non-negative; got {cuda_indices}")
 
     num_gpus = len(parent_device_list) if parent_device_list else number_of_available_gpus()
     max_idx = max(cuda_indices)

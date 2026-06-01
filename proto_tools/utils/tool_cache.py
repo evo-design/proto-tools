@@ -397,7 +397,7 @@ def cache_store_items(
     if cache is None:
         return
 
-    for key, item in zip(cache_keys, result_items, strict=False):
+    for key, item in zip(cache_keys, result_items, strict=True):
         cache.set(tool_key, key, item)
 
 

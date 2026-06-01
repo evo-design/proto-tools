@@ -77,6 +77,12 @@ def test_complex_rejects_nonstring_chain():
         Complex(chains=[_PROTEIN_SEQ_SHORT, 123])
 
 
+def test_complex_rejects_empty_chains_list():
+    """A complex with no chains violates the documented 'one or more chains' contract."""
+    with pytest.raises(ValueError, match="at least one chain"):
+        Complex(chains=[])
+
+
 # ── StructurePredictionInput normalisation ─────────────────────────────────────
 
 

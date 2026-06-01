@@ -106,6 +106,14 @@ def test_parse_device_string_invalid_malformed():
         parse_device_string("cuda:")
 
 
+def test_parse_device_string_rejects_negative_index():
+    """Negative CUDA indices must raise (single and multi forms), not silently wrap to the last GPU."""
+    with pytest.raises(ValueError, match="non-negative"):
+        parse_device_string("cuda:-1")
+    with pytest.raises(ValueError, match="non-negative"):
+        parse_device_string("cuda:0,-1")
+
+
 def test_parse_device_string_whitespace_handling():
     """Test that whitespace is properly stripped."""
     spec = parse_device_string("  cudax2  ")

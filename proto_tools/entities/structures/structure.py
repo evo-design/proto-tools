@@ -1094,7 +1094,12 @@ class Structure(BaseModel):
                 touched.add(int(binder_atoms.res_id[idx]))
 
         # get_residue_position_map is polymer-only — HETATM/ligand residues in `touched` are dropped here.
-        residue_map = self.get_residue_position_map()[binder_chain]
+        position_map = self.get_residue_position_map()
+        if binder_chain not in position_map:
+            raise ValueError(
+                f"binder_chain {binder_chain!r} has no polymer residues; available chains: {sorted(position_map)}"
+            )
+        residue_map = position_map[binder_chain]
         aa_by_pos = {pos: aa for aa, pos in residue_map}
         return {pos: aa_by_pos[pos] for pos in sorted(touched) if pos in aa_by_pos}
 
@@ -1193,7 +1198,12 @@ class Structure(BaseModel):
             for idx in cells.get_atoms(coord, radius=contact_cutoff):
                 touched.add(int(binder_contact_atoms.res_id[idx]))
 
-        residue_map = self.get_residue_position_map()[binder_chain]
+        position_map = self.get_residue_position_map()
+        if binder_chain not in position_map:
+            raise ValueError(
+                f"binder_chain {binder_chain!r} has no polymer residues; available chains: {sorted(position_map)}"
+            )
+        residue_map = position_map[binder_chain]
         aa_by_pos = {pos: aa for aa, pos in residue_map}
         return {pos: aa_by_pos[pos] for pos in sorted(touched) if pos in aa_by_pos}
 

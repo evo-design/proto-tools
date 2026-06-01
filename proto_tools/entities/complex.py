@@ -441,6 +441,13 @@ class Complex(BaseModel):
 
         return normalized
 
+    @model_validator(mode="after")
+    def _require_nonempty_chains(self) -> "Complex":
+        """A complex must contain at least one chain (see class docstring)."""
+        if not self.chains:
+            raise ValueError("Complex must contain at least one chain.")
+        return self
+
     @property
     def chain_sequences(self) -> list[str]:
         """Per-chain sequences in chain order; SMILES (or CCD code) for Fragments."""

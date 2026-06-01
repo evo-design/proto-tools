@@ -148,6 +148,12 @@ def test_cache_store_items_populates_cache(_setup_cache):
     assert info["total_entries"] == 2
 
 
+def test_cache_store_items_rejects_length_mismatch(_setup_cache):
+    """Mismatched keys/results lengths violate the documented 1:1 contract and must fail fast."""
+    with pytest.raises(ValueError):
+        cache_store_items("test-tool", ["k1", "k2"], ["only_one"])
+
+
 # ── cache_stitch_items tests ─────────────────────────────────────────────────
 
 

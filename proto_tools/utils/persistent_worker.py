@@ -781,7 +781,7 @@ class PersistentWorker:
                     )
                 response_matched = True
             finally:
-                if not response_matched and self.alive:
+                if not response_matched:
                     self.stop()
 
             if "error" in response:

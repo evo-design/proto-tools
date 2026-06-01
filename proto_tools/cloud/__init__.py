@@ -49,7 +49,10 @@ def _is_output_asset_ref(value: Any) -> bool:
 
 def _decode_output_assets(value: Any, assets: Any) -> Any:
     if _is_output_asset_ref(value):
-        return assets.decode(value)
+        try:
+            return assets.decode(value)
+        except Exception as exc:
+            raise RuntimeError(f"Failed to decode cloud output asset {value.get('id')!r}: {exc}") from exc
     if isinstance(value, dict):
         return {key: _decode_output_assets(item, assets) for key, item in value.items()}
     if isinstance(value, list):
@@ -114,6 +117,7 @@ def use_api_backend(
         config_payload.pop("device", None)
         tool_timeout = timeout if timeout is not None else config.effective_timeout()
         if tool_timeout is None:
+            logger.warning("No timeout configured for cloud run of %r; capping at 600s.", key)
             tool_timeout = 600.0
         try:
             response = client.tools.run(

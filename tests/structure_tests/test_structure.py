@@ -955,6 +955,28 @@ def test_interface_contact_residues_rejects_invalid_chain_args(pdl1_complex, bin
         pdl1_complex.interface_contact_residues(binder_chain=binder, target_chains=target, cutoff=4.0)
 
 
+def test_interface_contact_residues_ligand_only_binder_raises_value_error():
+    """A binder chain with atoms but no polymer residues (HETATM/ligand) raises ValueError, not KeyError."""
+    struct = _synthetic_pdb(
+        "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00 50.00           C",
+        "ATOM      2  CA  ALA A   2       1.500   0.000   0.000  1.00 50.00           C",
+        "HETATM    3  CA  LIG B   1       1.000   0.000   0.000  1.00 50.00           C",
+    )
+    with pytest.raises(ValueError, match="no polymer residues"):
+        struct.interface_contact_residues(binder_chain="B", target_chains="A", cutoff=4.0)
+
+
+def test_hotspot_contacts_ligand_only_binder_raises_value_error():
+    """hotspot_contacts shares the guard: a ligand-only binder chain raises ValueError, not KeyError."""
+    struct = _synthetic_pdb(
+        "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00 50.00           C",
+        "ATOM      2  CA  ALA A   2       1.500   0.000   0.000  1.00 50.00           C",
+        "HETATM    3  CA  LIG B   1       1.000   0.000   0.000  1.00 50.00           C",
+    )
+    with pytest.raises(ValueError, match="no polymer residues"):
+        struct.hotspot_contacts(binder_chain="B", target_hotspots="A1")
+
+
 def test_hotspot_contacts_subset_relations(pdl1_complex):
     """Hits ⊆ interface contacts, germinal_mode ⊆ default, and str/list hotspot specs parse identically."""
     interface = pdl1_complex.interface_contact_residues(binder_chain="B", target_chains=["A"], cutoff=6.0)
