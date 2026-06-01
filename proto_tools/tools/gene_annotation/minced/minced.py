@@ -18,7 +18,6 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
     ToolInstance,
-    resolve_sequence_ids,
 )
 
 
@@ -82,17 +81,13 @@ class MincedInput(BaseToolInput):
 
     Attributes:
         sequences (list[str]): Nucleotide sequence(s) to search for CRISPR arrays.
-        sequence_ids (list[str] | None): Optional sequence identifiers.
+            Labeled positionally (``seq_0``, ``seq_1``, ...); results are returned
+            in input order.
     """
 
     sequences: list[str] = InputField(
         title="Sequences",
         description="Nucleotide sequence(s) to search for CRISPR arrays",
-    )
-    sequence_ids: list[str] | None = InputField(
-        default=None,
-        title="Sequence IDs",
-        description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )
 
     @field_validator("sequences", mode="before")
@@ -267,7 +262,7 @@ def run_minced(inputs: MincedInput, config: MincedConfig, instance: Any = None) 
         >>> result = run_minced(inputs, config)
         >>> print(f"{result.num_sequences_with_crispr} sequences have CRISPR arrays")
     """
-    sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
+    sequence_ids = [f"seq_{i}" for i in range(len(inputs.sequences))]
 
     input_data: dict[str, Any] = {
         "device": "cpu",

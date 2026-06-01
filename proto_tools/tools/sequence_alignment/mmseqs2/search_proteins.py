@@ -26,7 +26,6 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
     ToolInstance,
-    resolve_sequence_ids,
 )
 
 # ============================================================================
@@ -123,9 +122,8 @@ class Mmseqs2SearchProteinsInput(BaseToolInput):
 
     Attributes:
         query_sequences (list[str]): List of protein sequence strings (amino acid
-            sequences) to search.
-        sequence_ids (list[str] | None): Optional list of sequence identifiers.
-            If not provided, sequences are assigned sequential IDs (seq_0, seq_1, ...).
+            sequences) to search. Labeled positionally (``seq_0``, ``seq_1``, ...)
+            as ``query_id`` in the output; results are returned in input order.
         mmseqs_db (str | None): Target DB (path/slug/AssetRef). Mutually
             exclusive with ``target_sequences``.
         target_sequences (list[str] | None): Inline target sequences.
@@ -135,11 +133,6 @@ class Mmseqs2SearchProteinsInput(BaseToolInput):
     query_sequences: list[str] = InputField(
         title="Query Sequences",
         description="List of protein sequences to search",
-    )
-    sequence_ids: list[str] | None = InputField(
-        default=None,
-        title="Sequence IDs",
-        description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )
     mmseqs_db: str | None = InputField(
         default=None,
@@ -426,7 +419,7 @@ def run_mmseqs2_search_proteins(
         ...     print(f"Top hit: {result[0].top_hit.pident}% identity")
     """
     sequences = inputs.query_sequences
-    sequence_ids = resolve_sequence_ids(sequences, inputs.sequence_ids)
+    sequence_ids = [f"seq_{i}" for i in range(len(sequences))]
     num_sequences = len(sequences)
 
     # GPU mode needs a pre-built padded DB; inline targets are CPU-only.

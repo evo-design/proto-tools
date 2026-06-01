@@ -270,7 +270,7 @@ def test_run_complete_run_populates_score():
     """
     seq = _read_fasta_sequence(DATA_DIR / "AAAABU010000051.fasta")
     result = run_crispr_tracr_rna(
-        CrisprTracrRNAInput(sequences=[seq], sequence_ids=["AAAABU010000051"]),
+        CrisprTracrRNAInput(sequences=[seq]),
         CrisprTracrRNAConfig(model_type="II"),
     )
     assert result.success, result.errors
@@ -286,7 +286,7 @@ def test_run_model_run_real_sequence():
     """model_run on the same locus populates the cmsearch-only schema fields on the top candidate."""
     seq = _read_fasta_sequence(DATA_DIR / "AAAABU010000051.fasta")
     result = run_crispr_tracr_rna(
-        CrisprTracrRNAInput(sequences=[seq], sequence_ids=["AAAABU010000051"]),
+        CrisprTracrRNAInput(sequences=[seq]),
         CrisprTracrRNAConfig(model_type="II", run_type="model_run"),
     )
     assert result.success, result.errors
@@ -309,7 +309,7 @@ def test_positive_control_spyogenes_sf370():
     """
     seq = _read_fasta_sequence(DATA_DIR / "NC_002737_849000_875000.fasta")
     result = run_crispr_tracr_rna(
-        CrisprTracrRNAInput(sequences=[seq], sequence_ids=["SpCas9_SF370"]),
+        CrisprTracrRNAInput(sequences=[seq]),
         CrisprTracrRNAConfig(model_type="II"),
     )
     assert result.success
@@ -337,7 +337,7 @@ def test_positive_control_spyogenes_sf370():
 def test_crispr_tracr_rna_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark: full S. pyogenes SF370 CRISPR-Cas9 locus (~26 kbp), model_type='II' (cold + warm)."""
     seq = _read_fasta_sequence(DATA_DIR / "NC_002737_849000_875000.fasta")
-    inputs = CrisprTracrRNAInput(sequences=[seq], sequence_ids=["SpCas9_SF370"])
+    inputs = CrisprTracrRNAInput(sequences=[seq])
     config = CrisprTracrRNAConfig(model_type="II")
     result = benchmark_twice(request, "crispr_tracr_rna", lambda: run_crispr_tracr_rna(inputs, config))
     validate_output(result)

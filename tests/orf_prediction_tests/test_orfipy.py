@@ -133,36 +133,22 @@ def test_full_workflow():
 
 
 @pytest.mark.integration
-def test_custom_sequence_ids_preserved():
-    inp = OrfipyInput(
-        sequences=["ATGAAACCCGGGAAATTTCCCGGGAAATTTCCCGGGAAATTTCCCGGGTAG"],
-        sequence_ids=["my_custom_gene"],
-    )
-    result = run_orfipy_prediction(inp, OrfipyConfig(min_len=30))
-
-    validate_output(result)
-    if result.num_orfs > 0:
-        for orf in result.predicted_orfs[0]:
-            assert orf.parent_id == "my_custom_gene"
-
-
-@pytest.mark.integration
-def test_multiple_sequences_with_custom_ids():
+def test_multiple_sequences_positional_ids():
     inp = OrfipyInput(
         sequences=[
             "ATGCCCAAATTTGGGCCCAAATTTGGGCCCAAATTTGGGTAG",
             "ATGTTTCCCGGGAAATTTCCCGGGTAA",
         ],
-        sequence_ids=["gene_a", "gene_b"],
     )
     result = run_orfipy_prediction(inp, OrfipyConfig(min_len=12))
 
     validate_output(result)
     assert len(result.predicted_orfs) == 2
+    # ORFs are labeled positionally (seq_0, seq_1, ...) in input order.
     if result.predicted_orfs[0]:
-        assert result.predicted_orfs[0][0].parent_id == "gene_a"
+        assert result.predicted_orfs[0][0].parent_id == "seq_0"
     if result.predicted_orfs[1]:
-        assert result.predicted_orfs[1][0].parent_id == "gene_b"
+        assert result.predicted_orfs[1][0].parent_id == "seq_1"
 
 
 def test_sequence_ids_length_mismatch_raises():

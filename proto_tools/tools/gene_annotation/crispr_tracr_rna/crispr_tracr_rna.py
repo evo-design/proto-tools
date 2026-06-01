@@ -18,7 +18,6 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
     ToolInstance,
-    resolve_sequence_ids,
 )
 
 
@@ -202,18 +201,13 @@ class CrisprTracrRNAInput(BaseToolInput):
 
     Attributes:
         sequences (list[str]): Nucleotide sequence(s) to predict tracrRNA from.
-            Each sequence should contain a CRISPR locus.
-        sequence_ids (list[str] | None): Optional sequence identifiers.
+            Each sequence should contain a CRISPR locus. Labeled positionally
+            (``seq_0``, ``seq_1``, ...); results are returned in input order.
     """
 
     sequences: list[str] = InputField(
         title="Sequences",
         description="Nucleotide sequence(s) to predict tracrRNA from",
-    )
-    sequence_ids: list[str] | None = InputField(
-        default=None,
-        title="Sequence IDs",
-        description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )
 
     @field_validator("sequences", mode="before")
@@ -464,7 +458,7 @@ def run_crispr_tracr_rna(
         >>> top = result.results[0].top_candidate
         >>> print(f"{result.num_with_tracr} sequences have a tracrRNA hit")
     """
-    sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
+    sequence_ids = [f"seq_{i}" for i in range(len(inputs.sequences))]
 
     num_workers = config.num_workers or 1
 

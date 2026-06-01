@@ -34,7 +34,6 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
     ToolInstance,
-    resolve_sequence_ids,
 )
 
 
@@ -47,24 +46,16 @@ class Mmseqs2SearchGenomesInput(BaseToolInput):
 
     Attributes:
         query_genomes (list[str]): List of nucleotide sequence strings (DNA/RNA)
-            to use as queries.
-        query_ids (list[str] | None): Optional list of query identifiers.
-            If not provided, sequences are assigned sequential IDs (seq_0, seq_1, ...).
+            to use as queries. Labeled positionally (``seq_0``, ``seq_1``, ...) as
+            ``query_id`` in the output; results are returned in query order.
         target_genomes (list[str] | None): Inline target genomes.
             Mutually exclusive with ``target_db``.
         target_db (str | None): Target FASTA or MMseqs2 DB stem
             (path/slug/AssetRef). Mutually exclusive with ``target_genomes``.
-        target_ids (list[str] | None): Optional IDs for inline targets
-            (defaults to target_0, target_1, ...).
     """
 
     query_genomes: list[str] = InputField(
         title="Query Genomes", description="List of query genome sequences (nucleotide)"
-    )
-    query_ids: list[str] | None = InputField(
-        default=None,
-        title="Query IDs",
-        description="Optional query identifiers (defaults to seq_0, seq_1, ...)",
     )
     target_genomes: list[str] | None = InputField(
         default=None,
@@ -75,11 +66,6 @@ class Mmseqs2SearchGenomesInput(BaseToolInput):
         default=None,
         title="Target Database",
         description="Target FASTA or MMseqs2 DB stem (path/slug/AssetRef). Mutually exclusive with `target_genomes`.",
-    )
-    target_ids: list[str] | None = InputField(
-        default=None,
-        title="Target IDs",
-        description="Optional target identifiers (defaults to target_0, target_1, ...)",
     )
 
     @field_validator("query_genomes", mode="before")
@@ -336,9 +322,9 @@ def run_mmseqs2_search_genomes(
         ...     print(f"Found {r.num_hits} hits")
     """
     query_sequences = inputs.query_genomes
-    query_ids = resolve_sequence_ids(query_sequences, inputs.query_ids)
+    query_ids = [f"seq_{i}" for i in range(len(query_sequences))]
     target_ids = (
-        resolve_sequence_ids(inputs.target_genomes, inputs.target_ids) if inputs.target_genomes is not None else None
+        [f"target_{i}" for i in range(len(inputs.target_genomes))] if inputs.target_genomes is not None else None
     )
     num_queries = len(query_sequences)
 

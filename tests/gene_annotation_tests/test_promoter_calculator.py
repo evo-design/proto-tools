@@ -41,11 +41,6 @@ def test_input_list_of_sequences():
     assert len(inp.sequences) == 2
 
 
-def test_input_custom_sequence_ids():
-    inp = PromoterCalculatorInput(sequences=["ATCG"], sequence_ids=["my_seq"])
-    assert inp.sequence_ids == ["my_seq"]
-
-
 # ── Data model properties ────────────────────────────────────────────────
 
 
@@ -130,12 +125,12 @@ def test_export_json(sample_output, tmp_path):
 @pytest.mark.integration
 def test_run_promoter_calculator_with_consensus_promoter():
     """Run the calculator on a sigma70 consensus-style promoter."""
-    inputs = PromoterCalculatorInput(sequences=[CONSENSUS_PROMOTER], sequence_ids=["consensus"])
+    inputs = PromoterCalculatorInput(sequences=[CONSENSUS_PROMOTER])
     result = run_promoter_calculator(inputs, PromoterCalculatorConfig())
 
     assert isinstance(result, PromoterCalculatorOutput)
     assert len(result.results) == 1
-    assert result.results[0].sequence_id == "consensus"
+    assert result.results[0].sequence_id == "seq_0"
 
 
 @pytest.mark.integration
@@ -158,7 +153,7 @@ def test_promoter_calculator_benchmark(request: pytest.FixtureRequest) -> None:
     # Distinct sequences avoid the @tool cacheable=True dedup path, which would
     # collapse N identical inputs to a single unique workload.
     sequences = [CONSENSUS_PROMOTER + f"AAAA{i:08d}AAAA" for i in range(100)]
-    inputs = PromoterCalculatorInput(sequences=sequences, sequence_ids=[f"seq_{i}" for i in range(100)])
+    inputs = PromoterCalculatorInput(sequences=sequences)
 
     result = benchmark_twice(
         request, "promoter_calculator", lambda: run_promoter_calculator(inputs, PromoterCalculatorConfig())

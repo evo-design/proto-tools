@@ -17,7 +17,6 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
     ToolInstance,
-    resolve_sequence_ids,
 )
 
 
@@ -79,17 +78,13 @@ class PromoterCalculatorInput(BaseToolInput):
 
     Attributes:
         sequences (list[str]): DNA sequences to scan for sigma70 promoters.
-        sequence_ids (list[str] | None): Optional sequence identifiers.
+            Labeled positionally (``seq_0``, ``seq_1``, ...); results are returned
+            in input order.
     """
 
     sequences: list[str] = InputField(
         title="Sequences",
         description="DNA sequences to scan for E. coli sigma70 (housekeeping) promoters",
-    )
-    sequence_ids: list[str] | None = InputField(
-        default=None,
-        title="Sequence IDs",
-        description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )
 
     @field_validator("sequences", mode="before")
@@ -238,12 +233,12 @@ def run_promoter_calculator(
         >>> # lacUV5 promoter padded with 20 nt of A on each side
         >>> seq = "A" * 20 + "AAAATTGTGAGCGGATAACAATTTCACACAGGAAACAGCTATGACC" + "A" * 20
         >>> result = run_promoter_calculator(
-        ...     PromoterCalculatorInput(sequences=[seq], sequence_ids=["lacUV5"]),
+        ...     PromoterCalculatorInput(sequences=[seq]),
         ...     PromoterCalculatorConfig(),
         ... )
         >>> print(f"{result.num_sequences_with_promoter} sequences had promoters")
     """
-    sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
+    sequence_ids = [f"seq_{i}" for i in range(len(inputs.sequences))]
 
     input_data = {
         "sequences": inputs.sequences,

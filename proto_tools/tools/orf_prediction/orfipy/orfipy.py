@@ -15,7 +15,6 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
     ToolInstance,
-    resolve_sequence_ids,
 )
 
 # ============================================================================
@@ -100,20 +99,14 @@ class OrfipyInput(BaseToolInput):
             - A list of DNA sequence strings for batch processing
 
             Sequences are automatically normalized to uppercase and filtered to
-            contain only valid DNA nucleotides (A, T, C, G).
-        sequence_ids (list[str] | None): Optional list of sequence identifiers.
-            If not provided, sequences are assigned sequential IDs (seq_0, seq_1, ...).
-            These IDs are used as ``parent_id`` in the output ORFs.
+            contain only valid DNA nucleotides (A, T, C, G). Each sequence is
+            labeled positionally (``seq_0``, ``seq_1``, ...) as ``parent_id`` in
+            the output ORFs; results are returned in input order.
     """
 
     sequences: list[str] = InputField(
         title="Sequences",
         description="DNA sequence(s) to analyze for open reading frames",
-    )
-    sequence_ids: list[str] | None = InputField(
-        default=None,
-        title="Sequence IDs",
-        description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )
 
     @field_validator("sequences", mode="before")
@@ -407,7 +400,7 @@ def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig, instance: A
         - Caching is performed per-sequence (based on sequence content).
         - Threads are applied per-sequence during execution.
     """
-    sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
+    sequence_ids = [f"seq_{i}" for i in range(len(inputs.sequences))]
 
     long_inputs = [sid for sid, seq in zip(sequence_ids, inputs.sequences, strict=True) if len(seq) > config.max_len]
     if long_inputs:
