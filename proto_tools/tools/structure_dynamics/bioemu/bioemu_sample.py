@@ -172,6 +172,7 @@ class BioEmuConfig(StructurePredictionConfig):
         colabfold_search_config (ColabfoldSearchConfig | None): ColabFold MSA
             search config. Defaults are used when ``None``.
         include_pae_matrix (bool): Inherited but unused (no PAE in conformational sampling).
+        timeout (int | None): Maximum execution time in seconds. Default: 3600.
         device (str): Inference device (inherited).
         verbose (bool): Verbose logging toggle (inherited).
     """
@@ -242,6 +243,13 @@ class BioEmuConfig(StructurePredictionConfig):
         title="Include PAE Matrix",
         default=False,
         description="Unused by BioEmu (inherited from StructurePredictionConfig)",
+    )
+    timeout: int | None = ConfigField(
+        title="Timeout",
+        default=3600,
+        ge=1,
+        description="Maximum execution time in seconds. None waits indefinitely.",
+        include_in_key=False,
     )
 
     def preprocess(self, inputs: StructurePredictionInput) -> StructurePredictionInput:  # type: ignore[override]
