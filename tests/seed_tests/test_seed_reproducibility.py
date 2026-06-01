@@ -73,7 +73,7 @@ def test_masking_strategy_seeded():
 #   ~1-2 mÅ even with the same seed. Upstream:
 #   - https://github.com/bytedance/Protenix/issues/116
 #   - https://github.com/bytedance/Protenix/issues/119
-# - alphafold2-binder: JAX bfloat16 / CUDA autotune drift (ColabDesign's
+# - alphafold2-gradient: JAX bfloat16 / CUDA autotune drift (ColabDesign's
 #   default ``global_config.bfloat16=True``) amplified by gradient backprop
 #   beyond tolerances even within a single persistent worker (~12% relative
 #   error on gradient values).
@@ -88,7 +88,7 @@ _SEED_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {
         "rfdiffusion3-design",
         "protenix-prediction",
-        "alphafold2-binder",
+        "alphafold2-gradient",
         "alphafold3-prediction",
     }
 )

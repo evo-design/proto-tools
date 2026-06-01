@@ -42,7 +42,7 @@ This tool folds a protein sequence into a 3D model for structural analysis, dock
 - **Confidence is reported as pLDDT, pTM, ipTM, and PAE.** Average pLDDT (0 to 1) is the primary per-structure quality metric; ipTM is populated only for multi-chain complexes. Set `include_pae_matrix` to attach the full per-residue PAE matrix.
 - **Protein sequences only.** DNA, RNA, and ligands are not supported; `X` is allowed for unknown residues.
 
-### AlphaFold2 Binder (`alphafold2-binder`)
+### AlphaFold2 Gradient (`alphafold2-gradient`)
 
 Scores and differentiates a binder against a frozen target structure. Given a target-plus-binder template, it runs AlphaFold2 (through ColabDesign's binder-design path) on the binder against the fixed target and returns the design loss, the predicted `Structure`, and, by default, the gradient of the loss with respect to the binder sequence logits.
 
@@ -65,7 +65,7 @@ This tool supplies the loss and gradient signal that gradient-based binder-desig
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every AlphaFold2 tool in this toolkit (`alphafold2-prediction`, `alphafold2-binder`).
+These apply to every AlphaFold2 tool in this toolkit (`alphafold2-prediction`, `alphafold2-gradient`).
 
 - **Requires a GPU.** Both tools run AlphaFold2 through a JAX backend and need an NVIDIA GPU; CPU execution is not practical.
 - **Runs the original AlphaFold2 through ColabDesign, not the full DeepMind pipeline.** There is no template-search stage; multiple-sequence alignments are optional and are used only by `alphafold2-prediction`.

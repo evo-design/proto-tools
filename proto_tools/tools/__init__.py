@@ -607,10 +607,10 @@ from proto_tools.tools.structure_dynamics import BioEmuConfig, BioEmuInput, BioE
 
 # Structure prediction tools
 from proto_tools.tools.structure_prediction import (
-    AlphaFold2BinderConfig,
-    AlphaFold2BinderInput,
-    AlphaFold2BinderOutput,
     AlphaFold2Config,
+    AlphaFold2GradientConfig,
+    AlphaFold2GradientInput,
+    AlphaFold2GradientOutput,
     AlphaFold2Input,
     AlphaFold2Output,
     AlphaFold3Config,
@@ -648,7 +648,7 @@ from proto_tools.tools.structure_prediction import (
     ViennaRNAOutput,
     predict_structures,
     run_alphafold2,
-    run_alphafold2_binder,
+    run_alphafold2_gradient,
     run_alphafold3,
     run_boltz2,
     run_boltz2_affinity,
@@ -936,11 +936,11 @@ __all__ = [
     "AlphaFold2Input",
     "AlphaFold2Config",
     "AlphaFold2Output",
-    # Structure prediction - AlphaFold2 Binder
-    "run_alphafold2_binder",
-    "AlphaFold2BinderInput",
-    "AlphaFold2BinderConfig",
-    "AlphaFold2BinderOutput",
+    # Structure prediction - AlphaFold2 Gradient
+    "run_alphafold2_gradient",
+    "AlphaFold2GradientInput",
+    "AlphaFold2GradientConfig",
+    "AlphaFold2GradientOutput",
     # Structure prediction - AlphaFold3
     "run_alphafold3",
     "AlphaFold3Input",

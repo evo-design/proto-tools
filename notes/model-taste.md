@@ -129,7 +129,7 @@ Use multiple final validators when final ranking depends on complex placement, l
 
 ## 5.1 Structure Predictor Selection Details
 
-Use AlphaFold2 when the problem is protein-only and the target validator, reference workflow, or local tooling is AF2-like. Use AF2-multimer for protein-protein complexes and inspect interface metrics rather than monomer confidence. Use `alphafold2-binder` as a differentiable loss or scoring component for a custom optimization loop; it is not by itself a complete candidate-generation campaign.
+Use AlphaFold2 when the problem is protein-only and the target validator, reference workflow, or local tooling is AF2-like. Use AF2-multimer for protein-protein complexes and inspect interface metrics rather than monomer confidence. Use `alphafold2-gradient` as a differentiable loss or scoring component for a custom optimization loop; it is not by itself a complete candidate-generation campaign.
 
 Use AlphaFold3 when broad biomolecular cofolding is available and accessible, especially for complexes with DNA, RNA, ligands, modified residues, or multiple entity types. Treat gated weights, runtime, and input-format support as practical constraints that must be checked before planning around it.
 

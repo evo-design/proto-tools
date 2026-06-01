@@ -1,14 +1,14 @@
 """Structure prediction tools."""
 
 from proto_tools.tools.structure_prediction.alphafold2 import (
-    AlphaFold2BinderConfig,
-    AlphaFold2BinderInput,
-    AlphaFold2BinderOutput,
     AlphaFold2Config,
+    AlphaFold2GradientConfig,
+    AlphaFold2GradientInput,
+    AlphaFold2GradientOutput,
     AlphaFold2Input,
     AlphaFold2Output,
     run_alphafold2,
-    run_alphafold2_binder,
+    run_alphafold2_gradient,
 )
 from proto_tools.tools.structure_prediction.alphafold3 import (
     AlphaFold3Config,
@@ -70,10 +70,10 @@ __all__ = [
     "AlphaFold2Input",
     "AlphaFold2Config",
     "AlphaFold2Output",
-    "run_alphafold2_binder",
-    "AlphaFold2BinderInput",
-    "AlphaFold2BinderConfig",
-    "AlphaFold2BinderOutput",
+    "run_alphafold2_gradient",
+    "AlphaFold2GradientInput",
+    "AlphaFold2GradientConfig",
+    "AlphaFold2GradientOutput",
     # AlphaFold3
     "run_alphafold3",
     "AlphaFold3Input",

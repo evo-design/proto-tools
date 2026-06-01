@@ -55,7 +55,7 @@ _VALID_LOSS_KEYS = frozenset(
 _BINDER_FIXTURE_PDB = Path(__file__).resolve().parent / "example_input_fixture.pdb"
 
 
-class AlphaFold2BinderInput(GradientInput):
+class AlphaFold2GradientInput(GradientInput):
     """Input for AlphaFold2 binder-design (forward scoring or gradient).
 
     Extends GradientInput with target-template structural data required
@@ -100,7 +100,7 @@ class AlphaFold2BinderInput(GradientInput):
     )
 
 
-class AlphaFold2BinderConfig(BaseConfig):
+class AlphaFold2GradientConfig(BaseConfig):
     """Configuration for AlphaFold2/ColabDesign binder design (forward or backward).
 
     Binder protocol only — designs a binder against a frozen target structure.
@@ -294,7 +294,7 @@ class AlphaFold2BinderConfig(BaseConfig):
         return self
 
 
-class AlphaFold2BinderOutput(GradientOutput):
+class AlphaFold2GradientOutput(GradientOutput):
     """Binder-design output: loss, metrics, Structure, and optionally the gradient.
 
     Attributes:
@@ -332,9 +332,9 @@ class AlphaFold2BinderOutput(GradientOutput):
         json_path.write_text(json.dumps(payload, indent=2))
 
 
-def example_input() -> AlphaFold2BinderInput:
+def example_input() -> AlphaFold2GradientInput:
     """Minimal valid input — short VHH-like binder with biased logits and PD-L1 template."""
-    return AlphaFold2BinderInput(
+    return AlphaFold2GradientInput(
         logits=one_hot_protein_logits("EVQLVESG", sharpness=2.0),
         target_pdb=Structure.from_file(_BINDER_FIXTURE_PDB),
         binder_chain="B",
@@ -342,12 +342,12 @@ def example_input() -> AlphaFold2BinderInput:
 
 
 @tool(
-    key="alphafold2-binder",
-    label="AlphaFold2 Binder",
+    key="alphafold2-gradient",
+    label="AlphaFold2 Gradient",
     category="structure_prediction",
-    input_class=AlphaFold2BinderInput,
-    config_class=AlphaFold2BinderConfig,
-    output_class=AlphaFold2BinderOutput,
+    input_class=AlphaFold2GradientInput,
+    config_class=AlphaFold2GradientConfig,
+    output_class=AlphaFold2GradientOutput,
     metrics_class=AlphaFold2Metrics,
     description="AF2 binder design against a fixed target. Returns loss, Structure, and optionally gradient.",
     uses_gpu=True,
@@ -355,11 +355,11 @@ def example_input() -> AlphaFold2BinderInput:
     cacheable=False,
     stochastic=True,
 )
-def run_alphafold2_binder(
-    inputs: AlphaFold2BinderInput,
-    config: AlphaFold2BinderConfig,
+def run_alphafold2_gradient(
+    inputs: AlphaFold2GradientInput,
+    config: AlphaFold2GradientConfig,
     instance: Any = None,
-) -> AlphaFold2BinderOutput:
+) -> AlphaFold2GradientOutput:
     """Run one AlphaFold2/ColabDesign binder-design step.
 
     ``compute_gradient=False`` runs forward only (gradient=None); loss, metrics,
@@ -416,7 +416,7 @@ def run_alphafold2_binder(
         )
 
     metrics = result["metrics"]
-    return AlphaFold2BinderOutput(
+    return AlphaFold2GradientOutput(
         gradient=result["gradient"],
         loss=result["loss"],
         metrics=metrics,
@@ -431,6 +431,6 @@ def run_alphafold2_binder(
                 avg_pae=metrics["avg_pae"],
                 pae=metrics.get("pae"),
             ),
-            source="alphafold2-binder",
+            source="alphafold2-gradient",
         ),
     )

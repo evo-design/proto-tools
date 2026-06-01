@@ -6,11 +6,11 @@ from proto_tools.tools.structure_prediction.alphafold2.alphafold2 import (
     AlphaFold2Output,
     run_alphafold2,
 )
-from proto_tools.tools.structure_prediction.alphafold2.alphafold2_binder import (
-    AlphaFold2BinderConfig,
-    AlphaFold2BinderInput,
-    AlphaFold2BinderOutput,
-    run_alphafold2_binder,
+from proto_tools.tools.structure_prediction.alphafold2.alphafold2_gradient import (
+    AlphaFold2GradientConfig,
+    AlphaFold2GradientInput,
+    AlphaFold2GradientOutput,
+    run_alphafold2_gradient,
 )
 
 __all__ = [
@@ -18,8 +18,8 @@ __all__ = [
     "AlphaFold2Config",
     "AlphaFold2Output",
     "run_alphafold2",
-    "AlphaFold2BinderInput",
-    "AlphaFold2BinderConfig",
-    "AlphaFold2BinderOutput",
-    "run_alphafold2_binder",
+    "AlphaFold2GradientInput",
+    "AlphaFold2GradientConfig",
+    "AlphaFold2GradientOutput",
+    "run_alphafold2_gradient",
 ]
