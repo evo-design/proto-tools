@@ -157,7 +157,7 @@ class AlphaGenomeModel:
         parsed_variants = [
             genome.Variant(
                 chromosome=v["chromosome"],
-                position=v["variant_position"],
+                position=v["variant_position"] + 1,  # 0-based input -> AlphaGenome 1-based
                 reference_bases=v["reference_bases"],
                 alternate_bases=v["alternate_bases"],
             )
@@ -215,7 +215,7 @@ class AlphaGenomeModel:
             parsed_variants.append(
                 genome.Variant(
                     chromosome=v["chromosome"],
-                    position=v["variant_position"],
+                    position=v["variant_position"] + 1,  # 0-based input -> AlphaGenome 1-based
                     reference_bases=v["reference_bases"],
                     alternate_bases=v["alternate_bases"],
                 )
@@ -281,7 +281,7 @@ class AlphaGenomeModel:
             if req.get("variant_position") is not None:
                 interval_variant = genome.Variant(
                     chromosome=req["chromosome"],
-                    position=req["variant_position"],
+                    position=req["variant_position"] + 1,  # 0-based input -> AlphaGenome 1-based
                     reference_bases=req["reference_bases"],
                     alternate_bases=req["alternate_bases"],
                 )
