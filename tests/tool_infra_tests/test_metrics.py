@@ -22,35 +22,83 @@ class _SampleMetrics(Metrics):
     """Subclass with mixed scalar and per-position metric specs."""
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
-        "perplexity": {"availability": "always", "type": "float", "min": 1.0, "max": None},
-        "log_likelihood": {"availability": "always", "type": "float", "min": None, "max": 0.0},
-        "optional_score": {"availability": "depends on input", "type": "float", "min": 0.0, "max": 1.0},
-        "per_position": {"availability": "always", "type": "list[float|None]", "min": -10.0, "max": 0.0},
+        "perplexity": {
+            "availability": "always",
+            "type": "float",
+            "min": 1.0,
+            "max": None,
+            "better_values_are": "lower",
+        },
+        "log_likelihood": {
+            "availability": "always",
+            "type": "float",
+            "min": None,
+            "max": 0.0,
+            "better_values_are": "higher",
+        },
+        "optional_score": {
+            "availability": "depends on input",
+            "type": "float",
+            "min": 0.0,
+            "max": 1.0,
+            "better_values_are": "higher",
+        },
+        "per_position": {
+            "availability": "always",
+            "type": "list[float|None]",
+            "min": -10.0,
+            "max": 0.0,
+            "better_values_are": "higher",
+        },
     }
     primary_metric: str | None = "perplexity"
 
 
 class _IntMetrics(Metrics):
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
-        "count": {"availability": "always", "type": "int", "min": 0, "max": None},
+        "count": {
+            "availability": "always",
+            "type": "int",
+            "min": 0,
+            "max": None,
+            "better_values_are": "context-dependent",
+        },
     }
 
 
 class _BoolMetrics(Metrics):
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
-        "flag": {"availability": "always", "type": "bool", "min": None, "max": None},
+        "flag": {
+            "availability": "always",
+            "type": "bool",
+            "min": None,
+            "max": None,
+            "better_values_are": "context-dependent",
+        },
     }
 
 
 class _ListMetrics(Metrics):
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
-        "scores": {"availability": "always", "type": "list[float]", "min": 0.0, "max": 1.0},
+        "scores": {
+            "availability": "always",
+            "type": "list[float]",
+            "min": 0.0,
+            "max": 1.0,
+            "better_values_are": "higher",
+        },
     }
 
 
 class _MatrixMetrics(Metrics):
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
-        "matrix": {"availability": "always", "type": "list[list[float]]", "min": 0.0, "max": 1.0},
+        "matrix": {
+            "availability": "always",
+            "type": "list[list[float]]",
+            "min": 0.0,
+            "max": 1.0,
+            "better_values_are": "context-dependent",
+        },
     }
 
 

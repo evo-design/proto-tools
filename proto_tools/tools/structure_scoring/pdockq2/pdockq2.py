@@ -89,24 +89,28 @@ class PDockQ2Metrics(Metrics):
             "type": "float",
             "min": 0.0,
             "max": 1.0,
+            "better_values_are": "higher",
         },
         "avg_interface_plddt": {
             "availability": "always",
             "type": "float",
             "min": 0.0,
             "max": 100.0,
+            "better_values_are": "higher",
         },
         "avg_interface_pae": {
             "availability": "always",
             "type": "float",
             "min": 0.0,
             "max": 1.0,
+            "better_values_are": "higher",
         },
         "num_interface_contacts": {
             "availability": "always",
             "type": "int",
             "min": 0,
             "max": None,
+            "better_values_are": "context-dependent",
         },
     }
     primary_metric: str | None = Field(

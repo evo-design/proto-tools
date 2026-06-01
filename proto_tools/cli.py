@@ -204,6 +204,8 @@ def _cmd_model_doc(args: argparse.Namespace, kind: str) -> int:
                 bits.append(m.unit)
             if m.availability:
                 bits.append(m.availability)
+            if m.better_values_are:
+                bits.append(f"better={m.better_values_are}")
             star = "  *primary" if m.is_primary else ""
             print(f"  {m.name:24s}  {', '.join(bits)}{star}")
             if m.description:

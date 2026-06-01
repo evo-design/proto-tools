@@ -97,30 +97,35 @@ class IPSAEMetrics(Metrics):
             "type": "float",
             "min": 0.0,
             "max": 1.0,
+            "better_values_are": "higher",
         },
         "pdockq2": {
             "availability": "always",
             "type": "float",
             "min": 0.0,
             "max": 1.5,
+            "better_values_are": "higher",
         },
         "lis": {
             "availability": "always",
             "type": "float",
             "min": 0.0,
             "max": 1.0,
+            "better_values_are": "higher",
         },
         "pdockq": {
             "availability": "always",
             "type": "float",
             "min": 0.0,
             "max": 1.0,
+            "better_values_are": "higher",
         },
         "iptm_d0chn": {
             "availability": "always",
             "type": "float",
             "min": 0.0,
             "max": 1.0,
+            "better_values_are": "higher",
         },
     }
     primary_metric: str | None = Field(

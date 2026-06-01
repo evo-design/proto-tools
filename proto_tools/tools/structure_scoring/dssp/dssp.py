@@ -37,9 +37,30 @@ class DSSPSecondaryStructureMetrics(Metrics):
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
-        "helix_pct": {"availability": "always", "type": "float", "min": 0.0, "max": 100.0, "unit": "%"},
-        "sheet_pct": {"availability": "always", "type": "float", "min": 0.0, "max": 100.0, "unit": "%"},
-        "loop_pct": {"availability": "always", "type": "float", "min": 0.0, "max": 100.0, "unit": "%"},
+        "helix_pct": {
+            "availability": "always",
+            "type": "float",
+            "min": 0.0,
+            "max": 100.0,
+            "unit": "%",
+            "better_values_are": "context-dependent",
+        },
+        "sheet_pct": {
+            "availability": "always",
+            "type": "float",
+            "min": 0.0,
+            "max": 100.0,
+            "unit": "%",
+            "better_values_are": "context-dependent",
+        },
+        "loop_pct": {
+            "availability": "always",
+            "type": "float",
+            "min": 0.0,
+            "max": 100.0,
+            "unit": "%",
+            "better_values_are": "context-dependent",
+        },
     }
 
     chain_id: str = Field(title="Chain ID", description="Analyzed chain label in the input structure namespace")

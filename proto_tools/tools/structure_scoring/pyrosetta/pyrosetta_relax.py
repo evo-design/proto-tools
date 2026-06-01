@@ -80,6 +80,7 @@ class PyRosettaRelaxMetrics(Metrics):
             "min": None,
             "max": None,
             "unit": "REU",
+            "better_values_are": "lower",
         },
     }
     primary_metric: str | None = Field(

@@ -40,6 +40,7 @@ class StructureQualityMetrics(Metrics):
             "min": 0,
             "max": None,
             "unit": "residues",
+            "better_values_are": "context-dependent",
         },
         "gyration_radius": {
             "availability": "always",
@@ -47,6 +48,7 @@ class StructureQualityMetrics(Metrics):
             "min": 0.0,
             "max": None,
             "unit": "Å",
+            "better_values_are": "context-dependent",
         },
         "helix_pct": {
             "availability": "always",
@@ -54,6 +56,7 @@ class StructureQualityMetrics(Metrics):
             "min": 0.0,
             "max": 100.0,
             "unit": "%",
+            "better_values_are": "context-dependent",
         },
         "sheet_pct": {
             "availability": "always",
@@ -61,6 +64,7 @@ class StructureQualityMetrics(Metrics):
             "min": 0.0,
             "max": 100.0,
             "unit": "%",
+            "better_values_are": "context-dependent",
         },
         "loop_pct": {
             "availability": "always",
@@ -68,6 +72,7 @@ class StructureQualityMetrics(Metrics):
             "min": 0.0,
             "max": 100.0,
             "unit": "%",
+            "better_values_are": "context-dependent",
         },
     }
 

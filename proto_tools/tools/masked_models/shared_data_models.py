@@ -322,9 +322,27 @@ class MaskedModelScoringMetrics(Metrics):
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
-        "log_likelihood": {"availability": "always", "type": "float", "min": None, "max": 0.0},
-        "avg_log_likelihood": {"availability": "always", "type": "float", "min": None, "max": 0.0},
-        "perplexity": {"availability": "always", "type": "float", "min": 1.0, "max": None},
+        "log_likelihood": {
+            "availability": "always",
+            "type": "float",
+            "min": None,
+            "max": 0.0,
+            "better_values_are": "higher",
+        },
+        "avg_log_likelihood": {
+            "availability": "always",
+            "type": "float",
+            "min": None,
+            "max": 0.0,
+            "better_values_are": "higher",
+        },
+        "perplexity": {
+            "availability": "always",
+            "type": "float",
+            "min": 1.0,
+            "max": None,
+            "better_values_are": "lower",
+        },
     }
     primary_metric: str | None = Field(
         default="perplexity",

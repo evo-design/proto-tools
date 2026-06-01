@@ -97,30 +97,35 @@ class PyMOLRMSDMetrics(Metrics):
             "min": 0.0,
             "max": None,
             "unit": "angstrom",
+            "better_values_are": "lower",
         },
         "aligned_length": {
             "availability": "cealign only",
             "type": "int",
             "min": 0,
             "max": None,
+            "better_values_are": "context-dependent",
         },
         "aligned_atoms": {
             "availability": "align only",
             "type": "int",
             "min": 0,
             "max": None,
+            "better_values_are": "context-dependent",
         },
         "alignment_cycles": {
             "availability": "align only",
             "type": "int",
             "min": 0,
             "max": None,
+            "better_values_are": "context-dependent",
         },
         "alignment_score": {
             "availability": "align only",
             "type": "float",
             "min": None,
             "max": None,
+            "better_values_are": "higher",
         },
         "pre_refinement_rmsd": {
             "availability": "align only",
@@ -128,18 +133,21 @@ class PyMOLRMSDMetrics(Metrics):
             "min": 0.0,
             "max": None,
             "unit": "angstrom",
+            "better_values_are": "lower",
         },
         "pre_refinement_aligned_atoms": {
             "availability": "align only",
             "type": "int",
             "min": 0,
             "max": None,
+            "better_values_are": "context-dependent",
         },
         "aligned_residues": {
             "availability": "align only",
             "type": "int",
             "min": 0,
             "max": None,
+            "better_values_are": "context-dependent",
         },
     }
 

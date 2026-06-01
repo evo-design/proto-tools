@@ -109,9 +109,27 @@ class SegmaskerMetrics(Metrics):
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
-        "low_complexity_fraction": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
-        "low_complexity_count": {"availability": "always", "type": "int", "min": 0, "max": None},
-        "sequence_length": {"availability": "always", "type": "int", "min": 1, "max": None},
+        "low_complexity_fraction": {
+            "availability": "always",
+            "type": "float",
+            "min": 0.0,
+            "max": 1.0,
+            "better_values_are": "lower",
+        },
+        "low_complexity_count": {
+            "availability": "always",
+            "type": "int",
+            "min": 0,
+            "max": None,
+            "better_values_are": "lower",
+        },
+        "sequence_length": {
+            "availability": "always",
+            "type": "int",
+            "min": 1,
+            "max": None,
+            "better_values_are": "context-dependent",
+        },
     }
     primary_metric: str | None = Field(
         default="low_complexity_fraction",

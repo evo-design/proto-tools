@@ -63,6 +63,7 @@ class PyRosettaInterfaceAnalyzerMetrics(Metrics):
             "min": 0.0,
             "max": 1.0,
             "unit": None,
+            "better_values_are": "higher",
         },
         "interface_hbonds": {
             "availability": "always",
@@ -70,6 +71,7 @@ class PyRosettaInterfaceAnalyzerMetrics(Metrics):
             "min": 0,
             "max": None,
             "unit": "count",
+            "better_values_are": "higher",
         },
         "interface_dG": {
             "availability": "always",
@@ -77,6 +79,7 @@ class PyRosettaInterfaceAnalyzerMetrics(Metrics):
             "min": None,
             "max": None,
             "unit": "REU",
+            "better_values_are": "lower",
         },
         "interface_dSASA": {
             "availability": "always",
@@ -84,6 +87,7 @@ class PyRosettaInterfaceAnalyzerMetrics(Metrics):
             "min": 0.0,
             "max": None,
             "unit": "Å²",
+            "better_values_are": "context-dependent",
         },
         "interface_packstat": {
             "availability": "always",
@@ -91,6 +95,7 @@ class PyRosettaInterfaceAnalyzerMetrics(Metrics):
             "min": 0.0,
             "max": 1.0,
             "unit": None,
+            "better_values_are": "higher",
         },
         "interface_hydrophobicity": {
             "availability": "always",
@@ -98,6 +103,7 @@ class PyRosettaInterfaceAnalyzerMetrics(Metrics):
             "min": 0.0,
             "max": 100.0,
             "unit": "%",
+            "better_values_are": "context-dependent",
         },
         "surface_hydrophobicity": {
             "availability": "always",
@@ -105,6 +111,7 @@ class PyRosettaInterfaceAnalyzerMetrics(Metrics):
             "min": 0.0,
             "max": 1.0,
             "unit": None,
+            "better_values_are": "lower",
         },
         "delta_unsat_hbonds": {
             "availability": "optional",
@@ -112,6 +119,7 @@ class PyRosettaInterfaceAnalyzerMetrics(Metrics):
             "min": 0,
             "max": None,
             "unit": "count",
+            "better_values_are": "lower",
         },
     }
     primary_metric: str | None = Field(

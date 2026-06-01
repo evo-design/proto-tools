@@ -152,6 +152,7 @@ class SpliceAIScoreMetrics(Metrics):
             "type": "float",
             "min": 0.0,
             "max": 1.0,
+            "better_values_are": "context-dependent",
         },
     }
     primary_metric: str | None = Field(

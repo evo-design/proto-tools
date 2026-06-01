@@ -78,17 +78,42 @@ class AlphaFold3Metrics(Metrics):
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
-        "avg_plddt": {"availability": "always", "type": "float", "min": 0.0, "max": 100.0},
-        "avg_pae": {"availability": "always", "type": "float", "min": 0.0, "max": None},
+        "avg_plddt": {
+            "availability": "always",
+            "type": "float",
+            "min": 0.0,
+            "max": 100.0,
+            "better_values_are": "higher",
+        },
+        "avg_pae": {"availability": "always", "type": "float", "min": 0.0, "max": None, "better_values_are": "lower"},
         "pae": {
             "availability": "when include_pae_matrix=True",
             "type": "list[list[float]]",
             "min": 0.0,
             "max": None,
+            "better_values_are": "lower",
         },
-        "ptm": {"availability": "depends on model output", "type": "float", "min": 0.0, "max": 1.0},
-        "iptm": {"availability": "depends on model output", "type": "float", "min": 0.0, "max": 1.0},
-        "ranking_score": {"availability": "depends on model output", "type": "float", "min": None, "max": None},
+        "ptm": {
+            "availability": "depends on model output",
+            "type": "float",
+            "min": 0.0,
+            "max": 1.0,
+            "better_values_are": "higher",
+        },
+        "iptm": {
+            "availability": "depends on model output",
+            "type": "float",
+            "min": 0.0,
+            "max": 1.0,
+            "better_values_are": "higher",
+        },
+        "ranking_score": {
+            "availability": "depends on model output",
+            "type": "float",
+            "min": None,
+            "max": None,
+            "better_values_are": "higher",
+        },
     }
     primary_metric: str | None = "avg_plddt"
 

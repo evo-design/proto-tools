@@ -119,8 +119,20 @@ class PangolinVariantMetrics(Metrics):
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
-        "max_gain": {"availability": "always", "type": "float", "min": -1.0, "max": 1.0},
-        "max_loss": {"availability": "always", "type": "float", "min": -1.0, "max": 1.0},
+        "max_gain": {
+            "availability": "always",
+            "type": "float",
+            "min": -1.0,
+            "max": 1.0,
+            "better_values_are": "context-dependent",
+        },
+        "max_loss": {
+            "availability": "always",
+            "type": "float",
+            "min": -1.0,
+            "max": 1.0,
+            "better_values_are": "context-dependent",
+        },
     }
     primary_metric: str | None = Field(
         default="max_gain",

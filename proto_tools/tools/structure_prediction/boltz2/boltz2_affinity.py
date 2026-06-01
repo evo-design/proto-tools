@@ -109,20 +109,29 @@ class Boltz2AffinityMetrics(Metrics):
             "min": None,
             "max": None,
             "unit": "log10(IC50 μM)",
+            "better_values_are": "lower",
         },
-        "affinity_probability_binary": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
+        "affinity_probability_binary": {
+            "availability": "always",
+            "type": "float",
+            "min": 0.0,
+            "max": 1.0,
+            "better_values_are": "higher",
+        },
         "affinity_pred_value1": {
             "availability": "when ensemble emits per-model values",
             "type": "float",
             "min": None,
             "max": None,
             "unit": "log10(IC50 μM)",
+            "better_values_are": "lower",
         },
         "affinity_probability_binary1": {
             "availability": "when ensemble emits per-model values",
             "type": "float",
             "min": 0.0,
             "max": 1.0,
+            "better_values_are": "higher",
         },
         "affinity_pred_value2": {
             "availability": "when ensemble emits per-model values",
@@ -130,12 +139,14 @@ class Boltz2AffinityMetrics(Metrics):
             "min": None,
             "max": None,
             "unit": "log10(IC50 μM)",
+            "better_values_are": "lower",
         },
         "affinity_probability_binary2": {
             "availability": "when ensemble emits per-model values",
             "type": "float",
             "min": 0.0,
             "max": 1.0,
+            "better_values_are": "higher",
         },
     }
     primary_metric: str | None = "affinity_pred_value"

@@ -104,12 +104,19 @@ class LigandMPNNDesignMetrics(Metrics):
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
-        "sequence_recovery": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
+        "sequence_recovery": {
+            "availability": "always",
+            "type": "float",
+            "min": 0.0,
+            "max": 1.0,
+            "better_values_are": "higher",
+        },
         "ligand_interface_sequence_recovery": {
             "availability": "when a ligand interface is present",
             "type": "float",
             "min": 0.0,
             "max": 1.0,
+            "better_values_are": "higher",
         },
     }
     primary_metric: str | None = Field(

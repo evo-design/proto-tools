@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 from collections.abc import ItemsView, Iterator, KeysView, Mapping, ValuesView
 from datetime import datetime
 from pathlib import Path
-from typing import Any, ClassVar, TypedDict
+from typing import Any, ClassVar, Literal, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -121,6 +121,9 @@ def _extra_dict(info: Any) -> dict[str, Any]:
 
 MetricValue = float | int | bool | list[float] | list[float | None] | list[list[float]]
 
+# Optimization direction: whether higher, lower, or in-range values are "better".
+Directionality = Literal["higher", "lower", "in-range", "context-dependent"]
+
 
 class MetricSpec(TypedDict, total=False):
     """Declarative per-metric metadata describing range, type, and availability.
@@ -141,6 +144,12 @@ class MetricSpec(TypedDict, total=False):
         max (float | None): Maximum valid value (element-wise for list types);
             ``None`` means unbounded above.
         unit (str | None): Unit string for the value, e.g. ``"REU"``, ``"Å"``, ``"bits"``.
+        better_values_are (Directionality): Optimization direction — ``"higher"`` (larger is
+            better, e.g. ``avg_plddt``, ``tm_score``), ``"lower"`` (smaller is better,
+            e.g. ``perplexity``, ``rmsd``, energy in REU), ``"in-range"`` (best within
+            a target band rather than monotonic), or ``"context-dependent"`` (no
+            universal direction; depends on the task, e.g. raw counts, secondary-
+            structure percentages).
     """
 
     description: str
@@ -149,6 +158,7 @@ class MetricSpec(TypedDict, total=False):
     min: float | None
     max: float | None
     unit: str | None
+    better_values_are: Directionality
 
 
 class Metrics(BaseModel):
@@ -876,6 +886,7 @@ def _approx_equal_values(a: Any, b: Any, rtol: float, atol: float, path: str) ->
 __all__ = [
     "BaseToolInput",
     "BaseToolOutput",
+    "Directionality",
     "InputField",
     "MetricSpec",
     "MetricValue",

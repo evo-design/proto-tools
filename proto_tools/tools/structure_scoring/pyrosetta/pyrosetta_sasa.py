@@ -76,6 +76,7 @@ class PyRosettaSASAMetrics(Metrics):
             "min": 0.0,
             "max": None,
             "unit": "Å²",
+            "better_values_are": "context-dependent",
         },
     }
     primary_metric: str | None = Field(

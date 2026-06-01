@@ -75,6 +75,7 @@ class PyRosettaSAPMetrics(Metrics):
             "type": "float",
             "min": 0.0,
             "max": None,
+            "better_values_are": "lower",
         },
     }
     primary_metric: str | None = Field(

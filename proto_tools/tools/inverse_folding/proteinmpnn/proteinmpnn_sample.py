@@ -86,8 +86,20 @@ class ProteinMPNNDesignMetrics(Metrics):
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
-        "perplexity": {"availability": "always", "type": "float", "min": 1.0, "max": None},
-        "sequence_recovery": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
+        "perplexity": {
+            "availability": "always",
+            "type": "float",
+            "min": 1.0,
+            "max": None,
+            "better_values_are": "lower",
+        },
+        "sequence_recovery": {
+            "availability": "always",
+            "type": "float",
+            "min": 0.0,
+            "max": 1.0,
+            "better_values_are": "higher",
+        },
     }
     primary_metric: str | None = Field(
         default="perplexity",

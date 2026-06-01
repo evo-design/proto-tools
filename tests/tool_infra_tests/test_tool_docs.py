@@ -233,8 +233,14 @@ def test_get_output_doc_nests_metric_specs() -> None:
     avg_plddt = next(m for m in doc.metric_specs if m.name == "avg_plddt")
     assert (avg_plddt.type_str, avg_plddt.min, avg_plddt.max) == ("float", 0.0, 1.0)
     assert avg_plddt.availability == "always"
+    assert avg_plddt.better_values_are == "higher"
     assert avg_plddt.is_primary is True
     assert sum(m.is_primary for m in doc.metric_specs) == 1
+
+    # A non-primary metric also carries its direction (field propagates to every spec).
+    avg_pae = next(m for m in doc.metric_specs if m.name == "avg_pae")
+    assert avg_pae.better_values_are == "lower"
+    assert avg_pae.is_primary is False
 
     # A tool with no registered metrics_class has no nested specs.
     assert ToolRegistry.get_output_doc("evo1-sample").metric_specs is None

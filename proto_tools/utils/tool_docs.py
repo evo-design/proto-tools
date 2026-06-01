@@ -40,7 +40,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from proto_tools.utils.tool_io import Metrics
+from proto_tools.utils.tool_io import Directionality, Metrics
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +145,10 @@ class MetricSpecDoc(BaseModel):
         description="When the metric is present (e.g. ``always``, ``depends on model output``).",
     )
     description: str | None = Field(default=None, description="Human-readable description of the metric.")
+    better_values_are: Directionality | None = Field(
+        default=None,
+        description="Optimization direction: higher, lower, in-range, or context-dependent.",
+    )
     is_primary: bool = Field(
         default=False,
         description="True if this is the model's ``primary_metric`` (headline value).",
@@ -624,6 +628,7 @@ def _build_metric_specs(metrics_class: type[Metrics]) -> tuple[list[MetricSpecDo
             unit=spec.get("unit"),
             availability=spec.get("availability"),
             description=spec.get("description"),
+            better_values_are=spec.get("better_values_are"),
             is_primary=(name == primary),
         )
         for name, spec in metrics_class.metric_spec.items()

@@ -68,8 +68,20 @@ class USalignMetrics(Metrics):
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
-        "tm_score_structure_1": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
-        "tm_score_structure_2": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
+        "tm_score_structure_1": {
+            "availability": "always",
+            "type": "float",
+            "min": 0.0,
+            "max": 1.0,
+            "better_values_are": "higher",
+        },
+        "tm_score_structure_2": {
+            "availability": "always",
+            "type": "float",
+            "min": 0.0,
+            "max": 1.0,
+            "better_values_are": "higher",
+        },
     }
 
 

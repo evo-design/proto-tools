@@ -169,27 +169,53 @@ class ProtenixMetrics(Metrics):
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
-        "confidence_score": {"availability": "always", "type": "float", "min": None, "max": None},
-        "ptm": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
-        "iptm": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
-        "avg_plddt": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
-        "gpde": {"availability": "always", "type": "float", "min": 0.0, "max": None},
-        "avg_pae": {"availability": "always", "type": "float", "min": 0.0, "max": None},
+        "confidence_score": {
+            "availability": "always",
+            "type": "float",
+            "min": None,
+            "max": None,
+            "better_values_are": "higher",
+        },
+        "ptm": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0, "better_values_are": "higher"},
+        "iptm": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0, "better_values_are": "higher"},
+        "avg_plddt": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0, "better_values_are": "higher"},
+        "gpde": {"availability": "always", "type": "float", "min": 0.0, "max": None, "better_values_are": "lower"},
+        "avg_pae": {"availability": "always", "type": "float", "min": 0.0, "max": None, "better_values_are": "lower"},
         "pae": {
             "availability": "when include_pae_matrix=True",
             "type": "list[list[float]]",
             "min": 0.0,
             "max": None,
+            "better_values_are": "lower",
         },
-        "chain_ptm": {"availability": "depends on model output", "type": "list[float]", "min": 0.0, "max": 1.0},
-        "chain_plddt": {"availability": "depends on model output", "type": "list[float]", "min": 0.0, "max": 1.0},
+        "chain_ptm": {
+            "availability": "depends on model output",
+            "type": "list[float]",
+            "min": 0.0,
+            "max": 1.0,
+            "better_values_are": "higher",
+        },
+        "chain_plddt": {
+            "availability": "depends on model output",
+            "type": "list[float]",
+            "min": 0.0,
+            "max": 1.0,
+            "better_values_are": "higher",
+        },
         "chain_pair_iptm": {
             "availability": "depends on model output",
             "type": "list[list[float]]",
             "min": 0.0,
             "max": 1.0,
+            "better_values_are": "higher",
         },
-        "has_clash": {"availability": "depends on model output", "type": "bool", "min": None, "max": None},
+        "has_clash": {
+            "availability": "depends on model output",
+            "type": "bool",
+            "min": None,
+            "max": None,
+            "better_values_are": "lower",
+        },
     }
     primary_metric: str | None = "confidence_score"
 

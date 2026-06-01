@@ -122,15 +122,22 @@ class AlphaFold2Metrics(Metrics):
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
-        "avg_plddt": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
-        "ptm": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
-        "iptm": {"availability": "multi-chain input only", "type": "float", "min": 0.0, "max": 1.0},
-        "avg_pae": {"availability": "always", "type": "float", "min": 0.0, "max": None},
+        "avg_plddt": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0, "better_values_are": "higher"},
+        "ptm": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0, "better_values_are": "higher"},
+        "iptm": {
+            "availability": "multi-chain input only",
+            "type": "float",
+            "min": 0.0,
+            "max": 1.0,
+            "better_values_are": "higher",
+        },
+        "avg_pae": {"availability": "always", "type": "float", "min": 0.0, "max": None, "better_values_are": "lower"},
         "pae": {
             "availability": "when include_pae_matrix=True",
             "type": "list[list[float]]",
             "min": 0.0,
             "max": None,
+            "better_values_are": "lower",
         },
     }
     primary_metric: str | None = "avg_plddt"

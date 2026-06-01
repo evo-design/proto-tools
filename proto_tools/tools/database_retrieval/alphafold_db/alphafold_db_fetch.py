@@ -120,18 +120,26 @@ class AlphaFoldDBMetrics(Metrics):
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
-        "avg_plddt": {"availability": "always", "type": "float", "min": 0.0, "max": 100.0},
+        "avg_plddt": {
+            "availability": "always",
+            "type": "float",
+            "min": 0.0,
+            "max": 100.0,
+            "better_values_are": "higher",
+        },
         "plddt_per_residue": {
             "availability": "always",
             "type": "list[float]",
             "min": 0.0,
             "max": 100.0,
+            "better_values_are": "higher",
         },
         "pae": {
             "availability": "when include_pae=True",
             "type": "list[list[float]]",
             "min": 0.0,
             "max": None,
+            "better_values_are": "lower",
         },
     }
     primary_metric: str | None = "avg_plddt"

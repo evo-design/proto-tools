@@ -13,11 +13,11 @@ Runs under ``--cpu-only`` in CI — no tool execution, no env builds.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, get_args
 
 import pytest
 
-from proto_tools.utils.tool_io import Metrics
+from proto_tools.utils.tool_io import Directionality, Metrics
 
 # Recognized spec value types (must match the ``type`` strings in MetricSpec).
 _VALID_TYPE_STRINGS = {
@@ -28,6 +28,9 @@ _VALID_TYPE_STRINGS = {
     "list[float|None]",
     "list[list[float]]",
 }
+
+# Recognized optimization directions, sourced from the ``Directionality`` literal.
+_VALID_BETTER_VALUES = set(get_args(Directionality))
 
 
 def _discover_metrics_subclasses() -> list[type[Metrics]]:
@@ -89,6 +92,14 @@ def _check_spec_entry(metric_name: str, spec: Any, subclass_name: str) -> None:
                 f"{subclass_name}.metric_spec[{metric_name!r}].{key} must be a string or None, got {value!r}"
             )
 
+    # better_values_are: recognized direction when present
+    if "better_values_are" in spec:
+        direction = spec["better_values_are"]
+        assert direction in _VALID_BETTER_VALUES, (
+            f"{subclass_name}.metric_spec[{metric_name!r}].better_values_are is {direction!r}; "
+            f"must be one of {sorted(_VALID_BETTER_VALUES)}"
+        )
+
 
 @pytest.mark.parametrize("metrics_subclass", _METRIC_SUBCLASSES, ids=_IDS)
 def test_metric_spec_is_well_formed(metrics_subclass: type[Metrics]) -> None:
@@ -102,6 +113,36 @@ def test_metric_spec_is_well_formed(metrics_subclass: type[Metrics]) -> None:
             f"{metrics_subclass.__qualname__}.metric_spec has a non-string key: {metric_name!r}"
         )
         _check_spec_entry(metric_name, spec, metrics_subclass.__qualname__)
+
+
+@pytest.mark.parametrize("metrics_subclass", _METRIC_SUBCLASSES, ids=_IDS)
+def test_repo_metrics_declare_direction(metrics_subclass: type[Metrics]) -> None:
+    """Every in-repo tool metric declares a valid ``better_values_are`` direction.
+
+    Scoped to ``proto_tools.tools`` subclasses so test-only fixtures are exempt.
+    Directionality is metadata consumers rely on, so it must be a deliberate
+    per-metric choice rather than silently omitted.
+    """
+    if not metrics_subclass.__module__.startswith("proto_tools.tools"):
+        pytest.skip(f"{metrics_subclass.__qualname__} is not a proto_tools.tools metric")
+    for metric_name, spec in metrics_subclass.metric_spec.items():
+        direction = spec.get("better_values_are")
+        assert direction in _VALID_BETTER_VALUES, (
+            f"{metrics_subclass.__qualname__}.metric_spec[{metric_name!r}] is missing a valid "
+            f"better_values_are (got {direction!r}); must be one of {sorted(_VALID_BETTER_VALUES)}"
+        )
+
+
+@pytest.mark.parametrize("direction", sorted(_VALID_BETTER_VALUES))
+def test_check_spec_entry_accepts_valid_direction(direction: str) -> None:
+    """Every recognized ``better_values_are`` value passes validation."""
+    _check_spec_entry("m", {"type": "float", "better_values_are": direction}, "T")
+
+
+def test_check_spec_entry_rejects_unknown_direction() -> None:
+    """An unrecognized ``better_values_are`` value raises."""
+    with pytest.raises(AssertionError, match="better_values_are"):
+        _check_spec_entry("m", {"type": "float", "better_values_are": "up"}, "T")
 
 
 def test_at_least_one_metrics_subclass_registered() -> None:

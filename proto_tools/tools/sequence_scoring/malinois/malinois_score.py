@@ -52,6 +52,7 @@ class MalinoisActivityMetrics(Metrics):
             "min": None,
             "max": None,
             "description": "Raw Malinois activity prediction for K562 cells.",
+            "better_values_are": "context-dependent",
         },
         "HepG2": {
             "availability": "when requested",
@@ -59,6 +60,7 @@ class MalinoisActivityMetrics(Metrics):
             "min": None,
             "max": None,
             "description": "Raw Malinois activity prediction for HepG2 cells.",
+            "better_values_are": "context-dependent",
         },
         "SKNSH": {
             "availability": "when requested",
@@ -66,6 +68,7 @@ class MalinoisActivityMetrics(Metrics):
             "min": None,
             "max": None,
             "description": "Raw Malinois activity prediction for SK-N-SH cells.",
+            "better_values_are": "context-dependent",
         },
     }
 
@@ -492,6 +495,7 @@ class MalinoisGradientSampleMetrics(Metrics):
             "min": 0.0,
             "max": None,
             "description": "Weighted scalar Malinois objective value for one sample.",
+            "better_values_are": "lower",
         },
         "K562": {
             "availability": "when requested",
@@ -499,6 +503,7 @@ class MalinoisGradientSampleMetrics(Metrics):
             "min": None,
             "max": None,
             "description": "Raw Malinois activity prediction for K562 cells.",
+            "better_values_are": "context-dependent",
         },
         "HepG2": {
             "availability": "when requested",
@@ -506,6 +511,7 @@ class MalinoisGradientSampleMetrics(Metrics):
             "min": None,
             "max": None,
             "description": "Raw Malinois activity prediction for HepG2 cells.",
+            "better_values_are": "context-dependent",
         },
         "SKNSH": {
             "availability": "when requested",
@@ -513,6 +519,7 @@ class MalinoisGradientSampleMetrics(Metrics):
             "min": None,
             "max": None,
             "description": "Raw Malinois activity prediction for SK-N-SH cells.",
+            "better_values_are": "context-dependent",
         },
     }
     primary_metric: str | None = Field(
