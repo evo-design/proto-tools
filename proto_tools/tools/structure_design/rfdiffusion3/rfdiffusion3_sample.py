@@ -982,11 +982,10 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
             )
         )
 
-    # Preserve input order. to_json_spec assigns spec-0, spec-1, ... by
-    # enumeration, so re-emit bundles in that order.
-    designed_structures = [
-        RFdiffusion3Designs(spec_key=key, structures=buckets[key]) for key in sorted(buckets, key=_spec_key_sort_index)
-    ]
+    # One bundle per spec sent (json_spec keys), in input order, backfilling
+    # empties so a zero-design spec can't shift later bundles out of alignment.
+    sent_spec_keys = list(json.loads(json_spec).keys())
+    designed_structures = [RFdiffusion3Designs(spec_key=key, structures=buckets.get(key, [])) for key in sent_spec_keys]
     return RFdiffusion3Output(designed_structures=designed_structures)
 
 
