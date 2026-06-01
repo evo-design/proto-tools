@@ -313,47 +313,21 @@ class ProtenixModel:
         # Protenix saves outputs to output_dir/{job_name}/seed_{seed}/predictions/
         job_dir = Path(output_dir) / job_name
 
-        # Parse seeds to find the first seed directory
-        seed_list = [s.strip() for s in seeds.split(",")]
-        first_seed = seed_list[0]
+        # Pick the best sample by ranking score across ALL seeds (not just seed 0).
+        # Samples without a confidence file score -1.0 so they are only a fallback.
+        samples: list[tuple[float, Path, int, Path, dict[str, Any] | None]] = []
+        for seed in (s.strip() for s in seeds.split(",")):
+            predictions_dir = job_dir / f"seed_{seed}" / "predictions"
+            for cif_file in sorted(predictions_dir.glob(f"{job_name}_sample_*.cif")):
+                sample_idx = int(cif_file.stem.rsplit("_sample_", 1)[1])
+                conf_file = predictions_dir / f"{job_name}_summary_confidence_sample_{sample_idx}.json"
+                metrics = json.loads(conf_file.read_text()) if conf_file.exists() else None
+                score = float(metrics.get("ranking_score", 0.0)) if metrics is not None else -1.0
+                samples.append((score, predictions_dir, sample_idx, cif_file, metrics))
 
-        # Construct the path to predictions directory
-        predictions_dir = job_dir / f"seed_{first_seed}" / "predictions"
-
-        logger.debug(f"Looking for predictions in: {predictions_dir}")
-
-        if not predictions_dir.is_dir():
-            raise FileNotFoundError(f"protenix: predictions directory not found: {predictions_dir}")
-
-        best_cif = None
-        best_metrics = None
-        best_rank: int | None = None
-        best_ranking_score = -1.0
-
-        # Search for all CIF files matching the pattern {job_name}_sample_*.cif
-        for sample_idx in range(100):  # search up to 100 samples
-            cif_file = predictions_dir / f"{job_name}_sample_{sample_idx}.cif"
-            confidence_file = predictions_dir / f"{job_name}_summary_confidence_sample_{sample_idx}.json"
-
-            if not cif_file.exists():
-                break
-
-            if confidence_file.exists():
-                with open(confidence_file) as f:
-                    metrics = json.load(f)
-
-                ranking_score = float(metrics.get("ranking_score", 0.0))
-                if ranking_score > best_ranking_score:
-                    best_ranking_score = ranking_score
-                    best_cif = cif_file
-                    best_metrics = metrics
-                    best_rank = sample_idx
-            elif best_cif is None:
-                best_cif = cif_file
-                best_rank = sample_idx
-
-        if best_cif is None or best_rank is None:
-            raise FileNotFoundError(f"protenix: no structure output found for job {job_name!r} in {predictions_dir}")
+        if not samples:
+            raise FileNotFoundError(f"protenix: no structure output found for job {job_name!r} under {job_dir}")
+        _, predictions_dir, best_rank, best_cif, best_metrics = max(samples, key=lambda s: s[0])
 
         # token_pair_pae: already serialized as list[list[float]] by upstream save_json.
         full_data_file = predictions_dir / f"{job_name}_full_data_sample_{best_rank}.json"
