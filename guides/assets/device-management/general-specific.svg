@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 220" role="img" aria-label="General request lets DeviceManager pick the GPU; specific request pins exactly to the requested device">
+  <style>
+    .label     { fill: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
+    .muted     { fill: #64748B; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; }
+    .caption   { fill: #475569; font-family: ui-serif, Georgia, serif; font-style: italic; font-size: 11px; }
+    .gpu-border{ stroke: #1E3A6A; stroke-opacity: 0.55; fill: none; }
+    .gpu-label { fill: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; font-weight: 600; }
+    .pill-used { fill: #4B85E8; }
+    .pill-text { fill: #ffffff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; font-weight: 600; }
+    .pill-idle { stroke: #94A3B8; stroke-opacity: 0.6; stroke-dasharray: 3 3; fill: none; }
+    .pill-idle-text { fill: #94A3B8; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; font-style: italic; }
+    .separator { stroke: #CBD5E1; stroke-width: 1; fill: none; }
+    @media (prefers-color-scheme: dark) {
+      .label      { fill: #CBD5E1; }
+      .muted      { fill: #94A3B8; }
+      .caption    { fill: #CBD5E1; }
+      .gpu-border { stroke: #4B85E8; stroke-opacity: 0.45; }
+      .gpu-label  { fill: #CBD5E1; }
+      .pill-idle  { stroke: #64748B; }
+      .pill-idle-text { fill: #64748B; }
+      .separator  { stroke: #334155; }
+    }
+  </style>
+
+  <!-- TOP ROW: General request -->
+  <text x="30" y="22" class="muted">General request</text>
+  <text x="130" y="22" class="label">device="cuda"</text>
+
+  <!-- GPU 0: used -->
+  <rect x="30"  y="32" width="130" height="56" rx="6" class="gpu-border" />
+  <text x="40"  y="50" class="gpu-label">cuda:0</text>
+  <rect x="40"  y="58" width="110" height="22" rx="4" class="pill-used" />
+  <text x="95"  y="73" text-anchor="middle" class="pill-text">esmfold</text>
+
+  <!-- GPU 1: idle -->
+  <rect x="175" y="32" width="130" height="56" rx="6" class="gpu-border" />
+  <text x="185" y="50" class="gpu-label">cuda:1</text>
+  <rect x="185" y="58" width="110" height="22" rx="4" class="pill-idle" />
+  <text x="240" y="73" text-anchor="middle" class="pill-idle-text">idle</text>
+
+  <!-- GPU 2: idle -->
+  <rect x="320" y="32" width="130" height="56" rx="6" class="gpu-border" />
+  <text x="330" y="50" class="gpu-label">cuda:2</text>
+  <rect x="330" y="58" width="110" height="22" rx="4" class="pill-idle" />
+  <text x="385" y="73" text-anchor="middle" class="pill-idle-text">idle</text>
+
+  <!-- Separator -->
+  <line x1="30" y1="110" x2="450" y2="110" class="separator" />
+
+  <!-- BOTTOM ROW: Specific request -->
+  <text x="30" y="132" class="muted">Specific request</text>
+  <text x="130" y="132" class="label">device="cuda:2"</text>
+
+  <!-- GPU 0: idle -->
+  <rect x="30"  y="142" width="130" height="56" rx="6" class="gpu-border" />
+  <text x="40"  y="160" class="gpu-label">cuda:0</text>
+  <rect x="40"  y="168" width="110" height="22" rx="4" class="pill-idle" />
+  <text x="95"  y="183" text-anchor="middle" class="pill-idle-text">idle</text>
+
+  <!-- GPU 1: idle -->
+  <rect x="175" y="142" width="130" height="56" rx="6" class="gpu-border" />
+  <text x="185" y="160" class="gpu-label">cuda:1</text>
+  <rect x="185" y="168" width="110" height="22" rx="4" class="pill-idle" />
+  <text x="240" y="183" text-anchor="middle" class="pill-idle-text">idle</text>
+
+  <!-- GPU 2: used -->
+  <rect x="320" y="142" width="130" height="56" rx="6" class="gpu-border" />
+  <text x="330" y="160" class="gpu-label">cuda:2</text>
+  <rect x="330" y="168" width="110" height="22" rx="4" class="pill-used" />
+  <text x="385" y="183" text-anchor="middle" class="pill-text">esmfold</text>
+
+  <!-- Bottom caption -->
+  <text x="240" y="214" text-anchor="middle" class="caption">"cuda" asks DeviceManager to pick any free GPU; "cuda:N" pins the request to device N.</text>
+</svg>

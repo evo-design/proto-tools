@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 240" role="img" aria-label="CPU offload timeline: evicted tools preserve state in CPU RAM and can swap back onto GPU fast">
+  <style>
+    .label        { fill: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
+    .muted        { fill: #64748B; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; }
+    .caption      { fill: #475569; font-family: ui-serif, Georgia, serif; font-style: italic; font-size: 11px; }
+    .gpu-label    { fill: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; }
+    .cpu-label    { fill: #64748B; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; }
+    .lane         { fill: none; stroke: #CBD5E1; stroke-opacity: 0.6; }
+    .cpu-lane     { fill: none; stroke: #94A3B8; stroke-opacity: 0.7; stroke-dasharray: 4 3; }
+    .resident-a   { fill: #4B85E8; fill-opacity: 0.28; }
+    .resident-b   { fill: #8A6E3F; fill-opacity: 0.28; }
+    .active-a     { fill: #4B85E8; }
+    .active-b     { fill: #8A6E3F; }
+    .pill-text    { fill: #ffffff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; }
+    .pill-text-faint { fill: #1E3A6A; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; }
+    .swap-arrow   { stroke: #64748B; stroke-width: 1.2; fill: #64748B; }
+    .event-label  { fill: #64748B; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 9px; }
+    .axis         { stroke: #94A3B8; stroke-width: 1; fill: none; }
+    @media (prefers-color-scheme: dark) {
+      .label        { fill: #CBD5E1; }
+      .muted        { fill: #94A3B8; }
+      .caption      { fill: #CBD5E1; }
+      .gpu-label    { fill: #CBD5E1; }
+      .cpu-label    { fill: #94A3B8; }
+      .lane         { stroke: #334155; }
+      .cpu-lane     { stroke: #475569; }
+      .active-b     { fill: #B8945A; }
+      .resident-b   { fill: #B8945A; fill-opacity: 0.28; }
+      .pill-text-faint { fill: #CBD5E1; }
+      .swap-arrow   { stroke: #94A3B8; fill: #94A3B8; }
+      .event-label  { fill: #94A3B8; }
+      .axis         { stroke: #64748B; }
+    }
+  </style>
+
+  <!-- Legend -->
+  <rect x="60"  y="12" width="20" height="10" rx="2" class="active-a" />
+  <text x="86"  y="21" class="muted">active</text>
+  <rect x="140" y="12" width="20" height="10" rx="2" class="resident-a" />
+  <text x="166" y="21" class="muted">resident (idle)</text>
+
+  <!-- cuda:0 lane -->
+  <text x="52" y="96" text-anchor="end" class="gpu-label">cuda:0</text>
+  <rect x="60" y="80" width="400" height="32" rx="4" class="lane" />
+
+  <!-- A segment 1 — active flush at start -->
+  <rect x="70"  y="84" width="130" height="24" rx="3" class="resident-a" />
+  <rect x="70"  y="84" width="42"  height="24" rx="3" class="active-a" />
+  <text x="91"  y="100" text-anchor="middle" class="pill-text">A</text>
+
+  <!-- B segment — active flush at start -->
+  <rect x="212" y="84" width="104" height="24" rx="3" class="resident-b" />
+  <rect x="212" y="84" width="42"  height="24" rx="3" class="active-b" />
+  <text x="233" y="100" text-anchor="middle" class="pill-text">B</text>
+
+  <!-- A segment 2 (after swap back) — minimal resident since block exits -->
+  <rect x="328" y="84" width="50" height="24" rx="3" class="resident-a" />
+  <rect x="328" y="84" width="42" height="24" rx="3" class="active-a" />
+  <text x="349" y="100" text-anchor="middle" class="pill-text">A</text>
+
+  <!-- CPU lane -->
+  <text x="52" y="146" text-anchor="end" class="cpu-label">CPU</text>
+  <rect x="60" y="130" width="400" height="32" rx="4" class="cpu-lane" />
+
+  <!-- A on CPU (resident only, never active) -->
+  <rect x="212" y="134" width="104" height="24" rx="3" class="resident-a" />
+  <text x="264" y="150" text-anchor="middle" class="pill-text-faint">A</text>
+
+  <!-- B on CPU — minimal, mirrors A2's brief lifespan on GPU -->
+  <rect x="328" y="134" width="50" height="24" rx="3" class="resident-b" />
+  <text x="353" y="150" text-anchor="middle" class="pill-text-faint">B</text>
+
+  <!-- Transition arrows -->
+  <!-- T1: A offloads cuda:0 -> CPU -->
+  <line x1="206" y1="112" x2="206" y2="128" class="swap-arrow" />
+  <polygon points="202,124 206,132 210,124" class="swap-arrow" />
+  <text x="194" y="124" text-anchor="end" class="event-label">offload</text>
+
+  <!-- T2: B offloads down, A swaps up -->
+  <line x1="318" y1="112" x2="318" y2="128" class="swap-arrow" />
+  <polygon points="314,124 318,132 322,124" class="swap-arrow" />
+  <line x1="328" y1="128" x2="328" y2="112" class="swap-arrow" />
+  <polygon points="324,116 328,108 332,116" class="swap-arrow" />
+  <text x="348" y="124" text-anchor="start" class="event-label">swap</text>
+
+  <!-- Time axis -->
+  <text x="24" y="188" class="muted">time</text>
+  <line x1="24" y1="194" x2="452" y2="194" class="axis" />
+  <polyline points="448,190 452,194 448,198" class="axis" />
+
+  <!-- Bottom caption -->
+  <text x="240" y="218" text-anchor="middle" class="caption">Offloaded workers hold state in RAM; swapping back to GPU is far cheaper than a cold reload.</text>
+</svg>

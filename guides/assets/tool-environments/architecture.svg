@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 360" role="img" aria-label="Your script calls into proto_tools, which dispatches each tool into its own isolated environment">
+  <style>
+    .border      { stroke: #94A3B8; stroke-opacity: 0.7; fill: none; }
+    .connector   { stroke: #94A3B8; stroke-opacity: 0.55; fill: none; }
+    .label       { fill: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
+    .muted       { fill: #64748B; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; }
+    .caption     { fill: #475569; font-family: ui-serif, Georgia, serif; font-style: italic; font-size: 11px; }
+    .pill        { fill: #4B85E8; }
+    .pill-text   { fill: #ffffff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; }
+    @media (prefers-color-scheme: dark) {
+      .border    { stroke: #64748B; stroke-opacity: 0.7; }
+      .connector { stroke: #64748B; stroke-opacity: 0.55; }
+      .label     { fill: #CBD5E1; }
+      .muted     { fill: #94A3B8; }
+      .caption   { fill: #CBD5E1; }
+    }
+  </style>
+
+  <rect x="180" y="14" width="240" height="46" rx="6" class="border" />
+  <text x="300" y="34" text-anchor="middle" class="label">your_script.py</text>
+  <text x="300" y="50" text-anchor="middle" class="muted">run_esmfold(...)</text>
+
+  <line x1="300" y1="60" x2="300" y2="86" class="connector" />
+
+  <rect x="60" y="86" width="480" height="36" rx="6" class="border" />
+  <text x="300" y="108" text-anchor="middle" class="muted">proto_tools  ·  $PROTO_HOME/envs/</text>
+
+  <line x1="90"  y1="122" x2="90"  y2="154" class="connector" />
+  <line x1="230" y1="122" x2="230" y2="154" class="connector" />
+  <line x1="370" y1="122" x2="370" y2="154" class="connector" />
+  <line x1="510" y1="122" x2="510" y2="154" class="connector" />
+
+  <rect x="30"  y="154" width="120" height="140" rx="6" class="border" />
+  <rect x="170" y="154" width="120" height="140" rx="6" class="border" />
+  <rect x="310" y="154" width="120" height="140" rx="6" class="border" />
+  <rect x="450" y="154" width="120" height="140" rx="6" class="border" />
+
+  <rect x="40"  y="168" width="100" height="22" rx="4" class="pill" />
+  <text x="90"  y="183" text-anchor="middle" class="pill-text">esmfold</text>
+  <rect x="180" y="168" width="100" height="22" rx="4" class="pill" />
+  <text x="230" y="183" text-anchor="middle" class="pill-text">blast</text>
+  <rect x="320" y="168" width="100" height="22" rx="4" class="pill" />
+  <text x="370" y="183" text-anchor="middle" class="pill-text">rfdiffusion</text>
+  <rect x="460" y="168" width="100" height="22" rx="4" class="pill" />
+  <text x="510" y="183" text-anchor="middle" class="pill-text">alphafold3</text>
+
+  <text x="90"  y="214" text-anchor="middle" class="muted">python 3.11</text>
+  <text x="90"  y="234" text-anchor="middle" class="muted">torch 2.4</text>
+  <text x="90"  y="254" text-anchor="middle" class="muted">cuda 12.1</text>
+  <text x="90"  y="274" text-anchor="middle" class="muted">esm weights</text>
+
+  <text x="230" y="214" text-anchor="middle" class="muted">python 3.11</text>
+  <text x="230" y="234" text-anchor="middle" class="muted">ncbi binary</text>
+  <text x="230" y="254" text-anchor="middle" class="muted">cpu-only</text>
+  <text x="230" y="274" text-anchor="middle" class="muted">db index</text>
+
+  <text x="370" y="214" text-anchor="middle" class="muted">python 3.10</text>
+  <text x="370" y="234" text-anchor="middle" class="muted">torch 2.1</text>
+  <text x="370" y="254" text-anchor="middle" class="muted">cuda 11.8</text>
+  <text x="370" y="274" text-anchor="middle" class="muted">rfd weights</text>
+
+  <text x="510" y="214" text-anchor="middle" class="muted">python 3.11</text>
+  <text x="510" y="234" text-anchor="middle" class="muted">jax 0.4</text>
+  <text x="510" y="254" text-anchor="middle" class="muted">cuda 12.1</text>
+  <text x="510" y="274" text-anchor="middle" class="muted">af3 weights</text>
+
+  <text x="300" y="330" text-anchor="middle" class="caption">each tool runs in its own isolated env, resolved per-hardware and cached on first use</text>
+</svg>
