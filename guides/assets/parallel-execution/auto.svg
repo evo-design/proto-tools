@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 260" role="img" aria-label="ToolPool auto-detects every GPU and runs partitions of the batch on each in parallel">
+  <style>
+    .label      { fill: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
+    .muted      { fill: #64748B; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; }
+    .caption    { fill: #475569; font-family: ui-serif, Georgia, serif; font-style: italic; font-size: 11px; }
+    .gpu-label  { fill: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; }
+    .lane       { fill: none; stroke: #CBD5E1; stroke-opacity: 0.6; }
+    .load       { fill: #1E3A6A; }
+    .load-text  { fill: #ffffff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; font-weight: 600; }
+    .infer      { fill: #4B85E8; }
+    .infer-text { fill: #ffffff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 9px; font-weight: 600; }
+    .count      { fill: #64748B; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; }
+    .axis       { stroke: #94A3B8; stroke-width: 1; fill: none; }
+    @media (prefers-color-scheme: dark) {
+      .label     { fill: #CBD5E1; }
+      .muted     { fill: #94A3B8; }
+      .caption   { fill: #CBD5E1; }
+      .gpu-label { fill: #CBD5E1; }
+      .lane      { stroke: #334155; }
+      .load      { fill: #3B5A8A; }
+      .count     { fill: #94A3B8; }
+      .axis      { stroke: #64748B; }
+    }
+  </style>
+
+  <!-- Legend -->
+  <rect x="60"  y="12" width="20" height="10" rx="2" class="load" />
+  <text x="86"  y="21" class="muted">load</text>
+  <rect x="128" y="12" width="20" height="10" rx="2" class="infer" />
+  <text x="154" y="21" class="muted">infer (one sequence)</text>
+
+  <!-- Context label -->
+  <text x="240" y="44" text-anchor="middle" class="label">batch of 48 sequences, 12 per GPU</text>
+
+  <!-- cuda:0 lane -->
+  <text x="52" y="76" text-anchor="end" class="gpu-label">cuda:0</text>
+  <rect x="60" y="60" width="400" height="32" rx="4" class="lane" />
+  <rect x="70" y="64" width="32" height="24" rx="3" class="load" />
+  <text x="86" y="80" text-anchor="middle" class="load-text">load</text>
+  <g>
+    <rect x="106" y="64" width="16" height="24" rx="2" class="infer" />
+    <rect x="124" y="64" width="16" height="24" rx="2" class="infer" />
+    <rect x="142" y="64" width="16" height="24" rx="2" class="infer" />
+    <rect x="160" y="64" width="16" height="24" rx="2" class="infer" />
+    <rect x="178" y="64" width="16" height="24" rx="2" class="infer" />
+    <rect x="196" y="64" width="16" height="24" rx="2" class="infer" />
+    <rect x="214" y="64" width="16" height="24" rx="2" class="infer" />
+    <rect x="232" y="64" width="16" height="24" rx="2" class="infer" />
+    <rect x="250" y="64" width="16" height="24" rx="2" class="infer" />
+    <rect x="268" y="64" width="16" height="24" rx="2" class="infer" />
+    <rect x="286" y="64" width="16" height="24" rx="2" class="infer" />
+    <rect x="304" y="64" width="16" height="24" rx="2" class="infer" />
+  </g>
+  <text x="330" y="80" class="count">12 seqs</text>
+
+  <!-- cuda:1 lane -->
+  <text x="52" y="116" text-anchor="end" class="gpu-label">cuda:1</text>
+  <rect x="60" y="100" width="400" height="32" rx="4" class="lane" />
+  <rect x="70" y="104" width="32" height="24" rx="3" class="load" />
+  <text x="86" y="120" text-anchor="middle" class="load-text">load</text>
+  <g>
+    <rect x="106" y="104" width="16" height="24" rx="2" class="infer" />
+    <rect x="124" y="104" width="16" height="24" rx="2" class="infer" />
+    <rect x="142" y="104" width="16" height="24" rx="2" class="infer" />
+    <rect x="160" y="104" width="16" height="24" rx="2" class="infer" />
+    <rect x="178" y="104" width="16" height="24" rx="2" class="infer" />
+    <rect x="196" y="104" width="16" height="24" rx="2" class="infer" />
+    <rect x="214" y="104" width="16" height="24" rx="2" class="infer" />
+    <rect x="232" y="104" width="16" height="24" rx="2" class="infer" />
+    <rect x="250" y="104" width="16" height="24" rx="2" class="infer" />
+    <rect x="268" y="104" width="16" height="24" rx="2" class="infer" />
+    <rect x="286" y="104" width="16" height="24" rx="2" class="infer" />
+    <rect x="304" y="104" width="16" height="24" rx="2" class="infer" />
+  </g>
+  <text x="330" y="120" class="count">12 seqs</text>
+
+  <!-- cuda:2 lane -->
+  <text x="52" y="156" text-anchor="end" class="gpu-label">cuda:2</text>
+  <rect x="60" y="140" width="400" height="32" rx="4" class="lane" />
+  <rect x="70" y="144" width="32" height="24" rx="3" class="load" />
+  <text x="86" y="160" text-anchor="middle" class="load-text">load</text>
+  <g>
+    <rect x="106" y="144" width="16" height="24" rx="2" class="infer" />
+    <rect x="124" y="144" width="16" height="24" rx="2" class="infer" />
+    <rect x="142" y="144" width="16" height="24" rx="2" class="infer" />
+    <rect x="160" y="144" width="16" height="24" rx="2" class="infer" />
+    <rect x="178" y="144" width="16" height="24" rx="2" class="infer" />
+    <rect x="196" y="144" width="16" height="24" rx="2" class="infer" />
+    <rect x="214" y="144" width="16" height="24" rx="2" class="infer" />
+    <rect x="232" y="144" width="16" height="24" rx="2" class="infer" />
+    <rect x="250" y="144" width="16" height="24" rx="2" class="infer" />
+    <rect x="268" y="144" width="16" height="24" rx="2" class="infer" />
+    <rect x="286" y="144" width="16" height="24" rx="2" class="infer" />
+    <rect x="304" y="144" width="16" height="24" rx="2" class="infer" />
+  </g>
+  <text x="330" y="160" class="count">12 seqs</text>
+
+  <!-- cuda:3 lane -->
+  <text x="52" y="196" text-anchor="end" class="gpu-label">cuda:3</text>
+  <rect x="60" y="180" width="400" height="32" rx="4" class="lane" />
+  <rect x="70" y="184" width="32" height="24" rx="3" class="load" />
+  <text x="86" y="200" text-anchor="middle" class="load-text">load</text>
+  <g>
+    <rect x="106" y="184" width="16" height="24" rx="2" class="infer" />
+    <rect x="124" y="184" width="16" height="24" rx="2" class="infer" />
+    <rect x="142" y="184" width="16" height="24" rx="2" class="infer" />
+    <rect x="160" y="184" width="16" height="24" rx="2" class="infer" />
+    <rect x="178" y="184" width="16" height="24" rx="2" class="infer" />
+    <rect x="196" y="184" width="16" height="24" rx="2" class="infer" />
+    <rect x="214" y="184" width="16" height="24" rx="2" class="infer" />
+    <rect x="232" y="184" width="16" height="24" rx="2" class="infer" />
+    <rect x="250" y="184" width="16" height="24" rx="2" class="infer" />
+    <rect x="268" y="184" width="16" height="24" rx="2" class="infer" />
+    <rect x="286" y="184" width="16" height="24" rx="2" class="infer" />
+    <rect x="304" y="184" width="16" height="24" rx="2" class="infer" />
+  </g>
+  <text x="330" y="200" class="count">12 seqs</text>
+
+  <!-- Time axis -->
+  <text x="24" y="228" class="muted">time</text>
+  <line x1="24" y1="234" x2="452" y2="234" class="axis" />
+  <polyline points="448,230 452,234 448,238" class="axis" />
+
+  <!-- Bottom caption -->
+  <text x="240" y="254" text-anchor="middle" class="caption">All visible GPUs load in parallel, each handling its slice of the batch.</text>
+</svg>

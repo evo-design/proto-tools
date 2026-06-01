@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 210" role="img" aria-label="Named instances: two workers, each pinned to its own GPU and routed by instance name">
+  <style>
+    .label      { fill: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
+    .muted      { fill: #64748B; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; }
+    .caption    { fill: #475569; font-family: ui-serif, Georgia, serif; font-style: italic; font-size: 11px; }
+    .load       { fill: #1E3A6A; }
+    .infer      { fill: #4B85E8; }
+    .load-text  { fill: #ffffff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; font-weight: 600; }
+    .infer-text { fill: #ffffff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; font-weight: 600; }
+    .pill-a     { fill: #4B85E8; }
+    .pill-b     { fill: #8A6E3F; }
+    .pill-text  { fill: #ffffff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; font-weight: 600; }
+    .gpu-border { stroke: #1E3A6A; stroke-opacity: 0.55; fill: none; }
+    .route      { stroke: #94A3B8; stroke-opacity: 0.8; fill: none; stroke-width: 1.2; }
+    @media (prefers-color-scheme: dark) {
+      .label   { fill: #CBD5E1; }
+      .muted   { fill: #94A3B8; }
+      .caption { fill: #CBD5E1; }
+      .load    { fill: #3B5A8A; }
+      .gpu-border { stroke: #4B85E8; stroke-opacity: 0.45; }
+      .route      { stroke: #64748B; }
+      .pill-b     { fill: #B8945A; }
+    }
+  </style>
+
+  <g transform="translate(-10 0)">
+    <!-- Caller-side instance labels -->
+    <text x="28" y="32" class="muted">run_esmfold(..., instance=...)</text>
+
+    <rect x="28" y="52" width="96" height="26" rx="4" class="pill-a" />
+    <text x="76" y="69" text-anchor="middle" class="pill-text">inst_a</text>
+
+    <rect x="28" y="138" width="96" height="26" rx="4" class="pill-b" />
+    <text x="76" y="155" text-anchor="middle" class="pill-text">"worker_b"</text>
+
+    <!-- Routing lines to the GPU rows -->
+    <path d="M 124 65 C 160 65, 160 66, 184 66" class="route" />
+    <path d="M 124 151 C 160 151, 160 150, 184 150" class="route" />
+
+    <!-- Two GPU rows -->
+    <rect x="184" y="44" width="288" height="44" rx="6" class="gpu-border" />
+    <text x="198" y="70" class="label">cuda:0 · worker_a</text>
+    <rect x="320" y="52" width="100" height="28" rx="3" class="load" />
+    <text x="370" y="71" text-anchor="middle" class="load-text">load</text>
+    <rect x="420" y="52" width="44"  height="28" rx="3" class="infer" />
+    <text x="442" y="71" text-anchor="middle" class="infer-text">infer</text>
+
+    <rect x="184" y="128" width="288" height="44" rx="6" class="gpu-border" />
+    <text x="198" y="154" class="label">cuda:1 · worker_b</text>
+    <rect x="320" y="136" width="100" height="28" rx="3" class="load" />
+    <text x="370" y="155" text-anchor="middle" class="load-text">load</text>
+    <rect x="420" y="136" width="44"  height="28" rx="3" class="infer" />
+    <text x="442" y="155" text-anchor="middle" class="infer-text">infer</text>
+  </g>
+
+  <!-- Bottom caption -->
+  <text x="240" y="200" text-anchor="middle" class="caption">Pass instance= to route each call to a named worker on a specific GPU.</text>
+</svg>

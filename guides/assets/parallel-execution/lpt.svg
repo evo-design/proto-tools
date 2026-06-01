@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 320" role="img" aria-label="Naive round-robin leaves GPUs idle; LPT scheduling finishes every GPU at roughly the same time">
+  <style>
+    .label      { fill: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
+    .muted      { fill: #64748B; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; }
+    .caption    { fill: #475569; font-family: ui-serif, Georgia, serif; font-style: italic; font-size: 11px; }
+    .subtitle   { fill: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; }
+    .gpu-label  { fill: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; font-weight: 600; }
+    .lane       { fill: none; stroke: #CBD5E1; stroke-opacity: 0.6; }
+    .item-large { fill: #1E3A6A; }
+    .item-med   { fill: #4B85E8; }
+    .item-small { fill: #8CB0EC; }
+    .item-text  { fill: #ffffff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 9px; font-weight: 600; }
+    .finish     { stroke: #94A3B8; stroke-width: 1; stroke-dasharray: 3 3; fill: none; }
+    .bad        { fill: #B85C5C; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; font-style: italic; }
+    .good       { fill: #5E8A5E; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; font-style: italic; }
+    .axis       { stroke: #94A3B8; stroke-width: 1; fill: none; }
+    @media (prefers-color-scheme: dark) {
+      .label      { fill: #CBD5E1; }
+      .muted      { fill: #94A3B8; }
+      .caption    { fill: #CBD5E1; }
+      .subtitle   { fill: #CBD5E1; }
+      .gpu-label  { fill: #CBD5E1; }
+      .lane       { stroke: #334155; }
+      .item-large { fill: #3B5A8A; }
+      .item-small { fill: #6A94D2; }
+      .bad        { fill: #D27A7A; }
+      .good       { fill: #85B585; }
+      .axis       { stroke: #64748B; }
+    }
+  </style>
+
+  <!-- Legend: item sizes -->
+  <rect x="60"  y="12" width="40" height="10" rx="2" class="item-large" />
+  <text x="106" y="21" class="muted">long</text>
+  <rect x="150" y="12" width="26" height="10" rx="2" class="item-med" />
+  <text x="182" y="21" class="muted">medium</text>
+  <rect x="236" y="12" width="14" height="10" rx="2" class="item-small" />
+  <text x="256" y="21" class="muted">short</text>
+
+  <!-- NAIVE panel -->
+  <text x="30" y="46" class="subtitle">Naive round-robin</text>
+  <text x="30" y="60" class="bad">cuda:0 finishes last; other GPUs sit idle</text>
+
+  <text x="52" y="82" text-anchor="end" class="gpu-label">cuda:0</text>
+  <rect x="60" y="70" width="380" height="24" rx="4" class="lane" />
+  <rect x="66" y="74" width="80" height="16" rx="3" class="item-large" />
+  <text x="106" y="85" text-anchor="middle" class="item-text">long</text>
+  <rect x="146" y="74" width="50" height="16" rx="3" class="item-med" />
+  <text x="171" y="85" text-anchor="middle" class="item-text">med</text>
+  <line x1="198" y1="70" x2="198" y2="94" class="finish" />
+
+  <text x="52" y="108" text-anchor="end" class="gpu-label">cuda:1</text>
+  <rect x="60" y="96" width="380" height="24" rx="4" class="lane" />
+  <rect x="66" y="100" width="80" height="16" rx="3" class="item-large" />
+  <text x="106" y="111" text-anchor="middle" class="item-text">long</text>
+  <rect x="146" y="100" width="26" height="16" rx="3" class="item-small" />
+  <line x1="174" y1="96" x2="174" y2="120" class="finish" />
+
+  <text x="52" y="134" text-anchor="end" class="gpu-label">cuda:2</text>
+  <rect x="60" y="122" width="380" height="24" rx="4" class="lane" />
+  <rect x="66" y="126" width="50" height="16" rx="3" class="item-med" />
+  <text x="91"  y="137" text-anchor="middle" class="item-text">med</text>
+  <rect x="116" y="126" width="26" height="16" rx="3" class="item-small" />
+  <line x1="144" y1="122" x2="144" y2="146" class="finish" />
+
+  <text x="52" y="160" text-anchor="end" class="gpu-label">cuda:3</text>
+  <rect x="60" y="148" width="380" height="24" rx="4" class="lane" />
+  <rect x="66" y="152" width="50" height="16" rx="3" class="item-med" />
+  <text x="91"  y="163" text-anchor="middle" class="item-text">med</text>
+  <rect x="116" y="152" width="26" height="16" rx="3" class="item-small" />
+  <line x1="144" y1="148" x2="144" y2="172" class="finish" />
+
+  <!-- LPT panel -->
+  <text x="30" y="200" class="subtitle">LPT (longest first)</text>
+  <text x="30" y="214" class="good">All GPUs finish at roughly the same time</text>
+
+  <text x="52" y="236" text-anchor="end" class="gpu-label">cuda:0</text>
+  <rect x="60" y="224" width="380" height="24" rx="4" class="lane" />
+  <rect x="66" y="228" width="80" height="16" rx="3" class="item-large" />
+  <text x="106" y="239" text-anchor="middle" class="item-text">long</text>
+  <rect x="146" y="228" width="26" height="16" rx="3" class="item-small" />
+  <line x1="174" y1="224" x2="174" y2="248" class="finish" />
+
+  <text x="52" y="262" text-anchor="end" class="gpu-label">cuda:1</text>
+  <rect x="60" y="250" width="380" height="24" rx="4" class="lane" />
+  <rect x="66" y="254" width="80" height="16" rx="3" class="item-large" />
+  <text x="106" y="265" text-anchor="middle" class="item-text">long</text>
+  <rect x="146" y="254" width="26" height="16" rx="3" class="item-small" />
+  <line x1="174" y1="250" x2="174" y2="274" class="finish" />
+
+  <text x="52" y="288" text-anchor="end" class="gpu-label">cuda:2</text>
+  <rect x="60" y="276" width="380" height="24" rx="4" class="lane" />
+  <rect x="66" y="280" width="50" height="16" rx="3" class="item-med" />
+  <text x="91"  y="291" text-anchor="middle" class="item-text">med</text>
+  <rect x="116" y="280" width="50" height="16" rx="3" class="item-med" />
+  <text x="141" y="291" text-anchor="middle" class="item-text">med</text>
+  <line x1="168" y1="276" x2="168" y2="300" class="finish" />
+
+  <text x="52" y="314" text-anchor="end" class="gpu-label">cuda:3</text>
+  <rect x="60" y="302" width="380" height="14" rx="4" class="lane" />
+  <rect x="66" y="304" width="50" height="10" rx="2" class="item-med" />
+  <rect x="116" y="304" width="26" height="10" rx="2" class="item-small" />
+  <line x1="144" y1="302" x2="144" y2="316" class="finish" />
+</svg>

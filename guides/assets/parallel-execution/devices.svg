@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 260" role="img" aria-label="Passing devices=[...] to ToolPool restricts the pool; other GPUs stay free for other work">
+  <style>
+    .label      { fill: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
+    .muted      { fill: #64748B; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; }
+    .caption    { fill: #475569; font-family: ui-serif, Georgia, serif; font-style: italic; font-size: 11px; }
+    .gpu-label  { fill: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; }
+    .gpu-label-out { fill: #94A3B8; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; }
+    .lane       { fill: none; stroke: #CBD5E1; stroke-opacity: 0.6; }
+    .lane-out   { fill: none; stroke: #94A3B8; stroke-opacity: 0.45; stroke-dasharray: 4 3; }
+    .load       { fill: #1E3A6A; }
+    .load-text  { fill: #ffffff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; font-weight: 600; }
+    .active     { fill: #4B85E8; }
+    .active-text{ fill: #ffffff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; font-weight: 600; }
+    .outside-text { fill: #94A3B8; font-family: ui-serif, Georgia, serif; font-style: italic; font-size: 11px; }
+    .axis       { stroke: #94A3B8; stroke-width: 1; fill: none; }
+    @media (prefers-color-scheme: dark) {
+      .label     { fill: #CBD5E1; }
+      .muted     { fill: #94A3B8; }
+      .caption   { fill: #CBD5E1; }
+      .gpu-label { fill: #CBD5E1; }
+      .gpu-label-out { fill: #64748B; }
+      .lane      { stroke: #334155; }
+      .lane-out  { stroke: #475569; }
+      .load      { fill: #3B5A8A; }
+      .outside-text { fill: #64748B; }
+      .axis      { stroke: #64748B; }
+    }
+  </style>
+
+  <!-- Legend -->
+  <rect x="60"  y="12" width="20" height="10" rx="2" class="load" />
+  <text x="86"  y="21" class="muted">load</text>
+  <rect x="124" y="12" width="20" height="10" rx="2" class="active" />
+  <text x="150" y="21" class="muted">active</text>
+
+  <!-- Context label -->
+  <text x="240" y="42" text-anchor="middle" class="label">ToolPool(devices=["cuda:0", "cuda:1"])</text>
+
+  <!-- cuda:0 lane -->
+  <text x="52" y="70" text-anchor="end" class="gpu-label">cuda:0</text>
+  <rect x="60" y="54" width="400" height="32" rx="4" class="lane" />
+  <rect x="70" y="58" width="30" height="24" rx="3" class="load" />
+  <text x="85" y="74" text-anchor="middle" class="load-text">load</text>
+  <rect x="100" y="58" width="250" height="24" rx="3" class="active" />
+  <text x="225" y="74" text-anchor="middle" class="active-text">24 seqs</text>
+
+  <!-- cuda:1 lane -->
+  <text x="52" y="110" text-anchor="end" class="gpu-label">cuda:1</text>
+  <rect x="60" y="94" width="400" height="32" rx="4" class="lane" />
+  <rect x="70" y="98" width="30" height="24" rx="3" class="load" />
+  <text x="85" y="114" text-anchor="middle" class="load-text">load</text>
+  <rect x="100" y="98" width="250" height="24" rx="3" class="active" />
+  <text x="225" y="114" text-anchor="middle" class="active-text">24 seqs</text>
+
+  <!-- cuda:2 lane — outside pool -->
+  <text x="52" y="150" text-anchor="end" class="gpu-label-out">cuda:2</text>
+  <rect x="60" y="134" width="400" height="32" rx="4" class="lane-out" />
+  <text x="260" y="155" text-anchor="middle" class="outside-text">outside pool, free for other work</text>
+
+  <!-- cuda:3 lane — outside pool -->
+  <text x="52" y="190" text-anchor="end" class="gpu-label-out">cuda:3</text>
+  <rect x="60" y="174" width="400" height="32" rx="4" class="lane-out" />
+  <text x="260" y="195" text-anchor="middle" class="outside-text">outside pool, free for other work</text>
+
+  <!-- Time axis -->
+  <text x="24" y="222" class="muted">time</text>
+  <line x1="24" y1="228" x2="452" y2="228" class="axis" />
+  <polyline points="448,224 452,228 448,232" class="axis" />
+
+  <!-- Bottom caption -->
+  <text x="240" y="252" text-anchor="middle" class="caption">Only the listed devices join the pool; the rest stay free for other workloads on the same machine.</text>
+</svg>

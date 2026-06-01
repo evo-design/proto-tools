@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 220" role="img" aria-label="Packing 4 instances on 2 GPUs: tools coexist on the same GPU instead of evicting each other">
+  <style>
+    .label      { fill: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
+    .muted      { fill: #64748B; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; }
+    .caption    { fill: #475569; font-family: ui-serif, Georgia, serif; font-style: italic; font-size: 11px; }
+    .gpu-label  { fill: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; }
+    .lane       { fill: none; stroke: #CBD5E1; stroke-opacity: 0.6; }
+    .resident-a { fill: #4B85E8; fill-opacity: 0.28; }
+    .resident-b { fill: #8A6E3F; fill-opacity: 0.28; }
+    .resident-c { fill: #046E7A; fill-opacity: 0.28; }
+    .resident-d { fill: #7C4FA8; fill-opacity: 0.28; }
+    .active-a   { fill: #4B85E8; }
+    .active-b   { fill: #8A6E3F; }
+    .active-c   { fill: #046E7A; }
+    .active-d   { fill: #7C4FA8; }
+    .pill-text  { fill: #ffffff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; }
+    .axis       { stroke: #94A3B8; stroke-width: 1; fill: none; }
+    @media (prefers-color-scheme: dark) {
+      .label      { fill: #CBD5E1; }
+      .muted      { fill: #94A3B8; }
+      .caption    { fill: #CBD5E1; }
+      .gpu-label  { fill: #CBD5E1; }
+      .lane       { stroke: #334155; }
+      .active-b   { fill: #B8945A; }
+      .active-c   { fill: #2A99A6; }
+      .active-d   { fill: #A074D2; }
+      .resident-b { fill: #B8945A; fill-opacity: 0.28; }
+      .resident-c { fill: #2A99A6; fill-opacity: 0.28; }
+      .resident-d { fill: #A074D2; fill-opacity: 0.28; }
+      .axis       { stroke: #64748B; }
+    }
+  </style>
+
+  <!-- Legend -->
+  <rect x="60"  y="12" width="20" height="10" rx="2" class="active-a" />
+  <text x="86"  y="21" class="muted">active</text>
+  <rect x="140" y="12" width="20" height="10" rx="2" class="resident-a" />
+  <text x="166" y="21" class="muted">resident (idle)</text>
+
+  <!-- cuda:0 lane (2 sub-rows: A and C coexist) -->
+  <text x="52" y="92" text-anchor="end" class="gpu-label">cuda:0</text>
+  <rect x="60" y="66" width="400" height="54" rx="4" class="lane" />
+  <!-- A: resident + active flush at start -->
+  <rect x="70"  y="72" width="380" height="20" rx="3" class="resident-a" />
+  <rect x="70"  y="72" width="42"  height="20" rx="3" class="active-a" />
+  <text x="91"  y="86" text-anchor="middle" class="pill-text">A</text>
+  <!-- C: resident + active flush at start -->
+  <rect x="210" y="96" width="240" height="20" rx="3" class="resident-c" />
+  <rect x="210" y="96" width="42"  height="20" rx="3" class="active-c" />
+  <text x="231" y="110" text-anchor="middle" class="pill-text">C</text>
+
+  <!-- cuda:1 lane (2 sub-rows: B and D coexist) -->
+  <text x="52" y="152" text-anchor="end" class="gpu-label">cuda:1</text>
+  <rect x="60" y="126" width="400" height="54" rx="4" class="lane" />
+  <!-- B: resident + active flush at start -->
+  <rect x="140" y="132" width="310" height="20" rx="3" class="resident-b" />
+  <rect x="140" y="132" width="42"  height="20" rx="3" class="active-b" />
+  <text x="161" y="146" text-anchor="middle" class="pill-text">B</text>
+  <!-- D: resident + active flush at start -->
+  <rect x="280" y="156" width="170" height="20" rx="3" class="resident-d" />
+  <rect x="280" y="156" width="42"  height="20" rx="3" class="active-d" />
+  <text x="301" y="170" text-anchor="middle" class="pill-text">D</text>
+
+  <!-- Time axis -->
+  <text x="24" y="196" class="muted">time</text>
+  <line x1="24" y1="202" x2="452" y2="202" class="axis" />
+  <polyline points="448,198 452,202 448,206" class="axis" />
+
+  <!-- Bottom caption -->
+  <text x="240" y="218" text-anchor="middle" class="caption">With allow_multiple_per_device, tools round-robin and coexist on the same GPU.</text>
+</svg>

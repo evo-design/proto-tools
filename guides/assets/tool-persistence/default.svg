@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 170" role="img" aria-label="Default one-shot: each call reloads the model and releases GPU memory">
+  <style>
+    .label         { fill: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
+    .muted         { fill: #64748B; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; }
+    .caption       { fill: #475569; font-family: ui-serif, Georgia, serif; font-style: italic; font-size: 11px; }
+    .load          { fill: #1E3A6A; }
+    .infer         { fill: #4B85E8; }
+    .load-text     { fill: #ffffff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; font-weight: 600; }
+    .infer-text    { fill: #ffffff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; font-weight: 600; }
+    .mem-bg        { fill: #DDE7F5; }
+    .release-bar   { stroke: #64748B; stroke-width: 1.6; fill: none; }
+    .release-mark  { fill: #64748B; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; }
+    .axis          { stroke: #94A3B8; stroke-width: 1; fill: none; }
+    @media (prefers-color-scheme: dark) {
+      .label        { fill: #CBD5E1; }
+      .muted        { fill: #94A3B8; }
+      .caption      { fill: #CBD5E1; }
+      .load         { fill: #3B5A8A; }
+      .mem-bg       { fill: #27324A; }
+      .release-bar  { stroke: #94A3B8; }
+      .release-mark { fill: #94A3B8; }
+      .axis         { stroke: #64748B; }
+    }
+  </style>
+
+  <g transform="translate(52 0)">
+    <!-- Legend -->
+    <rect x="28"  y="12" width="14" height="10" rx="2" class="load" />
+    <text x="48"  y="21" class="muted">load</text>
+    <rect x="92"  y="12" width="14" height="10" rx="2" class="infer" />
+    <text x="112" y="21" class="muted">infer</text>
+    <rect x="156" y="13" width="14" height="8"  rx="1" class="mem-bg" />
+    <text x="176" y="21" class="muted">model in memory</text>
+    <text x="300" y="13" text-anchor="middle" class="release-mark" font-size="10">×</text>
+    <line x1="300" y1="16" x2="300" y2="24" class="release-bar" />
+    <text x="308" y="21" class="muted">release</text>
+
+    <!-- Call labels centered over each call's load block -->
+    <text x="78"  y="50" text-anchor="middle" class="label">call 1</text>
+    <text x="222" y="50" text-anchor="middle" class="label">call 2</text>
+
+    <!-- Call 1: memory highlight behind, then blocks -->
+    <rect x="26"  y="58" width="148" height="44" rx="4" class="mem-bg" />
+    <rect x="28"  y="66" width="100" height="28" rx="3" class="load" />
+    <text x="78"  y="85" text-anchor="middle" class="load-text">load</text>
+    <rect x="128" y="66" width="44"  height="28" rx="3" class="infer" />
+    <text x="150" y="85" text-anchor="middle" class="infer-text">infer</text>
+
+    <!-- Call 2: starts immediately after (back-to-back, no gap) -->
+    <rect x="172" y="58" width="148" height="44" rx="4" class="mem-bg" />
+    <rect x="172" y="66" width="100" height="28" rx="3" class="load" />
+    <text x="222" y="85" text-anchor="middle" class="load-text">load</text>
+    <rect x="272" y="66" width="44"  height="28" rx="3" class="infer" />
+    <text x="294" y="85" text-anchor="middle" class="infer-text">infer</text>
+
+    <!-- Release markers (× above bar) aligned to end of each call's infer block -->
+    <text x="172" y="52" text-anchor="middle" class="release-mark" font-size="13">×</text>
+    <line x1="172" y1="58" x2="172" y2="102" class="release-bar" />
+    <text x="316" y="52" text-anchor="middle" class="release-mark" font-size="13">×</text>
+    <line x1="316" y1="58" x2="316" y2="102" class="release-bar" />
+  </g>
+
+  <!-- Time axis (label top-left, line across) -->
+  <text x="24"  y="124" class="muted">time</text>
+  <line x1="24" y1="130" x2="452" y2="130" class="axis" />
+  <polyline points="448,126 452,130 448,134" class="axis" />
+
+  <!-- Bottom caption -->
+  <text x="240" y="160" text-anchor="middle" class="caption">Every call pays the full load cost. GPU memory is released between calls.</text>
+</svg>
