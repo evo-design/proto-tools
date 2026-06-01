@@ -35,8 +35,8 @@ def test_enformer_input_valid():
 
     seq = _random_dna(ENFORMER_CONTEXT)
     inp = EnformerInput(sequences=seq)
-    assert inp.sequences == [seq]
-    assert len(inp.sequences[0]) == ENFORMER_CONTEXT
+    assert [window.sequence for window in inp.sequences] == [seq]
+    assert len(inp.sequences[0].sequence) == ENFORMER_CONTEXT
 
 
 def test_enformer_input_accepts_sequence_batches():
@@ -48,7 +48,7 @@ def test_enformer_input_accepts_sequence_batches():
 
     inp = EnformerInput(sequences=[seq_a, seq_b])
 
-    assert inp.sequences == [seq_a, seq_b]
+    assert [window.sequence for window in inp.sequences] == [seq_a, seq_b]
     assert len(inp) == 2
 
 
@@ -86,16 +86,16 @@ def test_enformer_input_rejects_invalid_nucleotides():
 
 def test_enformer_input_accepts_target_aligned_sequences():
     """Target coordinates let Enformer extract a model window from a larger construct."""
-    from proto_tools.tools.sequence_scoring.enformer import EnformerInput, SequenceTargetRange
+    from proto_tools.tools.sequence_scoring.enformer import EnformerInput, SequenceTargetRange, SequenceWindow
 
     sequence = ("C" * 100) + ("A" * ENFORMER_CONTEXT) + ("G" * 100)
     target_start = 100 + ENFORMER_OUTPUT_FLANK
 
     target_range = SequenceTargetRange(start=target_start, end=target_start + 10)
-    inputs = EnformerInput(sequences=sequence, target_ranges=target_range)
+    inputs = EnformerInput(sequences=[SequenceWindow(sequence=sequence, target_range=target_range)])
 
-    assert inputs.sequences == [sequence]
-    assert inputs.target_ranges == [target_range]
+    assert [window.sequence for window in inputs.sequences] == [sequence]
+    assert [window.target_range for window in inputs.sequences] == [target_range]
 
 
 def test_enformer_run_extracts_target_aligned_window(monkeypatch):
@@ -104,6 +104,7 @@ def test_enformer_run_extracts_target_aligned_window(monkeypatch):
         EnformerConfig,
         EnformerInput,
         SequenceTargetRange,
+        SequenceWindow,
         enformer_prediction,
         run_enformer,
     )
@@ -120,8 +121,12 @@ def test_enformer_run_extracts_target_aligned_window(monkeypatch):
     target_start = 100 + ENFORMER_OUTPUT_FLANK
     result = run_enformer(
         EnformerInput(
-            sequences=[sequence],
-            target_ranges=[SequenceTargetRange(start=target_start, end=target_start + 10)],
+            sequences=[
+                SequenceWindow(
+                    sequence=sequence,
+                    target_range=SequenceTargetRange(start=target_start, end=target_start + 10),
+                )
+            ],
         ),
         EnformerConfig(output_tracks=[0], device="cpu"),
     )

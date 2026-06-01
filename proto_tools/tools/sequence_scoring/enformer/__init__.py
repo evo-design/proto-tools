@@ -12,10 +12,11 @@ from proto_tools.tools.sequence_scoring.enformer.enformer_prediction import (
     EnformerPredictionResult,
     run_enformer,
 )
-from proto_tools.tools.sequence_scoring.shared_data_models import SequenceTargetRange
+from proto_tools.tools.sequence_scoring.shared_data_models import SequenceTargetRange, SequenceWindow
 
 __all__ = [
     "SequenceTargetRange",
+    "SequenceWindow",
     "EnformerInput",
     "EnformerConfig",
     "EnformerOutput",

@@ -35,8 +35,8 @@ def test_borzoi_input_valid():
 
     sequence = _generate_random_dna_sequence(BORZOI_CONTEXT)
     inputs = BorzoiInput(sequences=sequence)
-    assert inputs.sequences == [sequence]
-    assert len(inputs.sequences[0]) == BORZOI_CONTEXT
+    assert [window.sequence for window in inputs.sequences] == [sequence]
+    assert len(inputs.sequences[0].sequence) == BORZOI_CONTEXT
 
 
 def test_borzoi_input_accepts_sequence_batches():
@@ -48,7 +48,7 @@ def test_borzoi_input_accepts_sequence_batches():
 
     inputs = BorzoiInput(sequences=[seq_a, seq_b])
 
-    assert inputs.sequences == [seq_a, seq_b]
+    assert [window.sequence for window in inputs.sequences] == [seq_a, seq_b]
     assert len(inputs) == 2
 
 
@@ -67,16 +67,16 @@ def test_borzoi_input_rejects_wrong_length():
 
 def test_borzoi_input_accepts_target_aligned_sequences():
     """Target coordinates let Borzoi extract a model window from a larger construct."""
-    from proto_tools.tools.sequence_scoring.borzoi import BorzoiInput, SequenceTargetRange
+    from proto_tools.tools.sequence_scoring.borzoi import BorzoiInput, SequenceTargetRange, SequenceWindow
 
     sequence = ("C" * 100) + ("A" * BORZOI_CONTEXT) + ("G" * 100)
     target_start = 100 + BORZOI_OUTPUT_FLANK
 
     target_range = SequenceTargetRange(start=target_start, end=target_start + 10)
-    inputs = BorzoiInput(sequences=sequence, target_ranges=target_range)
+    inputs = BorzoiInput(sequences=[SequenceWindow(sequence=sequence, target_range=target_range)])
 
-    assert inputs.sequences == [sequence]
-    assert inputs.target_ranges == [target_range]
+    assert [window.sequence for window in inputs.sequences] == [sequence]
+    assert [window.target_range for window in inputs.sequences] == [target_range]
 
 
 def test_borzoi_run_extracts_target_aligned_window(monkeypatch):
@@ -85,6 +85,7 @@ def test_borzoi_run_extracts_target_aligned_window(monkeypatch):
         BorzoiConfig,
         BorzoiInput,
         SequenceTargetRange,
+        SequenceWindow,
         borzoi_prediction,
         run_borzoi,
     )
@@ -101,7 +102,12 @@ def test_borzoi_run_extracts_target_aligned_window(monkeypatch):
     target_start = 100 + BORZOI_OUTPUT_FLANK
     result = run_borzoi(
         BorzoiInput(
-            sequences=[sequence], target_ranges=[SequenceTargetRange(start=target_start, end=target_start + 10)]
+            sequences=[
+                SequenceWindow(
+                    sequence=sequence,
+                    target_range=SequenceTargetRange(start=target_start, end=target_start + 10),
+                )
+            ],
         ),
         BorzoiConfig(output_tracks=[0], device="cuda"),
     )

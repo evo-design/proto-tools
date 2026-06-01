@@ -244,7 +244,7 @@ class BorzoiEnsembleConfig(BaseConfig):
 # ============================================================================
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return BorzoiInput(sequences=["A" * 524288])
+    return BorzoiInput(sequences=["A" * 524288])  # type: ignore[list-item]
 
 
 @tool(
@@ -303,6 +303,7 @@ def run_borzoi_ensemble(
         replicate_outputs.append(replicate_output)
 
     reference_output = replicate_outputs[0]
+    raw_sequences = [window.sequence for window in inputs.sequences]
 
     return BorzoiEnsembleOutput(
         results=[
@@ -318,7 +319,7 @@ def run_borzoi_ensemble(
                 target_start=reference_output.results[idx].target_start,
                 target_end=reference_output.results[idx].target_end,
             )
-            for idx, sequence in enumerate(inputs.sequences)
+            for idx, sequence in enumerate(raw_sequences)
         ],
         output_tracks=config.output_tracks,
         species=config.species,

@@ -18,10 +18,11 @@ from proto_tools.tools.sequence_scoring.borzoi.borzoi_prediction import (
     BorzoiPredictionResult,
     run_borzoi,
 )
-from proto_tools.tools.sequence_scoring.shared_data_models import SequenceTargetRange
+from proto_tools.tools.sequence_scoring.shared_data_models import SequenceTargetRange, SequenceWindow
 
 __all__ = [
     "SequenceTargetRange",
+    "SequenceWindow",
     "BorzoiInput",
     "BorzoiConfig",
     "BorzoiOutput",

@@ -100,6 +100,94 @@ def validate_dna_sequence(sequence: str) -> str:
     return sequence
 
 
+class SequenceWindow(BaseToolInput):
+    """A DNA sequence with an optional target range, for sequence-to-function tools.
+
+    Bundling the sequence with its target range keeps the two aligned through
+    pool partitioning: the framework slices only the iterable input field, so a
+    separate parallel ``target_ranges`` list would desync from the sequences it
+    describes. A bare DNA string (or a ``{"sequence": ..., "target_range": ...}``
+    dict) is accepted and coerced.
+
+    Attributes:
+        sequence (str): DNA sequence -- an exact model-context window, or a
+            longer source sequence paired with ``target_range``.
+        target_range (SequenceTargetRange | None): Optional sequence-relative
+            span the tool must keep inside the model output bins. Windowing is
+            all-or-nothing across a call: set ``target_range`` on every window or
+            on none (see :func:`windows_target_ranges`).
+    """
+
+    sequence: str = InputField(
+        title="Sequence",
+        description="DNA sequence: an exact model window, or a longer source paired with target_range.",
+    )
+    target_range: SequenceTargetRange | None = InputField(
+        default=None,
+        title="Target Range",
+        description="Optional sequence-relative range to keep inside the model output bins.",
+    )
+
+    @field_validator("sequence")
+    @classmethod
+    def _validate_sequence(cls, value: str) -> str:
+        """Validate and uppercase the DNA sequence."""
+        return validate_dna_sequence(value)
+
+
+def coerce_sequence_windows(value: Any) -> Any:
+    """Normalize a ``list[SequenceWindow]`` field's raw input.
+
+    Use as a ``@field_validator(..., mode="before")`` body. Accepts a bare DNA
+    ``str`` or a single item (wrapped into a one-element list), then coerces each
+    element from ``str`` / ``dict`` / :class:`SequenceWindow`.
+
+    Args:
+        value (Any): Raw field value supplied by the caller.
+
+    Returns:
+        Any: A list for Pydantic to validate into ``list[SequenceWindow]``.
+
+    Raises:
+        ValueError: If an element is not a str, dict, or SequenceWindow.
+    """
+    if isinstance(value, (str, dict, SequenceWindow)):
+        value = [value]
+    if not isinstance(value, list):
+        return value
+    coerced: list[Any] = []
+    for item in value:
+        if isinstance(item, (SequenceWindow, dict)):
+            coerced.append(item)
+        elif isinstance(item, str):
+            coerced.append(SequenceWindow(sequence=item))
+        else:
+            raise ValueError(f"each sequence must be a str, dict, or SequenceWindow, got {type(item).__name__}")
+    return coerced
+
+
+def windows_target_ranges(windows: list[SequenceWindow]) -> list[SequenceTargetRange] | None:
+    """Return one target range per window, or ``None`` when no window sets one.
+
+    Args:
+        windows (list[SequenceWindow]): The bundled sequence windows.
+
+    Returns:
+        list[SequenceTargetRange] | None: Per-window ranges, or ``None`` in
+            exact-window mode (no window sets a range).
+
+    Raises:
+        ValueError: If some windows set ``target_range`` and others do not;
+            model windowing is all-or-nothing across a call.
+    """
+    ranges = [window.target_range for window in windows]
+    if all(target_range is None for target_range in ranges):
+        return None
+    if any(target_range is None for target_range in ranges):
+        raise ValueError("target_range must be set for all sequences or for none")
+    return ranges  # type: ignore[return-value]
+
+
 def prepare_model_windows(
     sequences: list[str],
     *,

@@ -13,9 +13,10 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from proto_tools.tools.sequence_scoring.shared_data_models import (
-    SequenceTargetRange,
+    SequenceWindow,
+    coerce_sequence_windows,
     prepare_model_windows,
-    validate_dna_sequence,
+    windows_target_ranges,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -55,65 +56,33 @@ class EnformerInput(BaseToolInput):
       sequence.
 
     Attributes:
-        sequences (list[str]): DNA sequence(s) for Enformer inference. A string
-            passed to this plural field is normalized to a one-item list.
-        target_ranges (list[SequenceTargetRange] | None): Optional target
-            ranges within each provided sequence. Coordinates are relative to
-            the corresponding sequence, 0-based, and use exclusive ends. When
-            provided, each sequence must contain enough real context to extract
-            a full Enformer input window; the tool does not pad missing
-            context.
+        sequences (list[SequenceWindow]): DNA sequence(s) for Enformer inference.
+            Each item is a sequence with an optional ``target_range``, and a bare
+            string is accepted. Without a ``target_range`` the sequence must
+            already be the model context length. With one, the source must be
+            long enough to extract a full window (no padding).
     """
 
-    sequences: list[str] = InputField(
+    sequences: list[SequenceWindow] = InputField(
         title="Sequences",
-        description="DNA sequence(s): exact model windows, or sources paired with target_ranges",
+        description="Sequence(s) to score; each a DNA window with optional target_range (a bare string is accepted)",
         min_length=1,
-    )
-    target_ranges: list[SequenceTargetRange] | None = InputField(
-        default=None,
-        title="Target Ranges",
-        description="Sequence-relative range(s) that must remain inside Enformer output bins",
     )
 
     @field_validator("sequences", mode="before")
     @classmethod
-    def normalize_sequences(cls, value: Any) -> list[Any]:
-        """Normalize the plural sequence field to a list."""
-        if value is None:
-            raise ValueError("sequences cannot be None")
-        if isinstance(value, str):
-            return [value]
-        if not value:
-            raise ValueError("sequences cannot be empty")
-        return value  # type: ignore[no-any-return]
-
-    @field_validator("sequences")
-    @classmethod
-    def validate_sequences(cls, sequences: list[str]) -> list[str]:
-        """Validate and normalize nucleotide sequences."""
-        return [validate_dna_sequence(sequence) for sequence in sequences]
-
-    @field_validator("target_ranges", mode="before")
-    @classmethod
-    def normalize_target_ranges(cls, value: Any) -> list[Any] | None:
-        """Normalize a single target range to a list."""
-        if value is None:
-            return None
-        if isinstance(value, list):
-            if not value:
-                raise ValueError("target_ranges cannot be empty")
-            return value
-        return [value]
+    def coerce_sequences(cls, value: Any) -> Any:
+        """Coerce bare strings / dicts into SequenceWindow items."""
+        return coerce_sequence_windows(value)
 
     @model_validator(mode="after")
     def validate_window_inputs(self) -> "EnformerInput":
         """Validate exact-context or target-aligned window inputs."""
         prepare_model_windows(
-            self.sequences,
+            [window.sequence for window in self.sequences],
             context_length=ENFORMER_CONTEXT,
             output_length=ENFORMER_OUTPUT_LENGTH,
-            target_ranges=self.target_ranges,
+            target_ranges=windows_target_ranges(self.sequences),
         )
         return self
 
@@ -332,7 +301,7 @@ class EnformerConfig(BaseConfig):
 # ============================================================================
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return EnformerInput(sequences=["A" * 196608])
+    return EnformerInput(sequences=["A" * 196608])  # type: ignore[list-item]
 
 
 @tool(
@@ -363,11 +332,12 @@ def run_enformer(inputs: EnformerInput, config: EnformerConfig, instance: Any = 
     """
     logger.debug("Using local venv for Enformer prediction")
 
+    raw_sequences = [window.sequence for window in inputs.sequences]
     prepared_windows = prepare_model_windows(
-        inputs.sequences,
+        raw_sequences,
         context_length=ENFORMER_CONTEXT,
         output_length=ENFORMER_OUTPUT_LENGTH,
-        target_ranges=inputs.target_ranges,
+        target_ranges=windows_target_ranges(inputs.sequences),
     )
     model_sequences = [window.model_sequence for window in prepared_windows]
 
@@ -405,7 +375,7 @@ def run_enformer(inputs: EnformerInput, config: EnformerConfig, instance: Any = 
                 target_start=window.target_start,
                 target_end=window.target_end,
             )
-            for sequence, prediction, window in zip(inputs.sequences, predictions, prepared_windows, strict=True)
+            for sequence, prediction, window in zip(raw_sequences, predictions, prepared_windows, strict=True)
         ],
         output_tracks=config.output_tracks,
         species=config.species,
