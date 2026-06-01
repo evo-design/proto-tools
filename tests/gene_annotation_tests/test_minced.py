@@ -52,11 +52,6 @@ def test_input_list_of_sequences():
     assert len(inp.sequences) == 2
 
 
-def test_input_custom_sequence_ids():
-    inp = MincedInput(sequences=["ATCG"], sequence_ids=["my_seq"])
-    assert inp.sequence_ids == ["my_seq"]
-
-
 def test_config_min_num_repeats_validation():
     """min_num_repeats must be >= 2."""
     with pytest.raises(ValidationError, match="greater than or equal to 2"):
@@ -178,10 +173,7 @@ def test_export_json(sample_output, tmp_path):
 @pytest.mark.integration
 def test_run_minced_with_crispr_sequence():
     """Run MinCED on a sequence with known CRISPR arrays."""
-    inputs = MincedInput(
-        sequences=[_CRISPR_SEQUENCE],
-        sequence_ids=["crispr_test"],
-    )
+    inputs = MincedInput(sequences=[_CRISPR_SEQUENCE])
     config = MincedConfig(min_num_repeats=3, min_repeat_length=23)
     result = run_minced(inputs, config)
 
@@ -230,7 +222,7 @@ def test_run_minced_default_finds_short_repeat_after_default_change():
     test pins the new default with a 25-bp E. coli-derived repeat: ``MincedConfig()``
     detects it; ``MincedConfig(min_repeat_length=27)`` (the old default) does not.
     """
-    inputs = MincedInput(sequences=[_SHORT_REPEAT_SEQUENCE], sequence_ids=["short_repeat"])
+    inputs = MincedInput(sequences=[_SHORT_REPEAT_SEQUENCE])
     new_default = run_minced(inputs, MincedConfig())
     old_default = run_minced(inputs, MincedConfig(min_repeat_length=27))
     assert new_default.success and old_default.success
@@ -252,7 +244,7 @@ def test_minced_crispr_benchmark(request: pytest.FixtureRequest) -> None:
     # Distinct sequences avoid the @tool cacheable=True dedup path, which would
     # collapse N identical inputs to a single unique workload.
     sequences = [_CRISPR_SEQUENCE + f"AAAA{i:08d}AAAA" for i in range(100)]
-    inputs = MincedInput(sequences=sequences, sequence_ids=[f"seq_{i}" for i in range(100)])
+    inputs = MincedInput(sequences=sequences)
     config = MincedConfig()
 
     result = benchmark_twice(request, "minced", lambda: run_minced(inputs, config))
