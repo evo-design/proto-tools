@@ -329,6 +329,13 @@ def run_ipsae_scoring(
     chain_pair_results_raw = result["chain_pair_results"]
     chain_pair_results = _parse_chain_pair_results(chain_pair_results_raw)
     binder_target_max = _extract_binder_target_scores(chain_pair_results, binder_chain, target_chains)
+    if not binder_target_max:
+        available = sorted({(r.chain1, r.chain2) for r in chain_pair_results if r.pair_type == "max"})
+        raise ValueError(
+            f"ipsae: no interface scores for binder_chain={binder_chain!r} vs "
+            f"target_chains={target_chains!r}; available max-type chain pairs: {available}. "
+            f"Check that the chain labels match the structure."
+        )
 
     metrics = IPSAEMetrics(
         ipsae=binder_target_max.get("ipsae", 0.0),
