@@ -116,6 +116,10 @@ def test_config_rejects_invalid_model_name():
         BioEmuConfig(model_name="invalid-model")
 
 
+def test_config_default_timeout_is_one_hour():
+    assert BioEmuConfig().timeout == 3600
+
+
 def test_config_passes_new_fields_to_dispatch():
     """All five new Config fields must flow to the dispatch payload."""
     # Pre-supply an empty per-complex MSA entry so preprocess() skips ColabFold.
