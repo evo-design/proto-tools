@@ -156,8 +156,8 @@ def _parse_int_list(s: str) -> list[int]:
     if not s:
         return []
     out: list[int] = []
-    for tok in s.split(","):
-        digits = re.sub(r"[^0-9]", "", tok)
+    for tok in re.split(r"[,\n]+", s):
+        digits = re.sub(r"[^0-9]", "", tok.strip())
         if digits:
             out.append(int(digits))
     return out

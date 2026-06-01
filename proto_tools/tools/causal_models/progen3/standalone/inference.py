@@ -333,7 +333,11 @@ class ProGen3Model:
         metrics = []
         for per_pos in result["per_position_metrics"]:
             valid = [x for x in per_pos["log_likelihood"] if x is not None]
-            metrics.append(log_likelihood_metrics(sum(valid) / len(valid), len(valid)))
+            # No scorable positions (e.g. a 1-residue sequence) → neutral sentinel, not div-by-zero.
+            if valid:
+                metrics.append(log_likelihood_metrics(sum(valid) / len(valid), len(valid)))
+            else:
+                metrics.append(log_likelihood_metrics(0.0, 0))
 
         return {
             "metrics": metrics,

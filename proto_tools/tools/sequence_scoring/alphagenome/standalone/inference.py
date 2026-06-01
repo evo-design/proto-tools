@@ -558,7 +558,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     # Tool orchestration metadata (not part of model call signature).
     kwargs.pop("timeout", None)
 
-    if _model is None:
+    # Reload when the requested version differs from the cached one.
+    if _model is None or _model.model_version != model_version:
         _model = AlphaGenomeModel(model_version=model_version)
 
     if operation not in _OPERATIONS:

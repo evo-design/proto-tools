@@ -32,9 +32,12 @@ echo "Installing PyRosetta via conda channel..."
 proto_resolve_weights_dir alphafold2
 PARAMS_DIR="${WEIGHTS_DIR}/params"
 mkdir -p "$PARAMS_DIR"
-if [ -z "$(ls -A "$PARAMS_DIR"/*.npz 2>/dev/null)" ]; then
+# Gate on a completion sentinel, not any .npz, so a partial extraction is re-downloaded.
+PARAMS_SENTINEL="${PARAMS_DIR}/.params_complete"
+if [ ! -f "$PARAMS_SENTINEL" ]; then
     echo "Downloading AlphaFold2 parameters (~5.5GB)..."
     curl -fsSL https://storage.googleapis.com/alphafold/alphafold_params_2022-12-06.tar | tar x -C "$PARAMS_DIR"
+    touch "$PARAMS_SENTINEL"
 else
     echo "AlphaFold2 parameters already present at $PARAMS_DIR"
 fi

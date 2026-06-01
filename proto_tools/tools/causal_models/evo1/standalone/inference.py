@@ -122,7 +122,9 @@ class Evo1Model:
         assert len(all_sequences) == len(prompts)
         return {
             "sequences": all_sequences,
-            "metrics": [log_likelihood_metrics(float(s), max_new_tokens) for s in all_scores],
+            "metrics": [
+                log_likelihood_metrics(float(s), len(seq)) for seq, s in zip(all_sequences, all_scores, strict=True)
+            ],
         }
 
     def score(
