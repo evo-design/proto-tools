@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 200" role="img" aria-label="First call runs detect hardware, install env, download weights, then run tool; cached call runs the tool immediately">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-36 0 596 200" role="img" aria-label="First call runs detect hardware, install env, download weights, then run tool; cached call runs the tool immediately">
   <style>
     .label        { fill: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
     .muted        { fill: #64748B; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; }
@@ -21,29 +21,29 @@
 
   <text x="50" y="44" text-anchor="end" class="label">first call</text>
 
-  <rect x="60"  y="30" width="60"  height="26" rx="3" class="phase-detect" />
-  <text x="90"  y="47" text-anchor="middle" class="phase-text">detect hw</text>
+  <rect x="60"  y="30" width="76"  height="26" rx="3" class="phase-detect" />
+  <text x="98"  y="47" text-anchor="middle" class="phase-text">detect hw</text>
 
-  <rect x="120" y="30" width="140" height="26" rx="3" class="phase-install" />
-  <text x="190" y="47" text-anchor="middle" class="phase-text">install env</text>
+  <rect x="136" y="30" width="140" height="26" rx="3" class="phase-install" />
+  <text x="206" y="47" text-anchor="middle" class="phase-text">install env</text>
 
-  <rect x="260" y="30" width="170" height="26" rx="3" class="phase-weights" />
-  <text x="345" y="47" text-anchor="middle" class="phase-text">download weights</text>
+  <rect x="276" y="30" width="170" height="26" rx="3" class="phase-weights" />
+  <text x="361" y="47" text-anchor="middle" class="phase-text">download weights</text>
 
-  <rect x="430" y="30" width="90"  height="26" rx="3" class="phase-run" />
-  <text x="475" y="47" text-anchor="middle" class="phase-text">run tool</text>
+  <rect x="446" y="30" width="90"  height="26" rx="3" class="phase-run" />
+  <text x="491" y="47" text-anchor="middle" class="phase-text">run tool</text>
 
   <text x="50" y="104" text-anchor="end" class="label">cached call</text>
 
   <rect x="60" y="90" width="90" height="26" rx="3" class="phase-run" />
   <text x="105" y="107" text-anchor="middle" class="phase-text">run tool</text>
 
-  <line x1="60" y1="140" x2="540" y2="140" class="axis" stroke-width="1" />
+  <line x1="60" y1="140" x2="544" y2="140" class="axis" stroke-width="1" />
   <line x1="60" y1="136" x2="60"  y2="144" class="tick" stroke-width="1" />
   <text x="60" y="158" text-anchor="middle" class="muted">t = 0</text>
 
-  <polygon points="540,137 548,140 540,143" fill="#94A3B8" fill-opacity="0.7" />
-  <text x="534" y="158" text-anchor="end" class="muted">time →</text>
+  <polygon points="544,137 552,140 544,143" fill="#94A3B8" fill-opacity="0.7" />
+  <text x="538" y="158" text-anchor="end" class="muted">time →</text>
 
   <text x="300" y="186" text-anchor="middle" class="caption">setup cost is paid once per tool, per machine; every call after is just the runtime</text>
 </svg>

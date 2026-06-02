@@ -1,15 +1,18 @@
 ---
 name: fix-env
 description: >
-  Debugs and fixes tool environment setup failures in proto-tools.
-  Covers infrastructure failures (compute detection, env variable isolation,
-  sitecustomize.py injection, micromamba install), PyTorch/CUDA issues (ABI
-  mismatch, broken symlinks, triton coordination), JAX setup/downgrades,
-  compilation failures (GCC/nvcc mismatch, source builds), network/binary
-  download failures, platform issues (aarch64, Python version), and device
-  management setup failures (standalone helpers, CUDA visibility). Use when
-  setup.sh fails, tool environments break after system updates, or standalone
-  venvs need cross-platform fixes.
+  Fixes tool environment setup failures in proto-tools, either just for the
+  current machine (eject the tool's standalone dir, patch it, and point
+  PROTO_<TOOLKIT>_STANDALONE_DIR at it; works for any install, including a
+  non-editable pip install) or as a cross-platform fix contributed back to the
+  repo. Same diagnosis for both: infrastructure failures (compute detection, env
+  variable isolation, sitecustomize.py injection, micromamba install),
+  PyTorch/CUDA issues (ABI mismatch, broken symlinks, triton coordination), JAX
+  setup/downgrades, compilation failures (GCC/nvcc mismatch, source builds),
+  network/binary download failures, platform issues (aarch64, Python version),
+  and device management setup failures (standalone helpers, CUDA visibility).
+  Use when a tool's setup.sh fails, an env breaks after a system update, or a
+  standalone venv needs a fix — for your own use or to upstream.
 allowed-tools:
   - Read
   - Write
@@ -20,30 +23,44 @@ allowed-tools:
 
 # fix-env
 
-**When to use:** Debugging and fixing tool environment setup failures on new systems or after system updates.
+**When to use:** a tool's environment fails to build or work, and you need to fix it — either just on the current machine, or as a fix the whole project should ship.
 
-## Core Principle
+## Two ways to fix an env
 
-**You will only be testing on the current machine.** Assume the existing setup works on other clusters. Your goal is to make surgical changes to `standalone/setup.sh` (and other standalone/ files, but **NEVER** `run.py` or `inference.py`) that fix the current machine while maintaining compatibility with other platforms.
+The diagnosis is identical; what differs is **where you apply the fix** and **how compatible it has to be**. Decide the mode first; the failure patterns and workflow below apply to both.
 
-## Strategy
+### Local fix — "I just need this tool working on my machine"
 
-1. **Identify the failure** on the current machine
-2. **Make targeted fixes** to environment setup files only
-3. **Use defensive patterns** that don't break existing platforms
-4. **Test the fix** on the current machine only
+For when you (or a user you're helping) hit a broken env and want it working now, **without modifying the installed package**. Works for any install, including a non-editable `pip install` where the packaged files sit in read-only site-packages.
 
-**Files you can modify:**
+1. **Eject the tool's setup** into an editable copy and set the variable it prints:
+   ```bash
+   proto-tools eject-standalone <toolkit>          # -> ./proto_standalone/<toolkit>/
+   export PROTO_<TOOLKIT>_STANDALONE_DIR=$PWD/proto_standalone/<toolkit>
+   ```
+2. **See the failure live** by re-running the tool with `PROTO_ENV_VERBOSE=1` (streams `setup.sh` output to your terminal); diagnose with the patterns below.
+3. **Patch the ejected files** (`setup.sh`, etc.) under `./proto_standalone/<toolkit>/`.
+4. **Rebuild by re-running the tool** — with the variable set, the next call builds from your copy under an isolated env name. Iterate until it runs.
+
+Never edit the installed package. Tell the user to export the variable per project (e.g. a `direnv` `.envrc`) so it applies only where they want. Reference: "Overriding a tool's standalone env" in `notes/tool-environments.md`.
+
+### Contributed fix — "the packaged setup should change for everyone"
+
+For when you have the repo (editable install) and the fix belongs upstream so every platform benefits.
+
+**You will only be testing on the current machine.** Assume the existing setup works on other clusters. Make surgical changes to `standalone/setup.sh` (and other standalone/ files) that fix the current machine while maintaining compatibility with other platforms, using defensive patterns (`|| true`, conditional checks, graceful fallbacks), then commit them.
+
+## Files you can modify
+
+Both modes edit the same files — the ejected copy (local) or the repo copy (contributed):
+
 - `standalone/setup.sh`
 - `standalone/requirements.txt`
 - `standalone/env_vars.txt`
 - `standalone/binary_config.py`
 - `standalone/python_version.txt`
 
-**Files you MUST NOT modify:**
-- `standalone/run.py`
-- `standalone/inference.py`
-- `{toolkit}.py` (core implementation)
+**Never** modify `standalone/run.py`, `standalone/inference.py`, or `{toolkit}.py` (core implementation).
 
 ## Common Failure Patterns
 
@@ -104,10 +121,13 @@ If env vars point to the parent conda env instead of the tool env, see Pattern 2
 ### 4. Match Error to Pattern
 Match the error in STATUS.txt to patterns in the table above. Read the detailed pattern in PATTERNS.md for full debugging steps and bash examples.
 
-### 5. Apply Fix to setup.sh
-Use defensive patterns (`|| true`, conditional checks, graceful fallbacks) that fix the current machine without breaking others.
+### 5. Apply the Fix to setup.sh
+Edit the **ejected copy** (local fix) or the repo's `standalone/setup.sh` (contributed fix). For a contributed fix, use defensive patterns (`|| true`, conditional checks, graceful fallbacks) that fix the current machine without breaking others; a local fix only has to work here.
 
-### 6. Validate Fix on Current Machine
+### 6. Validate the Fix
+**Local fix:** re-run the tool with `PROTO_<TOOLKIT>_STANDALONE_DIR` set — the env rebuilds from your patched copy; confirm the tool runs.
+
+**Contributed fix:** rebuild the packaged env and run the tests:
 ```bash
 rm -rf tool_envs/{tool}_env
 pytest -k "tool_key" --all -sv
