@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from proto_tools.entities.structures import ChainSelection, SingleChainSelection
 from proto_tools.entities.structures.structure import BFactorType, Structure
 from proto_tools.tools import IPSAEScoringConfig, IPSAEScoringInput, run_ipsae_scoring
 from proto_tools.tools.structure_scoring.ipsae.ipsae_scoring import example_input
@@ -49,6 +50,31 @@ def test_missing_plddt_rejected():
     structure = example_input().structure.model_copy(update={"b_factor_type": BFactorType.UNSPECIFIED})
     with pytest.raises(ValidationError, match="per_residue_plddt is None"):
         IPSAEScoringInput(structure=structure, binder_chain="A", target_chains=["B"])
+
+
+def test_chain_fields_are_selection_types():
+    """binder_chain/target_chains are the typed selection models.
+
+    They accept both shorthand (str / list) and explicit objects, so a saved
+    program round-trips either way.
+    """
+    structure = _bundled_structure()
+    # Bare-string / list shorthand coerces (what the client and most callers send).
+    coerced = IPSAEScoringInput(structure=structure, binder_chain="A", target_chains=["B"])
+    assert isinstance(coerced.binder_chain, SingleChainSelection)
+    assert isinstance(coerced.target_chains, ChainSelection)
+    assert coerced.binder_chain.chain == "A"
+    assert coerced.target_chains.chains == ["B"]
+    # Explicit selection objects are equivalent.
+    explicit = IPSAEScoringInput(
+        structure=structure,
+        binder_chain=SingleChainSelection(chain="A"),
+        target_chains=ChainSelection(chains=["B"]),
+    )
+    assert explicit.binder_chain == coerced.binder_chain
+    # A list for the single-chain binder is a usage error → points at ChainSelection.
+    with pytest.raises(ValidationError, match="single chain"):
+        IPSAEScoringInput(structure=structure, binder_chain=["A", "B"], target_chains=["B"])
 
 
 def test_extract_binder_target_scores_multi_target_picks_max_ipsae():

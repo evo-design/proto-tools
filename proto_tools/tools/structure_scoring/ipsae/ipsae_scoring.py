@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from proto_tools.entities.structures import Structure
+from proto_tools.entities.structures import ChainSelection, SingleChainSelection, Structure
 from proto_tools.entities.structures.structure import BFactorType
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -148,42 +148,32 @@ class IPSAEScoringInput(BaseToolInput):
         structure (Structure): Cofolded complex with per-residue pLDDT in the
             B-factor column and the PAE matrix attached at
             ``structure.metrics['pae']`` as a square ``list[list[float]]``.
-        binder_chain (str): Single-character chain ID of the binder.
-        target_chains (list[str]): Target chain ID(s).
+        binder_chain (SingleChainSelection): Single-character chain ID of the binder.
+        target_chains (ChainSelection): Target chain ID(s).
     """
 
     structure: Structure = InputField(
         title="Input Structure",
         description="Cofolded complex with per-residue pLDDT in B-factors and a PAE matrix attached to its metrics",
     )
-    binder_chain: str = InputField(
+    binder_chain: SingleChainSelection = InputField(
         title="Binder Chain",
         description="Single-character chain ID of the binder",
     )
-    target_chains: list[str] = InputField(
+    target_chains: ChainSelection = InputField(
         title="Target Chains",
         description="Target chain ID(s)",
     )
 
-    @field_validator("target_chains", mode="before")
-    @classmethod
-    def _normalize_target_chains(cls, value: Any) -> list[str]:
-        """Accept comma-separated strings or explicit lists."""
-        raw_chain_ids = [value] if isinstance(value, str) else value
-        if not isinstance(raw_chain_ids, (list, tuple)) or not all(isinstance(c, str) for c in raw_chain_ids):
-            raise ValueError("target_chains must be a string or list of strings")
-        target_chains = [chain.strip() for raw in raw_chain_ids for chain in raw.split(",") if chain.strip()]
-        if not target_chains:
-            raise ValueError("target_chains must contain at least one chain ID")
-        return target_chains
-
     @model_validator(mode="after")
     def _validate(self) -> "IPSAEScoringInput":
         """Validate chain IDs and required confidence signals."""
-        if self.binder_chain in self.target_chains:
-            raise ValueError(f"binder_chain {self.binder_chain!r} must not appear in target_chains")
+        binder = self.binder_chain.chain
+        targets = list(self.target_chains.chains)
+        if binder in targets:
+            raise ValueError(f"binder_chain {binder!r} must not appear in target_chains")
         available = set(self.structure.get_chain_ids())
-        missing = {self.binder_chain, *self.target_chains} - available
+        missing = {binder, *targets} - available
         if missing:
             raise ValueError(f"Chain ID(s) {sorted(missing)} not found in structure. Available: {sorted(available)}")
         pae = self.structure.metrics.get("pae")
@@ -268,7 +258,11 @@ def example_input() -> Any:
     n = n_a + n_b
     pae = [[0.0 if i == j else (3.0 if (i < n_a) == (j < n_a) else 6.0) for j in range(n)] for i in range(n)]
     structure = Structure.from_file(fixture, b_factor_type=BFactorType.PLDDT, metrics={"pae": pae})
-    return IPSAEScoringInput(structure=structure, binder_chain="A", target_chains=["B"])
+    return IPSAEScoringInput(
+        structure=structure,
+        binder_chain=SingleChainSelection(chain="A"),
+        target_chains=ChainSelection(chains=["B"]),
+    )
 
 
 @tool(
@@ -303,8 +297,8 @@ def run_ipsae_scoring(
         IPSAEScoringOutput: ipSAE, pDockQ2, LIS, pDockQ, and ipTM metrics.
     """
     structure = inputs.structure
-    binder_chain = inputs.binder_chain
-    target_chains = inputs.target_chains
+    binder_chain = inputs.binder_chain.chain
+    target_chains = list(inputs.target_chains.chains)
 
     pae = structure.metrics.get("pae")
     if pae is None:
