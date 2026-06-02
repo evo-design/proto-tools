@@ -7,7 +7,7 @@ name = "proto_tools"
 version = "0.1.0"
 description = "Bioinformatics tools for proto-language"
 readme = "README.md"
-license = {text = "Apache-2.0"}
+license = {text = "MIT"}
 authors = [
     {name = "Proto Bio Team"}
 ]
