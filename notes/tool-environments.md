@@ -111,6 +111,26 @@ Regardless of either flag, the combined output is always written to `<env_path>/
 
 Both variables default to off — setup output stays quiet unless a caller opts in. See `tests/tool_infra_tests/test_tool_instance.py::test_run_setup_script_*` for the behavior contract.
 
+## Overriding a tool's standalone env (`PROTO_<TOOLKIT>_STANDALONE_DIR`)
+
+When a tool's packaged `standalone/` setup does not work on your machine (a cluster needs a different CUDA wheel, a pinned version has to change, an install step needs patching) you can override the whole env definition without editing the installed package. This works identically whether proto-tools was installed editable (`pip install -e`) or as a regular wheel, since the override points at a directory you control rather than at the package. Two pieces:
+
+- `proto-tools eject-standalone <toolkit> [--dir DIR]` copies the tool's packaged env-def directory (resolving shared envs) into `DIR/<toolkit>/` (default `./proto_standalone/<toolkit>/`), giving you an editable copy of every file the env is built from (`setup.sh`, `python_version.txt`, `requirements.txt`, `env_vars.txt`, ...). It always copies the packaged baseline, ignoring any active override.
+- `PROTO_<TOOLKIT>_STANDALONE_DIR=<path>` makes `ToolInstance._resolve_env_def` use `<path>` as the env-def dir instead of the packaged one. `<TOOLKIT>` is the toolkit's **folder name** uppercased (e.g. `esm2` → `PROTO_ESM2_STANDALONE_DIR`), not a tool registration key like `esm2-embed`; `eject-standalone` accepts either form and prints the exact variable to export. The override builds under an isolated env name (`<toolkit>__override_<hash>_env`), so it never clobbers the packaged env and two projects pointing at different override dirs get separate envs on disk. Editing the override's files triggers the usual setup-hash rebuild.
+
+Typical flow:
+
+```bash
+proto-tools eject-standalone esm2                   # -> ./proto_standalone/esm2/
+# edit ./proto_standalone/esm2/setup.sh
+export PROTO_ESM2_STANDALONE_DIR=$PWD/proto_standalone/esm2
+# the next call to an esm2 tool builds from your version of the standalone folder that lives at the location you specified above
+```
+
+proto-tools reads the variable from the process environment (`os.environ`); it does not parse `.env` or `.envrc` files itself. To scope the override to one project instead of setting it globally in `.bashrc`, export it in that project's shell, or use `direnv` (its `.envrc` is loaded into your shell on `cd`, so the variable reaches proto-tools through the environment). A bare `.env` file only takes effect if you load it yourself (`direnv`'s `dotenv` directive, `python-dotenv`, `export $(...)`, etc.). If `PROTO_<TOOLKIT>_STANDALONE_DIR` is set but the path is not a directory or is missing `setup.sh`/`python_version.txt`, env resolution fails immediately with a message that names the variable, the path, and how to produce a valid directory.
+
+This works whether proto-tools is run from a clone or pip-installed, editable or non-editable.
+
 ## Conda Environment Registration
 
 Proto-tools writes `register_envs: false` to `PROTO_HOME/.micromamba/condarc` so micromamba-managed tool environments do not appear in the user's global `conda env list`. During micromamba setup, `ToolInstance` also removes existing registry entries under the current `PROTO_HOME/proto_tool_envs/` and `PROTO_HOME/.foundation_env/` roots from `~/.conda/environments.txt`; unrelated conda environments are left untouched.

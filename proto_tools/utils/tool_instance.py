@@ -86,6 +86,10 @@ DEVICE_MOVE_TIMEOUT = 200
 
 # conda corrupts relocated binaries past its 255-byte prefix; cap the envs root.
 MAX_TOOL_ENVS_ROOT_LEN = 200
+# The full env prefix (root + the per-env leaf) must also stay within the same
+# 255-byte limit. The root cap above leaves headroom for typical leaves; this
+# guards the actual prefix length, which longer env names (e.g. overrides) grow.
+MAX_ENV_PREFIX_LEN = 255
 
 # ============================================================================
 # Singleton registry
@@ -683,6 +687,12 @@ class ToolInstance:
         env_def_dir, env_name = self._resolve_env_def(toolkit)
         self.env_name = env_name
         self.env_path = env_root / f"{env_name}_env"
+        if len(str(self.env_path)) > MAX_ENV_PREFIX_LEN:
+            raise RuntimeError(
+                f"Tool environment path is too long for conda's binary-relocation limit: "
+                f"{self.env_path} exceeds {MAX_ENV_PREFIX_LEN} chars and would corrupt env "
+                f"binaries. Set PROTO_HOME to a shorter path."
+            )
         self.setup_script = env_def_dir / "setup.sh"
         self.script_path = self._find_script(toolkit)
         self._tool_env_vars = _parse_env_vars_file(env_def_dir / "env_vars.txt")
@@ -1925,8 +1935,88 @@ class ToolInstance:
         return Path(__file__).parent.parent / "shared_envs"
 
     @classmethod
+    def _standalone_override_dir(cls, toolkit: str) -> Path | None:
+        """Return a user override standalone dir from ``PROTO_<TOOLKIT>_STANDALONE_DIR``.
+
+        The variable lets a user replace a tool's packaged ``standalone/`` env
+        definition with their own editable copy (see ``proto-tools
+        eject-standalone``), e.g. to patch ``setup.sh`` for a specific cluster or
+        project. Returns ``None`` when the variable is unset.
+
+        Raises:
+            ValueError: If the variable is set but the path is not an existing
+                directory, or is missing a required env-def file (``setup.sh``,
+                ``python_version.txt``). The message names the variable, the
+                resolved path, and how to produce a valid directory.
+        """
+        # toolkit is the underscored folder name here, but sanitize hyphens
+        # defensively so the result is always a valid shell variable name.
+        var = f"PROTO_{toolkit.upper().replace('-', '_')}_STANDALONE_DIR"
+        raw = os.environ.get(var)
+        if not raw:
+            return None
+        path = Path(raw).expanduser()
+        if not path.is_dir():
+            raise ValueError(
+                f"{var}={raw!r} is set but no directory exists there. Create one with "
+                f"`proto-tools eject-standalone {toolkit}` and point {var} at it, or unset {var}."
+            )
+        missing = [f for f in ("setup.sh", "python_version.txt") if not (path / f).is_file()]
+        if missing:
+            raise ValueError(
+                f"{var} points to {path}, but a standalone override directory must contain "
+                f"setup.sh and python_version.txt (missing: {missing}). "
+                f"`proto-tools eject-standalone {toolkit}` produces a valid starting point."
+            )
+        return path.resolve()
+
+    @classmethod
     def _resolve_env_def(cls, toolkit: str) -> tuple[Path, str]:
         """Resolve a tool's environment-definition directory and env name.
+
+        Honors a ``PROTO_<TOOLKIT>_STANDALONE_DIR`` override when set (validated by
+        ``_standalone_override_dir``); the override builds under an isolated env
+        name so it never clobbers the packaged env and per-project overrides do
+        not collide on disk. Otherwise delegates to ``_packaged_env_def``.
+
+        Returns:
+            tuple[Path, str]: ``(env_def_dir, env_name)``. ``env_path`` is
+                ``env_root / f"{env_name}_env"``.
+        """
+        override = cls._standalone_override_dir(toolkit)
+        if override is not None:
+            digest = hashlib.sha256(str(override).encode()).hexdigest()[:8]
+            return override, f"{toolkit}__override_{digest}"
+        return cls._packaged_env_def(toolkit)
+
+    @classmethod
+    def eject_standalone(cls, toolkit: str, dest_root: Path) -> Path:
+        """Copy a tool's packaged standalone env-def dir to ``dest_root/<toolkit>/``.
+
+        Gives the user an editable, working-directory copy of every file the
+        tool's environment is built from (``setup.sh``, ``python_version.txt``,
+        ``requirements.txt``, ``env_vars.txt``, ...), as the starting point for a
+        ``PROTO_<TOOLKIT>_STANDALONE_DIR`` override. Always copies the *packaged*
+        definition (resolving shared envs), ignoring any active override.
+
+        Returns:
+            Path: The destination directory (``dest_root/<toolkit>``).
+
+        Raises:
+            ValueError: If the toolkit is unknown.
+            FileExistsError: If the destination already exists.
+        """
+        toolkit = cls._validate_toolkit(cls._normalize_toolkit(toolkit))
+        src, _ = cls._packaged_env_def(toolkit)
+        dest = (Path(dest_root) / toolkit).resolve()
+        if dest.exists():
+            raise FileExistsError(f"{dest} already exists; remove it or pass a different --dir.")
+        shutil.copytree(src, dest)
+        return dest
+
+    @classmethod
+    def _packaged_env_def(cls, toolkit: str) -> tuple[Path, str]:
+        """Resolve the packaged environment-definition directory and env name.
 
         If the tool's standalone dir contains ``shared_env.txt``, the env def
         comes from ``shared_envs/<name>/`` and the env name is ``<name>``;

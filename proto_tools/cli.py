@@ -17,11 +17,13 @@ import argparse
 import json
 import logging
 import sys
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
 
 from proto_tools.tools.tool_registry import ToolRegistry, ToolSpec
+from proto_tools.utils.tool_instance import ToolInstance
 
 logger = logging.getLogger(__name__)
 
@@ -315,6 +317,18 @@ def _cmd_url(args: argparse.Namespace) -> int:
 # =============================================================================
 
 
+def _cmd_eject_standalone(args: argparse.Namespace) -> int:
+    """Copy a tool's standalone env-def dir into the working tree for overriding."""
+    dest = ToolInstance.eject_standalone(args.tool, Path(args.dir))
+    # dest.name is the normalized toolkit (folder name), which may differ from
+    # args.tool (e.g. a tool key); the override var is keyed on the folder name.
+    var = f"PROTO_{dest.name.upper().replace('-', '_')}_STANDALONE_DIR"
+    print(f"Copied {dest.name} standalone env definition to {dest}")
+    print("Edit setup.sh (and the other files) there, then point proto-tools at it:")
+    print(f"  export {var}={dest}")
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="proto-tools",
@@ -357,6 +371,18 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_docs.add_argument("--json", action="store_true")
     p_docs.set_defaults(func=_cmd_docs)
+
+    p_eject = sub.add_parser(
+        "eject-standalone",
+        help="Copy a tool's standalone env-def dir into your working tree to edit and override it.",
+    )
+    p_eject.add_argument("tool", help="Tool identifier (toolkit name, registry key, run-function name, ...).")
+    p_eject.add_argument(
+        "--dir",
+        default="./proto_standalone",
+        help="Destination root; the copy lands in <dir>/<toolkit>/ (default: ./proto_standalone).",
+    )
+    p_eject.set_defaults(func=_cmd_eject_standalone)
 
     p_readme = sub.add_parser("readme", help="Full README text for the tool's toolkit.")
     p_readme.add_argument("tool")
@@ -440,6 +466,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     except KeyError as exc:
         print(f"error: tool not registered: {exc}", file=sys.stderr)
+        return 2
+    except FileExistsError as exc:
+        print(f"error: {exc}", file=sys.stderr)
         return 2
 
 

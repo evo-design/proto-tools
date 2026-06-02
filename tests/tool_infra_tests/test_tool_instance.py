@@ -2170,3 +2170,157 @@ def test_get_tool_envs_root_raises_when_proto_home_too_deep(monkeypatch):
     with pytest.raises(RuntimeError, match="Set PROTO_HOME to a shorter path"):
         ToolInstance._get_tool_envs_root()
     get_proto_home.cache_clear()
+
+
+# ── Standalone env override (PROTO_<TOOLKIT>_STANDALONE_DIR + eject-standalone) ──
+
+_OVERRIDE_TOOLKIT = "mock_cpu_tool"
+_OVERRIDE_ENV_VAR = "PROTO_MOCK_CPU_TOOL_STANDALONE_DIR"
+
+
+def _write_valid_standalone(dir_: Path) -> Path:
+    """Create a minimal valid standalone override dir and return it."""
+    dir_.mkdir(parents=True, exist_ok=True)
+    (dir_ / "setup.sh").write_text("#!/bin/bash\necho override\n")
+    (dir_ / "python_version.txt").write_text("default: 3.12\n")
+    return dir_
+
+
+def test_standalone_override_resolves_to_user_dir(tmp_path, monkeypatch):
+    override = _write_valid_standalone(tmp_path / "custom")
+    monkeypatch.setenv(_OVERRIDE_ENV_VAR, str(override))
+    env_def_dir, env_name = ToolInstance._resolve_env_def(_OVERRIDE_TOOLKIT)
+    assert env_def_dir == override.resolve()
+    # Isolated env name so the override never clobbers the packaged env.
+    assert env_name.startswith(f"{_OVERRIDE_TOOLKIT}__override_")
+    assert env_name != _OVERRIDE_TOOLKIT
+
+
+def test_standalone_override_env_name_is_stable_and_path_specific(tmp_path, monkeypatch):
+    a = _write_valid_standalone(tmp_path / "a")
+    b = _write_valid_standalone(tmp_path / "b")
+
+    monkeypatch.setenv(_OVERRIDE_ENV_VAR, str(a))
+    _, name_a1 = ToolInstance._resolve_env_def(_OVERRIDE_TOOLKIT)
+    _, name_a2 = ToolInstance._resolve_env_def(_OVERRIDE_TOOLKIT)
+    assert name_a1 == name_a2  # same path -> stable env (reused, not rebuilt)
+
+    monkeypatch.setenv(_OVERRIDE_ENV_VAR, str(b))
+    _, name_b = ToolInstance._resolve_env_def(_OVERRIDE_TOOLKIT)
+    assert name_b != name_a1  # different path -> different env (no collision)
+
+
+def test_standalone_override_missing_dir_fails_descriptively(monkeypatch):
+    monkeypatch.setenv(_OVERRIDE_ENV_VAR, "/no/such/standalone/dir")
+    with pytest.raises(ValueError, match="no directory exists there"):
+        ToolInstance._resolve_env_def(_OVERRIDE_TOOLKIT)
+
+
+def test_standalone_override_missing_files_fails_descriptively(tmp_path, monkeypatch):
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    monkeypatch.setenv(_OVERRIDE_ENV_VAR, str(empty))
+    with pytest.raises(ValueError, match="must contain"):
+        ToolInstance._resolve_env_def(_OVERRIDE_TOOLKIT)
+
+
+def test_no_override_uses_packaged_standalone(monkeypatch):
+    monkeypatch.delenv(_OVERRIDE_ENV_VAR, raising=False)
+    env_def_dir, env_name = ToolInstance._resolve_env_def(_OVERRIDE_TOOLKIT)
+    assert env_name == _OVERRIDE_TOOLKIT
+    assert (env_def_dir / "setup.sh").is_file()
+
+
+def test_eject_standalone_copies_packaged_files(tmp_path):
+    dest = ToolInstance.eject_standalone(_OVERRIDE_TOOLKIT, tmp_path)
+    assert dest == (tmp_path / _OVERRIDE_TOOLKIT).resolve()
+    assert (dest / "setup.sh").is_file()
+    assert (dest / "python_version.txt").is_file()
+
+
+def test_eject_then_override_round_trip(tmp_path, monkeypatch):
+    dest = ToolInstance.eject_standalone(_OVERRIDE_TOOLKIT, tmp_path)
+    monkeypatch.setenv(_OVERRIDE_ENV_VAR, str(dest))
+    env_def_dir, _ = ToolInstance._resolve_env_def(_OVERRIDE_TOOLKIT)
+    assert env_def_dir == dest
+
+
+def test_eject_standalone_refuses_existing_dest(tmp_path):
+    ToolInstance.eject_standalone(_OVERRIDE_TOOLKIT, tmp_path)
+    with pytest.raises(FileExistsError):
+        ToolInstance.eject_standalone(_OVERRIDE_TOOLKIT, tmp_path)
+
+
+def test_env_path_too_long_fails_fast(tmp_path, monkeypatch):
+    """The full env prefix is guarded, not just the root.
+
+    A long env name (e.g. an override) must fail fast against conda's relocation
+    limit rather than silently corrupt binaries.
+    """
+    from proto_tools.utils.proto_home import get_proto_home
+
+    monkeypatch.setenv("PROTO_HOME", str(tmp_path / ".proto"))
+    get_proto_home.cache_clear()
+    monkeypatch.setattr("proto_tools.utils.tool_instance.MAX_ENV_PREFIX_LEN", 10)
+    with pytest.raises(RuntimeError, match="binary-relocation limit"):
+        ToolInstance(_OVERRIDE_TOOLKIT)
+    get_proto_home.cache_clear()
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("mode", ["editable", "non-editable", "cloned"])
+def test_eject_standalone_works_across_install_modes(tmp_path, mode):
+    """eject-standalone must work however proto-tools is obtained.
+
+    Covers ``pip install -e`` (editable), ``pip install`` (non-editable), and
+    running straight from a git clone on PYTHONPATH with no install at all. Each
+    mode is set up in isolation and the CLI is run against it. For a non-editable
+    install the standalone data files reach the package via package-data; for the
+    checkout modes they are the source files on disk.
+    """
+    import os
+    import shutil
+
+    repo_root = Path(__file__).resolve().parents[2]
+    workdir = tmp_path / "cwd"  # run outside the repo so cwd never supplies the package
+    workdir.mkdir()
+    eject_into = tmp_path / "ejected"
+
+    # Hermetic subprocess env: drop PYTHONPATH (so the install under test isn't
+    # shadowed) and any PROTO_* config leaking from the test runner.
+    base_env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH" and not k.startswith("PROTO_")}
+
+    if mode == "cloned":
+        clone = tmp_path / "clone"
+        shutil.copytree(repo_root / "proto_tools", clone / "proto_tools")
+        python = sys.executable
+        env = {**base_env, "PYTHONPATH": str(clone)}
+    else:
+        venv_dir = tmp_path / "venv"
+        subprocess.run(
+            [sys.executable, "-m", "venv", "--system-site-packages", str(venv_dir)],
+            check=True,
+            capture_output=True,
+        )
+        python = str(venv_dir / "bin" / "python")
+        target = ["-e", str(repo_root)] if mode == "editable" else [str(repo_root)]
+        install = subprocess.run(
+            [python, "-m", "pip", "install", "--no-deps", "-q", *target],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert install.returncode == 0, f"install failed:\n{install.stderr[-2000:]}"
+        env = base_env
+
+    result = subprocess.run(
+        [python, "-m", "proto_tools", "eject-standalone", "mock_cpu_tool", "--dir", str(eject_into)],
+        cwd=workdir,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, f"{mode}: eject failed:\n{result.stderr[-2000:]}"
+    assert (eject_into / "mock_cpu_tool" / "setup.sh").is_file()
+    assert (eject_into / "mock_cpu_tool" / "python_version.txt").is_file()
