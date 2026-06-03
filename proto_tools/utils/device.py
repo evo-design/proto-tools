@@ -167,6 +167,16 @@ def _is_local_gpu_available() -> bool:
     return shutil.which("nvidia-smi") is not None and number_of_visible_gpus() > 0
 
 
+def nvidia_smi_present() -> bool:
+    """Return True if the ``nvidia-smi`` binary exists on PATH.
+
+    Distinguishes a real CPU host (binary absent → 0 GPUs is the correct answer)
+    from a GPU host where nvidia-smi only transiently reported no GPUs (a
+    cold-start race), so callers retry detection only on the latter.
+    """
+    return shutil.which("nvidia-smi") is not None
+
+
 def get_gpu_memory_used_physical(physical_device_id: int) -> int:
     """Get GPU memory used in bytes via nvidia-smi using physical device ID.
 

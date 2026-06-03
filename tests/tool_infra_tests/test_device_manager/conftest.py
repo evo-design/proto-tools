@@ -33,11 +33,21 @@ def mock_2_gpus():
 
 @pytest.fixture
 def mock_0_gpus():
-    """Mock number_of_visible_gpus to return 0 for test duration."""
-    with patch(
-        "proto_tools.utils.device_manager.number_of_visible_gpus",
-        return_value=0,
-    ) as mock:
+    """Mock a real CPU host: 0 visible GPUs and no nvidia-smi binary.
+
+    Mocking ``nvidia_smi_present`` → False keeps the cold-start detection retry
+    off, so "no GPUs" tests raise immediately (fast, host-independent).
+    """
+    with (
+        patch(
+            "proto_tools.utils.device_manager.number_of_visible_gpus",
+            return_value=0,
+        ) as mock,
+        patch(
+            "proto_tools.utils.device_manager.nvidia_smi_present",
+            return_value=False,
+        ),
+    ):
         yield mock
 
 
