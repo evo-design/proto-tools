@@ -365,6 +365,17 @@ class RFdiffusion3DesignSpec(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def validate_contig_xor_length(self) -> Any:
+        """Reject ``contig`` and ``length`` together; a contig already encodes its lengths."""
+        if self.contig is not None and self.length is not None:
+            raise ValueError(
+                "Pass either 'contig' or 'length', not both: a contig already encodes "
+                "its designed-segment lengths, while 'length' is for unconditional "
+                "design with no contig."
+            )
+        return self
+
     def to_dict(self) -> dict[str, Any]:
         """Convert design spec to RFdiffusion3 JSON format.
 
