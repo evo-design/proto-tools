@@ -76,11 +76,22 @@ from enum import Enum
 from typing import Any
 from uuid import uuid4
 
-from proto_tools.utils.device import is_exclusive_process_mode, number_of_visible_gpus
+from proto_tools.utils.device import (
+    is_exclusive_process_mode,
+    number_of_visible_gpus,
+    nvidia_smi_present,
+)
 
 logger = logging.getLogger(__name__)
 
 SUPPORTED_DEVICE_PREFIXES = ("cuda", "cpu")
+
+# Cold-start GPU-readiness race: a freshly-scheduled Modal GPU container can have
+# nvidia-smi report 0 GPUs for a beat before the driver is ready. When a GPU is
+# requested but none are visible *and* nvidia-smi exists, re-poll a few times
+# before declaring "no GPUs". Module-level so tests can shrink them.
+_GPU_DETECT_RETRIES = 5
+_GPU_DETECT_INTERVAL_S = 0.5
 
 # ============================================================================
 # Configuration
@@ -384,6 +395,40 @@ class DeviceManager:
     def _is_gpu(device_id: str) -> bool:
         """Return True if device_id refers to a CUDA GPU."""
         return device_id.startswith("cuda")
+
+    def _resolve_gpu_devices(self, toolkit: str) -> list[str]:
+        """Return visible GPU device IDs, retrying a transient nvidia-smi miss.
+
+        On a Modal GPU container cold start, nvidia-smi can briefly report 0 GPUs
+        before the driver initializes. When a GPU was requested but none are
+        visible *and* nvidia-smi exists (a GPU host, not a real CPU host),
+        re-poll ``_get_available_devices`` a few times before giving up. The
+        device pool is not cached, so each poll re-queries nvidia-smi. Returns a
+        possibly-empty list; callers raise when it stays empty.
+
+        Args:
+            toolkit (str): Tool name, for the recovery log line.
+
+        Returns:
+            list[str]: Visible GPU device IDs (e.g. ``["cuda:0"]``), or ``[]``.
+        """
+        gpu_devices = [d for d in self._get_available_devices() if self._is_gpu(d)]
+        # No retry on a real CPU host (nvidia-smi absent → 0 is correct).
+        if gpu_devices or not nvidia_smi_present():
+            return gpu_devices
+        for attempt in range(1, _GPU_DETECT_RETRIES + 1):
+            time.sleep(_GPU_DETECT_INTERVAL_S)
+            gpu_devices = [d for d in self._get_available_devices() if self._is_gpu(d)]
+            if gpu_devices:
+                logger.warning(
+                    "%s: GPU detection recovered on retry %d (~%.1fs); nvidia-smi "
+                    "transiently reported 0 GPUs (cold-start race)",
+                    toolkit,
+                    attempt,
+                    attempt * _GPU_DETECT_INTERVAL_S,
+                )
+                return gpu_devices
+        return gpu_devices
 
     @staticmethod
     def _validate_device(device: str) -> None:
@@ -871,9 +916,9 @@ class DeviceManager:
                     eviction_callback,
                 )
 
-            # Check if any GPUs are available in the system
-            all_devices = self._get_available_devices()
-            gpu_devices = [d for d in all_devices if self._is_gpu(d)]
+            # Check the system for visible GPUs, retrying a transient cold-start
+            # nvidia-smi miss (Modal GPU container readiness race) before giving up.
+            gpu_devices = self._resolve_gpu_devices(toolkit)
             if not gpu_devices:
                 cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "(unset)")
                 raise RuntimeError(
@@ -986,9 +1031,8 @@ class DeviceManager:
 
         spec = parse_device_string(device)
 
-        # Fail fast if no GPUs exist at all
-        all_devices = self._get_available_devices()
-        gpu_devices = [d for d in all_devices if self._is_gpu(d)]
+        # Fail fast if no GPUs exist at all (retry a transient cold-start miss).
+        gpu_devices = self._resolve_gpu_devices(toolkit)
         if not gpu_devices:
             cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "(unset)")
             raise RuntimeError(
