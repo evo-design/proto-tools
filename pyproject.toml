@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "proto_tools"
 version = "0.0.0"
-description = "Bioinformatics tools for proto-language"
+description = "A unified library of computational and AI tools for biology"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [

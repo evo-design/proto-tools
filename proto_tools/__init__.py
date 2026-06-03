@@ -1,4 +1,4 @@
-"""proto_tools - Bioinformatics tools for proto-language.
+"""proto_tools - A unified library of computational and AI tools for biology.
 
 This package provides a collection of bioinformatics tools and entity definitions
 for working with biological sequences, structures, and computational biology tasks.
