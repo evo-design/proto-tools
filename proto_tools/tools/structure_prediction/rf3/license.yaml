@@ -1,0 +1,17 @@
+code:
+  spdx: BSD-3-Clause
+  url: https://github.com/RosettaCommons/foundry/blob/production/LICENSE.md
+weights:
+  spdx: BSD-3-Clause
+  url: https://github.com/RosettaCommons/foundry/blob/production/LICENSE.md
+commercial_use: 'yes'
+redistribution: true
+attribution_required: true
+notes: |
+  Code (rc-foundry / Foundry monorepo) and the companion AtomWorks framework
+  (RosettaCommons/atomworks) are both BSD-3-Clause (IPD/UW 2025). The RF3
+  preprint (Corley et al., 2025) explicitly releases code and model weights
+  under the same permissive BSD license, and no separate weights-terms file
+  exists in the upstream repo or on the IPD file server. Commercial use is
+  permitted.
+last_updated: '2026-06-02'

@@ -47,6 +47,13 @@ from proto_tools.tools.structure_prediction.esmfold2 import (
     run_esmfold2,
 )
 from proto_tools.tools.structure_prediction.protenix import ProtenixConfig, ProtenixInput, ProtenixOutput, run_protenix
+from proto_tools.tools.structure_prediction.rf3 import (
+    RF3Config,
+    RF3Input,
+    RF3Metrics,
+    RF3Output,
+    run_rf3_prediction,
+)
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
     ChainModification,
@@ -114,6 +121,12 @@ __all__ = [
     "ProtenixInput",
     "ProtenixConfig",
     "ProtenixOutput",
+    # RoseTTAFold3
+    "run_rf3_prediction",
+    "RF3Input",
+    "RF3Config",
+    "RF3Output",
+    "RF3Metrics",
     # ViennaRNA
     "run_viennarna",
     "ViennaRNAInput",

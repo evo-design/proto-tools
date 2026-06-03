@@ -648,6 +648,10 @@ from proto_tools.tools.structure_prediction import (
     ProtenixConfig,
     ProtenixInput,
     ProtenixOutput,
+    RF3Config,
+    RF3Input,
+    RF3Metrics,
+    RF3Output,
     StructurePredictionOutput,
     ViennaRNAConfig,
     ViennaRNAInput,
@@ -663,6 +667,7 @@ from proto_tools.tools.structure_prediction import (
     run_esmfold2,
     run_esmfold_gradient,
     run_protenix,
+    run_rf3_prediction,
     run_viennarna,
 )
 from proto_tools.tools.structure_scoring import (
@@ -994,6 +999,12 @@ __all__ = [
     "ProtenixInput",
     "ProtenixConfig",
     "ProtenixOutput",
+    # Structure prediction - RoseTTAFold3
+    "run_rf3_prediction",
+    "RF3Input",
+    "RF3Config",
+    "RF3Output",
+    "RF3Metrics",
     # Structure prediction - ViennaRNA
     "run_viennarna",
     "ViennaRNAInput",

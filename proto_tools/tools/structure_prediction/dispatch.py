@@ -40,6 +40,11 @@ from proto_tools.tools.structure_prediction.protenix import (
     ProtenixInput,
     run_protenix,
 )
+from proto_tools.tools.structure_prediction.rf3 import (
+    RF3Config,
+    RF3Input,
+    run_rf3_prediction,
+)
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Complex,
     StructurePredictionOutput,
@@ -53,6 +58,7 @@ SP_TOOL_MAP = {
     "boltz2": {"config": Boltz2Config, "input": Boltz2Input, "run_func": run_boltz2},
     "chai1": {"config": Chai1Config, "input": Chai1Input, "run_func": run_chai1},
     "protenix": {"config": ProtenixConfig, "input": ProtenixInput, "run_func": run_protenix},
+    "rf3": {"config": RF3Config, "input": RF3Input, "run_func": run_rf3_prediction},
 }
 
 
@@ -66,6 +72,7 @@ def predict_structures(
     | Boltz2Config
     | Chai1Config
     | ProtenixConfig
+    | RF3Config
     | dict[str, Any]
     | None = None,
 ) -> StructurePredictionOutput:
@@ -77,8 +84,8 @@ def predict_structures(
     Args:
         complexes (Complex | list[Complex]): List of Complex objects to predict.
         toolkit (str): Name of the structure prediction tool. Supported values:
-            ``"esmfold"``, ``"esmfold2"``, ``"alphafold2"``, ``"alphafold3"``, ``"boltz2"``, ``"chai1"``, ``"protenix"``.
-        tool_config (ESMFoldConfig | ESMFold2Config | AlphaFold2Config | AlphaFold3Config | Boltz2Config | Chai1Config | ProtenixConfig | dict[str, Any] | None): Tool-specific configuration dictionary.
+            ``"esmfold"``, ``"esmfold2"``, ``"alphafold2"``, ``"alphafold3"``, ``"boltz2"``, ``"chai1"``, ``"protenix"``, ``"rf3"``.
+        tool_config (ESMFoldConfig | ESMFold2Config | AlphaFold2Config | AlphaFold3Config | Boltz2Config | Chai1Config | ProtenixConfig | RF3Config | dict[str, Any] | None): Tool-specific configuration dictionary.
 
     Returns:
         StructurePredictionOutput: StructurePredictionOutput containing predicted structures and metrics.
