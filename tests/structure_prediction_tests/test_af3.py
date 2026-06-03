@@ -10,6 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from proto_tools.entities.ligands import Fragment, Ligands
+from proto_tools.entities.msa import MSA
 from proto_tools.entities.structures import is_valid_structure
 from proto_tools.tools.structure_prediction import (
     AlphaFold3Config,
@@ -18,6 +19,7 @@ from proto_tools.tools.structure_prediction import (
     Complex,
     run_alphafold3,
 )
+from proto_tools.tools.structure_prediction.shared_data_models import ComplexMSAs
 from proto_tools.utils.standalone_helpers_source.standalone_helpers import resolve_weights_dir
 from tests.conftest import benchmark_twice
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
@@ -122,6 +124,21 @@ def test_af3_common_seed_overrides_model_seeds(mock_af3_inference):
     result = run_alphafold3(inputs, config)
     assert result.success
     assert mock_af3_inference["input_json"]["modelSeeds"] == [123]
+
+
+def test_af3_rejects_msa_keyed_to_wrong_chain(mock_af3_inference):
+    """Precomputed MSAs must have the matching chain sequence in their first row."""
+    expected = "MVLSPADKTN"
+    wrong = "MKTAYIAKQR"
+    complexes = [Complex(chains=[Chain(sequence=expected, entity_type="protein")])]
+    inputs = AlphaFold3Input(
+        complexes=complexes,
+        msas=[ComplexMSAs(per_chain={0: MSA(aligned_sequences=[wrong, wrong])})],
+    )
+    config = AlphaFold3Config(name="test_msa_guard", use_msa=False)
+
+    with pytest.raises(ValueError, match="has query row"):
+        run_alphafold3(inputs, config)
 
 
 def test_af3_rna_entity(mock_af3_inference):

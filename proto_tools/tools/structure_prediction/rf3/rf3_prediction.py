@@ -208,6 +208,8 @@ class RF3Config(MSAStructurePredictionConfig):
             from ``MSAStructurePredictionConfig``. Default True.
         colabfold_search_config (ColabfoldSearchConfig | None): Inherited.
             Default ``None``.
+        pair_heterocomplex_msas (bool): Use taxonomy-paired MSA generation for
+            heterocomplex protein chains. Inherited. Default ``True``.
         include_pae_matrix (bool): Inherited. **Must remain False** for RF3
             (no per-token PAE matrix is emitted).
         device (str): ``"cuda"`` or ``"cpu"``. Inherited. Default ``"cuda"``.

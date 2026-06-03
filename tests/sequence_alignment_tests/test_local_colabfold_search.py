@@ -232,6 +232,29 @@ def _install_paired_dispatch(
     monkeypatch.setattr(ToolInstance, "dispatch", staticmethod(fake))
 
 
+def _install_reordered_paired_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    output_chain_entries: list[int | str],
+    paired_depth: int = 3,
+) -> None:
+    """Patch dispatch to write paired output files in a caller-specified chain order."""
+
+    def fake(toolkit, input_data, **_):  # test stub
+        out_dir = Path(input_data["output_dir"])
+        out_dir.mkdir(parents=True, exist_ok=True)
+        seq_line = next(
+            ln for ln in Path(input_data["query_fasta_path"]).read_text().splitlines() if not ln.startswith(">")
+        )
+        chains = seq_line.split(":")
+        for output_idx, entry in enumerate(output_chain_entries):
+            sequence = chains[entry] if isinstance(entry, int) else entry
+            _write_a3m(out_dir / f"{output_idx}.paired.a3m", sequence, paired_depth)
+        return {"success": True, "output_dir": input_data["output_dir"]}
+
+    monkeypatch.setattr(ToolInstance, "dispatch", staticmethod(fake))
+
+
 def test_local_paired_produces_row_aligned_msas(tmp_path, monkeypatch):
     """A 2-chain paired query returns one row-aligned MSA per chain."""
     captured: list[dict] = []
@@ -259,6 +282,36 @@ def test_local_paired_strategy_maps_to_mmseqs_int(tmp_path, monkeypatch, strateg
     _local_search_paired(ColabfoldSearchQuery(sequences=[SAMPLE_PROTEIN_SEQ_1, SAMPLE_PROTEIN_SEQ_2]), config)
 
     assert captured[0]["pairing_strategy"] == expected_int
+
+
+def test_local_paired_reorders_and_reuses_duplicate_chain_msas(tmp_path, monkeypatch):
+    """Paired MSAs are matched by query row, not by output filename order."""
+    _install_reordered_paired_dispatch(monkeypatch, output_chain_entries=[2, 0])
+
+    query_sequences = [
+        SAMPLE_PROTEIN_SEQ_1,
+        SAMPLE_PROTEIN_SEQ_1,
+        SAMPLE_PROTEIN_SEQ_2,
+        SAMPLE_PROTEIN_SEQ_2,
+    ]
+    result = _local_search_paired(ColabfoldSearchQuery(sequences=query_sequences), _paired_config(tmp_path))
+
+    assert result.paired is True
+    assert len(result.msas) == len(query_sequences)
+    assert [msa.original_sequences[0] if msa else None for msa in result.msas] == query_sequences
+    assert result.msas[0] is result.msas[1]
+    assert result.msas[2] is result.msas[3]
+
+
+def test_local_paired_raises_on_unmatched_msa_query_row(tmp_path, monkeypatch):
+    """A paired MSA whose first row is not any requested chain fails before AF3."""
+    _install_reordered_paired_dispatch(monkeypatch, output_chain_entries=[SAMPLE_PROTEIN_SEQ_3, 0])
+
+    with pytest.raises(RuntimeError, match="do not match the requested chains"):
+        _local_search_paired(
+            ColabfoldSearchQuery(sequences=[SAMPLE_PROTEIN_SEQ_1, SAMPLE_PROTEIN_SEQ_2]),
+            _paired_config(tmp_path),
+        )
 
 
 def test_paired_gate_requires_taxonomy_mapping(tmp_path):

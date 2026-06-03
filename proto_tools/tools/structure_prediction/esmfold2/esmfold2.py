@@ -132,6 +132,9 @@ class ESMFold2Config(MSAStructurePredictionConfig):
         use_msa (bool): Whether to generate MSAs for protein chains via
             ColabFold search. Only valid with ``model_checkpoint='esmfold2'``.
             Default ``False``.
+        pair_heterocomplex_msas (bool): Whether heterocomplex protein chains
+            should use taxonomy-paired MSA generation. Inherited. Default:
+            ``True``.
         colabfold_search_config (ColabfoldSearchConfig | None): Configuration for
             ColabFold MSA search. Only used when ``use_msa=True``. Inherited.
             Default: ``None``.

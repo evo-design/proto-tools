@@ -177,6 +177,71 @@ def test_preprocess_heterocomplex_is_paired(monkeypatch):
     assert entry.as_paired_msa().row_count == 3
 
 
+def test_preprocess_heterocomplex_can_disable_pairing(monkeypatch):
+    """A heterodimer can request independent unpaired MSAs for each chain."""
+    captured = _stub_colabfold_search(monkeypatch)
+    inputs = _SPInput(complexes=[_protein_complex(_SEQ_A, _SEQ_B)])
+
+    out = sdm._preprocess_structure_prediction_msas(
+        inputs,
+        ColabfoldSearchConfig(),
+        verbose=0,
+        pair_heterocomplex_msas=False,
+    )
+
+    assert len(captured["queries"]) == 2
+    assert not any(q.is_paired for q in captured["queries"])
+    entry = out.msas[0]
+    assert entry.paired is False
+    assert set(entry.per_chain) == {0, 1}
+
+
+def test_validate_complex_msas_rejects_wrong_query_row():
+    """A pre-supplied MSA whose query row is not the chain sequence is rejected."""
+    complexes = [_protein_complex(_SEQ_A)]
+    msas = [ComplexMSAs(per_chain={0: MSA(aligned_sequences=[_SEQ_B, _SEQ_B])})]
+
+    with pytest.raises(ValueError, match="has query row"):
+        sdm._validate_complex_msas_match_chains(complexes, msas)
+
+
+def test_validate_complex_msas_accepts_matching_query_row():
+    """A correctly keyed pre-supplied MSA passes validation."""
+    complexes = [_protein_complex(_SEQ_A)]
+    msas = [ComplexMSAs(per_chain={0: MSA(aligned_sequences=[_SEQ_A, _SEQ_A])})]
+
+    sdm._validate_complex_msas_match_chains(complexes, msas)
+
+
+def test_validate_complex_msas_rejects_out_of_range_chain():
+    """A pre-supplied MSA keyed to a nonexistent chain index is rejected."""
+    complexes = [_protein_complex(_SEQ_A)]
+    msas = [ComplexMSAs(per_chain={1: MSA(aligned_sequences=[_SEQ_A, _SEQ_A])})]
+
+    with pytest.raises(ValueError, match="only 1 chain"):
+        sdm._validate_complex_msas_match_chains(complexes, msas)
+
+
+def test_validate_complex_msas_rejects_length_mismatch():
+    """Pre-supplied msas must be parallel to complexes."""
+    complexes = [_protein_complex(_SEQ_A), _protein_complex(_SEQ_B)]
+    msas = [ComplexMSAs(per_chain={0: MSA(aligned_sequences=[_SEQ_A, _SEQ_A])})]
+
+    with pytest.raises(ValueError, match="does not match complexes length"):
+        sdm._validate_complex_msas_match_chains(complexes, msas)
+
+
+def test_preprocess_validates_pre_supplied_msas_even_when_msa_disabled():
+    """The guard runs at the top of preprocess, before the use_msa gate."""
+    inputs = _SPInput(
+        complexes=[_protein_complex(_SEQ_A)],
+        msas=[ComplexMSAs(per_chain={0: MSA(aligned_sequences=[_SEQ_B, _SEQ_B])})],
+    )
+
+    with pytest.raises(ValueError, match="has query row"):
+        sdm.MSAStructurePredictionConfig(use_msa=False).preprocess(inputs)
+
+
 def test_preprocess_heterocomplex_unpaired_fallback(monkeypatch):
     """A paired query that fell back to unpaired (result.paired=False) yields a paired=False ComplexMSAs."""
 

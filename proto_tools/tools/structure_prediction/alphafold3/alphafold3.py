@@ -175,6 +175,10 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
             for protein chains using ColabFold search. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``True``.
 
+        pair_heterocomplex_msas (bool): Whether heterocomplex protein chains
+            should use taxonomy-paired MSA generation. Inherited from
+            ``MSAStructurePredictionConfig``. Default: ``True``.
+
         colabfold_search_config (ColabfoldSearchConfig | None): Configuration for
             ColabFold MSA search. Only used when ``use_msa=True``. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``None``.

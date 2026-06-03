@@ -208,6 +208,10 @@ class Boltz2Config(MSAStructurePredictionConfig):
             for protein chains using ColabFold search. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``True``.
 
+        pair_heterocomplex_msas (bool): Whether heterocomplex protein chains
+            should use taxonomy-paired MSA generation. Inherited from
+            ``MSAStructurePredictionConfig``. Default: ``True``.
+
         colabfold_search_config (ColabfoldSearchConfig | None): Configuration for
             ColabFold MSA search. Only used when ``use_msa=True``. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``None``.
@@ -385,7 +389,7 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config, instance: Any = None) 
     Note:
         - Boltz2 processes each complex independently and sequentially
         - MSA generation modes:
-            - ``use_msa=False``: Single-sequence mode without MSAs
+            - ``use_msa=False``: No ColabFold search; caller-supplied MSAs are still used
             - ``use_msa=True`` (default): Use ColabFold search tool for MSA generation
         - Higher ``recycling_steps`` and ``sampling_steps`` improve quality but increase runtime
         - Supports both local and remote ColabFold search modes when ``use_msa=True``
@@ -439,8 +443,10 @@ def run_boltz2_on_complex(
         output_dir = os.path.join(temp_dir, "boltz2_output")
         os.makedirs(output_dir)
 
+        # Honor MSAs whenever present: auto-generated when use_msa=True, or supplied
+        # by the caller (always respected regardless of use_msa).
         chain_msa_paths: dict[str, str] | None = None
-        if config.use_msa:
+        if complex_msas is not None:
             chain_msa_paths = build_chain_msa_paths(sp_complex, complex_msas, temp_dir, verbose=config.verbose)
 
         yaml_content = complex_to_yaml(sp_complex.chains, chain_msa_paths=chain_msa_paths)
