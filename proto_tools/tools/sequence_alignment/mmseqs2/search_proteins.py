@@ -270,6 +270,8 @@ class Mmseqs2SearchProteinsConfig(BaseConfig):
         threads (int): CPU threads; ``0`` auto-detects all cores (the wrapper
             omits ``--threads`` since ``mmseqs`` rejects ``--threads 0``).
         split (int): Split into N chunks to bound memory; ``0`` = auto.
+        split_memory_limit (str | None): Max prefilter memory per split (e.g.
+            ``"90G"``); ``None`` uses all system memory.
         sensitivity (float): Prefilter sensitivity (1.0-7.5); higher = slower
             but finds more remote homologs.
         evalue (float): E-value threshold for reported hits.
@@ -299,6 +301,11 @@ class Mmseqs2SearchProteinsConfig(BaseConfig):
         default=DEFAULT_SPLIT,
         ge=0,
         description="Split input into N chunks for memory-bounded prefiltering; `0` picks the best split automatically.",
+    )
+    split_memory_limit: str | None = ConfigField(
+        title="Split Memory Limit",
+        default=None,
+        description="Max prefilter memory per split (e.g. `90G`) for large DB indexes; None uses all system memory.",
     )
     sensitivity: float = ConfigField(
         title="Search Sensitivity",
@@ -461,6 +468,7 @@ def run_mmseqs2_search_proteins(
             "target_sequences": inputs.target_sequences,
             "threads": config.threads,
             "split": config.split,
+            "split_memory_limit": config.split_memory_limit,
             "sensitivity": config.sensitivity,
             "evalue": config.evalue,
             "min_seq_id": config.min_seq_id,
