@@ -168,6 +168,7 @@ class Boltz2AffinityConfig(Boltz2Config):
         subsample_msa (bool): Inherited. Randomly subsample the MSA each run. Default: ``False``.
         num_workers (int): Inherited. Dataloader workers for prediction. Default: ``min(cpu_count, 4)``.
         use_msa (bool): Inherited. Use ColabFold MSAs for protein chains. Default: ``True``.
+        pair_heterocomplex_msas (bool): Inherited. Use taxonomy-paired MSA generation for heterocomplex protein chains. Default: ``True``.
         colabfold_search_config (ColabfoldSearchConfig | None): Inherited. ColabFold MSA search config. Default: ``None``.
         include_pae_matrix (bool): No-op for affinity; excluded from the cache key. Default: ``False``.
         affinity_mw_correction (bool): Apply molecular-weight correction to the affinity value head. Default: ``False``.
@@ -275,8 +276,10 @@ def run_boltz2_affinity_on_complex(
         output_dir = os.path.join(temp_dir, "boltz2_output")
         os.makedirs(output_dir)
 
+        # Honor MSAs whenever present: auto-generated when use_msa=True, or supplied
+        # by the caller (always respected regardless of use_msa).
         chain_msa_paths: dict[str, str] | None = None
-        if config.use_msa:
+        if complex_msas is not None:
             chain_msa_paths = build_chain_msa_paths(sp_complex, complex_msas, temp_dir, verbose=config.verbose)
 
         yaml_content = complex_to_yaml(

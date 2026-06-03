@@ -172,6 +172,10 @@ class Chai1Config(MSAStructurePredictionConfig):
             for protein chains using ColabFold search. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``True``.
 
+        pair_heterocomplex_msas (bool): Whether heterocomplex protein chains
+            should use taxonomy-paired MSA generation. Inherited from
+            ``MSAStructurePredictionConfig``. Default: ``True``.
+
         colabfold_search_config (ColabfoldSearchConfig | None): Configuration for
             ColabFold MSA search. Only used when ``use_msa=True``. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``None``.
@@ -425,9 +429,10 @@ def run_chai1_on_complex(
 
         per_chain_msas, is_paired = unwrap_complex_msas(complex_msas)
 
-        # Write pre-computed MSAs to Parquet files
+        # Honor MSAs whenever present: auto-generated when use_msa=True, or supplied
+        # by the caller (always respected regardless of use_msa).
         msa_directory = None
-        if config.use_msa and per_chain_msas:
+        if per_chain_msas:
             pqt_dir = os.path.join(temp_dir, "msa_pqt")
             os.makedirs(pqt_dir, exist_ok=True)
             for ch_idx, chain in enumerate(comp.chains):

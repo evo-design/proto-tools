@@ -31,6 +31,7 @@ from proto_tools.utils import (
     BaseToolOutput,
     ConfigField,
     InputField,
+    format_sequence_for_error,
 )
 
 logger = logging.getLogger(__name__)
@@ -308,17 +309,26 @@ class MSAStructurePredictionConfig(StructurePredictionConfig):
         colabfold_search_config (ColabfoldSearchConfig | None): Configuration for
             ColabFold MSA search. Only used when ``use_msa=True``.
             Default: Uses ColabfoldSearchConfig defaults.
+        pair_heterocomplex_msas (bool): Whether heterocomplex protein chains
+            should be submitted as taxonomy-paired MSA groups. If ``False``,
+            every unique protein sequence is searched independently and assigned
+            as an unpaired per-chain MSA. Default: ``True``.
     """
 
     use_msa: bool = ConfigField(
         title="Use MSA",
         default=True,
-        description="Whether to generate and use MSAs for protein chains using ColabFold search",
+        description="Whether to auto-generate MSAs via ColabFold search; supplied MSAs are always used",
     )
     colabfold_search_config: ColabfoldSearchConfig | None = ConfigField(
         title="ColabFold Search Config",
         default=None,
         description="Nested configuration for ColabFold MSA search. If None, uses default settings.",
+    )
+    pair_heterocomplex_msas: bool = ConfigField(
+        title="Pair Heterocomplex MSAs",
+        default=True,
+        description="Whether heterocomplex protein chains should use taxonomy-paired MSA generation.",
     )
 
     @classmethod
@@ -336,12 +346,21 @@ class MSAStructurePredictionConfig(StructurePredictionConfig):
 
     def preprocess(self, inputs: StructurePredictionInput) -> StructurePredictionInput:  # type: ignore[override]
         """Preprocess structure prediction inputs before execution."""
+        # Pre-supplied MSAs bypass ColabFold search and its query-row remap; validate
+        # their chain keying here so every predictor catches mis-keyed MSAs uniformly.
+        if inputs.msas is not None:
+            _validate_complex_msas_match_chains(inputs.complexes, inputs.msas)
         if not self.use_msa:
             return inputs
         if self.colabfold_search_config is None:
             self.colabfold_search_config = ColabfoldSearchConfig()
         self.colabfold_search_config.verbose = self.verbose
-        return _preprocess_structure_prediction_msas(inputs, self.colabfold_search_config, self.verbose)
+        return _preprocess_structure_prediction_msas(
+            inputs,
+            self.colabfold_search_config,
+            self.verbose,
+            pair_heterocomplex_msas=self.pair_heterocomplex_msas,
+        )
 
 
 class StructurePredictionOutput(BaseToolOutput):
@@ -416,10 +435,53 @@ class StructurePredictionOutput(BaseToolOutput):
 # ============================================================================
 # Shared preprocessing
 # ============================================================================
+def _validate_complex_msas_match_chains(complexes: list[Complex], msas: list[ComplexMSAs]) -> None:
+    """Validate that each pre-supplied per-chain MSA's query row matches its chain.
+
+    Pre-supplied MSAs (``StructurePredictionInput.msas``) bypass ColabFold search and
+    its query-row remap, so a mis-keyed MSA would be folded onto the wrong chain. Each
+    ``per_chain[ch_idx]`` must reference a protein chain at ``complexes[i].chains[ch_idx]``
+    and carry that chain's sequence as its first (query) row.
+
+    Args:
+        complexes (list[Complex]): Complexes the MSAs were supplied for.
+        msas (list[ComplexMSAs]): Per-complex MSA bundles, parallel to ``complexes``.
+
+    Raises:
+        ValueError: If lengths differ, a chain index is out of range or non-protein,
+            or an MSA query row does not match its chain sequence.
+    """
+    if len(msas) != len(complexes):
+        raise ValueError(f"Pre-supplied msas length ({len(msas)}) does not match complexes length ({len(complexes)}).")
+    for comp_idx, (comp, complex_msas) in enumerate(zip(complexes, msas, strict=True)):
+        for ch_idx, msa in complex_msas.per_chain.items():
+            if ch_idx >= len(comp.chains):
+                raise ValueError(
+                    f"Pre-supplied MSA for complex {comp_idx} references chain index {ch_idx}, "
+                    f"but the complex has only {len(comp.chains)} chain(s)."
+                )
+            chain = comp.chains[ch_idx]
+            if not isinstance(chain, Chain) or chain.entity_type != "protein":
+                raise ValueError(
+                    f"Pre-supplied MSA for complex {comp_idx} chain {ch_idx} is keyed to a "
+                    "non-protein chain; MSAs are only valid for protein chains."
+                )
+            query_sequence = msa.original_sequences[0]
+            if query_sequence != chain.sequence:
+                raise ValueError(
+                    f"Pre-supplied MSA for complex {comp_idx} chain {ch_idx} has query row "
+                    f"{format_sequence_for_error(query_sequence)!r}, expected "
+                    f"{format_sequence_for_error(chain.sequence)!r}. Per-chain MSAs must be keyed "
+                    "by Complex chain index with the chain's sequence in the first row."
+                )
+
+
 def _preprocess_structure_prediction_msas(
     inputs: StructurePredictionInput,
     colabfold_search_config: Any,
     verbose: int = 0,
+    *,
+    pair_heterocomplex_msas: bool = True,
 ) -> StructurePredictionInput:
     """Generate per-complex MSAs and attach them as ``list[dict[int, MSA]]``.
 
@@ -432,6 +494,9 @@ def _preprocess_structure_prediction_msas(
         inputs (StructurePredictionInput): Structure prediction input containing complexes.
         colabfold_search_config (Any): ColabFold search configuration.
         verbose (int): Verbosity level (truthy = log progress); see :class:`BaseConfig`.
+        pair_heterocomplex_msas (bool): If ``True``, heterocomplex protein chains
+            are submitted as taxonomy-paired groups. If ``False``, all protein
+            chains use independent unpaired MSAs, deduplicated by sequence.
 
     Returns:
         StructurePredictionInput: Updated inputs with ``msas`` set to a list of
@@ -473,11 +538,11 @@ def _preprocess_structure_prediction_msas(
             continue
 
         unique_seqs_in_complex = {seq for _, seq in protein_chains}
-        if len(unique_seqs_in_complex) == 1:
-            seq = protein_chains[0][1]
-            if seq not in unpaired_seq_to_query_idx:
-                unpaired_seq_to_query_idx[seq] = len(queries_input)
-                queries_input.append(seq)
+        if not pair_heterocomplex_msas or len(unique_seqs_in_complex) == 1:
+            for _ch_idx, seq in protein_chains:
+                if seq not in unpaired_seq_to_query_idx:
+                    unpaired_seq_to_query_idx[seq] = len(queries_input)
+                    queries_input.append(seq)
             complex_plans.append((protein_chains, None))
         else:
             queries_input.append([seq for _, seq in protein_chains])

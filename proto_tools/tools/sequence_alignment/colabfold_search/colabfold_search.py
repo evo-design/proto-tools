@@ -24,6 +24,7 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
     ToolInstance,
+    format_sequence_for_error,
     has_cached_entries,
     resolve_num_threads,
 )
@@ -867,6 +868,66 @@ def _assert_db_supports_pairing(config: ColabfoldSearchConfig) -> None:
         )
 
 
+def _msa_query_sequence(msa: MSA) -> str:
+    """Return the ungapped first row of an MSA, which should be the query sequence."""
+    return msa.original_sequences[0]
+
+
+def _assign_msas_by_query_sequence(
+    query_sequences: list[str],
+    msas: list[MSA | None],
+    *,
+    source: str,
+) -> list[MSA | None]:
+    """Return MSAs parallel to ``query_sequences``, matching by each MSA query row.
+
+    Local paired ColabFold output can be reindexed when duplicate chains are present.
+    Match by the first MSA row instead of trusting file index order. If repeated
+    chains are collapsed to one output MSA, reuse that MSA for every identical
+    requested chain.
+    """
+    assigned: list[MSA | None] = []
+    used_indices: set[int] = set()
+    reusable_by_sequence: dict[str, MSA] = {}
+
+    for query_sequence in query_sequences:
+        match_idx = None
+        for idx, msa in enumerate(msas):
+            if idx in used_indices or msa is None:
+                continue
+            if _msa_query_sequence(msa) == query_sequence:
+                match_idx = idx
+                break
+
+        if match_idx is not None:
+            matched_msa = msas[match_idx]
+            assert matched_msa is not None
+            used_indices.add(match_idx)
+            reusable_by_sequence[query_sequence] = matched_msa
+            assigned.append(matched_msa)
+            continue
+
+        assigned.append(reusable_by_sequence.get(query_sequence))
+
+    unmatched = [
+        format_sequence_for_error(_msa_query_sequence(msa))
+        for idx, msa in enumerate(msas)
+        if idx not in used_indices and msa is not None
+    ]
+    if unmatched:
+        missing = [
+            f"chain {idx} {format_sequence_for_error(seq)}"
+            for idx, (seq, msa) in enumerate(zip(query_sequences, assigned, strict=True))
+            if msa is None
+        ]
+        raise RuntimeError(
+            f"colabfold-search: {source} returned MSA query row(s) that do not match the requested chains. "
+            f"Unmatched MSA query row(s): {unmatched}; missing requested chain(s): {missing}."
+        )
+
+    return assigned
+
+
 def _local_search_paired(
     query: ColabfoldSearchQuery,
     config: ColabfoldSearchConfig,
@@ -924,8 +985,10 @@ def _local_search_paired(
 
         # Any pairing => return the row-aligned paired MSAs; if nothing paired, fall back to the already-computed unpaired MSAs.
         if any(m is not None for m in paired_msas):
+            paired_msas = _assign_msas_by_query_sequence(query.sequences, paired_msas, source="local paired search")
             return ColabfoldSearchResult(query_sequences=query.sequences, msas=paired_msas, paired=True)
         unpaired_msas = [_read_chain_a3m(paired_out_dir, i, ".a3m") for i in range(len(query.sequences))]
+        unpaired_msas = _assign_msas_by_query_sequence(query.sequences, unpaired_msas, source="local paired fallback")
         return ColabfoldSearchResult(query_sequences=query.sequences, msas=unpaired_msas, paired=False)
 
 
@@ -1053,6 +1116,7 @@ def _remote_search_paired(
 
     # Any pairing => return paired MSAs; if nothing paired (disjoint taxa), fall back to a second unpaired call (mirrors local).
     if any(m is not None for m in per_chain_msas):
+        per_chain_msas = _assign_msas_by_query_sequence(query.sequences, per_chain_msas, source="remote paired search")
         return ColabfoldSearchResult(query_sequences=query.sequences, msas=per_chain_msas, paired=True)
     unpaired_out = _remote_search(query.sequences, config, str(config.output_dir), instance=instance)
     return ColabfoldSearchResult(

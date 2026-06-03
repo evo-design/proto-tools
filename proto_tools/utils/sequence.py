@@ -63,6 +63,22 @@ def calculate_gc_content(sequence: str) -> float:
     return 100.0 * gc_count / len(sequence)
 
 
+def format_sequence_for_error(sequence: str, max_len: int = 32) -> str:
+    """Truncate a sequence for display in error messages.
+
+    Args:
+        sequence (str): The sequence to format.
+        max_len (int): Maximum number of characters to keep before truncating.
+
+    Returns:
+        str: The sequence unchanged, or its first ``max_len`` characters with a
+            trailing ``...`` if it is longer.
+    """
+    if len(sequence) <= max_len:
+        return sequence
+    return f"{sequence[:max_len]}..."
+
+
 def resolve_sequence_ids(sequences: list[str], ids: list[str] | None) -> list[str]:
     """Resolve sequence identifiers, using provided IDs or generating defaults.
 
