@@ -83,6 +83,12 @@ def test_rfdiffusion3_design_spec_selections_require_input_structure():
     assert spec.length == "40"
 
 
+def test_rfdiffusion3_design_spec_rejects_contig_with_length():
+    """Contig and length are mutually exclusive; a contig already encodes its lengths."""
+    with pytest.raises(ValueError, match=r"Pass either 'contig' or 'length'"):
+        RFdiffusion3DesignSpec(input_structure=synthetic_cif(["A"]), contig="A1-100", length="100")
+
+
 def test_rfdiffusion3_config_gamma_0_symmetry_constraint():
     """gamma_0 must be > 0.5 when sampler_kind='symmetry' (upstream rfd3 asserts this)."""
     pattern = r"gamma_0 must be > 0\.5 when sampler_kind='symmetry'"
