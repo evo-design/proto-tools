@@ -11,7 +11,13 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures import is_valid_structure
+from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
+    ColabfoldSearchConfig,
+    ColabfoldSearchInput,
+    run_colabfold_search,
+)
 from proto_tools.tools.structure_prediction import (
     AlphaFold2Config,
     AlphaFold2Input,
@@ -19,6 +25,8 @@ from proto_tools.tools.structure_prediction import (
     AlphaFold3Config,
     AlphaFold3Input,
     AlphaFold3Output,
+    Boltz2AffinityConfig,
+    Boltz2AffinityInput,
     Boltz2Config,
     Boltz2Input,
     Boltz2Output,
@@ -26,6 +34,7 @@ from proto_tools.tools.structure_prediction import (
     Chai1Input,
     Chai1Output,
     Complex,
+    ComplexMSAs,
     ESMFold2Config,
     ESMFold2Input,
     ESMFold2Output,
@@ -42,6 +51,7 @@ from proto_tools.tools.structure_prediction import (
     run_alphafold2,
     run_alphafold3,
     run_boltz2,
+    run_boltz2_affinity,
     run_chai1,
     run_esmfold,
     run_esmfold2,
@@ -530,3 +540,193 @@ def test_batched_multichain_complexes():
         assert structure.num_chains == expected_chains, (
             f"Structure {i}: expected {expected_chains} chains, got {structure.num_chains}"
         )
+
+
+# ── End-to-end: caller-supplied MSAs (built by local ColabFold) drive prediction
+#
+# Pins the use_msa gating fix from commit e12379fe across every MSA-capable
+# predictor in both unpaired and taxonomy-paired modes.
+
+# E. coli 50S ribosomal proteins L7/L12 (P0A7K2) and L10 (P0A7J3).
+_L7L12_SEQ = (
+    "MSITKDQIIEAVAAMSVMDVVELISAMEEKFGVSAAAAVAVAAGPVEAAEEKTEFDVILKAAGANKVAVIKAVRG"
+    "ATGLGLKEAKDLVESAPAALKEGVSKDDAEALKKALEEAGAEVEVK"
+)
+_L10_SEQ = (
+    "MALNLQDKQAIVAEVSEVAKGALSAVVADSRGVTVDKMTELRKAGREAGVYMRVVRNTLLRRAVEGTPFECLKDA"
+    "FVGPTLIAYSMEHPGAAARLFKEFAKANAKFEVKAAAFEGELIPASQIDRLATLPTYEEAIARLMATMKEAPAGK"
+    "LVRTLAAVRDAKEAA"
+)
+
+# Mini SwissProt MMseqs DB; auto-provisioned by tests/dummy_data/create_mini_mmseqs_db.py.
+_MINI_DB_DIR = Path(__file__).parent.parent / "dummy_data" / "mini_mmseqs_db"
+_MINI_DB_NAME = "uniref30_mini_db"
+
+
+def _mini_db_skip_reason() -> str | None:
+    """Skip reason when the local mini MMseqs DB is missing; ``None`` if present."""
+    if not (_MINI_DB_DIR / f"{_MINI_DB_NAME}.dbtype").exists():
+        return f"Mini MMseqs DB not provisioned at {_MINI_DB_DIR}; run tests/dummy_data/create_mini_mmseqs_db.py first."
+    return None
+
+
+def _build_local_colabfold_config(output_dir: Path, *, pairing_strategy: str = "greedy") -> ColabfoldSearchConfig:
+    # CPU MMseqs: pytest's DeviceManager masks the GPU from the colabfold-search subprocess (tool not registered uses_gpu), and `--gpu 1` against an empty CUDA_VISIBLE_DEVICES crashes mmseqs.
+    return ColabfoldSearchConfig(
+        search_mode="local",
+        msa_db_dir=str(_MINI_DB_DIR),
+        database_name=_MINI_DB_NAME,
+        output_dir=str(output_dir),
+        use_metagenomic_db=False,
+        num_threads=4,
+        use_gpu=False,
+        pairing_strategy=pairing_strategy,
+        verbose=False,
+    )
+
+
+@pytest.fixture(scope="module")
+def _local_unpaired_msas(tmp_path_factory):
+    """Two independent unpaired local ColabFold searches against the mini SwissProt DB.
+
+    Module-scoped: the searches are amortized across every parametrization of
+    ``test_locally_searched_msa_drives_end_to_end_prediction``.
+    """
+    if _mini_db_skip_reason():
+        pytest.skip(_mini_db_skip_reason())
+    out_dir = tmp_path_factory.mktemp("colabfold_unpaired")
+    config = _build_local_colabfold_config(out_dir)
+    inputs = ColabfoldSearchInput(queries=[_L7L12_SEQ, _L10_SEQ])
+    result = run_colabfold_search(inputs, config)
+    assert result.success, "Local ColabFold search (unpaired) failed"
+    msa_l7l12 = result.results[0].msas[0]
+    msa_l10 = result.results[1].msas[0]
+    assert msa_l7l12 is not None and msa_l10 is not None, (
+        "Mini SwissProt DB unexpectedly returned no hits for one of the test chains"
+    )
+    return msa_l7l12, msa_l10
+
+
+@pytest.fixture(scope="module")
+def _local_paired_msas(tmp_path_factory):
+    """One taxonomy-paired local ColabFold search (greedy) against the mini SwissProt DB.
+
+    Module-scoped (see ``_local_unpaired_msas``). Requires the DB's ``*_mapping``
+    taxonomy file, which the mini DB ships with.
+    """
+    if _mini_db_skip_reason():
+        pytest.skip(_mini_db_skip_reason())
+    out_dir = tmp_path_factory.mktemp("colabfold_paired")
+    config = _build_local_colabfold_config(out_dir, pairing_strategy="greedy")
+    inputs = ColabfoldSearchInput(queries=[[_L7L12_SEQ, _L10_SEQ]])
+    result = run_colabfold_search(inputs, config)
+    assert result.success, "Local ColabFold search (paired) failed"
+    paired_result = result.results[0]
+    assert paired_result.paired, (
+        "Paired local ColabFold search fell back to unpaired — too few cross-chain hits "
+        "in the mini SwissProt DB for the chosen test pair."
+    )
+    msa_l7l12, msa_l10 = paired_result.msas
+    assert msa_l7l12 is not None and msa_l10 is not None, "Paired ColabFold returned None for at least one chain"
+    return msa_l7l12, msa_l10
+
+
+# AlphaFold2's MSA path is single-chain-only ("MSA not yet supported for multi-chain complexes"); it gets a 1-chain complex and only the unpaired variant.
+_SUPPLIED_MSA_PREDICTORS = {
+    "alphafold2": (run_alphafold2, AlphaFold2Input, AlphaFold2Config),
+    "alphafold3": (run_alphafold3, AlphaFold3Input, AlphaFold3Config),
+    "boltz2": (run_boltz2, Boltz2Input, Boltz2Config),
+    "boltz2-affinity": (run_boltz2_affinity, Boltz2AffinityInput, Boltz2AffinityConfig),
+    "chai1": (run_chai1, Chai1Input, Chai1Config),
+    "esmfold2": (run_esmfold2, ESMFold2Input, ESMFold2Config),
+    "protenix": (run_protenix, ProtenixInput, ProtenixConfig),
+}
+
+# L-tyrosine (CCD "TYR"); only here to satisfy Boltz2-affinity's "exactly one ligand" validator.
+_AFFINITY_LIGAND_SMILES = "c1cc(ccc1C[C@@H](C(=O)O)N)O"
+
+
+def _build_test_complex(predictor_name: str) -> Complex:
+    """Build the test complex: L7/L12 + L10 for most predictors; L7/L12 only for AF2; + TYR ligand for boltz2-affinity."""
+    if predictor_name == "alphafold2":
+        return Complex(chains=[_L7L12_SEQ])
+    chains: list = [_L7L12_SEQ, _L10_SEQ]
+    if predictor_name == "boltz2-affinity":
+        chains.append(Fragment(smiles=_AFFINITY_LIGAND_SMILES))
+    return Complex(chains=chains)
+
+
+def _generate_supplied_msa_params() -> list:
+    """Cross-product (predictor x pairing-mode); AF2 gets unpaired-only; skip AF3 variants when weights missing."""
+    params: list = []
+    for predictor_name in _SUPPLIED_MSA_PREDICTORS:
+        weights_skip = _missing_weights_skip_reason(predictor_name)
+        pairing_modes = (False,) if predictor_name == "alphafold2" else (False, True)
+        for paired in pairing_modes:
+            marks: list = []
+            if weights_skip:
+                marks.append(pytest.mark.skip(reason=weights_skip))
+            params.append(
+                pytest.param(
+                    predictor_name,
+                    paired,
+                    id=f"{predictor_name}-{'paired' if paired else 'unpaired'}",
+                    marks=tuple(marks) if marks else (),
+                )
+            )
+    return params
+
+
+@pytest.mark.integration
+@pytest.mark.uses_gpu
+@pytest.mark.slow
+@pytest.mark.skipif(_mini_db_skip_reason() is not None, reason=_mini_db_skip_reason() or "")
+@pytest.mark.usefixtures("_release_between_predictors")
+@pytest.mark.parametrize(("predictor_name", "paired"), _generate_supplied_msa_params())
+def test_locally_searched_msa_drives_end_to_end_prediction(
+    predictor_name,
+    paired,
+    _local_unpaired_msas,
+    _local_paired_msas,
+):
+    """End-to-end: build an MSA via local ColabFold, then fold with it (use_msa=False).
+
+    Closes the loop on the ``use_msa`` gating fix (commit e12379fe): caller-supplied
+    ``inputs.msas`` are always honored — ``use_msa`` gates only ColabFold
+    auto-generation. Each parametrization:
+
+    1. Pulls the relevant MSAs (paired or unpaired) from the module-scoped
+       fixtures, which ran local ColabFold once against the mini SwissProt DB
+       shipped at ``tests/dummy_data/mini_mmseqs_db/``.
+    2. Hands the predictor a :class:`ComplexMSAs` with the right ``paired`` flag,
+       and sets ``use_msa=False`` so the predictor must not run a second search.
+    3. Asserts the prediction succeeds and produces a valid structure.
+
+    Skips: missing mini DB (no MMseqs DB to search), missing GPU (each predictor
+    needs one), missing AlphaFold3 weights (DeepMind ToU-gated).
+    """
+    run_func, input_class, config_class = _SUPPLIED_MSA_PREDICTORS[predictor_name]
+
+    msa_l7l12, msa_l10 = _local_paired_msas if paired else _local_unpaired_msas
+    per_chain = {0: msa_l7l12} if predictor_name == "alphafold2" else {0: msa_l7l12, 1: msa_l10}
+    complex_msas = ComplexMSAs(per_chain=per_chain, paired=paired)
+
+    comp = _build_test_complex(predictor_name)
+    inputs = input_class(complexes=[comp], msas=[complex_msas])
+
+    config_kwargs: dict = {"use_msa": False, "verbose": True}
+    # ESMFold2 ships two checkpoints; only the non-Fast one accepts MSA conditioning.
+    if predictor_name == "esmfold2":
+        config_kwargs["model_checkpoint"] = "esmfold2"
+    config = config_class(**config_kwargs)
+
+    output = run_func(inputs, config)
+
+    validate_output(output)
+    assert isinstance(output, StructurePredictionOutput)
+    assert len(output.structures) == 1, f"Expected one structure for one input complex, got {len(output.structures)}"
+    assert is_valid_structure(output.structures[0].structure_cif), (
+        f"{predictor_name} produced an invalid structure when fed a "
+        f"{'paired' if paired else 'unpaired'} caller-supplied MSA"
+    )
+    assert_metrics_in_spec(output)
