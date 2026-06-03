@@ -206,7 +206,17 @@ def resolve_jax_device(device: str) -> Any:
     if backend == "cuda":
         backend = "gpu"
 
-    devices = jax.devices(backend)
+    try:
+        devices = jax.devices(backend)
+    except RuntimeError as e:
+        if backend != "gpu" or "No visible GPU devices" not in str(e):
+            raise
+        import time
+
+        if hasattr(jax, "clear_backends"):
+            jax.clear_backends()
+        time.sleep(5.0)
+        devices = jax.devices(backend)
     if device_idx >= len(devices):
         raise ValueError(f"Device {device} not available. Only {len(devices)} {backend} device(s) found.")
     return devices[device_idx]
