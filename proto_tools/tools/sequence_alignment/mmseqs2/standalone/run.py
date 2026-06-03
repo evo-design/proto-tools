@@ -47,7 +47,7 @@ def _run_cmd(cmd: list[str], description: str) -> subprocess.CompletedProcess:  
     try:
         return subprocess.run(cmd, check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError as e:
-        stderr_tail = (e.stderr or "").strip().splitlines()[-40:]
+        stderr_tail = (e.stderr or "").strip().splitlines()
         raise RuntimeError(
             f"mmseqs2: {description} failed (exit {e.returncode}): {' | '.join(stderr_tail) or '<no stderr>'}"
         ) from e
@@ -665,7 +665,7 @@ def run_homology_search(input_dict: dict[str, Any]) -> dict[str, Any]:
             "success": False,
             "output_dir": str(output_dir),
             "returncode": e.returncode,
-            "error": f"mmseqs2-homology-search: colabfold_search failed (exit {e.returncode}): {' | '.join((stderr or '').strip().splitlines()[-10:]) or '<no stderr>'}",
+            "error": f"mmseqs2-homology-search: colabfold_search failed (exit {e.returncode}): {' | '.join((stderr or '').strip().splitlines()) or '<no stderr>'}",
         }
 
 

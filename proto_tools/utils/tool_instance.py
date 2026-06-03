@@ -1651,7 +1651,7 @@ class ToolInstance:
                 logger.error("Failed to create foundation environment:\n%s", stderr)
                 raise RuntimeError(
                     f"foundation_env: micromamba create failed at {foundation_path} (exit {e.returncode}): "
-                    f"{' | '.join((stderr or '').strip().splitlines()[-10:]) or '<no stderr>'}"
+                    f"{' | '.join((stderr or '').strip().splitlines()) or '<no stderr>'}"
                 ) from e
 
             marker.touch()
@@ -2113,12 +2113,12 @@ class ToolInstance:
         return h.hexdigest()[:16]
 
     @staticmethod
-    def _stderr_tail(stderr: str | None, max_lines: int = 10) -> str:
-        """Return the last few non-empty lines of stderr for error messages."""
+    def _stderr_tail(stderr: str | None) -> str:
+        """Return all non-empty lines of stderr for error messages."""
         if not stderr:
             return ""
         lines = [line for line in stderr.strip().splitlines() if line.strip()]
-        return "\n".join(lines[-max_lines:])
+        return "\n".join(lines)
 
     @staticmethod
     def _parse_asset_sentinel(output: str | None) -> tuple[str, str] | None:

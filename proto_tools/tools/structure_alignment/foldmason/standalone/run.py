@@ -35,7 +35,7 @@ def _run_cmd(cmd: list[str], description: str) -> subprocess.CompletedProcess:  
     try:
         return subprocess.run(cmd, check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError as e:
-        stderr_tail = (e.stderr or "").strip().splitlines()[-10:]
+        stderr_tail = (e.stderr or "").strip().splitlines()
         raise RuntimeError(
             f"foldmason: {description} failed (exit {e.returncode}): {' | '.join(stderr_tail) or '<no stderr>'}"
         ) from e

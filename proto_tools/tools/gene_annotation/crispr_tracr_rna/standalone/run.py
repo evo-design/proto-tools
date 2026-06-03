@@ -306,7 +306,7 @@ def _run_tracr_batch(
             ) from e
 
         if proc.returncode != 0:
-            stderr_tail = (proc.stderr or "").strip().splitlines()[-10:]
+            stderr_tail = (proc.stderr or "").strip().splitlines()
             logger.warning(
                 "crispr-tracr-rna: batch %d CRISPRtracrRNA.py failed (exit %d): %s",
                 batch_idx,

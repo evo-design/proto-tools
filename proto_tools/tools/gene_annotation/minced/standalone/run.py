@@ -143,7 +143,7 @@ def _run_single_minced(sequence: str, seq_id: str, config: dict[str, Any]) -> di
             }
 
         if proc.returncode != 0:
-            stderr_tail = (proc.stderr or "").strip().splitlines()[-10:]
+            stderr_tail = (proc.stderr or "").strip().splitlines()
             logger.warning(
                 "minced: %s failed (exit %d): %s; returning empty arrays",
                 seq_id,

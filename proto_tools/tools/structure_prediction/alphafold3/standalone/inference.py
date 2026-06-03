@@ -334,7 +334,7 @@ class AlphaFold3Model:
         returncode, _stdout, stderr = run_teed(run_cmds, env=env, verbose=verbose)
 
         if returncode != 0:
-            stderr_tail = " | ".join(stderr.strip().splitlines()[-10:]) or "<no stderr>"
+            stderr_tail = " | ".join(stderr.strip().splitlines()) or "<no stderr>"
             if is_cuda_oom(stderr_tail):
                 raise_oom(
                     "alphafold3", hint="Shorten the sequences / reduce ligand atoms, or use a GPU with more memory."

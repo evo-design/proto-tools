@@ -94,7 +94,7 @@ def run_segmasker(input_data: dict[str, Any]) -> dict[str, Any]:
 
         if result.returncode != 0:
             raise RuntimeError(
-                f"segmasker: failed (exit {result.returncode}): {' | '.join((result.stderr or '').strip().splitlines()[-10:]) or '<no stderr>'}"
+                f"segmasker: failed (exit {result.returncode}): {' | '.join((result.stderr or '').strip().splitlines()) or '<no stderr>'}"
             )
 
         seq_records = list(SeqIO.parse(StringIO(result.stdout), "fasta"))  # type: ignore[no-untyped-call]

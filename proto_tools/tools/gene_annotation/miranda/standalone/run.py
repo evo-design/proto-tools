@@ -89,7 +89,7 @@ def run_miranda(
             )
         except subprocess.CalledProcessError as e:
             # miRanda writes diagnostics to stdout as well as stderr, so surface both.
-            diagnostics = ((e.stderr or "") + "\n" + (e.stdout or "")).strip().splitlines()[-10:]
+            diagnostics = ((e.stderr or "") + "\n" + (e.stdout or "")).strip().splitlines()
             raise RuntimeError(
                 f"miranda: prediction failed (exit {e.returncode}): {' | '.join(diagnostics) or '<no output>'}"
             ) from e

@@ -56,7 +56,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         )
 
         if result.returncode != 0:
-            stderr_tail = " | ".join((result.stderr or "").strip().splitlines()[-10:]) or "<no stderr>"
+            stderr_tail = " | ".join((result.stderr or "").strip().splitlines()) or "<no stderr>"
             raise RuntimeError(f"ipsae: ipsae.py failed (exit {result.returncode}); last stderr: {stderr_tail}")
 
         pae_str = f"{int(pae_cutoff):02d}"

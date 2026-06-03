@@ -153,7 +153,7 @@ def run_orfipy(input_data: dict[str, Any]) -> dict[str, Any]:
         except subprocess.TimeoutExpired as e:
             raise RuntimeError(f"orfipy: ORF prediction timed out after {timeout_seconds}s") from e
         if proc.returncode != 0:
-            stderr_tail = (proc.stderr or "").strip().splitlines()[-10:]
+            stderr_tail = (proc.stderr or "").strip().splitlines()
             raise RuntimeError(
                 f"orfipy: ORF prediction failed (exit {proc.returncode}): {' | '.join(stderr_tail) or '<no stderr>'}"
             )
