@@ -20,7 +20,7 @@ You can use it as a standalone Python library or as part of the broader [proto-l
 
 ## Related Repositories
 
-- [`proto-language`](https://github.com/evo-design/proto-language) – Core language framework (constraints, generators, optimizers)
+- [`proto-language`](https://github.com/evo-design/proto-language) – High-level programming language for generative biology
 - [`proto-client`](https://github.com/evo-design/proto-client) – Python SDK for Proto Bio APIs
 
 ## Setup 🚧
