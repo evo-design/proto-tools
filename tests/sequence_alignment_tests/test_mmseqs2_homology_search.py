@@ -3,7 +3,7 @@
 import logging
 import platform
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 import pytest
 from pydantic import ValidationError
@@ -159,15 +159,44 @@ def test_paired_group_accepted_as_nested_list() -> None:
 
 
 def test_unknown_dataset_rejected() -> None:
-    """Datasets must be in the registry."""
-    with pytest.raises(ValidationError, match="Unknown dataset"):
-        Mmseqs2HomologySearchConfig(datasets=["does-not-exist"])
+    """A value outside the searchable product Literal is rejected at construction."""
+    with pytest.raises(ValidationError, match="Input should be"):
+        Mmseqs2HomologySearchConfig(dataset="does-not-exist")
 
 
-def test_multi_dataset_rejected() -> None:
-    """Exactly one dataset is supported per call."""
-    with pytest.raises(ValidationError, match=r"[Ee]xactly one dataset"):
-        Mmseqs2HomologySearchConfig(datasets=["uniref30-2302", "uniref30-2302"])
+def test_non_searchable_dataset_not_selectable() -> None:
+    """A registered but non-ColabFold DB (a3m_adapter != 'colabfold') is not a valid ``dataset`` value."""
+    with pytest.raises(ValidationError, match="Input should be"):
+        Mmseqs2HomologySearchConfig(dataset="small-bfd", use_gpu=False)
+
+
+def test_dataset_field_schema_carries_inline_enum_and_default() -> None:
+    """The ``dataset`` Literal emits an INLINE JSON-Schema enum + default (drives the proto-ui dropdown).
+
+    The proto-ui parser reads ``schemaProp.enum`` at the property level, so the
+    enum must be inline. A Python ``Enum`` would instead emit a ``$ref`` into
+    ``$defs`` that the parser doesn't resolve — a ``Literal`` stays inline.
+    """
+    prop = Mmseqs2HomologySearchConfig.model_json_schema()["properties"]["dataset"]
+    assert prop["enum"] == ["colabfold-envdb-202108", "uniref30-2302"]
+    assert prop["default"] == "uniref30-2302"
+    assert "$ref" not in prop  # inline enum, not a $defs reference
+
+
+def test_dataset_literal_matches_registry_searchable_set() -> None:
+    """Drift guard: the ``dataset`` Literal must equal the registry's searchable product DBs.
+
+    Searchable == ``a3m_adapter == "colabfold"`` minus the in-tree
+    ``tiny-test-colabfold`` fixture. Registering a new searchable DB fails this
+    assertion, prompting an update to the Literal (and thus the UI dropdown).
+    """
+    searchable = {
+        name
+        for name in DatasetRegistry.list_all()
+        if DatasetRegistry.get(name).a3m_adapter == "colabfold" and name != "tiny-test-colabfold"
+    }
+    literal_values = set(get_args(Mmseqs2HomologySearchConfig.model_fields["dataset"].annotation))
+    assert literal_values == searchable
 
 
 @pytest.mark.skipif(platform.system() != "Linux", reason="GPU validation is Linux-only")
@@ -322,9 +351,11 @@ def test_e2e_search_against_provisioned_protein_dataset(dataset_name: str) -> No
         pytest.skip(f"{dataset_name} declares supports_gpu=False")
     if entry.a3m_adapter != "colabfold":
         pytest.skip(f"{dataset_name} uses a3m_adapter={entry.a3m_adapter!r}; tool only handles colabfold-style DBs")
+    if dataset_name == "tiny-test-colabfold":
+        pytest.skip("test fixture excluded from the product Literal; exercised separately via model_construct")
 
     inp = Mmseqs2HomologySearchInput(queries=[(UBIQUITIN, "ubiquitin")])
-    cfg = Mmseqs2HomologySearchConfig(datasets=[dataset_name], use_gpu=True)
+    cfg = Mmseqs2HomologySearchConfig(dataset=dataset_name, use_gpu=True)
     result = run_mmseqs2_homology_search(inp, cfg)
 
     assert result.success, f"Search against {dataset_name} failed: {result.errors}"
@@ -453,7 +484,10 @@ def test_real_paired_search_against_mini_db() -> None:
     row-aligned MSAs.
     """
     inp = Mmseqs2HomologySearchInput(queries=[[(HBA_HUMAN, "hba"), (HBB_HUMAN, "hbb")]])
-    cfg = Mmseqs2HomologySearchConfig(datasets=["tiny-test-colabfold"], use_gpu=False)
+    # tiny-test-colabfold is excluded from the product `dataset` Literal, so build
+    # the config via model_construct to bypass enum validation — this test exercises
+    # the search pipeline, not the field's product allowlist.
+    cfg = Mmseqs2HomologySearchConfig.model_construct(dataset="tiny-test-colabfold", use_gpu=False)
     out = run_mmseqs2_homology_search(inp, cfg)
 
     assert out.success, f"paired search failed: {out.errors}"

@@ -51,9 +51,8 @@ class Mmseqs2HomologySearchQuery(BaseModel):
         sequence_id (str | None): Optional identifier. Auto-generated from
             a hash of the sequence when not provided.
         molecule_type (Literal["protein", "rna", "dna"] | None): Sequence
-            type. When ``None``, inferred from the dataset's ``molecule_type``.
-            Setting this explicitly lets the validator catch protein-vs-nucleic
-            mismatches against the configured datasets.
+            type. When ``None`` (the default), inferred from the dataset's
+            ``molecule_type``.
     """
 
     sequence: str = Field(title="Sequence", description="Sequence to search for homologs")
@@ -61,7 +60,7 @@ class Mmseqs2HomologySearchQuery(BaseModel):
     molecule_type: Literal["protein", "rna", "dna"] | None = Field(
         default=None,
         title="Molecule Type",
-        description="Sequence type; inferred from datasets when None",
+        description="Sequence type; inferred from the dataset when None",
     )
 
     @field_validator("sequence")
@@ -258,8 +257,8 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
     """Configuration for ``mmseqs2-homology-search``.
 
     Attributes:
-        datasets (list[str]): Registered dataset keys; accepts exactly one
-            protein dataset.
+        dataset (Literal["colabfold-envdb-202108", "uniref30-2302"]): Registered
+            key of the searchable reference database; one ColabFold protein DB.
         use_gpu (bool): Run MMseqs2-GPU; requires a ``.idx_pad`` index,
             an NVIDIA GPU (Turing+), and a Linux host.
         pairing_strategy (Literal["greedy", "complete"]): Cross-chain pairing
@@ -279,10 +278,10 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
         as every other proto-tool with file outputs.
     """
 
-    datasets: list[str] = ConfigField(
-        title="Datasets",
-        default=["uniref30-2302"],
-        description="Registered dataset keys (e.g. `uniref30-2302`); exactly one protein dataset per call.",
+    dataset: Literal["colabfold-envdb-202108", "uniref30-2302"] = ConfigField(
+        title="Dataset",
+        default="uniref30-2302",
+        description="Registered ColabFold protein database to search (e.g. `uniref30-2302`); one per call.",
     )
     use_gpu: bool = ConfigField(
         title="Use GPU",
@@ -317,77 +316,12 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
     )
 
     @model_validator(mode="after")
-    def _validate_datasets_registered(self) -> Any:
-        """Every dataset key must be in the registry."""
-        unknown = [name for name in self.datasets if name not in DatasetRegistry.list_all()]
-        if unknown:
-            available = ", ".join(DatasetRegistry.list_all()) or "<none>"
-            raise ValueError(f"Unknown dataset(s) {unknown}. Registered: {available}")
-        return self
-
-    @model_validator(mode="after")
-    def _validate_single_dataset(self) -> Any:
-        """Exactly one dataset per call; multi-dataset merge is not supported."""
-        if len(self.datasets) != 1:
-            raise ValueError(
-                f"Exactly one dataset is supported, got {len(self.datasets)}: {self.datasets}. "
-                "Multi-dataset search (UniRef30 + envdb + BFD merge) is not yet available."
-            )
-        return self
-
-    @model_validator(mode="after")
-    def _validate_uniform_molecule_type(self) -> Any:
-        """All datasets must share a molecule type (so queries can target them as one)."""
-        types = {DatasetRegistry.get(name).molecule_type for name in self.datasets}
-        if len(types) > 1:
-            raise ValueError(
-                f"Datasets must share molecule_type, got {sorted(types)}. "
-                "Mix protein and nucleotide datasets in separate calls."
-            )
-        return self
-
-    @model_validator(mode="after")
-    def _validate_a3m_adapter_supported(self) -> Any:
-        """Only ColabFold-style profile DBs are searchable.
-
-        The standalone wraps colabfold_search's iterative pipeline, which only
-        works against UniRef30 / ColabFoldDB envdb. AF3-style and RNA datasets
-        need a different MMseqs2 invocation pattern. Block them at config time
-        with a clear hint.
-        """
-        unsupported = [
-            (name, DatasetRegistry.get(name).a3m_adapter)
-            for name in self.datasets
-            if DatasetRegistry.get(name).a3m_adapter != "colabfold"
-        ]
-        if unsupported:
-            raise ValueError(
-                f"Only datasets with a3m_adapter='colabfold' (UniRef30, ColabFoldDB envdb) "
-                f"are searchable. Got: {unsupported}. AF3-style protein and RNA datasets are "
-                "registered and provisionable but not yet searchable."
-            )
-        return self
-
-    @model_validator(mode="after")
     def _validate_use_gpu_platform(self) -> Any:
         """GPU search requires Linux (the GPU MMseqs2 binary is Linux-only)."""
         if self.use_gpu and platform.system() != "Linux":
             raise ValueError(
                 f"use_gpu=True requires Linux (current: {platform.system()} {platform.machine()}). "
                 "Set use_gpu=False to fall back to CPU search."
-            )
-        return self
-
-    @model_validator(mode="after")
-    def _validate_use_gpu_supported_by_datasets(self) -> Any:
-        """Every selected dataset must support GPU when use_gpu=True."""
-        if not self.use_gpu:
-            return self
-        unsupported = [name for name in self.datasets if not DatasetRegistry.get(name).supports_gpu]
-        if unsupported:
-            raise ValueError(
-                f"use_gpu=True but datasets {unsupported} declare supports_gpu=False. "
-                "Set use_gpu=False or pick a GPU-capable dataset."
             )
         return self
 
@@ -398,13 +332,15 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
 
     @classmethod
     def minimal(cls, **kwargs: Any) -> "Mmseqs2HomologySearchConfig":
-        """Cheap-mode defaults for env-report and seed-reproducibility tests.
+        """Cheap-mode defaults for construct-time test infrastructure.
 
-        Points at the in-tree ``tiny-test-colabfold`` fixture DB so the test
-        infrastructure never needs the ~100 GB UniRef30 tarball, and forces
-        CPU search so coverage isn't gated on a GPU being present.
+        Forces CPU search so construction isn't gated on a GPU/Linux host, and
+        keeps the default ``uniref30-2302`` (a valid ``dataset`` Literal value).
+        The in-tree ``tiny-test-colabfold`` fixture is excluded from the product
+        Literal, so tests that actually run a search against it build the config
+        via ``model_construct`` rather than through ``minimal``.
         """
-        kwargs.setdefault("datasets", ["tiny-test-colabfold"])
+        kwargs.setdefault("dataset", "uniref30-2302")
         kwargs.setdefault("use_gpu", False)
         return super().minimal(**kwargs)  # type: ignore[return-value]
 
@@ -445,12 +381,12 @@ def run_mmseqs2_homology_search(
     config: Mmseqs2HomologySearchConfig,
     instance: Any = None,
 ) -> Mmseqs2HomologySearchOutput:
-    """Execute homology search against the configured registered dataset(s).
+    """Execute homology search against the configured registered dataset.
 
     Args:
         inputs (Mmseqs2HomologySearchInput): Query groups; singletons yield
             unpaired MSAs, multi-chain groups yield taxonomy-paired MSAs.
-        config (Mmseqs2HomologySearchConfig): Search configuration; ``datasets``
+        config (Mmseqs2HomologySearchConfig): Search configuration; ``dataset``
             picks the registered DB, ``use_gpu`` toggles MMseqs2-GPU,
             ``pairing_strategy`` controls cross-chain pairing.
         instance (Any): Optional persistent ``ToolInstance`` for batch workloads.
@@ -459,8 +395,8 @@ def run_mmseqs2_homology_search(
         Mmseqs2HomologySearchOutput: One result per input group, with per-chain
             ``msas`` and (for paired groups) ``paired_msas``.
     """
-    # Validators guarantee exactly one colabfold-style protein dataset.
-    dataset_name = config.datasets[0]
+    # Validators guarantee a colabfold-style protein dataset.
+    dataset_name = config.dataset
     entry: DatasetEntry = DatasetRegistry.get(dataset_name)
     cache_dir = get_dataset_dir(dataset_name)
 
