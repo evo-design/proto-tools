@@ -1,0 +1,23 @@
+# Environment variables for RoseTTAFold3 (RF3, structure prediction).
+#
+# Lines starting with # are comments and will be ignored.
+# Variables listed under [passthrough] are inherited from the parent environment.
+# Variables under [set] are set to specific values in the subprocess.
+
+[passthrough]
+# Per-tool weights override (lets users point at an alternative RF3 checkpoint dir
+# without disturbing the proto-managed cache).
+PROTO_RF3_WEIGHTS_DIR
+# Honors the FOUNDRY_CHECKPOINT_DIRS convention if set externally so users can add
+# extra checkpoint roots without editing the wrapper.
+FOUNDRY_CHECKPOINT_DIRS
+
+[set]
+# Point triton's JIT launcher (and any CUDA-coupled build) at the tool-local
+# CUDA toolkit installed by proto_install_cuda_toolkit in setup.sh. Without
+# these, triton's run-time stub compilation fails on hosts that don't have
+# system gcc / nvcc (e.g. Sherlock).
+CC=${VENV_PATH}/cuda_env/bin/gcc
+CXX=${VENV_PATH}/cuda_env/bin/g++
+CUDA_HOME=${VENV_PATH}/cuda_env
+LD_LIBRARY_PATH=${VENV_PATH}/cuda_env/lib

@@ -35,6 +35,9 @@ from proto_tools.tools.structure_prediction import (
     ProtenixConfig,
     ProtenixInput,
     ProtenixOutput,
+    RF3Config,
+    RF3Input,
+    RF3Output,
     StructurePredictionOutput,
     run_alphafold2,
     run_alphafold3,
@@ -43,6 +46,7 @@ from proto_tools.tools.structure_prediction import (
     run_esmfold,
     run_esmfold2,
     run_protenix,
+    run_rf3_prediction,
 )
 from proto_tools.utils.standalone_helpers_source.standalone_helpers import resolve_weights_dir
 from proto_tools.utils.tool_cache import (
@@ -65,6 +69,7 @@ _STRUCTURE_PREDICTORS = {
     "chai1": (run_chai1, Chai1Input, Chai1Config, Chai1Output),
     "boltz2": (run_boltz2, Boltz2Input, Boltz2Config, Boltz2Output),
     "protenix": (run_protenix, ProtenixInput, ProtenixConfig, ProtenixOutput),
+    "rf3": (run_rf3_prediction, RF3Input, RF3Config, RF3Output),
 }
 
 _FAST_PREDICTORS = ["esmfold"]

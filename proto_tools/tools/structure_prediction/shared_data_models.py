@@ -617,13 +617,19 @@ def normalize_output_chain_ids(structure: Structure, chains: Sequence[Chain | Fr
     Predictors may emit positional or entity-derived names that differ from the
     IDs we sent. Remap output polymer chains by order when the counts match;
     ligand-only chains are excluded on both sides (mirrors
-    :meth:`Structure.get_chain_ids`). No-op when already aligned or on count mismatch.
+    :meth:`Structure.get_chain_ids`). No-op when already aligned, when the
+    expected polymer IDs are already an in-order prefix of the observed list
+    (some predictors — RF3, for example — emit ligand chains classified as
+    "polymer" by gemmi, appending them after the real polymer chains), or on
+    count mismatch.
     """
     expected_ids = [
         cid for chain, cid in zip(chains, resolve_chain_ids(chains), strict=True) if chain.entity_type != "ligand"
     ]
     observed_ids = structure.get_chain_ids()
     if observed_ids == expected_ids:
+        return structure
+    if observed_ids[: len(expected_ids)] == expected_ids:
         return structure
     if len(observed_ids) != len(expected_ids):
         logger.warning(
