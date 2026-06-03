@@ -134,6 +134,30 @@ def test_auto_persist_scope_noop_when_no_preprocess() -> None:
     assert _auto_persist_overlay.get() is None
 
 
+def test_auto_persist_scope_parks_worker_in_persist_scope() -> None:
+    """In persist mode the scope must NOT shut its worker down on exit.
+
+    Instead it hands the worker to the persist scoped cache so subsequent calls
+    reuse it. This is the fix for custom-preprocess tools never warming under
+    ``persist()``.
+    """
+    scoped_cache: dict[str, ToolInstance] = {}
+    persist_token = _persist_mode.set(True)
+    scope_token = _scope_override.set(scoped_cache)
+    try:
+        with patch.object(ToolInstance, "__init__", return_value=None):
+            with patch.object(ToolInstance, "shutdown") as mock_shutdown:
+                with ToolInstance._auto_persist_scope("pyrosetta"):
+                    overlay = _auto_persist_overlay.get()
+                    assert overlay is not None and "pyrosetta" in overlay
+                # Exited the scope: the worker is parked, not torn down.
+                assert mock_shutdown.call_count == 0
+                assert "pyrosetta" in scoped_cache
+    finally:
+        _scope_override.reset(scope_token)
+        _persist_mode.reset(persist_token)
+
+
 def test_auto_persist_scope_nesting_safe_via_overlay() -> None:
     """If the outer overlay already contains the toolkit, the inner scope is a no-op."""
     outer_inst = _make_fake_instance(toolkit="pyrosetta")
@@ -321,6 +345,61 @@ def test_atool_wrapper_triggers_auto_persist_for_custom_preprocess(
     assert "OVERLAY_HAD_TOOLKIT:hello" in result.result
     # Function body also saw the overlay (scope still active during dispatch).
     assert "BODY_OVERLAY_HIT" in result.result
+
+
+def test_persist_reuses_single_worker_for_custom_preprocess_tool(
+    _clean_registry: type[ToolRegistry],
+) -> None:
+    """Under persist(), a custom-preprocess standalone tool must reuse ONE worker.
+
+    Regression: ``_auto_persist_scope`` created and tore down a fresh worker on
+    every call, so a tool whose config defines ``preprocess`` reloaded its model
+    on each call even inside ``persist()`` (the persist scoped cache never got
+    populated). The worker should instead be created once, parked in the persist
+    scope, and reused for the remaining calls.
+    """
+
+    @_clean_registry.register(
+        key="auto-persist-warm-test",
+        label="Auto Persist Warm Test",
+        category="test",
+        input_class=_AutoPersistInput,
+        config_class=_PreprocessConfig,
+        output_class=_AutoPersistOutput,
+        description="Custom preprocess tool used to verify persist() keeps one worker warm",
+    )
+    def run_tool(inputs: _AutoPersistInput, config: _PreprocessConfig, instance: Any = None) -> _AutoPersistOutput:
+        return _AutoPersistOutput(result=inputs.input_data)
+
+    # Point spec + wrapper closure at the real pyrosetta dir (has standalone/) so
+    # has_standalone_env=True and the toolkit resolves to "pyrosetta".
+    pyrosetta_source = (
+        Path(__file__).resolve().parents[2]
+        / "proto_tools"
+        / "tools"
+        / "structure_scoring"
+        / "pyrosetta"
+        / "fake_tool_for_test.py"
+    )
+    spec = _clean_registry.get("auto-persist-warm-test")
+    spec.source_file = pyrosetta_source
+    _override_wrapper_source_file(run_tool, pyrosetta_source)
+
+    init_mock = MagicMock(return_value=None)
+    with patch.object(ToolInstance, "__init__", init_mock):
+        with patch.object(ToolInstance, "shutdown") as shutdown_mock:
+            with ToolInstance.persist():
+                for i in range(3):
+                    run_tool(_AutoPersistInput(input_data=f"seq{i}"), _PreprocessConfig())
+                # Snapshot mid-block, before persist()'s scope-exit teardown.
+                creations_in_block = init_mock.call_count
+                shutdowns_in_block = shutdown_mock.call_count
+                # The single worker is parked in the persist scoped cache.
+                scoped = _scope_override.get()
+                assert scoped is not None and "pyrosetta" in scoped
+
+    assert creations_in_block == 1, f"expected ONE worker across 3 calls, created {creations_in_block}"
+    assert shutdowns_in_block == 0, f"worker was torn down {shutdowns_in_block}x mid-block (should persist)"
 
 
 def test_atool_wrapper_skips_scope_without_preprocess_or_instance(

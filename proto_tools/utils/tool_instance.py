@@ -659,7 +659,18 @@ class ToolInstance:
         finally:
             _auto_persist_overlay.reset(token)
             if instance is None:
-                scoped_inst.shutdown()
+                if _persist_mode.get():
+                    with _lock:
+                        cache = _active_cache()
+                        if not hasattr(scoped_inst, "_cache_keys"):
+                            scoped_inst._cache_keys = set()
+                        if cache.setdefault(toolkit, scoped_inst) is scoped_inst:
+                            scoped_inst._cache_keys.add(toolkit)
+                        else:
+                            # Slot already claimed (e.g. a concurrent call) — drop ours.
+                            scoped_inst.shutdown()
+                else:
+                    scoped_inst.shutdown()
 
     # ------------------------------------------------------------------
     # Init
