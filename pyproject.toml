@@ -199,6 +199,8 @@ module = [
     "rdkit.*",
     "pdbeccdutils.*",
     "gemmi.*",
+    "faiss.*",
+    "affine_gaps.*",
     # Tool-specific model packages (installed in standalone envs, not on PyPI)
     "standalone_helpers.*",
     "ablang2.*",
