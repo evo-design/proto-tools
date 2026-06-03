@@ -1012,7 +1012,7 @@ def test_tools_section_lists_all_tools(readme: Path) -> None:
 
 
 # Domains that genuinely do not support HTTPS.
-_HTTP_ONLY_DOMAINS = frozenset({"hmmer.org", "eddylab.org"})
+_HTTP_ONLY_DOMAINS = frozenset({"hmmer.org", "eddylab.org", "bioinfo.isyslab.info"})
 
 
 @pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
