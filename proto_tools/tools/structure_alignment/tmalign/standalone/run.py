@@ -47,7 +47,7 @@ def run_tmalign_alignment(pdb_text_1: str, pdb_text_2: str) -> dict[str, Any]:
                 text=True,
             )
         except subprocess.CalledProcessError as e:
-            stderr_tail = (e.stderr or "").strip().splitlines()[-10:]
+            stderr_tail = (e.stderr or "").strip().splitlines()
             raise RuntimeError(
                 f"tmalign: alignment failed (exit {e.returncode}): {' | '.join(stderr_tail) or '<no stderr>'}"
             ) from e

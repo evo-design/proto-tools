@@ -149,7 +149,7 @@ def run_mafft_alignment(
                 env=env,
             )
         except subprocess.CalledProcessError as e:
-            stderr_tail = (e.stderr or "").strip().splitlines()[-10:]
+            stderr_tail = (e.stderr or "").strip().splitlines()
             raise RuntimeError(
                 f"mafft: alignment failed (exit {e.returncode}): {' | '.join(stderr_tail) or '<no stderr>'}"
             ) from e

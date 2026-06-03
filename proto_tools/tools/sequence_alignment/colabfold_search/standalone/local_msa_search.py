@@ -221,7 +221,7 @@ class ColabFoldSearchWrapper:
             }
 
         except subprocess.CalledProcessError as e:
-            stderr_tail = " | ".join((e.stderr or "").strip().splitlines()[-10:]) or "<no stderr>"
+            stderr_tail = " | ".join((e.stderr or "").strip().splitlines()) or "<no stderr>"
             error_msg = f"colabfold-search: failed (exit {e.returncode}): {stderr_tail}"
 
             # Check if this is a "prof_res does not exist" error

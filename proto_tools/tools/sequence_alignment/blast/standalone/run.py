@@ -55,7 +55,7 @@ def run_local_blast(input_data: dict[str, Any]) -> dict[str, Any]:
     try:
         proc = subprocess.run(cmd, check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError as e:
-        stderr_tail = (e.stderr or "").strip().splitlines()[-10:]
+        stderr_tail = (e.stderr or "").strip().splitlines()
         raise RuntimeError(
             f"blast: {Path(program).name} search failed (exit {e.returncode}): {' | '.join(stderr_tail) or '<no stderr>'}"
         ) from e
@@ -110,7 +110,7 @@ def run_create_blast_db(input_data: dict[str, Any]) -> dict[str, Any]:
     try:
         subprocess.run(cmd, check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError as e:
-        stderr_tail = (e.stderr or "").strip().splitlines()[-10:]
+        stderr_tail = (e.stderr or "").strip().splitlines()
         raise RuntimeError(
             f"blast: makeblastdb failed (exit {e.returncode}): {' | '.join(stderr_tail) or '<no stderr>'}"
         ) from e

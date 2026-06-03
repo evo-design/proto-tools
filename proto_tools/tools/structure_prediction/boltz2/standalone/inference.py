@@ -213,7 +213,7 @@ class Boltz2Model:
         # whether or not verbose streaming is on.
         returncode, stdout, stderr = run_teed(cmd, env=env, verbose=verbose, encoding="utf-8")
         if returncode != 0:
-            stderr_tail = " | ".join(stderr.strip().splitlines()[-10:]) or "<no stderr>"
+            stderr_tail = " | ".join(stderr.strip().splitlines()) or "<no stderr>"
             if is_cuda_oom(stderr_tail):
                 raise_oom("boltz2", hint="Reduce the complex size or use a GPU with more memory.")
             raise RuntimeError(f"boltz2: failed (exit {returncode}): {stderr_tail}")

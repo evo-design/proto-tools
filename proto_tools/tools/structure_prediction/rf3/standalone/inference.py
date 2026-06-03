@@ -86,7 +86,7 @@ class RF3Model:
 
         returncode, stdout, stderr = run_teed(cmd, env=env, verbose=verbose, encoding="utf-8")
         if returncode != 0:
-            stderr_tail = " | ".join(stderr.strip().splitlines()[-10:]) or "<no stderr>"
+            stderr_tail = " | ".join(stderr.strip().splitlines()) or "<no stderr>"
             if is_cuda_oom(stderr_tail):
                 raise_oom("rf3", hint="Reduce diffusion_batch_size or complex size, or use a GPU with more memory.")
             raise RuntimeError(f"rf3: rf3 fold failed (exit {returncode}): {stderr_tail}")

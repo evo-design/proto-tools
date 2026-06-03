@@ -279,7 +279,7 @@ class ProtenixModel:
         if err_dir.is_dir():
             err_files = list(err_dir.iterdir())
             if err_files:
-                messages = [f"{ef.name}: {ef.read_text()[:500]}" for ef in err_files]
+                messages = [f"{ef.name}: {ef.read_text()}" for ef in err_files]
                 raise RuntimeError("protenix: errors reported:\n" + "\n".join(messages))
 
         # Read job names from input JSON to preserve ordering

@@ -158,7 +158,7 @@ class GerminalRunner:
                 stderr=sys.stderr if verbose else subprocess.PIPE,
             )
         except subprocess.CalledProcessError as e:
-            stderr_tail = " | ".join((e.stderr or "").strip().splitlines()[-10:]) or "<no stderr>"
+            stderr_tail = " | ".join((e.stderr or "").strip().splitlines()) or "<no stderr>"
             raise RuntimeError(f"germinal: failed (exit {e.returncode}): {stderr_tail}") from e
         return self._collect_outputs(workdir, target_name, input_dict)
 
