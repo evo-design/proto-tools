@@ -47,7 +47,7 @@ def _run_cmd(cmd: list[str], description: str) -> subprocess.CompletedProcess:  
     try:
         return subprocess.run(cmd, check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError as e:
-        stderr_tail = (e.stderr or "").strip().splitlines()[-10:]
+        stderr_tail = (e.stderr or "").strip().splitlines()[-40:]
         raise RuntimeError(
             f"mmseqs2: {description} failed (exit {e.returncode}): {' | '.join(stderr_tail) or '<no stderr>'}"
         ) from e
@@ -179,6 +179,9 @@ def run_protein_search(input_data: dict[str, Any]) -> dict[str, Any]:
             cmd += ["--threads", str(threads)]
         if use_gpu:
             cmd += ["--gpu", "1"]
+        # Cap prefilter RAM so a large DB index (e.g. UniRef50) does not OOM under a cgroup limit.
+        if input_data.get("split_memory_limit"):
+            cmd += ["--split-memory-limit", str(input_data["split_memory_limit"])]
         cmd.extend(str(arg) for arg in input_data.get("extra_args", []))
 
         _run_cmd(cmd, "mmseqs easy-search")
