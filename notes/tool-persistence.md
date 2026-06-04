@@ -199,13 +199,14 @@ Two rules for tool authors:
 Runtime-only fields (e.g. `timeout`) set `reload_on_change=False` and do not
 trigger restarts.
 
-## Multi-GPU fan-out (`ToolPool`)
+## ToolPool and parallel execution
 
 `ToolPool` (`tool_pool.py`) parallelizes a single list-input tool call across
 several devices. It intercepts the `@tool` call, partitions the input items
-across persistent workers on different devices using cost-aware **LPT**
-(Longest Processing Time) scheduling, runs the partitions concurrently on a
-`ThreadPoolExecutor`, and reassembles results in original input order.
+across persistent workers on different devices, runs the partitions concurrently
+on a `ThreadPoolExecutor`, and reassembles results in original input order. It is
+the multi-GPU counterpart to `persist()`; the user-facing walkthrough is the
+Parallel Execution guide.
 
 ```python
 from proto_tools.utils import ToolPool
@@ -214,11 +215,50 @@ with ToolPool(gpus="all"):              # or gpus=2, or gpus=["cuda:0", "cuda:1"
     out = run_esmfold(ESMFoldInput(complexes=many_sequences), config)
 ```
 
-`gpus` accepts an int (first N visible GPUs), an explicit device list, or
-`"all"`. `cpus` caps CPU fan-out for CPU tools. Each partition runs as its own
-persistent worker; partition failures are surfaced without discarding the
-successful results. Pooling composes with `persist()` — the pool owns the
-workers for the duration of its block.
+### Constructor
+
+`ToolPool(gpus="all", cpus=None)`:
+
+- `gpus` — `"all"` (every visible GPU, default), an `int N` (the first N visible
+  GPUs; errors if N exceeds the visible count), an explicit device list
+  (`["cuda:0", "cuda:2"]`, validated against the visible set), or `0` (explicit
+  CPU-only mode, no GPU detection).
+- `cpus` — total CPU budget for CPU fan-out; `None` resolves to
+  `min(_detect_cpus(), 4)`. `_detect_cpus()` is cgroup-aware
+  (`os.sched_getaffinity`), so it respects Slurm/Kubernetes allocations.
+
+### What gets partitioned
+
+Only tools that declare an `iterable_input_field` are partitioned (e.g.
+`complexes` for ESMFold, `sequences` for ESM2). A tool with a single indivisible
+input runs on one device regardless of pool size. A config may set
+`gpus_per_instance > 1` (a worker that needs several GPUs, e.g. ColabFold): the
+pool then groups devices into slots of that size. `gpus_per_instance == 0` with a
+positive `cpus_per_instance` selects CPU fan-out mode instead.
+
+### Cost-aware scheduling (LPT)
+
+Items are distributed by **longest-processing-time-first (LPT)** bin-packing.
+Each tool reports a per-item estimate via `BaseToolInput.item_cost()` (default
+uniform `1.0`; ESMFold overrides it with residue count). `ToolPool` sorts items
+by descending cost and assigns each to the worker with the least total work, so
+all devices finish at roughly the same wall-clock time. A device may set a
+`max_item_cost` cap to route oversized items away from it. With uniform costs,
+LPT reduces to round-robin.
+
+### Deduplication
+
+Duplicate items in a batch are computed once and the result expanded back to
+every position where the item appeared, so the returned list keeps the input's
+length and order. This is the same dedup the runtime cache uses.
+
+### Persistence and failure handling
+
+Each partition runs as its own persistent worker, warm for the life of the
+`with` block — pooling composes with `persist()`, and the pool owns the workers
+for the block. A partition that raises does not discard the others: successful
+results are preserved and a `PartialFailureError` reports which partitions
+failed.
 
 ## Device management (`DeviceManager`)
 
