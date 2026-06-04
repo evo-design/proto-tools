@@ -58,7 +58,7 @@ def extract(archive_path: Path, bin_dir: Path) -> None:
             if len(parts) == 3 and parts[1] == "bin" and member.isfile():
                 binary_name = parts[2]
                 member.name = binary_name
-                tar.extract(member, path=bin_dir)
+                tar.extract(member, path=bin_dir, filter="data")
                 dest = bin_dir / binary_name
                 dest.chmod(dest.stat().st_mode | stat.S_IEXEC)
                 print(f"  Installed: {binary_name}")
