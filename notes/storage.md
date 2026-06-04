@@ -8,6 +8,7 @@ export PROTO_HOME=/path/to/your/proto_home
 ```
 
 `PROTO_MODEL_CACHE` can override just the model weights location (defaults to `PROTO_HOME/proto_model_cache/`).
+`PROTO_DATABASES_DIR` can override just the sequence-databases location (defaults to `PROTO_MODEL_CACHE/databases/`); see [Databases](#databases).
 
 ## Storage layout
 
@@ -16,6 +17,7 @@ Everything lives under `PROTO_HOME` regardless of install mode:
 ```
 PROTO_HOME/                   (default: ~/.proto/)
 ├── proto_model_cache/        model weights (HF_HOME, TORCH_HOME, resolve_weights_dir)
+│   └── databases/            provisioned MMseqs2 databases (override: PROTO_DATABASES_DIR)
 ├── proto_tool_envs/          micromamba-managed tool venvs
 ├── uv_cache/                 uv package download cache (UV_CACHE_DIR)
 ├── pip_cache/                pip HTTP cache (PIP_CACHE_DIR)
@@ -64,6 +66,23 @@ export PROTO_MODEL_CACHE=/shared/team/model_weights
 ```
 
 Do **not** share `PROTO_HOME` itself across users. Tool environments are user-specific and should remain per-user. Only model weights (`PROTO_MODEL_CACHE`) are safe to share.
+
+## Databases
+
+Sequence databases for `mmseqs2-homology-search` (UniRef30, the ColabFold envdb, etc.) are large (tens to hundreds of GB each) and, once indexed, read-only. By default they live under `PROTO_MODEL_CACHE/databases/`, but `PROTO_DATABASES_DIR` overrides the databases root directly, so you can keep them on a separate filesystem from model weights, e.g. a high-capacity scratch volume:
+
+```bash
+# Databases on scratch; weights wherever PROTO_MODEL_CACHE points
+export PROTO_DATABASES_DIR=/scratch/$USER/proto_databases
+```
+
+The override applies to **both** provisioning (`setup_databases.py` writes there) and runtime (the tool resolves datasets there), so a single export keeps them consistent — no symlinks. Like weights, the databases root is safe to NFS-mount and share across collaborators (read-only after indexing). Provision into it with:
+
+```bash
+python -m proto_tools.tools.sequence_alignment.mmseqs2.setup_databases <dataset>   # e.g. uniref30-2302
+```
+
+`setup_databases.py --workdir <dir>` overrides the root for a single invocation instead.
 
 ## Per-tool override
 

@@ -35,7 +35,16 @@ ENTRY = DatasetEntry(
                 description="Extract main MMseqs2 DB tarball",
             ),
             IndexStep(
-                command=["mmseqs", "createindex", "uniref30_2302_db", "tmp_createindex", "--remove-tmp-files", "1"],
+                command=[
+                    "mmseqs",
+                    "createindex",
+                    "uniref30_2302_db",
+                    "tmp_createindex",
+                    "--split-memory-limit",
+                    "{split_memory_limit}",
+                    "--remove-tmp-files",
+                    "1",
+                ],
                 description="Build MMseqs2 sequence index for search",
             ),
             IndexStep(

@@ -113,6 +113,96 @@ def _get_ram_gb() -> float:
     return 0.0
 
 
+# Values at or above this (or the literal "max") mean the cgroup is effectively unbounded.
+_CGROUP_UNLIMITED = 1 << 62
+
+
+def _read_cgroup_value(path: Path) -> int | None:
+    """Read a single-integer cgroup file; return None for missing, ``"max"``, or unparseable."""
+    try:
+        text = path.read_text().strip()
+    except OSError:
+        return None
+    if not text or text == "max":
+        return None
+    try:
+        return int(text)
+    except ValueError:
+        return None
+
+
+def _cgroup_memory_limit_bytes() -> int | None:
+    """Effective cgroup memory limit for this process in bytes, or None if unbounded/unavailable.
+
+    Handles both cgroup hierarchies portably:
+
+    - v2 (unified): reads ``memory.max`` from the process's cgroup up to the
+      root, keeping the smallest concrete limit (a parent — e.g. a Slurm job
+      cgroup — is often the one that actually caps us).
+    - v1: reads ``memory.limit_in_bytes`` for the ``memory`` controller.
+
+    Returns None when no controller file is present or every limit is "max"
+    (unbounded), so callers fall back to physical RAM.
+    """
+    try:
+        cgroup_lines = Path("/proc/self/cgroup").read_text().splitlines()
+    except OSError:
+        return None
+
+    v2_path: str | None = None
+    v1_path: str | None = None
+    for line in cgroup_lines:
+        parts = line.split(":", 2)
+        if len(parts) != 3:
+            continue
+        hierarchy_id, controllers, cgroup_path = parts
+        if hierarchy_id == "0" and controllers == "":
+            v2_path = cgroup_path  # unified (v2) hierarchy
+        elif "memory" in controllers.split(","):
+            v1_path = cgroup_path
+
+    root = Path("/sys/fs/cgroup")
+
+    # cgroup v2: walk from the leaf cgroup to the root; keep the smallest concrete cap.
+    if v2_path is not None:
+        limits: list[int] = []
+        current = root / v2_path.lstrip("/")
+        while True:
+            value = _read_cgroup_value(current / "memory.max")
+            if value is not None and value < _CGROUP_UNLIMITED:
+                limits.append(value)
+            if current == root:
+                break
+            current = current.parent
+        if limits:
+            return min(limits)
+
+    # cgroup v1: a single limit file under the memory controller mount.
+    if v1_path is not None:
+        value = _read_cgroup_value(root / "memory" / v1_path.lstrip("/") / "memory.limit_in_bytes")
+        if value is not None and value < _CGROUP_UNLIMITED:
+            return value
+
+    return None
+
+
+def available_memory_bytes() -> int:
+    """Best-effort memory budget for this process in bytes, respecting cgroup caps.
+
+    Returns the smaller of physical RAM (``/proc/meminfo`` / ``sysctl``) and the
+    effective cgroup memory limit, so Slurm / container / k8s caps are honored
+    rather than the physical host size. Falls back to physical RAM when no cgroup
+    limit applies, and to 0 only when nothing is readable.
+
+    Pure-stdlib and portable: reads ``/proc`` and ``/sys/fs/cgroup`` directly
+    (cgroup v1 and v2), degrading gracefully on systems without them.
+    """
+    physical = int(_get_ram_gb() * 1024**3)
+    cgroup_limit = _cgroup_memory_limit_bytes()
+    candidates = [v for v in (physical, cgroup_limit) if v and v > 0]
+    return min(candidates) if candidates else 0
+
+
 def resolve_num_threads(configured: int | None) -> int:
     """Return ``configured`` if set, else the CPU count this process may use (always >= 1).
 

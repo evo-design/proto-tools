@@ -226,7 +226,12 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
                 temp_db_path=str(tmp_path / "target_db"),
                 label="mmseqs2-search-genomes target_db",
             )
-            target_db_size = None  # leave threads at cpu_count; the cap only matters for tiny DBs where it trips other mmseqs edge cases
+            # Count .index lines to cap threads below; fall back to cpu_count if the read fails.
+            try:
+                with open(f"{target_db_path}.index") as f:
+                    target_db_size = sum(1 for _ in f)
+            except OSError:
+                target_db_size = None
 
         mmseqs_tmp = str(tmp_path / "mmseqs_tmp")
         res_dir = str(tmp_path / "results")
@@ -243,15 +248,14 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
         max_seqs = str(input_data["max_seqs"])
         strand = str(input_data["strand"])
 
-        # Cap threads at target DB size to avoid the chunking bug ("World Size: <threads> dbSize: <n>").
-        # When the user supplied a pre-built DB we don't know the size, so trust the caller.
+        # Cap threads at target DB size (with a floor of 2 so mmseqs' result-merge step has shards to rename) to avoid the "World Size > dbSize" segfault; skip the cap when target_db_size is unknown.
         requested_threads = int(input_data["threads"])
         if target_db_size is None:
             effective_threads = requested_threads if requested_threads > 0 else (os.cpu_count() or 1)
         elif requested_threads <= 0:
-            effective_threads = max(1, min((os.cpu_count() or 1), target_db_size))
+            effective_threads = max(2, min((os.cpu_count() or 1), target_db_size))
         else:
-            effective_threads = max(1, min(requested_threads, target_db_size))
+            effective_threads = max(2, min(requested_threads, target_db_size))
         threads = str(effective_threads)
 
         _run_cmd([mmseqs, "createdb", query_fasta, query_db], "mmseqs createdb (query)")
@@ -477,9 +481,11 @@ def _build_homology_command(
     colabfold_path: str,
     mmseqs_path: str,
     query_fasta: Path,
-    dataset_dir: Path,
+    dbbase: Path,
     output_dir: Path,
-    db_name: str,
+    db1: str,
+    db3: str | None,
+    use_env: bool,
     sensitivity: float | None,
     prefilter_mode: int | None,
     max_seqs: int | None,
@@ -490,11 +496,12 @@ def _build_homology_command(
 ) -> list[str]:
     """Assemble the colabfold_search CLI command from registry-driven flags.
 
-    When ``pairing_strategy`` is set, the query FASTA is a colon-joined complex
-    record and cross-chain paired MSAs are produced using the UniRef30 taxonomy DB;
-    ``--use-env-pairing`` stays off (env-pairing deferred). ``--unpack 0`` keeps the
-    result DBs (``final.a3m``, ``pair.a3m``) so the caller can unpack them into loose
-    per-chain files itself, instead of colabfold merging them into one combined a3m.
+    ``db1``/``db3`` are DB stems resolved relative to the ``dbbase`` directory.
+    With ``use_env`` set, the metagenomic ``db3`` is searched (``--use-env 1``) to
+    deepen the unpaired per-chain MSAs; cross-chain pairing always stays UniRef-only
+    (``--use-env-pairing`` off, env-pairing deferred). When ``pairing_strategy`` is
+    set, the query FASTA is a colon-joined complex record and ``--unpack 0`` keeps
+    the result DBs (``final.a3m``, ``pair.a3m``) for the caller to unpack itself.
     """
     cmd = [colabfold_path, "--mmseqs", mmseqs_path, "--threads", str(num_threads)]
     if sensitivity is not None:
@@ -503,12 +510,13 @@ def _build_homology_command(
         cmd += ["--prefilter-mode", str(prefilter_mode)]
     if max_seqs is not None:
         cmd += ["--max-accept", str(max_seqs)]
-    # env DB not used (no metagenomic support yet)
-    cmd += ["--use-env", "0"]
+    cmd += ["--use-env", "1" if use_env else "0"]
+    if use_env and db3:
+        cmd += ["--db3", db3]
     if pairing_strategy is not None:
         cmd += ["--pair-mode", "unpaired_paired", "--pairing_strategy", str(pairing_strategy), "--unpack", "0"]
-    cmd += ["--db1", db_name]
-    cmd += [str(query_fasta), str(dataset_dir), str(output_dir)]
+    cmd += ["--db1", db1]
+    cmd += [str(query_fasta), str(dbbase), str(output_dir)]
     if use_gpu:
         cmd += ["--gpu", "1"]
     cmd += list(extra_args)
@@ -578,7 +586,9 @@ def run_homology_search(input_dict: dict[str, Any]) -> dict[str, Any]:
             Optional: ``sensitivity`` (float | None), ``prefilter_mode``
             (int | None), ``max_seqs`` (int | None), ``extra_args`` (list[str]),
             ``use_gpu`` (bool, default False), ``verbose`` (bool, default False),
-            ``colabfold_timeout`` (float | None).
+            ``colabfold_timeout`` (float | None), ``use_metagenomic_db`` (bool,
+            default False) plus ``env_dataset_dir`` / ``env_db_prefix`` (the
+            envdb searched as ``--db3`` when metagenomic search is on).
 
     Returns:
         dict[str, Any]: ``{"success": bool, "output_dir": str, ...}``. On
@@ -597,6 +607,10 @@ def run_homology_search(input_dict: dict[str, Any]) -> dict[str, Any]:
     extra_args: list[str] = list(input_dict.get("extra_args", []))
     # When set (mmseqs pairaln --pairing-mode int), `sequences` is one complex's chains, submitted as one colon-joined record.
     pairing_strategy: int | None = input_dict.get("pairing_strategy")
+    # Metagenomic: search the envdb as --db3 (--use-env 1) to deepen unpaired MSAs.
+    use_metagenomic_db: bool = bool(input_dict.get("use_metagenomic_db", False))
+    env_dataset_dir = input_dict.get("env_dataset_dir")
+    env_db_prefix = input_dict.get("env_db_prefix")
     # Inner timeout fires before the framework's outer ToolInstance timeout so
     # we can return a structured error (with cleanup) instead of being
     # hard-killed mid-subprocess. None disables the inner timeout entirely.
@@ -605,6 +619,19 @@ def run_homology_search(input_dict: dict[str, Any]) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     colabfold_path, mmseqs_path = _resolve_executables()
     db_name = _detect_database_name(dataset_dir, db_prefix)
+
+    # colabfold_search resolves --db1/--db3 relative to one dbbase; the registry keeps UniRef + envdb in sibling dirs, so we pass their common parent and address each by relative stem.
+    if use_metagenomic_db and env_dataset_dir:
+        # Tool-layer invariant (homology_search.py:455-462): env_dataset_dir and env_db_prefix are set together.
+        assert env_db_prefix is not None, "env_dataset_dir set without env_db_prefix; tool-layer binding broken"
+        env_dir = Path(env_dataset_dir)
+        dbbase = Path(os.path.commonpath([str(dataset_dir), str(env_dir)]))
+        db1 = os.path.relpath(dataset_dir / db_name, dbbase)
+        db3: str | None = os.path.relpath(env_dir / env_db_prefix, dbbase)
+    else:
+        dbbase = dataset_dir
+        db1 = db_name
+        db3 = None
 
     query_fasta = output_dir / "query.fasta"
     if pairing_strategy is not None:
@@ -617,9 +644,11 @@ def run_homology_search(input_dict: dict[str, Any]) -> dict[str, Any]:
         colabfold_path=colabfold_path,
         mmseqs_path=mmseqs_path,
         query_fasta=query_fasta,
-        dataset_dir=dataset_dir,
+        dbbase=dbbase,
         output_dir=output_dir,
-        db_name=db_name,
+        db1=db1,
+        db3=db3,
+        use_env=use_metagenomic_db,
         sensitivity=sensitivity,
         prefilter_mode=prefilter_mode,
         max_seqs=max_seqs,

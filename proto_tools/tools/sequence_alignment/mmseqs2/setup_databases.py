@@ -3,9 +3,9 @@
 User-invoked CLI; no auto-download anywhere else in the codebase. Reads
 the registry entries in ``proto_tools.databases``
 to know what URLs to fetch, what indexing commands to run, and where on
-disk each dataset belongs (``$PROTO_MODEL_CACHE/databases/<name>/`` by
-default). Idempotent: re-runs skip already-provisioned datasets and
-already-downloaded files.
+disk each dataset belongs (the databases root: ``$PROTO_DATABASES_DIR`` if set,
+else ``$PROTO_MODEL_CACHE/databases/``; ``--workdir`` overrides per-invocation).
+Idempotent: re-runs skip already-provisioned datasets and already-downloaded files.
 
 Each registered ``DatasetEntry`` declares its own ``urls`` (download
 specs) and ``index_recipe.steps`` (argv to run after download). This
@@ -55,6 +55,10 @@ from proto_tools.databases import (
     get_databases_root,
     get_dataset_dir,
 )
+from proto_tools.utils.system_info import available_memory_bytes
+
+# Fraction of the cgroup-aware budget allotted to mmseqs index builds (mmseqs sizes splits from physical RAM, so the cap keeps `createindex` from OOMing under Slurm / container memory limits).
+_INDEX_MEMORY_SAFETY_FRACTION = 0.7
 
 # ============================================================================
 # Presets — mirror predictor `preferred_datasets` defaults from the design doc
@@ -96,10 +100,11 @@ PRESETS: dict[str, list[str]] = {
 def _resolve_cache_dir(name: str, workdir: Path | None) -> Path:
     """Return where ``name`` should be installed.
 
-    Without ``--workdir``, uses the registry's standard
-    ``$PROTO_MODEL_CACHE/databases/<slug>/``. With ``--workdir``, places
-    each dataset under ``<workdir>/<slug>/`` so multiple datasets stay
-    isolated even with a custom root.
+    Without ``--workdir``, uses the registry's databases root
+    (:func:`get_databases_root` — ``$PROTO_DATABASES_DIR`` or
+    ``$PROTO_MODEL_CACHE/databases/``). With ``--workdir``, places each dataset
+    under ``<workdir>/<slug>/`` so multiple datasets stay isolated even with a
+    custom root.
     """
     if workdir is None:
         return get_dataset_dir(name)
@@ -161,13 +166,32 @@ def _download_file(spec: DownloadSpec, cache_dir: Path, downloader: tuple[str, l
     return True
 
 
-def _run_step(step: IndexStep, cache_dir: Path, name: str) -> None:
+def _split_memory_limit() -> str:
+    """``--split-memory-limit`` value sized to the cgroup-aware memory budget.
+
+    Formatted with mmseqs's ``G`` (GiB) suffix: mmseqs misreads a bare byte
+    count as an enormous limit (e.g. ``60129542144`` → ``57344T``, effectively
+    unbounded), so the suffix is required for the cap to take effect. Returns
+    ``"0"`` (mmseqs default = all available) when the budget can't be detected.
+    """
+    budget = available_memory_bytes()
+    if budget <= 0:
+        return "0"
+    gib = int(budget * _INDEX_MEMORY_SAFETY_FRACTION / 1024**3)
+    return f"{max(1, gib)}G"
+
+
+def _run_step(step: IndexStep, cache_dir: Path, name: str, *, split_memory_limit: str = "0") -> None:
     """Run a single ``IndexStep`` argv with ``cwd=cache_dir``.
 
-    Substitutes ``{name}`` in any argv element with the dataset's registry
-    name (snake-cased to match filesystem conventions).
+    Substitutes template placeholders in each argv element: ``{name}`` →
+    the dataset's registry name (snake-cased to match filesystem conventions),
+    and ``{split_memory_limit}`` → a cgroup-aware ``mmseqs`` memory cap in bytes.
     """
-    cmd = [arg.replace("{name}", dataset_slug(name)) for arg in step.command]
+    cmd = [
+        arg.replace("{name}", dataset_slug(name)).replace("{split_memory_limit}", split_memory_limit)
+        for arg in step.command
+    ]
     print(f"  [step] {step.description}")
     print(f"          $ {' '.join(cmd)}")
     subprocess.run(cmd, cwd=cache_dir, check=True)
@@ -230,8 +254,11 @@ def provision(name: str, workdir: Path | None = None, *, force: bool = False) ->
         _download_file(spec, cache_dir, downloader)
 
     print("\n  Running index recipe...")
+    split_memory_limit = _split_memory_limit()
+    if split_memory_limit != "0":
+        print(f"  memory budget: capping mmseqs index splits at {split_memory_limit}iB")
     for step in entry.index_recipe.steps:
-        _run_step(step, cache_dir, name)
+        _run_step(step, cache_dir, name, split_memory_limit=split_memory_limit)
 
     print(f"\n  ✓ {name} ready at {cache_dir}")
     return cache_dir
@@ -304,7 +331,7 @@ def main(argv: list[str] | None = None) -> int:
         "--workdir",
         type=Path,
         default=None,
-        help=f"Override the cache root. Datasets still go in <workdir>/<slug>/ (default: {get_databases_root()}).",
+        help=f"Override the databases root for this run. Datasets go in <workdir>/<slug>/ (default: {get_databases_root()}).",
     )
     parser.add_argument("--list", action="store_true", help="List available datasets and presets, then exit.")
     parser.add_argument(

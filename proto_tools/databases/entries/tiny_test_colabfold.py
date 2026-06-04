@@ -81,6 +81,8 @@ ENTRY = DatasetEntry(
             "uniref30_mini_db.index",
             "uniref30_mini_db_h",
             "uniref30_mini_db_seq",
+            "uniref30_mini_db.idx_pad",
+            "uniref30_mini_db.idx_pad.dbtype",
         ],
     ),
     mmseqs_flags=MmseqsFlags(sensitivity=8.0, prefilter_mode=0, max_seqs=300),

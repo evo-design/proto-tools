@@ -50,6 +50,8 @@ ENTRY = DatasetEntry(
                     "tmp_createindex",
                     "--search-type",
                     "3",
+                    "--split-memory-limit",
+                    "{split_memory_limit}",
                     "--remove-tmp-files",
                     "1",
                 ],

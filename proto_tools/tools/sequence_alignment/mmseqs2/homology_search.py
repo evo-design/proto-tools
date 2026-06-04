@@ -36,6 +36,12 @@ logger = logging.getLogger(__name__)
 # colabfold_search `--pairing_strategy` maps to mmseqs `pairaln --pairing-mode`: greedy=0, complete=1.
 _PAIRING_MODE_INT = {"greedy": 0, "complete": 1}
 
+# datasets_searched label for remote results (the ColabFold API uses its own hosted UniRef30).
+_REMOTE_DATASET_LABEL = "colabfold-remote"
+
+# Local metagenomic search adds this registered envdb as colabfold_search's --db3 (--use-env 1).
+_METAGENOMIC_DATASET = "colabfold-envdb-202108"
+
 
 # ============================================================================
 # Input
@@ -257,17 +263,31 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
     """Configuration for ``mmseqs2-homology-search``.
 
     Attributes:
-        dataset (Literal["colabfold-envdb-202108", "uniref30-2302"]): Registered
-            key of the searchable reference database; one ColabFold protein DB.
-        use_gpu (bool): Run MMseqs2-GPU; requires a ``.idx_pad`` index,
-            an NVIDIA GPU (Turing+), and a Linux host.
+        search_mode (Literal["local", "remote"]): ``"local"`` runs MMseqs2
+            against a registry-provisioned DB on disk; ``"remote"`` (the
+            default) queries the ColabFold MSA API over the network and needs
+            no local DB. The remote API is a temporary stopgap, to be replaced
+            by a self-hosted cloud mirror of the local pipeline.
+        dataset (Literal["colabfold-envdb-202108", "uniref30-2302"]): Local-only
+            (ignored when remote). Registered key of the searchable reference
+            database; one ColabFold protein DB.
+        use_gpu (bool): Local-only (ignored when remote). Run MMseqs2-GPU;
+            requires a ``.idx_pad`` index, an NVIDIA GPU (Turing+), and a
+            Linux host.
+        use_metagenomic_db (bool): Include the metagenomic/environmental DB
+            (ColabFoldDB envdb) to deepen unpaired MSAs. Works in both modes;
+            local mode requires the ``colabfold-envdb-202108`` dataset
+            provisioned. Default ``False``. Does not affect cross-chain pairing.
         pairing_strategy (Literal["greedy", "complete"]): Cross-chain pairing
             strategy for paired (multi-chain) groups. ``"greedy"`` pairs a
             species found in at least two chains; ``"complete"`` only pairs a
-            species present in every chain. Ignored for singleton groups.
-        sensitivity (float | None): MMseqs2 ``-s`` override; ignored under
-            ``use_gpu=True``. ``None`` uses the dataset's registered default.
-        num_threads (int | None): CPU threads; ``None`` auto-detects all cores.
+            species present in every chain. Ignored for singleton groups, and
+            (remote-mode only) the API always uses its own greedy pairing.
+        sensitivity (float | None): Local-only (ignored when remote). MMseqs2
+            ``-s`` override; ignored under ``use_gpu=True``. ``None`` uses the
+            dataset's registered default.
+        num_threads (int | None): Local-only. CPU threads; ``None`` auto-detects
+            all cores.
         timeout (int | None): Subprocess timeout in seconds. ``None`` waits indefinitely.
 
     Note:
@@ -278,6 +298,11 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
         as every other proto-tool with file outputs.
     """
 
+    search_mode: Literal["local", "remote"] = ConfigField(
+        title="Search Mode",
+        default="remote",
+        description="`remote` queries ColabFold's MSA API; `local` runs MMseqs2 against a registry-provisioned DB.",
+    )
     dataset: Literal["colabfold-envdb-202108", "uniref30-2302"] = ConfigField(
         title="Dataset",
         default="uniref30-2302",
@@ -287,6 +312,11 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
         title="Use GPU",
         default=True,
         description="Use MMseqs2-GPU; requires a `.idx_pad` index, an NVIDIA GPU (Turing+), and a Linux host.",
+    )
+    use_metagenomic_db: bool = ConfigField(
+        title="Use Metagenomic Database",
+        default=False,
+        description="Include the metagenomic/environmental DB (ColabFoldDB envdb); local mode needs it provisioned.",
     )
     pairing_strategy: Literal["greedy", "complete"] = ConfigField(
         title="Pairing Strategy",
@@ -317,8 +347,8 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
 
     @model_validator(mode="after")
     def _validate_use_gpu_platform(self) -> Any:
-        """GPU search requires Linux (the GPU MMseqs2 binary is Linux-only)."""
-        if self.use_gpu and platform.system() != "Linux":
+        """GPU search requires Linux (the GPU MMseqs2 binary is Linux-only); use_gpu is ignored when remote."""
+        if self.use_gpu and self.search_mode == "local" and platform.system() != "Linux":
             raise ValueError(
                 f"use_gpu=True requires Linux (current: {platform.system()} {platform.machine()}). "
                 "Set use_gpu=False to fall back to CPU search."
@@ -327,19 +357,26 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
 
     @property
     def gpus_per_instance(self) -> int:
-        """Number of GPUs the configured search uses (1 if GPU, else 0)."""
-        return 1 if self.use_gpu else 0
+        """Number of GPUs the configured search uses (1 for local GPU search, else 0).
+
+        Remote search runs over the network, so it claims no GPU even though
+        ``use_gpu`` keeps its (ignored) local-mode default.
+        """
+        return 1 if (self.use_gpu and self.search_mode == "local") else 0
 
     @classmethod
     def minimal(cls, **kwargs: Any) -> "Mmseqs2HomologySearchConfig":
         """Cheap-mode defaults for construct-time test infrastructure.
 
-        Forces CPU search so construction isn't gated on a GPU/Linux host, and
-        keeps the default ``uniref30-2302`` (a valid ``dataset`` Literal value).
-        The in-tree ``tiny-test-colabfold`` fixture is excluded from the product
-        Literal, so tests that actually run a search against it build the config
-        via ``model_construct`` rather than through ``minimal``.
+        Forces CPU search so construction isn't gated on a GPU/Linux host,
+        keeps the default ``uniref30-2302`` (a valid ``dataset`` Literal value),
+        and pins ``search_mode="local"`` so env-report / seed tests never hit
+        the network. The in-tree ``tiny-test-colabfold`` fixture is excluded
+        from the product Literal, so tests that actually run a search against
+        it build the config via ``model_construct`` rather than through
+        ``minimal``.
         """
+        kwargs.setdefault("search_mode", "local")
         kwargs.setdefault("dataset", "uniref30-2302")
         kwargs.setdefault("use_gpu", False)
         return super().minimal(**kwargs)  # type: ignore[return-value]
@@ -395,7 +432,11 @@ def run_mmseqs2_homology_search(
         Mmseqs2HomologySearchOutput: One result per input group, with per-chain
             ``msas`` and (for paired groups) ``paired_msas``.
     """
-    # Validators guarantee a colabfold-style protein dataset.
+    # Remote mode (the default) hits the ColabFold MSA API and ignores dataset/use_gpu/sensitivity.
+    if config.search_mode == "remote":
+        return _run_remote_homology_search(inputs, config, instance)
+
+    # The Literal type guarantees a colabfold-style protein dataset.
     dataset_name = config.dataset
     entry: DatasetEntry = DatasetRegistry.get(dataset_name)
     cache_dir = get_dataset_dir(dataset_name)
@@ -409,6 +450,16 @@ def run_mmseqs2_homology_search(
         # CI / smoke tests don't need a separate provisioning step.
         _auto_provision(dataset_name, cache_dir, require_idx_pad=config.use_gpu)
     _check_dataset_provisioned(dataset_name, entry, cache_dir, require_idx_pad=config.use_gpu)
+
+    # Metagenomic search adds the envdb as colabfold_search's --db3; gate on it being provisioned (with a GPU-padded index too when use_gpu).
+    env_dataset_dir: str | None = None
+    env_db_prefix: str | None = None
+    if config.use_metagenomic_db:
+        env_entry = DatasetRegistry.get(_METAGENOMIC_DATASET)
+        env_cache = get_dataset_dir(_METAGENOMIC_DATASET)
+        _check_dataset_provisioned(_METAGENOMIC_DATASET, env_entry, env_cache, require_idx_pad=config.use_gpu)
+        env_dataset_dir = str(env_cache)
+        env_db_prefix = env_entry.db_prefix
 
     num_threads = resolve_num_threads(config.num_threads)
 
@@ -436,6 +487,9 @@ def run_mmseqs2_homology_search(
         "extra_args": list(entry.mmseqs_flags.extra_args),
         "colabfold_timeout": inner_timeout,
         "device": "cuda" if config.use_gpu else "cpu",
+        "use_metagenomic_db": config.use_metagenomic_db,
+        "env_dataset_dir": env_dataset_dir,
+        "env_db_prefix": env_db_prefix,
     }
 
     def _dispatch(sequences: list[str], output_dir: Path, pairing_strategy: int | None) -> None:
@@ -498,6 +552,176 @@ def run_mmseqs2_homology_search(
 
 
 # ============================================================================
+# Remote mode (ColabFold API; temporary, to be replaced by a self-hosted mirror)
+# ============================================================================
+
+
+def _dispatch_remote(
+    remote_queries: list[dict[str, Any]],
+    output_dir: Path,
+    config: Mmseqs2HomologySearchConfig,
+    instance: Any,
+    script_path: Path,
+) -> dict[str, Any]:
+    """Dispatch the ColabFold remote standalone for a batch of queries.
+
+    ``remote_queries`` items are ``{"sequences": str}`` (unpaired) or
+    ``{"sequences": [str, ...]}`` (one paired group). ``use_metagenomic_db``
+    forwards to the ColabFold API's ``use_env`` (off by default).
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "queries": remote_queries,
+        "output_dir": str(output_dir),
+        "use_metagenomic_db": config.use_metagenomic_db,
+        "verbose": config.verbose,
+        "device": "cpu",
+    }
+    return ToolInstance.dispatch("mmseqs2", payload, instance=instance, script_path=script_path, config=config)
+
+
+def _parse_remote_a3m(path: str | None, seq_id: str) -> tuple[MSA | None, int]:
+    """Normalize a remote A3M's query header to ``seq_id`` and parse it into ``(MSA, homolog_count)``."""
+    if path is None:
+        return None, 0
+    a3m = Path(path)
+    if not a3m.exists():
+        return None, 0
+    _replace_query_header_in_a3m(a3m, seq_id)
+    return _parse_a3m(a3m)
+
+
+def _remote_paired_group(
+    members: list[Mmseqs2HomologySearchQuery],
+    group_dir: Path,
+    config: Mmseqs2HomologySearchConfig,
+    instance: Any,
+    script_path: Path,
+) -> Mmseqs2HomologySearchResult:
+    """Run one paired group through the remote API; fall back to unpaired when no pairing.
+
+    The standalone returns one row-aligned A3M per chain under
+    ``paired_msa_paths["0"]``. When pairing finds nothing (every chain query-only),
+    a second unpaired call supplies per-chain ``msas`` and ``paired_msas`` stays
+    ``[None, ...]`` — the same fallback the local paired path uses. Remote never
+    computes separate unpaired MSAs alongside a successful pairing, so on success
+    ``msas`` is ``[None, ...]`` and consumers read ``paired_msas``.
+    """
+    sequence_ids: list[str] = []
+    for query in members:
+        assert query.sequence_id is not None  # populated by the input validator
+        sequence_ids.append(query.sequence_id)
+
+    out = _dispatch_remote([{"sequences": [q.sequence for q in members]}], group_dir, config, instance, script_path)
+    if not out.get("success", False):
+        raise RuntimeError(f"mmseqs2-homology-search: remote paired search failed: {out.get('errors')}")
+
+    chain_paths = out.get("paired_msa_paths", {}).get("0", [])
+    if len(chain_paths) != len(members):
+        raise RuntimeError(
+            f"mmseqs2-homology-search: remote paired standalone returned {len(chain_paths)} chain MSA path(s), "
+            f"expected {len(members)} (one per chain)."
+        )
+
+    paired_msas: list[MSA | None] = []
+    paired_homologs: list[int] = []
+    for query, path in zip(members, chain_paths, strict=True):
+        msa, homologs = _parse_remote_a3m(path, query.sequence_id)  # type: ignore[arg-type]
+        paired_msas.append(msa)
+        paired_homologs.append(homologs)
+
+    # Any pairing => return the row-aligned paired MSAs (remote computes no separate unpaired set).
+    if any(m is not None for m in paired_msas):
+        return Mmseqs2HomologySearchResult(
+            sequence_ids=sequence_ids,
+            msas=[None] * len(members),
+            paired_msas=paired_msas,
+            datasets_searched=[_REMOTE_DATASET_LABEL],
+            num_homologs_found=paired_homologs,
+        )
+
+    # No shared taxonomy: a second unpaired call supplies per-chain MSAs; paired_msas stays None.
+    fb = _dispatch_remote(
+        [{"sequences": q.sequence} for q in members], group_dir / "unpaired_fallback", config, instance, script_path
+    )
+    fb_paths = fb.get("msa_paths", {})
+    msas: list[MSA | None] = []
+    homolog_counts: list[int] = []
+    for chain_idx, query in enumerate(members):
+        msa, homologs = _parse_remote_a3m(fb_paths.get(str(chain_idx)), query.sequence_id)  # type: ignore[arg-type]
+        msas.append(msa)
+        homolog_counts.append(homologs)
+    return Mmseqs2HomologySearchResult(
+        sequence_ids=sequence_ids,
+        msas=msas,
+        paired_msas=[None] * len(members),
+        datasets_searched=[_REMOTE_DATASET_LABEL],
+        num_homologs_found=homolog_counts,
+    )
+
+
+def _run_remote_homology_search(
+    inputs: Mmseqs2HomologySearchInput,
+    config: Mmseqs2HomologySearchConfig,
+    instance: Any,
+) -> Mmseqs2HomologySearchOutput:
+    """Generate MSAs via the ColabFold remote API (no local DB / GPU / provisioning).
+
+    Singletons share one batched unpaired API call; each paired (multi-chain)
+    group makes its own ``use_pairing=True`` call (see ``_remote_paired_group``).
+    ``dataset``/``use_gpu``/``sensitivity`` are ignored in this mode.
+    """
+    remote_script = Path(__file__).parent / "standalone" / "remote_msa_search.py"
+
+    singletons: list[tuple[int, Mmseqs2HomologySearchQuery]] = []
+    paired_groups: list[tuple[int, list[Mmseqs2HomologySearchQuery]]] = []
+    for group_idx, group in enumerate(inputs.queries):
+        members = group if isinstance(group, list) else [group]
+        if isinstance(group, list) and len(members) >= 2:
+            paired_groups.append((group_idx, members))
+        else:
+            singletons.append((group_idx, members[0]))
+
+    results: list[Mmseqs2HomologySearchResult | None] = [None] * len(inputs.queries)
+    with tempfile.TemporaryDirectory(prefix="mmseqs2_remote_homology_search_") as tmp_dir_str:
+        tmp_root = Path(tmp_dir_str)
+
+        # One batched unpaired API call for all singletons; standalone keys msa_paths by submission index.
+        if singletons:
+            out = _dispatch_remote(
+                [{"sequences": q.sequence} for _, q in singletons],
+                tmp_root / "unpaired",
+                config,
+                instance,
+                remote_script,
+            )
+            if not out.get("success", False) and out.get("num_successful", 0) == 0:
+                raise RuntimeError(
+                    f"mmseqs2-homology-search: remote search failed for all queries: {out.get('errors')}"
+                )
+            msa_paths = out.get("msa_paths", {})
+            for batch_idx, (group_idx, query) in enumerate(singletons):
+                assert query.sequence_id is not None  # populated by the input validator
+                msa, homologs = _parse_remote_a3m(msa_paths.get(str(batch_idx)), query.sequence_id)
+                results[group_idx] = Mmseqs2HomologySearchResult(
+                    sequence_ids=[query.sequence_id],
+                    msas=[msa],
+                    paired_msas=[None],
+                    datasets_searched=[_REMOTE_DATASET_LABEL],
+                    num_homologs_found=[homologs],
+                )
+
+        # One paired API call per multi-chain group.
+        for group_idx, members in paired_groups:
+            results[group_idx] = _remote_paired_group(
+                members, tmp_root / f"paired_{group_idx}", config, instance, remote_script
+            )
+
+    assert all(r is not None for r in results), "internal: missing result for at least one group"
+    return Mmseqs2HomologySearchOutput(results=[r for r in results if r is not None])
+
+
+# ============================================================================
 # Helpers
 # ============================================================================
 
@@ -544,6 +768,13 @@ def _assemble_paired_result(
                 _replace_query_header_in_a3m(path, query.sequence_id)
         unpaired_msa, homologs = _parse_a3m(unpaired_path)
         paired_msa, _ = _parse_a3m(paired_path)
+        # Defensive: catch a corrupt standalone output before mis-keyed MSAs reach a predictor.
+        for kind, msa in (("unpaired", unpaired_msa), ("paired", paired_msa)):
+            if msa is not None and msa.original_sequences[0] != query.sequence:
+                raise RuntimeError(
+                    f"{kind} MSA for chain {chain_idx} ({query.sequence_id!r}) has query row "
+                    f"{msa.original_sequences[0]!r}, expected {query.sequence!r}"
+                )
         msas.append(unpaired_msa)
         paired_msas.append(paired_msa)
         num_homologs.append(homologs)
@@ -728,14 +959,11 @@ def _check_dataset_provisioned(name: str, entry: DatasetEntry, cache_dir: Path, 
     exists, and (when ``require_idx_pad=True``) the GPU-padded index too.
     """
     if not (cache_dir / f"{entry.db_prefix}.dbtype").is_file():
-        cmd_path = cache_dir
-        cmd_name = name.replace("-", "_")
         raise FileNotFoundError(
             f"Dataset {name!r} not provisioned on disk: expected {cache_dir}.\n"
             "Provision with:\n"
-            "  bash proto_tools/tools/sequence_alignment/colabfold_search/setup_databases.sh \\\n"
-            f'    "{cmd_path}" {cmd_name} colabfold_envdb_202108 1\n'
-            "(see proto_tools/tools/sequence_alignment/colabfold_search/README.md → Local Database Setup)"
+            f"  python -m proto_tools.tools.sequence_alignment.mmseqs2.setup_databases {name}\n"
+            "(see proto_tools/tools/sequence_alignment/mmseqs2/README.md)"
         )
     if require_idx_pad and entry.gpu_padded_marker:
         marker = cache_dir / entry.gpu_padded_marker

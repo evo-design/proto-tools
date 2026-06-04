@@ -1,10 +1,11 @@
 """Dataset registry for MMseqs2-based homology search tools.
 
 One source of truth for downloadable sequence databases consumed by
-``colabfold-search`` (today) and ``mmseqs2-homology-search`` (planned). Holds
-per-dataset metadata — molecule type, download URLs, index recipe, MMseqs2
-flags, GPU/pairing capability — and resolves the on-disk cache location under
-``$PROTO_MODEL_CACHE/databases/{name}/``.
+``colabfold-search`` and ``mmseqs2-homology-search``. Holds per-dataset
+metadata — molecule type, download URLs, index recipe, MMseqs2 flags,
+GPU/pairing capability — and resolves the on-disk cache location under
+the databases root (``$PROTO_DATABASES_DIR``, else ``$PROTO_MODEL_CACHE/databases/``);
+see :func:`get_databases_root`.
 
 This module defines the schemas and a simple lookup registry. Dataset
 provisioning is implemented by the MMseqs2 homology-search tooling.
@@ -52,14 +53,16 @@ class IndexStep(BaseModel):
     standalone env at ``ensure()`` time.
 
     Attributes:
-        command (list[str]): Argv for the step. Template placeholder
-            ``{name}`` is substituted with the dataset name at runtime.
+        command (list[str]): Argv for the step. Template placeholders are
+            substituted at runtime: ``{name}`` → the dataset name, and
+            ``{split_memory_limit}`` → a cgroup-aware ``mmseqs`` memory cap in
+            bytes (use it on memory-hungry steps like ``createindex``).
         description (str): One-line explanation for logs / error messages.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    command: list[str] = Field(description="Argv (supports {name} placeholder)")
+    command: list[str] = Field(description="Argv (supports {name} and {split_memory_limit} placeholders)")
     description: str = Field(description="Human-readable step description")
 
 
@@ -222,12 +225,23 @@ class DatasetRegistry:
 
 
 def get_databases_root() -> Path:
-    """Return ``$PROTO_MODEL_CACHE/databases/``.
+    """Return the root directory holding provisioned datasets.
 
-    Falls back to ``$PROTO_HOME/proto_model_cache/databases/`` when
-    ``PROTO_MODEL_CACHE`` is unset. Matches the HuggingFace / torch cache
-    pattern so NFS-mounting ``PROTO_MODEL_CACHE`` shares datasets across users.
+    Resolution order:
+
+    1. ``PROTO_DATABASES_DIR`` — used verbatim as the databases root. Lets large
+       datasets live on a separate (e.g. scratch or shared) filesystem from model
+       weights, and applies to both provisioning and runtime resolution.
+    2. ``$PROTO_MODEL_CACHE/databases/`` — co-located with model weights.
+    3. ``$PROTO_HOME/proto_model_cache/databases/`` — the all-in-one default.
+
+    Datasets are read-only once indexed, so NFS-mounting the root shares them
+    across users (same pattern as ``PROTO_MODEL_CACHE`` for weights).
     """
+    explicit = os.environ.get("PROTO_DATABASES_DIR")
+    if explicit:
+        return Path(explicit)
+
     from proto_tools.utils.proto_home import get_proto_home
 
     model_cache = os.environ.get("PROTO_MODEL_CACHE") or str(get_proto_home() / "proto_model_cache")
@@ -250,9 +264,10 @@ def dataset_slug(name: str) -> str:
 def get_dataset_dir(name: str) -> Path:
     """Return the on-disk cache directory for a registered dataset.
 
-    Resolves to ``$PROTO_MODEL_CACHE/databases/{name_slug}/`` where
-    ``name_slug`` is :func:`dataset_slug` of the dataset's name (kebab-case
-    with ``-`` replaced by ``_``, to match MMseqs2 filename conventions).
+    Resolves to ``<databases_root>/{name_slug}/`` (see :func:`get_databases_root`
+    for how the root is chosen) where ``name_slug`` is :func:`dataset_slug` of the
+    dataset's name (kebab-case with ``-`` replaced by ``_``, to match MMseqs2
+    filename conventions).
 
     The directory may not exist yet — this is a pure path helper, not an
     ``ensure``. Materialization belongs to ``DatasetManager.ensure`` (TBD,
