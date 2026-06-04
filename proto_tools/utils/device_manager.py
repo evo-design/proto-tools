@@ -35,7 +35,7 @@ DeviceManager can be configured via environment variables or programmatically.
   Default: auto-detect all visible GPUs.
 
 - ``BIO_TOOLS_OFFLOAD_STRATEGY``: Eviction strategy when GPUs are full (``"cpu"`` or ``"restart"``).
-  Default: ``"cpu"`` (keeps models warm in RAM).
+  Default: ``"restart"`` (frees GPU memory; the evicted worker reloads on next use).
 
 - ``BIO_TOOLS_ALLOW_MULTI_DEVICE``: Allow multiple tool instances per GPU (``"true"`` or ``"false"``).
   Default: ``"false"`` (one model per GPU).

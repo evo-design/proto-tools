@@ -222,27 +222,12 @@ workers for the duration of its block.
 
 ## Device management (`DeviceManager`)
 
-`DeviceManager` (`device_manager.py`) tracks GPU allocation across all
-persistent workers and places each worker on a device automatically. When GPUs
-are full it evicts least-recently-used workers per the configured strategy:
-
-- `BIO_TOOLS_OFFLOAD_STRATEGY=cpu` (default) — move the evicted model to CPU
-  RAM, keeping it warm for a fast move back.
-- `BIO_TOOLS_OFFLOAD_STRATEGY=restart` — shut the worker down; reload on next
-  use.
-
-Other controls:
-
-- `BIO_TOOLS_MANAGED_DEVICES` — restrict the device pool (logical IDs, after
-  `CUDA_VISIBLE_DEVICES` filtering); defaults to all visible GPUs.
-- `BIO_TOOLS_ALLOW_MULTI_DEVICE` — allow multiple workers to co-reside on one
-  GPU.
-- `tool.to("cuda:1")` — move a specific instance explicitly.
-
-An explicit `device=` request is always honored; if the requested GPU is busy,
-DeviceManager evicts to make room (and logs that it did). Physical device
-movement of a loaded model is the `to_device()` protocol documented in
-`notes/tool-environments.md`.
+`DeviceManager` places each persistent worker on a managed GPU and evicts the
+least-recently-used worker when the pool is full. Persistence and pooling are
+what drive these allocations; the device-string semantics, the allocation map,
+the eviction strategies (RESTART by default, or CPU offload), the managed-device
+pool, multi-per-device packing, and the `to_device()` mechanics are documented
+in full in `notes/device-management.md`.
 
 ## Timeouts
 
