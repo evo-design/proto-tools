@@ -347,13 +347,15 @@ proto_check_gated_hf_repo() {
             "$HOME/.git-credentials" 2>/dev/null | head -1)" || true
     fi
 
+    # -L follows HF's 307 redirect (resolve/main -> resolve-cache CDN); without it
+    # the probe sees 307 and a valid, authorized token is wrongly rejected.
     local http_code
     if [ -n "$hf_token" ]; then
-        http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+        http_code=$(curl -sL -o /dev/null -w "%{http_code}" \
             -H "Authorization: Bearer ${hf_token}" \
             "https://huggingface.co/${repo_id}/resolve/main/${probe_file}")
     else
-        http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+        http_code=$(curl -sL -o /dev/null -w "%{http_code}" \
             "https://huggingface.co/${repo_id}/resolve/main/${probe_file}")
     fi
 
