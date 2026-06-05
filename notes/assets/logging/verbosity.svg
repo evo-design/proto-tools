@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 4 560 404" role="img" aria-label="A single verbose-level bar runs the full height on the left, divided into regions 0 to 3 that get darker downward, where each level includes everything above it, and a label reads increasing verbosity with a downward arrow. Dotted lines extend from the region divisions across to the containers. Region 0 spans the live spinner (a one-line self-updating status) and the WARNING log line, region 1 the INFO line, region 2 the DEBUG line, and region 3 the raw tool stdout and stderr.">
+  <style>
+    .panel     { fill: #F1F5F9; stroke: #94A3B8; stroke-opacity: 0.45; }
+    .title     { fill: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; font-weight: 600; }
+    .desc      { fill: #64748B; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 9.5px; }
+    .logtext   { fill: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
+    .dim       { fill: #94A3B8; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10.5px; }
+    .glyph     { fill: #4B85E8; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 15px; }
+    .region    { stroke: #4B85E8; stroke-opacity: 0.4; }
+    .lvlnum    { fill: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; }
+    .axislabel { fill: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10.5px; font-weight: 600; }
+    .axisdir   { fill: #64748B; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 9.5px; font-weight: 600; }
+    .divider   { stroke: #94A3B8; stroke-opacity: 0.5; stroke-width: 1; stroke-dasharray: 2 3; fill: none; }
+  </style>
+
+  <rect x="0" y="0" width="560" height="410" fill="#ffffff" />
+
+  <!-- verbose level: one bar, full height, split into nested regions -->
+  <text x="77" y="22" text-anchor="middle" class="axislabel">verbose level</text>
+  <text x="26" y="190" text-anchor="middle" transform="rotate(-90 26 190)" class="axisdir">increasing verbosity</text>
+  <line x1="21" y1="257" x2="21" y2="277" stroke="#64748B" stroke-width="1.5" />
+  <polygon points="17,270 25,270 21,278" fill="#64748B" />
+
+  <rect x="64" y="34"  width="26" height="169" class="region" fill="#4B85E8" fill-opacity="0.14" />
+  <rect x="64" y="203" width="26" height="26"  class="region" fill="#4B85E8" fill-opacity="0.26" />
+  <rect x="64" y="229" width="26" height="41"  class="region" fill="#4B85E8" fill-opacity="0.40" />
+  <rect x="64" y="270" width="26" height="130" class="region" fill="#4B85E8" fill-opacity="0.55" />
+
+  <text x="54" y="122" text-anchor="end" class="lvlnum">0</text>
+  <text x="54" y="220" text-anchor="end" class="lvlnum">1</text>
+  <text x="54" y="253" text-anchor="end" class="lvlnum">2</text>
+  <text x="54" y="339" text-anchor="end" class="lvlnum">3</text>
+
+  <!-- live spinner -->
+  <rect x="150" y="34" width="390" height="78" rx="8" class="panel" />
+  <rect x="160" y="48" width="4" height="50" rx="2" fill="#4AA3A3" />
+  <text x="174" y="56" class="title">live spinner</text>
+  <text x="174" y="72" class="desc">a one-line, self-updating status of the current step</text>
+  <text x="175" y="99" class="glyph">&#10297;</text>
+  <text x="196" y="98" class="logtext">Running esmfold</text>
+
+  <!-- proto log lines -->
+  <rect x="150" y="128" width="390" height="134" rx="8" class="panel" />
+  <rect x="160" y="142" width="4" height="106" rx="2" fill="#4B85E8" />
+  <text x="174" y="150" class="title">worker log records</text>
+  <text x="174" y="166" class="desc">structured logs proto writes about what it is doing</text>
+
+  <circle cx="178" cy="190" r="4" fill="#D08A2A" />
+  <text x="190" y="194" class="logtext">WARNING&#160;&#160;low pLDDT in residues 14-22</text>
+  <circle cx="178" cy="216" r="4" fill="#4B85E8" />
+  <text x="190" y="220" class="logtext">INFO&#160;&#160;&#160;&#160;&#160;loaded checkpoint v1.3</text>
+  <circle cx="178" cy="242" r="4" fill="#94A3B8" />
+  <text x="190" y="246" class="logtext">DEBUG&#160;&#160;&#160;&#160;transition matrix in 0.3s</text>
+
+  <!-- raw tool output -->
+  <rect x="150" y="278" width="390" height="122" rx="8" class="panel" />
+  <rect x="160" y="292" width="4" height="96" rx="2" fill="#94A3B8" />
+  <text x="174" y="300" class="title">raw subprocess output</text>
+  <text x="174" y="316" class="desc">unfiltered output from the tool's own process and libraries</text>
+
+  <text x="178" y="340" class="dim">Loading checkpoint shards: 100%|########| 7/7</text>
+  <text x="178" y="360" class="dim">W tensorflow/core/util ... could not load libcudnn</text>
+  <text x="178" y="380" class="dim">[XLA] compiling fusion.32 for cuda ...</text>
+
+  <!-- dotted guides from each level division across to the containers -->
+  <line x1="90" y1="203" x2="540" y2="203" class="divider" />
+  <line x1="90" y1="229" x2="540" y2="229" class="divider" />
+  <line x1="90" y1="270" x2="540" y2="270" class="divider" />
+</svg>

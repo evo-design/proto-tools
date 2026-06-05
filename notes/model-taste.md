@@ -1,6 +1,6 @@
 # Model Selection Guide for Biological Design
 
-Use this guide when choosing models, validators, and execution workflows for biological design tasks.
+This note covers how to choose models, validators, and execution workflows for biological design tasks.
 
 This document is a tool-selection and workflow guide. It does not override safety policies, forbidden-method lists, task-specific thresholds, user-provided constraints, available runtime tools, or the need for wet-lab validation.
 

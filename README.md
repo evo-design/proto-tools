@@ -1,6 +1,5 @@
 > [!IMPORTANT]
 > This repo contains an unpublished project codebase. Do not share the source code externally.
-> If you are a beta tester, start here: [Beta Tester Instructions](notes/beta-welcome.md)
 
 # 🧬 Proto Tools 🛠️
 [![Checks](https://github.com/proto-bio/proto-tools/actions/workflows/checks.yml/badge.svg)](https://github.com/proto-bio/proto-tools/actions/workflows/checks.yml)
@@ -24,9 +23,6 @@ You can use it as a standalone Python library or as part of the broader [proto-l
 - [`proto-client`](https://github.com/proto-bio/proto-client) – Python SDK for Proto Bio APIs
 
 ## Setup 🚧
-
-> [!NOTE]
-> **On Stanford Sherlock?** The cluster's old glibc requires a container-based setup. See the [Sherlock HPC Setup Guide](notes/sherlock-setup.md) for step-by-step instructions.
 
 ### Step 0: Clone the repository 📦
 

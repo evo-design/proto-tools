@@ -125,7 +125,7 @@ Rules that affect behavior:
 citations, links, licenses, example inputs, and access requirements. The CLI
 mirrors that surface through `proto-tools ...` commands.
 
-Read `notes/runtime-api.md` for identifier resolution, registry methods,
+Read `notes/finding-tools.md` for identifier resolution, registry methods,
 README/doc extraction, schemas, JSON surfaces, gated weights, and calling
 patterns. Registry list methods return `ToolSpec` objects; use `spec.key` when comparing registered tool names.
 
@@ -142,7 +142,7 @@ To keep a developer-only region of a published Markdown source (toolkit
 When behavior changes, update the matching docs in the same commit. Common
 targets are:
 
-- Runtime API, registry, docs extraction: `notes/runtime-api.md`.
+- Runtime API, registry, docs extraction: `notes/finding-tools.md`.
 - Standalone environments, compute deps, binary install, `to_device()`:
   `notes/tool-environments.md`.
 - Error handling: `notes/error-handling.md`.

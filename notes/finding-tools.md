@@ -1,6 +1,6 @@
-# Runtime API
+# Finding Tools
 
-`proto_tools` exposes a uniform runtime API around every registered tool: discovery, prose documentation, Pydantic schemas, example inputs, citations, links, license/access metadata, and run functions. The same API supports in-process Python callers, scripts, notebooks, MCP/wire consumers, and the `proto-tools` CLI.
+This note covers how to discover, inspect, and call every registered tool through `ToolRegistry` and the `proto-tools` CLI, namely discovery, prose documentation, Pydantic schemas, example inputs, citations, links, license and access metadata, and run functions. The same API supports in-process Python callers, scripts, notebooks, MCP/wire consumers, and the `proto-tools` CLI.
 
 ## Python Entry Point
 
@@ -36,7 +36,7 @@ Most registry APIs accept multiple identifier forms.
 | Docs path | `"masked-models/esm2"` | yes | yes if single-tool toolkit |
 | Toolkit directory name | `"esm2"` | yes | raises if ambiguous |
 
-Toolkit-level README APIs resolve to the toolkit directory. Per-tool APIs must identify one registered operation; multi-tool toolkit names raise `ValueError` with the valid tool keys.
+Toolkit-level README APIs resolve to the toolkit directory, while per-tool APIs must identify one registered operation. A multi-tool toolkit name raises `ValueError` with the valid tool keys.
 
 ## Discovery
 
@@ -51,7 +51,7 @@ ToolRegistry.list_cpu_tools()
 ToolRegistry.list_local_cpu_tools()
 ```
 
-`ToolRegistry.list_all()` and related list methods return `ToolSpec` objects, not string keys. To test membership or build a set of tool names, use `{spec.key for spec in ToolRegistry.list_all()}`; do not call `set(ToolRegistry.list_all())` because `ToolSpec` objects are Pydantic models and are not hashable.
+`ToolRegistry.list_all()` and related list methods return `ToolSpec` objects, not string keys. To test membership or build a set of tool names, use `{spec.key for spec in ToolRegistry.list_all()}`, and do not call `set(ToolRegistry.list_all())`, because `ToolSpec` objects are Pydantic models and are not hashable.
 
 Each `ToolSpec` carries structured metadata: registry key, label, category, description, device requirements, Pydantic input/config/output model classes, run function, iterable fields, cache behavior, and source path.
 
@@ -105,11 +105,9 @@ Check access before dispatching tools that load model weights.
 
 ## Calling a Tool
 
-Every registered tool follows:
+Every registered tool follows the same shape, where the `Input` and `Config` together feed the `run_*()` call that produces an `Output`:
 
-```text
-Input -> Config -> run_*() -> Output
-```
+<img src="assets/finding-tools/call-shape.svg" alt="Input and Config together feed run_*(), which produces Output." width="520">
 
 ```python
 from proto_tools.tools.masked_models.esm2 import (
@@ -135,13 +133,13 @@ run_tool = spec.function
 result = run_tool(Input(sequences=["MKTLIIA..."]), Config())
 ```
 
-`Config` is optional at the public call site; the decorator supplies defaults. Output models inherit standard metadata (`tool_id`, `execution_time`, `success`, `errors`) plus tool-specific payload fields.
+`Config` is optional at the public call site, since the decorator supplies defaults. Output models inherit standard metadata (`tool_id`, `execution_time`, `success`, `errors`) plus tool-specific payload fields.
 
 ## Persistence and Devices
 
-Tool calls dispatch into isolated environments by default when a toolkit has a `standalone/` directory. For repeated or batched calls, use persistence or tool pools so models and environments stay warm. Read `notes/tool-environments.md` for environment setup and device movement, and the tutorials for runtime examples.
+Tool calls dispatch into isolated environments by default when a toolkit has a `standalone/` directory. For repeated or batched calls, use persistence or tool pools so models and environments stay warm. See `notes/tool-environments.md` for environment setup and device movement, and the tutorials for runtime examples.
 
-GPU tools default to `device="cuda"` when their config supports device selection. Inspect `ToolSpec.uses_gpu`, list CPU/GPU subsets through the registry, and check storage/access requirements before dispatch.
+GPU tools default to `device="cuda"` when their config supports device selection. Before dispatch, inspect `ToolSpec.uses_gpu`, list CPU/GPU subsets through the registry, and check storage and access requirements.
 
 ## JSON and Wire Consumers
 

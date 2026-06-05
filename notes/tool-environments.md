@@ -1,6 +1,10 @@
 # Tool Environments Reference
 
-Detailed reference for standalone tool environment setup, compute dependency management, and environment isolation. For model weight storage and `PROTO_HOME` configuration, see [storage.md](storage.md).
+This note covers standalone tool environment setup, compute dependency management, and environment isolation. For model weight storage and `PROTO_HOME` configuration, see [storage.md](storage.md).
+
+<img src="../guides/assets/tool-environments/architecture.svg" alt="Your script calls into proto-tools, which dispatches each tool into its own isolated environment." width="560">
+
+<img src="../guides/assets/tool-environments/lifecycle.svg" alt="The first call detects hardware, installs the environment, and downloads weights before running the tool, while a cached call runs it immediately." width="560">
 
 ## Compute Dependency Management
 
@@ -59,7 +63,7 @@ uv pip install "${JAX_SPEC}"
 
 ### TensorFlow Setup Pattern
 
-There is no centralized TensorFlow recommendation (only PyTorch/JAX), so TF tools install it directly in setup.sh, branching on `DETECTED_COMPUTE_PLATFORM`. See `spliceai` for reference:
+Because there is no centralized TensorFlow recommendation (only PyTorch and JAX), TF tools install it directly in setup.sh, branching on `DETECTED_COMPUTE_PLATFORM`. See `spliceai` for reference:
 
 ```bash
 if [ "${DETECTED_COMPUTE_PLATFORM:-cpu}" = "cuda" ]; then
@@ -69,7 +73,7 @@ else
 fi
 ```
 
-Pin `tensorflow~=2.15.0` to keep Keras 2 (Keras 3 in TF &ge;2.16 cannot load older `.h5` models); this forces `python_version.txt` to `3.11` (TF 2.15 has no py3.12 wheels).
+Pin `tensorflow~=2.15.0` to keep Keras 2, because Keras 3 in TF &ge;2.16 cannot load older `.h5` models. This forces `python_version.txt` to `3.11`, since TF 2.15 has no py3.12 wheels.
 
 ### Tool-Specific Overrides
 
@@ -89,13 +93,13 @@ Based on official sources (PyTorch RELEASE.md, JAX docs, NVIDIA CUDA compatibili
 **PyTorch** (driver → torch version):
 - Driver 570+: torch 2.8+ (CUDA 12.8 native support)
 - Driver 550-569: torch 2.5+ (CUDA 12.4 native support)
-- Driver 535-549: torch 2.4-2.6.x (CUDA 12.2; 2.7+ ships CUDA 12.8 runtime libs)
+- Driver 535-549: torch 2.4-2.6.x (CUDA 12.2, and 2.7+ ships CUDA 12.8 runtime libs)
 - Driver 525-534: torch 2.4-2.6.x (CUDA 12.0-12.1)
 - Driver &lt;525: torch 2.1-2.3 (CUDA 11.x era)
 
 **JAX** (driver + CUDA → jax version + variant):
 - Driver 525+: jax[cuda12] 0.4.20+ (all CUDA 12.x)
-- Driver 580+: jax[cuda13] 0.4.20+ (CUDA 13.x, not yet used)
+- Driver 580+: jax[cuda13] 0.4.20+ (CUDA 13.x)
 - Driver &lt;525: jax[cuda11] 0.4.20+ (CUDA 11.x)
 
 See `tests/tool_infra_tests/test_compute_deps.py` for comprehensive test coverage.
@@ -104,19 +108,19 @@ See `tests/tool_infra_tests/test_compute_deps.py` for comprehensive test coverag
 
 When `ToolInstance._create_env()` runs `standalone/setup.sh` to build a tool's venv, the subprocess output is normally captured quietly and only surfaced on failure (via `STATUS.txt` and the raised `RuntimeError`). Two env vars opt into richer visibility:
 
-- `PROTO_ENV_VERBOSE=1` — streams each line of `setup.sh`'s output live to the caller's stderr as the subprocess runs. Useful for watching long installs (PyTorch, flash-attn, transformer-engine, etc.) in real time and for diagnosing hangs.
-- `PROTO_ENV_LOG_DIR=<path>` — after `setup.sh` exits (success or failure), copies the complete log to `<PROTO_ENV_LOG_DIR>/<toolkit>_setup.log`. Useful when the env directory itself is ephemeral and you want the log to survive a rollback.
+- `PROTO_ENV_VERBOSE=1` streams each line of `setup.sh`'s output live to the caller's stderr as the subprocess runs. Useful for watching long installs (PyTorch, flash-attn, transformer-engine, etc.) in real time and for diagnosing hangs.
+- `PROTO_ENV_LOG_DIR=<path>` copies the complete log to `<PROTO_ENV_LOG_DIR>/<toolkit>_setup.log` after `setup.sh` exits (success or failure). Useful when the env directory itself is ephemeral and you want the log to survive a rollback.
 
 Regardless of either flag, the combined output is always written to `<env_path>/setup.log` during setup, so you can inspect it after the fact from any env that still has its files on disk.
 
-Both variables default to off — setup output stays quiet unless a caller opts in. See `tests/tool_infra_tests/test_tool_instance.py::test_run_setup_script_*` for the behavior contract.
+Both variables default to off, so setup output stays quiet unless a caller opts in. See `tests/tool_infra_tests/test_tool_instance.py::test_run_setup_script_*` for the behavior contract.
 
 ## Overriding a tool's standalone env (`PROTO_<TOOLKIT>_STANDALONE_DIR`)
 
 When a tool's packaged `standalone/` setup does not work on your machine (a cluster needs a different CUDA wheel, a pinned version has to change, an install step needs patching) you can override the whole env definition without editing the installed package. This works identically whether proto-tools was installed editable (`pip install -e`) or as a regular wheel, since the override points at a directory you control rather than at the package. Two pieces:
 
 - `proto-tools eject-standalone <toolkit> [--dir DIR]` copies the tool's packaged env-def directory (resolving shared envs) into `DIR/<toolkit>/` (default `./proto_standalone/<toolkit>/`), giving you an editable copy of every file the env is built from (`setup.sh`, `python_version.txt`, `requirements.txt`, `env_vars.txt`, ...). It always copies the packaged baseline, ignoring any active override.
-- `PROTO_<TOOLKIT>_STANDALONE_DIR=<path>` makes `ToolInstance._resolve_env_def` use `<path>` as the env-def dir instead of the packaged one. `<TOOLKIT>` is the toolkit's **folder name** uppercased (e.g. `esm2` → `PROTO_ESM2_STANDALONE_DIR`), not a tool registration key like `esm2-embed`; `eject-standalone` accepts either form and prints the exact variable to export. The override builds under an isolated env name (`<toolkit>__override_<hash>_env`), so it never clobbers the packaged env and two projects pointing at different override dirs get separate envs on disk. Editing the override's files triggers the usual setup-hash rebuild.
+- `PROTO_<TOOLKIT>_STANDALONE_DIR=<path>` makes `ToolInstance._resolve_env_def` use `<path>` as the env-def dir instead of the packaged one. `<TOOLKIT>` is the toolkit's **folder name** uppercased (e.g. `esm2` → `PROTO_ESM2_STANDALONE_DIR`), not a tool registration key like `esm2-embed`. `eject-standalone` accepts either form and prints the exact variable to export. The override builds under an isolated env name (`<toolkit>__override_<hash>_env`), so it never clobbers the packaged env and two projects pointing at different override dirs get separate envs on disk. Editing the override's files triggers the usual setup-hash rebuild.
 
 Typical flow:
 
@@ -127,30 +131,30 @@ export PROTO_ESM2_STANDALONE_DIR=$PWD/proto_standalone/esm2
 # the next call to an esm2 tool builds from your version of the standalone folder that lives at the location you specified above
 ```
 
-proto-tools reads the variable from the process environment (`os.environ`); it does not parse `.env` or `.envrc` files itself. To scope the override to one project instead of setting it globally in `.bashrc`, export it in that project's shell, or use `direnv` (its `.envrc` is loaded into your shell on `cd`, so the variable reaches proto-tools through the environment). A bare `.env` file only takes effect if you load it yourself (`direnv`'s `dotenv` directive, `python-dotenv`, `export $(...)`, etc.). If `PROTO_<TOOLKIT>_STANDALONE_DIR` is set but the path is not a directory or is missing `setup.sh`/`python_version.txt`, env resolution fails immediately with a message that names the variable, the path, and how to produce a valid directory.
+proto-tools reads the variable from the process environment (`os.environ`). It does not parse `.env` or `.envrc` files itself. To scope the override to one project instead of setting it globally in `.bashrc`, export it in that project's shell, or use `direnv` (its `.envrc` is loaded into your shell on `cd`, so the variable reaches proto-tools through the environment). A bare `.env` file only takes effect if you load it yourself (`direnv`'s `dotenv` directive, `python-dotenv`, `export $(...)`, etc.). If `PROTO_<TOOLKIT>_STANDALONE_DIR` is set but the path is not a directory or is missing `setup.sh`/`python_version.txt`, env resolution fails immediately with a message that names the variable, the path, and how to produce a valid directory.
 
 This works whether proto-tools is run from a clone or pip-installed, editable or non-editable.
 
 ## Conda Environment Registration
 
-Proto-tools writes `register_envs: false` to `PROTO_HOME/.micromamba/condarc` so micromamba-managed tool environments do not appear in the user's global `conda env list`. During micromamba setup, `ToolInstance` also removes existing registry entries under the current `PROTO_HOME/proto_tool_envs/` and `PROTO_HOME/.foundation_env/` roots from `~/.conda/environments.txt`; unrelated conda environments are left untouched.
+Proto-tools writes `register_envs: false` to `PROTO_HOME/.micromamba/condarc` so micromamba-managed tool environments do not appear in the user's global `conda env list`. During micromamba setup, `ToolInstance` also removes existing registry entries under the current `PROTO_HOME/proto_tool_envs/` and `PROTO_HOME/.foundation_env/` roots from `~/.conda/environments.txt`. Unrelated conda environments are left untouched.
 
 ## env_vars.txt
 
 Each tool's `standalone/env_vars.txt` supports three sections:
 - `[passthrough]`: Variable names copied from the parent environment (e.g., `HF_TOKEN`)
 - `[set]`: Literal `KEY=VALUE` assignments, with `${VENV_PATH}` interpolation
-- `[no_passthrough]`: Variable names whose parent value is **blocked** from leaking into the subprocess. For `LD_LIBRARY_PATH` this also skips the `$CONDA_PREFIX/lib` append; the host directory containing `libcuda.so.1` is still added so GPU init works. `[set]` entries still apply. Use this for tools whose pip-bundled libs (e.g. JAX's RPATH'd CUDA wheels) get ABI-shadowed by the parent's libs.
+- `[no_passthrough]`: Variable names whose parent value is **blocked** from leaking into the subprocess. For `LD_LIBRARY_PATH` this also skips the `$CONDA_PREFIX/lib` append, though the host directory containing `libcuda.so.1` is still added so GPU init works, and `[set]` entries still apply. Use this for tools whose pip-bundled libs (e.g. JAX's RPATH'd CUDA wheels) get ABI-shadowed by the parent's libs.
 
 **Auto-set environment variables** (always injected by `_build_subprocess_env()`):
 - `CONDA_PREFIX`: set to the **tool env path** (not the parent conda env) so uv/pip install into the correct environment
 - `VIRTUAL_ENV`: set to the **tool env path** for uv >=0.10 compatibility
 - `PATH`: `tool_env/bin` > `cuda/bin` (GPU) > parent PATH entries > system dirs
-- `LD_LIBRARY_PATH`: tool-specific `[set]` paths > parent `LD_LIBRARY_PATH` entries > `$CONDA_PREFIX/lib` (the latter two are skipped when `LD_LIBRARY_PATH` is in `[no_passthrough]`; in that case just the host's `libcuda.so.1` dir is appended)
+- `LD_LIBRARY_PATH`: tool-specific `[set]` paths > parent `LD_LIBRARY_PATH` entries > `$CONDA_PREFIX/lib` (the latter two are skipped when `LD_LIBRARY_PATH` is in `[no_passthrough]`, in which case just the host's `libcuda.so.1` dir is appended)
 
 ## Foundation Environment (git, curl, gcc, g++)
 
-`setup.sh` scripts assume `git`, `curl`, `gcc`, and `g++` are on `PATH`. When the host already provides all four with `gcc`/`g++` major version `>= MIN_FOUNDATION_GCC`, `ToolInstance._ensure_foundation_env` is a no-op; otherwise it provisions a shared micromamba env at `PROTO_HOME/.foundation_env/` (pinning `gcc>=MIN_FOUNDATION_GCC` / `gxx>=MIN_FOUNDATION_GCC`) and prepends its `bin/` to the setup script's `PATH`. Set `PROTO_USE_FOUNDATION_ENV=1` to force-install or `=0` to force-skip the probe.
+`setup.sh` scripts assume `git`, `curl`, `gcc`, and `g++` are on `PATH`. When the host already provides all four with `gcc`/`g++` major version `>= MIN_FOUNDATION_GCC`, `ToolInstance._ensure_foundation_env` is a no-op. Otherwise it provisions a shared micromamba env at `PROTO_HOME/.foundation_env/` (pinning `gcc>=MIN_FOUNDATION_GCC` / `gxx>=MIN_FOUNDATION_GCC`) and prepends its `bin/` to the setup script's `PATH`. Set `PROTO_USE_FOUNDATION_ENV=1` to force-install or `=0` to force-skip the probe.
 
 ## GCC/nvcc Compatibility for CUDA JIT Tools
 
@@ -167,11 +171,11 @@ Tools that JIT-compile CUDA C++ extensions install a compatible GCC from conda-f
 - **protenix** (CUDA 12.1): `"gcc=12.*" "gxx=12.*" "sysroot_linux-64=2.17"`
 - **evo2** (latest CUDA ~12.8): `"gcc=14.*" "gxx=14.*"`
 
-**Why sysroot 2.17 for GCC 12 tools:** conda-forge GCC packages pull in the latest sysroot by default. Sysroot 2.34+ adds `_Float32`/`_Float16` typedefs in `<stdlib.h>` that nvcc 12.1's EDG parser rejects. Pinning to glibc 2.17 avoids this.
+**Why sysroot 2.17 for GCC 12 tools:** conda-forge GCC packages pull in the latest sysroot by default, but sysroot 2.34+ adds `_Float32`/`_Float16` typedefs in `<stdlib.h>` that nvcc 12.1's EDG parser rejects, so pinning to glibc 2.17 avoids this.
 
 **Pattern:**
 1. Add `gcc`/`gxx` (+ `sysroot_linux-64` if needed) to the micromamba create command
-2. For runtime JIT tools (protenix): also set `CC`/`CXX` in `sitecustomize.py`
+2. For runtime JIT tools (protenix), also set `CC`/`CXX` in `sitecustomize.py`
 
 ## Cache Management for ABI-Sensitive Packages
 
@@ -220,7 +224,7 @@ fi
 
 Every tool with a `standalone/` directory must ship a `standalone/python_version.txt` that pins its Python version. The consistency tests fail if any tool is missing the file, and `ToolInstance._get_python_version` raises `FileNotFoundError` on setup for a tool whose file is missing.
 
-**Format:** keyed lines, with a required `default` and optional per-platform overrides. Comments (`#` to end of line) and blank lines are ignored. Whitespace around `:` is stripped; keys are lowercased.
+**Format:** keyed lines, with a required `default` and optional per-platform overrides. Comments (`#` to end of line) and blank lines are ignored. Whitespace around `:` is stripped, and keys are lowercased.
 
 ```text
 # Comments and blank lines are allowed.
@@ -232,8 +236,8 @@ darwin-arm64: 3.10
 
 **Lookup (most specific wins):**
 
-1. Exact `{system}-{machine}` key — e.g. `linux-aarch64`
-2. OS-only `{system}` key — e.g. `linux`
+1. Exact `{system}-{machine}` key, e.g. `linux-aarch64`
+2. OS-only `{system}` key, e.g. `linux`
 3. `default` (required catch-all)
 
 The lookup key is built as `f"{platform.system().lower()}-{platform.machine()}"`:
@@ -245,7 +249,7 @@ The lookup key is built as `f"{platform.system().lower()}-{platform.machine()}"`
 | macOS Intel | `darwin-x86_64` | `darwin` |
 | macOS Apple Silicon | `darwin-arm64` | `darwin` |
 
-**Validation:** every value must be `major.minor[.patch]` with `major == 3` and `minor >= 8`. All values are validated up front, so a typo in any override fails on any developer's machine — not just the affected platform.
+**Validation:** every value must be `major.minor[.patch]` with `major == 3` and `minor >= 8`. All values are validated up front, so a typo in any override fails on any developer's machine, not just the affected platform.
 
 **When to use overrides:** declare a per-platform override only when a tool's upstream dependency is unavailable for the default Python on that platform (e.g., PyRosetta on `linux-aarch64` only ships py39/py310 builds, so it pins `linux-aarch64: 3.10`). Use the OS-only tier when an entire OS family needs a different version. The reference example is `proto_tools/tools/structure_scoring/pyrosetta/standalone/python_version.txt`.
 
@@ -255,7 +259,7 @@ The lookup key is built as `f"{platform.system().lower()}-{platform.machine()}"`
 
 ## Shared Environments
 
-Multiple tools may rely on the same dependencies. For example, ESM3 and ESM C, which both come from `Biohub/esm` can share a single micromamba environment on disk. This avoids duplicating environments when adding a sibling model.
+Multiple tools may rely on the same dependencies. For example, ESM3 and ESM C, which both come from `Biohub/esm`, can share a single micromamba environment on disk, which avoids duplicating environments when adding a sibling model.
 
 **Layout:**
 
@@ -280,7 +284,7 @@ proto_tools/
 
 **How it resolves:** When a tool's `standalone/` contains a `shared_env.txt` marker, `ToolInstance._resolve_env_def()` reads the marker, looks up `proto_tools/shared_envs/<name>/`, and uses that directory's `setup.sh` / `requirements.txt` / `python_version.txt` / `env_vars.txt` for env construction. The on-disk env path becomes `PROTO_HOME/proto_tool_envs/<name>_env/` so all tools opting into the same shared env collide on the same physical directory and skip redundant setup.
 
-**`inference.py` always lives per-tool** — only env-construction inputs are shared. Each tool ships its own dispatch logic.
+**`inference.py` always lives per-tool.** Only env-construction inputs are shared, and each tool ships its own dispatch logic.
 
 **Validation:**
 
@@ -297,24 +301,24 @@ proto_tools/
 
 **When NOT to use:** Tools with conflicting Python versions, conflicting framework version pins, or genuinely independent dependency sets.
 
-**Migration note:** When a tool adopts a shared env (e.g. `esm3` migrated to `biohub_esm`), its on-disk env directory changes from `<toolkit>_env/` to `<shared_name>_env/`. The old directory is orphaned but harmless; users can manually delete `PROTO_HOME/proto_tool_envs/<old_name>_env/` to reclaim disk.
+**Migration note:** When a tool adopts a shared env (e.g. `esm3` migrated to `biohub_esm`), its on-disk env directory changes from `<toolkit>_env/` to `<shared_name>_env/`. The old directory is orphaned but harmless, and users can manually delete `PROTO_HOME/proto_tool_envs/<old_name>_env/` to reclaim disk.
 
 ## Binary Installation
 
-Tools needing external binaries must use `utils/install_binary.py`; never raw `curl`/`wget` in `setup.sh`.
+Tools needing external binaries must use `utils/install_binary.py`. Never use raw `curl`/`wget` in `setup.sh`.
 
 1. Create `standalone/binary_config.py` with:
    - `URLS`: dict mapping `(system, machine)` tuples to download URLs (use `"arm64"` not `"aarch64"`)
    - `extract(archive_path: Path, bin_dir: Path)`: extracts/copies binaries into bin/
-2. In `setup.sh`, call: `python "$SEARCH_DIR/utils/install_binary.py" <toolkit>`
+2. In `setup.sh`, call `python "$SEARCH_DIR/utils/install_binary.py" <toolkit>`
 
-See blast or mmseqs for the standard pattern. For platform-independent tools (e.g., Java JARs), use the same URL for all platform keys.
+See blast or mmseqs for the standard pattern, and for platform-independent tools (e.g., Java JARs), use the same URL for all platform keys.
 
 The downloader streams chunks with a per-read socket timeout, validates the final size against `Content-Length` so silent truncation surfaces as a retryable error, and retries with exponential backoff (see `_MAX_DOWNLOAD_RETRIES`, `_INITIAL_RETRY_DELAY_SECONDS`, `_BACKOFF_MULTIPLIER`, `_MAX_RETRY_DELAY_SECONDS`, `_SOCKET_TIMEOUT_SECONDS` in `install_binary.py`).
 
 ## Compile-from-Source Tools
 
-Tools distributed as C/C++ source compile during `setup.sh`. No `binary_config.py` or `requirements.txt` needed; just check for the compiler (`g++`), clone the source, compile into the venv's `bin/`, and clean up. Use `BUILD_DIR` (not `TMPDIR`) for the temporary clone directory. See TMalign/USalign (`tools/structure_alignment/`) as canonical examples.
+Tools distributed as C/C++ source compile during `setup.sh`, so no `binary_config.py` or `requirements.txt` is needed. The script just checks for the compiler (`g++`), clones the source, compiles into the venv's `bin/`, and cleans up. Use `BUILD_DIR` (not `TMPDIR`) for the temporary clone directory. See TMalign/USalign (`tools/structure_alignment/`) as canonical examples.
 
 ## Standalone Helpers for CLI Subprocess Device Routing
 
@@ -322,7 +326,7 @@ For tools that spawn CLI subprocesses (Boltz2, RFDiffusion3, Protenix, AlphaFold
 
 **The problem:** When DeviceManager allocates a logical device (e.g., `cuda:2`), CLI subprocesses need the physical GPU index mapped from the logical index.
 
-**The solution:** `utils/standalone_helpers_source/standalone_helpers.py` provides `get_subprocess_device_env(device: str) -> Dict[str, str]`:
+**The solution:** the `standalone_helpers/` package (`utils/standalone_helpers_source/standalone_helpers/device.py`) provides `get_subprocess_device_env(device: str) -> dict[str, str]`:
 
 ```python
 from standalone_helpers import get_subprocess_device_env
@@ -332,11 +336,10 @@ subprocess.run(cmd, env=env)
 ```
 
 **Auto-copy mechanism:**
-- Source: `proto_tools/utils/standalone_helpers_source/standalone_helpers.py` (tracked in git)
-- Destination: `{tool}/standalone/standalone_helpers.py` (not tracked, auto-generated at runtime by `_worker_bootstrap.py`)
-- Exception: AlphaFold3's `standalone_helpers.py` is manually copied and tracked
+- Source: `proto_tools/utils/standalone_helpers_source/standalone_helpers/` (the package, tracked in git, alongside `standalone_helpers.sh`)
+- Destination: `{tool}/standalone/standalone_helpers/` (not tracked, auto-copied at runtime by `_worker_bootstrap.py`)
 
-**Consistency enforcement:** The test `tests/tool_infra_tests/test_device_manager.py::test_gpu_cli_tools_use_subprocess_device_helper` verifies all GPU tools with subprocess calls properly use `get_subprocess_device_env()`.
+**Consistency enforcement:** The parametrized test `tests/tool_infra_tests/test_device_manager/test_tool_device_consistency.py::test_standalone_protocol_compliance` verifies that any tool making subprocess calls imports `get_subprocess_device_env()` and passes its result as `env=`.
 
 ## The `to_device()` Protocol
 
@@ -355,7 +358,7 @@ def to_device(device: str) -> dict:
 
 JAX tools come in two flavors depending on what the upstream library gives you. The difference matters because it determines whether your tool can be moved between devices, or has to be thrown away and rebuilt.
 
-**Pattern 1 — move-based** (`mock_jax_tool`, ProteinMPNN):
+**Pattern 1, move-based** (`mock_jax_tool`, ProteinMPNN):
 ```python
 def to_device(device: str) -> dict:
     global _model
@@ -363,9 +366,9 @@ def to_device(device: str) -> dict:
         _model.to_device(device)  # jax.device_put(params, device) via move_model_to_device
     return {"success": True, "device": device}
 ```
-Use this when the library hands you the model weights as plain data — a dict of arrays you can hold and inspect. You can physically move those arrays between GPU and CPU with `jax.device_put`, and the compiled forward pass runs against them wherever they live. `move_model_to_device()` in `standalone_helpers.py` does the transfer and frees GPU memory via `jax.clear_caches()` when moving off CUDA.
+Use this when the library hands you the model weights as plain data, a dict of arrays you can hold and inspect. You can physically move those arrays between GPU and CPU with `jax.device_put`, and the compiled forward pass runs against them wherever they live. `move_model_to_device()` in the `standalone_helpers` package does the transfer, freeing GPU memory via `jax.clear_caches()` when moving off CUDA.
 
-**Pattern 2 — reload-based** (AlphaGenome):
+**Pattern 2, reload-based** (AlphaGenome):
 ```python
 def to_device(device: str) -> dict:
     global _model
@@ -375,13 +378,13 @@ def to_device(device: str) -> dict:
 ```
 Use this when the library hands you a black-box model object (e.g. from `dna_model.create()`) with its weights and compiled forward pass hidden behind a wrapper. You can't reach in to move anything, so your only option is to destroy the model and create a new one on the target device.
 
-For CPU eviction specifically, even "create a new one on CPU" is a bad trade: compiling a large model like AlphaGenome for the CPU backend takes 10+ minutes, and CPU inference is too slow to actually use. So the tool's `to_device("cpu")` just **unloads** the model (frees the GPU memory and drops the reference) without putting anything on CPU. The next dispatch triggers a fresh load back onto GPU.
+For CPU eviction specifically, even "create a new one on CPU" is a bad trade, because compiling a large model like AlphaGenome for the CPU backend takes 10+ minutes and CPU inference is too slow to actually use. The tool's `to_device("cpu")` therefore just **unloads** the model, freeing the GPU memory and dropping the reference without putting anything on CPU, and the next dispatch triggers a fresh load back onto GPU.
 
-There's no registry flag to tell you which pattern to use — it's determined by what the library exposes. If the weights are reachable as plain data, use move-based. Otherwise, use reload-based.
+There's no registry flag to tell you which pattern to use, since it's determined by what the library exposes. If the weights are reachable as plain data, use move-based, and otherwise use reload-based.
 
-**Neither pattern works — use `gpu_only=True`**
+**Neither pattern works, use `gpu_only=True`**
 
-Some tools can't even do the reload-based pattern safely: the first run works, but the second run crashes the worker (either in the same process or in a fresh subprocess). This is usually an upstream bug in how the library tracks CUDA or XLA state across runs. Mark these with `gpu_only=True` in the `@tool()` decorator:
+Some tools can't even do the reload-based pattern safely. The first run works, but the second run crashes the worker, either in the same process or in a fresh subprocess, usually because of an upstream bug in how the library tracks CUDA or XLA state across runs. Mark these with `gpu_only=True` in the `@tool()` decorator:
 
 ```python
 @tool(
@@ -396,9 +399,9 @@ Some tools can't even do the reload-based pattern safely: the first run works, b
 The framework then changes two things for this tool:
 
 1. **It refuses CPU dispatch up front.** Calling the tool with `config.device="cpu"` raises `ValueError` immediately, so misconfigurations fail clearly instead of crashing deep inside the worker.
-2. **On LRU eviction, it kills the worker outright.** Instead of sending `to_device("cpu")` (which would hit the broken reload path), the framework calls `worker.stop()`, logs a warning, and drops the reference. The next time this tool is dispatched, a brand-new subprocess is spawned on GPU from scratch — fresh imports, fresh model load, fresh compile. It's slow, but it's always correct.
+2. **On LRU eviction, it kills the worker outright.** Instead of sending `to_device("cpu")` (which would hit the broken reload path), the framework calls `worker.stop()`, logs a warning, and drops the reference. The next time this tool is dispatched, a brand-new subprocess is spawned on GPU from scratch, with fresh imports, fresh model load, and fresh compile. It's slow but always correct.
 
-`gpu_only=True` implies `uses_gpu=True` — the framework checks this at registration. Currently only `alphagenome-predict-variants` opts in; the other alphagenome variants use plain reload-based because they don't exhibit the consecutive-dispatch crash.
+`gpu_only=True` implies `uses_gpu=True`, which the framework checks at registration. Currently only `alphagenome-predict-variants` opts in, because the other alphagenome variants don't exhibit the consecutive-dispatch crash and so use plain reload-based.
 
 **CLI tools** (Boltz2, RFDiffusion3, BLAST, etc.):
 ```python

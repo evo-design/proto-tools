@@ -1,6 +1,8 @@
 # Storage
 
-Tools download model weights on first use. `PROTO_HOME` (defaults to `~/.proto/`) controls where model weights are stored.
+This note covers where `proto_tools` stores model weights, tool environments, caches, and databases, and the environment variables that control those locations.
+
+Tools download model weights on first use, and `PROTO_HOME` (defaults to `~/.proto/`) controls where those weights are stored.
 
 ```bash
 # Recommended: add to ~/.bashrc
@@ -8,7 +10,7 @@ export PROTO_HOME=/path/to/your/proto_home
 ```
 
 `PROTO_MODEL_CACHE` can override just the model weights location (defaults to `PROTO_HOME/proto_model_cache/`).
-`PROTO_DATABASES_DIR` can override just the sequence-databases location (defaults to `PROTO_MODEL_CACHE/databases/`); see [Databases](#databases).
+`PROTO_DATABASES_DIR` can override just the sequence-databases location (defaults to `PROTO_MODEL_CACHE/databases/`). See [Databases](#databases).
 
 ## Storage layout
 
@@ -28,8 +30,8 @@ PROTO_HOME/                   (default: ~/.proto/)
 
 Tool env builds use `uv pip install` (and occasionally `pip install`) to fetch Python wheels. By default, proto-tools routes both caches under `PROTO_HOME` so all disk usage is consolidated and cleanable atomically.
 
-- `UV_CACHE_DIR` — defaults to `PROTO_HOME/uv_cache/` (extracted archives + HTTP cache for `uv`)
-- `PIP_CACHE_DIR` — defaults to `PROTO_HOME/pip_cache/` (HTTP + wheel cache for `pip`)
+- `UV_CACHE_DIR` defaults to `PROTO_HOME/uv_cache/` (extracted archives + HTTP cache for `uv`)
+- `PIP_CACHE_DIR` defaults to `PROTO_HOME/pip_cache/` (HTTP + wheel cache for `pip`)
 
 Both are injected by `persistent_worker._build_subprocess_env()` via `setdefault`, so any value set in your shell overrides the default. To share the cache across projects, set them explicitly:
 
@@ -38,7 +40,7 @@ export UV_CACHE_DIR=~/.cache/uv
 export PIP_CACHE_DIR=~/.cache/pip
 ```
 
-The cache and tool envs share a filesystem by default, which lets `uv` hard-link from the cache into envs (saves bulk — the extracted archive is not duplicated). Wiping `PROTO_HOME/proto_tool_envs/` preserves the cache, so the next rebuild is fast.
+The cache and tool envs share a filesystem by default, which lets `uv` hard-link from the cache into envs (saves bulk, because the extracted archive is not duplicated). Wiping `PROTO_HOME/proto_tool_envs/` preserves the cache, so the next rebuild is fast.
 
 ## Modes
 
@@ -65,7 +67,7 @@ export PROTO_HOME=~/.proto
 export PROTO_MODEL_CACHE=/shared/team/model_weights
 ```
 
-Do **not** share `PROTO_HOME` itself across users. Tool environments are user-specific and should remain per-user. Only model weights (`PROTO_MODEL_CACHE`) are safe to share.
+Do **not** share `PROTO_HOME` itself across users, because tool environments are user-specific and should remain per-user. Only model weights (`PROTO_MODEL_CACHE`) are safe to share.
 
 ## Databases
 
@@ -76,7 +78,7 @@ Sequence databases for `mmseqs2-homology-search` (UniRef30, the ColabFold envdb,
 export PROTO_DATABASES_DIR=/scratch/$USER/proto_databases
 ```
 
-The override applies to **both** provisioning (`setup_databases.py` writes there) and runtime (the tool resolves datasets there), so a single export keeps them consistent — no symlinks. Like weights, the databases root is safe to NFS-mount and share across collaborators (read-only after indexing). Provision into it with:
+The override applies to **both** provisioning (`setup_databases.py` writes there) and runtime (the tool resolves datasets there), so a single export keeps them consistent, with no symlinks. Like weights, the databases root is safe to NFS-mount and share across collaborators (read-only after indexing). Provision into it with:
 
 ```bash
 python -m proto_tools.tools.sequence_alignment.mmseqs2.setup_databases <dataset>   # e.g. uniref30-2302
@@ -96,7 +98,7 @@ export PROTO_PROTENIX_WEIGHTS_DIR=/custom/path/protenix
 <!-- docs:ignore start -->
 ## For tool authors
 
-Non-HF tools call `resolve_weights_dir(toolkit)` from `standalone_helpers.py`:
+Non-HF tools call `resolve_weights_dir(toolkit)` from the `standalone_helpers` package:
 
 ```python
 from standalone_helpers import resolve_weights_dir
@@ -107,7 +109,7 @@ if weights_dir:
     ...
 ```
 
-HF-based tools need no code changes; `persistent_worker.py` sets `HF_HOME` automatically.
+HF-based tools need no code changes. `persistent_worker.py` sets `HF_HOME` automatically.
 
 For `setup.sh` scripts that download weights during environment setup, use the shared helper from `standalone_helpers.sh` (auto-copied):
 
