@@ -170,13 +170,14 @@ class RFdiffusion3DesignSpec(BaseModel):
             native default.
 
     Note:
-        Additional RFdiffusion3 InputSpecification fields can be passed as
-        ``**kwargs`` via this model's ``extra="allow"`` mode (e.g.
-        ``dialect``, ``cif_parser_args``). See
+        Only the typed fields above are accepted; unknown keys are rejected.
+        For exotic InputSpecification fields (e.g. ``dialect``,
+        ``cif_parser_args``), pass the full spec through
+        ``RFdiffusion3Input.raw_json``. See
         https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
     """
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     input_structure: Structure | None = Field(
         default=None,
@@ -307,7 +308,7 @@ class RFdiffusion3DesignSpec(BaseModel):
 
     @model_validator(mode="after")
     def validate_has_design_params(self) -> Any:
-        """Reject specs with no constraints (any typed field or extras suffices)."""
+        """Reject specs with no constraints (at least one typed design field is required)."""
         typed_design_fields = (
             self.contig,
             self.length,
@@ -330,10 +331,9 @@ class RFdiffusion3DesignSpec(BaseModel):
             self.partial_t,
             self.is_non_loopy,
         )
-        if not any(f is not None for f in typed_design_fields) and not self.model_extra:
+        if not any(f is not None for f in typed_design_fields):
             raise ValueError(
-                "At least one design parameter (contig, length, symmetry, "
-                "select_*, partial_t, etc.) or **kwargs must be provided"
+                "At least one design parameter (contig, length, symmetry, select_*, partial_t, etc.) must be provided"
             )
         return self
 
@@ -385,11 +385,7 @@ class RFdiffusion3DesignSpec(BaseModel):
         """
         spec: dict[str, Any] = {}
 
-        # Start with extra kwargs (allows advanced options to be passed through)
-        if self.model_extra:
-            spec.update(self.model_extra)
-
-        # Add typed fields (override extra kwargs). input_structure is emitted by to_json_spec.
+        # input_structure is emitted by to_json_spec as a file path, not here.
         if self.contig is not None:
             spec["contig"] = self.contig
         if self.length is not None:
@@ -524,6 +520,77 @@ class RFdiffusion3Input(BaseToolInput):
 # Config Data Models
 
 
+class RFdiffusion3SamplerTuning(BaseModel):
+    """Finer rfd3 ``inference_sampler`` settings forwarded as Hydra overrides.
+
+    The settings below are the commonly tuned sampler parameters; each is validated,
+    defaults to ``None``, and is forwarded to ``inference_sampler.<name>`` only
+    when set, otherwise inheriting the checkpoint's upstream default. Any other
+    valid ``inference_sampler`` field (e.g. ``cfg_t_max``, ``s_min``, ``s_max``)
+    may be passed as an extra keyword and is forwarded verbatim. See
+    https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
+
+    Attributes:
+        noise_scale (float | None): Diffusion noise scale (upstream default 1.003).
+        p (int | None): Noise-schedule exponent (upstream default 7).
+        gamma_min (float | None): Lower stochasticity bound, paired with ``gamma_0`` (upstream default 1.0).
+        s_trans (float | None): Translational noise scale for inference augmentation (upstream default 1.0).
+        allow_realignment (bool | None): Allow motif realignment during sampling (upstream default False).
+        s_jitter_origin (float | None): Gaussian sigma jittering the motif offset (upstream default 0.0).
+    """
+
+    # extra="allow" forwards niche inference_sampler settings not typed above, verbatim.
+    model_config = ConfigDict(extra="allow")
+
+    noise_scale: float | None = Field(
+        default=None,
+        ge=0.0,
+        title="Noise Scale",
+        description="Diffusion noise scale (upstream default 1.003); higher = noisier sampling",
+    )
+    p: int | None = Field(
+        default=None,
+        ge=1,
+        title="Schedule Exponent",
+        description="Noise-schedule exponent p (upstream default 7)",
+    )
+    gamma_min: float | None = Field(
+        default=None,
+        ge=0.0,
+        title="Gamma Min",
+        description="Lower stochasticity bound paired with gamma_0 (upstream default 1.0)",
+    )
+    s_trans: float | None = Field(
+        default=None,
+        ge=0.0,
+        title="Translational Noise",
+        description="Translational noise scale for inference augmentation (upstream default 1.0)",
+    )
+    allow_realignment: bool | None = Field(
+        default=None,
+        title="Allow Realignment",
+        description="Allow motif realignment during sampling (upstream default False)",
+    )
+    s_jitter_origin: float | None = Field(
+        default=None,
+        ge=0.0,
+        title="Origin Jitter Sigma",
+        description="Gaussian sigma jittering the motif offset (upstream default 0.0)",
+    )
+
+    def to_overrides(self) -> dict[str, Any]:
+        """Return set settings as ``inference_sampler.<key>`` Hydra overrides (extras included)."""
+        # Untyped extras bypass validation; surface them so a typo is visible, not silent.
+        if self.model_extra:
+            logger.warning(
+                "RFdiffusion3 sampler_tuning is forwarding unvalidated inference_sampler override(s) %s; "
+                "a misspelled key will fail at rfd3 runtime. Typed settings: %s",
+                sorted(self.model_extra),
+                sorted(type(self).model_fields),
+            )
+        return {f"inference_sampler.{key}": value for key, value in self.model_dump(exclude_none=True).items()}
+
+
 class RFdiffusion3Config(BaseConfig):
     """Configuration for RFdiffusion3 structure design.
 
@@ -547,6 +614,8 @@ class RFdiffusion3Config(BaseConfig):
         gamma_0 (float): Sampler stochasticity; lower = more designable,
             less diverse; ``0.0`` = deterministic ODE. Must be ``> 0.5``
             when ``sampler_kind="symmetry"``.
+        sampler_tuning (RFdiffusion3SamplerTuning): Finer ``inference_sampler``
+            settings (noise schedule, motif noise); see that class for the fields.
         low_memory_mode (bool): Memory-efficient tokenization (slower);
             enable only if GPU RAM is tight.
         dump_trajectories (bool): Save diffusion trajectory frames (debugging).
@@ -559,15 +628,13 @@ class RFdiffusion3Config(BaseConfig):
         device (str): ``"cuda"`` or ``"cpu"``.
 
     Note:
-        Common sampler knobs are typed fields, emitted under their
-        ``inference_sampler.*`` Hydra paths. Niche sampler internals (and any other
-        Hydra override) are reachable via the dotted passthrough, which
-        ``extra="allow"`` forwards verbatim, e.g.
-        ``RFdiffusion3Config(**{"inference_sampler.noise_scale": 1.003})``. See
+        Headline sampler controls (``sampler_kind``, ``cfg_scale``, ``gamma_0``,
+        ``center_option``, ``use_classifier_free_guidance``) are top-level fields.
+        Finer ``inference_sampler`` settings live under ``sampler_tuning`` (a typed
+        :class:`RFdiffusion3SamplerTuning`), e.g.
+        ``RFdiffusion3Config(sampler_tuning={"noise_scale": 1.003})``. See
         https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
     """
-
-    model_config = ConfigDict(extra="allow")
 
     n_batches: int = ConfigField(
         title="Number of Batches",
@@ -620,6 +687,11 @@ class RFdiffusion3Config(BaseConfig):
         default=0.6,
         ge=0.0,
         description="Sampler stochasticity (lower = more designable, less diverse); >0.5 for symmetry sampler",
+    )
+    sampler_tuning: RFdiffusion3SamplerTuning = ConfigField(
+        default_factory=RFdiffusion3SamplerTuning,
+        title="Sampler Tuning",
+        description="Finer inference_sampler settings (noise schedule, motif noise); see RFdiffusion3SamplerTuning",
     )
     low_memory_mode: bool = ConfigField(
         title="Low Memory Mode",
@@ -678,14 +750,12 @@ class RFdiffusion3Config(BaseConfig):
     def get_cli_kwargs(self) -> dict[str, Any]:
         """Build CLI args for the rfd3 inference script.
 
-        Typed sampler knobs use dotted Hydra paths (``inference_sampler.<key>``);
-        any ``model_extra`` passthrough keys are forwarded verbatim. On
-        collision, typed fields win over ``model_extra``.
+        Sampler settings use dotted Hydra paths (``inference_sampler.<key>``). On
+        collision, the headline top-level fields win over ``sampler_tuning``.
         """
         cli_kwargs: dict[str, Any] = {}
-        # Extras first so typed fields below override them on collision.
-        if self.model_extra:
-            cli_kwargs.update(self.model_extra)
+        # sampler_tuning first so the headline fields below win on collision.
+        cli_kwargs.update(self.sampler_tuning.to_overrides())
         cli_kwargs.update(
             {
                 "n_batches": self.n_batches,

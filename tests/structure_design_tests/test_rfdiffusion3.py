@@ -106,14 +106,63 @@ def test_rfdiffusion3_config_gamma_0_symmetry_constraint():
     assert RFdiffusion3Config(sampler_kind="default", gamma_0=0.1).gamma_0 == 0.1
 
 
+def test_rfdiffusion3_config_rejects_unknown_field():
+    """Unknown config kwargs are rejected at construction, not silently forwarded to Hydra.
+
+    Regression: an agent passing a hallucinated setting (e.g. ``n_recycle``, which rfd3 has no
+    concept of) must fail immediately rather than reach Hydra as a bad ``inference_sampler.*``
+    override and crash mid-run.
+    """
+    with pytest.raises(ValueError):
+        RFdiffusion3Config(n_recycle=3)
+
+
+def test_rfdiffusion3_design_spec_rejects_unknown_field():
+    """Unknown spec kwargs are rejected; exotic InputSpecification fields go through raw_json."""
+    with pytest.raises(ValueError):
+        RFdiffusion3DesignSpec(length="100", contigs="A1-100")  # typo for 'contig'
+
+
+def test_rfdiffusion3_sampler_tuning_validates_and_omits_unset():
+    """sampler_tuning validates typed settings, drops unset ones, and forwards extras verbatim."""
+    # Bad value on a typed setting is rejected (would silently reach Hydra under extra="allow").
+    with pytest.raises(ValueError):
+        RFdiffusion3Config(sampler_tuning={"noise_scale": "not-a-float"})
+
+    # Unset settings never reach the CLI (preserve checkpoint defaults).
+    base = RFdiffusion3Config().get_cli_kwargs()
+    assert not any(k.startswith("inference_sampler.noise_scale") for k in base)
+
+    # A set typed setting and an untyped-but-valid extra both emit under inference_sampler.*.
+    kwargs = RFdiffusion3Config(sampler_tuning={"gamma_min": 0.9, "s_min": 1e-3}).get_cli_kwargs()
+    assert kwargs["inference_sampler.gamma_min"] == 0.9
+    assert kwargs["inference_sampler.s_min"] == 1e-3
+
+
+def test_rfdiffusion3_sampler_tuning_warns_on_untyped_extras(caplog):
+    """Untyped sampler_tuning extras are forwarded but warn, so a typo is visible not silent."""
+    import logging
+
+    # Untyped extra (a typo here would still reach Hydra) → warning naming the offending key.
+    with caplog.at_level(logging.WARNING):
+        RFdiffusion3Config(sampler_tuning={"n_recycle": 3}).get_cli_kwargs()
+    assert any("n_recycle" in r.message and "unvalidated" in r.message for r in caplog.records)
+
+    # Purely typed settings forward silently (no warning noise on the validated path).
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        RFdiffusion3Config(sampler_tuning={"noise_scale": 1.003}).get_cli_kwargs()
+    assert not caplog.records
+
+
 # ── Config: CLI kwargs assembly ─────────────────────────────────────────────
 
 
 def test_rfdiffusion3_config_get_cli_kwargs():
-    """Typed sampler knobs emit under inference_sampler.* dotted paths; top-level toggles stay flat.
+    """Typed sampler settings emit under inference_sampler.* dotted paths; top-level toggles stay flat.
 
-    Niche sampler internals (noise schedule, motif realignment, CFG sub-features) are not typed
-    fields; they reach the CLI only via the inference_sampler.* passthrough (model_extra).
+    Finer sampler settings (noise schedule, motif noise) are typed under sampler_tuning and emit
+    under the same inference_sampler.* paths; niche internals ride the sampler_tuning extras.
     """
     config = RFdiffusion3Config(
         sampler_kind="symmetry",
@@ -127,7 +176,7 @@ def test_rfdiffusion3_config_get_cli_kwargs():
     )
     kwargs = config.get_cli_kwargs()
 
-    # Typed sampler knobs use dotted Hydra paths.
+    # Typed sampler settings use dotted Hydra paths.
     expected_dotted = {
         "inference_sampler.cfg_scale": 2.0,
         "inference_sampler.gamma_0": 0.7,
@@ -147,24 +196,18 @@ def test_rfdiffusion3_config_get_cli_kwargs():
     for flat in ("cfg_scale", "gamma_0", "kind", "center_option", "use_classifier_free_guidance"):
         assert flat not in kwargs
 
-    # Demoted sampler internals stay reachable only via the inference_sampler.* passthrough.
-    passthrough = RFdiffusion3Config(**{"inference_sampler.noise_scale": 1.003}).get_cli_kwargs()
-    assert passthrough["inference_sampler.noise_scale"] == 1.003
+    # Finer sampler settings go through sampler_tuning and emit under inference_sampler.*.
+    tuned = RFdiffusion3Config(sampler_tuning={"noise_scale": 1.003}).get_cli_kwargs()
+    assert tuned["inference_sampler.noise_scale"] == 1.003
+    # Untyped-but-valid inference_sampler settings ride the sampler_tuning extras passthrough.
+    tail = RFdiffusion3Config(sampler_tuning={"cfg_t_max": 0.8}).get_cli_kwargs()
+    assert tail["inference_sampler.cfg_t_max"] == 0.8
 
 
-def test_rfdiffusion3_typed_fields_override_extras_on_collision(tmp_path):
-    """Both Config.get_cli_kwargs and DesignSpec.to_dict resolve typed-vs-extras collisions for typed."""
-    config = RFdiffusion3Config(cfg_scale=2.0, **{"inference_sampler.cfg_scale": 99.0})
+def test_rfdiffusion3_headline_field_overrides_sampler_tuning_on_collision():
+    """A headline top-level sampler field wins over the same key set in sampler_tuning extras."""
+    config = RFdiffusion3Config(cfg_scale=2.0, sampler_tuning={"cfg_scale": 99.0})
     assert config.get_cli_kwargs()["inference_sampler.cfg_scale"] == 2.0
-
-    target = tmp_path / "typed.pdb"
-    target.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000\n", encoding="utf-8")
-    spec = RFdiffusion3DesignSpec.model_validate({"input_structure": str(target), "input": "extra.pdb"})
-    # input_structure is materialized to a real file path by to_json_spec, overriding the extra "input".
-    emitted = json.loads(RFdiffusion3Input(design_specs=[spec]).to_json_spec(input_dir=tmp_path))["spec-0"]
-    assert emitted["input"] != "extra.pdb"
-    assert Path(emitted["input"]).is_file()
-    assert Path(emitted["input"]).read_text() == target.read_text()
 
 
 # ── DesignSpec: JSON spec emission ──────────────────────────────────────────
@@ -258,10 +301,10 @@ def test_rfdiffusion3_design_spec_symmetry_serializes_to_id_dict():
 
 
 def test_rfdiffusion3_config_cache_key_invariants():
-    """Path / debug-output fields are excluded; sampler knobs are included (change outputs)."""
+    """Path / debug-output fields are excluded; sampler settings are included (change outputs)."""
     base = RFdiffusion3Config().cache_key()
 
-    # Excluded — purely IO / debug knobs
+    # Excluded — purely IO / debug settings
     assert (
         RFdiffusion3Config(
             input_dir="in",
