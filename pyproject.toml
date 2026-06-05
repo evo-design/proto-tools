@@ -199,6 +199,7 @@ module = [
     "rdkit.*",
     "pdbeccdutils.*",
     "gemmi.*",
+    "mini3di.*",
     "faiss.*",
     "affine_gaps.*",
     # Tool-specific model packages (installed in standalone envs, not on PyPI)

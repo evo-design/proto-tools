@@ -1,10 +1,9 @@
 """SSAlign standalone runner: SaProt embedding + FAISS cosine prefilter + SAligner 3Di refine."""
 
 import json
+import math
 import os
-import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -136,99 +135,65 @@ class SaProtEmbedder:
 
 
 # ============================================================================
-# Foldseek 3Di extraction
+# 3Di extraction (mini3di: pure-Python NumPy port of foldseek's 3Di VQ-VAE encoder)
 # ============================================================================
-def _find_foldseek() -> str:
-    """Return the foldseek binary path in the venv bin/ dir, or raise if missing."""
-    b = Path(sys.executable).parent / "foldseek"
-    if not b.exists():
-        raise FileNotFoundError(
-            f"ssalign: foldseek binary not found at {b}; re-run standalone/setup.sh to provision the venv"
-        )
-    return str(b)
+def _structures_to_3di(items: list[dict[str, str]]) -> list[tuple[str, str]]:
+    """Extract (aa_seq, 3Di_seq) per structure with mini3di, first protein chain only.
 
-
-def _structures_to_3di(items: list[dict[str, str]], num_threads: int, device: str) -> list[tuple[str, str]]:
-    """Extract (aa_seq, 3Di_seq) per structure via one foldseek descriptor pass.
-
-    ``items`` are ``[{"id", "text", "format"}]`` in caller order. Each structure is
-    written under a unique, path-safe positional stem (decoupled from the caller id,
-    which may repeat or contain path-unsafe chars) and processed in a single
-    ``structureto3didescriptor`` call. Returns ``(aa_seq, 3Di_seq)`` per input in
-    input order, keeping the first chain per structure. Raises if foldseek drops any.
+    mini3di is a pure-Python (NumPy) port of foldseek's 3Di VQ-VAE encoder using
+    foldseek's trained weights, so it produces foldseek-compatible 3Di without the
+    foldseek binary. ``items`` are ``[{"id", "text", "format"}]`` in caller order;
+    returns ``(aa_seq, 3Di_seq)`` per input in that order, using the first chain that
+    has amino-acid residues (skipping nucleic-acid/ligand-only chains). Modified
+    residues (e.g. MSE) map to their canonical AA via biopython's extended table;
+    unknowns map to 'X' (SaProt-masked downstream by _build_combined_seq).
     """
-    from standalone_helpers import get_subprocess_device_env
+    import io
 
-    foldseek = _find_foldseek()
-    stems = [f"s{i:06d}" for i in range(len(items))]
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_path = Path(tmp)
-        struct_dir = tmp_path / "structures"
-        struct_dir.mkdir()
-        for stem, item in zip(stems, items, strict=True):
-            (struct_dir / f"{stem}.{item['format']}").write_text(item["text"])
+    import mini3di
+    from Bio.Data.PDBData import protein_letters_3to1_extended
+    from Bio.PDB.MMCIFParser import MMCIFParser
+    from Bio.PDB.PDBParser import PDBParser
+    from Bio.PDB.Polypeptide import is_aa
 
-        out_tsv = tmp_path / "descriptor.tsv"
-        cmd = [
-            foldseek,
-            "structureto3didescriptor",
-            "-v",
-            "0",
-            "--threads",
-            str(num_threads),
-            "--chain-name-mode",
-            "1",
-            str(struct_dir),
-            str(out_tsv),
-        ]
-        env = {**os.environ, **get_subprocess_device_env(device)}
+    encoder = mini3di.Encoder()
+    pdb_parser = PDBParser(QUIET=True)  # type: ignore[no-untyped-call]
+    cif_parser = MMCIFParser(QUIET=True)  # type: ignore[no-untyped-call]
+
+    results: list[tuple[str, str]] = []
+    for item in items:
+        parser = cif_parser if item["format"].lower() in {"cif", "mmcif"} else pdb_parser
+        structure = parser.get_structure(item["id"], io.StringIO(item["text"]))  # type: ignore[no-untyped-call]
         try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True, env=env)
-        except subprocess.CalledProcessError as e:
-            tail = "\n".join((e.stderr or "").strip().splitlines()[-10:])
+            model = next(structure.get_models())
+        except StopIteration as exc:
+            raise RuntimeError(f"ssalign: no model found in structure {item['id']}.") from exc
+
+        # Use the first chain that yields amino-acid residues (foldseek emitted 3Di for
+        # the first protein chain, so a leading nucleic-acid/ligand chain must not abort).
+        for chain in model.get_chains():
+            n, ca, c, cb, aa = [], [], [], [], []
+            for res in chain:
+                if not is_aa(res, standard=False):  # type: ignore[no-untyped-call]
+                    continue
+                coords = {atom.get_name(): atom.get_coord() for atom in res}
+                if not {"N", "CA", "C"} <= coords.keys():
+                    continue
+                n.append(coords["N"])
+                ca.append(coords["CA"])
+                c.append(coords["C"])
+                cb.append(coords.get("CB", (math.nan, math.nan, math.nan)))
+                aa.append(protein_letters_3to1_extended.get(res.get_resname().strip().upper(), "X"))
+            if ca:
+                break
+        else:
             raise RuntimeError(
-                f"ssalign: foldseek structureto3didescriptor failed (exit {e.returncode}): {tail or '<no stderr>'}"
-            ) from e
-
-        valid = set(stems)
-        by_stem: dict[str, tuple[str, str]] = {}
-        # Read defensively: a missing TSV (foldseek exited 0 but emitted nothing) flows into the
-        # per-structure "did not emit 3Di" error below, not an opaque FileNotFoundError.
-        descriptor_lines = out_tsv.read_text().splitlines() if out_tsv.exists() else []
-        for line in descriptor_lines:
-            if not line.strip():
-                continue
-            cols = line.split("\t")
-            if len(cols) < 3:
-                continue
-            matched = _match_stem(cols[0], valid)
-            if matched is None or matched in by_stem:
-                continue  # unknown stem, or keep only the first chain per structure
-            by_stem[matched] = (cols[1], cols[2])
-
-    missing = [item["id"] for stem, item in zip(stems, items, strict=True) if stem not in by_stem]
-    if missing:
-        raise RuntimeError(
-            f"ssalign: foldseek did not emit 3Di for structure(s) {missing}; "
-            "the structure(s) may be empty, too short, or malformed."
-        )
-    return [by_stem[stem] for stem in stems]
-
-
-def _match_stem(name: str, valid: set[str]) -> str | None:
-    """Map a foldseek descriptor name ('<stem>.<fmt>_<chain>' / '<stem>_<chain>') to its stem.
-
-    Foldseek decorates the input filename with an optional extension and a trailing
-    ``_<chain>``. Stems are fixed-width, unique, and path-safe (``s000000`` …), so we
-    strip the decoration and require an exact match — no fuzzy/prefix guessing.
-    """
-    if name in valid:
-        return name
-    cand = name.rsplit("_", 1)[0] if "_" in name else name
-    if cand in valid:
-        return cand
-    cand = cand.rsplit(".", 1)[0] if "." in cand else cand
-    return cand if cand in valid else None
+                f"ssalign: structure {item['id']} has no protein chain with N/CA/C backbone "
+                "atoms; it may be empty, non-protein, or malformed."
+            )
+        states = encoder.encode_atoms(ca=np.asarray(ca), cb=np.asarray(cb), n=np.asarray(n), c=np.asarray(c))
+        results.append(("".join(aa), encoder.build_sequence(states).upper()))
+    return results
 
 
 def _build_combined_seq(aa: str, threeDi: str) -> str:
@@ -238,7 +203,7 @@ def _build_combined_seq(aa: str, threeDi: str) -> str:
 
 
 def _threeDi_only(threeDi: str) -> str:
-    """Return the uppercase 3Di string (foldseek already emits uppercase)."""
+    """Return the uppercase 3Di string (mini3di output is uppercased at extraction)."""
     return threeDi.upper()
 
 
@@ -361,7 +326,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     # ── Embed queries (3Di + SaProt), aligned with input order ───────────────
     query_items = input_dict["queries"]
     q_ids = [item["id"] for item in query_items]
-    query_3di = _structures_to_3di(query_items, threads, device)  # [(aa, 3Di)] in input order
+    query_3di = _structures_to_3di(query_items)  # [(aa, 3Di)] in input order
     q_combined = [_build_combined_seq(aa, threeDi) for aa, threeDi in query_3di]
     q_3di = [_threeDi_only(threeDi) for _, threeDi in query_3di]
     q_emb = _saprot.embed(q_combined, batch_size, device)
@@ -371,7 +336,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         # MODE 1: embed + index targets on the fly.
         target_items = input_dict["target_structures"]
         t_ids = [item["id"] for item in target_items]
-        target_3di = _structures_to_3di(target_items, threads, device)
+        target_3di = _structures_to_3di(target_items)
         t_combined = [_build_combined_seq(aa, threeDi) for aa, threeDi in target_3di]
         t_3di = {tid: _threeDi_only(threeDi) for tid, (_, threeDi) in zip(t_ids, target_3di, strict=True)}
         t_emb = _saprot.embed(t_combined, batch_size, device)

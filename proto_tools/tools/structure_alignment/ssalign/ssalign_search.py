@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 SSAlignDim = Literal[64, 128, 256, 512, 1280]
 SSAlignMode = Literal[0, 1]
 
-# Shared 65-residue fixture (foldseek rejects too-short structures); reused across the category.
+# Shared 65-residue fixture reused across the category.
 _EXAMPLE_PDB_PATH = str(Path(__file__).parents[1] / "example_input_fixture.pdb")
 
 # Required filename suffixes inside a prebuilt SSAlignDB directory (mode 2).
@@ -98,7 +98,7 @@ class SSAlignSearchConfig(BaseConfig):
         max_target (int): Final hits returned per query after ranking; must be <= prefilter_target.
         device (str): Device for SaProt embedding ('cuda' default, or 'cpu').
         batch_size (int): Structures per SaProt forward pass.
-        num_threads (int): CPU threads for foldseek 3Di extraction and the FAISS search.
+        num_threads (int): CPU threads for the FAISS search.
     """
 
     # ── target source (exactly one; enforced below) ──────────────────────────
@@ -166,7 +166,7 @@ class SSAlignSearchConfig(BaseConfig):
         title="Threads",
         default=4,
         ge=1,
-        description="CPU threads for foldseek 3Di extraction and the FAISS search",
+        description="CPU threads for the FAISS search",
         include_in_key=False,
     )
 
@@ -369,7 +369,7 @@ def run_ssalign_search(
 ) -> SSAlignSearchOutput:
     """Run an SSAlign two-stage structure search.
 
-    Encodes each query (and each on-the-fly target) with foldseek 3Di + SaProt, prefilters with a
+    Encodes each query (and each on-the-fly target) with mini3di 3Di + SaProt, prefilters with a
     FAISS cosine index (raw embeddings on the fly; the prebuilt DB's whitened index in mode 2), and
     (mode 1) refines below-threshold candidates with SAligner.
 
