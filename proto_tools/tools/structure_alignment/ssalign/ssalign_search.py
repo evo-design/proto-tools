@@ -45,7 +45,7 @@ class SSAlignQuery(BaseModel):
     """One query structure plus an optional stable id echoed into its hits.
 
     Attributes:
-        structure (Structure): Query structure (Structure object, file path, or raw PDB/CIF string).
+        structure (Structure): Query structure (Structure/path/PDB/CIF); multi-chain uses the first chain only.
         query_id (str | None): Stable identifier echoed into output; defaults to positional 'query_{i}'.
     """
 
@@ -53,7 +53,7 @@ class SSAlignQuery(BaseModel):
 
     structure: Structure = Field(
         title="Query Structure",
-        description="Query structure (Structure object, file path, or raw PDB/CIF string)",
+        description="Query structure (Structure/path/PDB/CIF); multi-chain uses the first chain only",
     )
     query_id: str | None = Field(
         default=None,
@@ -195,7 +195,7 @@ class SSAlignHit(BaseModel):
         target_id (str): Identifier of the matched target structure.
         prefilter_score (float): FAISS cosine similarity (raw in mode 1, whitened in mode 2); in [-1, 1].
         saligner_score (float | None): SAligner 3Di global-alignment score (mode 1, refined hits only).
-        ss_score (float): Calibrated score = 0.55 * prefilter_score + 0.56 (upstream formula).
+        ss_score (float): Predicted avg TM-score (SSAlign linear fit of cosine); noisy (r~0.69), can exceed 1.
         rank (int): 1-indexed rank within this query's results.
         refined (bool): True if this hit was re-ranked by SAligner (below prefilter_threshold).
     """
@@ -216,7 +216,7 @@ class SSAlignHit(BaseModel):
     )
     ss_score: float = Field(
         title="SS Score",
-        description="Calibrated score = 0.55 * prefilter_score + 0.56 (upstream formula)",
+        description="Predicted avg TM-score (SSAlign linear fit of cosine); noisy (r~0.69), can exceed 1",
     )
     rank: int = Field(title="Rank", ge=1, description="1-indexed rank within this query's results")
     refined: bool = Field(
