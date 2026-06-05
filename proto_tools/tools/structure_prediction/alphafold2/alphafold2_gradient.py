@@ -69,7 +69,7 @@ class AlphaFold2GradientInput(GradientInput):
             shape produced by ``Structure.model_dump(mode='json')``.
         target_chain (str): Chain ID(s) of the frozen target in the PDB.
         target_hotspot (str | None): Comma-separated hotspot residue indices on the target.
-        binder_chain (str | None): Binder chain to redesign from its PDB template; None designs de novo.
+        binder_chain (str | None): Binder template chain to redesign; None (default) designs de novo.
         design_positions (list[int] | None): Zero-based binder residue indices
             for loss focus (e.g. CDR loops). Germinal backend only.
     """
@@ -89,15 +89,34 @@ class AlphaFold2GradientInput(GradientInput):
         description="Comma-separated hotspot residue indices on the target (e.g. '10,25,42').",
     )
     binder_chain: str | None = InputField(
-        default="H",
+        default=None,
         title="Binder Chain",
-        description="Binder chain to redesign from its PDB template; None designs the binder de novo (no template).",
+        description="Binder template chain to redesign; None (default) designs the binder de novo.",
     )
     design_positions: list[int] | None = InputField(
         default=None,
         title="Design Positions",
         description="Zero-based binder residue indices for loss focus (e.g. CDR loops).",
     )
+
+    @model_validator(mode="after")
+    def validate_chains_present(self) -> Self:
+        """Validate target/binder chains exist in target_pdb."""
+        # Absent chain -> empty PDB filter -> ColabDesign "Found 0 models".
+        present = set(self.target_pdb.get_chain_ids())
+        for part in (c.strip() for c in self.target_chain.split(",")):
+            if part and part not in present:
+                raise ValueError(
+                    f"target_chain={part!r} is not a polymer chain in target_pdb (available: {sorted(present)})."
+                )
+        if self.binder_chain is not None and self.binder_chain not in present:
+            raise ValueError(
+                f"binder_chain={self.binder_chain!r} is not a polymer chain "
+                f"in target_pdb (available: {sorted(present)}). "
+                "For de novo binder design set binder_chain=None; for "
+                "template redesign supply a PDB containing that chain."
+            )
+        return self
 
 
 class AlphaFold2GradientConfig(BaseConfig):

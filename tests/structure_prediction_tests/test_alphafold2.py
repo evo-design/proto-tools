@@ -117,6 +117,18 @@ def test_binder_input_allows_denovo_none_binder_chain():
     assert inp.binder_chain is None
 
 
+def test_binder_chain_absent_from_target_raises():
+    """Absent binder_chain fails fast with a clear error, not ColabDesign's 'Found 0 models'."""
+    with pytest.raises(ValidationError, match=r"binder_chain='H' is not a polymer chain"):
+        AlphaFold2GradientInput(logits=[[0.0] * 20] * 2, target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, binder_chain="H")
+
+
+def test_target_chain_absent_from_target_raises():
+    """target_chain absent from target_pdb fails fast with an actionable error."""
+    with pytest.raises(ValidationError, match=r"target_chain='Z' is not a polymer chain"):
+        AlphaFold2GradientInput(logits=[[0.0] * 20] * 2, target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, target_chain="Z")
+
+
 def test_binder_template_prep_kwargs_denovo_vs_redesign():
     """De-novo (None) returns no override; a set chain returns template-redesign kwargs."""
     si = _load_af2_standalone()
