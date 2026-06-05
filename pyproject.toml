@@ -31,7 +31,7 @@ dependencies = [
     "gemmi",
 
     # Chemistry & structure
-    "rdkit",
+    "rdkit!=2026.3.3",  # 2026.3.3's bundled rdchem.pyi stub is malformed and breaks mypy; drop when fixed upstream
     "py3Dmol",
 
     # Biology-specific tools
