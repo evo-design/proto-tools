@@ -168,8 +168,6 @@ def _cmd_sections(args: argparse.Namespace) -> int:
             print("\n## Toolkit Notes\n")
             print(sections.toolkit_notes)
         print(f"\n(tools registered: {', '.join(t.key for t in sections.tools)})")
-        if sections.qc_pending:
-            print("(NOTE: README still has the QC-pending TODO callout.)")
     return 0
 
 

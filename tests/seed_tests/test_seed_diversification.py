@@ -1,6 +1,6 @@
 """Tests that ``stochastic=True`` iterable tools diversify duplicate inputs.
 
-PR 1 (#844) made the framework pass duplicate iterable items through to the
+The framework passes duplicate iterable items through to the
 tool (skipping dedup). The contract is that the tool's per-item sampling
 primitives — ``torch.multinomial``, JAX ``random.split``, autoregressive
 decode loops, etc. — consume and advance RNG between batch elements so

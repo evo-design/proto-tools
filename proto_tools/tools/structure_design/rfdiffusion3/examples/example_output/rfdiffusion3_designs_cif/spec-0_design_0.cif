@@ -1,7 +1,7 @@
 data_rfdiffusion3_input_spec-0_0_model_0
 #
 _entry.id       rfdiffusion3_input_spec-0_0_model_0
-_entry.author   bviggiano
+_entry.author   anonymous
 _entry.date     2026-05-26
 _entry.time     15:18:38
 #

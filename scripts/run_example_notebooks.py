@@ -27,7 +27,10 @@ Exits non-zero if any notebook fails to execute.
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
+import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -47,6 +50,71 @@ _STRIP_MIMES = frozenset(
         "application/vnd.bokehjs_exec.v0+json",  # bokeh — HTML fallback renders fine
     }
 )
+
+
+# Text-bearing output mime types that may carry machine- or user-specific paths
+# and identifiers worth redacting before committing.
+_TEXT_MIMES = frozenset({"text/plain", "text/html", "text/markdown"})
+
+
+def _build_redaction_rules() -> list[tuple[re.Pattern[str], str]]:
+    """Build ``(pattern, replacement)`` pairs for redacting identifiers.
+
+    The rules strip machine- and user-specific identifiers from notebook outputs
+    so they don't leak into the public repo. Covers absolute paths that descend
+    into this repo (rewritten repo-relative), any user's home directory, the
+    running user's own home and username, and the author field embedded in
+    generated structure files (CIF/PDB).
+    """
+    repo = re.escape(REPO_ROOT.name)
+    rules: list[tuple[re.Pattern[str], str]] = [
+        # Absolute path descending into this repo -> repo-relative. The lookbehind
+        # leaves URLs like https://github.com/org/<repo>/ untouched.
+        (re.compile(r"(?<![\w:/])(?:/[\w.+-]+)+/" + repo + r"/"), REPO_ROOT.name + "/"),
+        # Any user's home directory.
+        (re.compile(r"/home/[^/\s\"']+"), "/home/user"),
+        (re.compile(r"/Users/[^/\s\"']+"), "/Users/user"),
+        # Author field written into generated CIF/PDB files.
+        (re.compile(r"(_entry\.author\s+)\S+"), r"\1anonymous"),
+    ]
+    # The running user's own home (covers non-standard cluster homes) and name.
+    home = os.path.expanduser("~")
+    if home and home not in ("/", "/home", "/home/user"):
+        rules.append((re.compile(re.escape(home)), "~"))
+    user = getpass.getuser()
+    if user and len(user) >= 3:
+        rules.append((re.compile(r"\b" + re.escape(user) + r"\b"), "user"))
+    return rules
+
+
+_REDACTION_RULES = _build_redaction_rules()
+
+
+def _redact_text(text: str) -> tuple[str, int]:
+    """Apply every redaction rule to a string. Returns ``(new_text, count)``."""
+    count = 0
+    for pattern, replacement in _REDACTION_RULES:
+        text, n = pattern.subn(replacement, text)
+        count += n
+    return text, count
+
+
+def _redact_field(value: object) -> tuple[object, int]:
+    """Redact a notebook text field that is a ``str`` or ``list[str]``."""
+    if isinstance(value, str):
+        return _redact_text(value)
+    if isinstance(value, list):
+        new_list: list[object] = []
+        count = 0
+        for item in value:
+            if isinstance(item, str):
+                red, n = _redact_text(item)
+                new_list.append(red)
+                count += n
+            else:
+                new_list.append(item)
+        return new_list, count
+    return value, 0
 
 
 def discover_notebooks(only: str | None) -> list[Path]:
@@ -90,21 +158,33 @@ def execute_notebook(path: Path, timeout: int) -> tuple[bool, str]:
     return True, "ok"
 
 
-def sanitize(path: Path) -> tuple[int, set[str]]:
-    """Strip non-renderable mime types from cell outputs; drop orphan ``widgets`` metadata.
+def sanitize(path: Path) -> tuple[int, int, set[str]]:
+    """Sanitize one notebook's cell outputs in place for committing.
+
+    Strips non-renderable mime types and redacts machine/user-specific identifiers
+    from cell outputs, and drops orphan ``widgets`` metadata.
 
     Returns:
-        tuple[int, set[str]]: ``(count, seen_mimes)`` — count of mime entries stripped,
-        and the full set of mime types that were encountered (for reporting).
+        tuple[int, int, set[str]]: ``(stripped, redacted, seen_mimes)`` — number of
+        mime entries stripped, number of identifier redactions applied, and the full
+        set of mime types that were encountered (for reporting).
     """
     nb = json.loads(path.read_text())
     stripped = 0
+    redacted = 0
     seen_mimes: set[str] = set()
 
     for cell in nb.get("cells", []):
         if cell.get("cell_type") != "code":
             continue
         for out in cell.get("outputs", []):
+            # Stream text (stdout/stderr) and error tracebacks are plain text.
+            if "text" in out:
+                out["text"], n = _redact_field(out["text"])
+                redacted += n
+            if "traceback" in out:
+                out["traceback"], n = _redact_field(out["traceback"])
+                redacted += n
             data = out.get("data")
             if not isinstance(data, dict):
                 continue
@@ -113,14 +193,17 @@ def sanitize(path: Path) -> tuple[int, set[str]]:
                 if mime in _STRIP_MIMES:
                     del data[mime]
                     stripped += 1
+                elif mime in _TEXT_MIMES:
+                    data[mime], n = _redact_field(data[mime])
+                    redacted += n
 
     # Drop notebook-level ``widgets`` metadata — refers to widget state we no longer persist.
     if "widgets" in nb.get("metadata", {}):
         del nb["metadata"]["widgets"]
 
-    if stripped:
+    if stripped or redacted:
         path.write_text(json.dumps(nb, indent=1) + "\n")
-    return stripped, seen_mimes
+    return stripped, redacted, seen_mimes
 
 
 def _rel(path: Path) -> str:
@@ -176,6 +259,7 @@ def main() -> int:
     failures: list[tuple[Path, str]] = []
     all_mimes: set[str] = set()
     total_stripped = 0
+    total_redacted = 0
 
     progress = tqdm(notebooks, desc="Processing", unit="nb", file=sys.stderr)
     for nb_path in progress:
@@ -188,10 +272,11 @@ def main() -> int:
             ok, msg = execute_notebook(nb_path, args.timeout)
 
         if ok:
-            stripped, mimes = sanitize(nb_path)
+            stripped, redacted, mimes = sanitize(nb_path)
             total_stripped += stripped
+            total_redacted += redacted
             all_mimes.update(mimes)
-            print(f"  ok    {rel}  (stripped {stripped})", flush=True)
+            print(f"  ok    {rel}  (stripped {stripped}, redacted {redacted})", flush=True)
         else:
             failures.append((nb_path, msg))
             print(f"  FAIL  {rel}: {msg}", flush=True)
@@ -201,7 +286,7 @@ def main() -> int:
     print(flush=True)
     print(
         f"Summary: {len(notebooks) - len(failures)}/{len(notebooks)} notebooks processed; "
-        f"{total_stripped} widget views stripped.",
+        f"{total_stripped} widget views stripped, {total_redacted} identifiers redacted.",
         flush=True,
     )
     if all_mimes:

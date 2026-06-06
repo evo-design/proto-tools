@@ -161,9 +161,6 @@ def _download_file(spec: DownloadSpec, cache_dir: Path, downloader: tuple[str, l
             print(f"  [warn] optional file {spec.filename} download failed (continuing): {e}")
             return True
         raise
-    # TODO: verify spec.sha256 when set — currently every registered entry
-    # passes sha256=None, so this branch is unreachable. Wire up hashlib
-    # comparison the first time we register an entry with a populated checksum.
     return True
 
 

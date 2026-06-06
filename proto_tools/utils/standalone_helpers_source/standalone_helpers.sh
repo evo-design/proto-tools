@@ -194,10 +194,10 @@ proto_resolve_weights_dir() {
 #                 (e.g. ``*.bin*`` for AF3, ``*.dbtype`` for an MMseqs2 DB).
 #   license_url   Optional URL with download / license instructions; printed
 #                 in the banner so the user knows where to go.
-#   asset_kind    "weights" (default) | "database" | "dataset". Today only
-#                 "weights" is wired to a resolver; other kinds will be added
-#                 as their cache layouts are formalised. Used in the sentinel
-#                 (``ASSET_NOT_AVAILABLE: <toolkit>:<asset_kind>``).
+#   asset_kind    Label for the kind of asset, used in the sentinel
+#                 (``ASSET_NOT_AVAILABLE: <toolkit>:<asset_kind>``). Only
+#                 "weights" (the default) is resolvable through this helper;
+#                 databases and datasets are checked in Python instead.
 #   hint          Optional multi-line string with tool-specific provisioning
 #                 instructions — DeepMind's 2-3 day approval flow, NVIDIA NIM
 #                 key registration, etc. Spliced into BOTH failure banners
@@ -244,7 +244,7 @@ proto_resolve_asset_availability() {
             ASSET_DIR="$WEIGHTS_DIR"
             ;;
         *)
-            echo "ERROR: proto_resolve_asset_availability: asset_kind '$asset_kind' not yet implemented (supported: weights)" >&2
+            echo "ERROR: proto_resolve_asset_availability: asset_kind '$asset_kind' not supported (only 'weights' is resolvable)" >&2
             exit 1
             ;;
     esac

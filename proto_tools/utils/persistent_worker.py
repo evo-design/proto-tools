@@ -84,8 +84,7 @@ def _handle_raw_stderr_line(line: str, buffer: "collections.deque[str]", raw_tee
     r"""Handle one untagged stderr line: ring buffer + optional tee to parent stderr.
 
     Progress-bar lines (tqdm-style ``\r<frame1>\r...<final>\n``) keep only the
-    last ``\r``-separated segment so the final completion state survives. A
-    followup PR will replace this with milestone detection.
+    last ``\r``-separated segment so the final completion state survives.
 
     Args:
         line (str): The raw line read from the subprocess's stderr.

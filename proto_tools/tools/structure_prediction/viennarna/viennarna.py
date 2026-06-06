@@ -82,9 +82,6 @@ class ViennaRNAInput(BaseToolInput):
 class ViennaRNAResult(BaseModel):
     """Result for a single RNA fold prediction.
 
-    TODO: Consider abstracting into a base class if other RNA secondary structure
-    predictors are implemented
-
     Attributes:
         sequence (str): The input RNA sequence.
         structure (str | None): Predicted secondary structure in dot-bracket notation.

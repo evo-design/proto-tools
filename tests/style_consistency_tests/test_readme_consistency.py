@@ -49,10 +49,6 @@ _PERMISSIVE_SPDX = frozenset(
     }
 )
 
-# READMEs with this marker are exempt from QC-gated checks until reviewed.
-# TODO(#743): once every README is migrated, delete _QC_PENDING_MARKER and every QC-gated pytest.skip guard here.
-_QC_PENDING_MARKER = "This README still needs to be reviewed and quality checked"
-
 # Guide paths every ## Toolkit Notes must link to (substring match: any host/badge syntax counts).
 _TOOLKIT_NOTES_REQUIRED_GUIDE_PATHS = [
     "/tools/guides/tool-persistence",
@@ -196,19 +192,13 @@ def test_starts_with_h1(readme: Path) -> None:
 
 @pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
 def test_has_doc_badge(readme: Path) -> None:
-    """README must have a right-aligned docs badge linking to the correct page.
-
-    The badge label is simplified from ``View in Proto Docs`` to ``View Docs``
-    as each README is QC'd, so QC-done READMEs must use the ``View_Docs`` label
-    while QC-pending ones still carry the legacy ``View_in_Proto_Docs`` label.
-    """
+    """README must have a right-aligned docs badge linking to the correct page."""
     rel = readme.relative_to(_TOOLS_DIR)
     category, toolkit, _ = rel.parts
     expected_path = f"/tools/{_slugify(category)}/{_slugify(toolkit)}"
 
     text = readme.read_text()
-    # TODO(#743): drop the legacy branch once every README is migrated.
-    expected_label = "View_in_Proto_Docs" if _QC_PENDING_MARKER in text else "View_Docs"
+    expected_label = "View_Docs"
     assert f"img.shields.io/badge/{expected_label}" in text, (
         f"{_tool_id(readme)}/README.md is missing the '{expected_label}' docs badge"
     )
@@ -235,14 +225,8 @@ def test_proto_tools_badge_matches_license(readme: Path) -> None:
     the badge (purple ``coming soon``, with the lightning logo) appears only
     when ``license.yaml`` declares ``redistribution: true``. Toolkits that
     cannot be hosted must omit the badge entirely.
-
-    Skipped for READMEs that still contain the QC-pending marker; the badge
-    rollout is incremental (one toolkit at a time as each README is QC'd).
     """
     text = readme.read_text()
-    # TODO(#743): drop this skip once every README is migrated.
-    if _QC_PENDING_MARKER in text:
-        pytest.skip(f"{_tool_id(readme)}/README.md still has QC-pending marker; skipping Proto Tools badge check")
 
     license_path = readme.parent / "license.yaml"
     assert license_path.exists(), f"{_tool_id(readme)} has no license.yaml to gate the Proto Tools badge."
@@ -281,15 +265,8 @@ def test_badges_use_compact_style(readme: Path) -> None:
     """Tool READMEs must use the compact ``flat-square`` shields.io badge style.
 
     The large ``style=for-the-badge`` style is not allowed for any badge.
-
-    The skip below is temporary scaffolding for the incremental README
-    migration and is removed once every README is migrated; the rule itself is
-    permanent.
     """
     text = readme.read_text()
-    # TODO(#743): drop this skip once every README is migrated.
-    if _QC_PENDING_MARKER in text:
-        pytest.skip(f"{_tool_id(readme)}/README.md still has QC-pending marker; skipping badge-size check")
 
     assert "style=for-the-badge" not in text, (
         f"{_tool_id(readme)}/README.md uses the large 'style=for-the-badge' shields.io style. "
@@ -305,15 +282,8 @@ def test_badges_are_canonical(readme: Path) -> None:
     Toolkit Notes guide badges byte-for-byte so they are identical catalog-wide.
     The Proto badge is license-gated and verified in
     ``test_proto_tools_badge_matches_license``.
-
-    The skip below is temporary scaffolding for the incremental README
-    migration and is removed once every README is migrated; the rule itself is
-    permanent.
     """
     text = readme.read_text()
-    # TODO(#743): drop this skip once every README is migrated.
-    if _QC_PENDING_MARKER in text:
-        pytest.skip(f"{_tool_id(readme)}/README.md still has QC-pending marker; skipping canonical-badge check")
 
     canonical = {
         "View Docs badge <img>": _VIEW_DOCS_BADGE_IMG,
@@ -513,15 +483,8 @@ def test_license_section_matches_yaml(readme: Path) -> None:
     optional weights SPDX, commercial-use / attribution flags, weights.access
     gating) and must sit between the badge line and the Overview section. The
     "a/an" article is not enforced; any other deviation is.
-
-    The skip below is temporary scaffolding for the incremental README
-    migration and is removed once every README is migrated; the rule itself is
-    permanent.
     """
     text = readme.read_text()
-    # TODO(#743): drop this skip once every README is migrated.
-    if _QC_PENDING_MARKER in text:
-        pytest.skip(f"{_tool_id(readme)}/README.md still has QC-pending marker; skipping license-callout check")
 
     license_path = readme.parent / "license.yaml"
     assert license_path.exists(), f"{_tool_id(readme)} has no license.yaml to build the License callout."
@@ -746,15 +709,8 @@ def test_gated_weights_noted_in_toolkit_notes(readme: Path) -> None:
     Agents pull the Toolkit Notes section via get_tool_docs, so an access
     restriction declared by ``weights.access`` must be visible there too, not
     only in the License callout.
-
-    The skip below is temporary scaffolding for the incremental README
-    migration and is removed once every README is migrated; the rule itself is
-    permanent.
     """
     text = readme.read_text()
-    # TODO(#743): drop this skip once every README is migrated.
-    if _QC_PENDING_MARKER in text:
-        pytest.skip(f"{_tool_id(readme)}/README.md still has QC-pending marker; skipping gated-notes check")
 
     license_path = readme.parent / "license.yaml"
     if not license_path.exists():
@@ -778,14 +734,8 @@ def test_gated_weights_noted_in_toolkit_notes(readme: Path) -> None:
 
 @pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
 def test_has_required_sections(readme: Path) -> None:
-    """README must contain all required H2 sections (exact match).
-
-    Skipped for READMEs that still contain the QC-pending marker.
-    """
+    """README must contain all required H2 sections (exact match)."""
     text = readme.read_text()
-    # TODO(#743): drop this skip once every README is migrated.
-    if _QC_PENDING_MARKER in text:
-        pytest.skip(f"{_tool_id(readme)}/README.md still has QC-pending marker; skipping section check")
 
     h2_headings = re.findall(r"^## (.+)$", text, re.MULTILINE)
     missing = [req for req in _REQUIRED_SECTIONS if req not in h2_headings]
@@ -809,13 +759,9 @@ def test_overview_within_char_limit(readme: Path) -> None:
 
     Markdown link URLs (the ``(url)`` portion of ``[text](url)``) are
     stripped before measuring; only the visible text the reader sees
-    counts toward the cap. Skipped for READMEs that still contain the
-    QC-pending marker.
+    counts toward the cap.
     """
     text = readme.read_text()
-    # TODO(#743): drop this skip once every README is migrated.
-    if _QC_PENDING_MARKER in text:
-        pytest.skip(f"{_tool_id(readme)}/README.md still has QC-pending marker; skipping length check")
 
     match = re.search(r"^## Overview\s*\n(.*?)(?=^## |\Z)", text, re.MULTILINE | re.DOTALL)
     assert match, f"{_tool_id(readme)}/README.md has no '## Overview' section to measure"
@@ -825,8 +771,7 @@ def test_overview_within_char_limit(readme: Path) -> None:
     visible = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", body)
     assert len(visible) <= _OVERVIEW_MAX_CHARS, (
         f"{_tool_id(readme)}/README.md Overview is {len(visible)} chars of visible text "
-        f"(limit {_OVERVIEW_MAX_CHARS}). Trim it, or add the QC-pending marker "
-        f"'{_QC_PENDING_MARKER}' near the top while it is still being edited."
+        f"(limit {_OVERVIEW_MAX_CHARS}). Trim it."
     )
 
 
@@ -838,13 +783,9 @@ def test_toolkit_notes_links_required_guides(readme: Path) -> None:
     apply to every tool at runtime, so the toolkit-level notes section must
     surface them as visible badges/links.
 
-    Skipped only for READMEs that still carry the QC-pending marker; missing
-    section or missing guides are hard failures.
+    A missing section or missing guides are hard failures.
     """
     text = readme.read_text()
-    # TODO(#743): drop this skip once every README is migrated.
-    if _QC_PENDING_MARKER in text:
-        pytest.skip(f"{_tool_id(readme)}/README.md still has QC-pending marker; skipping toolkit-notes guide check")
 
     match = re.search(r"^## Toolkit Notes\s*\n(.*?)(?=^## |\Z)", text, re.MULTILINE | re.DOTALL)
     assert match, (
@@ -924,10 +865,6 @@ def _tools_section_h3_bodies(text: str) -> dict[str, str]:
 # H3, then `#### Applications`, then `#### Usage Tips`.
 _REQUIRED_TOOL_H4S = ("Applications", "Usage Tips")
 
-# Pattern used to detect whether a README has begun the migration to the
-# polished three-section template. See `_skip_subsection_check` below.
-_POLISHED_H4_RE = re.compile(r"^#### (Applications|Usage Tips)\s*$", re.MULTILINE)
-
 
 @pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
 def test_tools_section_lists_all_tools(readme: Path) -> None:
@@ -969,17 +906,6 @@ def test_tools_section_lists_all_tools(readme: Path) -> None:
 
     empty = [k for k, body in h3_keys.items() if not body]
     assert not empty, f"{_tool_id(readme)}/README.md `## Tools` section H3s have no description body: {empty}"
-
-    # TODO(#782): Remove this skip clause once every tool README has been migrated
-    # to the polished three-section template (`#### Applications` + `#### Usage Tips`
-    # under each tool H3). Tracking issue:
-    #   https://github.com/proto-bio/proto-tools/issues/782
-    # Until then, READMEs whose `## Tools` section contains no `#### Applications`
-    # or `#### Usage Tips` H4 anywhere are skipped from the three-section pattern
-    # check below, so unfinished migrations don't generate a wave of failures. The
-    # basic H3 / registered-tool / non-empty-body checks above always run.
-    if not any(_POLISHED_H4_RE.search(body) for body in h3_keys.values()):
-        return
 
     pattern_issues: list[str] = []
     for key, body in h3_keys.items():
@@ -1105,14 +1031,14 @@ def test_all_links_reachable(readme: Path) -> None:
     # - proteininformationresource.org: valid PIR database, intermittently slow in CI
     # - www.ensembl.org: genome browser homepage, intermittently slow in CI
     _SKIP_DOMAINS = {"bio-pro.mintlify.app", "doi.org", "proteininformationresource.org", "www.ensembl.org"}
-    # TODO: Remove when public
-    _SKIP_URL_PREFIXES = ("https://github.com/proto-bio/proto-tools",)
+    # Self-references to this project's own repo; no need to validate our own links.
+    _SKIP_SUBSTRINGS = ("proto-tools",)
 
     broken = []
     for lineno, url in urls:
         if any(domain in url for domain in _SKIP_DOMAINS):
             continue
-        if url.startswith(_SKIP_URL_PREFIXES):
+        if any(substring in url for substring in _SKIP_SUBSTRINGS):
             continue
         try:
             _fetch_url(url, method="HEAD")

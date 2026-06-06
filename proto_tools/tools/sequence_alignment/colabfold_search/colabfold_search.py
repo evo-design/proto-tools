@@ -50,7 +50,7 @@ def _default_output_dir() -> Path:
 # Default database directory: registry-driven, resolves to
 # `$PROTO_MODEL_CACHE/databases/uniref30_2302/`. Kept under PROTO_MODEL_CACHE
 # (not $PROTO_HOME/colabfold_search/) so it survives `_default_output_dir`
-# cleanup, and uses a dataset-scoped subdir (not tool-scoped) so the future
+# cleanup, and uses a dataset-scoped subdir (not tool-scoped) so the
 # `mmseqs2-homology-search` tool reads the same files without redownloading.
 # See proto_tools/databases/.
 def _default_msa_db_dir() -> Path:

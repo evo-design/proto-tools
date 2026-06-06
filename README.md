@@ -1,6 +1,3 @@
-> [!IMPORTANT]
-> This repo contains an unpublished project codebase. Do not share the source code externally.
-
 # 🧬 Proto Tools 🛠️
 [![Checks](https://github.com/proto-bio/proto-tools/actions/workflows/checks.yml/badge.svg)](https://github.com/proto-bio/proto-tools/actions/workflows/checks.yml)
 [![Unit Tests](https://github.com/proto-bio/proto-tools/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/proto-bio/proto-tools/actions/workflows/unit-tests.yml)
