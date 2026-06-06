@@ -2,9 +2,7 @@
 
 # UniProt
 
-![UniProt](https://www.uniprot.org/android-chrome-192x192.png)
-
-> *Image source: [UniProt](https://www.uniprot.org/)*
+![UniProt](https://proto-bio.github.io/proto-assets/images/tool/uniprot/hero.png)
 
 > [!NOTE]
 > **License:** UniProt has a CC-BY-4.0 license and may require explicit attribution when utilized. Please refer to [the license](https://www.uniprot.org/help/license) for full terms.

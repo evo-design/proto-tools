@@ -2,9 +2,7 @@
 
 # AlphaFold2
 
-![AlphaFold](https://github.com/google-deepmind/alphafold/raw/main/imgs/header.jpg)
-
-> *Image source: [google-deepmind/alphafold](https://github.com/google-deepmind/alphafold)*
+![AlphaFold2](https://proto-bio.github.io/proto-assets/images/tool/alphafold2/hero.png)
 
 > [!NOTE]
 > **License:** AlphaFold2 uses Apache-2.0 for code and CC-BY-4.0 for model weights and may require explicit attribution when utilized. Please refer to the [code license](https://github.com/google-deepmind/alphafold/blob/main/LICENSE) and [model weights license](https://github.com/google-deepmind/alphafold#model-parameters-license) for full terms.

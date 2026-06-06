@@ -2,6 +2,8 @@
 
 # DSSP
 
+![DSSP](https://proto-bio.github.io/proto-assets/images/tool/dssp/hero.png)
+
 > [!NOTE]
 > **License:** DSSP is open source and free for academic and commercial use under a BSD-2-Clause license. Please refer to [the license](https://github.com/PDB-REDO/dssp/blob/trunk/LICENSE) for full terms.
 

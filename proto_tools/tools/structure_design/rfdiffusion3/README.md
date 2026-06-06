@@ -2,9 +2,7 @@
 
 # RFdiffusion3
 
-![RFdiffusion3](https://raw.githubusercontent.com/RosettaCommons/RFdiffusion/main/img/diffusion_protein_gradient_2.jpg)
-
-> *Image source: [RosettaCommons/RFdiffusion](https://github.com/RosettaCommons/RFdiffusion)*
+![RFdiffusion3](https://proto-bio.github.io/proto-assets/images/tool/rfdiffusion3/hero.png)
 
 > [!NOTE]
 > **License:** RFdiffusion3 is open source and free for academic and commercial use under a BSD-3-Clause license. Please refer to [the license](https://github.com/RosettaCommons/foundry/blob/production/LICENSE.md) for full terms.

@@ -2,9 +2,7 @@
 
 # Germinal
 
-![Germinal](https://arcinstitute.org/news/germinal/germinal.jpg)
-
-> *Image source: [Arc Institute](https://arcinstitute.org/news/building-germinal-for-ai-designed-antibody-molecules)*
+![Germinal](https://proto-bio.github.io/proto-assets/images/tool/germinal/hero.png)
 
 > [!NOTE]
 > **License:** Germinal's own code is licensed under Apache-2.0, but it runs as a pipeline that depends on bundled components and model weights under separate license terms, including non-commercial or restricted-use terms. The bundled model weights are licensed under CC-BY-4.0. As a whole the pipeline has restrictions around commercial use and may require explicit attribution when utilized.

@@ -2,6 +2,8 @@
 
 # ProGen2
 
+![ProGen2](https://proto-bio.github.io/proto-assets/images/tool/progen2/hero.png)
+
 > [!NOTE]
 > **License:** ProGen2 is open source and free for academic and commercial use under a BSD-3-Clause license. Please refer to [the license](https://github.com/enijkamp/progen2/blob/main/LICENSE.txt) for full terms.
 

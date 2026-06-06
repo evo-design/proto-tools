@@ -2,6 +2,8 @@
 
 # PyHMMER
 
+![PyHMMER](https://proto-bio.github.io/proto-assets/images/tool/pyhmmer/hero.png)
+
 > [!NOTE]
 > **License:** PyHMMER is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/althonos/pyhmmer/blob/master/COPYING) for full terms.
 

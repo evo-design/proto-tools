@@ -2,6 +2,8 @@
 
 # BioEmu
 
+![BioEmu](https://proto-bio.github.io/proto-assets/images/tool/bioemu/hero.png)
+
 > [!NOTE]
 > **License:** BioEmu is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/microsoft/bioemu/blob/main/LICENSE) for full terms.
 

@@ -2,9 +2,7 @@
 
 # Chai-1
 
-![Chai-1](https://framerusercontent.com/images/GHT9QAB4zu0jdGsoQxwESRTW8.png)
-
-> *Image source: [Chai Discovery](https://www.chaidiscovery.com/)*
+![Chai-1](https://proto-bio.github.io/proto-assets/images/tool/chai1/hero.png)
 
 > [!NOTE]
 > **License:** Chai-1 is open source and free for academic and commercial use under an Apache-2.0 license. Please refer to [the license](https://github.com/chaidiscovery/chai-lab/blob/main/LICENSE) for full terms.

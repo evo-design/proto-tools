@@ -2,9 +2,7 @@
 
 # FAMPNN
 
-![FAMPNN](https://raw.githubusercontent.com/richardshuai/fampnn/main/assets/seq_des_traj.gif)
-
-> *Image source: [richardshuai/fampnn](https://github.com/richardshuai/fampnn)*
+![FAMPNN](https://proto-bio.github.io/proto-assets/images/tool/fampnn/hero.png)
 
 > [!NOTE]
 > **License:** FAMPNN is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/richardshuai/fampnn/blob/main/LICENSE) for full terms.

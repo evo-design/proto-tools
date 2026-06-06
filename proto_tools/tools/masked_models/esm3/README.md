@@ -2,9 +2,7 @@
 
 # ESM3
 
-![ESM3](https://cdn.prod.website-files.com/6606dc3fd5f6645318003df4/663e392ca11e77f1a562c2c6_og.png)
-
-> *Image source: [EvolutionaryScale](https://www.evolutionaryscale.ai)*
+![ESM3](https://proto-bio.github.io/proto-assets/images/tool/esm3/hero.png)
 
 > [!NOTE]
 > **License:** ESM3 uses Custom (Cambrian Open License Agreement) for code and Custom (Cambrian Non-Commercial License Agreement) for model weights and has restrictions around commercial use and may require explicit attribution when utilized. Model weights are gated and require accepting the provider's terms and authenticating with a HuggingFace token. Please refer to the [code license](https://www.evolutionaryscale.ai/policies/cambrian-open-license-agreement) and [model weights license](https://www.evolutionaryscale.ai/policies/cambrian-non-commercial-license-agreement) for full terms.

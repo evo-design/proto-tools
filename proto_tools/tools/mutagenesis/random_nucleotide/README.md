@@ -2,6 +2,8 @@
 
 # Random Nucleotide Sampling
 
+![Random Nucleotide Sampling](https://proto-bio.github.io/proto-assets/images/tool/random_nucleotide/hero.png)
+
 > [!NOTE]
 > **License:** Random Nucleotide Sampling is open source and free for academic and commercial use under an Apache-2.0 license. Please refer to [the license](https://github.com/proto-bio/proto-tools) for full terms.
 

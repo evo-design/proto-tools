@@ -2,9 +2,7 @@
 
 # Evo2
 
-![Evo2](https://github.com/ArcInstitute/evo2/raw/main/evo2.jpg)
-
-> *Image source: [ArcInstitute/evo2](https://github.com/arcinstitute/evo2)*
+![Evo2](https://proto-bio.github.io/proto-assets/images/tool/evo2/hero.png)
 
 > [!NOTE]
 > **License:** Evo2 is open source and free for academic and commercial use under an Apache-2.0 license. Please refer to [the license](https://github.com/arcinstitute/evo2/blob/main/LICENSE) for full terms.

@@ -2,6 +2,8 @@
 
 # ESM-IF1
 
+![ESM-IF1](https://proto-bio.github.io/proto-assets/images/tool/esm_if1/hero.png)
+
 > [!NOTE]
 > **License:** ESM-IF1 is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/facebookresearch/esm/blob/main/LICENSE) for full terms.
 

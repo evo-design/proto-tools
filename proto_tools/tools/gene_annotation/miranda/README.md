@@ -2,6 +2,8 @@
 
 # miRanda
 
+![miRanda](https://proto-bio.github.io/proto-assets/images/tool/miranda/hero.png)
+
 > [!NOTE]
 > **License:** miRanda's own code is licensed under GPL-2.0, and it federates over bundled data sources and components, each under its own license terms.
 >

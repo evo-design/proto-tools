@@ -2,6 +2,8 @@
 
 # USalign
 
+![USalign](https://proto-bio.github.io/proto-assets/images/tool/usalign/hero.png)
+
 > [!NOTE]
 > **License:** USalign is licensed under Custom (Zhang Lab academic-use license) and may require explicit attribution when utilized. Please refer to [the license](https://github.com/pylelab/USalign/blob/master/LICENSE) for full terms.
 

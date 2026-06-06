@@ -2,6 +2,8 @@
 
 # SpliceAI
 
+![SpliceAI](https://proto-bio.github.io/proto-assets/images/tool/spliceai/hero.png)
+
 > [!NOTE]
 > **License:** SpliceAI uses Custom (PolyForm Strict License 1.0.0) for code and CC-BY-NC-4.0 for model weights and has restrictions around commercial use and may require explicit attribution when utilized. Please refer to the [code license](https://github.com/Illumina/SpliceAI/blob/master/LICENSE) and [model weights license](https://creativecommons.org/licenses/by-nc/4.0/) for full terms.
 

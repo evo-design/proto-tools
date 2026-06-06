@@ -2,6 +2,8 @@
 
 # ESMFold2
 
+![ESMFold2](https://proto-bio.github.io/proto-assets/images/tool/esmfold2/hero.png)
+
 > [!NOTE]
 > **License:** ESMFold2 is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/Biohub/esm/blob/main/LICENSE.md) for full terms.
 

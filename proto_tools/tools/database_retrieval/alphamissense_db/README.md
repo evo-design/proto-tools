@@ -2,9 +2,7 @@
 
 # AlphaMissense DB
 
-![AlphaMissense](https://alphafold.ebi.ac.uk/assets/favicons/android-chrome-192x192.png)
-
-> *Image source: [AlphaFold Protein Structure Database](https://alphafold.ebi.ac.uk/)*
+![AlphaMissense DB](https://proto-bio.github.io/proto-assets/images/tool/alphamissense_db/hero.png)
 
 > [!NOTE]
 > **License:** AlphaMissense DB retrieves data from the AlphaFold Protein Structure Database, distributed under CC-BY-4.0. Attribution to the AlphaFold Protein Structure Database is required when the data is redistributed. The client wrapper code is Apache-2.0-licensed. Please refer to [the data terms](https://alphafold.ebi.ac.uk/faq) for full terms.

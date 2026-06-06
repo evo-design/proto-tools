@@ -2,9 +2,7 @@
 
 # LigandMPNN
 
-![LigandMPNN](https://camo.githubusercontent.com/d2e58bb7f520b9393e38084cbe2a5de762583096e74bb3a9a85057c3056c9756/68747470733a2f2f646f63732e676f6f676c652e636f6d2f64726177696e67732f642f652f32504143582d317654746e4d42444f71385470484963745566474e38566c3332783549534e63504b6c786a63514a4632713730506c61483275466c6a3241633473336b686e5a71473159787070644d72306954796b2d2f7075623f773d38383926683d333538)
-
-> *Image source: [dauparas/LigandMPNN](https://github.com/dauparas/LigandMPNN)*
+![LigandMPNN](https://proto-bio.github.io/proto-assets/images/tool/ligandmpnn/hero.png)
 
 > [!NOTE]
 > **License:** LigandMPNN is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/dauparas/LigandMPNN/blob/main/LICENSE) for full terms.

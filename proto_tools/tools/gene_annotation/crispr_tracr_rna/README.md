@@ -2,6 +2,8 @@
 
 # CRISPRtracrRNA
 
+![CRISPRtracrRNA](https://proto-bio.github.io/proto-assets/images/tool/crispr_tracr_rna/hero.png)
+
 > [!NOTE]
 > **License:** CRISPRtracrRNA's own code is licensed under MIT, and it federates over bundled data sources and components, each under its own license terms.
 >

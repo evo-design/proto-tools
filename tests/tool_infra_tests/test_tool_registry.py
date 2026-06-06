@@ -1530,10 +1530,10 @@ def test_preprocess_default_noop(clean_registry):
 
 def test_get_links():
     """get_links parses links.yaml, handles partial data, and rejects unknown tools."""
-    # Full metadata
+    # Full metadata (images now live in proto-assets, not links.yaml)
     links = ToolRegistry.get_links("alphafold3-prediction")
     assert links is not None
-    assert "github" in links and "image" in links and "organizations" in links
+    assert "github" in links and "organizations" in links
 
     # Partial metadata (no github key)
     links = ToolRegistry.get_links("blast-search")

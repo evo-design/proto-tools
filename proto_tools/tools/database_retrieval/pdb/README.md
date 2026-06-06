@@ -2,9 +2,7 @@
 
 # PDB
 
-![PDB](https://cdn.rcsb.org/rcsb-pdb/v2/about-us/Logo/rcsb-pdb-logo.png)
-
-> *Image source: [RCSB PDB](https://www.rcsb.org/)*
+![PDB](https://proto-bio.github.io/proto-assets/images/tool/pdb/hero.png)
 
 > [!NOTE]
 > **License:** PDB retrieves data from the RCSB Protein Data Bank, distributed under CC0-1.0 (public domain; no attribution required). The client wrapper code is Apache-2.0-licensed. Please refer to [the data terms](https://www.rcsb.org/pages/policies) for full terms.

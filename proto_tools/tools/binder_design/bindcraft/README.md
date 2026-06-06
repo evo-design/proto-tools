@@ -2,9 +2,7 @@
 
 # BindCraft
 
-![BindCraft pipeline](https://raw.githubusercontent.com/martinpacesa/BindCraft/7cd4ace1b7407adf66a50dfefa47de2270f5e4a9/pipeline.png)
-
-> *Image source: [martinpacesa/BindCraft](https://github.com/martinpacesa/BindCraft)*
+![BindCraft](https://proto-bio.github.io/proto-assets/images/tool/bindcraft/hero.png)
 
 > [!NOTE]
 > **License:** BindCraft's own code is licensed under MIT, but it runs as a pipeline that depends on bundled components and model weights under separate license terms, including non-commercial or restricted-use terms. The bundled model weights are licensed under CC-BY-4.0. As a whole the pipeline has restrictions around commercial use and may require explicit attribution when utilized.

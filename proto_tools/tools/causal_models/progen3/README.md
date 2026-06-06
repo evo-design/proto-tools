@@ -2,9 +2,7 @@
 
 # ProGen3
 
-![ProGen3](https://cdn.prod.website-files.com/6769c2fceb550649b2f37b59/6769c2fceb550649b2f37d5e_ProGen.avif)
-
-> *Image source: [Profluent](https://www.profluent.bio/showcase/progen3)*
+![ProGen3](https://proto-bio.github.io/proto-assets/images/tool/progen3/hero.png)
 
 > [!NOTE]
 > **License:** ProGen3 uses Apache-2.0 for code and CC-BY-NC-SA-4.0 for model weights and has restrictions around commercial use and may require explicit attribution when utilized. Please refer to the [code license](https://github.com/Profluent-AI/progen3/blob/main/LICENSE-CODE) and [model weights license](https://github.com/Profluent-AI/progen3#license) for full terms.

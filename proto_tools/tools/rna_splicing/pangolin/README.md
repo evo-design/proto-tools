@@ -2,6 +2,8 @@
 
 # Pangolin
 
+![Pangolin](https://proto-bio.github.io/proto-assets/images/tool/pangolin/hero.png)
+
 > [!NOTE]
 > **License:** Pangolin has a GPL-3.0 license and may require explicit attribution when utilized. Please refer to [the license](https://github.com/tkzeng/Pangolin/blob/main/LICENSE) for full terms.
 

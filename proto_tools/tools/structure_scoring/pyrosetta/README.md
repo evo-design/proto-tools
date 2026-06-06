@@ -2,6 +2,8 @@
 
 # PyRosetta
 
+![PyRosetta](https://proto-bio.github.io/proto-assets/images/tool/pyrosetta/hero.png)
+
 > [!NOTE]
 > **License:** PyRosetta is licensed under Custom (PyRosetta Software License) and has restrictions around commercial use and may require explicit attribution when utilized. Please refer to [the license](https://www.pyrosetta.org/home/licensing-pyrosetta) for full terms.
 

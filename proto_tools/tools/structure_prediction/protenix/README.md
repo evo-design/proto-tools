@@ -2,9 +2,7 @@
 
 # Protenix
 
-![Protenix](https://github.com/bytedance/Protenix/raw/main/assets/protenix_predictions.gif)
-
-> *Image source: [bytedance/Protenix](https://github.com/bytedance/Protenix)*
+![Protenix](https://proto-bio.github.io/proto-assets/images/tool/protenix/hero.png)
 
 > [!NOTE]
 > **License:** Protenix is open source and free for academic and commercial use under an Apache-2.0 license. Please refer to [the license](https://github.com/bytedance/Protenix/blob/main/LICENSE) for full terms.

@@ -2,6 +2,8 @@
 
 # SpliceTransformer
 
+![SpliceTransformer](https://proto-bio.github.io/proto-assets/images/tool/splice_transformer/hero.png)
+
 > [!NOTE]
 > **License:** SpliceTransformer is open source and free for academic and commercial use under an Apache-2.0 license. Please refer to [the license](https://github.com/ShenLab-Genomics/SpliceTransformer/blob/main/LICENSE) for full terms.
 

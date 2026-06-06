@@ -2,6 +2,8 @@
 
 # FoldMason
 
+![FoldMason](https://proto-bio.github.io/proto-assets/images/tool/foldmason/hero.png)
+
 > [!NOTE]
 > **License:** FoldMason has a GPL-3.0 license. Please refer to [the license](https://github.com/steineggerlab/foldmason/blob/master/LICENSE.md) for full terms.
 

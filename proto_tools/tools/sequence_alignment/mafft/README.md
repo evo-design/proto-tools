@@ -2,6 +2,8 @@
 
 # MAFFT
 
+![MAFFT](https://proto-bio.github.io/proto-assets/images/tool/mafft/hero.png)
+
 > [!NOTE]
 > **License:** MAFFT is open source and free for academic and commercial use under a BSD-3-Clause license. Please refer to [the license](https://mafft.cbrc.jp/alignment/software/license.txt) for full terms.
 
