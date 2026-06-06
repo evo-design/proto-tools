@@ -1,7 +1,0 @@
-torch
-transformers>=4.30,<5
-faiss-cpu
-affine-gaps==0.2.0
-numpy
-mini3di==0.2.1
-biopython>=1.80

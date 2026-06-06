@@ -152,7 +152,6 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 ├── <a href="proto_tools/tools/structure_alignment/foldmason/">foldmason/</a>
 ├── <a href="proto_tools/tools/structure_alignment/foldseek/">foldseek/</a>
 ├── <a href="proto_tools/tools/structure_alignment/pymol_rmsd/">pymol_rmsd/</a>
-├── <a href="proto_tools/tools/structure_alignment/ssalign/">ssalign/</a>
 ├── <a href="proto_tools/tools/structure_alignment/tmalign/">tmalign/</a>
 └── <a href="proto_tools/tools/structure_alignment/usalign/">usalign/</a>
 <a href="proto_tools/tools/structure_design/">structure_design/</a>               # De novo structure generation

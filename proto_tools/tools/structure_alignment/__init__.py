@@ -42,15 +42,6 @@ from proto_tools.tools.structure_alignment.pymol_rmsd import (
     PyMOLRMSDOutput,
     run_pymol_rmsd_alignment,
 )
-from proto_tools.tools.structure_alignment.ssalign import (
-    SSAlignHit,
-    SSAlignQuery,
-    SSAlignQueryResult,
-    SSAlignSearchConfig,
-    SSAlignSearchInput,
-    SSAlignSearchOutput,
-    run_ssalign_search,
-)
 from proto_tools.tools.structure_alignment.tmalign import (
     TMalignConfig,
     TMalignInput,
@@ -106,14 +97,6 @@ __all__ = [
     "PyMOLRMSDMetrics",
     "PyMOLRMSDOutput",
     "run_pymol_rmsd_alignment",
-    # SSAlign
-    "SSAlignHit",
-    "SSAlignQuery",
-    "SSAlignQueryResult",
-    "SSAlignSearchConfig",
-    "SSAlignSearchInput",
-    "SSAlignSearchOutput",
-    "run_ssalign_search",
     # TMalign
     "TMalignConfig",
     "TMalignInput",

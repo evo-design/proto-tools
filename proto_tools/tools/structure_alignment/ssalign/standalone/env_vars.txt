@@ -1,4 +1,0 @@
-[set]
-# torch and faiss-cpu each bundle an OpenMP runtime; on macOS loading both aborts the
-# process. Allow the duplicate (standard cross-platform-safe workaround). See inference.py.
-KMP_DUPLICATE_LIB_OK=TRUE
