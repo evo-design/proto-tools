@@ -282,12 +282,14 @@ in full in `notes/device-management.md`.
 ## Timeouts
 
 Every tool call enforces a timeout, default 600 seconds (`DEFAULT_TIMEOUT`,
-overridable per call via the `timeout` config field). If a call exceeds it, the
-subprocess for that call is killed and a `TimeoutError` is raised. For a
-**persistent** worker the timeout is per-call, so a slow call that trips the
-timeout does not tear down the worker, and subsequent calls continue against the
-already-loaded model. `timeout` is `reload_on_change=False` and
-`include_in_key=False`, so changing it never restarts a worker.
+overridable per call via the `timeout` config field). The timeout bounds the
+**entire** wait for the worker's response — including any third-party or native
+output written to the worker's stdout, not just the first byte. If a call exceeds
+it, the worker subprocess is killed and a `TimeoutError` is raised. For a
+**persistent** worker the timeout is per-call: a call that trips the timeout tears
+down that worker, so the next call reloads the model in a fresh subprocess.
+`timeout` is `reload_on_change=False` and `include_in_key=False`, so changing it
+never restarts a worker on its own.
 
 ## Lifecycle and cleanup
 
