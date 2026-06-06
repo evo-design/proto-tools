@@ -269,9 +269,10 @@ def get_dataset_dir(name: str) -> Path:
     dataset's name (kebab-case with ``-`` replaced by ``_``, to match MMseqs2
     filename conventions).
 
-    The directory may not exist yet — this is a pure path helper, not an
-    ``ensure``. Materialization belongs to ``DatasetManager.ensure`` (TBD,
-    shipping with ``mmseqs2-homology-search``).
+    The directory may not exist yet — this is a pure path helper, not a
+    provisioner. Provisioning (download + index) and the on-disk provisioned
+    check live in the mmseqs2 ``setup_databases`` module (``provision`` and
+    ``_is_provisioned``).
 
     Args:
         name (str): Registered dataset key (kebab-case, e.g. ``"uniref30-2302"``).

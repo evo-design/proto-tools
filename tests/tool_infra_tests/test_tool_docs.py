@@ -6,22 +6,14 @@ Tests for the programmatic README + Pydantic-model extractors in
 Coverage:
 
 - Canonical structure assertions on the ESM2 README (the reference
-  implementation for the new template; see evo-design/proto-tools#783).
-- A parametrized smoke test that walks every README which has already
-  been quality-checked (no QC-pending callout) and verifies it parses
-  through ``get_readme_sections`` and that every registered tool in the
+  implementation for the template).
+- A parametrized smoke test that walks every toolkit README, verifies it parses
+  through ``get_readme_sections``, and checks that every registered tool in the
   toolkit shows up as a ``ToolReadmeEntry``.
-
-READMEs that still carry the ``> [!NOTE] **TODO:** This README still
-needs to be reviewed`` callout are skipped — those have not been
-migrated to the new structured template yet (issue #743 tracks the
-rewrite). The smoke test will pick them up automatically as each one
-is migrated and the callout is removed.
 """
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pytest
@@ -59,27 +51,14 @@ def _all_tool_readmes() -> list[Path]:
     return readmes
 
 
-# TODO(#743): once every README is migrated, delete _QC_CALLOUT_RE, _polished_readmes,
-# the _POLISHED* lists, and test_qc_pending_flag_reflects_callout; smoke-test all READMEs.
-_QC_CALLOUT_RE = re.compile(
-    r"^>\s*\[!NOTE\]\s*\n>\s*\*\*TODO:\*\*\s*This README still needs to be reviewed",
-    re.MULTILINE,
-)
-
-
-def _polished_readmes() -> list[Path]:
-    """Subset of READMEs that have been migrated (no QC-pending callout)."""
-    return [r for r in _all_tool_readmes() if not _QC_CALLOUT_RE.search(r.read_text())]
-
-
 def _toolkit_id(readme: Path) -> str:
     """``category/toolkit`` identifier for a README path, with dashes."""
     rel = readme.relative_to(_TOOLS_DIR)
     return f"{rel.parts[0].replace('_', '-')}/{rel.parts[1].replace('_', '-')}"
 
 
-_POLISHED = _polished_readmes()
-_POLISHED_IDS = [_toolkit_id(r) for r in _POLISHED]
+_TOOL_READMES = _all_tool_readmes()
+_TOOL_README_IDS = [_toolkit_id(r) for r in _TOOL_READMES]
 
 
 # ── ESM2 reference structure ────────────────────────────────────────────────
@@ -91,7 +70,6 @@ def test_esm2_readme_sections_structure() -> None:
 
     assert isinstance(sections, ReadmeSections)
     assert sections.title == "ESM2"
-    assert sections.qc_pending is False
     assert sections.overview, "Overview body is empty"
     assert sections.background, "Background body is empty"
     assert sections.toolkit_notes, "Toolkit Notes body is empty"
@@ -184,18 +162,6 @@ def test_background_includes_learning_resources_when_requested() -> None:
     assert section is not None
     assert "Learning Resources" in section
     assert _LEARNING_RESOURCES_URL in section
-
-
-def test_qc_pending_flag_reflects_callout() -> None:
-    """``qc_pending`` is True when the README still has the TODO callout."""
-    assert get_readme_sections("esm2-embedding").qc_pending is False
-    # Skip if no QC-pending READMEs remain (migration complete).
-    pending = [r for r in _all_tool_readmes() if _QC_CALLOUT_RE.search(r.read_text())]
-    if not pending:
-        pytest.skip("No QC-pending READMEs remain; migration is complete")
-    sample = pending[0]
-    toolkit_id = _toolkit_id(sample)
-    assert get_readme_sections(toolkit_id).qc_pending is True
 
 
 # ── Pydantic model docs ─────────────────────────────────────────────────────
@@ -361,12 +327,12 @@ def test_registry_wrappers_delegate_correctly() -> None:
     assert ToolRegistry.get_tool_docs("esm2-embedding") == get_tool_docs("esm2-embedding")
 
 
-# ── Parametrized smoke test on polished READMEs ─────────────────────────────
+# ── Parametrized smoke test on all tool READMEs ─────────────────────────────
 
 
-@pytest.mark.parametrize("readme", _POLISHED, ids=_POLISHED_IDS)
-def test_polished_readme_parses_cleanly(readme: Path) -> None:
-    """Every polished README round-trips through ``get_readme_sections``.
+@pytest.mark.parametrize("readme", _TOOL_READMES, ids=_TOOL_README_IDS)
+def test_tool_readme_parses_cleanly(readme: Path) -> None:
+    """Every tool README round-trips through ``get_readme_sections``.
 
     Asserts the parser doesn't raise, the canonical H2s are populated, and
     every registered tool in the toolkit shows up as a ``ToolReadmeEntry``.
@@ -378,7 +344,6 @@ def test_polished_readme_parses_cleanly(readme: Path) -> None:
     assert sections.title, "H1 is empty"
     assert sections.overview, "Overview body is empty"
     assert sections.background, "Background body is empty"
-    assert sections.qc_pending is False
 
     registry_keys = sorted(spec.key for spec in ToolRegistry.list_all() if spec.source_file.parent == toolkit_dir)
     parsed_keys = sorted(t.key for t in sections.tools)

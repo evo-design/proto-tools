@@ -19,7 +19,7 @@ from standalone_helpers import get_logger
 
 logger = get_logger(__name__)
 
-# Bounded retry: transient api.colabfold.com failures otherwise hard-fail predictions (#1027).
+# Bounded retry: transient api.colabfold.com failures otherwise hard-fail predictions.
 _MAX_ATTEMPTS = 3  # 1 initial try + 2 retries
 _BASE_DELAY_SECONDS = 2.0  # doubles each retry: ~2s, ~4s
 _MAX_DELAY_SECONDS = 30.0  # per-sleep cap

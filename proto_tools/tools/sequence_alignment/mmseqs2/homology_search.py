@@ -52,8 +52,7 @@ class Mmseqs2HomologySearchQuery(BaseModel):
     """One sequence to search for homologs.
 
     Attributes:
-        sequence (str): Amino acid (or, in future phases, nucleotide)
-            sequence to search.
+        sequence (str): Amino acid sequence to search.
         sequence_id (str | None): Optional identifier. Auto-generated from
             a hash of the sequence when not provided.
         molecule_type (Literal["protein", "rna", "dna"] | None): Sequence
@@ -266,8 +265,7 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
         search_mode (Literal["local", "remote"]): ``"local"`` runs MMseqs2
             against a registry-provisioned DB on disk; ``"remote"`` (the
             default) queries the ColabFold MSA API over the network and needs
-            no local DB. The remote API is a temporary stopgap, to be replaced
-            by a self-hosted cloud mirror of the local pipeline.
+            no local DB.
         dataset (Literal["colabfold-envdb-202108", "uniref30-2302"]): Local-only
             (ignored when remote). Registered key of the searchable reference
             database; one ColabFold protein DB.
@@ -552,7 +550,7 @@ def run_mmseqs2_homology_search(
 
 
 # ============================================================================
-# Remote mode (ColabFold API; temporary, to be replaced by a self-hosted mirror)
+# Remote mode (ColabFold API)
 # ============================================================================
 
 

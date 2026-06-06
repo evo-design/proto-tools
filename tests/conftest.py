@@ -196,8 +196,19 @@ class EnvReportCollector:
             if path.suffix != ".md":
                 path = path.with_suffix(".md")
             return path
-        project_root = Path(__file__).parent.parent
-        env_dir = project_root / ".environment_checks"
+        # Reports live in the private evo-design/tool-env-reports repo, not in this
+        # source tree. Point PROTO_ENV_REPORT_DIR at a clone of it (or pass
+        # --env-report=PATH). Otherwise fall back to a gitignored local dir.
+        env_report_dir = os.environ.get("PROTO_ENV_REPORT_DIR")
+        if env_report_dir:
+            env_dir = Path(env_report_dir)
+        else:
+            env_dir = Path(__file__).parent.parent / ".environment_checks"
+            print(
+                "[env-report] PROTO_ENV_REPORT_DIR is not set; writing to a "
+                f"gitignored {env_dir}. Set it to a clone of "
+                "evo-design/tool-env-reports to commit the report there."
+            )
         env_dir.mkdir(parents=True, exist_ok=True)
         platform_id = get_platform_id(include_date=False, include_commit=False)
         return env_dir / f"{platform_id}.md"

@@ -103,10 +103,6 @@ class ReadmeSections(BaseModel):
         default="",
         description="Body of the '## Toolkit Notes' section. Empty when the section is not present.",
     )
-    qc_pending: bool = Field(
-        default=False,
-        description="True if the README still has the '> [!NOTE] **TODO:** ...' callout.",
-    )
     other_sections: dict[str, str] = Field(
         default_factory=dict,
         description="Any non-canonical H2 sections, keyed by heading text.",
@@ -188,13 +184,6 @@ class ModelDoc(BaseModel):
 # README extraction
 # =============================================================================
 
-
-# TODO(#743): remove all QC-pending plumbing (this regex, _strip_review_callout,
-# _has_qc_callout, the qc_pending field) once every README is migrated.
-_TODO_CALLOUT_RE = re.compile(
-    r"^>\s*\[!NOTE\]\s*\n>\s*\*\*TODO:\*\*\s*This README still needs to be reviewed[^\n]*\n+",
-    re.MULTILINE,
-)
 
 _H1_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
 _H2_RE = re.compile(r"^##\s+(.+)$", re.MULTILINE)
@@ -313,16 +302,6 @@ def _normalize_tool_key(identifier: str) -> str:
 def _read_readme(tool: str) -> str:
     """Read the toolkit's ``README.md`` from disk."""
     return (resolve_toolkit_dir(tool) / "README.md").read_text()
-
-
-def _strip_review_callout(md: str) -> str:
-    """Strip the ``> [!NOTE] **TODO: review**`` callout from a README, if present."""
-    return _TODO_CALLOUT_RE.sub("", md)
-
-
-def _has_qc_callout(md: str) -> bool:
-    """Return True if the README still carries the QC-pending callout."""
-    return _TODO_CALLOUT_RE.search(md) is not None
 
 
 def _section_bounds(md: str) -> list[tuple[str, int, int]]:
@@ -463,7 +442,7 @@ def get_readme(tool: str) -> str:
         ValueError: If ``tool`` doesn't resolve to a registered toolkit.
         OSError: If the README cannot be read from disk.
     """
-    return _strip_review_callout(_read_readme(tool))
+    return _read_readme(tool)
 
 
 def get_readme_section(tool: str, heading: str, *, include_learning_resources: bool = False) -> str | None:
@@ -490,10 +469,6 @@ def get_readme_section(tool: str, heading: str, *, include_learning_resources: b
 def get_readme_sections(tool: str, *, include_learning_resources: bool = False) -> ReadmeSections:
     """Return a toolkit's README parsed into a typed structure.
 
-    The QC-pending callout is always stripped before parsing; the
-    ``qc_pending`` field on the result still reflects whether the callout was
-    present in the source.
-
     Args:
         tool (str): Tool identifier — same forms as ``get_readme``.
         include_learning_resources (bool): When False (the default), the
@@ -505,9 +480,7 @@ def get_readme_sections(tool: str, *, include_learning_resources: bool = False) 
         ReadmeSections: Parsed structure with overview / background / tools /
             toolkit_notes plus any non-canonical H2s in ``other_sections``.
     """
-    raw = _read_readme(tool)
-    qc_pending = _has_qc_callout(raw)
-    md = _strip_review_callout(raw)
+    md = _read_readme(tool)
     # Collapse badge HTML once up front so every parsed slice inherits clean text.
     md = _linkify_badges(md)
 
@@ -539,7 +512,6 @@ def get_readme_sections(tool: str, *, include_learning_resources: bool = False) 
         background=background,
         tools=tools,
         toolkit_notes=toolkit_notes,
-        qc_pending=qc_pending,
         other_sections=other,
     )
 

@@ -9,9 +9,6 @@
 > [!NOTE]
 > **License:** ColabFold Search is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/sokrypton/ColabFold/blob/main/LICENSE) for full terms.
 
-> [!NOTE]
-> **This tool will be replaced by a near-identical successor in the future.**
-
 ## Overview
 
 [ColabFold](https://github.com/sokrypton/ColabFold) is an open-source pipeline that combines fast [MMseqs2](https://github.com/soedinglab/MMseqs2)-based homology search with AlphaFold-class structure prediction. This toolkit exposes the homology-search step of ColabFold, which generates a multiple sequence alignment (MSA) for each input protein sequence by searching reference databases for homologs. The resulting MSAs are the canonical input to structure-prediction tools and to coevolutionary or conservation analyses.
