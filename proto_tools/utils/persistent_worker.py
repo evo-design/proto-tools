@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import uuid
 from pathlib import Path
 from typing import IO, Any
@@ -29,6 +30,10 @@ logger = logging.getLogger(__name__)
 
 # Default per-worker bounded stderr buffer size, used by _crash_context. Override via PROTO_WORKER_STDERR_BUFFER_LINES.
 _DEFAULT_STDERR_BUFFER_LINES = 20
+
+# Read response framing: chunk size per os.read, and the post-header window to drain the body.
+_READ_CHUNK = 65536
+_BODY_GRACE_SECONDS = 30
 
 
 def _verbose_to_log_level(verbose: int) -> int:
@@ -712,66 +717,7 @@ class PersistentWorker:
             # without this, the worker's late response sits in the pipe and corrupts the next send.
             response_matched = False
             try:
-                # Read response line (with optional timeout).
-                # select() on pipe fds is Unix-only; this module assumes Linux.
-                if timeout is not None:
-                    ready, _, _ = select.select([self._process.stdout.fileno()], [], [], timeout)
-                    if not ready:
-                        raise TimeoutError(
-                            f"{self.toolkit} worker timed out waiting for response to request {request_id} "
-                            f"after {timeout}s"
-                        )
-
-                # Header is PROTO_LENGTH:<n> (pipe payload) or PROTO_FILE:<path> (temp-file payload).
-                # proto_tools own logs route to stderr; anything else on stdout is third-party noise we skip.
-                while True:
-                    header_line = self._process.stdout.readline()
-                    if not header_line:
-                        raise RuntimeError(
-                            f"{self.toolkit} worker closed stdout before responding to request {request_id} "
-                            f"({self._crash_context()})"
-                        )
-                    header_line = header_line.strip()
-                    if header_line.startswith(("PROTO_LENGTH:", "PROTO_FILE:")):
-                        break
-
-                if header_line.startswith("PROTO_FILE:"):
-                    file_path = header_line.split(":", 1)[1]
-                    if not file_path.startswith(tempfile.gettempdir()):
-                        logger.warning(
-                            "Worker for %s sent file path outside temp directory: %s",
-                            self.toolkit,
-                            file_path,
-                        )
-                    try:
-                        with open(file_path) as f:
-                            response = json.load(f)
-                    finally:
-                        with contextlib.suppress(OSError):
-                            os.unlink(file_path)
-                else:
-                    try:
-                        json_length = int(header_line.split(":", 1)[1])
-                    except (ValueError, IndexError) as exc:
-                        raise RuntimeError(
-                            f"{self.toolkit} worker sent invalid LENGTH header {header_line!r} "
-                            f"for request {request_id} ({self._crash_context()})"
-                        ) from exc
-
-                    response_bytes = self._process.stdout.read(json_length)
-                    if len(response_bytes) != json_length:
-                        raise RuntimeError(
-                            f"{self.toolkit} worker sent incomplete JSON for request {request_id}: "
-                            f"expected {json_length} bytes, got {len(response_bytes)} ({self._crash_context()})"
-                        )
-
-                    try:
-                        response = json.loads(response_bytes)
-                    except json.JSONDecodeError as exc:
-                        raise RuntimeError(
-                            f"{self.toolkit} worker returned invalid JSON for request {request_id} "
-                            f"({self._crash_context()}); payload: {response_bytes!r}"
-                        ) from exc
+                response = self._read_response(request_id, timeout)
 
                 if response.get("id") != request_id:
                     raise RuntimeError(
@@ -790,6 +736,139 @@ class PersistentWorker:
                 )
 
             return response["result"]  # type: ignore[no-any-return]
+
+    def _read_response(self, request_id: str, timeout: int | None) -> dict[str, Any]:
+        """Read one framed worker response, bounding the whole wait by *timeout* (None = block)."""
+        if timeout is None:
+            return self._read_response_blocking(request_id)
+        return self._read_response_deadline(request_id, timeout)
+
+    def _read_response_blocking(self, request_id: str) -> dict[str, Any]:
+        """Legacy buffered read path (unbounded); used only when no timeout is set."""
+        assert self._process is not None and self._process.stdout is not None
+        # Header is PROTO_LENGTH:<n> (pipe payload) or PROTO_FILE:<path> (temp-file payload).
+        # proto_tools own logs route to stderr; anything else on stdout is third-party noise we skip.
+        while True:
+            header_line = self._process.stdout.readline()
+            if not header_line:
+                raise RuntimeError(
+                    f"{self.toolkit} worker closed stdout before responding to request {request_id} "
+                    f"({self._crash_context()})"
+                )
+            header_line = header_line.strip()
+            if header_line.startswith(("PROTO_LENGTH:", "PROTO_FILE:")):
+                break
+
+        if header_line.startswith("PROTO_FILE:"):
+            return self._read_file_payload(header_line)
+
+        try:
+            json_length = int(header_line.split(":", 1)[1])
+        except (ValueError, IndexError) as exc:
+            raise RuntimeError(
+                f"{self.toolkit} worker sent invalid LENGTH header {header_line!r} "
+                f"for request {request_id} ({self._crash_context()})"
+            ) from exc
+
+        response_bytes = self._process.stdout.read(json_length)
+        if len(response_bytes) != json_length:
+            raise RuntimeError(
+                f"{self.toolkit} worker sent incomplete JSON for request {request_id}: "
+                f"expected {json_length} bytes, got {len(response_bytes)} ({self._crash_context()})"
+            )
+        return self._decode_body(request_id, response_bytes)
+
+    def _read_response_deadline(self, request_id: str, timeout: int) -> dict[str, Any]:
+        """Deadline-bounded raw-fd read: the entire wait for a response is capped at *timeout*.
+
+        Reads raw bytes off the stdout fd (not the buffered text stream, which is select-unsafe)
+        and frames the protocol itself, so a worker that emits native fd-1 noise and then stalls
+        still trips the timeout instead of blocking forever in readline().
+        """
+        assert self._process is not None and self._process.stdout is not None
+        fd = self._process.stdout.fileno()
+        buf = bytearray()
+
+        # Phase 1: wait for the PROTO_* header, skipping noise lines. Compute happens here.
+        deadline = time.monotonic() + timeout
+        header_line = None
+        while header_line is None:
+            nl = buf.find(b"\n")
+            if nl != -1:
+                line = buf[:nl].decode("utf-8", "replace").strip()
+                del buf[: nl + 1]
+                if line.startswith(("PROTO_LENGTH:", "PROTO_FILE:")):
+                    header_line = line
+                continue  # noise line, or already-buffered bytes still to scan
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not select.select([fd], [], [], remaining)[0]:
+                raise TimeoutError(
+                    f"{self.toolkit} worker timed out waiting for response to request {request_id} after {timeout}s"
+                )
+            chunk = os.read(fd, _READ_CHUNK)
+            if not chunk:
+                raise RuntimeError(
+                    f"{self.toolkit} worker closed stdout before responding to request {request_id} "
+                    f"({self._crash_context()})"
+                )
+            buf.extend(chunk)
+
+        if header_line.startswith("PROTO_FILE:"):
+            return self._read_file_payload(header_line)
+
+        try:
+            json_length = int(header_line.split(":", 1)[1])
+        except (ValueError, IndexError) as exc:
+            raise RuntimeError(
+                f"{self.toolkit} worker sent invalid LENGTH header {header_line!r} "
+                f"for request {request_id} ({self._crash_context()})"
+            ) from exc
+
+        # Phase 2: drain the body. Compute is done, so a fresh short grace window bounds the
+        # transfer without risking killing a finished worker that produced a large result.
+        body_deadline = time.monotonic() + _BODY_GRACE_SECONDS
+        while len(buf) < json_length:
+            remaining = body_deadline - time.monotonic()
+            if remaining <= 0 or not select.select([fd], [], [], remaining)[0]:
+                break
+            chunk = os.read(fd, min(_READ_CHUNK, json_length - len(buf)))
+            if not chunk:
+                break
+            buf.extend(chunk)
+
+        if len(buf) < json_length:
+            raise RuntimeError(
+                f"{self.toolkit} worker sent incomplete JSON for request {request_id}: "
+                f"expected {json_length} bytes, got {len(buf)} ({self._crash_context()})"
+            )
+        # Body is ASCII (bootstrap serializes with ensure_ascii=True), so PROTO_LENGTH counts bytes.
+        return self._decode_body(request_id, bytes(buf[:json_length]))
+
+    def _read_file_payload(self, header_line: str) -> dict[str, Any]:
+        """Read and unlink a PROTO_FILE temp payload (shared by both read paths)."""
+        file_path = header_line.split(":", 1)[1]
+        if not file_path.startswith(tempfile.gettempdir()):
+            logger.warning(
+                "Worker for %s sent file path outside temp directory: %s",
+                self.toolkit,
+                file_path,
+            )
+        try:
+            with open(file_path) as f:
+                return json.load(f)  # type: ignore[no-any-return]
+        finally:
+            with contextlib.suppress(OSError):
+                os.unlink(file_path)
+
+    def _decode_body(self, request_id: str, response_bytes: bytes | str) -> dict[str, Any]:
+        """Parse a PROTO_LENGTH JSON body, raising RuntimeError on malformed payloads."""
+        try:
+            return json.loads(response_bytes)  # type: ignore[no-any-return]
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                f"{self.toolkit} worker returned invalid JSON for request {request_id} "
+                f"({self._crash_context()}); payload: {response_bytes!r}"
+            ) from exc
 
     def _killpg(self, sig: int) -> None:
         """Send *sig* to the worker's process group, ignoring already-dead."""

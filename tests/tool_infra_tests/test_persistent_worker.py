@@ -135,6 +135,39 @@ def legacy_script(tmp_path: Path) -> Path:
     return script
 
 
+@pytest.fixture
+def noise_then_hang_script(tmp_path: Path) -> Path:
+    """Writes a noise line to RAW fd 1, then hangs far past the test timeout."""
+    script = tmp_path / "noise_hang.py"
+    script.write_text(
+        textwrap.dedent("""\
+        import os, time
+
+        def dispatch(input_dict):
+            os.write(1, b"native-noise\\n")  # C-level write, bypasses sys.stdout->stderr redirect
+            time.sleep(15)                    # >> test timeout; bounded so a regression can't hang CI
+            return {"never": True}
+        """)
+    )
+    return script
+
+
+@pytest.fixture
+def noise_then_result_script(tmp_path: Path) -> Path:
+    """Writes a noise line to RAW fd 1, then returns normally."""
+    script = tmp_path / "noise_result.py"
+    script.write_text(
+        textwrap.dedent("""\
+        import os
+
+        def dispatch(input_dict):
+            os.write(1, b"native-noise\\n")  # noise the header-scan must skip
+            return {"echo": input_dict}
+        """)
+    )
+    return script
+
+
 def _make_worker(script_path: Path, verbose: int = 0) -> PersistentWorker:
     """Create a PersistentWorker using the current Python (no venv needed)."""
     # Use the current Python's directory as a fake venv
@@ -199,6 +232,30 @@ def test_error_handling(error_script: Path):
     try:
         with pytest.raises(RuntimeError, match="intentional test error"):
             worker.send({"anything": True})
+    finally:
+        worker.stop()
+
+
+# ── Read-path timeout (regression for silent hang) ───────────────────────────
+
+
+def test_send_times_out_when_noise_precedes_hung_compute(noise_then_hang_script: Path):
+    """A native-fd noise line before a hung forward pass must still trip the timeout."""
+    worker = _make_worker(noise_then_hang_script)
+    start = time.monotonic()
+    try:
+        with pytest.raises(TimeoutError, match="timed out waiting for response"):
+            worker.send({"x": 1}, timeout=2)
+        assert time.monotonic() - start < 8  # wall-clock guard: a regression must not hang
+    finally:
+        worker.stop()
+
+
+def test_noise_line_before_real_header_still_returns_result(noise_then_result_script: Path):
+    """A native-fd noise line followed by a real PROTO header is skipped; the result returns."""
+    worker = _make_worker(noise_then_result_script)
+    try:
+        assert worker.send({"v": 7}, timeout=10) == {"echo": {"v": 7}}
     finally:
         worker.stop()
 
