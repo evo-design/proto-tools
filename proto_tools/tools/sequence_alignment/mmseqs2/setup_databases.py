@@ -30,17 +30,17 @@ Usage::
     python -m ...setup_databases --workdir /custom/path uniref30-2302
 
 Prerequisites:
-    The ``mmseqs`` binary must be on ``PATH`` (and ``zstd`` for any
-    ``.zst``-distributed dataset). The ``mmseqs2`` toolkit's micromamba env
-    ships an ``mmseqs`` at ``$PROTO_HOME/proto_tool_envs/mmseqs2_env/bin/`` —
-    after any of the toolkit's tools has been dispatched once that env is
-    created and you can append it to PATH for this script. Resolving the
-    binary automatically from the tool env is a planned follow-up.
+    The script auto-resolves ``mmseqs`` from the ``mmseqs2`` toolkit's
+    micromamba env at ``$PROTO_HOME/proto_tool_envs/mmseqs2_env/bin/mmseqs``,
+    building the env on first run if needed (no PATH setup required by the
+    caller). ``zstd`` (for ``.zst``-distributed datasets) is still expected on
+    PATH where applicable.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -56,6 +56,7 @@ from proto_tools.databases import (
     get_dataset_dir,
 )
 from proto_tools.utils.system_info import available_memory_bytes
+from proto_tools.utils.tool_instance import ToolInstance
 
 # Fraction of the cgroup-aware budget allotted to mmseqs index builds (mmseqs sizes splits from physical RAM, so the cap keeps `createindex` from OOMing under Slurm / container memory limits).
 _INDEX_MEMORY_SAFETY_FRACTION = 0.7
@@ -343,6 +344,9 @@ def main(argv: list[str] | None = None) -> int:
         _list_available()
         return 0
 
+    # Toolkit-bundled mmseqs is at $PROTO_HOME/proto_tool_envs/mmseqs2_env/bin/mmseqs; building the env on first run (matches tests/dummy_data/create_mini_mmseqs_db.py) so recipes find `mmseqs` via PATH without caller setup.
+    _ensure_mmseqs_on_path()
+
     targets = _resolve_targets(args)
 
     print(f"Will provision {len(targets)} dataset(s): {', '.join(targets)}")
@@ -355,6 +359,25 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     return _provision_each(targets, workdir=args.workdir, force=args.force)
+
+
+def _ensure_mmseqs_on_path() -> None:
+    """Build the mmseqs2 toolkit env if needed and prepend its bin to PATH.
+
+    Idempotent. ``ToolInstance.ensure_ready()`` is a no-op when the env already
+    exists; first call builds it (~minutes). The bin prepend is process-local
+    (doesn't leak beyond this script invocation) and only adds the toolkit's
+    bin, so system utilities (``tar``, ``mv``, etc.) resolve unchanged.
+    """
+    tool = ToolInstance.get("mmseqs2")
+    tool.ensure_ready()
+    mmseqs_bin = tool.env_path / "bin" / "mmseqs"
+    if not mmseqs_bin.exists():
+        raise RuntimeError(
+            f"mmseqs binary not found at {mmseqs_bin} after toolkit env setup; "
+            "the mmseqs2 standalone env may have failed to build."
+        )
+    os.environ["PATH"] = f"{mmseqs_bin.parent}{os.pathsep}{os.environ.get('PATH', '')}"
 
 
 def _provision_each(targets: list[str], *, workdir: Path | None, force: bool) -> int:
