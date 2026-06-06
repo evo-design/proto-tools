@@ -2,6 +2,8 @@
 
 # IPSAE
 
+![IPSAE](https://proto-bio.github.io/proto-assets/images/tool/ipsae/hero.png)
+
 > [!NOTE]
 > **License:** IPSAE is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/DunbrackLab/IPSAE/blob/main/LICENSE) for full terms.
 

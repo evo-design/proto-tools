@@ -2,9 +2,7 @@
 
 # Evo1
 
-![Evo](https://github.com/evo-design/evo/raw/main/evo.jpg)
-
-> *Image source: [evo-design/evo](https://github.com/evo-design/evo)*
+![Evo1](https://proto-bio.github.io/proto-assets/images/tool/evo1/hero.png)
 
 > [!NOTE]
 > **License:** Evo1 is open source and free for academic and commercial use under an Apache-2.0 license. Please refer to [the license](https://github.com/evo-design/evo/blob/main/LICENSE) for full terms.

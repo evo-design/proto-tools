@@ -1,4 +1,7 @@
 # 🧬 Proto Tools 🛠️
+
+![Proto Tools](https://proto-bio.github.io/proto-assets/default/hero.png)
+
 [![Checks](https://github.com/evo-design/proto-tools/actions/workflows/checks.yml/badge.svg)](https://github.com/evo-design/proto-tools/actions/workflows/checks.yml)
 [![Unit Tests](https://github.com/evo-design/proto-tools/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/evo-design/proto-tools/actions/workflows/unit-tests.yml)
 [![Integration Tests](https://github.com/evo-design/proto-tools/actions/workflows/integration-tests.yml/badge.svg)](https://github.com/evo-design/proto-tools/actions/workflows/integration-tests.yml)

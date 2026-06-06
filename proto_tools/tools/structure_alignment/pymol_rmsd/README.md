@@ -2,6 +2,8 @@
 
 # PyMOL RMSD
 
+![PyMOL RMSD](https://proto-bio.github.io/proto-assets/images/tool/pymol_rmsd/hero.png)
+
 > [!NOTE]
 > **License:** PyMOL RMSD is licensed under Custom (Open-Source PyMOL Copyright Notice) and may require explicit attribution when utilized. Please refer to [the license](https://github.com/schrodinger/pymol-open-source/blob/master/LICENSE) for full terms.
 

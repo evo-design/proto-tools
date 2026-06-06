@@ -2,6 +2,8 @@
 
 # Puffin
 
+![Puffin](https://proto-bio.github.io/proto-assets/images/tool/puffin/hero.png)
+
 > [!NOTE]
 > **License:** Puffin is licensed under Custom (UTSW Academic Software License) and has restrictions around commercial use and may require explicit attribution when utilized. Please refer to [the license](https://github.com/jzhoulab/puffin/blob/main/LICENSE) for full terms.
 

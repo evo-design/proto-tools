@@ -2,6 +2,8 @@
 
 # Prodigal
 
+![Prodigal](https://proto-bio.github.io/proto-assets/images/tool/prodigal/hero.png)
+
 > [!NOTE]
 > **License:** Prodigal has a GPL-3.0 license. Please refer to [the license](https://github.com/hyattpd/Prodigal/blob/GoogleImport/LICENSE) for full terms.
 

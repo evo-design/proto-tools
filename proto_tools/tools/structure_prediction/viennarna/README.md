@@ -2,9 +2,7 @@
 
 # ViennaRNA
 
-![ViennaRNA](https://avatars.githubusercontent.com/u/22776520?s=280&v=4)
-
-> *Image source: [ViennaRNA/ViennaRNA](https://github.com/ViennaRNA/ViennaRNA)*
+![ViennaRNA](https://proto-bio.github.io/proto-assets/images/tool/viennarna/hero.png)
 
 > [!NOTE]
 > **License:** ViennaRNA is licensed under Custom (ViennaRNA Package License) and may require explicit attribution when utilized. Please refer to [the license](https://github.com/ViennaRNA/ViennaRNA/blob/master/COPYING) for full terms.

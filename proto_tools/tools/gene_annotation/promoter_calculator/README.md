@@ -2,6 +2,8 @@
 
 # Salis Lab Promoter Calculator
 
+![Salis Lab Promoter Calculator](https://proto-bio.github.io/proto-assets/images/tool/promoter_calculator/hero.png)
+
 > [!NOTE]
 > **License:** Salis Lab Promoter Calculator has a GPL-3.0 license. Please refer to [the license](https://github.com/barricklab/promoter-calculator/blob/master/LICENSE) for full terms.
 

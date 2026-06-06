@@ -2,9 +2,7 @@
 
 # ESM2
 
-![ESM-2](https://user-images.githubusercontent.com/3605224/199301187-a9e38b3f-71a7-44be-94f4-db0d66143c53.png)
-
-> *Image source: [facebookresearch/esm](https://github.com/facebookresearch/esm)*
+![ESM2](https://proto-bio.github.io/proto-assets/images/tool/esm2/hero.png)
 
 > [!NOTE]
 > **License:** ESM2 is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/facebookresearch/esm/blob/main/LICENSE) for full terms.

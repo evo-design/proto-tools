@@ -2,6 +2,8 @@
 
 # AlphaGenome
 
+![AlphaGenome](https://proto-bio.github.io/proto-assets/images/tool/alphagenome/hero.png)
+
 > [!NOTE]
 > **License:** AlphaGenome uses Apache-2.0 for code and Custom (AlphaGenome Terms of Use) for model weights and has restrictions around commercial use and may require explicit attribution when utilized. Model weights are gated and require accepting the provider's terms and authenticating with a HuggingFace token. Please refer to the [code license](https://github.com/google-deepmind/alphagenome_research/blob/main/LICENSE) and [model weights license](https://deepmind.google.com/science/alphagenome/model-terms) for full terms.
 

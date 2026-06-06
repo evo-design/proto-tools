@@ -2,6 +2,8 @@
 
 # Enformer
 
+![Enformer](https://proto-bio.github.io/proto-assets/images/tool/enformer/hero.png)
+
 > [!NOTE]
 > **License:** Enformer uses Apache-2.0 for code and CC-BY-4.0 for model weights and may require explicit attribution when utilized. Please refer to the [code license](https://github.com/google-deepmind/deepmind-research/blob/master/LICENSE) and [model weights license](https://github.com/google-deepmind/deepmind-research/blob/master/enformer/README.md) for full terms.
 

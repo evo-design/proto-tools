@@ -2,6 +2,8 @@
 
 # CCD Lookup
 
+![CCD Lookup](https://proto-bio.github.io/proto-assets/images/tool/ccd_lookup/hero.png)
+
 > [!NOTE]
 > **License:** CCD Lookup retrieves data from the wwPDB Chemical Component Dictionary, distributed under CC0-1.0 (public domain; no attribution required). The client wrapper code is Apache-2.0-licensed. Please refer to [the data terms](https://www.wwpdb.org/about/usage-policies) for full terms.
 

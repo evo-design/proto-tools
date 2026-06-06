@@ -2,9 +2,7 @@
 
 # ColabFold Search
 
-![ColabFold](https://github.com/sokrypton/ColabFold/raw/main/.github/ColabFold_Marv_Logo.png)
-
-> *Image source: [sokrypton/ColabFold](https://github.com/sokrypton/ColabFold)*
+![ColabFold Search](https://proto-bio.github.io/proto-assets/images/tool/colabfold_search/hero.png)
 
 > [!NOTE]
 > **License:** ColabFold Search is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/sokrypton/ColabFold/blob/main/LICENSE) for full terms.

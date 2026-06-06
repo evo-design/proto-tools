@@ -2,6 +2,8 @@
 
 # RoseTTAFold3 (RF3)
 
+![RoseTTAFold3 (RF3)](https://proto-bio.github.io/proto-assets/images/tool/rf3/hero.png)
+
 > [!NOTE]
 > **License:** RoseTTAFold3 (RF3) is open source and free for academic and commercial use under a BSD-3-Clause license and may require explicit attribution when utilized. Please refer to [the license](https://github.com/RosettaCommons/foundry/blob/production/LICENSE.md) for full terms.
 

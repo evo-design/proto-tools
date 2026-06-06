@@ -2,6 +2,8 @@
 
 # Borzoi
 
+![Borzoi](https://proto-bio.github.io/proto-assets/images/tool/borzoi/hero.png)
+
 > [!NOTE]
 > **License:** Borzoi uses Apache-2.0 for code and CC-BY-4.0 for model weights and may require explicit attribution when utilized. Please refer to the [code license](https://github.com/calico/borzoi/blob/main/LICENSE) and [model weights license](https://huggingface.co/johahi/borzoi-replicate-0) for full terms.
 

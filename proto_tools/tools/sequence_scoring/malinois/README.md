@@ -2,6 +2,8 @@
 
 # Malinois
 
+![Malinois](https://proto-bio.github.io/proto-assets/images/tool/malinois/hero.png)
+
 > [!NOTE]
 > **License:** Malinois is open source and free for academic and commercial use under an MIT license and may require explicit attribution when utilized. Please refer to [the license](https://github.com/sjgosai/boda2/blob/main/LICENSE.mit) for full terms.
 

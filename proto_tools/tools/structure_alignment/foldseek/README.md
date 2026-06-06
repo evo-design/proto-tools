@@ -2,9 +2,7 @@
 
 # Foldseek
 
-![Foldseek](https://raw.githubusercontent.com/steineggerlab/foldseek/master/.github/foldseek.png)
-
-> *Image source: [steineggerlab/foldseek](https://github.com/steineggerlab/foldseek)*
+![Foldseek](https://proto-bio.github.io/proto-assets/images/tool/foldseek/hero.png)
 
 > [!NOTE]
 > **License:** Foldseek has a GPL-3.0 license. Please refer to [the license](https://github.com/steineggerlab/foldseek/blob/master/LICENSE.md) for full terms.

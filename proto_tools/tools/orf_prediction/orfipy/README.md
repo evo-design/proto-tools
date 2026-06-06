@@ -2,6 +2,8 @@
 
 # ORFipy
 
+![ORFipy](https://proto-bio.github.io/proto-assets/images/tool/orfipy/hero.png)
+
 > [!NOTE]
 > **License:** ORFipy is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/urmi-21/orfipy/blob/master/LICENSE) for full terms.
 

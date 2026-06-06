@@ -2,9 +2,7 @@
 
 # Boltz-2
 
-![Boltz-2](https://github.com/jwohlwend/boltz/raw/main/docs/boltz1_pred_figure.png)
-
-> *Image source: [jwohlwend/boltz](https://github.com/jwohlwend/boltz)*
+![Boltz-2](https://proto-bio.github.io/proto-assets/images/tool/boltz2/hero.png)
 
 > [!NOTE]
 > **License:** Boltz-2 is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/jwohlwend/boltz/blob/main/LICENSE) for full terms.

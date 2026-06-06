@@ -2,6 +2,8 @@
 
 # pDockQ2
 
+![pDockQ2](https://proto-bio.github.io/proto-assets/images/tool/pdockq2/hero.png)
+
 > [!NOTE]
 > **License:** pDockQ2 has an AGPL-3.0 license and may require explicit attribution when utilized. Please refer to [the license](https://gitlab.com/ElofssonLab/afm-benchmark/-/blob/main/LICENSE) for full terms.
 

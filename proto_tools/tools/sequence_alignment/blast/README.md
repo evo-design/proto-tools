@@ -2,6 +2,8 @@
 
 # BLAST
 
+![BLAST](https://proto-bio.github.io/proto-assets/images/tool/blast/hero.png)
+
 > [!NOTE]
 > **License:** BLAST is licensed under Custom (NCBI BLAST+ public domain). Please refer to [the license](https://www.ncbi.nlm.nih.gov/IEB/ToolBox/CPP_DOC/lxr/source/scripts/projects/blast/LICENSE) for full terms.
 

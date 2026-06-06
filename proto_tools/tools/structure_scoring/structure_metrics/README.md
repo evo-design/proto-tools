@@ -2,6 +2,8 @@
 
 # Structure Metrics
 
+![Structure Metrics](https://proto-bio.github.io/proto-assets/images/tool/structure_metrics/hero.png)
+
 > [!NOTE]
 > **License:** Structure Metrics is open source and free for academic and commercial use under an Apache-2.0 license. Please refer to [the license](https://github.com/evo-design/proto-tools) for full terms.
 

@@ -2,6 +2,8 @@
 
 # MinCED
 
+![MinCED](https://proto-bio.github.io/proto-assets/images/tool/minced/hero.png)
+
 > [!NOTE]
 > **License:** MinCED has a GPL-3.0 license. Please refer to [the license](https://github.com/ctSkennerton/minced/blob/master/LICENSE) for full terms.
 

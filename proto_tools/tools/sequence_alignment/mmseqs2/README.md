@@ -2,9 +2,7 @@
 
 # MMseqs2
 
-![MMseqs2](https://raw.githubusercontent.com/soedinglab/mmseqs2/master/.github/mmseqs2_logo.png)
-
-> *Image source: [soedinglab/MMseqs2](https://github.com/soedinglab/MMseqs2)*
+![MMseqs2](https://proto-bio.github.io/proto-assets/images/tool/mmseqs2/hero.png)
 
 > [!NOTE]
 > **License:** MMseqs2 is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/soedinglab/MMseqs2/blob/master/LICENSE.md) for full terms.
