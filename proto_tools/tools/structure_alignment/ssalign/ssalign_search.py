@@ -195,7 +195,9 @@ class SSAlignHit(BaseModel):
         target_id (str): Identifier of the matched target structure.
         prefilter_score (float): FAISS cosine similarity (raw in mode 1, whitened in mode 2); in [-1, 1].
         saligner_score (float | None): SAligner 3Di global-alignment score (mode 1, refined hits only).
-        ss_score (float): Predicted avg TM-score (SSAlign linear fit of cosine); noisy (r~0.69), can exceed 1.
+        ss_score (float): Predicted average TM-score; a noisy ranking signal, not a hard TM-cutoff gate.
+            Computed as ``0.55*prefilter_score + 0.56``, so it is monotonic in ``prefilter_score`` and
+            floors near 0.56 (and can exceed 1), so a low absolute cutoff like 0.4 is unreachable.
         rank (int): 1-indexed rank within this query's results.
         refined (bool): True if this hit was re-ranked by SAligner (below prefilter_threshold).
     """
@@ -216,7 +218,7 @@ class SSAlignHit(BaseModel):
     )
     ss_score: float = Field(
         title="SS Score",
-        description="Predicted avg TM-score (SSAlign linear fit of cosine); noisy (r~0.69), can exceed 1",
+        description="Predicted average TM-score; a noisy ranking signal, not a hard TM-cutoff gate",
     )
     rank: int = Field(title="Rank", ge=1, description="1-indexed rank within this query's results")
     refined: bool = Field(
