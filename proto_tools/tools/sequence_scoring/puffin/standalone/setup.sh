@@ -10,6 +10,9 @@ pip install uv
 
 proto_install_pytorch
 
+# selene-sdk pulls pytabix, whose sdist-built C extension needs zlib.h.
+"$MAMBA_BIN" install -p "$VENV_PATH" -c conda-forge -y zlib
+
 echo "Installing remaining dependencies..."
 uv pip install -r requirements.txt
 
