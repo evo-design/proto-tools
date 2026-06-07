@@ -26,6 +26,7 @@ class ChainSelection(BaseModel):
     Accepts shorthand at construction:
 
     - ``"A"``        → ``ChainSelection(chains=["A"])``
+    - ``"A,B"``      → ``ChainSelection(chains=["A", "B"])`` (comma-separated, whitespace stripped)
     - ``["A", "B"]`` → ``ChainSelection(chains=["A", "B"])``
 
     Attributes:
@@ -42,11 +43,13 @@ class ChainSelection(BaseModel):
         if isinstance(data, ChainSelection):
             return {"chains": list(data.chains)}
         if isinstance(data, str):
-            return {"chains": [data]}
+            # Match Structure.select_chains: comma-separated, whitespace stripped, empties dropped.
+            return {"chains": [c.strip() for c in data.split(",") if c.strip()]}
         if isinstance(data, list):
             if not all(isinstance(c, str) for c in data):
                 raise ValueError("List must contain only chain ID strings")
-            return {"chains": list(data)}
+            # Same strip + drop-empties as the string branch (and Structure.select_chains' list path).
+            return {"chains": [c.strip() for c in data if c.strip()]}
         if isinstance(data, dict):
             keys = set(data.keys())
             if keys == {"chains"} and isinstance(data["chains"], list):
