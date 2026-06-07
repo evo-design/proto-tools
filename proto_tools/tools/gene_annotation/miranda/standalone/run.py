@@ -120,7 +120,7 @@ def to_device(device: str) -> dict[str, Any]:
 
 def get_memory_stats() -> dict[str, Any]:
     """DeviceManager protocol stub: miRanda is CPU-only, so no GPU memory to report."""
-    return {"available": False, "framework": "cpu", "note": "CPU tool"}
+    return {"available": False, "framework": "cpu", "reason": "CPU tool"}
 
 
 # =============================================================================
