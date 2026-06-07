@@ -52,7 +52,7 @@ This tool ranks candidate ligands against a chosen protein target, pairing a pre
 #### Usage Tips
 
 - **`affinity_pred_value` is on a log10-IC50 (μM) scale.** Values below `0` (sub-μM IC50) indicate strong binders; positive values indicate weaker binding. `affinity_probability_binary` is an independent binder probability and can stay high even when the IC50 estimate is uncertain.
-- **One binder ligand per complex.** The binder is auto-detected when a complex has exactly one ligand; set `binder_chain` (e.g. `"B"`) to name it when a complex has several. The binder must be a ligand chain with at most 128 heavy atoms.
+- **One binder ligand per complex.** The binder is auto-detected when a complex has exactly one ligand; set `binder_chain` to name it when a complex has several. `binder_chain` is per-complex: pass one value (e.g. `["B"]`) to apply it to every complex, or one per complex (e.g. `["B", None]`, where `None` auto-detects). The binder must be a ligand chain with at most 128 heavy atoms.
 - **Structure-side and affinity-side knobs are independent.** `recycling_steps`, `sampling_steps`, `diffusion_samples`, and MSA settings control the structure pass that runs first; `sampling_steps_affinity` (default `200`) and `diffusion_samples_affinity` (default `5`) control the affinity pass. Set `affinity_mw_correction` to apply Boltz-2's molecular-weight correction to the affinity value head.
 - **Stochastic predictions.** The diffusion-based affinity head is stochastic; set `seed` for reproducibility.
 

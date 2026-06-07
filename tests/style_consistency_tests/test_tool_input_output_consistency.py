@@ -44,6 +44,24 @@ def test_tool_input_uses_input_field(tool_input):
         )
 
 
+@pytest.mark.parametrize("spec", ToolRegistry.list_all(), ids=lambda s: s.key)
+def test_broadcastable_fields_are_in_parallel_group(spec):
+    """A ``broadcastable=True`` field must be a member of the tool's ``iterable_input_fields`` group.
+
+    Broadcast normalization expands the field to the primary's length so the framework slices and
+    keys it like any other parallel sibling; a broadcastable field left out of the group would not
+    be partitioned alongside the primary and would silently misalign.
+    """
+    broadcastable = spec.input_model.broadcastable_fields()
+    if not broadcastable:
+        return
+    group = set(spec.iterable_input_fields or [])
+    assert broadcastable <= group, (
+        f"{spec.input_model.__name__} marks {sorted(broadcastable - group)} broadcastable, but they are "
+        f"not in iterable_input_fields={spec.iterable_input_fields!r}."
+    )
+
+
 # ── Input and output consistency ────────────────────────────────────────────
 
 

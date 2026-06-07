@@ -185,6 +185,16 @@ class StructurePredictionInput(BaseToolInput):
             for entry in value
         ]
 
+    @model_validator(mode="after")
+    def _broadcast_parallel_fields(self) -> "StructurePredictionInput":
+        """Normalize any broadcastable parallel field (e.g. ``binder_chain``) to one-per-complex.
+
+        Runs before subclass ``after`` validators (base-first MRO order), so a subclass that
+        consumes a broadcastable field (e.g. ``Boltz2AffinityInput.validate_affinity_binders``)
+        always sees it already aligned 1:1 with ``complexes``.
+        """
+        return self.broadcast_parallel_fields("complexes")  # type: ignore[return-value]
+
     @classmethod
     def item_cost(cls, item: Complex) -> float:
         """Cost ~ total residues across all chains in the complex."""

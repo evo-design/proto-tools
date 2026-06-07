@@ -584,6 +584,32 @@ Point `iterable_output_field` at the wrapper list, not the flattened inner sampl
 
 ---
 
+## Input = per-item, Config = shared (the I/O invariant) — [Phase 2: Contract]
+
+Model every field by asking: **is there conceptually one of these per item, or one for the whole batch?**
+
+1. **Shared whole-batch parameter or collection → Config.** Applies wholesale to every item (e.g. a search database every query is compared against). Putting it in Config also keeps the per-item cache key correct *by construction* — the key is `item + config`, so anything shared is always keyed.
+2. **Per-item value, usually uniform → Input, broadcastable parallel field.** Conceptually one-per-item but frequently the same. Supply **one → broadcast to all items**; supply **N → strict 1:1**.
+3. **Per-item value, strict 1:1 → Input parallel field, must equal N.** One distinct value per item; broadcasting would be wrong.
+
+Categories 2 and 3 are members of `iterable_input_fields`. A per-item value is most often modeled by bundling it *inside* the iterable element (e.g. `inputs: list[ScoringStructureInput]`, each carrying its own `chains_to_score`); a top-level parallel sibling list (category 2/3) is the alternative when the value can't live on the element.
+
+**Broadcastable fields (category 2).** Mark with `InputField(..., broadcastable=True)` and add the field to `iterable_input_fields`. The field must be `list[...] | None`. `BaseToolInput.broadcast_parallel_fields(primary_field)`, called from a `model_validator(mode="after")`, normalizes a length-1 value to the primary's length N at construction — so by the time dedup/cache/partition runs it is an ordinary aligned sibling (folded into the per-item key, sliced with the primary). Length must be 1 or N, else it raises.
+
+```python
+class Boltz2AffinityInput(StructurePredictionInput):  # primary = "complexes"
+    binder_chain: list[SingleChainSelection | None] | None = InputField(
+        default=None, broadcastable=True, title="Binder Chain",
+        description="Ligand chain to score per complex; one value broadcasts to all, None auto-detects.",
+    )
+# @tool(..., iterable_input_fields=["complexes", "msas", "binder_chain"])
+# StructurePredictionInput's after-validator calls self.broadcast_parallel_fields("complexes").
+```
+
+**There are cases where broadcasting is not the correct option.** It fits `binder_chain` (the same chain label is meaningful across complexes). It is **wrong for `msas`**: broadcasting one MSA across *different* complexes silently mis-pairs alignments, so `msas` stays a strict 1:1 sibling (not broadcastable). Only mark a field broadcastable when a single value applied to every item is genuinely correct.
+
+---
+
 ## Caching Patterns — [Phase 2: Contract]
 
 Add `cacheable=True` to the `@tool()` decorator. The wrapper auto-selects strategy:

@@ -74,29 +74,40 @@ class Boltz2AffinityInput(StructurePredictionInput):
         complexes (list[Complex]): Each needs >=1 protein target and >=1 ligand chain.
         msas (list[ComplexMSAs] | None): Inherited per-complex MSAs;
             each entry is a ``ComplexMSAs`` (``paired=True`` for taxonomy-paired heterocomplexes).
-        binder_chain (SingleChainSelection | None): Ligand to score; None auto-detects the sole ligand.
+        binder_chain (list[SingleChainSelection | None] | None): Ligand to score per complex;
+            one value broadcasts to all complexes, None auto-detects each complex's sole ligand.
     """
 
     SUPPORTED_ENTITY_TYPES: ClassVar[set[str]] = {"protein", "ligand"}
     ALLOWS_CHAIN_MODIFICATIONS = False
 
-    binder_chain: SingleChainSelection | None = InputField(
+    binder_chain: list[SingleChainSelection | None] | None = InputField(
         default=None,
+        broadcastable=True,
         title="Binder Chain",
-        description="Ligand chain to score for affinity; None auto-detects the single ligand in each complex.",
+        description="Ligand chain to score per complex; one value broadcasts to all, None auto-detects.",
     )
+
+    def _binder_selections(self) -> list[SingleChainSelection | None]:
+        """Per-complex binder selection (broadcast already applied; None ⇒ every complex auto-detects)."""
+        if self.binder_chain is None:
+            return [None] * len(self.complexes)
+        return self.binder_chain
 
     @model_validator(mode="after")
     def validate_affinity_binders(self) -> "Boltz2AffinityInput":
         """Validate that each complex has a resolvable ligand binder (fails fast at construction)."""
-        for i, comp in enumerate(self.complexes):
-            _resolve_binder_chain_id(comp, self.binder_chain, i)
+        for i, (comp, sel) in enumerate(zip(self.complexes, self._binder_selections(), strict=True)):
+            _resolve_binder_chain_id(comp, sel, i)
         return self
 
     @property
     def resolved_binder_chain_ids(self) -> list[str]:
         """Binder chain ID per complex, re-resolved on access so it tracks ToolPool partitioning."""
-        return [_resolve_binder_chain_id(comp, self.binder_chain, i) for i, comp in enumerate(self.complexes)]
+        return [
+            _resolve_binder_chain_id(comp, sel, i)
+            for i, (comp, sel) in enumerate(zip(self.complexes, self._binder_selections(), strict=True))
+        ]
 
 
 class Boltz2AffinityMetrics(Metrics):
@@ -224,7 +235,7 @@ def example_input() -> Boltz2AffinityInput:
     uses_gpu=True,
     device_count="1-2",
     example_input=example_input,
-    iterable_input_fields=["complexes", "msas"],
+    iterable_input_fields=["complexes", "msas", "binder_chain"],
     iterable_output_field="structures",
     cacheable=True,
     stochastic=True,

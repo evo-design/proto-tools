@@ -7,10 +7,10 @@ import threading
 from unittest.mock import MagicMock, patch
 
 import pytest
-from pydantic import Field
+from pydantic import Field, ValidationError, model_validator
 
 from proto_tools.tools.tool_registry import ToolRegistry
-from proto_tools.utils import BaseConfig, ConfigField
+from proto_tools.utils import BaseConfig, ConfigField, InputField
 from proto_tools.utils.tool_io import BaseToolInput
 from proto_tools.utils.tool_pool import (
     DeviceCapability,
@@ -867,6 +867,113 @@ def test_parallel_group_dedup_keys_and_aligns_through_wrapper(clean_registry):
     assert seen == [(["a", "a"], ["x", "y"])]
     # Output expanded back to all 3 original positions, in order.
     assert out.results == ["a-x", "a-y", "a-x"]
+
+
+class _BroadcastInput(BaseToolInput):
+    """Mock input with a broadcastable parallel field (``weight``) aligned to primary ``items``."""
+
+    items: list[str] = InputField(default_factory=list, title="Items", description="primary list")
+    weight: list[str] | None = InputField(
+        default=None, broadcastable=True, title="Weight", description="usually-uniform per-item value"
+    )
+
+    @model_validator(mode="after")
+    def _broadcast(self) -> "_BroadcastInput":
+        return self.broadcast_parallel_fields("items")  # type: ignore[return-value]
+
+
+def test_broadcast_field_normalizes_to_primary_length():
+    """A length-1 broadcastable field expands to N; an N-length one is kept; None stays None."""
+    assert _BroadcastInput(items=["a", "b", "c"], weight=["w"]).weight == ["w", "w", "w"]  # 1 → N
+    assert _BroadcastInput(items=["a", "b"], weight=["p", "q"]).weight == ["p", "q"]  # N → N (1:1)
+    assert _BroadcastInput(items=["a", "b"], weight=None).weight is None  # absent, untouched
+
+
+def test_broadcast_field_rejects_length_that_is_neither_one_nor_n():
+    """A broadcastable field whose length is neither 1 nor N is rejected at construction."""
+    with pytest.raises(ValidationError, match="expected 1"):
+        _BroadcastInput(items=["a", "b", "c"], weight=["p", "q"])
+
+
+def test_broadcast_slots_are_independent_copies():
+    """Length-1 → N broadcast produces independent copies of the sole value (no aliasing).
+
+    Pydantic-model elements (the common case) are cloned via ``model_copy`` so a future
+    broadcastable field with a mutable element type can't have one slot's mutation
+    silently propagate to all slots.
+    """
+
+    class _Sel(BaseToolInput):
+        chain: str = InputField(default="", title="Chain", description="chain id")
+
+    class _ModelBroadcastInput(BaseToolInput):
+        items: list[str] = InputField(default_factory=list, title="Items", description="primary list")
+        sels: list[_Sel | None] | None = InputField(
+            default=None, broadcastable=True, title="Selections", description="per-item selection"
+        )
+
+        @model_validator(mode="after")
+        def _broadcast(self) -> "_ModelBroadcastInput":
+            return self.broadcast_parallel_fields("items")  # type: ignore[return-value]
+
+    inp = _ModelBroadcastInput(items=["a", "b", "c"], sels=[_Sel(chain="A")])
+    assert inp.sels is not None and len(inp.sels) == 3
+    # Slots are equal-valued but distinct instances — no aliasing.
+    assert inp.sels[0] == inp.sels[1] == inp.sels[2]
+    assert inp.sels[0] is not inp.sels[1]
+    assert inp.sels[1] is not inp.sels[2]
+
+    # None still aliases the singleton (harmless, no copy needed).
+    inp_none = _ModelBroadcastInput(items=["a", "b"], sels=[None])
+    assert inp_none.sels == [None, None]
+
+
+def test_broadcast_field_is_folded_into_dedup_key_through_wrapper(clean_registry):
+    """A broadcast field flows through the existing dedup/cache machinery as an aligned parallel field.
+
+    Because normalization happens at construction, the framework needs no broadcast branch: rows that
+    differ only in the broadcast value are kept distinct (folded into the per-item key), while a
+    broadcast value shared across identical primaries collapses to a single unique row.
+    """
+
+    class _BOutput(MockToolOutputBase):
+        results: list[str] = Field(description="one result per row")
+
+    seen: list[tuple[list[str], list[str] | None]] = []
+
+    @clean_registry.register(
+        key="broadcast-dedup",
+        label="Broadcast Dedup",
+        category="testing",
+        input_class=_BroadcastInput,
+        config_class=MockConfig,
+        output_class=_BOutput,
+        description="Records the (items, weight) rows it receives post-dedup",
+        iterable_input_fields=["items", "weight"],
+        iterable_output_field="results",
+        cacheable=True,
+    )
+    def run_broadcast_dedup(inputs, config=None, instance=None):
+        seen.append((list(inputs.items), list(inputs.weight)))
+        return _BOutput(
+            results=[f"{i}-{w}" for i, w in zip(inputs.items, inputs.weight, strict=True)],
+            tool_id="broadcast-dedup",
+            success=True,
+        )
+
+    spec = clean_registry.get("broadcast-dedup")
+
+    # Same primary thrice, ONE broadcast weight → normalized to (a,w),(a,w),(a,w): all duplicates.
+    seen.clear()
+    out = spec.function(_BroadcastInput(items=["a", "a", "a"], weight=["w"]), MockConfig(device="cpu"))
+    assert seen == [(["a"], ["w"])]  # collapsed to a single unique row
+    assert out.results == ["a-w", "a-w", "a-w"]  # expanded back to 3 positions
+
+    # Same primary, but per-item weights differ → the broadcast sibling keeps the rows distinct.
+    seen.clear()
+    out = spec.function(_BroadcastInput(items=["a", "a"], weight=["p", "q"]), MockConfig(device="cpu"))
+    assert seen == [(["a", "a"], ["p", "q"])]  # NOT collapsed — weight is in the per-item key
+    assert out.results == ["a-p", "a-q"]
 
 
 def test_toolspec_iterable_fields_default_to_none(clean_registry):

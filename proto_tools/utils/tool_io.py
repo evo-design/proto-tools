@@ -3,6 +3,7 @@
 Base input/output classes for standardized tool results with metadata tracking.
 """
 
+import copy
 import json
 import math
 import os
@@ -33,6 +34,15 @@ def _reject_removed_ui_kwargs(field_helper: str, kwargs: dict[str, Any]) -> None
     )
 
 
+def _broadcast_clone(value: Any) -> Any:
+    """Return an independent copy of one broadcast element so slots don't alias."""
+    if value is None:
+        return None
+    if isinstance(value, BaseModel):
+        return value.model_copy()
+    return copy.deepcopy(value)
+
+
 def _require_title_and_description(field_helper: str, title: str | None, description: str | None) -> None:
     """Ensure ``title=`` and ``description=`` are non-empty.
 
@@ -55,6 +65,7 @@ def InputField(
     title: str | None = None,
     description: str | None = None,
     include_in_key: bool = True,
+    broadcastable: bool = False,
     **kwargs: Any,
 ) -> Any:
     """Custom Field wrapper for tool Input classes.
@@ -65,6 +76,12 @@ def InputField(
         description (str | None): Field description; must be a non-empty string.
         include_in_key (bool): If False, field is excluded from tool cache key
             generation.
+        broadcastable (bool): If True, this is a member of the tool's
+            ``iterable_input_fields`` parallel group whose value is either supplied
+            once (length 1, broadcast to all items) or once per item (length N,
+            strict 1:1). ``BaseToolInput.broadcast_parallel_fields`` normalizes it to
+            length N at construction, so the dedup/cache/partition machinery treats it
+            as an ordinary aligned parallel field. The field must be a ``list | None``.
         kwargs: All other standard Pydantic Field arguments.
     """
     _require_title_and_description("InputField", title, description)
@@ -72,6 +89,8 @@ def InputField(
     json_schema_extra = kwargs.get("json_schema_extra", {})
     json_schema_extra["include_in_key"] = include_in_key
     json_schema_extra["_field_type"] = "InputField"
+    if broadcastable:
+        json_schema_extra["broadcastable"] = True
     kwargs["json_schema_extra"] = json_schema_extra
     return Field(default, title=title, description=description, **kwargs)
 
@@ -490,6 +509,48 @@ class BaseToolInput(BaseModel):
     def cache_exclude_fields(cls) -> set[str]:
         """Return field names marked with ``include_in_key=False``."""
         return {name for name, info in cls.model_fields.items() if not _extra_dict(info).get("include_in_key", True)}
+
+    @classmethod
+    def broadcastable_fields(cls) -> set[str]:
+        """Return field names marked ``broadcastable=True`` (see :func:`InputField`)."""
+        return {name for name, info in cls.model_fields.items() if _extra_dict(info).get("broadcastable")}
+
+    def broadcast_parallel_fields(self, primary_field: str) -> "BaseToolInput":
+        """Normalize broadcastable parallel fields to the primary's length, in place.
+
+        A broadcastable field (``InputField(..., broadcastable=True)``) is either supplied
+        once (length 1 → broadcast to every item) or once per item (length N → strict 1:1).
+        This runs in a ``model_validator(mode="after")`` so the field is a genuine length-N
+        parallel sibling before any dedup/cache/partition logic sees it — keeping the per-item
+        cache key correct by construction with no broadcast branch in the framework hot path.
+
+        ``None`` is left as-is (the field is simply absent from the active parallel group).
+        Raises ``ValueError`` on any other length (not 1 and not N).
+
+        Each broadcast slot is an **independent copy** of the sole supplied value (Pydantic
+        ``model_copy`` for ``BaseModel`` instances, ``copy.deepcopy`` for anything else,
+        ``None`` aliased as the singleton). Avoids the ``[obj] * n`` aliasing footgun if a
+        future broadcastable element type is mutable and something mutates one slot in place.
+        """
+        n = len(getattr(self, primary_field))
+        for name in self.broadcastable_fields():
+            value = getattr(self, name)
+            if value is None:
+                continue
+            if not isinstance(value, list):
+                raise ValueError(f"Broadcastable field {name!r} must be a list or None, got {type(value).__name__}.")
+            if len(value) == n:
+                continue
+            if len(value) == 1:
+                broadcast = [_broadcast_clone(value[0]) for _ in range(n)]
+                # mode="after" + validate_assignment=True: bypass re-validation to avoid recursion.
+                object.__setattr__(self, name, broadcast)
+            else:
+                raise ValueError(
+                    f"Broadcastable field {name!r} has length {len(value)}; expected 1 (broadcast to all) "
+                    f"or {n} (one per {primary_field!r})."
+                )
+        return self
 
     def cache_key(self) -> str:
         """Deterministic string for cache key generation, excluding non-key fields."""

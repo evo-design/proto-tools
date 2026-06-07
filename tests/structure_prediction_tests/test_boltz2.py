@@ -8,10 +8,11 @@ from unittest.mock import patch
 
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.msa import MSA
-from proto_tools.entities.structures import is_valid_structure
+from proto_tools.entities.structures import SingleChainSelection, is_valid_structure
 from proto_tools.tools.structure_prediction import (
     Boltz2AffinityConfig,
     Boltz2AffinityInput,
@@ -166,9 +167,35 @@ def test_affinity_auto_detects_single_ligand_binder():
 
 
 def test_affinity_explicit_binder_chain_selects_named_ligand():
-    """An explicit ``binder_chain`` naming a ligand resolves to that chain."""
-    inputs = Boltz2AffinityInput(complexes=[[_CRO_SEQUENCE, _TYR_SMILES]], binder_chain="B")
+    """A single explicit ``binder_chain`` naming a ligand broadcasts to every complex."""
+    inputs = Boltz2AffinityInput(complexes=[[_CRO_SEQUENCE, _TYR_SMILES]], binder_chain=["B"])
     assert inputs.resolved_binder_chain_ids == ["B"]
+
+
+def test_affinity_binder_chain_broadcasts_to_all_complexes():
+    """A length-1 ``binder_chain`` is broadcast across multiple complexes (one → N)."""
+    inputs = Boltz2AffinityInput(
+        complexes=[[_CRO_SEQUENCE, _TYR_SMILES], [_CRO_SEQUENCE, _TYR_SMILES]], binder_chain=["B"]
+    )
+    assert inputs.binder_chain == [SingleChainSelection(chain="B"), SingleChainSelection(chain="B")]
+    assert inputs.resolved_binder_chain_ids == ["B", "B"]
+
+
+def test_affinity_binder_chain_per_complex_one_to_one():
+    """An N-length ``binder_chain`` is matched 1:1 with the complexes (no broadcast)."""
+    inputs = Boltz2AffinityInput(
+        complexes=[[_CRO_SEQUENCE, _TYR_SMILES], [_CRO_SEQUENCE, _TYR_SMILES]], binder_chain=["B", None]
+    )
+    assert inputs.resolved_binder_chain_ids == ["B", "B"]
+
+
+def test_affinity_binder_chain_length_mismatch_raises():
+    """A ``binder_chain`` length that is neither 1 nor N is rejected at construction."""
+    with pytest.raises(ValidationError, match="expected 1"):
+        Boltz2AffinityInput(
+            complexes=[[_CRO_SEQUENCE, _TYR_SMILES], [_CRO_SEQUENCE, _TYR_SMILES]],
+            binder_chain=["B", "B", "B"],
+        )
 
 
 def test_affinity_binder_ids_track_model_copy_partition():
@@ -199,8 +226,8 @@ def _oversized_ligand_complex():
 @pytest.mark.parametrize(
     ("kwargs", "match"),
     [
-        ({"complexes": [[_CRO_SEQUENCE, _TYR_SMILES]], "binder_chain": "A"}, r"not a ligand chain"),
-        ({"complexes": [[_CRO_SEQUENCE, _TYR_SMILES]], "binder_chain": "Z"}, r"not a chain in complex"),
+        ({"complexes": [[_CRO_SEQUENCE, _TYR_SMILES]], "binder_chain": ["A"]}, r"not a ligand chain"),
+        ({"complexes": [[_CRO_SEQUENCE, _TYR_SMILES]], "binder_chain": ["Z"]}, r"not a chain in complex"),
         ({"complexes": [[_CRO_SEQUENCE]]}, r"exactly one"),
         ({"complexes": [_two_ligand_complex()]}, r"exactly one"),
         ({"complexes": [_ligand_only_complex()]}, r"at least one protein chain"),
