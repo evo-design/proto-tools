@@ -33,6 +33,21 @@ def test_chain_selection_coerces_string() -> None:
     assert sel.chains == ["A"]
 
 
+def test_chain_selection_coerces_csv_string() -> None:
+    sel = ChainSelection.model_validate("A,B, C")
+    assert sel.chains == ["A", "B", "C"]
+
+
+def test_chain_selection_rejects_empty_string() -> None:
+    with pytest.raises(ValidationError, match="cannot be empty"):
+        ChainSelection.model_validate("")
+
+
+def test_chain_selection_rejects_only_commas() -> None:
+    with pytest.raises(ValidationError, match="cannot be empty"):
+        ChainSelection.model_validate(", ,")
+
+
 def test_chain_selection_coerces_list() -> None:
     sel = ChainSelection.model_validate(["A", "B"])
     assert sel.chains == ["A", "B"]
