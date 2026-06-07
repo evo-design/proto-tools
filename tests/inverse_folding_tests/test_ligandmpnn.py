@@ -88,10 +88,7 @@ def test_ligandmpnn_sample_no_ligand(cif_structure: Structure):
         assert math.isfinite(interface_recovery)
         assert 0.0 <= interface_recovery <= 1.0
     for design in without_ligand.complexes:
-        # No ligand interface: metric is NaN or absent.
-        assert "ligand_interface_sequence_recovery" not in design.metrics or math.isnan(
-            design.metrics["ligand_interface_sequence_recovery"]
-        )
+        assert "ligand_interface_sequence_recovery" not in design.metrics
     assert all(
         math.isfinite(design.metrics["sequence_recovery"])
         for design_set in (with_ligand, without_ligand)
