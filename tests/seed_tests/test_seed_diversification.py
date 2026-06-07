@@ -80,19 +80,47 @@ def _build_diversification_test_params() -> list:
 def _replicate_first_item(spec: ToolSpec, inputs: Any, n: int = 3) -> Any:
     """Return a copy of ``inputs`` with ``iterable_input_field`` replaced by N copies of its first item.
 
+    Sibling list fields that are parallel-aligned to the iterable field (same
+    original length) are replicated too, so per-item alignment contracts hold for
+    the fabricated batch — e.g. a structure-prediction input's pre-supplied
+    ``msas`` must stay parallel to ``complexes``.
+
     Raises ``pytest.skip`` if the example input has an empty iterable.
     """
-    items = list(getattr(inputs, spec.iterable_input_field))
+    iterable_field = spec.iterable_input_field
+    items = list(getattr(inputs, iterable_field))
     if not items:
-        pytest.skip(f"{spec.key}: example_input() has no items in {spec.iterable_input_field!r}")
-    return inputs.model_copy(update={spec.iterable_input_field: [items[0]] * n})
+        pytest.skip(f"{spec.key}: example_input() has no items in {iterable_field!r}")
+    update: dict[str, Any] = {iterable_field: [items[0]] * n}
+    for field_name in type(inputs).model_fields:
+        if field_name == iterable_field:
+            continue
+        value = getattr(inputs, field_name)
+        if isinstance(value, list) and len(value) == len(items):
+            update[field_name] = [value[0]] * n
+    return inputs.model_copy(update=update)
 
 
 def _item_fingerprint(item: Any) -> str:
-    """Canonical string fingerprint of an output iterable item, for set-based distinctness checks."""
-    if hasattr(item, "model_dump"):
-        return json.dumps(item.model_dump(), sort_keys=True, default=str)
-    return json.dumps(item, sort_keys=True, default=str)
+    """Canonical string fingerprint of an output iterable item, for set-based distinctness checks.
+
+    Recurses into list/tuple/dict containers and dumps nested Pydantic models so the
+    fingerprint reflects model *content*. Without this, an item that is a *list* of
+    models (e.g. fampnn-pack's ``[Structure]``) would stringify via ``repr`` — and a
+    content-free ``Structure(...)`` repr makes genuinely-distinct outputs collapse to
+    one fingerprint.
+    """
+
+    def _canonical(obj: Any) -> Any:
+        if hasattr(obj, "model_dump"):
+            return obj.model_dump()
+        if isinstance(obj, (list, tuple)):
+            return [_canonical(x) for x in obj]
+        if isinstance(obj, dict):
+            return {k: _canonical(v) for k, v in obj.items()}
+        return obj
+
+    return json.dumps(_canonical(item), sort_keys=True, default=str)
 
 
 @pytest.mark.extensive
