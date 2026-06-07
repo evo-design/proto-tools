@@ -9,6 +9,9 @@ pip install uv
 echo "Installing Python dependencies..."
 uv pip install -r requirements.txt
 
+# minced is a Java wrapper script that exec's `java -jar minced.jar`.
+"$MAMBA_BIN" install -p "$VENV_PATH" -c conda-forge -y openjdk
+
 echo "Downloading MinCED..."
 # Walk up from this script's directory to find utils/install_binary.py
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
