@@ -2,4 +2,4 @@ github: https://github.com/RosettaCommons/foundry
 preprint: https://www.biorxiv.org/content/10.1101/2025.08.14.670328v2
 weights: https://github.com/RosettaCommons/foundry/tree/production/models/rf3
 organizations:
-  - Institute for Protein Design (UW)
+  - Institute for Protein Design
