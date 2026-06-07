@@ -107,7 +107,7 @@ def to_device(device: str) -> dict[str, Any]:
 
 def get_memory_stats() -> dict[str, Any]:
     """CPU tool — no GPU memory tracking."""
-    return {"available": False, "framework": "cpu", "note": "CPU tool"}
+    return {"available": False, "framework": "cpu", "reason": "CPU tool"}
 
 
 if __name__ == "__main__":

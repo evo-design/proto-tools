@@ -873,7 +873,7 @@ def to_device(device: str) -> dict[str, Any]:
 
 def get_memory_stats() -> dict[str, Any]:
     """CPU-only tool — no GPU memory stats."""
-    return {"available": False, "framework": "cpu", "note": "CPU tool"}
+    return {"available": False, "framework": "cpu", "reason": "CPU tool"}
 
 
 # ============================================================================

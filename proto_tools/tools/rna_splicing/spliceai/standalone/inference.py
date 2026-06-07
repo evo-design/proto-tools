@@ -192,7 +192,7 @@ def to_device(device: str) -> dict[str, Any]:
 
 def get_memory_stats() -> dict[str, Any]:
     """Report memory usage (called by DeviceManager). TF stats are not tracked."""
-    return {"available": False, "framework": "tensorflow"}
+    return {"available": False, "framework": "tensorflow", "reason": "TensorFlow memory stats not tracked"}
 
 
 if __name__ == "__main__":
