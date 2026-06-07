@@ -41,7 +41,7 @@ def run_miranda(
         scale: scaling factor for 5' seed-region matches (-scale).
         gap_open: gap-open penalty, <= 0 (-go).
         gap_extend: gap-extension penalty, <= 0 (-ge).
-        strict: when False, pass -loose to drop the strict 5' duplex heuristics.
+        strict: when True, pass -strict to enforce the strict 5' duplex heuristics.
         compute_energy: when False, pass -noenergy to skip folding.
         trim: when > 0, trim reference sequences to this length (-trim).
 
@@ -73,8 +73,8 @@ def run_miranda(
             "-ge",
             str(gap_extend),
         ]
-        if not strict:
-            argv.append("-loose")
+        if strict:
+            argv.append("-strict")
         if not compute_energy:
             argv.append("-noenergy")
         if trim > 0:

@@ -1,4 +1,4 @@
-github: https://github.com/hacktrackgnulinux/miranda
+github: https://github.com/bioconda/bioconda-recipes/tree/master/recipes/miranda
 paper: https://doi.org/10.1186/gb-2003-5-1-r1
 organizations:
   - Memorial Sloan Kettering Cancer Center

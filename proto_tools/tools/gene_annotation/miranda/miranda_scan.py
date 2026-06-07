@@ -210,7 +210,7 @@ class MirandaConfig(BaseConfig):
         scale (float): Contrast scaling on the microRNA 5' seed region (``-scale``).
         gap_open (int): Penalty for opening an alignment gap; negative (``-go``).
         gap_extend (int): Per-position penalty for extending a gap; negative (``-ge``).
-        strict (bool): Apply strict miRNA:target duplex base-pairing heuristics; ``-loose`` when False.
+        strict (bool): Apply strict miRNA:target duplex base-pairing heuristics; ``-strict`` when True.
         compute_energy (bool): Compute ViennaRNA free energy; ``-noenergy`` when False.
         trim (int): Trim targets to this many nucleotides; 0 disables (``-trim``).
     """
@@ -246,8 +246,8 @@ class MirandaConfig(BaseConfig):
     )
     strict: bool = ConfigField(
         title="Strict Heuristics",
-        default=True,
-        description="Strict miRNA:target base-pairing heuristics; `-loose` disables them for more, noisier hits",
+        default=False,
+        description="Strict miRNA:target 5'-seed heuristics (`-strict`); enable for fewer, higher-confidence sites",
     )
     compute_energy: bool = ConfigField(
         title="Compute Energy",
@@ -411,16 +411,16 @@ def _parse_miranda_output(stdout: str, mirna_ids: list[str]) -> dict[int, list[M
         if not line.startswith(">") or line.startswith(">>"):
             continue
 
-        # A malformed single-`>` line means miRanda's output format drifted.
+        # `>` hit fields: query_id, ref_id, score, energy, qpos, rpos, len, identity%, similarity%.
         fields = line.split("\t")
-        if len(fields) < 10:
-            raise RuntimeError(f"miranda-scan: malformed hit line (expected >=10 tab fields): {line!r}")
+        if len(fields) < 9:
+            raise RuntimeError(f"miranda-scan: malformed hit line (expected >=9 tab fields): {line!r}")
         mirna_idx = _internal_index(fields[0][1:], "q")
         target_idx = _internal_index(fields[1], "t")
         if mirna_idx is None or target_idx is None:
             raise RuntimeError(f"miranda-scan: unrecognized internal id in hit line: {line!r}")
-        mirna_start, mirna_end = (int(x) for x in fields[5].split())
-        target_start, target_end = (int(x) for x in fields[6].split())
+        mirna_start, mirna_end = (int(x) for x in fields[4].split())
+        target_start, target_end = (int(x) for x in fields[5].split())
         site = MirandaTargetSite(
             mirna_id=mirna_ids[mirna_idx],
             score=float(fields[2]),
@@ -429,9 +429,9 @@ def _parse_miranda_output(stdout: str, mirna_ids: list[str]) -> dict[int, list[M
             mirna_end=mirna_end,
             target_start=target_start,
             target_end=target_end,
-            alignment_length=int(fields[7]),
-            identity=float(fields[8].rstrip("%")),
-            similarity=float(fields[9].rstrip("%")),
+            alignment_length=int(fields[6]),
+            identity=float(fields[7].rstrip("%")),
+            similarity=float(fields[8].rstrip("%")),
             mirna_alignment=pending.get("mirna_alignment", ""),
             pairing=pending.get("pairing", ""),
             target_alignment=pending.get("target_alignment", ""),

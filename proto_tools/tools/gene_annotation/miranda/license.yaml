@@ -1,11 +1,11 @@
 code:
   spdx: GPL-2.0
-  url: https://github.com/hacktrackgnulinux/miranda/blob/master/COPYING
+  url: https://github.com/bioconda/bioconda-recipes/blob/master/recipes/miranda/meta.yaml
 commercial_use: 'yes'
 redistribution: false
 attribution_required: false
 bundled_dependencies:
   - name: ViennaRNA RNAlib (bundled, v1.5b)
     tool: structure_prediction/viennarna
-notes: 'miRanda bundles ViennaRNA RNAlib v1.5b (custom ViennaRNA license) for duplex free-energy calculation; miRanda''s own code is GPL-2.0. Statistical shuffling / Z-score support is non-functional in this fork and is not exposed by the wrapper.'
-last_updated: '2026-06-01'
+notes: 'miRanda bundles ViennaRNA RNAlib v1.5b (custom ViennaRNA license) for duplex free-energy calculation; miRanda''s own code is GPL-2.0. Binary installed from bioconda. Statistical shuffling / Z-score support is non-functional upstream and is not exposed by the wrapper.'
+last_updated: '2026-06-06'

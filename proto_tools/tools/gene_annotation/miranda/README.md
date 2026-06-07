@@ -15,7 +15,7 @@
 
 ## Overview
 
-[miRanda](https://github.com/hacktrackgnulinux/miranda) is a microRNA target-site prediction program written by Enright et al. at Memorial Sloan Kettering Cancer Center. It predicts where a microRNA binds an RNA or DNA target by combining a complementarity-based local alignment with a thermodynamic estimate of the resulting duplex's stability, and returns each predicted site with its score, free energy, alignment, and coordinates. This makes it useful for nominating candidate microRNA targets in 3'UTRs and other transcript regions ahead of experimental validation.
+[miRanda](https://github.com/bioconda/bioconda-recipes/tree/master/recipes/miranda) is a microRNA target-site prediction program written by Enright et al. at Memorial Sloan Kettering Cancer Center. It predicts where a microRNA binds an RNA or DNA target by combining a complementarity-based local alignment with a thermodynamic estimate of the resulting duplex's stability, and returns each predicted site with its score, free energy, alignment, and coordinates. This makes it useful for nominating candidate microRNA targets in 3'UTRs and other transcript regions ahead of experimental validation.
 
 ## Background
 
@@ -25,7 +25,6 @@ miRanda ([Enright et al., 2003](https://doi.org/10.1186/gb-2003-5-1-r1)) address
 
 ### Learning Resources
 
-- [hacktrackgnulinux/miranda](https://github.com/hacktrackgnulinux/miranda) (maintained fork) - the source repository, with the canonical command-line flag surface and build instructions.
 - [miRBase](https://www.mirbase.org/) (Griffiths-Jones et al.) - the reference registry of published microRNA sequences and names, and the standard place to obtain the microRNA queries you scan with.
 
 ## Tools
@@ -41,7 +40,7 @@ Use this to nominate candidate microRNA target sites in a transcript before comm
 #### Usage Tips
 
 - **`score_threshold` and `energy_threshold` set the sensitivity-versus-specificity trade-off.** Lowering **score_threshold** below the default of 50 and raising **energy_threshold** toward 0 from the default of -20 kcal/mol both admit weaker sites and recover more candidates at the cost of more false positives; tighten them in the other direction for high-confidence calls.
-- **Disable `strict` for more sensitivity.** **strict** applies stringent miRNA:target duplex base-pairing heuristics by default; turning it off (`-loose`) is less conservative and surfaces additional, lower-confidence sites.
+- **Enable `strict` for higher confidence.** **strict** defaults to off; turning it on passes `-strict` for stringent miRNA:target 5'-seed duplex heuristics that drop noisier, lower-confidence hits.
 - **Disable `compute_energy` for a much faster score-only scan.** **compute_energy** runs the ViennaRNA free-energy phase by default; turning it off skips that phase entirely (the reported energy is then 0.0), which is useful for quick large-scale complementarity sweeps where ΔG ranking is not yet needed.
 - **All reported positions are 1-indexed and inclusive** on both the target and the microRNA, matching biological coordinate conventions.
 
@@ -53,4 +52,4 @@ These apply to every miRanda tool in this toolkit (`miranda-scan`).
 
 - **microRNA queries are user-supplied.** miRanda does not ship a microRNA database; obtain query sequences from [miRBase](https://www.mirbase.org/) (or your own designs) and pass them as `mirna_queries`.
 - **Target sequences should be mRNAs or 3'UTRs, not whole genomes.** The aligner builds a query-by-target dynamic-programming matrix, so memory scales with target length. Scan transcript-scale sequences, and use `trim` to cap very long targets rather than feeding whole chromosomes.
-- **Statistical shuffling and Z-scores are not supported in this fork.** The randomization-based Z-score significance machinery is non-functional upstream and is not exposed by the wrapper; rank candidates by score and free energy instead.
+- **Statistical shuffling and Z-scores are not supported.** The randomization-based Z-score significance machinery is non-functional upstream and is not exposed by the wrapper; rank candidates by score and free energy instead.

@@ -31,7 +31,7 @@ SAMPLE_STDOUT = (
     "   Ref:      5' uaguuuucacAAUGAUCUCGG 3'\n"
     "   Energy:  -20.470000 kCal/Mol\n"
     "Scores for this hit:\n"
-    ">q0\tt0\t165.00\t-20.47\t0.00\t1 16\t100 117\t16\t75.00%\t87.50%\n"
+    ">q0\tt0\t165.00\t-20.47\t1 16\t100 117\t16\t75.00%\t87.50%\n"
     ">>q0\tt0\t165.00\t-20.47\t165.00\t-20.47\t1\t21\t2282\t100\n"
 )
 
@@ -57,8 +57,8 @@ def test_parse_extracts_all_fields_and_ignores_summary_line():
 def test_parse_groups_hits_by_target_index():
     """`q{i}`/`t{j}` ids map back to positional indices, bucketing hits per target."""
     stdout = (
-        ">q0\tt0\t150.00\t-18.00\t0.00\t1 16\t100 117\t16\t70.00%\t80.00%\n"
-        ">q0\tt1\t140.00\t-15.00\t0.00\t2 17\t200 216\t15\t65.00%\t78.00%\n"
+        ">q0\tt0\t150.00\t-18.00\t1 16\t100 117\t16\t70.00%\t80.00%\n"
+        ">q0\tt1\t140.00\t-15.00\t2 17\t200 216\t15\t65.00%\t78.00%\n"
     )
     sites = _parse_miranda_output(stdout, ["miR-bantam"])
 
@@ -82,8 +82,8 @@ def test_parse_malformed_hit_line_raises():
 def test_parse_unrecognized_internal_id_raises():
     """A well-formed `>` line whose ids aren't the wrapper's q{i}/t{j} surfaces as an error."""
     with pytest.raises(RuntimeError):
-        # 10 tab fields (passes the field-count guard) but ids lack the q/t prefix.
-        _parse_miranda_output(">x0\ty0\t165.00\t-20.47\t0.00\t1 16\t100 117\t16\t75.00%\t87.50%\n", ["miR-bantam"])
+        # 9 tab fields (passes the field-count guard) but ids lack the q/t prefix.
+        _parse_miranda_output(">x0\ty0\t165.00\t-20.47\t1 16\t100 117\t16\t75.00%\t87.50%\n", ["miR-bantam"])
 
 
 # -- FASTA reader (example loading) -----------------------------------------
