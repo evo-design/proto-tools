@@ -4,6 +4,7 @@ LigandMPNN sampling tool.
 """
 
 import logging
+import math
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
@@ -285,7 +286,10 @@ def run_ligandmpnn_sample(
                     designed=designed,
                     metrics=LigandMPNNDesignMetrics(
                         sequence_recovery=recovery,
-                        ligand_interface_sequence_recovery=interface_recovery,
+                        # Foundry returns NaN when no ligand interface; route to None so the conditional key is dropped.
+                        ligand_interface_sequence_recovery=(
+                            interface_recovery if math.isfinite(interface_recovery) else None
+                        ),
                     ),
                 )
             )
