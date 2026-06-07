@@ -281,7 +281,7 @@ in full in `notes/device-management.md`.
 
 ## Timeouts
 
-Every tool call enforces a timeout, default 600 seconds (`DEFAULT_TIMEOUT`,
+Every tool call enforces a timeout, default 3600 seconds (`DEFAULT_TIMEOUT`,
 overridable per call via the `timeout` config field). The timeout bounds the
 **entire** wait for the worker's response — including any third-party or native
 output written to the worker's stdout, not just the first byte. If a call exceeds

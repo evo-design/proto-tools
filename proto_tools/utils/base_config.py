@@ -17,7 +17,7 @@ from proto_tools.utils.tool_io import (
     _require_title_and_description,
 )
 
-DEFAULT_TIMEOUT = 600  # seconds
+DEFAULT_TIMEOUT = 3600  # seconds (generous default; heavy GPU tools need headroom under load)
 RANDOM_SEED_UPPER_BOUND = 2**31
 
 

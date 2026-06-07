@@ -18,6 +18,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from proto_tools.utils.base_config import DEFAULT_TIMEOUT
 from proto_tools.utils.tool_instance import (
     ToolInstance,
     _active_cache,
@@ -264,7 +265,7 @@ def test_dispatch_runs_oneshot_when_no_cache(mock_init: MagicMock, mock_oneshot:
         {"op": "score", "device": "cuda"},
         script_path=None,
         verbose=False,
-        timeout=600,
+        timeout=DEFAULT_TIMEOUT,
     )
 
 
@@ -280,7 +281,7 @@ def test_dispatch_uses_cached_instance(mock_init: MagicMock):
         {"op": "score", "device": "cuda"},
         script_path=None,
         verbose=False,
-        timeout=600,
+        timeout=DEFAULT_TIMEOUT,
         reload_on=None,
     )
 
@@ -322,7 +323,7 @@ def test_dispatch_with_tool_instance_object():
         {"op": "score"},
         script_path=None,
         verbose=False,
-        timeout=600,
+        timeout=DEFAULT_TIMEOUT,
         reload_on=None,
     )
 
@@ -341,7 +342,7 @@ def test_dispatch_passes_script_path(mock_init: MagicMock):
         {},
         script_path="/custom/script.py",
         verbose=True,
-        timeout=600,
+        timeout=DEFAULT_TIMEOUT,
         reload_on=set(),
     )
 
@@ -837,7 +838,7 @@ def test_dispatch_forwards_input_dict_to_oneshot(mock_oneshot: MagicMock):
         {"op": "score", "device": "cuda"},
         script_path=None,
         verbose=False,
-        timeout=600,
+        timeout=DEFAULT_TIMEOUT,
     )
 
 
@@ -851,7 +852,7 @@ def test_dispatch_without_device_in_input_dict(mock_oneshot: MagicMock):
         {"op": "search"},
         script_path=None,
         verbose=False,
-        timeout=600,
+        timeout=DEFAULT_TIMEOUT,
     )
 
 
@@ -964,7 +965,7 @@ def test_dispatch_derives_reload_on_from_config(mock_init: MagicMock):
         {"op": "score", "device": "cpu"},
         script_path=None,
         verbose=cfg.verbose,
-        timeout=600,
+        timeout=DEFAULT_TIMEOUT,
         reload_on={"model_checkpoint"},
     )
 
@@ -1107,8 +1108,8 @@ def test_dispatch_uses_effective_timeout_override(mock_init: MagicMock, mock_one
 
 @patch.object(ToolInstance, "_oneshot")
 @patch.object(ToolInstance, "__init__", return_value=None)
-def test_dispatch_defaults_timeout_to_600(mock_init: MagicMock, mock_oneshot: MagicMock):
-    """dispatch() should default timeout to 600 when not in input_dict."""
+def test_dispatch_defaults_timeout_to_default(mock_init: MagicMock, mock_oneshot: MagicMock):
+    """dispatch() should default timeout to DEFAULT_TIMEOUT when not in input_dict."""
     mock_oneshot.return_value = {"result": "ok"}
     ToolInstance.dispatch("esm2", {"op": "score"})
     mock_oneshot.assert_called_once_with(
@@ -1116,7 +1117,7 @@ def test_dispatch_defaults_timeout_to_600(mock_init: MagicMock, mock_oneshot: Ma
         {"op": "score"},
         script_path=None,
         verbose=False,
-        timeout=600,
+        timeout=DEFAULT_TIMEOUT,
     )
 
 

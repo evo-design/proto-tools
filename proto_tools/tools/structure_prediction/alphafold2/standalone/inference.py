@@ -295,6 +295,8 @@ class AlphaFold2Model:
             os.environ["JAX_PLATFORMS"] = "cpu"
         elif device.startswith("cuda") and ":" in device:
             os.environ["CUDA_VISIBLE_DEVICES"] = device.split(":")[1]
+            # CUDA_VISIBLE_DEVICES isolates us to one GPU, which JAX re-indexes to cuda:0.
+            device = "cuda:0"
 
         germinal_dir = os.path.join(
             os.environ.get("TOOL_VENV_PATH", os.environ.get("VIRTUAL_ENV", "")),
@@ -679,6 +681,9 @@ class AlphaFold2Model:
 
     def to_device(self, device: str, verbose: bool = False) -> None:
         """Switch target device for future model cache entries."""
+        # If load() isolated us via CUDA_VISIBLE_DEVICES, any cuda:N maps to the sole visible cuda:0.
+        if os.environ.get("CUDA_VISIBLE_DEVICES") and device.startswith("cuda") and ":" in device:
+            device = "cuda:0"
         if self.device == device:
             return
 
