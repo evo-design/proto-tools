@@ -599,7 +599,7 @@ class GerminalConfig(BaseConfig):
 
     @classmethod
     def minimal(cls, **kwargs: Any) -> GerminalConfig:
-        """Smoke-test config: 2 trajectories, 1 passing design.
+        """Smoke-test config: 2 trajectories, 1 passing design, reduced optimization steps.
 
         Args:
             **kwargs (Any): Field values; take precedence over the smoke defaults.
@@ -610,6 +610,15 @@ class GerminalConfig(BaseConfig):
         kwargs.setdefault("max_trajectories", 2)
         kwargs.setdefault("max_hallucinated_trajectories", 1)
         kwargs.setdefault("max_passing_designs", 1)
+        # Merge per-key so a caller's extra overrides augment (not replace) the cheap
+        # step caps; an explicit same-key value still wins.
+        kwargs["germinal_overrides"] = {
+            "logits_steps": 20,
+            "softmax_steps": 4,
+            "search_steps": 1,
+            "num_seqs": 2,
+            **kwargs.get("germinal_overrides", {}),
+        }
         return super().minimal(**kwargs)  # type: ignore[return-value]
 
 
