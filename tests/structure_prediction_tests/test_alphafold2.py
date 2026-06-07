@@ -363,6 +363,75 @@ def test_prediction_dispatch_contract(monkeypatch):
     assert plddt is not None and all(0.0 <= v <= 1.0 for v in plddt)
 
 
+def test_heteromultimer_msa_dispatch_payload(monkeypatch):
+    """Heteromultimer with caller-supplied paired MSAs flows per-chain A3Ms (not just chain 0)."""
+    from proto_tools.entities.msa import MSA
+    from proto_tools.tools.structure_prediction.shared_data_models import ComplexMSAs
+
+    captured: list[dict] = []
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        captured.append(payload)
+        return {"pdb": _EXAMPLE_PDB, "avg_plddt": 0.85, "ptm": 0.72, "iptm": 0.6, "avg_pae": 1.5, "pae": None}
+
+    monkeypatch.setattr(
+        "proto_tools.tools.structure_prediction.alphafold2.alphafold2.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+
+    # Two distinct chains (heteromultimer), each with a paired (row-aligned) MSA of depth 2.
+    msa_a = MSA.from_fasta_string(">qA\nMKTLAV\n>hA1\nMKTRAV\n")
+    msa_b = MSA.from_fasta_string(">qB\nGARYTW\n>hB1\nGARYTM\n")
+    complex_msas = ComplexMSAs(per_chain={0: msa_a, 1: msa_b}, paired=True)
+
+    run_alphafold2(
+        AlphaFold2Input(complexes=[["MKTLAV", "GARYTW"]], msas=[complex_msas]),
+        AlphaFold2Config(use_msa=False, device="cpu"),
+    )
+
+    payload = captured[0]
+    assert payload["msa_a3m_content"] is None, (
+        "Heteromultimer path must NOT pack a single combined A3M — per_chain_msas_a3m carries the work"
+    )
+    assert payload["is_paired"] is True
+    per_chain_a3m = payload["per_chain_msas_a3m"]
+    assert per_chain_a3m is not None and len(per_chain_a3m) == 2, "two-chain complex → two A3Ms"
+    assert per_chain_a3m[0] is not None and "MKTLAV" in per_chain_a3m[0]
+    assert per_chain_a3m[1] is not None and "GARYTW" in per_chain_a3m[1]
+
+
+def test_homooligomer_uses_single_a3m_dispatch_path(monkeypatch):
+    """Homo-oligomer takes the single-A3M path (ColabDesign expands via copies=N)."""
+    from proto_tools.entities.msa import MSA
+    from proto_tools.tools.structure_prediction.shared_data_models import ComplexMSAs
+
+    captured: list[dict] = []
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        captured.append(payload)
+        return {"pdb": _EXAMPLE_PDB, "avg_plddt": 0.85, "ptm": 0.72, "iptm": 0.6, "avg_pae": 1.5, "pae": None}
+
+    monkeypatch.setattr(
+        "proto_tools.tools.structure_prediction.alphafold2.alphafold2.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+
+    seq = "MKTLAV"
+    msa = MSA.from_fasta_string(f">q\n{seq}\n>h\nMKTRAV\n")
+    complex_msas = ComplexMSAs(per_chain={0: msa, 1: msa}, paired=False)
+
+    run_alphafold2(
+        AlphaFold2Input(complexes=[[seq, seq]], msas=[complex_msas]),
+        AlphaFold2Config(use_msa=False, device="cpu"),
+    )
+
+    payload = captured[0]
+    assert payload["per_chain_msas_a3m"] is None, "homo-oligomer must NOT use per-chain path"
+    assert payload["msa_a3m_content"] is not None and seq in payload["msa_a3m_content"], (
+        "homo-oligomer should pass chain 0's MSA as a single A3M for ColabDesign to expand"
+    )
+
+
 # -- GPU integration tests -----------------------------------------------------
 
 

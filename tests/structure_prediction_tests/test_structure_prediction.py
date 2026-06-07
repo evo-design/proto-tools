@@ -159,6 +159,23 @@ def _is_compatible_input_for_test(complexes, input_class) -> bool:
     return not (_has_modifications(complexes) and not input_class.ALLOWS_CHAIN_MODIFICATIONS)
 
 
+def _uniref30_skip_reason() -> str | None:
+    """Skip reason when UniRef30-2302 isn't provisioned; ``None`` if present.
+
+    Local MSA-search variants need the full ColabFold ``uniref30-2302`` DB on
+    disk under ``$PROTO_DATABASES_DIR`` (or the registry fallback). On systems
+    without it (e.g. CI), local-mode tests skip with a clear reason rather
+    than triggering a ~625 GB provisioning download.
+    """
+    cache = get_dataset_dir("uniref30-2302")
+    if not (cache / "uniref30_2302_db.idx_pad.dbtype").exists():
+        return (
+            f"uniref30-2302 not provisioned at {cache}; local-search variants need ~625 GB "
+            "of indexed DB (run setup_databases.py)."
+        )
+    return None
+
+
 def _generate_test_params() -> list:
     """Generate all valid test parameter combinations.
 
@@ -169,8 +186,13 @@ def _generate_test_params() -> list:
     - Input class SUPPORTED_ENTITY_TYPES
     - Input class ALLOWS_CHAIN_MODIFICATIONS
     - MSA support
+
+    For MSA-capable predictors, generates three variants: cloud (``remote``)
+    search, on-disk (``local``) search against UniRef30-2302, and ``without_msa``.
+    The ``local`` variant skips when UniRef30 isn't provisioned.
     """
     params = []
+    uniref30_skip = _uniref30_skip_reason()
 
     for predictor_name, (_, input_class, config_class, _output_class) in _STRUCTURE_PREDICTORS.items():
         for test_name, complexes in _TEST_COMPLEXES.items():
@@ -182,22 +204,25 @@ def _generate_test_params() -> list:
 
             # Generate MSA variants if supported
             if supports_msa:
-                marks = []
-                if predictor_name not in _FAST_PREDICTORS:
-                    marks.append(pytest.mark.slow)
-                if skip_reason:
-                    marks.append(pytest.mark.skip(reason=skip_reason))
+                for msa_search_mode in ("remote", "local"):
+                    marks = []
+                    if predictor_name not in _FAST_PREDICTORS:
+                        marks.append(pytest.mark.slow)
+                    if skip_reason:
+                        marks.append(pytest.mark.skip(reason=skip_reason))
+                    if msa_search_mode == "local" and uniref30_skip:
+                        marks.append(pytest.mark.skip(reason=uniref30_skip))
 
-                params.append(
-                    pytest.param(
-                        test_name,
-                        predictor_name,
-                        True,  # use_msa
-                        "remote",  # msa_search_mode
-                        id=f"{test_name}-{predictor_name}-with_msa-remote",
-                        marks=tuple(marks) if marks else (),
+                    params.append(
+                        pytest.param(
+                            test_name,
+                            predictor_name,
+                            True,  # use_msa
+                            msa_search_mode,
+                            id=f"{test_name}-{predictor_name}-with_msa-{msa_search_mode}",
+                            marks=tuple(marks) if marks else (),
+                        )
                     )
-                )
 
             # Collect marks for the without_msa variant (all predictors support this)
             marks = []
@@ -638,7 +663,6 @@ def _local_paired_msas(tmp_path_factory):
     return msa_l7l12, msa_l10
 
 
-# AlphaFold2's MSA path is single-chain-only ("MSA not yet supported for multi-chain complexes"); it gets a 1-chain complex and only the unpaired variant.
 _SUPPLIED_MSA_PREDICTORS = {
     "alphafold2": (run_alphafold2, AlphaFold2Input, AlphaFold2Config),
     "alphafold3": (run_alphafold3, AlphaFold3Input, AlphaFold3Config),
@@ -655,9 +679,7 @@ _AFFINITY_LIGAND_SMILES = "c1cc(ccc1C[C@@H](C(=O)O)N)O"
 
 
 def _build_test_complex(predictor_name: str) -> Complex:
-    """Build the test complex: L7/L12 + L10 for most predictors; L7/L12 only for AF2; + TYR ligand for boltz2-affinity."""
-    if predictor_name == "alphafold2":
-        return Complex(chains=[_L7L12_SEQ])
+    """Build the test complex: L7/L12 + L10 for all predictors; + TYR ligand for boltz2-affinity."""
     chains: list = [_L7L12_SEQ, _L10_SEQ]
     if predictor_name == "boltz2-affinity":
         chains.append(Fragment(smiles=_AFFINITY_LIGAND_SMILES))
@@ -665,12 +687,11 @@ def _build_test_complex(predictor_name: str) -> Complex:
 
 
 def _generate_supplied_msa_params() -> list:
-    """Cross-product (predictor x pairing-mode); AF2 gets unpaired-only; skip AF3 variants when weights missing."""
+    """Cross-product (predictor x pairing-mode); skip AF3 variants when weights missing."""
     params: list = []
     for predictor_name in _SUPPLIED_MSA_PREDICTORS:
         weights_skip = _missing_weights_skip_reason(predictor_name)
-        pairing_modes = (False,) if predictor_name == "alphafold2" else (False, True)
-        for paired in pairing_modes:
+        for paired in (False, True):
             marks: list = []
             if weights_skip:
                 marks.append(pytest.mark.skip(reason=weights_skip))
@@ -716,7 +737,7 @@ def test_locally_searched_msa_drives_end_to_end_prediction(
     run_func, input_class, config_class = _SUPPLIED_MSA_PREDICTORS[predictor_name]
 
     msa_l7l12, msa_l10 = _local_paired_msas if paired else _local_unpaired_msas
-    per_chain = {0: msa_l7l12} if predictor_name == "alphafold2" else {0: msa_l7l12, 1: msa_l10}
+    per_chain = {0: msa_l7l12, 1: msa_l10}
     complex_msas = ComplexMSAs(per_chain=per_chain, paired=paired)
 
     comp = _build_test_complex(predictor_name)
