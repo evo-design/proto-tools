@@ -305,26 +305,25 @@ def _run_tracr_batch(
                 f"crispr-tracr-rna: batch {batch_idx} CRISPRtracrRNA.py timed out after {max(600, len(sequences) * 120)}s"
             ) from e
 
-        if proc.returncode != 0:
-            stderr_tail = (proc.stderr or "").strip().splitlines()
-            logger.warning(
-                "crispr-tracr-rna: batch %d CRISPRtracrRNA.py failed (exit %d): %s",
-                batch_idx,
-                proc.returncode,
-                " | ".join(stderr_tail) or "<no stderr>",
-            )
-
+        stderr_tail = (proc.stderr or "").strip().splitlines()
         results = _parse_tracr_results(output_dir, sequence_ids)
 
-        if proc.returncode != 0 and not any(r["candidates"] for r in results):
-            # CRISPRtracrRNA can crash on sequences where fasta36 finds no
-            # anti-repeat hits (IndexError in anti_repeat_search.py). Expected
-            # for some generated sequences — treat as "no tracrRNA found".
-            logger.warning(
-                "crispr-tracr-rna: batch %d produced no results (exit %d); treating as no tracrRNA found",
-                batch_idx,
-                proc.returncode,
-            )
+        if proc.returncode != 0:
+            # Salvage partial output if upstream crashed mid-batch; raise if nothing salvaged.
+            if any(r["candidates"] for r in results):
+                logger.warning(
+                    "crispr-tracr-rna: batch %d CRISPRtracrRNA.py failed (exit %d) "
+                    "but partial results were salvaged: %s",
+                    batch_idx,
+                    proc.returncode,
+                    " | ".join(stderr_tail) or "<no stderr>",
+                )
+            else:
+                raise RuntimeError(
+                    f"crispr-tracr-rna: batch {batch_idx} CRISPRtracrRNA.py failed "
+                    f"(exit {proc.returncode}) with no salvageable output: "
+                    f"{' | '.join(stderr_tail) or '<no stderr>'}"
+                )
 
     return results
 
@@ -417,6 +416,12 @@ def run_crispr_tracr_rna(input_data: dict[str, Any]) -> dict[str, Any]:
                 ]
 
     if batch_errors:
+        # All batches failing means infrastructure failure, not partial-skip — raise.
+        if len(batch_errors) == len(batches):
+            raise RuntimeError(
+                f"crispr-tracr-rna: all {len(batches)} batches failed; "
+                f"check earlier batch error logs for the underlying cause"
+            )
         logger.warning(
             "crispr-tracr-rna: %d/%d batches failed: %s",
             len(batch_errors),

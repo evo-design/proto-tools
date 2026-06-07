@@ -135,25 +135,14 @@ def _run_single_minced(sequence: str, seq_id: str, config: dict[str, Any]) -> di
 
         try:
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-        except subprocess.TimeoutExpired:
-            logger.warning("minced: %s timed out after 120s; returning empty arrays", seq_id)
-            return {
-                "sequence_id": seq_id,
-                "crispr_arrays": [],
-            }
+        except subprocess.TimeoutExpired as e:
+            raise RuntimeError(f"minced: {seq_id} timed out after 120s") from e
 
         if proc.returncode != 0:
             stderr_tail = (proc.stderr or "").strip().splitlines()
-            logger.warning(
-                "minced: %s failed (exit %d): %s; returning empty arrays",
-                seq_id,
-                proc.returncode,
-                " | ".join(stderr_tail) or "<no stderr>",
+            raise RuntimeError(
+                f"minced: {seq_id} failed (exit {proc.returncode}): {' | '.join(stderr_tail) or '<no stderr>'}"
             )
-            return {
-                "sequence_id": seq_id,
-                "crispr_arrays": [],
-            }
 
         arrays_data = _process_minced_output(proc.stdout)
         crispr_arrays = [{"repeats_and_spacers": array} for array in arrays_data]
