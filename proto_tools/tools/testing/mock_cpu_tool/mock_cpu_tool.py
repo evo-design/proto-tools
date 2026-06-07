@@ -131,7 +131,7 @@ def example_input() -> Any:
     description="Pure-stdlib CPU mock tool for ToolPool CPU fan-out integration tests",
     uses_gpu=False,
     example_input=example_input,
-    iterable_input_field="items",
+    iterable_input_fields=["items"],
     iterable_output_field="results",
 )
 def run_mock_cpu_tool(

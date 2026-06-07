@@ -206,7 +206,7 @@ def example_input() -> Any:
     output_class=PromoterCalculatorOutput,
     description="Predict E. coli sigma70 promoter strength (dG and Tx rate) on DNA sequences",
     example_input=example_input,
-    iterable_input_field="sequences",
+    iterable_input_fields=["sequences"],
     iterable_output_field="results",
     cacheable=True,
 )

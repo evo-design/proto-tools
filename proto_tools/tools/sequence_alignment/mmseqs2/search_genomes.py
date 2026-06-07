@@ -284,7 +284,7 @@ def example_input() -> Any:
     output_class=Mmseqs2SearchGenomesOutput,
     description="Execute nucleotide genome-to-genome search workflow",
     example_input=example_input,
-    iterable_input_field="query_genomes",
+    iterable_input_fields=["query_genomes"],
     iterable_output_field="results",
     cacheable=True,
 )

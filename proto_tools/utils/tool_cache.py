@@ -6,7 +6,7 @@ This module provides program-scoped caching capabilities for tools. Caching is
 enabled by setting ``cacheable=True`` on the ``@tool()`` decorator, which
 auto-selects the strategy:
 
-- **Iterable tools** (have ``iterable_input_field``) → per-item cache
+- **Iterable tools** (have ``iterable_input_fields``) → per-item cache
   (strip cached items, dispatch uncached only, stitch results back).
 - **Non-iterable tools** → whole-output cache (hash full inputs + config).
 

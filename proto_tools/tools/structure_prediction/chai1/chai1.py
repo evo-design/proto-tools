@@ -266,7 +266,7 @@ def example_input() -> Any:
     description="Multi-modal structure prediction using Chai1",
     uses_gpu=True,
     example_input=example_input,
-    iterable_input_field="complexes",
+    iterable_input_fields=["complexes", "msas"],
     iterable_output_field="structures",
     cacheable=True,
     stochastic=True,

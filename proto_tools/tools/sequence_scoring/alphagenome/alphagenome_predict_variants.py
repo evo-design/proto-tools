@@ -150,7 +150,7 @@ def example_input() -> Any:
     uses_gpu=True,
     gpu_only=True,  # worker can't safely be reused
     example_input=example_input,
-    iterable_input_field="variants",
+    iterable_input_fields=["variants"],
     iterable_output_field="results",
     cacheable=True,
 )

@@ -188,7 +188,7 @@ def example_input() -> Any:
     description="Sample nucleotide sequences by filling masked positions with random bases from an IUPAC substitution scheme",
     uses_gpu=False,
     example_input=example_input,
-    iterable_input_field="sequences",
+    iterable_input_fields=["sequences"],
     iterable_output_field="sequences",
     cacheable=False,
     stochastic=True,

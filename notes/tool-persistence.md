@@ -237,9 +237,12 @@ with ToolPool(gpus="all"):              # or gpus=2, or gpus=["cuda:0", "cuda:1"
 
 ### What gets partitioned
 
-Only tools that declare an `iterable_input_field` are partitioned (e.g.
-`complexes` for ESMFold, `sequences` for ESM2), and a tool with a single
-indivisible input runs on one device regardless of pool size. A config may set
+Only tools that declare `iterable_input_fields` are partitioned (e.g.
+`["complexes"]` for ESMFold, `["sequences"]` for ESM2), and a tool with a single
+indivisible input runs on one device regardless of pool size. `iterable_input_fields`
+is a list (primary first): when an input carries index-parallel sibling lists (e.g.
+structure-prediction `["complexes", "msas"]`), the framework slices, dedups, and
+cache-keys the whole group so siblings stay aligned to the primary. A config may set
 `gpus_per_instance > 1` (a worker that needs several GPUs, e.g. ColabFold), and the
 pool then groups devices into slots of that size, while `gpus_per_instance == 0`
 with a positive `cpus_per_instance` selects CPU fan-out mode instead.

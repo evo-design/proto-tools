@@ -193,7 +193,7 @@ def example_input() -> Any:
     metrics_class=DSSPSecondaryStructureMetrics,
     description="Assign helix/sheet/loop percentages using the DSSP binary",
     example_input=example_input,
-    iterable_input_field="inputs",
+    iterable_input_fields=["inputs"],
     iterable_output_field="results",
     cacheable=True,
 )

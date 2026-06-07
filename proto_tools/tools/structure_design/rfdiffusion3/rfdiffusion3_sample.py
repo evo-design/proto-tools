@@ -814,7 +814,7 @@ class RFdiffusion3Designs(BaseModel):
     """All designs produced for a single input spec.
 
     Bundling N designs into one wrapper preserves the framework's 1:1
-    cardinality between ``iterable_input_field`` and ``iterable_output_field``
+    cardinality between ``iterable_input_fields`` and ``iterable_output_field``
     even though RFdiffusion3 fans out (N = ``n_batches * diffusion_batch_size``
     designs per spec). Mirrors the per-input bundling pattern used by
     ``DesignSet``.
@@ -960,7 +960,7 @@ def _canonicalize_design_chain_ids(structure: Structure) -> Structure:
     description="De novo protein structure design using RFdiffusion3",
     uses_gpu=True,
     example_input=example_input,
-    iterable_input_field="design_specs",
+    iterable_input_fields=["design_specs"],
     iterable_output_field="designed_structures",
     cacheable=True,
     stochastic=True,

@@ -294,7 +294,7 @@ def example_input() -> Any:
     uses_gpu=True,
     stochastic=True,
     example_input=example_input,
-    iterable_input_field="complexes",
+    iterable_input_fields=["complexes", "msas"],
     iterable_output_field="ensembles",
 )
 def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance: Any = None) -> BioEmuOutput:

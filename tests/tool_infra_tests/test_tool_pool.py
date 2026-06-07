@@ -64,7 +64,9 @@ class MockNonIterableOutput(MockToolOutputBase):
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
 
-def _register_mock_tool(registry, key="mock-process", iterable_input_field="items", iterable_output_field="results"):
+def _register_mock_tool(
+    registry, key="mock-process", iterable_input_fields=("items",), iterable_output_field="results"
+):
     """Register a mock tool and return (wrapper_function, call_log)."""
     call_log = []
 
@@ -76,7 +78,7 @@ def _register_mock_tool(registry, key="mock-process", iterable_input_field="item
         config_class=MockConfig,
         output_class=MockOutput,
         description="Mock tool for testing",
-        iterable_input_field=iterable_input_field,
+        iterable_input_fields=list(iterable_input_fields),
         iterable_output_field=iterable_output_field,
     )
     def run_mock_process(inputs, config=None, instance=None):
@@ -447,7 +449,7 @@ def test_dispatch_gpus_per_instance_grouping(clean_registry):
         config_class=MultiGPUConfig,
         output_class=MockOutput,
         description="Multi-GPU test",
-        iterable_input_field="items",
+        iterable_input_fields=["items"],
         iterable_output_field="results",
     )
     def run_multi(inputs, config=None, instance=None):
@@ -510,7 +512,7 @@ def test_dispatch_gpus_per_instance_zero_bypasses_pool(clean_registry):
         config_class=CPUOnlyConfig,
         output_class=MockOutput,
         description="CPU-only test",
-        iterable_input_field="items",
+        iterable_input_fields=["items"],
         iterable_output_field="results",
     )
     def run_cpu_only(inputs, config=None, instance=None):
@@ -568,7 +570,7 @@ def test_dispatch_collects_warnings_and_errors(clean_registry):
         config_class=MockConfig,
         output_class=MockOutput,
         description="Mock tool that produces warnings and errors",
-        iterable_input_field="items",
+        iterable_input_fields=["items"],
         iterable_output_field="results",
     )
     def run_with_warnings(inputs, config=None, instance=None):
@@ -661,7 +663,7 @@ def test_interception_iterable_tool_intercepted_by_pool(clean_registry):
         config_class=MockConfig,
         output_class=MockOutput,
         description="Iterable tool",
-        iterable_input_field="items",
+        iterable_input_fields=["items"],
         iterable_output_field="results",
     )
     def run_iterable(inputs, config=None, instance=None):
@@ -702,7 +704,7 @@ def test_interception_pool_executing_prevents_re_interception(clean_registry):
         config_class=MockConfig,
         output_class=MockOutput,
         description="Inner tool call",
-        iterable_input_field="items",
+        iterable_input_fields=["items"],
         iterable_output_field="results",
     )
     def run_inner(inputs, config=None, instance=None):
@@ -731,7 +733,7 @@ def test_interception_pool_executing_prevents_re_interception(clean_registry):
 
 
 def test_toolspec_iterable_fields_stored(clean_registry):
-    """iterable_input_field and iterable_output_field should be on ToolSpec."""
+    """iterable_input_fields and iterable_output_field should be on ToolSpec."""
 
     @clean_registry.register(
         key="spec-test",
@@ -741,15 +743,130 @@ def test_toolspec_iterable_fields_stored(clean_registry):
         config_class=MockConfig,
         output_class=MockOutput,
         description="Test",
-        iterable_input_field="items",
+        iterable_input_fields=["items"],
         iterable_output_field="results",
     )
     def run_spec_test(inputs, config=None, instance=None):
         return MockOutput(results=[], tool_id="spec-test", success=True)
 
     spec = clean_registry.get("spec-test")
-    assert spec.iterable_input_field == "items"
+    assert spec.iterable_input_fields == ["items"]
     assert spec.iterable_output_field == "results"
+
+
+def test_toolspec_iterable_input_fields_parallel_group(clean_registry):
+    """iterable_input_fields stores the parallel group (primary first)."""
+
+    @clean_registry.register(
+        key="parallel-spec-test",
+        label="Parallel",
+        category="testing",
+        input_class=MockInput,
+        config_class=MockConfig,
+        output_class=MockOutput,
+        description="Test",
+        iterable_input_fields=["items", "tags"],
+        iterable_output_field="results",
+    )
+    def run_parallel(inputs, config=None, instance=None):
+        return MockOutput(results=[], tool_id="parallel-spec-test", success=True)
+
+    spec = clean_registry.get("parallel-spec-test")
+    assert spec.iterable_input_fields == ["items", "tags"]
+
+
+def test_parallel_item_cache_key_folds_in_siblings():
+    """A parallel-item bundle's key reflects all fields; a 1-tuple matches the bare item (no cache churn)."""
+    from proto_tools.tools.tool_registry import _ParallelItem
+    from proto_tools.utils.tool_cache import _serialize_for_cache_key
+
+    # Single-field bundle keys identically to the bare item → existing cache entries still hit.
+    assert _ParallelItem(("seqA",)).cache_key() == _serialize_for_cache_key("seqA")
+    # Same primary, different sibling → distinct key (the dedup/cache-collision fix).
+    assert _ParallelItem(("seqA", "msaX")).cache_key() != _ParallelItem(("seqA", "msaY")).cache_key()
+    # Identical primary + sibling → identical key.
+    assert _ParallelItem(("seqA", "msaX")).cache_key() == _ParallelItem(("seqA", "msaX")).cache_key()
+
+
+def test_zip_apply_iter_items_keeps_parallel_fields_aligned():
+    """Slicing/reordering the parallel group moves every field together (the alignment fix)."""
+    from proto_tools.tools.tool_registry import _apply_iter_items, _zip_iter_items
+    from proto_tools.utils import BaseToolInput, InputField
+
+    class _PInput(BaseToolInput):
+        items: list[str] = InputField(default_factory=list, title="Items", description="primary list")
+        tags: list[str] | None = InputField(default=None, title="Tags", description="parallel sibling list")
+
+    inp = _PInput(items=["a", "b", "c"], tags=["1", "2", "3"])
+    fields = ["items", "tags"]
+    bundles = _zip_iter_items(inp, fields)
+    # Reorder + subset to original indices [2, 0]; both fields must follow in lockstep.
+    out = _apply_iter_items(inp, fields, [bundles[2], bundles[0]])
+    assert out.items == ["c", "a"]
+    assert out.tags == ["3", "1"]
+
+
+def test_zip_iter_items_rejects_misaligned_parallel_fields():
+    """A sibling whose length differs from the primary raises a clear ValueError."""
+    from proto_tools.tools.tool_registry import _zip_iter_items
+    from proto_tools.utils import BaseToolInput, InputField
+
+    class _PInput(BaseToolInput):
+        items: list[str] = InputField(default_factory=list, title="Items", description="primary list")
+        tags: list[str] = InputField(default_factory=list, title="Tags", description="parallel sibling list")
+
+    with pytest.raises(ValueError, match="not aligned"):
+        _zip_iter_items(_PInput(items=["a", "b", "c"], tags=["1"]), ["items", "tags"])  # too short
+    with pytest.raises(ValueError, match="not aligned"):
+        _zip_iter_items(_PInput(items=["a"], tags=["1", "2"]), ["items", "tags"])  # too long
+
+
+def test_parallel_group_dedup_keys_and_aligns_through_wrapper(clean_registry):
+    """A cacheable parallel-group iterable tool dedups on the full group through the @tool wrapper.
+
+    The sibling participates in the dedup key, stays aligned to the primary, and results expand
+    back to original positions.
+    """
+
+    class _MPInput(BaseToolInput):
+        items: list[str] = Field(description="primary list")
+        tags: list[str] = Field(description="index-parallel sibling list")
+
+    class _MPOutput(MockToolOutputBase):
+        results: list[str] = Field(description="one result per row")
+
+    seen: list[tuple[list[str], list[str]]] = []
+
+    @clean_registry.register(
+        key="parallel-dedup",
+        label="Parallel Dedup",
+        category="testing",
+        input_class=_MPInput,
+        config_class=MockConfig,
+        output_class=_MPOutput,
+        description="Records the (items, tags) rows it actually receives post-dedup",
+        iterable_input_fields=["items", "tags"],
+        iterable_output_field="results",
+        cacheable=True,
+    )
+    def run_parallel_dedup(inputs, config=None, instance=None):
+        seen.append((list(inputs.items), list(inputs.tags)))
+        return _MPOutput(
+            results=[f"{i}-{t}" for i, t in zip(inputs.items, inputs.tags, strict=True)],
+            tool_id="parallel-dedup",
+            success=True,
+        )
+
+    spec = clean_registry.get("parallel-dedup")
+    # Rows (a,x), (a,y), (a,x): the two (a,x) are true duplicates; (a,y) shares the primary
+    # but differs in the sibling, so it must NOT be collapsed.
+    out = spec.function(_MPInput(items=["a", "a", "a"], tags=["x", "y", "x"]), MockConfig(device="cpu"))
+
+    # The tool saw exactly the 2 unique rows, sibling aligned to primary (items-only dedup would
+    # have collapsed all three to one row and lost the (a,y) distinction).
+    assert seen == [(["a", "a"], ["x", "y"])]
+    # Output expanded back to all 3 original positions, in order.
+    assert out.results == ["a-x", "a-y", "a-x"]
 
 
 def test_toolspec_iterable_fields_default_to_none(clean_registry):
@@ -768,7 +885,7 @@ def test_toolspec_iterable_fields_default_to_none(clean_registry):
         return MockNonIterableOutput(answer="x", tool_id="no-iter-test", success=True)
 
     spec = clean_registry.get("no-iter-test")
-    assert spec.iterable_input_field is None
+    assert spec.iterable_input_fields is None
     assert spec.iterable_output_field is None
 
 
@@ -783,7 +900,7 @@ def test_toolspec_iterable_fields_excluded_from_serialization(clean_registry):
         config_class=MockConfig,
         output_class=MockOutput,
         description="Test",
-        iterable_input_field="items",
+        iterable_input_fields=["items"],
         iterable_output_field="results",
     )
     def run_serial(inputs, config=None, instance=None):
@@ -791,7 +908,7 @@ def test_toolspec_iterable_fields_excluded_from_serialization(clean_registry):
 
     spec = clean_registry.get("serial-test")
     serialized = spec.model_dump()
-    assert "iterable_input_field" not in serialized
+    assert "iterable_input_fields" not in serialized
     assert "iterable_output_field" not in serialized
 
 
@@ -898,7 +1015,7 @@ def test_dispatch_cpu_fanout_partitions_items(clean_registry):
         config_class=CpuFanoutConfig,
         output_class=MockOutput,
         description="CPU fan-out test",
-        iterable_input_field="items",
+        iterable_input_fields=["items"],
         iterable_output_field="results",
     )
     def run_cpu_fanout(inputs, config=None, instance=None):
@@ -964,7 +1081,7 @@ def test_dispatch_cpu_short_circuit_preserved(clean_registry):
         config_class=CpuOptOutConfig,
         output_class=MockOutput,
         description="Internal-threading CPU tool",
-        iterable_input_field="items",
+        iterable_input_fields=["items"],
         iterable_output_field="results",
     )
     def run_mmseqs_style(inputs, config=None, instance=None):
@@ -1040,7 +1157,7 @@ def test_local_partition_failure_preserves_other_results(clean_registry):
         config_class=MockConfig,
         output_class=MockOutput,
         description="Tool that fails on second device",
-        iterable_input_field="items",
+        iterable_input_fields=["items"],
         iterable_output_field="results",
     )
     def run_fail_tool(inputs, config=None, instance=None):
@@ -1085,7 +1202,7 @@ def test_all_partitions_fail(clean_registry):
         config_class=MockConfig,
         output_class=MockOutput,
         description="Tool that always fails",
-        iterable_input_field="items",
+        iterable_input_fields=["items"],
         iterable_output_field="results",
     )
     def run_all_fail(inputs, config=None, instance=None):

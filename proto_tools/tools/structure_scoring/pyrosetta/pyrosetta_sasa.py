@@ -230,7 +230,7 @@ def example_input() -> Any:
     description="Compute Solvent Accessible Surface Area (SASA) for protein structures using PyRosetta",
     uses_gpu=False,
     example_input=example_input,
-    iterable_input_field="inputs",
+    iterable_input_fields=["inputs"],
     iterable_output_field="results",
     cacheable=True,
 )

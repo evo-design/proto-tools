@@ -568,9 +568,11 @@ echo "{tool_display_name} setup complete!"
 
 ## Iterable cardinality (1:1) — [Phase 2: Contract]
 
-When `@tool()` declares both `iterable_input_field` and `iterable_output_field`, `len(output.{iterable_output_field})` must equal `len(inputs.{iterable_input_field})` and correspond by position. Per-item cache stitching, duplicate dedup, and the diversification test all assume this.
+When `@tool()` declares `iterable_input_fields` and `iterable_output_field`, `len(output.{iterable_output_field})` must equal the length of the (primary) input list and correspond by position. Per-item cache stitching, duplicate dedup, and the diversification test all assume this.
 
 If the tool produces N samples per input (`num_sequences_per_structure`, `num_designs`, `n_batches * diffusion_batch_size`, etc.), **bundle the N samples inside a per-input wrapper** — don't flatten. The wrapper is the iterable element.
+
+**`iterable_input_fields` is always a list** (primary first). Use a single element for an ordinary iterable (`iterable_input_fields=["sequences"]`). When the input carries index-parallel sibling lists that must stay aligned (e.g. structure-prediction `complexes` + `msas`, one `ComplexMSAs` per complex), list them together: `iterable_input_fields=["complexes", "msas"]`. The framework slices, dedups, and cache-keys the whole group as one — siblings stay aligned and a `None` field is skipped.
 
 | Tool | N comes from | Wrapper |
 |---|---|---|
@@ -585,12 +587,12 @@ Point `iterable_output_field` at the wrapper list, not the flattened inner sampl
 ## Caching Patterns — [Phase 2: Contract]
 
 Add `cacheable=True` to the `@tool()` decorator. The wrapper auto-selects strategy:
-- **Iterable tools** (have `iterable_input_field`) → per-item cache (strip/stitch). Requires the 1:1 cardinality contract above.
+- **Iterable tools** (have `iterable_input_fields`) → per-item cache (strip/stitch). Requires the 1:1 cardinality contract above.
 - **Non-iterable tools** → whole-output cache
 
 ```python
 # Per-item caching (tools processing lists/batches):
-@tool(key="{tool_key}", ..., iterable_input_field="sequences", iterable_output_field="results", cacheable=True)
+@tool(key="{tool_key}", ..., iterable_input_fields=["sequences"], iterable_output_field="results", cacheable=True)
 def run_{tool_key_snake}(inputs, config) -> Output:
 
 # Whole-output caching (tools with single output):

@@ -314,7 +314,7 @@ def example_input() -> Any:
     description="Gene expression and regulatory activity prediction using Enformer",
     uses_gpu=True,
     example_input=example_input,
-    iterable_input_field="sequences",
+    iterable_input_fields=["sequences"],
     iterable_output_field="results",
 )
 def run_enformer(inputs: EnformerInput, config: EnformerConfig, instance: Any = None) -> EnformerOutput:

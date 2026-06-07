@@ -307,7 +307,7 @@ def example_input() -> Any:
         "(complementarity alignment plus ViennaRNA thermodynamics)."
     ),
     example_input=example_input,
-    iterable_input_field="target_sequences",
+    iterable_input_fields=["target_sequences"],
     iterable_output_field="results",
     cacheable=True,
 )

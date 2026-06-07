@@ -140,7 +140,7 @@ def example_input() -> Any:
     uses_gpu=True,
     stochastic=True,
     example_input=example_input,
-    iterable_input_field="prompts",
+    iterable_input_fields=["prompts"],
     iterable_output_field="sequences",
 )
 def run_evo1_sample(

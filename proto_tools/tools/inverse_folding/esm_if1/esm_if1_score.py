@@ -189,7 +189,7 @@ def example_input() -> Any:
     ),
     uses_gpu=True,
     example_input=example_input,
-    iterable_input_field="sequence_structure_pairs",
+    iterable_input_fields=["sequence_structure_pairs"],
     iterable_output_field="scores",
     cacheable=True,
 )

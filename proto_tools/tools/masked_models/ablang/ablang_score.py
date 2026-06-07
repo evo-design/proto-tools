@@ -82,7 +82,7 @@ def example_input() -> AbLangScoringInput:
     description="Score antibody sequences using AbLang language model",
     uses_gpu=True,
     example_input=example_input,
-    iterable_input_field="antibodies",
+    iterable_input_fields=["antibodies"],
     iterable_output_field="scores",
     cacheable=True,
 )

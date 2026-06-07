@@ -362,7 +362,7 @@ def example_input() -> Any:
     output_class=OrfipyOutput,
     description="ORF (Open Reading Frame) prediction using Orfipy",
     example_input=example_input,
-    iterable_input_field="sequences",
+    iterable_input_fields=["sequences"],
     iterable_output_field="predicted_orfs",
     cacheable=True,
 )

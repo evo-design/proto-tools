@@ -131,7 +131,7 @@ def example_input() -> Any:
     description="Sample protein sequences by filling masked positions with random amino acids drawn from a codon scheme",
     uses_gpu=False,
     example_input=example_input,
-    iterable_input_field="sequences",
+    iterable_input_fields=["sequences"],
     iterable_output_field="sequences",
     cacheable=False,
     stochastic=True,

@@ -108,7 +108,7 @@ def example_input() -> AbLangEmbeddingsInput:
     description="Extract antibody sequence embeddings using AbLang",
     uses_gpu=True,
     example_input=example_input,
-    iterable_input_field="antibodies",
+    iterable_input_fields=["antibodies"],
     iterable_output_field="results",
     cacheable=True,
     post_process_iterable=attach_projections,

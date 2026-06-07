@@ -282,7 +282,7 @@ def example_input() -> Any:
     uses_gpu=True,
     device_count="1-2",
     example_input=example_input,
-    iterable_input_field="complexes",
+    iterable_input_fields=["complexes", "msas"],
     iterable_output_field="structures",
     cacheable=True,
     stochastic=True,

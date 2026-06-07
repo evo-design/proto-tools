@@ -629,7 +629,7 @@ def example_gradient_input() -> Any:
     description="Score regulatory DNA activity using the Malinois MPRA model",
     uses_gpu=True,
     example_input=example_input,
-    iterable_input_field="sequences",
+    iterable_input_fields=["sequences"],
     iterable_output_field="results",
     cacheable=True,
 )

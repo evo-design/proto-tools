@@ -302,7 +302,7 @@ def _build_fragment(record: dict[str, Any], original_identifier: str) -> Fragmen
         "cross-references and PDB usage."
     ),
     example_input=example_input,
-    iterable_input_field="identifiers",
+    iterable_input_fields=["identifiers"],
     iterable_output_field="enrichments",
     cacheable=True,
     uses_gpu=False,

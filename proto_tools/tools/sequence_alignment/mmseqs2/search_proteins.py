@@ -387,7 +387,7 @@ def example_input() -> Any:
     output_class=Mmseqs2SearchProteinsOutput,
     description="Search protein sequences using MMseqs2 with per-sequence results",
     example_input=example_input,
-    iterable_input_field="query_sequences",
+    iterable_input_fields=["query_sequences"],
     iterable_output_field="results",
     cacheable=True,
 )

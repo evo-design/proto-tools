@@ -222,7 +222,7 @@ def example_input() -> Any:
     description="Compute Spatial Aggregation Propensity (SAP) scores for protein structures using PyRosetta",
     uses_gpu=False,
     example_input=example_input,
-    iterable_input_field="inputs",
+    iterable_input_fields=["inputs"],
     iterable_output_field="results",
     cacheable=True,
 )

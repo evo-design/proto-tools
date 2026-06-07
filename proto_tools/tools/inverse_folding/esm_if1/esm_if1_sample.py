@@ -180,7 +180,7 @@ def example_input() -> Any:
     ),
     uses_gpu=True,
     example_input=example_input,
-    iterable_input_field="inputs",
+    iterable_input_fields=["inputs"],
     iterable_output_field="design_sets",
     cacheable=True,
     stochastic=True,

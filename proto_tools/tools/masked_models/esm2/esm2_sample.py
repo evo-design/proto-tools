@@ -187,7 +187,7 @@ def example_input() -> Any:
     uses_gpu=True,
     stochastic=True,
     example_input=example_input,
-    iterable_input_field="sequences",
+    iterable_input_fields=["sequences"],
     iterable_output_field="sequences",
 )
 def run_esm2_sample(

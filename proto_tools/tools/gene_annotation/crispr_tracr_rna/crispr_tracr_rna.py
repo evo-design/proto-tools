@@ -425,7 +425,7 @@ def example_input() -> Any:
     output_class=CrisprTracrRNAOutput,
     description="Predict tracrRNA sequences from nucleotide CRISPR loci",
     example_input=example_input,
-    iterable_input_field="sequences",
+    iterable_input_fields=["sequences"],
     iterable_output_field="results",
     cacheable=True,
 )

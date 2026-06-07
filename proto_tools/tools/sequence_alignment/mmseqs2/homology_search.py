@@ -406,7 +406,7 @@ def example_input() -> Mmseqs2HomologySearchInput:
     output_class=Mmseqs2HomologySearchOutput,
     description="Generate MSAs by searching protein sequences against MMseqs2-indexed databases (GPU by default).",
     example_input=example_input,
-    iterable_input_field="queries",
+    iterable_input_fields=["queries"],
     iterable_output_field="results",
     cacheable=True,
     device_count="<=1",

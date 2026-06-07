@@ -129,7 +129,7 @@ def example_input() -> Any:
     description="Predict per-position acceptor/donor splice-site probabilities from DNA sequence with SpliceAI",
     uses_gpu=True,
     example_input=example_input,
-    iterable_input_field="sequences",
+    iterable_input_fields=["sequences"],
     iterable_output_field="predictions",
     cacheable=True,
 )

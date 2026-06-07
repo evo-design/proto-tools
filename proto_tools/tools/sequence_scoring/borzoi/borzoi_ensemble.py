@@ -257,7 +257,7 @@ def example_input() -> Any:
     description="Regulatory activity prediction using all 4 Borzoi replicates",
     uses_gpu=True,
     example_input=example_input,
-    iterable_input_field="sequences",
+    iterable_input_fields=["sequences"],
     iterable_output_field="results",
 )
 def run_borzoi_ensemble(

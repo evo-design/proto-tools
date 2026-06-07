@@ -234,7 +234,7 @@ def example_input() -> Any:
     output_class=MincedOutput,
     description="Detect CRISPR arrays in nucleotide sequences using MinCED",
     example_input=example_input,
-    iterable_input_field="sequences",
+    iterable_input_fields=["sequences"],
     iterable_output_field="results",
     cacheable=True,
 )

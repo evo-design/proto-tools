@@ -139,7 +139,7 @@ def example_input() -> Any:
     uses_gpu=True,
     device_count="1",
     example_input=example_input,
-    iterable_input_field="data_items",
+    iterable_input_fields=["data_items"],
     iterable_output_field="results",
 )
 def run_mock_pytorch_tool(

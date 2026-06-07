@@ -91,7 +91,7 @@ def example_input() -> ProGen3ScoringInput:
     description="Score protein sequences using ProGen3 language model",
     uses_gpu=True,
     example_input=example_input,
-    iterable_input_field="sequences",
+    iterable_input_fields=["sequences"],
     iterable_output_field="scores",
     cacheable=True,
 )

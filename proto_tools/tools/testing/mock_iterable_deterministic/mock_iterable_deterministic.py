@@ -132,7 +132,7 @@ def example_input() -> MockIterableDeterministicInput:
     description="Pure-CPU mock of a deterministic per-item scorer with internal batching — for e2e testing of deterministic-iterable dedup behavior.",
     uses_gpu=False,
     example_input=example_input,
-    iterable_input_field="prompts",
+    iterable_input_fields=["prompts"],
     iterable_output_field="scores",
     cacheable=True,
 )

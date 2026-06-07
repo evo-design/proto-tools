@@ -228,7 +228,7 @@ def example_input() -> Any:
     description="Run batched in-silico mutagenesis with AlphaGenome variant scorers",
     uses_gpu=True,
     example_input=example_input,
-    iterable_input_field="requests",
+    iterable_input_fields=["requests"],
     iterable_output_field="results",
     cacheable=True,
 )

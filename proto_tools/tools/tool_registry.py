@@ -80,6 +80,58 @@ from proto_tools.utils.tool_cache import (
 from proto_tools.utils.tool_instance import ToolInstance
 from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, Metrics, MissingAssetError
 
+# ---------------------------------------------------------------------------
+# Parallel iterable-field helpers
+#
+# A tool's ``iterable_input_fields`` declares index-parallel input lists (primary
+# first, e.g. ``["complexes", "msas"]``). The framework slices/dedups/keys them as
+# a group so a parallel sibling (``msas``) stays aligned with the primary and is
+# part of the cache key. Single-field tools collapse to today's behavior: a
+# one-element bundle keys identically to the bare item.
+# ---------------------------------------------------------------------------
+
+
+class _ParallelItem:
+    """One row across a tool's parallel iterable fields, with a composite cache key."""
+
+    __slots__ = ("values",)
+
+    def __init__(self, values: tuple[Any, ...]) -> None:
+        self.values = values
+
+    def cache_key(self) -> str:
+        """Serialize every parallel field's value so dedup/cache keys reflect all of them."""
+        return "\x1f".join(_serialize_for_cache_key(v) for v in self.values)
+
+
+def _active_iter_fields(inputs: Any, spec: ToolSpec) -> list[str]:
+    """Parallel iterable fields present (non-None) on ``inputs``, primary first."""
+    return [f for f in (spec.iterable_input_fields or []) if getattr(inputs, f, None) is not None]
+
+
+def _zip_iter_items(inputs: Any, fields: list[str]) -> list[_ParallelItem]:
+    """Zip the parallel field lists into per-row ``_ParallelItem`` bundles.
+
+    Raises ``ValueError`` on a length mismatch. This dedup/cache path runs before a
+    tool's ``config.preprocess`` (where the per-tool friendly check lives), so without
+    this guard a misaligned sibling would surface as a bare ``IndexError`` (too short)
+    or be silently truncated to the primary length (too long).
+    """
+    cols = [list(getattr(inputs, f)) for f in fields]
+    n = len(cols[0])
+    for f, col in zip(fields[1:], cols[1:], strict=True):
+        if len(col) != n:
+            raise ValueError(
+                f"Parallel iterable field {f!r} (len {len(col)}) is not aligned with primary {fields[0]!r} (len {n})."
+            )
+    return [_ParallelItem(tuple(col[i] for col in cols)) for i in range(n)]
+
+
+def _apply_iter_items(inputs: Any, fields: list[str], items: list[_ParallelItem]) -> Any:
+    """Rebuild ``inputs`` with each parallel field set from the bundles (kept aligned)."""
+    update: dict[str, Any] = {f: [it.values[j] for it in items] for j, f in enumerate(fields)}
+    return inputs.model_copy(update=update)
+
 
 class ToolSpec(BaseModel):
     """Specification for a registered tool.
@@ -108,8 +160,10 @@ class ToolSpec(BaseModel):
         source_file (Path): Path to the source file where the tool function is defined.
         example_input (Callable[[], BaseToolInput] | None): Factory returning a minimal
             valid input for testing.
-        iterable_input_field (str | None): Input field name containing the iterable list
-            of items (for ToolPool fan-out).
+        iterable_input_fields (list[str] | None): Index-parallel input list field names
+            (primary first; e.g. ``["complexes", "msas"]`` or a single-field ``["sequences"]``).
+            Sliced, deduped, and cache-keyed together so siblings stay aligned to the primary.
+            ``None`` for non-iterable tools.
         iterable_output_field (str | None): Output field name containing the iterable list
             of results (for ToolPool fan-out).
         cacheable (bool): Declares that this tool's output is a
@@ -168,10 +222,10 @@ class ToolSpec(BaseModel):
         exclude=True,
         description="Factory returning a minimal valid input for testing",
     )
-    iterable_input_field: str | None = Field(
+    iterable_input_fields: list[str] | None = Field(
         default=None,
         exclude=True,
-        description="Input field name containing the iterable list of items (for ToolPool fan-out)",
+        description="Index-parallel input list fields (primary first); sliced/keyed together, None entries skipped",
     )
     iterable_output_field: str | None = Field(
         default=None,
@@ -318,7 +372,7 @@ class ToolRegistry:
         gpu_only: bool = False,
         device_count: str = "1",
         example_input: Callable[[], BaseToolInput] | None = None,
-        iterable_input_field: str | None = None,
+        iterable_input_fields: list[str] | None = None,
         iterable_output_field: str | None = None,
         cacheable: bool = False,
         stochastic: bool = False,
@@ -351,8 +405,11 @@ class ToolRegistry:
                 Validates allocation: errors on under-allocation, warns on over-allocation.
             example_input (Callable[[], BaseToolInput] | None): Factory returning a minimal valid
                 input for testing and examples.
-            iterable_input_field (str | None): Input field name containing the iterable list of
-                items for ToolPool fan-out and per-item caching.
+            iterable_input_fields (list[str] | None): Index-parallel input list field names
+                (primary first) batched/sliced/keyed together for ToolPool fan-out and per-item
+                caching; a None field is skipped. Use a single-element list for an ordinary
+                iterable (e.g. ``["sequences"]``), or several aligned lists for a parallel group
+                (e.g. structure-prediction ``["complexes", "msas"]``).
             iterable_output_field (str | None): Output field name containing the iterable list of
                 results for ToolPool fan-out and per-item caching.
             cacheable (bool): Declares that this tool's output is a
@@ -386,9 +443,9 @@ class ToolRegistry:
         ) -> Callable[..., BaseToolOutput]:
             cls._check_duplicate(key, func.__name__)
 
-            if (iterable_input_field is None) != (iterable_output_field is None):
+            if (iterable_input_fields is None) != (iterable_output_field is None):
                 raise ValueError(
-                    f"@tool({key!r}): iterable_input_field and iterable_output_field must both be set or both None"
+                    f"@tool({key!r}): iterable_input_fields and iterable_output_field must both be set or both None"
                 )
 
             if gpu_only and not uses_gpu:
@@ -535,16 +592,20 @@ class ToolRegistry:
                         validate_device_allocation(device_spec.count, device_count, key)
 
                 # --- Dedup + Cache (cacheable tools only) ---
-                if runtime_cacheable and spec and spec.iterable_input_field and not stochastic_tool:
+                if runtime_cacheable and spec and spec.iterable_input_fields and not stochastic_tool:
                     assert spec.iterable_output_field is not None  # validated at registration
                     # Iterable path (deterministic only): dedup then strip cached items.
                     # Stochastic iterables fall through to the whole-call cache branch
                     # below so duplicates reach the tool and diverge via per-item RNG.
-                    original_items = list(getattr(inputs, spec.iterable_input_field))
+                    # Zip the parallel iterable group (primary + aligned siblings, e.g.
+                    # complexes + msas) into per-row bundles so dedup/strip key on, and keep
+                    # aligned, ALL fields — not just the primary.
+                    _iter_fields = _active_iter_fields(inputs, spec)
+                    original_items = _zip_iter_items(inputs, _iter_fields)
                     if len(original_items) > 1:
                         deduped = deduplicate_items(original_items, key_fn=_serialize_for_cache_key)
                         if len(deduped.unique_items) < len(original_items):
-                            inputs = inputs.model_copy(update={spec.iterable_input_field: deduped.unique_items})
+                            inputs = _apply_iter_items(inputs, _iter_fields, deduped.unique_items)
                             logger.debug(
                                 "Tool %s: dedup %d → %d unique items",
                                 key,
@@ -553,7 +614,7 @@ class ToolRegistry:
                             )
 
                     # Strip cached items from the (possibly deduped) input
-                    current_items = list(getattr(inputs, spec.iterable_input_field))
+                    current_items = _zip_iter_items(inputs, _iter_fields)
                     strip = cache_strip_items(key, current_items, config)
                     if strip is not None and strip.all_cached:
                         logger.debug(
@@ -578,9 +639,9 @@ class ToolRegistry:
                         }
                         return output_class.model_construct(**cache_kwargs)
 
-                    # Narrow inputs to uncached items only
+                    # Narrow inputs to uncached items only (all parallel fields kept aligned)
                     if strip is not None and strip.uncached_items:
-                        inputs = inputs.model_copy(update={spec.iterable_input_field: strip.uncached_items})
+                        inputs = _apply_iter_items(inputs, _iter_fields, strip.uncached_items)
 
                 elif runtime_cacheable:
                     # Whole-output path: check full cache
@@ -624,7 +685,7 @@ class ToolRegistry:
                     )
 
                     pool = get_active_pool()
-                    if pool is not None and not is_pool_executing() and spec and spec.iterable_input_field is not None:
+                    if pool is not None and not is_pool_executing() and spec and spec.iterable_input_fields is not None:
                         result = pool._parallel_dispatch(key, func, inputs, config)
                         result.tool_id = key
                         if result.success is None:
@@ -663,10 +724,10 @@ class ToolRegistry:
                         return _finish_dispatched(dispatched)
 
                     # Scale effective_timeout() by the iterable batch size.
-                    if spec is not None and spec.iterable_input_field is not None:
+                    if spec is not None and spec.iterable_input_fields is not None:
                         effective = config.effective_timeout()
                         if effective is not None:
-                            items = getattr(inputs, spec.iterable_input_field, None)
+                            items = getattr(inputs, spec.iterable_input_fields[0], None)
                             n_items = len(items) if items is not None else 1
                             if n_items > 1:
                                 config = config.model_copy(update={"timeout": effective * n_items})
@@ -797,7 +858,7 @@ class ToolRegistry:
                 function=wrapper,
                 source_file=source_file,
                 example_input=example_input,
-                iterable_input_field=iterable_input_field,
+                iterable_input_fields=iterable_input_fields,
                 iterable_output_field=iterable_output_field,
                 cacheable=cacheable,
                 stochastic=stochastic,
@@ -1411,7 +1472,7 @@ def _post_dispatch_cache_and_expand(
         original_items (list[Any] | None): Original input items before dedup/strip.
         whole_cache_key (str | None): Cache key for whole-output caching path.
     """
-    if is_cacheable and spec and spec.iterable_input_field and not stochastic_tool:
+    if is_cacheable and spec and spec.iterable_input_fields and not stochastic_tool:
         assert spec.iterable_output_field is not None  # validated at registration
         output_field = spec.iterable_output_field
         # Per-item cache store + stitch (deterministic iterable only)
@@ -1441,7 +1502,7 @@ def _post_dispatch_cache_and_expand(
     # cache path was taken. Deterministic iterables see the full stitched
     # batch after dedup expand; stochastic iterables see the natural batch
     # (no dedup happened).
-    if is_cacheable and spec is not None and spec.iterable_input_field and spec.post_process_iterable is not None:
+    if is_cacheable and spec is not None and spec.iterable_input_fields and spec.post_process_iterable is not None:
         assert spec.iterable_output_field is not None
         spec.post_process_iterable(getattr(result, spec.iterable_output_field))
 

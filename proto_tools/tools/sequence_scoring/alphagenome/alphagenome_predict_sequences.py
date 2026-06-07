@@ -146,7 +146,7 @@ def example_input() -> Any:
     description="Predict genomic signals from batched raw DNA sequences using AlphaGenome",
     uses_gpu=True,
     example_input=example_input,
-    iterable_input_field="sequences",
+    iterable_input_fields=["sequences"],
     iterable_output_field="results",
     cacheable=True,
 )

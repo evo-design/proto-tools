@@ -1004,7 +1004,7 @@ def _register_cacheable_iterable(registry, key, func):
         config_class=MockToolConfig,
         output_class=MockIterableOutput,
         description=key,
-        iterable_input_field="items",
+        iterable_input_fields=["items"],
         iterable_output_field="results",
         cacheable=True,
     )(func)
@@ -1055,7 +1055,7 @@ def test_tool_wrapper_dedup_skipped_without_cacheable(clean_registry):
         config_class=MockToolConfig,
         output_class=MockIterableOutput,
         description="Non-cacheable iterable tool",
-        iterable_input_field="items",
+        iterable_input_fields=["items"],
         iterable_output_field="results",
         cacheable=False,
     )
@@ -1647,7 +1647,7 @@ def _register_batch_aware_tool(registry, key, run_fn, hook):
         config_class=MockToolConfig,
         output_class=MockBatchAwareOutput,
         description=key,
-        iterable_input_field="items",
+        iterable_input_fields=["items"],
         iterable_output_field="results",
         cacheable=True,
         post_process_iterable=hook,
@@ -1782,7 +1782,7 @@ def test_iterable_dispatch_scales_config_timeout_by_item_count(clean_registry):
         config_class=AnotherMockToolConfig,
         output_class=AnotherMockToolOutput,
         description="mock",
-        iterable_input_field="sequences",
+        iterable_input_fields=["sequences"],
         iterable_output_field="processed_data",
     )(run_fn)
 
@@ -1807,7 +1807,7 @@ def test_single_item_iterable_dispatch_does_not_scale_timeout(clean_registry):
         config_class=AnotherMockToolConfig,
         output_class=AnotherMockToolOutput,
         description="mock",
-        iterable_input_field="sequences",
+        iterable_input_fields=["sequences"],
         iterable_output_field="processed_data",
     )(run_fn)
 
@@ -1832,7 +1832,7 @@ def test_iterable_dispatch_no_scaling_when_timeout_none(clean_registry):
         config_class=AnotherMockToolConfig,
         output_class=AnotherMockToolOutput,
         description="mock",
-        iterable_input_field="sequences",
+        iterable_input_fields=["sequences"],
         iterable_output_field="processed_data",
     )(run_fn)
 
@@ -1867,7 +1867,7 @@ def test_iterable_dispatch_respects_effective_timeout_override(clean_registry):
         config_class=UnboundedConfig,
         output_class=AnotherMockToolOutput,
         description="mock",
-        iterable_input_field="sequences",
+        iterable_input_fields=["sequences"],
         iterable_output_field="processed_data",
     )(run_fn)
 

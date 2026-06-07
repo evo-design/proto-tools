@@ -118,7 +118,7 @@ def example_input() -> Any:
     description="Score DNA sequences using Evo2 language model",
     uses_gpu=True,
     example_input=example_input,
-    iterable_input_field="sequences",
+    iterable_input_fields=["sequences"],
     iterable_output_field="scores",
     cacheable=True,
 )

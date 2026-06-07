@@ -255,7 +255,7 @@ def example_input() -> Any:
     description="Compute Rosetta energy scores for protein structures (with optional FastRelax preprocess via config.pre_relax_structures)",
     uses_gpu=False,
     example_input=example_input,
-    iterable_input_field="inputs",
+    iterable_input_fields=["inputs"],
     iterable_output_field="results",
     cacheable=True,
 )

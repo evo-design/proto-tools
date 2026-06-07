@@ -328,7 +328,7 @@ def example_input() -> Any:
     output_class=ProdigalOutput,
     description="Prokaryotic ORF and gene prediction using Prodigal",
     example_input=example_input,
-    iterable_input_field="input_sequences",
+    iterable_input_fields=["input_sequences"],
     iterable_output_field="predicted_orfs",
     cacheable=True,
 )

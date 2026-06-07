@@ -123,7 +123,7 @@ def example_input() -> AbLangSampleInput:
     description="Restore masked antibody sequence positions using AbLang",
     uses_gpu=True,
     example_input=example_input,
-    iterable_input_field="antibodies",
+    iterable_input_fields=["antibodies"],
     iterable_output_field="sequences",
     cacheable=True,
     stochastic=True,

@@ -363,7 +363,7 @@ class ToolPool:
             result = run_boltz2(inputs, config)
 
     The pool intercepts ``@tool``-decorated function calls transparently.
-    Only tools that declare ``iterable_input_field`` / ``iterable_output_field``
+    Only tools that declare ``iterable_input_fields`` / ``iterable_output_field``
     on their ``@tool()`` decorator are parallelized; other tools pass through
     to normal single-worker execution (but still benefit from persistence).
 
@@ -500,13 +500,17 @@ class ToolPool:
         # Look up ToolSpec
         spec = ToolRegistry.get(tool_key)
         # Caller (@tool wrapper) only routes here when both fields are set.
-        assert spec.iterable_input_field is not None
+        assert spec.iterable_input_fields is not None
         assert spec.iterable_output_field is not None
-        iterable_input_field: str = spec.iterable_input_field
+        primary_input_field: str = spec.iterable_input_fields[0]
         iterable_output_field: str = spec.iterable_output_field
 
-        # Extract items
-        items = list(getattr(inputs, iterable_input_field))
+        # Parallel iterable group (primary + aligned siblings, e.g. complexes + msas):
+        # slice every present field together so siblings stay aligned per partition.
+        active_iter_fields: list[str] = [f for f in spec.iterable_input_fields if getattr(inputs, f, None) is not None]
+
+        # Extract items (primary field defines the per-item count / cost)
+        items = list(getattr(inputs, primary_input_field))
         n_items = len(items)
 
         # Single-item / empty: no collision risk, skip pool overhead.
@@ -580,8 +584,10 @@ class ToolPool:
                             env_overrides=slot.env_overrides,
                         )
 
-                    partition_items = [wi.item for wi in assignment.items]
-                    partition_input = inputs.model_copy(update={iterable_input_field: partition_items})
+                    partition_indices = [wi.original_index for wi in assignment.items]
+                    partition_input = inputs.model_copy(
+                        update={f: [getattr(inputs, f)[idx] for idx in partition_indices] for f in active_iter_fields}
+                    )
 
                     config_copy = config.model_copy(update={"device": slot.device_override})
                     result = func(partition_input, config_copy, instance=slot.worker_name)

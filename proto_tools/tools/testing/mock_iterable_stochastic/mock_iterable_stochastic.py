@@ -140,7 +140,7 @@ def example_input() -> MockIterableStochasticInput:
     description="Pure-CPU mock of a stochastic LM sampler with internal batching — for e2e testing of stochastic-iterable cache/dedup routing.",
     uses_gpu=False,
     example_input=example_input,
-    iterable_input_field="prompts",
+    iterable_input_fields=["prompts"],
     iterable_output_field="completions",
     cacheable=True,
     stochastic=True,

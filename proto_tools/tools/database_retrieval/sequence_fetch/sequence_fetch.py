@@ -504,7 +504,7 @@ def example_input() -> Any:
     description="Fetch DNA, RNA, protein, and structure records from NCBI, UniProt, and PDB",
     uses_gpu=False,
     example_input=example_input,
-    iterable_input_field="requests",
+    iterable_input_fields=["requests"],
     iterable_output_field="results",
     cacheable=True,
 )

@@ -46,7 +46,7 @@ _REPRODUCIBILITY_EXCLUDED_KEYS: frozenset[str] = _SEED_EXCLUDED_KEYS | _SEED_NON
 def _build_diversification_test_params() -> list:
     """Build pytest parametrize params for diversification tests.
 
-    Filters to ``stochastic=True`` tools with an ``iterable_input_field`` —
+    Filters to ``stochastic=True`` tools with ``iterable_input_fields`` —
     the diversification contract is iterable-specific. Skips categories
     excluded from broad tool tests (``database_retrieval``) and tools
     without a valid ``example_input()`` factory.
@@ -56,7 +56,7 @@ def _build_diversification_test_params() -> list:
     for spec in sorted(ToolRegistry.list_all(), key=lambda s: s.key):
         if not spec.stochastic:
             continue
-        if spec.iterable_input_field is None:
+        if spec.iterable_input_fields is None:
             continue
         if spec.category in EXCLUDED_CATEGORIES:
             continue
@@ -78,25 +78,23 @@ def _build_diversification_test_params() -> list:
 
 
 def _replicate_first_item(spec: ToolSpec, inputs: Any, n: int = 3) -> Any:
-    """Return a copy of ``inputs`` with ``iterable_input_field`` replaced by N copies of its first item.
+    """Return a copy of ``inputs`` with the declared parallel iterable group replaced by N copies.
 
-    Sibling list fields that are parallel-aligned to the iterable field (same
-    original length) are replicated too, so per-item alignment contracts hold for
-    the fabricated batch — e.g. a structure-prediction input's pre-supplied
-    ``msas`` must stay parallel to ``complexes``.
+    Replicates every field in ``spec.iterable_input_fields`` (primary + aligned
+    siblings, e.g. ``complexes`` + ``msas``), skipping any that are ``None``, so the
+    fabricated batch keeps the per-item alignment contract. The parallelism is read
+    from the declared group rather than inferred from list lengths.
 
     Raises ``pytest.skip`` if the example input has an empty iterable.
     """
-    iterable_field = spec.iterable_input_field
-    items = list(getattr(inputs, iterable_field))
-    if not items:
-        pytest.skip(f"{spec.key}: example_input() has no items in {iterable_field!r}")
-    update: dict[str, Any] = {iterable_field: [items[0]] * n}
-    for field_name in type(inputs).model_fields:
-        if field_name == iterable_field:
-            continue
-        value = getattr(inputs, field_name)
-        if isinstance(value, list) and len(value) == len(items):
+    fields = spec.iterable_input_fields or []
+    primary = fields[0]
+    if not list(getattr(inputs, primary)):
+        pytest.skip(f"{spec.key}: example_input() has no items in {primary!r}")
+    update: dict[str, Any] = {}
+    for field_name in fields:
+        value = getattr(inputs, field_name, None)
+        if value is not None:
             update[field_name] = [value[0]] * n
     return inputs.model_copy(update=update)
 
