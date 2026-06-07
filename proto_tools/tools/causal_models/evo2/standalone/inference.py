@@ -83,6 +83,19 @@ class Evo2Model:
         self.device: str | None = None
         self.model: Any = None
 
+    @property
+    def _local_device(self) -> str:
+        """Device to place tensors on, accounting for CUDA_VISIBLE_DEVICES isolation.
+
+        ``load()`` pins the worker to one physical GPU via CUDA_VISIBLE_DEVICES,
+        which torch re-indexes to ``cuda:0``. Tensors must target that, not the
+        physical ``self.device`` (e.g. ``cuda:3``), which would be out of range.
+
+        Returns:
+            str: ``"cpu"`` when running on CPU, else ``"cuda:0"``.
+        """
+        return "cpu" if self.device == "cpu" else "cuda:0"
+
     def sample(
         self,
         # input arguments
@@ -202,7 +215,7 @@ class Evo2Model:
 
                 # Vortex generator internally calls torch.inference_mode()
                 output_ids, logits, new_kv_cache = gen.generate(
-                    device=self.device,
+                    device=self._local_device,
                     input_ids=input_ids,
                     num_tokens=max_new_tokens,
                     cached_generation=cached_generation,
@@ -266,7 +279,7 @@ class Evo2Model:
             else:
                 input_ids[i, :length] = t
 
-        return input_ids.to(self.device), lengths
+        return input_ids.to(self._local_device), lengths
 
     def score(
         self,
