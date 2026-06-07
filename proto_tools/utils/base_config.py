@@ -195,7 +195,7 @@ class BaseConfig(BaseModel):
         Override in subclasses when GPU need is decoupled from the device
         string — e.g. a model whose large checkpoint needs 4 GPUs regardless
         of input device, or a tool that toggles real GPU use via a separate
-        config flag (see ``ColabfoldSearchConfig.gpus_per_instance``).
+        config flag (see ``Mmseqs2HomologySearchConfig.gpus_per_instance``).
         """
         from proto_tools.utils.device import parse_device_string
 

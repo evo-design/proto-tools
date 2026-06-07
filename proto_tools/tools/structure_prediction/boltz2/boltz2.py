@@ -205,16 +205,16 @@ class Boltz2Config(MSAStructurePredictionConfig):
             Must be at least 1. Default: ``min(cpu_count, 4)``.
 
         use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
-            for protein chains using ColabFold search. Inherited from
+            for protein chains using MMseqs2 homology search. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``True``.
 
         pair_heterocomplex_msas (bool): Whether heterocomplex protein chains
             should use taxonomy-paired MSA generation. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``True``.
 
-        colabfold_search_config (ColabfoldSearchConfig | None): Configuration for
-            ColabFold MSA search. Only used when ``use_msa=True``. Inherited from
-            ``MSAStructurePredictionConfig``. Default: ``None``.
+        msa_search_config (Mmseqs2HomologySearchConfig | None): Configuration for
+            MMseqs2 homology search (MSA generation). Only used when ``use_msa=True``.
+            Inherited from ``MSAStructurePredictionConfig``. Default: ``None``.
 
         verbose: Whether to print status messages during execution including
             MSA generation, model loading, and prediction progress. Inherited from
@@ -389,10 +389,10 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config, instance: Any = None) 
     Note:
         - Boltz2 processes each complex independently and sequentially
         - MSA generation modes:
-            - ``use_msa=False``: No ColabFold search; caller-supplied MSAs are still used
-            - ``use_msa=True`` (default): Use ColabFold search tool for MSA generation
+            - ``use_msa=False``: No MMseqs2 search; caller-supplied MSAs are still used
+            - ``use_msa=True`` (default): Use the MMseqs2 homology-search tool for MSA generation
         - Higher ``recycling_steps`` and ``sampling_steps`` improve quality but increase runtime
-        - Supports both local and remote ColabFold search modes when ``use_msa=True``
+        - Supports both local and remote MSA search modes when ``use_msa=True``
     """
     base_seed = config.seed if config.seed is not None else config.get_random_int()
     # Advance the seed per complex so duplicate inputs get distinct seeds.

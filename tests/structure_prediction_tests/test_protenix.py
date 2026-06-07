@@ -108,11 +108,11 @@ def test_protenix_config_explicit_schedule_overrides_variant_default():
     assert config.num_diffusion_steps == 100
 
 
-def test_protenix_config_colabfold_lazy_init():
-    """colabfold_search_config is None by default, initialized lazily in preprocess."""
+def test_protenix_config_msa_search_lazy_init():
+    """msa_search_config is None by default, initialized lazily in preprocess."""
     config = ProtenixConfig(verbose=True)
     # Not eagerly initialized; stays None until preprocess() is called
-    assert config.colabfold_search_config is None
+    assert config.msa_search_config is None
 
 
 def test_protenix_input_accepts_string_shorthand():

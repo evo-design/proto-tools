@@ -179,16 +179,16 @@ class AlphaFold2Config(MSAStructurePredictionConfig):
             (models 1 through N). Range: 1-5. Default: 1.
 
         use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
-            for protein chains using ColabFold search. Inherited from
+            for protein chains using MMseqs2 homology search. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``True``.
 
         pair_heterocomplex_msas (bool): Whether heterocomplex protein chains
             should use taxonomy-paired MSA generation. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``True``.
 
-        colabfold_search_config (ColabfoldSearchConfig | None): Configuration for
-            ColabFold MSA search. Only used when ``use_msa=True``. Inherited from
-            ``MSAStructurePredictionConfig``. Default: ``None``.
+        msa_search_config (Mmseqs2HomologySearchConfig | None): Configuration for
+            MMseqs2 homology search (MSA generation). Only used when ``use_msa=True``.
+            Inherited from ``MSAStructurePredictionConfig``. Default: ``None``.
 
         device: Device to run the model on (``"cuda"``, ``"cpu"``). Inherited
             from ``StructurePredictionConfig``. Default: ``"cuda"``.
@@ -265,7 +265,7 @@ def run_alphafold2(
 
     Uses the original AlphaFold2 model via the ColabDesign JAX wrapper to predict
     3D structures of protein sequences. Supports optional MSA generation via
-    ColabFold search for improved accuracy.
+    MMseqs2 homology search for improved accuracy.
 
     Args:
         inputs (AlphaFold2Input): Validated input containing one or more protein

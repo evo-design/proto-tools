@@ -15,8 +15,8 @@ from proto_tools.entities.structures import (
     Structure,
     StructureEnsemble,
 )
-from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
-    ColabfoldSearchConfig,
+from proto_tools.tools.sequence_alignment.mmseqs2.homology_search import (
+    Mmseqs2HomologySearchConfig,
 )
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Complex,
@@ -151,7 +151,7 @@ class BioEmuConfig(StructurePredictionConfig):
 
     BioEmu always requires MSA-derived Evoformer embeddings. Unlike structure
     prediction tools (which have an optional ``use_msa`` toggle), this config
-    always runs ColabFold search during preprocessing to generate MSAs. If MSAs
+    always runs MMseqs2 homology search during preprocessing to generate MSAs. If MSAs
     are pre-supplied on the input, the search is skipped.
 
     Attributes:
@@ -169,8 +169,8 @@ class BioEmuConfig(StructurePredictionConfig):
         cache_embeds_dir (str | None): Directory to cache MSA embeddings across runs.
         cache_so3_dir (str | None): Directory to cache SO3 precomputations across runs.
         output_dir (str | None): Optional directory for raw BioEmu outputs.
-        colabfold_search_config (ColabfoldSearchConfig | None): ColabFold MSA
-            search config. Defaults are used when ``None``.
+        msa_search_config (Mmseqs2HomologySearchConfig | None): MMseqs2 homology
+            search config (MSA generation). Defaults are used when ``None``.
         include_pae_matrix (bool): Inherited but unused (no PAE in conformational sampling).
         timeout (int | None): Maximum execution time in seconds. Default: 3600.
         device (str): Inference device (inherited).
@@ -234,10 +234,10 @@ class BioEmuConfig(StructurePredictionConfig):
         description="Optional directory for raw BioEmu output files",
         include_in_key=False,
     )
-    colabfold_search_config: ColabfoldSearchConfig | None = ConfigField(
-        title="ColabFold Search Config",
+    msa_search_config: Mmseqs2HomologySearchConfig | None = ConfigField(
+        title="MSA Search Config",
         default=None,
-        description="Configuration for ColabFold MSA search; None uses defaults",
+        description="Configuration for MMseqs2 homology search (MSA generation); None uses defaults",
     )
     include_pae_matrix: bool = ConfigField(
         title="Include PAE Matrix",
@@ -253,7 +253,7 @@ class BioEmuConfig(StructurePredictionConfig):
     )
 
     def preprocess(self, inputs: StructurePredictionInput) -> StructurePredictionInput:  # type: ignore[override]
-        """Generate MSAs via ColabFold search (always — BioEmu requires them).
+        """Generate MSAs via MMseqs2 homology search (always — BioEmu requires them).
 
         Skips the search if MSAs are already pre-supplied on ``inputs.msas``.
 
@@ -264,10 +264,10 @@ class BioEmuConfig(StructurePredictionConfig):
         Returns:
             StructurePredictionInput: Updated inputs with ``msas`` field populated.
         """
-        if self.colabfold_search_config is None:
-            self.colabfold_search_config = ColabfoldSearchConfig()
-        self.colabfold_search_config.verbose = self.verbose
-        return _preprocess_structure_prediction_msas(inputs, self.colabfold_search_config, self.verbose)
+        if self.msa_search_config is None:
+            self.msa_search_config = Mmseqs2HomologySearchConfig()
+        self.msa_search_config.verbose = self.verbose
+        return _preprocess_structure_prediction_msas(inputs, self.msa_search_config, self.verbose)
 
 
 # ============================================================================

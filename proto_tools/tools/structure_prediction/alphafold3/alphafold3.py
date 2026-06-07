@@ -172,16 +172,16 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
             total candidates = len(seeds) * num_diffusion_samples.
 
         use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
-            for protein chains using ColabFold search. Inherited from
+            for protein chains using MMseqs2 homology search. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``True``.
 
         pair_heterocomplex_msas (bool): Whether heterocomplex protein chains
             should use taxonomy-paired MSA generation. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``True``.
 
-        colabfold_search_config (ColabfoldSearchConfig | None): Configuration for
-            ColabFold MSA search. Only used when ``use_msa=True``. Inherited from
-            ``MSAStructurePredictionConfig``. Default: ``None``.
+        msa_search_config (Mmseqs2HomologySearchConfig | None): Configuration for
+            MMseqs2 homology search (MSA generation). Only used when ``use_msa=True``.
+            Inherited from ``MSAStructurePredictionConfig``. Default: ``None``.
 
         include_pae_matrix (bool): Inherited. Default: ``False``.
 

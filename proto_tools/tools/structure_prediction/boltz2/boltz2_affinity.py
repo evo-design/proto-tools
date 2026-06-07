@@ -167,9 +167,9 @@ class Boltz2AffinityConfig(Boltz2Config):
         max_msa_seqs (int): Inherited. Cap on MSA depth fed into the model. Default: ``8192``.
         subsample_msa (bool): Inherited. Randomly subsample the MSA each run. Default: ``False``.
         num_workers (int): Inherited. Dataloader workers for prediction. Default: ``min(cpu_count, 4)``.
-        use_msa (bool): Inherited. Use ColabFold MSAs for protein chains. Default: ``True``.
+        use_msa (bool): Inherited. Use MMseqs2 MSAs for protein chains. Default: ``True``.
         pair_heterocomplex_msas (bool): Inherited. Use taxonomy-paired MSA generation for heterocomplex protein chains. Default: ``True``.
-        colabfold_search_config (ColabfoldSearchConfig | None): Inherited. ColabFold MSA search config. Default: ``None``.
+        msa_search_config (Mmseqs2HomologySearchConfig | None): Inherited. MMseqs2 homology-search config. Default: ``None``.
         include_pae_matrix (bool): No-op for affinity; excluded from the cache key. Default: ``False``.
         affinity_mw_correction (bool): Apply molecular-weight correction to the affinity value head. Default: ``False``.
         sampling_steps_affinity (int): Denoising steps for the affinity pass. Default: ``200``.

@@ -130,14 +130,14 @@ class ESMFold2Config(MSAStructurePredictionConfig):
         early_exit (bool): Exit refinement loops early when convergence is
             detected. Default ``False``.
         use_msa (bool): Whether to generate MSAs for protein chains via
-            ColabFold search. Only valid with ``model_checkpoint='esmfold2'``.
+            MMseqs2 homology search. Only valid with ``model_checkpoint='esmfold2'``.
             Default ``False``.
         pair_heterocomplex_msas (bool): Whether heterocomplex protein chains
             should use taxonomy-paired MSA generation. Inherited. Default:
             ``True``.
-        colabfold_search_config (ColabfoldSearchConfig | None): Configuration for
-            ColabFold MSA search. Only used when ``use_msa=True``. Inherited.
-            Default: ``None``.
+        msa_search_config (Mmseqs2HomologySearchConfig | None): Configuration for
+            MMseqs2 homology search (MSA generation). Only used when ``use_msa=True``.
+            Inherited. Default: ``None``.
         device (str): Device to run the model on. Default ``"cuda"``. Inherited.
         include_pae_matrix (bool): Attach the full per-token PAE matrix to
             metrics (``avg_pae`` is always emitted). Default ``False``. Inherited.
@@ -195,7 +195,7 @@ class ESMFold2Config(MSAStructurePredictionConfig):
     use_msa: bool = ConfigField(
         title="Use MSA",
         default=False,
-        description="Generate MSAs via ColabFold for protein chains. Only valid with model_checkpoint='esmfold2'.",
+        description="Generate MSAs via MMseqs2 for protein chains. Only valid with model_checkpoint='esmfold2'.",
     )
     timeout: int | None = ConfigField(
         title="Timeout",

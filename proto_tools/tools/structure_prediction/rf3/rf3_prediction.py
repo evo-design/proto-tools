@@ -204,9 +204,9 @@ class RF3Config(MSAStructurePredictionConfig):
         num_steps (int): Denoising steps in the diffusion process. Default 50.
         cyclic_chains (list[str]): Chain IDs (e.g. ``["A"]``) to mark as
             cyclic. Default ``[]``.
-        use_msa (bool): Generate ColabFold MSAs for protein chains. Inherited
-            from ``MSAStructurePredictionConfig``. Default True.
-        colabfold_search_config (ColabfoldSearchConfig | None): Inherited.
+        use_msa (bool): Generate MSAs for protein chains via MMseqs2 homology
+            search. Inherited from ``MSAStructurePredictionConfig``. Default True.
+        msa_search_config (Mmseqs2HomologySearchConfig | None): Inherited.
             Default ``None``.
         pair_heterocomplex_msas (bool): Use taxonomy-paired MSA generation for
             heterocomplex protein chains. Inherited. Default ``True``.
@@ -367,8 +367,9 @@ def run_rf3_prediction_on_complex(
         output_dir = os.path.join(temp_dir, "rf3_output")
         os.makedirs(output_dir)
 
+        # Honor MSAs whenever present: auto-generated when use_msa=True, or supplied by the caller (always respected regardless of use_msa).
         chain_msa_paths: dict[str, str] | None = None
-        if config.use_msa:
+        if complex_msas is not None:
             chain_msa_paths = build_chain_a3m_paths(sp_complex, complex_msas, temp_dir, verbose=config.verbose)
 
         json_payload = complex_to_rf3_json(

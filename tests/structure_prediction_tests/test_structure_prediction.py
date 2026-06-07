@@ -11,12 +11,14 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from proto_tools.databases import get_dataset_dir
 from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures import is_valid_structure
-from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
-    ColabfoldSearchConfig,
-    ColabfoldSearchInput,
-    run_colabfold_search,
+from proto_tools.tools.sequence_alignment.mmseqs2.homology_search import (
+    Mmseqs2HomologySearchConfig,
+    Mmseqs2HomologySearchInput,
+    Mmseqs2HomologySearchQuery,
+    run_mmseqs2_homology_search,
 )
 from proto_tools.tools.structure_prediction import (
     AlphaFold2Config,
@@ -346,11 +348,11 @@ def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
         config = config_class(**config_kwargs)
 
         if use_msa and msa_search_mode is not None:
-            from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
-                ColabfoldSearchConfig,
+            from proto_tools.tools.sequence_alignment.mmseqs2.homology_search import (
+                Mmseqs2HomologySearchConfig,
             )
 
-            config.colabfold_search_config = ColabfoldSearchConfig(search_mode=msa_search_mode, verbose=True)
+            config.msa_search_config = Mmseqs2HomologySearchConfig(search_mode=msa_search_mode, verbose=True)
     else:
         config = config_class(verbose=True)
 
@@ -558,47 +560,48 @@ _L10_SEQ = (
     "LVRTLAAVRDAKEAA"
 )
 
-# Mini SwissProt MMseqs DB; auto-provisioned by tests/dummy_data/create_mini_mmseqs_db.py.
-_MINI_DB_DIR = Path(__file__).parent.parent / "dummy_data" / "mini_mmseqs_db"
-_MINI_DB_NAME = "uniref30_mini_db"
+# Mini SwissProt DB via the registry-driven ``tiny-test-colabfold`` dataset entry; auto-provisioned on first dispatch.
+_MSA_TEST_DATASET = "tiny-test-colabfold"
 
 
 def _mini_db_skip_reason() -> str | None:
-    """Skip reason when the local mini MMseqs DB is missing; ``None`` if present."""
-    if not (_MINI_DB_DIR / f"{_MINI_DB_NAME}.dbtype").exists():
-        return f"Mini MMseqs DB not provisioned at {_MINI_DB_DIR}; run tests/dummy_data/create_mini_mmseqs_db.py first."
+    """Skip reason when ``tiny-test-colabfold`` isn't already on disk; ``None`` if present."""
+    cache = get_dataset_dir(_MSA_TEST_DATASET)
+    if not (cache / "uniref30_mini_db.dbtype").exists():
+        return (
+            f"tiny-test-colabfold not provisioned at {cache}; first dispatch auto-provisions "
+            "(263 MB download). Skipping to keep the test offline-safe."
+        )
     return None
 
 
-def _build_local_colabfold_config(output_dir: Path, *, pairing_strategy: str = "greedy") -> ColabfoldSearchConfig:
-    # CPU MMseqs: pytest's DeviceManager masks the GPU from the colabfold-search subprocess (tool not registered uses_gpu), and `--gpu 1` against an empty CUDA_VISIBLE_DEVICES crashes mmseqs.
-    return ColabfoldSearchConfig(
+def _build_local_mmseqs2_config() -> Mmseqs2HomologySearchConfig:
+    # tiny-test-colabfold is excluded from the product `dataset` Literal so the proto-ui doesn't surface it; use model_construct to bypass the enum validator. CPU because the colabfold-search subprocess can't see the GPU under pytest's DeviceManager mask.
+    return Mmseqs2HomologySearchConfig.model_construct(
         search_mode="local",
-        msa_db_dir=str(_MINI_DB_DIR),
-        database_name=_MINI_DB_NAME,
-        output_dir=str(output_dir),
-        use_metagenomic_db=False,
-        num_threads=4,
+        dataset=_MSA_TEST_DATASET,
         use_gpu=False,
-        pairing_strategy=pairing_strategy,
         verbose=False,
     )
 
 
 @pytest.fixture(scope="module")
 def _local_unpaired_msas(tmp_path_factory):
-    """Two independent unpaired local ColabFold searches against the mini SwissProt DB.
+    """Two independent unpaired local MMseqs2 searches against the mini SwissProt DB.
 
     Module-scoped: the searches are amortized across every parametrization of
     ``test_locally_searched_msa_drives_end_to_end_prediction``.
     """
     if _mini_db_skip_reason():
         pytest.skip(_mini_db_skip_reason())
-    out_dir = tmp_path_factory.mktemp("colabfold_unpaired")
-    config = _build_local_colabfold_config(out_dir)
-    inputs = ColabfoldSearchInput(queries=[_L7L12_SEQ, _L10_SEQ])
-    result = run_colabfold_search(inputs, config)
-    assert result.success, "Local ColabFold search (unpaired) failed"
+    inputs = Mmseqs2HomologySearchInput(
+        queries=[
+            Mmseqs2HomologySearchQuery(sequence=_L7L12_SEQ, sequence_id="l7l12"),
+            Mmseqs2HomologySearchQuery(sequence=_L10_SEQ, sequence_id="l10"),
+        ]
+    )
+    result = run_mmseqs2_homology_search(inputs, _build_local_mmseqs2_config())
+    assert result.success, "Local MMseqs2 search (unpaired) failed"
     msa_l7l12 = result.results[0].msas[0]
     msa_l10 = result.results[1].msas[0]
     assert msa_l7l12 is not None and msa_l10 is not None, (
@@ -609,25 +612,29 @@ def _local_unpaired_msas(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def _local_paired_msas(tmp_path_factory):
-    """One taxonomy-paired local ColabFold search (greedy) against the mini SwissProt DB.
+    """One taxonomy-paired local MMseqs2 search (greedy) against the mini SwissProt DB.
 
-    Module-scoped (see ``_local_unpaired_msas``). Requires the DB's ``*_mapping``
-    taxonomy file, which the mini DB ships with.
+    Module-scoped (see ``_local_unpaired_msas``). Requires the DB's taxonomy
+    ``*_mapping`` file, which the mini DB ships with.
     """
     if _mini_db_skip_reason():
         pytest.skip(_mini_db_skip_reason())
-    out_dir = tmp_path_factory.mktemp("colabfold_paired")
-    config = _build_local_colabfold_config(out_dir, pairing_strategy="greedy")
-    inputs = ColabfoldSearchInput(queries=[[_L7L12_SEQ, _L10_SEQ]])
-    result = run_colabfold_search(inputs, config)
-    assert result.success, "Local ColabFold search (paired) failed"
-    paired_result = result.results[0]
-    assert paired_result.paired, (
-        "Paired local ColabFold search fell back to unpaired — too few cross-chain hits "
-        "in the mini SwissProt DB for the chosen test pair."
+    inputs = Mmseqs2HomologySearchInput(
+        queries=[
+            [
+                Mmseqs2HomologySearchQuery(sequence=_L7L12_SEQ, sequence_id="l7l12"),
+                Mmseqs2HomologySearchQuery(sequence=_L10_SEQ, sequence_id="l10"),
+            ]
+        ]
     )
-    msa_l7l12, msa_l10 = paired_result.msas
-    assert msa_l7l12 is not None and msa_l10 is not None, "Paired ColabFold returned None for at least one chain"
+    result = run_mmseqs2_homology_search(inputs, _build_local_mmseqs2_config())
+    assert result.success, "Local MMseqs2 search (paired) failed"
+    paired_result = result.results[0]
+    assert all(m is not None for m in paired_result.paired_msas), (
+        "Paired local MMseqs2 search returned no taxonomy-aligned rows for at least one chain — "
+        "too few cross-chain hits in the mini SwissProt DB for the chosen test pair."
+    )
+    msa_l7l12, msa_l10 = paired_result.paired_msas
     return msa_l7l12, msa_l10
 
 
@@ -640,6 +647,7 @@ _SUPPLIED_MSA_PREDICTORS = {
     "chai1": (run_chai1, Chai1Input, Chai1Config),
     "esmfold2": (run_esmfold2, ESMFold2Input, ESMFold2Config),
     "protenix": (run_protenix, ProtenixInput, ProtenixConfig),
+    "rf3": (run_rf3_prediction, RF3Input, RF3Config),
 }
 
 # L-tyrosine (CCD "TYR"); only here to satisfy Boltz2-affinity's "exactly one ligand" validator.

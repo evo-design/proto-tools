@@ -10,8 +10,8 @@ from typing import ClassVar
 import pytest
 
 from proto_tools.entities.msa import MSA
-from proto_tools.tools.sequence_alignment.colabfold_search import colabfold_search as cfs
-from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search import ColabfoldSearchConfig
+from proto_tools.tools.sequence_alignment.mmseqs2 import homology_search as hs
+from proto_tools.tools.sequence_alignment.mmseqs2.homology_search import Mmseqs2HomologySearchConfig
 from proto_tools.tools.structure_prediction import shared_data_models as sdm
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
@@ -46,20 +46,34 @@ def _protein_complex(*sequences):
     return Complex(chains=[Chain(sequence=s, entity_type="protein") for s in sequences])
 
 
-def _stub_colabfold_search(monkeypatch):
-    """Replace run_colabfold_search with a stub echoing 3-row MSAs; capture submitted queries."""
+def _mmseqs2_result(members, *, paired):
+    """A stub Mmseqs2HomologySearchResult: one 3-row MSA per chain, optionally row-aligned paired."""
+    chain_msas = [MSA(aligned_sequences=[q.sequence, q.sequence, q.sequence]) for q in members]
+    return hs.Mmseqs2HomologySearchResult(
+        sequence_ids=[q.sequence_id for q in members],
+        msas=chain_msas,
+        paired_msas=chain_msas if paired else [None for _ in members],
+        datasets_searched=["stub"],
+        num_homologs_found=[2 for _ in members],
+    )
+
+
+def _stub_mmseqs2_search(monkeypatch):
+    """Replace run_mmseqs2_homology_search with a stub echoing 3-row MSAs; capture submitted query groups.
+
+    Paired (nested-list) groups come back row-aligned; singletons come back unpaired.
+    """
     captured = {}
 
-    def fake(colabfold_input, config):
-        captured["queries"] = list(colabfold_input.queries)
+    def fake(search_input, config):
+        captured["queries"] = list(search_input.queries)
         results = []
-        for q in colabfold_input.queries:
-            # One 3-row MSA per chain (equal depth → row-aligned for paired groups).
-            chain_msas = [MSA(aligned_sequences=[s, s, s]) for s in q.sequences]
-            results.append(cfs.ColabfoldSearchResult(query_sequences=q.sequences, msas=chain_msas, paired=q.is_paired))
-        return cfs.ColabfoldSearchOutput(results=results)
+        for group in search_input.queries:
+            members = group if isinstance(group, list) else [group]
+            results.append(_mmseqs2_result(members, paired=isinstance(group, list)))
+        return hs.Mmseqs2HomologySearchOutput(results=results)
 
-    monkeypatch.setattr(cfs, "run_colabfold_search", fake)
+    monkeypatch.setattr(hs, "run_mmseqs2_homology_search", fake)
     return captured
 
 
@@ -133,13 +147,13 @@ def test_write_paired_a3m_species_tokens_align_across_chains(tmp_path):
 
 def test_preprocess_single_chain_is_unpaired(monkeypatch):
     """A single protein chain issues one unpaired query and yields a plain per-chain dict."""
-    captured = _stub_colabfold_search(monkeypatch)
+    captured = _stub_mmseqs2_search(monkeypatch)
     inputs = _SPInput(complexes=[_protein_complex(_SEQ_A)])
 
-    out = sdm._preprocess_structure_prediction_msas(inputs, ColabfoldSearchConfig(), verbose=0)
+    out = sdm._preprocess_structure_prediction_msas(inputs, Mmseqs2HomologySearchConfig(), verbose=0)
 
     assert len(captured["queries"]) == 1
-    assert not captured["queries"][0].is_paired
+    assert not isinstance(captured["queries"][0], list)  # singleton group
     entry = out.msas[0]
     assert isinstance(entry, ComplexMSAs)
     assert not entry.paired
@@ -148,13 +162,13 @@ def test_preprocess_single_chain_is_unpaired(monkeypatch):
 
 def test_preprocess_homomultimer_broadcasts_single_msa(monkeypatch):
     """A homodimer issues one unpaired query (deduped) and broadcasts the MSA to both chains."""
-    captured = _stub_colabfold_search(monkeypatch)
+    captured = _stub_mmseqs2_search(monkeypatch)
     inputs = _SPInput(complexes=[_protein_complex(_SEQ_A, _SEQ_A)])
 
-    out = sdm._preprocess_structure_prediction_msas(inputs, ColabfoldSearchConfig(), verbose=0)
+    out = sdm._preprocess_structure_prediction_msas(inputs, Mmseqs2HomologySearchConfig(), verbose=0)
 
     assert len(captured["queries"]) == 1
-    assert not captured["queries"][0].is_paired
+    assert not isinstance(captured["queries"][0], list)  # homomultimer dedups to one unpaired query
     entry = out.msas[0]
     assert not entry.paired
     assert set(entry.per_chain) == {0, 1}
@@ -162,15 +176,15 @@ def test_preprocess_homomultimer_broadcasts_single_msa(monkeypatch):
 
 
 def test_preprocess_heterocomplex_is_paired(monkeypatch):
-    """A heterodimer issues one paired query and yields a paired ComplexMSAs over both chains."""
-    captured = _stub_colabfold_search(monkeypatch)
+    """A heterodimer issues one paired query group and yields a paired ComplexMSAs over both chains."""
+    captured = _stub_mmseqs2_search(monkeypatch)
     inputs = _SPInput(complexes=[_protein_complex(_SEQ_A, _SEQ_B)])
 
-    out = sdm._preprocess_structure_prediction_msas(inputs, ColabfoldSearchConfig(), verbose=0)
+    out = sdm._preprocess_structure_prediction_msas(inputs, Mmseqs2HomologySearchConfig(), verbose=0)
 
-    paired = [q for q in captured["queries"] if q.is_paired]
+    paired = [g for g in captured["queries"] if isinstance(g, list)]
     assert len(paired) == 1
-    assert len(paired[0].sequences) == 2
+    assert len(paired[0]) == 2  # two chains in the paired group
     entry = out.msas[0]
     assert entry.paired
     assert set(entry.per_chain) == {0, 1}
@@ -179,18 +193,19 @@ def test_preprocess_heterocomplex_is_paired(monkeypatch):
 
 def test_preprocess_heterocomplex_can_disable_pairing(monkeypatch):
     """A heterodimer can request independent unpaired MSAs for each chain."""
-    captured = _stub_colabfold_search(monkeypatch)
+    captured = _stub_mmseqs2_search(monkeypatch)
     inputs = _SPInput(complexes=[_protein_complex(_SEQ_A, _SEQ_B)])
 
     out = sdm._preprocess_structure_prediction_msas(
         inputs,
-        ColabfoldSearchConfig(),
+        Mmseqs2HomologySearchConfig(),
         verbose=0,
         pair_heterocomplex_msas=False,
     )
 
     assert len(captured["queries"]) == 2
-    assert not any(q.is_paired for q in captured["queries"])
+    # Mmseqs2HomologySearchInput marks paired groups as a nested list; singletons are bare queries.
+    assert not any(isinstance(g, list) for g in captured["queries"])
     entry = out.msas[0]
     assert entry.paired is False
     assert set(entry.per_chain) == {0, 1}
@@ -243,20 +258,20 @@ def test_preprocess_validates_pre_supplied_msas_even_when_msa_disabled():
 
 
 def test_preprocess_heterocomplex_unpaired_fallback(monkeypatch):
-    """A paired query that fell back to unpaired (result.paired=False) yields a paired=False ComplexMSAs."""
+    """A paired group that found no pairing (paired_msas all None) yields a paired=False ComplexMSAs from msas."""
 
-    def fake(colabfold_input, config):
+    def fake(search_input, config):
+        # Simulate the no-pairing fallback: paired_msas all None, unpaired msas present.
         results = []
-        for q in colabfold_input.queries:
-            chain_msas = [MSA(aligned_sequences=[s, s, s]) for s in q.sequences]
-            # Simulate the n_found==0 fallback: a paired query returns unpaired MSAs, paired=False.
-            results.append(cfs.ColabfoldSearchResult(query_sequences=q.sequences, msas=chain_msas, paired=False))
-        return cfs.ColabfoldSearchOutput(results=results)
+        for group in search_input.queries:
+            members = group if isinstance(group, list) else [group]
+            results.append(_mmseqs2_result(members, paired=False))
+        return hs.Mmseqs2HomologySearchOutput(results=results)
 
-    monkeypatch.setattr(cfs, "run_colabfold_search", fake)
+    monkeypatch.setattr(hs, "run_mmseqs2_homology_search", fake)
     inputs = _SPInput(complexes=[_protein_complex(_SEQ_A, _SEQ_B)])
 
-    out = sdm._preprocess_structure_prediction_msas(inputs, ColabfoldSearchConfig(), verbose=0)
+    out = sdm._preprocess_structure_prediction_msas(inputs, Mmseqs2HomologySearchConfig(), verbose=0)
 
     entry = out.msas[0]
     assert entry.paired is False
@@ -264,32 +279,36 @@ def test_preprocess_heterocomplex_unpaired_fallback(monkeypatch):
 
 
 def test_preprocess_two_heterocomplexes_not_deduped_across_complexes(monkeypatch):
-    """Two heterocomplexes sharing a chain sequence still submit two separate paired groups."""
-    captured = _stub_colabfold_search(monkeypatch)
+    """Two heterocomplexes sharing a chain sequence still submit two separate paired groups.
+
+    Also exercises the unique-sequence_id contract: the shared chain gets distinct
+    per-group ids (`p0_*` vs `p1_*`), so the search input's uniqueness validator passes.
+    """
+    captured = _stub_mmseqs2_search(monkeypatch)
     inputs = _SPInput(complexes=[_protein_complex(_SEQ_A, _SEQ_B), _protein_complex(_SEQ_A, _SEQ_C)])
 
-    out = sdm._preprocess_structure_prediction_msas(inputs, ColabfoldSearchConfig(), verbose=0)
+    out = sdm._preprocess_structure_prediction_msas(inputs, Mmseqs2HomologySearchConfig(), verbose=0)
 
-    paired = [q for q in captured["queries"] if q.is_paired]
+    paired = [g for g in captured["queries"] if isinstance(g, list)]
     assert len(paired) == 2
     assert len(out.msas) == 2
     assert all(entry.paired for entry in out.msas)
 
 
 def test_preprocess_skips_search_when_msas_presupplied(monkeypatch):
-    """Pre-supplied msas short-circuit preprocessing without calling ColabFold."""
+    """Pre-supplied msas short-circuit preprocessing without calling the MSA search."""
     calls = {"n": 0}
 
     def fail(*args, **kwargs):
         calls["n"] += 1
-        raise AssertionError("run_colabfold_search must not be called when msas are pre-supplied")
+        raise AssertionError("run_mmseqs2_homology_search must not be called when msas are pre-supplied")
 
-    monkeypatch.setattr(cfs, "run_colabfold_search", fail)
+    monkeypatch.setattr(hs, "run_mmseqs2_homology_search", fail)
 
     msa = MSA(aligned_sequences=[_SEQ_A, _SEQ_A])
     inputs = _SPInput(complexes=[_protein_complex(_SEQ_A)], msas=[{0: msa}])
 
-    out = sdm._preprocess_structure_prediction_msas(inputs, ColabfoldSearchConfig(), verbose=0)
+    out = sdm._preprocess_structure_prediction_msas(inputs, Mmseqs2HomologySearchConfig(), verbose=0)
 
     assert calls["n"] == 0
     assert out.msas[0].per_chain[0].aligned_sequences == [_SEQ_A, _SEQ_A]
@@ -297,12 +316,12 @@ def test_preprocess_skips_search_when_msas_presupplied(monkeypatch):
 
 def test_preprocess_rejects_presupplied_length_mismatch(monkeypatch):
     """Pre-supplied msas must be parallel to complexes."""
-    _stub_colabfold_search(monkeypatch)
+    _stub_mmseqs2_search(monkeypatch)
     msa = MSA(aligned_sequences=[_SEQ_A, _SEQ_A])
     inputs = _SPInput(complexes=[_protein_complex(_SEQ_A), _protein_complex(_SEQ_B)], msas=[{0: msa}])
 
     with pytest.raises(ValueError, match="does not match"):
-        sdm._preprocess_structure_prediction_msas(inputs, ColabfoldSearchConfig(), verbose=0)
+        sdm._preprocess_structure_prediction_msas(inputs, Mmseqs2HomologySearchConfig(), verbose=0)
 
 
 # ── AF3-style token counting ──────────────────────────────────────────────────
