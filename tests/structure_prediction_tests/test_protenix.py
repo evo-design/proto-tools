@@ -115,6 +115,33 @@ def test_protenix_config_msa_search_lazy_init():
     assert config.msa_search_config is None
 
 
+def test_protenix_unpaired_msa_path_gets_deep_per_chain_unpaired(tmp_path):
+    """The unpaired slot receives each chain's deep unpaired MSA; the paired slot the shallow paired set."""
+    from pathlib import Path
+
+    from proto_tools.entities.msa import MSA
+    from proto_tools.tools.structure_prediction.protenix.protenix import _write_msas_to_batch_json
+    from proto_tools.tools.structure_prediction.shared_data_models import ComplexMSAs
+
+    seq_a, seq_b = "MKTAYIAKQR", "GSHMEELLSK"
+    cx = Complex(chains=[Chain(sequence=seq_a, entity_type="protein"), Chain(sequence=seq_b, entity_type="protein")])
+    paired = {i: MSA(aligned_sequences=[s, s]) for i, s in enumerate([seq_a, seq_b])}  # 2 rows
+    unpaired = {i: MSA(aligned_sequences=[s, s, s, s, s]) for i, s in enumerate([seq_a, seq_b])}  # 5 rows
+    inputs = ProtenixInput(
+        complexes=[cx], msas=[ComplexMSAs(per_chain=paired, paired=True, unpaired_per_chain=unpaired)]
+    )
+    batch_json = [{"sequences": [{"proteinChain": {}}, {"proteinChain": {}}]}]
+
+    _write_msas_to_batch_json(batch_json, inputs, ProtenixConfig(), str(tmp_path))
+
+    for entry in batch_json[0]["sequences"]:
+        pc = entry["proteinChain"]
+        unpaired_rows = Path(pc["unpairedMsaPath"]).read_text().count(">")
+        paired_rows = Path(pc["pairedMsaPath"]).read_text().count(">")
+        assert unpaired_rows == 5, f"unpairedMsaPath should carry the deep unpaired, got {unpaired_rows}"
+        assert paired_rows == 2, f"pairedMsaPath should carry the paired set, got {paired_rows}"
+
+
 def test_protenix_input_accepts_string_shorthand():
     """Single-chain string input is normalised to a Complex."""
     inputs = ProtenixInput(complexes=["MKTL"])

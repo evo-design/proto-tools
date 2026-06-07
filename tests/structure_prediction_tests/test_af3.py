@@ -141,6 +141,46 @@ def test_af3_rejects_msa_keyed_to_wrong_chain(mock_af3_inference):
         run_alphafold3(inputs, config)
 
 
+def test_af3_unpaired_msa_path_gets_deep_per_chain_unpaired(tmp_path):
+    """The unpaired slot receives each chain's deep unpaired MSA; the paired slot the shallow paired set."""
+    from proto_tools.entities.complex import Chain, Complex
+    from proto_tools.tools.structure_prediction.alphafold3.alphafold3 import _assign_msas_to_input_json
+
+    seq_a, seq_b = "MKTAYIAKQR", "GSHMEELLSK"
+    cx = Complex(chains=[Chain(sequence=seq_a, entity_type="protein"), Chain(sequence=seq_b, entity_type="protein")])
+    paired = {i: MSA(aligned_sequences=[s, s]) for i, s in enumerate([seq_a, seq_b])}  # 2 rows
+    unpaired = {i: MSA(aligned_sequences=[s, s, s, s, s]) for i, s in enumerate([seq_a, seq_b])}  # 5 rows
+    input_json = {"sequences": [{"protein": {"id": "A"}}, {"protein": {"id": "B"}}]}
+
+    out = _assign_msas_to_input_json(input_json, paired, unpaired, True, cx, str(tmp_path), verbose=0)
+
+    for entry in out["sequences"]:
+        prot = entry["protein"]
+        unpaired_rows = (tmp_path / prot["unpairedMsaPath"]).read_text().count(">")
+        paired_rows = (tmp_path / prot["pairedMsaPath"]).read_text().count(">")
+        assert unpaired_rows == 5, f"unpairedMsaPath should carry the deep unpaired MSA, got {unpaired_rows} rows"
+        assert paired_rows == 2, f"pairedMsaPath should carry the paired set, got {paired_rows} rows"
+
+
+def test_af3_unpaired_falls_back_to_paired_when_no_separate_unpaired(tmp_path):
+    """With no separate unpaired MSA, unpairedMsaPath falls back to the primary MSA (prior behavior)."""
+    from proto_tools.entities.complex import Chain, Complex
+    from proto_tools.tools.structure_prediction.alphafold3.alphafold3 import _assign_msas_to_input_json
+
+    seq_a, seq_b = "MKTAYIAKQR", "GSHMEELLSK"
+    cx = Complex(chains=[Chain(sequence=seq_a, entity_type="protein"), Chain(sequence=seq_b, entity_type="protein")])
+    paired = {i: MSA(aligned_sequences=[s, s, s]) for i, s in enumerate([seq_a, seq_b])}  # 3 rows
+    input_json = {"sequences": [{"protein": {"id": "A"}}, {"protein": {"id": "B"}}]}
+
+    out = _assign_msas_to_input_json(input_json, paired, None, True, cx, str(tmp_path), verbose=0)
+
+    for entry in out["sequences"]:
+        prot = entry["protein"]
+        unpaired_rows = (tmp_path / prot["unpairedMsaPath"]).read_text().count(">")
+        paired_rows = (tmp_path / prot["pairedMsaPath"]).read_text().count(">")
+        assert unpaired_rows == 3 and paired_rows == 3  # both slots from the same set
+
+
 def test_af3_rna_entity(mock_af3_inference):
     """RNA chains are correctly formatted in the AF3 JSON dialect."""
     chains = [

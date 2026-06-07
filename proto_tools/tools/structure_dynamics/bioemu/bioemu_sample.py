@@ -309,7 +309,7 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance: Any = None) 
     if inputs.msas:
         for cplx_idx, complex_ in enumerate(inputs.complexes):
             seq = complex_.chain_sequences[0]
-            per_chain, _ = unwrap_complex_msas(inputs.msas[cplx_idx])
+            per_chain, _unpaired, _ = unwrap_complex_msas(inputs.msas[cplx_idx])
             msa = per_chain.get(0)
             if msa is not None:
                 msa_a3m_contents[cplx_idx] = msa.to_a3m_string()

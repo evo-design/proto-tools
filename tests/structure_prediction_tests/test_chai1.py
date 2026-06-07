@@ -26,6 +26,52 @@ from tests.structure_prediction_tests._fasta_helpers import load_benchmark_compl
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 
 
+def test_msa_to_pqt_appends_deep_unpaired_with_empty_pairing_key(tmp_path):
+    """Paired rows keep row-index pairing keys; the deep unpaired MSA is appended with empty keys.
+
+    chai_lab pairs rows whose ``pairing_key`` matches across chains and treats empty
+    keys as unpaired depth, so one pqt carries both the row-aligned paired rows and
+    the deeper per-chain unpaired rows.
+    """
+    import pandas as pd
+
+    from proto_tools.entities.msa import MSA
+    from proto_tools.tools.structure_prediction.chai1.chai1 import _msa_to_pqt_file
+
+    query = "MKTAYIAKQR"
+    paired = MSA(aligned_sequences=[query, "MKTAYIAKQA", "MKTAYIAKQE"])  # query + 2 paired rows
+    # Deep unpaired: query + 4 rows, 2 of which overlap the paired set (should dedup).
+    unpaired = MSA(aligned_sequences=[query, "MKTAYIAKQA", "MKTAYIAKQE", "MKTAYIAKQW", "MKTAYIAKQY"])
+
+    pqt_path = str(tmp_path / "chain.aligned.pqt")
+    _msa_to_pqt_file(msa=paired, pqt_path=pqt_path, paired=True, unpaired_msa=unpaired)
+
+    df = pd.read_parquet(pqt_path)
+    keys = df["pairing_key"].tolist()
+    seqs = df["sequence"].tolist()
+    assert len(df) == 5  # query + 2 paired + 2 unique unpaired (overlaps deduped)
+    assert keys[0] == "" and df.iloc[0]["source_database"] == "query"  # query row
+    assert keys[1:3] == ["1", "2"]  # paired rows: row-index pairing keys
+    assert keys[3:] == ["", ""]  # appended deep-unpaired rows: empty pairing key
+    assert "MKTAYIAKQW" in seqs and "MKTAYIAKQY" in seqs  # new unpaired depth present
+
+
+def test_msa_to_pqt_without_unpaired_keeps_paired_only(tmp_path):
+    """With no unpaired MSA, only the paired rows are written (prior behavior)."""
+    import pandas as pd
+
+    from proto_tools.entities.msa import MSA
+    from proto_tools.tools.structure_prediction.chai1.chai1 import _msa_to_pqt_file
+
+    paired = MSA(aligned_sequences=["MKTAYIAKQR", "MKTAYIAKQA", "MKTAYIAKQE"])
+    pqt_path = str(tmp_path / "chain.aligned.pqt")
+    _msa_to_pqt_file(msa=paired, pqt_path=pqt_path, paired=True)
+
+    df = pd.read_parquet(pqt_path)
+    assert len(df) == 3
+    assert df["pairing_key"].tolist() == ["", "1", "2"]
+
+
 @pytest.mark.benchmark("chai1-prediction")
 @pytest.mark.slow
 @pytest.mark.uses_gpu

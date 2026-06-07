@@ -179,7 +179,8 @@ class AlphaFold2Config(MSAStructurePredictionConfig):
             (models 1 through N). Range: 1-5. Default: 1.
 
         use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
-            for protein chains using MMseqs2 homology search. Inherited from
+            for protein chains using MMseqs2 homology search. Supplied MSAs are always
+            used and override ``use_msa=False``. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``True``.
 
         pair_heterocomplex_msas (bool): Whether heterocomplex protein chains
@@ -313,11 +314,12 @@ def run_alphafold2(
         # Attach MSAs: single-chain/homo-oligomer pass one A3M (ColabDesign tiles it); heteromultimers pass per-chain A3Ms stitched into a block-diagonal MSA downstream.
         msa_a3m_content: str | None = None
         per_chain_msas_a3m: list[str | None] | None = None
+        unpaired_per_chain_msas_a3m: list[str | None] | None = None
         is_paired = False
         if inputs.msas:
             from proto_tools.tools.structure_prediction.shared_data_models import unwrap_complex_msas
 
-            per_chain, is_paired = unwrap_complex_msas(inputs.msas[complex_data["complex_idx"]])
+            per_chain, unpaired_per_chain, is_paired = unwrap_complex_msas(inputs.msas[complex_data["complex_idx"]])
             num_chains = complex_data["num_chains"]
             is_homooligomer = num_chains > 1 and len(set(complex_data["chains"])) == 1
 
@@ -331,6 +333,12 @@ def run_alphafold2(
                 per_chain_msas_a3m = [
                     per_chain[i].to_a3m_string() if i in per_chain else None for i in range(num_chains)
                 ]
+                # Deep per-chain unpaired MSAs ride alongside the paired rows for block-diagonal depth.
+                if unpaired_per_chain:
+                    unpaired_per_chain_msas_a3m = [
+                        unpaired_per_chain[i].to_a3m_string() if i in unpaired_per_chain else None
+                        for i in range(num_chains)
+                    ]
                 if config.verbose:
                     depths = [len(per_chain[i]) if i in per_chain else 0 for i in range(num_chains)]
                     logger.info(
@@ -349,6 +357,7 @@ def run_alphafold2(
             "msa_a3m_content": msa_a3m_content,
             "per_chain_msas_a3m": per_chain_msas_a3m,
             "is_paired": is_paired,
+            "unpaired_per_chain_msas_a3m": unpaired_per_chain_msas_a3m,
             "device": config.device,
             "verbose": config.verbose,
             "include_pae_matrix": config.include_pae_matrix,

@@ -131,6 +131,7 @@ class ESMFold2Config(MSAStructurePredictionConfig):
             detected. Default ``False``.
         use_msa (bool): Whether to generate MSAs for protein chains via
             MMseqs2 homology search. Only valid with ``model_checkpoint='esmfold2'``.
+            Supplied MSAs are always used and override ``use_msa=False``.
             Default ``False``.
         pair_heterocomplex_msas (bool): Whether heterocomplex protein chains
             should use taxonomy-paired MSA generation. Inherited. Default:
@@ -336,12 +337,16 @@ def _run_esmfold2_on_complex(
         _chain_to_payload(chain, chain_id) for chain, chain_id in zip(sp_complex.chains, chain_ids, strict=True)
     ]
 
-    per_chain_msas, is_paired = unwrap_complex_msas(complex_msas)
+    per_chain_msas, unpaired_per_chain, is_paired = unwrap_complex_msas(complex_msas)
 
     # MSAs are only meaningful for the MSA-capable checkpoint.
     msa_payload: dict[str, list[str]] | None = None
+    unpaired_payload: dict[str, list[str]] | None = None
     if config.model_checkpoint == "esmfold2" and per_chain_msas:
         msa_payload = _serialize_msas_for_worker(per_chain_msas)
+        # Deep per-chain unpaired MSAs ride alongside the paired rows for block-diagonal depth.
+        if unpaired_per_chain:
+            unpaired_payload = _serialize_msas_for_worker(unpaired_per_chain)
     elif config.model_checkpoint == "esmfold2-fast" and per_chain_msas:
         logger.warning("ESMFold2-Fast is single-sequence; ignoring supplied MSAs.")
 
@@ -350,6 +355,7 @@ def _run_esmfold2_on_complex(
         "chains": chains_payload,
         "msas": msa_payload,
         "msas_paired": is_paired,
+        "unpaired_msas": unpaired_payload,
         "model_checkpoint": config.model_checkpoint,
         "num_loops": config.num_loops,
         "num_sampling_steps": config.num_sampling_steps,

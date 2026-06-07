@@ -205,7 +205,8 @@ class RF3Config(MSAStructurePredictionConfig):
         cyclic_chains (list[str]): Chain IDs (e.g. ``["A"]``) to mark as
             cyclic. Default ``[]``.
         use_msa (bool): Generate MSAs for protein chains via MMseqs2 homology
-            search. Inherited from ``MSAStructurePredictionConfig``. Default True.
+            search. Supplied MSAs are always used and override ``use_msa=False``.
+            Inherited from ``MSAStructurePredictionConfig``. Default True.
         msa_search_config (Mmseqs2HomologySearchConfig | None): Inherited.
             Default ``None``.
         pair_heterocomplex_msas (bool): Use taxonomy-paired MSA generation for

@@ -51,7 +51,7 @@ def build_chain_a3m_paths(
             and a UserWarning is emitted (RF3 falls back to single-sequence
             mode for those chains).
     """
-    per_chain_msas, _is_paired = unwrap_complex_msas(complex_msas)
+    per_chain_msas, unpaired_per_chain, _is_paired = unwrap_complex_msas(complex_msas)
     chain_a3m_paths: dict[str, str] = {}
     if per_chain_msas:
         msa_dir = os.path.join(temp_dir, "msas")
@@ -63,16 +63,20 @@ def build_chain_a3m_paths(
             msa = per_chain_msas.get(ch_idx)
             if msa is None:
                 continue
+            # RF3 pairs by tax_id parsed from the a3m headers, so feed the deep
+            # per-chain unpaired MSA when present: it carries full per-chain depth
+            # plus the UniRef TaxID= headers RF3 uses to re-pair across chains.
+            a3m_msa = (unpaired_per_chain or {}).get(ch_idx) or msa
             chain_id = chain.id if chain.id is not None else chain_label(ch_idx)
             seq = chain.sequence
             a3m_path = seq_to_a3m.get(seq)
             if a3m_path is None:
                 a3m_path = os.path.join(msa_dir, f"{hashlib.sha256(seq.encode()).hexdigest()}.a3m")
-                msa.to_a3m_file(a3m_path)
+                a3m_msa.to_a3m_file(a3m_path)
                 seq_to_a3m[seq] = a3m_path
             chain_a3m_paths[chain_id] = a3m_path
             if verbose:
-                logger.info("Assigned MSA to chain %s (%d sequences)", chain_id, len(msa))
+                logger.info("Assigned MSA to chain %s (%d sequences)", chain_id, len(a3m_msa))
 
     _, protein_chain_ids = sp_complex.extract_protein_chains()
     for chain_id in protein_chain_ids:

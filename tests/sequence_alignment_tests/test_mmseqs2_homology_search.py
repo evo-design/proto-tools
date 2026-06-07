@@ -514,6 +514,70 @@ def test_paired_group_produces_row_aligned_paired_msas(tmp_path: Path, monkeypat
     assert captured[0]["sequences"] == [UBIQUITIN, HEMOGLOBIN_ALPHA]
 
 
+def test_remote_paired_group_fetches_paired_and_deep_unpaired(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Remote paired group returns row-aligned paired MSAs AND each chain's deeper unpaired MSA."""
+    from proto_tools.tools.sequence_alignment.mmseqs2 import homology_search as hs
+
+    members = [
+        Mmseqs2HomologySearchQuery(sequence=UBIQUITIN, sequence_id="chainA"),
+        Mmseqs2HomologySearchQuery(sequence=HEMOGLOBIN_ALPHA, sequence_id="chainB"),
+    ]
+    paired_dir = tmp_path / "paired"
+    unpaired_dir = tmp_path / "unpaired"
+    paired_dir.mkdir()
+    unpaired_dir.mkdir()
+    paired_paths: list[str] = []
+    unpaired_map: dict[str, str] = {}
+    for i, q in enumerate(members):
+        pp = paired_dir / f"{i}.a3m"
+        _write_a3m(pp, q.sequence, 3)
+        paired_paths.append(str(pp))
+        up = unpaired_dir / f"{i}.a3m"
+        _write_a3m(up, q.sequence, 6)
+        unpaired_map[str(i)] = str(up)
+
+    def fake_dispatch(remote_queries, output_dir, config, instance, script_path):  # type: ignore[no-untyped-def]
+        if isinstance(remote_queries[0]["sequences"], list):
+            return {"success": True, "paired_msa_paths": {"0": paired_paths}}
+        return {"success": True, "msa_paths": unpaired_map}
+
+    monkeypatch.setattr(hs, "_dispatch_remote", fake_dispatch)
+    result = hs._remote_paired_group(members, tmp_path / "grp", Mmseqs2HomologySearchConfig(), None, Path("x"))
+
+    assert all(m is not None for m in result.paired_msas)
+    assert all(m is not None for m in result.msas)
+    assert {m.num_sequences for m in result.paired_msas if m is not None} == {3}
+    assert {m.num_sequences for m in result.msas if m is not None} == {6}  # deeper unpaired
+
+
+def test_remote_paired_group_degrades_when_unpaired_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An unpaired-call failure leaves paired_msas intact and degrades msas to None (never breaks paired)."""
+    from proto_tools.tools.sequence_alignment.mmseqs2 import homology_search as hs
+
+    members = [
+        Mmseqs2HomologySearchQuery(sequence=UBIQUITIN, sequence_id="chainA"),
+        Mmseqs2HomologySearchQuery(sequence=HEMOGLOBIN_ALPHA, sequence_id="chainB"),
+    ]
+    paired_dir = tmp_path / "paired"
+    paired_dir.mkdir()
+    paired_paths: list[str] = []
+    for i, q in enumerate(members):
+        pp = paired_dir / f"{i}.a3m"
+        _write_a3m(pp, q.sequence, 3)
+        paired_paths.append(str(pp))
+
+    def fake_dispatch(remote_queries, output_dir, config, instance, script_path):  # type: ignore[no-untyped-def]
+        if isinstance(remote_queries[0]["sequences"], list):
+            return {"success": True, "paired_msa_paths": {"0": paired_paths}}
+        raise RuntimeError("unpaired API down")
+
+    monkeypatch.setattr(hs, "_dispatch_remote", fake_dispatch)
+    result = hs._remote_paired_group(members, tmp_path / "grp", Mmseqs2HomologySearchConfig(), None, Path("x"))
+
+    assert all(m is not None for m in result.paired_msas)  # paired result intact
+    assert all(m is None for m in result.msas)  # unpaired degraded, no exception
+
+
 def test_paired_homomultimer_yields_per_chain_msas_with_correct_query_rows(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -794,31 +858,31 @@ def test_remote_singleton_normalizes_header_and_parses(monkeypatch: pytest.Monke
 
 
 def test_remote_paired_group_returns_row_aligned_paired_msas(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A remote paired group returns row-aligned paired MSAs; unpaired ``msas`` stay None on pairing success."""
+    """A remote paired group returns row-aligned paired MSAs AND each chain's deep unpaired MSA."""
     calls: list[str] = []
-    _install_fake_remote_dispatch(monkeypatch, calls, paired_homologs=3)
+    _install_fake_remote_dispatch(monkeypatch, calls, paired_homologs=3, unpaired_homologs=4)
 
     inp = Mmseqs2HomologySearchInput(queries=[[(HBA_HUMAN, "hba"), (HBB_HUMAN, "hbb")]])
     out = run_mmseqs2_homology_search(inp, Mmseqs2HomologySearchConfig(search_mode="remote"))
 
-    assert calls == ["paired"]  # no fallback when pairing succeeds
+    assert sorted(calls) == ["paired", "unpaired"]  # paired + per-chain unpaired fetched in parallel
     grp = out.results[0]
     assert grp.sequence_ids == ["hba", "hbb"]
     assert all(m is not None for m in grp.paired_msas)
-    assert grp.msas == [None, None]  # remote computes no separate unpaired set on pairing success
-    depths = {m.num_sequences for m in grp.paired_msas if m is not None}
-    assert depths == {4}  # 1 query + 3 homologs, row-aligned across chains
+    assert all(m is not None for m in grp.msas)  # per-chain unpaired depth now retained
+    assert {m.num_sequences for m in grp.paired_msas if m is not None} == {4}  # 1 query + 3 homologs, row-aligned
+    assert {m.num_sequences for m in grp.msas if m is not None} == {5}  # 1 query + 4 homologs (deeper unpaired)
 
 
-def test_remote_paired_falls_back_to_unpaired_when_no_pairing(monkeypatch: pytest.MonkeyPatch) -> None:
-    """No shared taxonomy (paired query-only) triggers a gated unpaired call; paired_msas stays None."""
+def test_remote_paired_group_no_pairing_keeps_unpaired(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With no shared taxonomy the paired set is empty; the per-chain unpaired MSAs still come back."""
     calls: list[str] = []
     _install_fake_remote_dispatch(monkeypatch, calls, paired_homologs=0, unpaired_homologs=4)
 
     inp = Mmseqs2HomologySearchInput(queries=[[(HBA_HUMAN, "hba"), (HBB_HUMAN, "hbb")]])
     out = run_mmseqs2_homology_search(inp, Mmseqs2HomologySearchConfig(search_mode="remote"))
 
-    assert calls == ["paired", "unpaired"]  # the unpaired call is gated on pairing finding nothing
+    assert sorted(calls) == ["paired", "unpaired"]  # both always run, in parallel
     grp = out.results[0]
     assert grp.paired_msas == [None, None]
     assert all(m is not None for m in grp.msas)
@@ -855,8 +919,8 @@ def test_remote_mixed_groups_preserve_order(monkeypatch: pytest.MonkeyPatch) -> 
     assert [r.sequence_ids for r in out.results] == [["solo1"], ["pairA", "pairB"], ["solo2"]]
     assert out.results[0].paired_msas == [None] and out.results[2].paired_msas == [None]
     assert all(m is not None for m in out.results[1].paired_msas)
-    # One batched unpaired call for both singletons + one paired call (pairing succeeds, no fallback).
-    assert calls.count("unpaired") == 1 and calls.count("paired") == 1
+    # Two unpaired calls (the singletons batch + the paired group's per-chain unpaired) and one paired call.
+    assert calls.count("unpaired") == 2 and calls.count("paired") == 1
 
 
 # ============================================================================

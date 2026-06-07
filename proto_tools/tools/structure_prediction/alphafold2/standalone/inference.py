@@ -265,13 +265,16 @@ def _build_combined_multimer_msa(
     chains: list[str],
     seq_lengths: list[int],
     is_paired: bool,
+    unpaired_per_chain_msas_a3m: list[str | None] | None = None,
 ) -> tuple[Any, Any]:
     """Stitch per-chain A3Ms into one combined MSA of shape (N, L_total) for the multimer model.
 
     Layout:
       * row 0: concatenated chain queries
       * if ``is_paired``: paired rows — row k = ``[chain_0_row_k | chain_1_row_k | ...]``
-        (each chain's MSA is taxonomy-row-aligned so row k is the same species across chains)
+        (each chain's MSA is taxonomy-row-aligned so row k is the same species across chains),
+        then, when ``unpaired_per_chain_msas_a3m`` is supplied, each chain's deep unpaired
+        rows are appended block-diagonally below the paired block for per-chain depth.
       * else: block-diagonal rows — for each chain i and each non-query row in chain i's
         MSA, place that row in chain i's column band and gap-pad the other chains.
 
@@ -281,21 +284,27 @@ def _build_combined_multimer_msa(
     import numpy as np
     from colabdesign.shared.parsers import aa2num, parse_a3m
 
-    parsed: list[tuple[Any, Any] | None] = []
-    for i, a3m in enumerate(per_chain_msas_a3m):
-        if a3m is None:
-            parsed.append(None)
-            continue
-        msa_i, del_i = parse_a3m(a3m_string=a3m)
-        if msa_i.ndim == 1:
-            msa_i = msa_i[None]
-            del_i = del_i[None]
-        if msa_i.shape[1] != seq_lengths[i]:
-            raise ValueError(
-                f"alphafold2: chain {i} MSA length {msa_i.shape[1]} does not match "
-                f"expected chain length {seq_lengths[i]}"
-            )
-        parsed.append((msa_i, del_i))
+    num_chains = len(chains)
+
+    def _parse(per_chain_a3m: list[str | None]) -> list[tuple[Any, Any] | None]:
+        parsed: list[tuple[Any, Any] | None] = []
+        for i, a3m in enumerate(per_chain_a3m):
+            if a3m is None:
+                parsed.append(None)
+                continue
+            msa_i, del_i = parse_a3m(a3m_string=a3m)
+            if msa_i.ndim == 1:
+                msa_i = msa_i[None]
+                del_i = del_i[None]
+            if msa_i.shape[1] != seq_lengths[i]:
+                raise ValueError(
+                    f"alphafold2: chain {i} MSA length {msa_i.shape[1]} does not match "
+                    f"expected chain length {seq_lengths[i]}"
+                )
+            parsed.append((msa_i, del_i))
+        return parsed
+
+    parsed = _parse(per_chain_msas_a3m)
 
     # Row 0, the concatenated query: row 0 of each chain's MSA, or the aa-encoded bare chain sequence when it has no MSA.
     query_segments = []
@@ -310,25 +319,10 @@ def _build_combined_multimer_msa(
 
     combined_rows = [np.concatenate(query_segments)]
     combined_dels = [np.concatenate(query_del_segments)]
-    num_chains = len(chains)
 
-    if is_paired:
-        # All present chains share the same row count by ComplexMSAs's PairedMSA validator.
-        n_paired = next((p[0].shape[0] for p in parsed if p is not None), 0)
-        for k in range(1, n_paired):
-            row_segments, del_segments = [], []
-            for i in range(num_chains):
-                p_i = parsed[i]
-                if p_i is not None:
-                    row_segments.append(np.asarray(p_i[0][k], dtype=np.int32))
-                    del_segments.append(np.asarray(p_i[1][k], dtype=np.int32))
-                else:
-                    row_segments.append(np.full(seq_lengths[i], _AA_GAP, dtype=np.int32))
-                    del_segments.append(np.zeros(seq_lengths[i], dtype=np.int32))
-            combined_rows.append(np.concatenate(row_segments))
-            combined_dels.append(np.concatenate(del_segments))
-    else:
-        for i, p in enumerate(parsed):
+    def _append_block_diagonal(parsed_list: list[tuple[Any, Any] | None]) -> None:
+        # Each chain's non-query rows go in its own column band; other chains are gap-padded.
+        for i, p in enumerate(parsed_list):
             if p is None:
                 continue
             msa_i, del_i = p
@@ -343,6 +337,27 @@ def _build_combined_multimer_msa(
                         del_segments.append(np.zeros(seq_lengths[j], dtype=np.int32))
                 combined_rows.append(np.concatenate(row_segments))
                 combined_dels.append(np.concatenate(del_segments))
+
+    if is_paired:
+        # Paired block: row k spans all chains (each chain's MSA is taxonomy-row-aligned).
+        n_paired = next((p[0].shape[0] for p in parsed if p is not None), 0)
+        for k in range(1, n_paired):
+            row_segments, del_segments = [], []
+            for i in range(num_chains):
+                p_i = parsed[i]
+                if p_i is not None:
+                    row_segments.append(np.asarray(p_i[0][k], dtype=np.int32))
+                    del_segments.append(np.asarray(p_i[1][k], dtype=np.int32))
+                else:
+                    row_segments.append(np.full(seq_lengths[i], _AA_GAP, dtype=np.int32))
+                    del_segments.append(np.zeros(seq_lengths[i], dtype=np.int32))
+            combined_rows.append(np.concatenate(row_segments))
+            combined_dels.append(np.concatenate(del_segments))
+        # Unpaired depth block: each chain's deep unpaired rows, block-diagonal under the paired block.
+        if unpaired_per_chain_msas_a3m is not None:
+            _append_block_diagonal(_parse(unpaired_per_chain_msas_a3m))
+    else:
+        _append_block_diagonal(parsed)
 
     return np.stack(combined_rows, axis=0), np.stack(combined_dels, axis=0)
 
@@ -499,13 +514,16 @@ class AlphaFold2Model:
         msa_a3m_content: str | None,
         per_chain_msas_a3m: list[str | None] | None = None,
         is_paired: bool = False,
+        unpaired_per_chain_msas_a3m: list[str | None] | None = None,
     ) -> None:
         """Prepare ColabDesign inputs for a prediction request.
 
         Single-chain / homo-oligomer paths use ``msa_a3m_content`` (one A3M); ColabDesign
         tiles it across copies for homo-oligomers. Heteromultimers use ``per_chain_msas_a3m``
         (one A3M per chain, parallel to ``chains``) to build the combined block-diagonal
-        MSA the multimer architecture expects.
+        MSA the multimer architecture expects. For paired heteromultimers,
+        ``unpaired_per_chain_msas_a3m`` carries each chain's deep unpaired MSA appended as
+        block-diagonal depth below the paired block.
         """
         chains = complex_data["chains"]
         seq_lengths = complex_data["seq_lengths"]
@@ -526,6 +544,7 @@ class AlphaFold2Model:
                 chains=chains,
                 seq_lengths=seq_lengths,
                 is_paired=is_paired,
+                unpaired_per_chain_msas_a3m=unpaired_per_chain_msas_a3m,
             )
             af_model.set_msa(msa, deletion_matrix)
             return
@@ -552,6 +571,7 @@ class AlphaFold2Model:
         msa_a3m_content: str | None = None,
         per_chain_msas_a3m: list[str | None] | None = None,
         is_paired: bool = False,
+        unpaired_per_chain_msas_a3m: list[str | None] | None = None,
         device: str = "cuda",
         verbose: bool = False,
         include_pae_matrix: bool = False,
@@ -569,6 +589,7 @@ class AlphaFold2Model:
             msa_a3m_content,
             per_chain_msas_a3m=per_chain_msas_a3m,
             is_paired=is_paired,
+            unpaired_per_chain_msas_a3m=unpaired_per_chain_msas_a3m,
         )
 
         predict_kwargs: dict[str, Any] = {
@@ -838,6 +859,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             msa_a3m_content=input_dict.get("msa_a3m_content"),
             per_chain_msas_a3m=input_dict.get("per_chain_msas_a3m"),
             is_paired=input_dict.get("is_paired", False),
+            unpaired_per_chain_msas_a3m=input_dict.get("unpaired_per_chain_msas_a3m"),
             device=input_dict["device"],
             verbose=input_dict["verbose"],
             include_pae_matrix=input_dict["include_pae_matrix"],

@@ -81,20 +81,25 @@ def _stub_mmseqs2_search(monkeypatch):
 
 
 def test_unwrap_complex_msas_none():
-    assert unwrap_complex_msas(None) == ({}, False)
+    assert unwrap_complex_msas(None) == ({}, None, False)
 
 
 def test_unwrap_complex_msas_unpaired():
     msa = MSA(aligned_sequences=["AA", "AA"])
-    per_chain, is_paired = unwrap_complex_msas(ComplexMSAs(per_chain={0: msa}, paired=False))
+    per_chain, unpaired, is_paired = unwrap_complex_msas(ComplexMSAs(per_chain={0: msa}, paired=False))
     assert per_chain == {0: msa}
+    assert unpaired is None
     assert is_paired is False
 
 
 def test_unwrap_complex_msas_paired():
     msa = MSA(aligned_sequences=["AA", "AA"])
-    per_chain, is_paired = unwrap_complex_msas(ComplexMSAs(per_chain={0: msa, 1: msa}, paired=True))
+    deep = MSA(aligned_sequences=["AA", "AA", "AA"])
+    per_chain, unpaired, is_paired = unwrap_complex_msas(
+        ComplexMSAs(per_chain={0: msa, 1: msa}, paired=True, unpaired_per_chain={0: deep, 1: deep})
+    )
     assert set(per_chain) == {0, 1}
+    assert unpaired is not None and {m.num_sequences for m in unpaired.values()} == {3}
     assert is_paired is True
 
 
@@ -209,6 +214,69 @@ def test_preprocess_heterocomplex_can_disable_pairing(monkeypatch):
     entry = out.msas[0]
     assert entry.paired is False
     assert set(entry.per_chain) == {0, 1}
+    assert entry.unpaired_per_chain is None  # unpaired path carries no separate unpaired set
+
+
+def test_preprocess_heterocomplex_retains_deep_unpaired(monkeypatch):
+    """A paired heterocomplex retains each chain's deeper unpaired MSA in ``unpaired_per_chain``."""
+
+    def fake(search_input, config):
+        results = []
+        for group in search_input.queries:
+            members = group if isinstance(group, list) else [group]
+            if isinstance(group, list):
+                # Paired group: shallow paired (2 rows) + deep per-chain unpaired (5 rows).
+                results.append(
+                    hs.Mmseqs2HomologySearchResult(
+                        sequence_ids=[q.sequence_id for q in members],
+                        msas=[MSA(aligned_sequences=[q.sequence] * 5) for q in members],
+                        paired_msas=[MSA(aligned_sequences=[q.sequence] * 2) for q in members],
+                        datasets_searched=["stub"],
+                        num_homologs_found=[4 for _ in members],
+                    )
+                )
+            else:
+                results.append(_mmseqs2_result(members, paired=False))
+        return hs.Mmseqs2HomologySearchOutput(results=results)
+
+    monkeypatch.setattr(hs, "run_mmseqs2_homology_search", fake)
+    inputs = _SPInput(complexes=[_protein_complex(_SEQ_A, _SEQ_B)])
+
+    out = sdm._preprocess_structure_prediction_msas(inputs, Mmseqs2HomologySearchConfig(), verbose=0)
+
+    entry = out.msas[0]
+    assert entry.paired
+    assert {m.num_sequences for m in entry.per_chain.values()} == {2}  # paired (row-aligned) rows
+    assert entry.unpaired_per_chain is not None
+    assert set(entry.unpaired_per_chain) == {0, 1}
+    assert {m.num_sequences for m in entry.unpaired_per_chain.values()} == {5}  # deeper per-chain unpaired
+
+
+def test_preprocess_heterocomplex_unpaired_none_when_search_omits_it(monkeypatch):
+    """When pairing succeeds but the search returns no unpaired set, ``unpaired_per_chain`` stays None."""
+
+    def fake(search_input, config):
+        results = []
+        for group in search_input.queries:
+            members = group if isinstance(group, list) else [group]
+            results.append(
+                hs.Mmseqs2HomologySearchResult(
+                    sequence_ids=[q.sequence_id for q in members],
+                    msas=[None for _ in members],
+                    paired_msas=[MSA(aligned_sequences=[q.sequence] * 3) for q in members],
+                    datasets_searched=["stub"],
+                    num_homologs_found=[2 for _ in members],
+                )
+            )
+        return hs.Mmseqs2HomologySearchOutput(results=results)
+
+    monkeypatch.setattr(hs, "run_mmseqs2_homology_search", fake)
+    inputs = _SPInput(complexes=[_protein_complex(_SEQ_A, _SEQ_B)])
+
+    out = sdm._preprocess_structure_prediction_msas(inputs, Mmseqs2HomologySearchConfig(), verbose=0)
+
+    assert out.msas[0].paired
+    assert out.msas[0].unpaired_per_chain is None
 
 
 def test_validate_complex_msas_rejects_wrong_query_row():
@@ -255,6 +323,18 @@ def test_preprocess_validates_pre_supplied_msas_even_when_msa_disabled():
 
     with pytest.raises(ValueError, match="has query row"):
         sdm.MSAStructurePredictionConfig(use_msa=False).preprocess(inputs)
+
+
+def test_preprocess_supplied_msas_override_use_msa_false():
+    """Supplied MSAs force use_msa=True so the model consumes them, even if the caller set use_msa=False."""
+    msa = MSA(aligned_sequences=[_SEQ_A, _SEQ_A])
+    inputs = _SPInput(complexes=[_protein_complex(_SEQ_A)], msas=[ComplexMSAs(per_chain={0: msa})])
+    config = sdm.MSAStructurePredictionConfig(use_msa=False)
+
+    out = config.preprocess(inputs)
+
+    assert config.use_msa is True  # overridden because MSAs were supplied
+    assert out.msas[0].per_chain[0].aligned_sequences == [_SEQ_A, _SEQ_A]  # supplied MSAs retained
 
 
 def test_preprocess_heterocomplex_unpaired_fallback(monkeypatch):

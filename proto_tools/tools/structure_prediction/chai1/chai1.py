@@ -169,7 +169,8 @@ class Chai1Config(MSAStructurePredictionConfig):
             for diversity. 0 disables (default).
 
         use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
-            for protein chains using MMseqs2 homology search. Inherited from
+            for protein chains using MMseqs2 homology search. Supplied MSAs are always
+            used and override ``use_msa=False``. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``True``.
 
         pair_heterocomplex_msas (bool): Whether heterocomplex protein chains
@@ -362,17 +363,36 @@ def _msa_to_pqt_file(
     query_index: int = 0,
     source_database: str = "uniref90",
     paired: bool = False,
+    unpaired_msa: Any = None,
 ) -> None:
     """Write an MSA object to Chai1's .aligned.pqt Parquet format.
 
-    When ``paired=True``, each non-query row receives a pairing_key equal to its
-    row index so chai_lab matches rows across chains by index.
+    When ``paired=True``, each non-query paired row receives a pairing_key equal to
+    its row index so chai_lab matches rows across chains by index (proto-tools'
+    paired MSA is taxonomy-aligned, so equal indices share a taxon). When
+    ``unpaired_msa`` is supplied, its non-query rows are appended with empty pairing
+    keys (``NO_PAIRING_KEY`` in chai_lab), giving full per-chain unpaired depth
+    alongside the paired rows in one pqt.
     """
     sequences, seq_ids = extract_msa_sequences(msa, query_index)
     pairing_keys = None
     if paired:
         # Row 0 is the query; chai_lab pairs rows whose pairing_key is non-empty and equal.
         pairing_keys = [""] + [str(i) for i in range(1, len(sequences))]
+    if unpaired_msa is not None:
+        # Append the deep unpaired rows for per-chain depth, skipping the query and
+        # any sequence already present among the paired rows. Empty pairing_key marks
+        # them as unpaired (not matched across chains).
+        u_seqs, u_ids = extract_msa_sequences(unpaired_msa, 0)
+        seen = set(sequences)
+        for u_seq, u_id in zip(u_seqs[1:], u_ids[1:], strict=True):
+            if u_seq in seen:
+                continue
+            seen.add(u_seq)
+            sequences.append(u_seq)
+            seq_ids.append(u_id)
+            if pairing_keys is not None:
+                pairing_keys.append("")
     write_msa_pqt(
         sequences,
         pqt_path,
@@ -427,7 +447,7 @@ def run_chai1_on_complex(
 
         from proto_tools.tools.structure_prediction.shared_data_models import unwrap_complex_msas
 
-        per_chain_msas, is_paired = unwrap_complex_msas(complex_msas)
+        per_chain_msas, unpaired_per_chain, is_paired = unwrap_complex_msas(complex_msas)
 
         # Honor MSAs whenever present: auto-generated when use_msa=True, or supplied
         # by the caller (always respected regardless of use_msa).
@@ -443,12 +463,13 @@ def run_chai1_on_complex(
                     continue
                 seq_hash = _hash_sequence(chain.sequence.upper())
                 pqt_path = os.path.join(pqt_dir, f"{seq_hash}.aligned.pqt")
-                # Only set pairing_keys when MSAs are actually row-aligned across chains.
+                # Pair row-aligned rows across chains; append the deep unpaired MSA for depth.
                 _msa_to_pqt_file(
                     msa=msa,
                     pqt_path=pqt_path,
                     query_index=0,
                     paired=is_paired,
+                    unpaired_msa=(unpaired_per_chain or {}).get(ch_idx),
                 )
                 if config.verbose:
                     logger.info(f"Assigned MSA to protein chain {ch_idx} ({len(msa)} sequences)")

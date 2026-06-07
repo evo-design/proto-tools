@@ -32,6 +32,7 @@ def _build_upstream_input(
     chains: list[dict[str, Any]],
     msas: dict[str, list[str]] | None,
     msas_paired: bool,
+    unpaired_msas: dict[str, list[str]] | None = None,
 ) -> Any:
     """Convert the JSON chains payload into an upstream ``StructurePredictionInput``."""
     from esm.models.esmfold2 import (
@@ -80,6 +81,17 @@ def _build_upstream_input(
                     FastaEntry(header=header_fmt.format(row=row_idx), sequence=seq)
                     for row_idx, seq in enumerate(chain_msa_rows)
                 ]
+                # Append the deep unpaired rows with non-`key=` headers: upstream reads
+                # taxonomy -1 for these and places them block-diagonally as per-chain
+                # depth after the paired rows (skip the query and any paired duplicate).
+                unpaired_rows = unpaired_msas.get(str(idx)) if unpaired_msas else None
+                if unpaired_rows:
+                    seen = set(chain_msa_rows)
+                    for u_seq in unpaired_rows[1:]:
+                        if u_seq in seen:
+                            continue
+                        seen.add(u_seq)
+                        entries.append(FastaEntry(header=f"unpaired_{len(entries)}", sequence=u_seq))
                 msa_obj = MSA(entries=entries)
             sequences.append(ProteinInput(id=chain_id, sequence=sequence, modifications=mods, msa=msa_obj))
         elif entity_type == "dna":
@@ -145,6 +157,7 @@ class ESMFold2Model:
         chains: list[dict[str, Any]],
         msas: dict[str, list[str]] | None,
         msas_paired: bool,
+        unpaired_msas: dict[str, list[str]] | None,
         num_loops: int,
         num_sampling_steps: int,
         diffusion_samples: int,
@@ -167,7 +180,7 @@ class ESMFold2Model:
         effective_seed = seed if seed is not None else get_random_int()
         set_torch_seed(effective_seed)
 
-        upstream_input = _build_upstream_input(chains, msas, msas_paired)
+        upstream_input = _build_upstream_input(chains, msas, msas_paired, unpaired_msas)
 
         # Optional sampler overrides: upstream consumes them only when non-None.
         sampler_kwargs: dict[str, Any] = {}
@@ -259,6 +272,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             chains=input_dict["chains"],
             msas=input_dict.get("msas"),
             msas_paired=input_dict.get("msas_paired", False),
+            unpaired_msas=input_dict.get("unpaired_msas"),
             num_loops=input_dict["num_loops"],
             num_sampling_steps=input_dict["num_sampling_steps"],
             diffusion_samples=input_dict.get("diffusion_samples", 1),

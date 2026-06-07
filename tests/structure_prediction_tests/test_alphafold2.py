@@ -400,6 +400,45 @@ def test_heteromultimer_msa_dispatch_payload(monkeypatch):
     assert per_chain_a3m[1] is not None and "GARYTW" in per_chain_a3m[1]
 
 
+def test_heteromultimer_paired_dispatch_carries_deep_unpaired_a3m(monkeypatch):
+    """Paired heteromultimer flows the deep per-chain unpaired MSAs alongside the paired rows."""
+    from proto_tools.entities.msa import MSA
+    from proto_tools.tools.structure_prediction.shared_data_models import ComplexMSAs
+
+    captured: list[dict] = []
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        captured.append(payload)
+        return {"pdb": _EXAMPLE_PDB, "avg_plddt": 0.85, "ptm": 0.72, "iptm": 0.6, "avg_pae": 1.5, "pae": None}
+
+    monkeypatch.setattr(
+        "proto_tools.tools.structure_prediction.alphafold2.alphafold2.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+
+    # Shallow paired (depth 2) plus a deeper per-chain unpaired MSA (depth 4) per chain.
+    paired_a = MSA.from_fasta_string(">qA\nMKTLAV\n>hA1\nMKTRAV\n")
+    paired_b = MSA.from_fasta_string(">qB\nGARYTW\n>hB1\nGARYTM\n")
+    unpaired_a = MSA.from_fasta_string(">qA\nMKTLAV\n>uA1\nMKTRAV\n>uA2\nMKSLAV\n>uA3\nMKTLAW\n")
+    unpaired_b = MSA.from_fasta_string(">qB\nGARYTW\n>uB1\nGARYTM\n>uB2\nGARYSW\n>uB3\nGTRYTW\n")
+    complex_msas = ComplexMSAs(
+        per_chain={0: paired_a, 1: paired_b},
+        paired=True,
+        unpaired_per_chain={0: unpaired_a, 1: unpaired_b},
+    )
+
+    run_alphafold2(
+        AlphaFold2Input(complexes=[["MKTLAV", "GARYTW"]], msas=[complex_msas]),
+        AlphaFold2Config(use_msa=False, device="cpu"),
+    )
+
+    payload = captured[0]
+    assert payload["is_paired"] is True
+    unpaired_a3m = payload["unpaired_per_chain_msas_a3m"]
+    assert unpaired_a3m is not None and len(unpaired_a3m) == 2, "two-chain complex → two deep unpaired A3Ms"
+    assert unpaired_a3m[0].count(">") == 4 and unpaired_a3m[1].count(">") == 4  # deep unpaired depth carried
+
+
 def test_homooligomer_uses_single_a3m_dispatch_path(monkeypatch):
     """Homo-oligomer takes the single-A3M path (ColabDesign expands via copies=N)."""
     from proto_tools.entities.msa import MSA

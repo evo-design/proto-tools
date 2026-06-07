@@ -301,7 +301,8 @@ class ProtenixConfig(MSAStructurePredictionConfig):
             Default ``None``.
 
         use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
-            for protein chains using MMseqs2 homology search. Inherited from
+            for protein chains using MMseqs2 homology search. Supplied MSAs are always
+            used and override ``use_msa=False``. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``True``.
 
         pair_heterocomplex_msas (bool): Whether heterocomplex protein chains
@@ -600,7 +601,7 @@ def _write_msas_to_batch_json(
 
     for job_idx, job in enumerate(batch_json):
         sp_complex = inputs.complexes[job_idx]
-        per_chain_msas, is_paired = unwrap_complex_msas(inputs.msas[job_idx])
+        per_chain_msas, unpaired_per_chain, is_paired = unwrap_complex_msas(inputs.msas[job_idx])
 
         protein_chain_indices = [
             i for i, ch in enumerate(sp_complex.chains) if hasattr(ch, "entity_type") and ch.entity_type == "protein"
@@ -621,8 +622,13 @@ def _write_msas_to_batch_json(
                 if getattr(sp_complex.chains[chain_idx], "id", None)
                 else chain_label(chain_idx)
             )
+            # unpairedMsaPath gets each chain's deep unpaired MSA when available, else the
+            # primary MSA; Protenix block-diagonalizes the unpaired rows itself (AF3-style).
+            unpaired_msa = (unpaired_per_chain or {}).get(chain_idx)
+            if unpaired_msa is None:
+                unpaired_msa = msa
             a3m_path = os.path.join(msa_dir, f"job_{job_idx}_chain_{chain_id}_{chain_idx}.a3m")
-            msa.to_a3m_file(a3m_path, query_index=0)
+            unpaired_msa.to_a3m_file(a3m_path, query_index=0)
             chain_idx_to_path[chain_idx] = a3m_path
             if is_paired:
                 paired_a3m_path = os.path.join(msa_dir, f"job_{job_idx}_chain_{chain_id}_{chain_idx}.paired.a3m")
@@ -630,7 +636,10 @@ def _write_msas_to_batch_json(
                 chain_idx_to_paired_path[chain_idx] = paired_a3m_path
 
             if config.verbose:
-                logger.info(f"Assigned MSA to chain {chain_id} in complex {job_idx} ({len(msa)} sequences)")
+                logger.info(
+                    f"Assigned MSA to chain {chain_id} in complex {job_idx} "
+                    f"(unpaired {len(unpaired_msa)} / paired {len(msa)} sequences)"
+                )
 
         # Inject MSA paths into the job's proteinChain entries in positional order.
         proto_entry_iter = (s for s in job["sequences"] if "proteinChain" in s)

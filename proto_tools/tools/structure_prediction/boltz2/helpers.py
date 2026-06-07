@@ -25,22 +25,25 @@ from proto_tools.utils import extract_msa_sequences
 logger = getLogger(__name__)
 
 
-def write_msa_csv(aligned_sequences: list[Any], csv_path: str) -> None:
+def write_msa_csv(aligned_sequences: list[Any], csv_path: str, keys: list[int] | None = None) -> None:
     """Write aligned sequences as Boltz2-format CSV (sequence + key columns).
 
-    Query sequence must be first (key=0). Boltz uses the key column
-    for cross-chain MSA pairing.
+    Query sequence must be first (key=0). Boltz uses the key column for cross-chain
+    MSA pairing: rows sharing a key are paired across chains, and ``key=-1`` marks a
+    row as unpaired (kept as depth, excluded from pairing).
 
     Args:
         aligned_sequences (list[Any]): List of aligned sequence strings. The first
             sequence is treated as the query.
         csv_path (str): Path where the CSV file will be written.
+        keys (list[int] | None): Optional per-row pairing keys. When ``None``, each
+            row gets its row index (positional pairing).
     """
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["sequence", "key"])
         for idx, seq in enumerate(aligned_sequences):
-            writer.writerow([seq, idx])
+            writer.writerow([seq, keys[idx] if keys is not None else idx])
 
 
 def build_chain_msa_paths(
@@ -54,9 +57,10 @@ def build_chain_msa_paths(
     boltz requires identical chains to share a single MSA file. The ``key=<row_idx>``
     column written by ``write_msa_csv`` lets Boltz pair rows across chains by
     position; when rows are taxonomy-aligned by upstream preprocess, that
-    pairing carries through automatically.
+    pairing carries through automatically. The deep per-chain unpaired MSA, when
+    present, is appended with ``key=-1`` so Boltz keeps it as depth without pairing.
     """
-    per_chain_msas, _is_paired = unwrap_complex_msas(complex_msas)
+    per_chain_msas, unpaired_per_chain, _is_paired = unwrap_complex_msas(complex_msas)
     chain_msa_paths: dict[str, str] = {}
     if per_chain_msas:
         msa_dir = os.path.join(temp_dir, "msas")
@@ -74,7 +78,20 @@ def build_chain_msa_paths(
             if csv_path is None:
                 csv_path = os.path.join(msa_dir, f"{hashlib.sha256(seq.encode()).hexdigest()}.csv")
                 sequences, _ids = extract_msa_sequences(msa, 0)
-                write_msa_csv(sequences, csv_path)
+                keys = list(range(len(sequences)))  # row-index pairing keys
+                unpaired_msa = (unpaired_per_chain or {}).get(ch_idx)
+                if unpaired_msa is not None:
+                    # Append the deep unpaired rows for depth, skipping the query and
+                    # any sequence already among the paired rows; key=-1 = no pairing.
+                    u_seqs, _u_ids = extract_msa_sequences(unpaired_msa, 0)
+                    seen = set(sequences)
+                    for u_seq in u_seqs[1:]:
+                        if u_seq in seen:
+                            continue
+                        seen.add(u_seq)
+                        sequences.append(u_seq)
+                        keys.append(-1)
+                write_msa_csv(sequences, csv_path, keys=keys)
                 seq_to_csv[seq] = csv_path
             chain_msa_paths[chain_id] = csv_path
             if verbose:

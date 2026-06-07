@@ -13,6 +13,7 @@ import os
 import platform
 import tempfile
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Literal
 
@@ -596,31 +597,56 @@ def _remote_paired_group(
     instance: Any,
     script_path: Path,
 ) -> Mmseqs2HomologySearchResult:
-    """Run one paired group through the remote API; fall back to unpaired when no pairing.
+    """Run one paired group through the remote API, fetching paired + unpaired MSAs.
 
-    The standalone returns one row-aligned A3M per chain under
-    ``paired_msa_paths["0"]``. When pairing finds nothing (every chain query-only),
-    a second unpaired call supplies per-chain ``msas`` and ``paired_msas`` stays
-    ``[None, ...]`` — the same fallback the local paired path uses. Remote never
-    computes separate unpaired MSAs alongside a successful pairing, so on success
-    ``msas`` is ``[None, ...]`` and consumers read ``paired_msas``.
+    The ColabFold API returns the row-aligned paired MSAs and each chain's deep
+    *unpaired* MSA from separate calls, so both are dispatched in parallel. On
+    success both ``paired_msas`` (cross-chain) and ``msas`` (per-chain unpaired
+    depth) are populated; when no taxonomy is shared ``paired_msas`` stays
+    ``[None, ...]`` and consumers read ``msas``. The unpaired call is best-effort:
+    if it fails, ``msas`` degrades to ``[None, ...]`` without affecting a
+    successful paired result.
     """
     sequence_ids: list[str] = []
     for query in members:
         assert query.sequence_id is not None  # populated by the input validator
         sequence_ids.append(query.sequence_id)
 
-    out = _dispatch_remote([{"sequences": [q.sequence for q in members]}], group_dir, config, instance, script_path)
-    if not out.get("success", False):
-        raise RuntimeError(f"mmseqs2-homology-search: remote paired search failed: {out.get('errors')}")
+    # Paired and per-chain unpaired searches are independent ColabFold calls; run them
+    # concurrently so the added per-chain depth costs ~no extra wall-clock.
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        paired_future = executor.submit(
+            _dispatch_remote,
+            [{"sequences": [q.sequence for q in members]}],
+            group_dir / "paired",
+            config,
+            instance,
+            script_path,
+        )
+        unpaired_future = executor.submit(
+            _dispatch_remote,
+            [{"sequences": q.sequence} for q in members],
+            group_dir / "unpaired",
+            config,
+            instance,
+            script_path,
+        )
+        paired_out = paired_future.result()
+        try:
+            unpaired_out: dict[str, Any] | None = unpaired_future.result()
+        except Exception as exc:  # unpaired depth is best-effort; never break a paired result
+            logger.warning("mmseqs2-homology-search: remote unpaired search failed (%s); using paired only", exc)
+            unpaired_out = None
 
-    chain_paths = out.get("paired_msa_paths", {}).get("0", [])
+    # Paired search is required.
+    if not paired_out.get("success", False):
+        raise RuntimeError(f"mmseqs2-homology-search: remote paired search failed: {paired_out.get('errors')}")
+    chain_paths = paired_out.get("paired_msa_paths", {}).get("0", [])
     if len(chain_paths) != len(members):
         raise RuntimeError(
             f"mmseqs2-homology-search: remote paired standalone returned {len(chain_paths)} chain MSA path(s), "
             f"expected {len(members)} (one per chain)."
         )
-
     paired_msas: list[MSA | None] = []
     paired_homologs: list[int] = []
     for query, path in zip(members, chain_paths, strict=True):
@@ -628,33 +654,26 @@ def _remote_paired_group(
         paired_msas.append(msa)
         paired_homologs.append(homologs)
 
-    # Any pairing => return the row-aligned paired MSAs (remote computes no separate unpaired set).
-    if any(m is not None for m in paired_msas):
-        return Mmseqs2HomologySearchResult(
-            sequence_ids=sequence_ids,
-            msas=[None] * len(members),
-            paired_msas=paired_msas,
-            datasets_searched=[_REMOTE_DATASET_LABEL],
-            num_homologs_found=paired_homologs,
-        )
+    # Per-chain unpaired (best-effort): parse when available, else leave as None.
+    unpaired_msas: list[MSA | None] = [None] * len(members)
+    unpaired_homologs: list[int] = [0] * len(members)
+    if unpaired_out is not None and unpaired_out.get("success", False):
+        unpaired_paths = unpaired_out.get("msa_paths", {})
+        for chain_idx, query in enumerate(members):
+            msa, homologs = _parse_remote_a3m(unpaired_paths.get(str(chain_idx)), query.sequence_id)  # type: ignore[arg-type]
+            unpaired_msas[chain_idx] = msa
+            unpaired_homologs[chain_idx] = homologs
 
-    # No shared taxonomy: a second unpaired call supplies per-chain MSAs; paired_msas stays None.
-    fb = _dispatch_remote(
-        [{"sequences": q.sequence} for q in members], group_dir / "unpaired_fallback", config, instance, script_path
-    )
-    fb_paths = fb.get("msa_paths", {})
-    msas: list[MSA | None] = []
-    homolog_counts: list[int] = []
-    for chain_idx, query in enumerate(members):
-        msa, homologs = _parse_remote_a3m(fb_paths.get(str(chain_idx)), query.sequence_id)  # type: ignore[arg-type]
-        msas.append(msa)
-        homolog_counts.append(homologs)
+    paired_found = any(m is not None for m in paired_msas)
+    num_homologs = [
+        unpaired_homologs[i] if unpaired_msas[i] is not None else paired_homologs[i] for i in range(len(members))
+    ]
     return Mmseqs2HomologySearchResult(
         sequence_ids=sequence_ids,
-        msas=msas,
-        paired_msas=[None] * len(members),
+        msas=unpaired_msas,
+        paired_msas=paired_msas if paired_found else [None] * len(members),
         datasets_searched=[_REMOTE_DATASET_LABEL],
-        num_homologs_found=homolog_counts,
+        num_homologs_found=num_homologs,
     )
 
 

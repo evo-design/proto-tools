@@ -4,6 +4,7 @@ Tests for RoseTTAFold3 (``rf3-prediction``).
 """
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -74,6 +75,49 @@ def test_complex_to_rf3_json_omits_cyclic_chains_field():
     assert "cyclic_chains" not in example
     # Only ``name`` and ``components`` are emitted at the example level.
     assert set(example.keys()) == {"name", "components"}
+
+
+def test_build_chain_a3m_paths_feeds_deep_unpaired_msa(tmp_path):
+    """Each chain's a3m carries the deep per-chain unpaired MSA, not the shallow paired set.
+
+    RF3 re-pairs by tax_id parsed from the a3m headers, so the deep unpaired MSA
+    (full per-chain depth, UniRef ``TaxID=`` headers preserved) is the correct feed.
+    """
+    from proto_tools.entities.msa import MSA
+    from proto_tools.tools.structure_prediction.rf3.helpers import build_chain_a3m_paths
+    from proto_tools.tools.structure_prediction.shared_data_models import ComplexMSAs
+
+    seq_a, seq_b = "MKTAYIAKQR", "GSHMEELLSK"
+    cx = Complex(
+        chains=[
+            Chain(id="A", sequence=seq_a, entity_type="protein"),
+            Chain(id="B", sequence=seq_b, entity_type="protein"),
+        ]
+    )
+    paired = {i: MSA(aligned_sequences=[s, s]) for i, s in enumerate([seq_a, seq_b])}  # 2 rows
+    unpaired = {i: MSA(aligned_sequences=[s, s, s, s, s]) for i, s in enumerate([seq_a, seq_b])}  # 5 rows
+    complex_msas = ComplexMSAs(per_chain=paired, paired=True, unpaired_per_chain=unpaired)
+
+    paths = build_chain_a3m_paths(cx, complex_msas, str(tmp_path))
+
+    for chain_id in ("A", "B"):
+        rows = Path(paths[chain_id]).read_text().count(">")
+        assert rows == 5, f"chain {chain_id} a3m should carry the deep unpaired MSA, got {rows} rows"
+
+
+def test_build_chain_a3m_paths_falls_back_to_per_chain_when_no_unpaired(tmp_path):
+    """With no separate unpaired MSA, the per-chain (primary) MSA is written as before."""
+    from proto_tools.entities.msa import MSA
+    from proto_tools.tools.structure_prediction.rf3.helpers import build_chain_a3m_paths
+    from proto_tools.tools.structure_prediction.shared_data_models import ComplexMSAs
+
+    seq = "MKTAYIAKQR"
+    cx = Complex(chains=[Chain(id="A", sequence=seq, entity_type="protein")])
+    complex_msas = ComplexMSAs(per_chain={0: MSA(aligned_sequences=[seq, seq, seq])}, paired=False)
+
+    paths = build_chain_a3m_paths(cx, complex_msas, str(tmp_path))
+
+    assert Path(paths["A"]).read_text().count(">") == 3
 
 
 # ── Config: RF3 emits no per-token PAE matrix ─────────────────────────────────

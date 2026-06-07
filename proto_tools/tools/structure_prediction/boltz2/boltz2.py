@@ -205,7 +205,8 @@ class Boltz2Config(MSAStructurePredictionConfig):
             Must be at least 1. Default: ``min(cpu_count, 4)``.
 
         use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
-            for protein chains using MMseqs2 homology search. Inherited from
+            for protein chains using MMseqs2 homology search. Supplied MSAs are always
+            used and override ``use_msa=False``. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``True``.
 
         pair_heterocomplex_msas (bool): Whether heterocomplex protein chains

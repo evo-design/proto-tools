@@ -48,15 +48,23 @@ class ComplexMSAs(BaseModel):
 
     Attributes:
         per_chain (dict[int, MSA]): Chain index (position in ``Complex.chains``)
-            → its MSA.
+            → its MSA. When ``paired`` is ``True`` these are the row-aligned paired MSAs.
         paired (bool): Whether the per-chain MSAs are row-aligned across chains.
             When ``True``, all chains must share the same row count.
+        unpaired_per_chain (dict[int, MSA] | None): For paired heterocomplexes only,
+            each chain's deep *unpaired* MSA (independent homologs), retained alongside
+            the paired rows so predictors can use full per-chain depth. ``None`` otherwise.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     per_chain: dict[int, MSA] = Field(description="Chain index → MSA for each protein chain.")
     paired: bool = Field(default=False, description="Whether rows are taxonomy-aligned across chains.")
+    unpaired_per_chain: dict[int, MSA] | None = Field(
+        default=None,
+        title="Unpaired Per-Chain MSAs",
+        description="Deep per-chain unpaired MSAs retained alongside paired rows; set only for paired heterocomplexes.",
+    )
 
     @model_validator(mode="after")
     def _validate_paired_row_counts(self) -> "ComplexMSAs":
@@ -302,9 +310,10 @@ class MSAStructurePredictionConfig(StructurePredictionConfig):
     homology search. Tools that support MSA preprocessing should inherit from this class.
 
     Attributes:
-        use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
-            for protein chains using MMseqs2 homology search. If ``False``, runs in
-            single-sequence mode without MSAs. Default: ``True``.
+        use_msa (bool): Whether to generate Multiple Sequence Alignments (MSAs) for
+            protein chains using MMseqs2 homology search. If ``False``, runs in
+            single-sequence mode, unless MSAs are supplied on the input: supplied MSAs
+            are always used and override ``use_msa=False``. Default: ``True``.
 
         msa_search_config (Mmseqs2HomologySearchConfig | None): Configuration for
             MMseqs2 homology search (MSA generation). Only used when ``use_msa=True``.
@@ -345,10 +354,21 @@ class MSAStructurePredictionConfig(StructurePredictionConfig):
         return super().minimal(**kwargs)  # type: ignore[return-value]
 
     def preprocess(self, inputs: StructurePredictionInput) -> StructurePredictionInput:  # type: ignore[override]
-        """Preprocess structure prediction inputs before execution."""
-        # Pre-supplied MSAs bypass MMseqs2 search and its query-row remap; validate their chain keying here so every predictor catches mis-keyed MSAs uniformly.
+        """Preprocess structure prediction inputs before execution.
+
+        Pre-supplied MSAs are always honored: they skip the MMseqs2 search and force
+        ``use_msa=True`` so the model consumes them. Supplying MSAs is an explicit
+        request to use them, so it overrides ``use_msa=False`` (which otherwise folds
+        single-sequence); without this, predictors that gate model-level MSA usage on
+        ``use_msa`` (e.g. Protenix) would silently ignore the supplied alignments.
+        """
+        # Pre-supplied MSAs bypass the search and its query-row remap; validate their
+        # chain keying so every predictor catches mis-keyed MSAs uniformly, then force
+        # use_msa=True so the model actually consumes them.
         if inputs.msas is not None:
             _validate_complex_msas_match_chains(inputs.complexes, inputs.msas)
+            self.use_msa = True
+            return inputs
         if not self.use_msa:
             return inputs
         if self.msa_search_config is None:
@@ -588,14 +608,24 @@ def _preprocess_structure_prediction_msas(
             paired_result = results[paired_query_idx]
             # Prefer the row-aligned paired MSAs; fall back to the unpaired set (paired=False)
             # when the chains shared no taxonomy and pairing produced nothing.
+            unpaired_per_chain: dict[int, MSA] | None = None
             if any(m is not None for m in paired_result.paired_msas):
                 chain_msas, paired = paired_result.paired_msas, True
+                # The same search already produced each chain's deep unpaired MSA; retain it
+                # (as unpaired_per_chain) so predictors can use full per-chain depth alongside
+                # the paired rows, instead of discarding it.
+                if any(m is not None for m in paired_result.msas):
+                    unpaired_per_chain = {
+                        ch_idx: umsa
+                        for (ch_idx, _seq), umsa in zip(protein_chains, paired_result.msas, strict=True)
+                        if umsa is not None
+                    } or None
             else:
                 chain_msas, paired = paired_result.msas, False
             for (ch_idx, _seq), msa in zip(protein_chains, chain_msas, strict=True):
                 if msa is not None:
                     per_chain[ch_idx] = msa
-            msas_list.append(ComplexMSAs(per_chain=per_chain, paired=paired))
+            msas_list.append(ComplexMSAs(per_chain=per_chain, paired=paired, unpaired_per_chain=unpaired_per_chain))
         else:
             for ch_idx, seq in protein_chains:
                 msa = seq_to_msa.get(seq)
@@ -607,16 +637,21 @@ def _preprocess_structure_prediction_msas(
     return inputs.model_copy(update={"msas": msas_list}) if has_any else inputs
 
 
-def unwrap_complex_msas(complex_msas: "ComplexMSAs | None") -> tuple[dict[int, MSA], bool]:
-    """Return ``(per_chain_dict, is_paired)`` from a per-complex MSA bundle.
+def unwrap_complex_msas(
+    complex_msas: "ComplexMSAs | None",
+) -> tuple[dict[int, MSA], dict[int, MSA] | None, bool]:
+    """Return ``(per_chain, unpaired_per_chain, is_paired)`` from a per-complex MSA bundle.
 
-    Helper for downstream structure-prediction tools that need uniform access to a
-    complex's MSAs and a flag indicating whether the MSAs are taxonomy-paired (so
-    they should populate pairing slots on the per-tool input format).
+    Uniform accessor for structure-prediction tools. ``per_chain`` is each chain's
+    primary MSA (the row-aligned paired set when ``is_paired``, else the unpaired set).
+    ``unpaired_per_chain`` is each chain's deep independent MSA retained alongside the
+    paired rows (``None`` when there is no separate unpaired set), letting predictors
+    with distinct unpaired/paired slots feed full per-chain depth. ``is_paired`` flags
+    whether ``per_chain`` is taxonomy-paired.
     """
     if complex_msas is None:
-        return {}, False
-    return complex_msas.per_chain, complex_msas.paired
+        return {}, None, False
+    return complex_msas.per_chain, complex_msas.unpaired_per_chain, complex_msas.paired
 
 
 _BASE36 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"

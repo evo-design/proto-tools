@@ -172,7 +172,8 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
             total candidates = len(seeds) * num_diffusion_samples.
 
         use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
-            for protein chains using MMseqs2 homology search. Inherited from
+            for protein chains using MMseqs2 homology search. Supplied MSAs are always
+            used and override ``use_msa=False``. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``True``.
 
         pair_heterocomplex_msas (bool): Whether heterocomplex protein chains
@@ -344,10 +345,10 @@ def run_alphafold3(
                 if inputs.msas:
                     from proto_tools.tools.structure_prediction.shared_data_models import unwrap_complex_msas
 
-                    per_chain_msas, is_paired = unwrap_complex_msas(inputs.msas[dispatch_idx])
+                    per_chain_msas, unpaired_per_chain, is_paired = unwrap_complex_msas(inputs.msas[dispatch_idx])
                     if per_chain_msas:
                         input_json = _assign_msas_to_input_json(
-                            input_json, per_chain_msas, is_paired, comp, input_dir, config.verbose
+                            input_json, per_chain_msas, unpaired_per_chain, is_paired, comp, input_dir, config.verbose
                         )
 
                 # Write input JSON to file for worker protocol
@@ -405,6 +406,7 @@ def run_alphafold3(
 def _assign_msas_to_input_json(
     input_json_data: AlphaFold3JSON,
     per_chain_msas: dict[int, MSA],
+    unpaired_per_chain: dict[int, MSA] | None,
     is_paired: bool,
     sp_complex: Complex,
     input_dir: str,
@@ -412,16 +414,20 @@ def _assign_msas_to_input_json(
 ) -> AlphaFold3JSON:
     """Write pre-computed MSAs to A3M files and assign paths to input JSON.
 
-    AF3 accepts both ``unpairedMsaPath`` and ``pairedMsaPath`` per protein chain.
-    When the per-chain MSAs came from a paired query (``is_paired=True``), the
-    same files serve as both sources: AF3 pairs rows across chains by position
-    within ``pairedMsaPath`` files.
+    AF3 takes a separate ``unpairedMsaPath`` and ``pairedMsaPath`` per protein chain
+    and builds the combined MSA features (block-diagonal unpaired + cross-chain
+    pairing) itself. ``unpairedMsaPath`` gets each chain's deep unpaired MSA
+    (``unpaired_per_chain`` when available), and ``pairedMsaPath`` gets the
+    row-aligned paired MSA (``per_chain``) when ``is_paired``. When no separate
+    unpaired MSA is provided, ``per_chain`` serves both slots.
 
     Args:
         input_json_data (AlphaFold3JSON): AlphaFold3 input JSON dictionary to
             update with MSA paths.
-        per_chain_msas (dict[int, MSA]): MSAs for this complex, keyed by
-            chain index.
+        per_chain_msas (dict[int, MSA]): Paired (row-aligned) MSAs when
+            ``is_paired``, else the unpaired MSAs, keyed by chain index.
+        unpaired_per_chain (dict[int, MSA] | None): Each chain's deep unpaired MSA
+            for the ``unpairedMsaPath`` slot; ``None`` falls back to ``per_chain``.
         is_paired (bool): ``True`` when per-chain MSAs are row-aligned across
             chains.
         sp_complex (Complex): The Complex; used to map seq_entry positions to
@@ -454,8 +460,13 @@ def _assign_msas_to_input_json(
         if isinstance(chain_id, list):
             chain_id = chain_id[0]
 
+        # unpairedMsaPath gets each chain's deep unpaired MSA when available, else the
+        # primary MSA; AF3 block-diagonalizes the unpaired rows across the complex itself.
+        unpaired_msa = (unpaired_per_chain or {}).get(chain_idx)
+        if unpaired_msa is None:
+            unpaired_msa = msa
         a3m_path = os.path.join(msa_dir, f"chain_{chain_id}_{chain_idx}.a3m")
-        msa.to_a3m_file(a3m_path, query_index=0)
+        unpaired_msa.to_a3m_file(a3m_path, query_index=0)
         seq_entry["protein"]["unpairedMsaPath"] = os.path.relpath(a3m_path, input_dir)
 
         if is_paired:
@@ -464,7 +475,9 @@ def _assign_msas_to_input_json(
             seq_entry["protein"]["pairedMsaPath"] = os.path.relpath(paired_a3m_path, input_dir)
 
         if verbose:
-            logger.info(f"Assigned MSA to chain {chain_id} ({len(msa)} sequences)")
+            logger.info(
+                f"Assigned MSA to chain {chain_id} (unpaired {len(unpaired_msa)} / paired {len(msa)} sequences)"
+            )
 
     return input_json_data
 

@@ -167,7 +167,7 @@ class Boltz2AffinityConfig(Boltz2Config):
         max_msa_seqs (int): Inherited. Cap on MSA depth fed into the model. Default: ``8192``.
         subsample_msa (bool): Inherited. Randomly subsample the MSA each run. Default: ``False``.
         num_workers (int): Inherited. Dataloader workers for prediction. Default: ``min(cpu_count, 4)``.
-        use_msa (bool): Inherited. Use MMseqs2 MSAs for protein chains. Default: ``True``.
+        use_msa (bool): Inherited. Use MMseqs2 MSAs for protein chains. Supplied MSAs are always used and override ``use_msa=False``. Default: ``True``.
         pair_heterocomplex_msas (bool): Inherited. Use taxonomy-paired MSA generation for heterocomplex protein chains. Default: ``True``.
         msa_search_config (Mmseqs2HomologySearchConfig | None): Inherited. MMseqs2 homology-search config. Default: ``None``.
         include_pae_matrix (bool): No-op for affinity; excluded from the cache key. Default: ``False``.

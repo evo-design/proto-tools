@@ -49,6 +49,51 @@ def test_esmfold2_chain_to_payload_stamps_resolved_id():
     assert ligand == {"id": "L", "entity_type": "ligand", "ccd_code": "ATP"}
 
 
+def test_esmfold2_payload_carries_deep_unpaired_msas():
+    """The worker payload carries the deep per-chain unpaired MSAs alongside the paired rows.
+
+    The standalone reads the paired rows (``key=`` headers) for cross-chain pairing and
+    appends the unpaired rows block-diagonally for per-chain depth.
+    """
+    from unittest.mock import patch
+
+    from proto_tools.entities.msa import MSA
+    from proto_tools.tools.structure_prediction.esmfold2.esmfold2 import _run_esmfold2_on_complex
+    from proto_tools.tools.structure_prediction.shared_data_models import ComplexMSAs
+
+    class _Stop(Exception):
+        pass
+
+    cx = Complex(
+        chains=[Chain(sequence=_HELIX_A, entity_type="protein"), Chain(sequence=_HELIX_B, entity_type="protein")]
+    )
+    paired = {i: MSA(aligned_sequences=[s, s]) for i, s in enumerate([_HELIX_A, _HELIX_B])}  # 2 rows
+    unpaired = {i: MSA(aligned_sequences=[s, s, s, s, s]) for i, s in enumerate([_HELIX_A, _HELIX_B])}  # 5 rows
+    complex_msas = ComplexMSAs(per_chain=paired, paired=True, unpaired_per_chain=unpaired)
+
+    captured: dict = {}
+
+    def fake_dispatch(_name, input_data, **_kwargs):
+        captured["input"] = input_data
+        raise _Stop
+
+    with (
+        patch(
+            "proto_tools.tools.structure_prediction.esmfold2.esmfold2.ToolInstance.dispatch",
+            side_effect=fake_dispatch,
+        ),
+        pytest.raises(_Stop),
+    ):
+        _run_esmfold2_on_complex(
+            ESMFold2Config(model_checkpoint="esmfold2", use_msa=True), cx, complex_msas=complex_msas
+        )
+
+    payload = captured["input"]
+    assert payload["msas_paired"] is True
+    assert payload["msas"] == {"0": [_HELIX_A, _HELIX_A], "1": [_HELIX_B, _HELIX_B]}  # paired rows
+    assert payload["unpaired_msas"] == {"0": [_HELIX_A] * 5, "1": [_HELIX_B] * 5}  # deep unpaired depth
+
+
 # ── GPU integration tests ───────────────────────────────────────────────────
 
 

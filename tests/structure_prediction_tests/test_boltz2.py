@@ -24,7 +24,7 @@ from proto_tools.tools.structure_prediction import (
     run_boltz2_affinity,
 )
 from proto_tools.tools.structure_prediction.boltz2.boltz2 import run_boltz2_on_complex
-from proto_tools.tools.structure_prediction.boltz2.helpers import complex_to_yaml
+from proto_tools.tools.structure_prediction.boltz2.helpers import build_chain_msa_paths, complex_to_yaml
 from tests.conftest import benchmark_twice
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
@@ -105,6 +105,41 @@ def test_boltz2_writes_one_msa_per_unique_sequence(seqs, n_files):
     assert len(captured["csv_files"]) == n_files
     assert len(set(msa_paths)) == n_files
     assert "empty" not in msa_paths
+
+
+def test_build_chain_msa_paths_appends_deep_unpaired_with_key_minus_one(tmp_path):
+    """Paired rows keep row-index keys; deep unpaired rows append with key=-1 (depth, no pairing).
+
+    Boltz excludes ``key == -1`` rows from taxonomy pairing but keeps them as MSA depth.
+    """
+    import csv as _csv
+
+    query_a, query_b = "MKTAYIAKQR", "GSHMEELLSK"
+    cx = Complex(
+        chains=[
+            Chain(id="A", sequence=query_a, entity_type="protein"),
+            Chain(id="B", sequence=query_b, entity_type="protein"),
+        ]
+    )
+    paired = {
+        0: MSA(aligned_sequences=[query_a, "MKTAYIAKQA", "MKTAYIAKQE"]),  # query + 2 paired
+        1: MSA(aligned_sequences=[query_b, "GSHMEELLSA", "GSHMEELLSE"]),
+    }
+    unpaired = {
+        0: MSA(aligned_sequences=[query_a, "MKTAYIAKQA", "MKTAYIAKQW", "MKTAYIAKQY"]),  # 1 overlap, 2 new
+        1: MSA(aligned_sequences=[query_b, "GSHMEELLSW"]),  # 1 new
+    }
+    complex_msas = ComplexMSAs(per_chain=paired, paired=True, unpaired_per_chain=unpaired)
+
+    paths = build_chain_msa_paths(cx, complex_msas, str(tmp_path))
+
+    rows_a = list(_csv.DictReader(Path(paths["A"]).read_text().splitlines()))
+    assert [r["key"] for r in rows_a] == ["0", "1", "2", "-1", "-1"]  # 2 paired + 2 new unpaired
+    seqs_a = [r["sequence"] for r in rows_a]
+    assert "MKTAYIAKQW" in seqs_a and "MKTAYIAKQY" in seqs_a  # new depth present, overlap deduped
+
+    rows_b = list(_csv.DictReader(Path(paths["B"]).read_text().splitlines()))
+    assert [r["key"] for r in rows_b] == ["0", "1", "2", "-1"]
 
 
 # ── Affinity: YAML emission & validator ─────────────────────────────────────
