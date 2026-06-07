@@ -2,9 +2,9 @@
 
 The MSA-generation entry point of the unified ``mmseqs2`` toolkit, alongside
 ``mmseqs2-search-proteins`` / ``mmseqs2-search-genomes`` / ``mmseqs2-clustering``.
-Replaces ``colabfold-search`` in structure predictors. Searches protein queries
-against the registry's UniRef30 entry (GPU by default), producing unpaired MSAs
-for singleton queries and taxonomy-paired MSAs for multi-chain groups.
+Searches protein queries against the registry's UniRef30 entry (GPU by default),
+producing unpaired MSAs for singleton queries and taxonomy-paired MSAs for
+multi-chain groups.
 """
 
 import hashlib

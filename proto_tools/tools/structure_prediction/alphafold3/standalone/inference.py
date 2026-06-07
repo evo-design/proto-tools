@@ -9,7 +9,7 @@ Two execution paths, selected at runtime based on what setup.sh provisioned:
    source clone of AlphaFold3 installed into the tool's micromamba venv.
 
 MSAs are supplied by the caller via the input JSON (proto_tools delegates MSA
-generation to the colabfold-search tool), so we pass --norun_data_pipeline and
+generation to the mmseqs2-homology-search tool), so we pass --norun_data_pipeline and
 skip the sequence databases entirely on both paths.
 
 Worker protocol implementation for ToolInstance integration.

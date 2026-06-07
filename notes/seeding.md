@@ -18,7 +18,7 @@ Tools whose inference doesn't sample. Some may still call `set_torch_seed(config
 
 **Examples (by category):**
 
-- **Sequence search & alignment**: BLAST, MMseqs2, ColabFold-search, Foldseek, Foldmason, mafft
+- **Sequence search & alignment**: BLAST, MMseqs2, Foldseek, Foldmason, mafft
 - **HMM tools**: hmmsearch, hmmscan, jackhmmer, phmmer, nhmmer
 - **Structure analysis & scoring**: DSSP, ipsae, pdockq2, structure-metrics, pyrosetta-energy, pyrosetta-sasa, pyrosetta-sap
 - **Single-pass structure prediction**: ESMFold-prediction

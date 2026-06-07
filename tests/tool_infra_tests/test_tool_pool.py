@@ -480,11 +480,11 @@ def test_dispatch_gpus_per_instance_zero_bypasses_pool(clean_registry):
 
     Regression: ToolPool._parallel_dispatch previously crashed with
     `ValueError: range() arg 3 must not be zero` when a tool's config returned
-    gpus_per_instance=0 (e.g. colabfold-search with use_gpu=False) and the
+    gpus_per_instance=0 (e.g. mmseqs2-homology-search with use_gpu=False) and the
     pool was dispatched with >=2 input items. The fix short-circuits to a
     single direct call mirroring the n_items<=1 path. With the cpus_per_instance
-    default of 1, the explicit None opt-out (mirroring colabfold-search,
-    mmseqs2-*, etc. in production) is required to reach the short-circuit branch.
+    default of 1, the explicit None opt-out (mirroring mmseqs2-* in production)
+    is required to reach the short-circuit branch.
     """
     _, call_log = _register_mock_tool(clean_registry)
 
@@ -497,7 +497,7 @@ def test_dispatch_gpus_per_instance_zero_bypasses_pool(clean_registry):
 
         @property
         def cpus_per_instance(self) -> int | None:
-            """Opt out of CPU fan-out — internally threaded (same as colabfold-search)."""
+            """Opt out of CPU fan-out — internally threaded (same as mmseqs2-homology-search)."""
             return None
 
     clean_registry._registry.clear()
@@ -1420,7 +1420,7 @@ def test_cpu_fanout_explicit_opt_out_short_circuits():
     class OptOutConfig(MockCPUToolConfig):
         @property
         def cpus_per_instance(self) -> int | None:
-            """Opt out of fan-out — mirrors mmseqs2 / colabfold-search in production."""
+            """Opt out of fan-out — mirrors mmseqs2 in production."""
             return None
 
     DeviceManager.reset_instance()

@@ -11,12 +11,6 @@ from proto_tools.tools.sequence_alignment.blast import (
     run_blast_search,
     run_create_blast_db,
 )
-from proto_tools.tools.sequence_alignment.colabfold_search import (
-    ColabfoldSearchConfig,
-    ColabfoldSearchInput,
-    ColabfoldSearchOutput,
-    run_colabfold_search,
-)
 from proto_tools.tools.sequence_alignment.mafft import MafftConfig, MafftInput, MafftOutput, run_mafft_align
 from proto_tools.tools.sequence_alignment.mmseqs2 import (
     Mmseqs2ClusteringConfig,
@@ -59,11 +53,6 @@ __all__ = [
     "MafftInput",
     "MafftConfig",
     "MafftOutput",
-    # ColabFold Search
-    "run_colabfold_search",
-    "ColabfoldSearchInput",
-    "ColabfoldSearchConfig",
-    "ColabfoldSearchOutput",
     # MMseqs2 shared schemas
     "Mmseqs2Hit",
     "Mmseqs2SequenceSearchResult",

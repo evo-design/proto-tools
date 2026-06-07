@@ -7,7 +7,7 @@ homology-search MSA pipeline):
 - ``mmseqs2-search-genomes`` — nucleotide genome-to-genome search workflow.
 - ``mmseqs2-clustering`` — sequence clustering via greedy set-cover.
 - ``mmseqs2-homology-search`` — MSA generation for structure predictors (the
-  ColabFold-style iterative pipeline; replaces ``colabfold-search``).
+  ColabFold-style iterative pipeline).
 """
 
 from proto_tools.tools.sequence_alignment.mmseqs2.clustering import (

@@ -1012,7 +1012,7 @@ class ToolRegistry:
         """Get mapping of tool names to their categories.
 
         Extracts tool name from registry key (e.g., 'blast-search' -> 'blast')
-        and maps to category. Handles multi-word tool names like 'colabfold_search'.
+        and maps to category. Handles multi-word tool names like 'mmseqs2_homology'.
 
         Returns:
             dict[str, str]: Dict mapping tool name to category (e.g., {'blast': 'gene_annotation'})
@@ -1020,7 +1020,7 @@ class ToolRegistry:
         tool_categories: dict[str, str] = {}
         for spec in cls._registry.values():
             # Extract toolkit from key: 'blast-search' -> 'blast'
-            # Handle multi-part names: 'colabfold-search' -> 'colabfold_search'
+            # Handle multi-part names: 'mmseqs2-homology-search' -> 'mmseqs2_homology'
             key_parts = spec.key.split("-")
             toolkit = "_".join(key_parts[:-1]) if len(key_parts) >= 2 else spec.key
             tool_categories[toolkit] = spec.category

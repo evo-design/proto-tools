@@ -576,7 +576,7 @@ def _mini_db_skip_reason() -> str | None:
 
 
 def _build_local_mmseqs2_config() -> Mmseqs2HomologySearchConfig:
-    # tiny-test-colabfold is excluded from the product `dataset` Literal so the proto-ui doesn't surface it; use model_construct to bypass the enum validator. CPU because the colabfold-search subprocess can't see the GPU under pytest's DeviceManager mask.
+    # tiny-test-colabfold is excluded from the product `dataset` Literal so the proto-ui doesn't surface it; use model_construct to bypass the enum validator. CPU because the mmseqs2-homology-search subprocess can't see the GPU under pytest's DeviceManager mask.
     return Mmseqs2HomologySearchConfig.model_construct(
         search_mode="local",
         dataset=_MSA_TEST_DATASET,

@@ -159,7 +159,7 @@ class {ToolName}Config(BaseConfig):
     #
     # `gpus_per_instance` is auto-derived from the device string. Override
     # only when GPU need is decoupled from device (e.g. a use_gpu flag, or
-    # a model-variant-dependent count); see ColabfoldSearchConfig for the pattern.
+    # a model-variant-dependent count); see Mmseqs2HomologySearchConfig for the pattern.
 
 class {ToolName}Output(BaseToolOutput):
     """Output from {ToolName}.

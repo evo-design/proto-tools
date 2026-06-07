@@ -1,8 +1,0 @@
-code:
-  spdx: MIT
-  url: https://github.com/sokrypton/ColabFold/blob/main/LICENSE
-commercial_use: 'yes'
-redistribution: true
-attribution_required: false
-notes: ColabFold (Mirdita/Ovchinnikov) is MIT-licensed. The colabfold_search wrapper hits public ColabFold MMseqs2 servers; respect their fair-use policies.
-last_updated: '2026-05-01'

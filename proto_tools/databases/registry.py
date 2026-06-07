@@ -1,7 +1,7 @@
 """Dataset registry for MMseqs2-based homology search tools.
 
 One source of truth for downloadable sequence databases consumed by
-``colabfold-search`` and ``mmseqs2-homology-search``. Holds per-dataset
+``mmseqs2-homology-search``. Holds per-dataset
 metadata — molecule type, download URLs, index recipe, MMseqs2 flags,
 GPU/pairing capability — and resolves the on-disk cache location under
 the databases root (``$PROTO_DATABASES_DIR``, else ``$PROTO_MODEL_CACHE/databases/``);

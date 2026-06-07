@@ -28,9 +28,6 @@ proto_model_cache
 # Model parameters
 *.npz
 
-# ColabFold databases (large downloads, should not be committed)
-tools/sequence_alignment/colabfold_search/databases/
-
 # Log files and directory
 *.log
 logs/

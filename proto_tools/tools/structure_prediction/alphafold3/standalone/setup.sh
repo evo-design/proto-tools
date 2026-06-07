@@ -21,7 +21,7 @@
 # the in-env Python install.
 #
 # MSAs are supplied by the caller via the input JSON (proto_tools delegates
-# MSA generation to colabfold-search), so at runtime we pass
+# MSA generation to mmseqs2-homology-search), so at runtime we pass
 # --norun_data_pipeline and skip the ~630 GB sequence DBs regardless of path.
 
 set -euo pipefail

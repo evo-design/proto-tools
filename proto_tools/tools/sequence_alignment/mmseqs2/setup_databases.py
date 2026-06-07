@@ -79,8 +79,7 @@ _AF3_RNA = [
 ]
 
 PRESETS: dict[str, list[str]] = {
-    # Default of the legacy `colabfold-search` setup_databases.sh and the
-    # current `mmseqs2-homology-search` Config default.
+    # Default of the `mmseqs2-homology-search` Config.
     "colabfold-default": ["uniref30-2302"],
     "colabfold-with-envdb": ["uniref30-2302", "colabfold-envdb-202108"],
     # AlphaFast / AF3 reference set

@@ -37,7 +37,7 @@ CPU-only, no env). These run in CI and enforce consistency checks (docstring sty
 config/schema field metadata including the <100-char description limit,
 README/license/version consistency, tool I/O round-trip, and more) that `ruff` and
 `mypy` do not catch (`ruff` ignores `E501`). Failures propagate through configs
-embedded by other tools, e.g. an over-long `ColabfoldSearchConfig` field description
+embedded by other tools, e.g. an over-long `Mmseqs2HomologySearchConfig` field description
 fails every predictor that nests it.
 
 ## Repository Map
