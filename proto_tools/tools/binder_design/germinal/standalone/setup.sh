@@ -63,6 +63,10 @@ uv pip install --no-deps ablang2
 uv pip install --no-deps iglm
 uv pip install rotary_embedding_torch
 
+# colabdesign pulls iglm, whose unpinned transformers resolves to 5.x — broken under
+# our torch 2.6 pin (refs torch.float8_e8m0fnu, torch>=2.7). Pin to 4.x.
+uv pip install "transformers==4.46.*"
+
 echo "Installing pinned Python dependencies..."
 uv pip install -r requirements.txt
 

@@ -35,6 +35,9 @@ def test_gpu_tool_eviction_round_trip(tool_spec):
 
     Verifies that every tool's standalone worker correctly handles
     to_device() calls for both GPU->CPU and CPU->GPU transitions.
+
+    Each tool runs with ``config_model.minimal()``, so a broken ``minimal()`` for
+    any GPU tool surfaces here, not just a device-lifecycle regression.
     """
     n_gpus = parse_min_gpu_count(tool_spec.device_count)
 
@@ -67,9 +70,12 @@ def test_gpu_tool_eviction_round_trip(tool_spec):
             tool_dir = tool_spec.source_file.parent.name
 
             # --- Step 1: Run the tool on GPU ---
+            # Minimal config — this test only exercises the device round-trip, not a
+            # production-scale run (germinal would otherwise launch a full campaign).
             example = tool_spec.example_input()
+            config = tool_spec.config_model.minimal()
             with ToolInstance.persist_tool(tool_dir, instance_name=instance_name):
-                result1 = tool_spec.function(example, instance=instance_name)
+                result1 = tool_spec.function(example, config, instance=instance_name)
                 assert result1.success, f"{tool_key} failed on first run: {result1.errors}"
 
                 status = dm.get_device_status()
@@ -114,7 +120,7 @@ def test_gpu_tool_eviction_round_trip(tool_spec):
 
                     # --- Step 3: Re-run the tool (should move back to GPU) ---
                     example2 = tool_spec.example_input()
-                    result2 = tool_spec.function(example2, instance=instance_name)
+                    result2 = tool_spec.function(example2, config, instance=instance_name)
                     assert result2.success, f"{tool_key} failed after eviction round-trip: {result2.errors}"
 
                     status = dm.get_device_status()
