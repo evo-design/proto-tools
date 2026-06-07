@@ -137,6 +137,9 @@ _SEED_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
 #   guarantee bit-exact behaviour across processes.
 # - esmfold2-prediction: ~7 mÅ atom drift across fresh subprocesses despite
 #   matching seeds and standard determinism flags. Root cause not isolated.
+# - bindcraft-design: intermittently diverges across fresh subprocesses
+#   (cross-process CUDA kernel-numerics drift). The persistent variant is
+#   reproducible.
 _SEED_NON_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {
         "progen3-sample",
@@ -148,6 +151,7 @@ _SEED_NON_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
         "alphagenome-score-ism-variants-batch",
         "alphagenome-score-variants",
         "esmfold2-prediction",
+        "bindcraft-design",
     }
 )
 
