@@ -140,6 +140,11 @@ _SEED_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
 # - bindcraft-design: intermittently diverges across fresh subprocesses
 #   (cross-process CUDA kernel-numerics drift). The persistent variant is
 #   reproducible.
+# - proteinmpnn-sample: autoregressive JAX sampling — per-item seeds are
+#   deterministic, but cross-process kernel numerics flip a few residues at
+#   near-ties. Bounded + bimodal (two fixed sequences ~4 residues apart, same
+#   class as the other JAX/autoregressive tools here). The persistent variant
+#   is reproducible.
 _SEED_NON_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {
         "progen3-sample",
@@ -152,22 +157,9 @@ _SEED_NON_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
         "alphagenome-score-variants",
         "esmfold2-prediction",
         "bindcraft-design",
+        "proteinmpnn-sample",
     }
 )
-
-# Tools that PASS the non-persistent variant but with a wider — yet bounded — float
-# noise floor than the global ``approx_equal`` default (rtol=1e-4). Discrete outputs
-# (sampled sequences) still match exactly across fresh subprocesses; only a derived
-# scalar metric drifts. Excluding these tools would needlessly drop the cross-process
-# sequence-identity check, so we relax just the float tolerance instead.
-#
-# - proteinmpnn-sample: the sampled sequence is identical across fresh subprocesses,
-#   but the derived ``perplexity`` drifts ~2.6e-4 (bounded cross-process kernel
-#   numerics), just over the 1e-4 default. A 1e-3 rtol preserves the exact
-#   sequence-identity assertion while tolerating the bounded drift.
-_SEED_NON_PERSISTENT_RTOL: dict[str, float] = {
-    "proteinmpnn-sample": 1e-3,
-}
 
 
 def _build_seed_test_params() -> list:
@@ -224,7 +216,7 @@ def test_all_tools_seed_reproducibility(spec: ToolSpec, tmp_path):
     assert r2.success, f"Second run of {spec.key} failed: {r2.errors}"
     assert_metrics_in_spec(r2)
 
-    r1.approx_equal(r2, rtol=_SEED_NON_PERSISTENT_RTOL.get(spec.key, 1e-4))
+    r1.approx_equal(r2)
 
 
 @pytest.mark.extensive
