@@ -594,12 +594,9 @@ class ToolRegistry:
                 # --- Dedup + Cache (cacheable tools only) ---
                 if runtime_cacheable and spec and spec.iterable_input_fields and not stochastic_tool:
                     assert spec.iterable_output_field is not None  # validated at registration
-                    # Iterable path (deterministic only): dedup then strip cached items.
-                    # Stochastic iterables fall through to the whole-call cache branch
-                    # below so duplicates reach the tool and diverge via per-item RNG.
-                    # Zip the parallel iterable group (primary + aligned siblings, e.g.
-                    # complexes + msas) into per-row bundles so dedup/strip key on, and keep
-                    # aligned, ALL fields — not just the primary.
+                    # Iterable path (deterministic only): zip the parallel iterable group into per-row
+                    # bundles, dedup, then strip cached items. Stochastic iterables skip to the
+                    # whole-call cache so duplicates can diverge via per-item RNG.
                     _iter_fields = _active_iter_fields(inputs, spec)
                     original_items = _zip_iter_items(inputs, _iter_fields)
                     if len(original_items) > 1:

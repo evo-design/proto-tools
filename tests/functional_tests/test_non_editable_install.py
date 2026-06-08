@@ -6,10 +6,14 @@ Run from demo-project/ (NOT the repo root) to ensure Python loads from
 site-packages, not the local source directory.
 
 Usage:
-    export PROTO_HOME=/oak/stanford/groups/euan/projects/viggiano/.proto
-    export PROTO_MODEL_CACHE=/scratch/users/viggiano/model_weights/proto-tools
+    export PROTO_HOME=~/.proto
+    export PROTO_MODEL_CACHE=~/.cache/proto-tools/model_weights
     cd demo-project/
     python test_non_editable_install.py
+
+On storage-constrained systems (e.g. HPC clusters with a small $HOME quota),
+point PROTO_HOME and PROTO_MODEL_CACHE at directories with enough space for
+tool environments and model weights respectively.
 """
 
 import os
@@ -26,7 +30,7 @@ def main():
 
     # ── Step 1: Verify env vars are set ──────────────────────────────────
     print("[1] Environment variables")
-    assert proto_home, "PROTO_HOME must be set (we're on Sherlock; ~/.proto/ would fill $HOME)"
+    assert proto_home, "PROTO_HOME must be set to a directory with space for tool environments."
     print(f"    PROTO_HOME       = {proto_home}")
     print(f"    PROTO_MODEL_CACHE = {proto_model_cache or '(not set, will use PROTO_HOME/proto_model_cache/)'}")
     print()

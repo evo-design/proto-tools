@@ -515,43 +515,9 @@ def _get_username() -> str | None:
         return os.environ.get("USER") or os.environ.get("USERNAME")
 
 
-def _get_slurm_cluster_name() -> str | None:
-    """Get SLURM cluster name if running on a SLURM cluster.
-
-    Returns:
-        str | None: Cluster name (e.g., "arc-slurm") or None if not on SLURM.
-    """
-    # First check environment variable (set by some SLURM configs)
-    cluster_name = os.environ.get("SLURM_CLUSTER_NAME")
-    if cluster_name:
-        return cluster_name
-
-    # If SLURM_JOB_ID is set, we're on SLURM - query scontrol for cluster name
-    if os.environ.get("SLURM_JOB_ID"):
-        try:
-            result = subprocess.run(
-                ["scontrol", "show", "config"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            if result.returncode == 0:
-                # Parse "ClusterName = arc-slurm" from output
-                match = re.search(r"ClusterName\s*=\s*(\S+)", result.stdout)
-                if match:
-                    return match.group(1)
-        except Exception as e:
-            logger.debug(f"Failed to query SLURM cluster name: {e}")
-
-    return None
-
-
 # Hostname regex -> friendly name. Checked in order; first match wins.
-# Add new clusters here as (compiled_pattern, friendly_name) tuples.
-_HOSTNAME_ALIASES: list[tuple[re.Pattern[str], str]] = [
-    # Sherlock (Stanford): login nodes "sh03-lnNN", compute nodes "sh04-NNnNN"
-    (re.compile(r"^sh\d+-", re.IGNORECASE), "sherlock"),
-]
+# Add cluster-specific patterns here as (compiled_pattern, friendly_name) tuples.
+_HOSTNAME_ALIASES: list[tuple[re.Pattern[str], str]] = []
 
 
 def _resolve_hostname_alias(hostname: str) -> str | None:
@@ -595,15 +561,13 @@ def get_platform_id(
 
     The hostname is included for generic OS names (e.g. ``linux``) to
     disambiguate machines that would otherwise produce the same ID.
-    Named clusters (chimera, dgx_spark) and macOS already have unique
-    OS parts, so the hostname is omitted for brevity.
+    Named platforms (dgx_spark, registered hostname aliases) and macOS
+    already have unique OS parts, so the hostname is omitted for brevity.
 
     Examples:
     --------
     - Mac: `alice_macosDarwin_arm64_cpu_20260216_bcf5907`
-    - Chimera: `bob_chimera_x86_64_h100_20260216_bcf5907`
     - DGX Spark: `alice_dgx_spark_arm64_gb10_20260216_bcf5907`
-    - Sherlock: `viggiano_sherlock_x86_64_h100_20260216_bcf5907`
     - Unknown Linux: `alice_linux_myhost_x86_64_a100_20260216_bcf5907`
 
     Args:
@@ -626,16 +590,13 @@ def get_platform_id(
             parts.append(username)
 
     # Determine cluster/OS prefix
-    # Named clusters and macOS are already unique; generic OS names
+    # Named platforms and macOS are already unique; generic OS names
     # (e.g. "linux") get the hostname appended to disambiguate machines.
-    # Known hostname patterns (see _HOSTNAME_ALIASES) are resolved to
-    # friendly names and treated as named clusters (no raw hostname).
+    # Hostname patterns registered in _HOSTNAME_ALIASES resolve to
+    # friendly names and are treated as named platforms (no raw hostname).
     include_hostname = False
-    cluster_name = _get_slurm_cluster_name()
     hostname_alias = _resolve_hostname_alias(platform_info.hostname)
-    if cluster_name == "arc-slurm":
-        os_part = "chimera"
-    elif "dgx" in platform_info.hostname.lower() or "spark" in platform_info.hostname.lower():
+    if "dgx" in platform_info.hostname.lower() or "spark" in platform_info.hostname.lower():
         os_part = "dgx_spark"
     elif hostname_alias:
         os_part = hostname_alias

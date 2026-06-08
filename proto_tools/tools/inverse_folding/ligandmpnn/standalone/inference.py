@@ -103,10 +103,8 @@ class LigandMPNNModel:
 
         fixed_residues = _fixed_residues(fixed_positions)
 
-        # Build input dict for Foundry engine
-        # NOTE: Cannot mix residue-based (fixed_residues) and chain-based (designed_chains)
-        # design constraints in the same input. If fixed_residues is provided, we omit
-        # designed_chains - the designable scope is implicitly defined by unfixed residues.
+        # Foundry can't mix residue-based (fixed_residues) and chain-based (designed_chains) constraints;
+        # when fixed_residues is set, designed_chains is implicit (the unfixed residues).
         input_dict = {
             "structure_path": pdb_path,
             "name": "design",

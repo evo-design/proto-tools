@@ -368,12 +368,8 @@ def test_drain_reemits_tagged_lines_under_worker_namespace(stderr_emitter_script
     parent.addHandler(handler)
     parent.setLevel(logging.DEBUG)
 
-    # Standalone that emits a tagged log line via the bridge. Uses the producer
-    # convention: ``from standalone_helpers import get_logger`` (the bootstrap
-    # copies ``standalone_helpers/`` into the standalone dir, triggers
-    # ``install()`` via the package init, and adds the dir to ``sys.path``).
-    # The script must live under a ``standalone/`` directory for the helpers
-    # copy to fire — see ``_copy_standalone_helpers``.
+    # Standalone that emits a tagged log line via the bridge. The script must live under a
+    # ``standalone/`` dir so ``_copy_standalone_helpers`` fires and stages the helpers next to it.
     standalone_dir = stderr_emitter_script.parent / "standalone"
     standalone_dir.mkdir(exist_ok=True)
     script_with_log = standalone_dir / "tagged_emitter.py"

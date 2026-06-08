@@ -196,9 +196,7 @@ class EnvReportCollector:
             if path.suffix != ".md":
                 path = path.with_suffix(".md")
             return path
-        # Reports live in the private proto-bio/tool-env-reports repo, not in this
-        # source tree. Point PROTO_ENV_REPORT_DIR at a clone of it (or pass
-        # --env-report=PATH). Otherwise fall back to a gitignored local dir.
+        # Set PROTO_ENV_REPORT_DIR (or pass --env-report=PATH) to write reports outside the source tree.
         env_report_dir = os.environ.get("PROTO_ENV_REPORT_DIR")
         if env_report_dir:
             env_dir = Path(env_report_dir)
@@ -206,8 +204,7 @@ class EnvReportCollector:
             env_dir = Path(__file__).parent.parent / ".environment_checks"
             print(
                 "[env-report] PROTO_ENV_REPORT_DIR is not set; writing to a "
-                f"gitignored {env_dir}. Set it to a clone of "
-                "proto-bio/tool-env-reports to commit the report there."
+                f"gitignored {env_dir}. Set it to a directory where reports should be collected."
             )
         env_dir.mkdir(parents=True, exist_ok=True)
         platform_id = get_platform_id(include_date=False, include_commit=False)
@@ -295,11 +292,8 @@ class EnvReportCollector:
         else:
             rate_color = "red"
 
-        # Determine cluster/environment name for title
-        cluster_name = os.environ.get("SLURM_CLUSTER_NAME")
-        if cluster_name == "arc-slurm":
-            env_name = "Chimera"
-        elif "dgx" in platform["hostname"].lower() or "spark" in platform["hostname"].lower():
+        # Determine environment name for title
+        if "dgx" in platform["hostname"].lower() or "spark" in platform["hostname"].lower():
             env_name = "DGX Spark"
         else:
             env_name = f"{platform['os']} {platform['architecture']}"
@@ -826,14 +820,9 @@ def pytest_runtest_makereport(item, call):
     outcome = yield
     report = outcome.get_result()
 
-    # Convert MissingAssetError into a skip outcome rather than a failure.
-    # Tools whose external assets (DeepMind-gated weights, large MMseqs2 DBs,
-    # NVIDIA NIM models, ...) aren't provisioned on this machine emit the
-    # ``[proto-tools] ASSET_NOT_AVAILABLE`` sentinel from
-    # ``proto_resolve_asset_availability`` in standalone_helpers.sh; the
-    # ToolInstance setup-failure path raises ``MissingAssetError`` when it
-    # sees that sentinel. Treating it as a skip means an unprovisioned host
-    # gets clean test output instead of cascading failures.
+    # Convert MissingAssetError into a skip outcome. Tools whose external assets aren't provisioned
+    # on this machine emit ASSET_NOT_AVAILABLE via standalone_helpers.sh, which ToolInstance
+    # surfaces as MissingAssetError; treating it as a skip keeps test output clean.
     if call.excinfo is not None and call.excinfo.errisinstance(MissingAssetError):
         exc = call.excinfo.value
         report.outcome = "skipped"
@@ -1140,12 +1129,8 @@ def pytest_collection_modifyitems(config, items):
             if "extensive" in item.keywords:
                 item.add_marker(skip_extensive)
 
-    # Benchmark-marked tests are gated off by default — opt in via --benchmark or
-    # one of its variants (--benchmark-report / --benchmark-tool / --benchmark-toolkit,
-    # all of which imply --benchmark). When any of those is set, benchmark mode is
-    # *exclusive*: every non-benchmark test in the collected set is deselected
-    # (mirroring how --env-report scopes the run). --benchmark-tool / --benchmark-toolkit
-    # then narrow *within* the benchmark set.
+    # Benchmark tests are off by default; opt in via --benchmark (or --benchmark-{report,tool,toolkit}).
+    # Benchmark mode is exclusive: non-benchmark tests in the collected set are deselected.
     if benchmark_mode:
         selected, deselected = [], []
         for item in items:

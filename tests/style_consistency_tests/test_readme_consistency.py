@@ -362,12 +362,8 @@ def _expected_license_callouts(lic: dict, name: str) -> list[str]:
                 category, toolkit = dep["tool"].split("/", 1)
                 dep_url = f"https://bio-pro.mintlify.app/tools/{_slugify(category)}/{_slugify(toolkit)}"
                 dep_lic = yaml.safe_load((_TOOLS_DIR / dep["tool"] / "license.yaml").read_text())
-                # Data-orchestrator deps surface the sibling's data SPDX (what governs use of
-                # the retrieved records); pipeline deps surface the sibling's code SPDX. When
-                # the sibling has no explicit data block (e.g. UniProt, where code.spdx already
-                # carries the data license), fall back to code.spdx. Redistribution-attribution
-                # clauses are intentionally omitted here; they apply to hosts of the tool, not
-                # to the end-user reading the README.
+                # Data-orchestrator deps surface the sibling's data SPDX (governs use of retrieved records);
+                # pipeline deps surface code SPDX. Falls back to code.spdx when no explicit data block exists.
                 dep_data = dep_lic.get("data")
                 if not has_weights:
                     ds = dep_data["spdx"] if isinstance(dep_data, dict) else dep_lic["code"]["spdx"]

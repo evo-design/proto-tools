@@ -226,10 +226,8 @@ class AbLangModel:
         tokenizer.aa_to_token = vocab
         tokenizer.token_to_aa = tokenizer.vocab_to_aa
 
-        # Python resolves __call__ on the class, not the instance, so we must
-        # patch the class.  To avoid mutating the original ABtokenizer class
-        # (which would break if ablang2-paired were loaded in the same process),
-        # we create a one-off subclass and reassign the instance's __class__.
+        # Python resolves __call__ on the class — patch via a one-off subclass + __class__ reassign so
+        # the original ABtokenizer isn't mutated (would break ablang2-paired in the same process).
         original_cls = type(tokenizer)
         original_call = original_cls.__call__
 

@@ -88,13 +88,9 @@ def _build_caches() -> tuple[set[str], dict[str, str], dict[str, str], dict[str,
     inchikey_groups: dict[str, list[str]] = defaultdict(list)
     skipped = 0
 
-    # Silence RDKit's C++ logger (writes to stderr, bypasses Python logging) for
-    # the cache build only. The wwPDB CCD file contains hundreds of organometallic
-    # / hypervalent entries (boron clusters, hypervalent N, Be 4-coord, etc.) that
-    # RDKit refuses to sanitize. We already drop them via the `mol is None` guard
-    # below, but the warnings would otherwise leak into every caller's stderr
-    # (e.g. the AlphaFold3 example notebook). Restore after so genuine sanitize
-    # warnings on user-supplied SMILES (via map_smiles_to_ccd_code) are still surfaced.
+    # Silence RDKit's C++ logger (bypasses Python logging) during the cache build only — the wwPDB
+    # CCD file has hundreds of organometallic/hypervalent entries we already drop via the mol-is-None
+    # guard below. Restored after so genuine sanitize warnings on user SMILES still surface.
     RDLogger.DisableLog("rdApp.*")  # type: ignore[attr-defined]
     try:
         with open(CCD_DATABASE_PATH) as f:

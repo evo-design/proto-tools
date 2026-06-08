@@ -548,12 +548,10 @@ def _preprocess_structure_prediction_msas(
         run_mmseqs2_homology_search,
     )
 
-    # Build the query groups and a per-complex plan for reassembling results by position.
-    # Heterocomplex protein chains → one paired group (a list); single-chain / homo-multimer
-    # → one unpaired query, deduplicated across complexes by sequence. Every query carries an
-    # explicit, globally-unique sequence_id (the search input enforces uniqueness): `u{idx}` for
-    # singletons, `p{group}_{chain}` for paired chains — needed because one sequence can recur
-    # across groups (shared chains), which sequence-hash auto-ids would reject as duplicates.
+    # Build query groups + per-complex reassembly plan: heterocomplex chains → one paired group;
+    # single-chain / homo-multimer → unpaired queries deduped by sequence. Every query carries a
+    # globally-unique sequence_id (`u{idx}` singletons, `p{group}_{chain}` paired) since shared chains
+    # can recur across groups and sequence-hash auto-ids would reject them as duplicates.
     queries_input: list[tuple[str, str] | list[tuple[str, str]]] = []
     unpaired_seq_to_query_idx: dict[str, int] = {}
     # Per complex: (protein chains as (chain_idx, sequence), paired group index or None).

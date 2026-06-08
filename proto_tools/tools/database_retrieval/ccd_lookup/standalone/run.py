@@ -257,13 +257,8 @@ def _load_component(code: str, components_path: str, sanitize: bool) -> Any | No
     if parsed is None:
         from pdbeccdutils.core import ccd_reader
 
-        # Silence the C++ logger across the whole-bundle parse — the noise
-        # (organometallics, hypervalent atoms, etc.) is not about the code
-        # the user asked for. Per-code RDKit warnings during _extract_record
-        # still surface normally. A bundle-parse failure is a setup-level
-        # problem (corrupted download, version mismatch); let it propagate
-        # so the per-identifier guard in _process_identifiers surfaces the
-        # real exception type rather than a misleading "code not found".
+        # Silence the C++ logger across the bundle parse — the noise (organometallics, hypervalent
+        # atoms) isn't tied to the user's code. Per-code warnings during _extract_record still surface.
         with _silence_rdkit_logger():
             parsed = ccd_reader.read_pdb_components_file(
                 components_path,
@@ -589,12 +584,8 @@ def run_ccd_lookup(input_data: dict[str, Any]) -> dict[str, Any]:
         msg = f"CCD bundle not found at {components_path}; rerun setup.sh"
         return {"records": [_empty_record(None, [msg]) for _ in identifiers]}
 
-    # Silence the C++ logger across the whole batch — pdbeccdutils' internal
-    # paths can re-emit "bond type above 3" / "Invalid InChI prefix" warnings
-    # while iterating the bundle even after our scoped silencers exit. Real
-    # per-identifier failures already land on `record["errors"]` /
-    # `record["warnings"]`, so dropping the C++ stderr output here doesn't
-    # hide actionable information.
+    # Silence the C++ logger across the batch — pdbeccdutils re-emits "bond type above 3" /
+    # "Invalid InChI prefix" warnings even after scoped silencers; real failures already land on record["errors"].
     with _silence_rdkit_logger():
         records = _process_identifiers(identifiers, components_path, sanitize, include_xrefs, include_pdb_usage)
     return {"records": records}

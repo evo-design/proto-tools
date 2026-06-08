@@ -548,10 +548,8 @@ def _create_input_json_from_complex(
             }
 
         else:
-            # templates=[] is required when running with --norun_data_pipeline;
-            # AF3's featurisation validates that every protein chain either has
-            # templates (even an empty list explicitly set) or the data pipeline
-            # has run to populate them.
+            # templates=[] is required with --norun_data_pipeline: AF3 featurisation requires every
+            # protein chain to have templates explicitly set (even to []) when the pipeline didn't run.
             sequence_entry = {
                 mol_type: {  # type: ignore[dict-item]
                     "id": chain_ids[idx],

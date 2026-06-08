@@ -124,8 +124,7 @@ def get_subprocess_device_env(device: str) -> dict[str, str]:
     """
     env = os.environ.copy()
 
-    # Normalize bare "cuda" to "cuda:0" for single-GPU environments
-    # where there's no DeviceManager
+    # Normalize bare "cuda" to "cuda:0" for single-GPU environments without a DeviceManager.
     if device == "cuda":
         device = "cuda:0"
 
@@ -352,6 +351,5 @@ def move_model_to_device(
         # JAX not available - not a JAX tool
         pass
 
-    # Not a PyTorch or JAX model - return as-is
-    # This handles CLI-only tools or tools with custom device management
+    # Not a PyTorch or JAX model — return as-is (CLI-only tools or tools with custom device management).
     return model_or_params

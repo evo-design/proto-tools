@@ -118,10 +118,8 @@ class ESMCModel:
                     attention_mask = torch.nn.functional.pad(attention_mask, (0, pad_len), value=0)
                 all_attention_masks.append(attention_mask)
 
-                # Per-position logits (BOS/EOS stripped, restricted to amino acids).
-                # The model always produces sequence_logits, but the post-processing
-                # (slice/index/pad/cat) and per-batch GPU residency is skippable when
-                # the caller doesn't ask for them — and that's the default path.
+                # Per-position logits (BOS/EOS stripped, AAs only). The model always emits sequence_logits,
+                # but the post-processing (slice/index/pad/cat) + GPU residency is skipped when not requested.
                 if all_logits is not None:
                     logits = outputs.sequence_logits[:, 1:-1, :]
                     logits = logits[:, :, self.amino_acid_token_ids]

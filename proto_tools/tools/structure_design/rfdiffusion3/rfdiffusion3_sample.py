@@ -340,10 +340,8 @@ class RFdiffusion3DesignSpec(BaseModel):
     @model_validator(mode="after")
     def validate_selections_require_input_structure(self) -> Any:
         """Reject ``contig``, ``unindex``, and ``select_*`` fields without ``input_structure``."""
-        # Upstream rfd3 resolves all of these against an atom array built from
-        # input_structure. ``contig`` is not a substitute — even chain-referencing
-        # contigs fail without input. ``length`` is the only way to design without
-        # an atom source (unconditional generation, no per-residue constraints).
+        # Upstream rfd3 resolves these against an atom array built from input_structure (even
+        # chain-referencing contigs fail without it). ``length`` is the only input-free path.
         requires_input = (
             "contig",
             "unindex",

@@ -440,12 +440,9 @@ class _PerPositionScorer:
 
             seq_len = len(sequences[i])
 
-            # Extract per-position forward LL (strip special tokens).
-            # Token layout: [<bos>, direction_marker, AA_0, ..., AA_{L-1}, end_marker, <eos>]
-            # After shift-by-1 in NLL computation, valid AA positions start at index 1
-            # (predicting AA_0 from <bos>+marker) through index L (predicting end_marker).
-            # We want indices 1..L which give LL for AA positions 1..L-1,
-            # with position 0 having no forward score.
+            # Extract per-position forward LL (strip special tokens). Token layout:
+            # [<bos>, marker, AA_0..AA_{L-1}, end, <eos>]; after shift-by-1, valid indices are 1..L
+            # (predicting AA_0 from <bos>+marker through end_marker). Position 0 has no forward score.
             fwd_mask = mask_fwd[i].bool()
             fwd_vals = per_pos_fwd[i][fwd_mask].cpu().tolist()
             # fwd_vals has L values: LL for predicting tokens at positions 1..L
