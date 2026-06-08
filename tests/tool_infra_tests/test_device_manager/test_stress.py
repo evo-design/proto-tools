@@ -820,6 +820,10 @@ def test_gpu_only_tool_rejects_cpu_dispatch(monkeypatch):
 
 @pytest.mark.uses_gpu
 @pytest.mark.slow
+@pytest.mark.skipif(
+    is_exclusive_process_mode(),
+    reason="Exclusive_Process mode: CPU strategy auto-escalates to RESTART, so the gpu_only kill-worker path never fires",
+)
 def test_gpu_only_tool_kills_worker_on_eviction(monkeypatch, caplog):
     """Under CPU offload strategy, a gpu_only tool's worker is killed (not moved to CPU).
 
