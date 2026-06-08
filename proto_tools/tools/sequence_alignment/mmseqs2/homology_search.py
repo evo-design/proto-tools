@@ -31,6 +31,7 @@ from proto_tools.utils import (
     ToolInstance,
     resolve_num_threads,
 )
+from proto_tools.utils.system_info import available_memory_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,36 @@ _REMOTE_DATASET_LABEL = "colabfold-remote"
 
 # Local metagenomic search adds this registered envdb as colabfold_search's --db3 (--use-env 1).
 _METAGENOMIC_DATASET = "colabfold-envdb-202108"
+
+
+def local_search_low_memory_reason(entry: DatasetEntry, cache_dir: Path) -> str | None:
+    """Reason a local search will be memory-starved, or ``None`` if RAM suffices.
+
+    colabfold_search's align/expand steps load the dataset's ``{db_prefix}_seq``
+    file; when available RAM is below its on-disk size the search either OOMs (in
+    the default load mode) or runs very slowly (mmap). Compares that file's size
+    against the cgroup-aware budget. Returns ``None`` when the file is absent
+    (size unknown) so callers fall through rather than guess.
+
+    Args:
+        entry (DatasetEntry): The dataset being searched locally.
+        cache_dir (Path): Provisioned dataset directory holding the DB files.
+
+    Returns:
+        str | None: A human-readable reason when RAM is below the sequence-DB
+            size, else ``None``.
+    """
+    seq_db = cache_dir / f"{entry.db_prefix}_seq"
+    if not seq_db.is_file():
+        return None
+    seq_bytes = seq_db.stat().st_size
+    available = available_memory_bytes()
+    if available <= 0 or available >= seq_bytes:
+        return None
+    return (
+        f"local search of {entry.name} loads a {seq_bytes / 1e9:.0f} GB sequence DB but only "
+        f"{available / 1e9:.0f} GB RAM is available; use search_mode='remote' or allocate more memory"
+    )
 
 
 # ============================================================================
@@ -462,6 +493,12 @@ def run_mmseqs2_homology_search(
 
     num_threads = resolve_num_threads(config.num_threads)
 
+    # Below the sequence DB size, warn and mmap (db-load-mode 2) instead of OOM-killing; else fast auto (0).
+    low_memory_reason = local_search_low_memory_reason(entry, cache_dir)
+    if low_memory_reason:
+        logger.warning("mmseqs2-homology-search: %s; running in slow low-memory mode", low_memory_reason)
+    db_load_mode = 2 if low_memory_reason else 0
+
     # Sensitivity: user override > registry default
     sensitivity = config.sensitivity if config.sensitivity is not None else entry.mmseqs_flags.sensitivity
 
@@ -483,6 +520,7 @@ def run_mmseqs2_homology_search(
         "sensitivity": sensitivity,
         "prefilter_mode": entry.mmseqs_flags.prefilter_mode,
         "max_seqs": entry.mmseqs_flags.max_seqs,
+        "db_load_mode": db_load_mode,
         "extra_args": list(entry.mmseqs_flags.extra_args),
         "colabfold_timeout": inner_timeout,
         "device": "cuda" if config.use_gpu else "cpu",

@@ -492,6 +492,7 @@ def _build_homology_command(
     extra_args: list[str],
     num_threads: int,
     use_gpu: bool,
+    db_load_mode: int = 0,
     pairing_strategy: int | None = None,
 ) -> list[str]:
     """Assemble the colabfold_search CLI command from registry-driven flags.
@@ -502,6 +503,8 @@ def _build_homology_command(
     (``--use-env-pairing`` off, env-pairing deferred). When ``pairing_strategy`` is
     set, the query FASTA is a colon-joined complex record and ``--unpack 0`` keeps
     the result DBs (``final.a3m``, ``pair.a3m``) for the caller to unpack itself.
+    ``db_load_mode`` is colabfold's ``--db-load-mode`` (0 auto, 1 fread, 2 mmap,
+    3 mmap+touch); 2 caps resident memory by paging the sequence DB from disk.
     """
     cmd = [colabfold_path, "--mmseqs", mmseqs_path, "--threads", str(num_threads)]
     if sensitivity is not None:
@@ -519,6 +522,7 @@ def _build_homology_command(
     cmd += [str(query_fasta), str(dbbase), str(output_dir)]
     if use_gpu:
         cmd += ["--gpu", "1"]
+    cmd += ["--db-load-mode", str(db_load_mode)]
     cmd += list(extra_args)
     return cmd
 
@@ -584,8 +588,10 @@ def run_homology_search(input_dict: dict[str, Any]) -> dict[str, Any]:
             Required keys: ``sequences`` (list[str]), ``dataset_dir`` (str),
             ``db_prefix`` (str), ``output_dir`` (str), ``num_threads`` (int).
             Optional: ``sensitivity`` (float | None), ``prefilter_mode``
-            (int | None), ``max_seqs`` (int | None), ``extra_args`` (list[str]),
-            ``use_gpu`` (bool, default False), ``verbose`` (bool, default False),
+            (int | None), ``max_seqs`` (int | None), ``db_load_mode`` (int,
+            default 0; 2 mmaps the sequence DB to cap resident memory),
+            ``extra_args`` (list[str]), ``use_gpu`` (bool, default False),
+            ``verbose`` (bool, default False),
             ``colabfold_timeout`` (float | None), ``use_metagenomic_db`` (bool,
             default False) plus ``env_dataset_dir`` / ``env_db_prefix`` (the
             envdb searched as ``--db3`` when metagenomic search is on).
@@ -604,6 +610,8 @@ def run_homology_search(input_dict: dict[str, Any]) -> dict[str, Any]:
     sensitivity = input_dict.get("sensitivity")
     prefilter_mode = input_dict.get("prefilter_mode")
     max_seqs = input_dict.get("max_seqs")
+    # colabfold --db-load-mode: 2 (mmap) caps resident memory under a cgroup cap; 0 (auto) otherwise.
+    db_load_mode = int(input_dict.get("db_load_mode", 0))
     extra_args: list[str] = list(input_dict.get("extra_args", []))
     # When set (mmseqs pairaln --pairing-mode int), `sequences` is one complex's chains, submitted as one colon-joined record.
     pairing_strategy: int | None = input_dict.get("pairing_strategy")
@@ -655,6 +663,7 @@ def run_homology_search(input_dict: dict[str, Any]) -> dict[str, Any]:
         extra_args=extra_args,
         num_threads=num_threads,
         use_gpu=use_gpu,
+        db_load_mode=db_load_mode,
         pairing_strategy=pairing_strategy,
     )
 
