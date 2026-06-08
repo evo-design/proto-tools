@@ -47,6 +47,7 @@ from proto_tools.tools.structure_prediction.rf3 import (
 )
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Complex,
+    ComplexMSAs,
     StructurePredictionOutput,
 )
 
@@ -75,6 +76,7 @@ def predict_structures(
     | RF3Config
     | dict[str, Any]
     | None = None,
+    msas: ComplexMSAs | list[ComplexMSAs] | None = None,
 ) -> StructurePredictionOutput:
     """Dispatch structure prediction to the specified tool.
 
@@ -86,6 +88,7 @@ def predict_structures(
         toolkit (str): Name of the structure prediction tool. Supported values:
             ``"esmfold"``, ``"esmfold2"``, ``"alphafold2"``, ``"alphafold3"``, ``"boltz2"``, ``"chai1"``, ``"protenix"``, ``"rf3"``.
         tool_config (ESMFoldConfig | ESMFold2Config | AlphaFold2Config | AlphaFold3Config | Boltz2Config | Chai1Config | ProtenixConfig | RF3Config | dict[str, Any] | None): Tool-specific configuration dictionary.
+        msas (ComplexMSAs | list[ComplexMSAs] | None): Pre-computed MSAs, one per complex (a single ``ComplexMSAs`` is normalized to a one-element list, mirroring ``complexes``); chains omitted from a complex's ``per_chain`` map stay single-sequence. When supplied, the tool consumes them directly and skips MMseqs2 homology search.
 
     Returns:
         StructurePredictionOutput: StructurePredictionOutput containing predicted structures and metrics.
@@ -96,6 +99,10 @@ def predict_structures(
     # If complexes is a single Complex, normalize it to a list
     if isinstance(complexes, Complex):
         complexes = [complexes]
+
+    # Mirror the above for a single ComplexMSAs so the convenience form stays symmetric.
+    if isinstance(msas, ComplexMSAs):
+        msas = [msas]
 
     if toolkit not in SP_TOOL_MAP:
         raise ValueError(f"predict_structures: unknown toolkit {toolkit!r}; supported: {sorted(SP_TOOL_MAP)}")
@@ -120,7 +127,7 @@ def predict_structures(
     run_func = SP_TOOL_MAP[toolkit]["run_func"]
 
     # Wrap the config input in the expected input class
-    inputs = SP_TOOL_MAP[toolkit]["input"](complexes=complexes)  # type: ignore[operator]
+    inputs = SP_TOOL_MAP[toolkit]["input"](complexes=complexes, msas=msas)  # type: ignore[operator]
 
     # Run the prediction
     return run_func(inputs, tool_config)  # type: ignore[no-any-return, operator]
