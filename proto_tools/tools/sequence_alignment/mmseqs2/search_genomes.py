@@ -42,30 +42,16 @@ from proto_tools.utils import (
 # ============================================================================
 # Input:
 class Mmseqs2SearchGenomesInput(BaseToolInput):
-    """Input object for MMseqs2 genome search.
+    """Query genomes to search.
 
     Attributes:
         query_genomes (list[str]): List of nucleotide sequence strings (DNA/RNA)
             to use as queries. Labeled positionally (``seq_0``, ``seq_1``, ...) as
             ``query_id`` in the output; results are returned in query order.
-        target_genomes (list[str] | None): Inline target genomes.
-            Mutually exclusive with ``target_db``.
-        target_db (str | None): Target FASTA or MMseqs2 DB stem
-            (path/slug/AssetRef). Mutually exclusive with ``target_genomes``.
     """
 
     query_genomes: list[str] = InputField(
         title="Query Genomes", description="List of query genome sequences (nucleotide)"
-    )
-    target_genomes: list[str] | None = InputField(
-        default=None,
-        title="Target Genomes",
-        description="Inline target genome sequences. Mutually exclusive with `target_db`.",
-    )
-    target_db: str | None = InputField(
-        default=None,
-        title="Target Database",
-        description="Target FASTA or MMseqs2 DB stem (path/slug/AssetRef). Mutually exclusive with `target_genomes`.",
     )
 
     @field_validator("query_genomes", mode="before")
@@ -79,27 +65,6 @@ class Mmseqs2SearchGenomesInput(BaseToolInput):
         if not all(isinstance(item, str) for item in v):
             raise ValueError("All items in query_genomes list must be strings")
         return v
-
-    @field_validator("target_genomes", mode="before")
-    @classmethod
-    def validate_target_genomes(cls, v: Any) -> Any:
-        """Validate target genomes input when provided inline."""
-        if v is None:
-            return v
-        if not isinstance(v, list):
-            raise ValueError(f"target_genomes must be a list, got {type(v)}")
-        if not v:
-            raise ValueError("target_genomes list cannot be empty")
-        if not all(isinstance(item, str) for item in v):
-            raise ValueError("All items in target_genomes list must be strings")
-        return v
-
-    @model_validator(mode="after")
-    def exactly_one_target(self) -> Mmseqs2SearchGenomesInput:
-        """Enforce the 'target' XOR constraint at runtime."""
-        if (self.target_genomes is None) == (self.target_db is None):
-            raise ValueError("mmseqs2-search-genomes: provide exactly one of `target_genomes` or `target_db`.")
-        return self
 
 
 # Output:
@@ -189,7 +154,17 @@ class Mmseqs2SearchGenomesConfig(BaseConfig):
     Nucleotide-vs-nucleotide search; the search type is fixed because this tool's
     purpose is exclusively nucleotide search.
 
+    The target genomes (inline or named DB) live here because every query in a run
+    searches against the same target — shared-batch state, not per-query data — so
+    the per-item cache key (query + config) correctly distinguishes searches whose
+    target collection differs.
+
     Attributes:
+        target_genomes (list[str] | None): Inline target genomes. Mutually
+            exclusive with ``target_db``; required at dispatch.
+        target_db (str | None): Target FASTA or MMseqs2 DB stem
+            (path/slug/AssetRef). Mutually exclusive with ``target_genomes``;
+            required at dispatch.
         threads (int): CPU threads; ``0`` auto-detects all cores (the wrapper
             omits ``--threads`` since ``mmseqs`` rejects ``--threads 0``).
         sensitivity (float): Prefilter sensitivity (1.0-7.5). Wrapper default
@@ -207,6 +182,16 @@ class Mmseqs2SearchGenomesConfig(BaseConfig):
             niche flags (e.g. ``["--alignment-mode", "2"]``).
     """
 
+    target_genomes: list[str] | None = ConfigField(
+        default=None,
+        title="Target Genomes",
+        description="Inline target genome sequences. Mutually exclusive with `target_db`.",
+    )
+    target_db: str | None = ConfigField(
+        default=None,
+        title="Target Database",
+        description="Target FASTA or MMseqs2 DB stem (path/slug/AssetRef). Mutually exclusive with `target_genomes`.",
+    )
     threads: int = ConfigField(
         title="Number of Threads",
         default=DEFAULT_THREADS,
@@ -263,16 +248,41 @@ class Mmseqs2SearchGenomesConfig(BaseConfig):
         description="Verbatim `mmseqs search` CLI tokens for niche flags (e.g. `['--alignment-mode', '2']`).",
     )
 
+    @field_validator("target_genomes", mode="before")
+    @classmethod
+    def _validate_target_genomes(cls, v: Any) -> Any:
+        """Validate target genomes input when provided inline."""
+        if v is None:
+            return v
+        if not isinstance(v, list):
+            raise ValueError(f"target_genomes must be a list, got {type(v)}")
+        if not v:
+            raise ValueError("target_genomes list cannot be empty")
+        if not all(isinstance(item, str) for item in v):
+            raise ValueError("All items in target_genomes list must be strings")
+        return v
+
+    @model_validator(mode="after")
+    def _validate_target_xor(self) -> Mmseqs2SearchGenomesConfig:
+        """At most one of `target_genomes` / `target_db` may be set; dispatch raises if both unset."""
+        if self.target_genomes is not None and self.target_db is not None:
+            raise ValueError("mmseqs2-search-genomes: `target_genomes` and `target_db` are mutually exclusive.")
+        return self
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> Mmseqs2SearchGenomesConfig:
+        """Cheap-mode defaults: bundle an inline 2-sequence target so ``Config.minimal()`` works without args."""
+        if "target_genomes" not in kwargs and "target_db" not in kwargs:
+            kwargs["target_genomes"] = ["ATCGATCG", "GCTAGCTA"]
+        return super().minimal(**kwargs)  # type: ignore[return-value]
+
 
 # ============================================================================
 # Tool Implementation
 # ============================================================================
 def example_input() -> Any:
-    """Minimal valid input for testing and examples."""
-    return Mmseqs2SearchGenomesInput(
-        query_genomes=["ATCGATCG"],
-        target_genomes=["ATCGATCG", "GCTAGCTA"],
-    )
+    """Minimal valid input for testing and examples (queries only; target lives on Config)."""
+    return Mmseqs2SearchGenomesInput(query_genomes=["ATCGATCG"])
 
 
 @tool(
@@ -299,9 +309,9 @@ def run_mmseqs2_search_genomes(
     creation, indexing, searching, and result conversion.
 
     Args:
-        inputs (Mmseqs2SearchGenomesInput): Validated input containing query
-            and target genome sequences.
-        config (Mmseqs2SearchGenomesConfig): Configuration with search parameters.
+        inputs (Mmseqs2SearchGenomesInput): Validated input containing query genome sequences.
+        config (Mmseqs2SearchGenomesConfig): Configuration with search parameters and
+            the target collection (``target_db`` or inline ``target_genomes``).
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
@@ -312,19 +322,20 @@ def run_mmseqs2_search_genomes(
         RuntimeError: If any MMseqs2 command fails during execution.
 
     Examples:
-        >>> inputs = Mmseqs2SearchGenomesInput(
-        ...     query_genomes=["ATGGTGCTGTCTCCT...", "ATGAAGCTGCTGGTG..."],
-        ...     target_genomes=["ATGGTGCTGTCTCCT...", "ATGAAGCTGCTGGTG..."],
-        ... )
-        >>> config = Mmseqs2SearchGenomesConfig()
+        >>> inputs = Mmseqs2SearchGenomesInput(query_genomes=["ATGGTGCTGTCTCCT...", "ATGAAGCTGCTGGTG..."])
+        >>> config = Mmseqs2SearchGenomesConfig(target_genomes=["ATGGTGCTGTCTCCT...", "ATGAAGCTGCTGGTG..."])
         >>> result = run_mmseqs2_search_genomes(inputs, config)
         >>> for r in result:
         ...     print(f"Found {r.num_hits} hits")
     """
+    if config.target_genomes is None and config.target_db is None:
+        raise ValueError(
+            "mmseqs2-search-genomes: provide exactly one of `target_genomes` or `target_db` on Mmseqs2SearchGenomesConfig."
+        )
     query_sequences = inputs.query_genomes
     query_ids = [f"seq_{i}" for i in range(len(query_sequences))]
     target_ids = (
-        [f"target_{i}" for i in range(len(inputs.target_genomes))] if inputs.target_genomes is not None else None
+        [f"target_{i}" for i in range(len(config.target_genomes))] if config.target_genomes is not None else None
     )
     num_queries = len(query_sequences)
 
@@ -335,9 +346,9 @@ def run_mmseqs2_search_genomes(
             "operation": "genome_search",
             "query_sequences": query_sequences,
             "query_ids": query_ids,
-            "target_sequences": inputs.target_genomes,
+            "target_sequences": config.target_genomes,
             "target_ids": target_ids,
-            "target_db": inputs.target_db,
+            "target_db": config.target_db,
             # search_type is hardcoded: this tool only does nucleotide-vs-nucleotide.
             "search_type": SEARCH_TYPE_NUCLEOTIDE,
             "threads": config.threads,
@@ -370,7 +381,7 @@ def run_mmseqs2_search_genomes(
             "max_seqs": config.max_seqs,
             "strand": config.strand,
             "num_queries": num_queries,
-            "num_targets": len(inputs.target_genomes) if inputs.target_genomes is not None else None,
+            "num_targets": len(config.target_genomes) if config.target_genomes is not None else None,
         },
         results=results,
     )

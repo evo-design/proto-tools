@@ -101,18 +101,23 @@ def test_read_fasta_keeps_ids_and_seqs_aligned_for_empty_records(tmp_path):
 # -- Input validation (custom validator) ------------------------------------
 
 
+def test_input_rejects_empty_targets():
+    """Empty target list is rejected at Input construction."""
+    with pytest.raises(ValueError, match="target_sequences"):
+        MirandaInput(target_sequences=[])
+
+
 @pytest.mark.parametrize(
     "kwargs",
     [
-        {"target_sequences": [], "mirna_queries": ["UGAGAU"]},  # empty targets
-        {"target_sequences": ["ACGT"], "mirna_queries": []},  # empty queries
-        {"target_sequences": ["ACGT"], "mirna_queries": ["UGAGAU"], "mirna_ids": ["a", "b"]},  # id length mismatch
+        {"mirna_queries": []},  # empty queries
+        {"mirna_queries": ["UGAGAU"], "mirna_ids": ["a", "b"]},  # id length mismatch
     ],
 )
-def test_input_validation_rejects_bad_input(kwargs):
-    """Empty sequence lists and mismatched mirna_ids are rejected at construction."""
+def test_config_rejects_bad_mirnas(kwargs):
+    """Empty query list and mismatched mirna_ids are rejected at Config construction."""
     with pytest.raises(ValueError):
-        MirandaInput(**kwargs)
+        MirandaConfig(**kwargs)
 
 
 # -- Output export (in-memory; no binary) -----------------------------------
@@ -171,8 +176,8 @@ def test_miranda_scan_finds_bantam_site():
     _, target_seqs = _read_fasta(_EXAMPLES_DIR / "hid_utr.fasta")
 
     result = run_miranda_scan(
-        MirandaInput(target_sequences=target_seqs, mirna_queries=mirna_seqs, mirna_ids=["miR-bantam"]),
-        MirandaConfig(),
+        MirandaInput(target_sequences=target_seqs),
+        MirandaConfig(mirna_queries=mirna_seqs, mirna_ids=["miR-bantam"]),
     )
 
     assert result.success is True
@@ -184,3 +189,23 @@ def test_miranda_scan_finds_bantam_site():
     assert top.mirna_id == "miR-bantam"  # query id surfaced end-to-end
     assert top.energy < 0  # a favorable duplex
     assert 1 <= top.target_start <= top.target_end <= len(target_seqs[0])  # 1-indexed, in-bounds
+
+
+# -- Cache-key separation (mirna_queries moved to Config; now in per-item key) -----
+
+
+def test_miranda_per_item_cache_key_distinguishes_different_mirna_queries():
+    """Same target + different `mirna_queries` on Config → distinct per-item cache keys.
+
+    Regression test: before the Input→Config migration, `mirna_queries` lived on Input as
+    a non-iterable sibling field that bypassed the per-item key, so a cached result for
+    one query set would silently be returned for scans against a different set.
+    """
+    from proto_tools.utils.tool_cache import _generate_cache_key
+
+    target = "ACGUACGUACGU"
+    cfg_a = MirandaConfig(mirna_queries=["UGAGAUCAUU"])
+    cfg_b = MirandaConfig(mirna_queries=["GGGGGGGGGG"])
+    key_a = _generate_cache_key("miranda-scan", input_item=target, config=cfg_a)
+    key_b = _generate_cache_key("miranda-scan", input_item=target, config=cfg_b)
+    assert key_a != key_b
