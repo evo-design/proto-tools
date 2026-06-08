@@ -118,8 +118,8 @@ def test_auto_configure_runs_when_only_spinner_handler_attached(monkeypatch: pyt
 
     try:
         _auto_configure_logging()
-        # Auto-configure should have added a StreamHandler despite the spinner.
-        stream_handlers = [h for h in pt.handlers if type(h) is logging.StreamHandler]
+        # Auto-configure should add a stderr StreamHandler (incl. the bar-aware subclass) despite the spinner.
+        stream_handlers = [h for h in pt.handlers if isinstance(h, logging.StreamHandler)]
         assert stream_handlers, (
             f"_auto_configure_logging skipped StreamHandler install; handlers={[type(h).__name__ for h in pt.handlers]}"
         )
