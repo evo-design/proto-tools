@@ -11,6 +11,15 @@ set -euo pipefail
 source standalone_helpers.sh
 
 # ----------------------------------------------------------------------------
+# System libs
+# ----------------------------------------------------------------------------
+# pdbeccdutils unconditionally imports rdkit.Chem.Draw, whose PyPI wheel
+# links against libXrender / libX11 / libXext. Missing from minimal
+# container images (e.g. stripped apptainer/docker bases), so install
+# them into the env.
+"$MAMBA_BIN" install -y -p "$VENV_PATH" -c conda-forge xorg-libxrender xorg-libx11 xorg-libxext
+
+# ----------------------------------------------------------------------------
 # Python deps
 # ----------------------------------------------------------------------------
 pip install uv
