@@ -84,12 +84,17 @@ def test_masking_strategy_seeded():
 #   seed) — across both persistent and non-persistent variants. Mitigations
 #   like ``XLA_FLAGS=--xla_gpu_deterministic_ops=true`` would slow inference
 #   2-5x without a guarantee of bit-exact reproducibility.
+# - germinal-design: binder-design pipeline that runs AF2 hallucination +
+#   re-prediction internally, inheriting the same JAX/CUDA non-determinism as
+#   alphafold2/3 above. Cross-run drift changes which trajectory filters fire,
+#   so even the ``pipeline_stats`` keys differ between runs; both variants fail.
 _SEED_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {
         "rfdiffusion3-design",
         "protenix-prediction",
         "alphafold2-gradient",
         "alphafold3-prediction",
+        "germinal-design",
     }
 )
 
