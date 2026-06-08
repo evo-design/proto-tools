@@ -163,16 +163,28 @@ class GerminalRunner:
         return self._collect_outputs(workdir, target_name, input_dict)
 
     @staticmethod
+    def _is_existing_file(value: str) -> bool:
+        """True if ``value`` is a path to an existing file.
+
+        Inline PDB content can exceed the filesystem's NAME_MAX and make
+        ``Path.is_file()`` raise ENAMETOOLONG; treat that as "not a file".
+        """
+        try:
+            return Path(value).is_file()
+        except OSError:
+            return False
+
+    @staticmethod
     def _hash_pdb(pdb: str) -> str:
         """Derive a stable target name from PDB content (file path or PDB string)."""
-        body = Path(pdb).read_text() if Path(pdb).is_file() else pdb
+        body = Path(pdb).read_text() if GerminalRunner._is_existing_file(pdb) else pdb
         return "target_" + hashlib.sha256(body.encode()).hexdigest()[:8]
 
     @staticmethod
     def _write_target_pdb(workdir: Path, target_name: str, source: str) -> None:
         out = workdir / "pdbs" / f"{target_name}.pdb"
         out.parent.mkdir(parents=True, exist_ok=True)
-        if Path(source).is_file():
+        if GerminalRunner._is_existing_file(source):
             shutil.copy(source, out)
         else:
             out.write_text(source)

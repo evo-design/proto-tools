@@ -134,7 +134,13 @@ class BlastSearchInput(BaseToolInput):
     def infer_query_type(self) -> "BlastSearchInput":
         """Classify query as a raw sequence or a FASTA file path."""
         path = Path(self.query)
-        if path.exists() and path.is_file():
+        try:
+            is_fasta_path = path.exists() and path.is_file()
+        except OSError:
+            # A query longer than the filesystem's NAME_MAX (e.g. a long DNA
+            # sequence) makes stat() raise ENAMETOOLONG; it is a sequence, not a path.
+            is_fasta_path = False
+        if is_fasta_path:
             object.__setattr__(self, "query_type", "fasta_path")
         else:
             # Not a file; treat as raw sequence. Validate characters.

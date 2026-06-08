@@ -126,6 +126,14 @@ def test_input_protein_sequence():
     assert inp.query_type == "sequence"
 
 
+def test_input_long_sequence_not_treated_as_path():
+    # A sequence longer than the filesystem's NAME_MAX (255) once made the
+    # path probe raise OSError(ENAMETOOLONG) instead of classifying it as a
+    # sequence; common for DNA queries (introns, CREs).
+    query = "ACGT" * 100  # 400 nt
+    assert BlastSearchInput(query=query).query_type == "sequence"
+
+
 def test_input_fasta_path(tmp_path):
     fasta = tmp_path / "test.fasta"
     fasta.write_text(">test\nATGCGTAAA\n")
