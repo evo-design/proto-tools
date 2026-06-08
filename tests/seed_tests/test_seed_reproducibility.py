@@ -145,6 +145,9 @@ _SEED_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
 #   near-ties. Bounded + bimodal (two fixed sequences ~4 residues apart, same
 #   class as the other JAX/autoregressive tools here). The persistent variant
 #   is reproducible.
+# - fampnn-pack: per-item seeds are deterministic, but a packed side-chain
+#   coordinate drifts ~1 mÅ across fresh subprocesses (cross-process kernel
+#   numerics). The persistent variant is reproducible.
 _SEED_NON_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {
         "progen3-sample",
@@ -158,6 +161,7 @@ _SEED_NON_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
         "esmfold2-prediction",
         "bindcraft-design",
         "proteinmpnn-sample",
+        "fampnn-pack",
     }
 )
 
