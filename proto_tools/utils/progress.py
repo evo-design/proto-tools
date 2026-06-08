@@ -244,6 +244,7 @@ class _NotebookProgressBar(tqdm_auto):  # type: ignore[type-arg]
         """
         self._base_desc = kwargs.get("desc", "") or ""
         self._style = SPINNER_STYLES.get(spinner_style, SPINNER_STYLES["dots"])
+        self._show_bar = show_bar
         self._stop_event = threading.Event()
         _push_active_bar(self)
         super().__init__(*args, **kwargs)
@@ -297,9 +298,12 @@ class _NotebookProgressBar(tqdm_auto):  # type: ignore[type-arg]
             return
         self._stop_event.set()
         self._spinner_thread.join(timeout=1.0)
-        completed = self.total is not None and self.n >= self.total
-        icon = "\u2714" if completed else "\u2718"
-        self.set_description(f"{icon} {_format_desc_for_display(self._base_desc)}", refresh=True)
+        # See _AnimatedProgressBar.close() for why status-only spinners skip
+        # the icon \u2014 same misleading-\u2718 problem on success.
+        if self._show_bar:
+            completed = self.total is not None and self.n >= self.total
+            icon = "\u2714" if completed else "\u2718"
+            self.set_description(f"{icon} {_format_desc_for_display(self._base_desc)}", refresh=True)
         _pop_active_bar(self)
         super().close()
 
@@ -317,18 +321,27 @@ class _AnimatedProgressBar(tqdm):  # type: ignore[type-arg]
     changes.
     """
 
-    def __init__(self, *args: Any, spinner_style: str = "dots", **kwargs: Any) -> None:  # noqa: D417
+    def __init__(self, *args: Any, spinner_style: str = "dots", show_bar: bool = True, **kwargs: Any) -> None:  # noqa: D417
         """Create an animated progress bar.
 
         All positional and keyword args are forwarded to tqdm.
 
         Args:
             spinner_style (str): Animation style name from ``SPINNER_STYLES``.
+            show_bar (bool): Whether the bar widget is rendered. When False
+                (status-only spinner used by tool dispatch), ``close()`` clears
+                the line instead of pinning a final icon — the trailing
+                "Tool X: completed in Ns" log line already conveys the result.
         """
         self._base_desc = kwargs.pop("desc", "") or ""
         self._style = SPINNER_STYLES.get(spinner_style, SPINNER_STYLES["dots"])
+        self._show_bar = show_bar
         self._stop_event = threading.Event()
         _push_active_bar(self)
+
+        # Status-only spinners shouldn't leave their final frame on screen.
+        if not show_bar:
+            kwargs.setdefault("leave", False)
 
         super().__init__(*args, desc=self._base_desc, **kwargs)  # type: ignore[call-overload]
 
@@ -377,9 +390,16 @@ class _AnimatedProgressBar(tqdm):  # type: ignore[type-arg]
             return
         self._stop_event.set()
         self._spinner_thread.join(timeout=1.0)
-        completed = self.total is not None and self.n >= self.total
-        icon = "\033[32m\u2714\033[0m" if completed else "\033[31m\u2718\033[0m"
-        self.set_description(f"{icon} {_format_desc_for_display(self._base_desc)}", refresh=True)
+        # Real progress bars: pin a final \u2714/\u2718 based on n vs total.
+        # Status-only spinners (show_bar=False): skip the icon and let
+        # leave=False (set in __init__) clear the line on super().close().
+        # The n vs total heuristic is misleading for status spinners because
+        # tool dispatch never calls update(), so n stays at 0 and every
+        # successful run would render a red \u2718.
+        if self._show_bar:
+            completed = self.total is not None and self.n >= self.total
+            icon = "\033[32m\u2714\033[0m" if completed else "\033[31m\u2718\033[0m"
+            self.set_description(f"{icon} {_format_desc_for_display(self._base_desc)}", refresh=True)
         _pop_active_bar(self)
         super().close()
 
@@ -422,7 +442,7 @@ def progress_bar(*args: Any, spinner_style: str = "dots", show_bar: bool = True,
         return tqdm(*args, **kwargs)
     if _in_notebook():
         return _NotebookProgressBar(*args, spinner_style=spinner_style, show_bar=show_bar, **kwargs)
-    return _AnimatedProgressBar(*args, spinner_style=spinner_style, **kwargs)
+    return _AnimatedProgressBar(*args, spinner_style=spinner_style, show_bar=show_bar, **kwargs)
 
 
 def set_substatus(message: str, style: str | None = None) -> None:
