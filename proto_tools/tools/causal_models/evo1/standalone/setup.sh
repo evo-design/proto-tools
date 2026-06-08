@@ -94,6 +94,11 @@ echo "Installing torch..."
 # work with the exact torch version they were compiled against.
 uv pip install torch==2.7.1 --extra-index-url "${RECOMMENDED_TORCH_INDEX}" --refresh
 
+# flash-attn's setup.py imports psutil/packaging at build time but doesn't declare
+# them as build deps. We build flash-attn with --no-build-isolation (below), so the
+# build reads from this env — they must be installed here first.
+uv pip install psutil packaging
+
 echo "Installing dependencies from requirements.txt..."
 # Use --no-build-isolation-package for flash-attn to ensure it uses the installed torch
 # and doesn't download a different version during build
