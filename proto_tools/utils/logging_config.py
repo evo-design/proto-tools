@@ -96,7 +96,7 @@ def _auto_configure_logging() -> None:
         return
 
     # No one configured logging - add minimal stderr handler
-    handler = logging.StreamHandler(sys.stderr)
+    handler = _BarAwareStreamHandler(sys.stderr)
     handler.setLevel(logging.INFO)
     handler.setFormatter(SelectiveLevelFormatter("%(message)s"))
     handler.addFilter(_drop_update_status_records)
@@ -115,6 +115,35 @@ def _drop_update_status_records(record: logging.LogRecord) -> bool:
     everything as an audit trail.
     """
     return not getattr(record, "update_status", False)
+
+
+class _BarAwareStreamHandler(logging.StreamHandler):  # type: ignore[type-arg]
+    r"""StreamHandler that routes through ``tqdm.write`` when a spinner is active.
+
+    Plain ``StreamHandler.emit`` writes ``msg + terminator`` directly to the
+    stream. When ``_AnimatedProgressBar`` is repainting the same stderr line
+    via ``\r`` (verbose >= 2, DEBUG records streaming), the log line appends
+    to the spinner frame and the next frame leaves the prior one stranded
+    above — ghost frames accumulate. ``tqdm.write`` clears the bar line first,
+    writes the message, then redraws the bar so log lines and the spinner
+    don't collide.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:
+        # Lazy import: progress -> tqdm is heavier and ``logging_config`` is
+        # imported very early (proto_tools package init).
+        from proto_tools.utils.progress import has_active_progress_bar
+
+        if has_active_progress_bar():
+            try:
+                from tqdm import tqdm
+
+                tqdm.write(self.format(record), file=self.stream)
+                return
+            except Exception:
+                self.handleError(record)
+                return
+        super().emit(record)
 
 
 # ============================================================================
@@ -263,7 +292,7 @@ def setup_logging(
     # Console handler (stderr - safe from subprocess IPC on stdout)
     console_handler = None
     if log_to_console:
-        console_handler = logging.StreamHandler(sys.stderr)
+        console_handler = _BarAwareStreamHandler(sys.stderr)
         console_handler.setLevel(console_level or level)
         console_handler.setFormatter(console_formatter)
         console_handler.addFilter(_drop_update_status_records)
