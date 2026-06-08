@@ -35,7 +35,8 @@ This tool is appropriate for ad-hoc protein homology search at scale, ranking hi
 
 #### Usage Tips
 
-- **Targets are specified via either `mmseqs_db` or `target_sequences`, but not both.** Use `mmseqs_db` for a path to a FASTA file or a prebuilt MMseqs2 database when the target set is large or reused across calls. Use `target_sequences` for short inline lists.
+- **Targets are specified on `Mmseqs2SearchProteinsConfig` via either `mmseqs_db` or `target_sequences`, but not both.** Use `mmseqs_db` for a path to a FASTA file or a prebuilt MMseqs2 database when the target set is large or reused across calls. Use `target_sequences` for short inline lists. They live on Config because every query in a run searches against the same target collection.
+- **`mmseqs_db` is cached by path, not by contents.** The per-item cache key includes the path string but not the bytes at that path, so mutating the database in place (overwriting `/dbs/uniref90` with a new build at the same path) will silently return stale hits. If you swap a DB at a stable path, either clear the cache or use a versioned filename (`/dbs/uniref90_v2`) so the new path forces a fresh key.
 - **`sensitivity=5.7` is the wrapper default and matches upstream `easy-search`.** Higher values recover more distant homologs at the cost of additional runtime. The accepted range is 1.0 to 7.5.
 - **`only_top_hits=True` (the default) returns only the best hit per query by percent identity.** Set it to `False` to retain every hit that passes the configured thresholds.
 - **`use_gpu=True` requires a GPU-padded index alongside the target database.** Build the index once with `mmseqs makepaddedseqdb <db> <db>.idx_pad`. The configuration validator hard-errors when the `.idx_pad` companion is missing or when `use_gpu=True` is combined with inline `target_sequences` (the GPU path does not accept inline targets).
@@ -51,7 +52,8 @@ This tool is appropriate for genome-to-genome similarity analysis, locating homo
 
 #### Usage Tips
 
-- **Targets are specified via either `target_db` or `target_genomes`, but not both.** Use `target_db` for a FASTA file or a prebuilt MMseqs2 database; use `target_genomes` for inline nucleotide sequences.
+- **Targets are specified on `Mmseqs2SearchGenomesConfig` via either `target_db` or `target_genomes`, but not both.** Use `target_db` for a FASTA file or a prebuilt MMseqs2 database; use `target_genomes` for inline nucleotide sequences. They live on Config because every query in a run scans against the same target collection.
+- **`target_db` is cached by path, not by contents.** The per-item cache key includes the path string but not the bytes at that path, so mutating the database in place will silently return stale hits. If you swap a DB at a stable path, either clear the cache or use a versioned filename so the new path forces a fresh key.
 - **`sensitivity=7.5` is the wrapper default for nucleotide search.** This is a wrapper bias above the upstream MMseqs2 default of 5.7, chosen because nucleotide searches typically benefit from the higher sensitivity setting. The accepted range is 1.0 to 7.5.
 - **`strand=2` (both strands) is the wrapper default.** Upstream defaults to forward strand only. Set `strand=1` to restrict to the forward strand or `strand=0` for reverse only.
 - **`extra_args` accepts verbatim [`mmseqs search`](https://github.com/soedinglab/MMseqs2/wiki#search-workflow) CLI tokens.** Tokens are appended after the typed flags.
@@ -67,6 +69,7 @@ This tool is appropriate for deduplicating a sequence set before downstream anal
 #### Usage Tips
 
 - **Inputs are specified via either `input_sequences` or `mmseqs_db`, but not both.** Use `input_sequences` for inline sequences; use `mmseqs_db` for a prebuilt database that may be reused across calls.
+- **`mmseqs_db` is cached by path, not by contents.** The cache key includes the path string but not the bytes at that path, so mutating the database in place will silently return stale cluster assignments. If you swap a DB at a stable path, either clear the cache or use a versioned filename so the new path forces a fresh key.
 - **`min_seq_id=0.6` is the wrapper default.** This is a wrapper bias above the upstream MMseqs2 default of 0.0, chosen as a reasonable starting point for grouping proteins into functional families. Set it higher (for example `0.95`) to remove near-duplicates, or lower (for example `0.3`) to group remote homologs.
 - **`cluster_mode=0` (set-cover) is the default greedy algorithm.** Alternative modes are `1` (connected-component, BLASTclust-style) and `2` or `3` (greedy by length, CD-HIT-style).
 - **The cluster representative is the first sequence to cover the cluster during greedy set-cover.** It is not necessarily the longest or most central sequence. Choose an alternative `cluster_mode` if a different representative-selection policy is needed.

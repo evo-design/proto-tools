@@ -264,8 +264,8 @@ def test_run_protein_search_use_gpu_without_padded_db_fails(tmp_path):
     fasta.write_text(">seq_0\nMKTL\n")
     with pytest.raises(Exception, match=r"(?s)GPU-padded MMseqs2 DB.*makepaddedseqdb"):
         run_mmseqs2_search_proteins(
-            Mmseqs2SearchProteinsInput(query_sequences=["MKTL"], mmseqs_db=str(fasta)),
-            Mmseqs2SearchProteinsConfig(use_gpu=True),
+            Mmseqs2SearchProteinsInput(query_sequences=["MKTL"]),
+            Mmseqs2SearchProteinsConfig(mmseqs_db=str(fasta), use_gpu=True),
         )
 
 
@@ -315,7 +315,7 @@ def test_column_names_consistency():
 
 def test_search_proteins_input_valid():
     """Sanity: a well-formed Input model accepts its required fields."""
-    inputs = Mmseqs2SearchProteinsInput(query_sequences=["MVLSPADKTN", "MKLLVVAAAA"], mmseqs_db="/p")
+    inputs = Mmseqs2SearchProteinsInput(query_sequences=["MVLSPADKTN", "MKLLVVAAAA"])
     assert len(inputs.query_sequences) == 2
 
 
@@ -324,23 +324,18 @@ def test_search_proteins_input_valid():
     [
         (
             Mmseqs2SearchProteinsInput,
-            {"query_sequences": [], "mmseqs_db": "/p"},
+            {"query_sequences": []},
             "query_sequences list cannot be empty",
         ),
         (
             Mmseqs2SearchProteinsInput,
-            {"query_sequences": "single", "mmseqs_db": "/p"},
+            {"query_sequences": "single"},
             "query_sequences must be a list",
         ),
         (
             Mmseqs2SearchGenomesInput,
-            {"query_genomes": [], "target_genomes": ["ATGC"]},
+            {"query_genomes": []},
             "query_genomes list cannot be empty",
-        ),
-        (
-            Mmseqs2SearchGenomesInput,
-            {"query_genomes": ["ATGC"], "target_genomes": []},
-            "target_genomes list cannot be empty",
         ),
         (Mmseqs2ClusteringInput, {"input_sequences": []}, "input_sequences list cannot be empty"),
     ],
@@ -353,9 +348,7 @@ def test_input_field_validator_rejects_bad_value(input_cls, kwargs, msg):
 @pytest.mark.parametrize(
     "input_cls, base_kwargs, new_kwargs, cleared_field",
     [
-        (Mmseqs2SearchProteinsInput, {"query_sequences": ["MKTL"]}, {"target_sequences": ["A", "B"]}, "mmseqs_db"),
         (Mmseqs2ClusteringInput, {}, {"mmseqs_db": "/p"}, "input_sequences"),
-        (Mmseqs2SearchGenomesInput, {"query_genomes": ["ATCG"]}, {"target_db": "/p"}, "target_genomes"),
     ],
 )
 def test_new_xor_modality_accepted(input_cls, base_kwargs, new_kwargs, cleared_field):
@@ -368,31 +361,107 @@ def test_new_xor_modality_accepted(input_cls, base_kwargs, new_kwargs, cleared_f
     "input_cls, base_kwargs, both_kwargs, msg",
     [
         (
-            Mmseqs2SearchProteinsInput,
-            {"query_sequences": ["MKTL"]},
-            {"mmseqs_db": "/p", "target_sequences": ["MKTL"]},
-            r"exactly one of `mmseqs_db` or `target_sequences`",
-        ),
-        (
             Mmseqs2ClusteringInput,
             {},
             {"input_sequences": ["MKTL"], "mmseqs_db": "/p"},
             r"exactly one of `input_sequences` or `mmseqs_db`",
         ),
-        (
-            Mmseqs2SearchGenomesInput,
-            {"query_genomes": ["ATCG"]},
-            {"target_genomes": ["ATCG"], "target_db": "/p"},
-            r"exactly one of `target_genomes` or `target_db`",
-        ),
     ],
 )
 @pytest.mark.parametrize("violation", ["both", "neither"], ids=lambda v: v)
 def test_xor_violation_raises(input_cls, base_kwargs, both_kwargs, msg, violation):
-    """For every XOR-grouped tool, both `both fields set` and `neither set` raise a clear ValueError."""
+    """For every Input-level XOR-grouped tool, both `both fields set` and `neither set` raise a clear ValueError."""
     extra = both_kwargs if violation == "both" else {}
     with pytest.raises(ValueError, match=msg):
         input_cls(**base_kwargs, **extra)
+
+
+# Proteins-specific Config-level XOR (target moved to Config in this refactor).
+def test_proteins_config_target_xor_both_raises():
+    """`mmseqs_db` and `target_sequences` are mutually exclusive on Mmseqs2SearchProteinsConfig."""
+    with pytest.raises(ValueError, match=r"mutually exclusive"):
+        Mmseqs2SearchProteinsConfig(mmseqs_db="/p", target_sequences=["MKTL"])
+
+
+def test_proteins_config_neither_target_accepted_at_construction():
+    """`Mmseqs2SearchProteinsConfig()` constructs with both target fields unset; dispatch raises."""
+    config = Mmseqs2SearchProteinsConfig()
+    assert config.mmseqs_db is None
+    assert config.target_sequences is None
+    with pytest.raises(ValueError, match=r"exactly one of `mmseqs_db` or `target_sequences`"):
+        run_mmseqs2_search_proteins(Mmseqs2SearchProteinsInput(query_sequences=["MKTL"]), config)
+
+
+def test_proteins_config_rejects_empty_target_sequences():
+    """`target_sequences=[]` on Config is rejected by the field validator."""
+    with pytest.raises(ValueError, match=r"target_sequences list cannot be empty"):
+        Mmseqs2SearchProteinsConfig(target_sequences=[])
+
+
+# Genomes-specific Config-level XOR (target moved to Config in this refactor).
+def test_genomes_config_target_xor_both_raises():
+    """`target_genomes` and `target_db` are mutually exclusive on Mmseqs2SearchGenomesConfig."""
+    with pytest.raises(ValueError, match=r"mutually exclusive"):
+        Mmseqs2SearchGenomesConfig(target_genomes=["ATCG"], target_db="/p")
+
+
+def test_genomes_config_neither_target_accepted_at_construction():
+    """`Mmseqs2SearchGenomesConfig()` constructs with both target fields unset; dispatch raises."""
+    config = Mmseqs2SearchGenomesConfig()
+    assert config.target_genomes is None
+    assert config.target_db is None
+    with pytest.raises(ValueError, match=r"exactly one of `target_genomes` or `target_db`"):
+        run_mmseqs2_search_genomes(Mmseqs2SearchGenomesInput(query_genomes=["ATCG"]), config)
+
+
+def test_genomes_config_rejects_empty_target_genomes():
+    """`target_genomes=[]` on Config is rejected by the field validator."""
+    with pytest.raises(ValueError, match=r"target_genomes list cannot be empty"):
+        Mmseqs2SearchGenomesConfig(target_genomes=[])
+
+
+# ── Cache-key separation (Config-moved targets now participate in the per-item key) ──
+
+
+def test_proteins_per_item_cache_key_distinguishes_different_mmseqs_db():
+    """Same query + different `mmseqs_db` on Config → distinct per-item cache keys.
+
+    Regression test: before the Input→Config migration, `mmseqs_db` lived on Input as a
+    non-iterable sibling field that bypassed the per-item key, so a cached result for
+    one DB would silently be returned for queries against a different DB.
+    """
+    from proto_tools.utils.tool_cache import _generate_cache_key
+
+    query = "MVLSPADKTN"
+    cfg_a = Mmseqs2SearchProteinsConfig(mmseqs_db="/dbs/uniref30")
+    cfg_b = Mmseqs2SearchProteinsConfig(mmseqs_db="/dbs/uniref90")
+    key_a = _generate_cache_key("mmseqs2-search-proteins", input_item=query, config=cfg_a)
+    key_b = _generate_cache_key("mmseqs2-search-proteins", input_item=query, config=cfg_b)
+    assert key_a != key_b
+
+
+def test_proteins_per_item_cache_key_distinguishes_different_target_sequences():
+    """Same query + different inline `target_sequences` on Config → distinct per-item cache keys."""
+    from proto_tools.utils.tool_cache import _generate_cache_key
+
+    query = "MVLSPADKTN"
+    cfg_a = Mmseqs2SearchProteinsConfig(target_sequences=["AAAA"])
+    cfg_b = Mmseqs2SearchProteinsConfig(target_sequences=["BBBB"])
+    key_a = _generate_cache_key("mmseqs2-search-proteins", input_item=query, config=cfg_a)
+    key_b = _generate_cache_key("mmseqs2-search-proteins", input_item=query, config=cfg_b)
+    assert key_a != key_b
+
+
+def test_genomes_per_item_cache_key_distinguishes_different_target_db():
+    """Same query + different `target_db` on Config → distinct per-item cache keys."""
+    from proto_tools.utils.tool_cache import _generate_cache_key
+
+    query = "ATCG"
+    cfg_a = Mmseqs2SearchGenomesConfig(target_db="/dbs/genomes_a")
+    cfg_b = Mmseqs2SearchGenomesConfig(target_db="/dbs/genomes_b")
+    key_a = _generate_cache_key("mmseqs2-search-genomes", input_item=query, config=cfg_a)
+    key_b = _generate_cache_key("mmseqs2-search-genomes", input_item=query, config=cfg_b)
+    assert key_a != key_b
 
 
 def test_resolve_to_mmseqs_db_classifies_inputs(tmp_path):
@@ -463,9 +532,8 @@ def test_mmseqs_search_proteins_execution(tmp_path):
             "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT",
             "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT",
         ],
-        mmseqs_db=str(db_file),
     )
-    config = Mmseqs2SearchProteinsConfig(threads=2)
+    config = Mmseqs2SearchProteinsConfig(mmseqs_db=str(db_file), threads=2)
     result = run_mmseqs2_search_proteins(inputs, config)
 
     validate_output(result)
@@ -481,11 +549,8 @@ def test_mmseqs_search_proteins_no_hits(tmp_path):
     db_file = tmp_path / "database.faa"
     db_file.write_text(">db1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n")
 
-    inputs = Mmseqs2SearchProteinsInput(
-        query_sequences=["WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW"],
-        mmseqs_db=str(db_file),
-    )
-    config = Mmseqs2SearchProteinsConfig(threads=2)
+    inputs = Mmseqs2SearchProteinsInput(query_sequences=["WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW"])
+    config = Mmseqs2SearchProteinsConfig(mmseqs_db=str(db_file), threads=2)
     result = run_mmseqs2_search_proteins(inputs, config)
 
     assert isinstance(result, Mmseqs2SearchProteinsOutput)
@@ -545,8 +610,8 @@ def test_mmseqs_search_genomes_execution():
         "ATGAAGCTGCTGGTGGTGGCCGCCGCCGCCGCCGCCGCCGCCGCCGCCGCCGCCATGAAGCTGCTGGTGGTGGCCGCCGCCGCCGCCGCCGCCGCCGCCGCCGCCGCC",
     ]
 
-    inputs = Mmseqs2SearchGenomesInput(query_genomes=query_seqs, target_genomes=target_seqs)
-    config = Mmseqs2SearchGenomesConfig()
+    inputs = Mmseqs2SearchGenomesInput(query_genomes=query_seqs)
+    config = Mmseqs2SearchGenomesConfig(target_genomes=target_seqs)
     result = run_mmseqs2_search_genomes(inputs, config)
 
     validate_output(result)
@@ -558,11 +623,12 @@ def test_mmseqs_search_genomes_execution():
 @pytest.mark.integration
 def test_search_proteins_inline_target_sequences_execution():
     """End-to-end: target_sequences (inline) routed via easy-search yields hits."""
-    inputs = Mmseqs2SearchProteinsInput(
-        query_sequences=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"],
+    inputs = Mmseqs2SearchProteinsInput(query_sequences=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"])
+    config = Mmseqs2SearchProteinsConfig(
         target_sequences=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT", "AAAAAAAAAAAAAAAAAAAA"],
+        threads=2,
     )
-    result = run_mmseqs2_search_proteins(inputs, Mmseqs2SearchProteinsConfig(threads=2))
+    result = run_mmseqs2_search_proteins(inputs, config)
     assert result.success and result[0].num_hits >= 1
 
 
@@ -589,11 +655,8 @@ def test_search_genomes_target_db_fasta_path_execution(tmp_path):
     target = tmp_path / "target.fna"
     target.write_text(">t1\nATGGTGCTGTCTCCTGCCGACAAGACCAACGTCAAGGCCGCC\n")
     result = run_mmseqs2_search_genomes(
-        Mmseqs2SearchGenomesInput(
-            query_genomes=["ATGGTGCTGTCTCCTGCCGACAAGACCAACGTCAAGGCCGCC"],
-            target_db=str(target),
-        ),
-        Mmseqs2SearchGenomesConfig(),
+        Mmseqs2SearchGenomesInput(query_genomes=["ATGGTGCTGTCTCCTGCCGACAAGACCAACGTCAAGGCCGCC"]),
+        Mmseqs2SearchGenomesConfig(target_db=str(target)),
     )
     assert result.success and len(result) == 1
 
@@ -608,12 +671,9 @@ def test_search_proteins_threads_zero_runs_successfully(tmp_path):
     db_file = tmp_path / "database.faa"
     db_file.write_text(">db1\nMVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT\n")
 
-    inputs = Mmseqs2SearchProteinsInput(
-        query_sequences=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"],
-        mmseqs_db=str(db_file),
-    )
+    inputs = Mmseqs2SearchProteinsInput(query_sequences=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"])
     # Default threads=0 — verify the standalone correctly omits the flag
     # rather than passing `--threads 0` (which mmseqs rejects).
-    result = run_mmseqs2_search_proteins(inputs, Mmseqs2SearchProteinsConfig())
+    result = run_mmseqs2_search_proteins(inputs, Mmseqs2SearchProteinsConfig(mmseqs_db=str(db_file)))
     assert result.success is True
     assert result[0].num_hits >= 1

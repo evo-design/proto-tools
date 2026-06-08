@@ -115,34 +115,17 @@ class Mmseqs2SequenceSearchResult(BaseModel):
 
 # Input:
 class Mmseqs2SearchProteinsInput(BaseToolInput):
-    """Input object for MMseqs2 protein search.
-
-    This class defines the input parameters for running MMseqs2 protein sequence
-    searches.
+    """Query sequences to search.
 
     Attributes:
         query_sequences (list[str]): List of protein sequence strings (amino acid
             sequences) to search. Labeled positionally (``seq_0``, ``seq_1``, ...)
             as ``query_id`` in the output; results are returned in input order.
-        mmseqs_db (str | None): Target DB (path/slug/AssetRef). Mutually
-            exclusive with ``target_sequences``.
-        target_sequences (list[str] | None): Inline target sequences.
-            Mutually exclusive with ``mmseqs_db``.
     """
 
     query_sequences: list[str] = InputField(
         title="Query Sequences",
         description="List of protein sequences to search",
-    )
-    mmseqs_db: str | None = InputField(
-        default=None,
-        title="MMseqs2 Database",
-        description="Target DB (path/slug/AssetRef). Mutually exclusive with `target_sequences`.",
-    )
-    target_sequences: list[str] | None = InputField(
-        default=None,
-        title="Target Sequences",
-        description="Inline target protein sequences. Mutually exclusive with `mmseqs_db`.",
     )
 
     @field_validator("query_sequences", mode="before")
@@ -156,27 +139,6 @@ class Mmseqs2SearchProteinsInput(BaseToolInput):
         if not all(isinstance(item, str) for item in v):
             raise ValueError("All items in query_sequences list must be strings")
         return v
-
-    @field_validator("target_sequences", mode="before")
-    @classmethod
-    def validate_target_sequences(cls, v: Any) -> Any:
-        """Validate target sequences when provided inline."""
-        if v is None:
-            return v
-        if not isinstance(v, list):
-            raise ValueError(f"target_sequences must be a list, got {type(v)}")
-        if not v:
-            raise ValueError("target_sequences list cannot be empty")
-        if not all(isinstance(item, str) for item in v):
-            raise ValueError("All items in target_sequences list must be strings")
-        return v
-
-    @model_validator(mode="after")
-    def exactly_one_target(self) -> Mmseqs2SearchProteinsInput:
-        """Enforce the 'target' XOR constraint at runtime."""
-        if (self.mmseqs_db is None) == (self.target_sequences is None):
-            raise ValueError("mmseqs2-search-proteins: provide exactly one of `mmseqs_db` or `target_sequences`.")
-        return self
 
 
 # Output:
@@ -266,7 +228,16 @@ class Mmseqs2SearchProteinsOutput(BaseToolOutput):
 class Mmseqs2SearchProteinsConfig(BaseConfig):
     """Configuration object for MMseqs2 protein search.
 
+    The target collection (inline list or named DB) lives here because every
+    query in a run searches against the same target — shared-batch state, not
+    per-query data — so the per-item cache key (query + config) correctly
+    distinguishes searches whose target collection differs.
+
     Attributes:
+        mmseqs_db (str | None): Target DB (path/slug/AssetRef). Mutually
+            exclusive with ``target_sequences``; required at dispatch.
+        target_sequences (list[str] | None): Inline target sequences.
+            Mutually exclusive with ``mmseqs_db``; required at dispatch.
         threads (int): CPU threads; ``0`` auto-detects all cores (the wrapper
             omits ``--threads`` since ``mmseqs`` rejects ``--threads 0``).
         split (int): Split into N chunks to bound memory; ``0`` = auto.
@@ -289,6 +260,16 @@ class Mmseqs2SearchProteinsConfig(BaseConfig):
             for niche flags (e.g. ``["--alignment-mode", "3"]``).
     """
 
+    mmseqs_db: str | None = ConfigField(
+        default=None,
+        title="MMseqs2 Database",
+        description="Target DB (path/slug/AssetRef). Mutually exclusive with `target_sequences`.",
+    )
+    target_sequences: list[str] | None = ConfigField(
+        default=None,
+        title="Target Sequences",
+        description="Inline target protein sequences. Mutually exclusive with `mmseqs_db`.",
+    )
     threads: int = ConfigField(
         title="Number of Threads",
         default=DEFAULT_THREADS,
@@ -366,16 +347,41 @@ class Mmseqs2SearchProteinsConfig(BaseConfig):
         """Per-call GPU need: 1 when ``use_gpu`` is set, 0 otherwise."""
         return 1 if self.use_gpu else 0
 
+    @field_validator("target_sequences", mode="before")
+    @classmethod
+    def _validate_target_sequences(cls, v: Any) -> Any:
+        """Validate target sequences when provided inline."""
+        if v is None:
+            return v
+        if not isinstance(v, list):
+            raise ValueError(f"target_sequences must be a list, got {type(v)}")
+        if not v:
+            raise ValueError("target_sequences list cannot be empty")
+        if not all(isinstance(item, str) for item in v):
+            raise ValueError("All items in target_sequences list must be strings")
+        return v
+
+    @model_validator(mode="after")
+    def _validate_target_xor(self) -> Mmseqs2SearchProteinsConfig:
+        """At most one of `mmseqs_db` / `target_sequences` may be set; dispatch raises if both unset."""
+        if self.mmseqs_db is not None and self.target_sequences is not None:
+            raise ValueError("mmseqs2-search-proteins: `mmseqs_db` and `target_sequences` are mutually exclusive.")
+        return self
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> Mmseqs2SearchProteinsConfig:
+        """Cheap-mode defaults: bundle an inline 2-sequence target so ``Config.minimal()`` works without args."""
+        if "mmseqs_db" not in kwargs and "target_sequences" not in kwargs:
+            kwargs["target_sequences"] = ["MKTL", "ARND"]
+        return super().minimal(**kwargs)  # type: ignore[return-value]
+
 
 # ============================================================================
 # Tool Implementation
 # ============================================================================
 def example_input() -> Any:
-    """Minimal valid input for testing and examples."""
-    return Mmseqs2SearchProteinsInput(
-        query_sequences=["MKTL"],
-        target_sequences=["MKTL", "ARND"],
-    )
+    """Minimal valid input for testing and examples (queries only; target lives on Config)."""
+    return Mmseqs2SearchProteinsInput(query_sequences=["MKTL"])
 
 
 @tool(
@@ -402,9 +408,9 @@ def run_mmseqs2_search_proteins(
     per-sequence results with all hits.
 
     Args:
-        inputs (Mmseqs2SearchProteinsInput): Validated input containing query
-            sequences and target database path.
-        config (Mmseqs2SearchProteinsConfig): Configuration with search parameters.
+        inputs (Mmseqs2SearchProteinsInput): Validated input containing query sequences.
+        config (Mmseqs2SearchProteinsConfig): Configuration with search parameters and
+            the target collection (``mmseqs_db`` or inline ``target_sequences``).
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
@@ -416,33 +422,34 @@ def run_mmseqs2_search_proteins(
         RuntimeError: If MMseqs2 command execution fails.
 
     Examples:
-        >>> inputs = Mmseqs2SearchProteinsInput(
-        ...     query_sequences=["MSKGEELFT", "MVLSPADKTN"], mmseqs_db="/path/to/protein_db"
-        ... )
-        >>> config = Mmseqs2SearchProteinsConfig()
+        >>> inputs = Mmseqs2SearchProteinsInput(query_sequences=["MSKGEELFT", "MVLSPADKTN"])
+        >>> config = Mmseqs2SearchProteinsConfig(mmseqs_db="/path/to/protein_db")
         >>> result = run_mmseqs2_search_proteins(inputs, config)
         >>> print(f"Found {result[0].num_hits} hits for first sequence")
         >>> if result[0].top_hit:
         ...     print(f"Top hit: {result[0].top_hit.pident}% identity")
     """
+    if config.mmseqs_db is None and config.target_sequences is None:
+        raise ValueError(
+            "mmseqs2-search-proteins: provide exactly one of `mmseqs_db` or `target_sequences` on Mmseqs2SearchProteinsConfig."
+        )
     sequences = inputs.query_sequences
     sequence_ids = [f"seq_{i}" for i in range(len(sequences))]
     num_sequences = len(sequences)
 
     # GPU mode needs a pre-built padded DB; inline targets are CPU-only.
     mmseqs_db_for_dispatch: str | None = None
-    if inputs.target_sequences is not None:
+    if config.target_sequences is not None:
         if config.use_gpu:
             raise ValueError(
                 "mmseqs2-search-proteins: use_gpu=True requires a pre-built GPU-padded "
                 "MMseqs2 DB; inline `target_sequences` aren't supported in GPU mode."
             )
     else:
-        # XOR validator guarantees mmseqs_db is non-None here; explicit check is for mypy narrowing.
-        if inputs.mmseqs_db is None:
-            raise ValueError("mmseqs2-search-proteins: provide `mmseqs_db` when `target_sequences` is unset.")
+        # mmseqs_db is non-None here (the no-target guard above already returned).
+        assert config.mmseqs_db is not None  # mypy narrowing
         mmseqs_db_for_dispatch, resolved_registry_db = _resolve_registered_mmseqs_db(
-            inputs.mmseqs_db,
+            config.mmseqs_db,
             use_gpu=config.use_gpu,
         )
         if config.use_gpu and not resolved_registry_db:
@@ -450,7 +457,7 @@ def run_mmseqs2_search_proteins(
             if padded_stem is None:
                 raise ValueError(
                     f"mmseqs2-search-proteins: use_gpu=True requires a GPU-padded MMseqs2 DB "
-                    f"alongside {inputs.mmseqs_db!r}. Build one with:\n"
+                    f"alongside {config.mmseqs_db!r}. Build one with:\n"
                     f"  mmseqs createdb <fasta> <db>     # only if your input is a FASTA file\n"
                     f"  mmseqs makepaddedseqdb <db> <db>.idx_pad\n"
                     f"or set use_gpu=False."
@@ -465,7 +472,7 @@ def run_mmseqs2_search_proteins(
             "sequences": sequences,
             "sequence_ids": sequence_ids,
             "mmseqs_db": mmseqs_db_for_dispatch,
-            "target_sequences": inputs.target_sequences,
+            "target_sequences": config.target_sequences,
             "threads": config.threads,
             "split": config.split,
             "split_memory_limit": config.split_memory_limit,
@@ -496,7 +503,7 @@ def run_mmseqs2_search_proteins(
 
     return Mmseqs2SearchProteinsOutput(
         metadata={
-            "mmseqs_db": inputs.mmseqs_db,
+            "mmseqs_db": config.mmseqs_db,
             "threads": config.threads,
             "sensitivity": config.sensitivity,
             "evalue": config.evalue,
