@@ -198,6 +198,15 @@ class ToolSpec(BaseModel):
             "Implies uses_gpu=True."
         ),
     )
+    pin_visible_devices: bool = Field(
+        default=False,
+        description=(
+            "Pin the worker's CUDA_VISIBLE_DEVICES to its assigned physical GPU(s); "
+            "the worker addresses them as local cuda:0..N-1 and respawns on a "
+            "physical-device change. For JAX tools, whose runtime spans every "
+            "visible GPU. Implies uses_gpu=True."
+        ),
+    )
     device_count: str = Field(
         default="1",
         description="Expected device count requirement (e.g., '1', '1-2', '>=1', '<=2')",
@@ -370,6 +379,7 @@ class ToolRegistry:
         metrics_class: type[Metrics] | None = None,
         uses_gpu: bool = False,
         gpu_only: bool = False,
+        pin_visible_devices: bool = False,
         device_count: str = "1",
         example_input: Callable[[], BaseToolInput] | None = None,
         iterable_input_fields: list[str] | None = None,
@@ -401,6 +411,11 @@ class ToolRegistry:
             gpu_only (bool): Tool cannot run on CPU. Direct ``device="cpu"``
                 dispatch raises ``ValueError``, and LRU eviction restarts the
                 worker instead of offloading. Implies ``uses_gpu=True``.
+            pin_visible_devices (bool): Pin the worker's ``CUDA_VISIBLE_DEVICES``
+                to its assigned physical GPU(s); the worker sees them as local
+                ``cuda:0..N-1`` and respawns on a physical-device change instead
+                of moving in-process. For JAX tools, whose runtime initializes a
+                context on every visible GPU. Implies ``uses_gpu=True``.
             device_count (str): Expected device count (e.g., "1", "1-2", ">=1", "<=2").
                 Validates allocation: errors on under-allocation, warns on over-allocation.
             example_input (Callable[[], BaseToolInput] | None): Factory returning a minimal valid
@@ -450,6 +465,9 @@ class ToolRegistry:
 
             if gpu_only and not uses_gpu:
                 raise ValueError(f"@tool({key!r}): gpu_only=True requires uses_gpu=True")
+
+            if pin_visible_devices and not uses_gpu:
+                raise ValueError(f"@tool({key!r}): pin_visible_devices=True requires uses_gpu=True")
 
             source_file = Path(func.__code__.co_filename)
 
@@ -504,6 +522,7 @@ class ToolRegistry:
                 spec = cls._registry.get(key)
                 cache_enabled = spec.cacheable if spec is not None else cacheable
                 gpu_only_flag = spec.gpu_only if spec is not None else gpu_only
+                pin_visible_devices_flag = spec.pin_visible_devices if spec is not None else pin_visible_devices
                 stochastic_tool = spec.stochastic if spec is not None else stochastic
                 # Unseeded calls to stochastic tools skip cache so repeat dispatches advance RNG.
                 runtime_cacheable = cache_enabled and (not stochastic_tool or config.seed is not None)
@@ -729,9 +748,7 @@ class ToolRegistry:
                             if n_items > 1:
                                 config = config.model_copy(update={"timeout": effective * n_items})
 
-                    # Carry per-invocation flags (key, gpu_only) to ToolInstance so
-                    # the eviction callback can restart the worker instead of
-                    # attempting an in-process CPU offload when the tool is gpu_only.
+                    # Carry per-invocation flags (key, gpu_only, pin_visible_devices) to ToolInstance for eviction/dispatch.
                     from proto_tools.utils.tool_instance import _current_tool_invocation
 
                     for attempt in range(1 + MAX_RETRIES):
@@ -746,7 +763,13 @@ class ToolRegistry:
 
                                 # Execute the tool function (ContextVar is read by
                                 # ``ToolInstance.dispatch`` / ``_run_persistent``).
-                                _inv_token = _current_tool_invocation.set({"key": key, "gpu_only": gpu_only_flag})
+                                _inv_token = _current_tool_invocation.set(
+                                    {
+                                        "key": key,
+                                        "gpu_only": gpu_only_flag,
+                                        "pin_visible_devices": pin_visible_devices_flag,
+                                    }
+                                )
                                 try:
                                     result = func(inputs, config, instance)
                                 finally:
@@ -847,6 +870,7 @@ class ToolRegistry:
                 description=description,
                 uses_gpu=uses_gpu,
                 gpu_only=gpu_only,
+                pin_visible_devices=pin_visible_devices,
                 device_count=device_count,
                 input_model=input_class,
                 config_model=config_class,

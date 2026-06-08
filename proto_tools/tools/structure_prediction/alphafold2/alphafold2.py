@@ -252,6 +252,7 @@ def example_input() -> Any:
     metrics_class=AlphaFold2Metrics,
     description="Protein structure prediction using AlphaFold2 via ColabDesign",
     uses_gpu=True,
+    pin_visible_devices=True,
     example_input=example_input,
     iterable_input_fields=["complexes", "msas"],
     iterable_output_field="structures",

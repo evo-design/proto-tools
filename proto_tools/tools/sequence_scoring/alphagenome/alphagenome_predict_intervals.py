@@ -134,6 +134,7 @@ def example_input() -> Any:
     output_class=AlphaGenomePredictIntervalsOutput,
     description="Predict genomic signals for batched intervals using AlphaGenome",
     uses_gpu=True,
+    pin_visible_devices=True,
     example_input=example_input,
     iterable_input_fields=["intervals"],
     iterable_output_field="results",

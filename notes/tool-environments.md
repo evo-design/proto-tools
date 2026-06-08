@@ -341,46 +341,22 @@ subprocess.run(cmd, env=env)
 
 **Consistency enforcement:** The parametrized test `tests/tool_infra_tests/test_device_manager/test_tool_device_consistency.py::test_standalone_protocol_compliance` verifies that any tool making subprocess calls imports `get_subprocess_device_env()` and passes its result as `env=`.
 
-## The `to_device()` Protocol
+## Device movement: `to_device()` (PyTorch) vs. `pin_visible_devices` (JAX)
 
-All standalone scripts (`standalone/inference.py` or `standalone/run.py`) implement a `to_device(device: str) -> dict` function that DeviceManager calls to move models between devices. This function is invoked via the worker bootstrap protocol when `ToolInstance.to(device)` is called.
-
-**PyTorch tools** (ESMFold, Evo2, ESM2, ProteinMPNN, etc.):
+**PyTorch tools** (ESMFold, Evo2, ESM2, etc.) implement a `to_device(device: str) -> dict` function in their standalone script. DeviceManager calls it via the worker bootstrap when `ToolInstance.to(device)` is invoked, moving the loaded model between devices **in-process** (CPU offload, GPU↔GPU):
 ```python
 def to_device(device: str) -> dict:
     global _model
     if _model is not None and _model._loaded:
         _model.to_device(device)
         return {"success": True, "device": device}
-    else:
-        return {"success": True, "device": device, "note": "model not loaded yet"}
+    return {"success": True, "device": device, "note": "model not loaded yet"}
 ```
+The wrapper's `.to_device()` uses `move_model_to_device()` from `standalone_helpers`, which calls `model.to()` and frees CUDA memory via `torch.cuda.empty_cache()` when moving off GPU.
 
-JAX tools come in two flavors depending on what the upstream library gives you. The difference matters because it determines whether your tool can be moved between devices, or has to be thrown away and rebuilt.
+**JAX tools** (AlphaFold2, ProteinMPNN, AlphaGenome, …) do **not** implement `to_device()`. A JAX runtime initializes a context on *every* visible GPU, so these tools set `pin_visible_devices=True` on the `@tool` registration. The worker is then spawned with `CUDA_VISIBLE_DEVICES` restricted to its assigned physical GPU(s), which it addresses as local `cuda:0..N-1`, and the model is placed on its sole visible GPU at load — there is nothing to move. Because `CUDA_VISIBLE_DEVICES` is fixed for a process, a JAX worker cannot reach another GPU in-process, so DeviceManager **respawns** it on a device change (and kills it on eviction). The user-facing `device=` selection is unchanged; the logical→physical mapping is internal. See `notes/device-management.md`.
 
-**Pattern 1, move-based** (`mock_jax_tool`, ProteinMPNN):
-```python
-def to_device(device: str) -> dict:
-    global _model
-    if _model is not None and _model._loaded:
-        _model.to_device(device)  # jax.device_put(params, device) via move_model_to_device
-    return {"success": True, "device": device}
-```
-Use this when the library hands you the model weights as plain data, a dict of arrays you can hold and inspect. You can physically move those arrays between GPU and CPU with `jax.device_put`, and the compiled forward pass runs against them wherever they live. `move_model_to_device()` in the `standalone_helpers` package does the transfer, freeing GPU memory via `jax.clear_caches()` when moving off CUDA.
-
-**Pattern 2, reload-based** (AlphaGenome):
-```python
-def to_device(device: str) -> dict:
-    global _model
-    if _model is not None and hasattr(_model, "to_device"):
-        _model.to_device(device)
-    return {"success": True, "device": device}
-```
-Use this when the library hands you a black-box model object (e.g. from `dna_model.create()`) with its weights and compiled forward pass hidden behind a wrapper. You can't reach in to move anything, so your only option is to destroy the model and create a new one on the target device.
-
-For CPU eviction specifically, even "create a new one on CPU" is a bad trade, because compiling a large model like AlphaGenome for the CPU backend takes 10+ minutes and CPU inference is too slow to actually use. The tool's `to_device("cpu")` therefore just **unloads** the model, freeing the GPU memory and dropping the reference without putting anything on CPU, and the next dispatch triggers a fresh load back onto GPU.
-
-There's no registry flag to tell you which pattern to use, since it's determined by what the library exposes. If the weights are reachable as plain data, use move-based, and otherwise use reload-based.
+`AlphaGenome` additionally sets `gpu_only=True`: its black-box model cannot be CPU-offloaded usefully (CPU compilation takes 10+ minutes), so eviction kills the worker and the next dispatch reloads on GPU.
 
 **Neither pattern works, use `gpu_only=True`**
 

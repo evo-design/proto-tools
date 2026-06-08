@@ -227,6 +227,7 @@ def example_input() -> Any:
     output_class=AlphaGenomeScoreISMOutput,
     description="Run batched in-silico mutagenesis with AlphaGenome variant scorers",
     uses_gpu=True,
+    pin_visible_devices=True,
     example_input=example_input,
     iterable_input_fields=["requests"],
     iterable_output_field="results",

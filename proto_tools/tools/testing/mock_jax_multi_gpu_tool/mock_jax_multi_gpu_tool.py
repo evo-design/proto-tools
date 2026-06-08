@@ -138,6 +138,7 @@ def example_input() -> Any:
     output_class=MockJAXMultiGPUToolOutput,
     description="Minimal 2-GPU JAX-pattern tool for testing multi-device management",
     uses_gpu=True,
+    pin_visible_devices=True,
     device_count="2",
     example_input=example_input,
 )

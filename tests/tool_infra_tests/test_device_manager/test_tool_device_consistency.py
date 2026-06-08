@@ -49,8 +49,14 @@ def test_standalone_protocol_compliance(tool_spec):
     content = standalone_script.read_text()
     violations = []
 
-    # --- 1. Must have module-level to_device() ---
-    if "def to_device(" not in content:
+    # --- 1-4. to_device() protocol — PyTorch/CLI move in-process; pinned (JAX) tools respawn and omit to_device(). ---
+    if tool_spec.pin_visible_devices:
+        # Pinned tools must not expose the module-level to_device() dispatch (a class-level .to_device() at load is fine).
+        assert re.search(r"^def to_device\(", content, re.MULTILINE) is None, (
+            f"{tool_key} is pin_visible_devices=True but defines a module-level to_device(); "
+            "pinned tools respawn on device change and must not implement it"
+        )
+    elif "def to_device(" not in content:
         violations.append("Missing to_device() function")
     else:
         # --- 2. Correct signature: def to_device(device: str) -> dict[str, Any]: ---

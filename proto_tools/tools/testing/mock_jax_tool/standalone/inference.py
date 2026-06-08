@@ -21,7 +21,6 @@ import jax.numpy as jnp
 from standalone_helpers import (
     get_jax_memory_stats,
     get_logger,
-    move_model_to_device,
     resolve_jax_device,
     set_jax_seed,
 )
@@ -109,17 +108,6 @@ class MockJAXToolModel:
             memory_mb,
         )
 
-    def to_device(self, device: str) -> None:
-        """Move params to new device via move_model_to_device (dict pytree)."""
-        if self.device_str == device:
-            return
-
-        old_device = self.device_str
-        self.params = move_model_to_device(self.params, old_device, device)
-        self._jax_device = resolve_jax_device(device)
-        self.device_str = device
-        logger.info("Moved params to %s via device_put (from %s)", device, old_device)
-
     def run(self, data: list[float]) -> dict[str, Any]:
         """Run inference on input data."""
         x = jax.device_put(jnp.array(data, dtype=jnp.float32), self._jax_device)
@@ -172,15 +160,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         )
 
     return _model.run(data)
-
-
-def to_device(device: str) -> dict[str, Any]:
-    """Move model to specified device (called by DeviceManager)."""
-    global _model
-    if _model is not None and _model._loaded:
-        _model.to_device(device)
-        return {"success": True, "device": device}
-    return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
 def get_memory_stats() -> dict[str, Any]:

@@ -384,9 +384,9 @@ echo "{tool_display_name} setup complete!"
 - **Non-persistent tools**: Create a new model instance on each call and unload it after (e.g., BioEmu)
 - **CLI tools**: Spawn subprocesses that naturally unload after completion (e.g., Boltz2, RFDiffusion3)
 
-#### 1. `to_device(device: str) -> dict`
+#### 1. `to_device(device: str) -> dict` (PyTorch / CLI only)
 
-Enables DeviceManager to move models between GPUs and CPU for resource management.
+Enables DeviceManager to move a model between GPUs and CPU in-process.
 
 **Persistent PyTorch tools:**
 ```python
@@ -404,6 +404,13 @@ def to_device(device: str) -> dict:
 def to_device(device: str) -> dict:
     return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
 ```
+
+**JAX tools do NOT implement `to_device()`.** A JAX runtime initializes a context
+on every visible GPU, so JAX tools set `pin_visible_devices=True` on the `@tool`
+registration. The worker is spawned with `CUDA_VISIBLE_DEVICES` pinned to its
+assigned GPU(s) (addressed as local `cuda:0..N-1`) and **respawns** on a device
+change rather than moving in-process. The model is placed on its sole visible GPU
+at load — there is nothing to move. See `notes/device-management.md`.
 
 #### 2. `get_memory_stats() -> dict`
 

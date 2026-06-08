@@ -7,13 +7,13 @@ Three related concerns live together here:
    ephemeral CLI subprocess spawned from a persistent worker.
 2. **Device Resolution** — map a device string (``"cuda:0"``) to the
    framework-specific device object (``jax.Device``).
-3. **Device Movement** — move a model or params pytree between devices
-   with proper GPU memory cleanup, for both PyTorch and JAX.
+3. **Device Movement** — move a PyTorch model between devices with proper GPU
+   memory cleanup. JAX tools pin their device and respawn instead of moving.
 """
 
 import os
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any
 
 from .proto_logging import get_logger
 
@@ -234,26 +234,20 @@ def move_model_to_device(
 ) -> Any:
     """Move a model or params to a different device with proper GPU memory cleanup.
 
-    This helper standardizes device movement across all tools and ensures GPU
-    memory is properly freed when moving off CUDA devices. It handles both
-    PyTorch models and JAX params pytrees, with support for custom movement
-    logic for opaque third-party models.
+    This helper standardizes in-process device movement for PyTorch tools and
+    ensures GPU memory is freed when moving off CUDA devices. JAX tools do not
+    move in-process — they set ``pin_visible_devices`` and respawn on a device
+    change (their CUDA_VISIBLE_DEVICES is fixed per worker) — so there is no JAX
+    path here.
 
     For PyTorch models (nn.Module or objects with .to()):
         - Calls model.to(new_device)
         - Calls torch.cuda.empty_cache() when moving off CUDA
 
-    For JAX params (dict/list/tuple pytrees):
-        - Calls jax.device_put(pytree, device) to move all arrays
-        - Works natively with Flax/Haiku param dicts
-
-    For JAX objects with jax.Array attributes:
-        - Walks object attributes and device_put()s each jax.Array
-
     For non-ML models (CLI tools, etc.):
         - Returns as-is (no device movement needed)
 
-    For opaque third-party models (e.g., AlphaGenome):
+    For opaque third-party models:
         - Pass custom_move_fn to override default behavior (e.g., full reload)
 
     Args:
@@ -320,36 +314,5 @@ def move_model_to_device(
     except Exception:
         raise
 
-    # Try JAX: move params/arrays via device_put
-    try:
-        import gc
-
-        import jax
-
-        jax_device = resolve_jax_device(new_device)
-
-        # Pytree-compatible types (dict, list, tuple): device_put recurses natively
-        # This is the standard path for Flax/Haiku params dicts
-        if isinstance(model_or_params, (dict, list, tuple)):
-            model_or_params = jax.device_put(model_or_params, jax_device)
-        else:
-            # Objects with jax.Array attributes: walk and move each one
-            if model_or_params is not None:
-                for attr_name in list(vars(model_or_params)):
-                    val = getattr(model_or_params, attr_name)
-                    if isinstance(val, jax.Array):
-                        setattr(model_or_params, attr_name, jax.device_put(val, jax_device))
-
-        # Free GPU memory when moving off CUDA device (GC + clear JIT caches)
-        if old_device != "cpu" and old_device.startswith("cuda"):
-            clear_caches = cast(Callable[[], None], jax.clear_caches)
-            clear_caches()
-            gc.collect()
-
-        return model_or_params
-    except ImportError:
-        # JAX not available - not a JAX tool
-        pass
-
-    # Not a PyTorch or JAX model — return as-is (CLI-only tools or tools with custom device management).
+    # Not a PyTorch model - return as-is (CLI tools, or JAX tools which pin + respawn instead of moving).
     return model_or_params

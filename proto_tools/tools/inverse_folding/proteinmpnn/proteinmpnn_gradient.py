@@ -180,6 +180,7 @@ def example_input() -> ProteinMPNNGradientInput:
     output_class=ProteinMPNNGradientOutput,
     description="Compute ProteinMPNN structure-conditioned perplexity gradient for relaxed protein sequences",
     uses_gpu=True,
+    pin_visible_devices=True,
     example_input=example_input,
     cacheable=False,
     stochastic=True,

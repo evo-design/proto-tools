@@ -148,6 +148,7 @@ def example_input() -> Any:
     output_class=AlphaGenomePredictVariantsOutput,
     description="Predict variant effects in batch using AlphaGenome",
     uses_gpu=True,
+    pin_visible_devices=True,
     gpu_only=True,  # worker can't safely be reused
     example_input=example_input,
     iterable_input_fields=["variants"],

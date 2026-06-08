@@ -352,6 +352,7 @@ def _build_subprocess_env(
     tool_env_path: Path | str | None = None,
     tool_env_vars: dict[str, list[str]] | None = None,
     env_overrides: dict[str, str] | None = None,
+    pin_visible_devices: bool = False,
 ) -> dict[str, str]:
     """Build a clean env dict for subprocess execution.
 
@@ -371,6 +372,7 @@ def _build_subprocess_env(
             ``OMP_NUM_THREADS`` / ``MKL_NUM_THREADS`` / etc., but available to
             any caller that needs to override a specific variable for one
             worker subprocess.
+        pin_visible_devices (bool): Restrict ``CUDA_VISIBLE_DEVICES`` to ``device``'s physical GPU(s) (local cuda:0..N-1) instead of the parent's value. For JAX tools.
     """
     from proto_tools.utils.system_info import capture_subprocess_env
 
@@ -417,10 +419,17 @@ def _build_subprocess_env(
             path_parts.append(d)
     env["PATH"] = ":".join(path_parts)
 
-    # Pass through parent's CUDA_VISIBLE_DEVICES (device placement handled by model.to())
-    parent_cvd = os.environ.get("CUDA_VISIBLE_DEVICES")
-    if parent_cvd is not None:
-        env["CUDA_VISIBLE_DEVICES"] = parent_cvd
+    # CUDA_VISIBLE_DEVICES: pinned workers (JAX) see only their physical GPU(s) as local cuda:0..N-1; else pass parent's through.
+    if pin_visible_devices:
+        from proto_tools.utils.device import determine_visible_devices
+
+        env["CUDA_VISIBLE_DEVICES"] = determine_visible_devices(device)  # "" for cpu; physical indices for cuda
+        if device == "cpu":
+            env["JAX_PLATFORMS"] = "cpu"  # hide GPUs so JAX initializes on CPU only
+    else:
+        parent_cvd = os.environ.get("CUDA_VISIBLE_DEVICES")
+        if parent_cvd is not None:
+            env["CUDA_VISIBLE_DEVICES"] = parent_cvd
 
     # Generous timeouts for pip/uv; NFS extraction can exceed the defaults
     env.setdefault("UV_HTTP_TIMEOUT", "300")
@@ -591,6 +600,7 @@ class PersistentWorker:
         tool_env_vars: dict[str, list[str]] | None = None,
         verbose: int = 0,
         env_overrides: dict[str, str] | None = None,
+        pin_visible_devices: bool = False,
     ) -> None:
         """Initialize PersistentWorker."""
         self.toolkit = toolkit
@@ -600,6 +610,8 @@ class PersistentWorker:
         self.tool_env_vars = tool_env_vars
         self._verbose = verbose
         self._env_overrides = env_overrides
+        # When True, spawn with CUDA_VISIBLE_DEVICES restricted to ``device``'s physical GPU(s) (local cuda:0..N-1).
+        self._pin_visible_devices = pin_visible_devices
         self._process: subprocess.Popen | None = None  # type: ignore[type-arg]
         self._lock = threading.Lock()
         self._stderr_thread: threading.Thread | None = None
@@ -646,6 +658,7 @@ class PersistentWorker:
             tool_env_path=self.env_path,
             tool_env_vars=self.tool_env_vars,
             env_overrides=self._env_overrides,
+            pin_visible_devices=self._pin_visible_devices,
         )
         env["TOOL_VENV_PATH"] = str(self.env_path)
 

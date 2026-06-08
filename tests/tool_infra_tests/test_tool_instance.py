@@ -67,6 +67,8 @@ def _make_fake_instance(
     inst._instance_lock = threading.Lock()
     inst._worker = None
     inst._reload_params = {}
+    inst._gpu_only = False
+    inst._pin_visible_devices = False
 
     # Pre-mark default config as warmed up unless testing warmup behavior
     if not needs_warmup:

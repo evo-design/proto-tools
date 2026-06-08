@@ -370,6 +370,7 @@ def example_input() -> AlphaFold2GradientInput:
     metrics_class=AlphaFold2Metrics,
     description="AF2 binder design against a fixed target. Returns loss, Structure, and optionally gradient.",
     uses_gpu=True,
+    pin_visible_devices=True,
     example_input=example_input,
     cacheable=False,
     stochastic=True,

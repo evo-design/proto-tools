@@ -66,6 +66,7 @@ from typing import Any, ClassVar
 
 from proto_tools.utils._worker_bootstrap import _copy_standalone_helpers as copy_standalone_helpers
 from proto_tools.utils.base_config import DEFAULT_TIMEOUT, BaseConfig
+from proto_tools.utils.device import parse_device_string
 from proto_tools.utils.device_manager import DeviceManager
 from proto_tools.utils.logging_config import verbose_level_from_env
 from proto_tools.utils.persistent_worker import (
@@ -104,10 +105,36 @@ _persist_mode: contextvars.ContextVar[bool] = contextvars.ContextVar("_persist_m
 
 # Set by the ``@tool()`` wrapper around each dispatch so ``ToolInstance`` can
 # read per-tool flags (e.g. ``gpu_only``) without plumbing the ``ToolSpec``
-# through every call site. Contents: {"key": str, "gpu_only": bool}.
+# through every call site. Contents: {"key": str, "gpu_only": bool,
+# "pin_visible_devices": bool}.
 _current_tool_invocation: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
     "_current_tool_invocation", default=None
 )
+
+
+def _device_change_needed(current: str, requested: str) -> bool:
+    """Whether a worker on ``current`` must move to satisfy ``requested`` (auto/equivalent device forms = no move)."""
+    if not requested:
+        return False
+    try:
+        cur, req = parse_device_string(current), parse_device_string(requested)
+    except ValueError:
+        return current != requested  # unparseable form: compare verbatim
+    if req.devices is None:  # auto request (cuda / cudaxN) satisfied by any same-kind, same-count allocation
+        return not (cur.kind == req.kind and cur.count == req.count)
+    return (cur.kind, cur.devices) != (req.kind, req.devices)
+
+
+def _local_visible_device(device: str) -> str:
+    """Local device a CVD-pinned worker sees: its N assigned GPUs become cuda:0..N-1; cpu unchanged."""
+    if not device or device == "cpu":
+        return "cpu"
+    try:
+        count = parse_device_string(device).count
+    except ValueError:
+        count = 1
+    return ",".join(f"cuda:{i}" for i in range(count))
+
 
 # Overlay of toolkit -> ToolInstance used by _auto_persist_scope. Checked by
 # dispatch() Path 2 BEFORE the shared cache. ContextVar-backed so two
@@ -718,6 +745,8 @@ class ToolInstance:
         # Latches True if any dispatch sets gpu_only; eviction then uses the
         # worker-kill path. See notes/tool-environments.md.
         self._gpu_only: bool = False
+        # Latches True if any dispatch sets pin_visible_devices (CVD-pinned worker, respawns on device change).
+        self._pin_visible_devices: bool = False
 
     def _ensure_env(self) -> None:
         """Build the tool's environment if it doesn't exist or is broken.
@@ -1077,10 +1106,20 @@ class ToolInstance:
         track_reload = reload_on is not None
         reload_params = {k: input_dict.get(k) for k in (reload_on or set())} if track_reload else None
 
-        # Latch gpu_only so the eviction callback can see it later.
+        # Latch gpu_only / pin_visible_devices for later dispatches and the eviction callback.
         _invocation = _current_tool_invocation.get() or {}
         if _invocation.get("gpu_only"):
             self._gpu_only = True
+        if _invocation.get("pin_visible_devices"):
+            self._pin_visible_devices = True
+
+        # Pinned workers have a fixed CUDA_VISIBLE_DEVICES and cannot move in-process; respawn on a device change.
+        if self._worker is not None and self._pin_visible_devices:
+            requested_device = input_dict.get("device", "")
+            if _device_change_needed(self.device, requested_device):
+                set_substatus("Restarting worker")
+                self._worker.stop()
+                self._worker = None
 
         if self._worker is not None:
             script_changed = self._worker.script_path != sp
@@ -1115,22 +1154,22 @@ class ToolInstance:
             # Eviction callback - sends to_device directly to avoid lock ordering deadlock
             def eviction_callback(action: str) -> None:
                 if action == "cpu":
-                    # gpu_only tools can't be offloaded to CPU - kill the worker
-                    # so the next dispatch spawns a fresh subprocess on GPU.
-                    if self._gpu_only:
+                    # gpu_only/pinned tools can't be CPU-offloaded in-process; kill the worker (next dispatch respawns).
+                    if self._gpu_only or self._pin_visible_devices:
                         worker = self._worker
                         self._worker = None
                         if worker is not None:
                             logger.warning(
-                                "Evicting gpu_only tool %s: killing worker "
-                                "(CPU offload not supported; fresh worker will "
-                                "spawn on next GPU dispatch).",
+                                "Evicting %s %s: killing worker (in-process CPU "
+                                "offload not supported; fresh worker spawns on next "
+                                "dispatch).",
+                                "gpu_only tool" if self._gpu_only else "pinned tool",
                                 self.toolkit,
                             )
                             try:
                                 worker.stop()
                             except Exception as e:
-                                logger.error("Failed to stop gpu_only worker during eviction: %s", e)
+                                logger.error("Failed to stop worker during eviction: %s", e)
                         self.device = "cpu"
                         return
                     worker = self._worker
@@ -1164,9 +1203,11 @@ class ToolInstance:
                 eviction_callback=eviction_callback,
             )
 
-            # Override input_dict device with allocated device
+            # Track the logical device; a pinned worker places on its local cuda:0..N-1, otherwise the logical device.
             self.device = allocated_device
-            input_dict["device"] = allocated_device
+            input_dict["device"] = (
+                _local_visible_device(allocated_device) if self._pin_visible_devices else allocated_device
+            )
 
             set_substatus("Starting worker")
             # Latch effective verbose (max of config.verbose and PROTO_WORKER_VERBOSE) on the worker.
@@ -1179,28 +1220,22 @@ class ToolInstance:
                 tool_env_vars=self._tool_env_vars,
                 verbose=effective_verbose,
                 env_overrides=self._env_overrides,
+                pin_visible_devices=self._pin_visible_devices,
             )
         else:
+            # Live worker that needs no physical-device change (pinned ones that do were respawned above).
             device_manager = DeviceManager.get_instance()
             requested_device = input_dict.get("device", "")
 
-            # Move worker if config requests a different device than current
-            needs_move = False
-            if requested_device == "cuda" and self.device.startswith("cuda"):
-                # Already on a GPU, generic "cuda" is satisfied
-                pass
-            elif requested_device and self.device != requested_device:
-                needs_move = True
-
-            if needs_move:
+            # Non-pinned workers move in-process; pinned workers never reach here with a pending change.
+            if not self._pin_visible_devices and _device_change_needed(self.device, requested_device):
                 self._to(requested_device)
 
             # Update last-used timestamp on each dispatch
             device_manager.update_last_used(instance_name)
 
-            # Override input_dict device with worker's actual device
-            # (resolves generic "cuda" to specific "cuda:0", etc.)
-            input_dict["device"] = self.device
+            # Worker placement target: a pinned worker's local cuda:0..N-1, otherwise the resolved logical device.
+            input_dict["device"] = _local_visible_device(self.device) if self._pin_visible_devices else self.device
 
         # Apply warm-up timeout for first use of this config combination
         effective_timeout = self._apply_warmup_timeout(timeout, reload_params)

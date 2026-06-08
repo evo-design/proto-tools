@@ -19,7 +19,6 @@ import jax.numpy as jnp
 from standalone_helpers import (
     get_jax_memory_stats,
     get_logger,
-    move_model_to_device,
     resolve_jax_device,
     set_jax_seed,
 )
@@ -130,22 +129,6 @@ class MockJAXMultiGPUToolModel:
             memory_mb,
         )
 
-    def to_device(self, device: str) -> None:
-        """Move both param pytrees to new devices via move_model_to_device."""
-        new_device_a, new_device_b = _parse_device_pair(device)
-
-        if self.device_a != new_device_a:
-            self.params_a = move_model_to_device(self.params_a, self.device_a, new_device_a)
-            self._jax_device_a = resolve_jax_device(new_device_a)
-            self.device_a = new_device_a
-
-        if self.device_b != new_device_b:
-            self.params_b = move_model_to_device(self.params_b, self.device_b, new_device_b)
-            self._jax_device_b = resolve_jax_device(new_device_b)
-            self.device_b = new_device_b
-
-        logger.info("Moved params: params_a on %s, params_b on %s", self.device_a, self.device_b)
-
     def run(self, data: list[float]) -> dict[str, Any]:
         """Run inference on both param sets."""
         x_a = jax.device_put(jnp.array(data, dtype=jnp.float32), self._jax_device_a)
@@ -209,15 +192,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         )
 
     return _model.run(data)
-
-
-def to_device(device: str) -> dict[str, Any]:
-    """Move both param sets to specified devices (called by DeviceManager)."""
-    global _model
-    if _model is not None and _model._loaded:
-        _model.to_device(device)
-        return {"success": True, "device": device}
-    return {"success": True, "device": device, "note": "models not loaded yet"}
 
 
 def get_memory_stats() -> dict[str, Any]:

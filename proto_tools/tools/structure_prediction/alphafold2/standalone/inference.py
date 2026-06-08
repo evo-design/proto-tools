@@ -397,14 +397,7 @@ class AlphaFold2Model:
                 self._jax.clear_caches()
             self._loaded = False
 
-        # Configure JAX device hints before the first import
-        if device == "cpu":
-            os.environ["JAX_PLATFORMS"] = "cpu"
-        elif device.startswith("cuda") and ":" in device:
-            os.environ["CUDA_VISIBLE_DEVICES"] = device.split(":")[1]
-            # CUDA_VISIBLE_DEVICES isolates us to one GPU, which JAX re-indexes to cuda:0.
-            device = "cuda:0"
-
+        # Device env (CUDA_VISIBLE_DEVICES / JAX_PLATFORMS) is owned by the worker spawn (pin_visible_devices).
         germinal_dir = os.path.join(
             os.environ.get("TOOL_VENV_PATH", os.environ.get("VIRTUAL_ENV", "")),
             "data",
@@ -900,15 +893,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             include_pae_matrix=input_dict["include_pae_matrix"],
         )
     raise ValueError(f"alphafold2: unknown operation {operation!r}; valid: ['predict', 'compute_gradient']")
-
-
-def to_device(device: str) -> dict[str, Any]:
-    """Move model to specified device (called by DeviceManager)."""
-    global _model
-    if _model is not None and _model._loaded:
-        _model.to_device(device)
-        return {"success": True, "device": device}
-    return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
 def get_memory_stats() -> dict[str, Any]:

@@ -13,15 +13,11 @@ from proto_tools.utils.tool_instance import ToolInstance
 
 # ── Constants ───────────────────────────────────────────────────────────
 
-# Memory allocated by PyTorch/JAX mock tools via buffer tensor/array (MB).
-# Set large enough that CUDA/JAX runtime context overhead (~500-700 MB)
-# falls well within tolerance, avoiding the need for warm-up baselines.
+# Mock-tool buffer (MB), large enough to clear _GPU_MEMORY_TOLERANCE_MB so a resident tool reads as "present".
 _TOOL_MEMORY_MB = 4096
 
-# Tolerance for GPU memory assertions (MB).  Must absorb CUDA/JAX runtime
-# context (~500-700 MB per framework), caching allocator overhead, nvidia-smi
-# granularity, and residual context from cross-framework eviction, but less
-# than _TOOL_MEMORY_MB so "loaded" vs "freed" states remain distinguishable.
+# Threshold (MB) separating "resident" from "near baseline / freed"; assertions check presence/absence, not exact size
+# (true footprint = buffer + framework runtime). Above runtime/allocator/nvidia-smi noise, below _TOOL_MEMORY_MB.
 _GPU_MEMORY_TOLERANCE_MB = 3072
 
 
@@ -168,23 +164,20 @@ def _assert_gpu_memory(
     tolerance_mb: float = _GPU_MEMORY_TOLERANCE_MB,
     label: str = "",
 ) -> dict[str, float]:
-    """Snapshot GPU memory and assert expected state relative to baseline.
+    """Snapshot GPU memory and assert each device is resident vs. near-baseline.
 
-    The baseline should be a "warm" snapshot taken after CUDA/JAX context
-    is already initialized on the relevant devices (e.g., after a tool has
-    been loaded and unloaded once). This avoids counting one-time CUDA
-    context overhead (~500-700 MB) in the delta.
+    Checks presence/absence against ``tolerance_mb``, not an exact footprint (true memory = buffer + framework runtime).
 
     Args:
         dm: DeviceManager instance.
-        baseline: Warm memory snapshot (post-context-init, pre-model-load).
-        loaded: Devices expected to have ~_TOOL_MEMORY_MB above baseline
-                (a persistent GPU tool is resident). CLI tools auto-unload
-                after each call and should NOT be listed here.
+        baseline: Memory snapshot taken before the tool(s) loaded.
+        loaded: Devices expected to have a resident GPU tool (clearly above
+                baseline). CLI tools auto-unload after each call and should NOT
+                be listed here.
         freed: Devices that previously had a model but should now be near
                baseline (model moved away / evicted). Functionally identical
                to unmentioned devices; included for test readability.
-        tolerance_mb: Acceptable deviation in MB for all comparisons.
+        tolerance_mb: Threshold separating "resident" from "near baseline".
         label: Context string for assertion messages.
 
     Returns:
@@ -204,10 +197,9 @@ def _assert_gpu_memory(
         delta = current_mb - baseline_mb
 
         if device in loaded_set:
-            assert abs(delta - _TOOL_MEMORY_MB) < tolerance_mb, (
-                f"{device}: expected ~{_TOOL_MEMORY_MB} MB above baseline{suffix}, "
-                f"got delta={delta:.0f} MB (tolerance=+/-{tolerance_mb} MB)"
-                f"{noise_note}"
+            assert delta > tolerance_mb, (
+                f"{device}: expected a resident tool (>{tolerance_mb} MB above baseline){suffix}, "
+                f"got delta={delta:.0f} MB{noise_note}"
             )
         else:
             # freed or unmentioned, should be near baseline

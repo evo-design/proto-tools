@@ -173,6 +173,7 @@ def example_input() -> Any:
     output_class=AlphaGenomeScoreIntervalsOutput,
     description="Score genomic intervals in batch with AlphaGenome interval scorers",
     uses_gpu=True,
+    pin_visible_devices=True,
     example_input=example_input,
     iterable_input_fields=["intervals"],
     iterable_output_field="results",

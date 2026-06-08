@@ -121,6 +121,7 @@ def example_input() -> Any:
     metrics_class=InverseFoldingScoringMetrics,
     description="Score protein sequences using ProteinMPNN",
     uses_gpu=True,
+    pin_visible_devices=True,
     example_input=example_input,
     iterable_input_fields=["sequence_structure_pairs"],
     iterable_output_field="scores",

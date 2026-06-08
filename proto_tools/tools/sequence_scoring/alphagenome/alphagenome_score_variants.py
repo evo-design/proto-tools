@@ -187,6 +187,7 @@ def example_input() -> Any:
     output_class=AlphaGenomeScoreVariantsOutput,
     description="Score variant effects in batch with AlphaGenome variant scorers",
     uses_gpu=True,
+    pin_visible_devices=True,
     example_input=example_input,
     iterable_input_fields=["variants"],
     iterable_output_field="results",
