@@ -271,6 +271,30 @@ def test_padded_marker_without_dbtype_is_rejected(tmp_path: Path) -> None:
         _check_dataset_provisioned("uniref30-2302", entry, tmp_path, require_idx_pad=True)
 
 
+def test_local_search_low_memory_reason_tracks_seq_db_size(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Reason fires when RAM < sequence-DB size, and clears when RAM fits or the file is absent."""
+    import proto_tools.tools.sequence_alignment.mmseqs2.homology_search as hs
+
+    entry = DatasetRegistry.get("uniref30-2302")
+    seq_db = tmp_path / f"{entry.db_prefix}_seq"
+    with open(seq_db, "wb") as f:
+        f.truncate(100 * 1024**3)  # 100 GiB, sparse (no real allocation)
+
+    # RAM below the sequence DB: warn/skip with an actionable reason.
+    monkeypatch.setattr(hs, "available_memory_bytes", lambda: 80 * 1024**3)
+    reason = hs.local_search_low_memory_reason(entry, tmp_path)
+    assert reason is not None and "remote" in reason
+
+    # RAM above the sequence DB: fast path, no reason.
+    monkeypatch.setattr(hs, "available_memory_bytes", lambda: 200 * 1024**3)
+    assert hs.local_search_low_memory_reason(entry, tmp_path) is None
+
+    # Sequence DB absent (size unknown): fall through rather than guess.
+    seq_db.unlink()
+    monkeypatch.setattr(hs, "available_memory_bytes", lambda: 1)
+    assert hs.local_search_low_memory_reason(entry, tmp_path) is None
+
+
 def test_dispatch_payload_carries_operation_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Tool layer must include ``operation="homology_search"`` in the dispatch payload.
 

@@ -11,13 +11,14 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from proto_tools.databases import get_dataset_dir
+from proto_tools.databases import DatasetRegistry, get_dataset_dir
 from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures import is_valid_structure
 from proto_tools.tools.sequence_alignment.mmseqs2.homology_search import (
     Mmseqs2HomologySearchConfig,
     Mmseqs2HomologySearchInput,
     Mmseqs2HomologySearchQuery,
+    local_search_low_memory_reason,
     run_mmseqs2_homology_search,
 )
 from proto_tools.tools.structure_prediction import (
@@ -176,6 +177,17 @@ def _uniref30_skip_reason() -> str | None:
     return None
 
 
+def _local_search_memory_skip_reason() -> str | None:
+    """Skip reason when RAM is below the UniRef30-2302 sequence DB; ``None`` if it fits.
+
+    Mirrors the tool's runtime guard (``local_search_low_memory_reason``): local
+    search loads the multi-GB sequence file, so on memory-starved hosts it would
+    OOM or crawl under mmap. Returns ``None`` when the DB isn't provisioned (the
+    provisioning skip already covers that).
+    """
+    return local_search_low_memory_reason(DatasetRegistry.get("uniref30-2302"), get_dataset_dir("uniref30-2302"))
+
+
 def _generate_test_params() -> list:
     """Generate all valid test parameter combinations.
 
@@ -189,10 +201,12 @@ def _generate_test_params() -> list:
 
     For MSA-capable predictors, generates three variants: cloud (``remote``)
     search, on-disk (``local``) search against UniRef30-2302, and ``without_msa``.
-    The ``local`` variant skips when UniRef30 isn't provisioned.
+    The ``local`` variant skips when UniRef30 isn't provisioned or when the host
+    lacks the RAM for an on-disk search.
     """
     params = []
     uniref30_skip = _uniref30_skip_reason()
+    local_memory_skip = _local_search_memory_skip_reason()
 
     for predictor_name, (_, input_class, config_class, _output_class) in _STRUCTURE_PREDICTORS.items():
         for test_name, complexes in _TEST_COMPLEXES.items():
@@ -210,8 +224,11 @@ def _generate_test_params() -> list:
                         marks.append(pytest.mark.slow)
                     if skip_reason:
                         marks.append(pytest.mark.skip(reason=skip_reason))
-                    if msa_search_mode == "local" and uniref30_skip:
-                        marks.append(pytest.mark.skip(reason=uniref30_skip))
+                    if msa_search_mode == "local":
+                        if uniref30_skip:
+                            marks.append(pytest.mark.skip(reason=uniref30_skip))
+                        elif local_memory_skip:
+                            marks.append(pytest.mark.skip(reason=local_memory_skip))
 
                     params.append(
                         pytest.param(
