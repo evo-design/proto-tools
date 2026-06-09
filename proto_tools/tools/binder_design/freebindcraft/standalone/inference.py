@@ -1,0 +1,375 @@
+"""FreeBindCraft (PyRosetta-free) binder-design CLI subprocess wrapper for ToolInstance dispatch.
+
+Invokes the FreeBindCraft fork's ``bindcraft.py`` with ``--no-pyrosetta``; relaxation runs on
+OpenMM and interface metrics come from sc-rs / FreeSASA / Biopython. PyRosetta-only metrics
+(interface energies, H-bond counts, packstat) are placeholders upstream and are dropped from the
+metric map below so they are never surfaced as real values.
+"""
+
+import csv
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import Any
+
+from standalone_helpers import get_jax_memory_stats, get_logger, get_subprocess_device_env, resolve_weights_dir
+
+logger = get_logger(__name__)
+
+# ============================================================================
+# Paths
+# ============================================================================
+
+_VENV_PATH = os.environ.get("TOOL_VENV_PATH") or os.environ.get("VIRTUAL_ENV") or os.environ.get("VENV_PATH")
+if not _VENV_PATH:
+    raise RuntimeError(
+        "FreeBindCraft inference requires TOOL_VENV_PATH / VIRTUAL_ENV / VENV_PATH to be set. "
+        "This script must be invoked via ToolInstance."
+    )
+_BINDCRAFT_DIR = Path(_VENV_PATH) / "data" / "BindCraft"
+_DEFAULT_FILTERS_PATH = Path(__file__).parent / "default_filters.json"
+
+
+# ============================================================================
+# final_design_stats.csv Average_* columns → FreeBindCraftMetrics field names
+# ============================================================================
+# Only PyRosetta-free real metrics are mapped. FreeBindCraft emits placeholder
+# values for the PyRosetta-only columns (interface energies, H-bond counts,
+# packstat) "to satisfy default filters"; they are dropped here so they are
+# never parsed into the typed output as if real. Clash counts are geometric
+# (Biopython) and ipSAE is PAE-derived, so both are kept.
+
+_METRIC_COLUMN_MAP: dict[str, str] = {
+    # AlphaFold2 confidence (always real)
+    "Average_pLDDT": "avg_plddt",
+    "Average_pTM": "avg_ptm",
+    "Average_i_pTM": "avg_iptm",
+    "Average_pAE": "avg_pae",
+    "Average_i_pAE": "avg_ipae",
+    "Average_ipSAE": "avg_ipsae",
+    "Average_i_pLDDT": "avg_iplddt",
+    "Average_ss_pLDDT": "avg_ss_plddt",
+    "Average_Binder_pLDDT": "avg_binder_plddt",
+    "Average_Binder_pTM": "avg_binder_ptm",
+    "Average_Binder_pAE": "avg_binder_pae",
+    # Surface / interface geometry (FreeSASA + Biopython + sc-rs)
+    "Average_dSASA": "dSASA",
+    "Average_Interface_SASA_%": "interface_sasa_pct",
+    "Average_Interface_Hydrophobicity": "interface_hydrophobicity",
+    "Average_Surface_Hydrophobicity": "surface_hydrophobicity",
+    "Average_ShapeComplementarity": "shape_complementarity",
+    "Average_n_InterfaceResidues": "n_interface_residues",
+    # Secondary structure (structural analysis)
+    "Average_Binder_Helix%": "binder_helix_pct",
+    "Average_Binder_BetaSheet%": "binder_betasheet_pct",
+    "Average_Binder_Loop%": "binder_loop_pct",
+    "Average_Interface_Helix%": "interface_helix_pct",
+    "Average_Interface_BetaSheet%": "interface_betasheet_pct",
+    "Average_Interface_Loop%": "interface_loop_pct",
+    # RMSDs (structural alignment)
+    "Average_Hotspot_RMSD": "hotspot_rmsd",
+    "Average_Target_RMSD": "target_rmsd",
+    "Average_Binder_RMSD": "binder_rmsd",
+    # Clashes (geometric, Biopython — pre- and post-OpenMM relaxation)
+    "Average_Unrelaxed_Clashes": "unrelaxed_clashes",
+    "Average_Relaxed_Clashes": "relaxed_clashes",
+}
+
+_MISSING_VALUES = {"", "None", "nan", "NaN", "NA", "null"}
+
+
+# ============================================================================
+# Settings builders
+# ============================================================================
+
+
+def _materialize_pdb(pdb: str, work_dir: Path) -> str:
+    """Return a filesystem path to the target PDB.
+
+    If ``pdb`` is already a path to an existing file, return it unchanged.
+    If it's PDB-format content (starts with HEADER/ATOM/MODEL/CRYST1/REMARK),
+    write it into ``work_dir/target.pdb`` and return that path.
+    """
+    candidate = pdb.lstrip()
+    if candidate.startswith(("HEADER", "ATOM", "MODEL", "CRYST1", "REMARK", "HETATM")):
+        out_path = work_dir / "target.pdb"
+        out_path.write_text(pdb)
+        return str(out_path)
+    if os.path.isfile(pdb):
+        return os.path.abspath(pdb)
+    raise FileNotFoundError(f"target_pdb is neither a PDB-format string nor an existing file path: {pdb!r}")
+
+
+def _build_target_settings(payload: dict[str, Any], work_dir: Path) -> dict[str, Any]:
+    """Build BindCraft's target_settings.json from the dispatch payload."""
+    return {
+        "design_path": str(work_dir / "designs"),
+        "binder_name": payload["binder_name"],
+        "starting_pdb": _materialize_pdb(payload["target_pdb"], work_dir),
+        "chains": payload["target_chain"],
+        "target_hotspot_residues": payload.get("target_hotspot_residues") or "",
+        "lengths": list(payload["binder_lengths"]),
+        "number_of_final_designs": payload["number_of_final_designs"],
+    }
+
+
+def _build_advanced_settings(payload: dict[str, Any]) -> dict[str, Any]:
+    """Build BindCraft's advanced_settings.json from the dispatch payload."""
+    advanced: dict[str, Any] = dict(payload["advanced_settings"])
+    af2_weights = resolve_weights_dir("alphafold2")
+    if not af2_weights:
+        raise RuntimeError(
+            "AlphaFold2 weights directory could not be resolved. "
+            "Re-run setup.sh or set PROTO_ALPHAFOLD2_WEIGHTS_DIR / PROTO_BINDCRAFT_WEIGHTS_DIR."
+        )
+    # af_params_dir is the parent of params/, not params/ itself — ColabDesign appends `/params/`.
+    advanced["af_params_dir"] = str(af2_weights)
+    advanced["dssp_path"] = str(_BINDCRAFT_DIR / "functions" / "dssp")
+    advanced["dalphaball_path"] = str(_BINDCRAFT_DIR / "functions" / "DAlphaBall.gcc")
+    return advanced
+
+
+def _build_filters(payload: dict[str, Any]) -> dict[str, Any]:
+    """Load default filters and merge per-metric overrides on top.
+
+    Merges per metric rather than replacing: a partial override such as
+    ``{"Average_pLDDT": {"threshold": 0.5}}`` keeps the default's other keys
+    (notably ``"higher"``, which upstream's filter check reads unconditionally),
+    so a partial override can't drop it and KeyError or invert the direction.
+    """
+    base: dict[str, Any] = json.loads(_DEFAULT_FILTERS_PATH.read_text())
+    for metric, override in (payload.get("filter_overrides") or {}).items():
+        existing = base.get(metric)
+        if isinstance(existing, dict) and isinstance(override, dict):
+            base[metric] = {**existing, **override}
+        else:
+            base[metric] = override
+    return base
+
+
+# ============================================================================
+# Output parsers
+# ============================================================================
+
+
+def _read_stats_by_design(csv_path: Path) -> dict[str, dict[str, str]]:
+    """Index a ``*_design_stats.csv`` by its ``Design`` column (preserving row order)."""
+    out: dict[str, dict[str, str]] = {}
+    if csv_path.exists():
+        with csv_path.open() as f:
+            for row in csv.DictReader(f):
+                name = (row.get("Design") or "").strip()
+                if name:
+                    out[name] = row
+    return out
+
+
+def _row_to_metrics(row: dict[str, str]) -> dict[str, float]:
+    """Extract metric columns from a *_design_stats.csv row, skipping missing entries."""
+    out: dict[str, float] = {}
+    for csv_col, metric_key in _METRIC_COLUMN_MAP.items():
+        val = row.get(csv_col, "")
+        if val.strip() in _MISSING_VALUES:
+            continue
+        try:
+            out[metric_key] = float(val)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _parse_int_list(s: str) -> list[int]:
+    """Parse 'A1,A2,A3' or '1,2,3' style strings into 1-indexed residue positions."""
+    if not s:
+        return []
+    out: list[int] = []
+    for tok in re.split(r"[,\n]+", s):
+        digits = re.sub(r"[^0-9]", "", tok.strip())
+        if digits:
+            out.append(int(digits))
+    return out
+
+
+def _parse_interface_aas(s: str) -> dict[str, int]:
+    """Parse a Python-dict-as-string or JSON dict cell into {aa: count}."""
+    if not s:
+        return {}
+    # CSV cells are stringified Python dicts (single quotes); flip to JSON.
+    try:
+        return {str(k): int(v) for k, v in json.loads(s.replace("'", '"')).items()}
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+
+
+def _resolve_accepted_pdb(designs_dir: Path, design_name: str) -> Path | None:
+    """Find the accepted PDB under Accepted/{design_name}_model{N}.pdb (upstream always suffixes _model{N})."""
+    accepted_dir = designs_dir / "Accepted"
+    if not accepted_dir.is_dir():
+        return None
+    matches = sorted(accepted_dir.glob(f"{design_name}_model*.pdb"))
+    return matches[0] if matches else None
+
+
+def _count_trajectories(designs_dir: Path) -> int:
+    """Count trajectories attempted from trajectory_stats.csv (one row per trajectory)."""
+    stats_csv = designs_dir / "trajectory_stats.csv"
+    if not stats_csv.exists():
+        return 0
+    with stats_csv.open() as f:
+        return max(0, sum(1 for _ in f) - 1)
+
+
+def _design_from_row(row: dict[str, str], pdb_path: Path) -> dict[str, Any]:
+    """Build one design dict from a stats row and its accepted PDB."""
+    return {
+        "design_name": (row.get("Design") or "").strip(),
+        "binder_sequence": (row.get("Sequence") or "").strip(),
+        "pdb": pdb_path.read_text(),
+        "metrics": _row_to_metrics(row),
+        "seed": int((row.get("Seed") or "0").strip() or 0),
+        "interface_aas": _parse_interface_aas(row.get("Average_InterfaceAAs", "")),
+        "interface_residues": _parse_int_list(row.get("InterfaceResidues", "")),
+    }
+
+
+def _parse_outputs(designs_dir: Path) -> dict[str, Any]:
+    """Collect accepted designs into the dispatch result dict.
+
+    Upstream reranks and writes ``final_design_stats.csv`` only once
+    ``number_of_final_designs`` is reached. A run stopped first by
+    ``max_trajectories`` can still have accepted binders (PDBs under
+    ``Accepted/``, rows in ``mpnn_design_stats.csv``), so fall back to those —
+    otherwise budget-capped runs silently drop binders that passed filters.
+    """
+    designs: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    # 1. Reranked final designs (present only when the target count was reached).
+    for design_name, row in _read_stats_by_design(designs_dir / "final_design_stats.csv").items():
+        pdb_path = _resolve_accepted_pdb(designs_dir, design_name)
+        if pdb_path is not None:
+            designs.append(_design_from_row(row, pdb_path))
+            seen.add(design_name)
+
+    # 2. Early-stop fallback: accepted PDBs not in the final rerank, scored from mpnn stats.
+    accepted_dir = designs_dir / "Accepted"
+    if accepted_dir.is_dir():
+        mpnn_stats = _read_stats_by_design(designs_dir / "mpnn_design_stats.csv")
+        for pdb_path in sorted(accepted_dir.glob("*_model*.pdb")):
+            design_name = re.sub(r"_model\d+$", "", pdb_path.stem)
+            if design_name not in seen and design_name in mpnn_stats:
+                designs.append(_design_from_row(mpnn_stats[design_name], pdb_path))
+                seen.add(design_name)
+
+    # Floor at len(designs) — can't have accepted more designs than trajectories run.
+    n_trajectories = max(_count_trajectories(designs_dir), len(designs))
+    return {
+        "designs": designs,
+        "n_trajectories_run": n_trajectories,
+        "n_designs_accepted": len(designs),
+    }
+
+
+# ============================================================================
+# Dispatch entry point
+# ============================================================================
+
+
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
+    """Materialize settings, invoke bindcraft.py, parse outputs."""
+    operation = input_dict["operation"]
+    if operation != "design":
+        raise ValueError(f"Unknown BindCraft operation: {operation}")
+
+    if not _BINDCRAFT_DIR.is_dir():
+        raise FileNotFoundError(f"BindCraft repo not found at {_BINDCRAFT_DIR}. Re-run setup.sh.")
+
+    with tempfile.TemporaryDirectory(prefix="bindcraft_") as work_dir_str:
+        work_dir = Path(work_dir_str)
+        (work_dir / "designs").mkdir(parents=True, exist_ok=True)
+
+        target = _build_target_settings(input_dict, work_dir)
+        advanced = _build_advanced_settings(input_dict)
+        filters = _build_filters(input_dict)
+
+        target_path = work_dir / "target_settings.json"
+        advanced_path = work_dir / "advanced_settings.json"
+        filters_path = work_dir / "filters.json"
+        target_path.write_text(json.dumps(target, indent=2))
+        advanced_path.write_text(json.dumps(advanced, indent=2))
+        filters_path.write_text(json.dumps(filters, indent=2))
+
+        env = get_subprocess_device_env(input_dict.get("device", "cuda"))
+        # Deterministic hash randomization for the design loop's set/dict iteration.
+        seed = input_dict.get("seed")
+        if seed is not None:
+            env["PYTHONHASHSEED"] = str(seed)
+
+        cmd = [
+            sys.executable,
+            str(_BINDCRAFT_DIR / "bindcraft.py"),
+            "--settings",
+            str(target_path),
+            "--advanced",
+            str(advanced_path),
+            "--filters",
+            str(filters_path),
+            # PyRosetta-free: skip FastRelax + Rosetta scoring; FreeBindCraft falls back to
+            # OpenMM relax and sc-rs / FreeSASA / Biopython interface metrics.
+            "--no-pyrosetta",
+        ]
+
+        verbose = bool(input_dict.get("verbose", False))
+        try:
+            subprocess.run(
+                cmd,
+                env=env,
+                cwd=str(_BINDCRAFT_DIR),
+                check=True,
+                text=True,
+                encoding="utf-8",
+                stdout=sys.stdout if verbose else subprocess.PIPE,
+                stderr=sys.stderr if verbose else subprocess.PIPE,
+            )
+        except subprocess.CalledProcessError as e:
+            full_stderr = (e.stderr or "").strip()
+            if full_stderr:
+                # Surface full stderr; a 10-line tail previously hid the root cause.
+                print(full_stderr, file=sys.stderr)
+            stderr_tail = " | ".join(full_stderr.splitlines()) or "<no stderr>"
+            raise RuntimeError(f"bindcraft: failed (exit {e.returncode}): {stderr_tail}") from e
+
+        return _parse_outputs(work_dir / "designs")
+
+
+# ============================================================================
+# DeviceManager protocol (passthrough — CLI subprocess auto-unloads)
+# ============================================================================
+
+
+def to_device(device: str) -> dict[str, Any]:
+    """DeviceManager passthrough — CLI subprocess manages GPU per call."""
+    return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
+
+
+def get_memory_stats() -> dict[str, Any]:
+    """Report JAX memory stats for the worker's first visible device."""
+    stats: dict[str, Any] = get_jax_memory_stats(device_index=0)
+    return stats
+
+
+# ============================================================================
+# Worker protocol entry point
+# ============================================================================
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+    with open(sys.argv[1]) as f:
+        result = dispatch(json.load(f))
+    with open(sys.argv[2], "w") as f:
+        json.dump(result, f)

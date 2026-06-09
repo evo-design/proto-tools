@@ -8,6 +8,14 @@ from proto_tools.tools.binder_design.bindcraft import (
     BindCraftOutput,
     run_bindcraft_design,
 )
+from proto_tools.tools.binder_design.freebindcraft import (
+    FreeBindCraftConfig,
+    FreeBindCraftDesign,
+    FreeBindCraftInput,
+    FreeBindCraftMetrics,
+    FreeBindCraftOutput,
+    run_freebindcraft_design,
+)
 from proto_tools.tools.binder_design.germinal import (
     GerminalConfig,
     GerminalDesign,
@@ -24,6 +32,12 @@ __all__ = [
     "BindCraftMetrics",
     "BindCraftOutput",
     "run_bindcraft_design",
+    "FreeBindCraftConfig",
+    "FreeBindCraftDesign",
+    "FreeBindCraftInput",
+    "FreeBindCraftMetrics",
+    "FreeBindCraftOutput",
+    "run_freebindcraft_design",
     "GerminalConfig",
     "GerminalDesign",
     "GerminalDesignMetrics",
