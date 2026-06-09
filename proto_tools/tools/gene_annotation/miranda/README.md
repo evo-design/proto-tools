@@ -15,7 +15,7 @@
 
 ## Overview
 
-[miRanda](https://github.com/bioconda/bioconda-recipes/tree/master/recipes/miranda) is a microRNA target-site prediction program written by Enright et al. at Memorial Sloan Kettering Cancer Center. It predicts where a microRNA binds an RNA or DNA target by combining a complementarity-based local alignment with a thermodynamic estimate of the resulting duplex's stability, and returns each predicted site with its score, free energy, alignment, and coordinates. This makes it useful for nominating candidate microRNA targets in 3'UTRs and other transcript regions ahead of experimental validation.
+[miRanda](https://github.com/mskcc/miRanda) is a microRNA target-site prediction program written by Enright et al. at Memorial Sloan Kettering Cancer Center. It predicts where a microRNA binds an RNA or DNA target by combining a complementarity-based local alignment with a thermodynamic estimate of the resulting duplex's stability, and returns each predicted site with its score, free energy, alignment, and coordinates. This makes it useful for nominating candidate microRNA targets in 3'UTRs and other transcript regions ahead of experimental validation.
 
 ## Background
 

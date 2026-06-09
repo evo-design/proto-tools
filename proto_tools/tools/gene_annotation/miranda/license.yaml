@@ -1,6 +1,6 @@
 code:
   spdx: GPL-2.0
-  url: https://github.com/hacktrackgnulinux/miranda/blob/master/COPYING
+  url: https://github.com/mskcc/miRanda/blob/master/LICENSE
 commercial_use: 'yes'
 redistribution: false
 attribution_required: false
