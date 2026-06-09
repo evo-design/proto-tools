@@ -175,6 +175,7 @@ from proto_tools.tools.gene_annotation import (
     CrisprTracrRNAPrediction,
     CrisprTracrRNASequenceResult,
     FimoMatch,
+    FimoSequenceMatches,
     MEMEFimoScanConfig,
     MEMEFimoScanInput,
     MEMEFimoScanOutput,
@@ -853,6 +854,7 @@ __all__ = [
     "run_crispr_tracr_rna",
     # MEME
     "FimoMatch",
+    "FimoSequenceMatches",
     "MEMEFimoScanConfig",
     "MEMEFimoScanInput",
     "MEMEFimoScanOutput",

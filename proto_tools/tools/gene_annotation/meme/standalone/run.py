@@ -57,11 +57,23 @@ def _is_complementable(motif: Any) -> bool:
     return motif.alphabet.size == 4 and {"A", "C", "G"} <= symbols and ("T" in symbols or "U" in symbols)
 
 
+def _sequence_index(name: str) -> int | None:
+    """Parse the 0-based input index from a ``seq_{i}`` sequence name."""
+    try:
+        return int(name.removeprefix("seq_"))
+    except ValueError:
+        return None
+
+
 # ============================================================================
 # Implementation
 # ============================================================================
 def run_fimo_scan(input_data: dict[str, Any]) -> dict[str, Any]:
-    """Scan sequences against MEME-format motifs with FIMO."""
+    """Scan sequences against MEME-format motifs with FIMO.
+
+    Returns one match list per input sequence, aligned by position, so the result
+    maps 1:1 onto the input ``sequences`` (the tool's iterable contract).
+    """
     sequences = [Sequence(seq, name=f"seq_{i}".encode()) for i, seq in enumerate(input_data["sequences"])]
     motifs, background = _read_motifs(input_data["motifs_path"])
 
@@ -74,37 +86,35 @@ def run_fimo_scan(input_data: dict[str, Any]) -> dict[str, Any]:
 
     fimo = FIMO(both_strands=both_strands, threshold=input_data["threshold"])
 
-    matches: list[dict[str, Any]] = []
+    results: list[list[dict[str, Any]]] = [[] for _ in sequences]
     for motif in motifs:
         accession = _decode(motif.accession)
         name = _decode(motif.name)
         motif_id = accession or name
         motif_alt_id = name if (name and name != motif_id) else "-"
 
-        # FIMO reports start <= stop with strand separate; pymemesuite gives
-        # strand-oriented coordinates, so normalize to (min, max).
         pattern = fimo.score_motif(motif, sequences, background)
-        matches.extend(
-            {
-                "motif_id": motif_id,
-                "motif_alt_id": motif_alt_id,
-                "sequence_name": _decode(element.source.name),
-                "start": int(min(element.start, element.stop)),
-                "stop": int(max(element.start, element.stop)),
-                "strand": element.strand,
-                "score": float(element.score),
-                "pvalue": float(element.pvalue),
-                "qvalue": float(element.qvalue),
-                "matched_sequence": _decode(element.sequence),
-            }
-            for element in pattern.matched_elements
-        )
+        for element in pattern.matched_elements:
+            idx = _sequence_index(_decode(element.source.name))
+            if idx is None or not 0 <= idx < len(results):
+                continue
+            # FIMO reports start <= stop with strand separate; pymemesuite gives
+            # strand-oriented coordinates, so normalize to (min, max).
+            results[idx].append(
+                {
+                    "motif_id": motif_id,
+                    "motif_alt_id": motif_alt_id,
+                    "start": int(min(element.start, element.stop)),
+                    "stop": int(max(element.start, element.stop)),
+                    "strand": element.strand,
+                    "score": float(element.score),
+                    "pvalue": float(element.pvalue),
+                    "qvalue": float(element.qvalue),
+                    "matched_sequence": _decode(element.sequence),
+                }
+            )
 
-    return {
-        "matches": matches,
-        "num_sequences": len(sequences),
-        "num_motifs": len(motifs),
-    }
+    return {"results": results, "num_motifs": len(motifs)}
 
 
 # ============================================================================

@@ -31,7 +31,6 @@ class FimoMatch(BaseModel):
             ``MOTIF`` line; the motif accession when present).
         motif_alt_id (str): Alternate motif name (second token of the ``MOTIF``
             line); ``"-"`` when the motif has no alternate name.
-        sequence_name (str): Name of the target sequence containing the match.
         start (int): Match start in the target sequence (1-indexed, inclusive).
         stop (int): Match end in the target sequence (1-indexed, inclusive).
         strand (str): Strand of the match, ``"+"`` or ``"-"``.
@@ -43,7 +42,6 @@ class FimoMatch(BaseModel):
 
     motif_id: str = Field(title="Motif ID", description="Matched motif identifier (motif accession when present)")
     motif_alt_id: str = Field(title="Motif Alt ID", description="Alternate motif name; '-' if none")
-    sequence_name: str = Field(title="Sequence Name", description="Name of the target sequence containing the match")
     start: int = Field(title="Start", description="Match start in the target sequence (1-indexed, inclusive)")
     stop: int = Field(title="Stop", description="Match end in the target sequence (1-indexed, inclusive)")
     strand: str = Field(title="Strand", description="Strand of the match ('+' or '-')")
@@ -51,6 +49,22 @@ class FimoMatch(BaseModel):
     pvalue: float = Field(title="P-value", description="P-value of the match")
     qvalue: float = Field(title="Q-value", description="Benjamini-Hochberg q-value (FDR) of the match")
     matched_sequence: str = Field(title="Matched Sequence", description="Subsequence at the hit on the matched strand")
+
+
+class FimoSequenceMatches(BaseModel):
+    """All motif occurrences found in a single target sequence.
+
+    One of these is returned per input sequence (positionally aligned to
+    ``MEMEFimoScanInput.sequences``); a sequence with no occurrences yields an
+    empty ``matches`` list.
+
+    Attributes:
+        matches (list[FimoMatch]): Occurrences in this sequence, across all motifs.
+    """
+
+    matches: list[FimoMatch] = Field(
+        default_factory=list, title="Matches", description="Motif occurrences found in this sequence"
+    )
 
 
 # Input:
@@ -125,26 +139,27 @@ class MEMEFimoScanConfig(BaseConfig):
 
 # Output:
 class MEMEFimoScanOutput(BaseToolOutput):
-    """FIMO scan results: motif occurrences across the target sequences.
+    """FIMO scan results, one bundle per input sequence.
 
     Attributes:
-        matches (list[FimoMatch]): Every motif occurrence passing the p-value
-            threshold, across all target sequences and motifs. Empty if none.
+        results (list[FimoSequenceMatches]): One entry per input sequence,
+            positionally aligned to ``MEMEFimoScanInput.sequences`` — ``results[i]``
+            holds the matches found in sequence ``i`` (empty if none).
 
     Properties:
-        num_matches: Total number of motif occurrences found.
+        num_matches: Total number of motif occurrences across all sequences.
     """
 
-    matches: list[FimoMatch] = Field(
+    results: list[FimoSequenceMatches] = Field(
         default_factory=list,
-        title="Matches",
-        description="Motif occurrences passing the p-value threshold",
+        title="Results",
+        description="Per-sequence motif occurrences, aligned to the input sequences",
     )
 
     @property
     def num_matches(self) -> int:
-        """Return the number of motif occurrences found."""
-        return len(self.matches)
+        """Return the total number of motif occurrences across all sequences."""
+        return sum(len(r.matches) for r in self.results)
 
     @property
     def output_format_options(self) -> list[str]:
@@ -161,10 +176,13 @@ class MEMEFimoScanOutput(BaseToolOutput):
 
         if file_format not in ("csv", "json"):
             raise ValueError(f"Unsupported format: {file_format}")
-        if not self.matches:
+        # Flatten the per-sequence bundles into one table, tagging each row with its
+        # 0-based sequence_index so the source sequence is recoverable.
+        rows = [{"sequence_index": i, **match.model_dump()} for i, r in enumerate(self.results) for match in r.matches]
+        if not rows:
             warnings.warn("No FIMO matches to export. The scan returned no occurrences.", UserWarning, stacklevel=2)
             return
-        df = pd.DataFrame([m.model_dump() for m in self.matches])
+        df = pd.DataFrame(rows)
         path = Path(export_path)
         if file_format == "csv":
             df.to_csv(path, index=False)
@@ -192,6 +210,8 @@ def example_input() -> Any:
     output_class=MEMEFimoScanOutput,
     description="Scan sequences for occurrences of known motifs (PWMs) using MEME Suite FIMO",
     example_input=example_input,
+    iterable_input_fields=["sequences"],
+    iterable_output_field="results",
     cacheable=True,
 )
 def run_meme_fimo_scan(
@@ -210,15 +230,15 @@ def run_meme_fimo_scan(
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        MEMEFimoScanOutput: ``matches`` — every occurrence passing ``threshold``,
-            each carrying the motif id, sequence name, 1-indexed coordinates,
-            strand, score, p-value, and q-value.
+        MEMEFimoScanOutput: ``results`` — one ``FimoSequenceMatches`` per input
+            sequence (positionally aligned), each holding that sequence's matches
+            with motif id, 1-indexed coordinates, strand, score, p-value, and q-value.
 
     Examples:
         >>> inputs = MEMEFimoScanInput(sequences=["GTTGAGCTGGTCAAC"], motifs="/path/to/jaspar.meme")
         >>> result = run_meme_fimo_scan(inputs, MEMEFimoScanConfig(threshold=1e-4))
         >>> print(f"Found {result.num_matches} motif occurrence(s)")
-        >>> strongest = min(result.matches, key=lambda m: m.pvalue) if result.matches else None
+        >>> first_seq_hits = result.results[0].matches
     """
     output_data = ToolInstance.dispatch(
         "meme",
@@ -234,14 +254,17 @@ def run_meme_fimo_scan(
         config=config,
     )
 
-    matches = [FimoMatch(**m) for m in output_data["matches"]]
+    # The standalone returns one match list per input sequence (aligned by position).
+    results = [
+        FimoSequenceMatches(matches=[FimoMatch(**m) for m in seq_matches]) for seq_matches in output_data["results"]
+    ]
 
     return MEMEFimoScanOutput(
         metadata={
-            "num_sequences": output_data.get("num_sequences", len(inputs.sequences)),
+            "num_sequences": len(inputs.sequences),
             "num_motifs": output_data.get("num_motifs", 0),
             "threshold": config.threshold,
             "both_strands": config.both_strands,
         },
-        matches=matches,
+        results=results,
     )

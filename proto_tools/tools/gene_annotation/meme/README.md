@@ -47,4 +47,4 @@ These apply to the MEME FIMO tool in this toolkit (`meme-fimo-scan`).
 
 - **Runs on CPU.** FIMO scanning is a CPU operation; `pymemesuite` compiles the MEME Suite C library into its wheel, so there is no GPU acceleration to enable and no separate MEME install or PATH lookup is needed.
 - **Motifs are user-supplied.** FIMO ships no motif database; provide your own MEME-format PWM file (e.g. exported from [JASPAR](https://jaspar.elixir.no/)) via `motifs`. Every motif in the file is scanned against every target sequence.
-- **Matches are returned as a flat list, not one per input.** A target sequence may yield zero, one, or many matches, so results are not position-aligned to the inputs; each match carries its `sequence_name` and `motif_id` to map it back. Scanning is deterministic — identical inputs return identical matches on repeated calls.
+- **Results are returned per input sequence.** `results[i]` holds the matches found in input sequence `i`, positionally aligned to the input — a sequence with no occurrences yields an empty bundle. Scanning is deterministic — identical inputs return identical matches on repeated calls.

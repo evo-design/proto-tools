@@ -2,6 +2,7 @@
 
 from proto_tools.tools.gene_annotation.meme.meme_fimo_scan import (
     FimoMatch,
+    FimoSequenceMatches,
     MEMEFimoScanConfig,
     MEMEFimoScanInput,
     MEMEFimoScanOutput,
@@ -10,6 +11,7 @@ from proto_tools.tools.gene_annotation.meme.meme_fimo_scan import (
 
 __all__ = [
     "FimoMatch",
+    "FimoSequenceMatches",
     "MEMEFimoScanConfig",
     "MEMEFimoScanInput",
     "MEMEFimoScanOutput",

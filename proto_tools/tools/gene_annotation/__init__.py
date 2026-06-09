@@ -13,6 +13,7 @@ from proto_tools.tools.gene_annotation.crispr_tracr_rna import (
 # MEME tools
 from proto_tools.tools.gene_annotation.meme import (
     FimoMatch,
+    FimoSequenceMatches,
     MEMEFimoScanConfig,
     MEMEFimoScanInput,
     MEMEFimoScanOutput,
@@ -111,6 +112,7 @@ __all__ = [
     "run_crispr_tracr_rna",
     # MEME
     "FimoMatch",
+    "FimoSequenceMatches",
     "MEMEFimoScanConfig",
     "MEMEFimoScanInput",
     "MEMEFimoScanOutput",

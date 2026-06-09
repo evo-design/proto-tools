@@ -42,13 +42,26 @@ def test_fimo_scan_basic_execution():
 
     assert result.success is True
     assert result.tool_id == "meme-fimo-scan"
+    assert len(result.results) == 1  # one bundle per input sequence
     assert result.num_matches >= 1
 
-    match = result.matches[0]
+    match = result.results[0].matches[0]
     assert match.motif_id == "MA0TEST"
     assert match.strand in {"+", "-"}
     assert 0 < match.pvalue <= 1e-4
     assert match.start <= match.stop
+
+
+@pytest.mark.integration
+def test_fimo_scan_results_align_to_inputs():
+    """Output is 1:1 with inputs; a sequence with no occurrences yields an empty bundle."""
+    inputs = MEMEFimoScanInput(sequences=[SAMPLE_SEQUENCE, "AAAAAAAAAAAAAAAA"], motifs=str(EXAMPLE_MEME_FILE))
+    result = run_meme_fimo_scan(inputs, MEMEFimoScanConfig())
+
+    assert result.success is True
+    assert len(result.results) == 2  # positionally aligned to the two inputs
+    assert len(result.results[0].matches) >= 1  # motif present in sequence 0
+    assert result.results[1].matches == []  # no motif in sequence 1 -> empty bundle
 
 
 @pytest.mark.integration
@@ -60,7 +73,7 @@ def test_fimo_scan_single_strand_finds_forward_matches():
     assert result.success is True
     assert result.tool_id == "meme-fimo-scan"
     assert result.num_matches >= 1
-    assert all(m.strand == "+" for m in result.matches)
+    assert all(m.strand == "+" for r in result.results for m in r.matches)
 
 
 def _write_protein_motif(path: Path) -> None:
@@ -87,7 +100,7 @@ def test_fimo_scan_protein_motif_is_forward_only(tmp_path):
 
     assert result.success is True
     assert result.num_matches >= 1
-    assert all(m.strand == "+" for m in result.matches)
+    assert all(m.strand == "+" for r in result.results for m in r.matches)
 
 
 @pytest.mark.integration
