@@ -193,6 +193,7 @@ module = [
     "proto_client.*",
     # Bioinformatics tools (only used in standalone/ dirs, not pip deps)
     "pyhmmer.*",
+    "pymemesuite.*",
     "pyrodigal.*",
     "mdtraj.*",
     "RNA.*",

@@ -1,0 +1,9 @@
+code:
+  spdx: Custom (MEME Suite Academic License)
+  url: https://github.com/althonos/pymemesuite/blob/main/vendor/meme/COPYING
+  text: 'Copyright (c) 1994-2019 The Regents of the University of California. Permission to use, copy, modify, and distribute any part of this software for educational, research and non-profit purposes, without fee and without a written agreement, is granted provided the copyright notice and the license paragraphs appear in all copies. Those desiring to incorporate this software into commercial products or use it for commercial purposes must contact the Technology Transfer Office, University of California, San Diego. The software is provided "as is" with no warranties. Full terms at the canonical URL above.'
+commercial_use: restricted
+redistribution: true
+attribution_required: true
+notes: 'FIMO is provided by the MEME Suite C library (Regents of the University of California), licensed for educational/research/non-profit use without fee; commercial use requires contacting UC San Diego Technology Transfer. The Python binding pymemesuite (Martin Larralde) is MIT-licensed (https://github.com/althonos/pymemesuite/blob/main/COPYING), but the underlying MEME Suite restriction governs usage.'
+last_updated: '2026-06-08'

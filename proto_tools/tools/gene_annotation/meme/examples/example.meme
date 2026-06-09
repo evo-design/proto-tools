@@ -1,0 +1,21 @@
+MEME version 4
+
+ALPHABET= ACGT
+
+strands: + -
+
+Background letter frequencies
+A 0.25 C 0.25 G 0.25 T 0.25
+
+MOTIF MA0TEST EXMOTIF
+letter-probability matrix: alength= 4 w= 10 nsites= 20 E= 0
+ 0.03 0.03 0.91 0.03
+ 0.91 0.03 0.03 0.03
+ 0.03 0.03 0.91 0.03
+ 0.03 0.91 0.03 0.03
+ 0.03 0.03 0.03 0.91
+ 0.03 0.03 0.91 0.03
+ 0.03 0.03 0.91 0.03
+ 0.03 0.03 0.03 0.91
+ 0.03 0.91 0.03 0.03
+ 0.91 0.03 0.03 0.03

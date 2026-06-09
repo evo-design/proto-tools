@@ -10,6 +10,15 @@ from proto_tools.tools.gene_annotation.crispr_tracr_rna import (
     run_crispr_tracr_rna,
 )
 
+# MEME tools
+from proto_tools.tools.gene_annotation.meme import (
+    FimoMatch,
+    MEMEFimoScanConfig,
+    MEMEFimoScanInput,
+    MEMEFimoScanOutput,
+    run_meme_fimo_scan,
+)
+
 # MinCED tools
 from proto_tools.tools.gene_annotation.minced import (
     CrisprArray,
@@ -100,6 +109,12 @@ __all__ = [
     "CrisprTracrRNAPrediction",
     "CrisprTracrRNASequenceResult",
     "run_crispr_tracr_rna",
+    # MEME
+    "FimoMatch",
+    "MEMEFimoScanConfig",
+    "MEMEFimoScanInput",
+    "MEMEFimoScanOutput",
+    "run_meme_fimo_scan",
     # MinCED
     "run_minced",
     "MincedInput",
