@@ -2045,12 +2045,25 @@ def _fake_compiler_version(major: int):
     return _run
 
 
+def _all_foundation_tools_present() -> dict[str, str]:
+    """All foundation binaries present (helper for host-probe tests)."""
+    return {
+        "git": "/usr/bin/git",
+        "curl": "/usr/bin/curl",
+        "make": "/usr/bin/make",
+        "cmake": "/usr/bin/cmake",
+        "pkg-config": "/usr/bin/pkg-config",
+        "gcc": "/usr/bin/gcc",
+        "g++": "/usr/bin/g++",
+    }
+
+
 def test_host_probe_skips_when_modern_tools_present(monkeypatch):
-    """All four binaries present + gcc/g++ >= MIN_FOUNDATION_GCC → host satisfies contract."""
+    """All required binaries present + gcc/g++ >= MIN_FOUNDATION_GCC → host satisfies contract."""
     from proto_tools.utils.foundation_env import MIN_FOUNDATION_GCC, host_has_foundation_tools
 
     monkeypatch.delenv("PROTO_USE_FOUNDATION_ENV", raising=False)
-    present = {"git": "/usr/bin/git", "curl": "/usr/bin/curl", "gcc": "/usr/bin/gcc", "g++": "/usr/bin/g++"}
+    present = _all_foundation_tools_present()
     with (
         patch("proto_tools.utils.foundation_env.shutil.which", side_effect=_fake_which(present)),
         patch("subprocess.run", side_effect=_fake_compiler_version(MIN_FOUNDATION_GCC)),
@@ -2069,7 +2082,7 @@ def test_host_probe_falls_through_when_gcc_too_old(monkeypatch, tmp_path):
 
     get_proto_home.cache_clear()
 
-    present = {"git": "/usr/bin/git", "curl": "/usr/bin/curl", "gcc": "/usr/bin/gcc", "g++": "/usr/bin/g++"}
+    present = _all_foundation_tools_present()
     install_called = False
     foundation_path = ToolInstance._get_foundation_env_path()
     fake_compiler = _fake_compiler_version(MIN_FOUNDATION_GCC - 1)
@@ -2105,7 +2118,21 @@ def test_host_probe_falls_through_when_binary_missing(monkeypatch):
     from proto_tools.utils.foundation_env import MIN_FOUNDATION_GCC, host_has_foundation_tools
 
     monkeypatch.delenv("PROTO_USE_FOUNDATION_ENV", raising=False)
-    present = {"git": "/usr/bin/git", "curl": "/usr/bin/curl", "gcc": "/usr/bin/gcc", "g++": None}
+    present = {**_all_foundation_tools_present(), "g++": None}
+    with (
+        patch("proto_tools.utils.foundation_env.shutil.which", side_effect=_fake_which(present)),
+        patch("subprocess.run", side_effect=_fake_compiler_version(MIN_FOUNDATION_GCC)),
+    ):
+        assert host_has_foundation_tools() is False
+
+
+@pytest.mark.parametrize("missing", ["make", "cmake", "pkg-config"])
+def test_host_probe_falls_through_when_build_tool_missing(monkeypatch, missing):
+    """Missing make/cmake/pkg-config → probe returns False even with modern compilers present."""
+    from proto_tools.utils.foundation_env import MIN_FOUNDATION_GCC, host_has_foundation_tools
+
+    monkeypatch.delenv("PROTO_USE_FOUNDATION_ENV", raising=False)
+    present = {**_all_foundation_tools_present(), missing: None}
     with (
         patch("proto_tools.utils.foundation_env.shutil.which", side_effect=_fake_which(present)),
         patch("subprocess.run", side_effect=_fake_compiler_version(MIN_FOUNDATION_GCC)),

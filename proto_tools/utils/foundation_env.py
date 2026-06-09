@@ -1,9 +1,9 @@
 """Foundation env host-probe helpers.
 
-The foundation env (a shared micromamba env with git, curl, gcc, gxx) is
-provisioned by ``ToolInstance._ensure_foundation_env`` only when the host
-can't satisfy those dependencies on its own. This module owns the probe
-logic and the minimum-version constant that decides "satisfies".
+The foundation env (a shared micromamba env with git, curl, make, cmake,
+pkg-config, gcc, gxx) is provisioned by ``ToolInstance._ensure_foundation_env``
+only when the host can't satisfy those dependencies on its own. This module
+owns the probe logic and the minimum-version constant that decides "satisfies".
 """
 
 import logging
@@ -21,7 +21,7 @@ MIN_FOUNDATION_GCC = 11
 
 
 def host_has_foundation_tools() -> bool:
-    """Return True if the host already provides git, curl, and gcc/g++ >= MIN_FOUNDATION_GCC.
+    """Return True if the host already provides git, curl, make, cmake, pkg-config, and gcc/g++ >= MIN_FOUNDATION_GCC.
 
     Probes ``shutil.which`` for each binary and parses the major version
     from ``gcc --version`` / ``g++ --version``. Returns False (and logs the
@@ -31,7 +31,7 @@ def host_has_foundation_tools() -> bool:
     Returns:
         bool: True iff the host satisfies the foundation env contract.
     """
-    for tool in ("git", "curl"):
+    for tool in ("git", "curl", "make", "cmake", "pkg-config"):
         if shutil.which(tool) is None:
             logger.debug("Foundation env probe: %s not on PATH", tool)
             return False

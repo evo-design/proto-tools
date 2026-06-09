@@ -1617,10 +1617,10 @@ class ToolInstance:
         """Ensure a foundation environment is available, or confirm host satisfies it.
 
         The foundation env is a shared micromamba environment at
-        ``PROTO_HOME/.foundation_env/`` containing git, curl, gcc, and gxx
-        from conda-forge. Standalone tool setup scripts get its ``bin/``
-        prepended to PATH so they can compile and download regardless of
-        the host system.
+        ``PROTO_HOME/.foundation_env/`` containing git, curl, make, cmake,
+        pkg-config, gcc, and gxx from conda-forge. Standalone tool setup
+        scripts get its ``bin/`` prepended to PATH so they can compile and
+        download regardless of the host system.
 
         Skipped entirely when the host already provides those tools at a
         recent enough version — see ``foundation_env.host_has_foundation_tools``.
@@ -1683,6 +1683,9 @@ class ToolInstance:
                         str(foundation_path),
                         "git",
                         "curl",
+                        "make",
+                        "cmake",
+                        "pkg-config",
                         gcc_pin,
                         gxx_pin,
                         "-c",
