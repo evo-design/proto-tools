@@ -1,0 +1,17 @@
+# jax, colabdesign, openmm, pdbfixer, freesasa are installed by setup.sh, not here.
+# chex/dm-haiku/optax are left unpinned so they match the JAX 0.6.0 installed by
+# setup.sh — upstream BindCraft pins dm-haiku==0.0.13, which references
+# jax.core.JaxprEqn (removed in JAX 0.6).
+numpy==1.26.4
+pandas==2.2.3
+biopython==1.84
+scipy==1.14.1
+chex
+dm-haiku
+dm-tree==0.1.8
+joblib==1.4.2
+ml-collections==0.1.1
+immutabledict==4.2.0
+optax
+matplotlib==3.9.2
+tqdm==4.66.5

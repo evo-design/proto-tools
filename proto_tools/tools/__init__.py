@@ -9,12 +9,18 @@ from proto_tools.tools.binder_design import (
     BindCraftInput,
     BindCraftMetrics,
     BindCraftOutput,
+    FreeBindCraftConfig,
+    FreeBindCraftDesign,
+    FreeBindCraftInput,
+    FreeBindCraftMetrics,
+    FreeBindCraftOutput,
     GerminalConfig,
     GerminalDesign,
     GerminalDesignMetrics,
     GerminalInput,
     GerminalOutput,
     run_bindcraft_design,
+    run_freebindcraft_design,
     run_germinal_design,
 )
 
@@ -747,6 +753,13 @@ __all__ = [
     "BindCraftOutput",
     "BindCraftDesign",
     "BindCraftMetrics",
+    # Binder / antibody design - FreeBindCraft (PyRosetta-free)
+    "run_freebindcraft_design",
+    "FreeBindCraftInput",
+    "FreeBindCraftConfig",
+    "FreeBindCraftOutput",
+    "FreeBindCraftDesign",
+    "FreeBindCraftMetrics",
     # Binder / antibody design - Germinal
     "GerminalConfig",
     "GerminalDesign",

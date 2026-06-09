@@ -1,0 +1,27 @@
+# Environment variables for FreeBindCraft (PyRosetta-free binder design)
+#
+# Lines starting with # are comments and will be ignored.
+# Variables listed under [passthrough] are inherited from the parent environment.
+# Variables under [set] are set to specific values in the subprocess.
+#
+# AlphaFold2 weights are SHARED with the alphafold2 toolkit — setup.sh resolves
+# them via proto_resolve_weights_dir alphafold2 so a user with AF2 already
+# installed does not re-download. PROTO_HOME and PROTO_MODEL_CACHE are forwarded
+# automatically by persistent_worker.py.
+
+[passthrough]
+# JAX runtime knobs (let users override preallocation for tight-memory hosts)
+JAX_PLATFORMS
+XLA_PYTHON_CLIENT_PREALLOCATE
+XLA_PYTHON_CLIENT_ALLOCATOR
+# Per-tool weights override (lets users point FreeBindCraft at an external AF2 weights dir)
+PROTO_FREEBINDCRAFT_WEIGHTS_DIR
+# Shared with alphafold2 — same weights, both vars resolve to the same dir
+PROTO_ALPHAFOLD2_WEIGHTS_DIR
+
+[set]
+# Vestigial cuda_env hints — setup.sh skips proto_install_cuda_toolkit, so these
+# point at a dir that may not exist; the loader skips missing paths and JAX falls
+# back to its bundled nvidia-cu12 wheel libs. Kept to mirror the proven image config.
+LD_LIBRARY_PATH=${VENV_PATH}/cuda_env/lib
+XLA_FLAGS=--xla_gpu_cuda_data_dir=${VENV_PATH}/cuda_env

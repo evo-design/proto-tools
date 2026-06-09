@@ -1,0 +1,11 @@
+code:
+  spdx: MIT
+  url: https://github.com/cytokineking/FreeBindCraft/blob/master/LICENSE
+weights:
+  spdx: CC-BY-4.0
+  url: https://github.com/google-deepmind/alphafold#model-parameters-license
+commercial_use: 'yes'
+redistribution: true
+attribution_required: true
+notes: 'FreeBindCraft (cytokineking/FreeBindCraft) and upstream BindCraft (martinpacesa/BindCraft) are MIT; ColabDesign (sokrypton/ColabDesign, pinned e31a56fe) is under the Beer-Ware License (Revision 42, Sergey Ovchinnikov) — permissive, permits commercial use, requires only retaining the notice. FreeBindCraft replaces PyRosetta with open-source tools — OpenMM (relaxation), FreeSASA + Biopython (surface analysis), and the sc-rs shape-complementarity binary — so the pipeline carries no PyRosetta license restriction and is safe for commercial hosting. The dominant weights are AlphaFold2 parameters (CC-BY-4.0, shared with the alphafold2 toolkit; attribution required). ProteinMPNN weights bundled via ColabDesign are MIT.'
+last_updated: '2026-06-08'
