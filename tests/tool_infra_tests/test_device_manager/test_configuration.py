@@ -22,6 +22,12 @@ def test_env_var_overrides():
             "proto_tools.utils.device_manager.number_of_visible_gpus",
             return_value=3,
         ),
+        # Pin compute mode so this test isolates env-var parsing from the
+        # Exclusive_Process auto-escalation that overrides allow_multiple.
+        patch(
+            "proto_tools.utils.device_manager.is_exclusive_process_mode",
+            return_value=False,
+        ),
         patch.dict(
             os.environ,
             {
@@ -200,3 +206,91 @@ def test_no_gpus_available(no_gpus_manager):
     """Test behavior when no GPUs are available."""
     devices = no_gpus_manager._get_available_devices()
     assert devices == [], "Should return empty list when no GPUs"
+
+
+# ── Exclusive_Process auto-escalation ──────────────────────────────────────
+
+
+def test_exclusive_process_disables_allow_multiple_per_device():
+    """Under Exclusive_Process, allow_multiple_per_device must be forced off.
+
+    A second CUDA context on the same Exclusive_Process device is rejected by
+    the driver (cudaErrorDevicesUnavailable). DeviceManager must therefore
+    refuse to "share" the device so that ``_resolve_device_conflicts`` evicts
+    the prior worker via RESTART before the next one starts.
+    """
+    DeviceManager.reset_instance()
+    with (
+        patch("proto_tools.utils.device_manager.number_of_visible_gpus", return_value=1),
+        patch("proto_tools.utils.device_manager.is_exclusive_process_mode", return_value=True),
+    ):
+        dm = DeviceManager.get_instance()
+        dm.configure(allow_multiple_per_device=True)
+        assert dm._allow_multiple_per_device is False, (
+            "configure(allow_multiple_per_device=True) must be auto-disabled under Exclusive_Process"
+        )
+    DeviceManager.reset_instance()
+
+
+def test_exclusive_process_env_var_allow_multi_device_overridden():
+    """BIO_TOOLS_ALLOW_MULTI_DEVICE=true gets force-disabled under Exclusive_Process."""
+    DeviceManager.reset_instance()
+    with (
+        patch("proto_tools.utils.device_manager.number_of_visible_gpus", return_value=1),
+        patch("proto_tools.utils.device_manager.is_exclusive_process_mode", return_value=True),
+        patch.dict(os.environ, {"BIO_TOOLS_ALLOW_MULTI_DEVICE": "true"}),
+    ):
+        dm = DeviceManager.get_instance()
+        assert dm._allow_multiple_per_device is False, (
+            "BIO_TOOLS_ALLOW_MULTI_DEVICE=true must not survive Exclusive_Process auto-escalation"
+        )
+    DeviceManager.reset_instance()
+
+
+def test_exclusive_process_eviction_fires_after_auto_disable():
+    """End-to-end: requesting cuda twice with allow_multiple=True actually evicts.
+
+    Without the auto-disable, the second request would silently coexist with
+    the first allocation (the bug). With the auto-disable, the first allocation
+    is shut down via the RESTART eviction callback before the second succeeds.
+    """
+    DeviceManager.reset_instance()
+    with (
+        patch("proto_tools.utils.device_manager.number_of_visible_gpus", return_value=1),
+        patch("proto_tools.utils.device_manager.is_exclusive_process_mode", return_value=True),
+    ):
+        dm = DeviceManager.get_instance()
+        dm.configure(allow_multiple_per_device=True)
+
+        evicted: list[str] = []
+
+        def first_cb(action: str) -> None:
+            evicted.append(action)
+
+        def second_cb(action: str) -> None:
+            pass
+
+        dm.request_device("alphafold2", "alphafold2", device="cuda", eviction_callback=first_cb)
+        dm.request_device("ablang", "ablang", device="cuda", eviction_callback=second_cb)
+
+        assert evicted == ["shutdown"], (
+            f"Expected RESTART eviction of first worker before second allocation, got {evicted!r}"
+        )
+        assert "alphafold2" not in dm._allocations, "First allocation must be removed by eviction"
+        assert "ablang" in dm._allocations, "Second allocation must take the device"
+    DeviceManager.reset_instance()
+
+
+def test_default_mode_preserves_allow_multiple_per_device():
+    """Outside Exclusive_Process, allow_multiple_per_device is respected."""
+    DeviceManager.reset_instance()
+    with (
+        patch("proto_tools.utils.device_manager.number_of_visible_gpus", return_value=1),
+        patch("proto_tools.utils.device_manager.is_exclusive_process_mode", return_value=False),
+    ):
+        dm = DeviceManager.get_instance()
+        dm.configure(allow_multiple_per_device=True)
+        assert dm._allow_multiple_per_device is True, (
+            "allow_multiple_per_device must be left alone on Default-mode GPUs"
+        )
+    DeviceManager.reset_instance()

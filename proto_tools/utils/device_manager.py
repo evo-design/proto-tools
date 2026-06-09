@@ -249,18 +249,31 @@ class DeviceManager:
         self._escalate_for_exclusive_process()
 
     def _escalate_for_exclusive_process(self) -> None:
-        """Switch CPU offload to RESTART if any GPU is in Exclusive_Process mode.
+        """Adjust incompatible settings if any GPU is in Exclusive_Process mode.
 
-        Under Exclusive_Process, an evicted subprocess retains its CUDA context
-        and blocks other processes from using the GPU even after offloading to CPU.
+        Under Exclusive_Process, only one CUDA context per device can exist, so:
+
+        - CPU offload leaves the evicted subprocess holding its CUDA context and
+          blocking other processes; auto-switch to RESTART.
+        - ``allow_multiple_per_device=True`` is unenforceable at the driver level
+          (a second worker's ``.to('cuda')`` raises ``cudaErrorDevicesUnavailable``);
+          auto-switch off so ``_resolve_device_conflicts`` evicts the prior worker
+          via RESTART before the next one starts.
         """
-        if self._offload_strategy == OffloadStrategy.CPU and is_exclusive_process_mode():
+        if not is_exclusive_process_mode():
+            return
+        if self._offload_strategy == OffloadStrategy.CPU:
             logger.warning(
-                "GPU compute mode is Exclusive_Process — CPU offload strategy "
-                "is incompatible (evicted subprocess retains CUDA context). "
-                "Auto-switching to RESTART strategy."
+                "Exclusive_Process GPU: CPU offload unsupported "
+                "(evicted subprocess retains the CUDA context); switching to RESTART."
             )
             self._offload_strategy = OffloadStrategy.RESTART
+        if self._allow_multiple_per_device:
+            logger.warning(
+                "Exclusive_Process GPU: cannot share a device "
+                "(second CUDA context is rejected); disabling allow_multiple_per_device."
+            )
+            self._allow_multiple_per_device = False
 
     def configure(
         self,
