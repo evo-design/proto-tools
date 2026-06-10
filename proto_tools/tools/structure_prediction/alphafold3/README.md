@@ -5,7 +5,7 @@
 ![AlphaFold3](https://proto-bio.github.io/proto-assets/images/tool/alphafold3/hero.png)
 
 > [!NOTE]
-> **License:** AlphaFold3 uses CC-BY-NC-SA-4.0 for code and Custom (AlphaFold 3 Model Parameters Terms of Use) for model weights and has restrictions around commercial use and may require explicit attribution when utilized. Model weights are not publicly distributed and must be requested from the provider. Please refer to the [code license](https://github.com/google-deepmind/alphafold3/blob/main/LICENSE) and [model weights license](https://github.com/google-deepmind/alphafold3/blob/main/WEIGHTS_TERMS_OF_USE.md) for full terms.
+> **License:** AlphaFold3 uses Apache-2.0 for code and Custom (AlphaFold 3 Model Parameters Terms of Use) for model weights and has restrictions around commercial use and may require explicit attribution when utilized. Model weights are not publicly distributed and must be requested from the provider. Please refer to the [code license](https://github.com/google-deepmind/alphafold3/blob/main/LICENSE) and [model weights license](https://github.com/google-deepmind/alphafold3/blob/main/WEIGHTS_TERMS_OF_USE.md) for full terms.
 
 ## Overview
 
