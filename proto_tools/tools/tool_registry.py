@@ -342,31 +342,6 @@ class ToolRegistry:
     _registry: ClassVar[dict[str, ToolSpec]] = {}
 
     @classmethod
-    def _try_dispatch(
-        cls,
-        key: str,  # noqa: ARG003 — required by descriptor protocol
-        inputs: BaseToolInput,  # noqa: ARG003 — required by descriptor protocol
-        config: BaseConfig | None,  # noqa: ARG003 — required by descriptor protocol
-    ) -> BaseToolOutput | None:
-        """Extension point for external tool dispatch.
-
-        Monkeypatch this classmethod to route tool calls to external
-        services (e.g. HTTP APIs).  Return a ``BaseToolOutput`` to handle
-        the call, or ``None`` to fall through to local execution.
-
-        Args:
-            key (str): Tool registry key (e.g. ``"esm2"``).
-            inputs (BaseToolInput): Tool input payload.
-            config (BaseConfig | None): Tool configuration, if any.
-
-        Returns:
-            BaseToolOutput | None: Tool output if handled, or ``None``
-                to fall through to local execution.
-        """
-        result: BaseToolOutput | None = None
-        return result
-
-    @classmethod
     def register(
         cls,
         key: str,
@@ -550,8 +525,8 @@ class ToolRegistry:
                     )
 
                 # Validate device allocation against tool requirements.
-                # device="cloud" delegates all resource allocation to the registered
-                # cloud backend, so local validation is skipped.
+                # device="cloud" delegates all resource allocation to the cloud
+                # service, so local validation is skipped.
                 if hasattr(config, "device"):
                     device_str = str(config.device)
                     if device_str == "cloud":
@@ -564,11 +539,13 @@ class ToolRegistry:
                             config = config.model_copy(update={"device": "cpu"})
                             device_str = "cpu"
                         else:
+                            from proto_tools.cloud import dispatch_to_cloud
+
                             try:
-                                dispatched = cls._try_dispatch(key, inputs, config)
+                                dispatched = dispatch_to_cloud(key, inputs, config)
                             except Exception as e:
                                 logger.error(
-                                    "Tool %s: _try_dispatch raised %s: %s",
+                                    "Tool %s: cloud dispatch raised %s: %s",
                                     key,
                                     type(e).__name__,
                                     e,
@@ -580,21 +557,7 @@ class ToolRegistry:
                                     e,
                                     traceback.format_exc(),
                                 )
-                            if dispatched is not None:
-                                return _finish_dispatched(dispatched)
-                            from proto_tools.cloud import is_api_backend_enabled
-
-                            if not is_api_backend_enabled():
-                                raise RuntimeError(
-                                    f"Tool {key!r} called with device='cloud' but Proto's "
-                                    "remote execution backend is not enabled. Install "
-                                    "proto-tools[cloud] and call "
-                                    "proto_tools.cloud.use_api_backend()."
-                                )
-                            raise RuntimeError(
-                                f"Tool {key!r} called with device='cloud' but the configured "
-                                "remote execution backend did not handle the call."
-                            )
+                            return _finish_dispatched(dispatched)
                     if gpu_only_flag and device_str == "cpu":
                         raise ValueError(
                             f"Tool {key!r} is gpu_only and rejects device='cpu'; use 'cuda', 'cuda:N', or 'cudaxN'"
@@ -718,26 +681,6 @@ class ToolRegistry:
                             original_items,
                             whole_cache_key,
                         )
-
-                    # Extension point: try external dispatch before local execution.
-                    try:
-                        dispatched = cls._try_dispatch(key, inputs, config)
-                    except Exception as e:
-                        logger.error(
-                            "Tool %s: _try_dispatch raised %s: %s",
-                            key,
-                            type(e).__name__,
-                            e,
-                        )
-                        return _make_error_output_or_raise(
-                            output_class,
-                            key,
-                            start_time,
-                            e,
-                            traceback.format_exc(),
-                        )
-                    if dispatched is not None:
-                        return _finish_dispatched(dispatched)
 
                     # Scale effective_timeout() by the iterable batch size.
                     if spec is not None and spec.iterable_input_fields is not None:

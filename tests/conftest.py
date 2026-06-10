@@ -692,8 +692,7 @@ def pytest_addoption(parser):
         "--use-cloud",
         action="store_true",
         default=False,
-        help="Route every tool run through device='cloud' (proto_tools.cloud.use_api_backend). "
-        "Requires PROTO_API_KEY in the environment.",
+        help="Route every tool run through device='cloud'. Requires PROTO_API_KEY in the environment.",
     )
     parser.addoption(
         "--benchmark-report",
@@ -1314,20 +1313,18 @@ def _env_report_clean_envs(request, setup_test_logging):
 
 @pytest.fixture(scope="session", autouse=True)
 def _route_tests_to_cloud(request):
-    """Arm proto_tools.cloud and patch BaseConfig.device default to 'cloud' when --use-cloud is set.
+    """Patch BaseConfig.device default to 'cloud' when --use-cloud is set.
 
     Lets a test that already passes ``Config()`` without an explicit ``device=`` run
-    locally (default ``"cpu"``) or against Proto's remote execution service
-    (``--use-cloud``) without any change to the test body.
+    locally (default ``"cpu"``) or against Proto's hosted execution service
+    (``--use-cloud``) without any change to the test body. The cloud path
+    activates automatically as long as ``PROTO_API_KEY`` is in the env.
     """
     if not request.config.getoption("--use-cloud"):
         yield
         return
 
-    from proto_tools.cloud import disable_api_backend, use_api_backend
     from proto_tools.utils.base_config import BaseConfig
-
-    use_api_backend()
 
     all_classes = {BaseConfig} | _all_subclasses(BaseConfig)
     originals = {}
@@ -1347,7 +1344,6 @@ def _route_tests_to_cloud(request):
             fi.default = original
     for cls in all_classes:
         cls.model_rebuild(force=True)
-    disable_api_backend()
 
 
 @pytest.fixture(scope="session", autouse=True)

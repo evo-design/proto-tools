@@ -1,6 +1,6 @@
 """tests/tool_infra_tests/test_cloud.py.
 
-Tests for device="cloud" dispatch via proto_tools.cloud.use_api_backend.
+Tests for device="cloud" dispatch via proto_tools.cloud.dispatch_to_cloud.
 
 ``proto_client`` is stubbed via ``sys.modules`` so tests run without the
 real SDK installed and without hitting a network.
@@ -16,11 +16,6 @@ from typing import Any
 import pytest
 from pydantic import Field
 
-from proto_tools.cloud import (
-    disable_api_backend,
-    is_api_backend_enabled,
-    use_api_backend,
-)
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.utils import BaseConfig, ConfigField
 from proto_tools.utils.tool_io import BaseToolInput
@@ -127,7 +122,7 @@ class _FakeProtoAuthError(Exception):
 
 @pytest.fixture
 def fake_proto_client(monkeypatch):
-    """Install a fake ``proto_client`` module + stub key so use_api_backend() can construct a client."""
+    """Install a fake ``proto_client`` module + stub key so dispatch_to_cloud can construct a client."""
     fake_module = types.ModuleType("proto_client")
     fake_module.ProtoClient = _StubProtoClient  # type: ignore[attr-defined]
     fake_errors = types.ModuleType("proto_client.errors")
@@ -136,21 +131,45 @@ def fake_proto_client(monkeypatch):
     monkeypatch.setitem(sys.modules, "proto_client", fake_module)
     monkeypatch.setitem(sys.modules, "proto_client.errors", fake_errors)
     monkeypatch.setenv("PROTO_API_KEY", "test-stub-key")
+
+    # Clear the lru_cache so each test gets a fresh client.
+    from proto_tools.cloud import _get_client
+
+    _get_client.cache_clear()
     _StubProtoClient.last_instance = None
     yield _StubProtoClient
+    _get_client.cache_clear()
     _StubProtoClient.last_instance = None
 
 
 @pytest.fixture
 def clean_registry():
-    """Clean tool registry + cloud state for each test."""
+    """Clean tool registry state for each test."""
     original_registry = ToolRegistry._registry.copy()
-    original_dispatch = ToolRegistry._try_dispatch
     ToolRegistry._registry.clear()
     yield ToolRegistry
     ToolRegistry._registry = original_registry
-    disable_api_backend()
-    ToolRegistry._try_dispatch = original_dispatch  # type: ignore[method-assign]
+
+
+@pytest.fixture
+def arm_stub_client(monkeypatch):
+    """Helper: monkey-patch ``_StubProtoClient.__init__`` to seed tools/assets state at construction.
+
+    Required because the dispatcher constructs ``ProtoClient`` lazily inside the
+    call path, so we can't reach into ``last_instance`` before the SDK call has
+    already happened. Each test calls ``arm_stub_client(setup=...)`` to inject
+    output, raise_on_run, or asset state into the stub at construction time.
+    """
+    original_init = _StubProtoClient.__init__
+
+    def _arm(setup):
+        def _init_with_setup(self, **kwargs):
+            original_init(self, **kwargs)
+            setup(self)
+
+        monkeypatch.setattr(_StubProtoClient, "__init__", _init_with_setup)
+
+    return _arm
 
 
 def _register_cloud_tool(
@@ -178,7 +197,7 @@ def _register_cloud_tool(
     return registry.get(key)
 
 
-# ─ parse_device_string / is_api_backend_enabled ──────────────────────────────
+# ─ parse_device_string ───────────────────────────────────────────────────────
 
 
 def test_parse_device_string_accepts_cloud():
@@ -191,97 +210,84 @@ def test_parse_device_string_accepts_cloud():
     assert spec.count == 1
 
 
-def test_is_api_backend_enabled_defaults_false():
-    """Before use_api_backend() is called, the flag is off."""
-    assert is_api_backend_enabled() is False
+# ─ device='cloud' dispatch ───────────────────────────────────────────────────
 
 
-# ─ use_api_backend wiring ────────────────────────────────────────────────────
+def test_device_cloud_returns_validated_output(fake_proto_client, arm_stub_client, clean_registry):
+    """A registered tool with device='cloud' returns the validated cloud response."""
+    arm_stub_client(lambda c: setattr(c.tools, "output_to_return", {"result": "from-api"}))
+    spec = _register_cloud_tool(clean_registry, "api-tool-2")
 
-
-def test_use_api_backend_routes_device_cloud(fake_proto_client, clean_registry):
-    """device='cloud' dispatches through proto-client and returns the validated output."""
-    use_api_backend(poll_interval=0.25, timeout=5.0, api_key="test-key")
-    assert is_api_backend_enabled() is True
-
-    client = fake_proto_client.last_instance
-    assert client is not None
-    assert client.kwargs == {"api_key": "test-key"}
-    client.tools.output_to_return = {"result": "from-api"}
-
-    spec = _register_cloud_tool(clean_registry, "api-tool")
     result = spec.function(_CloudInput(payload="hi"), _CloudConfig(device="cloud"))
 
     assert isinstance(result, _CloudOutput)
     assert result.result == "from-api"
     assert result.success is True
-    assert result.tool_id == "api-tool"
-
-    assert len(client.tools.calls) == 1
-    call = client.tools.calls[0]
-    assert call["tool_key"] == "api-tool"
-    assert call["inputs"] == {"payload": "hi"}
-    # device='cloud' is the client-side routing signal; the server picks its own
-    # physical device, so the dispatcher strips device before sending.
-    assert "device" not in call["config"]
-    assert call["poll_interval"] == 0.25
-    assert call["timeout"] == 5.0
-    assert call["output_model"] is None
-
-
-def test_use_api_backend_defaults_to_tool_config_timeout(fake_proto_client, clean_registry):
-    """Default cloud dispatch respects the selected tool config's effective timeout."""
-    use_api_backend(api_key="test-key")
+    assert result.tool_id == "api-tool-2"
 
     client = fake_proto_client.last_instance
     assert client is not None
-    client.tools.output_to_return = {"result": "from-api"}
+    assert len(client.tools.calls) == 1
+    call = client.tools.calls[0]
+    assert call["tool_key"] == "api-tool-2"
+    assert call["inputs"] == {"payload": "hi"}
+    # device='cloud' is the client-side routing signal; the server picks its
+    # own physical device, so the dispatcher strips device before sending.
+    assert "device" not in call["config"]
+    assert call["output_model"] is None
 
+
+def test_device_cloud_uses_tool_config_timeout(fake_proto_client, arm_stub_client, clean_registry):
+    """Cloud dispatch passes the selected tool config's effective timeout to the SDK."""
+    arm_stub_client(lambda c: setattr(c.tools, "output_to_return", {"result": "from-api"}))
     spec = _register_cloud_tool(clean_registry, "slow-api-tool", config_class=_SlowCloudConfig)
-    result = spec.function(_CloudInput(payload="hi"), _SlowCloudConfig(device="cloud"))
 
-    assert isinstance(result, _CloudOutput)
+    spec.function(_CloudInput(payload="hi"), _SlowCloudConfig(device="cloud"))
+
+    client = fake_proto_client.last_instance
+    assert client is not None
     assert client.tools.calls[0]["timeout"] == 1200.0
 
 
-def test_cloud_output_assets_are_decoded_before_validation(fake_proto_client, clean_registry):
+def test_cloud_output_assets_are_decoded_before_validation(fake_proto_client, arm_stub_client, clean_registry):
     """Cloud dispatch materializes output AssetRefs before applying the proto-tools output model."""
-    use_api_backend()
-    client = fake_proto_client.last_instance
-    client.assets.decoded_by_id = {
-        "structure_asset": "data_test\n#",
-        "scores_asset": [[0.91, 0.87]],
-    }
-    client.tools.output_to_return = {
-        "structure": {
-            "id": "structure_asset",
-            "kind": "output",
-            "mime_type": "chemical/x-mmcif",
-            "url": "https://api.test/api/v1/assets/structure_asset",
-        },
-        "scores": {
-            "id": "scores_asset",
-            "kind": "output",
-            "mime_type": "application/json+gzip",
-            "url": "https://api.test/api/v1/assets/scores_asset",
-        },
-    }
 
+    def _seed(c):
+        c.assets.decoded_by_id = {
+            "structure_asset": "data_test\n#",
+            "scores_asset": [[0.91, 0.87]],
+        }
+        c.tools.output_to_return = {
+            "structure": {
+                "id": "structure_asset",
+                "kind": "output",
+                "mime_type": "chemical/x-mmcif",
+                "url": "https://api.test/api/v1/assets/structure_asset",
+            },
+            "scores": {
+                "id": "scores_asset",
+                "kind": "output",
+                "mime_type": "application/json+gzip",
+                "url": "https://api.test/api/v1/assets/scores_asset",
+            },
+        }
+
+    arm_stub_client(_seed)
     spec = _register_cloud_tool(clean_registry, "asset-tool", output_class=_CloudAssetOutput)
+
     result = spec.function(_CloudInput(payload="hi"), _CloudConfig(device="cloud"))
 
     assert isinstance(result, _CloudAssetOutput)
     assert result.structure == "data_test\n#"
     assert result.scores == [[0.91, 0.87]]
+    client = fake_proto_client.last_instance
+    assert client is not None
     assert [ref["id"] for ref in client.assets.calls] == ["structure_asset", "scores_asset"]
 
 
-def test_device_cloud_dispatches_before_preprocess(fake_proto_client, clean_registry):
+def test_device_cloud_dispatches_before_preprocess(fake_proto_client, arm_stub_client, clean_registry):
     """device='cloud' sends the original request instead of running local preprocess first."""
-    expected = _CloudOutput(result="from-api")
-    use_api_backend()
-    fake_proto_client.last_instance.tools.output_to_return = expected
-
+    arm_stub_client(lambda c: setattr(c.tools, "output_to_return", {"result": "from-api"}))
     clean_registry.register(
         key="preprocess-tool",
         label="preprocess-tool",
@@ -297,50 +303,15 @@ def test_device_cloud_dispatches_before_preprocess(fake_proto_client, clean_regi
     result = spec.function(_CloudInput(payload="raw"), _PreprocessConfig(device="cloud"))
 
     assert result.result == "from-api"
-    call = fake_proto_client.last_instance.tools.calls[0]
+    client = fake_proto_client.last_instance
+    assert client is not None
+    call = client.tools.calls[0]
     assert call["inputs"] == {"payload": "raw"}
     assert "local_path" not in call["config"]
 
 
-def test_device_cloud_uses_custom_dispatch_without_proto_client_backend(clean_registry):
-    """Other ToolRegistry dispatch hooks can handle device='cloud' without proto_tools.cloud."""
-    original_dispatch = ToolRegistry._try_dispatch
-
-    clean_registry.register(
-        key="custom-cloud-tool",
-        label="custom-cloud-tool",
-        category="test",
-        input_class=_CloudInput,
-        config_class=_PreprocessConfig,
-        output_class=_CloudOutput,
-        description="custom-cloud-tool",
-        uses_gpu=True,
-    )(lambda inputs, config, instance=None: _CloudOutput(result="local"))
-    spec = clean_registry.get("custom-cloud-tool")
-    seen: dict[str, Any] = {}
-
-    def _custom_dispatch(cls, key, inputs, config):
-        del cls
-        seen["key"] = key
-        seen["inputs"] = inputs.model_dump()
-        seen["config"] = config.model_dump(exclude_none=True)
-        return _CloudOutput(result="custom")
-
-    ToolRegistry._try_dispatch = classmethod(_custom_dispatch)
-    try:
-        result = spec.function(_CloudInput(payload="raw"), _PreprocessConfig(device="cloud"))
-    finally:
-        ToolRegistry._try_dispatch = original_dispatch
-
-    assert result.result == "custom"
-    assert seen["key"] == "custom-cloud-tool"
-    assert seen["inputs"] == {"payload": "raw"}
-    assert seen["config"]["device"] == "cloud"
-
-
-def test_device_cpu_falls_through_to_local(fake_proto_client, clean_registry):
-    """After use_api_backend(), non-cloud devices must still run locally."""
-    use_api_backend()
+def test_device_cpu_runs_locally(fake_proto_client, clean_registry):
+    """Non-cloud devices must still run locally, even when fake_proto_client is installed."""
 
     def _local_impl(inputs, config, instance=None):
         del config, instance
@@ -361,24 +332,14 @@ def test_device_cpu_falls_through_to_local(fake_proto_client, clean_registry):
 
     assert result.result == "local:y"
     assert result.success is True
-    assert fake_proto_client.last_instance.tools.calls == []
-
-
-def test_device_cloud_without_use_api_backend_raises(clean_registry):
-    """device='cloud' without use_api_backend() surfaces a clear configuration error."""
-    assert is_api_backend_enabled() is False
-    spec = _register_cloud_tool(clean_registry, "no-backend")
-
-    with pytest.raises(RuntimeError, match="Proto's remote execution backend is not enabled"):
-        spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
+    assert fake_proto_client.last_instance is None  # client never constructed
 
 
 # ─ local_cpu no-op ───────────────────────────────────────────────────────────
 
 
-def test_device_cloud_noops_for_local_cpu_without_backend(clean_registry):
-    """device='cloud' on a local_cpu tool runs locally even without use_api_backend()."""
-    assert is_api_backend_enabled() is False
+def test_device_cloud_noops_for_local_cpu(fake_proto_client, clean_registry):
+    """device='cloud' on a local_cpu tool runs locally without hitting the cloud client."""
 
     def _local_impl(inputs, config, instance=None):
         del config, instance
@@ -400,32 +361,7 @@ def test_device_cloud_noops_for_local_cpu_without_backend(clean_registry):
 
     assert result.result == "local:hi"
     assert result.success is True
-
-
-def test_device_cloud_noops_for_local_cpu_with_backend(fake_proto_client, clean_registry):
-    """device='cloud' on a local_cpu tool bypasses the cloud client even when use_api_backend() is on."""
-    use_api_backend()
-
-    def _local_impl(inputs, config, instance=None):
-        del config, instance
-        return _CloudOutput(result=f"local:{inputs.payload}")
-
-    clean_registry.register(
-        key="local-cpu-tool-with-backend",
-        label="local-cpu-tool-with-backend",
-        category="test",
-        input_class=_CloudInput,
-        config_class=_CloudConfig,
-        output_class=_CloudOutput,
-        description="pure-python tool — no GPU, no standalone env",
-    )(_local_impl)
-    spec = clean_registry.get("local-cpu-tool-with-backend")
-    assert spec.local_cpu is True
-
-    result = spec.function(_CloudInput(payload="ok"), _CloudConfig(device="cloud"))
-
-    assert result.result == "local:ok"
-    assert fake_proto_client.last_instance.tools.calls == []
+    assert fake_proto_client.last_instance is None
 
 
 def test_device_cloud_noop_leaves_caller_config_untouched(clean_registry):
@@ -453,107 +389,104 @@ def test_device_cloud_noop_leaves_caller_config_untouched(clean_registry):
     assert caller_config.device == "cloud"
 
 
-def test_use_api_backend_without_proto_client_raises(monkeypatch):
-    """use_api_backend() raises a helpful ImportError if proto-client is missing."""
-    import builtins
-
-    monkeypatch.delitem(sys.modules, "proto_client", raising=False)
-    real_import = builtins.__import__
-
-    def _blocked_import(name, *args, **kwargs):
-        if name == "proto_client":
-            raise ImportError("No module named 'proto_client'")
-        return real_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", _blocked_import)
-
-    with pytest.raises(ImportError, match=r"proto-tools\[cloud\]"):
-        use_api_backend()
-
-
 # ─ failure handling ──────────────────────────────────────────────────────────
 
 
-def test_transport_error_propagates_to_caller(fake_proto_client, clean_registry):
-    """Non-auth SDK failures (network, 5xx, etc.) propagate unchanged — not buried as the placeholder."""
-    use_api_backend()
-    fake_proto_client.last_instance.tools.raise_on_run = ConnectionError("network down")
+def test_no_api_key_raises_cloud_status(monkeypatch, clean_registry):
+    """device='cloud' with no PROTO_API_KEY surfaces the coming-soon status."""
+    monkeypatch.delenv("PROTO_API_KEY", raising=False)
+    # Need a stub proto_client so the ImportError path doesn't fire first.
+    fake_module = types.ModuleType("proto_client")
+    fake_module.ProtoClient = _StubProtoClient  # type: ignore[attr-defined]
+    fake_errors = types.ModuleType("proto_client.errors")
+    fake_errors.ProtoAuthError = _FakeProtoAuthError  # type: ignore[attr-defined]
+    fake_module.errors = fake_errors  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "proto_client", fake_module)
+    monkeypatch.setitem(sys.modules, "proto_client.errors", fake_errors)
+    spec = _register_cloud_tool(clean_registry, "no-key")
 
+    with pytest.raises(NotImplementedError, match="coming soon"):
+        spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
+
+
+def test_missing_proto_client_raises_install_hint(monkeypatch, clean_registry):
+    """If proto-client isn't installed, the user gets a `pip install proto-client` hint."""
+    import builtins
+
+    monkeypatch.delitem(sys.modules, "proto_client", raising=False)
+    monkeypatch.delitem(sys.modules, "proto_client.errors", raising=False)
+    real_import = builtins.__import__
+
+    def _blocked_import(name, *args, **kwargs):
+        if name == "proto_client" or name.startswith("proto_client."):
+            raise ImportError(f"No module named {name!r}")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _blocked_import)
+    monkeypatch.setenv("PROTO_API_KEY", "test-stub-key")
+
+    spec = _register_cloud_tool(clean_registry, "no-sdk")
+
+    with pytest.raises(ImportError, match=r"pip install proto-client"):
+        spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
+
+
+def test_invalid_api_key_raises_permission_error(fake_proto_client, arm_stub_client, clean_registry):
+    """A ProtoAuthError surfaces as PermissionError with the invalid-key guidance."""
+    arm_stub_client(lambda c: setattr(c.tools, "raise_on_run", _FakeProtoAuthError("unauthorized", status_code=401)))
+    spec = _register_cloud_tool(clean_registry, "bad-key-tool")
+
+    with pytest.raises(PermissionError, match="API key was rejected"):
+        spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
+
+
+def test_transport_error_propagates_to_caller(fake_proto_client, arm_stub_client, clean_registry):
+    """Non-auth SDK failures (network, 5xx, etc.) propagate unchanged — not buried as the placeholder."""
+    arm_stub_client(lambda c: setattr(c.tools, "raise_on_run", ConnectionError("network down")))
     spec = _register_cloud_tool(clean_registry, "transport-failing-tool")
 
     with pytest.raises(ConnectionError, match="network down"):
         spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
 
 
-def test_real_tool_failure_propagates_to_caller(fake_proto_client, clean_registry):
+def test_real_tool_failure_propagates_to_caller(fake_proto_client, arm_stub_client, clean_registry):
     """A RuntimeError from proto-client (failed/cancelled job) propagates with the original message."""
-    use_api_backend()
-    fake_proto_client.last_instance.tools.raise_on_run = RuntimeError(
-        "Job fc-1 failed: ValueError: chain 'A' not present"
+    arm_stub_client(
+        lambda c: setattr(c.tools, "raise_on_run", RuntimeError("Job fc-1 failed: ValueError: chain 'A' not present"))
     )
-
     spec = _register_cloud_tool(clean_registry, "failing-cloud-tool")
 
     with pytest.raises(RuntimeError, match="chain 'A'"):
         spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
 
 
-def test_unexpected_result_type_raises(fake_proto_client, clean_registry):
+def test_unexpected_result_type_raises(fake_proto_client, arm_stub_client, clean_registry):
     """If proto-client returns a non-conforming result, cloud dispatch flags it."""
-    use_api_backend()
-    fake_proto_client.last_instance.tools.output_to_return = {"unexpected": "ok"}
-
+    arm_stub_client(lambda c: setattr(c.tools, "output_to_return", {"unexpected": "ok"}))
     spec = _register_cloud_tool(clean_registry, "type-check-tool")
 
     with pytest.raises(Exception, match="does not conform to _CloudOutput"):
         spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
 
 
-# ─ disable ───────────────────────────────────────────────────────────────────
+# ─ api_key override ──────────────────────────────────────────────────────────
 
 
-def test_disable_api_backend_restores_default(fake_proto_client, clean_registry):
-    """disable_api_backend() clears the flag and restores local dispatch."""
-    use_api_backend()
-    assert is_api_backend_enabled() is True
+def test_explicit_api_key_overrides_env(fake_proto_client, arm_stub_client, monkeypatch, clean_registry):
+    """dispatch_to_cloud's api_key kwarg takes precedence over PROTO_API_KEY."""
+    monkeypatch.setenv("PROTO_API_KEY", "env-key")
+    arm_stub_client(lambda c: setattr(c.tools, "output_to_return", {"result": "ok"}))
+    _register_cloud_tool(clean_registry, "explicit-key-tool")
 
-    disable_api_backend()
-    assert is_api_backend_enabled() is False
+    from proto_tools.cloud import dispatch_to_cloud
 
-    def _local_impl(inputs, config, instance=None):
-        del inputs, config, instance
-        return _CloudOutput(result="local-after-disable")
+    dispatch_to_cloud(
+        "explicit-key-tool",
+        _CloudInput(payload="hi"),
+        _CloudConfig(device="cloud"),
+        api_key="explicit-key",
+    )
 
-    clean_registry.register(
-        key="post-disable-tool",
-        label="post-disable-tool",
-        category="test",
-        input_class=_CloudInput,
-        config_class=_CloudConfig,
-        output_class=_CloudOutput,
-        description="post-disable-tool",
-    )(_local_impl)
-    spec = clean_registry.get("post-disable-tool")
-
-    result = spec.function(_CloudInput(payload="q"), _CloudConfig(device="cpu"))
-    assert result.result == "local-after-disable"
-    del fake_proto_client
-
-
-def test_use_api_backend_called_twice_replaces_client(fake_proto_client, clean_registry):
-    """Re-calling use_api_backend() swaps the active client."""
-    use_api_backend(api_key="first")
-    first = fake_proto_client.last_instance
-    use_api_backend(api_key="second")
-    second = fake_proto_client.last_instance
-
-    assert first is not second
-    assert second.kwargs == {"api_key": "second"}
-
-    second.tools.output_to_return = _CloudOutput(result="second-client")
-    spec = _register_cloud_tool(clean_registry, "swap-tool")
-    result = spec.function(_CloudInput(payload="z"), _CloudConfig(device="cloud"))
-
-    assert result.result == "second-client"
-    assert first.tools.calls == []
-    assert len(second.tools.calls) == 1
+    client = fake_proto_client.last_instance
+    assert client is not None
+    assert client.kwargs == {"api_key": "explicit-key"}

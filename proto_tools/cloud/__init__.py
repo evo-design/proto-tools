@@ -1,21 +1,21 @@
 """Cloud-dispatch support for the ``device="cloud"`` option.
 
-When a tool is called with ``config.device == "cloud"``,
-``ToolRegistry._try_dispatch`` routes the call to Proto's remote
-execution service via ``proto-client`` before local preprocessing or
-worker setup runs.
+When a tool is called with ``config.device == "cloud"``, the registry
+routes the call to Proto's hosted execution service via
+:func:`dispatch_to_cloud`.
 
-Enable with :func:`use_api_backend` (requires the ``cloud`` extra:
-``pip install proto-tools[cloud]``).
+The dispatcher reads ``PROTO_API_KEY`` from the environment (or accepts
+an explicit ``api_key`` kwarg). No setup ceremony is required — cloud is
+available whenever ``proto-client`` is installed and a key is configured.
 
 Example::
 
-    from proto_tools.cloud import use_api_backend
+    from proto_tools import run_esmfold
 
-    use_api_backend()  # reads PROTO_API_KEY from env
-    result = run_esmfold(inputs, Config(device="cloud"))
+    result = run_esmfold(inputs, Config(device="cloud"))  # uses PROTO_API_KEY
 """
 
+import functools
 import logging
 import os
 from typing import Any
@@ -28,19 +28,42 @@ from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 logger = logging.getLogger(__name__)
 
-# TODO: remove once cloud is generally available — drop _NOT_READY_MSG, the API-key precheck in use_api_backend(), and the ProtoAuthError catch in _route_to_cloud, so all SDK exceptions propagate.
-_NOT_READY_MSG = (
+# TODO: replace "(request link coming soon)" / "(contact link coming soon)" with the real signup + support URLs once they're live.
+# TODO: drop _CLOUD_STATUS / _INVALID_KEY and the ProtoAuthError catch once cloud is generally available — SDK exceptions should propagate as-is.
+
+_CLOUD_STATUS = (
     "\n"
-    "  ┌─────────────────────────────────────────────────────────────┐\n"
-    "  │  Proto Cloud (device='cloud') is coming soon!               │\n"
-    "  │                                                             │\n"
-    "  │  Our hosted execution service is not yet generally          │\n"
-    "  │  available. For now, please run tools locally using         │\n"
-    "  │  device='cpu' or device='cuda'.                             │\n"
-    "  └─────────────────────────────────────────────────────────────┘\n"
+    "No API key was detected.\n"
+    "\n"
+    "device='cloud' is coming soon! We're rolling out to beta-testers in the\n"
+    "coming weeks — only approved users will have API keys for now.\n"
+    "\n"
+    "Request access: (request link coming soon)\n"
+    "\n"
+    "Once approved, set PROTO_API_KEY in your environment and re-run;\n"
+    "device='cloud' will dispatch automatically.\n"
+    "\n"
+    "In the meantime, run locally with device='cpu' or device='cuda'.\n"
 )
 
-_enabled: bool = False
+_INVALID_KEY = (
+    "\n"
+    "Your Proto API key was rejected.\n"
+    "\n"
+    "Double-check the PROTO_API_KEY value and confirm your account is\n"
+    "approved for beta access. If you believe this is in error, contact\n"
+    "the Proto team: (contact link coming soon)\n"
+)
+
+_DEFAULT_POLL_INTERVAL = 1.0
+_DEFAULT_FALLBACK_TIMEOUT = 600.0
+
+
+@functools.lru_cache(maxsize=4)
+def _get_client(api_key: str) -> Any:
+    from proto_client import ProtoClient
+
+    return ProtoClient(api_key=api_key)
 
 
 def _is_output_asset_ref(value: Any) -> bool:
@@ -54,115 +77,85 @@ def _decode_output_assets(value: Any, assets: Any) -> Any:
         except Exception as exc:
             raise RuntimeError(f"Failed to decode cloud output asset {value.get('id')!r}: {exc}") from exc
     if isinstance(value, dict):
-        return {key: _decode_output_assets(item, assets) for key, item in value.items()}
+        return {k: _decode_output_assets(v, assets) for k, v in value.items()}
     if isinstance(value, list):
-        return [_decode_output_assets(item, assets) for item in value]
+        return [_decode_output_assets(v, assets) for v in value]
     return value
 
 
-def use_api_backend(
+def dispatch_to_cloud(
+    key: str,
+    inputs: BaseToolInput,
+    config: BaseConfig | None,
     *,
-    poll_interval: float = 1.0,
-    timeout: float | None = None,
-    **client_kwargs: Any,
-) -> None:
-    """Enable ``device="cloud"`` by routing tool runs through ``proto-client``.
-
-    Constructs a :class:`proto_client.ProtoClient` and installs a dispatch
-    hook on :class:`ToolRegistry`. The SDK reads ``PROTO_API_KEY`` (and
-    optionally ``PROTO_TOOLS_BASE_URL``) from the environment unless
-    overridden via ``client_kwargs``.
+    api_key: str | None = None,
+) -> BaseToolOutput:
+    """Submit a tool call to Proto's hosted execution service.
 
     Args:
-        poll_interval (float): Seconds between job-status polls.
-        timeout (float | None): Optional global max seconds to wait for a
-            single tool to complete. When unset, each tool's config timeout is
-            used.
-        client_kwargs (Any): Forwarded to :class:`proto_client.ProtoClient`
-            (e.g. ``api_key``, ``tools_base_url``).
+        key (str): Registry key (e.g. ``"esmfold-prediction"``).
+        inputs (BaseToolInput): Tool input payload.
+        config (BaseConfig | None): Tool configuration. ``config.device``
+            is stripped before sending — the server picks its own
+            physical device.
+        api_key (str | None): Overrides ``PROTO_API_KEY`` env var.
+
+    Returns:
+        BaseToolOutput: The validated tool output.
 
     Raises:
         ImportError: If ``proto-client`` is not installed. Install with
-            ``pip install proto-tools[cloud]``.
-        NotImplementedError: If no API key is configured (neither
-            ``api_key`` kwarg nor ``PROTO_API_KEY`` env var). The
-            placeholder message documents that cloud isn't generally
-            available yet.
+            ``pip install proto-client``.
+        NotImplementedError: If no API key is configured. Surfaces the
+            beta-access status message.
+        PermissionError: If the configured key is rejected by the server.
+        TypeError: If the server response doesn't match the tool's
+            ``output_model`` schema.
     """
     try:
-        from proto_client import ProtoClient
         from proto_client.errors import ProtoAuthError
     except ImportError as exc:
-        raise ImportError(
-            "device='cloud' requires proto-client. Install with `pip install proto-tools[cloud]`."
-        ) from exc
+        raise ImportError("device='cloud' requires proto-client. Install with `pip install proto-client`.") from exc
 
-    # API-key gate: no key configured → user-facing placeholder. Auth failures from a configured-but-invalid key are caught below.
-    if not client_kwargs.get("api_key") and not os.environ.get("PROTO_API_KEY"):
-        raise NotImplementedError(_NOT_READY_MSG)
+    resolved_key = api_key if api_key is not None else os.environ.get("PROTO_API_KEY")
+    if not resolved_key:
+        raise NotImplementedError(_CLOUD_STATUS)
 
-    client = ProtoClient(**client_kwargs)
+    client = _get_client(resolved_key)
+    output_class = ToolRegistry.get(key).output_model
 
-    def _route_to_cloud(
-        _cls: type,
-        key: str,
-        inputs: BaseToolInput,
-        config: BaseConfig | None,
-    ) -> BaseToolOutput | None:
-        if config is None or config.device != "cloud":
-            return None
-        output_class = ToolRegistry.get(key).output_model
-        # device='cloud' is the routing signal for this client; the server picks its own physical device, so strip it before sending.
-        config_payload = config.model_dump(exclude_none=True)
-        config_payload.pop("device", None)
-        tool_timeout = timeout if timeout is not None else config.effective_timeout()
-        if tool_timeout is None:
-            logger.warning("No timeout configured for cloud run of %r; capping at 600s.", key)
-            tool_timeout = 600.0
-        try:
-            response = client.tools.run(
-                key,
-                inputs=inputs.model_dump(exclude_none=True),
-                config=config_payload,
-                poll_interval=poll_interval,
-                timeout=float(tool_timeout),
-                output_model=None,
-            )
-        except ProtoAuthError as exc:
-            # Invalid / unauthorized key — surface the user-facing placeholder. All other SDK exceptions propagate.
-            logger.debug("Cloud auth error for %r: %s", key, exc, exc_info=True)
-            raise NotImplementedError(_NOT_READY_MSG) from exc
+    # device='cloud' is the client-side routing signal; the server picks its own physical device, so strip it before sending.
+    config_payload = config.model_dump(exclude_none=True) if config is not None else {}
+    config_payload.pop("device", None)
 
-        decoded_result = _decode_output_assets(response.result, client.assets)
-        try:
-            return output_class.model_validate(decoded_result)
-        except ValidationError as exc:
-            raise TypeError(f"Tool {key!r} result does not conform to {output_class.__name__}: {exc}") from exc
+    tool_timeout: float | None = config.effective_timeout() if config is not None else None
+    if tool_timeout is None:
+        logger.warning(
+            "No timeout configured for cloud run of %r; capping at %ss.",
+            key,
+            _DEFAULT_FALLBACK_TIMEOUT,
+        )
+        tool_timeout = _DEFAULT_FALLBACK_TIMEOUT
 
-    setattr(ToolRegistry, "_try_dispatch", classmethod(_route_to_cloud))  # noqa: B010
-    global _enabled  # noqa: PLW0603 — module-level on/off flag
-    _enabled = True
+    try:
+        response = client.tools.run(
+            key,
+            inputs=inputs.model_dump(exclude_none=True),
+            config=config_payload,
+            poll_interval=_DEFAULT_POLL_INTERVAL,
+            timeout=float(tool_timeout),
+            output_model=None,
+        )
+    except ProtoAuthError as exc:
+        # Distinct from the no-key path, which raises NotImplementedError(_CLOUD_STATUS) above. All other SDK exceptions propagate.
+        logger.debug("Cloud auth error for %r: %s", key, exc, exc_info=True)
+        raise PermissionError(_INVALID_KEY) from exc
+
+    decoded_result = _decode_output_assets(response.result, client.assets)
+    try:
+        return output_class.model_validate(decoded_result)
+    except ValidationError as exc:
+        raise TypeError(f"Tool {key!r} result does not conform to {output_class.__name__}: {exc}") from exc
 
 
-def disable_api_backend() -> None:
-    """Restore default local dispatch. Primarily for tests."""
-
-    def _noop(
-        _cls: type,
-        _key: str,
-        _inputs: BaseToolInput,
-        _config: BaseConfig | None,
-    ) -> BaseToolOutput | None:
-        return None
-
-    setattr(ToolRegistry, "_try_dispatch", classmethod(_noop))  # noqa: B010
-    global _enabled  # noqa: PLW0603 — module-level on/off flag
-    _enabled = False
-
-
-def is_api_backend_enabled() -> bool:
-    """Return True iff :func:`use_api_backend` has been called (and not since disabled)."""
-    return _enabled
-
-
-__all__ = ["disable_api_backend", "is_api_backend_enabled", "use_api_backend"]
+__all__ = ["dispatch_to_cloud"]

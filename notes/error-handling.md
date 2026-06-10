@@ -2,7 +2,7 @@
 
 This note covers how `proto_tools` decides whether a tool exception is raised or captured, including capture mode, the retry loop, the `MissingAssetError` carve-out, pool error aggregation, and GPU out-of-memory handling.
 
-The `@tool` decorator in `proto_tools/tools/tool_registry.py` **raises by default** when a tool function (or its retry-exhausted `_RETRYABLE_EXCEPTIONS` loop, or the cloud `_try_dispatch` hook) lets an exception escape. Callers see the original exception with a meaningful traceback at the call site.
+The `@tool` decorator in `proto_tools/tools/tool_registry.py` **raises by default** when a tool function (or its retry-exhausted `_RETRYABLE_EXCEPTIONS` loop, or the cloud `dispatch_to_cloud` call) lets an exception escape. Callers see the original exception with a meaningful traceback at the call site.
 
 Capture mode, where the exception is packed into `output.errors` with `success=False` and returned to the caller instead of raising, is opt-in.
 
@@ -45,9 +45,9 @@ The wrapper retries `ConnectionError` (and any other entry in `_RETRYABLE_EXCEPT
 
 `ToolPool._parallel_dispatch` is independent of the policy, because pool partitions call the **raw undecorated** tool function, bypassing the `@tool` wrapper entirely. Per-partition exceptions are caught by the pool's own `try: future.result() except Exception` and aggregated into `PartialFailureError`, with the original exception type preserved on `PartialFailureError.failed[i]["exception"]` and successful partitions' results preserved on `PartialFailureError.succeeded`.
 
-## Cloud / `_try_dispatch`
+## Cloud / `dispatch_to_cloud`
 
-`proto_tools.cloud._route_to_cloud` raises on remote failure, and the wrapper propagates that exception to the caller by default. Setting `PROTO_CAPTURE_ERRORS=1` packs the cloud exception into a `success=False` output, identical to the local-execution capture path.
+`proto_tools.cloud.dispatch_to_cloud` raises on remote failure, and the wrapper propagates that exception to the caller by default. Setting `PROTO_CAPTURE_ERRORS=1` packs the cloud exception into a `success=False` output, identical to the local-execution capture path.
 
 ## GPU out-of-memory
 
