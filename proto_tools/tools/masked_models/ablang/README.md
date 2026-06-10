@@ -5,7 +5,7 @@
 ![AbLang](https://proto-bio.github.io/proto-assets/images/tool/ablang/hero.png)
 
 > [!NOTE]
-> **License:** AbLang is open source and free for academic and commercial use under a BSD-3-Clause license. Please refer to [the license](https://github.com/oxpig/AbLang/blob/main/LICENSE) for full terms.
+> **License:** AbLang is open source and free for academic and commercial use under a BSD-3-Clause license. Please refer to [the license](https://github.com/oxpig/AbLang2/blob/main/LICENSE) for full terms.
 
 ## Overview
 

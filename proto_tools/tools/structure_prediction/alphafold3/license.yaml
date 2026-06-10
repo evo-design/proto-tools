@@ -1,5 +1,5 @@
 code:
-  spdx: CC-BY-NC-SA-4.0
+  spdx: Apache-2.0
   url: https://github.com/google-deepmind/alphafold3/blob/main/LICENSE
 weights:
   spdx: Custom (AlphaFold 3 Model Parameters Terms of Use)
@@ -9,5 +9,5 @@ weights:
 commercial_use: 'no'
 redistribution: false
 attribution_required: true
-notes: alphafold3 code is CC-BY-NC-SA-4.0 (non-commercial, ShareAlike). Weights are gated and released under DeepMind's separate AlphaFold 3 Model Parameters Terms of Use (non-commercial research only).
+notes: alphafold3 code is Apache-2.0. Weights are gated and released under DeepMind's separate AlphaFold 3 Model Parameters Terms of Use (non-commercial research only), so commercial use remains gated by the weight terms.
 last_updated: '2026-05-01'
