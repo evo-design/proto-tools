@@ -164,7 +164,7 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
 2. Write the core tool file `proto_tools/tools/{category}/{toolkit}/{tool_key_snake}.py` with:
    - Proper imports
    - Input class extending `BaseToolInput` (or shared base) with `Field()` — `extra="forbid"`
-   - Config class extending `BaseConfig` (or shared base) with `ConfigField()` — `extra="forbid"`. Use `reload_on_change=True` on fields that require worker restart (model checkpoint, etc.). Use `include_in_key=False` on fields that don't affect computation results (device, verbose, timeout are already excluded on `BaseConfig`; tool-level overrides of `device` must also set `include_in_key=False`). `include_in_key` defaults to `True`. Use `xor_group="<slug>"` to mark mutually exclusive sibling fields (see "Mutual-exclusion fields (XOR groups)" below). UI-presentation flags (advanced/hidden/conditional visibility) live in the proto-ui overlay layer, not on `ConfigField()`.
+   - Config class extending `BaseConfig` (or shared base) with `ConfigField()` — `extra="forbid"`. Use `reload_on_change=True` on fields that require worker restart (model checkpoint, etc.). Use `include_in_key=False` on fields that don't affect computation results (device, verbose, timeout are already excluded on `BaseConfig`; tool-level overrides of `device` must also set `include_in_key=False`). `include_in_key` defaults to `True`. Use `xor_group="<slug>"` to mark mutually exclusive sibling fields (see "Mutual-exclusion fields (XOR groups)" below).
    - Output class extending `BaseToolOutput` (or shared base) with `Field()` — `extra="ignore"` (set by `BaseToolOutput`; the base also emits a warning for unexpected fields so computed-field JSON round-trips can validate cleanly)
    - `@tool()` decorator with the 7 required kwargs (key, label, category, input_class, config_class, output_class, description) plus conventionally set `uses_gpu`. Optional: `example_input`, `device_count`, `cacheable`, `stochastic`, `iterable_input_fields` (a list — `["sequences"]` for an ordinary iterable, or an index-parallel group like `["complexes", "msas"]`), `iterable_output_field`, `metrics_class`, `gpu_only`, `post_process_iterable`
    - `run_*()` function that calls `ToolInstance.dispatch()`
@@ -187,7 +187,7 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
 
 ## Mutual-exclusion fields (XOR groups)
 
-For "pick one" siblings: make each `Optional` with `default=None`, tag with the same `xor_group="<slug>"`, and add a `@model_validator(mode="after")` to enforce at runtime. proto-ui's overlay layer renders the group as a segmented picker that clears the inactive side on switch.
+For "pick one" siblings: make each `Optional` with `default=None`, tag with the same `xor_group="<slug>"`, and add a `@model_validator(mode="after")` to enforce at runtime.
 
 ```python
 mmseqs_db: str | None = InputField(default=None, xor_group="target",
@@ -201,8 +201,6 @@ def exactly_one_target(self) -> "Mmseqs2SearchProteinsInput":
         raise ValueError("provide exactly one of `mmseqs_db` or `target_sequences`")
     return self
 ```
-
-For string fields that accept a path **or** an uploaded file: mention `AssetRef` in the `description`. proto-ui routes those to its upload picker; the gateway rewrites uploaded AssetRefs to a worker-side path before the tool runs.
 
 ## Code Style Conventions
 

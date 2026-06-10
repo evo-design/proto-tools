@@ -23,15 +23,12 @@ _REMOVED_UI_KWARGS = frozenset({"advanced", "hidden", "depends_on"})
 
 
 def _reject_removed_ui_kwargs(field_helper: str, kwargs: dict[str, Any]) -> None:
-    """Reject UI-presentation kwargs that belong in proto-ui overlays."""
+    """Reject field kwargs that are not supported."""
     removed = sorted(_REMOVED_UI_KWARGS.intersection(kwargs))
     if not removed:
         return
     names = ", ".join(removed)
-    raise TypeError(
-        f"{field_helper} no longer accepts UI-presentation kwarg(s): {names}. "
-        "Edit the proto-ui overlay for advanced/hidden/conditional visibility."
-    )
+    raise TypeError(f"{field_helper} does not accept the kwarg(s): {names}.")
 
 
 def _broadcast_clone(value: Any) -> Any:

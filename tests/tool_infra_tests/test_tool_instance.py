@@ -1912,7 +1912,7 @@ def test_run_setup_script_mirrors_log_to_dir(tmp_path, monkeypatch):
 
 
 def test_run_setup_script_swallows_mirror_oserror(tmp_path, monkeypatch):
-    """A broken PROTO_ENV_LOG_DIR (e.g. Modal warmup volume unmounted at runtime) must not fail the env build."""
+    """A broken PROTO_ENV_LOG_DIR (e.g. a warmup volume unmounted at runtime) must not fail the env build."""
     monkeypatch.delenv("PROTO_ENV_VERBOSE", raising=False)
     broken_symlink = tmp_path / "weights"
     broken_symlink.symlink_to(tmp_path / "does_not_exist")

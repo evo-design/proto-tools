@@ -41,7 +41,7 @@ def test_input_accepts_structure_objects():
     s = Structure(structure=_TINY_MULTIMER_PDB)
     inputs = FoldseekMultimerClusterInput(structures=[s, s])
     assert inputs.structures == [_TINY_MULTIMER_PDB, _TINY_MULTIMER_PDB]
-    # Schema exposes the Structure entity so the frontend can render a picker.
+    # Schema exposes the Structure entity.
     assert "Structure" in FoldseekMultimerClusterInput.model_json_schema().get("$defs", {})
 
 

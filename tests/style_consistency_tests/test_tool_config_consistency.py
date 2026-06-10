@@ -79,8 +79,7 @@ def test_tool_config_consistency(config_model):
         )
         banned_keys = _BANNED_UI_SCHEMA_KEYS.intersection(json_schema_extra)
         assert not banned_keys, (
-            f"{config_model.__name__}.{field_name} has UI-presentation schema keys {sorted(banned_keys)}. "
-            "Move advanced/hidden/conditional visibility to the proto-ui overlay."
+            f"{config_model.__name__}.{field_name} sets unsupported schema key(s) {sorted(banned_keys)}."
         )
 
     # Every field must appear in the config's own docstring (excluding

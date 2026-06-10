@@ -322,14 +322,10 @@ class SpTransformer(nn.Module):  # type: ignore[misc]
         model1 = SpEncoder_L(128, tissue_cnt=self.tissue_num, context_len=self.context_len)
         model2 = SpEncoder2_L(64, tissue_cnt=self.tissue_num, context_len=self.context_len)
         if training:
-            print("Load previous model SpEncoder1")
-            WEIGHTS = "/public/home/shenninggroup/yny/code/CellSplice/runs/T-EncoderL1-1000-128_3/best.ckpt"
-            save_dict = torch.load(WEIGHTS, map_location=torch.device("cpu"))
-            model1.load_state_dict(save_dict["state_dict"], strict=True)
-            print("Load previous model SpEncoder2")
-            WEIGHTS = "/public/home/shenninggroup/yny/code/Splice-Pytorch/model/stage1.ckpt"
-            model2.load_state_dict(torch.load(WEIGHTS, map_location=torch.device("cpu")), strict=False)
-            print("Done")
+            raise NotImplementedError(
+                "Training-mode encoder weight loading is not supported in this distribution; "
+                "inference uses the published checkpoint."
+            )
         return nn.ModuleList([model1, model2])
 
     def forward(self, x: Any) -> Any:

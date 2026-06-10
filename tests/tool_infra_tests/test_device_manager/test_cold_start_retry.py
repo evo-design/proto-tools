@@ -1,6 +1,6 @@
-"""Cold-start GPU-detection retry (Modal GPU container readiness race).
+"""Cold-start GPU-detection retry (GPU container readiness race).
 
-On a freshly-scheduled Modal GPU container, ``nvidia-smi`` can transiently report
+On a freshly-scheduled GPU container, ``nvidia-smi`` can transiently report
 0 GPUs before the driver is ready. DeviceManager re-polls a few times before
 declaring "no GPUs visible" — but only when nvidia-smi exists, so a real CPU host
 still fails fast.

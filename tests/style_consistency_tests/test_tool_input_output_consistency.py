@@ -39,8 +39,7 @@ def test_tool_input_uses_input_field(tool_input):
         )
         banned_keys = _BANNED_UI_SCHEMA_KEYS.intersection(json_schema_extra)
         assert not banned_keys, (
-            f"{tool_input.__name__}.{field_name} has UI-presentation schema keys {sorted(banned_keys)}. "
-            "Move advanced/hidden/conditional visibility to the proto-ui overlay."
+            f"{tool_input.__name__}.{field_name} sets unsupported schema key(s) {sorted(banned_keys)}."
         )
 
 

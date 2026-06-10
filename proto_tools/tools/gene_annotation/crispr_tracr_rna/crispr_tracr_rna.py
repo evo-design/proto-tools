@@ -303,8 +303,7 @@ class CrisprTracrRNAConfig(BaseConfig):
 
     Mirrors the upstream CRISPRtracrRNA.py argparse surface. Defaults match
     upstream verbatim. The ten ranking weights only take effect in
-    ``run_type="complete_run"`` and are flagged ``advanced`` so frontend UIs
-    can collapse them by default.
+    ``run_type="complete_run"``.
 
     Attributes:
         model_type (Literal['II', 'all']): CRISPR model type.
