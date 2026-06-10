@@ -86,7 +86,7 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_DEVICE_PREFIXES = ("cuda", "cpu")
 
-# Cold-start GPU-readiness race: a freshly-scheduled the cloud runtime GPU container can have
+# Cold-start GPU-readiness race: a freshly-scheduled GPU container can have
 # nvidia-smi report 0 GPUs for a beat before the driver is ready. When a GPU is
 # requested but none are visible *and* nvidia-smi exists, re-poll a few times
 # before declaring "no GPUs". Module-level so tests can shrink them.
@@ -412,7 +412,7 @@ class DeviceManager:
     def _resolve_gpu_devices(self, toolkit: str) -> list[str]:
         """Return visible GPU device IDs, retrying a transient nvidia-smi miss.
 
-        On a the cloud runtime GPU container cold start, nvidia-smi can briefly report 0 GPUs
+        On a GPU container cold start, nvidia-smi can briefly report 0 GPUs
         before the driver initializes. When a GPU was requested but none are
         visible *and* nvidia-smi exists (a GPU host, not a real CPU host),
         re-poll ``_get_available_devices`` a few times before giving up. The
@@ -930,7 +930,7 @@ class DeviceManager:
                 )
 
             # Check the system for visible GPUs, retrying a transient cold-start
-            # nvidia-smi miss (the cloud runtime GPU container readiness race) before giving up.
+            # nvidia-smi miss (GPU container readiness race) before giving up.
             gpu_devices = self._resolve_gpu_devices(toolkit)
             if not gpu_devices:
                 cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "(unset)")

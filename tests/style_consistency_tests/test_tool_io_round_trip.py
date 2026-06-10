@@ -3,10 +3,9 @@
 Universal contract: every registered tool's Input and Config models must
 reconstruct cleanly from their own ``model_dump`` output.
 
-This is the property that ``proto_tools.cloud._route_to_cloud`` and every
-the tools backend the cloud runtime service rely on — they serialize an Input or Config to
-a dict, send it over the wire, and reconstruct it on the other side via
-``Model(**dumped_dict)``. Pydantic's default field coercion handles this for
+This is the property the hosted execution service relies on — it serializes an
+Input or Config to a dict, sends it over the wire, and reconstructs it on the
+other side via ``Model(**dumped_dict)``. Pydantic's default field coercion handles this for
 free, but a tool with a ``@field_validator(..., mode="before")`` that takes
 manual control over normalization can accidentally drop the dict shape.
 

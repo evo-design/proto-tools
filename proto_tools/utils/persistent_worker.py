@@ -537,7 +537,7 @@ def _build_subprocess_env(
                 "Could not locate libcuda.so.1 via ldconfig, parent LD_LIBRARY_PATH, "
                 "or fallback dirs %s; subprocess may fail to load the CUDA driver. "
                 "This is expected on hosts where pip-bundled CUDA wheels are "
-                "self-sufficient (e.g. the cloud runtime).",
+                "self-sufficient (e.g. on some managed GPU platforms).",
                 list(_DRIVER_LIB_FALLBACK_DIRS),
             )
 
@@ -726,7 +726,7 @@ class PersistentWorker:
                 ) from exc
 
             # Kill the worker if we fail to read a matching response. The worker is in its own
-            # process group and survives parent-side cancellation (e.g. the cloud runtime `fc.cancel.aio()`);
+            # process group and survives parent-side cancellation by the host platform;
             # without this, the worker's late response sits in the pipe and corrupts the next send.
             response_matched = False
             try:

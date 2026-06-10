@@ -113,9 +113,9 @@ class {ToolName}Config(BaseConfig):
         description="Choose between option_a and option_b",
     )
 
-    # --- Secondary parameters (mark advanced in proto-ui overlay if needed) ---
-    advanced_param: float = ConfigField(
-        title="Advanced Parameter",
+    # --- Secondary parameters ---
+    secondary_param: float = ConfigField(
+        title="Secondary Parameter",
         default=0.5,
         gt=0.0,
         le=1.0,

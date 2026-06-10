@@ -79,7 +79,7 @@ def test_chain_fields_are_selection_types():
     program round-trips either way.
     """
     structure = _bundled_structure()
-    # Bare-string / list shorthand coerces (what the client and most callers send).
+    # Bare-string / list shorthand coerces (what most callers send).
     coerced = PDockQ2Input(structure=structure, binder_chain="A", target_chains=["B"])
     assert isinstance(coerced.binder_chain, SingleChainSelection)
     assert isinstance(coerced.target_chains, ChainSelection)

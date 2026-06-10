@@ -29,7 +29,7 @@ LOCK_TIMEOUT_SECONDS = 600
 
 @contextlib.contextmanager
 def _file_lock(lock_path: Path) -> Iterator[None]:
-    """Small cross-process lock using O_EXCL so the cloud runtime workers do not race downloads."""
+    """Small cross-process lock using O_EXCL so concurrent workers do not race downloads."""
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     fd: int | None = None

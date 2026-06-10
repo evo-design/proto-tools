@@ -3,7 +3,7 @@
 Tool registry for managing tool discovery and schema generation.
 
 Provides a decorator-based API for registering tools with metadata and
-automatic schema generation for API/client integration.
+automatic schema generation for API integration.
 """
 
 from __future__ import annotations
@@ -326,7 +326,7 @@ class ToolRegistry:
         ... def run_blast_search(inputs: BlastSearchInput, config: BlastSearchConfig) -> BlastSearchOutput:
         ...     pass
 
-        API/Client Usage:
+        API Usage:
         >>> tools = ToolRegistry.list_all()
         >>> schema = ToolRegistry.get_config_schema("blast-search")
 

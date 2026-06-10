@@ -245,7 +245,7 @@ def test_output_export_json(tmp_path):
     assert len(json_files) == 1
 
 
-# ── JSON round-trip (HTTP gateway contract) ─────────────────────────────────────
+# ── JSON round-trip (HTTP transport contract) ─────────────────────────────────────
 
 
 def test_proteinmpnn_sample_input_roundtrip():

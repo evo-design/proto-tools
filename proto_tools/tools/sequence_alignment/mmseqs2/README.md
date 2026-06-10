@@ -85,7 +85,7 @@ This tool is the proto-tools entry point for generating the MSA input to structu
 
 #### Usage Tips
 
-- **The `dataset` field selects one registered reference database.** The default is `uniref30-2302`. It is a scalar enum of the searchable ColabFold-style protein databases, so the proto-ui renders it as a dropdown; non-searchable or non-protein datasets are rejected by validation.
+- **The `dataset` field selects one registered reference database.** The default is `uniref30-2302`. It is a scalar enum of the searchable ColabFold-style protein databases; non-searchable or non-protein datasets are rejected by validation.
 - **GPU execution is the default.** The configuration validator hard-errors on macOS and Windows (GPU search is Linux-only). Set `use_gpu=False` to force the CPU pipeline.
 - **The reference database must be provisioned once on the host machine before the first call.** Run `python -m proto_tools.tools.sequence_alignment.mmseqs2.setup_databases <dataset>`, where the dataset key matches the value of `Mmseqs2HomologySearchConfig.dataset`. The wrapper does not auto-download databases at call time.
 - **Local search needs enough RAM to hold the dataset's sequence database.** When available memory (cgroup-aware) is below that file's size, the tool logs a warning and falls back to a disk-paged (mmap) search that completes but is much slower; for a responsive search, allocate more memory or use `search_mode="remote"`.

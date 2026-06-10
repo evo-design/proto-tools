@@ -188,9 +188,9 @@ def test_non_searchable_dataset_not_selectable() -> None:
 
 
 def test_dataset_field_schema_carries_inline_enum_and_default() -> None:
-    """The ``dataset`` Literal emits an INLINE JSON-Schema enum + default (drives the proto-ui dropdown).
+    """The ``dataset`` Literal emits an INLINE JSON-Schema enum + default at the property level.
 
-    The proto-ui parser reads ``schemaProp.enum`` at the property level, so the
+    A schema consumer reads ``schemaProp.enum`` at the property level, so the
     enum must be inline. A Python ``Enum`` would instead emit a ``$ref`` into
     ``$defs`` that the parser doesn't resolve — a ``Literal`` stays inline.
     """
@@ -205,7 +205,7 @@ def test_dataset_literal_matches_registry_searchable_set() -> None:
 
     Searchable == ``a3m_adapter == "colabfold"`` minus the in-tree
     ``tiny-test-colabfold`` fixture. Registering a new searchable DB fails this
-    assertion, prompting an update to the Literal (and thus the client dropdown).
+    assertion, prompting an update to the Literal.
     """
     searchable = {
         name

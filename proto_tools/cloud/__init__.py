@@ -28,9 +28,6 @@ from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 logger = logging.getLogger(__name__)
 
-# TODO: replace "(request link coming soon)" / "(contact link coming soon)" with the real signup + support URLs once they're live.
-# TODO: drop _CLOUD_STATUS / _INVALID_KEY and the ProtoAuthError catch once cloud is generally available — SDK exceptions should propagate as-is.
-
 _CLOUD_STATUS = (
     "\n"
     "No API key was detected.\n"
