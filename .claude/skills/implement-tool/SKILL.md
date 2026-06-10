@@ -46,7 +46,7 @@ Phase 1: Research → Phase 2: Contract → Phase 3: Fan-out (5 parallel agents)
 ## Phase 0: Parse Input
 
 The user provides EITHER:
-- A **GitHub issue URL/number** (e.g., `#53` or `https://github.com/proto-bio/proto-tools/issues/53`)
+- A **GitHub issue URL/number** (e.g., `#<issue-number>` or `https://github.com/proto-bio/proto-tools/issues/<issue-number>`)
 - A **tool name + source repo** (e.g., "ESM-IF from https://github.com/facebookresearch/esm")
 
 **If a GitHub issue is provided:**
@@ -152,7 +152,7 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
    |   +-- README.md
    |   +-- examples/
    |   |   +-- example.ipynb   # Working example notebook (required)
-   |   +-- helpers.py            # [optional] Plain-type helpers shared with deployment service
+   |   +-- helpers.py            # [optional] Self-contained plain-type file-format conversion helpers
    |   +-- standalone/
    |   |   +-- setup.sh
    |   |   +-- run.py OR inference.py  # run.py for CPU tools, inference.py for AI models
@@ -313,7 +313,7 @@ logger.update_status("Loading checkpoint")  # spinner subtitle update; not shown
 logger.info("...")                           # normal log line
 ```
 
-**If the tool has file-format conversion helpers** (e.g., writing MSA to Parquet, converting complexes to YAML/FASTA), implement them as plain-type functions in `helpers.py` at the tool directory level. These functions must be self-contained (no `proto_tools` imports) and take only plain types (str, list, dict). The tool layer imports and wraps them with typed signatures. The deployment service mounts them via `add_local_file()`. This ensures a single source of truth across tool and service layers. See esmfold, chai1, boltz2 for examples.
+**If the tool has file-format conversion helpers** (e.g., writing MSA to Parquet, converting complexes to YAML/FASTA), implement them as plain-type functions in `helpers.py` at the tool directory level. These functions must be self-contained (no `proto_tools` imports) and take only plain types (str, list, dict). The tool layer imports and wraps them with typed signatures. Keeping them dependency-free lets the hosted execution backend reuse the same files, preserving a single source of truth. See esmfold, chai1, boltz2 for examples.
 
 CRITICAL RULES:
 - Every `.py` file in `standalone/` (except `__init__.py`) MUST declare `logger = get_logger(__name__)` from `standalone_helpers` — see "Logger Convention" above. Plain `logging.getLogger(__name__)` is forbidden and enforced by a consistency test.
@@ -571,7 +571,7 @@ Create a Jupyter notebook (.ipynb JSON) with these cells:
 8. **Code: Export** — Demonstrate result.export()
 
 Notebook metadata:
-- kernelspec must be exactly `{"name": "python3", "display_name": "proto-tools"}`. Custom names like `proto-language` or `bio-programming` raise `NoSuchKernel` outside the original author's machine.
+- kernelspec must be exactly `{"name": "python3", "display_name": "proto-tools"}`. Custom names like `proto-language` raise `NoSuchKernel` outside the original author's machine.
 - `language_info.name` is `"python"`.
 - Use realistic biological data (real protein sequences, not placeholder text)
 - Include comments explaining each step

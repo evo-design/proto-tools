@@ -73,7 +73,7 @@ dev = [
     "pytest>=7.3.0",        # --strict-markers requires 7.3+
     "pytest-asyncio>=0.21", # asyncio_mode="auto" requires 0.21+
     "pytest-cov>=4.1.0",
-    "pytest-forked",        # Required on Sherlock (exclusive GPU process mode)
+    "pytest-forked",        # Required on shared clusters running GPUs in exclusive process mode
     "pytest-randomly>=3.15",
 
     # Code quality

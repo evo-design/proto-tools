@@ -3,7 +3,6 @@
 .env
 .env.local
 .proto.env
-.bpt.env
 .env.development.local
 .env.test.local
 .env.production.local
@@ -70,6 +69,5 @@ proto_tools/tools/sequence_alignment/blast/example_input_fixture.*
 .claude/worktrees/
 uv.lock
 
-# Local env-report fallback output (when PROTO_ENV_REPORT_DIR is unset). Reports
-# live in the private proto-bio/tool-env-reports repo, not in this codebase.
+# Local env-report fallback output (when PROTO_ENV_REPORT_DIR is unset).
 .environment_checks/

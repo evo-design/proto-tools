@@ -16,7 +16,7 @@ FOUNDRY_CHECKPOINT_DIRS
 # Point triton's JIT launcher (and any CUDA-coupled build) at the tool-local
 # CUDA toolkit installed by proto_install_cuda_toolkit in setup.sh. Without
 # these, triton's run-time stub compilation fails on hosts that don't have
-# system gcc / nvcc (e.g. Sherlock).
+# system gcc / nvcc (e.g. some shared HPC clusters).
 CC=${VENV_PATH}/cuda_env/bin/gcc
 CXX=${VENV_PATH}/cuda_env/bin/g++
 CUDA_HOME=${VENV_PATH}/cuda_env

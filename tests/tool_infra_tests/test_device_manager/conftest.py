@@ -15,8 +15,8 @@ def mock_2_gpus():
     """Mock number_of_visible_gpus to return 2 for test duration.
 
     Also mocks is_exclusive_process_mode to False so tests can exercise both
-    CPU and RESTART offload strategies independently (Sherlock GPUs run in
-    Exclusive_Process mode which would silently override CPU → RESTART).
+    CPU and RESTART offload strategies independently (GPUs in Exclusive_Process
+    mode would silently override CPU → RESTART).
     """
     with (
         patch(

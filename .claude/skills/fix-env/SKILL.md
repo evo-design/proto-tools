@@ -66,23 +66,23 @@ Both modes edit the same files — the ejected copy (local) or the repo copy (co
 
 | Category | Pattern | Symptoms | Solution |
 |----------|---------|----------|---------|
-| **Infra** | Compute Detection (#1) | Wrong torch installed, `No GPU detected` | Verify nvidia-smi, check DETECTED_* vars |
-| **Infra** | Env Var Isolation (#2) | `uv installs to wrong env`, missing libs | Check CONDA_PREFIX, VIRTUAL_ENV, LD_LIBRARY_PATH |
-| **Infra** | sitecustomize.py (#3) | `ctypes.CDLL` errors, `CC not found` | Verify generated file, check lib paths |
-| **Infra** | Micromamba Install (#4) | `Failed to download/extract micromamba` | Check network, manual install to cache |
-| **PyTorch** | ABI Mismatch (#5) | `undefined symbol`, `ImportError: *.so` | Cache clear + `--refresh` + validate deep imports |
-| **PyTorch** | Broken CUDA Symlinks (#6) | `libcudart.so: No such file` | Auto-repair symlinks in cuda_env |
-| **PyTorch** | Triton Version (#7) | `PY_SSIZE_T_CLEAN` crash | Upgrade triton AFTER all other installs |
-| **JAX** | Version Downgrade (#8) | JAX uses CPU on GPU, wrong CUDA plugin | Re-apply JAX spec after dependency install |
-| **Compile** | GCC/nvcc Mismatch (#9) | `_Float32 undeclared`, nvcc errors | Match GCC to CUDA version, pin sysroot |
-| **Compile** | Platform Detection (#10) | `No CUDA target`, `not supported on aarch64` | Platform guards + graceful fallbacks |
-| **Network** | GitHub Wheel 404 (#11) | `HTTP Error 404/502` | Switch to PyPI |
-| **Compile** | OOM Source Build (#12) | `Killed signal`, exit -9 | Prefer wheels, `MAX_JOBS=1` |
-| **Network** | Binary Download (#13) | `Failed after 3 attempts` | Check network, platform support in binary_config.py |
-| **Platform** | CUDA Headers (#14) | `cuda_runtime.h: No such file` | Conditional symlinks |
-| **Platform** | Python Version (#15) | `No wheel for Python 3.12` | python_version.txt |
-| **Device Mgmt** | Standalone Helpers Import (#16) | `ImportError: standalone_helpers` | Check bootstrap copy, verify source exists |
-| **Device Mgmt** | CUDA Visibility Mismatch (#17) | `No available device`, wrong GPU | Check CUDA_VISIBLE_DEVICES vs BIO_TOOLS_MANAGED_DEVICES |
+| **Infra** | Compute Detection (Pattern 1) | Wrong torch installed, `No GPU detected` | Verify nvidia-smi, check DETECTED_* vars |
+| **Infra** | Env Var Isolation (Pattern 2) | `uv installs to wrong env`, missing libs | Check CONDA_PREFIX, VIRTUAL_ENV, LD_LIBRARY_PATH |
+| **Infra** | sitecustomize.py (Pattern 3) | `ctypes.CDLL` errors, `CC not found` | Verify generated file, check lib paths |
+| **Infra** | Micromamba Install (Pattern 4) | `Failed to download/extract micromamba` | Check network, manual install to cache |
+| **PyTorch** | ABI Mismatch (Pattern 5) | `undefined symbol`, `ImportError: *.so` | Cache clear + `--refresh` + validate deep imports |
+| **PyTorch** | Broken CUDA Symlinks (Pattern 6) | `libcudart.so: No such file` | Auto-repair symlinks in cuda_env |
+| **PyTorch** | Triton Version (Pattern 7) | `PY_SSIZE_T_CLEAN` crash | Upgrade triton AFTER all other installs |
+| **JAX** | Version Downgrade (Pattern 8) | JAX uses CPU on GPU, wrong CUDA plugin | Re-apply JAX spec after dependency install |
+| **Compile** | GCC/nvcc Mismatch (Pattern 9) | `_Float32 undeclared`, nvcc errors | Match GCC to CUDA version, pin sysroot |
+| **Compile** | Platform Detection (Pattern 10) | `No CUDA target`, `not supported on aarch64` | Platform guards + graceful fallbacks |
+| **Network** | GitHub Wheel 404 (Pattern 11) | `HTTP Error 404/502` | Switch to PyPI |
+| **Compile** | OOM Source Build (Pattern 12) | `Killed signal`, exit -9 | Prefer wheels, `MAX_JOBS=1` |
+| **Network** | Binary Download (Pattern 13) | `Failed after 3 attempts` | Check network, platform support in binary_config.py |
+| **Platform** | CUDA Headers (Pattern 14) | `cuda_runtime.h: No such file` | Conditional symlinks |
+| **Platform** | Python Version (Pattern 15) | `No wheel for Python 3.12` | python_version.txt |
+| **Device Mgmt** | Standalone Helpers Import (Pattern 16) | `ImportError: standalone_helpers` | Check bootstrap copy, verify source exists |
+| **Device Mgmt** | CUDA Visibility Mismatch (Pattern 17) | `No available device`, wrong GPU | Check CUDA_VISIBLE_DEVICES vs BIO_TOOLS_MANAGED_DEVICES |
 
 For detailed patterns with full bash examples: Read `.claude/skills/fix-env/PATTERNS.md`
 

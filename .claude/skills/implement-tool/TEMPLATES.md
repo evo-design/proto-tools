@@ -477,7 +477,7 @@ Create `tools/{category}/{toolkit}/examples/example.ipynb` with:
 5. **Export cell** demonstrating `result.export()`
 
 Follow the pattern in existing notebooks (e.g., `tools/causal_models/evo2/examples/example.ipynb`). Key conventions:
-- Kernelspec must be `{"name": "python3", "display_name": "proto-tools"}` — every example notebook ships with this exact metadata so `run_example_notebooks.py` resolves the kernel from the `proto-tools` conda env. Never set custom names like `proto-language` or `bio-programming`; they'll fail with `NoSuchKernel` outside the original author's machine.
+- Kernelspec must be `{"name": "python3", "display_name": "proto-tools"}` — every example notebook ships with this exact metadata so `run_example_notebooks.py` resolves the kernel from the `proto-tools` conda env. Never set custom names like `proto-language`; they'll fail with `NoSuchKernel` outside the original author's machine.
 - Use `display_api_reference()` for every Input/Config/Output table (see step 3 above) — `proto_tools.utils.notebook_docs` introspects the live Pydantic schema, so the table stays in sync with the code automatically.
 - Use realistic biological data (real sequences, not lorem ipsum)
 - Show result inspection (printing key fields, accessing metrics)

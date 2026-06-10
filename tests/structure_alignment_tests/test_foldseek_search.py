@@ -224,7 +224,7 @@ def test_foldseek_search_end_to_end_with_tp53():
     """End-to-end: TP53 from AFDB → Foldseek pdb100 → schema-validated structural hits.
 
     Hits search.foldseek.com live (submit, poll, download, parse). TP53 is a
-    well-known prototyper target; restricting to pdb100 keeps runtime ~10-30s
+    well-known protein design target; restricting to pdb100 keeps runtime ~10-30s
     (afdb50 alone takes minutes). Asserts protocol correctness and schema
     invariants — does NOT assert specific PDB IDs because pdb100 is a
     redundancy-clustered DB whose representatives shift over time.

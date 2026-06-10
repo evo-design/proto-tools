@@ -199,7 +199,7 @@ def test_pubchem_fetch_custom_property_subset_leaves_other_fields_unset():
 def test_workflow_name_to_smiles_to_inchikey_roundtrip_converges():
     """Chained workflow: name -> CID, then SMILES -> CID, then InChIKey -> CID.
 
-    Whenever a downstream tool emits a SMILES or InChIKey that prototyper hands
+    Whenever a downstream tool emits a SMILES or InChIKey that a caller hands
     back to this wrapper, the round-trip must converge on the same compound. A
     failure here means the wrapper's identifier resolution is asymmetric -- a
     silent bug that would corrupt downstream design provenance.

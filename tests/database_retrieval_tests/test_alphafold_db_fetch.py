@@ -372,12 +372,12 @@ def test_alphafold_db_fetch_unknown_accession_returns_failure():
 
 @pytest.mark.integration
 def test_workflow_uniprot_then_afdb_yields_consistent_template():
-    """End-to-end workflow mirroring prototyper's `fetch_target_sequence_for_template` eval.
+    """End-to-end workflow mirroring a sequence-for-template lookup.
 
     Steps:
       1. Resolve KRAS by gene symbol via UniProt (no accession provided).
       2. Use the returned canonical UniProt accession to pull AFDB structure + pLDDT.
-      3. Verify the two sources agree on the canonical sequence (a real prototyper
+      3. Verify the two sources agree on the canonical sequence (a real design
          workflow would feed both into a generator/constraint, so disagreement here
          would silently corrupt every downstream design).
 
