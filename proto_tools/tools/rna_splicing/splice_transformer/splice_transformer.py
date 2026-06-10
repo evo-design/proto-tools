@@ -114,15 +114,15 @@ class SpliceTransformerInput(BaseToolInput):
 
     target_seqs: list[str] = InputField(
         title="Target Sequences",
-        description="Sequence(s) on which to make splicing predictions",
+        description="Target region(s) for splice prediction; each must be exactly 1000 bp.",
     )
     left_contexts: list[str] = InputField(
         title="Left Contexts",
-        description="Sequence(s) of the left context. Must be the same length as target_seqs",
+        description="Left (5') flanking context; each exactly 4000 bp, one per target sequence.",
     )
     right_contexts: list[str] = InputField(
         title="Right Contexts",
-        description="Sequence(s) of the right context. Must be the same length as target_seqs",
+        description="Right (3') flanking context; each exactly 4000 bp, one per target sequence.",
     )
 
     @model_validator(mode="after")
