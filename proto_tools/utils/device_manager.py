@@ -86,10 +86,6 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_DEVICE_PREFIXES = ("cuda", "cpu")
 
-# Cold-start GPU-readiness race: a freshly-scheduled GPU container can have
-# nvidia-smi report 0 GPUs for a beat before the driver is ready. When a GPU is
-# requested but none are visible *and* nvidia-smi exists, re-poll a few times
-# before declaring "no GPUs". Module-level so tests can shrink them.
 _GPU_DETECT_RETRIES = 5
 _GPU_DETECT_INTERVAL_S = 0.5
 
