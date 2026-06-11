@@ -8,6 +8,7 @@ real SDK installed and without hitting a network.
 
 from __future__ import annotations
 
+import logging
 import sys
 import types
 from dataclasses import dataclass, field
@@ -51,41 +52,75 @@ class _PreprocessConfig(_CloudConfig):
 
 
 @dataclass
-class _StubResponse:
+class _StubJobStatus:
+    """Stand-in for proto_client.models.JobStatus enum entries."""
+
+    value: str
+
+
+@dataclass
+class _StubJobStatusResponse:
     """Stand-in for proto_client.models.JobStatusResponse."""
 
-    result: Any
+    status: _StubJobStatus
+    result: Any = None
+    error: str | None = None
 
 
 @dataclass
 class _StubToolsNamespace:
     output_to_return: Any = None
+    # Raised by ``submit`` so auth + transport failures surface like the real SDK.
     raise_on_run: BaseException | None = None
-    calls: list[dict[str, Any]] = field(default_factory=list)
+    final_status: str = "completed"
+    status_sequence: list[str] = field(
+        default_factory=list
+    )  # statuses returned across successive get() calls; else final_status
+    log_records: list[Any] = field(default_factory=list)
+    submit_calls: list[dict[str, Any]] = field(default_factory=list)
+    get_calls: list[dict[str, Any]] = field(default_factory=list)
+    log_iter_calls: list[dict[str, Any]] = field(default_factory=list)
 
-    def run(
+    # Back-compat alias so older assertions reading ``client.tools.calls`` still resolve to submit history.
+    @property
+    def calls(self) -> list[dict[str, Any]]:
+        return self.submit_calls
+
+    def submit(
         self,
         tool_key: str,
         inputs: dict[str, Any],
         config: dict[str, Any] | None = None,
-        poll_interval: float = 1.0,
-        timeout: float = 600.0,
-        *,
-        output_model: type | None = None,
-    ) -> _StubResponse:
-        self.calls.append(
-            {
-                "tool_key": tool_key,
-                "inputs": inputs,
-                "config": config,
-                "poll_interval": poll_interval,
-                "timeout": timeout,
-                "output_model": output_model,
-            }
-        )
+    ) -> str:
+        self.submit_calls.append({"tool_key": tool_key, "inputs": inputs, "config": config})
         if self.raise_on_run is not None:
             raise self.raise_on_run
-        return _StubResponse(result=self.output_to_return)
+        return f"stub-job-{tool_key}"
+
+    def get(self, tool_key: str, job_id: str) -> _StubJobStatusResponse:
+        self.get_calls.append({"tool_key": tool_key, "job_id": job_id})
+        status_value = self.status_sequence.pop(0) if self.status_sequence else self.final_status
+        return _StubJobStatusResponse(
+            status=_StubJobStatus(status_value),
+            result=self.output_to_return,
+            error="stub failure" if status_value == "failed" else None,
+        )
+
+    def iter_job_logs(
+        self,
+        tool_key: str,
+        job_id: str,
+        *,
+        follow: bool = False,
+        level: list[str] | None = None,
+        stream: list[str] | None = None,
+        since: int | None = None,
+        limit: int | None = None,
+    ) -> Any:
+        self.log_iter_calls.append(
+            {"tool_key": tool_key, "job_id": job_id, "follow": follow, "level": level, "stream": stream}
+        )
+        yield from self.log_records
 
 
 @dataclass
@@ -151,6 +186,12 @@ def clean_registry():
     ToolRegistry._registry = original_registry
 
 
+@pytest.fixture(autouse=True)
+def _default_cloud_hostable(monkeypatch):
+    """Default synthetic test tools (no ``license.yaml``) hostable so the gate doesn't block dispatch."""
+    monkeypatch.setattr(ToolRegistry, "get_license", lambda key: {"redistribution": True})
+
+
 @pytest.fixture
 def arm_stub_client(monkeypatch):
     """Helper: monkey-patch ``_StubProtoClient.__init__`` to seed tools/assets state at construction.
@@ -197,6 +238,67 @@ def _register_cloud_tool(
     return registry.get(key)
 
 
+# ─ cloud hostability gate (license redistribution) ───────────────────────────
+
+
+def test_is_cloud_hostable_reads_redistribution(monkeypatch):
+    """``is_cloud_hostable`` reflects the tool's license ``redistribution`` flag, failing closed."""
+    from proto_tools.cloud import is_cloud_hostable
+
+    monkeypatch.setattr(ToolRegistry, "get_license", lambda key: {"redistribution": True})
+    assert is_cloud_hostable("any-tool") is True
+
+    monkeypatch.setattr(ToolRegistry, "get_license", lambda key: {"redistribution": False})
+    assert is_cloud_hostable("any-tool") is False
+
+    # Missing license, missing field, and unknown key all fail closed.
+    monkeypatch.setattr(ToolRegistry, "get_license", lambda key: None)
+    assert is_cloud_hostable("any-tool") is False
+
+    monkeypatch.setattr(ToolRegistry, "get_license", lambda key: {})
+    assert is_cloud_hostable("any-tool") is False
+
+    def _raise(key):
+        raise ValueError("unknown tool")
+
+    monkeypatch.setattr(ToolRegistry, "get_license", _raise)
+    assert is_cloud_hostable("any-tool") is False
+
+
+def test_is_cloud_hostable_fails_closed_on_malformed_license(monkeypatch):
+    """A corrupt/unreadable license.yaml (a non-ValueError from get_license) blocks cloud instead of crashing the run."""
+    import yaml
+
+    from proto_tools.cloud import is_cloud_hostable
+
+    def _raise_yaml(key):
+        raise yaml.YAMLError("could not parse license.yaml")
+
+    monkeypatch.setattr(ToolRegistry, "get_license", _raise_yaml)
+    assert is_cloud_hostable("any-tool") is False
+
+    def _raise_os(key):
+        raise OSError("permission denied reading license.yaml")
+
+    monkeypatch.setattr(ToolRegistry, "get_license", _raise_os)
+    assert is_cloud_hostable("any-tool") is False
+
+
+def test_cloud_blocks_non_redistributable_tool(fake_proto_client, arm_stub_client, monkeypatch, clean_registry):
+    """device='cloud' on a non-redistributable tool fails fast with a clear error and never dispatches."""
+    arm_stub_client(lambda c: setattr(c.tools, "output_to_return", {"result": "should-not-run"}))
+    spec = _register_cloud_tool(clean_registry, "gated-tool")
+
+    # This tool's license forbids redistribution → not hostable on Proto's cloud.
+    monkeypatch.setattr(ToolRegistry, "get_license", lambda key: {"redistribution": False})
+
+    with pytest.raises(ValueError, match="redistribution"):
+        spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
+
+    # The gate is purely local: no client constructed, no submit attempted.
+    assert fake_proto_client.last_instance is None
+
+
 # ─ parse_device_string ───────────────────────────────────────────────────────
 
 
@@ -234,19 +336,29 @@ def test_device_cloud_returns_validated_output(fake_proto_client, arm_stub_clien
     # device='cloud' is the client-side routing signal; the server picks its
     # own physical device, so the dispatcher strips device before sending.
     assert "device" not in call["config"]
-    assert call["output_model"] is None
 
 
-def test_device_cloud_uses_tool_config_timeout(fake_proto_client, arm_stub_client, clean_registry):
-    """Cloud dispatch passes the selected tool config's effective timeout to the SDK."""
+def test_device_cloud_uses_tool_config_timeout(fake_proto_client, arm_stub_client, monkeypatch, clean_registry):
+    """Cloud dispatch passes the selected tool config's effective timeout to the poll loop."""
     arm_stub_client(lambda c: setattr(c.tools, "output_to_return", {"result": "from-api"}))
     spec = _register_cloud_tool(clean_registry, "slow-api-tool", config_class=_SlowCloudConfig)
 
+    # Spy on _poll_until_terminal — the dispatcher's poll loop owns the timeout now (no single SDK call carries it).
+    import proto_tools.cloud as cloud_mod
+
+    captured: dict[str, Any] = {}
+    real_poll = cloud_mod._poll_until_terminal
+
+    def _spy_poll(client, key, job_id, poll_interval, timeout):
+        captured["timeout"] = timeout
+        captured["poll_interval"] = poll_interval
+        return real_poll(client, key, job_id, poll_interval, timeout)
+
+    monkeypatch.setattr(cloud_mod, "_poll_until_terminal", _spy_poll)
+
     spec.function(_CloudInput(payload="hi"), _SlowCloudConfig(device="cloud"))
 
-    client = fake_proto_client.last_instance
-    assert client is not None
-    assert client.tools.calls[0]["timeout"] == 1200.0
+    assert captured["timeout"] == 1200.0
 
 
 def test_cloud_output_assets_are_decoded_before_validation(fake_proto_client, arm_stub_client, clean_registry):
@@ -436,7 +548,7 @@ def test_invalid_api_key_raises_permission_error(fake_proto_client, arm_stub_cli
     arm_stub_client(lambda c: setattr(c.tools, "raise_on_run", _FakeProtoAuthError("unauthorized", status_code=401)))
     spec = _register_cloud_tool(clean_registry, "bad-key-tool")
 
-    with pytest.raises(PermissionError, match="API key was rejected"):
+    with pytest.raises(PermissionError, match="appears to be invalid"):
         spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
 
 
@@ -467,6 +579,224 @@ def test_unexpected_result_type_raises(fake_proto_client, arm_stub_client, clean
 
     with pytest.raises(Exception, match="does not conform to _CloudOutput"):
         spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
+
+
+# ─ log streaming ─────────────────────────────────────────────────────────────
+
+
+@dataclass
+class _StubLogRecord:
+    """Stand-in for proto_client.models.LogRecord."""
+
+    msg: str
+    level: str = "info"
+    stream: str = "system"
+    seq: int = 0
+    type: str = "record"
+    update_status: bool = False
+
+
+@dataclass
+class _StubLogsEnd:
+    """Stand-in for proto_client.models.LogsEnd terminator."""
+
+    type: str = "end"
+    reason: str = "completed"
+    final_seq: int = 0
+
+
+def test_cloud_streams_remote_logs_through_local_logger(
+    fake_proto_client, arm_stub_client, caplog, monkeypatch, clean_registry
+):
+    """LogRecord rows from the server are replayed via ``proto_tools.cloud.remote`` so the user sees live progress."""
+    # See verbose-mapping test: conftest pins PROTO_WORKER_VERBOSE=3 globally.
+    monkeypatch.delenv("PROTO_WORKER_VERBOSE", raising=False)
+
+    def _seed(c):
+        c.tools.output_to_return = {"result": "ok"}
+        c.tools.log_records = [
+            _StubLogRecord(msg="Starting ESMFold", level="info", stream="system", seq=1),
+            _StubLogRecord(msg="Folded 1/3", level="info", stream="stdout", seq=2),
+            _StubLogRecord(msg="GPU OOM averted", level="warning", stream="system", seq=3),
+            _StubLogsEnd(final_seq=3),
+            # After the LogsEnd terminator the streaming helper must stop — this record must never appear in caplog.
+            _StubLogRecord(msg="should not be replayed", level="info", stream="system", seq=4),
+        ]
+
+    arm_stub_client(_seed)
+    spec = _register_cloud_tool(clean_registry, "streaming-tool")
+
+    caplog.set_level(logging.DEBUG, logger="proto_tools.cloud.remote")
+    spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud", verbose=1))
+
+    messages = [r.message for r in caplog.records if r.name == "proto_tools.cloud.remote"]
+    assert "Starting ESMFold" in messages
+    assert "Folded 1/3" in messages
+    assert "GPU OOM averted" in messages
+    assert "should not be replayed" not in messages
+
+    # The warning record must map to Python WARNING, not INFO.
+    levels = {r.message: r.levelno for r in caplog.records if r.name == "proto_tools.cloud.remote"}
+    assert levels["GPU OOM averted"] == logging.WARNING
+    assert levels["Starting ESMFold"] == logging.INFO
+
+    # iter_job_logs must have been called once with follow=True and the verbose=1 filters.
+    client = fake_proto_client.last_instance
+    assert client is not None
+    assert len(client.tools.log_iter_calls) == 1
+    call = client.tools.log_iter_calls[0]
+    assert call["follow"] is True
+    assert call["stream"] == ["system", "stdout"]
+    assert call["level"] == ["info", "notice", "warning", "error", "critical", "alert", "emergency"]
+
+
+def test_cloud_verbose_levels_map_to_server_filters(fake_proto_client, arm_stub_client, monkeypatch, clean_registry):
+    """``config.verbose`` translates 1:1 to ``iter_job_logs`` level/stream filters so cloud mirrors local verbosity."""
+    # Clear PROTO_WORKER_VERBOSE (conftest pins it to 3) so config.verbose drives each case.
+    monkeypatch.delenv("PROTO_WORKER_VERBOSE", raising=False)
+    arm_stub_client(lambda c: setattr(c.tools, "output_to_return", {"result": "ok"}))
+
+    for verbose, expected_level, expected_stream in [
+        # verbose=0 is "quiet": cloud streams only warnings+ (spinner conveys liveness instead of info chatter), mirroring local quiet mode.
+        (0, ["warning", "error", "critical", "alert", "emergency"], ["system"]),
+        (1, ["info", "notice", "warning", "error", "critical", "alert", "emergency"], ["system", "stdout"]),
+        (2, None, ["system", "stdout"]),
+        (3, None, None),
+    ]:
+        key = f"verbose-tool-{verbose}"
+        spec = _register_cloud_tool(clean_registry, key)
+        spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud", verbose=verbose))
+        call = fake_proto_client.last_instance.tools.log_iter_calls[-1]
+        assert call["level"] == expected_level, f"verbose={verbose}"
+        assert call["stream"] == expected_stream, f"verbose={verbose}"
+
+
+def test_cloud_dispatch_opens_cloud_spinner(fake_proto_client, arm_stub_client, monkeypatch, clean_registry):
+    """The cloud dispatch path opens a progress_bar with the computer↔cloud spinner so a glance shows it's a cloud run."""
+    arm_stub_client(lambda c: setattr(c.tools, "output_to_return", {"result": "ok"}))
+    spec = _register_cloud_tool(clean_registry, "spinner-tool")
+
+    # Spy on ``progress_bar`` to capture how dispatch invokes it (kwargs are the contract).
+    import proto_tools.cloud as cloud_mod
+
+    captured: dict[str, Any] = {}
+    real_progress_bar = cloud_mod.progress_bar
+
+    def _spy(*args, **kwargs):
+        captured.update(kwargs)
+        return real_progress_bar(*args, **kwargs)
+
+    monkeypatch.setattr(cloud_mod, "progress_bar", _spy)
+
+    spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
+
+    # Emoji terminals get the "cloud" pulse style (no separate prefix); non-UTF falls back to dots + [cloud].
+    assert (captured.get("spinner_style"), captured.get("prefix")) in {("cloud", None), ("dots", "[cloud]")}
+    # The description shows the live phase, opening at "queued".
+    assert captured.get("desc") == "queued"
+    # status-only spinner: no progress bar widget, only the spinner + description
+    assert captured.get("show_bar") is False
+
+
+def test_cloud_spinner_substatus_tracks_job_status(fake_proto_client, arm_stub_client, monkeypatch, clean_registry):
+    """The cloud spinner's substatus follows job status while polling (queued → running) before the result returns."""
+    import proto_tools.cloud as cloud_mod
+
+    seen: list[str] = []
+    monkeypatch.setattr(cloud_mod, "set_substatus", lambda msg, *a, **k: seen.append(msg))
+    monkeypatch.setattr(cloud_mod.time, "sleep", lambda _s: None)  # don't actually wait between polls
+
+    def _seed(c):
+        c.tools.output_to_return = {"result": "ok"}
+        c.tools.status_sequence = ["running", "completed"]  # first poll running, then terminal
+
+    arm_stub_client(_seed)
+    spec = _register_cloud_tool(clean_registry, "status-tool")
+    spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
+
+    assert "running" in seen  # the running status was mapped onto the spinner substatus
+
+
+def test_strip_logger_prefix():
+    """The worker logger-name prefix is removed from phase markers; ordinary 'word:' messages are kept."""
+    from proto_tools.cloud import _strip_logger_prefix
+
+    assert (
+        _strip_logger_prefix("proto_tools.worker.esmfold.esmfold-prediction: Loading ESMFold model: v1 on cuda")
+        == "Loading ESMFold model: v1 on cuda"
+    )
+    assert _strip_logger_prefix("proto_tools.utils.progress: Running esmfold") == "Running esmfold"
+    # No dotted logger head -> leave untouched (message may legitimately start with 'word: ').
+    assert _strip_logger_prefix("Done: 5 sequences") == "Done: 5 sequences"
+    assert _strip_logger_prefix("Folding 1 complex(es), num_recycles=3") == "Folding 1 complex(es), num_recycles=3"
+
+
+def test_cloud_replay_strips_logger_prefix_on_plain_lines(
+    fake_proto_client, arm_stub_client, monkeypatch, caplog, clean_registry
+):
+    """Cloud log lines read like local: the worker logger-name prefix is stripped on every replayed line."""
+    monkeypatch.delenv("PROTO_WORKER_VERBOSE", raising=False)
+
+    def _seed(c):
+        c.tools.output_to_return = {"result": "ok"}
+        c.tools.log_records = [
+            _StubLogRecord(msg="proto_tools.utils.progress: Starting worker", level="info", stream="stdout", seq=1),
+            _StubLogsEnd(final_seq=1),
+        ]
+
+    arm_stub_client(_seed)
+    spec = _register_cloud_tool(clean_registry, "prefix-tool")
+    caplog.set_level(logging.DEBUG, logger="proto_tools.cloud.remote")
+    spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud", verbose=1))
+
+    msgs = [r.message for r in caplog.records if r.name == "proto_tools.cloud.remote"]
+    assert "Starting worker" in msgs
+    assert "proto_tools.utils.progress: Starting worker" not in msgs
+
+
+def test_cloud_update_status_records_drive_spinner_substatus(
+    fake_proto_client, arm_stub_client, monkeypatch, caplog, clean_registry
+):
+    """update_status records replay with the flag so the local spinner handler drives the bar; plain lines don't."""
+    monkeypatch.delenv("PROTO_WORKER_VERBOSE", raising=False)
+
+    def _seed(c):
+        c.tools.output_to_return = {"result": "ok"}
+        c.tools.log_records = [
+            _StubLogRecord(msg="Loading checkpoint", level="info", stream="stdout", seq=1, update_status=True),
+            _StubLogRecord(msg="Folded 1/3", level="info", stream="stdout", seq=2),
+            _StubLogsEnd(final_seq=2),
+        ]
+
+    arm_stub_client(_seed)
+    spec = _register_cloud_tool(clean_registry, "phase-tool")
+    caplog.set_level(logging.DEBUG, logger="proto_tools.cloud.remote")
+    spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud", verbose=1))
+
+    # The flag rides through onto the replayed record; SpinnerFromLogsHandler (tested separately) routes it to the bar.
+    by_msg = {r.message: r for r in caplog.records if r.name == "proto_tools.cloud.remote"}
+    assert getattr(by_msg["Loading checkpoint"], "update_status", False) is True
+    assert getattr(by_msg["Folded 1/3"], "update_status", False) is False
+
+
+def test_cloud_log_stream_failure_does_not_break_run(fake_proto_client, arm_stub_client, caplog, clean_registry):
+    """A broken log stream must not fail the run — the result is what matters."""
+
+    def _seed(c):
+        c.tools.output_to_return = {"result": "ok"}
+
+        def _broken_logs(*args, **kwargs):
+            raise ConnectionError("log stream down")
+            yield  # unreachable; keep this a generator function
+
+        c.tools.iter_job_logs = _broken_logs
+
+    arm_stub_client(_seed)
+    spec = _register_cloud_tool(clean_registry, "log-fail-tool")
+
+    caplog.set_level(logging.DEBUG, logger="proto_tools.cloud")
+    result = spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
+    assert result.result == "ok"
 
 
 # ─ api_key override ──────────────────────────────────────────────────────────

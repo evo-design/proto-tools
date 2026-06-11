@@ -49,8 +49,8 @@ def test_proto_logger_kwarg_does_not_corrupt_extra():
 # ── SpinnerFromLogsHandler: only fires for flagged records ─────────────────
 
 
-def test_spinner_handler_calls_set_substatus_on_flagged_record():
-    """A record with ``update_status=True`` should reach ``set_substatus``."""
+def test_spinner_handler_updates_active_substatus_on_flagged_record():
+    """A record with ``update_status=True`` should reach the bar-only sink."""
     handler = SpinnerFromLogsHandler()
     record = logging.LogRecord(
         name="proto_tools.x",
@@ -63,13 +63,13 @@ def test_spinner_handler_calls_set_substatus_on_flagged_record():
     )
     record.update_status = True
 
-    with patch("proto_tools.utils.progress.set_substatus") as mock_set:
+    with patch("proto_tools.utils.progress.update_active_substatus") as mock_set:
         handler.emit(record)
         mock_set.assert_called_once_with("step A")
 
 
 def test_spinner_handler_skips_unflagged_record():
-    """Records without the flag should not call ``set_substatus``."""
+    """Records without the flag should not touch the spinner."""
     handler = SpinnerFromLogsHandler()
     record = logging.LogRecord(
         name="proto_tools.x",
@@ -81,9 +81,27 @@ def test_spinner_handler_skips_unflagged_record():
         exc_info=None,
     )
 
-    with patch("proto_tools.utils.progress.set_substatus") as mock_set:
+    with patch("proto_tools.utils.progress.update_active_substatus") as mock_set:
         handler.emit(record)
         mock_set.assert_not_called()
+
+
+def test_set_substatus_without_bar_emits_flagged_record_without_recursing(caplog, monkeypatch):
+    """No active bar: set_substatus logs a flagged record (so a remote/log-driven bar advances) and doesn't loop."""
+    import proto_tools.utils.progress as progress
+    from proto_tools.utils.progress import set_substatus
+
+    # The active-bar stack is process-wide; force it empty so this exercises the genuine no-bar
+    # path regardless of a bar leaked by another test (pytest-randomly shuffles order).
+    monkeypatch.setattr(progress, "_active_bars", [])
+
+    # With SpinnerFromLogsHandler installed on the proto_tools namespace, a flag that re-entered
+    # set_substatus would recurse; the no-bar fallback must emit a flagged record without looping.
+    with caplog.at_level(logging.INFO, logger="proto_tools.utils.progress"):
+        set_substatus("Running esmfold")
+
+    flagged = [r for r in caplog.records if getattr(r, "update_status", False)]
+    assert any(r.getMessage() == "Running esmfold" for r in flagged)
 
 
 # ── install_* idempotency + scoping ────────────────────────────────────────
@@ -136,6 +154,24 @@ def test_install_spinner_handler_idempotent():
     spinners = [h for h in pt.handlers if isinstance(h, SpinnerFromLogsHandler)]
     assert len(spinners) == 1
     pt.handlers = [h for h in pt.handlers if not isinstance(h, SpinnerFromLogsHandler)]
+
+
+def test_setup_logging_reattaches_spinner_handler():
+    """setup_logging clears proto_tools handlers, so it must re-attach SpinnerFromLogsHandler.
+
+    Without this, update_status records (cloud replay or local worker-bridged) have nothing
+    routing them to the active bar and just get logged instead.
+    """
+    from proto_tools.utils.logging_config import setup_logging
+
+    pt = logging.getLogger("proto_tools")
+    saved_handlers, saved_level = pt.handlers[:], pt.level
+    try:
+        setup_logging(level=logging.INFO, log_to_console=False, log_to_file=False)
+        assert any(isinstance(h, SpinnerFromLogsHandler) for h in pt.handlers)
+    finally:
+        pt.handlers[:] = saved_handlers
+        pt.setLevel(saved_level)
 
 
 # ── verbose_level_from_env ─────────────────────────────────────────────────

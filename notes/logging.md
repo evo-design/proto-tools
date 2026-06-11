@@ -100,7 +100,7 @@ Standard Python logging hierarchy applies to records re-emitted by the drain thr
 | `get_logger(name)` | `standalone_helpers/proto_logging.py` | Producer convention: returns `logging.getLogger(f"worker.{name}")` |
 | `standalone_helpers/__init__.py` | same dir | Calls `install()` once when `TOOL_VENV_PATH` is set |
 | `ProtoLogger` (parent) | `proto_tools/utils/logging_config.py` | Logger subclass for parent-side `update_status` kwarg |
-| `SpinnerFromLogsHandler` | `proto_tools/utils/logging_config.py` | Parent-side: calls `set_substatus(...)` for flagged records |
+| `SpinnerFromLogsHandler` | `proto_tools/utils/logging_config.py` | Parent-side: routes flagged records to the active bar via `update_active_substatus(...)` |
 | `install_logger_class` | `proto_tools/utils/logging_config.py` | Sets `ProtoLogger` as default class; called from `proto_tools/__init__.py` |
 | `install_spinner_handler` | `proto_tools/utils/logging_config.py` | Attaches spinner handler to `proto_tools` logger |
 | `verbose_level_from_env` | `proto_tools/utils/logging_config.py` | Parses `PROTO_WORKER_VERBOSE` as int 0..3 |

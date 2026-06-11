@@ -75,6 +75,28 @@ def _equalizer_frames() -> list[str]:
     return ["".join(blocks[h] for h in p) for p in patterns]
 
 
+def _cloud_frames(track: int = 3) -> list[str]:
+    """Generate cloud-dispatch frames: a pulse bouncing between a computer and a cloud.
+
+    Evokes the round-trip to hosted execution. Each frame is fixed-width (one ``•``
+    pulse over a ``·`` track, flanked by the two emoji), so the pulse animates in place
+    and the badge stays short enough to leave room for the status message.
+
+    Args:
+        track (int): Number of dot positions between the two icons.
+
+    Returns:
+        list[str]: Frame strings like ``💻·•·☁️``.
+    """
+    positions = list(range(track)) + list(range(track - 2, 0, -1))
+    frames = []
+    for pos in positions:
+        dots = ["·"] * track
+        dots[pos] = "•"
+        frames.append("💻" + "".join(dots) + "☁️")
+    return frames
+
+
 class SpinnerStyle:
     """Definition of a spinner animation style.
 
@@ -110,6 +132,10 @@ SPINNER_STYLES: dict[str, SpinnerStyle] = {
     "bar": SpinnerStyle(
         frames=["|", "/", "-", "\\"],
         interval=0.10,
+    ),
+    "cloud": SpinnerStyle(
+        frames=_cloud_frames(),
+        interval=0.28,
     ),
 }
 
@@ -221,6 +247,14 @@ def _format_desc_for_display(message: str, width: int = _DESC_DISPLAY_WIDTH) -> 
     return message.ljust(width)
 
 
+def _compose_desc(prefix: str | None, leader: str, base_desc: str) -> str:
+    """Compose a spinner description line: optional prefix + frame/icon + padded message."""
+    padded = _format_desc_for_display(base_desc)
+    if prefix:
+        return f"{prefix} {leader} {padded}"
+    return f"{leader} {padded}"
+
+
 # ============================================================================
 # Notebook progress bar (tqdm.auto widget with spinner thread)
 # ============================================================================
@@ -232,7 +266,9 @@ class _NotebookProgressBar(tqdm_auto):  # type: ignore[type-arg]
     animates at a slower interval than the terminal variant.
     """
 
-    def __init__(self, *args: Any, spinner_style: str = "dots", show_bar: bool = True, **kwargs: Any) -> None:  # noqa: D417
+    def __init__(  # noqa: D417
+        self, *args: Any, spinner_style: str = "dots", show_bar: bool = True, prefix: str | None = None, **kwargs: Any
+    ) -> None:
         """Create a notebook progress bar.
 
         All positional and keyword args are forwarded to tqdm.auto.
@@ -241,10 +277,13 @@ class _NotebookProgressBar(tqdm_auto):  # type: ignore[type-arg]
             spinner_style (str): Animation style name from ``SPINNER_STYLES``.
             show_bar (bool): Whether to show the progress bar widget. When False,
                 only the spinner, description, and elapsed time are visible.
+            prefix (str | None): Optional static badge rendered before the
+                animated frame (e.g. ``"☁"`` for cloud dispatch).
         """
         self._base_desc = kwargs.get("desc", "") or ""
         self._style = SPINNER_STYLES.get(spinner_style, SPINNER_STYLES["dots"])
         self._show_bar = show_bar
+        self._prefix = prefix
         self._stop_event = threading.Event()
         _push_active_bar(self)
         super().__init__(*args, **kwargs)
@@ -264,7 +303,7 @@ class _NotebookProgressBar(tqdm_auto):  # type: ignore[type-arg]
         while not self._stop_event.is_set():
             frame = frames[idx % len(frames)]
             try:
-                self.set_description(f"{frame} {_format_desc_for_display(self._base_desc)}", refresh=True)
+                self.set_description(_compose_desc(self._prefix, frame, self._base_desc), refresh=True)
             except Exception:
                 break
             idx += 1
@@ -303,7 +342,7 @@ class _NotebookProgressBar(tqdm_auto):  # type: ignore[type-arg]
         if self._show_bar:
             completed = self.total is not None and self.n >= self.total
             icon = "\u2714" if completed else "\u2718"
-            self.set_description(f"{icon} {_format_desc_for_display(self._base_desc)}", refresh=True)
+            self.set_description(_compose_desc(self._prefix, icon, self._base_desc), refresh=True)
         _pop_active_bar(self)
         super().close()
 
@@ -321,7 +360,9 @@ class _AnimatedProgressBar(tqdm):  # type: ignore[type-arg]
     changes.
     """
 
-    def __init__(self, *args: Any, spinner_style: str = "dots", show_bar: bool = True, **kwargs: Any) -> None:  # noqa: D417
+    def __init__(  # noqa: D417
+        self, *args: Any, spinner_style: str = "dots", show_bar: bool = True, prefix: str | None = None, **kwargs: Any
+    ) -> None:
         """Create an animated progress bar.
 
         All positional and keyword args are forwarded to tqdm.
@@ -332,10 +373,14 @@ class _AnimatedProgressBar(tqdm):  # type: ignore[type-arg]
                 (status-only spinner used by tool dispatch), ``close()`` clears
                 the line instead of pinning a final icon — the trailing
                 "Tool X: completed in Ns" log line already conveys the result.
+            prefix (str | None): Optional static badge rendered before the
+                animated frame (e.g. ``"☁"`` to flag cloud dispatch). Stays
+                fixed across frames so it's a stable glanceable marker.
         """
         self._base_desc = kwargs.pop("desc", "") or ""
         self._style = SPINNER_STYLES.get(spinner_style, SPINNER_STYLES["dots"])
         self._show_bar = show_bar
+        self._prefix = prefix
         self._stop_event = threading.Event()
         _push_active_bar(self)
 
@@ -356,7 +401,7 @@ class _AnimatedProgressBar(tqdm):  # type: ignore[type-arg]
         while not self._stop_event.is_set():
             frame = frames[idx % len(frames)]
             try:
-                self.set_description(f"{frame} {_format_desc_for_display(self._base_desc)}", refresh=True)
+                self.set_description(_compose_desc(self._prefix, frame, self._base_desc), refresh=True)
             except Exception:
                 break
             idx += 1
@@ -399,7 +444,7 @@ class _AnimatedProgressBar(tqdm):  # type: ignore[type-arg]
         if self._show_bar:
             completed = self.total is not None and self.n >= self.total
             icon = "\033[32m\u2714\033[0m" if completed else "\033[31m\u2718\033[0m"
-            self.set_description(f"{icon} {_format_desc_for_display(self._base_desc)}", refresh=True)
+            self.set_description(_compose_desc(self._prefix, icon, self._base_desc), refresh=True)
         _pop_active_bar(self)
         super().close()
 
@@ -407,7 +452,9 @@ class _AnimatedProgressBar(tqdm):  # type: ignore[type-arg]
 # ============================================================================
 # Public API
 # ============================================================================
-def progress_bar(*args: Any, spinner_style: str = "dots", show_bar: bool = True, **kwargs: Any) -> tqdm:  # type: ignore[type-arg]  # noqa: D417
+def progress_bar(  # noqa: D417
+    *args: Any, spinner_style: str = "dots", show_bar: bool = True, prefix: str | None = None, **kwargs: Any
+) -> tqdm:  # type: ignore[type-arg]
     """Create a tqdm progress bar with an animated spinner in the description.
 
     Drop-in replacement for ``tqdm()``.  A background thread animates a
@@ -424,6 +471,9 @@ def progress_bar(*args: Any, spinner_style: str = "dots", show_bar: bool = True,
         show_bar (bool): Whether to show the progress bar widget. When False,
             only the spinner, description, and elapsed time are visible.
             Only affects notebook rendering.
+        prefix (str | None): Optional static badge rendered before the animated
+            frame (e.g. ``"☁"`` to flag cloud-dispatched runs). Held fixed
+            across frames so it functions as a glanceable mode indicator.
 
     Returns:
         tqdm: A tqdm-compatible progress bar instance.
@@ -441,8 +491,8 @@ def progress_bar(*args: Any, spinner_style: str = "dots", show_bar: bool = True,
     if _is_disabled() or kwargs.get("disable"):
         return tqdm(*args, **kwargs)
     if _in_notebook():
-        return _NotebookProgressBar(*args, spinner_style=spinner_style, show_bar=show_bar, **kwargs)
-    return _AnimatedProgressBar(*args, spinner_style=spinner_style, show_bar=show_bar, **kwargs)
+        return _NotebookProgressBar(*args, spinner_style=spinner_style, show_bar=show_bar, prefix=prefix, **kwargs)
+    return _AnimatedProgressBar(*args, spinner_style=spinner_style, show_bar=show_bar, prefix=prefix, **kwargs)
 
 
 def set_substatus(message: str, style: str | None = None) -> None:
@@ -474,14 +524,27 @@ def set_substatus(message: str, style: str | None = None) -> None:
         _fallback_log(message)
 
 
+def update_active_substatus(message: str) -> None:
+    """Update the active progress bar's substatus, or no-op if none is active.
+
+    The bar-only sink for log-driven spinner updates (``SpinnerFromLogsHandler``).
+    Unlike :func:`set_substatus` it never logs on the no-bar path; re-logging here
+    would loop back through the handler that routed the record in.
+    """
+    bar = _current_active_bar()
+    if bar is not None:
+        bar._set_substatus(message)
+
+
 def _fallback_log(message: str) -> None:
     """Log a substatus message when no progress bar is active.
 
-    Args:
-        message (str): Status message to display.
+    Flagged ``update_status`` so a log-driven spinner downstream still advances
+    even though this process has no bar to drive directly: the parent's
+    ``SpinnerFromLogsHandler``, or a cloud client replaying captured worker logs.
     """
     logger = logging.getLogger("proto_tools.utils.progress")
-    logger.info(message)
+    logger.info(message, extra={"update_status": True})
 
 
 # ============================================================================

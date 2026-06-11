@@ -253,8 +253,8 @@ def test_update_status_method_parity_between_proto_logger_copies():
         assert getattr(captured[0], "update_status", False) is True, f"{cls!r}.update_status did not flag the record"
 
 
-def test_drop_update_status_filter_blocks_console_emission():
-    """The console-handler filter must reject update_status records and pass plain ones."""
+def test_drop_update_status_filter_is_bar_aware():
+    """The console filter drops update_status records only while a bar shows them; plain records always pass."""
     from proto_tools.utils.logging_config import _drop_update_status_records
 
     flagged = logging.LogRecord(
@@ -276,5 +276,13 @@ def test_drop_update_status_filter_blocks_console_emission():
         args=(),
         exc_info=None,
     )
-    assert _drop_update_status_records(flagged) is False
-    assert _drop_update_status_records(plain) is True
+
+    # Bar active: the bar renders the flagged record, so the console drops it.
+    with patch("proto_tools.utils.progress.has_active_progress_bar", return_value=True):
+        assert _drop_update_status_records(flagged) is False
+        assert _drop_update_status_records(plain) is True
+
+    # No bar: nothing else is showing the phase, so keep it visible (the no-bar set_substatus fallback).
+    with patch("proto_tools.utils.progress.has_active_progress_bar", return_value=False):
+        assert _drop_update_status_records(flagged) is True
+        assert _drop_update_status_records(plain) is True

@@ -107,14 +107,20 @@ def _auto_configure_logging() -> None:
 
 
 def _drop_update_status_records(record: logging.LogRecord) -> bool:
-    """Filter for console handlers: drop records flagged ``update_status=True``.
+    """Filter for console handlers: drop ``update_status`` records only while a bar shows them.
 
-    These records are spinner-subtitle updates; SpinnerFromLogsHandler picks
-    them up via the ``proto_tools`` namespace, but they should never clutter
-    console output. File handlers don't install this filter, so they capture
-    everything as an audit trail.
+    These records are spinner-subtitle updates; while a progress bar is active it
+    renders them (and SpinnerFromLogsHandler routes them there), so echoing them to
+    the console would just duplicate the bar. With no active bar there's nothing
+    displaying them, so keep them visible — this is the no-bar ``set_substatus``
+    fallback path, and dropping it would silently swallow phase messages locally.
+    File handlers don't install this filter, so they capture everything as an audit trail.
     """
-    return not getattr(record, "update_status", False)
+    if not getattr(record, "update_status", False):
+        return True
+    from proto_tools.utils.progress import has_active_progress_bar
+
+    return not has_active_progress_bar()
 
 
 class _BarAwareStreamHandler(logging.StreamHandler):  # type: ignore[type-arg]
@@ -343,6 +349,10 @@ def setup_logging(
     warnings.filterwarnings("ignore", category=DeprecationWarning, module=r"huggingface_hub.*")
     warnings.filterwarnings("ignore", category=FutureWarning, module=r"huggingface_hub.*")
 
+    # handlers.clear() above dropped the spinner handler installed at import; re-attach it so
+    # update_status records (local worker-bridged or cloud-replayed) still reach the active bar.
+    install_spinner_handler()
+
 
 def get_logger(name: str) -> logging.Logger:
     """Get a logger for a proto_tools module.
@@ -428,14 +438,16 @@ class ProtoLogger(logging.Logger):
 
 
 class SpinnerFromLogsHandler(logging.Handler):
-    """Calls ``set_substatus`` for log records flagged with ``update_status=True``.
+    """Routes log records flagged ``update_status=True`` to the active spinner subtitle.
 
     Attached to the ``proto_tools`` namespace on the parent. Sees both the
     re-emitted records from worker subprocesses (under
     ``proto_tools.worker.*``) and direct records from parent-side wrapper
     code (under ``proto_tools.tools.*``, ``proto_tools.utils.*``, etc.) since
-    both propagate up to ``proto_tools``. ``set_substatus`` is a no-op when no
-    spinner is active, so this handler is safe to leave permanently attached.
+    both propagate up to ``proto_tools``. It updates the bar via
+    ``update_active_substatus`` (not ``set_substatus``) so a flagged record never
+    loops back through the no-bar logging fallback; it no-ops when no spinner is
+    active, so the handler is safe to leave permanently attached.
     """
 
     def emit(self, record: logging.LogRecord) -> None:
@@ -443,9 +455,9 @@ class SpinnerFromLogsHandler(logging.Handler):
         if not getattr(record, "update_status", False):
             return
         try:
-            from proto_tools.utils.progress import set_substatus
+            from proto_tools.utils.progress import update_active_substatus
 
-            set_substatus(record.getMessage())
+            update_active_substatus(record.getMessage())
         except Exception:
             self.handleError(record)
 

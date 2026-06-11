@@ -530,6 +530,12 @@ class ToolRegistry:
                 if hasattr(config, "device"):
                     device_str = str(config.device)
                     if device_str == "cloud":
+                        from proto_tools.cloud import (
+                            cloud_unhostable_message,
+                            dispatch_to_cloud,
+                            is_cloud_hostable,
+                        )
+
                         # local_cpu tools have nothing to offload — rewrite device and fall through.
                         if spec is not None and spec.local_cpu:
                             logger.debug(
@@ -538,9 +544,10 @@ class ToolRegistry:
                             )
                             config = config.model_copy(update={"device": "cpu"})
                             device_str = "cpu"
+                        # Fail fast if the tool's license bars it from Proto's cloud; after the local_cpu no-op.
+                        elif not is_cloud_hostable(key):
+                            raise ValueError(cloud_unhostable_message(key))
                         else:
-                            from proto_tools.cloud import dispatch_to_cloud
-
                             try:
                                 dispatched = dispatch_to_cloud(key, inputs, config)
                             except Exception as e:
