@@ -23,6 +23,8 @@ from proto_tools.tools.masked_models.esm2 import (
     run_esm2_sample,
     run_esm2_score,
 )
+from proto_tools.tools.masked_models.esm2.esm2_gradient import ESM2GradientOutput
+from proto_tools.utils import one_hot_protein_logits
 from proto_tools.utils.standalone_helpers_source.standalone_helpers.serialization import AMINO_ACIDS_LIST
 from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
@@ -189,6 +191,32 @@ def test_esm2_score_and_gradient_agree_on_pll():
     )
 
     assert -grad_result.loss == pytest.approx(score_result.scores[0].avg_log_likelihood, rel=1e-5)
+
+
+@pytest.mark.benchmark("esm2-gradient")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_esm2_gradient_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark esm2-gradient: 20 backward passes over a length-500 logits matrix (cold + warm)."""
+    sequence = random_protein_sequences(n=1, length=500, seed=3)[0]
+    inputs = ESM2GradientInput(logits=one_hot_protein_logits(sequence, sharpness=2.0), temperature=0.6)
+    config = ESM2GradientConfig(model_checkpoint="esm2_t33_650M_UR50D", batch_size=32)
+
+    def run() -> ESM2GradientOutput:
+        last: ESM2GradientOutput | None = None
+        for _ in range(20):
+            last = run_esm2_gradient(inputs, config)
+        assert last is not None
+        return last
+
+    result = benchmark_twice(request, "esm2", run)
+    validate_output(result)
+
+    assert result.tool_id == "esm2-gradient"
+    assert result.gradient is not None
+    assert len(result.gradient) == 500
+    assert all(len(row) == 20 for row in result.gradient)
+    assert result.loss > 0
 
 
 # ── Embedding tests ───────────────────────────────────────────────────────────
