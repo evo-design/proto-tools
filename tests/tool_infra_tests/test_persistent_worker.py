@@ -1505,3 +1505,31 @@ def test_hf_token_not_set_when_absent(monkeypatch, tmp_path: Path):
     )
     env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
     assert "HF_TOKEN" not in env
+
+
+# ── GPU-acquisition error recovery ───────────────────────────────────────────
+def _build_error_worker(error_message: str) -> PersistentWorker:
+    """A worker whose next send() yields a matched error response carrying *error_message*."""
+    worker = PersistentWorker(toolkit="test", env_path=Path("/fake"), script_path=Path("/fake/script.py"), device="cpu")
+    proc = MagicMock()
+    proc.poll.return_value = None  # alive
+    worker._process = proc
+    worker.stop = MagicMock()  # spy; the real stop() would killpg a mock pid
+    worker._read_response = lambda request_id, timeout: {"id": request_id, "error": error_message}
+    return worker
+
+
+def test_send_stops_worker_on_gpu_acquisition_error():
+    """A GPU context-acquisition error tears the worker down so the next dispatch cold-starts fresh."""
+    worker = _build_error_worker("Unable to initialize backend 'cuda': No visible GPU devices.")
+    with pytest.raises(RuntimeError, match="No visible GPU devices"):
+        worker.send({"op": "x"})
+    worker.stop.assert_called_once()
+
+
+def test_send_keeps_worker_alive_on_generic_error():
+    """A non-GPU error response leaves the worker running (no needless restart)."""
+    worker = _build_error_worker("ValueError: chain 'A' not present")
+    with pytest.raises(RuntimeError, match="chain 'A' not present"):
+        worker.send({"op": "x"})
+    worker.stop.assert_not_called()

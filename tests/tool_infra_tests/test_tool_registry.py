@@ -885,6 +885,61 @@ def test_timeout_error_not_retried(clean_registry, fast_retry):
     assert call_count == 1
 
 
+def test_gpu_acquisition_error_not_retried_under_default_mode(clean_registry, fast_retry, monkeypatch):
+    """The same error fails fast under Default compute mode, where it signals a real fault."""
+    import proto_tools.utils.device as device_module
+
+    monkeypatch.setattr(device_module, "is_exclusive_process_mode", lambda: False)
+    call_count = 0
+
+    def tool(inputs, config, instance=None):
+        nonlocal call_count
+        call_count += 1
+        raise RuntimeError("Unable to initialize backend 'cuda': No visible GPU devices.")
+
+    with pytest.raises(RuntimeError, match="No visible GPU devices"):
+        _register_and_run(clean_registry, "gpu-acq-no-retry-default", tool)
+    assert call_count == 1
+
+
+def test_gpu_acquisition_error_exhausts_under_exclusive_process(clean_registry, fast_retry, monkeypatch):
+    """A persistent GPU-acquisition failure raises after exhausting the separate retry budget."""
+    import proto_tools.utils.device as device_module
+
+    monkeypatch.setattr(device_module, "is_exclusive_process_mode", lambda: True)
+    call_count = 0
+
+    def tool(inputs, config, instance=None):
+        nonlocal call_count
+        call_count += 1
+        raise RuntimeError("failed call to cuInit: UNKNOWN ERROR (303)")
+
+    with pytest.raises(RuntimeError, match="cuInit"):
+        _register_and_run(clean_registry, "gpu-acq-exhaust", tool)
+    assert call_count == 1 + MAX_RETRIES
+
+
+def test_gpu_acquisition_error_in_subprocess_stderr_retried(clean_registry, fast_retry, monkeypatch):
+    """One-shot CalledProcessError carries the cuInit text in stderr (not str(exc)); still retried."""
+    import subprocess
+
+    import proto_tools.utils.device as device_module
+
+    monkeypatch.setattr(device_module, "is_exclusive_process_mode", lambda: True)
+    call_count = 0
+
+    def tool(inputs, config, instance=None):
+        nonlocal call_count
+        call_count += 1
+        if call_count < 3:
+            raise subprocess.CalledProcessError(1, ["python", "inference.py"], stderr="boom: No visible GPU devices.")
+        return MockToolOutput(result="success")
+
+    result = _register_and_run(clean_registry, "gpu-acq-stderr", tool)
+    assert result.success is True
+    assert call_count == 3
+
+
 # ── Device count validation ──────────────────────────────────────────────────
 
 

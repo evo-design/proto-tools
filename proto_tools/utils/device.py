@@ -66,6 +66,36 @@ def is_exclusive_process_mode() -> bool:
     return any(m == "Exclusive_Process" for m in get_gpu_compute_modes())
 
 
+# cuInit / "No visible GPU devices" — a CUDA context cannot be acquired (typically a device-handoff race).
+_GPU_ACQUISITION_ERROR_SIGNATURES = ("no visible gpu devices", "failed call to cuinit")
+
+
+def is_gpu_acquisition_error(error: object) -> bool:
+    """Return True if *error* is a GPU context-acquisition failure (cuInit / "No visible GPU devices").
+
+    Accepts an exception or a message string. For exceptions, scans the message, any subprocess
+    ``stderr``/``output``, and the ``__cause__``/``__context__`` chain, so the signature is caught
+    whether it lands in ``str(exc)`` (persistent-worker path) or only in ``CalledProcessError.stderr``
+    (one-shot subprocess path).
+    """
+    parts: list[str] = []
+    if isinstance(error, BaseException):
+        current: BaseException | None = error
+        depth = 0
+        while current is not None and depth < 5:
+            parts.append(str(current))
+            for attr in ("stderr", "output"):
+                value = getattr(current, attr, None)
+                if value:
+                    parts.append(value.decode("utf-8", "replace") if isinstance(value, bytes) else str(value))
+            current = current.__cause__ or current.__context__
+            depth += 1
+    else:
+        parts.append(str(error))
+    blob = " ".join(parts).lower()
+    return any(sig in blob for sig in _GPU_ACQUISITION_ERROR_SIGNATURES)
+
+
 def number_of_physical_gpus() -> int:
     """Returns the number of physical NVIDIA GPUs via nvidia-smi.
 

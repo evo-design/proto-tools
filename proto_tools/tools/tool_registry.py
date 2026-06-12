@@ -53,6 +53,19 @@ _RETRYABLE_EXCEPTIONS = (ConnectionError,)
 _CAPTURE_ERRORS_ENV_VAR = "PROTO_CAPTURE_ERRORS"
 
 
+def _is_transient_gpu_acquisition_error(exc: BaseException) -> bool:
+    """Return True for a retryable GPU context-acquisition failure under Exclusive_Process mode.
+
+    cuInit / "No visible GPU devices" failures right after a device handoff are a race (the prior
+    process has not released its exclusive CUDA context yet), not a real fault. Gated on
+    Exclusive_Process so the same error still fails fast under Default mode, where it signals a
+    genuine misconfiguration or dead GPU.
+    """
+    from proto_tools.utils.device import is_exclusive_process_mode, is_gpu_acquisition_error
+
+    return is_gpu_acquisition_error(exc) and is_exclusive_process_mode()
+
+
 def _should_capture_errors() -> bool:
     """Whether tool exceptions should be captured into the output instead of raised."""
     return os.environ.get(_CAPTURE_ERRORS_ENV_VAR, "0") == "1"
@@ -515,7 +528,7 @@ class ToolRegistry:
                     config = _coerce_model(config, config_class, key, "config")  # type: ignore[assignment]
 
                 start_time = time.time()
-                last_exception = None
+                last_exception: Exception | None = None
                 last_traceback = ""
                 warning_list = []
 
@@ -838,6 +851,17 @@ class ToolRegistry:
                                 time.sleep(delay)
 
                         except Exception as e:
+                            if attempt < MAX_RETRIES and _is_transient_gpu_acquisition_error(e):
+                                last_exception = e
+                                last_traceback = traceback.format_exc()
+                                delay = RETRY_DELAY * (2**attempt)
+                                logger.warning(
+                                    f"Tool {key}: transient GPU acquisition failure (Exclusive_Process) on "
+                                    f"attempt {attempt + 1}/{1 + MAX_RETRIES}, retrying in {delay:.1f}s: {e}"
+                                )
+                                time.sleep(delay)
+                                continue
+
                             # Non-retryable error; raise (or capture per policy)
                             filtered_warnings = [
                                 w

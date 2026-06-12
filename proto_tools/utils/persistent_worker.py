@@ -743,9 +743,15 @@ class PersistentWorker:
                     self.stop()
 
             if "error" in response:
+                # Capture crash context before any stop() (which clears the process state it reads).
+                error_context = self._crash_context()
+                from proto_tools.utils.device import is_gpu_acquisition_error
+
+                # A GPU context-acquisition failure poisons this process (the CUDA/JAX backend caches the init failure); tear it down so the next dispatch (e.g. a registry retry) cold-starts a fresh worker.
+                if is_gpu_acquisition_error(response["error"]):
+                    self.stop()
                 raise RuntimeError(
-                    f"{self.toolkit} worker error for request {request_id}: {response['error']}; "
-                    f"{self._crash_context()}"
+                    f"{self.toolkit} worker error for request {request_id}: {response['error']}; {error_context}"
                 )
 
             return response["result"]  # type: ignore[no-any-return]
