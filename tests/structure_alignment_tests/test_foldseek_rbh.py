@@ -14,6 +14,8 @@ from proto_tools.tools.structure_alignment import (
     FoldseekRBHInput,
     run_foldseek_rbh,
 )
+from tests.conftest import benchmark_twice
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _TINY_PDB = "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
 _FIXTURES = Path(__file__).parent.parent / "dummy_data"
@@ -99,6 +101,46 @@ def test_foldseek_rbh_end_to_end_with_directory_target_db(tmp_path):
     assert self_hits[0].sequence_identity > 0.99
     # Schema invariants on every hit.
     for hit in output.hits:
+        assert 0.0 <= hit.sequence_identity <= 1.0
+        assert hit.alignment_length >= 0
+        assert hit.evalue >= 0.0
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("foldseek-rbh")
+@pytest.mark.slow
+def test_foldseek_rbh_benchmark(request: pytest.FixtureRequest, tmp_path) -> None:
+    """Benchmark foldseek-rbh: 8 sequential RBH searches of renin (~340 aa) vs a 30-structure target DB (cold + warm)."""
+    src = [
+        (_FIXTURES / "renin_af3.pdb").read_text(),
+        (_FIXTURES / "pdl1.pdb").read_text(),
+        (_FIXTURES / "test_structure_similarity.pdb").read_text(),
+    ]
+    target_dir = tmp_path / "targets"
+    target_dir.mkdir()
+    for i in range(30):
+        (target_dir / f"target_{i}.pdb").write_text(src[i % len(src)])
+
+    inputs = FoldseekRBHInput(structure=src[0])
+    config = FoldseekRBHConfig(local_db=str(target_dir), num_threads=4)
+
+    def run_batch():
+        last = None
+        for _ in range(8):
+            last = run_foldseek_rbh(inputs, config)
+        return last
+
+    result = benchmark_twice(request, "foldseek", run_batch)
+    validate_output(result)
+
+    assert result.tool_id == "foldseek-rbh"
+    assert result.target_db == str(target_dir)
+    assert result.num_hits == len(result.hits)
+    assert result.num_hits >= 1, "self-RBH must produce at least the renin self-match"
+    assert max(h.sequence_identity for h in result.hits) > 0.99, "renin self-match should be present"
+    for hit in result.hits:
         assert 0.0 <= hit.sequence_identity <= 1.0
         assert hit.alignment_length >= 0
         assert hit.evalue >= 0.0

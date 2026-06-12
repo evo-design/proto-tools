@@ -35,7 +35,6 @@ _EXEMPT_TOOLS = frozenset({"blast-create-db"})
 # instead. The test below keeps this set honest.
 _KNOWN_MISSING = frozenset(
     {
-        "foldseek-rbh",
         "foldseek-search",
         "freebindcraft-design",
         "germinal-design",
