@@ -27,6 +27,8 @@ from proto_tools.tools.structure_alignment.foldseek.foldseek_search import (
     _parse_m8_text,
     _submit,
 )
+from tests.conftest import benchmark_twice
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 
 def _make_archive(files: dict[str, str]) -> bytes:
@@ -285,3 +287,40 @@ def test_foldseek_search_local_mode_with_directory_db(tmp_path):
     self_hits = [h for h in output.hits if "renin" in h.target_id.lower()]
     assert self_hits, f"renin self-match missing; got {[h.target_id for h in output.hits]}"
     assert self_hits[0].sequence_identity > 0.99
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("foldseek-search")
+@pytest.mark.slow
+def test_foldseek_search_benchmark(request: pytest.FixtureRequest, tmp_path) -> None:
+    """Benchmark foldseek-search: 20 sequential local easy-search runs of renin (~340 aa) vs a 39-structure PDB DB (cold + warm)."""
+    fixtures = Path(__file__).parent.parent / "dummy_data"
+    src = [
+        (fixtures / "renin_af3.pdb").read_text(),
+        (fixtures / "test_structure_similarity.pdb").read_text(),
+        (fixtures / "pdl1.pdb").read_text(),
+    ]
+    target_dir = tmp_path / "targets"
+    target_dir.mkdir()
+    for i in range(39):
+        (target_dir / f"target_{i}.pdb").write_text(src[i % len(src)])
+
+    inputs = FoldseekSearchInput(structure=src[0])
+    config = FoldseekSearchConfig(search_mode="local", local_db=str(target_dir), num_threads=4)
+
+    def run_batch():
+        last = None
+        for _ in range(20):
+            last = run_foldseek_search(inputs, config)
+        return last
+
+    result = benchmark_twice(request, "foldseek", run_batch)
+    validate_output(result)
+
+    assert result.tool_id == "foldseek-search"
+    assert result.ticket_id == ""  # local mode produces no ticket
+    assert result.databases_queried == [str(target_dir)]
+    assert result.num_hits == len(result.hits) >= 1
+    assert max(h.sequence_identity for h in result.hits) > 0.99, "renin self-match should be present"
