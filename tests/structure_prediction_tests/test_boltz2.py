@@ -385,3 +385,44 @@ def test_boltz2_affinity_end_to_end():
     assert isinstance(structure.metrics["affinity_pred_value"], float)
     assert 0.0 <= structure.metrics["affinity_probability_binary"] <= 1.0
     assert_metrics_in_spec(result)
+
+
+# ── Affinity: Benchmark ──────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("boltz2-affinity")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_boltz2_affinity_benchmark(request):
+    """Benchmark boltz2-affinity: virtual-screen 8 diverse small molecules against Cro repressor, MSA-free (cold + warm)."""
+    ligands = [
+        _TYR_SMILES,  # L-tyrosine
+        "CC(=O)Oc1ccccc1C(=O)O",  # aspirin
+        "Cn1cnc2c1c(=O)n(C)c(=O)n2C",  # caffeine
+        "CC(=O)Nc1ccc(O)cc1",  # acetaminophen
+        "CC(C)Cc1ccc(cc1)C(C)C(=O)O",  # ibuprofen
+        "O=C(O)c1ccccc1O",  # salicylic acid
+        "O=C(O)c1cccnc1",  # nicotinic acid
+        "N[C@@H](Cc1ccccc1)C(=O)O",  # L-phenylalanine
+    ]
+    inputs = Boltz2AffinityInput(complexes=[[_CRO_SEQUENCE, smiles] for smiles in ligands])
+    config = Boltz2AffinityConfig(
+        use_msa=False,
+        sampling_steps=50,
+        diffusion_samples=1,
+        sampling_steps_affinity=50,
+        diffusion_samples_affinity=2,
+        seed=42,
+        verbose=True,
+    )
+
+    result = benchmark_twice(request, "boltz2", lambda: run_boltz2_affinity(inputs, config))
+
+    assert result.success, "Boltz2 affinity benchmark run failed"
+    assert result.tool_id == "boltz2-affinity"
+    assert len(result.structures) == len(ligands)
+    for structure in result.structures:
+        assert is_valid_structure(structure.structure_cif)
+        assert isinstance(structure.metrics["affinity_pred_value"], float)
+        assert 0.0 <= structure.metrics["affinity_probability_binary"] <= 1.0
+    assert_metrics_in_spec(result)

@@ -35,7 +35,6 @@ _EXEMPT_TOOLS = frozenset({"blast-create-db"})
 # instead. The test below keeps this set honest.
 _KNOWN_MISSING = frozenset(
     {
-        "boltz2-affinity",
         "esm2-gradient",
         "esmfold-gradient",
         "esmfold2-prediction",
