@@ -91,7 +91,6 @@ def clean_registry():
     # Save original registry
     original_registry = ToolRegistry._registry.copy()
     original_backend = ToolRegistry._dispatch_backend
-    original_dispatch_configured = ToolRegistry._dispatch_configured
 
     # Clear registry
     ToolRegistry._registry.clear()
@@ -102,7 +101,6 @@ def clean_registry():
     # Restore original registry
     ToolRegistry._registry = original_registry
     ToolRegistry._dispatch_backend = original_backend
-    ToolRegistry._dispatch_configured = original_dispatch_configured
 
 
 def test_tool_registry_register_decorator(clean_registry):
@@ -371,7 +369,6 @@ def test_dispatch_backend_short_circuits_before_local_execution(clean_registry):
 
 def test_dispatch_backend_configured_state(clean_registry):
     assert clean_registry.dispatch_backend_configured() is False
-    assert clean_registry._dispatch_configured is False
 
     def backend(key, inputs, config):
         return None
@@ -379,15 +376,10 @@ def test_dispatch_backend_configured_state(clean_registry):
     clean_registry.configure_dispatch_backend(backend)
 
     assert clean_registry.dispatch_backend_configured() is True
-    assert clean_registry._dispatch_configured is True
 
     clean_registry.clear_dispatch_backend()
 
     assert clean_registry.dispatch_backend_configured() is False
-    assert clean_registry._dispatch_configured is False
-
-    clean_registry._dispatch_configured = True
-    assert clean_registry.dispatch_backend_configured() is True
 
 
 def test_dispatch_backend_none_falls_through_to_local_execution(clean_registry):

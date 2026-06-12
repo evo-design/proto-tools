@@ -343,46 +343,29 @@ class ToolRegistry:
 
     _registry: ClassVar[dict[str, ToolSpec]] = {}
     _dispatch_backend: ClassVar[ToolDispatchBackend | None] = None
-    # Compatibility flag for runtimes that configure external dispatch outside
-    # this hook, e.g. older language-api deployments that patched tool functions
-    # and used proto-language's Program to skip creating a local ToolPool.
-    _dispatch_configured: ClassVar[bool] = False
 
     @classmethod
     def configure_dispatch_backend(cls, backend: ToolDispatchBackend | None) -> None:
-        """Configure an early dispatch backend for registered tool calls.
+        """Install an early dispatch hook for registered tool calls.
 
-        The backend runs after input/config coercion but before local device
+        The hook runs after input/config coercion but before local device
         validation, cache lookup, preprocessing, ToolPool fan-out, or standalone
         dispatch. Return a ``BaseToolOutput`` to short-circuit local execution,
-        or ``None`` to fall through to the normal local/cloud path.
+        or ``None`` to fall through to the normal dispatch path.
 
-        The backend owns its transport retry policy and remote persistence model;
-        the local ``instance`` argument is not forwarded through this hook.
-
-        This hook is intended for trusted server environments that route tools
-        to their own execution fabric. End-user cloud calls should continue to
-        use ``config.device == "cloud"``.
+        The ``instance`` argument is not forwarded through this hook.
         """
         cls._dispatch_backend = backend
-        cls._dispatch_configured = backend is not None
 
     @classmethod
     def clear_dispatch_backend(cls) -> None:
         """Clear any configured early dispatch backend."""
         cls._dispatch_backend = None
-        cls._dispatch_configured = False
 
     @classmethod
     def dispatch_backend_configured(cls) -> bool:
-        """Return whether callers such as Program should avoid creating a local ToolPool.
-
-        Legacy external-dispatch runtimes may set ``_dispatch_configured``
-        without using this hook. That state means another high-level dispatch
-        path is responsible for routing tool calls, not that
-        ``_dispatch_backend`` itself will run.
-        """
-        return cls._dispatch_backend is not None or cls._dispatch_configured
+        """Return whether an early dispatch backend is currently installed."""
+        return cls._dispatch_backend is not None
 
     @classmethod
     def register(
