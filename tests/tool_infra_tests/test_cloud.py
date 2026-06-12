@@ -477,11 +477,21 @@ def test_device_cpu_runs_locally(fake_proto_client, clean_registry):
 # ─ local_cpu no-op ───────────────────────────────────────────────────────────
 
 
-def test_device_cloud_noops_for_local_cpu(fake_proto_client, clean_registry):
-    """device='cloud' on a local_cpu tool runs locally without hitting the cloud client."""
+def test_device_cloud_noops_for_local_cpu_without_cloud_hostability(
+    monkeypatch,
+    fake_proto_client,
+    clean_registry,
+):
+    """device='cloud' on a local_cpu tool runs locally without cloud hostability or transport."""
+
+    def _get_license_should_not_run(key):
+        raise AssertionError(f"local_cpu cloud no-op should not check cloud hostability for {key!r}")
+
+    monkeypatch.setattr(ToolRegistry, "get_license", _get_license_should_not_run)
 
     def _local_impl(inputs, config, instance=None):
-        del config, instance
+        del instance
+        assert config.device == "cpu"
         return _CloudOutput(result=f"local:{inputs.payload}")
 
     clean_registry.register(

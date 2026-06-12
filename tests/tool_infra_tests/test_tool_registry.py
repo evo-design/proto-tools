@@ -57,6 +57,15 @@ class MockToolOutput(MockToolOutputBase):
     result: str = Field(description="Result string")
 
 
+class DispatchBackendConfig(BaseConfig):
+    """Config with a device field and preprocess hook that backend dispatch should skip."""
+
+    device: str = ConfigField(default="cuda", title="Device", description="Device request")
+
+    def preprocess(self, inputs):
+        raise AssertionError("dispatch backend should run before preprocess")
+
+
 class AnotherMockToolInput(BaseToolInput):
     """Another mock input for testing."""
 
@@ -81,14 +90,19 @@ def clean_registry():
     """Fixture to provide a clean registry for each test."""
     # Save original registry
     original_registry = ToolRegistry._registry.copy()
+    original_backend = ToolRegistry._dispatch_backend
+    original_dispatch_configured = ToolRegistry._dispatch_configured
 
     # Clear registry
     ToolRegistry._registry.clear()
+    ToolRegistry.clear_dispatch_backend()
 
     yield ToolRegistry
 
     # Restore original registry
     ToolRegistry._registry = original_registry
+    ToolRegistry._dispatch_backend = original_backend
+    ToolRegistry._dispatch_configured = original_dispatch_configured
 
 
 def test_tool_registry_register_decorator(clean_registry):
@@ -318,6 +332,145 @@ def test_tool_registry_decorator_populates_metadata(clean_registry):
     assert result.success is True, "Success should be True"
     assert result.timestamp is not None, "Timestamp should be populated by decorator"
     assert result.result == "Processed test"
+
+
+def test_dispatch_backend_short_circuits_before_local_execution(clean_registry):
+    """A configured backend can route calls before device validation, preprocess, or local execution."""
+
+    @clean_registry.register(
+        key="backend-tool",
+        label="Backend Tool",
+        category="test",
+        input_class=MockToolInput,
+        config_class=DispatchBackendConfig,
+        output_class=MockToolOutput,
+        description="Tool dispatched by backend",
+        uses_gpu=True,
+    )
+    def backend_tool(inputs: MockToolInput, config: DispatchBackendConfig, instance=None) -> MockToolOutput:
+        raise AssertionError("local function should not run when backend handles the call")
+
+    calls = []
+
+    def backend(key: str, inputs: BaseToolInput, config: BaseConfig) -> MockToolOutput | None:
+        calls.append((key, inputs, config))
+        return MockToolOutput(result="from backend")
+
+    clean_registry.configure_dispatch_backend(backend)
+    spec = clean_registry.get("backend-tool")
+    result = spec.function(MockToolInput(input_data="test"), DispatchBackendConfig(device="cuda"))
+
+    assert calls and calls[0][0] == "backend-tool"
+    assert isinstance(calls[0][1], MockToolInput)
+    assert isinstance(calls[0][2], DispatchBackendConfig)
+    assert result.tool_id == "backend-tool"
+    assert result.success is True
+    assert result.execution_time is not None
+    assert result.result == "from backend"
+
+
+def test_dispatch_backend_configured_state(clean_registry):
+    assert clean_registry.dispatch_backend_configured() is False
+    assert clean_registry._dispatch_configured is False
+
+    def backend(key, inputs, config):
+        return None
+
+    clean_registry.configure_dispatch_backend(backend)
+
+    assert clean_registry.dispatch_backend_configured() is True
+    assert clean_registry._dispatch_configured is True
+
+    clean_registry.clear_dispatch_backend()
+
+    assert clean_registry.dispatch_backend_configured() is False
+    assert clean_registry._dispatch_configured is False
+
+    clean_registry._dispatch_configured = True
+    assert clean_registry.dispatch_backend_configured() is True
+
+
+def test_dispatch_backend_none_falls_through_to_local_execution(clean_registry):
+    """Returning ``None`` from the backend leaves normal local execution unchanged."""
+
+    @clean_registry.register(
+        key="backend-fallthrough",
+        label="Backend Fallthrough",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="Tool not handled by backend",
+    )
+    def fallthrough_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
+        return MockToolOutput(result=f"local {inputs.input_data} {config.param1}")
+
+    calls = []
+
+    def backend(key: str, inputs: BaseToolInput, config: BaseConfig) -> None:
+        calls.append((key, inputs, config))
+
+    clean_registry.configure_dispatch_backend(backend)
+    spec = clean_registry.get("backend-fallthrough")
+    result = spec.function(MockToolInput(input_data="test"), MockToolConfig(param1="value"))
+
+    assert calls and calls[0][0] == "backend-fallthrough"
+    assert result.result == "local test value"
+
+
+def test_dispatch_backend_error_uses_capture_policy(clean_registry, capture_errors):
+    """Backend exceptions use the same capture-vs-raise policy as local tool failures."""
+
+    @clean_registry.register(
+        key="backend-error",
+        label="Backend Error",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="Tool with backend failure",
+    )
+    def backend_error_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
+        raise AssertionError("local function should not run after backend error")
+
+    def backend(key: str, inputs: BaseToolInput, config: BaseConfig) -> None:
+        del key, inputs, config
+        raise RuntimeError("backend unavailable")
+
+    clean_registry.configure_dispatch_backend(backend)
+    spec = clean_registry.get("backend-error")
+    result = spec.function(MockToolInput(input_data="test"), MockToolConfig(param1="value"))
+
+    assert result.tool_id == "backend-error"
+    assert result.success is False
+    assert result.execution_time is not None
+    assert any("backend unavailable" in error for error in result.errors)
+
+
+def test_dispatch_backend_rejects_invalid_output_type(clean_registry):
+    """Backend implementations must return ``BaseToolOutput`` or ``None``."""
+
+    @clean_registry.register(
+        key="backend-bad-output",
+        label="Backend Bad Output",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="Tool with bad backend output",
+    )
+    def backend_bad_output_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
+        raise AssertionError("local function should not run after backend handles the call")
+
+    def backend(key: str, inputs: BaseToolInput, config: BaseConfig) -> dict[str, str]:
+        del key, inputs, config
+        return {"result": "not a BaseToolOutput"}
+
+    clean_registry.configure_dispatch_backend(backend)
+    spec = clean_registry.get("backend-bad-output")
+
+    with pytest.raises(TypeError, match="expected BaseToolOutput or None"):
+        spec.function(MockToolInput(input_data="test"), MockToolConfig(param1="value"))
 
 
 def test_tool_registry_decorator_raises_by_default(clean_registry):

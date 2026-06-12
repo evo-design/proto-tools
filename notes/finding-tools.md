@@ -135,6 +135,18 @@ result = run_tool(Input(sequences=["MKTLIIA..."]), Config())
 
 `Config` is optional at the public call site, since the decorator supplies defaults. Output models inherit standard metadata (`tool_id`, `execution_time`, `success`, `errors`) plus tool-specific payload fields.
 
+## Server-Side Dispatch Backend
+
+Trusted server environments can install an early dispatch backend:
+
+```python
+ToolRegistry.configure_dispatch_backend(backend)
+```
+
+The backend is called as `backend(tool_key, inputs, config)` after input/config coercion, but before local device validation, cache lookup, preprocessing, tool pools, or standalone worker dispatch. Return a `BaseToolOutput` to short-circuit local execution, or `None` to fall through to the normal local/cloud path. The local `instance` argument is not forwarded; server runtimes own remote persistence and transport retries. Use `ToolRegistry.dispatch_backend_configured()` to check whether callers such as `Program` should avoid local `ToolPool` dispatch, and call `ToolRegistry.clear_dispatch_backend()` to remove the hook.
+
+This is not the end-user cloud API. Client code should continue to request hosted execution with `config.device == "cloud"`. The dispatch backend is for API services that already own routing, authentication, cancellation, and remote execution.
+
 ## Persistence and Devices
 
 Tool calls dispatch into isolated environments by default when a toolkit has a `standalone/` directory. For repeated or batched calls, use persistence or tool pools so models and environments stay warm. See `notes/tool-environments.md` for environment setup and device movement, and the tutorials for runtime examples.
