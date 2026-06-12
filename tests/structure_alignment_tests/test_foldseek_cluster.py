@@ -16,6 +16,8 @@ from proto_tools.tools.structure_alignment.foldseek.foldseek_cluster import (
     _coerce_structure_items_to_text,
     _parse_cluster_tsv,
 )
+from tests.conftest import benchmark_twice
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _TINY_PDB = "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
 _TINY_CIF = "data_TEST\nloop_\n_atom_site.id\n_atom_site.type_symbol\n1 C\n"
@@ -330,3 +332,37 @@ def test_foldseek_cluster_end_to_end_with_directory(tmp_path):
     assert output.success, f"errors: {output.errors}"
     assert output.num_structures == 2
     assert output.num_clusters >= 1
+
+
+# ── Benchmark ───────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("foldseek-cluster")
+@pytest.mark.slow
+def test_foldseek_cluster_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark foldseek-cluster: 3 easy-cluster runs over 90 structures (3 distinct folds cycled) (cold + warm)."""
+    pdbs = [
+        (_FIXTURES / "renin_af3.pdb").read_text(),
+        (_FIXTURES / "test_structure_similarity.pdb").read_text(),
+        (_FIXTURES / "pdl1.pdb").read_text(),
+    ]
+    n = 90
+    structures = [pdbs[i % len(pdbs)] for i in range(n)]
+    structure_ids = [f"struct_{i}" for i in range(n)]
+    inputs = FoldseekClusterInput(structures=structures, structure_ids=structure_ids)
+    config = FoldseekClusterConfig(num_threads=8)
+
+    def run_batch():
+        last = None
+        for _ in range(3):
+            last = run_foldseek_cluster(inputs, config)
+        return last
+
+    result = benchmark_twice(request, "foldseek", run_batch)
+    validate_output(result)
+
+    assert result.tool_id == "foldseek-cluster"
+    assert result.num_structures == n
+    # 3 distinct folds → multiple real clusters, not a degenerate single cluster.
+    assert result.num_clusters >= 2
+    assert len(result.clusters) == result.num_clusters
