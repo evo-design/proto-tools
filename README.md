@@ -8,7 +8,7 @@
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/evs3Unkegv)
 
 
-Welcome! This repository contains the **tools layer** of the biological programming language project. It puts **60+ computational biology and biological AI tools** at your fingertips through a single, consistent Python interface. Protein language models, structure predictors, inverse folding, sequence analysis, gene annotation, conformational dynamics, genomic scoring, and more are all just one function call away.
+Welcome! This repository contains the **tools layer** of the biological programming language project. It puts **100+ computational biology and biological AI tools** at your fingertips through a single, consistent Python interface. Protein language models, structure predictors, inverse folding, sequence analysis, gene annotation, conformational dynamics, genomic scoring, and more are all just one function call away.
 
 Every tool runs in its own automatically managed isolated environment, so you never have to fight dependency conflicts or build complex conda setups. Just install, call, and get results. Run tools locally on your own hardware, or dispatch to remote compute.
 
