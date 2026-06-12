@@ -283,6 +283,98 @@ def test_standalone_dispatch_rejects_unknown_operation():
         standalone.dispatch({"operation": "bogus"})
 
 
+def test_genome_search_thread_fallback_retries_on_world_size_error(monkeypatch, tmp_path):
+    """A split-index 'World Size > dbSize' abort retries once with --threads clamped to the reported dbSize."""
+    from proto_tools.tools.sequence_alignment.mmseqs2.standalone import run as standalone
+
+    calls: list[list[str]] = []
+
+    def fake_run_cmd(cmd, description):
+        calls.append(cmd)
+        if len(calls) == 1:
+            raise RuntimeError(
+                "mmseqs2: mmseqs search failed (exit 1): World Size: 20 dbSize: 10 | World Size: 20 dbSize: 10"
+            )
+        return  # retry succeeds
+
+    monkeypatch.setattr(standalone, "_run_cmd", fake_run_cmd)
+    mmseqs_tmp = str(tmp_path / "mmseqs_tmp")
+    res_dir = str(tmp_path / "results")
+
+    def search_cmd_for(n: int) -> list[str]:
+        return ["mmseqs", "search", "q", "t", res_dir, mmseqs_tmp, "--threads", str(n)]
+
+    standalone._run_search_with_thread_fallback(search_cmd_for, 20, mmseqs_tmp, res_dir)
+
+    assert len(calls) == 2  # one failed attempt, one successful retry
+    assert calls[0][calls[0].index("--threads") + 1] == "20"
+    assert calls[1][calls[1].index("--threads") + 1] == "10"  # clamped to dbSize
+
+
+def test_genome_search_thread_fallback_handles_pipe_joined_error(monkeypatch, tmp_path):
+    """The fallback still fires if World Size/dbSize land on separate stderr lines (joined by ' | ')."""
+    from proto_tools.tools.sequence_alignment.mmseqs2.standalone import run as standalone
+
+    calls: list[list[str]] = []
+
+    def fake_run_cmd(cmd, description):
+        calls.append(cmd)
+        if len(calls) == 1:
+            raise RuntimeError("mmseqs2: mmseqs search failed (exit 1): World Size: 20 | dbSize: 10")
+        return
+
+    monkeypatch.setattr(standalone, "_run_cmd", fake_run_cmd)
+    tmp, res = str(tmp_path / "tmp"), str(tmp_path / "res")
+    standalone._run_search_with_thread_fallback(
+        lambda n: ["mmseqs", "search", "q", "t", res, tmp, "--threads", str(n)], 20, tmp, res
+    )
+
+    assert len(calls) == 2
+    assert calls[1][calls[1].index("--threads") + 1] == "10"
+
+
+def test_genome_search_thread_fallback_floors_threads_at_one(monkeypatch, tmp_path):
+    """A degenerate dbSize of 0 retries with --threads 1, never --threads 0 (which mmseqs rejects)."""
+    from proto_tools.tools.sequence_alignment.mmseqs2.standalone import run as standalone
+
+    calls: list[list[str]] = []
+
+    def fake_run_cmd(cmd, description):
+        calls.append(cmd)
+        if len(calls) == 1:
+            raise RuntimeError("mmseqs2: mmseqs search failed (exit 1): World Size: 20 dbSize: 0")
+        return
+
+    monkeypatch.setattr(standalone, "_run_cmd", fake_run_cmd)
+    tmp, res = str(tmp_path / "tmp"), str(tmp_path / "res")
+    standalone._run_search_with_thread_fallback(
+        lambda n: ["mmseqs", "search", "q", "t", res, tmp, "--threads", str(n)], 20, tmp, res
+    )
+
+    assert len(calls) == 2
+    assert calls[1][calls[1].index("--threads") + 1] == "1"
+
+
+def test_genome_search_thread_fallback_reraises_unrelated_error(monkeypatch, tmp_path):
+    """A failure that isn't 'World Size > dbSize' propagates without a retry."""
+    from proto_tools.tools.sequence_alignment.mmseqs2.standalone import run as standalone
+
+    calls: list[list[str]] = []
+
+    def fake_run_cmd(cmd, description):
+        calls.append(cmd)
+        raise RuntimeError("mmseqs2: mmseqs search failed (exit 1): some other error")
+
+    monkeypatch.setattr(standalone, "_run_cmd", fake_run_cmd)
+
+    with pytest.raises(RuntimeError, match="some other error"):
+        standalone._run_search_with_thread_fallback(
+            lambda n: ["mmseqs", "--threads", str(n)], 20, str(tmp_path / "t"), str(tmp_path / "r")
+        )
+
+    assert len(calls) == 1  # no retry
+
+
 # ── M8 workflow (pure Python, local test data) ───────────────────────────
 
 

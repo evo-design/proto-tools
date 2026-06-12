@@ -16,10 +16,12 @@ persistent-worker ``dispatch`` import (see ``utils/_worker_bootstrap.py``).
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -197,6 +199,40 @@ def run_protein_search(input_data: dict[str, Any]) -> dict[str, Any]:
 # ============================================================================
 
 
+def _run_search_with_thread_fallback(
+    search_cmd_for: Callable[[int], list[str]], effective_threads: int, mmseqs_tmp: str, res_dir: str
+) -> None:
+    """Run `mmseqs search`; on a split-index "World Size > dbSize" abort, clamp threads to the reported dbSize and retry once.
+
+    A pre-indexed target's effective dbSize is its memory-sized index split count,
+    not the sequence count the up-front cap reads — so recover from the value mmseqs
+    reports. Floored at 1 (not the up-front cap's 2): a dbSize of 1 needs --threads 1
+    and flooring to 2 would re-trigger the abort; the floor also avoids --threads 0 for
+    a degenerate dbSize of 0, which mmseqs rejects.
+    """
+    try:
+        _run_cmd(search_cmd_for(effective_threads), "mmseqs search")
+    except RuntimeError as exc:
+        # World Size/dbSize share an mmseqs stderr line, but _run_cmd joins lines with " | "; `.*?` matches either.
+        match = re.search(r"World Size:\s*(\d+).*?dbSize:\s*(\d+)", str(exc))
+        if match is None:
+            raise
+        world_size, db_size = int(match.group(1)), int(match.group(2))
+        capped = max(1, min(effective_threads, db_size))
+        if world_size <= db_size or capped >= effective_threads:
+            raise
+        logger.warning(
+            "mmseqs search: threads %d exceed DB split count %d; retrying with --threads %d",
+            effective_threads,
+            db_size,
+            capped,
+        )
+        for stale in (mmseqs_tmp, res_dir):
+            shutil.rmtree(stale, ignore_errors=True)
+            Path(stale).mkdir()
+        _run_cmd(search_cmd_for(capped), "mmseqs search (thread-capped retry)")
+
+
 def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run MMseqs2 nucleotide search; target is inline ``target_sequences`` or a FASTA/DB ``target_db`` path."""
     mmseqs = _find_binary()
@@ -256,11 +292,11 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
             effective_threads = max(2, min((os.cpu_count() or 1), target_db_size))
         else:
             effective_threads = max(2, min(requested_threads, target_db_size))
-        threads = str(effective_threads)
 
         _run_cmd([mmseqs, "createdb", query_fasta, query_db], "mmseqs createdb (query)")
-        _run_cmd(
-            [
+
+        def _search_cmd(n_threads: int) -> list[str]:
+            return [
                 mmseqs,
                 "search",
                 query_db,
@@ -270,7 +306,7 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
                 "--search-type",
                 search_type,
                 "--threads",
-                threads,
+                str(n_threads),
                 "-s",
                 sensitivity,
                 "-e",
@@ -286,9 +322,9 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
                 "--strand",
                 strand,
                 *(str(arg) for arg in input_data.get("extra_args", [])),
-            ],
-            "mmseqs search",
-        )
+            ]
+
+        _run_search_with_thread_fallback(_search_cmd, effective_threads, mmseqs_tmp, res_dir)
 
         m8_columns = input_data["m8_columns"]
         _run_cmd(
