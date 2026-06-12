@@ -21,6 +21,8 @@ from proto_tools.tools.gene_annotation.miranda.miranda_scan import (
     _parse_miranda_output,
     _read_fasta,
 )
+from tests.conftest import benchmark_twice, random_dna_sequences
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # One captured hit: the 3-line alignment block, the tab-delimited self-identifying
 # `>` line, and the `>>` summary line (which must be ignored).
@@ -209,3 +211,23 @@ def test_miranda_per_item_cache_key_distinguishes_different_mirna_queries():
     key_a = _generate_cache_key("miranda-scan", input_item=target, config=cfg_a)
     key_b = _generate_cache_key("miranda-scan", input_item=target, config=cfg_b)
     assert key_a != key_b
+
+
+# -- Benchmark (real binary; heavy workload) --------------------------------
+
+
+@pytest.mark.benchmark("miranda-scan")
+@pytest.mark.slow
+def test_miranda_scan_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark miranda-scan: scan the miR-bantam query against 250 random 1000-nt targets (cold + warm)."""
+    targets = random_dna_sequences(n=250, length=1000, seed=0)
+    inputs = MirandaInput(target_sequences=targets)
+    _, mirna_seqs = _read_fasta(_EXAMPLES_DIR / "bantam_mirna.fasta")
+    config = MirandaConfig(mirna_queries=mirna_seqs, mirna_ids=["miR-bantam"])
+
+    result = benchmark_twice(request, "miranda", lambda: run_miranda_scan(inputs, config))
+    validate_output(result)
+
+    assert result.tool_id == "miranda-scan"
+    assert len(result.results) == 250  # one result per input target, in input order
+    assert all(r.target_sequence == targets[i] for i, r in enumerate(result.results))
