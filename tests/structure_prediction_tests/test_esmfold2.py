@@ -18,6 +18,7 @@ from proto_tools.tools.structure_prediction.esmfold2 import (
     run_esmfold2,
 )
 from proto_tools.tools.structure_prediction.esmfold2.esmfold2 import _chain_to_payload
+from tests.conftest import benchmark_twice, random_protein_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 
 # Ubiquitin (PDB 1UBQ), 76 aa: small, well-folded benchmark protein.
@@ -141,3 +142,27 @@ def test_esmfold2_ligand_ccd():
     assert result.success
     assert len(result.structures) == 1
     assert result.structures[0].structure_cif
+
+
+# ── Benchmark ────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("esmfold2-prediction")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_esmfold2_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark esmfold2-prediction: 8 random 150-residue proteins on the deployed esmfold2-fast checkpoint, MSA-free (cold + warm)."""
+    sequences = random_protein_sequences(n=8, length=150, seed=0)
+    inputs = ESMFold2Input(complexes=sequences)
+    config = ESMFold2Config(model_checkpoint="esmfold2-fast", use_msa=False, seed=0)
+
+    result = benchmark_twice(request, "esmfold2", lambda: run_esmfold2(inputs, config))
+
+    assert result.success, "ESMFold2 benchmark run failed"
+    assert result.tool_id == "esmfold2-prediction"
+    assert isinstance(result, ESMFold2Output)
+    assert len(result.structures) == 8
+    for structure in result.structures:
+        assert structure.structure_cif and len(structure.structure_cif) > 0
+        assert isinstance(structure.metrics, ESMFold2Metrics)
+    assert_metrics_in_spec(result)

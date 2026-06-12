@@ -35,7 +35,6 @@ _EXEMPT_TOOLS = frozenset({"blast-create-db"})
 # instead. The test below keeps this set honest.
 _KNOWN_MISSING = frozenset(
     {
-        "esmfold2-prediction",
         "foldmason-msa",
         "foldmason-score-msa",
         "foldseek-cluster",
