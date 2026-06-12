@@ -12,6 +12,8 @@ from proto_tools.tools import (
     MEMEFimoScanInput,
     run_meme_fimo_scan,
 )
+from tests.conftest import benchmark_twice, random_dna_sequences
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _MEME_DIR = Path(__file__).parent.parent.parent / "proto_tools" / "tools" / "gene_annotation" / "meme"
 EXAMPLE_MEME_FILE = _MEME_DIR / "examples" / "example.meme"
@@ -117,3 +119,25 @@ def test_fimo_scan_export_csv(tmp_path):
     written = tmp_path / "fimo_matches"
     assert written.exists()
     assert written.stat().st_size > 0
+
+
+# ---------------------------------------------------------------------------
+# Benchmark
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.benchmark("meme-fimo-scan")
+@pytest.mark.slow
+def test_meme_fimo_scan_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark meme-fimo-scan: scan 15000 random 1 kb DNA sequences against the bundled motif (cold + warm)."""
+    sequences = random_dna_sequences(n=15000, length=1000, seed=0)
+    inputs = MEMEFimoScanInput(sequences=sequences, motifs=str(EXAMPLE_MEME_FILE))
+    config = MEMEFimoScanConfig()
+
+    result = benchmark_twice(request, "meme", lambda: run_meme_fimo_scan(inputs, config))
+    validate_output(result)
+
+    assert result.tool_id == "meme-fimo-scan"
+    assert result.success is True
+    assert len(result.results) == 15000  # one bundle per input sequence
+    assert result.num_matches > 0
