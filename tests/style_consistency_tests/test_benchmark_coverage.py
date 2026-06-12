@@ -24,6 +24,12 @@ _TESTS_ROOT = pathlib.Path(__file__).parent.parent
 #                        measure the remote service's latency, not our code.
 _EXEMPT_CATEGORIES = frozenset({"testing", "database_retrieval"})
 
+# Individual tools exempt from the benchmark requirement (their category is not).
+#   blast-create-db — builds a local BLAST database from a FASTA; no compute
+#                     model and not deployed to the cloud, so a benchmark would
+#                     just time local index construction.
+_EXEMPT_TOOLS = frozenset({"blast-create-db"})
+
 # Tools registered before the benchmark requirement existed. Remove an entry
 # when you add its benchmark; do NOT add new entries — write the benchmark
 # instead. The test below keeps this set honest.
@@ -31,7 +37,6 @@ _KNOWN_MISSING = frozenset(
     {
         "alphafold2-gradient",
         "bindcraft-design",
-        "blast-create-db",
         "blast-search",
         "boltz2-affinity",
         "esm2-gradient",
@@ -99,7 +104,11 @@ def _benchmarked_tool_keys() -> set[str]:
 
 
 def _registered_tool_keys() -> set[str]:
-    return {spec.key for spec in ToolRegistry.list_all() if spec.category not in _EXEMPT_CATEGORIES}
+    return {
+        spec.key
+        for spec in ToolRegistry.list_all()
+        if spec.category not in _EXEMPT_CATEGORIES and spec.key not in _EXEMPT_TOOLS
+    }
 
 
 def test_consistency_all_tools_have_benchmark() -> None:
@@ -130,6 +139,19 @@ def test_known_missing_is_exact() -> None:
     assert not now_covered, (
         f"_KNOWN_MISSING lists tools that now have a benchmark: {now_covered}. "
         "Delete these entries — the requirement is met for them."
+    )
+
+    # Keep the per-tool exemption list honest too.
+    all_registered = {spec.key for spec in ToolRegistry.list_all()}
+    stale_exempt = sorted(_EXEMPT_TOOLS - all_registered)
+    assert not stale_exempt, (
+        f"_EXEMPT_TOOLS names tools that are no longer registered: {stale_exempt}. "
+        "Remove them (likely renamed or deleted)."
+    )
+    double_listed = sorted(_EXEMPT_TOOLS & _KNOWN_MISSING)
+    assert not double_listed, (
+        f"Tools are both exempt and in _KNOWN_MISSING: {double_listed}. "
+        "An exempt tool needs no benchmark — remove it from _KNOWN_MISSING."
     )
 
 
