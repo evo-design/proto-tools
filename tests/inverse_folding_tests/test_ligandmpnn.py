@@ -29,7 +29,7 @@ from proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample import (
 from proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample import (
     example_input as ligandmpnn_example_input,
 )
-from tests.conftest import benchmark_twice, make_persistent_fixture
+from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -281,3 +281,26 @@ def test_ligandmpnn_sample_benchmark(request: pytest.FixtureRequest, cif_structu
     lengths = {sum(len(s) for s in design.chain_sequences) for design in design_set.complexes}
     assert len(lengths) == 1, f"All complexes should have the same length, got {lengths}"
     assert next(iter(lengths)) > 0, "Designs should be non-empty"
+
+
+@pytest.mark.benchmark("ligandmpnn-score")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_ligandmpnn_score_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark ligandmpnn-score on 50 sequence-structure pairs against renin chain A (cold + warm)."""
+    structure = Structure.from_file(Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb")
+    target_len = len(structure.get_chain_sequence("A"))
+    sequences = random_protein_sequences(n=50, length=target_len, seed=1)
+    pairs = [SequenceStructurePair(sequence=s, structure=structure) for s in sequences]
+
+    inputs = LigandMPNNScoringInput(sequence_structure_pairs=pairs)
+    config = LigandMPNNScoringConfig(seed=42, return_logits=False)
+
+    result = benchmark_twice(request, "ligandmpnn", lambda: run_ligandmpnn_score(inputs, config))
+    assert_metrics_in_spec(result)
+
+    assert result.tool_id == "ligandmpnn-score"
+    assert len(result.scores) == 50
+    for score in result.scores:
+        assert isinstance(score, InverseFoldingScoringMetrics)
+        assert score["perplexity"] >= 1.0
