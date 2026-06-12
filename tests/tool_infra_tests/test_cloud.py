@@ -361,6 +361,33 @@ def test_device_cloud_uses_tool_config_timeout(fake_proto_client, arm_stub_clien
     assert captured["timeout"] == 1200.0
 
 
+class _NoTimeoutCloudConfig(_CloudConfig):
+    timeout: int | None = ConfigField(default=None, ge=1, title="Timeout", description="No inference cap")
+
+
+def test_device_cloud_none_timeout_polls_until_terminal(
+    fake_proto_client, arm_stub_client, monkeypatch, clean_registry
+):
+    """config.timeout=None must poll until terminal (no client deadline), not cap at a fixed value."""
+    arm_stub_client(lambda c: setattr(c.tools, "output_to_return", {"result": "from-api"}))
+    spec = _register_cloud_tool(clean_registry, "unbounded-api-tool", config_class=_NoTimeoutCloudConfig)
+
+    import proto_tools.cloud as cloud_mod
+
+    captured: dict[str, Any] = {}
+    real_poll = cloud_mod._poll_until_terminal
+
+    def _spy_poll(client, key, job_id, poll_interval, timeout):
+        captured["timeout"] = timeout
+        return real_poll(client, key, job_id, poll_interval, timeout)
+
+    monkeypatch.setattr(cloud_mod, "_poll_until_terminal", _spy_poll)
+
+    spec.function(_CloudInput(payload="hi"), _NoTimeoutCloudConfig(device="cloud"))
+
+    assert captured["timeout"] is None
+
+
 def test_cloud_output_assets_are_decoded_before_validation(fake_proto_client, arm_stub_client, clean_registry):
     """Cloud dispatch materializes output AssetRefs before applying the proto-tools output model."""
 
