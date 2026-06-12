@@ -20,7 +20,12 @@ from proto_tools.tools.sequence_alignment.blast.blast_search import (
     BlastHit,
     _blast_results_to_hits,
 )
-from tests.conftest import make_persistent_fixture
+from tests.conftest import (
+    benchmark_twice,
+    make_persistent_fixture,
+    random_dna_sequences,
+)
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _persistent_tool = make_persistent_fixture("blast", gpu=False)
 
@@ -597,3 +602,43 @@ def test_full_pipeline_create_db_search_export(tmp_path):
         "bitscore",
     ]
     assert list(loaded.columns) == expected_cols
+
+
+# ---------------------------------------------------------------------------
+# Benchmark
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.benchmark("blast-search")
+@pytest.mark.slow
+def test_blast_search_benchmark(request: pytest.FixtureRequest, tmp_path: Path) -> None:
+    """Benchmark blast-search: 20 sequential local blastn searches of a 2000 nt query against a 100-sequence nucleotide DB containing it (cold + warm)."""
+    db_seqs = random_dna_sequences(n=100, length=2000, seed=1)
+    query = db_seqs[0]  # the query is present in the DB, so the homology search returns real hits
+    fasta = tmp_path / "bench_db.fasta"
+    fasta.write_text("".join(f">seq_{i}\n{seq}\n" for i, seq in enumerate(db_seqs)))
+    db_path = run_create_blast_db(
+        CreateBlastDbInput(fasta=str(fasta)),
+        CreateBlastDbConfig(dbtype="nucl"),
+    ).db_path
+    inputs = BlastSearchInput(query=query)
+    config = BlastSearchConfig(
+        search_mode="local",
+        program="blastn",
+        local_db=db_path,
+        task="blastn",
+        num_threads=4,
+    )
+
+    def run_batch():
+        last = None
+        for _ in range(20):
+            last = run_blast_search(inputs, config)
+        return last
+
+    result = benchmark_twice(request, "blast", run_batch)
+    validate_output(result)
+
+    assert result.tool_id == "blast-search"
+    assert isinstance(result, BlastSearchOutput)
+    assert result.num_hits >= 1
