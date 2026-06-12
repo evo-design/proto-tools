@@ -24,23 +24,16 @@ You can use it as a standalone Python library or as part of the broader [proto-l
 
 ## Setup 🚧
 
-### Step 0: Clone the repository 📦
-
-```bash
-git clone https://github.com/evo-design/proto-tools.git
-cd proto-tools
-```
-
-> [!NOTE]
-> In the future, we plan to enable a direct PyPI install (`pip install proto-tools`), but prior to the public release we will be using this local install approach.
-
 ### Step 1: Install the package 🐍
 
 All you need is Python 3.10+ and pip:
 
 ```bash
-pip install .
+pip install git+https://github.com/evo-design/proto-tools.git
 ```
+
+> [!NOTE]
+> A direct PyPI install (`pip install proto-tools`) will be available soon.
 
 System tools that standalone tool environments need (git, curl, gcc) are automatically provisioned on first use via a shared foundation environment — no manual setup required.
 
