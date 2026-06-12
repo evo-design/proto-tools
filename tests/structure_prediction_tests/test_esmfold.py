@@ -190,6 +190,44 @@ def test_esmfold_benchmark(request):
         assert is_valid_structure(structure.structure_cif)
 
 
+@pytest.mark.benchmark("esmfold-gradient")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_esmfold_gradient_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark esmfold-gradient: 10 sequential gradient passes on a 200-residue target chain (cold + warm).
+
+    The gradient tool takes a single non-iterable input, so it is stressed the
+    tmalign way: a heavy 200-residue target chain folded with a full forward +
+    backward confidence pass, looped 10x to exercise the persistent ESMFold
+    worker. The 200-residue logits matrix drives a realistic differentiable-design
+    payload; the length is held at 200 (vs the forward-only prediction
+    benchmark's 300) because the gradient path retains the full O(L^2) pair-rep
+    activations for the backward pass, and 300 residues exceeds an 80 GB GPU.
+    ``num_recycles=1`` keeps each backward pass tractable while the loop carries
+    the throughput stress.
+    """
+    sequence = random_protein_sequences(n=1, length=200, seed=0)[0]
+    inputs = ESMFoldGradientInput(
+        logits=one_hot_protein_logits(sequence, sharpness=2.0),
+        chains=[sequence],
+    )
+    config = ESMFoldGradientConfig(num_recycles=1, loss_weights={"plddt": 1.0})
+
+    def run_batch():
+        last = None
+        for _ in range(10):
+            last = run_esmfold_gradient(inputs, config)
+        return last
+
+    result = benchmark_twice(request, "esmfold", run_batch)
+
+    assert result.tool_id == "esmfold-gradient"
+    assert result.gradient is not None
+    assert len(result.gradient) == 200
+    assert all(len(row) == 20 for row in result.gradient)
+    assert is_valid_structure(result.structure.structure_cif)
+
+
 def test_relabel_chains_rejects_multi_char_ids():
     """PDB chain IDs are single-character; multi-char IDs must fail fast (no GPU)."""
     from proto_tools.tools.structure_prediction.esmfold.helpers import relabel_chains
