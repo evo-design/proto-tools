@@ -106,17 +106,17 @@ def test_get_subprocess_device_env_doesnt_modify_parent_env(monkeypatch):
     assert env["CUDA_VISIBLE_DEVICES"] != original
 
 
-def test_get_subprocess_device_env_warns_without_parent_cuda_visible_devices(monkeypatch, caplog):
-    """Verify warning is logged when CUDA_VISIBLE_DEVICES is not set."""
+def test_get_subprocess_device_env_silent_without_parent_cuda_visible_devices(monkeypatch, caplog):
+    """No parent CUDA_VISIBLE_DEVICES: fall back to logical indices without warning."""
     import logging
 
     monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
 
     with caplog.at_level(logging.WARNING):
-        get_subprocess_device_env("cuda:0")
+        env = get_subprocess_device_env("cuda:0")
 
-    # Should log a warning
-    assert any("CUDA_VISIBLE_DEVICES not set" in record.message for record in caplog.records)
+    assert env["CUDA_VISIBLE_DEVICES"] == "0", "Falls back to the logical index directly"
+    assert not any("CUDA_VISIBLE_DEVICES not set" in record.message for record in caplog.records)
 
 
 def test_get_subprocess_device_env_rejects_invalid_device_format(monkeypatch):

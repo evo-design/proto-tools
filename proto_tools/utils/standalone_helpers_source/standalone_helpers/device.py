@@ -142,11 +142,7 @@ def get_subprocess_device_env(device: str) -> dict[str, str]:
     parent_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
 
     if not parent_visible or not parent_visible.strip():
-        # No parent CUDA_VISIBLE_DEVICES; use indices directly
-        logger.warning(
-            f"CUDA_VISIBLE_DEVICES not set in worker environment for device '{device}'. "
-            f"CLI subprocess may access unintended GPUs."
-        )
+        # No parent CUDA_VISIBLE_DEVICES; use the logical indices directly.
         env["CUDA_VISIBLE_DEVICES"] = ",".join(str(idx) for idx in indices)
         return _apply_jax_subprocess_env(env)
 

@@ -57,6 +57,31 @@ _STRIP_MIMES = frozenset(
 _TEXT_MIMES = frozenset({"text/plain", "text/html", "text/markdown"})
 
 
+def _ignored_warning_substrings() -> tuple[str, ...]:
+    """Warning substrings the registry suppresses at runtime, mirrored for sanitizing.
+
+    Notebooks executed before a substring was added to the registry's ignore list
+    carry the warning baked into saved stderr output. Re-using the same list lets
+    ``--sanitize-only`` scrub them without a full GPU re-run.
+    """
+    from proto_tools.tools.tool_registry import IGNORED_WARNING_SUBSTRINGS
+
+    return tuple(IGNORED_WARNING_SUBSTRINGS)
+
+
+def _scrub_warning_lines(text: object, ignored: tuple[str, ...]) -> tuple[object, int]:
+    """Drop stderr stream lines containing a runtime-ignored warning substring.
+
+    Returns ``(new_value, removed)`` preserving the original ``str``/``list[str]`` shape.
+    """
+    lines = text if isinstance(text, list) else str(text).splitlines(keepends=True)
+    kept = [ln for ln in lines if not any(sub in str(ln) for sub in ignored)]
+    removed = len(lines) - len(kept)
+    if isinstance(text, str):
+        return "".join(kept), removed
+    return kept, removed
+
+
 def _build_redaction_rules() -> list[tuple[re.Pattern[str], str]]:
     """Build ``(pattern, replacement)`` pairs for redacting identifiers.
 
@@ -158,26 +183,37 @@ def execute_notebook(path: Path, timeout: int) -> tuple[bool, str]:
     return True, "ok"
 
 
-def sanitize(path: Path) -> tuple[int, int, set[str]]:
+def sanitize(path: Path) -> tuple[int, int, int, set[str]]:
     """Sanitize one notebook's cell outputs in place for committing.
 
-    Strips non-renderable mime types and redacts machine/user-specific identifiers
-    from cell outputs, and drops orphan ``widgets`` metadata.
+    Strips non-renderable mime types, scrubs stderr lines for warnings the registry
+    suppresses at runtime, redacts machine/user-specific identifiers from cell
+    outputs, and drops orphan ``widgets`` metadata.
 
     Returns:
-        tuple[int, int, set[str]]: ``(stripped, redacted, seen_mimes)`` — number of
-        mime entries stripped, number of identifier redactions applied, and the full
-        set of mime types that were encountered (for reporting).
+        tuple[int, int, int, set[str]]: ``(stripped, scrubbed, redacted, seen_mimes)`` —
+        mime entries stripped, stderr warning lines scrubbed, identifier redactions
+        applied, and the full set of mime types encountered (for reporting).
     """
     nb = json.loads(path.read_text())
+    ignored = _ignored_warning_substrings()
     stripped = 0
+    scrubbed = 0
     redacted = 0
     seen_mimes: set[str] = set()
 
     for cell in nb.get("cells", []):
         if cell.get("cell_type") != "code":
             continue
+        kept_outputs = []
         for out in cell.get("outputs", []):
+            # Drop stderr lines for warnings the registry ignores at runtime; if the
+            # whole output was noise, drop it rather than leave an empty stream.
+            if out.get("output_type") == "stream" and out.get("name") == "stderr" and "text" in out:
+                out["text"], n = _scrub_warning_lines(out["text"], ignored)
+                scrubbed += n
+                if not out["text"]:
+                    continue
             # Stream text (stdout/stderr) and error tracebacks are plain text.
             if "text" in out:
                 out["text"], n = _redact_field(out["text"])
@@ -186,24 +222,27 @@ def sanitize(path: Path) -> tuple[int, int, set[str]]:
                 out["traceback"], n = _redact_field(out["traceback"])
                 redacted += n
             data = out.get("data")
-            if not isinstance(data, dict):
-                continue
-            for mime in list(data.keys()):
-                seen_mimes.add(mime)
-                if mime in _STRIP_MIMES:
-                    del data[mime]
-                    stripped += 1
-                elif mime in _TEXT_MIMES:
-                    data[mime], n = _redact_field(data[mime])
-                    redacted += n
+            if isinstance(data, dict):
+                for mime in list(data.keys()):
+                    seen_mimes.add(mime)
+                    if mime in _STRIP_MIMES:
+                        del data[mime]
+                        stripped += 1
+                    elif mime in _TEXT_MIMES:
+                        data[mime], n = _redact_field(data[mime])
+                        redacted += n
+            kept_outputs.append(out)
+        cell["outputs"] = kept_outputs
 
     # Drop notebook-level ``widgets`` metadata — refers to widget state we no longer persist.
     if "widgets" in nb.get("metadata", {}):
         del nb["metadata"]["widgets"]
 
-    if stripped or redacted:
-        path.write_text(json.dumps(nb, indent=1) + "\n")
-    return stripped, redacted, seen_mimes
+    if stripped or scrubbed or redacted:
+        # ensure_ascii=False keeps literal UTF-8 (em dashes, emoji, arrows), matching
+        # nbformat's writer; the default would escape them and churn every notebook.
+        path.write_text(json.dumps(nb, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    return stripped, scrubbed, redacted, seen_mimes
 
 
 def _rel(path: Path) -> str:
@@ -259,6 +298,7 @@ def main() -> int:
     failures: list[tuple[Path, str]] = []
     all_mimes: set[str] = set()
     total_stripped = 0
+    total_scrubbed = 0
     total_redacted = 0
 
     progress = tqdm(notebooks, desc="Processing", unit="nb", file=sys.stderr)
@@ -272,11 +312,12 @@ def main() -> int:
             ok, msg = execute_notebook(nb_path, args.timeout)
 
         if ok:
-            stripped, redacted, mimes = sanitize(nb_path)
+            stripped, scrubbed, redacted, mimes = sanitize(nb_path)
             total_stripped += stripped
+            total_scrubbed += scrubbed
             total_redacted += redacted
             all_mimes.update(mimes)
-            print(f"  ok    {rel}  (stripped {stripped}, redacted {redacted})", flush=True)
+            print(f"  ok    {rel}  (stripped {stripped}, scrubbed {scrubbed}, redacted {redacted})", flush=True)
         else:
             failures.append((nb_path, msg))
             print(f"  FAIL  {rel}: {msg}", flush=True)
@@ -286,7 +327,8 @@ def main() -> int:
     print(flush=True)
     print(
         f"Summary: {len(notebooks) - len(failures)}/{len(notebooks)} notebooks processed; "
-        f"{total_stripped} widget views stripped, {total_redacted} identifiers redacted.",
+        f"{total_stripped} widget views stripped, {total_scrubbed} warning lines scrubbed, "
+        f"{total_redacted} identifiers redacted.",
         flush=True,
     )
     if all_mimes:
