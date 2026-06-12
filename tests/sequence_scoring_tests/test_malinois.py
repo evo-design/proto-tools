@@ -279,6 +279,40 @@ def test_malinois_real_gpu_batched_gradient_matches_batch_size_one_calls() -> No
         np.testing.assert_allclose(np.asarray(batched.gradient[idx]), np.asarray(single.gradient[0]), atol=1e-6)
 
 
+@pytest.mark.benchmark("malinois-score")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_malinois_score_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark malinois-score on 25000 DNA inserts of length 200 (cold + warm)."""
+    from proto_tools.tools.sequence_scoring.malinois import (
+        MalinoisScoreConfig,
+        MalinoisScoreInput,
+        run_malinois_score,
+    )
+
+    sequences = random_dna_sequences(n=25000, length=200, seed=0)
+    inputs = MalinoisScoreInput(sequences=sequences)
+    config = MalinoisScoreConfig(
+        cell_types=["K562", "HepG2", "SKNSH"],
+        seq_length=200,
+        batch_size=32,
+        device="cuda",
+    )
+
+    result = benchmark_twice(request, "malinois", lambda: run_malinois_score(inputs, config))
+    validate_output(result)
+    assert_metrics_in_spec(result)
+
+    assert result.tool_id == "malinois-score"
+    assert len(result.results) == 25000
+    assert result.cell_types == ["K562", "HepG2", "SKNSH"]
+    assert result.seq_length == 200
+    for sequence_result in result.results:
+        assert sequence_result.sequence_length == 200
+        assert set(sequence_result.scores) == {"K562", "HepG2", "SKNSH"}
+        assert all(math.isfinite(score) for score in sequence_result.scores.values())
+
+
 @pytest.mark.benchmark("malinois-gradient")
 @pytest.mark.slow
 @pytest.mark.uses_gpu

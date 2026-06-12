@@ -38,7 +38,6 @@ _EXEMPT_TOOLS = frozenset(
 # instead. The test below keeps this set honest.
 _KNOWN_MISSING = frozenset(
     {
-        "malinois-score",
         "meme-fimo-scan",
         "miranda-scan",
         "mmseqs2-clustering",
