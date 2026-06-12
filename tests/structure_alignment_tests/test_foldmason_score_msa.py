@@ -19,6 +19,8 @@ from proto_tools.tools.structure_alignment import (
     run_foldmason_score_msa,
 )
 from proto_tools.tools.structure_alignment.foldmason.standalone.run import _parse_msa2lddt_stdout
+from tests.conftest import benchmark_twice
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _TINY_PDB = "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
 _TINY_MSA = ">a\nM\n>b\nM\n"
@@ -237,3 +239,40 @@ def test_foldmason_score_msa_chained_after_local_msa():
     assert len(score_out.column_scores) == score_out.alignment_length
     for s in score_out.column_scores:
         assert 0.0 <= s <= 1.0
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("foldmason-score-msa")
+@pytest.mark.slow
+def test_foldmason_score_msa_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark foldmason-score-msa: msa2lddt on a real foldmason-msa alignment of 30 structures (2 folds) (cold + warm)."""
+    pdbs = [(_FIXTURES / "renin_af3.pdb").read_text(), (_FIXTURES / "test_structure_similarity.pdb").read_text()]
+    n = 30
+    structures = [pdbs[i % len(pdbs)] for i in range(n)]
+    structure_ids = [f"structure_{i}" for i in range(n)]
+    # Score a real alignment of two distinct folds (genuine gaps, sub-1.0 LDDT),
+    # built once with foldmason-msa as setup — not a degenerate identical MSA.
+    msa_out = run_foldmason_msa(
+        FoldmasonMSAInput(structures=structures, structure_ids=structure_ids),
+        FoldmasonMSAConfig(search_mode="local", num_threads=4),
+    )
+    assert msa_out.success, f"msa setup errors: {msa_out.errors}"
+    inputs = FoldmasonScoreMSAInput(structures=structures, structure_ids=structure_ids, msa=msa_out.aa_msa_fasta)
+    config = FoldmasonScoreMSAConfig(num_threads=4)
+
+    def run_batch():
+        last = None
+        for _ in range(5):
+            last = run_foldmason_score_msa(inputs, config)
+        return last
+
+    result = benchmark_twice(request, "foldmason", run_batch)
+    validate_output(result)
+
+    assert result.tool_id == "foldmason-score-msa"
+    assert result.success, f"errors: {result.errors}"
+    assert result.alignment_length == msa_out.alignment_length
+    assert len(result.column_scores) == result.alignment_length
+    assert 0.0 <= result.average_lddt <= 1.0
