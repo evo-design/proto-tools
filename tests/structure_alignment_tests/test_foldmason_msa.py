@@ -18,6 +18,8 @@ from proto_tools.tools.structure_alignment.foldmason.foldmason_msa import (
     _msa_dimensions,
     _parse_msa_response_json,
 )
+from tests.conftest import benchmark_twice
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _TINY_PDB = "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
 _FIXTURES = Path(__file__).parent.parent / "dummy_data"
@@ -289,3 +291,39 @@ def test_foldmason_msa_remote_with_real_fixtures():
     assert len(headers) == 3
     for h in headers:
         assert h in output.newick_tree, f"header {h!r} missing from Newick {output.newick_tree!r}"
+
+
+# ── Benchmark ──────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("foldmason-msa")
+@pytest.mark.slow
+def test_foldmason_msa_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark foldmason-msa: 5x local easy-msa over a 90-structure MSA (3 folds cycled) (cold + warm)."""
+    pdbs = [
+        (_FIXTURES / "renin_af3.pdb").read_text(),
+        (_FIXTURES / "test_structure_similarity.pdb").read_text(),
+        (_FIXTURES / "pdl1.pdb").read_text(),
+    ]
+    n = 90
+    structures = [pdbs[i % len(pdbs)] for i in range(n)]
+    structure_ids = [f"struct_{i}" for i in range(n)]
+    inputs = FoldmasonMSAInput(structures=structures, structure_ids=structure_ids)
+    config = FoldmasonMSAConfig(search_mode="local", num_threads=4)
+
+    def run_batch():
+        last = None
+        for _ in range(5):
+            last = run_foldmason_msa(inputs, config)
+        return last
+
+    result = benchmark_twice(request, "foldmason", run_batch)
+    validate_output(result)
+
+    assert result.tool_id == "foldmason-msa"
+    assert result.success, f"errors: {result.errors}"
+    assert result.ticket_id == ""  # local mode produces no ticket
+    # n structures cycled over 3 folds; pdl1.pdb is a 2-chain complex contributing
+    # 2 sequences each → (n/3)*(renin 1 + similarity 1 + pdl1 2) = 4n/3 sequences.
+    assert result.num_sequences == 4 * n // 3
+    assert result.alignment_length > 0
