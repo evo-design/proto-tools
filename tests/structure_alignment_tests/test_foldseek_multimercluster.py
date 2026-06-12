@@ -12,6 +12,8 @@ from proto_tools.tools.structure_alignment import (
     FoldseekMultimerClusterInput,
     run_foldseek_multimercluster,
 )
+from tests.conftest import benchmark_twice
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _TINY_MULTIMER_PDB = (
     "ATOM      1  CA  MET A   1       0.000   0.000   0.000  1.00  0.00\n"
@@ -192,3 +194,37 @@ def test_foldseek_multimercluster_end_to_end_with_directory(tmp_path):
 
     assert output.success, f"errors: {output.errors}"
     assert output.num_multimers == 2
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("foldseek-multimercluster")
+@pytest.mark.slow
+def test_foldseek_multimercluster_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark foldseek-multimercluster: cluster 90 multi-chain complexes (45 pdl1 + 45 renin) in one easy-multimercluster run (cold + warm)."""
+    pdl1_pdb = (_FIXTURES / "pdl1.pdb").read_text()
+    renin_cif = (_FIXTURES / "renin.cif").read_text()
+
+    structures = []
+    structure_ids = []
+    for i in range(45):
+        structures.append(pdl1_pdb)
+        structure_ids.append(f"pdl1-{i}")
+        structures.append(renin_cif)
+        structure_ids.append(f"renin-{i}")
+
+    inputs = FoldseekMultimerClusterInput(structures=structures, structure_ids=structure_ids)
+    config = FoldseekMultimerClusterConfig(num_threads=4)
+
+    result = benchmark_twice(
+        request,
+        "foldseek",
+        lambda: run_foldseek_multimercluster(inputs, config),
+    )
+
+    validate_output(result)
+    assert result.tool_id == "foldseek-multimercluster"
+    assert result.num_multimers == 90
+    assert result.num_clusters == len(result.clusters)
+    assert result.num_clusters >= 2  # two distinct complex types separate into real clusters
