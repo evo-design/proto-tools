@@ -5,7 +5,9 @@ import math
 import pytest
 from pydantic import ValidationError
 
+from tests.conftest import benchmark_twice, random_dna_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 
 def _skip_if_no_malinois_gpu() -> None:
@@ -275,3 +277,54 @@ def test_malinois_real_gpu_batched_gradient_matches_batch_size_one_calls() -> No
         assert batched.metrics["losses"][idx] == pytest.approx(single.metrics["losses"][0], abs=1e-6)
         assert batched.metrics["raw_scores"][idx] == pytest.approx(single.metrics["raw_scores"][0], abs=1e-6)
         np.testing.assert_allclose(np.asarray(batched.gradient[idx]), np.asarray(single.gradient[0]), atol=1e-6)
+
+
+@pytest.mark.benchmark("malinois-gradient")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_malinois_gradient_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark malinois-gradient: 5 loops of a 256x200x4 batched DNA logit backward pass (cold + warm)."""
+    _skip_if_no_malinois_gpu()
+
+    from proto_tools.tools.sequence_scoring.malinois import (
+        MalinoisGradientConfig,
+        MalinoisGradientInput,
+        MalinoisGradientLossTerm,
+        run_malinois_gradient,
+    )
+    from proto_tools.utils import DNA_NUCLEOTIDES
+
+    base_index = {nucleotide: column for column, nucleotide in enumerate(DNA_NUCLEOTIDES)}
+    sequences = random_dna_sequences(n=256, length=200, seed=0)
+    logits = [
+        [[1.0 if column == base_index[base] else 0.0 for column in range(len(DNA_NUCLEOTIDES))] for base in sequence]
+        for sequence in sequences
+    ]
+    inputs = MalinoisGradientInput(logits=logits, temperature=1.0)
+    config = MalinoisGradientConfig(
+        loss_terms=[
+            MalinoisGradientLossTerm(cell_type="K562", direction="max"),
+            MalinoisGradientLossTerm(cell_type="HepG2", direction="min"),
+            MalinoisGradientLossTerm(cell_type="SKNSH", direction="min"),
+        ],
+        device="cuda",
+    )
+
+    def run_batch() -> object:
+        last = None
+        for _ in range(5):
+            last = run_malinois_gradient(inputs, config)
+        return last
+
+    result = benchmark_twice(request, "malinois", run_batch)
+    validate_output(result)
+    assert_metrics_in_spec(result)
+
+    assert result.tool_id == "malinois-gradient"
+    assert result.gradient is not None
+    assert len(result.gradient) == 256
+    assert all(len(matrix) == 200 for matrix in result.gradient)
+    assert all(len(row) == 4 for matrix in result.gradient for row in matrix)
+    assert len(result.sample_metrics) == 256
+    assert all(set(sample) == {"loss", "K562", "HepG2", "SKNSH"} for sample in result.sample_metrics)
+    assert result.vocab == ["A", "C", "G", "T"]
