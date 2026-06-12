@@ -115,7 +115,6 @@ def cloud_unhostable_message(key: str) -> str:
 
 
 _DEFAULT_POLL_INTERVAL = 1.0
-_DEFAULT_FALLBACK_TIMEOUT = 600.0
 _LOG_THREAD_JOIN_TIMEOUT = 2.0
 
 # RFC 5424 severity → Python logging level.
@@ -240,9 +239,13 @@ _CLOUD_STATUS_PHASE = {"pending": "queued", "running": "running"}
 _CLOUD_INITIAL_PHASE = "queued"
 
 
-def _poll_until_terminal(client: Any, key: str, job_id: str, poll_interval: float, timeout: float) -> Any:
-    """Block until the job reaches a terminal status; return the final job envelope."""
-    deadline = time.monotonic() + timeout
+def _poll_until_terminal(client: Any, key: str, job_id: str, poll_interval: float, timeout: float | None) -> Any:
+    """Block until the job reaches a terminal status; return the final job envelope.
+
+    ``timeout=None`` polls with no client-side deadline, honoring
+    ``config.timeout=None`` ("wait indefinitely").
+    """
+    deadline = None if timeout is None else time.monotonic() + timeout
     last_status: str | None = None
     while True:
         status = client.tools.get(key, job_id)
@@ -257,6 +260,9 @@ def _poll_until_terminal(client: Any, key: str, job_id: str, poll_interval: floa
             # Coarse phase from job status; streamed system records (if any) refine it.
             set_substatus(_CLOUD_STATUS_PHASE.get(status_value, status_value))
             last_status = status_value
+        if deadline is None:
+            time.sleep(poll_interval)
+            continue
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise TimeoutError(f"Cloud job {job_id} did not complete within {timeout}s")
@@ -309,13 +315,6 @@ def dispatch_to_cloud(
     config_payload.pop("device", None)
 
     tool_timeout: float | None = config.effective_timeout() if config is not None else None
-    if tool_timeout is None:
-        logger.warning(
-            "No timeout configured for cloud run of %r; capping at %ss.",
-            key,
-            _DEFAULT_FALLBACK_TIMEOUT,
-        )
-        tool_timeout = _DEFAULT_FALLBACK_TIMEOUT
 
     verbose = _effective_verbose(config)
 
@@ -344,7 +343,9 @@ def dispatch_to_cloud(
             log_thread.start()
 
         try:
-            response = _poll_until_terminal(client, key, job_id, _DEFAULT_POLL_INTERVAL, float(tool_timeout))
+            response = _poll_until_terminal(
+                client, key, job_id, _DEFAULT_POLL_INTERVAL, None if tool_timeout is None else float(tool_timeout)
+            )
         finally:
             # Brief join to drain the trailing log stream; the daemon thread is abandoned if it stalls.
             if log_thread is not None:
