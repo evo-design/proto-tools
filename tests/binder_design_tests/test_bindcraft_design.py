@@ -16,7 +16,7 @@ from proto_tools.tools.binder_design.bindcraft.bindcraft_design import (
     _USER_FACING_UPSTREAM_KEYS,
 )
 from proto_tools.tools.tool_registry import ToolRegistry
-from tests.conftest import make_persistent_fixture
+from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -205,3 +205,44 @@ def test_bindcraft_filter_override_rejects_with_impossible_threshold() -> None:
     assert result.n_trajectories_run >= 1
     assert result.n_designs_accepted == 0, "Impossible pLDDT threshold should reject every design"
     assert result.designs == []
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("bindcraft-design")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_bindcraft_design_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark bindcraft-design: full AF2+MPNN+PyRosetta pipeline, 2 designs over up to 2 trajectories on renin (~340 aa) (cold + warm)."""
+    inputs = BindCraftInput(
+        target_pdb=str(_FIXTURE_PDB),
+        target_chain="A",
+        target_hotspot_residues="56",
+        binder_lengths=(60, 80),
+        binder_name="bench",
+        number_of_final_designs=2,
+    )
+    config = BindCraftConfig(
+        max_trajectories=2,
+        soft_iterations=25,
+        temporary_iterations=15,
+        hard_iterations=3,
+        greedy_iterations=3,
+        num_seqs=4,
+        max_mpnn_sequences=2,
+        seed=42,
+    )
+
+    result = benchmark_twice(request, "bindcraft", lambda: run_bindcraft_design(inputs, config))
+    validate_output(result)
+
+    assert result.tool_id == "bindcraft-design"
+    assert result.n_trajectories_run >= 1
+    assert result.n_designs_accepted == len(result.designs)
+    for design in result.designs:
+        assert isinstance(design, BindCraftDesign)
+        assert 60 <= len(design.binder_sequence) <= 80
+        assert design.structure is not None
+        assert design.metrics.primary_value is not None
+    assert_metrics_in_spec(result)
