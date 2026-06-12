@@ -252,8 +252,6 @@ def test_foldmason_score_msa_benchmark(request: pytest.FixtureRequest) -> None:
     n = 30
     structures = [pdbs[i % len(pdbs)] for i in range(n)]
     structure_ids = [f"structure_{i}" for i in range(n)]
-    # Score a real alignment of two distinct folds (genuine gaps, sub-1.0 LDDT),
-    # built once with foldmason-msa as setup — not a degenerate identical MSA.
     msa_out = run_foldmason_msa(
         FoldmasonMSAInput(structures=structures, structure_ids=structure_ids),
         FoldmasonMSAConfig(search_mode="local", num_threads=4),
