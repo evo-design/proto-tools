@@ -38,7 +38,6 @@ _EXEMPT_TOOLS = frozenset(
 # instead. The test below keeps this set honest.
 _KNOWN_MISSING = frozenset(
     {
-        "miranda-scan",
         "mmseqs2-clustering",
         "mmseqs2-homology-search",
         "mmseqs2-search-genomes",
