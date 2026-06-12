@@ -20,6 +20,7 @@ from proto_tools.tools.structure_prediction import (
     run_alphafold2,
     run_alphafold2_gradient,
 )
+from proto_tools.utils import one_hot_protein_logits
 from proto_tools.utils.sequence import PROTEIN_AMINO_ACIDS
 from proto_tools.utils.tool_instance import ToolInstance
 from tests.conftest import benchmark_twice
@@ -622,3 +623,36 @@ def test_alphafold2_benchmark(request):
     assert result.success, "AlphaFold2 benchmark run failed"
     assert len(result.structures) == 1
     assert is_valid_structure(result.structures[0].structure_cif)
+
+
+@pytest.mark.benchmark("alphafold2-gradient")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_alphafold2_gradient_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark alphafold2-gradient: 5 repeated redesign passes of the PD-L1 nanobody (chain B, 118 aa) vs the target (cold + warm)."""
+    binder_seq = Structure.from_file(_GRADIENT_EXAMPLE_PDB_PATH).get_chain_sequence("B")
+    inputs = AlphaFold2GradientInput(
+        logits=one_hot_protein_logits(binder_seq, sharpness=2.0),
+        temperature=1.0,
+        target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
+        target_chain="A",
+        binder_chain="B",
+    )
+    config = AlphaFold2GradientConfig(num_recycles=1, loss_weights={"plddt": 1.0}, seed=0)
+
+    def run_steps():
+        last = None
+        for _ in range(5):
+            last = run_alphafold2_gradient(inputs, config)
+        return last
+
+    result = benchmark_twice(request, "alphafold2", run_steps)
+
+    validate_output(result)
+    assert result.tool_id == "alphafold2-gradient"
+    assert len(result.gradient) == len(binder_seq)
+    assert all(len(row) == 20 for row in result.gradient)
+    assert all(math.isfinite(v) for row in result.gradient for v in row)
+    assert math.isfinite(result.loss)
+    assert result.structure.source == "alphafold2-gradient"
+    assert is_valid_structure(result.structure.structure)
