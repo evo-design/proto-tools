@@ -14,6 +14,8 @@ from proto_tools.tools.structure_alignment import (
     FoldseekMultimerSearchInput,
     run_foldseek_multimer_search,
 )
+from tests.conftest import benchmark_twice
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _MULTIMER_FIXTURE = Path(__file__).parent.parent / "dummy_data" / "pdl1.pdb"
 _TINY_MULTIMER_PDB = (
@@ -156,4 +158,41 @@ def test_local_multimer_search_with_directory_db(tmp_path):
     assert output.num_hits >= 1
     # Self-search should produce a near-perfect identity match somewhere in hits.
     best = max(output.hits, key=lambda h: h.sequence_identity)
+    assert best.sequence_identity > 0.99
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("foldseek-multimer-search")
+@pytest.mark.slow
+def test_foldseek_multimer_search_benchmark(request: pytest.FixtureRequest, tmp_path) -> None:
+    """Benchmark foldseek-multimer-search: 20 local easy-multimersearch runs of pdl1 vs a 30-complex DB (2 distinct multimers) (cold + warm)."""
+    multimer_pdb = _MULTIMER_FIXTURE.read_text()
+    renin_cif = (_MULTIMER_FIXTURE.parent / "renin.cif").read_text()
+    target_dir = tmp_path / "targets"
+    target_dir.mkdir()
+    for i in range(30):
+        if i % 2 == 0:
+            (target_dir / f"pdl1_{i}.pdb").write_text(multimer_pdb)
+        else:
+            (target_dir / f"renin_{i}.cif").write_text(renin_cif)
+
+    inputs = FoldseekMultimerSearchInput(structure=multimer_pdb)
+    config = FoldseekMultimerSearchConfig(search_mode="local", local_db=str(target_dir), num_threads=4)
+
+    def run_batch():
+        last = None
+        for _ in range(20):
+            last = run_foldseek_multimer_search(inputs, config)
+        return last
+
+    result = benchmark_twice(request, "foldseek", run_batch)
+    validate_output(result)
+
+    assert result.tool_id == "foldseek-multimer-search"
+    assert result.ticket_id == ""
+    assert result.databases_queried == [str(target_dir)]
+    assert result.num_hits == len(result.hits) >= 1
+    best = max(result.hits, key=lambda h: h.sequence_identity)
     assert best.sequence_identity > 0.99
