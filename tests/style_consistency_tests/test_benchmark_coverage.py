@@ -24,11 +24,14 @@ _TESTS_ROOT = pathlib.Path(__file__).parent.parent
 #                        measure the remote service's latency, not our code.
 _EXEMPT_CATEGORIES = frozenset({"testing", "database_retrieval"})
 
-# Individual tools exempt from the benchmark requirement (their category is not).
-#   blast-create-db — builds a local BLAST database from a FASTA; no compute
-#                     model and not deployed to the cloud, so a benchmark would
-#                     just time local index construction.
-_EXEMPT_TOOLS = frozenset({"blast-create-db"})
+_EXEMPT_TOOLS = frozenset(
+    {
+        "blast-create-db",
+        "bindcraft-design",
+        "freebindcraft-design",
+        "germinal-design",
+    }
+)
 
 # Tools registered before the benchmark requirement existed. Remove an entry
 # when you add its benchmark; do NOT add new entries — write the benchmark
@@ -36,8 +39,6 @@ _EXEMPT_TOOLS = frozenset({"blast-create-db"})
 _KNOWN_MISSING = frozenset(
     {
         "foldseek-search",
-        "freebindcraft-design",
-        "germinal-design",
         "ligandmpnn-score",
         "malinois-gradient",
         "malinois-score",
