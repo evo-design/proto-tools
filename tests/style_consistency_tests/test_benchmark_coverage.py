@@ -30,6 +30,7 @@ _EXEMPT_TOOLS = frozenset(
         "bindcraft-design",
         "freebindcraft-design",
         "germinal-design",
+        "mmseqs2-homology-search",
     }
 )
 
@@ -39,7 +40,6 @@ _EXEMPT_TOOLS = frozenset(
 _KNOWN_MISSING = frozenset(
     {
         "mmseqs2-clustering",
-        "mmseqs2-homology-search",
         "mmseqs2-search-genomes",
         "mmseqs2-search-proteins",
         "pangolin-predict",
