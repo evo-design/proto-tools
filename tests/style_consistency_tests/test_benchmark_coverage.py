@@ -42,7 +42,6 @@ _KNOWN_MISSING = frozenset(
         "mmseqs2-clustering",
         "mmseqs2-search-genomes",
         "mmseqs2-search-proteins",
-        "pyhmmer-nhmmer",
         "pyhmmer-phmmer",
         "pymol-rmsd-alignment",
         "rf3-prediction",

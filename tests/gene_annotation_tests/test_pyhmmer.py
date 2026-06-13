@@ -30,7 +30,7 @@ from proto_tools.tools.gene_annotation.pyhmmer import (
 from proto_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
     _build_hit_models,
 )
-from tests.conftest import benchmark_twice, random_protein_sequences
+from tests.conftest import benchmark_twice, random_dna_sequences, random_protein_sequences
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _DATA_DIR = Path(__file__).parent.parent / "dummy_data"
@@ -318,3 +318,29 @@ def test_pyhmmer_jackhmmer_benchmark(request: pytest.FixtureRequest) -> None:
     assert len(result.metadata["iterations_per_query"]) == len(queries)
     assert result.num_sequence_hits >= 1
     assert max(result.metadata["iterations_per_query"]) > 1  # homolog targets make the profile expand past iteration 1
+
+
+@pytest.mark.benchmark("pyhmmer-nhmmer")
+@pytest.mark.slow
+def test_pyhmmer_nhmmer_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark pyhmmer-nhmmer: 20 query vs 50000 target DNA seqs (~500 nt), both strands (cold + warm)."""
+    queries = random_dna_sequences(20, 500, seed=11)
+    targets = random_dna_sequences(50000, 500, seed=22)
+    inputs = PyNhmmerInput(sequences=queries, target_sequences=targets)
+    config = PyNhmmerConfig(
+        evalue_threshold=1000.0,
+        domain_evalue_threshold=1000.0,
+        strand="both",
+        num_threads=0,
+    )
+
+    result = benchmark_twice(request, "pyhmmer", lambda: run_pyhmmer_nhmmer(inputs, config))
+
+    validate_output(result, check_export=False)
+
+    assert isinstance(result, PyHmmerOutput)
+    assert result.tool_id == "pyhmmer-nhmmer"
+    assert result.metadata["num_query_sequences"] == 20
+    assert result.metadata["num_target_sequences"] == 50000
+    assert result.num_sequence_hits == len(result.sequence_hits)
+    assert result.num_domain_hits == len(result.domain_hits)
