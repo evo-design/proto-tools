@@ -1,5 +1,6 @@
 """Tests for the MMseqs2 toolkit's protein search, genome search, and clustering tools."""
 
+import random
 from pathlib import Path
 
 import pandas as pd
@@ -29,6 +30,7 @@ from proto_tools.tools.sequence_alignment.mmseqs2.search_proteins import (
     _resolve_gpu_db_stem,
     _resolve_registered_mmseqs_db,
 )
+from tests.conftest import benchmark_twice, random_protein_sequences
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_DATA_DIR = Path("tests/dummy_data")
@@ -769,3 +771,39 @@ def test_search_proteins_threads_zero_runs_successfully(tmp_path):
     result = run_mmseqs2_search_proteins(inputs, Mmseqs2SearchProteinsConfig(mmseqs_db=str(db_file)))
     assert result.success is True
     assert result[0].num_hits >= 1
+
+
+# ---------------------------------------------------------------------------
+# Benchmarks
+# ---------------------------------------------------------------------------
+
+
+def _clustered_protein_sequences(n_families: int, per_family: int, length: int, mutation_rate: float, seed: int) -> list[str]:
+    """``n_families`` families of ``per_family`` ~mutation_rate-substituted variants each, so they actually cluster."""
+    rng = random.Random(seed)
+    bases = random_protein_sequences(n_families, length, seed)
+    noise = random_protein_sequences(n_families * per_family, length, seed + 1)
+    sequences = []
+    for family, base in enumerate(bases):
+        for variant in range(per_family):
+            src = noise[family * per_family + variant]
+            sequences.append("".join(src[i] if rng.random() < mutation_rate else base[i] for i in range(length)))
+    return sequences
+
+
+@pytest.mark.benchmark("mmseqs2-clustering")
+@pytest.mark.slow
+def test_mmseqs2_clustering_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark mmseqs2-clustering: cluster 1500 protein sequences in 50 homologous families of 200 aa (cold + warm)."""
+    sequences = _clustered_protein_sequences(n_families=50, per_family=30, length=200, mutation_rate=0.2, seed=0)
+    inputs = Mmseqs2ClusteringInput(input_sequences=sequences)
+    config = Mmseqs2ClusteringConfig(min_seq_id=0.5)
+
+    result = benchmark_twice(request, "mmseqs2", lambda: run_mmseqs2_clustering(inputs, config))
+    validate_output(result)
+
+    assert result.tool_id == "mmseqs2-clustering"
+    assert isinstance(result, Mmseqs2ClusteringOutput)
+    assert len(result) == 1500
+    assert 1 < result.num_clusters <= 100  # 50 families collapse to ~50 clusters, not 1500 singletons
+    assert len(result.representative_indices) == result.num_clusters
