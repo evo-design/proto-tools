@@ -23,6 +23,9 @@ from proto_tools.tools.inverse_folding.proteinmpnn import (
     run_proteinmpnn_sample,
     run_proteinmpnn_score,
 )
+from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_gradient import (
+    ProteinMPNNGradientOutput,
+)
 from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample import (
     ProteinMPNNDesign,
     ProteinMPNNDesignMetrics,
@@ -36,6 +39,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingStructureInput,
     SequenceStructurePair,
 )
+from proto_tools.utils import one_hot_protein_logits
 from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
@@ -744,3 +748,35 @@ def test_proteinmpnn_score_benchmark(request: pytest.FixtureRequest, pdb_structu
     assert len(result.scores) == 50
     for score in result.scores:
         assert score["perplexity"] >= 1.0
+
+
+@pytest.mark.benchmark("proteinmpnn-gradient")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_proteinmpnn_gradient_benchmark(request: pytest.FixtureRequest, pdb_structure: Structure) -> None:
+    """Benchmark proteinmpnn-gradient: 20 sequential backward passes over renin (~340 aa) (cold + warm)."""
+    target_len = len(pdb_structure.get_chain_sequence("A"))
+    sequence = random_protein_sequences(n=1, length=target_len, seed=7)[0]
+    inputs = ProteinMPNNGradientInput(
+        logits=one_hot_protein_logits(sequence, sharpness=2.0),
+        structure=pdb_structure,
+        chains_to_redesign=["A"],
+        temperature=0.7,
+    )
+    config = ProteinMPNNGradientConfig(seed=42)
+
+    def run_many() -> ProteinMPNNGradientOutput:
+        result = None
+        for _ in range(20):
+            result = run_proteinmpnn_gradient(inputs, config)
+        return result
+
+    result = benchmark_twice(request, "proteinmpnn", run_many)
+
+    validate_output(result)
+    assert result.tool_id == "proteinmpnn-gradient"
+    assert result.gradient is not None
+    assert len(result.gradient) == target_len
+    assert all(len(row) == 20 for row in result.gradient)
+    assert all(np.isfinite(v) for row in result.gradient for v in row)
+    assert result.loss > 0.0
