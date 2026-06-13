@@ -71,9 +71,10 @@ def _install_fake_dispatch(
 ) -> None:
     """Patch ``ToolInstance.dispatch`` to drop synthetic per-chain A3M files.
 
-    A paired call (``pairing_strategy`` set) writes ``{i}.a3m`` (unpaired) and
-    ``{i}.paired.a3m`` (row-aligned) per chain; an unpaired batch writes
-    ``__q{idx}.a3m`` per sequence.
+    A paired call (``pairing_strategy`` set) writes ``{u}.a3m`` (unpaired) and
+    ``{u}.paired.a3m`` (row-aligned) per *unique* chain, matching colabfold's
+    deduplication of identical chains; an unpaired batch writes ``__q{idx}.a3m``
+    per sequence.
     """
 
     def fake(toolkit: str, payload: dict[str, Any], **_: Any) -> dict[str, Any]:
@@ -81,9 +82,10 @@ def _install_fake_dispatch(
         out_dir = Path(payload["output_dir"])
         sequences = payload["sequences"]
         if payload.get("pairing_strategy") is not None:
-            for i, seq in enumerate(sequences):
-                _write_a3m(out_dir / f"{i}.a3m", seq, 4)
-                _write_a3m(out_dir / f"{i}.paired.a3m", seq, paired_depth)
+            # colabfold dedups identical chains: one {u}.a3m / {u}.paired.a3m per unique sequence.
+            for u, seq in enumerate(dict.fromkeys(sequences)):
+                _write_a3m(out_dir / f"{u}.a3m", seq, 4)
+                _write_a3m(out_dir / f"{u}.paired.a3m", seq, paired_depth)
         else:
             for idx, seq in enumerate(sequences):
                 _write_a3m(out_dir / f"__q{idx}.a3m", seq, 4)
@@ -605,12 +607,10 @@ def test_remote_paired_group_degrades_when_unpaired_fails(tmp_path: Path, monkey
 def test_paired_homomultimer_yields_per_chain_msas_with_correct_query_rows(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A homomultimer paired group yields one MSA per chain index, each with the chain's query row.
+    """Each chain of a homomultimer paired group gets an MSA whose query row is its own sequence.
 
-    Counterpart to colabfold's ``test_local_paired_reorders_and_reuses_duplicate_chain_msas`` —
-    mmseqs's standalone emits one A3M per chain index (no dedup), so the assertion is per-position
-    rather than identity, but the spirit is the same: duplicate input chains map to coherent
-    per-chain MSAs whose query rows are the requested chain's sequence.
+    colabfold emits one A3M per unique chain, so the duplicate ubiquitin and hemoglobin copies
+    are broadcast their unique chain's row-aligned block.
     """
     _provision_fake_cache(tmp_path, monkeypatch)
     captured: list[dict[str, Any]] = []
@@ -637,10 +637,9 @@ def test_paired_homomultimer_yields_per_chain_msas_with_correct_query_rows(
 
 
 def test_paired_assembly_raises_on_unmatched_query_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Assembly raises when a paired A3M's query row doesn't match the requested chain.
+    """Assembly raises when a chain's A3M query row doesn't match the requested chain's sequence.
 
-    Defensive guard against a corrupt standalone output silently mis-keying MSAs to the wrong
-    chain (matching colabfold's ``test_local_paired_raises_on_unmatched_msa_query_row``).
+    Guards against a mis-keyed MSA silently reaching a predictor on the wrong chain.
     """
     _provision_fake_cache(tmp_path, monkeypatch)
 
@@ -648,7 +647,7 @@ def test_paired_assembly_raises_on_unmatched_query_row(tmp_path: Path, monkeypat
         out_dir = Path(payload["output_dir"])
         sequences = payload["sequences"]
         _write_a3m(out_dir / "0.a3m", sequences[0], 3)
-        # Chain 0's paired MSA carries chain 1's sequence as its query — the bug we want to catch.
+        # Chain 0's paired MSA carries chain 1's sequence as its query row, which must be rejected.
         _write_a3m(out_dir / "0.paired.a3m", sequences[1], 3)
         _write_a3m(out_dir / "1.a3m", sequences[1], 3)
         _write_a3m(out_dir / "1.paired.a3m", sequences[1], 3)
@@ -657,7 +656,7 @@ def test_paired_assembly_raises_on_unmatched_query_row(tmp_path: Path, monkeypat
     monkeypatch.setattr(ToolInstance, "dispatch", staticmethod(fake))
 
     inp = Mmseqs2HomologySearchInput(queries=[[(UBIQUITIN, "a"), (HBB_HUMAN, "b")]])
-    with pytest.raises(RuntimeError, match="paired MSA for chain 0"):
+    with pytest.raises(RuntimeError, match=r"0\.paired\.a3m for chain 'a'"):
         run_mmseqs2_homology_search(inp, Mmseqs2HomologySearchConfig(search_mode="local", use_gpu=False))
 
 
@@ -736,6 +735,39 @@ def test_assemble_paired_result_no_pairing_returns_all_none(tmp_path: Path) -> N
     assert all(m is not None for m in result.msas)  # unpaired still present
 
 
+def test_assemble_paired_result_broadcasts_deduped_homomultimer(tmp_path: Path) -> None:
+    """A deduped {u}.a3m is broadcast to every input chain that shares its sequence.
+
+    colabfold emits one {u}.a3m / {u}.paired.a3m per unique chain, keyed in first-occurrence
+    order, so a homo-oligomer copy is given its unique chain's row-aligned block.
+    """
+    members = [
+        Mmseqs2HomologySearchQuery(sequence=UBIQUITIN, sequence_id="chainA"),
+        Mmseqs2HomologySearchQuery(sequence=UBIQUITIN, sequence_id="chainB"),
+        Mmseqs2HomologySearchQuery(sequence=HEMOGLOBIN_ALPHA, sequence_id="chainC"),
+    ]
+    # Deduped output: unique chains [UBIQ, HBA] keyed 0, 1 (no file per duplicate chain).
+    _write_a3m(tmp_path / "0.a3m", UBIQUITIN, 5)
+    _write_a3m(tmp_path / "0.paired.a3m", UBIQUITIN, 3)
+    _write_a3m(tmp_path / "1.a3m", HEMOGLOBIN_ALPHA, 4)
+    _write_a3m(tmp_path / "1.paired.a3m", HEMOGLOBIN_ALPHA, 3)
+    # Noise: the packed result DBs share the .a3m suffix but must be ignored.
+    (tmp_path / "final.a3m").write_text(">x\nXXXX\n")
+    (tmp_path / "pair.a3m").write_text(">x\nXXXX\n")
+
+    result = _assemble_paired_result(tmp_path, members, "uniref30-2302")
+
+    assert result.sequence_ids == ["chainA", "chainB", "chainC"]
+    # Both ubiquitin chains share the deduped block; hemoglobin gets its own.
+    assert [m.original_sequences[0] for m in result.msas] == [UBIQUITIN, UBIQUITIN, HEMOGLOBIN_ALPHA]
+    assert [m.original_sequences[0] for m in result.paired_msas] == [UBIQUITIN, UBIQUITIN, HEMOGLOBIN_ALPHA]
+    # A broadcast block still carries each chain's own id in its query row.
+    assert [m.sequence_ids[0] for m in result.msas] == ["chainA", "chainB", "chainC"]
+    assert [m.sequence_ids[0] for m in result.paired_msas] == ["chainA", "chainB", "chainC"]
+    # Paired output stays row-aligned: equal depth across chains.
+    assert len({m.num_sequences for m in result.paired_msas}) == 1
+
+
 @pytest.mark.integration
 @pytest.mark.uses_cpu
 @pytest.mark.slow
@@ -766,6 +798,32 @@ def test_real_paired_search_against_mini_db() -> None:
         f"expected deep equal-depth paired MSAs, got {[m.num_sequences for m in grp.paired_msas if m]}"
     )
     # Unpaired per-chain MSAs are present alongside the paired ones.
+    assert all(m is not None for m in grp.msas)
+
+
+@pytest.mark.integration
+@pytest.mark.uses_cpu
+@pytest.mark.slow
+@pytest.mark.skip_ci
+def test_real_paired_homooligomer_against_mini_db() -> None:
+    """Real paired search with a repeated chain still gives every copy its MSA.
+
+    ``[hbaA, hbaB, hbb]`` deduplicates to ``[hba, hbb]`` inside colabfold, so only two chain
+    blocks come back; hba's block is broadcast to both alpha copies in input order.
+    """
+    inp = Mmseqs2HomologySearchInput(queries=[[(HBA_HUMAN, "hbaA"), (HBA_HUMAN, "hbaB"), (HBB_HUMAN, "hbb")]])
+    cfg = Mmseqs2HomologySearchConfig.model_construct(search_mode="local", dataset="tiny-test-colabfold", use_gpu=False)
+    out = run_mmseqs2_homology_search(inp, cfg)
+
+    assert out.success, f"paired search failed: {out.errors}"
+    grp = out.results[0]
+    assert grp.sequence_ids == ["hbaA", "hbaB", "hbb"]
+    # Both alpha copies share the deduped block; beta gets its own. Query rows carry each chain's id.
+    assert [m.original_sequences[0] for m in grp.paired_msas] == [HBA_HUMAN, HBA_HUMAN, HBB_HUMAN]
+    assert [m.sequence_ids[0] for m in grp.paired_msas] == ["hbaA", "hbaB", "hbb"]
+    # Paired output stays row-aligned across all three chains.
+    depths = {m.num_sequences for m in grp.paired_msas}
+    assert len(depths) == 1 and next(iter(depths)) > 5
     assert all(m is not None for m in grp.msas)
 
 
@@ -1057,3 +1115,100 @@ def test_rename_a3m_avoids_collision_with_adversarial_numeric_ids(tmp_path: Path
     assert p1_lines[0] == ">0"
     assert ">homolog_a" in p0_lines
     assert ">homolog_x" in p1_lines
+
+
+# ============================================================================
+# Remote paired homo-oligomer regression (colabfold dedups identical chains)
+# ============================================================================
+
+
+def _load_remote_msa_search():
+    """Import the standalone `remote_msa_search` module (needs the standalone helpers on sys.path)."""
+    import importlib.util
+    import sys
+
+    root = Path(__file__).resolve().parents[2]
+    helpers = root / "proto_tools/utils/standalone_helpers_source"
+    if str(helpers) not in sys.path:
+        sys.path.insert(0, str(helpers))
+    path = root / "proto_tools/tools/sequence_alignment/mmseqs2/standalone/remote_msa_search.py"
+    spec = importlib.util.spec_from_file_location("remote_msa_search", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _pair_block(query: str, n_rows: int) -> bytes:
+    """A row-aligned A3M block whose first record is the chain `query`."""
+    records = [f">row_{i}\n{query}" for i in range(n_rows)]
+    return ("\n".join(records) + "\n").encode()
+
+
+def test_parse_pair_a3m_broadcasts_deduped_homomultimer_blocks(tmp_path: Path) -> None:
+    """ColabFold dedups identical chains; the deduped block is broadcast to every chain that shares it."""
+    rms = _load_remote_msa_search()
+    ubiq = _pair_block(UBIQUITIN, 3)
+    hba = _pair_block(HEMOGLOBIN_ALPHA, 3)
+    pair_a3m = tmp_path / "pair.a3m"
+
+    # Homodimer: two identical chains -> one returned block -> broadcast to both.
+    pair_a3m.write_bytes(ubiq + b"\x00")
+    assert rms._parse_pair_a3m(pair_a3m, [UBIQUITIN, UBIQUITIN]) == [ubiq, ubiq]
+
+    # 3-chain with a repeat split across positions: two blocks -> three chains, input order preserved.
+    pair_a3m.write_bytes(ubiq + b"\x00" + hba + b"\x00")
+    assert rms._parse_pair_a3m(pair_a3m, [UBIQUITIN, HEMOGLOBIN_ALPHA, UBIQUITIN]) == [ubiq, hba, ubiq]
+
+    # Heterodimer (all-distinct) is unchanged: one block per chain.
+    assert rms._parse_pair_a3m(pair_a3m, [UBIQUITIN, HEMOGLOBIN_ALPHA]) == [ubiq, hba]
+
+
+def test_parse_pair_a3m_raises_when_blocks_do_not_cover_chains(tmp_path: Path) -> None:
+    """A block set that can't serve every unique chain sequence is a hard error."""
+    rms = _load_remote_msa_search()
+    pair_a3m = tmp_path / "pair.a3m"
+    pair_a3m.write_bytes(_pair_block(UBIQUITIN, 3) + b"\x00")
+    with pytest.raises(RuntimeError, match="do not match"):
+        rms._parse_pair_a3m(pair_a3m, [UBIQUITIN, HEMOGLOBIN_ALPHA])
+
+
+def test_parse_pair_a3m_maps_blocks_by_content_not_position(tmp_path: Path) -> None:
+    """Blocks are matched to chains by query identity, regardless of file order or case."""
+    rms = _load_remote_msa_search()
+    ubiq = _pair_block(UBIQUITIN, 3)
+    hba = _pair_block(HEMOGLOBIN_ALPHA, 3)
+    pair_a3m = tmp_path / "pair.a3m"
+
+    # Block order reversed relative to chain order -> still mapped by content.
+    pair_a3m.write_bytes(hba + b"\x00" + ubiq + b"\x00")
+    assert rms._parse_pair_a3m(pair_a3m, [UBIQUITIN, HEMOGLOBIN_ALPHA]) == [ubiq, hba]
+
+    # Interleaved repeats: two blocks fan out to four chains in input order.
+    pair_a3m.write_bytes(ubiq + b"\x00" + hba + b"\x00")
+    assert rms._parse_pair_a3m(pair_a3m, [UBIQUITIN, HEMOGLOBIN_ALPHA, UBIQUITIN, HEMOGLOBIN_ALPHA]) == [
+        ubiq,
+        hba,
+        ubiq,
+        hba,
+    ]
+
+    # Lowercase chains still match the uppercase block query (the input validator only strips).
+    pair_a3m.write_bytes(ubiq + b"\x00")
+    assert rms._parse_pair_a3m(pair_a3m, [UBIQUITIN.lower(), UBIQUITIN.lower()]) == [ubiq, ubiq]
+
+
+@pytest.mark.integration
+@pytest.mark.skip_ci
+def test_remote_search_live_homooligomer_broadcasts_paired_msa() -> None:
+    """Live remote paired query with a repeated chain: the deduped block is broadcast to both copies."""
+    inp = Mmseqs2HomologySearchInput(queries=[[(UBIQUITIN, "ubiA"), (UBIQUITIN, "ubiB"), (HBA_HUMAN, "hbaC")]])
+    out = run_mmseqs2_homology_search(inp, Mmseqs2HomologySearchConfig(search_mode="remote"))
+
+    grp = out.results[0]
+    assert grp.sequence_ids == ["ubiA", "ubiB", "hbaC"]
+    assert all(m is not None for m in grp.paired_msas)
+    # Both ubiquitin chains share the deduped block; hemoglobin gets its own.
+    assert [m.original_sequences[0] for m in grp.paired_msas] == [UBIQUITIN, UBIQUITIN, HBA_HUMAN]
+    # Paired output is row-aligned: all per-chain MSAs share the same depth.
+    depths = {m.num_sequences for m in grp.paired_msas}
+    assert len(depths) == 1 and depths.pop() > 1

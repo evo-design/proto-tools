@@ -577,7 +577,7 @@ def run_mmseqs2_homology_search(
                     num_homologs_found=[homologs],
                 )
 
-        # One paired search per multi-chain group; standalone emits per-chain {i}.a3m (unpaired) and {i}.paired.a3m (row-aligned).
+        # One paired search per multi-chain group; standalone emits {u}.a3m (unpaired) and {u}.paired.a3m (row-aligned) per unique chain.
         for group_idx, members in paired_groups:
             group_dir = tmp_root / f"paired_{group_idx}"
             group_dir.mkdir()
@@ -803,33 +803,28 @@ def _assemble_paired_result(
 ) -> Mmseqs2HomologySearchResult:
     """Build a per-group result from a paired search's per-chain A3M files.
 
-    The standalone unpacks one ``{i}.a3m`` (unpaired) and ``{i}.paired.a3m``
-    (row-aligned paired) per chain, keyed by chain index ``i``. Each file's
-    query header is rewritten to the chain's sequence_id before parsing. Both the
-    unpaired ``msas`` and ``paired_msas`` are returned, so a consumer can fall back
-    to the unpaired MSAs when pairing found nothing (all ``paired_msas`` None).
+    colabfold deduplicates identical chains, unpacking one ``{u}.a3m`` (unpaired)
+    and ``{u}.paired.a3m`` (row-aligned paired) per *unique* chain, keyed
+    ``0..U-1`` in first-occurrence order, rather than one per input chain. Each
+    input chain reads its unique chain's files, so a homo-oligomer copy is
+    broadcast the same row-aligned block (mirrors the remote ``_parse_pair_a3m``
+    broadcast). The query row is rewritten to the chain's sequence_id, and both
+    the unpaired ``msas`` and ``paired_msas`` are returned so a consumer can fall
+    back to the unpaired MSAs when pairing found nothing (all ``paired_msas`` None).
     """
+    # colabfold keys its deduped output by unique chain in first-occurrence order.
+    unique_idx_by_seq = {seq: i for i, seq in enumerate(dict.fromkeys(q.sequence for q in members))}
+
     sequence_ids: list[str] = []
     msas: list[MSA | None] = []
     paired_msas: list[MSA | None] = []
     num_homologs: list[int] = []
-    for chain_idx, query in enumerate(members):
+    for query in members:
         assert query.sequence_id is not None  # populated by the input validator
         sequence_ids.append(query.sequence_id)
-        unpaired_path = group_dir / f"{chain_idx}.a3m"
-        paired_path = group_dir / f"{chain_idx}.paired.a3m"
-        for path in (unpaired_path, paired_path):
-            if path.exists():
-                _replace_query_header_in_a3m(path, query.sequence_id)
-        unpaired_msa, homologs = _parse_a3m(unpaired_path)
-        paired_msa, _ = _parse_a3m(paired_path)
-        # Defensive: catch a corrupt standalone output before mis-keyed MSAs reach a predictor.
-        for kind, msa in (("unpaired", unpaired_msa), ("paired", paired_msa)):
-            if msa is not None and msa.original_sequences[0] != query.sequence:
-                raise RuntimeError(
-                    f"{kind} MSA for chain {chain_idx} ({query.sequence_id!r}) has query row "
-                    f"{msa.original_sequences[0]!r}, expected {query.sequence!r}"
-                )
+        unique_idx = unique_idx_by_seq[query.sequence]
+        unpaired_msa, homologs = _parse_paired_chain_a3m(group_dir / f"{unique_idx}.a3m", query)
+        paired_msa, _ = _parse_paired_chain_a3m(group_dir / f"{unique_idx}.paired.a3m", query)
         msas.append(unpaired_msa)
         paired_msas.append(paired_msa)
         num_homologs.append(homologs)
@@ -842,6 +837,26 @@ def _assemble_paired_result(
         datasets_searched=[dataset_name],
         num_homologs_found=num_homologs,
     )
+
+
+def _parse_paired_chain_a3m(a3m_path: Path, query: Mmseqs2HomologySearchQuery) -> tuple[MSA | None, int]:
+    """Parse one chain's paired-search A3M, naming its query row with the chain's sequence_id.
+
+    The file may be shared across homo-oligomer copies, so the query header is set
+    on the parsed MSA rather than rewritten on disk. Raises when the file's query
+    row doesn't match the chain's sequence (colabfold's dedup ordering broke and a
+    chain is about to receive the wrong MSA).
+    """
+    assert query.sequence_id is not None  # populated by the input validator
+    msa, homologs = _parse_a3m(a3m_path)
+    if msa is not None:
+        if msa.original_sequences[0] != query.sequence:
+            raise RuntimeError(
+                f"{a3m_path.name} for chain {query.sequence_id!r} has query row "
+                f"{msa.original_sequences[0]!r}, expected {query.sequence!r}"
+            )
+        msa.sequence_ids[0] = query.sequence_id
+    return msa, homologs
 
 
 def _count_sequences_in_a3m(a3m_path: Path) -> int:
