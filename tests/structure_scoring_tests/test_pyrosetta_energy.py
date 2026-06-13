@@ -129,7 +129,6 @@ def test_run_pyrosetta_energy_with_pre_relax_preprocess():
 @pytest.mark.slow
 def test_pyrosetta_energy_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark pyrosetta-energy: 5 distinct renin_af3 copies (~340 aa each), no preprocess relax (cold + warm)."""
-    # Distinct metrics break the iterable-input dedup so all 5 copies actually compute.
     structures = [Structure(structure=TEST_PDB, metrics={"_bench_id": i}) for i in range(5)]
     inputs = PyRosettaEnergyInput(inputs=structures)
 

@@ -778,7 +778,9 @@ def test_search_proteins_threads_zero_runs_successfully(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def _clustered_protein_sequences(n_families: int, per_family: int, length: int, mutation_rate: float, seed: int) -> list[str]:
+def _clustered_protein_sequences(
+    n_families: int, per_family: int, length: int, mutation_rate: float, seed: int
+) -> list[str]:
     """``n_families`` families of ``per_family`` ~mutation_rate-substituted variants each, so they actually cluster."""
     rng = random.Random(seed)
     bases = random_protein_sequences(n_families, length, seed)
@@ -805,7 +807,7 @@ def test_mmseqs2_clustering_benchmark(request: pytest.FixtureRequest) -> None:
     assert result.tool_id == "mmseqs2-clustering"
     assert isinstance(result, Mmseqs2ClusteringOutput)
     assert len(result) == 1500
-    assert 1 < result.num_clusters <= 100  # 50 families collapse to ~50 clusters, not 1500 singletons
+    assert 1 < result.num_clusters <= 100
     assert len(result.representative_indices) == result.num_clusters
 
 
@@ -828,7 +830,6 @@ def _homolog_genome_db(queries: list[str], per_query: int, noise: int, mutation:
 def test_mmseqs2_search_genomes_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark mmseqs2-search-genomes: 50 query genomes vs a 400-genome DB of ~90%-identity homologs + noise (cold + warm)."""
     query_genomes = random_dna_sequences(n=50, length=1000, seed=0)
-    # Each query has diverged homologs in the DB (real homology hits at <100% identity), not just an exact self-copy.
     target_genomes = _homolog_genome_db(query_genomes, per_query=4, noise=200, mutation=0.10, seed=1)
     inputs = Mmseqs2SearchGenomesInput(query_genomes=query_genomes)
     config = Mmseqs2SearchGenomesConfig(target_genomes=target_genomes, threads=4)
@@ -839,4 +840,4 @@ def test_mmseqs2_search_genomes_benchmark(request: pytest.FixtureRequest) -> Non
     assert result.tool_id == "mmseqs2-search-genomes"
     assert isinstance(result, Mmseqs2SearchGenomesOutput)
     assert len(result) == 50
-    assert result.total_hits >= len(query_genomes)  # each query finds its diverged homologs
+    assert result.total_hits >= len(query_genomes)

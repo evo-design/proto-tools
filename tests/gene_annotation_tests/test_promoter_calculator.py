@@ -150,8 +150,6 @@ def test_run_promoter_calculator_homopolymer():
 @pytest.mark.slow
 def test_promoter_calculator_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark promoter-calculator: 100 distinct sigma70 consensus-bearing sequences (cold + warm)."""
-    # Distinct sequences avoid the @tool cacheable=True dedup path, which would
-    # collapse N identical inputs to a single unique workload.
     sequences = [CONSENSUS_PROMOTER + f"AAAA{i:08d}AAAA" for i in range(100)]
     inputs = PromoterCalculatorInput(sequences=sequences)
 

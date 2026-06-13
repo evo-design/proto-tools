@@ -172,7 +172,6 @@ def test_structure_metrics_benchmark(request: pytest.FixtureRequest, tmp_path: P
     import shutil
     import time
 
-    # 50 distinct paths so the @tool dedup doesn't collapse them to one compute.
     structure_paths = []
     for i in range(50):
         p = tmp_path / f"renin_{i:03d}.pdb"

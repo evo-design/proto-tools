@@ -227,4 +227,4 @@ def test_foldseek_multimercluster_benchmark(request: pytest.FixtureRequest) -> N
     assert result.tool_id == "foldseek-multimercluster"
     assert result.num_multimers == 90
     assert result.num_clusters == len(result.clusters)
-    assert result.num_clusters >= 2  # two distinct complex types separate into real clusters
+    assert result.num_clusters >= 2

@@ -614,7 +614,7 @@ def test_full_pipeline_create_db_search_export(tmp_path):
 def test_blast_search_benchmark(request: pytest.FixtureRequest, tmp_path: Path) -> None:
     """Benchmark blast-search: 20 sequential local blastn searches of a 2000 nt query against a 100-sequence nucleotide DB containing it (cold + warm)."""
     db_seqs = random_dna_sequences(n=100, length=2000, seed=1)
-    query = db_seqs[0]  # the query is present in the DB, so the homology search returns real hits
+    query = db_seqs[0]
     fasta = tmp_path / "bench_db.fasta"
     fasta.write_text("".join(f">seq_{i}\n{seq}\n" for i, seq in enumerate(db_seqs)))
     db_path = run_create_blast_db(

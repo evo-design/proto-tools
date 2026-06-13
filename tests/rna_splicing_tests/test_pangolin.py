@@ -399,7 +399,6 @@ def test_pangolin_score_variants_benchmark(request: pytest.FixtureRequest) -> No
     distance = 50
     variants = []
     for i, seq in enumerate(seqs):
-        # Center SNVs on 5100 so every +/-distance window stays in the scoreable band [5050, 5150] (fully scored).
         pos = 5100 - len(seqs) // 2 + i
         ref = seq[pos]
         alt = "A" if ref != "A" else "C"

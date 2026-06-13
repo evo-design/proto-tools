@@ -191,8 +191,6 @@ def test_relax_preserves_multichar_chain_ids():
 @pytest.mark.slow
 def test_pyrosetta_relax_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark pyrosetta-relax: 1 renin_af3 (~340 aa), default scorefxn ref2015, relax_cycles=1 (cold + warm)."""
-    # FastRelax is the dominant cost for any PyRosetta-based design pipeline; one
-    # relax_cycle on a ~340-aa monomer is the typical per-design unit of work.
     inputs = PyRosettaRelaxInput(inputs=[Structure(structure=TEST_PDB)])
     config = PyRosettaRelaxConfig(relax_cycles=1, seed=42)
 

@@ -82,9 +82,6 @@ def test_splice_transformer_gpu():
 @pytest.mark.uses_gpu
 def test_splice_transformer_prediction_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark splice-transformer-prediction: 16 items at target=1000 + 4000 bp flanks each, batched (cold + warm)."""
-    # Each item is 1000 bp target + 4000 bp left/right context = 9000 bp; 16 items
-    # is a comfortable transformer batch on a modern GPU and exercises the
-    # batched forward pass at realistic high-throughput screening scale.
     targets = random_dna_sequences(n=16, length=TARGET_LENGTH, seed=0)
     lefts = random_dna_sequences(n=16, length=CONTEXT_LENGTH, seed=1)
     rights = random_dna_sequences(n=16, length=CONTEXT_LENGTH, seed=2)

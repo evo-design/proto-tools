@@ -502,7 +502,7 @@ def test_rfdiffusion3_design_benchmark(request: pytest.FixtureRequest) -> None:
     inputs = RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(length="128")])
     config = RFdiffusion3Config(
         n_batches=1,
-        diffusion_batch_size=8,  # 8 parallel designs per pass; mirrors typical mini-binder generation
+        diffusion_batch_size=8,
         num_timesteps=200,
     )
 
@@ -510,12 +510,10 @@ def test_rfdiffusion3_design_benchmark(request: pytest.FixtureRequest) -> None:
     validate_output(result)
 
     assert result.tool_id == "rfdiffusion3-design"
-    # Single input spec → single bundle holding all 8 designs.
     assert len(result.designed_structures) == 1
     bundle = result[0]
     assert len(bundle.structures) == 8
     for design in bundle.structures:
         assert design.structure is not None
-        # Single-chain unconditional design → one designed chain of 128 residues.
         assert len(design.complex.chains) == 1
         assert len(design.complex.chains[0].sequence) == 128

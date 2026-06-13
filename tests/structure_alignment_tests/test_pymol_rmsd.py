@@ -133,5 +133,5 @@ def test_pymol_rmsd_benchmark(request: pytest.FixtureRequest) -> None:
 
     assert result.tool_id == "pymol-rmsd-alignment"
     assert result.method == "cealign"
-    assert 0.0 < result.rmsd < 2.0  # two genuinely different renin models superpose to a small but non-zero RMSD
-    assert result.aligned_length > 250  # most of the ~340 residues align
+    assert 0.0 < result.rmsd < 2.0
+    assert result.aligned_length > 250

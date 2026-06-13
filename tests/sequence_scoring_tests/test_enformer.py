@@ -256,7 +256,6 @@ def test_enformer_prediction_benchmark(request: pytest.FixtureRequest) -> None:
 
     sequences = random_dna_sequences(n=8, length=ENFORMER_CONTEXT, seed=0)
     inputs = EnformerInput(sequences=sequences)
-    # 10 tracks keeps the per-position output non-trivial without bloating I/O.
     config = EnformerConfig(
         output_tracks=list(range(10)),
         species="human",

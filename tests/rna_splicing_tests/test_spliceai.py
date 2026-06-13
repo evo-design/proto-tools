@@ -221,7 +221,6 @@ def test_spliceai_predict_gpu() -> None:
 @pytest.mark.uses_gpu
 def test_spliceai_predict_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark spliceai-predict on 100 transcript-length (10 kb) sequences (cold + warm)."""
-    # 100 sequences at 10 kb — SpliceAI's full 10 kb receptive field of real sequence per position (vs. 400 bp, ~96% N-padding); a transcript-scale gene scan.
     n, length = 100, 10000
     sequences = random_dna_sequences(n=n, length=length, seed=0)
     inputs = SpliceAIPredictInput(sequences=sequences)
@@ -248,11 +247,9 @@ def test_spliceai_score_benchmark(request: pytest.FixtureRequest, tmp_path: Path
     shutil.copy(_EXAMPLES_DIR / "example_genome.fa", genome)
     shutil.copy(_EXAMPLES_DIR / "example_annotation.txt", annotation)
 
-    # 1000 SNVs across the SPLICEAI_DEMO gene — a 5-model, 10001 bp-context ensemble scan at large variant-set / saturation scale.
     gseq = "".join(ln.strip() for ln in genome.read_text().splitlines() if not ln.startswith(">")).upper()
     n = 1000
     alt_map = {"A": "C", "C": "G", "G": "T", "T": "A"}
-    # Stay a margin off both TX boundaries (1-based 20000-40000): a variant at TX_START/TX_END misses the gene and yields empty scores.
     margin = 1000
     lo, hi = 20000 + margin, 40000 - margin
     positions = [lo + i * ((hi - lo) // n) for i in range(n)]

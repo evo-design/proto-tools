@@ -808,8 +808,6 @@ def test_ablang_sample_benchmark(request: pytest.FixtureRequest) -> None:
 @pytest.mark.uses_gpu
 def test_ablang_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark ablang-gradient on a full-length paired antibody as logits (cold + warm)."""
-    # Gradient takes a single AntibodyLogits (not a list); workload size comes
-    # from sequence length times per-position MLM batches inside the model.
     rng = random.Random(3)
     heavy_logits = one_hot_protein_logits(_diversify_cdr3(rng.choice(_VH_TEMPLATES), rng))
     light_logits = one_hot_protein_logits(rng.choice(_VL_TEMPLATES))

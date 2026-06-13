@@ -389,9 +389,6 @@ def test_evo2_sample_benchmark(request):
     """Benchmark evo2-sample: 16 DNA prompts x 1024 nt, generating 512 tokens each (cold + warm)."""
     prompts = random_dna_sequences(n=16, length=1024, seed=0)
     inputs = Evo2SampleInput(prompts=prompts)
-    # batch_size=8 keeps the StripedHyena FFT prefill activation footprint within
-    # the 80 GiB single-GPU budget alongside the loaded 7B weights; batch_size=16
-    # OOM'd at a 16 GiB ifft allocation once memory fragmented across runs.
     config = Evo2SampleConfig(
         model_checkpoint="evo2_7b",
         max_new_tokens=512,

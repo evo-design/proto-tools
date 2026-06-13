@@ -363,6 +363,5 @@ def test_foldseek_cluster_benchmark(request: pytest.FixtureRequest) -> None:
 
     assert result.tool_id == "foldseek-cluster"
     assert result.num_structures == n
-    # 3 distinct folds → multiple real clusters, not a degenerate single cluster.
     assert result.num_clusters >= 2
     assert len(result.clusters) == result.num_clusters

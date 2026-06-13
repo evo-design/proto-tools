@@ -363,7 +363,7 @@ def test_alphagenome_predict_intervals_benchmark(request: pytest.FixtureRequest)
     )
 
     result = benchmark_twice(request, "alphagenome", lambda: run_alphagenome_predict_intervals(inputs, config))
-    validate_output(result, check_export=False)  # multi-GB prediction tensors; export round-trip dominates wall time
+    validate_output(result, check_export=False)
 
     assert result.tool_id == "alphagenome-predict-intervals"
     assert len(result) == _BENCH_BATCH
@@ -391,7 +391,7 @@ def test_alphagenome_predict_sequences_benchmark(request: pytest.FixtureRequest)
     )
 
     result = benchmark_twice(request, "alphagenome", lambda: run_alphagenome_predict_sequences(inputs, config))
-    validate_output(result, check_export=False)  # multi-GB prediction tensors; skip export round-trip
+    validate_output(result, check_export=False)
 
     assert result.tool_id == "alphagenome-predict-sequences"
     assert len(result) == _BENCH_BATCH
@@ -430,7 +430,7 @@ def test_alphagenome_predict_variants_benchmark(request: pytest.FixtureRequest) 
     )
 
     result = benchmark_twice(request, "alphagenome", lambda: run_alphagenome_predict_variants(inputs, config))
-    validate_output(result, check_export=False)  # multi-GB prediction tensors; skip export round-trip
+    validate_output(result, check_export=False)
 
     assert result.tool_id == "alphagenome-predict-variants"
     assert len(result) == _BENCH_BATCH

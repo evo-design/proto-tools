@@ -88,8 +88,6 @@ _BENCH_RENIN_PDB = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
 @pytest.mark.slow
 def test_dssp_secondary_structure_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark dssp-secondary-structure: 50 distinct renin_af3 copies (~340 aa each) (cold + warm)."""
-    # Distinct metrics break the @tool iterable-input dedup that would otherwise
-    # collapse N identical structures to a single compute, defeating the benchmark.
     structures = [
         {"structure": Structure(structure=str(_BENCH_RENIN_PDB), metrics={"_bench_id": i}), "chain": "A"}
         for i in range(50)

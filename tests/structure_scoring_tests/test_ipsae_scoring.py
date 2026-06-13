@@ -153,8 +153,6 @@ def test_export_json_round_trip(ipsae_result, tmp_path):
 @pytest.mark.slow
 def test_ipsae_scoring_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark ipsae-scoring: 20 sequential calls on the bundled 4INS A+B fixture (cold + warm)."""
-    # ipsae takes a single Structure per call; loop in the runner so cold/warm
-    # both reflect a realistic batched-screening workload.
     inp = example_input()
     config = IPSAEScoringConfig()
 

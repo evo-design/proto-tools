@@ -241,8 +241,6 @@ def test_run_minced_default_finds_short_repeat_after_default_change():
 @pytest.mark.slow
 def test_minced_crispr_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark minced-crispr: 100 distinct CRISPR-bearing sequences with varied flanking regions (cold + warm)."""
-    # Distinct sequences avoid the @tool cacheable=True dedup path, which would
-    # collapse N identical inputs to a single unique workload.
     sequences = [_CRISPR_SEQUENCE + f"AAAA{i:08d}AAAA" for i in range(100)]
     inputs = MincedInput(sequences=sequences)
     config = MincedConfig()

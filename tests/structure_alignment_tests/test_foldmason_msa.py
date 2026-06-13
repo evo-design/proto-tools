@@ -323,6 +323,5 @@ def test_foldmason_msa_benchmark(request: pytest.FixtureRequest) -> None:
     assert result.tool_id == "foldmason-msa"
     assert result.success, f"errors: {result.errors}"
     assert result.ticket_id == ""  # local mode produces no ticket
-    # pdl1 is a 2-chain complex, so the 3 cycled folds yield 4n/3 sequences.
     assert result.num_sequences == 4 * n // 3
     assert result.alignment_length > 0
