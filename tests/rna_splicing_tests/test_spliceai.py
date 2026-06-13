@@ -21,7 +21,7 @@ from proto_tools.tools import (
     run_spliceai_predict,
     run_spliceai_score,
 )
-from tests.conftest import benchmark_twice
+from tests.conftest import benchmark_twice, random_dna_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -214,6 +214,27 @@ def test_spliceai_predict_gpu() -> None:
 
 
 # ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("spliceai-predict")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_spliceai_predict_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark spliceai-predict on 100 transcript-length (10 kb) sequences (cold + warm)."""
+    # 100 sequences at 10 kb — SpliceAI's full 10 kb receptive field of real sequence per position (vs. 400 bp, ~96% N-padding); a transcript-scale gene scan.
+    n, length = 100, 10000
+    sequences = random_dna_sequences(n=n, length=length, seed=0)
+    inputs = SpliceAIPredictInput(sequences=sequences)
+    config = SpliceAIPredictConfig(device="cuda")
+
+    result = benchmark_twice(request, "spliceai", lambda: run_spliceai_predict(inputs, config))
+
+    assert result.success is True, f"SpliceAI predict failed: {result}"
+    assert result.tool_id == "spliceai-predict"
+    assert len(result.predictions) == n, "Should have one prediction track per input sequence"
+    for seq_pred in result.predictions:
+        assert len(seq_pred) == length, "Per-position predictions should match input length"
+        assert all(len(pos) == 3 and all(0.0 <= p <= 1.0 for p in pos) for pos in seq_pred)
 
 
 @pytest.mark.benchmark("spliceai-score")
