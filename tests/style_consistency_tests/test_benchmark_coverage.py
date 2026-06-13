@@ -46,7 +46,6 @@ _KNOWN_MISSING = frozenset(
         "pymol-rmsd-alignment",
         "rf3-prediction",
         "spliceai-predict",
-        "spliceai-score",
     }
 )
 
