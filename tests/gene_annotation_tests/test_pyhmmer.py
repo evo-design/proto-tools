@@ -29,6 +29,7 @@ from proto_tools.tools.gene_annotation.pyhmmer import (
 from proto_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
     _build_hit_models,
 )
+from tests.conftest import benchmark_twice, random_protein_sequences
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _DATA_DIR = Path(__file__).parent.parent / "dummy_data"
@@ -216,3 +217,33 @@ def test_pyhmmer_hmmsearch_skip_filters_monotonic():
     unfiltered = run_pyhmmer_hmmsearch(inputs, PyHmmsearchConfig(skip_filters=True, evalue_threshold=e_threshold))
     assert filtered.success and unfiltered.success
     assert unfiltered.num_sequence_hits >= filtered.num_sequence_hits
+
+
+# ---------------------------------------------------------------------------
+# Benchmarks
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.benchmark("pyhmmer-hmmscan")
+@pytest.mark.slow
+def test_pyhmmer_hmmscan_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark pyhmmer-hmmscan: 25000 proteins (2 real + rest random 300-aa) scanned against the test HMM db (cold + warm)."""
+    n_queries = 25000
+    # Seed with the 2 real sequences that hit the test HMM db so the export is non-empty; the rest are random noise.
+    sequences = [*SAMPLE_SEQUENCES, *random_protein_sequences(n=n_queries - len(SAMPLE_SEQUENCES), length=300, seed=0)]
+    inputs = PyHmmscanInput(hmm_db=str(TEST_HMM_FILE), sequences=sequences)
+    config = PyHmmscanConfig(
+        num_threads=4,
+        evalue_threshold=1000.0,
+        domain_evalue_threshold=1000.0,
+    )
+
+    result = benchmark_twice(request, "pyhmmer", lambda: run_pyhmmer_hmmscan(inputs, config))
+    validate_output(result)
+
+    assert isinstance(result, PyHmmerOutput)
+    assert result.tool_id == "pyhmmer-hmmscan"
+    assert result.num_sequence_hits == len(result.sequence_hits)
+    assert result.num_domain_hits == len(result.domain_hits)
+    assert result.num_sequence_hits >= len(SAMPLE_SEQUENCES)  # the seeded real sequences must hit
+    assert result.metadata["num_queries"] == n_queries
