@@ -30,7 +30,7 @@ from proto_tools.tools.sequence_alignment.mmseqs2.search_proteins import (
     _resolve_gpu_db_stem,
     _resolve_registered_mmseqs_db,
 )
-from tests.conftest import benchmark_twice, random_protein_sequences
+from tests.conftest import benchmark_twice, random_dna_sequences, random_protein_sequences
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_DATA_DIR = Path("tests/dummy_data")
@@ -807,3 +807,36 @@ def test_mmseqs2_clustering_benchmark(request: pytest.FixtureRequest) -> None:
     assert len(result) == 1500
     assert 1 < result.num_clusters <= 100  # 50 families collapse to ~50 clusters, not 1500 singletons
     assert len(result.representative_indices) == result.num_clusters
+
+
+def _homolog_genome_db(queries: list[str], per_query: int, noise: int, mutation: float, seed: int) -> list[str]:
+    """Each query gets ``per_query`` ~mutation-diverged homologs (real hits below 100% identity) plus ``noise`` random genomes."""
+    rng = random.Random(seed)
+    length = len(queries[0])
+    variant_src = random_dna_sequences(per_query * len(queries), length, seed)
+    targets = []
+    for q_idx, base in enumerate(queries):
+        for j in range(per_query):
+            src = variant_src[q_idx * per_query + j]
+            targets.append("".join(src[i] if rng.random() < mutation else base[i] for i in range(length)))
+    targets += random_dna_sequences(noise, length, seed + 7)
+    return targets
+
+
+@pytest.mark.benchmark("mmseqs2-search-genomes")
+@pytest.mark.slow
+def test_mmseqs2_search_genomes_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark mmseqs2-search-genomes: 50 query genomes vs a 400-genome DB of ~90%-identity homologs + noise (cold + warm)."""
+    query_genomes = random_dna_sequences(n=50, length=1000, seed=0)
+    # Each query has diverged homologs in the DB (real homology hits at <100% identity), not just an exact self-copy.
+    target_genomes = _homolog_genome_db(query_genomes, per_query=4, noise=200, mutation=0.10, seed=1)
+    inputs = Mmseqs2SearchGenomesInput(query_genomes=query_genomes)
+    config = Mmseqs2SearchGenomesConfig(target_genomes=target_genomes, threads=4)
+
+    result = benchmark_twice(request, "mmseqs2", lambda: run_mmseqs2_search_genomes(inputs, config))
+    validate_output(result)
+
+    assert result.tool_id == "mmseqs2-search-genomes"
+    assert isinstance(result, Mmseqs2SearchGenomesOutput)
+    assert len(result) == 50
+    assert result.total_hits >= len(query_genomes)  # each query finds its diverged homologs
