@@ -247,3 +247,28 @@ def test_pyhmmer_hmmscan_benchmark(request: pytest.FixtureRequest) -> None:
     assert result.num_domain_hits == len(result.domain_hits)
     assert result.num_sequence_hits >= len(SAMPLE_SEQUENCES)  # the seeded real sequences must hit
     assert result.metadata["num_queries"] == n_queries
+
+
+@pytest.mark.benchmark("pyhmmer-hmmsearch")
+@pytest.mark.slow
+def test_pyhmmer_hmmsearch_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark pyhmmer-hmmsearch: multi-HMM file searched against 150000 proteins (2 real + rest random 350aa) (cold + warm)."""
+    n_sequences = 150000
+    # Seed with the 2 real sequences that hit the test HMM db so the export is non-empty; the rest are random noise.
+    sequences = [*SAMPLE_SEQUENCES, *random_protein_sequences(n_sequences - len(SAMPLE_SEQUENCES), 350, seed=0)]
+    inputs = PyHmmsearchInput(hmm=str(TEST_HMM_FILE), sequences=sequences)
+    config = PyHmmsearchConfig(
+        num_threads=0,
+        evalue_threshold=1000.0,
+        domain_evalue_threshold=1000.0,
+    )
+
+    result = benchmark_twice(request, "pyhmmer", lambda: run_pyhmmer_hmmsearch(inputs, config))
+    validate_output(result)
+
+    assert isinstance(result, PyHmmerOutput)
+    assert result.tool_id == "pyhmmer-hmmsearch"
+    assert result.num_sequence_hits == len(result.sequence_hits)
+    assert result.num_domain_hits == len(result.domain_hits)
+    assert result.num_sequence_hits >= len(SAMPLE_SEQUENCES)  # the seeded real sequences must hit
+    assert result.metadata["num_sequences"] == n_sequences
