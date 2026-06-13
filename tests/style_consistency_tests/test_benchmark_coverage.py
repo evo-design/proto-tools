@@ -44,7 +44,6 @@ _KNOWN_MISSING = frozenset(
         "mmseqs2-search-proteins",
         "pymol-rmsd-alignment",
         "rf3-prediction",
-        "spliceai-predict",
     }
 )
 
