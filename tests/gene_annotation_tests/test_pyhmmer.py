@@ -3,6 +3,7 @@
 Tests for the PyHMMER tools.
 """
 
+import random
 from pathlib import Path
 
 import pytest
@@ -272,3 +273,48 @@ def test_pyhmmer_hmmsearch_benchmark(request: pytest.FixtureRequest) -> None:
     assert result.num_domain_hits == len(result.domain_hits)
     assert result.num_sequence_hits >= len(SAMPLE_SEQUENCES)  # the seeded real sequences must hit
     assert result.metadata["num_sequences"] == n_sequences
+
+
+def _homolog_target_db(queries: list[str], per_query: int, seed: int) -> list[str]:
+    """Per query, ``per_query`` mutated homologs on a 15->40% divergence gradient so jackhmmer's profile expands across iterations."""
+    rng = random.Random(seed)
+    length = len(queries[0])
+    noise = random_protein_sequences(per_query * len(queries), length, seed)
+    targets = []
+    for q_idx, base in enumerate(queries):
+        for j in range(per_query):
+            src = noise[q_idx * per_query + j]
+            mutation = 0.15 + 0.25 * j / max(per_query - 1, 1)
+            targets.append("".join(src[i] if rng.random() < mutation else base[i] for i in range(length)))
+    return targets
+
+
+@pytest.mark.benchmark("pyhmmer-jackhmmer")
+@pytest.mark.slow
+def test_pyhmmer_jackhmmer_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark pyhmmer-jackhmmer: 5 iterative searches of 4 queries vs 200 homolog targets (~250 aa, 3 iters) (cold + warm)."""
+    queries = random_protein_sequences(n=4, length=250, seed=7)
+    targets = _homolog_target_db(queries, per_query=50, seed=21)
+    inputs = PyJackhmmerInput(sequences=queries, target_sequences=targets)
+    config = PyJackhmmerConfig(
+        max_iterations=3,
+        num_threads=4,
+        evalue_threshold=1000.0,
+        domain_evalue_threshold=1000.0,
+    )
+
+    def run_batch():
+        last = None
+        for _ in range(5):
+            last = run_pyhmmer_jackhmmer(inputs, config)
+        return last
+
+    result = benchmark_twice(request, "pyhmmer", run_batch)
+    validate_output(result, check_export=False)
+
+    assert isinstance(result, PyHmmerOutput)
+    assert result.tool_id == "pyhmmer-jackhmmer"
+    assert result.metadata["max_iterations"] == 3
+    assert len(result.metadata["iterations_per_query"]) == len(queries)
+    assert result.num_sequence_hits >= 1
+    assert max(result.metadata["iterations_per_query"]) > 1  # homolog targets make the profile expand past iteration 1
