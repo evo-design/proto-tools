@@ -39,7 +39,6 @@ _EXEMPT_TOOLS = frozenset(
 # instead. The test below keeps this set honest.
 _KNOWN_MISSING = frozenset(
     {
-        "mmseqs2-search-genomes",
         "mmseqs2-search-proteins",
     }
 )
