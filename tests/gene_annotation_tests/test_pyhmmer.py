@@ -344,3 +344,29 @@ def test_pyhmmer_nhmmer_benchmark(request: pytest.FixtureRequest) -> None:
     assert result.metadata["num_target_sequences"] == 50000
     assert result.num_sequence_hits == len(result.sequence_hits)
     assert result.num_domain_hits == len(result.domain_hits)
+
+
+@pytest.mark.benchmark("pyhmmer-phmmer")
+@pytest.mark.slow
+def test_pyhmmer_phmmer_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark pyhmmer-phmmer: 25 queries vs a homolog + noise target DB (~300 aa) so the full hit-model path runs (cold + warm)."""
+    queries = random_protein_sequences(n=25, length=300, seed=0)
+    # Random proteins alone yield 0 phmmer hits; seed mutated homologs of each query so the search finds real hits.
+    targets = _homolog_target_db(queries, per_query=20, seed=1) + random_protein_sequences(n=500, length=300, seed=2)
+    inputs = PyPhmmerInput(sequences=queries, target_sequences=targets)
+    config = PyPhmmerConfig(
+        num_threads=4,
+        evalue_threshold=1000.0,
+        domain_evalue_threshold=1000.0,
+    )
+
+    result = benchmark_twice(request, "pyhmmer", lambda: run_pyhmmer_phmmer(inputs, config))
+    validate_output(result, check_export=False)
+
+    assert isinstance(result, PyHmmerOutput)
+    assert result.tool_id == "pyhmmer-phmmer"
+    assert result.metadata["num_query_sequences"] == 25
+    assert result.metadata["num_target_sequences"] == len(targets)
+    assert len(result.sequence_hits) == result.num_sequence_hits
+    assert len(result.domain_hits) == result.num_domain_hits
+    assert result.num_sequence_hits >= len(queries)  # each query finds its seeded homologs
