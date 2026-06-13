@@ -12,10 +12,13 @@ from proto_tools.tools.structure_alignment.pymol_rmsd import (
     run_pymol_rmsd_alignment,
 )
 from proto_tools.utils import ToolInstance
+from tests.conftest import benchmark_twice
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _DUMMY_DATA = Path(__file__).parent.parent / "dummy_data"
 _PDB_PATH = _DUMMY_DATA / "test_structure_similarity.pdb"
+_RENIN_PDB_PATH = _DUMMY_DATA / "renin_af3.pdb"
+_RENIN_CIF_PATH = _DUMMY_DATA / "renin.cif"
 
 
 def test_pymol_rmsd_config_method_is_literal_enum():
@@ -108,3 +111,27 @@ def test_pymol_rmsd_e2e_self_alignment():
     assert align.rmsd == pytest.approx(0.0, abs=1e-4)
     assert align.aligned_atoms > 0
     assert align.aligned_residues > 0
+
+
+@pytest.mark.benchmark("pymol-rmsd-alignment")
+@pytest.mark.slow
+def test_pymol_rmsd_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark pymol-rmsd-alignment: 20 sequential cealign of two renin models (~340 aa, RMSD ~0.6 A) (cold + warm)."""
+    target = Structure.from_file(_RENIN_PDB_PATH)
+    mobile = Structure.from_file(_RENIN_CIF_PATH)
+    inputs = PyMOLRMSDInput(target_structure=target, mobile_structure=mobile)
+    config = PyMOLRMSDConfig(method="cealign")
+
+    def run_batch():
+        last = None
+        for _ in range(20):
+            last = run_pymol_rmsd_alignment(inputs, config)
+        return last
+
+    result = benchmark_twice(request, "pymol_rmsd", run_batch)
+    validate_output(result)
+
+    assert result.tool_id == "pymol-rmsd-alignment"
+    assert result.method == "cealign"
+    assert 0.0 < result.rmsd < 2.0  # two genuinely different renin models superpose to a small but non-zero RMSD
+    assert result.aligned_length > 250  # most of the ~340 residues align
