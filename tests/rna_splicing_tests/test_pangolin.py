@@ -15,7 +15,7 @@ from proto_tools.tools.rna_splicing.pangolin import (
     run_pangolin_score_variants,
 )
 from proto_tools.tools.rna_splicing.pangolin.shared_data_models import PANGOLIN_FLANK
-from tests.conftest import random_dna_sequences
+from tests.conftest import benchmark_twice, random_dna_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -362,3 +362,29 @@ def test_pangolin_score_variants_export(tmp_path) -> None:
         assert path.exists() and path.stat().st_size > 0
     header = (out_dir / "pangolin.csv").read_text().splitlines()[0]
     assert "increase_position" in header and "max_gain" in header
+
+
+# ── Benchmark ────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("pangolin-predict")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_pangolin_predict_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark pangolin-predict on 64 sequences of length 12000 bp across 4 tissues (cold + warm)."""
+    n = 64
+    length = 12000
+    sequences = random_dna_sequences(n=n, length=length, seed=0)
+    inputs = PangolinPredictInput(sequences=sequences)
+    config = PangolinPredictConfig(device="cuda")
+
+    result = benchmark_twice(request, "pangolin", lambda: run_pangolin_predict(inputs, config))
+
+    assert result.success is True, f"Pangolin predict failed: {result}"
+    assert result.tool_id == "pangolin-predict"
+    assert len(result.results) == n
+    expected_positions = length - 2 * PANGOLIN_FLANK
+    for prediction in result.results:
+        assert len(prediction.scores) == expected_positions
+        assert all(len(row) == 4 for row in prediction.scores)
+        assert prediction.output_start == PANGOLIN_FLANK
