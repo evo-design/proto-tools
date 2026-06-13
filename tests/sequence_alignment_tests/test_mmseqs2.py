@@ -793,6 +793,20 @@ def _clustered_protein_sequences(
     return sequences
 
 
+def _homolog_protein_db(queries: list[str], per_query: int, noise: int, mutation: float, seed: int) -> list[str]:
+    """Each query gets ``per_query`` ~mutation-diverged homologs (real hits below 100% identity) plus ``noise`` random proteins."""
+    rng = random.Random(seed)
+    length = len(queries[0])
+    variant_src = random_protein_sequences(per_query * len(queries), length, seed)
+    targets = []
+    for q_idx, base in enumerate(queries):
+        for j in range(per_query):
+            src = variant_src[q_idx * per_query + j]
+            targets.append("".join(src[i] if rng.random() < mutation else base[i] for i in range(length)))
+    targets += random_protein_sequences(noise, length, seed + 7)
+    return targets
+
+
 @pytest.mark.benchmark("mmseqs2-clustering")
 @pytest.mark.slow
 def test_mmseqs2_clustering_benchmark(request: pytest.FixtureRequest) -> None:
@@ -809,6 +823,23 @@ def test_mmseqs2_clustering_benchmark(request: pytest.FixtureRequest) -> None:
     assert len(result) == 1500
     assert 1 < result.num_clusters <= 100
     assert len(result.representative_indices) == result.num_clusters
+
+
+@pytest.mark.benchmark("mmseqs2-search-proteins")
+@pytest.mark.slow
+def test_search_proteins_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark mmseqs2-search-proteins: 200 query proteins vs a 4800-seq DB of ~85%-identity homologs + noise (cold + warm)."""
+    queries = random_protein_sequences(n=200, length=250, seed=0)
+    targets = _homolog_protein_db(queries, per_query=4, noise=4000, mutation=0.15, seed=1)
+    inputs = Mmseqs2SearchProteinsInput(query_sequences=queries)
+    config = Mmseqs2SearchProteinsConfig(target_sequences=targets, threads=4)
+
+    result = benchmark_twice(request, "mmseqs2", lambda: run_mmseqs2_search_proteins(inputs, config))
+    validate_output(result)
+
+    assert result.tool_id == "mmseqs2-search-proteins"
+    assert len(result) == 200
+    assert result.total_hits >= len(queries)
 
 
 def _homolog_genome_db(queries: list[str], per_query: int, noise: int, mutation: float, seed: int) -> list[str]:

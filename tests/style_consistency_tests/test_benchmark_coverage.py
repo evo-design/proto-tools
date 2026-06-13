@@ -37,11 +37,7 @@ _EXEMPT_TOOLS = frozenset(
 # Tools registered before the benchmark requirement existed. Remove an entry
 # when you add its benchmark; do NOT add new entries — write the benchmark
 # instead. The test below keeps this set honest.
-_KNOWN_MISSING = frozenset(
-    {
-        "mmseqs2-search-proteins",
-    }
-)
+_KNOWN_MISSING: frozenset[str] = frozenset()
 
 
 def _benchmarked_tool_keys() -> set[str]:
