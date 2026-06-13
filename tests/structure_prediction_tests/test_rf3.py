@@ -18,6 +18,7 @@ from proto_tools.tools.structure_prediction import (
     run_rf3_prediction,
 )
 from proto_tools.tools.structure_prediction.rf3.helpers import complex_to_rf3_json
+from tests.conftest import benchmark_twice, random_protein_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 
 # Cro repressor from bacteriophage lambda; short, well-folded.
@@ -205,3 +206,26 @@ def test_rf3_seed_advances_per_complex():
     assert len(result.structures) == 2
     # The two structures must differ — confirms per-complex seed advancement.
     assert result.structures[0].structure != result.structures[1].structure
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("rf3-prediction")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_rf3_prediction_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark rf3-prediction on 8 random 256-residue proteins, MSA-free, diffusion_batch_size=1 (cold + warm)."""
+    sequences = random_protein_sequences(n=8, length=256, seed=0)
+    complexes = [Complex(chains=[Chain(sequence=seq, entity_type="protein")]) for seq in sequences]
+    inputs = RF3Input(complexes=complexes)
+    config = RF3Config(use_msa=False, diffusion_batch_size=1, verbose=False)
+
+    result = benchmark_twice(request, "rf3", lambda: run_rf3_prediction(inputs, config))
+
+    assert result.success, "RF3 benchmark run failed"
+    assert result.tool_id == "rf3-prediction"
+    assert len(result.structures) == 8
+    for structure in result.structures:
+        assert is_valid_structure(structure.structure_cif)
+    assert_metrics_in_spec(result)
