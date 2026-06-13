@@ -237,7 +237,7 @@ class ColabFoldRemoteSearchWrapper:
                 raise RuntimeError(f"colabfold paired query returned no .a3m file in {pair_dir}")
             pair_a3m = candidates[0]
 
-        per_chain_blocks = _parse_pair_a3m(pair_a3m, num_chains=len(group_seqs))
+        per_chain_blocks = _parse_pair_a3m(pair_a3m, group_seqs)
 
         written: list[str] = []
         for chain_idx, block_bytes in enumerate(per_chain_blocks):
@@ -269,27 +269,47 @@ class ColabFoldRemoteSearchWrapper:
         logger.debug("ColabFold remote search initialized")
 
 
-def _parse_pair_a3m(pair_a3m: Path, num_chains: int) -> list[bytes]:
-    r"""Split a paired `pair.a3m` into per-chain row-aligned blocks.
+def _a3m_query_sequence(block: bytes) -> str:
+    """The block's first-record (query) sequence, uppercased and ungapped."""
+    seq = bytearray()
+    for line in block.split(b"\n")[1:]:  # skip the leading '>' header
+        if line.startswith(b">"):
+            break
+        seq += line.strip()
+    return seq.upper().replace(b"-", b"").decode()
+
+
+def _parse_pair_a3m(pair_a3m: Path, group_seqs: list[str]) -> list[bytes]:
+    r"""Split a paired `pair.a3m` into per-chain row-aligned blocks, in input chain order.
 
     Format observed empirically against api.colabfold.com: a single file with
     `\x00`-separated chain blocks, each block a standard A3M with the chain
-    query as the first sequence. Trailing empty block from the final delimiter
-    is dropped. Asserts `num_chains` blocks were produced.
+    query as the first sequence. The API **deduplicates identical chains**, so a
+    homo-oligomer query comes back with one block per *unique* sequence rather
+    than one per chain. Map each block back onto every chain that shares its
+    sequence (the blocks stay taxonomy-row-aligned, so duplicated chains pair
+    correctly) and return one block per input chain.
     """
     raw = pair_a3m.read_bytes()
     blocks = [b for b in raw.split(b"\x00") if b.strip()]
-    if len(blocks) != num_chains:
-        raise RuntimeError(f"colabfold pair.a3m: expected {num_chains} chain blocks, got {len(blocks)}")
 
-    # Optional sanity check: equal row counts across blocks.
+    block_by_query = {_a3m_query_sequence(b): b for b in blocks}
+    wanted = [s.upper() for s in group_seqs]
+    unique_seqs = list(dict.fromkeys(wanted))
+    if len(blocks) != len(unique_seqs) or any(seq not in block_by_query for seq in unique_seqs):
+        raise RuntimeError(
+            f"colabfold pair.a3m: {len(blocks)} block(s) do not match the "
+            f"{len(unique_seqs)} unique chain sequence(s) in the query"
+        )
+
+    # Sanity check: equal row counts across blocks (taxonomy-paired output).
     row_counts = [b.count(b"\n>") + (1 if b.startswith(b">") else 0) for b in blocks]
     if len(set(row_counts)) != 1:
         raise RuntimeError(
             f"colabfold pair.a3m: chain blocks have unequal row counts {row_counts}; expected row-aligned paired output"
         )
 
-    return blocks
+    return [block_by_query[seq] for seq in wanted]
 
 
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
