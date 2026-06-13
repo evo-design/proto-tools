@@ -364,7 +364,7 @@ def test_pangolin_score_variants_export(tmp_path) -> None:
     assert "increase_position" in header and "max_gain" in header
 
 
-# ── Benchmark ────────────────────────────────────────────────────────────────────
+# ── Benchmark ────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.benchmark("pangolin-predict")
@@ -388,3 +388,39 @@ def test_pangolin_predict_benchmark(request: pytest.FixtureRequest) -> None:
         assert len(prediction.scores) == expected_positions
         assert all(len(row) == 4 for row in prediction.scores)
         assert prediction.output_start == PANGOLIN_FLANK
+
+
+@pytest.mark.benchmark("pangolin-score-variants")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_pangolin_score_variants_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark pangolin-score-variants on 64 SNVs in 10,200 bp windows (cold + warm)."""
+    seqs = random_dna_sequences(n=64, length=10200, seed=42)
+    distance = 50
+    variants = []
+    for i, seq in enumerate(seqs):
+        # Center SNVs on 5100 so every +/-distance window stays in the scoreable band [5050, 5150] (fully scored).
+        pos = 5100 - len(seqs) // 2 + i
+        ref = seq[pos]
+        alt = "A" if ref != "A" else "C"
+        variants.append(
+            PangolinVariant(
+                sequence=seq,
+                variant_position=pos,
+                reference_bases=ref,
+                alternate_bases=alt,
+            )
+        )
+    inputs = PangolinScoreVariantsInput(variants=variants)
+    config = PangolinScoreVariantsConfig(device="cuda", distance=distance)
+
+    result = benchmark_twice(request, "pangolin", lambda: run_pangolin_score_variants(inputs, config))
+
+    assert result.success is True, f"Pangolin score-variants failed: {result}"
+    assert result.tool_id == "pangolin-score-variants"
+    assert len(result.results) == 64
+    for effect in result.results:
+        assert len(effect.gain_scores) == 2 * distance + 1
+        assert len(effect.gain_scores) == len(effect.loss_scores)
+        assert isinstance(effect.increase_score, float)
+    assert_metrics_in_spec(result)
