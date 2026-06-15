@@ -376,7 +376,7 @@ def test_pangolin_predict_benchmark(request: pytest.FixtureRequest) -> None:
     length = 12000
     sequences = random_dna_sequences(n=n, length=length, seed=0)
     inputs = PangolinPredictInput(sequences=sequences)
-    config = PangolinPredictConfig(device="cuda")
+    config = PangolinPredictConfig()
 
     result = benchmark_twice(request, "pangolin", lambda: run_pangolin_predict(inputs, config))
 
@@ -411,7 +411,7 @@ def test_pangolin_score_variants_benchmark(request: pytest.FixtureRequest) -> No
             )
         )
     inputs = PangolinScoreVariantsInput(variants=variants)
-    config = PangolinScoreVariantsConfig(device="cuda", distance=distance)
+    config = PangolinScoreVariantsConfig(distance=distance)
 
     result = benchmark_twice(request, "pangolin", lambda: run_pangolin_score_variants(inputs, config))
 

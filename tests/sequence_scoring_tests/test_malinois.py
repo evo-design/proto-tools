@@ -296,7 +296,6 @@ def test_malinois_score_benchmark(request: pytest.FixtureRequest) -> None:
         cell_types=["K562", "HepG2", "SKNSH"],
         seq_length=200,
         batch_size=32,
-        device="cuda",
     )
 
     result = benchmark_twice(request, "malinois", lambda: run_malinois_score(inputs, config))
@@ -318,8 +317,6 @@ def test_malinois_score_benchmark(request: pytest.FixtureRequest) -> None:
 @pytest.mark.uses_gpu
 def test_malinois_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark malinois-gradient: 5 loops of a 256x200x4 batched DNA logit backward pass (cold + warm)."""
-    _skip_if_no_malinois_gpu()
-
     from proto_tools.tools.sequence_scoring.malinois import (
         MalinoisGradientConfig,
         MalinoisGradientInput,
@@ -341,7 +338,6 @@ def test_malinois_gradient_benchmark(request: pytest.FixtureRequest) -> None:
             MalinoisGradientLossTerm(cell_type="HepG2", direction="min"),
             MalinoisGradientLossTerm(cell_type="SKNSH", direction="min"),
         ],
-        device="cuda",
     )
 
     def run_batch() -> object:
