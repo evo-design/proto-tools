@@ -43,16 +43,26 @@ def _model_table(doc: ModelDoc, kind: str) -> str:
         """Escape ``|`` so a value stays inside one markdown table cell."""
         return text.replace("|", "\\|")
 
+    def code(text: str) -> str:
+        """Render inline code via HTML ``<code>`` so pipes survive table cells.
+
+        Markdown code spans ignore backslash escapes, so ``|`` inside one breaks
+        the table. HTML ``<code>`` with entity-encoded pipes renders correctly in
+        both Jupyter and GitHub.
+        """
+        html = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("|", "&#124;")
+        return f"<code>{html}</code>"
+
     rows: list[str] = []
     for f in doc.fields:
         if f.required:
             default = "required"
         elif f.default is not None:
-            default = f"`{esc(repr(f.default))}`"
+            default = code(repr(f.default))
         else:
-            default = "`None`"
+            default = code("None")
         desc = esc((f.description or "").replace("\n", " ")).strip()
-        rows.append(f"| `{f.name}` | `{esc(f.type_str)}` | {default} | {desc} |")
+        rows.append(f"| {code(f.name)} | {code(f.type_str)} | {default} | {desc} |")
     header = (
         f"**{kind.capitalize()}** — `{doc.name}`\n\n"
         "| Field | Type | Default | Description |\n"
