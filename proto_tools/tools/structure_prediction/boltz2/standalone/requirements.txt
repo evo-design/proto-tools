@@ -1,1 +1,1 @@
-boltz[cuda]
+boltz[cuda]==2.2.1

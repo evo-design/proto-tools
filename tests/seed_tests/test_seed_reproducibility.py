@@ -114,11 +114,14 @@ _SEED_EXCLUDED_KEYS: frozenset[str] = frozenset(
 #   test handles it via worker restart, but the persistent seed test has no
 #   eviction to trigger that path.
 # - esmfold2-prediction: ~2 mÅ atom drift between consecutive in-worker dispatches; root cause not isolated.
+# - boltz2-prediction, boltz2-affinity: resident model; ~0.1 Å cross-dispatch drift from hidden CUDA/JIT state (same class as chai1-prediction).
 _SEED_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {
         "chai1-prediction",
         "alphagenome-predict-variants",
         "esmfold2-prediction",
+        "boltz2-prediction",
+        "boltz2-affinity",
     }
 )
 

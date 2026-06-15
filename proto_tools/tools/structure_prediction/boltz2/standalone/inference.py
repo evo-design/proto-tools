@@ -2,7 +2,6 @@
 
 import json
 import os
-import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -20,12 +19,52 @@ def _prepare_output_values(value: Any) -> Any:
     return value
 
 
+_checkpoint_cache_installed = False
+# Resident Boltz2 models keyed by checkpoint path; lives at module scope so to_device() can relocate them.
+_checkpoint_cache: dict[str, Any] = {}
+
+
+def _install_checkpoint_cache() -> None:
+    """Memoize ``Boltz2.load_from_checkpoint`` so a resident worker loads each checkpoint once.
+
+    ``boltz.main.predict`` reloads the checkpoint on every call; this memoization collapses those
+    repeated loads to one per checkpoint. Config fields baked into the load (sampling/recycling/
+    diffusion steps, step_scale, subsample_msa, and the affinity knobs) are marked
+    ``reload_on_change=True``, so a config change restarts the worker and load args stay fixed for a
+    worker's lifetime. The only distinct checkpoints are the structure (``boltz2_conf``) and affinity
+    (``boltz2_aff``) files, so keying by checkpoint path bounds the cache to two entries.
+
+    The path-only key does not self-correct: correctness relies on the ``reload_on_change`` set
+    covering every field boltz threads into ``Boltz2.load_from_checkpoint``. An unmarked load-affecting
+    field would let a same-path entry serve a model loaded with stale args, wrong output, no error.
+    """
+    global _checkpoint_cache_installed
+    if _checkpoint_cache_installed:
+        return
+    from boltz.model.models.boltz2 import Boltz2
+
+    original_load = Boltz2.load_from_checkpoint
+
+    def cached_load_from_checkpoint(checkpoint: Any, **kwargs: Any) -> Any:
+        key = str(checkpoint)
+        model = _checkpoint_cache.get(key)
+        if model is None:
+            logger.debug("boltz2: checkpoint cache miss, loading %s", checkpoint)
+            model = original_load(checkpoint, **kwargs)
+            _checkpoint_cache[key] = model
+        else:
+            logger.debug("boltz2: reusing resident checkpoint %s", checkpoint)
+        return model
+
+    Boltz2.load_from_checkpoint = cached_load_from_checkpoint
+    _checkpoint_cache_installed = True
+
+
 class Boltz2Model:
     """Boltz2 model for multi-modal structure prediction."""
 
     def __init__(self) -> None:
         """Initialize Boltz2 model wrapper."""
-        self._loaded = False
         from standalone_helpers import resolve_weights_dir
 
         weights_dir = resolve_weights_dir("boltz2")
@@ -38,7 +77,6 @@ class Boltz2Model:
                 self.cache_dir = Path(hf_home) / "boltz"
             else:
                 raise RuntimeError("boltz2: cannot determine cache directory; set PROTO_HOME or PROTO_MODEL_CACHE")
-        self.boltz_executable: str | None = None
 
     def __call__(
         self,
@@ -61,7 +99,7 @@ class Boltz2Model:
         Args:
             input_yaml_path: Path to input YAML file
             output_dir: Directory to write output to
-            device: Device for subprocess environment
+            device: GPU device the worker runs on
             recycling_steps: Number of recycling steps
             sampling_steps: Number of sampling steps
             diffusion_samples: Number of diffusion samples
@@ -69,15 +107,15 @@ class Boltz2Model:
             max_msa_seqs: Cap on MSA depth fed into the model
             subsample_msa: Stochastically subsample MSA each call
             num_workers: Number of workers for prediction
-            seed: Random seed forwarded to the boltz CLI as ``--seed``. None
-                leaves the boltz default (unseeded) in place.
+            seed: Random seed forwarded to boltz. None leaves the boltz default
+                (unseeded) in place.
             verbose: Whether to print status messages
             include_pae_matrix: Attach the full per-residue PAE matrix.
 
         Returns:
             Dictionary containing structure_cif_output and metrics
         """
-        captured = self._run_boltz_predict(
+        self._run_boltz_predict(
             input_yaml_path=input_yaml_path,
             output_dir=output_dir,
             device=device,
@@ -91,7 +129,7 @@ class Boltz2Model:
             seed=seed,
             verbose=verbose,
         )
-        return self._extract_boltz_output(output_dir, input_yaml_path, include_pae_matrix, boltz_output=captured)
+        return self._extract_boltz_output(output_dir, input_yaml_path, include_pae_matrix)
 
     def predict_affinity(
         self,
@@ -117,14 +155,7 @@ class Boltz2Model:
         Returns ``__call__``'s output plus ``affinity_metrics`` parsed from
         ``affinity_<input>.json``.
         """
-        extra_flags = [
-            f"--sampling_steps_affinity={sampling_steps_affinity}",
-            f"--diffusion_samples_affinity={diffusion_samples_affinity}",
-        ]
-        if affinity_mw_correction:
-            extra_flags.append("--affinity_mw_correction")
-
-        captured = self._run_boltz_predict(
+        self._run_boltz_predict(
             input_yaml_path=input_yaml_path,
             output_dir=output_dir,
             device=device,
@@ -137,19 +168,21 @@ class Boltz2Model:
             num_workers=num_workers,
             seed=seed,
             verbose=verbose,
-            extra_args=extra_flags,
+            affinity={
+                "sampling_steps_affinity": sampling_steps_affinity,
+                "diffusion_samples_affinity": diffusion_samples_affinity,
+                "affinity_mw_correction": affinity_mw_correction,
+            },
         )
-        result = self._extract_boltz_output(
-            output_dir, input_yaml_path, include_pae_matrix=False, boltz_output=captured
-        )
-        result["affinity_metrics"] = self._extract_affinity_json(output_dir, input_yaml_path, boltz_output=captured)
+        result = self._extract_boltz_output(output_dir, input_yaml_path, include_pae_matrix=False)
+        result["affinity_metrics"] = self._extract_affinity_json(output_dir, input_yaml_path)
         return result
 
     def _run_boltz_predict(
         self,
         input_yaml_path: str,
         output_dir: str,
-        device: str,
+        device: str,  # noqa: ARG002 -- worker already runs on its assigned GPU
         recycling_steps: int,
         sampling_steps: int,
         diffusion_samples: int,
@@ -158,81 +191,62 @@ class Boltz2Model:
         subsample_msa: bool,
         num_workers: int,
         seed: int | None,
-        verbose: bool,
-        extra_args: list[str] | None = None,
-    ) -> str | None:
-        """Invoke the ``boltz predict`` CLI; ``extra_args`` appends affinity flags.
+        verbose: bool,  # noqa: ARG002 -- boltz logs through its own logger
+        affinity: dict[str, Any] | None = None,
+    ) -> None:
+        """Drive ``boltz.main.predict`` in-process against the memoized resident checkpoint.
 
-        Returns boltz's captured stdout/stderr (or None), surfaced by callers if
-        no predictions are written.
+        ``affinity`` (when set) enables the binding-affinity pass. The checkpoint loads once per
+        worker and stays resident; ``to_device()`` relocates it for offload.
         """
-        if not self._loaded:
-            self.load(verbose)
+        from boltz.main import predict as predict_cmd
+        from standalone_helpers import is_cuda_oom, raise_oom
 
         logger.debug("\n=== Boltz2 Prediction ===")
         logger.debug(f"Input YAML path: {input_yaml_path}")
         logger.debug(f"Output directory: {output_dir}")
         with open(input_yaml_path) as f:
-            yaml_content = f.read()
-        logger.debug(f"\n--- Input YAML ---\n{yaml_content}\n------------------\n")
-        sys.stdout.flush()
+            logger.debug(f"\n--- Input YAML ---\n{f.read()}\n------------------\n")
+
+        _install_checkpoint_cache()
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         num_devices = 1 if torch.cuda.is_available() else 0
-        cmd = [
-            self.boltz_executable,
-            "predict",
-            input_yaml_path,
-            f"--out_dir={output_dir}",
-            f"--recycling_steps={recycling_steps}",
-            f"--diffusion_samples={diffusion_samples}",
-            f"--sampling_steps={sampling_steps}",
-            f"--step_scale={step_scale}",
-            f"--max_msa_seqs={max_msa_seqs}",
-            "--output_format=mmcif",
-            f"--devices={num_devices}",
-            f"--cache={self.cache_dir!s}",
-            f"--num_workers={num_workers}",
-        ]
-        if subsample_msa:
-            cmd.append("--subsample_msa")
-        if seed is not None:
-            cmd.append(f"--seed={seed}")
-        if extra_args:
-            cmd.extend(extra_args)
+        kwargs: dict[str, Any] = {
+            "data": input_yaml_path,
+            "out_dir": output_dir,
+            "cache": str(self.cache_dir),
+            "devices": num_devices,
+            "recycling_steps": recycling_steps,
+            "sampling_steps": sampling_steps,
+            "diffusion_samples": diffusion_samples,
+            "step_scale": step_scale,
+            "max_msa_seqs": max_msa_seqs,
+            "subsample_msa": subsample_msa,
+            "num_workers": num_workers,
+            "output_format": "mmcif",
+            "seed": seed,
+        }
+        if affinity is not None:
+            kwargs["sampling_steps_affinity"] = affinity["sampling_steps_affinity"]
+            kwargs["diffusion_samples_affinity"] = affinity["diffusion_samples_affinity"]
+            kwargs["affinity_mw_correction"] = affinity["affinity_mw_correction"]
 
-        logger.debug(f"Running Boltz command: {' '.join(cmd)}")  # type: ignore[arg-type]
-        sys.stdout.flush()
-
-        from standalone_helpers import get_subprocess_device_env
-
-        env = get_subprocess_device_env(device)
-
-        from standalone_helpers import is_cuda_oom, raise_oom, run_teed
-
-        # Always capture stdout/stderr (teed to the terminal when verbose) so a CUDA OOM is detected
-        # whether or not verbose streaming is on.
-        returncode, stdout, stderr = run_teed(cmd, env=env, verbose=verbose, encoding="utf-8")
-        if returncode != 0:
-            stderr_tail = " | ".join(stderr.strip().splitlines()) or "<no stderr>"
-            if is_cuda_oom(stderr_tail):
+        try:
+            predict_cmd.callback(**kwargs)
+        except RuntimeError as e:
+            if is_cuda_oom(str(e)):
                 raise_oom("boltz2", hint="Reduce the complex size or use a GPU with more memory.")
-            raise RuntimeError(f"boltz2: failed (exit {returncode}): {stderr_tail}")
-
+            raise
         logger.debug("Boltz prediction completed")
-        sys.stdout.flush()
-        # boltz can exit 0 yet skip the input; pass its output so the missing-predictions error explains why.
-        return "\n".join(s for s in (stdout, stderr) if s) or None
 
-    def _extract_boltz_output(
-        self, output_dir: str, input_path: str, include_pae_matrix: bool, boltz_output: str | None = None
-    ) -> dict[str, Any]:
+    def _extract_boltz_output(self, output_dir: str, input_path: str, include_pae_matrix: bool) -> dict[str, Any]:
         """Extract structure and metrics from Boltz prediction outputs.
 
         Args:
             output_dir: Directory containing Boltz prediction outputs
             input_path: Path to input YAML file
             include_pae_matrix: Attach the full per-residue PAE matrix.
-            boltz_output: boltz's captured stdout/stderr, surfaced in the error if no predictions were written.
 
         Returns:
             Dictionary containing structure_cif_output and metrics
@@ -243,8 +257,9 @@ class Boltz2Model:
         prediction_dir = Path(output_dir) / f"boltz_results_{input_name}" / "predictions" / input_name
 
         if not prediction_dir.is_dir():
-            hint = f" boltz exited 0 but wrote no predictions; output: {boltz_output}" if boltz_output else ""
-            raise FileNotFoundError(f"boltz2: prediction directory not found: {prediction_dir}.{hint}")
+            raise FileNotFoundError(
+                f"boltz2: prediction directory not found: {prediction_dir} (boltz wrote no predictions)."
+            )
 
         # Read confidence metrics
         confidence_file = prediction_dir / f"confidence_{input_name}_model_0.json"
@@ -274,33 +289,17 @@ class Boltz2Model:
             "metrics": metrics,
         }
 
-    def _extract_affinity_json(
-        self, output_dir: str, input_path: str, boltz_output: str | None = None
-    ) -> dict[str, float]:
+    def _extract_affinity_json(self, output_dir: str, input_path: str) -> dict[str, float]:
         """Read ``affinity_<input>.json`` (log10 IC50 μM + binder probability, plus per-model variants)."""
         input_name = Path(input_path).stem
         prediction_dir = Path(output_dir) / f"boltz_results_{input_name}" / "predictions" / input_name
         affinity_file = prediction_dir / f"affinity_{input_name}.json"
         if not affinity_file.exists():
-            hint = f" boltz exited 0 but wrote no affinity output; output: {boltz_output}" if boltz_output else ""
-            raise FileNotFoundError(f"boltz2: affinity file not found: {affinity_file}.{hint}")
+            raise FileNotFoundError(
+                f"boltz2: affinity file not found: {affinity_file} (boltz wrote no affinity output)."
+            )
         with open(affinity_file) as f:
             return {k: float(v) for k, v in json.load(f).items()}
-
-    def load(self, verbose: bool = False) -> None:  # noqa: ARG002 — required by tool interface
-        """Load Boltz2 model components."""
-        logger.debug("Initializing Boltz2")
-
-        # First try to find boltz in the current venv's bin directory
-        venv_boltz = Path(sys.executable).parent / "boltz"
-        exe = str(venv_boltz) if venv_boltz.exists() else shutil.which("boltz")
-        if not exe:
-            raise ImportError("boltz2: 'boltz' executable not found in current environment")
-        self.boltz_executable = exe
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self._loaded = True
-
-        logger.debug(f"Boltz2 initialized successfully. Using executable: {self.boltz_executable}")
 
 
 # ============================================================================
@@ -354,11 +353,19 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
 
 def to_device(device: str) -> dict[str, Any]:
-    """Passthrough for CLI tool - Boltz2 naturally unloads after each call."""
-    # Boltz2 is a CLI tool that spawns subprocesses and naturally unloads
-    # after each call, so explicit device management is not needed.
-    # This is a passthrough for standardization with other tools.
-    return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
+    """Relocate resident in-process checkpoints to ``device``; frees the GPU on CPU offload.
+
+    The resident model stays on the GPU between calls, so DeviceManager offload must move it
+    (and empty the CUDA cache) to actually reclaim memory.
+    """
+    from standalone_helpers import move_model_to_device
+
+    moved = 0
+    for key, model in list(_checkpoint_cache.items()):
+        old_device = str(next(model.parameters()).device)
+        _checkpoint_cache[key] = move_model_to_device(model, old_device, device)
+        moved += 1
+    return {"success": True, "device": device, "note": f"moved {moved} resident model(s)"}
 
 
 def get_memory_stats() -> dict[str, Any]:

@@ -197,18 +197,21 @@ class Boltz2AffinityConfig(Boltz2Config):
         title="Affinity MW Correction",
         default=False,
         description="Apply molecular-weight correction to the Boltz-2 affinity value head.",
+        reload_on_change=True,
     )
     sampling_steps_affinity: int = ConfigField(
         title="Affinity Sampling Steps",
         default=200,
         ge=1,
         description="Denoising steps for the affinity prediction pass.",
+        reload_on_change=True,
     )
     diffusion_samples_affinity: int = ConfigField(
         title="Affinity Diffusion Samples",
         default=5,
         ge=1,
         description="Independent diffusion samples per complex for the affinity pass.",
+        reload_on_change=True,
     )
 
 

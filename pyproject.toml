@@ -205,6 +205,7 @@ module = [
     "affine_gaps.*",
     # Tool-specific model packages (installed in standalone envs, not on PyPI)
     "standalone_helpers.*",
+    "boltz.*",
     "ablang2.*",
     "colabdesign.*",
     "colabfold.*",

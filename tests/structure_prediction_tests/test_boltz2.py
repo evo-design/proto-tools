@@ -426,3 +426,62 @@ def test_boltz2_affinity_benchmark(request):
         assert isinstance(structure.metrics["affinity_pred_value"], float)
         assert 0.0 <= structure.metrics["affinity_probability_binary"] <= 1.0
     assert_metrics_in_spec(result)
+
+
+# ── Resident-checkpoint cache: reload_on_change invariant ───────────────────
+
+
+def test_boltz2_reload_on_change_covers_load_threaded_fields():
+    """Lock the ``reload_on_change`` set against the fields boltz threads into ``load_from_checkpoint``.
+
+    The standalone keys the resident-checkpoint cache by path alone, so it no longer self-corrects on a
+    changed load arg: every field baked into the load must be marked, or a same-path entry serves a
+    stale model (wrong output, no error). These are the boltz 2.2.1 load-threaded fields. max_msa_seqs
+    (MSA-depth preprocessing), num_workers (dataloader), and seed (per-call RNG) are predict-time and
+    must stay unmarked — seed in particular must, so the seed-reproducibility test can vary it.
+    """
+    assert Boltz2Config.reload_fields() == {
+        "recycling_steps",
+        "sampling_steps",
+        "diffusion_samples",
+        "step_scale",
+        "subsample_msa",
+    }
+    assert Boltz2AffinityConfig.reload_fields() == Boltz2Config.reload_fields() | {
+        "sampling_steps_affinity",
+        "diffusion_samples_affinity",
+        "affinity_mw_correction",
+    }
+    assert {"max_msa_seqs", "num_workers", "seed"}.isdisjoint(Boltz2AffinityConfig.reload_fields())
+
+
+@pytest.mark.uses_gpu
+@pytest.mark.slow
+def test_boltz2_reload_on_change_restarts_worker_only_for_load_fields(caplog):
+    """A marked load field restarts the persistent worker; a predict-time field does not.
+
+    Behavioral guard for the path-keyed checkpoint cache: only a worker restart swaps the resident
+    model, so a load-affecting field that failed to restart would silently serve a stale one. Varying a
+    marked field (step_scale) must restart; varying a predict-time field (max_msa_seqs) must not.
+    """
+    import logging
+
+    from proto_tools.utils.tool_instance import ToolInstance
+
+    inputs = Boltz2Input(complexes=[_CRO_SEQUENCE])
+    base = {"use_msa": False, "sampling_steps": 25, "diffusion_samples": 1, "seed": 42}
+
+    with ToolInstance.persist_tool("boltz2"):
+        assert run_boltz2(inputs, Boltz2Config(**base, step_scale=1.5)).success
+
+        # Marked field change → worker restarts and reloads the checkpoint.
+        with caplog.at_level(logging.INFO, logger="proto_tools.utils.tool_instance"):
+            assert run_boltz2(inputs, Boltz2Config(**base, step_scale=1.0)).success
+        assert "restarting worker" in caplog.text.lower()
+        assert "step_scale" in caplog.text
+
+        # Predict-time field change → same resident model reused, no restart.
+        caplog.clear()
+        with caplog.at_level(logging.INFO, logger="proto_tools.utils.tool_instance"):
+            assert run_boltz2(inputs, Boltz2Config(**base, step_scale=1.0, max_msa_seqs=64)).success
+        assert "restarting worker" not in caplog.text.lower()

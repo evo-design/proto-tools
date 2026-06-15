@@ -232,24 +232,28 @@ class Boltz2Config(MSAStructurePredictionConfig):
         default=3,
         ge=0,
         description="Iterative refinement passes through the model. Higher = more accurate but slower.",
+        reload_on_change=True,
     )
     sampling_steps: int = ConfigField(
         title="Number of Sampling Steps",
         default=200,
         ge=1,
         description="Denoising steps in the diffusion process. Higher = more refined but slower.",
+        reload_on_change=True,
     )
     diffusion_samples: int = ConfigField(
         title="Number of Diffusion Samples",
         default=1,
         ge=1,
         description="Structure samples per complex; best by confidence is kept. Higher = more thorough but slower.",
+        reload_on_change=True,
     )
     step_scale: float = ConfigField(
         title="Diffusion Step Scale",
         default=1.5,
         gt=0.0,
         description="Diffusion step size (typical range 1.0-2.0). Lower values produce more sample diversity.",
+        reload_on_change=True,
     )
     max_msa_seqs: int = ConfigField(
         title="Max MSA Sequences",
@@ -261,6 +265,7 @@ class Boltz2Config(MSAStructurePredictionConfig):
         title="Subsample MSA",
         default=False,
         description="Randomly subsample the MSA on each run for sample diversity (loses determinism).",
+        reload_on_change=True,
     )
     num_workers: int = ConfigField(
         title="Number of Workers",
