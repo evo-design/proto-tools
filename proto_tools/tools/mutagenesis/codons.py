@@ -6,6 +6,7 @@ No BioPython dependency.
 
 import functools
 import random
+from collections.abc import Collection
 
 from proto_tools.utils.sequence import PROTEIN_AMINO_ACIDS
 
@@ -180,15 +181,53 @@ def get_codon_scheme(name: str, include_stop: bool = False) -> dict[str, list[st
     }
 
 
-def sample_amino_acid(scheme: str, rng: random.Random | None = None, include_stop: bool = False) -> str:
+def amino_acid_weights(
+    scheme: str,
+    *,
+    include_stop: bool = False,
+    excluded_amino_acids: Collection[str] | None = None,
+) -> dict[str, float]:
+    """Return sampling weights for a codon scheme after optional exclusions.
+
+    Args:
+        scheme (str): Codon scheme name.
+        include_stop (bool): Whether to include the stop symbol ``"*"``.
+        excluded_amino_acids (Collection[str] | None): Amino acids to remove from
+            the distribution.
+
+    Returns:
+        dict[str, float]: Amino acid sampling weights.
+
+    Raises:
+        ValueError: If exclusions remove every reachable amino acid.
+    """
+    info = get_codon_scheme(scheme, include_stop=include_stop)
+    weights = info["weights"]
+    assert isinstance(weights, dict)
+    if excluded_amino_acids:
+        excluded = set(excluded_amino_acids)
+        weights = {aa: weight for aa, weight in weights.items() if aa not in excluded}
+        if not weights:
+            raise ValueError(f"excluded_amino_acids removes every residue reachable by codon scheme '{scheme}'.")
+    return weights
+
+
+def sample_amino_acid(
+    scheme: str,
+    rng: random.Random | None = None,
+    include_stop: bool = False,
+    excluded_amino_acids: Collection[str] | None = None,
+) -> str:
     """Sample a single amino acid from a codon scheme.
 
     Stops are excluded unless ``include_stop`` is True, in which case ``"*"``
     may be drawn with the weight defined by :func:`get_codon_scheme`.
     """
-    info = get_codon_scheme(scheme, include_stop=include_stop)
-    weights = info["weights"]
-    assert isinstance(weights, dict)
+    weights = amino_acid_weights(
+        scheme,
+        include_stop=include_stop,
+        excluded_amino_acids=excluded_amino_acids,
+    )
     aas = list(weights.keys())
     ws = list(weights.values())
     r = rng or random

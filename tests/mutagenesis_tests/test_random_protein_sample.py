@@ -67,6 +67,61 @@ def test_allow_stop_codons_can_emit_star():
 
 
 # ============================================================================
+# Amino acid exclusions
+# ============================================================================
+
+
+def test_excluded_amino_acids_are_not_sampled():
+    config = RandomProteinSampleConfig(excluded_amino_acids=["C", "A"], seed=3)
+    result = run_random_protein_sample(
+        RandomProteinSampleInput(sequences=["_" * 500]),
+        config,
+    )
+
+    assert "C" not in result.sequences[0]
+    assert "A" not in result.sequences[0]
+    assert result.metadata["excluded_amino_acids"] == ["C", "A"]
+
+
+def test_excluded_amino_acids_normalize_case_and_dedupe():
+    config = RandomProteinSampleConfig(excluded_amino_acids=["c", "A", "c"], seed=3)
+
+    assert config.excluded_amino_acids == ["C", "A"]
+
+
+def test_excluded_amino_acids_empty_list_means_no_exclusions():
+    config = RandomProteinSampleConfig(excluded_amino_acids=[])
+
+    assert config.excluded_amino_acids is None
+
+
+def test_excluded_amino_acids_respect_codon_scheme_distribution():
+    info = get_codon_scheme("NDT")
+    reachable = set(info["amino_acids"])
+    config = RandomProteinSampleConfig(codon_scheme="NDT", excluded_amino_acids=["C", "R"], seed=5)
+    result = run_random_protein_sample(
+        RandomProteinSampleInput(sequences=["_" * 500]),
+        config,
+    )
+
+    assert set(result.sequences[0]) <= reachable - {"C", "R"}
+
+
+def test_excluding_all_reachable_amino_acids_raises():
+    reachable = list(get_codon_scheme("NRT")["amino_acids"])
+    config = RandomProteinSampleConfig(codon_scheme="NRT", excluded_amino_acids=reachable)
+
+    with pytest.raises(ValueError, match="removes every residue"):
+        run_random_protein_sample(RandomProteinSampleInput(sequences=["_"]), config)
+
+
+@pytest.mark.parametrize("excluded", [["B"], ["*"]])
+def test_excluded_amino_acids_reject_invalid_values(excluded):
+    with pytest.raises(ValueError, match="excluded_amino_acids"):
+        RandomProteinSampleConfig(excluded_amino_acids=excluded)
+
+
+# ============================================================================
 # Output export
 # ============================================================================
 

@@ -9,19 +9,19 @@ import random
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelInput,
 )
-from proto_tools.tools.mutagenesis.codons import sample_amino_acid
+from proto_tools.tools.mutagenesis.codons import amino_acid_weights
 from proto_tools.tools.tool_registry import tool
 from proto_tools.transforms.masking import (
     MASK_TOKEN,
     MaskingStrategy,
     apply_masking_strategy,
 )
-from proto_tools.utils import BaseConfig, BaseToolOutput, ConfigField
+from proto_tools.utils import AminoAcid, BaseConfig, BaseToolOutput, ConfigField
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +88,10 @@ class RandomProteinSampleConfig(BaseConfig):
             the sampling distribution. For degenerate schemes it is weighted by
             its stop-codon count; for ``"UNIFORM"`` it is an equally weighted
             21st symbol. Default: False (stops never sampled).
+        excluded_amino_acids (list[AminoAcid] | None): One-letter codes of
+            amino acids to remove from the sampling distribution after
+            codon-scheme and stop-codon handling. An empty list is treated as
+            ``None``.
     """
 
     masking_strategy: MaskingStrategy = ConfigField(
@@ -105,6 +109,25 @@ class RandomProteinSampleConfig(BaseConfig):
         default=False,
         description="Include the stop symbol '*' in the sampling distribution.",
     )
+    excluded_amino_acids: list[AminoAcid] | None = ConfigField(
+        title="Excluded Amino Acids",
+        default=None,
+        description="Residues to remove after codon/stop handling (e.g. ['C'] to forbid cysteine).",
+        examples=[["C"]],
+    )
+
+    @field_validator("excluded_amino_acids", mode="before")
+    @classmethod
+    def normalize_excluded_amino_acids(cls, value: Any) -> Any:
+        """Normalize and validate excluded amino-acid codes."""
+        if value is None:
+            return None
+        if not isinstance(value, list):
+            return value
+        if len(value) == 0:
+            return None
+        normalized = [aa.upper() if isinstance(aa, str) else aa for aa in value]
+        return list(dict.fromkeys(normalized))
 
     def preprocess(self, inputs: Any) -> Any:
         """Apply masking strategy unless sequences are already pre-masked."""
@@ -158,19 +181,27 @@ def run_random_protein_sample(
     """
     rng = random.Random(config.seed)  # noqa: S311 -- not cryptographic
     scheme = config.codon_scheme
+    weights = amino_acid_weights(
+        scheme,
+        include_stop=config.allow_stop_codons,
+        excluded_amino_acids=config.excluded_amino_acids,
+    )
+    amino_acids = list(weights.keys())
+    amino_acid_sampling_weights = list(weights.values())
 
     sampled = []
     for seq in inputs.sequences:
         chars = list(seq)
         for i, ch in enumerate(chars):
             if ch == MASK_TOKEN:
-                chars[i] = sample_amino_acid(scheme, rng=rng, include_stop=config.allow_stop_codons)
+                chars[i] = rng.choices(amino_acids, weights=amino_acid_sampling_weights, k=1)[0]
         sampled.append("".join(chars))
 
     return RandomProteinSampleOutput(
         metadata={
             "codon_scheme": scheme,
             "allow_stop_codons": config.allow_stop_codons,
+            "excluded_amino_acids": config.excluded_amino_acids,
             "num_sequences": len(inputs.sequences),
         },
         sequences=sampled,
