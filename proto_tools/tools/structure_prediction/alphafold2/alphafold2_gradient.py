@@ -1,6 +1,6 @@
-"""AlphaFold2/ColabDesign binder-design tool.
+"""Differentiable AlphaFold2/ColabDesign binder-scoring tool.
 
-Binder design against a frozen target template. Backends: ``"base"`` (upstream
+Scores a binder against a frozen target template. Backends: ``"base"`` (upstream
 ColabDesign) or ``"germinal"`` (fork with alpha=2.0 logit scaling, persistent
 bias, framework contact penalties, and extension losses: rg, i_ptm, helix,
 beta_strand, NC). ``compute_gradient=True`` (default) runs forward+backward
@@ -368,7 +368,10 @@ def example_input() -> AlphaFold2GradientInput:
     config_class=AlphaFold2GradientConfig,
     output_class=AlphaFold2GradientOutput,
     metrics_class=AlphaFold2Metrics,
-    description="AF2 binder design against a fixed target. Returns loss, Structure, and optionally gradient.",
+    description=(
+        "Differentiable AlphaFold2 scoring of a binder against a fixed target. "
+        "Returns loss, Structure, and optionally the gradient w.r.t. input logits."
+    ),
     uses_gpu=True,
     pin_visible_devices=True,
     example_input=example_input,
