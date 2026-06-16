@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar, Literal, TypedDict
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ModelWrapValidatorHandler, model_validator
 
 from proto_tools.utils.compressed_array import is_compressed_array
 from proto_tools.utils.export_names import sanitize_field
@@ -177,6 +177,9 @@ class MetricSpec(TypedDict, total=False):
     better_values_are: Directionality
 
 
+_METRICS_REGISTRY: dict[str, type["Metrics"]] = {}
+
+
 class Metrics(BaseModel):
     """Dual-access metric container for tool outputs.
 
@@ -227,6 +230,39 @@ class Metrics(BaseModel):
         title="Primary Metric",
         description="Headline metric used to rank results.",
     )
+    metric_type: str = Field(
+        default="Metrics",
+        title="Metric Type",
+        description="Concrete Metrics subclass tag; enables typed reconstruction after a serialization round-trip.",
+    )
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Register each Metrics subclass by name so a serialized tag can rebuild the concrete type."""
+        super().__init_subclass__(**kwargs)
+        _METRICS_REGISTRY[cls.__name__] = cls
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _rebuild_subtype(cls, data: Any, handler: ModelWrapValidatorHandler["Metrics"]) -> "Metrics":
+        """Rebuild the concrete subclass when validating a dict carrying its ``metric_type`` tag.
+
+        A cloud round-trip dumps a subclass (e.g. ``ESMFold2Metrics``) to a plain dict with no
+        class identity; validating that dict against the base-typed field (``Structure.metrics: Metrics``)
+        would otherwise yield a base ``Metrics``. The tag lets us re-dispatch to the registered subclass.
+        """
+        if isinstance(data, dict):
+            tag = data.get("metric_type")
+            target = _METRICS_REGISTRY.get(tag) if isinstance(tag, str) else None
+            if target is not None and target is not cls and issubclass(target, cls):
+                return target.model_validate(data)
+        return handler(data)
+
+    @model_validator(mode="after")
+    def _stamp_metric_type(self) -> "Metrics":
+        """Stamp the concrete class name so the tag survives a later ``model_dump`` round-trip."""
+        if self.metric_type == "Metrics" and type(self).__name__ != "Metrics":
+            object.__setattr__(self, "metric_type", type(self).__name__)
+        return self
 
     def __init__(self, **data: Any) -> None:
         """Accept arbitrary metric keyword arguments alongside declared fields.

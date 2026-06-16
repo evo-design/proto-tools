@@ -321,3 +321,35 @@ def test_log_likelihood_metrics_perplexity_one_at_zero_likelihood():
     m = log_likelihood_metrics(avg_log_likelihood=0.0, seq_len=10)
     assert m["log_likelihood"] == 0.0
     assert m["perplexity"] == pytest.approx(1.0)
+
+
+# ============================================================================
+# Typed cloud round-trip (metric_type tag)
+# ============================================================================
+def test_metric_type_tag_stamped_and_dumped_on_subclass():
+    """A subclass stamps its own class name into ``metric_type`` and serializes it."""
+    m = _SampleMetrics(perplexity=3.0)
+    assert m.metric_type == "_SampleMetrics"
+    assert m.model_dump()["metric_type"] == "_SampleMetrics"
+
+
+def test_base_metrics_rebuilds_concrete_subtype_from_dump():
+    """Validating a subclass dump against base ``Metrics`` rebuilds the concrete subtype (cloud round-trip)."""
+    rebuilt = Metrics.model_validate(_SampleMetrics(perplexity=3.0, log_likelihood=-1.0).model_dump())
+    assert isinstance(rebuilt, _SampleMetrics)
+    assert rebuilt["perplexity"] == 3.0
+    assert rebuilt["log_likelihood"] == -1.0
+
+
+def test_metric_type_tag_is_not_exposed_as_a_metric():
+    """The ``metric_type`` tag is a declared field, so it never appears in metric iteration."""
+    m = _SampleMetrics(perplexity=3.0, custom=1.0)
+    assert "metric_type" not in m
+    assert "metric_type" not in list(m.keys())
+
+
+def test_untagged_dict_falls_back_to_base_metrics():
+    """A legacy dict without a ``metric_type`` tag stays a base ``Metrics`` with its values intact."""
+    m = Metrics.model_validate({"plddt": 0.5})
+    assert type(m) is Metrics
+    assert m["plddt"] == 0.5
