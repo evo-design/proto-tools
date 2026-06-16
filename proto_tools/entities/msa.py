@@ -35,7 +35,10 @@ class MSA(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _auto_generate_ids(cls, data: Any) -> Any:
-        """Auto-generate sequence_ids when not provided."""
+        """Accept a raw FASTA/A3M string and auto-generate sequence_ids when not provided."""
+        if isinstance(data, str):
+            ids, seqs = _parse_a3m_string(data)
+            return {"aligned_sequences": seqs, "sequence_ids": ids}
         if isinstance(data, list):
             return {"aligned_sequences": data, "sequence_ids": [f"seq_{i}" for i in range(len(data))]}
         if isinstance(data, dict) and "aligned_sequences" in data and "sequence_ids" not in data:
@@ -360,42 +363,42 @@ class PairedMSA(BaseModel):
 # ============================================================================
 
 
-def _parse_a3m_file(path: Path) -> tuple[list[str], list[str]]:
-    """Parse an A3M file into sequence IDs and rectangular aligned sequences.
+def _parse_a3m_string(text: str) -> tuple[list[str], list[str]]:
+    """Parse FASTA/A3M text into ``(sequence_ids, rectangular aligned_sequences)``.
 
-    Lowercase characters (insertions relative to query) are removed to produce
-    a rectangular alignment with ``-`` for gaps.
-
-    Args:
-        path (Path): Path to an A3M file.
-
-    Returns:
-        tuple[list[str], list[str]]: (sequence_ids, aligned_sequences).
+    Lowercase A3M insertion characters are dropped so the result is rectangular with
+    ``-`` for gaps; plain gapped FASTA (no lowercase) passes through unchanged. This is
+    the inverse of the gateway's ``MSA``->A3M output externalization, so a cloud
+    round-trip of an ``MSA`` field reconstructs faithfully.
     """
     ids: list[str] = []
     seqs: list[str] = []
     current_id: str | None = None
     current_seq: list[str] = []
 
-    with open(path) as f:
-        for raw_line in f:
-            line = raw_line.replace("\x00", "").rstrip()
-            if not line or line.startswith("#"):
-                continue
-            if line.startswith(">"):
-                if current_id is not None:
-                    ids.append(current_id)
-                    seqs.append("".join(current_seq))
-                current_id = line[1:].strip()
-                current_seq = []
-            else:
-                current_seq.append("".join(c for c in line if not c.islower()))
+    for raw_line in text.splitlines():
+        line = raw_line.replace("\x00", "").rstrip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith(">"):
+            if current_id is not None:
+                ids.append(current_id)
+                seqs.append("".join(current_seq))
+            current_id = line[1:].strip()
+            current_seq = []
+        else:
+            current_seq.append("".join(c for c in line if not c.islower()))
 
     if current_id is not None:
         ids.append(current_id)
         seqs.append("".join(current_seq))
 
     return ids, seqs
+
+
+def _parse_a3m_file(path: Path) -> tuple[list[str], list[str]]:
+    """Parse an A3M file into ``(sequence_ids, rectangular aligned_sequences)``."""
+    return _parse_a3m_string(Path(path).read_text())
 
 
 def convert_a3m_to_fasta(

@@ -120,6 +120,20 @@ def test_msa_init_with_a3m_file(sample_a3m_file):
     assert sequences[3] == "ACGTGGAAA"
 
 
+def test_msa_model_validate_from_string_round_trips():
+    """A raw FASTA/A3M string reconstructs an MSA (cloud MSA->A3M externalization round-trip)."""
+    original = MSA(aligned_sequences=["MK-TL", "MI-TL", "MKQTL"], sequence_ids=["a", "b", "c"])
+    text = "\n".join(
+        f">{sid}\n{seq}" for sid, seq in zip(original.sequence_ids, original.aligned_sequences, strict=True)
+    )
+
+    restored = MSA.model_validate(text)
+
+    assert restored.aligned_sequences == original.aligned_sequences
+    assert restored.sequence_ids == original.sequence_ids
+    assert restored.num_sequences == 3
+
+
 def test_msa_init_with_nonexistent_file():
     """Test that nonexistent file raises FileNotFoundError."""
     with pytest.raises(FileNotFoundError):
