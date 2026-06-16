@@ -58,8 +58,8 @@ _CLOUD_STATUS = _status_box(
     "Proto Cloud: request access",
     "No API key was detected.\n"
     "\n"
-    "device='cloud' is coming soon! We're rolling out to beta-testers in the\n"
-    "coming weeks; only approved users will have API keys for now.\n"
+    "device='cloud' is coming soon! We're rolling out access in the coming\n"
+    "weeks; only approved users will have API keys for now.\n"
     "\n"
     "Request access: (request link coming soon)\n"
     "\n"
@@ -74,7 +74,7 @@ _INVALID_KEY = _status_box(
     "We couldn't validate your Proto API key.\n"
     "\n"
     "Double-check the PROTO_API_KEY value and confirm your account is\n"
-    "approved for beta access. If you believe this is in error, contact\n"
+    "approved for cloud access. If you believe this is in error, contact\n"
     "the Proto team: (contact link coming soon)",
 )
 
@@ -293,7 +293,7 @@ def dispatch_to_cloud(
         ImportError: If ``proto-client`` is not installed. Install with
             ``pip install proto-client``.
         NotImplementedError: If no API key is configured. Surfaces the
-            beta-access status message.
+            cloud-access status message.
         PermissionError: If the server does not accept the configured key.
         TypeError: If the server response doesn't match the tool's
             ``output_model`` schema.
