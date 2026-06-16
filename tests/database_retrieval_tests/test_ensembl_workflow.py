@@ -62,8 +62,10 @@ def test_panel_full_chain_brca1():
 
     xrefs = run_ensembl_xrefs(EnsemblXrefsInput(ensembl_id=lookup.result.id))
     assert xrefs.success, xrefs.errors
-    uniprot_id = next(x.primary_id for x in xrefs.result if x.dbname == "Uniprot_gn")
-    uniprot = run_uniprot_fetch(UniProtFetchInput(uniprot_id=uniprot_id))
+    # Resolve to the canonical reviewed entry; TrEMBL accessions carry no gene names.
+    uniprot_ids = {x.primary_id for x in xrefs.result if x.dbname == "Uniprot_gn"}
+    assert "P38398" in uniprot_ids
+    uniprot = run_uniprot_fetch(UniProtFetchInput(uniprot_id="P38398"))
     assert uniprot.success
     assert "brca1" in {n.lower() for n in uniprot.gene_names}
 

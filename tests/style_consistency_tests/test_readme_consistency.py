@@ -1027,12 +1027,14 @@ def test_all_links_reachable(readme: Path) -> None:
     # - proteininformationresource.org: valid PIR database, intermittently slow in CI
     # - www.ensembl.org: genome browser homepage, intermittently slow in CI
     # - www.mirbase.org: canonical miRBase database, TLS handshake intermittently times out in CI
+    # - smart.embl.de: canonical SMART domain database, intermittently times out in CI
     _SKIP_DOMAINS = {
         "bio-pro.mintlify.app",
         "doi.org",
         "proteininformationresource.org",
         "www.ensembl.org",
         "www.mirbase.org",
+        "smart.embl.de",
     }
     # Self-references to this project's own repo; no need to validate our own links.
     _SKIP_SUBSTRINGS = ("proto-tools",)
