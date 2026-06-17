@@ -1,2 +1,2 @@
-protenix>=1.0.0
+protenix==2.0.0
 ninja
