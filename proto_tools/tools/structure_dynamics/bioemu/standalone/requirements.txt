@@ -1,1 +1,1 @@
-bioemu
+bioemu==1.3.1
