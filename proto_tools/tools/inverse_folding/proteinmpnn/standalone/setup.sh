@@ -27,7 +27,7 @@ ABMPNN_PKL="${COLABDESIGN_WEIGHTS_DIR}/abmpnn.pkl"
 if [ ! -f "$ABMPNN_PKL" ]; then
     echo "Downloading AbMPNN weights..."
     curl -fsSL -o "$ABMPNN_PKL" \
-        "https://github.com/SantiagoMille/germinal/raw/main/colabdesign/colabdesign/mpnn/weights_abmpnn/abmpnn.pkl"
+        "https://github.com/SantiagoMille/germinal/raw/1e1c1a5b79884ae45abae030c9df90d9423a990a/colabdesign/colabdesign/mpnn/weights_abmpnn/abmpnn.pkl"
     echo "AbMPNN weights installed to ${ABMPNN_PKL}"
 else
     echo "AbMPNN weights already present at ${ABMPNN_PKL}"
