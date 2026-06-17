@@ -12,6 +12,7 @@ import sys
 import tempfile
 import textwrap
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -54,6 +55,7 @@ def _make_fake_instance(
     """
     inst = ToolInstance.__new__(ToolInstance)
     inst.toolkit = toolkit
+    inst.env_name = toolkit
     inst.device = device
     if _tmp_dir is not None:
         inst.env_path = _tmp_dir
@@ -85,6 +87,7 @@ def clear_instance_cache():
     """Ensure the singleton cache and build-failure set are clean for each test."""
     _instances.clear()
     ToolInstance._build_failures.clear()
+    ToolInstance._env_build_locks.clear()
     _scope_override.set(None)
     _persist_mode.set(False)
     yield
@@ -95,6 +98,7 @@ def clear_instance_cache():
         inst.shutdown()
     _instances.clear()
     ToolInstance._build_failures.clear()
+    ToolInstance._env_build_locks.clear()
 
 
 # ── Singleton factory tests ─────────────────────────────────────────────────
@@ -2354,3 +2358,51 @@ def test_eject_standalone_works_across_install_modes(tmp_path, mode):
     assert result.returncode == 0, f"{mode}: eject failed:\n{result.stderr[-2000:]}"
     assert (eject_into / "mock_cpu_tool" / "setup.sh").is_file()
     assert (eject_into / "mock_cpu_tool" / "python_version.txt").is_file()
+
+
+# ── Concurrent env-build serialization ───────────────────────────────────────
+
+
+def test_concurrent_builds_for_same_env_are_serialized():
+    """_ensure_env must not run _create_env in parallel for one env.
+
+    Two toolkits sharing one physical env (same env_name) hitting setup at
+    once must serialize on the build lock; overlapping micromamba extractions
+    corrupt the env. Reproduces the shared-env race the env_name-keyed lock fixes.
+    """
+    active = 0
+    max_active = 0
+    counter_lock = threading.Lock()
+    start = threading.Barrier(2)
+
+    def fake_create_env(self):
+        nonlocal active, max_active
+        with counter_lock:
+            active += 1
+            max_active = max(max_active, active)
+        time.sleep(0.05)
+        with counter_lock:
+            active -= 1
+
+    # Distinct toolkits, one shared env_name -> one physical env on disk.
+    instances = []
+    for toolkit in ("tool_a", "tool_b"):
+        inst = _make_fake_instance(toolkit=toolkit)
+        inst._env_ready = False
+        inst.env_name = "shared_env"
+        instances.append(inst)
+
+    def worker(inst: ToolInstance):
+        start.wait()
+        inst._ensure_env()
+
+    with (
+        patch.object(ToolInstance, "_create_env", fake_create_env),
+        patch.object(ToolInstance, "_is_env_ok", return_value=False),
+        patch("proto_tools.utils.proto_home.show_first_run_notice"),
+    ):
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            for future in [pool.submit(worker, inst) for inst in instances]:
+                future.result()
+
+    assert max_active == 1, f"_create_env ran concurrently (max_active={max_active})"
