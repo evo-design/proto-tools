@@ -1,2 +1,2 @@
-enformer-pytorch
+enformer-pytorch==0.8.11
 transformers==4.36.0
