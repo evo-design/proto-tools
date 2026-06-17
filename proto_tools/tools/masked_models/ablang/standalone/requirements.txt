@@ -1,2 +1,2 @@
-ablang2
+ablang2==0.2.1
 numba
