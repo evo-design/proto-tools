@@ -135,7 +135,7 @@ def test_all_supported_types_accepted():
 @pytest.mark.parametrize(
     "chain,expected_type",
     [
-        (_DNA_SEQ, "dna"),
+        # 'U' rules out protein, parenthesised SMILES rules out protein: neither re-scopes.
         (_RNA_SEQ, "rna"),
         ("CC(C)C", "ligand"),
     ],
@@ -197,6 +197,45 @@ def test_supported_type_validation_checks_all_complexes():
     assert len(input_obj.complexes) == 3
 
 
+# ── entity-type re-scoping to supported types ──────────────────────────────────
+
+_DNA_LOOKING_PEPTIDE = "GATTACA"  # valid as both DNA and protein; globally detected as DNA
+
+
+@pytest.mark.parametrize("sequence", [_DNA_LOOKING_PEPTIDE, _DNA_SEQ])
+def test_protein_only_input_rescopes_inferred_dna_to_protein(sequence):
+    input_obj = _ProteinOnlyInput(complexes=[sequence])
+    assert input_obj.complexes[0].chains[0].entity_type == "protein"
+
+
+def test_protein_only_input_still_rejects_genuine_rna():
+    """RNA with 'U' cannot re-scope to protein, so the original rejection still fires."""
+    with pytest.raises(ValueError, match="unsupported entity types: rna"):
+        _ProteinOnlyInput(complexes=[_RNA_SEQ])
+
+
+def test_protein_only_input_does_not_rescope_explicit_dna():
+    """An explicitly-typed DNA chain is a real user error and is never silently coerced."""
+    complex_obj = Complex(chains=[Chain(sequence=_DNA_SEQ, entity_type="dna")])
+    with pytest.raises(ValueError, match="unsupported entity types: dna"):
+        _ProteinOnlyInput(complexes=[complex_obj])
+
+
+def test_multi_type_input_does_not_rescope_supported_inferred_type():
+    """When the guessed type is already supported, it is left as-is (no over-coercion to protein)."""
+    input_obj = _ProteinDNAInput(complexes=[_DNA_LOOKING_PEPTIDE])
+    assert input_obj.complexes[0].chains[0].entity_type == "dna"
+
+
+def test_rescope_does_not_mutate_caller_supplied_complex():
+    """Re-scoping copies the chain; a Complex reused across tools is never aliased."""
+    complex_obj = Complex(chains=[_DNA_LOOKING_PEPTIDE])
+    input_obj = _ProteinOnlyInput(complexes=[complex_obj])
+    assert input_obj.complexes[0].chains[0].entity_type == "protein"
+    # The caller's original object keeps its globally-inferred type.
+    assert complex_obj.chains[0].entity_type == "dna"
+
+
 # ── ChainModification ──────────────────────────────────────────────────────────
 
 
@@ -240,6 +279,24 @@ def test_chain_defaults_to_empty_modifications():
 def test_chain_explicit_entity_type_is_preserved():
     chain = Chain(sequence=_PROTEIN_SEQ, entity_type="protein")
     assert chain.entity_type == "protein"
+
+
+def test_chain_entity_type_inferred_flag_set_when_auto_detected():
+    chain = Chain(sequence=_PROTEIN_SEQ)
+    assert chain.entity_type_inferred is True
+
+
+def test_chain_entity_type_inferred_flag_clear_when_explicit():
+    chain = Chain(sequence=_PROTEIN_SEQ, entity_type="protein")
+    assert chain.entity_type_inferred is False
+
+
+def test_chain_entity_type_inferred_is_off_the_model_surface():
+    """A private attr: not a settable field, not serialized, not in the schema."""
+    chain = Chain(sequence=_PROTEIN_SEQ)
+    assert "entity_type_inferred" not in chain.model_dump()
+    assert "entity_type_inferred" not in Chain.model_json_schema()["properties"]
+    assert "entity_type_inferred" not in Chain.model_fields
 
 
 def test_chain_with_single_modification():

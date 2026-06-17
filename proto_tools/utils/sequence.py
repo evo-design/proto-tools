@@ -4,6 +4,7 @@ Sequence validation, detection, and ID resolution utilities.
 """
 
 import logging
+from collections.abc import Collection
 from typing import Literal, get_args
 
 # ============================================================================
@@ -246,7 +247,7 @@ def return_invalid_protein_chars(
     return _return_invalid_chars(sequence, set(valid_chars))
 
 
-def detect_sequence_type(sequence: str) -> str:
+def detect_sequence_type(sequence: str, allowed_types: Collection[str] | None = None) -> str:
     """Attempts to determine the type of a sequence based on the characters it contains.
 
     Starts with more specific sequence types (less characters allowed) and works
@@ -254,34 +255,41 @@ def detect_sequence_type(sequence: str) -> str:
     cannot be determined.
 
     Note that there are ambiguous cases (e.g., "CCCCCC" could be DNA, RNA, protein, or
-    ligand SMILES). Priority is: DNA, RNA, protein, ligand.
+    ligand SMILES). Priority is: DNA, RNA, protein, ligand. Because the protein
+    alphabet is a superset of DNA's, every DNA sequence also validates as protein;
+    pass ``allowed_types`` to restrict detection to a candidate set so ambiguous
+    sequences resolve within it (e.g. a protein-only tool detects "GATTACA" as protein).
 
     Args:
         sequence (str): The sequence string to detect the type of.
+        allowed_types (Collection[str] | None): Candidate types to consider, in the
+            usual priority order. ``None`` considers all types (default behavior).
 
     Returns:
        str: The type of the sequence ("dna", "rna", "protein", "ligand", or "unknown").
     """
+
+    def allowed(type_name: str) -> bool:
+        return allowed_types is None or type_name in allowed_types
+
     # DNA
-    invalid_chars = return_invalid_dna_chars(sequence, additional_valid_chars="N")
-    if not invalid_chars:
+    if allowed("dna") and not return_invalid_dna_chars(sequence, additional_valid_chars="N"):
         return "dna"
 
     # RNA
-    invalid_chars = return_invalid_rna_chars(sequence, additional_valid_chars="TN")
-    if not invalid_chars:
+    if allowed("rna") and not return_invalid_rna_chars(sequence, additional_valid_chars="TN"):
         return "rna"
 
     # Protein
-    invalid_chars = return_invalid_protein_chars(sequence, additional_valid_chars="X*")
-    if not invalid_chars:
+    if allowed("protein") and not return_invalid_protein_chars(sequence, additional_valid_chars="X*"):
         return "protein"
 
     # Ligand/SMILES
-    from proto_tools.utils.chemistry import validate_smiles
+    if allowed("ligand"):
+        from proto_tools.utils.chemistry import validate_smiles
 
-    if validate_smiles(sequence, verbose=False):
-        return "ligand"
+        if validate_smiles(sequence, verbose=False):
+            return "ligand"
 
     # Otherwise, return unknown
     return "unknown"

@@ -31,6 +31,7 @@ from proto_tools.utils import (
     BaseToolOutput,
     ConfigField,
     InputField,
+    detect_sequence_type,
     format_sequence_for_error,
 )
 
@@ -237,7 +238,29 @@ class StructurePredictionInput(BaseToolInput):
         # VALIDATION ==========================================================
         # Validate entity types are supported by this tool
         for comp_idx, comp in enumerate(final_complexes):
-            entity_types = comp.get_entity_type_set()
+            # Re-scope auto-inferred chains to this tool's supported types; explicit types are left as-is.
+            # Copy rather than mutate so a caller-supplied Complex reused across tools is never aliased.
+            rescoped_chains: list[Chain | Fragment] = []
+            rescoped_any = False
+            for chain in comp.chains:
+                resolved = chain
+                if (
+                    isinstance(chain, Chain)
+                    and chain.entity_type_inferred
+                    and chain.entity_type not in cls.SUPPORTED_ENTITY_TYPES
+                ):
+                    rescoped = detect_sequence_type(chain.sequence, allowed_types=cls.SUPPORTED_ENTITY_TYPES)
+                    if rescoped in cls.SUPPORTED_ENTITY_TYPES:
+                        resolved = chain.model_copy(update={"entity_type": rescoped})
+                        rescoped_any = True
+                rescoped_chains.append(resolved)
+            if rescoped_any:
+                comp_checked = comp.model_copy(update={"chains": rescoped_chains})
+                final_complexes[comp_idx] = comp_checked
+            else:
+                comp_checked = comp
+
+            entity_types = comp_checked.get_entity_type_set()
             unsupported = entity_types - cls.SUPPORTED_ENTITY_TYPES
 
             if unsupported:
@@ -248,7 +271,7 @@ class StructurePredictionInput(BaseToolInput):
                     f"{', '.join(sorted(cls.SUPPORTED_ENTITY_TYPES))}"
                 )
 
-            if not cls.ALLOWS_CHAIN_MODIFICATIONS and comp.has_modifications():
+            if not cls.ALLOWS_CHAIN_MODIFICATIONS and comp_checked.has_modifications():
                 raise ValueError(
                     f"Complex {comp_idx} contains modifications. {cls.__name__} does not allow chain modifications."
                 )

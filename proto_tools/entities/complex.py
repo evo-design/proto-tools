@@ -4,7 +4,7 @@ import string
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, Final
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
 from proto_tools.entities.ligands import Fragment, Ligands, is_valid_ccd_code
 from proto_tools.entities.ligands.ccd_utils import (
@@ -177,6 +177,12 @@ class Chain(BaseModel):
     modifications: list[ChainModification] = Field(
         default_factory=list, description="List of modifications to apply to this chain"
     )
+    _entity_type_inferred: bool = PrivateAttr(default=False)
+
+    @property
+    def entity_type_inferred(self) -> bool:
+        """Whether ``entity_type`` was auto-inferred rather than supplied by the caller."""
+        return self._entity_type_inferred
 
     @field_validator("sequence")
     @classmethod
@@ -225,6 +231,7 @@ class Chain(BaseModel):
         """Auto-infer entity type if not provided."""
         if self.entity_type is None:
             self.entity_type = detect_sequence_type(self.sequence)
+            self._entity_type_inferred = True
         return self
 
     @model_validator(mode="after")

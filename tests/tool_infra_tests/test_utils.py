@@ -67,6 +67,23 @@ def test_detect_sequence_type(sequence, expected):
     assert detect_sequence_type(sequence) == expected
 
 
+@pytest.mark.parametrize(
+    "sequence,allowed_types,expected",
+    [
+        # "GATTACA" is DNA-first under global detection but resolves to protein when scoped.
+        ("GATTACA", {"protein"}, "protein"),
+        ("GATTACA", None, "dna"),
+        # Genuine RNA cannot resolve within a protein-only set ('U' is not an amino acid).
+        ("ACGU", {"protein"}, "unknown"),
+        ("ACGU", {"protein", "rna"}, "rna"),
+        # Unrelated allowed labels (e.g. glycan) are simply skipped.
+        ("MVLSPADKTN", {"protein", "glycan"}, "protein"),
+    ],
+)
+def test_detect_sequence_type_scoped(sequence, allowed_types, expected):
+    assert detect_sequence_type(sequence, allowed_types=allowed_types) == expected
+
+
 # ── chemistry.py ──────────────────────────────────────────────────────────────
 
 
