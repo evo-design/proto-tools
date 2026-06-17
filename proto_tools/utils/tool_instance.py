@@ -286,6 +286,7 @@ class ToolInstance:
 
     _tool_dir_cache: ClassVar[dict[str, Path] | None] = None
     _build_failures: ClassVar[dict[str, str]] = {}
+    _env_build_locks: ClassVar[dict[str, threading.Lock]] = {}
 
     # ------------------------------------------------------------------
     # Factory
@@ -773,50 +774,64 @@ class ToolInstance:
 
         show_first_run_notice()
 
-        if not self.env_path.exists() or not self._is_env_ok():
-            if not self.env_path.exists():
-                logger.info(
-                    "First-time setup for %s. Installing dependencies. "
-                    "This is a one-time process; subsequent runs will start much faster.",
-                    self.toolkit,
-                )
-            # Check for a stale status from a previous session
-            status_file = self.env_path / "STATUS.txt"
-            if status_file.exists():
-                status = status_file.read_text()
-                if status.startswith("SUCCESS"):
+        # Serialize builds per env_name so concurrent calls for the same env (incl. shared envs) don't race micromamba create.
+        with _lock:
+            if self.env_name not in self._env_build_locks:
+                self._env_build_locks[self.env_name] = threading.Lock()
+        with self._env_build_locks[self.env_name]:
+            # Re-check under the build lock in case the race winner already recorded a failure.
+            if self.toolkit in self._build_failures:
+                tail = self._build_failures[self.toolkit]
+                sentinel = self._parse_asset_sentinel(tail)
+                if sentinel is not None:
+                    toolkit, asset_kind = sentinel
+                    raise MissingAssetError(toolkit, asset_kind, tail)
+                raise RuntimeError(f"{self.toolkit}: previously failed setup; last error: {tail or '<no stderr>'}")
+
+            if not self.env_path.exists() or not self._is_env_ok():
+                if not self.env_path.exists():
                     logger.info(
-                        "Setup files changed for %s, rebuilding environment",
+                        "First-time setup for %s. Installing dependencies. "
+                        "This is a one-time process; subsequent runs will start much faster.",
                         self.toolkit,
                     )
-                elif status.startswith("FAILED"):
-                    current_hash = self._setup_hash()
-                    if f"Setup hash: {current_hash}" in status:
-                        summary = self._failure_summary()
-                        hint = f": {summary}" if summary else ""
-                        logger.warning(
-                            "'%s' previously failed to build with the "
-                            "same setup files (hash=%s)%s. Retrying — "
-                            "if this keeps failing, the tool may not be "
-                            "compatible with your system, or you may "
-                            "need to accept a license agreement (e.g. "
-                            "Hugging Face). Check logs for details.",
-                            self.toolkit,
-                            current_hash,
-                            hint,
-                        )
-                    else:
+                # Check for a stale status from a previous session
+                status_file = self.env_path / "STATUS.txt"
+                if status_file.exists():
+                    status = status_file.read_text()
+                    if status.startswith("SUCCESS"):
                         logger.info(
-                            "Setup files changed for %s — retrying venv build",
+                            "Setup files changed for %s, rebuilding environment",
                             self.toolkit,
                         )
-            try:
-                self._create_env()
-            except Exception as exc:
-                # Store exception message as fallback if _create_env didn't populate _build_failures
-                if self.toolkit not in self._build_failures:
-                    self._build_failures[self.toolkit] = str(exc)
-                raise
+                    elif status.startswith("FAILED"):
+                        current_hash = self._setup_hash()
+                        if f"Setup hash: {current_hash}" in status:
+                            summary = self._failure_summary()
+                            hint = f": {summary}" if summary else ""
+                            logger.warning(
+                                "'%s' previously failed to build with the "
+                                "same setup files (hash=%s)%s. Retrying — "
+                                "if this keeps failing, the tool may not be "
+                                "compatible with your system, or you may "
+                                "need to accept a license agreement (e.g. "
+                                "Hugging Face). Check logs for details.",
+                                self.toolkit,
+                                current_hash,
+                                hint,
+                            )
+                        else:
+                            logger.info(
+                                "Setup files changed for %s — retrying venv build",
+                                self.toolkit,
+                            )
+                try:
+                    self._create_env()
+                except Exception as exc:
+                    # Store exception message as fallback if _create_env didn't populate _build_failures
+                    if self.toolkit not in self._build_failures:
+                        self._build_failures[self.toolkit] = str(exc)
+                    raise
         self._env_ready = True
 
     # ------------------------------------------------------------------
