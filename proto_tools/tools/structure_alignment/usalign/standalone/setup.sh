@@ -21,7 +21,8 @@ pip install uv
 echo "Compiling USalign from source (using $CXX)..."
 # Clone USalign repo
 BUILD_DIR=$(mktemp -d)
-git clone --depth 1 https://github.com/pylelab/USalign.git "$BUILD_DIR/usalign_src"
+git clone https://github.com/pylelab/USalign.git "$BUILD_DIR/usalign_src"
+git -C "$BUILD_DIR/usalign_src" checkout 177cc8a2bbd3e2a6e9c5faaaa4ff5dfa1e6048f7
 
 # Install into the venv's bin directory
 BIN_DIR="$(dirname "$(which python)")"
