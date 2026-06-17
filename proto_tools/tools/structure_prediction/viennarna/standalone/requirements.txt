@@ -1,1 +1,1 @@
-ViennaRNA>=2.7.0
+ViennaRNA==2.7.2
