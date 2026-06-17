@@ -1,1 +1,1 @@
-pyrodigal>=3.0.0
+pyrodigal==3.7.1
