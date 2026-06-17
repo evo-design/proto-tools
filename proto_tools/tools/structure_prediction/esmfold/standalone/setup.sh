@@ -11,6 +11,6 @@ pip install uv
 proto_install_pytorch
 
 echo "Installing remaining dependencies..."
-uv pip install transformers biopython
+uv pip install transformers==5.12.1 biopython
 
 echo "ESMFold setup complete!"
