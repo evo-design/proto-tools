@@ -35,9 +35,9 @@ class MSA(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _auto_generate_ids(cls, data: Any) -> Any:
-        """Accept a raw FASTA/A3M string and auto-generate sequence_ids when not provided."""
+        """Accept a raw FASTA string and auto-generate sequence_ids when not provided."""
         if isinstance(data, str):
-            ids, seqs = _parse_a3m_string(data)
+            ids, seqs = _parse_fasta_records(data, drop_a3m_insertions=False)
             return {"aligned_sequences": seqs, "sequence_ids": ids}
         if isinstance(data, list):
             return {"aligned_sequences": data, "sequence_ids": [f"seq_{i}" for i in range(len(data))]}
@@ -363,13 +363,12 @@ class PairedMSA(BaseModel):
 # ============================================================================
 
 
-def _parse_a3m_string(text: str) -> tuple[list[str], list[str]]:
-    """Parse FASTA/A3M text into ``(sequence_ids, rectangular aligned_sequences)``.
+def _parse_fasta_records(text: str, *, drop_a3m_insertions: bool) -> tuple[list[str], list[str]]:
+    """Parse FASTA/A3M text into ``(sequence_ids, aligned_sequences)``.
 
-    Lowercase A3M insertion characters are dropped so the result is rectangular with
-    ``-`` for gaps; plain gapped FASTA (no lowercase) passes through unchanged. This is
-    the inverse of the gateway's ``MSA``->A3M output externalization, so a cloud
-    round-trip of an ``MSA`` field reconstructs faithfully.
+    With ``drop_a3m_insertions=True``, lowercase A3M insertion characters are dropped so the
+    alignment is rectangular with ``-`` for gaps (loading a ``.a3m`` file). With ``False``,
+    case is preserved verbatim (plain FASTA, where lowercase residues are meaningful).
     """
     ids: list[str] = []
     seqs: list[str] = []
@@ -387,7 +386,7 @@ def _parse_a3m_string(text: str) -> tuple[list[str], list[str]]:
             current_id = line[1:].strip()
             current_seq = []
         else:
-            current_seq.append("".join(c for c in line if not c.islower()))
+            current_seq.append("".join(c for c in line if not c.islower()) if drop_a3m_insertions else line)
 
     if current_id is not None:
         ids.append(current_id)
@@ -397,8 +396,8 @@ def _parse_a3m_string(text: str) -> tuple[list[str], list[str]]:
 
 
 def _parse_a3m_file(path: Path) -> tuple[list[str], list[str]]:
-    """Parse an A3M file into ``(sequence_ids, rectangular aligned_sequences)``."""
-    return _parse_a3m_string(Path(path).read_text())
+    """Parse an A3M file into ``(sequence_ids, rectangular aligned_sequences)`` (insertions dropped)."""
+    return _parse_fasta_records(Path(path).read_text(), drop_a3m_insertions=True)
 
 
 def convert_a3m_to_fasta(

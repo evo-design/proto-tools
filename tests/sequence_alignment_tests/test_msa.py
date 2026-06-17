@@ -120,18 +120,28 @@ def test_msa_init_with_a3m_file(sample_a3m_file):
     assert sequences[3] == "ACGTGGAAA"
 
 
-def test_msa_model_validate_from_string_round_trips():
-    """A raw FASTA/A3M string reconstructs an MSA (cloud MSA->A3M externalization round-trip)."""
-    original = MSA(aligned_sequences=["MK-TL", "MI-TL", "MKQTL"], sequence_ids=["a", "b", "c"])
-    text = "\n".join(
-        f">{sid}\n{seq}" for sid, seq in zip(original.sequence_ids, original.aligned_sequences, strict=True)
-    )
+def _as_rectangular_fasta(msa: MSA) -> str:
+    """Render an MSA as rectangular FASTA (aligned rows verbatim)."""
+    return "\n".join(f">{sid}\n{seq}" for sid, seq in zip(msa.sequence_ids, msa.aligned_sequences, strict=True))
 
-    restored = MSA.model_validate(text)
+
+def test_msa_model_validate_from_fasta_round_trips_with_query_gaps():
+    """Rectangular FASTA round-trips faithfully even when the first row has gaps."""
+    original = MSA(aligned_sequences=["ACGT--AAA", "ACGTGGAAA"], sequence_ids=["seq_0", "seq_1"])
+
+    restored = MSA.model_validate(_as_rectangular_fasta(original))
 
     assert restored.aligned_sequences == original.aligned_sequences
     assert restored.sequence_ids == original.sequence_ids
-    assert restored.num_sequences == 3
+
+
+def test_msa_model_validate_from_fasta_preserves_lowercase_residues():
+    """Lowercase residues survive the round-trip — the string branch parses FASTA, not lossy A3M."""
+    original = MSA(aligned_sequences=["ACgtAAA", "ACGTAAA"], sequence_ids=["q", "s"])
+
+    restored = MSA.model_validate(_as_rectangular_fasta(original))
+
+    assert restored.aligned_sequences == ["ACgtAAA", "ACGTAAA"]
 
 
 def test_msa_init_with_nonexistent_file():
