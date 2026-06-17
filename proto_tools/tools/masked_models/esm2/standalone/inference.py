@@ -25,6 +25,10 @@ ESM2_MODEL_CHECKPOINTS = Literal[
     "esm2_t48_15B_UR50D",
 ]
 
+# Checkpoints with no flash-attn mirror under ``fredzzp/`` — load these from Meta's
+# official ``facebook/`` repo instead (standard attention, identical architecture).
+_OFFICIAL_REPO_CHECKPOINTS = frozenset({"esm2_t48_15B_UR50D"})
+
 
 class ESM2Model:
     """ESM2 model for protein sequence embeddings and logits.
@@ -707,13 +711,20 @@ class ESM2Model:
         if verbose:
             logger.info(f"Loading ESM2 model: {self.model_checkpoint} on {device}")
 
-        # Load model and tokenizer
-        # Uses flash attention enabled version: https://huggingface.co/fredzzp/esm2_t33_650M_UR50D
+        # Load model and tokenizer. Most checkpoints use the flash-attn-enabled mirror
+        # (https://huggingface.co/fredzzp/esm2_t33_650M_UR50D); checkpoints without a mirror
+        # (e.g. 15B) fall back to Meta's official repo — standard attention, same architecture.
         from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-        repo = "fredzzp/" + self.model_checkpoint
+        org = "facebook" if self.model_checkpoint in _OFFICIAL_REPO_CHECKPOINTS else "fredzzp"
+        repo = f"{org}/{self.model_checkpoint}"
+        # The official-repo checkpoints (15B) are ~60 GB in fp32; load them in bfloat16 (~30 GB) for
+        # headroom on an 80 GB GPU. Mirrored (flash-attn) checkpoints keep their default precision.
         try:
-            self.model = AutoModelForMaskedLM.from_pretrained(repo).to(device).eval()
+            if self.model_checkpoint in _OFFICIAL_REPO_CHECKPOINTS:
+                self.model = AutoModelForMaskedLM.from_pretrained(repo, torch_dtype=torch.bfloat16).to(device).eval()
+            else:
+                self.model = AutoModelForMaskedLM.from_pretrained(repo).to(device).eval()
             self.model.requires_grad_(False)
             self.tokenizer = AutoTokenizer.from_pretrained(repo)
         except OSError as e:
