@@ -1,2 +1,2 @@
-fair-esm
+fair-esm==2.0.0
 biotite
