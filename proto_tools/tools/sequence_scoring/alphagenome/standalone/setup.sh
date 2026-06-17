@@ -30,13 +30,16 @@ JAX_SPEC="${ALPHAGENOME_JAX_SPEC:-${RECOMMENDED_JAX_SPEC:-jax[cuda12]>=0.5,<1}}"
 proto_install_jax ALPHAGENOME
 
 REPO_DIR="${VENV_PATH}/src/alphagenome_research"
-if [ -d "$REPO_DIR" ]; then
-  echo "Updating existing alphagenome_research clone..."
-  git -C "$REPO_DIR" pull origin main
-else
+ALPHAGENOME_COMMIT="b2046c6ae00a7e6d60fec071d6e4d19454a71f8e"
+if [ ! -d "$REPO_DIR/.git" ]; then
   echo "Cloning alphagenome_research..."
   git clone https://github.com/google-deepmind/alphagenome_research.git "$REPO_DIR"
+else
+  echo "alphagenome_research already cloned."
 fi
+echo "Checking out pinned alphagenome_research commit ${ALPHAGENOME_COMMIT}..."
+git -C "$REPO_DIR" fetch origin "$ALPHAGENOME_COMMIT"
+git -C "$REPO_DIR" checkout "$ALPHAGENOME_COMMIT"
 echo "Installing alphagenome_research from local clone..."
 uv pip install "$REPO_DIR"
 
