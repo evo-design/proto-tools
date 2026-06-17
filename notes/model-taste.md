@@ -40,20 +40,20 @@ Select models based on:
 3. the conditioning information available,
 4. the validation metric required,
 5. the available tools,
-6. the available compute budget,
+6. the candidate-pool size and throughput required,
 7. and the required confidence level.
 
 Use generators to propose candidates and validators to evaluate whether those candidates are credible.
 
 A language-model likelihood, motif check, or “designed by construction” argument is usually a prior, not a hard validity check.
 
-Prefer the highest-level workflow that directly optimizes the requested design class. Use lower-level tools only when the higher-level workflow lacks the required conditioning, output contract, runtime budget, or availability.
+Prefer the highest-level workflow that directly optimizes the requested design class. Use lower-level tools only when the higher-level workflow lacks the required conditioning, output contract, or availability.
 
 For structure, interfaces, ligand context, nucleic acid structure, regulatory genomics, circuits, pathways, and genome-scale designs, prefer multiple agreeing predictors before final selection. Agreement across model families is stronger evidence than a single convenient cutoff, but it is not experimental proof.
 
 Keep submetrics separate. A composite score can rank candidates, but donor usage, acceptor usage, retention, expression, ipTM, PAE, pLDDT, novelty, sequence naturalness, developability, off-target effects, thermodynamics, folding energy, GC content, codon adaptation, pathway flux, and circuit behavior should remain inspectable as independent failure modes.
 
-Use fast proxies for triage and expensive predictors for final selection. If a proxy disagrees with final scoring, recalibrate or change the proxy objective rather than scaling the same loop.
+Use screening predictors to triage large candidate pools and the strongest task-matched predictors for final selection. Default to the strongest task-matched predictor; a screening pass is an efficiency step for large pools, not a reason to downgrade the final validator. If a screening predictor disagrees with final scoring, recalibrate or change its objective rather than scaling the same loop.
 
 Do not present a candidate as validated unless the validation method measured the actual biological quantity requested by the task.
 
@@ -89,7 +89,7 @@ For every biological design task, report the following:
 | Generic de novo protein binder                                    | BindCraft when target-conditioned hallucination fits; Protein Hunter for fast all-X, partially constrained, or contact-conditioned protein-protein binder search; RFdiffusion-family methods when explicit geometry or motifs matter; AlphaProteo-style systems | AF2-multimer/AF3-family predictors; Boltz/Chai/Protenix; interface PAE/ipTM; pDockQ2; hotspot contact recovery; PyRosetta/interface geometry; novelty and specificity checks            | Monomer pLDDT; generator score alone; one model’s interface score without independent validation                   |
 | Symmetric or homo-oligomeric assembly                             | Symmetry-conditioned backbone generation (e.g. RFdiffusion-family symmetric sampling) so the interface forms by construction, then ProteinMPNN/LigandMPNN for sequence (broadcast one protomer across chains for homo-oligomers)                                | AF2-multimer/AF3-family complex predictors (Boltz/Chai/Protenix); gate on interface confidence (ipTM, cross-chain PAE) and inter-chain symmetry (pairwise TM), not per-chain pLDDT alone; Foldseek/US-align for novelty | Composing chains independently and filtering for assembly; per-chain pLDDT as evidence the interface forms          |
 | Epitope-targeted antibody, VHH, or scFv                           | Germinal; antibody-specific hallucination/redesign; AbMPNN/AbLang/antibody-specific MPNNs for local redesign and naturalness                                                                                                                                    | Antibody-antigen cofolding; epitope contact recovery; interface PAE; pDockQ2; CDR/framework checks; developability and antibody-sequence naturalness                                    | Generic binder workflows when antibody architecture matters; cofolding score without antibody-specific checks      |
-| Fast exploratory protein-protein design                           | Protein Hunter; BindCraft broad sampling; lightweight RFdiffusion/MPNN pipelines                                                                                                                                                                                | Cheap complex-prediction triage first, then independent final validators for top candidates; contact recovery and interface metrics                                                     | Treating fast in silico success as final validation                                                                |
+| Fast exploratory protein-protein design                           | Protein Hunter; BindCraft broad sampling; lightweight RFdiffusion/MPNN pipelines                                                                                                                                                                                | Complex-prediction screening first, then independent final validators for top candidates; contact recovery and interface metrics                                                     | Treating fast in silico success as final validation                                                                |
 | Peptide design                                                    | Peptide-specific generative models; protein language models for short sequences; constrained motif design; docking-guided or structure-guided peptide design; AMP/CPP classifiers for specific peptide classes                                                  | Peptide structure/ensemble checks, target binding if relevant, toxicity/hemolysis filters for AMPs, uptake predictors for CPPs, solubility and stability checks                         | Treating peptide design as ordinary folded-protein design                                                          |
 | Protein-ligand, metal, cofactor, or nucleic-acid contact redesign | LigandMPNN for sequence design around supplied non-protein context; RFdiffusion-family methods when designing a new pocket or backbone                                                                                                                          | Ligand-aware or all-atom complex predictors; ligand/contact geometry; docking or PyRosetta; identity and chemistry checks for small molecules                                           | ProteinMPNN if decisive residues see non-protein atoms; protein binder hallucination for small-molecule generation |
 | Small-molecule ligand generation                                  | Chemistry-aware generation or retrieval tools; molecule-native design workflows                                                                                                                                                                                 | Docking; ligand-aware structure prediction; identity checks against PubChem/CCD or relevant databases; physicochemical filters; medicinal chemistry constraints                         | Protein-design tools as substitutes for molecule generation                                                        |
@@ -112,7 +112,7 @@ For every biological design task, report the following:
 
 ## 5. Protein Structure Prediction Defaults
 
-Use ESMFold for fast, MSA-free protein triage, especially on de novo or heavily engineered sequences where alignment search is weak or expensive. Use ESMFold2 as a fast, high-accuracy all-atom structure and interaction predictor for proteins, DNA, RNA, ligands, and antibody-antigen complexes; prefer its single-sequence mode for high-throughput triage and its MSA-capable mode for harder final checks when runtime allows.
+Use ESMFold for fast, MSA-free protein triage, especially on de novo or heavily engineered sequences where alignment search is weak or unavailable. Use ESMFold2 as a fast, high-accuracy all-atom structure and interaction predictor for proteins, DNA, RNA, ligands, and antibody-antigen complexes; prefer its single-sequence mode for high-throughput triage and its MSA-capable mode for harder final checks when runtime allows.
 
 Treat ESMFold as a screening predictor. Treat ESMFold2 as a fast, high-accuracy structure and interaction oracle that can be part of final validation, including for predicted antibody complexes; still prefer agreement with an independent available oracle for final decisions when feasible.
 
@@ -138,7 +138,7 @@ Use Boltz-2 when an open AlphaFold3-style predictor is needed for protein, DNA, 
 
 Use Chai-1 when protein-ligand or protein-glycan cofolding is central and the local wrapper supports the requested entity types. Chai uses ESM embeddings and optional MSAs and is useful as an independent complex validator. In proto-tools, verify whether nucleic acids or modifications are supported by the wrapper before selecting it for DNA/RNA complexes.
 
-Use Protenix when open AlphaFold3-like prediction is needed for proteins, DNA, RNA, ligands, or modified residues. Prefer base/full variants for final ranking when resources permit; mini or tiny variants are useful for cheaper triage and large sweeps but should not be treated as equivalent final evidence.
+Use Protenix when open AlphaFold3-like prediction is needed for proteins, DNA, RNA, ligands, or modified residues. Prefer base/full variants for final ranking; mini or tiny variants are useful for high-throughput screening and large sweeps but should not be treated as equivalent final evidence.
 
 Use ESMFold for fast MSA-free protein folding, especially de novo sequences or large early pools. Use ESMFold2 for fast and accurate all-atom complex prediction across proteins, DNA, RNA, and ligands, including interaction modeling and antibody-antigen complex prediction; use its single-sequence mode for high-throughput screens and its MSA mode for harder targets. Do not use ESMFold alone as final evidence for structure-sensitive decisions; ESMFold2 can be one final oracle, but final selections are stronger when confirmed by an independent available predictor or structure metric.
 
@@ -382,7 +382,7 @@ For human or mouse regulatory design, choose the predictor whose outputs match t
 
 Use AlphaGenome when the objective is one of its native outputs, such as RNA-seq, CAGE, accessibility, histone marks, TF tracks, splice sites, splice-site usage, splice junctions, polyadenylation, or contact maps.
 
-AlphaGenome is expensive; use cheaper proxies during the inner-loop search and reserve the strongest task-matched predictor for final validation.
+AlphaGenome directly predicts native regulatory outputs; reserve it for final validation, and use task-matched screening predictors for inner-loop triage over large candidate pools.
 
 Use Borzoi for long-context expression and RNA-seq coverage-style objectives, especially when exon/intron coverage shape and broad genomic context matter.
 
@@ -622,7 +622,7 @@ Use FoldMason when structural multiple sequence alignment is needed across relat
 
 ## 31. Handling Predictor Disagreement
 
-If a cheap proxy and a final validator disagree, trust the final validator for final ranking.
+If a screening predictor and a final validator disagree, trust the final validator for final ranking.
 
 If two final validators disagree on the central metric, do not average them blindly. Inspect the relevant submetrics.
 
@@ -692,17 +692,17 @@ If the design loop fails to produce enough passing candidates:
 
 ---
 
-## 33. Budget Modes
+## 33. Rigor Modes
 
 ### Fast Mode
 
-Use when the user wants a quick first-pass answer or compute is limited.
+Use when the user wants a quick first-pass answer.
 
 Workflow:
 
 1. Generate or enumerate a small candidate pool.
 2. Run deterministic checks.
-3. Run one cheap task-matched proxy.
+3. Run one task-matched screening predictor.
 4. Return preliminary rankings with low or medium confidence.
 
 Do not present fast-mode outputs as final validated designs.
@@ -714,7 +714,7 @@ Use for most design tasks.
 Workflow:
 
 1. Generate a broad candidate pool.
-2. Run deterministic checks and cheap proxies.
+2. Run deterministic checks and screening predictors.
 3. Score the surviving pool with the strongest available validator.
 4. Keep submetrics separate.
 5. Return ranked candidates with stated limitations.
@@ -727,7 +727,7 @@ Workflow:
 
 1. Generate a broad and diverse candidate pool.
 2. Run deterministic checks.
-3. Run cheap proxies.
+3. Run screening predictors if they aid triage.
 4. Run multiple final validators when feasible.
 5. Require agreement on central metrics.
 6. Run novelty and off-target checks.
@@ -741,13 +741,13 @@ Workflow:
 For design scripts, prefer this execution pattern:
 
 1. Generate a broad candidate pool from the most task-matched generator.
-2. Run deterministic checks and cheap proxies first.
+2. Run deterministic checks and screening predictors first.
 3. Score the surviving pool with the strongest available validators.
 4. Require agreement across predictors for final candidates when feasible; default to multiple task-matched oracles for learned or context-dependent properties.
 5. Keep all submetrics visible.
 6. If one submetric is starving the pool, change the proposal distribution or objective around that submetric before spending the rest of the budget.
 7. Keep sampling in bounded replenishment rounds until the requested final count is reached or an explicit time, proposal, or compute cap is hit. Implement this as executable control flow, not only as a plan: checkpoint survivors, count unique final-equivalent candidates after every round, estimate observed yield, and launch additional rounds with more or more diverse proposals when yield is low. Size caps from the available execution budget and observed validator yield; a few dozen heavy validations is not a sufficient stop condition when hours remain and at least some candidates are passing.
-8. Compile, import, and smoke-test generated scripts before expensive runs.
+8. Compile, import, and smoke-test generated scripts before long runs.
 9. Save intermediate outputs.
 10. Record skipped candidates and failure reasons.
 11. Record unavailable tools and validation gaps.
@@ -859,7 +859,7 @@ Avoid these mistakes:
 - Claiming novelty without database search.
 - Averaging disagreeing predictors without inspecting submetrics.
 - Continuing to sample from the same proposal distribution when one required submetric repeatedly fails.
-- Producing scripts that do not compile, import, or run a small smoke test before expensive jobs.
+- Producing scripts that do not compile, import, or run a small smoke test before long jobs.
 - Stopping after an undersized passing batch when the user requested a fixed number of final candidates.
 - Fast structure proxies can disagree with more reliable AlphaFold-family models; use a consensus of several appropriate models for higher success.
 - Motif-only genomic designs can miss learned splice or expression submetrics; use multiple task-matched oracles, such as independent splice predictors plus deterministic ORF/repeat/frame checks, to increase success likelihoods.
