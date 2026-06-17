@@ -2,6 +2,6 @@
 # https://github.com/sokrypton/ColabDesign
 
 jax[cuda12]==0.5.3  # colabdesign uses jnp.clip(a_min=...), removed in JAX 0.10. Matches Germinal's pin.
-colabdesign @ git+https://github.com/sokrypton/ColabDesign.git@gamma
+colabdesign @ git+https://github.com/sokrypton/ColabDesign.git@5ab4efaba2321a6c3c314b82d2fff8e0241f5c2d
 biopython
 ipython
