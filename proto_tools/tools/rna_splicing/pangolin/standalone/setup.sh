@@ -14,6 +14,6 @@ uv pip install -r requirements.txt
 # Pangolin ships its model weights inside the pip package. Install with --no-deps so
 # its loose setup.py cannot override the driver-aware torch installed above.
 echo "Installing Pangolin (with bundled model weights)..."
-uv pip install --no-deps "git+https://github.com/tkzeng/Pangolin.git"
+uv pip install --no-deps "git+https://github.com/tkzeng/Pangolin.git@v1.0.1"
 
 echo "Pangolin setup complete!"
