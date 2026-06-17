@@ -22,12 +22,17 @@ uv pip install -r requirements.txt
 # so find_packages() returns nothing and normal pip install is empty)
 # ============================================================================
 FAMPNN_REPO_DIR="${VENV_PATH}/fampnn_repo"
+FAMPNN_COMMIT="aaf788b1502ad95d5c5a84455cfc53f2544f3b45"
 if [ ! -d "$FAMPNN_REPO_DIR/.git" ]; then
     echo "Cloning FAMPNN repository..."
-    git clone --depth 1 https://github.com/richardshuai/fampnn.git "$FAMPNN_REPO_DIR"
+    git clone https://github.com/richardshuai/fampnn.git "$FAMPNN_REPO_DIR"
 else
     echo "FAMPNN repository already cloned."
 fi
+
+echo "Checking out pinned FAMPNN commit ${FAMPNN_COMMIT}..."
+git -C "$FAMPNN_REPO_DIR" fetch origin "$FAMPNN_COMMIT"
+git -C "$FAMPNN_REPO_DIR" checkout "$FAMPNN_COMMIT"
 
 echo "Creating missing __init__.py files in FAMPNN package..."
 find "$FAMPNN_REPO_DIR/fampnn" -type d -exec sh -c '
@@ -57,7 +62,7 @@ pip install -e "$FAMPNN_REPO_DIR" --no-deps
 # ============================================================================
 proto_resolve_weights_dir fampnn
 
-REPO_BASE="https://github.com/richardshuai/fampnn/raw/main/weights"
+REPO_BASE="https://github.com/richardshuai/fampnn/raw/aaf788b1502ad95d5c5a84455cfc53f2544f3b45/weights"
 
 for WEIGHT_FILE in fampnn_0_0.pt fampnn_0_3.pt fampnn_0_3_cath.pt; do
     if [ ! -f "${WEIGHTS_DIR}/${WEIGHT_FILE}" ]; then
