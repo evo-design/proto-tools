@@ -37,7 +37,12 @@ def validate_raw_sequence(sequence: str) -> str:
         raise ValueError("sequence must only contain DNA bases A/C/G/T/N")
     if len(sequence) not in SUPPORTED_CONTEXT_LENGTHS:
         supported = ", ".join(str(length) for length in sorted(SUPPORTED_CONTEXT_LENGTHS))
-        raise ValueError(f"sequence length must match a supported AlphaGenome context length ({supported} bp)")
+        raise ValueError(
+            f"sequence length ({len(sequence)} bp) must match a supported AlphaGenome context length "
+            f"({supported} bp). Raw sequences are not auto-resized: pad or trim to one of these lengths "
+            f"(16384 is the smallest), or use alphagenome-predict-intervals with genomic coordinates, "
+            f"which fetches and resizes the reference context for you."
+        )
     return sequence
 
 
@@ -51,11 +56,19 @@ class AlphaGenomePredictSequencesInput(BaseToolInput):
 
     Attributes:
         sequences (list[str]): Raw DNA sequences (A/C/G/T/N characters).
-            A single string is auto-wrapped into a list. Each sequence
-            must match a supported context length.
+            A single string is auto-wrapped into a list. Sequences are not
+            auto-resized: each must already be exactly one of the supported
+            context lengths (16,384 / 131,072 / 524,288 / 1,048,576 bp). To
+            score a shorter region, pad it with flanking context to the
+            nearest supported length, or use ``alphagenome-predict-intervals``
+            with genomic coordinates, which fetches and resizes the reference
+            context automatically.
     """
 
-    sequences: list[str] = InputField(title="Sequences", description="Raw DNA sequences for prediction")
+    sequences: list[str] = InputField(
+        title="Sequences",
+        description="Raw DNA sequences; each must already be a supported context length (16384/131072/524288/1048576 bp)",
+    )
 
     @field_validator("sequences", mode="before")
     @classmethod

@@ -49,7 +49,7 @@ This tool scores synthetic or edited sequences, such as designed promoters and e
 
 #### Usage Tips
 
-- **Raw sequences are not resized.** Each sequence must already be exactly one of the supported context lengths.
+- **Raw sequences are not resized.** Each sequence must already be exactly one of the supported context lengths (16,384 / 131,072 / 524,288 / 1,048,576 bp). To score a shorter region, pad it with flanking context up to the nearest supported length, or use **Predict Intervals** with genomic coordinates, which fetches and resizes the reference context automatically.
 - **Only DNA bases are accepted.** Sequences may contain only the bases A, C, G, T, and N.
 
 ### Predict Variants (`alphagenome-predict-variants`)
