@@ -1,2 +1,2 @@
-pyhmmer>=0.10.0
+pyhmmer==0.12.1
 pandas>=2.0.0
