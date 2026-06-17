@@ -111,7 +111,7 @@ echo "Installing megablocks..."
 uv pip install --no-build-isolation "megablocks[gg]==0.7.0" --refresh
 
 echo "Installing progen3..."
-uv pip install "progen3 @ git+https://github.com/Profluent-AI/progen3.git"
+uv pip install "progen3 @ git+https://github.com/Profluent-AI/progen3.git@5c8c88c10b369a8c3044e11d586266f68dfca0bf"
 
 echo "Installing remaining dependencies..."
 uv pip install -r requirements.txt
