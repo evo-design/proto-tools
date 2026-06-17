@@ -2,6 +2,6 @@
 # https://github.com/evo-design/evo
 # Note: torch and flash-attn are installed in setup.sh before this file.
 
-evo-model>=0.5
+evo-model==0.5
 transformers>=4.48
 tqdm
