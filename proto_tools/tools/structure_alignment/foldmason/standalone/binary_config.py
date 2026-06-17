@@ -10,11 +10,14 @@ import stat
 import tarfile
 from pathlib import Path
 
+_FOLDMASON_RELEASE_TAG = "4-dd3c235"
+_RELEASE_URL = f"https://github.com/steineggerlab/foldmason/releases/download/{_FOLDMASON_RELEASE_TAG}"
+
 URLS = {
-    ("Darwin", "arm64"): "https://mmseqs.com/foldmason/foldmason-osx-universal.tar.gz",
-    ("Darwin", "x86_64"): "https://mmseqs.com/foldmason/foldmason-osx-universal.tar.gz",
-    ("Linux", "x86_64"): "https://mmseqs.com/foldmason/foldmason-linux-avx2.tar.gz",
-    ("Linux", "arm64"): "https://mmseqs.com/foldmason/foldmason-linux-arm64.tar.gz",
+    ("Darwin", "arm64"): f"{_RELEASE_URL}/foldmason-osx-universal.tar.gz",
+    ("Darwin", "x86_64"): f"{_RELEASE_URL}/foldmason-osx-universal.tar.gz",
+    ("Linux", "x86_64"): f"{_RELEASE_URL}/foldmason-linux-avx2.tar.gz",
+    ("Linux", "arm64"): f"{_RELEASE_URL}/foldmason-linux-arm64.tar.gz",
 }
 
 
