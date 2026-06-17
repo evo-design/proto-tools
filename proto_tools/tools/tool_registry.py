@@ -619,6 +619,9 @@ class ToolRegistry:
                         # Fail fast if the tool's license bars it from Proto's cloud; after the local_cpu no-op.
                         elif not is_cloud_hostable(key):
                             raise ValueError(cloud_unhostable_message(key))
+                        # Fail fast on a config the cloud can't run (e.g. a local database/file).
+                        elif (reason := config.cloud_unsupported_reason()) is not None:
+                            raise ValueError(f"{key}: {reason}")
                         else:
                             try:
                                 dispatched = dispatch_to_cloud(key, inputs, config)

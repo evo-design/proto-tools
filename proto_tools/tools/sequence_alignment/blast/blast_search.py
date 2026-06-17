@@ -508,6 +508,15 @@ class BlastSearchConfig(BaseConfig):
 
         return self
 
+    def cloud_unsupported_reason(self) -> str | None:
+        """Local-DB search can't run on the hosted cloud — the database lives on the caller's machine."""
+        if self.search_mode == "local":
+            return (
+                "search_mode='local' needs a local BLAST database, which can't be staged to "
+                "device='cloud'. Use search_mode='online', or run locally with device='cpu'."
+            )
+        return None
+
 
 # ============================================================================
 # Tool Implementation

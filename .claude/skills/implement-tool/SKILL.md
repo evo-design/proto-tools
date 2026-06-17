@@ -185,6 +185,18 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
 
 **Inherited field audit:** When reusing a shared base config (e.g., `InverseFoldingConfig`) or base input, enumerate every inherited field and verify the target model can implement it. For each unsupported field, either implement support (e.g., logit masking for `excluded_amino_acids`) or override the field with a validator that raises `ValueError("'{field_name}' is not supported by {tool_display_name}")` when a non-default value is provided. Do not silently inherit fields that the model ignores.
 
+**Cloud fail-fast for local-resource configs:** If a config setting needs a **local resource that can't be staged to the hosted service** — a local database/index, an on-disk weights/artifact directory, or a local file path — override `BaseConfig.cloud_unsupported_reason(self) -> str | None` so `device='cloud'` fails fast at dispatch with a clear message instead of a late runtime error (a missing-file crash, or silently ignoring the override). Return a user-facing reason when the offending setting is active, `None` otherwise (the default means cloud-compatible). Guard on the setting actually being non-default so ordinary cloud runs are untouched:
+
+```python
+def cloud_unsupported_reason(self) -> str | None:
+    """A local weights directory (``local_path``) isn't present on a hosted worker."""
+    if self.local_path:  # optional override; unset by default → cloud-OK
+        return "local_path points to a local weights directory not available on device='cloud'. Unset it, or run locally with device='cpu'."
+    return None
+```
+
+A tool whose *only* mode needs a local file (e.g. a required local DB/HMM input, like `blast-search` local mode or `pyhmmer-hmmscan`) returns the reason unconditionally. Scope this to **intrinsically** local configs — do **not** encode deployment-specific hosting knowledge here (e.g. which model checkpoints are warmed on Modal); that stays private to proto-tools-api. The router invokes this only on the `device='cloud'` path, after the `local_cpu` no-op and the license gate.
+
 ## Mutual-exclusion fields (XOR groups)
 
 For "pick one" siblings: make each `Optional` with `default=None`, tag with the same `xor_group="<slug>"`, and add a `@model_validator(mode="after")` to enforce at runtime.
@@ -791,6 +803,7 @@ Per-field checklist:
    - `include_in_key=False` for fields that don't affect results (`device`, `verbose`, `timeout` are already excluded on `BaseConfig`; a tool-level `device` override must re-set it).
    - `xor_group="<slug>"` for mutually exclusive siblings, paired with the `@model_validator`.
 7. **Inherited fields** — confirm the Phase 2 inherited-field audit holds: every field from a shared base is implemented or rejected with `ValueError`, never silently ignored.
+8. **Local-resource field → cloud hook.** If the field points at a local file/database/index or an on-disk weights/artifact path, confirm the config overrides `cloud_unsupported_reason()` so `device='cloud'` fails fast (see "Cloud fail-fast for local-resource configs" in Phase 2). Skip for AssetRef-stageable uploads and `Structure`-typed inputs (the gateway stages those).
 
 **Output:** edit the contract directly. If you remove/rename/retype a field, propagate to standalone `dispatch()`, README, notebook, tests, and the export chain — leave no dangling references. Re-run Phase 4 import/test checks. Do this deliberately yourself, or delegate to a focused subagent given the Phase 1 upstream param surface + the contract.
 

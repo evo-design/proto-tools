@@ -299,6 +299,74 @@ def test_cloud_blocks_non_redistributable_tool(fake_proto_client, arm_stub_clien
     assert fake_proto_client.last_instance is None
 
 
+def test_cloud_blocks_unsupported_config(fake_proto_client, clean_registry):
+    """device='cloud' with a config whose ``cloud_unsupported_reason()`` is non-None fails fast, never dispatches."""
+
+    class _LocalOnlyConfig(_CloudConfig):
+        def cloud_unsupported_reason(self) -> str | None:
+            return "needs a local database file"
+
+    spec = _register_cloud_tool(clean_registry, "local-only-config", config_class=_LocalOnlyConfig)
+
+    with pytest.raises(ValueError, match="needs a local database file"):
+        spec.function(_CloudInput(payload="x"), _LocalOnlyConfig(device="cloud"))
+
+    # Fails fast locally: no client constructed, no submit attempted.
+    assert fake_proto_client.last_instance is None
+
+
+def test_base_config_cloud_unsupported_reason_defaults_none():
+    """The default hook returns None so ordinary tools still dispatch to cloud."""
+    assert _CloudConfig().cloud_unsupported_reason() is None
+
+
+def test_local_file_tools_declare_cloud_unsupported():
+    """Local-file tools (blast local-DB search, pyhmmer hmmscan/hmmsearch) declare themselves cloud-unsupported."""
+    from proto_tools.tools.gene_annotation.pyhmmer.hmmscan import PyHmmscanConfig
+    from proto_tools.tools.gene_annotation.pyhmmer.hmmsearch import PyHmmsearchConfig
+    from proto_tools.tools.sequence_alignment.blast.blast_search import BlastSearchConfig
+
+    assert BlastSearchConfig(search_mode="local", local_db="/db").cloud_unsupported_reason() is not None
+    assert BlastSearchConfig(search_mode="online").cloud_unsupported_reason() is None  # online (NCBI) is cloud-OK
+    assert PyHmmscanConfig().cloud_unsupported_reason() is not None
+    assert PyHmmsearchConfig().cloud_unsupported_reason() is not None
+
+
+def test_local_resource_override_configs_declare_cloud_unsupported():
+    """Optional local-path overrides (weights dir, artifact, denoiser YAML) fail cloud only when set."""
+    from proto_tools.tools.causal_models.evo2.evo2_sample import Evo2SampleConfig
+    from proto_tools.tools.causal_models.evo2.evo2_score import Evo2ScoringConfig
+    from proto_tools.tools.causal_models.progen2.progen2_sample import ProGen2SampleConfig
+    from proto_tools.tools.causal_models.progen2.progen2_score import ProGen2ScoringConfig
+    from proto_tools.tools.sequence_scoring.malinois.malinois_score import (
+        MalinoisGradientConfig,
+        MalinoisScoreConfig,
+    )
+    from proto_tools.tools.structure_dynamics.bioemu.bioemu_sample import BioEmuConfig
+
+    # Defaults dispatch fine (managed download / cache / unset).
+    for cfg in (
+        Evo2SampleConfig(),
+        Evo2ScoringConfig(),
+        ProGen2SampleConfig(),
+        ProGen2ScoringConfig(),
+        MalinoisScoreConfig(),
+        MalinoisGradientConfig(),
+        BioEmuConfig(),
+    ):
+        assert cfg.cloud_unsupported_reason() is None
+
+    # An explicitly-set local override is rejected before dispatch.
+    assert Evo2SampleConfig(local_path="/w").cloud_unsupported_reason() is not None
+    assert Evo2ScoringConfig(local_path="/w").cloud_unsupported_reason() is not None
+    assert ProGen2SampleConfig(local_path="/w").cloud_unsupported_reason() is not None
+    assert ProGen2ScoringConfig(local_path="/w").cloud_unsupported_reason() is not None
+    assert MalinoisScoreConfig(artifact_path="/a").cloud_unsupported_reason() is not None
+    assert MalinoisScoreConfig(malinois_dir="/d").cloud_unsupported_reason() is not None
+    assert MalinoisGradientConfig(malinois_dir="/d").cloud_unsupported_reason() is not None
+    assert BioEmuConfig(denoiser_config="steer.yaml").cloud_unsupported_reason() is not None
+
+
 # ─ parse_device_string ───────────────────────────────────────────────────────
 
 

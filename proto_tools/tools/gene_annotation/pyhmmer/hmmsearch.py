@@ -87,6 +87,10 @@ class PyHmmsearchConfig(PyHmmerConfig):
         description="HMM curated cutoff: 'gathering' (Pfam GA), 'noise' (permissive), 'trusted' (strictest)",
     )
 
+    def cloud_unsupported_reason(self) -> str | None:
+        """Reads a local HMM file (``hmm``) that can't be staged to the hosted cloud."""
+        return "needs a local HMM file (hmm) that can't be staged to device='cloud'. Run locally with device='cpu'."
+
 
 # ============================================================================
 # Tool Implementation

@@ -98,6 +98,12 @@ class Evo2ScoringConfig(CausalModelScoringConfig):
         include_in_key=False,
     )
 
+    def cloud_unsupported_reason(self) -> str | None:
+        """A local weights directory (``local_path``) isn't present on a hosted worker."""
+        if self.local_path:
+            return "local_path points to a local weights directory not available on device='cloud'. Unset it, or run locally with device='cpu'."
+        return None
+
 
 # ============================================================================
 # Tool Implementation

@@ -273,3 +273,12 @@ class BaseConfig(BaseModel):
     def preprocess(self, inputs: BaseToolInput) -> BaseToolInput:
         """Transform inputs before tool execution. Override in subclasses."""
         return inputs
+
+    def cloud_unsupported_reason(self) -> str | None:
+        """Reason this config can't run via ``device='cloud'``, or ``None`` if it can.
+
+        Override in a tool's config to fail fast at dispatch when a setting needs a local
+        resource (e.g. a local database or file) that can't be staged to the hosted service.
+        The returned message is surfaced to the caller; ``None`` (the default) means compatible.
+        """
+        return None
