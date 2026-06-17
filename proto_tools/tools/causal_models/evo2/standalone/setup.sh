@@ -124,10 +124,10 @@ uv cache clean transformer-engine-torch
 uv pip install --no-build-isolation "transformer_engine[pytorch]==2.5.0" --refresh
 
 echo "Installing vortex..."
-uv pip install vtx
+uv pip install vtx==1.1.0
 
 echo "Installing evo2..."
-uv pip install evo2 --constraint <(echo "torch==2.6.0")
+uv pip install evo2==0.5.5 --constraint <(echo "torch==2.6.0")
 
 echo "Installing dependencies from requirements.txt..."
 uv pip install -r requirements.txt --constraint <(echo "torch==2.6.0")
