@@ -1378,6 +1378,66 @@ def test_failure_writes_status_and_raises(tmp_path: Path):
     assert "Setup hash:" in status
 
 
+def test_called_process_detail_decodes_stderr_then_stdout():
+    """Captured bytes are decoded; stderr wins, stdout is the fallback."""
+    e_stderr = subprocess.CalledProcessError(1, "x", stderr=b"boom on stderr\n")
+    assert ToolInstance._called_process_detail(e_stderr) == "boom on stderr"
+
+    e_stdout = subprocess.CalledProcessError(1, "x", output=b"boom on stdout", stderr=b"")
+    assert ToolInstance._called_process_detail(e_stdout) == "boom on stdout"
+
+    e_empty = subprocess.CalledProcessError(1, "x", stderr=b"", output=b"")
+    assert ToolInstance._called_process_detail(e_empty) == ""
+
+    # Whitespace-only stderr is blank after tailing, so stdout is still used.
+    e_blank_stderr = subprocess.CalledProcessError(1, "x", stderr=b"\n  \n", output=b"real stdout error")
+    assert ToolInstance._called_process_detail(e_blank_stderr) == "real stdout error"
+
+
+def test_fix_env_hint_points_to_fix_env_skill():
+    """Build-failure guidance names the skill, the eject flow, and to iterate."""
+    hint = _make_fake_instance(toolkit="esm2")._fix_env_hint()
+    assert "fix-env" in hint
+    assert "proto-tools eject-standalone esm2" in hint
+    assert "PROTO_ESM2_STANDALONE_DIR" in hint
+    assert "PROTO_ENV_VERBOSE" in hint
+    assert "editable" in hint.lower()
+    assert "iterat" in hint.lower()
+
+
+def test_micromamba_create_failure_surfaces_detail_and_hint(tmp_path: Path):
+    """A failed `micromamba create` raises with captured stderr + fix-env guidance.
+
+    Regression: the create call used check=True/capture_output=True with no
+    except, so the CalledProcessError surfaced only "returned non-zero exit
+    status N" and the captured stderr was dropped.
+    """
+    inst = ToolInstance.__new__(ToolInstance)
+    inst.toolkit = "esm2"
+    inst.device = "cpu"
+    inst.env_path = tmp_path / "fake_env"  # absent -> skip rmtree branch
+    inst.setup_script = tmp_path / "setup.sh"
+    inst._tool_env_vars = {"passthrough": [], "set": [], "no_passthrough": []}
+
+    err = subprocess.CalledProcessError(
+        returncode=1, cmd=["micromamba", "create"], stderr=b"PackagesNotFoundError: libfoo"
+    )
+    with (
+        patch.object(inst, "_ensure_micromamba", return_value=Path("/fake/mm/bin/micromamba")),
+        patch.object(inst, "_get_python_version", return_value="3.12"),
+        patch("proto_tools.utils.tool_instance.subprocess.run", side_effect=err),
+        pytest.raises(RuntimeError) as excinfo,
+    ):
+        inst._create_env()
+
+    msg = str(excinfo.value)
+    assert "micromamba create failed" in msg
+    assert "PackagesNotFoundError: libfoo" in msg  # captured stderr, not swallowed
+    assert "eject-standalone esm2" in msg
+    assert "PROTO_ESM2_STANDALONE_DIR" in msg
+    assert ToolInstance._build_failures["esm2"] == "PackagesNotFoundError: libfoo"
+
+
 def test_build_failure_prevents_retry_in_process(tmp_path: Path):
     """After _create_env fails, _ensure_env raises immediately on retry."""
     inst = _make_fake_instance()

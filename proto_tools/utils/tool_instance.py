@@ -768,7 +768,9 @@ class ToolInstance:
             if sentinel is not None:
                 toolkit, asset_kind = sentinel
                 raise MissingAssetError(toolkit, asset_kind, tail)
-            raise RuntimeError(f"{self.toolkit}: previously failed setup; last error: {tail or '<no stderr>'}")
+            raise RuntimeError(
+                f"{self.toolkit}: previously failed setup; last error: {tail or '<no stderr>'}{self._fix_env_hint()}"
+            )
         # Show one-time notice if using default storage locations
         from proto_tools.utils.proto_home import show_first_run_notice
 
@@ -1711,11 +1713,11 @@ class ToolInstance:
                     env=mamba_env,
                 )
             except subprocess.CalledProcessError as e:
-                stderr = e.stderr.decode("utf-8", errors="replace") if e.stderr else ""
-                logger.error("Failed to create foundation environment:\n%s", stderr)
+                detail = ToolInstance._called_process_detail(e)
+                logger.error("Failed to create foundation environment:\n%s", detail)
                 raise RuntimeError(
                     f"foundation_env: micromamba create failed at {foundation_path} (exit {e.returncode}): "
-                    f"{' | '.join((stderr or '').strip().splitlines()) or '<no stderr>'}"
+                    f"{' | '.join(detail.splitlines()) or '<no stderr>'}"
                 ) from e
 
             marker.touch()
@@ -2184,6 +2186,24 @@ class ToolInstance:
         lines = [line for line in stderr.strip().splitlines() if line.strip()]
         return "\n".join(lines)
 
+    @classmethod
+    def _called_process_detail(cls, exc: subprocess.CalledProcessError) -> str:
+        """Decode captured stderr (falling back to stdout) from a failed run.
+
+        ``capture_output=True`` leaves the bytes on the exception but the
+        default ``CalledProcessError`` message drops them, so callers must pull
+        them out to surface anything useful.
+        """
+
+        def _decode(stream: object) -> str:
+            if isinstance(stream, bytes):
+                return stream.decode("utf-8", errors="replace")
+            return stream if isinstance(stream, str) else ""
+
+        # Tail each stream before falling back, so a blank-only stderr (which
+        # tails to "") still yields stdout instead of short-circuiting on it.
+        return cls._stderr_tail(_decode(exc.stderr)) or cls._stderr_tail(_decode(exc.stdout))
+
     @staticmethod
     def _parse_asset_sentinel(output: str | None) -> tuple[str, str] | None:
         """Detect the ``proto_resolve_asset_availability`` sentinel in output.
@@ -2213,6 +2233,18 @@ class ToolInstance:
                     toolkit, asset_kind = payload.split(":", 1)
                     return toolkit.strip(), asset_kind.strip()
         return None
+
+    def _fix_env_hint(self) -> str:
+        """Guidance appended to env-build failures, pointing at the ``fix-env`` skill."""
+        var = f"PROTO_{self.toolkit.upper().replace('-', '_')}_STANDALONE_DIR"
+        return (
+            f"\n\nThis is an environment-build failure: {self.toolkit}'s standalone setup "
+            "(setup.sh, etc.) is fully editable to match any hardware/software. "
+            "Use the proto-tools `fix-env` skill — eject, patch, and iterate until it builds:\n"
+            f"  proto-tools eject-standalone {self.toolkit}\n"
+            f'  export {var}="$PWD/proto_standalone/{self.toolkit}"\n'
+            "  # re-run with PROTO_ENV_VERBOSE=1, edit setup.sh, re-run."
+        )
 
     def _failure_summary(self) -> str:
         """Extract a one-line error summary from a FAILED STATUS.txt."""
@@ -2285,27 +2317,49 @@ class ToolInstance:
         # tool_envs/) so the package cache lives alongside the envs and
         # micromamba can hardlink instead of copying.
         mamba_env = {**os.environ, "MAMBA_ROOT_PREFIX": str(mamba_bin.parent.parent)}
-        subprocess.run(
-            [
-                str(mamba_bin),
-                "create",
-                "-y",
-                "-p",
-                str(self.env_path),
-                f"python={python_version}",
-                "pip",
-                "uv",
-                "-c",
-                "conda-forge",
-            ],
-            check=True,
-            capture_output=True,
-            env=mamba_env,
-        )
+        try:
+            subprocess.run(
+                [
+                    str(mamba_bin),
+                    "create",
+                    "-y",
+                    "-p",
+                    str(self.env_path),
+                    f"python={python_version}",
+                    "pip",
+                    "uv",
+                    "-c",
+                    "conda-forge",
+                ],
+                check=True,
+                capture_output=True,
+                env=mamba_env,
+            )
+        except subprocess.CalledProcessError as e:
+            detail = self._called_process_detail(e)
+            logger.error(
+                "micromamba create failed for %s (exit %s):\n%s",
+                self.toolkit,
+                e.returncode,
+                detail,
+            )
+            self._build_failures[self.toolkit] = detail
+            raise RuntimeError(
+                f"{self.toolkit}: micromamba create failed (exit {e.returncode}): "
+                f"{detail or '<no output>'}{self._fix_env_hint()}"
+            ) from e
 
         # Run setup.sh directly (not via micromamba run, which overwrites PATH
         # and strips conda prefix - breaking access to git, curl, gcc, etc.)
-        subprocess.run(["chmod", "+x", str(self.setup_script)], check=True)
+        try:
+            subprocess.run(["chmod", "+x", str(self.setup_script)], check=True, capture_output=True)
+        except subprocess.CalledProcessError as e:
+            detail = self._called_process_detail(e)
+            self._build_failures[self.toolkit] = detail
+            raise RuntimeError(
+                f"{self.toolkit}: failed to chmod +x {self.setup_script} (exit {e.returncode}): "
+                f"{detail or '<no output>'}{self._fix_env_hint()}"
+            ) from e
 
         # Ensure foundation environment (provides git, curl, gcc, g++).
         # Returns None when the host already provides these - see
@@ -2386,7 +2440,9 @@ class ToolInstance:
                 toolkit, asset_kind = sentinel
                 raise MissingAssetError(toolkit, asset_kind, tail)
 
-            raise RuntimeError(f"{self.toolkit}: setup.sh failed (exit {returncode}): {tail or '<no stderr>'}")
+            raise RuntimeError(
+                f"{self.toolkit}: setup.sh failed (exit {returncode}): {tail or '<no stderr>'}{self._fix_env_hint()}"
+            )
 
 
 atexit.register(ToolInstance.clear_all)
