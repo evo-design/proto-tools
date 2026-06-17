@@ -23,5 +23,4 @@ Each tool also ships an `examples/example.ipynb` under `proto_tools/tools/{categ
 
 ## Questions?
 
-- Join the [Discord](https://discord.gg/evs3Unkegv).
 - File issues at [proto-bio/proto-tools/issues](https://github.com/proto-bio/proto-tools/issues).

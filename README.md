@@ -5,8 +5,6 @@
 [![Checks](https://github.com/proto-bio/proto-tools/actions/workflows/checks.yml/badge.svg)](https://github.com/proto-bio/proto-tools/actions/workflows/checks.yml)
 [![Unit Tests](https://github.com/proto-bio/proto-tools/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/proto-bio/proto-tools/actions/workflows/unit-tests.yml)
 [![Integration Tests](https://github.com/proto-bio/proto-tools/actions/workflows/integration-tests.yml/badge.svg)](https://github.com/proto-bio/proto-tools/actions/workflows/integration-tests.yml)
-[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/evs3Unkegv)
-
 
 Welcome! This repository contains the **tools layer** of the biological programming language project. It puts **100+ computational biology and biological AI tools** at your fingertips through a single, consistent Python interface. Protein language models, structure predictors, inverse folding, sequence analysis, gene annotation, conformational dynamics, genomic scoring, and more are all just one function call away.
 
