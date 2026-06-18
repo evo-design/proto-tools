@@ -67,6 +67,9 @@ def test_masking_strategy_seeded():
 #
 # - rfdiffusion3-design: external subprocess without a deterministic mode.
 #   Upstream: https://github.com/RosettaCommons/foundry/issues/170.
+# - rf3-prediction: foundry CLI tool like rfdiffusion3-design, no deterministic
+#   mode; a fresh ``rf3 fold`` subprocess per fold makes cross-call comparisons
+#   cross-process, hitting intermittent bimodal CUDA kernel drift.
 # - protenix-prediction: protenix's CLI ``--seed`` is honoured, but the
 #   cuequivariance triangle multiplication / attention kernels accumulate
 #   floating-point ops non-deterministically across runs. Coordinates drift by
@@ -91,6 +94,7 @@ def test_masking_strategy_seeded():
 _SEED_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {
         "rfdiffusion3-design",
+        "rf3-prediction",
         "protenix-prediction",
         "alphafold2-gradient",
         "alphafold3-prediction",
