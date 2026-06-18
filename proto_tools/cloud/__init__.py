@@ -55,27 +55,32 @@ def _status_box(title: str, body: str) -> str:
 
 
 _CLOUD_STATUS = _status_box(
-    "Proto Cloud: request access",
-    "No API key was detected.\n"
+    "Proto Cloud: set up your API key",
+    "No PROTO_API_KEY was detected.\n"
     "\n"
-    "device='cloud' is coming soon! We're rolling out access in the coming\n"
-    "weeks; only approved users will have API keys for now.\n"
+    "device='cloud' dispatches this tool to Proto's hosted GPUs. To use\n"
+    "it, create an API key in your workspace settings, then set\n"
+    "PROTO_API_KEY in your environment and re-run:\n"
     "\n"
-    "Request access: (request link coming soon)\n"
+    "    https://proto.evodesign.org/settings/workspace/keys\n"
     "\n"
-    "Once approved, set PROTO_API_KEY in your environment and re-run;\n"
-    "device='cloud' will dispatch automatically.\n"
+    "You'll need a Proto account — sign in or sign up at\n"
+    "https://proto.evodesign.org first.\n"
     "\n"
-    "In the meantime, run locally with device='cpu' or device='cuda'.",
+    "Prefer to stay local? Run with device='cpu' or device='cuda'.",
 )
 
 _INVALID_KEY = _status_box(
-    "Proto Cloud: This key appears to be invalid",
-    "We couldn't validate your Proto API key.\n"
+    "Proto Cloud: API key not recognized",
+    "We couldn't validate your PROTO_API_KEY.\n"
     "\n"
-    "Double-check the PROTO_API_KEY value and confirm your account is\n"
-    "approved for cloud access. If you believe this is in error, contact\n"
-    "the Proto team: (contact link coming soon)",
+    "Double-check the value, and confirm the key is still active in your\n"
+    "workspace settings (you can create a new one there):\n"
+    "\n"
+    "    https://proto.evodesign.org/settings/workspace/keys\n"
+    "\n"
+    "If you believe this is an error, use the in-app feedback button at\n"
+    "https://proto.evodesign.org to reach the Proto team.",
 )
 
 

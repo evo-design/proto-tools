@@ -610,7 +610,7 @@ def test_device_cloud_noop_leaves_caller_config_untouched(clean_registry):
 
 
 def test_no_api_key_raises_cloud_status(monkeypatch, clean_registry):
-    """device='cloud' with no PROTO_API_KEY surfaces the coming-soon status."""
+    """device='cloud' with no PROTO_API_KEY surfaces the set-up-your-key guidance."""
     monkeypatch.delenv("PROTO_API_KEY", raising=False)
     # Need a stub proto_client so the ImportError path doesn't fire first.
     fake_module = types.ModuleType("proto_client")
@@ -622,7 +622,7 @@ def test_no_api_key_raises_cloud_status(monkeypatch, clean_registry):
     monkeypatch.setitem(sys.modules, "proto_client.errors", fake_errors)
     spec = _register_cloud_tool(clean_registry, "no-key")
 
-    with pytest.raises(NotImplementedError, match="coming soon"):
+    with pytest.raises(NotImplementedError, match="workspace/keys"):
         spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
 
 
@@ -653,7 +653,7 @@ def test_invalid_api_key_raises_permission_error(fake_proto_client, arm_stub_cli
     arm_stub_client(lambda c: setattr(c.tools, "raise_on_run", _FakeProtoAuthError("unauthorized", status_code=401)))
     spec = _register_cloud_tool(clean_registry, "bad-key-tool")
 
-    with pytest.raises(PermissionError, match="appears to be invalid"):
+    with pytest.raises(PermissionError, match="couldn't validate"):
         spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
 
 
