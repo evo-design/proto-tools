@@ -36,9 +36,9 @@ Use this to redesign a natural protein or to generate sequences for a de novo ba
 #### Usage Tips
 
 - **`temperature` defaults to `1.0`, rather than the `0.1` used by the other inverse-folding tools.** ESM-IF1's reference inference samples at `1.0`, and this toolkit retains that default, so its designs are more diverse than those produced by the backbone-MPNN models. Lower it toward `0.1` for conservative, near-greedy designs, and raise it for greater variation.
-- **`batch_size` trades GPU memory against throughput.** It defaults to `num_sequences_per_structure`, so all requested sequences are generated in a single forward pass. Increase it to generate more sequences per pass and improve throughput. Decrease it to lower peak GPU memory when a large request or long backbone exhausts memory.
+- **`batch_size` controls how many sequences are produced per worker dispatch.** It defaults to `num_sequences_per_structure`, so the whole request is handled in one dispatch; the model still decodes the sequences one at a time. Lower it to bound peak GPU memory when a large request or long backbone exhausts memory.
 - **Non-redesigned chains still shape the design.** Chains you do not select stay as fixed structural context rather than being ignored, so designing one chain of a complex accounts for its partners. `fixed_positions` is counted from 1, not 0 to follow biological conventions for residue selection.
-- **Output is structured per design.** `output.design_sets[i].complexes[j]` is an `ESMIF1Design`; the designed target sequence is `design.designed_chains[0].sequence` and the log-likelihood is `design.metrics["log_likelihood"]`. `ESMIF1Designs` are a `Complex` subclass and can be passed directly to structure predictors.
+- **Output is structured per design.** `output.design_sets[i].complexes[j]` is an `ESMIF1Design`; the designed target sequence is `design.designed_chains[0].sequence` and the log-likelihood is `design.metrics["log_likelihood"]`. `ESMIF1Design` is a `Complex` subclass and can be passed directly to structure predictors.
 
 ### ESM-IF1 Scoring (`esm-if1-score`)
 

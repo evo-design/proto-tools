@@ -586,7 +586,7 @@ class MalinoisGradientOutput(GradientOutput):
             Per-sample values are available in ``sample_metrics``.
         sample_metrics (list[MalinoisGradientSampleMetrics]): Per-sample metric
             containers with scalar loss and raw cell-type scores.
-        metrics (dict[str, Any]): Legacy metadata bundle from the standalone
+        metrics (dict[str, Any]): Auxiliary metadata bundle from the standalone
             worker, including raw scores, objective-term metadata, and runtime
             relaxation parameters.
         vocab (list[str]): DNA column ordering for logits and gradient.
@@ -605,7 +605,7 @@ class MalinoisGradientOutput(GradientOutput):
 
     @model_validator(mode="after")
     def populate_sample_metrics(self) -> "MalinoisGradientOutput":
-        """Populate metric containers from the legacy metadata payload."""
+        """Populate metric containers from the standalone metrics payload."""
         if not self.sample_metrics:
             self.sample_metrics = _build_gradient_sample_metrics(self.metrics)
         return self

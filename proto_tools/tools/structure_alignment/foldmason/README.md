@@ -60,4 +60,4 @@ This tool is appropriate for assigning a structural quality score to an MSA prod
 These apply to every FoldMason tool in this toolkit (`foldmason-msa`, `foldmason-score-msa`).
 
 - **FoldMason runs on CPU only.** Neither the remote service nor the local program uses a GPU. Local-mode runtime grows with both the number of structures and their lengths, since each progressive merge step performs a pairwise structural alignment.
-- **Inputs are PDB-format text strings.** Each entry is written to disk as `{structure_id}.pdb` before alignment, so each structure should be supplied as PDB-format text in `structures`. The upstream FoldMason CLI also accepts mmCIF, but this toolkit does not currently support mmCIF input.
+- **Inputs are normalised to PDB before alignment.** Each `structures` entry may be a `Structure`, a file path, or raw PDB/CIF text; every entry is serialised to PDB and written to disk as `{structure_id}.pdb` before FoldMason runs.

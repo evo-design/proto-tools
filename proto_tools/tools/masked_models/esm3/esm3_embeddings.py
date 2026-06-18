@@ -55,8 +55,8 @@ class ESM3EmbeddingsOutput(MaskedModelEmbeddingsOutput):
 class ESM3EmbeddingsConfig(MaskedModelEmbeddingsConfig):
     """Configuration for ESM3 protein language model embedding extraction.
 
-    ESM3 is a generative protein language model from EvolutionaryScale that can perform
-    both embedding extraction and structure prediction.
+    ESM3 is a generative protein language model from EvolutionaryScale; this tool uses
+    it to extract mean-pooled embeddings and optional per-position logits.
 
     Inherits from ``MaskedModelEmbeddingsConfig``.
 
@@ -136,11 +136,9 @@ def run_esm3_embeddings(
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        ESM3EmbeddingsOutput: Structured output containing:
-            - ``mean_embeddings``: Mean-pooled embeddings for each sequence
-            - ``logits``: Per-position amino acid logits for each sequence
-            - ``attention_masks``: Binary masks for valid positions
-            - ``num_sequences``: Number of sequences processed
+        ESM3EmbeddingsOutput: ``results`` is a list of ``SequenceEmbedding``
+            (one per input), each with ``mean_embedding``, ``attention_mask``,
+            and optional per-position ``logits``; run metadata is in ``metadata``.
 
     See Also:
         - ESM3 GitHub Repository: https://github.com/evolutionaryscale/esm

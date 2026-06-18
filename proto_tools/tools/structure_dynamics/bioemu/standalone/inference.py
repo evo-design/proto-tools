@@ -134,7 +134,7 @@ class BioEmuModel:
                     score_model=self.score_model,
                     sequence=sequence,
                     sdes=self.sdes,
-                    batch_size=min(adjusted_batch_size, n),
+                    batch_size=n,
                     seed=batch_seed,
                     denoiser=denoiser,
                     cache_embeds_dir=cache_embeds_dir,

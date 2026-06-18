@@ -9,7 +9,7 @@
 
 ## Overview
 
-Published in 2023, ESM-2 is Meta AI's second-generation of protein masked langauge models. Spanning six checkpoints ranging in scale from 8M to 15B parameters, the ESM-2 model family has become a widely used tool for protein embedding generation, and zero-shot variant-effect prediction via masked log-probabilities.
+Published in 2023, ESM-2 is Meta AI's second-generation of protein masked language models. Spanning six checkpoints ranging in scale from 8M to 15B parameters, the ESM-2 model family has become a widely used tool for protein embedding generation, and zero-shot variant-effect prediction via masked log-probabilities.
 
 ## Background
 

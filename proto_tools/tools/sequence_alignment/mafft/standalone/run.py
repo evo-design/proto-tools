@@ -12,7 +12,8 @@ Input JSON format:
     "sequence_ids": ["seq_0", "seq_1", ...],  // optional
     "align_method": "auto",  // auto, localpair, globalpair, genafpair
     "max_iterations": 0,
-    "threads": 1
+    "threads": 1,
+    "extra_args": ["--reorder"]  // optional, verbatim mafft CLI tokens
 }
 
 Output JSON format:

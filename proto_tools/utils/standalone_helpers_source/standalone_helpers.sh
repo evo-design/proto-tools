@@ -3,7 +3,7 @@
 # Shared shell helper functions for tool standalone setup scripts.
 #
 # This file is automatically copied to each tool's standalone/ directory
-# at runtime alongside standalone_helpers.py.
+# at runtime alongside the standalone_helpers/ Python package.
 #
 # DO NOT EDIT copies in tools/*/standalone/ — they are overwritten.
 # Edit the source at: utils/standalone_helpers_source/standalone_helpers.sh
@@ -16,7 +16,9 @@
 #   proto_install_jax [TOOL_PREFIX]
 #   proto_install_cuda_toolkit [constraint] [extra_packages...]
 #   proto_resolve_weights_dir <toolkit>     -> sets $WEIGHTS_DIR
+#   proto_resolve_asset_availability <toolkit> <pattern> [license_url] [asset_kind] [hint]  -> sets $ASSET_DIR
 #   proto_check_gated_hf_repo <repo_id> <license_url> [probe_file]
+#   proto_download_gdrive <file_id> <dest>
 # ============================================================================
 
 
@@ -133,7 +135,7 @@ proto_install_cuda_toolkit() {
 # proto_resolve_weights_dir <toolkit>
 #
 # Set the shell variable WEIGHTS_DIR based on PROTO_MODEL_CACHE.
-# Mirrors the Python resolve_weights_dir() logic in standalone_helpers.py.
+# Mirrors the Python resolve_weights_dir() logic in standalone_helpers/weights.py.
 #
 # Priority:
 #   1. PROTO_{TOOL_NAME}_WEIGHTS_DIR (per-tool override)

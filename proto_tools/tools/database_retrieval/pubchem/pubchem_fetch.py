@@ -339,9 +339,9 @@ def run_pubchem_fetch(
 
     Args:
         inputs (PubChemFetchInput): Exactly one identifier (cid / name / smiles
-            / inchikey).
-        config (PubChemFetchConfig): Properties to request, synonym toggle, HTTP
-            retry settings.
+            / inchi / inchikey).
+        config (PubChemFetchConfig): Properties to request and the synonym,
+            description, and BioAssay-ID toggles.
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:

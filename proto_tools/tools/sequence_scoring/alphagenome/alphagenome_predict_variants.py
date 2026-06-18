@@ -149,7 +149,7 @@ def example_input() -> Any:
     description="Predict variant effects in batch using AlphaGenome",
     uses_gpu=True,
     pin_visible_devices=True,
-    gpu_only=True,  # worker can't safely be reused
+    gpu_only=True,  # model can't load on CPU; reject device='cpu' and respawn (not CPU-offload) on eviction
     example_input=example_input,
     iterable_input_fields=["variants"],
     iterable_output_field="results",

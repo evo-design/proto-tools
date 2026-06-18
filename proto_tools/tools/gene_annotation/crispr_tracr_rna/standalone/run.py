@@ -442,11 +442,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     return run_crispr_tracr_rna(input_dict)
 
 
-# =============================================================================
-# Entry point (called by ToolInstance)
-# =============================================================================
-
-
 def to_device(device: str) -> dict[str, Any]:
     """Passthrough for CLI tool - automatically unloads after each call."""
     # CLI tool that spawns subprocesses and naturally unloads after each call

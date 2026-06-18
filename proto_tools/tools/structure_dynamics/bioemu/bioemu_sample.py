@@ -171,7 +171,7 @@ class BioEmuConfig(StructurePredictionConfig):
         output_dir (str | None): Optional directory for raw BioEmu outputs.
         msa_search_config (Mmseqs2HomologySearchConfig | None): MMseqs2 homology
             search config (MSA generation). Defaults are used when ``None``.
-        include_pae_matrix (bool): Inherited but unused (no PAE in conformational sampling).
+        include_pae_matrix (bool): Redeclared but unused (no PAE in conformational sampling).
         timeout (int | None): Maximum execution time in seconds. Default: 3600.
         device (str): Inference device (inherited).
         verbose (bool): Verbose logging toggle (inherited).

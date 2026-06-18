@@ -436,9 +436,8 @@ def run_crispr_tracr_rna(
     """Predict tracrRNA sequences from nucleotide CRISPR loci.
 
     Uses the CRISPRtracrRNA tool from the Backofen Lab to predict tracrRNA
-    sequences associated with CRISPR loci. This is used as a Stage 3 filter
-    in the Cas9 filtering pipeline to confirm that candidate sequences
-    contain functional tracrRNA binding sites.
+    sequences associated with CRISPR loci, confirming and characterizing
+    Type II (Cas9) and tracrRNA-bearing Type V (Cas12) CRISPR-Cas systems.
 
     Args:
         inputs (CrisprTracrRNAInput): Validated input containing nucleotide sequences.

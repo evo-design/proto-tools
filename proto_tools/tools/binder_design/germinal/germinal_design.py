@@ -479,8 +479,8 @@ class GerminalConfig(BaseConfig):
             filter YAML values. Schema:
             ``{"initial" | "final": {<filter_name>: {"value": <v>, "operator": <op>}}}``.
             Merged on top of the design_type preset.
-        device (str): Device for the Germinal subprocess. Forced to ``"cuda"``;
-            CPU is not supported by the upstream pipeline.
+        device (str): Device for the Germinal subprocess. CPU is not supported
+            by the upstream pipeline; leave as ``"cuda"``.
         output_dir (str | None): Optional persistent output directory. If
             unset, a temp dir is used and discarded after the call.
     """
@@ -567,7 +567,7 @@ class GerminalConfig(BaseConfig):
     device: str = ConfigField(
         title="Device",
         default="cuda",
-        description="Device for the Germinal subprocess (forced 'cuda'; CPU not supported).",
+        description="Device for the Germinal subprocess; CPU is unsupported, leave as 'cuda'.",
         include_in_key=False,
     )
     output_dir: str | None = ConfigField(

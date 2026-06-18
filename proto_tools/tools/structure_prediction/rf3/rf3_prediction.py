@@ -73,12 +73,12 @@ class RF3Metrics(Metrics):
         chain_ptm (list[float]): Per-chain mean pLDDT in ``[0, 1]`` (note: upstream
             uses the ``chain_ptm`` key for pLDDT despite the name; see comment in
             ``standalone/inference.py``). Always present.
-        chain_pair_pae (list[list[float]]): Upper-triangular n-by-n chain-pair PAE
-            matrix in Å. Always present.
-        chain_pair_pae_min (list[list[float]]): Per-pair minimum-PAE aggregate
-            in Å. Always present.
-        chain_pair_pde (list[list[float]]): Upper-triangular n-by-n chain-pair PDE
-            matrix in Å. Always present.
+        chain_pair_pae (list[list[float]]): Symmetric n-by-n chain-pair PAE
+            matrix in Å (diagonal 0.0). Always present.
+        chain_pair_pae_min (list[list[float]]): Symmetric n-by-n per-pair
+            minimum-PAE matrix in Å. Always present.
+        chain_pair_pde (list[list[float]]): Symmetric n-by-n chain-pair PDE
+            matrix in Å (diagonal 0.0). Always present.
         chain_pair_pde_min (list[list[float]]): Per-pair minimum-PDE aggregate
             in Å. Always present.
         has_clash (bool): True if the predicted structure contains atom clashes.

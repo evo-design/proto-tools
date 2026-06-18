@@ -40,7 +40,7 @@ class ResidueEnergy(BaseModel):
     When a chain selection is used, the reported energy is the residue's
     contribution *within the full complex* (including pair interactions with
     unselected chains), not the energy of the chain scored in isolation. See
-    :class:`EnergyResult` for details.
+    :class:`PyRosettaEnergyMetrics` for details.
 
     Attributes:
         chain_id (str): Chain identifier.
@@ -184,9 +184,9 @@ class PyRosettaEnergyOutput(BaseToolOutput):
 
     Attributes:
         results (list[PyRosettaEnergyMetrics]): Energy scores, one per input
-            structure. Each entry carries ``total_energy`` + ``relaxed`` as
-            specced metrics plus ``energy_terms`` and ``per_residue`` as
-            declared non-metric fields.
+            structure. Each entry carries ``total_energy`` as a specced metric
+            plus ``energy_terms`` and ``per_residue`` as declared non-metric
+            fields.
     """
 
     results: list[PyRosettaEnergyMetrics] = Field(

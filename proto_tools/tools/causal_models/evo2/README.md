@@ -44,7 +44,7 @@ This tool produces candidate DNA sequences for downstream design and screening, 
 
 ### Evo2 Scoring (`evo2-score`)
 
-Scores existing DNA sequences under the Evo2 model. For each sequence, it computes the model's predicted probability of every nucleotide given the preceding nucleotides and aggregates these into a log-likelihood, an average log-likelihood per nucleotide, and a perplexity. Optionally returns the per-position logits and the token vocabulary.
+Scores existing DNA sequences under the Evo2 model. For each sequence, it computes the model's predicted probability of every nucleotide given the preceding nucleotides and aggregates these into a log-likelihood, an average log-likelihood per nucleotide, and a perplexity. Optionally returns the per-position logits, alongside the token vocabulary giving their column order.
 
 #### Applications
 

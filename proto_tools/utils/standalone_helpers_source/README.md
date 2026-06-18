@@ -26,7 +26,8 @@ have the full `proto_tools` package importable.
 - **`standalone_helpers.sh`** — Bash helper functions for `setup.sh` scripts.
   Sourced via `source standalone_helpers.sh`. Provides `proto_install_pytorch`,
   `proto_install_jax`, `proto_install_cuda_toolkit`, `proto_resolve_weights_dir`,
-  and `proto_check_gated_hf_repo`.
+  `proto_resolve_asset_availability`, `proto_check_gated_hf_repo`, and
+  `proto_download_gdrive`.
 
 ## Editing
 

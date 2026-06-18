@@ -6,6 +6,6 @@ huggingface:
   - https://huggingface.co/Profluent-Bio/progen3-762m
   - https://huggingface.co/Profluent-Bio/progen3-1b
   - https://huggingface.co/Profluent-Bio/progen3-3b
-preprint: https://doi.org/10.1101/2025.05.16.654471
+preprint: https://doi.org/10.1101/2025.04.15.649055
 organizations:
   - Profluent

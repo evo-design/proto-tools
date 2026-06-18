@@ -15,9 +15,6 @@ if ! command -v "$CXX" &>/dev/null; then
     exit 1
 fi
 
-echo "Installing uv package manager..."
-pip install uv
-
 echo "Compiling USalign from source (using $CXX)..."
 # Clone USalign repo
 BUILD_DIR=$(mktemp -d)

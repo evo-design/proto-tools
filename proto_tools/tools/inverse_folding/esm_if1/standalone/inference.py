@@ -159,7 +159,7 @@ class ESMIF1Model:
                 1-indexed positions to keep fixed at native residue identity.
 
         Returns:
-            Dictionary with keys: sequences, log_likelihoods
+            Dictionary with keys: sequences, metrics
         """
         if not self._loaded or self._weights_variant != weights_variant:
             self.load(device, weights_variant, verbose)

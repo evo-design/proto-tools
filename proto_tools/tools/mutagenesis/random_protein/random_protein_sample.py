@@ -173,7 +173,6 @@ def run_random_protein_sample(
     Args:
         inputs (RandomProteinSampleInput): Protein sequences with ``_`` at designable positions.
         config (RandomProteinSampleConfig): Sampling configuration.
-
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
