@@ -91,6 +91,10 @@ def test_masking_strategy_seeded():
 #   re-prediction internally, inheriting the same JAX/CUDA non-determinism as
 #   alphafold2/3 above. Cross-run drift changes which trajectory filters fire,
 #   so even the ``pipeline_stats`` keys differ between runs; both variants fail.
+# - bindcraft-design, freebindcraft-design: AF2 hallucination + MPNN pipeline
+#   (same ColabDesign/JAX non-determinism as germinal-design); BindCraft also
+#   samples binder length + trajectory seed from an unseeded numpy RNG, so
+#   cross-call runs diverge in both trajectory choice and filter outcomes.
 _SEED_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {
         "rfdiffusion3-design",
@@ -99,6 +103,8 @@ _SEED_EXCLUDED_KEYS: frozenset[str] = frozenset(
         "alphafold2-gradient",
         "alphafold3-prediction",
         "germinal-design",
+        "bindcraft-design",
+        "freebindcraft-design",
     }
 )
 
@@ -149,9 +155,6 @@ _SEED_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
 #   guarantee bit-exact behaviour across processes.
 # - esmfold2-prediction: ~7 mÅ atom drift across fresh subprocesses despite
 #   matching seeds and standard determinism flags. Root cause not isolated.
-# - bindcraft-design: intermittently diverges across fresh subprocesses
-#   (cross-process CUDA kernel-numerics drift). The persistent variant is
-#   reproducible.
 # - proteinmpnn-sample: autoregressive JAX sampling — per-item seeds are
 #   deterministic, but cross-process kernel numerics flip a few residues at
 #   near-ties. Bounded + bimodal (two fixed sequences ~4 residues apart, same
@@ -171,7 +174,6 @@ _SEED_NON_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
         "alphagenome-score-ism-variants-batch",
         "alphagenome-score-variants",
         "esmfold2-prediction",
-        "bindcraft-design",
         "proteinmpnn-sample",
         "fampnn-pack",
     }
