@@ -535,29 +535,13 @@ Do not optimize isolated parts and assume the assembled circuit will work.
 
 ---
 
-## 28. Metabolic Pathway Design Defaults
-
-Use metabolic pathway design when the objective is to produce, consume, transform, or regulate a target compound through a set of enzymatic steps.
-
-Pathway design is a system-level problem. Choosing enzymes by annotation is not enough.
-
-Appropriate proposal methods include retrosynthetic pathway search, enzyme database search, reaction rule mining, host-aware enzyme selection, flux-balance analysis, kinetic modeling when parameters are available, thermodynamic feasibility analysis, cofactor balancing, and combinatorial pathway variant design.
-
-Required validation includes reaction feasibility, pathway completeness, thermodynamic favorability, enzyme availability, substrate specificity, cofactor balance, host compatibility, transport requirements, toxicity of intermediates or products, competing pathways, side products, expression burden, and pathway flux.
-
-When designing pathway DNA, also validate promoter/RBS/terminator choices, gene order, codon optimization, assembly constraints, and host burden.
-
-Do not present a pathway as functional because every reaction has an enzyme annotation. Enzyme promiscuity, expression, localization, cofactors, and host metabolism can dominate success or failure.
-
----
-
-## 29. Synthetic Genome Design Defaults
+## 26. Synthetic Genome Design Defaults
 
 Use synthetic genome design workflows when the objective is genome-scale recoding, minimal genome design, large-scale refactoring, synthetic chromosome design, or multi-locus genome engineering.
 
 Synthetic genome design is high-scope and requires stricter safety, viability, and review assumptions than single-sequence design.
 
-Appropriate proposal methods include genome-scale recoding tools, constraint-aware synonymous rewriting, essential-gene preservation, genome minimization analysis, repeat and recombination reduction, regulatory architecture preservation, and synthesis/assembly planning.
+Appropriate proposal methods include following methods outlined it the circuit and operon design section, with additional emphasis of choosing natural genomic sequences as starting points and leveraging genome-scale recoding tools, constraint-aware synonymous rewriting, essential-gene preservation, genome minimization analysis, repeat and recombination reduction, regulatory architecture preservation, and synthesis/assembly planning.
 
 Required validation includes safety and scope review, essentiality analysis, preservation of required genes and regulatory elements, codon usage and translation constraints, repeat and recombination checks, mobile element screening, restriction-site constraints, operon and gene-neighborhood preservation when relevant, replication/segregation features, genome stability, synthesis constraints, assembly constraints, and host viability assumptions.
 
@@ -567,7 +551,7 @@ Do not proceed with genome-scale designs that create, enhance, or enable harmful
 
 ---
 
-## 30. Novelty And Similarity Defaults
+## 27. Novelty And Similarity Defaults
 
 Choose novelty checks based on what could make the candidate non-novel.
 
@@ -591,7 +575,7 @@ Use FoldMason when structural multiple sequence alignment is needed across relat
 
 ---
 
-## 31. Handling Predictor Disagreement
+## 28. Handling Predictor Disagreement
 
 If a screening predictor and a final validator disagree, trust the final validator for final ranking.
 
@@ -627,11 +611,12 @@ If disagreement remains unresolved, mark the candidate as uncertain rather than 
 
 ---
 
-## 32. Fallback Rules
+## 29. Fallback Rules
 
 If the preferred generator is unavailable:
 
 1. Use the closest generator that matches the same output object and conditioning.
+2. Always prefer using a model-based generator over uniform mutation unless starting from a biologically-grounded starting point
 2. State that the preferred generator was unavailable.
 3. Do not imply the fallback has equivalent confidence unless validated.
 
@@ -663,7 +648,7 @@ If the design loop fails to produce enough passing candidates:
 
 ---
 
-## 33. Rigor Modes
+## 30. Rigor Modes
 
 ### Fast Mode
 
@@ -707,7 +692,7 @@ Workflow:
 
 ---
 
-## 34. Execution Pattern For Design Scripts
+## 31. Execution Pattern For Design Scripts
 
 For design scripts, prefer this execution pattern:
 
@@ -727,7 +712,7 @@ A generated script should not be considered ready for a long run until it import
 
 ---
 
-## 35. Minimum Validation By Task
+## 32. Minimum Validation By Task
 
 A final protein binder candidate requires target-conditioned proposal or explicit interface design, complex prediction, interface confidence metrics, hotspot/contact checks when applicable, monomer plausibility, sequence novelty check, specificity check when relevant, and stated failure modes.
 
@@ -761,13 +746,7 @@ A final structured RNA candidate requires target structure definition, MFE struc
 
 A final aptamer candidate requires target definition, predicted structure, binding motif or docking validation when available, specificity checks, folding ensemble checks, synthesis constraints, and experimental binding validation for final claims.
 
-A final ribozyme candidate requires catalytic objective definition, catalytic motif preservation, substrate or cleavage-site constraints, structure and ensemble validation, catalytic geometry checks when available, and experimental assay validation for final claims.
-
-A final riboswitch candidate requires sensing-domain validation, expression-platform validation, ligand-bound and ligand-free state modeling, switching dynamic range, leakage assessment, and reporter or functional validation for final claims.
-
 A final operon/circuit candidate requires part list and ordering, part compatibility checks, expression balance modeling, burden checks, crosstalk checks, dynamic simulation when relevant, assembly constraints, and host-context assumptions.
-
-A final metabolic pathway candidate requires reaction sequence, enzyme candidates, thermodynamic feasibility, flux or kinetic analysis when available, cofactor balance, toxicity/side-product checks, host compatibility, and expression/assembly plan.
 
 A final synthetic genome candidate requires safety and scope review, essentiality analysis, regulatory architecture checks, genome stability checks, repeat/mobile-element screening, synthesis and assembly constraints, viability assumptions, and explicit review of risks introduced by the design.
 
@@ -775,7 +754,7 @@ A final small-molecule candidate requires molecule-native generation or retrieva
 
 ---
 
-## 36. Confidence Labels
+## 33. Confidence Labels
 
 ### Low confidence
 
@@ -795,7 +774,7 @@ Use “high computational confidence” instead.
 
 ---
 
-## 37. Common Failure Modes To Avoid
+## 34. Common Failure Modes To Avoid
 
 Avoid these mistakes:
 
@@ -855,7 +834,7 @@ The remedy is general:
 
 ---
 
-## 38. Source Anchors
+## 35. Source Anchors
 
 This guidance is based on proto-tools local docs and the following primary or official sources:
 
