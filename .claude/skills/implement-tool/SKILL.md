@@ -46,7 +46,7 @@ Phase 1: Research → Phase 2: Contract → Phase 3: Fan-out (5 parallel agents)
 ## Phase 0: Parse Input
 
 The user provides EITHER:
-- A **GitHub issue URL/number** (e.g., `#<issue-number>` or `https://github.com/proto-bio/proto-tools/issues/<issue-number>`)
+- A **GitHub issue URL/number** (e.g., `#<issue-number>` or `https://github.com/evo-design/proto-tools/issues/<issue-number>`)
 - A **tool name + source repo** (e.g., "ESM-IF from https://github.com/facebookresearch/esm")
 
 **If a GitHub issue is provided:**

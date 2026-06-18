@@ -8,7 +8,7 @@ NOTE: this is UniProt's *current-release* URL, which advances when UniProt
 ships a new release. The ``2026_01`` in the name records the release this
 entry was pinned against (60,315,044 clusters, observed 2026-05-26). Re-pin
 the name + ``total_*_bytes`` when re-provisioning against a newer UniProt
-release. Built into an MMseqs2 GPU-padded DB the same way [[uniref90-2022-05]].
+release. Built into an MMseqs2 GPU-padded DB the same way ``uniref90-2022-05``.
 """
 
 from proto_tools.databases.registry import (

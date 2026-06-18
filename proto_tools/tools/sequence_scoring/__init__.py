@@ -47,6 +47,7 @@ from proto_tools.tools.sequence_scoring.borzoi import (
     BorzoiOutput,
     BorzoiPredictionResult,
     SequenceTargetRange,
+    SequenceWindow,
     run_borzoi,
     run_borzoi_ensemble,
 )
@@ -149,6 +150,7 @@ __all__ = [
     "run_alphagenome_score_ism_variants_batch",
     # Borzoi
     "SequenceTargetRange",
+    "SequenceWindow",
     "BorzoiInput",
     "BorzoiConfig",
     "BorzoiOutput",

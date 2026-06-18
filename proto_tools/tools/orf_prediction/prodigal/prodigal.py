@@ -352,9 +352,7 @@ def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig, insta
         ProdigalOutput: Structured output
 
     Raises:
-        ValueError: If input sequences are empty, contain invalid DNA characters,
-            or are too short for reliable prediction.
-        RuntimeError: If Prodigal prediction fails for any sequence.
+        ValueError: If input sequences are empty or contain invalid DNA characters.
 
     See Also:
         - Prodigal paper: https://doi.org/10.1186/1471-2105-11-119

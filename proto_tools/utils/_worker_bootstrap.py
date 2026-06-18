@@ -220,7 +220,7 @@ def _send_response(json_out: Any, response_json: str) -> None:
         response_json (str): Serialized JSON string to send.
     """
     if len(response_json) > _FILE_FALLBACK_THRESHOLD:
-        fd, path = tempfile.mkstemp(suffix=".json", prefix="bpt_worker_")
+        fd, path = tempfile.mkstemp(suffix=".json", prefix="proto_worker_")
         try:
             with os.fdopen(fd, "w") as f:
                 f.write(response_json)

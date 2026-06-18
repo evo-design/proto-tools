@@ -70,7 +70,7 @@ class ChainPairScores(BaseModel):
         title="pDockQ", description="pDockQ interface score (Bryant 2022); 0-1, higher indicates a better interface"
     )
     pdockq2: float = Field(
-        title="pDockQ2", description="pDockQ2 interface score (Zhu 2023); 0-1, higher indicates a better interface"
+        title="pDockQ2", description="pDockQ2 interface score (Zhu 2023); 0-1.5, higher indicates a better interface"
     )
     lis: float = Field(
         title="LIS", description="Local Interaction Score (Kim 2024); higher values indicate more interface contact"

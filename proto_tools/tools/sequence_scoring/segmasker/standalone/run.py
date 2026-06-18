@@ -37,7 +37,7 @@ def run_segmasker(input_data: dict[str, Any]) -> dict[str, Any]:
         input_data: Dict with keys: sequences, config
 
     Returns:
-        Dict with keys: fractions, counts, lengths, results_data
+        Dict with keys: fractions, counts, lengths
     """
     from Bio import SeqIO
 
@@ -57,15 +57,6 @@ def run_segmasker(input_data: dict[str, Any]) -> dict[str, Any]:
             "fractions": [0.0] * len(sequences),
             "counts": [0] * len(sequences),
             "lengths": seq_lengths,
-            "results_data": [
-                {
-                    "sequence_id": f"seq_{i}",
-                    "length": 0,
-                    "lowercase_count": 0,
-                    "low_complexity_fraction": 0.0,
-                }
-                for i in range(len(sequences))
-            ],
         }
 
     # Create temporary FASTA with all sequences
@@ -104,20 +95,11 @@ def run_segmasker(input_data: dict[str, Any]) -> dict[str, Any]:
 
         fractions: list[float] = []
         counts: list[int] = []
-        results_data: list[dict[str, Any]] = []
 
-        for seq_idx, (original_seq, record) in enumerate(zip(sequences, seq_records, strict=False)):
+        for original_seq, record in zip(sequences, seq_records, strict=False):
             if len(original_seq) == 0:
                 fractions.append(0.0)
                 counts.append(0)
-                results_data.append(
-                    {
-                        "sequence_id": f"seq_{seq_idx}",
-                        "length": 0,
-                        "lowercase_count": 0,
-                        "low_complexity_fraction": 0.0,
-                    }
-                )
                 continue
 
             masked_seq = str(record.seq)
@@ -126,20 +108,11 @@ def run_segmasker(input_data: dict[str, Any]) -> dict[str, Any]:
 
             fractions.append(fraction)
             counts.append(lowercase_count)
-            results_data.append(
-                {
-                    "sequence_id": f"seq_{seq_idx}",
-                    "length": len(original_seq),
-                    "lowercase_count": lowercase_count,
-                    "low_complexity_fraction": fraction,
-                }
-            )
 
         return {
             "fractions": fractions,
             "counts": counts,
             "lengths": seq_lengths,
-            "results_data": results_data,
         }
 
     except subprocess.TimeoutExpired as e:

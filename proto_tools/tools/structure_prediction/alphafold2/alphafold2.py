@@ -89,7 +89,7 @@ class AlphaFold2Input(StructurePredictionInput):
         """Prepare complexes for AlphaFold2 inference.
 
         Returns:
-            list[dict[str, Any]]: List of dicts with keys: chains, seq_lengths, num_chains, total_residues
+            list[dict[str, Any]]: List of dicts with keys: complex_idx, chains, seq_lengths, num_chains, total_residues
         """
         prepared_complexes = []
         for comp_idx, comp in enumerate(self.complexes):
@@ -196,8 +196,8 @@ class AlphaFold2Config(MSAStructurePredictionConfig):
 
         include_pae_matrix (bool): Inherited. Default: ``False``.
 
-        verbose: Whether to print status messages during execution. Inherited
-            from ``BaseConfig``. Default: ``False``.
+        verbose: Verbosity level (0=quiet, 1=info, 2=debug, 3=raw subprocess
+            stderr). Inherited from ``BaseConfig``. Default: ``0``.
     """
 
     num_recycles: int = ConfigField(

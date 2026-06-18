@@ -87,7 +87,6 @@ class ESMFoldInput(StructurePredictionInput):
         ESMFold architectural constraint (ESM2 uses rotary positions, so it has no fixed cap).
     """
 
-    # ESMFold only supports proteins
     SUPPORTED_ENTITY_TYPES: ClassVar[set[str]] = {"protein"}
     ALLOWS_CHAIN_MODIFICATIONS = False
 

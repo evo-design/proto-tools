@@ -30,13 +30,13 @@ class MockPyTorchMultiGPUToolInput(BaseToolInput):
     """Input for mock multi-GPU tool.
 
     Attributes:
-        data (list[float]): Input data to pass through both models.
+        data (list[float]): 4-element float vector passed through both models.
     """
 
     data: list[float] = InputField(
         default=[1.0, 2.0, 3.0, 4.0],
         title="Data",
-        description="Input data to pass through both models (any length)",
+        description="Input data to pass through both models (4-element float vector)",
     )
 
 

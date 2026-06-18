@@ -24,9 +24,9 @@ from proto_tools.utils import InputField, ToolInstance
 class PyPhmmerInput(PyHmmerInput):
     """Input object for PyHMMER phmmer (protein sequences vs protein sequences).
 
-    This class defines the input parameters for performing iterative protein
-    sequence searches, where query sequences are compared directly against target
-    sequences without requiring pre-built HMM profiles.
+    This class defines the input parameters for a single-pass protein search,
+    where a temporary HMM is built from each query sequence and searched directly
+    against the target sequences without requiring a pre-built HMM profile.
 
     Attributes:
         sequences (list[str]): Query protein sequences. Inherited from
@@ -84,10 +84,10 @@ def example_input() -> Any:
 def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig, instance: Any = None) -> PyPhmmerOutput:
     """Search protein sequences against protein database using PyHMMER.
 
-    This function implements the phmmer algorithm, which performs iterative
-    protein-protein searches by building temporary HMM profiles from query
-    sequences on-the-fly. This is useful for finding homologous sequences without
-    requiring pre-built HMM profiles.
+    This function implements the phmmer algorithm, a single-pass protein-protein
+    search that builds a temporary HMM profile from each query sequence on-the-fly.
+    This is useful for finding homologous sequences without requiring pre-built
+    HMM profiles.
 
     Args:
         inputs (PyPhmmerInput): Validated PyHMMER phmmer input containing both
@@ -109,7 +109,7 @@ def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig, instance: 
         RuntimeError: If PyHMMER search execution fails.
 
     Examples:
-        >>> # Search for similar sequences to of query proteins
+        >>> # Search for sequences similar to the query proteins
         >>> inputs = PyPhmmerInput(
         ...     sequences=["MVLSPADKTNVKAAW"], target_sequences=["MVLSPADKTN", "ATCGATCGAT", "MVLSPADKTNVK"]
         ... )
@@ -117,9 +117,9 @@ def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig, instance: 
         >>> result = run_pyhmmer_phmmer(inputs, config)
         >>> print(f"Found {result.num_sequence_hits} similar sequences")
         >>>
-        >>> # Find all hits with >80% identity
+        >>> # Keep only highly significant hits
         >>> if result.sequence_hits:
-        ...     high_identity = [hit for hit in result.sequence_hits if hit.evalue < 1e-10]
+        ...     significant = [hit for hit in result.sequence_hits if hit.evalue < 1e-10]
     """
     output_data = ToolInstance.dispatch(
         "pyhmmer",

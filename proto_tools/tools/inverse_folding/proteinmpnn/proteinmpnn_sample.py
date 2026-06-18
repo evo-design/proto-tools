@@ -46,7 +46,7 @@ class ProteinMPNNSampleConfig(InverseFoldingConfig):
             Defaults to num_sequences_per_structure.
         temperature (float): Controls randomness in sampling from logits.
         excluded_amino_acids (list[AminoAcid] | None): One-letter codes of amino acids to exclude.
-        seed (int): Random seed to use for sampling.
+        seed (int | None): Random seed to use for sampling; None draws a fresh seed.
         model_choice (Literal['proteinmpnn', 'v_48_002', 'v_48_010', 'v_48_030', 'abmpnn', 'soluble']): Model
             weights. ``"proteinmpnn"`` is ColabDesign's default ``v_48_020`` (medium training noise). The
             ``v_48_*`` variants are the same architecture trained at different noise levels (002 / 010 / 030).
@@ -210,7 +210,6 @@ def run_proteinmpnn_sample(
     """
     design_sets: list[ProteinMPNNDesignSet] = []
 
-    # Local venv execution
     logger.debug("Using local venv for ProteinMPNN sampling")
 
     base_seed = config.seed if config.seed is not None else config.get_random_int()

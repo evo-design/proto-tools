@@ -1,4 +1,4 @@
-"""BioEmu protein dynamics simulation."""
+"""BioEmu protein conformational ensemble sampling."""
 
 from proto_tools.tools.structure_dynamics.bioemu.bioemu_sample import (
     BioEmuConfig,

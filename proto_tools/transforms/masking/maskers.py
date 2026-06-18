@@ -67,7 +67,7 @@ class Masker(ABC):
     supported_models: list[str] | None = None
 
     def __init__(self, strategy: Any) -> None:
-        """Initialize MyCustomMasker."""
+        """Store the owning MaskingStrategy."""
         self.strategy = strategy
 
     @abstractmethod
@@ -105,7 +105,7 @@ class RandomMasker(Masker):
         sequences: list[str],
         position_score_fn: Callable[..., Any] | None = None,  # noqa: ARG002 — required by abstract Masker interface
     ) -> list[list[float]]:
-        """Score a sequence at masked positions using the model."""
+        """Score all positions equally (uniform zero scores, no model)."""
         return [[0.0] * len(seq) for seq in sequences]
 
 

@@ -519,16 +519,17 @@ def run_sequence_fetch(
     sequence and structure retrieval.
 
     Routing priority (per request):
-        Protein: ``uniprot_id`` → ``protein_id`` / ``preferred_accession`` →
-            ``pdb_id`` → name search.
-        Genomic: ``genomic_coordinates`` → ``preferred_accession`` →
+        Protein: ``uniprot_id`` → ``protein_id`` / preferred accession
+            (``genbank_accession`` → ``refseq_accession`` →
+            ``additional_ids['accession']``) → ``pdb_id`` → name search.
+        Genomic: ``genomic_coordinates`` → preferred accession →
             name search → gene-locus fallback.
         ``additional_ids`` is consulted last; the key ``"accession"`` is
         used as a generic fallback when no typed override is set.
 
     Args:
         inputs (SequenceFetchInput): One or more sequence retrieval requests.
-        config (SequenceFetchConfig): Timeout and validation settings.
+        config (SequenceFetchConfig): Candidate-limit, type-check, and NCBI credential settings.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 

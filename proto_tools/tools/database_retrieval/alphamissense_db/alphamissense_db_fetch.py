@@ -1,4 +1,4 @@
-"""proto_tools/tools/database_retrieval/alphamissense/alphamissense_fetch.py.
+"""proto_tools/tools/database_retrieval/alphamissense_db/alphamissense_db_fetch.py.
 
 Fetches per-residue, per-substitution AlphaMissense pathogenicity scores for
 human proteins by UniProt accession, served as CSV via the AlphaFold

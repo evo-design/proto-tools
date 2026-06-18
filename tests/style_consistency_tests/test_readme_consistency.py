@@ -596,7 +596,7 @@ def test_expected_license_callouts_logic() -> None:
 def test_expected_license_callouts_data_block() -> None:
     """An optional ``data:`` block yields a data-resource callout (CC0 vs CC-BY)."""
     cc0 = {
-        "code": {"spdx": "Apache-2.0", "url": "https://github.com/proto-bio/proto-tools"},
+        "code": {"spdx": "Apache-2.0", "url": "https://github.com/evo-design/proto-tools"},
         "data": {
             "name": "the RCSB Protein Data Bank",
             "spdx": "CC0-1.0",
@@ -613,7 +613,7 @@ def test_expected_license_callouts_data_block() -> None:
     ]
 
     ccby = {
-        "code": {"spdx": "Apache-2.0", "url": "https://github.com/proto-bio/proto-tools"},
+        "code": {"spdx": "Apache-2.0", "url": "https://github.com/evo-design/proto-tools"},
         "data": {
             "name": "the AlphaFold Protein Structure Database",
             "spdx": "CC-BY-4.0",
@@ -634,7 +634,7 @@ def test_expected_license_callouts_data_block() -> None:
 def test_expected_license_callouts_data_custom() -> None:
     """data: with Custom/public-domain terms strips the wrapper and reads cleanly."""
     pd = {
-        "code": {"spdx": "Apache-2.0", "url": "https://github.com/proto-bio/proto-tools"},
+        "code": {"spdx": "Apache-2.0", "url": "https://github.com/evo-design/proto-tools"},
         "data": {
             "name": "NCBI's Entrez databases",
             "spdx": "Custom (U.S. Government public domain)",
@@ -651,7 +651,7 @@ def test_expected_license_callouts_data_custom() -> None:
     ]
 
     custom_attr = {
-        "code": {"spdx": "Apache-2.0", "url": "https://github.com/proto-bio/proto-tools"},
+        "code": {"spdx": "Apache-2.0", "url": "https://github.com/evo-design/proto-tools"},
         "data": {
             "name": "the Ensembl project",
             "spdx": "Custom (the EMBL-EBI Terms of Use)",
@@ -677,7 +677,7 @@ def test_expected_license_callouts_bundled_data_orchestrator() -> None:
     attribution-required source gets an inline clause.
     """
     orchestrator = {
-        "code": {"spdx": "Apache-2.0", "url": "https://github.com/proto-bio/proto-tools"},
+        "code": {"spdx": "Apache-2.0", "url": "https://github.com/evo-design/proto-tools"},
         "commercial_use": "yes",
         "attribution_required": False,
         "bundled_dependencies": [

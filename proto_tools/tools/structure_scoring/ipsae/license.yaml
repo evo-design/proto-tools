@@ -4,5 +4,5 @@ code:
 commercial_use: 'yes'
 redistribution: true
 attribution_required: false
-notes: ipSAE algorithm from Roney & Dunbrack (2024). proto-tools vendors the upstream reference script (DunbrackLab/IPSAE, MIT-licensed) via setup.sh into standalone/ipsae.py (gitignored); the wrapper code around it is proto-tools original.
+notes: ipSAE algorithm from Dunbrack (2025). proto-tools vendors the upstream reference script (DunbrackLab/IPSAE, MIT-licensed) via setup.sh into standalone/ipsae.py (gitignored); the wrapper code around it is proto-tools original.
 last_updated: '2026-05-01'

@@ -166,11 +166,14 @@ def run_esm2_embeddings(
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        ESM2EmbeddingsOutput: Structured output containing:
-            - ``mean_embeddings``: Mean-pooled embeddings for each sequence
-            - ``logits``: Per-position amino acid logits for each sequence
-            - ``attention_masks``: Binary masks for valid positions
-            - ``num_sequences``: Number of sequences processed
+        ESM2EmbeddingsOutput: Structured output with ``results``, a list of
+            per-sequence ``SequenceEmbedding`` objects, each containing:
+            - ``mean_embedding``: Mean-pooled embedding for the sequence
+            - ``attention_mask``: Binary mask for valid positions
+            - ``logits``: Per-position amino acid logits (``None`` unless
+              ``return_logits=True``)
+            Run metadata (model checkpoint, ``num_sequences``, batch size,
+            device) is reported under ``metadata``.
 
     Examples:
         >>> # Basic embedding extraction

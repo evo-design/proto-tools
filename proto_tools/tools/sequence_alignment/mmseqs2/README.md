@@ -77,7 +77,7 @@ This tool is appropriate for deduplicating a sequence set before downstream anal
 
 ### MMseqs2 Homology Search (`mmseqs2-homology-search`)
 
-Generates a multiple sequence alignment per query protein by iterating MMseqs2 searches against a registry-provisioned reference database using the ColabFold homology-search pipeline. Returns one `MSA` object per query, suitable as the MSA input to AlphaFold-class structure predictors. GPU execution is the default on supported hardware.
+Generates a multiple sequence alignment per query protein using the ColabFold homology-search pipeline. Returns one `MSA` object per query, suitable as the MSA input to AlphaFold-class structure predictors. By default (`search_mode="remote"`) it queries the hosted ColabFold MSA API over the network and needs no local database; set `search_mode="local"` to run MMseqs2 against a registry-provisioned reference database on disk (GPU-accelerated by default on supported hardware).
 
 #### Applications
 
@@ -86,8 +86,9 @@ This tool is the proto-tools entry point for generating the MSA input to structu
 #### Usage Tips
 
 - **The `dataset` field selects one registered reference database.** The default is `uniref30-2302`. It is a scalar enum of the searchable ColabFold-style protein databases; non-searchable or non-protein datasets are rejected by validation.
-- **GPU execution is the default.** The configuration validator hard-errors on macOS and Windows (GPU search is Linux-only). Set `use_gpu=False` to force the CPU pipeline.
-- **The reference database must be provisioned once on the host machine before the first call.** Run `python -m proto_tools.tools.sequence_alignment.mmseqs2.setup_databases <dataset>`, where the dataset key matches the value of `Mmseqs2HomologySearchConfig.dataset`. The wrapper does not auto-download databases at call time.
+- **`search_mode="remote"` is the default.** It queries the hosted ColabFold MSA API over the network; `dataset`, `use_gpu`, and `sensitivity` are ignored, and no local database or GPU is required. Set `search_mode="local"` to run MMseqs2 against a provisioned on-disk database instead.
+- **Local mode (`search_mode="local"`) uses GPU by default.** The configuration validator hard-errors only when `use_gpu=True` on a local search on macOS or Windows (GPU search is Linux-only). Set `use_gpu=False` to force the CPU pipeline.
+- **Local mode requires the reference database to be provisioned once before the first call.** Run `python -m proto_tools.tools.sequence_alignment.mmseqs2.setup_databases <dataset>`, where the dataset key matches the value of `Mmseqs2HomologySearchConfig.dataset`. The wrapper does not auto-download databases at call time. (Remote mode skips this entirely.)
 - **Local search needs enough RAM to hold the dataset's sequence database.** When available memory (cgroup-aware) is below that file's size, the tool logs a warning and falls back to a disk-paged (mmap) search that completes but is much slower; for a responsive search, allocate more memory or use `search_mode="remote"`.
 - **Each query produces an `MSA` object or `None`.** Always check `result.msas[i] is not None` before accessing alignment properties. The `num_homologs_found` list returns `0` for queries that produced no homologs. `MSA` objects serialise to A3M or FASTA through the standard export interface.
 

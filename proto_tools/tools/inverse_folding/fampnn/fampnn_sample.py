@@ -88,7 +88,7 @@ class FAMPNNSampleConfig(InverseFoldingConfig):
         batch_size (int | None): Number of sequences to process simultaneously on GPU.
             Defaults to num_sequences_per_structure.
         temperature (float): Controls randomness in sampling from logits.
-        seed (int): Random seed to use for sampling.
+        seed (int | None): Random seed; None draws a random seed per run.
         model_variant (str): FAMPNN checkpoint variant. '0.3' for sequence design
             (PDB-trained, 0.3A noise), '0.0' for sidechain packing (PDB-trained,
             0.0A noise), '0.3_cath' for mutation scoring (CATH-trained).

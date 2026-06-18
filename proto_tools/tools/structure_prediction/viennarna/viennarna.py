@@ -32,21 +32,12 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # Input:
 class ViennaRNAInput(BaseToolInput):
-    """Input object for ViennaRNA secondary structure prediction.
-
-    This class defines the input parameters for predicting RNA secondary
-    structures using ViennaRNA's MFE folding algorithm.
+    """Input for ViennaRNA secondary structure prediction.
 
     Attributes:
-        sequences (list[str]): List of RNA sequences to fold. Each sequence
-            should contain only valid RNA nucleotides (A, U, G, C) or DNA
-            nucleotides (A, T, G, C) which will be automatically converted
-            to RNA (T -> U). Lowercase letters are also accepted.
-
-    Note:
-        ViennaRNA can handle both RNA and DNA sequences. DNA sequences
-        (containing T) will be converted to RNA (T -> U) before folding
-        unless DNA parameters are explicitly loaded.
+        sequences (list[str]): RNA (A, U, G, C), DNA (A, T, G, C), or N
+            sequences to fold (any case). T is converted to U before folding
+            unless DNA parameters are used.
     """
 
     sequences: list[str] = InputField(title="Sequences", description="List of input RNA sequences")
@@ -54,15 +45,7 @@ class ViennaRNAInput(BaseToolInput):
     @field_validator("sequences")
     @classmethod
     def validate_sequences(cls, sequences: list[str]) -> list[str]:
-        """Validates that sequences contain only valid nucleotides.
-
-        Args:
-            sequences (list[str]): RNA/DNA sequences to validate.
-
-        Checks:
-        - Non-empty sequences
-        - Valid nucleotide characters (A, U, G, C, T, N)
-        """
+        """Require a non-empty list whose sequences use only A/U/G/C/T/N."""
         if not sequences:
             raise ValueError("At least one sequence is required")
 
@@ -159,21 +142,13 @@ class ViennaRNAConfig(BaseConfig):
 
     Attributes:
         temperature (float): Temperature in Celsius for energy calculations.
-            Affects the thermodynamic parameters used in folding. Default: 37.0
-            (physiological temperature).
-
-        use_dna_params (bool): Whether to use DNA energy parameters instead of
-            RNA parameters. When True, loads DNA_Mathews2004 parameters.
-            Default: False (use RNA_Turner2004 parameters).
-
+        use_dna_params (bool): Use DNA energy parameters instead of RNA parameters.
         no_lonely_pairs (bool): Disallow lonely base pairs (helices of length 1).
-            This can reduce artifacts in structure prediction. Default: False.
-
-        dangles (Literal[0, 1, 2, 3]): Dangling-end treatment.
-        circ (bool): Treat as circular RNA. Default False.
-        max_bp_span (int): Max base-pair span; positive
-            values forbid long-range pairing.
-
+        dangles (Literal[0, 1, 2, 3]): Dangling-end treatment (0=ignore, 1=minimal,
+            2=multibranch, 3=accurate).
+        circ (bool): Treat sequence as circular (plasmids, viroids, circRNAs).
+        max_bp_span (int): Max base-pair span in nt; -1 = no limit, positive forbids
+            long-range pairs.
     """
 
     temperature: float = ConfigField(

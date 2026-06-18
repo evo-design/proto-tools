@@ -231,9 +231,9 @@ def run_evo2_sample(
 ) -> Evo2SampleOutput:
     """Sample DNA sequences using Evo2 language model.
 
-    Uses the Evo2 7B parameter language model to autoregressively generate
-    genomic DNA sequences from prompt sequences. Supports local GPU execution
-    with advanced sampling strategies including nucleus sampling and KV caching.
+    Uses the configured Evo2 checkpoint (``evo2_7b`` by default) to
+    autoregressively generate genomic DNA sequences from prompt sequences.
+    Supports local GPU execution with nucleus sampling and KV caching.
 
     Args:
         inputs (Evo2SampleInput): Validated input containing one or more DNA
@@ -260,7 +260,8 @@ def run_evo2_sample(
 
     Note:
         - For long sequences, use ``cached_generation=True`` for efficiency
-        - Batched generation requires all prompts to have the same length
+        - Prompts of differing lengths in one batch are processed individually;
+          uniform-length prompts share a single batched forward pass
 
     See Also:
         - Evo2 GitHub Repository: https://github.com/arcinstitute/evo2

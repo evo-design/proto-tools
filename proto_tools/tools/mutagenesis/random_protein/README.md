@@ -5,7 +5,7 @@
 ![Random Protein Sampling](https://proto-bio.github.io/proto-assets/images/tool/random_protein/hero.png)
 
 > [!NOTE]
-> **License:** Random Protein Sampling is open source and free for academic and commercial use under an Apache-2.0 license. Please refer to [the license](https://github.com/proto-bio/proto-tools) for full terms.
+> **License:** Random Protein Sampling is open source and free for academic and commercial use under an Apache-2.0 license. Please refer to [the license](https://github.com/evo-design/proto-tools) for full terms.
 
 ## Overview
 
@@ -17,7 +17,7 @@ Random Protein Sampling performs random mutagenesis at the protein level: it tak
 
 Internally, designable positions are either the `_` characters already present in the input or, when none are present, positions chosen by the configured masking strategy. The codon scheme is expanded to its concrete codons, and each amino acid's sampling weight is set proportional to the number of codons in the scheme that encode it, with stop codons excluded by default. `UNIFORM` instead assigns equal weight to all twenty standard amino acids. If `excluded_amino_acids` is set, those residue types are removed after codon-scheme and stop-codon handling; the sampler raises an error if no reachable residue remains. Each masked position is filled independently by a weighted random draw. With a fixed seed the output is deterministic.
 
-This tool is original proto-tools code maintained by [Proto](https://github.com/proto-bio/proto-tools).
+This tool is original proto-tools code maintained by [Proto](https://github.com/evo-design/proto-tools).
 
 ## Tools
 

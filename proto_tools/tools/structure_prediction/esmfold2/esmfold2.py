@@ -33,7 +33,7 @@ class ESMFold2Input(StructurePredictionInput):
 
     Inherits from ``StructurePredictionInput``. Supports proteins, DNA, RNA, and
     small-molecule ligands (CCD codes or SMILES) in arbitrary combinations,
-    optionally with chain-level modifications and covalent bonds.
+    optionally with chain-level modifications.
 
     Attributes:
         complexes (list[Complex]): List of biomolecular complexes to fold.

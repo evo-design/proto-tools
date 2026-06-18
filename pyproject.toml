@@ -53,8 +53,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/proto-bio/proto-tools"
-Repository = "https://github.com/proto-bio/proto-tools"
+Homepage = "https://github.com/evo-design/proto-tools"
+Repository = "https://github.com/evo-design/proto-tools"
 
 [project.scripts]
 # Agent/CLI entry point; also reachable via `python -m proto_tools`.

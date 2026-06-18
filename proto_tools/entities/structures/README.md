@@ -1,7 +1,7 @@
 # Structures
 
 ## Overview
-This module provides the `Structure` class - a unified representation for protein 3D structures. It handles loading from PDB/CIF files, format conversions, sequence extraction, chain manipulation, and visualization. The class serves as the standard structure representation throughout the proto-language toolkit, bridging the gap between structure prediction outputs and downstream analysis.
+This module provides the `Structure` class - a unified representation for protein 3D structures. It handles loading from PDB/CIF files, format conversions, sequence extraction, chain manipulation, and visualization. The class serves as the standard structure representation throughout the proto-tools library, bridging the gap between structure prediction outputs and downstream analysis.
 
 ## When to Use This Tool
 
@@ -114,7 +114,7 @@ pLDDT is often stored in the B-factor column of structure files.
 | `get_residue_position_map()` | `Dict` | Mapping of chains to (residue, position) tuples |
 | `write_pdb(filepath)` | `None` | Save structure as PDB file |
 | `write_cif(filepath)` | `None` | Save structure as CIF file |
-| `visualize(style)` | `py3Dmol view` | Interactive 3D visualization |
+| `visualize(style)` | `None` | Render an interactive 3D view in the notebook |
 | `add_metric(name, value)` | `None` | Add a metric to the structure |
 
 ## Best Practices & Gotchas

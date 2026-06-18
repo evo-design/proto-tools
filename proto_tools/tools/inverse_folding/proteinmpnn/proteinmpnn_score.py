@@ -178,7 +178,6 @@ def run_proteinmpnn_score(
     """
     scores = []
 
-    # Local venv execution
     logger.debug("Using local venv for ProteinMPNN scoring")
 
     seed = config.seed if config.seed is not None else config.get_random_int()

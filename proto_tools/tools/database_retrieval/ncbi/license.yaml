@@ -1,6 +1,6 @@
 code:
   spdx: Apache-2.0
-  url: https://github.com/proto-bio/proto-tools
+  url: https://github.com/evo-design/proto-tools
 data:
   name: NCBI's Entrez databases
   spdx: Custom (U.S. Government public domain)

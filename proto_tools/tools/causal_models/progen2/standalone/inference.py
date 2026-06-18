@@ -41,12 +41,12 @@ PROGEN2_TERMINAL_TOKENS = PROGEN2_START_TOKEN + PROGEN2_END_TOKEN
 
 PROGEN2_MODEL_CHECKPOINTS = Literal[
     "progen2-small",  # 151M parameters
-    "progen2-medium",  # 754M parameters
-    "progen2-base",  # 754M parameters, trained on UniRef90
-    "progen2-oas",  # 754M parameters, trained on OAS antibody sequences
-    "progen2-large",  # 2B parameters
-    "progen2-BFD90",  # 2B parameters, trained on BFD90
-    "progen2-xlarge",  # 6B parameters
+    "progen2-medium",  # 764M parameters
+    "progen2-base",  # 764M parameters, trained on UniRef90
+    "progen2-oas",  # 764M parameters, trained on OAS antibody sequences
+    "progen2-large",  # 2.7B parameters
+    "progen2-BFD90",  # 2.7B parameters, trained on BFD90
+    "progen2-xlarge",  # 6.4B parameters
 ]
 
 
