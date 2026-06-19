@@ -418,12 +418,13 @@ def test_ablang_score_paired():
 
 @pytest.mark.uses_gpu
 def test_ablang_score_return_logits():
-    """``return_logits=True`` populates per-position AA logits and vocab; default leaves them ``None``."""
+    """``return_logits=True`` populates per-position AA logits; ``vocab`` is always populated."""
     inputs = AbLangScoringInput(antibodies=[Antibody(heavy_chain=VH_SEQ), Antibody(heavy_chain=VH_SEQ[:50])])
 
     default = run_ablang_score(inputs, AbLangScoringConfig())
     validate_output(default)
-    assert all(s.logits is None and s.vocab is None for s in default.scores)
+    assert all(s.logits is None for s in default.scores)
+    assert all(s.vocab == list(PROTEIN_AMINO_ACIDS) for s in default.scores)
 
     with_logits = run_ablang_score(inputs, AbLangScoringConfig(return_logits=True))
     validate_output(with_logits)
