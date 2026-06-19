@@ -35,7 +35,7 @@ logger = get_logger(__name__)
 _SMILES_INDEX: dict[str, str] | None = None
 # Maps InChIKey -> CCD code (built once on first SMILES lookup).
 _INCHIKEY_INDEX: dict[str, str] | None = None
-# The wwPDB CCD bundle is ~70 MB compressed and ~500 MB uncompressed (the
+# The wwPDB CCD bundle is ~115 MB compressed and ~500 MB uncompressed (the
 # decompressed components.cif on disk). Parsing or re-reading it per identifier
 # is the dominant cost (~10-60s); cache aggressively at module level.
 

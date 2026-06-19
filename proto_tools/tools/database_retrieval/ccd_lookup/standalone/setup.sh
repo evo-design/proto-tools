@@ -3,7 +3,7 @@
 #
 # Installs pdbeccdutils + RDKit + gemmi into the isolated micromamba env and
 # downloads the wwPDB Chemical Component Dictionary (components.cif) into the
-# tool's weights directory. The CCD bundle is ~70MB compressed and ~500MB
+# tool's weights directory. The CCD bundle is ~115MB compressed and ~500MB
 # uncompressed; pdbeccdutils prefers the uncompressed mmCIF for fast lookups.
 
 set -euo pipefail
