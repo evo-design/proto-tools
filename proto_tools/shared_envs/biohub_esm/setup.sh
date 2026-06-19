@@ -4,8 +4,7 @@
 set -euo pipefail
 source standalone_helpers.sh
 
-# Verify the public biohub fork repo is reachable (it is not gated on HF, so this is a
-# reachability check only; ESM3 license/token enforcement happens at runtime via require_hf_token()).
+# ESM3 is gated on HuggingFace; the check ensures the user has accepted the license.
 # ESM C 300M is open; ESM C 600M is non-commercial-only and not gated on HF.
 proto_check_gated_hf_repo "biohub/esm3-sm-open-v1" "https://huggingface.co/biohub/esm3-sm-open-v1"
 
