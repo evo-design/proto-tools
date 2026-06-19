@@ -54,7 +54,7 @@ class MockIterableDeterministicConfig(BaseConfig):
 
     Attributes:
         batch_size (int): Internal batch size for the scoring loop.
-            Mimics a real scorer's batch_size knob.
+            Mimics a real scorer's batch_size setting.
     """
 
     batch_size: int = ConfigField(

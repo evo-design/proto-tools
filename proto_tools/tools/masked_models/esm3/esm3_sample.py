@@ -68,7 +68,7 @@ class ESM3SampleConfig(MaskedModelSampleConfig):
         masking_strategy (MaskingStrategy): Positions to mask before sampling.
         sampling_method (Literal["single_pass", "iterative_refinement"]): "single_pass"
             fills every mask in one forward; "iterative_refinement" dispatches to
-            ``model.batch_generate`` and uses the five GenerationConfig knobs below.
+            ``model.batch_generate`` and uses the five GenerationConfig settings below.
         temperature (float): Softmax temperature.
         top_p (float): Nucleus threshold (iterative only).
         num_steps (int): Refinement steps (iterative only).

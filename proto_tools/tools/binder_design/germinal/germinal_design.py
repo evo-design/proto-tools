@@ -446,7 +446,7 @@ class GerminalInput(BaseToolInput):
 class GerminalConfig(BaseConfig):
     """Configuration for Germinal antibody design.
 
-    Type-dependent knobs (loss weights, iteration counts, AbLM scales) are not
+    Type-dependent settings (loss weights, iteration counts, AbLM scales) are not
     exposed here — the ``design_type`` preset wins. Use ``germinal_overrides``
     for arbitrary Hydra ``<key>=<value>`` overrides on the run config.
 
@@ -832,7 +832,7 @@ def run_germinal_design(
 
     Args:
         inputs (GerminalInput): Target PDB + chain layout + hotspot residues.
-        config (GerminalConfig): Pipeline knobs. Defaults match Germinal source;
+        config (GerminalConfig): Pipeline settings. Defaults match Germinal source;
             see attribute docstrings for source-vs-default mapping.
         instance (Any): Optional :class:`ToolInstance` for subprocess execution.
 

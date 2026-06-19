@@ -285,7 +285,7 @@ def run_pyrosetta_relax(
 
     Args:
         inputs (PyRosettaRelaxInput): Structures to relax.
-        config (PyRosettaRelaxConfig | None): Score function + relax knobs.
+        config (PyRosettaRelaxConfig | None): Score function + relax settings.
         instance (ToolInstance | None): Optional ToolInstance for persistent execution.
 
     Returns:

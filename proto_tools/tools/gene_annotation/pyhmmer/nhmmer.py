@@ -62,7 +62,7 @@ class PyNhmmerConfig(PyHmmerConfig):
 
     Adds ``strand`` — nhmmer is the only HMMER tool that runs on nucleotide
     targets, so it is the only place where forward / reverse-complement strand
-    selection makes sense. All other knobs are inherited from
+    selection makes sense. All other settings are inherited from
     :class:`PyHmmerConfig`.
 
     Attributes:

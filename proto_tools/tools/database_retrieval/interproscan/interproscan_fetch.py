@@ -367,7 +367,7 @@ def run_interproscan_fetch(
 
     Args:
         inputs (InterProScanFetchInput): UniProt accession or protein sequence.
-        config (InterProScanFetchConfig): Optional fetch knobs (email,
+        config (InterProScanFetchConfig): Optional fetch settings (email,
             applications, paging, polling).
         instance (Any): Optional ToolInstance for subprocess execution.
 

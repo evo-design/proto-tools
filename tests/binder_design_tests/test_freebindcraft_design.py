@@ -27,7 +27,7 @@ from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _FIXTURE_PDB = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
-# FreeBindCraft is a drop-in fork: its hallucination/MPNN knobs match upstream BindCraft byte-for-byte.
+# FreeBindCraft is a drop-in fork: its hallucination/MPNN settings match upstream BindCraft byte-for-byte.
 _UPSTREAM_SNAPSHOT = Path(__file__).parent.parent / "dummy_data" / "bindcraft_default_4stage_multimer.json"
 _UPSTREAM_INFRA_KEYS = frozenset({"af_params_dir", "dssp_path", "dalphaball_path"})
 _UPSTREAM_KNOBS = set(json.loads(_UPSTREAM_SNAPSHOT.read_text())) - _UPSTREAM_INFRA_KEYS

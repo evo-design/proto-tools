@@ -95,7 +95,7 @@ def _run_single_minced(sequence: str, seq_id: str, config: dict[str, Any]) -> di
     Args:
         sequence: Nucleotide sequence string.
         seq_id: Sequence identifier.
-        config: Configuration dict with MinCED -minNR/-minRL/-maxRL/-minSL/-maxSL knobs.
+        config: Configuration dict with MinCED -minNR/-minRL/-maxRL/-minSL/-maxSL settings.
             All keys are required — the wrapper always populates them. Reading
             via ``config[key]`` (not ``config.get``) prevents silent drift if
             ``MincedConfig`` defaults ever change without the wrapper updating.

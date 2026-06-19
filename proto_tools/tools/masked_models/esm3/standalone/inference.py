@@ -185,7 +185,7 @@ class ESM3Model:
         ``[MASK]`` tokens at those positions, runs a forward pass, and samples
         replacement amino acids from the model's predictions.
         ``iterative_refinement`` dispatches to ESM3's ``model.batch_generate``,
-        with the five GenerationConfig knobs driving the decoding loop;
+        with the five GenerationConfig settings driving the decoding loop;
         ``return_logits=True`` on that path runs a final forward over the
         completed sequences.
 
