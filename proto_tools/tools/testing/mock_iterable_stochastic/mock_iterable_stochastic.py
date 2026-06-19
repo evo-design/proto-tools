@@ -2,8 +2,8 @@
 
 Implements an LM-shaped two-step inference: a deterministic "forward
 pass" maps each prompt to a logits vector over a token vocabulary, then
-a per-item weighted draw from a single ``random.Random(seed)`` stream
-picks one token. Used to e2e-test the framework's stochastic-iterable
+per-item weighted draws from a single ``random.Random(seed)`` stream
+pick SEQ_LEN tokens. Used to e2e-test the framework's stochastic-iterable
 cache/dedup routing without GPU or model load.
 
 ``items_processed`` is exposed on the output so tests can directly
@@ -61,7 +61,7 @@ class MockIterableStochasticConfig(BaseConfig):
 
     Attributes:
         batch_size (int): Internal batch size for the tool's sampling
-            loop. Mimics an LM's ``batch_size`` knob — the framework
+            loop. Mimics an LM's ``batch_size`` setting — the framework
             doesn't see or care about this; it's an implementation
             detail of the tool's inference path.
     """
@@ -78,8 +78,8 @@ class MockIterableStochasticOutput(BaseToolOutput):
     """Output from the stochastic iterable mock.
 
     Attributes:
-        completions (list[str]): Per-prompt sampled tokens, in input
-            order. Each completion is one character drawn from VOCAB
+        completions (list[str]): Per-prompt completions, in input order.
+            Each completion is SEQ_LEN characters drawn from VOCAB
             weighted by the prompt's logits.
         items_processed (int): Number of items the tool's function
             actually received in this call (before framework
@@ -150,13 +150,13 @@ def run_mock_iterable_stochastic(
     config: MockIterableStochasticConfig,
     instance: Any = None,  # noqa: ARG001 — required by tool interface
 ) -> MockIterableStochasticOutput:
-    """Sample one token per prompt by weighted draw from prompt-derived logits.
+    """Sample SEQ_LEN tokens per prompt by weighted draws from prompt-derived logits.
 
     The single ``random.Random`` instance is the analogue of torch's
     global RNG state: each weighted draw consumes it and advances state,
     so two identical prompts in the same internal batch see the same
-    logits but pick different tokens — exactly the mechanism the
-    redesign relies on.
+    logits but pick different tokens — the mechanism stochastic-iterable
+    routing relies on.
 
     Args:
         inputs (MockIterableStochasticInput): Prompts to sample for.

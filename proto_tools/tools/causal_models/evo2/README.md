@@ -36,7 +36,7 @@ This tool produces candidate DNA sequences for downstream design and screening, 
 
 - **Match the checkpoint to the task.** `evo2_7b` (the default), `evo2_20b`, and `evo2_40b` are the 1M-context models in increasing size and capability. The `evo2_7b_base`, `evo2_40b_base`, and `evo2_1b_base` checkpoints are 8K-context counterparts (`evo2_1b_base` is the smallest); `evo2_7b_262k` is a 262K-context variant; `evo2_7b_microviridae` is a 7B model adapted on Microviridae genomes for generating that bacteriophage family.
 - **Prompts use Evo2's prompt format.** Prompt strings follow Evo2's special tokenization (for example a leading `+~` before DNA); see the upstream [Evo2 documentation](https://github.com/arcinstitute/evo2) for the conventions.
-- **`top_k` defaults to 4, the size of the DNA alphabet.** It exists mainly to keep generation on the four bases rather than other byte tokens, so it is not the diversity knob; control diversity with `temperature` (lower stays near the training distribution, higher explores it) and leave `top_p` at its default unless you specifically want nucleus sampling.
+- **`top_k` defaults to 4, the size of the DNA alphabet.** It exists mainly to keep generation on the four bases rather than other byte tokens, so it is not the diversity parameter; control diversity with `temperature` (lower stays near the training distribution, higher explores it) and leave `top_p` at its default unless you specifically want nucleus sampling.
 - **Output includes the prompt by default.** `prepend_prompt=True` (the default for this toolkit) returns the prompt joined to its continuation; set it `False` to receive only the newly generated nucleotides.
 - **Prompt length plus `max_new_tokens` (default 32) must fit the checkpoint's context window.** The model cannot attend beyond that window, so a long prompt directly reduces how much can be generated; pick a longer-context checkpoint when the combined length is large.
 - **`stop_at_eos` ends generation early** when the model emits an end-of-sequence token; set it to `False` to always produce the full `max_new_tokens`.
@@ -44,7 +44,7 @@ This tool produces candidate DNA sequences for downstream design and screening, 
 
 ### Evo2 Scoring (`evo2-score`)
 
-Scores existing DNA sequences under the Evo2 model. For each sequence, it computes the model's predicted probability of every nucleotide given the preceding nucleotides and aggregates these into a log-likelihood, an average log-likelihood per nucleotide, and a perplexity. Optionally returns the per-position logits and the token vocabulary.
+Scores existing DNA sequences under the Evo2 model. For each sequence, it computes the model's predicted probability of every nucleotide given the preceding nucleotides and aggregates these into a log-likelihood, an average log-likelihood per nucleotide, and a perplexity. Optionally returns the per-position logits, alongside the token vocabulary giving their column order.
 
 #### Applications
 

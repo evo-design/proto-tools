@@ -645,11 +645,8 @@ class BaseToolOutput(BaseModel, ABC):
 
     Example:
         >>> class BLASTOutput(BaseToolOutput):
-        ...     hits: List[Dict[str, Any]]
-        >>> # Within a tool function (metadata populated by decorator):
-        >>> result = BLASTOutput(hits=[{"accession": "P12345", "evalue": 1e-50}])
-        >>>
-        >>> # Direct construction (testing/manual use):
+        ...     hits: list[dict[str, Any]]
+        >>> # Metadata fields are populated by the @tool decorator at runtime.
         >>> result = BLASTOutput(hits=[{"accession": "P12345", "evalue": 1e-50}])
     """
 

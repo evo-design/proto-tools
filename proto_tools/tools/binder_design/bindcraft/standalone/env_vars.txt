@@ -10,7 +10,7 @@
 # automatically by persistent_worker.py.
 
 [passthrough]
-# JAX runtime knobs (let users override preallocation for tight-memory hosts)
+# JAX runtime settings (let users override preallocation for tight-memory hosts)
 JAX_PLATFORMS
 XLA_PYTHON_CLIENT_PREALLOCATE
 XLA_PYTHON_CLIENT_ALLOCATOR

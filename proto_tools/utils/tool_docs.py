@@ -428,9 +428,6 @@ def _parse_tool_entries(tools_body: str) -> list[ToolReadmeEntry]:
 def get_readme(tool: str) -> str:
     """Return a toolkit's README text.
 
-    The ``> [!NOTE] **TODO:** ...`` callout that flags un-reviewed READMEs is
-    always stripped.
-
     Args:
         tool (str): Tool identifier (registry key, docs path, run-function
             name, or toolkit directory name).

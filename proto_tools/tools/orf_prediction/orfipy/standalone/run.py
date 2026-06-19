@@ -70,9 +70,7 @@ def _parse_orfipy_header(header: str) -> dict[str, Any] | None:
     }
 
 
-# =============================================================================
-# Subprocess Execution
-# =============================================================================
+# Allowlist of DNA nucleotides used to clean input sequences.
 DNA_NUCLEOTIDES = {"A", "T", "C", "G"}
 
 
@@ -212,15 +210,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     return run_orfipy(input_dict)
 
 
-# =============================================================================
-# Entry point (called by ToolInstance)
-# =============================================================================
-
-
 def to_device(device: str) -> dict[str, Any]:
-    """Passthrough for CLI tool - automatically unloads after each call."""
-    # CLI tool that spawns subprocesses and naturally unloads after each call
-    # This is a passthrough for standardization with other tools
+    """Passthrough for a CLI tool: it spawns subprocesses and unloads after each call."""
     return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
 
 

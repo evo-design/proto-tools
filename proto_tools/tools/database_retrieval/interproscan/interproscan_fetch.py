@@ -310,8 +310,8 @@ class InterProScanFetchOutput(BaseToolOutput):
                 json.dump(self.model_dump(mode="json"), f, indent=2)
             return
         if file_format == "csv":
-            # One row per domain hit; nested fields (locations, go_terms,
-            # pathway_xrefs) are JSON-encoded into single cells.
+            # One row per domain hit; list/dict fields (go_terms, pathways)
+            # are JSON-encoded into single cells.
             rows: list[dict[str, Any]] = []
             for d in self.domains:
                 row = d.model_dump()
@@ -367,7 +367,7 @@ def run_interproscan_fetch(
 
     Args:
         inputs (InterProScanFetchInput): UniProt accession or protein sequence.
-        config (InterProScanFetchConfig): Optional fetch knobs (email,
+        config (InterProScanFetchConfig): Optional fetch settings (email,
             applications, paging, polling).
         instance (Any): Optional ToolInstance for subprocess execution.
 

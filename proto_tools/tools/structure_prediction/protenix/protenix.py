@@ -468,7 +468,7 @@ def run_protenix(
 
     See Also:
         - Protenix GitHub: https://github.com/bytedance/Protenix
-        - Protenix paper: https://www.biorxiv.org/content/10.1101/2025.01.08.631857
+        - Protenix paper: https://www.biorxiv.org/content/10.1101/2025.01.08.631967
 
     Example:
         >>> inputs = ProtenixInput(complexes=[["MVLSPADKTNVKAAW", "GSSGSSGSS"]])

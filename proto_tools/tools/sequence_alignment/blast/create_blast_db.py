@@ -195,7 +195,7 @@ def run_create_blast_db(
         CreateBlastDbOutput: Structured output with database path
 
     Raises:
-        ValueError: If the BLAST database creation fails.
+        RuntimeError: If the BLAST database creation fails.
 
     Examples:
         >>> from proto_tools.tools.sequence_alignment import (

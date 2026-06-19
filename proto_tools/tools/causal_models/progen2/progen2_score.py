@@ -128,8 +128,8 @@ def run_progen2_score(
               attribute ``score.perplexity`` or mapping ``score["perplexity"]``)
             - ``logits``: Per-position logits tensor (seq_len, vocab_size=30) if
               ``return_logits=True``, otherwise ``None``
-            - ``vocab``: List of 30 tokens (special + amino acids) if
-              ``return_logits=True``, otherwise ``None``
+            - ``vocab``: List of 30 tokens (special + amino acids) giving the
+              column order of ``logits`` (always populated)
 
     Examples:
         >>> # Basic scoring (metrics only, no logits)

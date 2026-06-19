@@ -35,7 +35,7 @@ Use this when the question is "where does motif X occur in these sequences." Typ
 
 #### Usage Tips
 
-- **`threshold` is the p-value cutoff and is the main sensitivity knob.** It defaults to `1e-4`, reproducing FIMO's command-line default (`--thresh`); only matches with a p-value at or below this value are reported. Loosen it (e.g. `1e-3`) to recover weaker sites at the cost of more false positives, or tighten it for stringent calls. The reported q-value gives the false discovery rate for filtering after the scan.
+- **`threshold` is the p-value cutoff and is the main sensitivity parameter.** It defaults to `1e-4`, reproducing FIMO's command-line default (`--thresh`); only matches with a p-value at or below this value are reported. Loosen it (e.g. `1e-3`) to recover weaker sites at the cost of more false positives, or tighten it for stringent calls. The reported q-value gives the false discovery rate for filtering after the scan.
 - **`both_strands` controls strand coverage for nucleotide motifs.** It defaults to `True`, scanning the forward strand and its reverse complement (the right choice for DNA/RNA motifs, which can bind on either strand). Set it to `False` for single-strand scans (this maps to FIMO's `--norc`). For protein and other non-complementable motifs the reverse complement is meaningless, so it is ignored automatically and scanning is always forward-only — matching the FIMO CLI.
 - **Motifs come from MEME-format files, such as those exported from JASPAR.** Supply a `.meme` PWM file; matrices from JASPAR and other databases can be converted to this format. The scan iterates over every motif in the file against every target sequence.
 

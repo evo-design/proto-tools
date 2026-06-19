@@ -111,7 +111,7 @@ class MEMEFimoScanInput(BaseToolInput):
 class MEMEFimoScanConfig(BaseConfig):
     """Configuration for FIMO motif scanning.
 
-    Exposes the two FIMO knobs end users commonly set; defaults reproduce FIMO's
+    Exposes the two FIMO settings end users commonly set; defaults reproduce FIMO's
     command-line behavior for nucleotide motifs.
 
     Attributes:

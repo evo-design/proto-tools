@@ -15,9 +15,11 @@ from typing import Literal, get_args
 DNA_NUCLEOTIDES = "ACGT"
 RNA_NUCLEOTIDES = "ACGU"
 
-# Source of truth for the 20 canonical amino acids.
-# ``PROTEIN_AMINO_ACIDS`` (str) and standalone-helpers' ``AMINO_ACIDS_LIST``
-# (list[str]) derive from this Literal so all three stay in sync.
+# Source of truth for the 20 canonical amino acids. ``PROTEIN_AMINO_ACIDS``
+# (str) is derived from this Literal. The standalone-helpers copy
+# (``standalone_helpers/serialization.py``'s ``AMINO_ACIDS_LIST``) is a separate
+# hand-maintained list, since standalone envs can't import ``proto_tools``;
+# keep it in the same order if this Literal changes.
 AminoAcid = Literal["A", "C", "D", "E", "F", "G", "H", "I", "K", "L", "M", "N", "P", "Q", "R", "S", "T", "V", "W", "Y"]
 PROTEIN_AMINO_ACIDS = "".join(get_args(AminoAcid))
 

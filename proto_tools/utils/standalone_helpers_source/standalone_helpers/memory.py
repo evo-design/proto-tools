@@ -16,7 +16,7 @@ def get_pytorch_memory_stats(device: int | str = 0) -> dict[str, Any]:
     """Helper for PyTorch tools to report GPU memory stats.
 
     Args:
-        device (int | str): CUDA device index (int) or torch.device object
+        device (int | str): CUDA device index (int) or device string (e.g. "cuda:0")
 
     Returns:
         dict[str, Any]: Dict with memory statistics or {"available": False} if not available.

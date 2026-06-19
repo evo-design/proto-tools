@@ -7,6 +7,7 @@ to avoid dependency conflicts with the main proto-language environment.
 """
 
 import json
+import logging
 import random
 import shutil
 import sys
@@ -136,23 +137,22 @@ class ColabFoldRemoteSearchWrapper:
 
                 temp_results_path = Path(temp_results_dir)
 
-                # Debug: Check what directories and files exist
-                logger.debug("Looking for MSA files...")
-                logger.debug(f"  Temp prefix: {temp_output_prefix}")
-                logger.debug(f"  Expected results dir: {temp_results_path}")
-                logger.debug(f"  Results dir exists: {temp_results_path.exists()}")
-
-                # Check parent directory
-                parent_dir = Path(output_dir)
-                if parent_dir.exists():
-                    all_items = list(parent_dir.iterdir())
-                    logger.debug(f"  Files/dirs in parent: {[item.name for item in all_items]}")
-
-                if temp_results_path.exists():
-                    all_files = list(temp_results_path.rglob("*"))
-                    logger.debug(
-                        f"  All files in results dir: {[str(f.relative_to(temp_results_path)) for f in all_files if f.is_file()]}"
-                    )
+                # Debug: enumerate candidate dirs/files. Gated on DEBUG so the
+                # filesystem walks below only run when the output will be logged.
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("Looking for MSA files...")
+                    logger.debug(f"  Temp prefix: {temp_output_prefix}")
+                    logger.debug(f"  Expected results dir: {temp_results_path}")
+                    logger.debug(f"  Results dir exists: {temp_results_path.exists()}")
+                    parent_dir = Path(output_dir)
+                    if parent_dir.exists():
+                        all_items = list(parent_dir.iterdir())
+                        logger.debug(f"  Files/dirs in parent: {[item.name for item in all_items]}")
+                    if temp_results_path.exists():
+                        all_files = list(temp_results_path.rglob("*"))
+                        logger.debug(
+                            f"  All files in results dir: {[str(f.relative_to(temp_results_path)) for f in all_files if f.is_file()]}"
+                        )
 
                 # Look for .a3m files in the results directory and subdirectories
                 a3m_files = list(temp_results_path.rglob("*.a3m")) if temp_results_path.exists() else []

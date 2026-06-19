@@ -55,7 +55,7 @@ class SpliceTransformerModel:
             left_contexts: Left context sequences (must be context_length long)
             right_contexts: Right context sequences (must be context_length long)
             device: Device to run inference on
-            verbose: Whether to print status messages
+            verbose: Accepted for interface symmetry; status is emitted via the logger.
 
         Returns:
             Predictions of shape (batch, target_length, 18)

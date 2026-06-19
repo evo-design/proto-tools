@@ -3,10 +3,10 @@
 Protein structure prediction using Boltz2.
 
 Example:
-    >>> from proto_tools.tools.structure_prediction.boltz2 import run_boltz2, Boltz2Config
-    >>> config = Boltz2Config(sequences=["MVLSPADKTNVKAAW", "GSSGSSGSS"])
-    >>> result = run_boltz2(config)
-    >>> print(f"Confidence: {result.confidence_score:.2f}")
+    >>> from proto_tools.tools.structure_prediction.boltz2 import run_boltz2, Boltz2Config, Boltz2Input
+    >>> inputs = Boltz2Input(complexes=[["MVLSPADKTNVKAAW", "GSSGSSGSS"]])
+    >>> result = run_boltz2(inputs, Boltz2Config())
+    >>> print(f"Confidence: {result.structures[0].metrics['confidence_score']:.2f}")
 """
 
 import os
@@ -200,8 +200,8 @@ class Boltz2Config(MSAStructurePredictionConfig):
         subsample_msa (bool): Randomly subsample the MSA on each run for sample
             diversity (loses determinism). Default False.
 
-        num_workers (int): Number of CPU workers for parallel processing during
-            prediction. Automatically set to the minimum of available CPU cores or 4.
+        num_workers (int): Number of dataloader workers for prediction.
+            Automatically set to the minimum of available CPU cores or 4.
             Must be at least 1. Default: ``min(cpu_count, 4)``.
 
         use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
@@ -325,7 +325,7 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config, instance: Any = None) 
 
     Returns:
         Boltz2Output: Structured output containing:
-            - ``structures``: List of ``Boltz2Structure`` instances, one per input complex
+            - ``structures``: List of ``Structure`` instances, one per input complex
             - Each structure includes coordinates and confidence metrics:
                     confidence_score: Primary ranking score used to select the best
                         structure from multiple samples. For multi-chain complexes, this is
@@ -366,11 +366,11 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config, instance: Any = None) 
                         Range: 0-1. Useful for assessing confidence specifically in the
                         interaction regions.
 
-                    complex_pde: Average Predicted Aligned Error (PAE) in
+                    complex_pde: Average Predicted Distance Error (PDE) in
                         Angstroms across all residue pairs. Lower values indicate more confident
-                        relative positioning. From 0 to 31.75 Å.
+                        relative positioning.
 
-                    complex_ipde: PAE for interface residue pairs only, in
+                    complex_ipde: PDE for interface residue pairs only, in
                         Angstroms. Lower values indicate more confident interface geometry.
 
                     chains_ptm: Individual PTM scores for each chain.
@@ -390,7 +390,7 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config, instance: Any = None) 
         >>> inputs = Boltz2Input(complexes=[["MVLSPADKTNVKAAW", "GSSGSSGSS"]])
         >>> config = Boltz2Config(recycling_steps=3, sampling_steps=200, diffusion_samples=1, verbose=True)
         >>> result = run_boltz2(inputs, config)
-        >>> print(f"Confidence: {result.structures[0].confidence_score:.2f}")
+        >>> print(f"Confidence: {result.structures[0].metrics['confidence_score']:.2f}")
 
     Note:
         - Boltz2 processes each complex independently and sequentially

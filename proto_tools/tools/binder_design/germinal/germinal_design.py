@@ -446,7 +446,7 @@ class GerminalInput(BaseToolInput):
 class GerminalConfig(BaseConfig):
     """Configuration for Germinal antibody design.
 
-    Type-dependent knobs (loss weights, iteration counts, AbLM scales) are not
+    Type-dependent settings (loss weights, iteration counts, AbLM scales) are not
     exposed here — the ``design_type`` preset wins. Use ``germinal_overrides``
     for arbitrary Hydra ``<key>=<value>`` overrides on the run config.
 
@@ -479,8 +479,8 @@ class GerminalConfig(BaseConfig):
             filter YAML values. Schema:
             ``{"initial" | "final": {<filter_name>: {"value": <v>, "operator": <op>}}}``.
             Merged on top of the design_type preset.
-        device (str): Device for the Germinal subprocess. Forced to ``"cuda"``;
-            CPU is not supported by the upstream pipeline.
+        device (str): Device for the Germinal subprocess. Requires ``"cuda"``
+            (CPU is unsupported).
         output_dir (str | None): Optional persistent output directory. If
             unset, a temp dir is used and discarded after the call.
     """
@@ -567,7 +567,7 @@ class GerminalConfig(BaseConfig):
     device: str = ConfigField(
         title="Device",
         default="cuda",
-        description="Device for the Germinal subprocess (forced 'cuda'; CPU not supported).",
+        description="Device for the Germinal subprocess. Requires 'cuda' (CPU unsupported).",
         include_in_key=False,
     )
     output_dir: str | None = ConfigField(
@@ -832,7 +832,7 @@ def run_germinal_design(
 
     Args:
         inputs (GerminalInput): Target PDB + chain layout + hotspot residues.
-        config (GerminalConfig): Pipeline knobs. Defaults match Germinal source;
+        config (GerminalConfig): Pipeline settings. Defaults match Germinal source;
             see attribute docstrings for source-vs-default mapping.
         instance (Any): Optional :class:`ToolInstance` for subprocess execution.
 

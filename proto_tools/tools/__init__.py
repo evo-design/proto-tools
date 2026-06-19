@@ -1,7 +1,5 @@
 """Bioinformatics tool wrappers and shared infrastructure."""
 
-# Base classes and registry
-
 # Binder / antibody design tools
 from proto_tools.tools.binder_design import (
     BindCraftConfig,
@@ -25,7 +23,6 @@ from proto_tools.tools.binder_design import (
 )
 
 # Causal model tools
-# Tool cache and I/O
 from proto_tools.tools.causal_models import (
     EVO1_MODEL_CHECKPOINTS,
     CausalModelScoringMetrics,

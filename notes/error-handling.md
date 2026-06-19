@@ -14,7 +14,7 @@ PROTO_CAPTURE_ERRORS=1 python my_script.py
 
 When set to `"1"`, every tool exception in the process is packed into a `success=False` output instead of raising. The variable is read **dynamically per call**, so test code can use `monkeypatch.setenv("PROTO_CAPTURE_ERRORS", "1")` to scope the change to a single test.
 
-This is a process-wide knob, with no per-call kwarg.
+This is a process-wide setting, with no per-call kwarg.
 
 ## When are `success` / `errors` populated?
 

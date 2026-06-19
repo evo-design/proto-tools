@@ -189,7 +189,7 @@ def run_ncbi_esearch(
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        NCBIEsearchOutput: NCBIEsearchOutput containing matching NCBI IDs.
+        NCBIEsearchOutput: Matching NCBI record IDs.
     """
     del instance
 

@@ -80,21 +80,21 @@ def predict_structures(
 ) -> StructurePredictionOutput:
     """Dispatch structure prediction to the specified tool.
 
-    Dynamically imports tools to avoid circular dependencies. Used by
+    Maps ``toolkit`` to its Input/Config/run-function and invokes it. Used by
     structure-related constraints and optimizers.
 
     Args:
         complexes (Complex | list[Complex]): List of Complex objects to predict.
         toolkit (str): Name of the structure prediction tool. Supported values:
             ``"esmfold"``, ``"esmfold2"``, ``"alphafold2"``, ``"alphafold3"``, ``"boltz2"``, ``"chai1"``, ``"protenix"``, ``"rf3"``.
-        tool_config (ESMFoldConfig | ESMFold2Config | AlphaFold2Config | AlphaFold3Config | Boltz2Config | Chai1Config | ProtenixConfig | RF3Config | dict[str, Any] | None): Tool-specific configuration dictionary.
+        tool_config (ESMFoldConfig | ESMFold2Config | AlphaFold2Config | AlphaFold3Config | Boltz2Config | Chai1Config | ProtenixConfig | RF3Config | dict[str, Any] | None): Tool-specific config object, a dict coerced to it, or None for defaults.
         msas (ComplexMSAs | list[ComplexMSAs] | None): Pre-computed MSAs, one per complex (a single ``ComplexMSAs`` is normalized to a one-element list, mirroring ``complexes``); chains omitted from a complex's ``per_chain`` map stay single-sequence. When supplied, the tool consumes them directly and skips MMseqs2 homology search.
 
     Returns:
         StructurePredictionOutput: StructurePredictionOutput containing predicted structures and metrics.
 
     Raises:
-        ValueError: If toolkit is not recognized.
+        ValueError: If toolkit is not recognized, or tool_config is an instance of the wrong config class.
     """
     # If complexes is a single Complex, normalize it to a list
     if isinstance(complexes, Complex):

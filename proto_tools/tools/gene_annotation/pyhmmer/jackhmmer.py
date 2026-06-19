@@ -55,8 +55,8 @@ class PyJackhmmerInput(PyHmmerInput):
 class PyJackhmmerConfig(PyHmmerConfig):
     """Configuration for PyHMMER jackhmmer search.
 
-    Inherits all reporting + inclusion + filter knobs from :class:`PyHmmerConfig`.
-    Adds ``max_iterations`` — the *defining* knob for iterative search; surfaced
+    Inherits all reporting + inclusion + filter settings from :class:`PyHmmerConfig`.
+    Adds ``max_iterations`` — the *defining* parameter for iterative search; surfaced
     as a primary parameter rather than buried in the advanced section.
 
     Attributes:

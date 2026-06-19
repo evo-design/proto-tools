@@ -10,9 +10,10 @@ available whenever ``proto-client`` is installed and a key is configured.
 
 Example::
 
-    from proto_tools import run_esmfold
+    from proto_tools import run_esmfold, ESMFoldInput, ESMFoldConfig
 
-    result = run_esmfold(inputs, Config(device="cloud"))  # uses PROTO_API_KEY
+    inputs = ESMFoldInput(complexes=["MKT..."])
+    result = run_esmfold(inputs, ESMFoldConfig(device="cloud"))  # uses PROTO_API_KEY
 """
 
 import functools

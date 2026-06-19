@@ -92,12 +92,11 @@ class RF3Model:
             raise RuntimeError(f"rf3: rf3 fold failed (exit {returncode}): {stderr_tail}")
 
         captured = "\n".join(s for s in (stdout, stderr) if s) or None
-        return self._extract_output(output_dir, input_json_path, captured=captured)
+        return self._extract_output(output_dir, captured=captured)
 
-    def _extract_output(self, output_dir: str, input_json_path: str, captured: str | None = None) -> dict[str, Any]:
+    def _extract_output(self, output_dir: str, captured: str | None = None) -> dict[str, Any]:
         """Locate the best-ranked sample's mmCIF and summary confidences."""
-        del input_json_path  # rf3 writes outputs under output_dir/<input_stem>/...; rglob locates them.
-
+        # rf3 writes outputs under output_dir/<input_stem>/...; rglob locates them.
         summary_files = sorted(Path(output_dir).rglob("*_summary_confidences.json"))
         if not summary_files:
             hint = f" rf3 exited 0 but wrote no summary; output: {captured}" if captured else ""

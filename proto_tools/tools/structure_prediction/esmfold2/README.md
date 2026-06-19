@@ -27,7 +27,7 @@ Two checkpoints are available. `esmfold2` is the larger, MSA-capable model recom
 
 ### ESMFold2 Structure Prediction (`esmfold2-prediction`)
 
-Predicts the all-atom 3D structure of a biomolecular complex. Each input complex can combine protein, DNA, RNA, and ligand chains (with optional chain-level modifications and covalent bonds); the assembly is folded by ESMFold2 and returned as a predicted `Structure` per complex with confidence metrics: pLDDT, pTM, interface pTM (for multi-chain complexes), and predicted aligned error.
+Predicts the all-atom 3D structure of a biomolecular complex. Each input complex can combine protein, DNA, RNA, and ligand chains (with optional chain-level modifications); the assembly is folded by ESMFold2 and returned as a predicted `Structure` per complex with confidence metrics: pLDDT, pTM, interface pTM (for multi-chain complexes), and predicted aligned error.
 
 #### Applications
 
@@ -37,7 +37,7 @@ This tool predicts the structure of multi-component assemblies such as protein-p
 
 - **`model_checkpoint` selects the variant.** `esmfold2-fast` (default) is the inference-optimized single-sequence model and is appropriate for most high-throughput applications; select `esmfold2` (with `use_msa=True`, or by attaching precomputed `msas` on the input) for the larger MSA-capable model on difficult or long targets. Setting `use_msa=True` with `esmfold2-fast` raises a validation error, and `msas` supplied with `esmfold2-fast` are ignored with a logged warning.
 - **`num_loops` (default `3`) and `num_sampling_steps` (default `50`) trade computation for accuracy.** Both parameters materially affect prediction quality, with the largest gains on difficult targets such as antibody-antigen complexes. Increasing either improves accuracy but extends runtime; decreasing them accelerates high-throughput screens at some accuracy cost.
-- **Multi-modal inputs.** Protein, DNA, RNA, and small-molecule ligand chains are supported; ligands can be specified by CCD code or SMILES, and chain modifications and covalent bonds are accepted. SMILES-based ligand input is supported but currently has known accuracy issues; CCD codes are recommended.
+- **Multi-modal inputs.** Protein, DNA, RNA, and small-molecule ligand chains are supported; ligands can be specified by CCD code or SMILES, and chain-level modifications are accepted. SMILES-based ligand input is supported but currently has known accuracy issues; CCD codes are recommended.
 - **Confidence is reported as pLDDT, pTM, ipTM, and PAE.** Mean pLDDT (0 to 1) is the primary per-structure quality metric; `iptm` is emitted only for multi-chain complexes, and `avg_pae` is in angstroms (0 to about 32). Set `include_pae_matrix=True` to attach the full per-token PAE matrix.
 
 ## Toolkit Notes

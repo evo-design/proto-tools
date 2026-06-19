@@ -1,7 +1,7 @@
 code:
   spdx: Custom (Cambrian Open License Agreement)
   url: https://www.evolutionaryscale.ai/policies/cambrian-open-license-agreement
-  text: 'EvolutionaryScale Cambrian Open License Agreement: permits research, educational, and commercial use of the licensed code and weights, subject to a naming requirement that any derivative model must include ''ESM'' in its name and credit EvolutionaryScale. Full terms at the canonical URL above.'
+  text: 'EvolutionaryScale Cambrian Open License Agreement: permits research, educational, and commercial use of the licensed code, subject to a naming requirement that any derivative model must include ''ESM'' in its name and credit EvolutionaryScale. The ESM3 model weights are separately licensed under the Cambrian Non-Commercial License Agreement (see weights below). Full terms at the canonical URL above.'
 weights:
   spdx: Custom (Cambrian Non-Commercial License Agreement)
   url: https://www.evolutionaryscale.ai/policies/cambrian-non-commercial-license-agreement

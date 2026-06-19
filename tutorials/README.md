@@ -23,4 +23,4 @@ Each tool also ships an `examples/example.ipynb` under `proto_tools/tools/{categ
 
 ## Questions?
 
-- File issues at [proto-bio/proto-tools/issues](https://github.com/proto-bio/proto-tools/issues).
+- File issues at [evo-design/proto-tools/issues](https://github.com/evo-design/proto-tools/issues).

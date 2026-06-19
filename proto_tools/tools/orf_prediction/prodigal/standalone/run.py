@@ -9,7 +9,6 @@ Usage (called by ToolInstance, not directly):
 
 import json
 import sys
-import warnings
 from functools import partial
 from multiprocessing.pool import ThreadPool
 from typing import Any
@@ -101,11 +100,11 @@ def run_prodigal(input_data: dict[str, Any]) -> dict[str, Any]:
     translation_table = config["translation_table"]
 
     if meta_mode and translation_table != 11:
-        warnings.warn(
-            f"translation_table={translation_table} is ignored in meta mode. "
+        logger.warning(
+            "translation_table=%s is ignored in meta mode. "
             "Metagenomic models use their own built-in translation tables. "
             "Set meta_mode=False to use a custom translation table.",
-            stacklevel=2,
+            translation_table,
         )
 
     # Initialize Prodigal gene finder

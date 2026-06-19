@@ -181,7 +181,7 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig, instance: Any = Non
         >>> result = run_mafft_align(inputs, config)
         >>> print(f"Alignment length: {result.msa.alignment_length}")
         >>> for i, seq in enumerate(result.msa):
-        ...     print(f"{result.sequence_ids[i]}: {seq}")
+        ...     print(f"{result.msa.sequence_ids[i]}: {seq}")
     """
     sequences = inputs.sequences
     sequence_ids = resolve_sequence_ids(sequences, inputs.sequence_ids)

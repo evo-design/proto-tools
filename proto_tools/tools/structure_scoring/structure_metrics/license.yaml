@@ -1,6 +1,6 @@
 code:
-  spdx: Apache-2.0
-  url: https://github.com/proto-bio/proto-tools
+  spdx: MIT
+  url: https://github.com/evo-design/proto-tools
 commercial_use: 'yes'
 redistribution: true
 attribution_required: false

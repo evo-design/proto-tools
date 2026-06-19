@@ -9,7 +9,7 @@ Environment variables exported:
     DETECTED_COMPUTE_PLATFORM: "cpu" or "cuda"
     DETECTED_DRIVER_VERSION: NVIDIA driver major version (e.g., "550")
     DETECTED_CUDA_VERSION: CUDA toolkit major version (e.g., "12")
-    RECOMMENDED_TORCH_SPEC: PyTorch version constraint (e.g., "torch>=2.7,<2.10")
+    RECOMMENDED_TORCH_SPEC: PyTorch version constraint (e.g., "torch>=2.5,<3")
     RECOMMENDED_TORCH_INDEX: PyTorch wheel index URL for the detected CUDA variant
     RECOMMENDED_JAX_SPEC: JAX version constraint with CUDA variant
     RECOMMENDED_JAX_VARIANT: JAX CUDA variant (e.g., "cuda12")
@@ -172,7 +172,7 @@ def detect_compute_environment() -> dict[str, str]:
         >>> env["DETECTED_COMPUTE_PLATFORM"]
         'cuda'
         >>> env["RECOMMENDED_TORCH_SPEC"]
-        'torch>=2.7,<2.10'
+        'torch>=2.5,<3'
     """
     from proto_tools.utils.system_info import get_gpu_info
 

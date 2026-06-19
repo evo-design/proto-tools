@@ -474,9 +474,7 @@ class BlastSearchConfig(BaseConfig):
 
     @model_validator(mode="after")
     def validate_mode_requirements(self) -> "BlastSearchConfig":
-        """Validate that mode-specific required fields are provided and.
-
-        warn about mode-inappropriate parameters.
+        """Validate mode-specific required fields and warn about mode-inappropriate parameters.
 
         Raises ``ValueError`` for hard errors (e.g. missing ``local_db``
         in local mode) and logs warnings for fields that will be ignored.

@@ -39,6 +39,7 @@ Use this to predict the base-pairing of mRNAs, non-coding RNAs, riboswitches, ap
 - **`use_dna_params` (default `False`) also changes how the input is read.** When `False`, any `T` in a sequence is converted to `U` and the sequence is folded as RNA with the Turner 2004 parameters. Set it `True` to fold the sequence as DNA with the Mathews 2004 DNA parameters and no `T`-to-`U` conversion.
 - **Set `circ` to `True` for circular molecules.** Plasmids, viroids, and circular RNAs fold differently from linear strands, and the default treats the sequence as linear.
 - **`no_lonely_pairs` (default `False`) forbids isolated base pairs.** Enabling it removes length-one helices, which often yields more physically realistic structures.
+- **`dangles` (default `2`) sets dangling-end energy treatment.** Choose `0` to ignore dangling ends, `1` for minimal, `2` for multibranch, or `3` for the most accurate model.
 - **`max_bp_span` (default `-1`, unlimited) caps the base-pair span.** Set a positive value to forbid long-range pairs, which is useful for very long sequences or local-structure analysis.
 
 ## Toolkit Notes

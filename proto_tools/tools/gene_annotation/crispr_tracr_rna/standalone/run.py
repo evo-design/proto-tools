@@ -209,7 +209,7 @@ _UPSTREAM_DEFAULTS: dict[str, Any] = {
 
 
 def _build_upstream_flags(config: dict[str, Any]) -> list[str]:
-    """Build CRISPRtracrRNA CLI flags for the optional config knobs.
+    """Build CRISPRtracrRNA CLI flags for the optional config settings.
 
     Only emits a flag when the configured value differs from upstream's
     documented default. ``perform_type_v_anti_repeat_analysis`` is special-
@@ -440,11 +440,6 @@ def run_crispr_tracr_rna(input_data: dict[str, Any]) -> dict[str, Any]:
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for persistent-worker execution."""
     return run_crispr_tracr_rna(input_dict)
-
-
-# =============================================================================
-# Entry point (called by ToolInstance)
-# =============================================================================
 
 
 def to_device(device: str) -> dict[str, Any]:

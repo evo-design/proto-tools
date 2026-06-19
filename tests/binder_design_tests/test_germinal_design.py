@@ -287,7 +287,7 @@ def _assert_design_invariants(design: GerminalDesign) -> None:
 @pytest.mark.slow
 @pytest.mark.integration
 def test_germinal_design_e2e_vhh_pd_l1(tmp_path):
-    """End-to-end VHH campaign against PD-L1 with reduced compute knobs (~5-15 min on H100).
+    """End-to-end VHH campaign against PD-L1 with reduced compute settings (~5-15 min on H100).
 
     Exercises the full wrap-Germinal pipeline:
       1. setup.sh-staged repo + AF-Multimer weights are reachable

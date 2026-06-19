@@ -35,7 +35,7 @@ This tool predicts the structure of multi-component assemblies such as protein-D
 - **Diffusion samples are ranked by `ranking_score`.** `diffusion_batch_size` (default `5`) independent samples are drawn per complex. The best by `ranking_score = 0.8*iptm + 0.2*ptm - 100*has_clash` is returned, with `num_steps` (default `50`) controlling the denoising step count.
 - **`n_recycles` (default `10`) trades accuracy for time.** More recycling iterations refine the prediction at higher runtime. Leave the upstream default of `10` unless you have a specific reason to lower it.
 - **Cyclic chains.** Mark chains as cyclic (head-to-tail) with `cyclic_chains=["A", ...]`.
-- **No template or conformer conditioning.** RF3 can condition on input coordinates (templates, holo ligand conformers), but this wrapper accepts only sequences, SMILES, and CCD codes — no coordinate input — so those upstream knobs are not exposed.
+- **No template or conformer conditioning.** RF3 can condition on input coordinates (templates, holo ligand conformers), but this wrapper accepts only sequences, SMILES, and CCD codes — no coordinate input — so those upstream options are not exposed.
 - **No per-token PAE matrix.** Unlike Boltz-2 and AlphaFold3, RF3 emits only chain-pair PAE aggregates (`avg_pae`, `chain_pair_pae`, `chain_pair_pae_min`) and a separate `pde` (predicted distance error). The inherited `include_pae_matrix` toggle is rejected by `RF3Config`.
 - **Multi-modal inputs.** Protein, DNA, RNA, and ligand entities are supported.
 

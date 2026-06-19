@@ -174,8 +174,8 @@ def run_progen2_sample(
 
     Args:
         inputs (ProGen2SampleInput): Validated input containing one or more protein
-            prompt sequences. Prompts can include ProGen2's special tokens or raw
-            amino acid sequences (which will be automatically normalized).
+            prompt sequences. Prompts are tokenized as given; include ProGen2's
+            start token '1' explicitly to condition generation on a sequence start.
         config (ProGen2SampleConfig): Validated ProGen2 sampling configuration specifying
             model variant, generation parameters (temperature, top-k, top-p),
             sequence length, and output processing options.
@@ -194,8 +194,8 @@ def run_progen2_sample(
         >>> result = run_progen2_sample(inputs, config)
         >>> print(f"Generated: {result.sequences[0]}")
 
-        >>> # Generate from raw amino acids (auto-normalized)
-        >>> inputs = ProGen2SampleInput(prompts=["MVLS"])  # Will prepend '1'
+        >>> # Generate from a raw amino-acid prompt (tokenized as given)
+        >>> inputs = ProGen2SampleInput(prompts=["MVLS"])
         >>> result = run_progen2_sample(inputs, config)
 
         >>> # Batch generation
@@ -209,7 +209,7 @@ def run_progen2_sample(
 
     Note:
         - ProGen2 uses '1' as start token and '2' as stop token
-        - Raw amino acid sequences are automatically normalized (start token prepended)
+        - Prompts are tokenized as given; prepend '1' to condition on a sequence start
         - Local execution runs inside a standalone venv via ToolInstance
 
     See Also:

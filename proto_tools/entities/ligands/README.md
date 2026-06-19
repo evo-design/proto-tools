@@ -61,16 +61,25 @@ SMILES (Simplified Molecular-Input Line-Entry System) is a line notation for des
 
 ### Fragment Class
 
+At least one of `smiles` or `ccd_code` must be provided.
+
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `molecule` | `str \| Chem.Mol \| Fragment` | SMILES string, RDKit Mol object, or existing Fragment |
-| `name` | `str \| None` | Optional name for the molecule (auto-generated from SMILES if not provided) |
+| `smiles` | `str \| None` | SMILES string for a single connected molecule |
+| `ccd_code` | `str \| None` | CCD code (e.g. `"ATP"`); resolved to SMILES |
+| `id` | `str \| None` | Optional free-form identifier (e.g. a chain letter) |
+| `name` | `str \| None` | Optional human-readable molecule name (defaults to `None`) |
+| `metrics` | `dict[str, float]` | Computed metrics for this fragment (defaults to `{}`) |
 
 ### Ligands Class
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `input_data` | `List \| str \| Path` | Single or list of: Fragment, Mol, SMILES string, `.smi` path, or `.sdf` path |
+| `fragments` | `list[Fragment]` | Explicit list of fragments |
+| `smiles` | `str` | Shorthand kwarg: dot-separated SMILES, expanded into fragments |
+| `ccd_codes` | `list[str]` | Shorthand kwarg: CCD codes, expanded into fragments |
+
+Use the factories `Ligands.from_smiles(...)`, `Ligands.from_ccd_codes([...])`, `Ligands.from_file(path)`, or `Ligands.from_mols([...])` to load from common sources.
 
 ### Conformer Generation
 
@@ -134,69 +143,9 @@ SMILES (Simplified Molecular-Input Line-Entry System) is a line notation for des
 
 3. **Name collisions**: Auto-generated names from SMILES can be cryptic. Provide meaningful names when possible.
 
-## Quick Start Examples
+## Quick Start
 
-**Example 1: Create a ligand from SMILES**
-```python
-from proto_tools.entities.ligands import Fragment, Ligands
-
-# Single molecule
-aspirin = Fragment("CC(=O)OC1=CC=CC=C1C(=O)O", name="Aspirin")
-print(f"Canonical SMILES: {aspirin.smiles}")
-
-# Generate 3D structure
-aspirin.generate_conformers(num_conformers=10)
-print(f"Generated {len(aspirin.conformers)} conformers")
-
-# Visualize in Jupyter
-aspirin.visualize(style='stick')
-```
-
-**Example 2: Load a ligand library from SDF**
-```python
-from proto_tools.entities.ligands import Ligands
-
-# Load all molecules from an SDF file
-library = Ligands("compounds.sdf")
-print(f"Loaded {len(library)} compounds")
-
-# Iterate and process
-for fragment in library:
-    print(f"{fragment.name}: {fragment.smiles}")
-```
-
-**Example 3: Prepare ligands for structure prediction**
-```python
-from proto_tools.entities.ligands import Ligands
-
-# Create from SMILES list
-ligands = Ligands(["ATP", "Mg"])  # Will auto-lookup if invalid SMILES
-# Or use actual SMILES:
-ligands = Ligands([
-    "NC1=NC=NC2=C1N=CN2C3OC(COP(O)(=O)OP(O)(=O)OP(O)(O)=O)C(O)C3O",  # ATP
-    "[Mg+2]"  # Magnesium ion
-])
-
-# Generate conformers for all
-ligands.generate_conformers(num_conformers=1)
-
-# Export for external tools
-ligands.to_sdf("ligands_for_docking.sdf")
-```
-
-**Example 4: Use with structure prediction**
-```python
-from proto_tools.entities.ligands import Ligands
-from proto_tools.tools.structure_prediction import run_boltz2
-
-# Prepare a small molecule
-drug = Ligands("CC(C)CC1=CC=C(C=C1)C(C)C(=O)O")  # Ibuprofen
-drug.generate_conformers()
-drug.to_sdf("ibuprofen.sdf")
-
-# Use in structure prediction pipeline
-# (See structure_prediction module for full example)
-```
+See [`examples/example.ipynb`](examples/example.ipynb) for a runnable walkthrough: building a ligand from SMILES, generating 3D conformers, exporting to SDF, loading cofactors by CCD code, and 3D visualization.
 
 ## Dependencies
 

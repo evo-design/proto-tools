@@ -423,8 +423,8 @@ class BindCraftConfig(BaseConfig):
         predict_initial_guess (bool): Use the trajectory structure as AF2's initial guess.
         predict_bigbang (bool): Use AF2's "Big Bang" recycle initialisation.
         enable_mpnn (bool): Run ProteinMPNN sequence refinement after each accepted trajectory.
-            When False, the eight ``mpnn_*`` / ``num_seqs`` / ``max_mpnn_sequences`` /
-            ``sampling_temp`` / ``backbone_noise`` / ``model_path`` knobs are inert.
+            When False, the ``mpnn_*`` / ``num_seqs`` / ``max_mpnn_sequences`` /
+            ``sampling_temp`` / ``backbone_noise`` / ``model_path`` fields are inert.
         mpnn_fix_interface (bool): Fix interface residues during MPNN redesign.
         num_seqs (int): Number of MPNN sequences to sample per trajectory.
         max_mpnn_sequences (int): Max MPNN sequences to validate per trajectory.

@@ -22,9 +22,6 @@ from standalone_helpers import (
 
 logger = get_logger(__name__)
 
-PUFFIN_PADDING = 325
-PUFFIN_OUTPUT_CHANNELS = 10
-
 TARGETI_FORWARD = {
     "FANTOM_CAGE": 0,
     "ENCODE_CAGE": 1,

@@ -57,7 +57,7 @@ class ESMFoldModel:
             num_recycles: Iterative refinement passes through ESMFold (training default 4).
 
         Returns:
-            List of dicts with keys: pdb, avg_plddt, ptm
+            List of dicts with keys: pdb, avg_plddt, ptm, avg_pae, pae
         """
         # Lazy load on first call or device change
         if not self._loaded:
@@ -478,7 +478,7 @@ class ESMFoldModel:
         """Extract results for a single complex from batched outputs.
 
         Returns:
-            Dict with keys: pdb, avg_plddt, ptm, avg_pae
+            Dict with keys: pdb, avg_plddt, ptm, avg_pae, pae
         """
         # Structure module tensors have shape (num_blocks, batch, ...) - batch is dim 1.
         # All other tensors have shape (batch, ...) - batch is dim 0.
