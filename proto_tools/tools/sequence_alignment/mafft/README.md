@@ -9,7 +9,7 @@
 
 ## Overview
 
-[MAFFT](https://mafft.cbrc.jp/alignment/software/) (Multiple Alignment using Fast Fourier Transform) is a multiple sequence alignment program developed by Kazutaka Katoh and collaborators at Osaka University. It aligns multiple protein or nucleotide sequences by inserting gap characters so that homologous residues occupy the same alignment column, and offers a family of algorithms that trade speed for accuracy. This toolkit wraps the MAFFT command-line program in an isolated environment and returns typed MSA results.
+[MAFFT](https://mafft.cbrc.jp/alignment/software/) (Multiple Alignment using Fast Fourier Transform) is a multiple sequence alignment program developed by Kazutaka Katoh and collaborators at Osaka University. It aligns multiple protein or nucleotide sequences by inserting gap characters so that homologous residues occupy the same alignment column, and offers a family of algorithms that trade speed for accuracy. This toolkit runs the MAFFT command-line program and returns typed MSA results.
 
 ## Background
 
