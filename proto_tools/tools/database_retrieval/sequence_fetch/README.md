@@ -5,7 +5,7 @@
 ![Unified Sequence Fetch](https://proto-bio.github.io/proto-assets/images/tool/sequence_fetch/hero.png)
 
 > [!NOTE]
-> **License:** Unified Sequence Fetch's own code is licensed under Apache-2.0, and it federates over bundled data sources and components, each under its own license terms.
+> **License:** Unified Sequence Fetch's own code is licensed under MIT, and it federates over bundled data sources and components, each under its own license terms.
 >
 > Bundled dependencies, each under its own license:
 >

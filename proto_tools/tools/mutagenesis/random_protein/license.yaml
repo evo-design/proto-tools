@@ -1,5 +1,5 @@
 code:
-  spdx: Apache-2.0
+  spdx: MIT
   url: https://github.com/evo-design/proto-tools
 commercial_use: 'yes'
 redistribution: true

@@ -5,7 +5,7 @@
 ![Ensembl](https://proto-bio.github.io/proto-assets/images/tool/ensembl/hero.png)
 
 > [!NOTE]
-> **License:** Ensembl retrieves data from the Ensembl project, distributed under the EMBL-EBI Terms of Use. Attribution to the Ensembl project is required when the data is redistributed. The client wrapper code is Apache-2.0-licensed. Please refer to [the data terms](https://www.ebi.ac.uk/about/terms-of-use/) for full terms.
+> **License:** Ensembl retrieves data from the Ensembl project, distributed under the EMBL-EBI Terms of Use. Attribution to the Ensembl project is required when the data is redistributed. The client wrapper code is MIT-licensed. Please refer to [the data terms](https://www.ebi.ac.uk/about/terms-of-use/) for full terms.
 
 ## Overview
 

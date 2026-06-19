@@ -1,5 +1,5 @@
 code:
-  spdx: Apache-2.0
+  spdx: MIT
   url: https://github.com/evo-design/proto-tools
 bundled_dependencies:
   - name: NCBI Entrez
@@ -12,5 +12,5 @@ commercial_use: 'yes'
 redistribution: true
 attribution_required: false
 proto_tools_original: true
-notes: proto-tools original orchestration code (Apache-2.0) that federates over the NCBI Entrez, UniProt, and RCSB PDB sibling toolkits. Each underlying source carries its own data terms (NCBI public domain, UniProt CC-BY-4.0, RCSB CC0-1.0); attribution to UniProt is required when UniProt records are redistributed.
+notes: proto-tools original orchestration code (MIT) that federates over the NCBI Entrez, UniProt, and RCSB PDB sibling toolkits. Each underlying source carries its own data terms (NCBI public domain, UniProt CC-BY-4.0, RCSB CC0-1.0); attribution to UniProt is required when UniProt records are redistributed.
 last_updated: '2026-05-19'

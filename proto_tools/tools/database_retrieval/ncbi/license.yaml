@@ -1,5 +1,5 @@
 code:
-  spdx: Apache-2.0
+  spdx: MIT
   url: https://github.com/evo-design/proto-tools
 data:
   name: NCBI's Entrez databases
@@ -11,5 +11,5 @@ commercial_use: 'yes'
 redistribution: true
 attribution_required: false
 proto_tools_original: true
-notes: proto-tools original client code (Apache-2.0) calling NCBI Entrez E-utilities over plain HTTP. The records retrieved are works of the United States Government, in the public domain; standard NCBI usage policies (rate limits) apply to the API endpoints.
+notes: proto-tools original client code (MIT) calling NCBI Entrez E-utilities over plain HTTP. The records retrieved are works of the United States Government, in the public domain; standard NCBI usage policies (rate limits) apply to the API endpoints.
 last_updated: '2026-05-18'

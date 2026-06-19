@@ -5,7 +5,7 @@
 ![PubChem](https://proto-bio.github.io/proto-assets/images/tool/pubchem/hero.png)
 
 > [!NOTE]
-> **License:** PubChem retrieves data from the PubChem database, in the public domain (U.S. Government public domain). The client wrapper code is Apache-2.0-licensed. Please refer to [the data terms](https://www.ncbi.nlm.nih.gov/home/about/policies/) for full terms.
+> **License:** PubChem retrieves data from the PubChem database, in the public domain (U.S. Government public domain). The client wrapper code is MIT-licensed. Please refer to [the data terms](https://www.ncbi.nlm.nih.gov/home/about/policies/) for full terms.
 
 ## Overview
 

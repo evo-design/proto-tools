@@ -1,5 +1,5 @@
 code:
-  spdx: Apache-2.0
+  spdx: MIT
   url: https://github.com/evo-design/proto-tools
 data:
   name: the PubChem database
@@ -11,5 +11,5 @@ commercial_use: 'yes'
 redistribution: true
 attribution_required: false
 proto_tools_original: true
-notes: proto-tools original client code (Apache-2.0) calling the PubChem PUG REST API over plain HTTP. PubChem core data is a U.S. Government work in the public domain; some records re-distribute third-party content with depositor-specific terms.
+notes: proto-tools original client code (MIT) calling the PubChem PUG REST API over plain HTTP. PubChem core data is a U.S. Government work in the public domain; some records re-distribute third-party content with depositor-specific terms.
 last_updated: '2026-05-18'

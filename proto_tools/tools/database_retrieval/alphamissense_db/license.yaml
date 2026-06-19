@@ -1,5 +1,5 @@
 code:
-  spdx: Apache-2.0
+  spdx: MIT
   url: https://github.com/evo-design/proto-tools
 data:
   name: the AlphaFold Protein Structure Database
@@ -10,5 +10,5 @@ commercial_use: 'yes'
 redistribution: true
 attribution_required: true
 proto_tools_original: true
-notes: proto-tools original client code (Apache-2.0) downloading the pre-computed AlphaMissense CSVs over plain HTTP; no google-deepmind/alphamissense dependency. The predictions are distributed by the AlphaFold Protein Structure Database (alphafold.ebi.ac.uk) under CC-BY-4.0; attribution to AlphaMissense and EMBL-EBI is required when redistributing them.
+notes: proto-tools original client code (MIT) downloading the pre-computed AlphaMissense CSVs over plain HTTP; no google-deepmind/alphamissense dependency. The predictions are distributed by the AlphaFold Protein Structure Database (alphafold.ebi.ac.uk) under CC-BY-4.0; attribution to AlphaMissense and EMBL-EBI is required when redistributing them.
 last_updated: '2026-05-18'

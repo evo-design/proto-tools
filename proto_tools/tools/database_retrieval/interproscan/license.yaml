@@ -1,5 +1,5 @@
 code:
-  spdx: Apache-2.0
+  spdx: MIT
   url: https://github.com/evo-design/proto-tools
 data:
   name: the InterPro classification
@@ -11,5 +11,5 @@ commercial_use: 'yes'
 redistribution: true
 attribution_required: false
 proto_tools_original: true
-notes: proto-tools original client code (Apache-2.0) calling EBI's public InterPro REST API and iprscan5 submit-and-poll service over plain HTTP. Data accessed via the public InterPro API is freely usable under the EMBL-EBI Terms of Use; member databases aggregated by InterPro have varying terms.
+notes: proto-tools original client code (MIT) calling EBI's public InterPro REST API and iprscan5 submit-and-poll service over plain HTTP. Data accessed via the public InterPro API is freely usable under the EMBL-EBI Terms of Use; member databases aggregated by InterPro have varying terms.
 last_updated: '2026-05-18'

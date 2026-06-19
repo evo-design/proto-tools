@@ -1,5 +1,5 @@
 code:
-  spdx: Apache-2.0
+  spdx: MIT
   url: https://github.com/evo-design/proto-tools
 data:
   name: the RCSB Protein Data Bank
@@ -10,5 +10,5 @@ commercial_use: 'yes'
 redistribution: true
 attribution_required: false
 proto_tools_original: true
-notes: proto-tools original client code (Apache-2.0) calling the RCSB PDB Data and FASTA REST endpoints over plain HTTP; there is no py-rcsb-api dependency. PDB archive data is public-domain under CC0-1.0 per the RCSB usage policies.
+notes: proto-tools original client code (MIT) calling the RCSB PDB Data and FASTA REST endpoints over plain HTTP; there is no py-rcsb-api dependency. PDB archive data is public-domain under CC0-1.0 per the RCSB usage policies.
 last_updated: '2026-05-18'
