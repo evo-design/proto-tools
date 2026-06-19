@@ -467,7 +467,6 @@ class AbLangModel:
         return {
             "metrics": all_metrics,
             "logits": all_logits,
-            # vocab gives the column order for logits; always populated, matching the other LMs.
             "vocab": list(STANDARD_AMINO_ACIDS),
         }
 
