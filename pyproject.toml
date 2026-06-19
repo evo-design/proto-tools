@@ -182,7 +182,6 @@ module = [
     "transformers.*",
     "flash_attn.*",
     # Installed but missing library stubs or py.typed marker
-    "biotite.*",
     "py3Dmol.*",
     "pymol.*",
     "pandas.*",
@@ -238,6 +237,14 @@ module = [
     "malinois_scoring.*",
     "model.*",
 ]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Newer biotite ships a py.typed marker with a generic ``AtomArray``, but the
+# codebase treats biotite structures as untyped (bare ``AtomArray``). Skip
+# following it so its generic-type requirements don't leak into mypy strict.
+module = ["biotite.*"]
+follow_imports = "skip"
 ignore_missing_imports = true
 
 [tool.pydantic-mypy]
