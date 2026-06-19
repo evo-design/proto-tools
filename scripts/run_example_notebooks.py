@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """scripts/run_example_notebooks.py.
 
-Re-execute (optional) and post-process every tool example notebook under
-``proto_tools/tools/*/examples/`` to strip output mime types that don't
-render outside the original execution context (ipywidgets progress bars,
-live Plotly/Bokeh handles, etc.). The text/plain and text/html fallbacks
-stay.
+Re-execute (optional) and post-process every example notebook named
+``example.ipynb`` under ``proto_tools/`` (tool and entity examples alike) to
+strip output mime types that don't render outside the original execution
+context (ipywidgets progress bars, live Plotly/Bokeh handles, etc.). The
+text/plain and text/html fallbacks stay.
 
 Typical usage::
 
@@ -143,8 +143,8 @@ def _redact_field(value: object) -> tuple[object, int]:
 
 
 def discover_notebooks(only: str | None) -> list[Path]:
-    """Return every ``example.ipynb`` under ``proto_tools/tools``, filtered by ``only``."""
-    notebooks = sorted(REPO_ROOT.glob("proto_tools/tools/**/examples/example.ipynb"))
+    """Return every ``example.ipynb`` under ``proto_tools``, filtered by ``only``."""
+    notebooks = sorted(REPO_ROOT.glob("proto_tools/**/example.ipynb"))
     if only:
         notebooks = [n for n in notebooks if only in str(n.relative_to(REPO_ROOT))]
     return notebooks
