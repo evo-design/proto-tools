@@ -13,11 +13,11 @@ Every tool runs in its own automatically managed isolated environment, so you ne
 > [!TIP]
 > **COMING SOON:** Cloud dispatch will allow you to run GPU jobs even without local compute.
 
-You can use it as a standalone Python library or as part of the broader [proto-language](https://github.com/proto-bio/proto-language) system.
+You can use it as a standalone Python library or as part of the broader [proto-language](https://github.com/evo-design/proto-language) system.
 
 ## Related Repositories
 
-- [`proto-language`](https://github.com/proto-bio/proto-language) – High-level programming language for generative biology
+- [`proto-language`](https://github.com/evo-design/proto-language) – High-level programming language for generative biology
 - [`proto-client`](https://github.com/proto-bio/proto-client) – Python SDK for Proto Bio APIs
 
 ## Setup 🚧
