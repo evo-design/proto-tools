@@ -29,7 +29,7 @@ You are implementing a new bioinformatics tool in the proto-tools codebase. This
 Phase 1: Research → Phase 2: Contract → Phase 3: Fan-out (5 parallel agents) → Phase 4: Verify → Phase 4.5: Config Field Audit → Phase 4.6: Temp Integration & Stress → Phase 4.7: Docs Verification → Phase 4.8: Self-Audit & Full PR Review → Phase 5: Ship
 ```
 
-**The Phase 4.x gates are decisive and non-negotiable** — they catch the failure modes that the fast fan-out reliably misses (invented config knobs, untested real workloads, hallucinated citations/licenses, missing `license.yaml`/`links.yaml`). Do not skip them to ship faster. Ground every decision in upstream source or a credible reference — never assume.
+**The Phase 4.x gates are decisive and non-negotiable** — they catch the failure modes that the fast fan-out reliably misses (invented config parameters, untested real workloads, hallucinated citations/licenses, missing `license.yaml`/`links.yaml`). Do not skip them to ship faster. Ground every decision in upstream source or a credible reference — never assume.
 
 **Key principle:** The core tool file (Input/Config/Output + `@tool()` + `run_*()`) is the **contract** everything else depends on. Write it first (sequential), then fan out to subagents (parallel).
 
@@ -79,7 +79,7 @@ The user provides EITHER:
    - Input/output formats
    - **License** — read the repo's actual `LICENSE`/`COPYING` file (not just the README badge) and the weights license if it differs. Record the SPDX id (or note it's non-standard) and the file URL. Feeds `license.yaml` and the README License callout.
    - **Canonical links** — the repo URL, project homepage/docs, paper DOI or preprint URL, HuggingFace model page, affiliated orgs. Feeds `links.yaml`. Verify each resolves.
-   - **The full upstream parameter surface** — which knobs the upstream CLI/Python API actually exposes to *end users*, with their defaults and valid ranges. This is the ground truth for Phase 4.5's config audit; capture it now while reading the source.
+   - **The full upstream parameter surface** — which parameters the upstream CLI/Python API actually exposes to *end users*, with their defaults and valid ranges. This is the ground truth for Phase 4.5's config audit; capture it now while reading the source.
    - Model weights location (HuggingFace, GitHub releases, etc.) — determines which weight management pattern to use:
      - **HuggingFace `from_pretrained`** → no weight code needed (HF_HOME set automatically). Example: `tools/masked_models/esm2/`
      - **Direct download in setup.sh** → must implement `PROTO_MODEL_CACHE` pattern. Example: `tools/inverse_folding/fampnn/standalone/setup.sh`
@@ -179,7 +179,7 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
 - No try/except — `@tool` decorator handles errors
 - Use `logging.getLogger(__name__)`, never `print()`
 - Output must implement `output_format_options`, `output_format_default`, `_export_output()`
-- **Iterable input/output cardinality must be 1:1**: when `iterable_input_fields` and `iterable_output_field` are both set, `len(output.{iterable_output_field})` must equal the (primary) input list length, by position. The framework's per-item cache stitching, dedup, and diversification testing all rely on this. If the tool produces N samples per input (e.g. a `num_sequences_per_structure` or `num_designs` config knob), bundle the N samples inside a single per-input wrapper class — do NOT flatten N×inputs into the output list. Canonical patterns to follow: `ProteinMPNNSequences` / `LigandMPNNSequences` (per-structure sequence bundles, `num_sequences_per_structure` config) and `RFdiffusion3Designs` (per-spec design bundles, `n_batches * diffusion_batch_size` per spec). See PATTERNS.md → "Iterable cardinality" for the full rule and code shape.
+- **Iterable input/output cardinality must be 1:1**: when `iterable_input_fields` and `iterable_output_field` are both set, `len(output.{iterable_output_field})` must equal the (primary) input list length, by position. The framework's per-item cache stitching, dedup, and diversification testing all rely on this. If the tool produces N samples per input (e.g. a `num_sequences_per_structure` or `num_designs` config parameter), bundle the N samples inside a single per-input wrapper class — do NOT flatten N×inputs into the output list. Canonical patterns to follow: `ProteinMPNNSequences` / `LigandMPNNSequences` (per-structure sequence bundles, `num_sequences_per_structure` config) and `RFdiffusion3Designs` (per-spec design bundles, `n_batches * diffusion_batch_size` per spec). See PATTERNS.md → "Iterable cardinality" for the full rule and code shape.
 - **Input = per-item, Config = shared**: model each field by "is there one of these per item, or one for the whole batch?" Shared whole-batch params/collections → Config (which also keeps the per-item cache key correct by construction). Per-item values → Input, either bundled inside the iterable element or as a parallel sibling in `iterable_input_fields`. A per-item value that is *usually uniform* can be a **broadcastable** field — `InputField(..., broadcastable=True)`, declared as `list[...] | None`, added to `iterable_input_fields`, normalized via `broadcast_parallel_fields()` (one value broadcasts to all, N is strict 1:1). Broadcast is opt-in per field and only when a single value applied to every item is genuinely correct (safe for `binder_chain`; **wrong for `msas`**). See PATTERNS.md → "Input = per-item, Config = shared".
 - **`cpus_per_instance` opt-in**: `BaseConfig.cpus_per_instance` defaults to `None` — every CPU tool stays off ToolPool's CPU scheduler and runs as a single direct call. **Most CPU tools should leave this alone.** Only opt in (override to a positive int) when per-call work is heavy enough to amortize spinning up N persistent worker subprocesses — each holds its own venv in RAM and pays a startup tax, so cheap tools (short per-item compute, internal threading, network IO) lose more than they gain. The canonical opt-in is PyRosetta (heavy `init`, multi-second per pose, embarrassingly parallel poses → `cpus_per_instance = 1`). GPU tools (`gpus_per_instance > 0`) ignore `cpus_per_instance` entirely.
 
@@ -524,7 +524,7 @@ Follow the structured template in TEMPLATES.md exactly. Four canonical H2 sectio
 1. `# {Toolkit Display Name}` (plus the badge row above the title and a `> [!NOTE] License: ...` callout)
 2. `## Overview` — 2–3 sentences: who built it, what it does, why useful (link the upstream repo on first mention)
 3. `## Background` — 1–3 paragraphs of biological/algorithmic context with inline paper citations; optional `### Learning Resources` subsection for user-facing explainers (blogs, talks, courses)
-4. `## Tools` — one `### {Tool Display Name} (\`{tool-key}\`)` block per registered tool, each with `#### Applications` and `#### Usage Tips` (critical-knob tips in bold)
+4. `## Tools` — one `### {Tool Display Name} (\`{tool-key}\`)` block per registered tool, each with `#### Applications` and `#### Usage Tips` (critical-parameter tips in bold)
 5. `## Toolkit Notes` — Toolkit-wide guide badges row + bulleted notes that apply to every tool in the toolkit
 
 DO NOT add other H2 sections — schemas, configs, and output specs are auto-generated from Pydantic field descriptions. Read `gene_annotation/pyhmmer/README.md` for the canonical example before drafting. The `> [!NOTE] License: ...` callout MUST agree with `license.yaml`.
@@ -785,7 +785,7 @@ CRITICAL RULES:
 
 ## Phase 4.5: Config Field Audit
 
-**Goal:** Guarantee every Input/Config field is real, correctly typed, correctly defaulted, and earns its place. The fast fan-out tends to invent knobs the upstream tool doesn't have, copy defaults/ranges blindly, and leave types loose (`str` where a `Literal` belongs).
+**Goal:** Guarantee every Input/Config field is real, correctly typed, correctly defaulted, and earns its place. The fast fan-out tends to invent parameters the upstream tool doesn't have, copy defaults/ranges blindly, and leave types loose (`str` where a `Literal` belongs).
 
 **When:** After Phase 4 passes. Before Phase 4.6 — pruning/retyping a field changes the surface the temp tests exercise.
 
@@ -793,7 +793,7 @@ CRITICAL RULES:
 
 Per-field checklist:
 
-1. **Real upstream knob?** Is this parameter actually exposed to *end users* upstream? If it's an internal implementation detail (a managed path, a fixed buffer, a constant the upstream API never surfaces), **delete it** — do not manufacture complexity the tool doesn't have. Keep only what a user would meaningfully set.
+1. **Real upstream parameter?** Is this parameter actually exposed to *end users* upstream? If it's an internal implementation detail (a managed path, a fixed buffer, a constant the upstream API never surfaces), **delete it** — do not manufacture complexity the tool doesn't have. Keep only what a user would meaningfully set.
 2. **Default matches upstream.** The default must equal the upstream default, or be a deliberate deviation noted in the description. Never invent a default.
 3. **Range/constraints match upstream.** `ge`/`le`/`gt`/`lt` bounds must reflect the real valid range from the source, not a guess.
 4. **Type is as tight as the domain allows.** Prefer `Literal[...]` over `str`, and `list[Literal[...]]` over `list[str]`, whenever upstream accepts a fixed enumerated set. Use bounded `int`/`float` over unbounded numerics. Use `X | None` only when `None` is genuinely meaningful.
@@ -817,7 +817,7 @@ Per-field checklist:
 
 **How:**
 
-1. **Direct-call driver script** — write a temp script (e.g. `scratch/drive_{toolkit}.py`) that imports `run_{tool_key_snake}` and calls it exactly as a user would: realistic biological inputs, default config, then a couple of non-default configs exercising the knobs you just audited. Print key output fields and `result.success`. Run it; confirm the output is scientifically sensible, not just non-erroring.
+1. **Direct-call driver script** — write a temp script (e.g. `scratch/drive_{toolkit}.py`) that imports `run_{tool_key_snake}` and calls it exactly as a user would: realistic biological inputs, default config, then a couple of non-default configs exercising the parameters you just audited. Print key output fields and `result.success`. Run it; confirm the output is scientifically sensible, not just non-erroring.
 2. **Temp integration + stress tests** emulating real usage — run them:
    - A realistic end-to-end call on representative data.
    - Batch / large-input behavior (many sequences, a long sequence, multiple structures) to surface batching or memory bugs.

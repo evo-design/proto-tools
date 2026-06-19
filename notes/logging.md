@@ -106,7 +106,7 @@ Standard Python logging hierarchy applies to records re-emitted by the drain thr
 | `verbose_level_from_env` | `proto_tools/utils/logging_config.py` | Parses `PROTO_WORKER_VERBOSE` as int 0..3 |
 | `_TAG_PREFIX` | `proto_tools/utils/logging_config.py` (parent) and `standalone_helpers/proto_logging.py` (subprocess) | Wire-format constant; **must match** on both sides |
 | `_drain_subprocess_stderr` / `_handle_raw_stderr_line` / `_reemit_tagged_line` | `proto_tools/utils/persistent_worker.py` | Drain thread; demuxes tagged lines, ring-buffers / tees untagged |
-| `BaseConfig.verbose` | `proto_tools/utils/base_config.py` | User-facing int knob (0/1/2/3) |
+| `BaseConfig.verbose` | `proto_tools/utils/base_config.py` | User-facing int setting (0/1/2/3) |
 | `_run_oneshot` / `_run_persistent` | `proto_tools/utils/tool_instance.py` | Honor `effective = max(verbose, env)` and pass `raw_tee` to the drain |
 | `_install_subprocess_logging_bridge` | `proto_tools/utils/_worker_bootstrap.py` | Imports `standalone_helpers` to trigger `install()` before the standalone loads |
 

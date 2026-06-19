@@ -234,7 +234,7 @@ class PyRosettaInterfaceAnalyzerConfig(BaseConfig):
     """Configuration for PyRosetta interface analysis.
 
     Interface chains are specified on each :class:`InterfaceStructureInput` in
-    ``inputs``, not here — this config only carries cross-input knobs
+    ``inputs``, not here — this config only carries cross-input settings
     (score function and the optional FastRelax preprocess).
 
     Attributes:

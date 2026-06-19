@@ -125,7 +125,7 @@ def run_pdb_fetch_entry(
 
     Args:
         inputs (PdbFetchEntryInput): PDB accession to look up.
-        config (PdbFetchConfig): Empty placeholder (PDB fetch has no user knobs).
+        config (PdbFetchConfig): Empty placeholder (PDB fetch has no user settings).
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:

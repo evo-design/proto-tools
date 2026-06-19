@@ -29,7 +29,7 @@ def _install_checkpoint_cache() -> None:
 
     ``boltz.main.predict`` reloads the checkpoint on every call; this memoization collapses those
     repeated loads to one per checkpoint. Config fields baked into the load (sampling/recycling/
-    diffusion steps, step_scale, subsample_msa, and the affinity knobs) are marked
+    diffusion steps, step_scale, subsample_msa, and the affinity settings) are marked
     ``reload_on_change=True``, so a config change restarts the worker and load args stay fixed for a
     worker's lifetime. The only distinct checkpoints are the structure (``boltz2_conf``) and affinity
     (``boltz2_aff``) files, so keying by checkpoint path bounds the cache to two entries.
@@ -151,7 +151,7 @@ class Boltz2Model:
     ) -> dict[str, Any]:
         """Run Boltz2 structure + binding-affinity prediction.
 
-        Structure args mirror ``__call__``; the affinity pass adds its own knobs.
+        Structure args mirror ``__call__``; the affinity pass adds its own settings.
         Returns ``__call__``'s output plus ``affinity_metrics`` parsed from
         ``affinity_<input>.json``.
         """

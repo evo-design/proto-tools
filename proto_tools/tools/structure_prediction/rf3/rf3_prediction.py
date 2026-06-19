@@ -192,7 +192,7 @@ class RF3Config(MSAStructurePredictionConfig):
     ``include_pae_matrix`` flag is rejected: RF3 emits only chain-pair PAE
     aggregates and an ``avg_pae`` scalar, never a per-token LxL matrix.
 
-    RF3's template/conformer-conditioning knobs and ``add_missing_atoms`` act on
+    RF3's template/conformer-conditioning settings and ``add_missing_atoms`` act on
     input atomic coordinates; this wrapper sends only sequences, SMILES, and CCD
     codes, so they would be no-ops and are not exposed.
 

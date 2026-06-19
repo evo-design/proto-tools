@@ -38,12 +38,12 @@ Selects positions via a configurable masking strategy, masks them, and resamples
 
 #### Applications
 
-This tool drives guided point mutation, variant generation, and infilling at designable sites. Resampling masked positions from a protein language model is the core operation behind directed-evolution proposals and antibody affinity maturation. Which positions are resampled is set by the [masking strategy](https://github.com/evo-design/proto-tools/blob/main/proto_tools/transforms/masking/README.md); see its README for the available selection methods and tuning knobs.
+This tool drives guided point mutation, variant generation, and infilling at designable sites. Resampling masked positions from a protein language model is the core operation behind directed-evolution proposals and antibody affinity maturation. Which positions are resampled is set by the [masking strategy](https://github.com/evo-design/proto-tools/blob/main/proto_tools/transforms/masking/README.md); see its README for the available selection methods and tuning parameters.
 
 #### Usage Tips
 
 - **`iterative_refinement` produces more coherent joint samples than `single_pass`.** It runs ESM3's `batch_generate` over `num_steps` rounds (cosine or linear unmask schedule) instead of filling every mask independently in one pass; it is roughly `num_steps×` slower. Default to it when masking more than a handful of sites.
-- **`masking_strategy` controls which positions get masked before sampling.** See the [masking strategy README](https://github.com/evo-design/proto-tools/blob/main/proto_tools/transforms/masking/README.md) for the available selection methods and tuning knobs. As an alternative to passing a strategy, pre-mask exact positions with `_` directly in the input string and the masking strategy is skipped entirely.
+- **`masking_strategy` controls which positions get masked before sampling.** See the [masking strategy README](https://github.com/evo-design/proto-tools/blob/main/proto_tools/transforms/masking/README.md) for the available selection methods and tuning parameters. As an alternative to passing a strategy, pre-mask exact positions with `_` directly in the input string and the masking strategy is skipped entirely.
 - **`temperature` scales the per-position logits before sampling.** Values of 0.5 to 0.7 yield conservative mutations close to the input; values above 1.0 broaden exploration of the model's distribution.
 
 ### ESM3 Scoring (`esm3-score`)

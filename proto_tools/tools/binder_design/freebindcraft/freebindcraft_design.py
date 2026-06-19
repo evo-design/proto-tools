@@ -79,7 +79,7 @@ _HARDCODED_INTERNAL_SETTINGS: dict[str, Any] = {
     "remove_unrelaxed_trajectory": True,
     "remove_unrelaxed_complex": True,
     "remove_binder_monomer": True,
-    # Dials constant across all BindCraft presets — pinned to upstream defaults, not user knobs.
+    # Dials constant across all BindCraft presets — pinned to upstream defaults, not user settings.
     "intra_contact_distance": 14.0,
     "inter_contact_distance": 20.0,
     "intra_contact_number": 2,
@@ -368,7 +368,7 @@ class FreeBindCraftConfig(BaseConfig):
     """User-facing FreeBindCraft settings.
 
     Defaults match upstream BindCraft's pinned ``default_4stage_multimer.json``
-    (FreeBindCraft is a drop-in fork, so the hallucination/MPNN knobs are
+    (FreeBindCraft is a drop-in fork, so the hallucination/MPNN settings are
     identical); ``filter_overrides`` merges per-metric thresholds on top of the
     default-filters snapshot at dispatch.
 

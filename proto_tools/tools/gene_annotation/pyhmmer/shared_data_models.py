@@ -330,7 +330,7 @@ class PyHmmerOutput(BaseToolOutput):
 class PyHmmerConfig(BaseConfig):
     """Base configuration object for PyHMMER tools.
 
-    Common knobs for hmmsearch / hmmscan / phmmer / nhmmer / jackhmmer.
+    Common settings for hmmsearch / hmmscan / phmmer / nhmmer / jackhmmer.
     Reporting thresholds control what appears in output; inclusion thresholds
     mark a hit as 'trusted' (jackhmmer uses included hits to seed the next
     iteration).

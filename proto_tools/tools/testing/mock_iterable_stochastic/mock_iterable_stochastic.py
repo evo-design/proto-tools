@@ -61,7 +61,7 @@ class MockIterableStochasticConfig(BaseConfig):
 
     Attributes:
         batch_size (int): Internal batch size for the tool's sampling
-            loop. Mimics an LM's ``batch_size`` knob — the framework
+            loop. Mimics an LM's ``batch_size`` setting — the framework
             doesn't see or care about this; it's an implementation
             detail of the tool's inference path.
     """
