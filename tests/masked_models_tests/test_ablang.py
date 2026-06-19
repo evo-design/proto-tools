@@ -423,7 +423,6 @@ def test_ablang_score_return_logits():
 
     default = run_ablang_score(inputs, AbLangScoringConfig())
     validate_output(default)
-    # logits are gated on return_logits, but vocab (the logit column order) is always returned.
     assert all(s.logits is None for s in default.scores)
     assert all(s.vocab == list(PROTEIN_AMINO_ACIDS) for s in default.scores)
 
