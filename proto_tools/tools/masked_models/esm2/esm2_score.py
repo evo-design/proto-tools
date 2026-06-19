@@ -143,8 +143,8 @@ def run_esm2_score(
               attribute ``score.perplexity`` or mapping ``score["perplexity"]``)
             - ``logits``: Per-position logits tensor (seq_len, 20) if
               ``return_logits=True``, otherwise ``None``
-            - ``vocab``: List of 20 standard amino acid characters if
-              ``return_logits=True``, otherwise ``None``
+            - ``vocab``: List of 20 standard amino acid characters giving the
+              column order of ``logits`` (always populated)
 
     Examples:
         >>> # Basic scoring (metrics only, no logits)
