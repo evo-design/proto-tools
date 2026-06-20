@@ -313,7 +313,6 @@ def run_splice_transformer(
         "right_contexts": inputs.right_contexts,
         "context_length": CONTEXT_LENGTH,
         "device": config.device,
-        "verbose": config.verbose,
     }
 
     output_data = ToolInstance.dispatch(

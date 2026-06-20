@@ -46,7 +46,6 @@ class SpliceTransformerModel:
         left_contexts: list[str],
         right_contexts: list[str],
         device: str = "cuda",
-        verbose: bool = False,
     ) -> np.ndarray:
         """Run SpliceTransformer inference on sequences with contexts.
 
@@ -55,14 +54,13 @@ class SpliceTransformerModel:
             left_contexts: Left context sequences (must be context_length long)
             right_contexts: Right context sequences (must be context_length long)
             device: Device to run inference on
-            verbose: Accepted for interface symmetry; status is emitted via the logger.
 
         Returns:
             Predictions of shape (batch, target_length, 18)
         """
         # Lazy load on first call or device change
         if not self._loaded:
-            self.load(device, verbose)
+            self.load(device)
         elif self.device != device:
             self.to_device(device)
 
@@ -145,7 +143,7 @@ class SpliceTransformerModel:
             key.replace("attn.pos_emb.weights_", "attn.pos_emb.weights."): value for key, value in state_dict.items()
         }
 
-    def load(self, device: str = "cuda", verbose: bool = False) -> None:  # noqa: ARG002 - verbose kept for interface symmetry
+    def load(self, device: str = "cuda") -> None:
         """Load SpliceTransformer model to device."""
         logger.debug(f"Loading SpliceTransformer (context_length={self.context_length}) on {device}")
 
@@ -211,7 +209,7 @@ class SpliceTransformerModel:
             self.model = move_model_to_device(self.model, self.device, device)
             self.device = device
 
-    def unload(self, verbose: bool = False) -> None:  # noqa: ARG002 — required by tool interface
+    def unload(self) -> None:
         """Move model to CPU to free GPU memory."""
         if self._loaded and self.device != "cpu":
             logger.debug("Unloading SpliceTransformer from GPU")
@@ -243,7 +241,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             left_contexts=input_dict["left_contexts"],
             right_contexts=input_dict["right_contexts"],
             device=input_dict["device"],
-            verbose=input_dict["verbose"],
         )
         return {"prediction": prediction}
     raise ValueError(f"splice-transformer: unknown operation {operation!r}; valid: ['predict']")
