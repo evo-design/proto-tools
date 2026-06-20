@@ -94,6 +94,19 @@ def test_progen2_standalone_sample_strips_generated_terminal_tokens(terminal_tok
     assert sequence == "AC"
 
 
+def test_progen2_standalone_prepend_start_token():
+    """Start token lands at the residue start, after any conditioning tag, without doubling."""
+    from proto_tools.tools.causal_models.progen2.standalone.inference import ProGen2Model
+
+    assert ProGen2Model._prepend_start_token(["MKTL", "1MKTL", "", "<|pf03668|>1MEVVI", "<|pf03668|>MEVVI"]) == [
+        "1MKTL",
+        "1MKTL",
+        "1",
+        "<|pf03668|>1MEVVI",
+        "<|pf03668|>1MEVVI",
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Integration tests
 # ---------------------------------------------------------------------------
