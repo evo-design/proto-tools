@@ -171,7 +171,9 @@ class ProGen2Model:
         normalized = []
         for s in sequences:
             # Split off any leading conditioning tags so '1' lands at the residue start.
-            tags, residues = re.match(r"^((?:<\|[^|]*\|>)*)(.*)$", s, re.DOTALL).groups()
+            match = re.match(r"^((?:<\|[^|]*\|>)*)(.*)$", s, re.DOTALL)
+            assert match is not None  # pattern matches any string
+            tags, residues = match.groups()
             if not residues.startswith(PROGEN2_START_TOKEN):
                 residues = PROGEN2_START_TOKEN + residues
             normalized.append(tags + residues)
