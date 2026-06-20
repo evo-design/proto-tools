@@ -310,6 +310,13 @@ def _cmd_url(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_agent_context(_args: argparse.Namespace) -> int:
+    """``proto-tools agent-context`` — usage primer for coding agents."""
+    primer = Path(__file__).parent / "agent_context.md"
+    print(primer.read_text(), end="")
+    return 0
+
+
 # =============================================================================
 # Argparse wiring
 # =============================================================================
@@ -333,8 +340,16 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Discover and inspect proto-tools registered tools. "
         "Every verb maps to a `ToolRegistry` classmethod; pass --json on "
         "verbs that return structured data for machine-readable output.",
+        epilog="Coding agents: run `proto-tools agent-context` first for a usage primer.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     sub = parser.add_subparsers(dest="verb", required=True)
+
+    p_agent = sub.add_parser(
+        "agent-context",
+        help="Print a usage primer for coding agents (start here).",
+    )
+    p_agent.set_defaults(func=_cmd_agent_context)
 
     p_list = sub.add_parser("list", help="List registered tools.")
     filt = p_list.add_mutually_exclusive_group()

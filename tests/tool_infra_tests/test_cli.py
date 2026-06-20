@@ -70,6 +70,16 @@ def test_catalog_json_groups_by_category() -> None:
     assert any(item["key"] == "esm2-embedding" for item in payload["masked_models"])
 
 
+# ── Agent context ───────────────────────────────────────────────────────────
+
+
+def test_agent_context_prints_primer() -> None:
+    code, out, _ = _run("agent-context")
+    assert code == 0
+    assert "Input -> Config -> run_*() -> Output" in out
+    assert "github.com/evo-design/proto-tools/tree/main/notes" in out
+
+
 # ── Per-tool docs ───────────────────────────────────────────────────────────
 
 
