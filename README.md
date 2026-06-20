@@ -1,30 +1,22 @@
 # 🧬 Proto Tools 🛠️
 
-![Proto Tools](https://proto-bio.github.io/proto-assets/default/hero.png)
+![Proto Tools](https://proto-bio.github.io/proto-assets/covers/open-wings-code/carousel.png)
 
 [![Checks](https://github.com/evo-design/proto-tools/actions/workflows/checks.yml/badge.svg)](https://github.com/evo-design/proto-tools/actions/workflows/checks.yml)
 [![Unit Tests](https://github.com/evo-design/proto-tools/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/evo-design/proto-tools/actions/workflows/unit-tests.yml)
 [![Integration Tests](https://github.com/evo-design/proto-tools/actions/workflows/integration-tests.yml/badge.svg)](https://github.com/evo-design/proto-tools/actions/workflows/integration-tests.yml)
 
-Welcome! This repository contains the **tools layer** of the biological programming language project. It puts **100+ computational biology and biological AI tools** at your fingertips through a single, consistent Python interface. Protein language models, structure predictors, inverse folding, sequence analysis, gene annotation, conformational dynamics, genomic scoring, and more are all just one function call away.
+Welcome! This repository contains the open-source implementation of `proto-tools`, a Python package containing a large suite of computational biology and biological AI tools, all accessible through a single, consistent Python interface. Language models, structure predictors, inverse folding, sequence analysis, gene annotation, conformational dynamics, genomic scoring, and more are all available through a single `pip install` command.
 
-Every tool runs in its own automatically managed isolated environment, so you never have to fight dependency conflicts or build complex conda setups. Just install, call, and get results. Run tools locally on your own hardware, or dispatch to remote compute.
+Every tool runs in its own automatically managed isolated environment, so all dependency wrangling is handled for you. In addition, `proto-tools` implements extensive infrastructure for features such as device management and GPU fan-out, making it easy to call tools in quick succession.
 
-> [!TIP]
-> **COMING SOON:** Cloud dispatch will allow you to run GPU jobs even without local compute.
-
-You can use it as a standalone Python library or as part of the broader [proto-language](https://github.com/proto-bio/proto-language) system.
-
-## Related Repositories
-
-- [`proto-language`](https://github.com/proto-bio/proto-language) – High-level programming language for generative biology
-- [`proto-client`](https://github.com/proto-bio/proto-client) – Python SDK for Proto Bio APIs
+You can use it as a standalone Python library or as part of the broader [proto-language](https://github.com/proto-bio/proto-language) optimization system. Proto-tools is open source under an MIT license. Contributions are welcome!
 
 ## Setup 🚧
 
 ### Step 1: Install the package 🐍
 
-All you need is Python 3.10+ and pip:
+Proto-tools requires Python 3.10+:
 
 ```bash
 pip install git+https://github.com/evo-design/proto-tools.git
@@ -33,22 +25,21 @@ pip install git+https://github.com/evo-design/proto-tools.git
 > [!NOTE]
 > A direct PyPI install (`pip install proto-tools`) will be available soon.
 
-System tools that standalone tool environments need (git, curl, gcc) are automatically provisioned on first use via a shared foundation environment — no manual setup required.
-
-> **Note:** If you are developing or contributing to this project, follow the setup instructions in [CONTRIBUTING.md](CONTRIBUTING.md) instead.
+> [!NOTE]
+> If you are developing or contributing to this project, follow the setup instructions in [CONTRIBUTING.md](CONTRIBUTING.md) instead.
 
 ### Step 2: Configure storage (optional) 🗂️
 
-All persistent data (model weights, tool environments, micromamba) is stored under `PROTO_HOME` (defaults to `~/.proto/`).
+All persistent data (model weights and tool environments) is cached under the `PROTO_HOME` directory on first use (defaults to `~/.proto/`).
 
-To customize the storage location (recommended for labs/HPC):
+To customize the storage location, you can specify a path via the following environment variable:
 
 ```bash
-# Add to your ~/.bashrc:
+# Add to your shell profile:
 export PROTO_HOME=/path/to/your/proto_home
 ```
 
-To override just model weights separately: `export PROTO_MODEL_CACHE=/path/to/shared/weights`. See [notes/storage.md](notes/storage.md) for all options.
+For shared filesystems, model weights can be reused to avoid downloading duplicate copies. The `PROTO_MODEL_CACHE` environment variable lets you point just the weights at that shared location (sharing tool environments is not recommended): `export PROTO_MODEL_CACHE=/path/to/shared/weights`. See [notes/storage.md](notes/storage.md) for all details and options.
 
 ### Step 3: Gated model access (optional) 🔑
 
@@ -58,7 +49,7 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 |-------|--------|--------|
 | ESM3 | HuggingFace: [EvolutionaryScale/esm3-sm-open-v1](https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1) | Accept EvolutionaryScale license, then authenticate with HF (see below) |
 | AlphaGenome | HuggingFace: [google/alphagenome-all-folds](https://huggingface.co/google/alphagenome-all-folds) | Accept Google DeepMind terms, then authenticate with HF (see below) |
-| AlphaFold3 | DeepMind request form: [google-deepmind/alphafold3#obtaining-model-parameters](https://github.com/google-deepmind/alphafold3#obtaining-model-parameters) | Submit DeepMind's form; after approval (2–3 business days) download the weights archive and place at `$PROTO_HOME/proto_model_cache/alphafold3/` (or set `PROTO_ALPHAFOLD3_WEIGHTS_DIR`). Not hosted on HuggingFace. |
+| AlphaFold3 | DeepMind request form: [google-deepmind/alphafold3#obtaining-model-parameters](https://github.com/google-deepmind/alphafold3#obtaining-model-parameters) | Submit DeepMind's form; if approved, you can download the weights archive and place at `$PROTO_HOME/proto_model_cache/alphafold3/` (or set `PROTO_ALPHAFOLD3_WEIGHTS_DIR`). See [`proto_tools/tools/structure_prediction/alphafold3/README.md`](proto_tools/tools/structure_prediction/alphafold3/README.md) for the full weights-setup flow. |
 
 **For HuggingFace-gated models:**
 
@@ -74,10 +65,8 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
    export HF_TOKEN=hf_...
    ```
 
-**For AlphaFold3:** follow DeepMind's linked form (no HF token involved). See [`proto_tools/tools/structure_prediction/alphafold3/README.md`](proto_tools/tools/structure_prediction/alphafold3/README.md) for the full weights-setup flow.
-
 > [!TIP]
-> **You're all set up!** To learn what features are available in the library, check out the [tutorial series](tutorials/) — four short notebooks covering the universal tool pattern, persistent execution, device management, and parallel multi-GPU runs.
+> **You're all set up!** To learn what features are available in the library, check out the [guides](guides/) — four short notebooks covering tool environments, persistent execution, device management, and parallel multi-GPU runs.
 
 ## Available Tools 🔬
 
@@ -168,47 +157,14 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 └── <a href="proto_tools/tools/structure_scoring/structure_metrics/">structure_metrics/</a>
 </pre>
 
-## Usage
+## Guides
 
-Every tool follows the same `Input` / `Config` / `run_{tool}()` / `Output` pattern. Config is always optional; omit it to use defaults.
+Runnable walkthroughs of the core framework features live in [`guides/`](guides/) and are also available on our [docs page](https://proto.evodesign.org/docs/tools/introduction):
 
-```python
-from proto_tools.tools.sequence_alignment.blast import (
-    run_blast_search, BlastSearchInput, BlastSearchConfig,
-)
-
-inputs = BlastSearchInput(query="MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTK...")
-config = BlastSearchConfig(program="blastp", database="swissprot")
-result = run_blast_search(inputs, config)
-
-print(result.num_hits)
-print(result.results_df.head())
-```
-
-### Persistent Execution
-
-For batch workloads, keep the model loaded across calls to avoid redundant load times:
-
-```python
-from proto_tools.utils.tool_instance import ToolInstance
-from proto_tools.tools.structure_prediction.esmfold import (
-    run_esmfold, ESMFoldInput, ESMFoldConfig,
-)
-
-# Model loads once, reused across all calls in the block
-with ToolInstance.persist():
-    for seq in sequences:
-        result = run_esmfold(ESMFoldInput(complexes=[seq]), ESMFoldConfig())
-```
-
-## Tutorials
-
-Runnable walkthroughs of the core framework features live in [`tutorials/`](tutorials/):
-
-1. [Getting Started](tutorials/01_getting_started.ipynb) — the universal tool pattern (CPU-only)
-2. [Tool Persistence](tutorials/02_tool_persistence.ipynb) — keep models warm across calls
-3. [Device Management](tutorials/03_device_management.ipynb) — GPU allocation, LRU eviction, CPU offload
-4. [Parallel Execution](tutorials/04_parallel_execution.ipynb) — fan out work across every GPU with `ToolPool`
+1. [Tool Environments](guides/tool_environments.ipynb) — how isolated environments are built and cached on first call (CPU-only)
+2. [Tool Persistence](guides/tool_persistence.ipynb) — keep models warm across calls
+3. [Device Management](guides/device_management.ipynb) — GPU allocation, LRU eviction, CPU offload
+4. [Parallel Execution](guides/parallel_execution.ipynb) — fan out work across every GPU with `ToolPool`
 
 Each specific tool also ships a minimal `examples/example.ipynb` under `proto_tools/tools/{category}/{tool}/examples/`.
 
