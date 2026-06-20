@@ -161,37 +161,14 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 
 Runnable walkthroughs of the core framework features live in [`guides/`](guides/) and are also available on our [docs page](https://proto.evodesign.org/docs/tools/introduction):
 
-1. [Tool Environments](guides/tool_environments.ipynb) — how isolated environments are built and cached on first call (CPU-only)
+1. [Tool Environments](guides/tool_environments.ipynb) — how isolated environments are built and cached on first call.
 2. [Tool Persistence](guides/tool_persistence.ipynb) — keep models warm across calls
 3. [Device Management](guides/device_management.ipynb) — GPU allocation, LRU eviction, CPU offload
 4. [Parallel Execution](guides/parallel_execution.ipynb) — fan out work across every GPU with `ToolPool`
 
 Each specific tool also ships a minimal `examples/example.ipynb` under `proto_tools/tools/{category}/{tool}/examples/`.
 
-## Using with a coding agent
-
-Run tools interactively through natural language with any conventions-aware coding agent (Claude Code, Gemini CLI, OpenAI Codex CLI, etc.). The agent reads `CLAUDE.md` — symlinked as `AGENTS.md` and `GEMINI.md` so each agent picks up the same content — for proto-tools conventions, and the [`.claude/skills/`](.claude/skills/) directory for task-specific guides.
-
-Launch your agent CLI from the repo root and ask things like:
-
-```
-> BLAST this sequence against swissprot
-> Predict the structure of MKFLIL... with ESMFold
-> Fold this sequence, redesign it with inverse folding, and compare the original and designed sequences
-```
-
-It will write runnable scripts to `analyses/` or execute directly depending on context.
-
 ## Development & Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for full developer setup, storage
 configuration, PR format, code style, and testing conventions.
-
-### Agent skills
-
-Task-specific guides live in [`.claude/skills/`](.claude/skills/). Claude Code surfaces them as slash commands (e.g. `/implement-tool`); other agents read the same `SKILL.md` files directly.
-
-- **`implement-tool`**: step-by-step guide for implementing a new tool wrapper (architecture, templates, export chain, examples, tests)
-- **`fix-env`**: troubleshooting recipes for tool environment setup failures
-
-Every tool follows the same `Input` / `Config` / `run_{tool}()` / `Output` pattern.

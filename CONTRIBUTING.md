@@ -14,6 +14,15 @@ pip install -e ".[dev]"
 
 System tools that standalone tool environments need (git, curl, gcc) are automatically provisioned on first use via a shared foundation environment — no manual setup required.
 
+
+### Agent skills
+
+Task-specific guides live in [`.claude/skills/`](.claude/skills/). Claude Code surfaces them as slash commands (e.g. `/implement-tool`); other agents read the same `SKILL.md` files directly.
+
+- **`implement-tool`**: step-by-step guide for implementing a new tool wrapper (architecture, templates, export chain, examples, tests)
+- **`fix-env`**: troubleshooting recipes for tool environment setup failures
+
+
 ### Storage for developers
 
 All persistent data (tool environments, model weights, micromamba) lives under `PROTO_HOME` (defaults to `~/.proto/`). See the [README](README.md) setup instructions.
