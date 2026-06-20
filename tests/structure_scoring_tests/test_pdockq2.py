@@ -16,7 +16,11 @@ from pydantic import ValidationError
 from proto_tools.entities.structures import ChainSelection, SingleChainSelection
 from proto_tools.entities.structures.structure import BFactorType, Structure
 from proto_tools.tools.structure_scoring.pdockq2 import PDockQ2Config, PDockQ2Input, run_pdockq2
-from proto_tools.tools.structure_scoring.pdockq2.pdockq2 import _pmidockq_sigmoid, example_input
+from proto_tools.tools.structure_scoring.pdockq2.pdockq2 import (
+    PDockQ2Metrics,
+    _pmidockq_sigmoid,
+    example_input,
+)
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -106,6 +110,16 @@ def test_pmidockq_sigmoid_pins_zhu_2023_constants():
         1.31034849 / (1.0 + np.exp(0.0747157696 * 84.7326239)) + 0.00501886443
     )
     assert _pmidockq_sigmoid(84.7326239) == pytest.approx(1.31034849 / 2.0 + 0.00501886443)
+
+
+def test_pmidockq_sigmoid_bounds_match_metric_spec():
+    """The metric_spec max (1.316) is the logistic asymptote; valid inputs stay under it."""
+    asymptote = 1.31034849 + 0.00501886443  # L + b ~= 1.31537
+    spec_max = PDockQ2Metrics.metric_spec["pdockq2"]["max"]
+    assert asymptote < spec_max <= 1.316
+    # if_plddt (<=100) * norm_pae (<=1) caps the input at 100, so values stay below ~1.0.
+    assert _pmidockq_sigmoid(100.0) < 1.0
+    assert _pmidockq_sigmoid(1e6) == pytest.approx(asymptote)
 
 
 # ── Integration: real algorithm runs against real PDB + PAE fixtures ─────────

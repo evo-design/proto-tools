@@ -9,7 +9,7 @@
 
 ## Overview
 
-[pDockQ2](https://gitlab.com/ElofssonLab/afm-benchmark) is an interface-quality score for cofolded protein complexes developed by the [Elofsson Lab](https://www.bioinfo.se/) at SciLifeLab and Stockholm University. It combines per-residue pLDDT and the Predicted Aligned Error (PAE) matrix into a single estimate of the per-interface DockQ score in the range 0 to 1, with higher values indicating more reliably predicted interfaces. This toolkit re-implements the published scoring formula in pure Python and exposes it through a single registered tool that returns the overall pDockQ2 score together with a per-interface breakdown.
+[pDockQ2](https://gitlab.com/ElofssonLab/afm-benchmark) is an interface-quality score for cofolded protein complexes developed by the [Elofsson Lab](https://www.bioinfo.se/) at SciLifeLab and Stockholm University. It combines per-residue pLDDT and the Predicted Aligned Error (PAE) matrix into a single estimate of the per-interface DockQ score (0 to ~1.316, the logistic asymptote), with higher values indicating more reliably predicted interfaces. This toolkit re-implements the published scoring formula in pure Python and exposes it through a single registered tool that returns the overall pDockQ2 score together with a per-interface breakdown.
 
 ## Background
 
