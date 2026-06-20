@@ -195,7 +195,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
 
 def get_memory_stats() -> dict[str, Any]:
-    """Get memory statistics from both devices."""
+    """Get memory statistics from the first device."""
     global _model
     if _model is None:
         return {"available": False, "framework": "jax", "reason": "Models not loaded"}

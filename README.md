@@ -2,9 +2,9 @@
 
 ![Proto Tools](https://proto-bio.github.io/proto-assets/default/hero.png)
 
-[![Checks](https://github.com/proto-bio/proto-tools/actions/workflows/checks.yml/badge.svg)](https://github.com/proto-bio/proto-tools/actions/workflows/checks.yml)
-[![Unit Tests](https://github.com/proto-bio/proto-tools/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/proto-bio/proto-tools/actions/workflows/unit-tests.yml)
-[![Integration Tests](https://github.com/proto-bio/proto-tools/actions/workflows/integration-tests.yml/badge.svg)](https://github.com/proto-bio/proto-tools/actions/workflows/integration-tests.yml)
+[![Checks](https://github.com/evo-design/proto-tools/actions/workflows/checks.yml/badge.svg)](https://github.com/evo-design/proto-tools/actions/workflows/checks.yml)
+[![Unit Tests](https://github.com/evo-design/proto-tools/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/evo-design/proto-tools/actions/workflows/unit-tests.yml)
+[![Integration Tests](https://github.com/evo-design/proto-tools/actions/workflows/integration-tests.yml/badge.svg)](https://github.com/evo-design/proto-tools/actions/workflows/integration-tests.yml)
 
 Welcome! This repository contains the **tools layer** of the biological programming language project. It puts **100+ computational biology and biological AI tools** at your fingertips through a single, consistent Python interface. Protein language models, structure predictors, inverse folding, sequence analysis, gene annotation, conformational dynamics, genomic scoring, and more are all just one function call away.
 
@@ -27,7 +27,7 @@ You can use it as a standalone Python library or as part of the broader [proto-l
 All you need is Python 3.10+ and pip:
 
 ```bash
-pip install git+https://github.com/proto-bio/proto-tools.git
+pip install git+https://github.com/evo-design/proto-tools.git
 ```
 
 > [!NOTE]

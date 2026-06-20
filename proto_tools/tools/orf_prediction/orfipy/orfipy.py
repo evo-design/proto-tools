@@ -17,6 +17,8 @@ from proto_tools.utils import (
     ToolInstance,
 )
 
+logger = logging.getLogger(__name__)
+
 # ============================================================================
 # Codon & Translation Table Types
 # ============================================================================
@@ -53,8 +55,6 @@ OrfipyTranslationTable = Literal[
 # numbers. Orfipy's translation_tables_dict uses contiguous numbering that diverges
 # from NCBI starting at key 7 (NCBI skips tables 7, 8, 15, 17-20, but orfipy
 # numbers them sequentially). See: orfipy/translation_tables.py
-logger = logging.getLogger(__name__)
-
 ORFIPY_TRANSLATION_TABLE_MAP: dict[str, int] = {
     "standard": 1,
     "vertebrate_mitochondrial": 2,

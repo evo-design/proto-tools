@@ -17,7 +17,7 @@ The pipeline chains four stages per design trajectory. First, an AlphaFold2 hall
 
 ### PyRosetta-free metrics
 
-FreeBindCraft computes the AlphaFold2 confidence metrics (pLDDT, pTM, interface pTM, interface pSAE, PAE) and the geometry-based interface metrics — shape complementarity (sc-rs), buried surface area and SASA fractions (FreeSASA), interface-residue counts, secondary-structure composition, hotspot/target/binder RMSDs, and pre- and post-relaxation clash counts (geometric, Biopython) — for real. Metrics that depend on Rosetta's energy function and lack an open-source equivalent (interface binding energy `dG`, `dG/dSASA`, `Binder_Energy_Score`, `PackStat`, and hydrogen-bond counts) are emitted upstream as placeholders only to satisfy default filters; this toolkit does **not** surface them, so every metric returned by `freebindcraft-design` is a real measurement.
+FreeBindCraft computes the AlphaFold2 confidence metrics (pLDDT, pTM, interface pTM, ipSAE, PAE) and the geometry-based interface metrics — shape complementarity (sc-rs), buried surface area and SASA fractions (FreeSASA), interface-residue counts, secondary-structure composition, hotspot/target/binder RMSDs, and pre- and post-relaxation clash counts (geometric, Biopython) — for real. Metrics that depend on Rosetta's energy function and lack an open-source equivalent (interface binding energy `dG`, `dG/dSASA`, `Binder_Energy_Score`, `PackStat`, and hydrogen-bond counts) are emitted upstream as placeholders only to satisfy default filters; this toolkit does **not** surface them, so every metric returned by `freebindcraft-design` is a real measurement.
 
 ### Learning Resources
 

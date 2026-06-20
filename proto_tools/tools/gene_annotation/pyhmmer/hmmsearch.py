@@ -51,7 +51,7 @@ class PyHmmsearchConfig(PyHmmerConfig):
 
     Adds ``bit_cutoffs`` — only meaningful for hmmsearch and hmmscan, which
     consume a pre-built HMM file that may carry curated GA/NC/TC cutoffs
-    (Pfam HMMs always do). All other knobs are inherited from
+    (Pfam HMMs always do). All other settings are inherited from
     :class:`PyHmmerConfig`.
 
     Attributes:

@@ -60,9 +60,9 @@ class SequenceHit(BaseModel):
         title="Target Description", description="Description of the target sequence. If not available, set to '-'."
     )
     evalue: float = Field(title="E-value", description="E-value of the hit")
-    score: float = Field(title="Score", description="Score of the full sequence")
-    bias: float = Field(title="Bias", description="Bias of the full sequence")
-    sum_score: float = Field(title="Sum Score", description="Sum score of the full sequence")
+    score: float = Field(title="Score", description="Bit score of the full sequence")
+    bias: float = Field(title="Bias", description="Bias correction for the sequence score")
+    sum_score: float = Field(title="Sum Score", description="Sum of domain scores")
     reported: bool = Field(title="Reported", description="Whether the hit is reported")
     included: bool = Field(title="Included", description="Whether the hit is included")
     pvalue: float = Field(title="P-value", description="p-value of the hit")
@@ -330,7 +330,7 @@ class PyHmmerOutput(BaseToolOutput):
 class PyHmmerConfig(BaseConfig):
     """Base configuration object for PyHMMER tools.
 
-    Common knobs for hmmsearch / hmmscan / phmmer / nhmmer / jackhmmer.
+    Common settings for hmmsearch / hmmscan / phmmer / nhmmer / jackhmmer.
     Reporting thresholds control what appears in output; inclusion thresholds
     mark a hit as 'trusted' (jackhmmer uses included hits to seed the next
     iteration).

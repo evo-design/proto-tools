@@ -374,7 +374,7 @@ Create `tools/{category}/{toolkit}/README.md` using the structured template. Sch
 
 #### Usage Tips
 
-- **Critical-knob name explained in bold.** Followed by a short explanation including units, defaults, and the most common failure mode.
+- **Critical-parameter name explained in bold.** Followed by a short explanation including units, defaults, and the most common failure mode.
 - **Second tip in bold.** Explanation including any non-obvious interaction with other config fields.
 
 [Repeat the H3 + H4 block per tool in the toolkit.]

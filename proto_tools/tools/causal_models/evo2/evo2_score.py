@@ -155,8 +155,8 @@ def run_evo2_score(
               attribute ``score.perplexity`` or mapping ``score["perplexity"]``)
             - ``logits``: Per-position logits tensor (seq_len, vocab_size=512) if
               ``return_logits=True``, otherwise ``None``
-            - ``vocab``: List of 512 byte-level tokens if ``return_logits=True``,
-              otherwise ``None``
+            - ``vocab``: List of 512 byte-level tokens giving the column order of
+              ``logits`` (always populated)
 
     Examples:
         >>> # Basic scoring (metrics only, no logits)

@@ -398,7 +398,7 @@ class InverseFoldingOutput(BaseToolOutput):
 class InverseFoldingScoringMetrics(Metrics):
     """Per-sequence scoring metrics for inverse-folding scorers.
 
-    Shared across ProteinMPNN, LigandMPNN, and FAMPnn scoring — all three emit
+    Shared across ESM-IF1, ProteinMPNN, and LigandMPNN scoring — all three emit
     the same scalar set against a given sequence-structure pair.
 
     Metrics documented in ``metric_spec``:
@@ -459,7 +459,7 @@ class InverseFoldingScoringOutput(BaseToolOutput):
     """Standardized output for inverse folding scoring tools.
 
     Contains scoring results for sequence-structure pairs evaluated by
-    ProteinMPNN, LigandMPNN, or FAMPnn scoring.
+    ESM-IF1, ProteinMPNN, or LigandMPNN scoring.
 
     Attributes:
         scores (list[InverseFoldingScoringMetrics]): List of scoring outputs,

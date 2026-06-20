@@ -35,8 +35,6 @@ from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance, extract_msa_sequences
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
-os.environ["DISABLE_PANDERA_IMPORT_WARNING"] = "True"
-
 
 # ============================================================================
 # Data Models
@@ -90,7 +88,7 @@ class Chai1Metrics(Metrics):
         ptm (float): Predicted TM-score (0-1). Always present.
         iptm (float): Interface predicted TM-score (0-1). Always present.
         avg_pae (float): Average predicted aligned error. Always present.
-        pae (list[list[float]]): Full per-residue PAE matrix in Å. Present when include_pae_matrix=True.
+        pae (list[list[float]]): Full per-token PAE matrix in Å. Present when include_pae_matrix=True.
         confidence_score (float): Chai-1 confidence score. Always present.
     """
 
@@ -289,7 +287,7 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config, instance: Any = None) -> 
 
     Returns:
         Chai1Output: Structured output containing:
-            - ``structures``: List of ``ChaiStructure`` instances, one per input complex
+            - ``structures``: List of ``Structure`` instances, one per input complex
             - Each structure includes coordinates and confidence metrics:
                 avg_plddt: Average per-residue confidence (pLDDT) across all residues.
                     Range: 0-1. Interpretation:
@@ -303,16 +301,15 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config, instance: Any = None) -> 
 
                 ptm: Predicted Template Modeling score measuring overall
                     structural accuracy. Range: 0.0-1.0. Higher values indicate better
-                    predicted structures. May be ``None`` for some predictions.
+                    predicted structures.
 
                 iptm: Interface PTM score measuring confidence in inter-chain
                     interfaces. Range: 0.0-1.0. Higher values indicate more confident
                     predictions of chain-chain interactions. Only meaningful for multi-chain
-                    complexes. May be ``None`` for single-chain predictions.
+                    complexes.
 
                 confidence_score: Overall confidence score combining
                     multiple quality metrics. Higher values indicate more reliable predictions.
-                    May be ``None`` if not computed.
 
     Raises:
         ValueError: If total tokens exceed 2,048, if entity types are invalid

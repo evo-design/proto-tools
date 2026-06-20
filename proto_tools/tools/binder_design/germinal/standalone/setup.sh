@@ -52,7 +52,7 @@ echo "Installing PyRosetta via conda channel..."
 
 # Chai-1 (default validation backend; aarch64 lacks sm_121 support).
 if [ "$(uname -m)" = "aarch64" ]; then
-    echo "WARNING: skipping chai-lab on aarch64; use structure_model='alphafold3' or 'protenix'."
+    echo "WARNING: skipping chai-lab on aarch64; other structure prediction models are available."
 else
     echo "Installing Chai-1..."
     uv pip install "chai-lab==0.6.1"

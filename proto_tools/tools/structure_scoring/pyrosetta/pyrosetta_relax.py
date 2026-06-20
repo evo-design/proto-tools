@@ -203,9 +203,9 @@ class PyRosettaRelaxOutput(BaseToolOutput):
 
     Attributes:
         results (list[PyRosettaRelaxMetrics]): One entry per input structure,
-            in input order. Each carries ``total_score`` + ``relaxed`` as
-            specced metrics plus ``relax`` (a :class:`RelaxResult`) carrying
-            the relaxed ``Structure``.
+            in input order. Each carries ``total_score`` as a specced metric
+            plus ``relax`` (a :class:`RelaxResult`) carrying the relaxed
+            ``Structure``.
     """
 
     results: list[PyRosettaRelaxMetrics] = Field(
@@ -285,13 +285,13 @@ def run_pyrosetta_relax(
 
     Args:
         inputs (PyRosettaRelaxInput): Structures to relax.
-        config (PyRosettaRelaxConfig | None): Score function + relax knobs.
+        config (PyRosettaRelaxConfig | None): Score function + relax settings.
         instance (ToolInstance | None): Optional ToolInstance for persistent execution.
 
     Returns:
         PyRosettaRelaxOutput: One :class:`PyRosettaRelaxMetrics` per input,
-            carrying ``total_score`` + ``relaxed`` as scalar metrics and the
-            relaxed :class:`Structure` as a structured field.
+            carrying ``total_score`` as a scalar metric and the relaxed
+            :class:`Structure` as a structured field.
     """
     logger.debug("Using local venv for PyRosetta FastRelax")
 

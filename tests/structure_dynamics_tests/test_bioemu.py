@@ -187,7 +187,7 @@ def test_config_cache_key_invariants():
     """Cache dirs / output_dir excluded; msa_host_url INCLUDED (server change → different MSAs)."""
     base = BioEmuConfig().cache_key()
 
-    # Excluded — storage knobs don't affect the returned ensembles
+    # Excluded — storage settings don't affect the returned ensembles
     assert (
         BioEmuConfig(
             cache_embeds_dir="embeds",

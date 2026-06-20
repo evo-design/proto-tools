@@ -5,7 +5,7 @@
 ![Random Nucleotide Sampling](https://proto-bio.github.io/proto-assets/images/tool/random_nucleotide/hero.png)
 
 > [!NOTE]
-> **License:** Random Nucleotide Sampling is open source and free for academic and commercial use under an Apache-2.0 license. Please refer to [the license](https://github.com/proto-bio/proto-tools) for full terms.
+> **License:** Random Nucleotide Sampling is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/evo-design/proto-tools) for full terms.
 
 ## Overview
 
@@ -17,7 +17,7 @@ Random Nucleotide Sampling performs random mutagenesis at the nucleotide level: 
 
 Internally, designable positions are either the `_` characters already present in the input or, when none are present, positions chosen by the configured masking strategy. Each masked position is filled independently by drawing one base uniformly at random from the pool that the IUPAC code expands to: `N` expands to A/C/G/T, `R` to A/G, `S` to G/C, and so on. Sampling is uniform within the pool, with no frequency weighting. When the input is RNA, sampled `T` bases are converted to `U`. With a fixed seed the output is deterministic.
 
-This tool is original proto-tools code maintained by [Proto](https://github.com/proto-bio/proto-tools).
+This tool is original proto-tools code maintained by [Proto](https://github.com/evo-design/proto-tools).
 
 ## Tools
 

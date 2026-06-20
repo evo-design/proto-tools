@@ -142,9 +142,10 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
 
         seeds (list[int]): Seeds to use for AlphaFold3 when the common
             ``BaseConfig.seed`` field is unset. Default: ``[0]``. Note:
-            AlphaFold3 will do five diffusion samples per seed, so this often
-            can be set to a single seed. More seeds are required for complex
-            docking tasks, such as antibody-antigen docking.
+            AlphaFold3 does ``num_diffusion_samples`` (default 5) diffusion
+            samples per seed, so this often can be set to a single seed. More
+            seeds are required for complex docking tasks, such as
+            antibody-antigen docking.
 
         output_dir (str | None): Path prefix for the AlphaFold3 output directory.
             Appends ``_af3_results`` to the provided string. If ``None`` (default),
@@ -487,12 +488,13 @@ def _create_input_json_from_complex(
     name: str,
     seed: int | list[int],
 ) -> AlphaFold3JSON:
-    """Create input JSON data for AlphaFold3 inference from a list of components.
+    """Create input JSON data for AlphaFold3 inference from a Complex.
 
     The "alphafold3" JSON dialect is documented here:
     https://github.com/google-deepmind/alphafold3/blob/main/docs/input.md
 
-    Also converts SMILES strings to CCD code using data from here:
+    Ligand chains use ``chain.ccd_code``, which the Fragment entity resolves from
+    SMILES via the CCD database:
     https://files.wwpdb.org/pub/pdb/data/monomers/Components-smiles-stereo-oe.smi
 
     Args:

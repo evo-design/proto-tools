@@ -384,7 +384,7 @@ class ToolInstance:
         This is the primary entry point for tool wrappers.  When no
         persistent instance is cached, runs an ephemeral one-shot
         subprocess (no leak).  When a persistent instance exists (via
-        :meth:`persistent` or :meth:`get`), reuses it.
+        :meth:`persist`, :meth:`persist_tool`, or :meth:`get`), reuses it.
 
         Args:
             toolkit (str): Worker-group folder name (e.g. ``"esm2"``).
@@ -1258,14 +1258,12 @@ class ToolInstance:
         effective_timeout = self._apply_warmup_timeout(timeout, reload_params)
 
         set_substatus(f"Running {self.toolkit}")
-        try:
-            result = self._worker.send(input_dict, timeout=effective_timeout)
-            if reload_params is not None:
-                self._mark_warmup_complete(reload_params)
-            return result
-        except Exception:
-            # Don't mark complete on failure
-            raise
+        # _mark_warmup_complete only runs after a successful send(); a raising
+        # send() short-circuits it, so a failed run never marks warmup complete.
+        result = self._worker.send(input_dict, timeout=effective_timeout)
+        if reload_params is not None:
+            self._mark_warmup_complete(reload_params)
+        return result
 
     # ------------------------------------------------------------------
     # One-shot execution

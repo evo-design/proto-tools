@@ -30,7 +30,7 @@ class MaskedModelInput(BaseToolInput):
     """Base input for masked language model tools.
 
     Provides common input validation and normalization for protein
-    sequences used across all masked protein language model tools (ESM2, ESM3).
+    sequences used across all masked protein language model tools (ESM2, ESM3, ESMC).
 
     Attributes:
         sequences (list[str]): Protein sequence(s) to process. Can be
@@ -41,7 +41,7 @@ class MaskedModelInput(BaseToolInput):
 
             After validation, sequences are automatically normalized to a list format.
             Valid protein sequences contain only standard amino acid characters
-            (20 standard amino acids + X (any amino acid) + * (stop codon)).
+            (20 standard amino acids + X (any amino acid) + * (translation stop)).
     """
 
     sequences: list[str] = InputField(
@@ -58,8 +58,8 @@ class MaskedModelInput(BaseToolInput):
     def normalize_sequences(cls, value: Any) -> list[str]:
         """Normalize sequences to a list.
 
-        Accepts single string or list of strings.
-        Normalizes to List[str] and validates non-empty sequences.
+        Accepts single string or list of strings, normalizes to List[str],
+        and rejects None entries.
         """
         seqs = [value] if isinstance(value, str) else value
 

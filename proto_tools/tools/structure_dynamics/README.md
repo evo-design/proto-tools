@@ -5,5 +5,5 @@ equilibrium. Rather than returning a single static model, these tools sample man
 conformations, approximating the diversity that explicit molecular-dynamics simulation
 would reveal at far greater cost.
 
-- **Input:** a protein sequence, optionally with a reference structure.
+- **Input:** a protein sequence.
 - **Output:** an ensemble of sampled conformations approximating the protein's equilibrium structural diversity.

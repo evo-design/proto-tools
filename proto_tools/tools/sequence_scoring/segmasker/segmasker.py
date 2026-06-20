@@ -223,11 +223,10 @@ def run_segmasker(
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        SegmaskerOutput: Structured output containing:
-            - ``low_complexity_fractions``: Fraction of each sequence that is low-complexity
-            - ``low_complexity_counts``: Number of low-complexity positions per sequence
-            - ``sequence_lengths``: Length of each input sequence
-            - ``metadata``: Execution metadata (num_sequences, window, locut, hicut)
+        SegmaskerOutput: Structured output whose ``results`` field holds one
+            SegmaskerMetrics per input sequence (index-aligned with
+            ``inputs.sequences``), each carrying ``low_complexity_fraction``,
+            ``low_complexity_count``, and ``sequence_length``.
 
     See Also:
         - BLAST+ suite: https://blast.ncbi.nlm.nih.gov/Blast.cgi?PAGE_TYPE=BlastDocs
@@ -237,7 +236,7 @@ def run_segmasker(
         >>> inputs = SegmaskerInput(sequences=["AAAAAAAA", "MVLSPADKTN"])
         >>> config = SegmaskerConfig()
         >>> result = run_segmasker(inputs, config)
-        >>> print(f"Low-complexity fractions: {result.low_complexity_fractions}")
+        >>> print(f"Low-complexity fractions: {[r.low_complexity_fraction for r in result.results]}")
     """
     input_data = {
         "sequences": inputs.sequences,

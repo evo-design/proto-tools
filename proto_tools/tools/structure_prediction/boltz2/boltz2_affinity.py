@@ -168,7 +168,7 @@ class Boltz2AffinityOutput(StructurePredictionOutput):
 
 
 class Boltz2AffinityConfig(Boltz2Config):
-    """Boltz-2 affinity config: all inherited Boltz2Config structure-pass knobs plus the affinity-pass controls.
+    """Boltz-2 affinity config: all inherited Boltz2Config structure-pass settings plus the affinity-pass controls.
 
     Attributes:
         recycling_steps (int): Inherited. Refinement passes for the structure pass. Default: ``3``.

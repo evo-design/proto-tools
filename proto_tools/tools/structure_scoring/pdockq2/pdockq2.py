@@ -43,10 +43,7 @@ class InterfacePDockQ2(BaseModel):
             ``chain_id``.
         norm_pae (float): Mean of ``1 / (1 + (PAE / 10)^2)`` over contact
             residue pairs for this chain.
-        pmidockq (float): Per-chain pDockQ2 score, bounded above by the Zhu-2023
-            logistic asymptote ``L + b ~= 1.316`` (the ``metric_spec`` ceiling).
-            Practical values stay below ~1.0 because the sigmoid input
-            ``if_plddt * norm_pae`` is capped at 100 (interface pLDDT <= 100).
+        pmidockq (float): Per-chain pDockQ2 score in ``[0, 1]``.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -62,7 +59,7 @@ class InterfacePDockQ2(BaseModel):
     )
     pmidockq: float = Field(
         title="pmiDockQ",
-        description="Per-chain pDockQ2 contribution; 0 to ~1.316, higher indicates a better interface",
+        description="Per-chain pDockQ2 contribution; 0-1, higher indicates a better interface",
     )
 
 
@@ -70,9 +67,8 @@ class PDockQ2Metrics(Metrics):
     """pDockQ2 interface-quality metrics for a cofolded complex.
 
     Metrics documented in ``metric_spec``:
-        pdockq2 (float): Overall pDockQ2 score. Mean of ``pmidockq`` over
-            non-binder target chains that contact the binder, so it shares
-            ``pmidockq``'s ~1.316 asymptote (practical values < ~1.0).
+        pdockq2 (float): Overall pDockQ2 score in ``[0, 1]``. Mean of
+            ``pmidockq`` over non-binder target chains that contact the binder.
             Always present.
         avg_interface_plddt (float): Mean ``if_plddt`` (0-100 scale) averaged
             across the same target chains used for ``pdockq2``. Always present.
@@ -92,7 +88,7 @@ class PDockQ2Metrics(Metrics):
             "availability": "always",
             "type": "float",
             "min": 0.0,
-            "max": 1.316,
+            "max": 1.0,
             "better_values_are": "higher",
         },
         "avg_interface_plddt": {

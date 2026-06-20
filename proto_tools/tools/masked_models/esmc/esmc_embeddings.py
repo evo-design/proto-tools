@@ -67,7 +67,7 @@ class ESMCEmbeddingsConfig(MaskedModelEmbeddingsConfig):
         batch_size (int): Number of sequences to process in parallel. Larger batches
             improve throughput but require more GPU memory.
         device (str): Device to run the model on.
-        verbose (bool): Print status messages during model execution.
+        verbose (int): Verbosity level (0=quiet, 1=info, 2=debug, 3=raw subprocess stderr).
         return_logits (bool): Include per-position logits in the output (large; disable to
             save memory).
         repr_layer (int): Transformer layer index for embeddings. ``-1`` returns the

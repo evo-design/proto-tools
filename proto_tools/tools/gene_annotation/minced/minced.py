@@ -242,9 +242,9 @@ def run_minced(inputs: MincedInput, config: MincedConfig, instance: Any = None) 
     """Detect CRISPR arrays in nucleotide sequences using MinCED.
 
     Uses MinCED (Mining CRISPRs in Environmental Datasets) to identify
-    CRISPR repeats and spacers in input nucleotide sequences. This is
-    used as a Stage 1 filter in the Cas9 filtering pipeline to confirm
-    that candidate sequences contain functional CRISPR loci.
+    CRISPR repeats and spacers in input nucleotide sequences. It is
+    typically run as an upstream filter to confirm that candidate
+    sequences contain CRISPR loci before downstream Cas analysis.
 
     Args:
         inputs (MincedInput): Validated input containing nucleotide sequences.

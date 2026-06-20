@@ -73,12 +73,12 @@ class RF3Metrics(Metrics):
         chain_ptm (list[float]): Per-chain mean pLDDT in ``[0, 1]`` (note: upstream
             uses the ``chain_ptm`` key for pLDDT despite the name; see comment in
             ``standalone/inference.py``). Always present.
-        chain_pair_pae (list[list[float]]): Upper-triangular n-by-n chain-pair PAE
-            matrix in Å. Always present.
-        chain_pair_pae_min (list[list[float]]): Per-pair minimum-PAE aggregate
-            in Å. Always present.
-        chain_pair_pde (list[list[float]]): Upper-triangular n-by-n chain-pair PDE
-            matrix in Å. Always present.
+        chain_pair_pae (list[list[float]]): Symmetric n-by-n chain-pair PAE
+            matrix in Å (diagonal 0.0). Always present.
+        chain_pair_pae_min (list[list[float]]): Symmetric n-by-n per-pair
+            minimum-PAE matrix in Å. Always present.
+        chain_pair_pde (list[list[float]]): Symmetric n-by-n chain-pair PDE
+            matrix in Å (diagonal 0.0). Always present.
         chain_pair_pde_min (list[list[float]]): Per-pair minimum-PDE aggregate
             in Å. Always present.
         has_clash (bool): True if the predicted structure contains atom clashes.
@@ -192,7 +192,7 @@ class RF3Config(MSAStructurePredictionConfig):
     ``include_pae_matrix`` flag is rejected: RF3 emits only chain-pair PAE
     aggregates and an ``avg_pae`` scalar, never a per-token LxL matrix.
 
-    RF3's template/conformer-conditioning knobs and ``add_missing_atoms`` act on
+    RF3's template/conformer-conditioning settings and ``add_missing_atoms`` act on
     input atomic coordinates; this wrapper sends only sequences, SMILES, and CCD
     codes, so they would be no-ops and are not exposed.
 

@@ -5,6 +5,7 @@ Based on the ProGen2-finetuning repository: https://github.com/hugohrban/ProGen2
 """
 
 import json
+import re
 import sys
 from typing import Any, Literal
 
@@ -41,12 +42,12 @@ PROGEN2_TERMINAL_TOKENS = PROGEN2_START_TOKEN + PROGEN2_END_TOKEN
 
 PROGEN2_MODEL_CHECKPOINTS = Literal[
     "progen2-small",  # 151M parameters
-    "progen2-medium",  # 754M parameters
-    "progen2-base",  # 754M parameters, trained on UniRef90
-    "progen2-oas",  # 754M parameters, trained on OAS antibody sequences
-    "progen2-large",  # 2B parameters
-    "progen2-BFD90",  # 2B parameters, trained on BFD90
-    "progen2-xlarge",  # 6B parameters
+    "progen2-medium",  # 764M parameters
+    "progen2-base",  # 764M parameters, trained on UniRef90
+    "progen2-oas",  # 764M parameters, trained on OAS antibody sequences
+    "progen2-large",  # 2.7B parameters
+    "progen2-BFD90",  # 2.7B parameters, trained on BFD90
+    "progen2-xlarge",  # 6.4B parameters
 ]
 
 
@@ -158,6 +159,26 @@ class ProGen2Model:
 
         return input_ids.to(self.device), attention_mask.to(self.device), lengths
 
+    @staticmethod
+    def _prepend_start_token(sequences: list[str]) -> list[str]:
+        """Insert ProGen2's '1' start token at the residue start of each sequence.
+
+        A leading conditioning tag (e.g. ``<|pf03668|>``) is preserved and the
+        start token is inserted after it. Sequences already carrying '1' at the
+        residue start are left untouched (no doubling); an empty string becomes
+        '1' alone (generation from a bare sequence start).
+        """
+        normalized = []
+        for s in sequences:
+            # Split off any leading conditioning tags so '1' lands at the residue start.
+            match = re.match(r"^((?:<\|[^|]*\|>)*)(.*)$", s, re.DOTALL)
+            assert match is not None  # pattern matches any string
+            tags, residues = match.groups()
+            if not residues.startswith(PROGEN2_START_TOKEN):
+                residues = PROGEN2_START_TOKEN + residues
+            normalized.append(tags + residues)
+        return normalized
+
     def _truncate_at_terminals(self, sequence: str) -> str:
         """Truncate sequence at the first terminal token ('1' or '2') after position 0."""
         terminals = [PROGEN2_START_TOKEN, PROGEN2_END_TOKEN]
@@ -219,6 +240,9 @@ class ProGen2Model:
 
         if not prompts:
             raise ValueError("progen2: cannot sample from empty prompt list")
+
+        # Prepend the '1' start token so raw residue prompts condition on a sequence start.
+        prompts = self._prepend_start_token(prompts)
 
         # Batch processing logic
         all_sequences: list[str] = []
@@ -319,9 +343,7 @@ class ProGen2Model:
             raise ValueError("progen2: cannot score empty sequence list")
 
         # Ensure sequences have start token
-        normalized_seqs = [
-            seq if seq.startswith(PROGEN2_START_TOKEN) else PROGEN2_START_TOKEN + seq for seq in sequences
-        ]
+        normalized_seqs = self._prepend_start_token(sequences)
 
         # Batch processing logic
         all_logits: list[Any] = []

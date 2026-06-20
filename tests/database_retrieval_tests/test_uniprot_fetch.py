@@ -180,7 +180,7 @@ def test_uniprot_fetch_with_fields_shrinks_response_and_populates_typed_output()
     assert minimal.pdb_crossrefs == full.pdb_crossrefs
 
     # The minimal raw_entry must be meaningfully smaller — payload reduction
-    # is the whole point of this knob. UniProt always returns `entryType`,
+    # is the whole point of this setting. UniProt always returns `entryType`,
     # `extraAttributes`, and `primaryAccession` in the response envelope, so
     # the floor is ~hundreds of bytes; the full TP53 record is ~880 KB.
     assert len(str(minimal.raw_entry)) < len(str(full.raw_entry)) / 5, (

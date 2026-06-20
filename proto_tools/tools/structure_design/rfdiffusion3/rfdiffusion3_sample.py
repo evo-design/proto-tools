@@ -91,12 +91,10 @@ class RFdiffusion3DesignSpec(BaseModel):
             for motif/binder design; written to a file before rfd3 (reads a path). Omit for de novo.
 
         contig (str | None): Contig string specifying the design topology.
-            Format: comma-separated segments with chain breaks as ``/0``.
-
-    Examples:
-                - ``"50-80"`` - design 50-80 residue monomer
-                - ``"A1-100,50,A150-200"`` - scaffold around residues A1-100 and A150-200
-                - ``"50,/0,B1-50"`` - design 50 residues, chain break, then keep B1-50
+            Format: comma-separated segments with chain breaks as ``/0``. Examples:
+            ``"50-80"`` (design 50-80 residue monomer);
+            ``"A1-100,50,A150-200"`` (scaffold around residues A1-100 and A150-200);
+            ``"50,/0,B1-50"`` (design 50 residues, chain break, then keep B1-50).
 
         length (str | None): Per-asymmetric-unit length (int or
             ``"min-max"``); per-protomer under ``symmetry``.
@@ -1047,7 +1045,7 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
 
     # Group designs by originating spec so the output has 1:1 cardinality with
     # inputs.design_specs. Subprocess emits a flat list; the spec-key prefix on
-    # each design (set in to_json_spec at line 380-384) lets us bucket them.
+    # each design (set in to_json_spec) lets us bucket them.
     buckets: dict[str, list[RFdiffusion3Structure]] = defaultdict(list)
     for design_data in output_data.get("designs", []):
         structure = Structure(
@@ -1068,17 +1066,3 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
     sent_spec_keys = list(json.loads(json_spec).keys())
     designed_structures = [RFdiffusion3Designs(spec_key=key, structures=buckets.get(key, [])) for key in sent_spec_keys]
     return RFdiffusion3Output(designed_structures=designed_structures)
-
-
-def _spec_key_sort_index(key: str) -> tuple[int, str]:
-    """Sort spec keys by trailing integer when present, falling back to lexical.
-
-    Positional inputs produce ``spec-0``, ``spec-1``, ... — sort those
-    numerically. ``raw_json`` callers may use arbitrary key names; those fall
-    through to lexical ordering.
-    """
-    suffix = key.rsplit("-", 1)[-1] if "-" in key else key
-    try:
-        return (0, f"{int(suffix):020d}")
-    except ValueError:
-        return (1, key)

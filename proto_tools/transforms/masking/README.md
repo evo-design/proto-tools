@@ -10,7 +10,7 @@ Masked language modelling over proteins works by blanking out a subset of positi
 
 - Masking random positions is cheap and unbiased, but ignores the model's own uncertainty.
 - Masking positions where the model is least certain (highest-entropy) concentrates the budget on residues the model thinks are most flexible — useful for design.
-- Masking positions where the model most confidently predicts a *different* amino acid (low max-logit of the wild-type residue) concentrates on likely mutations — useful for directed editing.
+- Masking positions where the model is least confident in its top prediction (low max-logit over the vocabulary) concentrates on residues the model finds hardest to call — useful for directed editing.
 
 This utility centralises that logic in one place so ESM2 and ESM3 share the same strategy surface, the same defaults, and the same reproducibility guarantees.
 
@@ -23,8 +23,8 @@ This utility centralises that logic in one place so ESM2 and ESM3 share the same
 3. Scores each designable position according to `method`:
    - `"random"` — uniform scores → uniform random sampling
    - `"entropy"` — Shannon entropy of the model's per-position logit distribution (higher = more uncertain)
-   - `"max-logit"` — negated max logit of the wild-type amino acid (higher = model confidently prefers *something else*)
-4. Draws positions via weighted sampling (`weighted_sample`). A score temperature (`score_temperature`) controls how sharply the sampler concentrates on the top-scoring positions when `method` is `"entropy"` or `"max-logit"`.
+   - `"max-logit"` — negated max logit over the vocabulary (higher = model is least confident in its top prediction)
+4. Draws positions via weighted sampling (`weighted_sample`). A score temperature (`temperature`) controls how sharply the sampler concentrates on the top-scoring positions when `method` is `"entropy"` or `"max-logit"`.
 5. Applies the mask to the sequence with `apply_mask`, returning the masked string ready for the downstream model to fill in.
 
 All randomness flows through an explicit `np.random.RandomState`, so a given `(method, mask_fraction, fixed_positions, seed)` tuple is fully reproducible.
@@ -57,9 +57,9 @@ The masked strings are handed directly to ESM2 / ESM3 sampling tools; see the [E
 
 - **Don't set both `num_mutations` and `mask_fraction`.** The config validates this at construction time and raises.
 - **`mask_fraction` is applied to the *designable* count**, not the full sequence length. With `fixed_positions=[1, 2, 3]` on a 100-residue sequence, `mask_fraction=0.3` masks ~29 positions, not 30.
-- **`entropy` and `max-logit` require a model to score with.** Set `model_name="esm2"` (or `"esm3"`) on the strategy. Without a score function, the two methods silently degrade to uniform random.
+- **`entropy` and `max-logit` require a model to score with.** Set `model_name="esm2"` (or `"esm3"`) on the strategy. Without a model name or score function, these methods raise a `ValueError`.
 - **Use explicit seeds for reproducibility.** The samplers use a `np.random.RandomState`; pass a seed through the tool's config to get byte-identical masked outputs across runs.
-- **Score temperature only affects the scored methods.** Adjusting `score_temperature` when `method="random"` has no effect.
+- **Score temperature only affects the scored methods.** Adjusting `temperature` when `method="random"` has no effect.
 
 ## References
 

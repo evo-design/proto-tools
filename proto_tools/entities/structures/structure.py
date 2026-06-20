@@ -31,9 +31,6 @@ from proto_tools.entities.structures.utils import (
 )
 from proto_tools.utils.tool_io import Metrics, MetricValue
 
-VISUALIZE_STYLE_OPTIONS = ["cartoon", "line", "stick", "sphere", "licorice"]
-
-
 # Per-residue VDW "key atoms" used by ``hotspot_contacts`` with ``germinal_mode=True``.
 _KEY_SIDE_CHAIN_ATOMS: dict[str, list[str]] = {
     "VAL": ["CG1", "CG2"],

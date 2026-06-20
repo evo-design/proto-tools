@@ -163,67 +163,6 @@ class ESM3Model:
             "attention_masks": all_attention_masks,
         }
 
-    def predict_structure(
-        self,
-        sequences: list[str],
-        batch_size: int = 40,
-        device: str = "cuda",
-        verbose: bool = False,
-    ) -> list[dict[str, Any]]:
-        """Predict 3D structures for protein sequences.
-
-        Args:
-            sequences: Protein sequences
-            batch_size: Batch size for structure prediction
-            device: Device to run on
-
-            verbose: Whether to enable verbose logging output.
-
-        Returns:
-            List of structure dictionaries
-        """
-        # Lazy import ESM3 dependencies
-        from esm.sdk.api import ESMProtein, GenerationConfig
-
-        # Lazy load on first call or device change
-        if not self._loaded:
-            self.load(device, verbose)
-        elif self.device != device:
-            self.to_device(device)
-
-        # Split the sequences into batches
-        max_batch_size = min(batch_size, len(sequences))
-        batches = [sequences[i : i + max_batch_size] for i in range(0, len(sequences), max_batch_size)]
-
-        all_structures: list[Any] = []
-
-        # For each batch
-        for batch_sequences in tqdm(
-            batches, desc="Predicting structures with ESM3", unit="sequence batch", total=len(batches)
-        ):
-            # Create protein and config objects
-            esm3_proteins = [ESMProtein(sequence=seq) for seq in batch_sequences]
-            structure_configs = [GenerationConfig(track="structure")] * len(esm3_proteins)
-
-            # Generate the structures
-            structures = self.model.batch_generate(
-                inputs=esm3_proteins,
-                configs=structure_configs,
-            )
-
-            # Unpack predicted structures
-            all_structures.extend(
-                {
-                    "sequence": struct.sequence,
-                    "pdb_string": struct.to_pdb_string(),
-                    "avg_plddt": struct.plddt.mean().item(),
-                    "ptm": struct.ptm.item(),
-                }
-                for struct in structures
-            )
-
-        return all_structures
-
     def sample(
         self,
         sequences: list[str],
@@ -246,7 +185,7 @@ class ESM3Model:
         ``[MASK]`` tokens at those positions, runs a forward pass, and samples
         replacement amino acids from the model's predictions.
         ``iterative_refinement`` dispatches to ESM3's ``model.batch_generate``,
-        with the five GenerationConfig knobs driving the decoding loop;
+        with the five GenerationConfig settings driving the decoding loop;
         ``return_logits=True`` on that path runs a final forward over the
         completed sequences.
 
@@ -700,16 +639,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             return_logits=input_dict["return_logits"],
             seed=input_dict["seed"],
         )
-    if operation == "predict_structure":
-        return _model.predict_structure(  # type: ignore[return-value]
-            sequences=input_dict["sequences"],
-            batch_size=input_dict["batch_size"],
-            device=input_dict["device"],
-            verbose=input_dict["verbose"],
-        )
-    raise ValueError(
-        f"esm3: unknown operation {operation!r}; valid: ['embeddings', 'inference', 'sample', 'score', 'predict_structure']"
-    )
+    raise ValueError(f"esm3: unknown operation {operation!r}; valid: ['embeddings', 'inference', 'sample', 'score']")
 
 
 def to_device(device: str) -> dict[str, Any]:

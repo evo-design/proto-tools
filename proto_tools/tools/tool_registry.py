@@ -1126,25 +1126,6 @@ class ToolRegistry:
         return [spec for spec in cls._registry.values() if spec.local_cpu]
 
     @classmethod
-    def get_tool_categories(cls) -> dict[str, str]:
-        """Get mapping of tool names to their categories.
-
-        Extracts tool name from registry key (e.g., 'blast-search' -> 'blast')
-        and maps to category. Handles multi-word tool names like 'mmseqs2_homology'.
-
-        Returns:
-            dict[str, str]: Dict mapping tool name to category (e.g., {'blast': 'gene_annotation'})
-        """
-        tool_categories: dict[str, str] = {}
-        for spec in cls._registry.values():
-            # Extract toolkit from key: 'blast-search' -> 'blast'
-            # Handle multi-part names: 'mmseqs2-homology-search' -> 'mmseqs2_homology'
-            key_parts = spec.key.split("-")
-            toolkit = "_".join(key_parts[:-1]) if len(key_parts) >= 2 else spec.key
-            tool_categories[toolkit] = spec.category
-        return tool_categories
-
-    @classmethod
     def list_categories(cls) -> list[str]:
         """Return the sorted list of categories any registered tool belongs to.
 

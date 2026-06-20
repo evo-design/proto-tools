@@ -75,7 +75,7 @@ class NCBIEfetchInput(BaseToolInput):
     strand: Literal["+", "-"] | None = InputField(
         default=None,
         title="Strand",
-        description="Strand for nucleotide retrieval (nuccore-only)",
+        description="Strand for nucleotide retrieval (nuccore/nucleotide only)",
     )
 
     @model_validator(mode="after")
@@ -175,7 +175,7 @@ def run_ncbi_efetch(
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        NCBIEfetchOutput: NCBIEfetchOutput containing parsed FASTA records.
+        NCBIEfetchOutput: Parsed FASTA records and the sanitized request URL.
     """
     del instance
 

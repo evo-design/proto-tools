@@ -1,6 +1,6 @@
 """Filesystem-safe filename builder for the unified export convention.
 
-Composes ``{project}__{YYYY-MM-DD_HHMMSS}{discriminator}.{ext}``. Empty fields drop out
+Composes ``{project}__{run_name}__{YYYY-MM-DD_HHMMSS}{discriminator}.{ext}``. Empty fields drop out
 with their separator. Discriminators (e.g. ``_stage-0``) must start with ``_``.
 """
 

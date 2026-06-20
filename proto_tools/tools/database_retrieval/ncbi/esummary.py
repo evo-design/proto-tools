@@ -151,7 +151,7 @@ def run_ncbi_esummary(
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        NCBIEsummaryOutput: NCBIEsummaryOutput containing the record summary.
+        NCBIEsummaryOutput: Record summary and the sanitized request URL.
     """
     del instance
 

@@ -307,8 +307,6 @@ def move_model_to_device(
     except ImportError:
         # PyTorch not available - not a PyTorch tool
         pass
-    except Exception:
-        raise
 
     # Not a PyTorch model - return as-is (CLI tools, or JAX tools which pin + respawn instead of moving).
     return model_or_params
