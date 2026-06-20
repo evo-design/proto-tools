@@ -9,7 +9,6 @@ import contextlib
 import json
 import os
 import sys
-import types
 from typing import Any
 
 from standalone_helpers import (
@@ -22,24 +21,6 @@ from standalone_helpers import (
 )
 
 logger = get_logger(__name__)
-
-
-def _sequence_to_encoding(sequence: str, *, base_to_index: dict[str, int], bases_arr: str) -> Any:
-    """One-hot encoder shim replacing selene_sdk.sequences.sequence_to_encoding.
-
-    The vendored puffin.py calls ``sequences.sequence_to_encoding(...)`` but its
-    ``from selene_sdk import sequences`` import is commented out, so we inject a
-    ``sequences`` namespace exposing this function onto the puffin module at load.
-    """
-    import numpy as np
-
-    encoding = np.zeros((len(sequence), len(bases_arr)), dtype=np.float32)
-    for position, base in enumerate(sequence):
-        index = base_to_index.get(base)
-        if index is not None:
-            encoding[position, index] = 1.0
-    return encoding
-
 
 TARGETI_FORWARD = {
     "FANTOM_CAGE": 0,
@@ -124,13 +105,7 @@ class PuffinModel:
         repo_dir = self._ensure_repo()
         if verbose:
             logger.info(f"Loading Puffin on {device}")
-        # The vendored puffin.py uses `sequences.sequence_to_encoding` but its selene_sdk
-        # import is commented out; inject a shim so Puffin.predict() works.
-        import puffin as _puffin_module  # type: ignore[import-not-found]
-        from puffin import Puffin
-
-        if not hasattr(_puffin_module, "sequences"):
-            _puffin_module.sequences = types.SimpleNamespace(sequence_to_encoding=_sequence_to_encoding)
+        from puffin import Puffin  # type: ignore[import-not-found]
 
         with _chdir(repo_dir):
             model = Puffin(use_cuda=device.startswith("cuda"))
