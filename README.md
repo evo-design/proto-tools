@@ -10,7 +10,7 @@ Welcome! This repository contains the open-source implementation of `proto-tools
 
 Every tool runs in its own automatically managed isolated environment, so all dependency wrangling is handled for you. In addition, `proto-tools` implements extensive infrastructure for features such as device management and GPU fan-out, making it easy to call tools in quick succession.
 
-You can use it as a standalone Python library or as part of the broader [proto-language](https://github.com/proto-bio/proto-language) optimization system. Proto-tools is open source under an MIT license. Contributions are welcome!
+You can use it as a standalone Python library or as part of the broader [proto-language](https://github.com/evo-design/proto-language) optimization system. Proto-tools is open source under an MIT license. Contributions are welcome!
 
 ## Setup 🚧
 
