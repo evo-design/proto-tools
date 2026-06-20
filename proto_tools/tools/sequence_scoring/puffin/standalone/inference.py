@@ -127,7 +127,7 @@ class PuffinModel:
         # The vendored puffin.py uses `sequences.sequence_to_encoding` but its selene_sdk
         # import is commented out; inject a shim so Puffin.predict() works.
         import puffin as _puffin_module  # type: ignore[import-not-found]
-        from puffin import Puffin  # type: ignore[import-not-found]
+        from puffin import Puffin
 
         if not hasattr(_puffin_module, "sequences"):
             _puffin_module.sequences = types.SimpleNamespace(sequence_to_encoding=_sequence_to_encoding)
