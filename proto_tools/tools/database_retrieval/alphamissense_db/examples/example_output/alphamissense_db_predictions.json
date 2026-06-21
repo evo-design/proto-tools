@@ -1,7 +1,7 @@
 {
   "tool_id": "alphamissense-db-fetch",
-  "execution_time": 0.22913193702697754,
-  "timestamp": "2026-05-19T14:07:50.423522",
+  "execution_time": 0.18709969520568848,
+  "timestamp": "2026-06-20T19:09:27.513987",
   "success": true,
   "warnings": [],
   "errors": [],
@@ -89614,6 +89614,6 @@
     }
   ],
   "num_predictions": 7467,
-  "mean_pathogenicity": 0.5267141020490154,
+  "mean_pathogenicity": 0.5267141020490157,
   "source_url": "https://alphafold.ebi.ac.uk/files/AF-P04637-F1-aa-substitutions.csv"
 }

@@ -1,7 +1,7 @@
 {
   "tool_id": "ncbi-esummary",
-  "execution_time": 0.11415767669677734,
-  "timestamp": "2026-05-09T02:23:53.617430",
+  "execution_time": 0.09261631965637207,
+  "timestamp": "2026-06-20T19:09:09.176502",
   "success": true,
   "warnings": [],
   "errors": [],
@@ -36,7 +36,7 @@
           "exoncount": 13
         }
       ],
-      "geneweight": 599439,
+      "geneweight": 591007,
       "summary": "This gene encodes a tumor suppressor protein containing transcriptional activation, DNA binding, and oligomerization domains. The encoded protein responds to diverse cellular stresses to regulate expression of target genes, thereby inducing cell cycle arrest, apoptosis, senescence, DNA repair, or changes in metabolism. Mutations in this gene are associated with a variety of human cancers, including hereditary cancers such as Li-Fraumeni syndrome. Alternative splicing of this gene and the use of alternate promoters result in multiple transcript variants and isoforms. Additional isoforms have also been shown to result from the use of alternate translation initiation codons from identical transcript variants (PMIDs: 12032546, 20937277). [provided by RefSeq, Dec 2016]",
       "chrsort": "17",
       "chrstart": 7668420,
@@ -118,13 +118,6 @@
         },
         {
           "annotationrelease": "109.20211119",
-          "assemblyaccver": "GCF_000001405.39",
-          "chraccver": "NC_000017.11",
-          "chrstart": 7687489,
-          "chrstop": 7668420
-        },
-        {
-          "annotationrelease": "109.20210514",
           "assemblyaccver": "GCF_000001405.39",
           "chraccver": "NC_000017.11",
           "chrstart": 7687489,

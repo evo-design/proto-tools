@@ -1,54 +1,63 @@
 [
   {
-    "sequence_id":"test_genome",
+    "sequence_id":"seq_0",
     "array_index":0,
-    "position":29,
+    "position":4819,
     "repeat":"GTTTTAGAGCTATGCTGTTTTGAATGGTCCCAAAAC",
-    "spacer":"AAAAAAAACCCCCCCCTTTTTTTTGGGGGGGG",
+    "spacer":"TGCGCTGGTTGATTTCTTCTTGCGCTTTTT",
     "repeat_length":36.0,
-    "spacer_length":32.0
+    "spacer_length":30.0
   },
   {
-    "sequence_id":"test_genome",
+    "sequence_id":"seq_0",
     "array_index":0,
-    "position":97,
+    "position":4885,
     "repeat":"GTTTTAGAGCTATGCTGTTTTGAATGGTCCCAAAAC",
-    "spacer":"CCCCCCCCAAAAAAAGGGGGGGTTTTTTTTAA",
+    "spacer":"TTATATGAACATAACTCAATTTGTAAAAAA",
     "repeat_length":36.0,
-    "spacer_length":32.0
+    "spacer_length":30.0
   },
   {
-    "sequence_id":"test_genome",
+    "sequence_id":"seq_0",
     "array_index":0,
-    "position":165,
+    "position":4951,
     "repeat":"GTTTTAGAGCTATGCTGTTTTGAATGGTCCCAAAAC",
-    "spacer":"TTTTTTTTGGGGGGGGAAAAAAAACCCCCCCC",
+    "spacer":"AGGAATATCCGCAATAATTAATTGCGCTCT",
     "repeat_length":36.0,
-    "spacer_length":32.0
+    "spacer_length":30.0
   },
   {
-    "sequence_id":"test_genome",
+    "sequence_id":"seq_0",
     "array_index":0,
-    "position":233,
+    "position":5017,
     "repeat":"GTTTTAGAGCTATGCTGTTTTGAATGGTCCCAAAAC",
-    "spacer":"GGGGGGGGTTTTTTTTCCCCCCCCAAAAAAAA",
+    "spacer":"AGTGCCGAGGAAAAATTAGGTGCGCTTGGC",
     "repeat_length":36.0,
-    "spacer_length":32.0
+    "spacer_length":30.0
   },
   {
-    "sequence_id":"test_genome",
+    "sequence_id":"seq_0",
     "array_index":0,
-    "position":301,
+    "position":5083,
     "repeat":"GTTTTAGAGCTATGCTGTTTTGAATGGTCCCAAAAC",
-    "spacer":"AACCCCGGTTTTAAAACCCCGGGGTTTTAAAA",
+    "spacer":"TAAATTTGTTTAGCAGGTAAACCGTGCTTT",
     "repeat_length":36.0,
-    "spacer_length":32.0
+    "spacer_length":30.0
   },
   {
-    "sequence_id":"test_genome",
+    "sequence_id":"seq_0",
     "array_index":0,
-    "position":369,
+    "position":5149,
     "repeat":"GTTTTAGAGCTATGCTGTTTTGAATGGTCCCAAAAC",
+    "spacer":"TTCAGCACACTGAGACTTGTTGAGTTCCAT",
+    "repeat_length":36.0,
+    "spacer_length":30.0
+  },
+  {
+    "sequence_id":"seq_0",
+    "array_index":0,
+    "position":5215,
+    "repeat":"GTTTTAGAGCTATGCTGTTTTGAATGGTCTCCATTC",
     "spacer":null,
     "repeat_length":null,
     "spacer_length":null

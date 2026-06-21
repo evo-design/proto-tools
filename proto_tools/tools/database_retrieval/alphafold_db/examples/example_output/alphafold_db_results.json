@@ -1,7 +1,7 @@
 {
   "tool_id": "alphafold-db-fetch",
-  "execution_time": 0.26749110221862793,
-  "timestamp": "2026-05-09T02:13:03.070219",
+  "execution_time": 0.3697683811187744,
+  "timestamp": "2026-06-20T19:09:19.754029",
   "success": true,
   "warnings": [],
   "errors": [],
@@ -36,6 +36,7 @@
     "source": "alphafold-db-fetch",
     "metrics": {
       "primary_metric": "avg_plddt",
+      "metric_type": "AlphaFoldDBMetrics",
       "avg_plddt": 75.06,
       "plddt_per_residue": [
         42.72,
@@ -470,6 +471,7 @@
     "taxId": 9606,
     "organismScientificName": "Homo sapiens",
     "isUniProtReferenceProteome": true,
+    "chainId": "A",
     "bcifUrl": "https://alphafold.ebi.ac.uk/files/AF-P04637-F1-model_v6.bcif",
     "cifUrl": "https://alphafold.ebi.ac.uk/files/AF-P04637-F1-model_v6.cif",
     "pdbUrl": "https://alphafold.ebi.ac.uk/files/AF-P04637-F1-model_v6.pdb",

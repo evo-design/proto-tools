@@ -1,0 +1,54 @@
+{
+  "tool_id": "ccd-lookup",
+  "execution_time": 82.4930272102356,
+  "timestamp": "2026-06-20T19:46:40.221484",
+  "success": true,
+  "warnings": [],
+  "errors": [],
+  "metadata": {
+    "include_cross_references": false,
+    "include_pdb_usage": false
+  },
+  "ligands": {
+    "fragments": [
+      {
+        "id": null,
+        "smiles": "Nc1ncnc2c1ncn2[C@@H]1O[C@H](CO[P@@](=O)(O)O[P@](=O)(O)OP(=O)(O)O)[C@@H](O)[C@H]1O",
+        "ccd_code": "ATP",
+        "entity_type": "ligand",
+        "name": "ADENOSINE-5'-TRIPHOSPHATE",
+        "metrics": {}
+      }
+    ]
+  },
+  "enrichments": [
+    {
+      "ccd_code": "ATP",
+      "formula": "C10 H16 N5 O13 P3",
+      "formula_weight": 507.182,
+      "inchi": "InChI=1S/C10H16N5O13P3/c11-8-5-9(13-2-12-8)15(3-14-5)10-7(17)6(16)4(26-10)1-25-30(21,22)28-31(23,24)27-29(18,19)20/h2-4,6-7,10,16-17H,1H2,(H,21,22)(H,23,24)(H2,11,12,13)(H2,18,19,20)/t4-,6-,7-,10-/m1/s1",
+      "inchikey": "ZKHQWZAMYRWXGA-KQYNXXCUSA-N",
+      "released": true,
+      "release_status": "REL",
+      "parent_ccd_code": null,
+      "physchem_properties": {
+        "molecular_weight": 507.182,
+        "exact_molecular_weight": 506.9957454620005,
+        "logp": -2.4380299999999995,
+        "tpsa": 279.12999999999994,
+        "num_h_donors": 8.0,
+        "num_h_acceptors": 18.0,
+        "num_rotatable_bonds": 15.0,
+        "num_heavy_atoms": 31.0,
+        "num_aromatic_rings": 2.0,
+        "fraction_csp3": 0.5
+      },
+      "cross_references": null,
+      "pdb_structures": null,
+      "warnings": [],
+      "errors": []
+    }
+  ],
+  "num_resolved": 1,
+  "num_unresolved": 0
+}

@@ -1,7 +1,7 @@
 {
   "tool_id": "uniprot-fetch",
-  "execution_time": 0.7031407356262207,
-  "timestamp": "2026-05-09T02:24:47.250644",
+  "execution_time": 0.7947096824645996,
+  "timestamp": "2026-06-20T19:08:59.983052",
   "success": true,
   "warnings": [],
   "errors": [],
@@ -294,12 +294,21 @@
     "8RCI",
     "8UQR",
     "8WD2",
+    "8XCB",
+    "8XCE",
     "8XP5",
     "9BR3",
     "9BR4",
     "9C5S",
     "9CHT",
-    "9FZB"
+    "9FZB",
+    "9G5H",
+    "9G6T",
+    "9G6U",
+    "9R04",
+    "9R2M",
+    "9R2P",
+    "9R2Q"
   ],
   "source_url": "https://rest.uniprot.org/uniprotkb/P04637",
   "raw_entry": {
@@ -336,9 +345,9 @@
     "uniProtkbId": "P53_HUMAN",
     "entryAudit": {
       "firstPublicDate": "1987-08-13",
-      "lastAnnotationUpdateDate": "2026-01-28",
+      "lastAnnotationUpdateDate": "2026-06-10",
       "lastSequenceUpdateDate": "2009-11-24",
-      "entryVersion": 313,
+      "entryVersion": 314,
       "sequenceVersion": 4
     },
     "annotationScore": 5.0,
@@ -901,6 +910,11 @@
               {
                 "evidenceCode": "ECO:0000269",
                 "source": "PubMed",
+                "id": "22914926"
+              },
+              {
+                "evidenceCode": "ECO:0000269",
+                "source": "PubMed",
                 "id": "22945289"
               },
               {
@@ -989,7 +1003,7 @@
                 "id": "9840937"
               }
             ],
-            "value": "Forms homodimers and homotetramers (PubMed:19011621). Binds DNA as a homotetramer (PubMed:36108750). Interacts with AXIN1. Probably part of a complex consisting of TP53, HIPK2 and AXIN1 (By similarity). Interacts with histone acetyltransferases EP300 and methyltransferases HRMT1L2 and CARM1, and recruits them to promoters. Interacts (via C-terminus) with TAF1; when TAF1 is part of the TFIID complex. Interacts with ING4; this interaction may be indirect. Found in a complex with CABLES1 and TP73. Interacts with HIPK1, HIPK2, and TP53INP1. Interacts with WWOX. May interact with HCV core protein. Interacts with USP7 and SYVN1. Interacts with HSP90AB1. Interacts with CHD8; leading to recruit histone H1 and prevent transactivation activity (By similarity). Interacts with ARMC10, CDKN2AIP, NUAK1, STK11/LKB1, UHRF2 and E4F1. Interacts with YWHAZ; the interaction enhances TP53 transcriptional activity. Phosphorylation of YWHAZ on 'Ser-58' inhibits this interaction. Interacts (via DNA-binding domain) with MAML1 (via N-terminus). Interacts with MKRN1. Interacts with PML (via C-terminus). Interacts with MDM2; leading to ubiquitination and proteasomal degradation of TP53. Directly interacts with FBXO42; leading to ubiquitination and degradation of TP53. Interacts (phosphorylated at Ser-15 by ATM) with the phosphatase PP2A-PPP2R5C holoenzyme; regulates stress-induced TP53-dependent inhibition of cell proliferation. Interacts with PPP2R2A. Interacts with AURKA, DAXX, BRD7 and TRIM24. Interacts (when monomethylated at Lys-382) with L3MBTL1. Isoform 1 interacts with isoform 2 and with isoform 4. Interacts with GRK5. Binds to the CAK complex (CDK7, cyclin H and MAT1) in response to DNA damage. Interacts with CDK5 in neurons. Interacts with AURKB, SETD2, UHRF2 and NOC2L. Interacts (via N-terminus) with PTK2/FAK1; this promotes ubiquitination by MDM2. Interacts with PTK2B/PYK2; this promotes ubiquitination by MDM2. Interacts with PRKCG. Interacts with PPIF; the association implicates preferentially tetrameric TP53, is induced by oxidative stress and is impaired by cyclosporin A (CsA). Interacts with SNAI1; the interaction induces SNAI1 degradation via MDM2-mediated ubiquitination and inhibits SNAI1-induced cell invasion. Interacts with UBC9. Interacts with ZNF385B; the interaction is direct. Interacts (via DNA-binding domain) with ZNF385A; the interaction is direct and enhances p53/TP53 transactivation functions on cell-cycle arrest target genes, resulting in growth arrest. Interacts with ANKRD2. Interacts with RFFL and RNF34; involved in p53/TP53 ubiquitination. Interacts with MTA1 and COP1. Interacts with CCAR2 (via N-terminus). Interacts with MORC3 (PubMed:17332504). Interacts (via C-terminus) with POU4F2 isoform 1 (via C-terminus) (PubMed:17145718). Interacts (via oligomerization region) with NOP53; the interaction is direct and may prevent the MDM2-mediated proteasomal degradation of TP53 (PubMed:22522597). Interacts with AFG1L; mediates mitochondrial translocation of TP53 (PubMed:27323408). Interacts with UBD (PubMed:25422469). Interacts with TAF6 isoform 1 and isoform 4 (PubMed:20096117). Interacts with C10orf90/FATS; the interaction inhibits binding of TP53 and MDM2 (By similarity). Interacts with NUPR1; interaction is stress-dependent (PubMed:18690848). Forms a complex with EP300 and NUPR1; this complex binds CDKN1A promoter leading to transcriptional induction of CDKN1A (PubMed:18690848). Interacts with PRMT5 in response to DNA damage; the interaction is TTC5/STRAP dependent (PubMed:19011621). Interacts with PPP1R13L (via SH3 domain and ANK repeats); the interaction inhibits pro-apoptotic activity of p53/TP53 (PubMed:12524540). Interacts with PPP1R13B/ASPP1 and TP53BP2/ASPP2; the interactions promotes pro-apoptotic activity (PubMed:12524540). When phosphorylated at Ser-15, interacts with DDX3X and gamma-tubulin (PubMed:28842590). Interacts with KAT7/HBO1; leading to inhibit histone acetyltransferase activity of KAT7/HBO1 (PubMed:17954561). Interacts (via N-terminus) with E3 ubiquitin-protein ligase MUL1; the interaction results in ubiquitination of cytoplasmic TP53 at Lys-24 and subsequent proteasomal degradation (PubMed:21597459). Interacts with S100A4; this interaction promotes TP53 degradation (PubMed:23752197, PubMed:32442400). Interacts with BANP (By similarity). Interacts with TTC5/STRAP; the interaction may result in increased mitochondrial-dependent apoptosis (PubMed:25168243). Interacts with NQO1; this interaction is NADH-dependent, stabilizes TP53 in response to oxidative stress and protects it from ubiquitin-independent degradation by the 20S proteasome (PubMed:15687255). Interacts with DAZAP2 at TP53 target gene promoters; the interaction is triggered by DNA damage and leads to modulation of the expression of a subset of TP53 target genes, reducing DNA damage-induced cell death by limiting the expression of cell death-mediating TP53 target genes (PubMed:33591310). Interacts (via N-terminus) with ZNF768 (via zinc-finger domains); interaction might be facilitated by TP53 oligomerization state (PubMed:34404770). Forms a ternary complex with ALDOB and G6PD; this interaction is direct. ALDOB stabilizes the complex inhibiting G6PD activity and keeping oxidative pentose phosphate metabolism in check. Interacts with MORN3; the interactions mediate post-transcriptional modifications of TP53 by MDM2 and SIRT1 (PubMed:29681526). Interacts with HSPA9/MOT-2; the interaction promotes the degradation of TP53 (PubMed:24625977). Interacts with FBXO22; this interaction promotes TP53 proteasomal degradation (PubMed:26868148)"
+            "value": "Forms homodimers and homotetramers (PubMed:19011621). Binds DNA as a homotetramer (PubMed:36108750). Interacts with AXIN1. Probably part of a complex consisting of TP53, HIPK2 and AXIN1 (By similarity). Interacts with histone acetyltransferases EP300 and methyltransferases HRMT1L2 and CARM1, and recruits them to promoters. Interacts (via C-terminus) with TAF1; when TAF1 is part of the TFIID complex. Interacts with ING4; this interaction may be indirect. Found in a complex with CABLES1 and TP73. Interacts with HIPK1, HIPK2, and TP53INP1. Interacts with WWOX. May interact with HCV core protein. Interacts with USP7 and SYVN1. Interacts with HSP90AB1. Interacts with CHD8; leading to recruit histone H1 and prevent transactivation activity (By similarity). Interacts with ARMC10, CDKN2AIP, NUAK1, STK11/LKB1, UHRF2 and E4F1. Interacts with YWHAZ; the interaction enhances TP53 transcriptional activity. Phosphorylation of YWHAZ on 'Ser-58' inhibits this interaction. Interacts (via DNA-binding domain) with MAML1 (via N-terminus). Interacts with MKRN1. Interacts with PML (via C-terminus). Interacts with MDM2; leading to ubiquitination and proteasomal degradation of TP53 (PubMed:10570149, PubMed:19880522, PubMed:22914926, PubMed:8875929). Interacts with PDCD5; the interaction is direct and prevents the interaction between TP53 and MDM2, thereby stabilizing TP53 (PubMed:22914926). Directly interacts with FBXO42; leading to ubiquitination and degradation of TP53. Interacts (phosphorylated at Ser-15 by ATM) with the phosphatase PP2A-PPP2R5C holoenzyme; regulates stress-induced TP53-dependent inhibition of cell proliferation. Interacts with PPP2R2A. Interacts with AURKA, DAXX, BRD7 and TRIM24. Interacts (when monomethylated at Lys-382) with L3MBTL1. Isoform 1 interacts with isoform 2 and with isoform 4. Interacts with GRK5. Binds to the CAK complex (CDK7, cyclin H and MAT1) in response to DNA damage. Interacts with CDK5 in neurons. Interacts with AURKB, SETD2, UHRF2 and NOC2L. Interacts (via N-terminus) with PTK2/FAK1; this promotes ubiquitination by MDM2. Interacts with PTK2B/PYK2; this promotes ubiquitination by MDM2. Interacts with PRKCG. Interacts with PPIF; the association implicates preferentially tetrameric TP53, is induced by oxidative stress and is impaired by cyclosporin A (CsA). Interacts with SNAI1; the interaction induces SNAI1 degradation via MDM2-mediated ubiquitination and inhibits SNAI1-induced cell invasion. Interacts with UBC9. Interacts with ZNF385B; the interaction is direct. Interacts (via DNA-binding domain) with ZNF385A; the interaction is direct and enhances p53/TP53 transactivation functions on cell-cycle arrest target genes, resulting in growth arrest. Interacts with ANKRD2. Interacts with RFFL and RNF34; involved in p53/TP53 ubiquitination. Interacts with MTA1 and COP1. Interacts with CCAR2 (via N-terminus). Interacts with MORC3 (PubMed:17332504). Interacts (via C-terminus) with POU4F2 isoform 1 (via C-terminus) (PubMed:17145718). Interacts (via oligomerization region) with NOP53; the interaction is direct and may prevent the MDM2-mediated proteasomal degradation of TP53 (PubMed:22522597). Interacts with AFG1L; mediates mitochondrial translocation of TP53 (PubMed:27323408). Interacts with UBD (PubMed:25422469). Interacts with TAF6 isoform 1 and isoform 4 (PubMed:20096117). Interacts with C10orf90/FATS; the interaction inhibits binding of TP53 and MDM2 (By similarity). Interacts with NUPR1; interaction is stress-dependent (PubMed:18690848). Forms a complex with EP300 and NUPR1; this complex binds CDKN1A promoter leading to transcriptional induction of CDKN1A (PubMed:18690848). Interacts with PRMT5 in response to DNA damage; the interaction is TTC5/STRAP dependent (PubMed:19011621). Interacts with PPP1R13L (via SH3 domain and ANK repeats); the interaction inhibits pro-apoptotic activity of p53/TP53 (PubMed:12524540). Interacts with PPP1R13B/ASPP1 and TP53BP2/ASPP2; the interactions promotes pro-apoptotic activity (PubMed:12524540). When phosphorylated at Ser-15, interacts with DDX3X and gamma-tubulin (PubMed:28842590). Interacts with KAT7/HBO1; leading to inhibit histone acetyltransferase activity of KAT7/HBO1 (PubMed:17954561). Interacts (via N-terminus) with E3 ubiquitin-protein ligase MUL1; the interaction results in ubiquitination of cytoplasmic TP53 at Lys-24 and subsequent proteasomal degradation (PubMed:21597459). Interacts with S100A4; this interaction promotes TP53 degradation (PubMed:23752197, PubMed:32442400). Interacts with BANP (By similarity). Interacts with TTC5/STRAP; the interaction may result in increased mitochondrial-dependent apoptosis (PubMed:25168243). Interacts with NQO1; this interaction is NADH-dependent, stabilizes TP53 in response to oxidative stress and protects it from ubiquitin-independent degradation by the 20S proteasome (PubMed:15687255). Interacts with DAZAP2 at TP53 target gene promoters; the interaction is triggered by DNA damage and leads to modulation of the expression of a subset of TP53 target genes, reducing DNA damage-induced cell death by limiting the expression of cell death-mediating TP53 target genes (PubMed:33591310). Interacts (via N-terminus) with ZNF768 (via zinc-finger domains); interaction might be facilitated by TP53 oligomerization state (PubMed:34404770). Forms a ternary complex with ALDOB and G6PD; this interaction is direct. ALDOB stabilizes the complex inhibiting G6PD activity and keeping oxidative pentose phosphate metabolism in check. Interacts with MORN3; the interactions mediate post-transcriptional modifications of TP53 by MDM2 and SIRT1 (PubMed:29681526). Interacts with HSPA9/MOT-2; the interaction promotes the degradation of TP53 (PubMed:24625977). Interacts with FBXO22; this interaction promotes TP53 proteasomal degradation (PubMed:26868148)"
           }
         ],
         "commentType": "SUBUNIT"
@@ -1219,19 +1233,6 @@
               "intActId": "EBI-366083"
             },
             "interactantTwo": {
-              "uniProtKBAccession": "P38398",
-              "geneName": "BRCA1",
-              "intActId": "EBI-349905"
-            },
-            "numberOfExperiments": 2,
-            "organismDiffer": false
-          },
-          {
-            "interactantOne": {
-              "uniProtKBAccession": "P04637",
-              "intActId": "EBI-366083"
-            },
-            "interactantTwo": {
               "uniProtKBAccession": "P51587",
               "geneName": "BRCA2",
               "intActId": "EBI-79792"
@@ -1349,50 +1350,11 @@
               "intActId": "EBI-366083"
             },
             "interactantTwo": {
-              "uniProtKBAccession": "Q03701",
-              "geneName": "CEBPZ",
-              "intActId": "EBI-1046778"
-            },
-            "numberOfExperiments": 2,
-            "organismDiffer": false
-          },
-          {
-            "interactantOne": {
-              "uniProtKBAccession": "P04637",
-              "intActId": "EBI-366083"
-            },
-            "interactantTwo": {
               "uniProtKBAccession": "O14757",
               "geneName": "CHEK1",
               "intActId": "EBI-974488"
             },
             "numberOfExperiments": 2,
-            "organismDiffer": false
-          },
-          {
-            "interactantOne": {
-              "uniProtKBAccession": "P04637",
-              "intActId": "EBI-366083"
-            },
-            "interactantTwo": {
-              "uniProtKBAccession": "O96017",
-              "geneName": "CHEK2",
-              "intActId": "EBI-1180783"
-            },
-            "numberOfExperiments": 3,
-            "organismDiffer": false
-          },
-          {
-            "interactantOne": {
-              "uniProtKBAccession": "P04637",
-              "intActId": "EBI-366083"
-            },
-            "interactantTwo": {
-              "uniProtKBAccession": "Q8NHY2",
-              "geneName": "COP1",
-              "intActId": "EBI-1176214"
-            },
-            "numberOfExperiments": 5,
             "organismDiffer": false
           },
           {
@@ -1548,7 +1510,7 @@
               "geneName": "EP300",
               "intActId": "EBI-447295"
             },
-            "numberOfExperiments": 22,
+            "numberOfExperiments": 21,
             "organismDiffer": false
           },
           {
@@ -1661,19 +1623,6 @@
               "intActId": "EBI-366083"
             },
             "interactantTwo": {
-              "uniProtKBAccession": "Q9H2X6",
-              "geneName": "HIPK2",
-              "intActId": "EBI-348345"
-            },
-            "numberOfExperiments": 3,
-            "organismDiffer": false
-          },
-          {
-            "interactantOne": {
-              "uniProtKBAccession": "P04637",
-              "intActId": "EBI-366083"
-            },
-            "interactantTwo": {
               "uniProtKBAccession": "P09429",
               "geneName": "HMGB1",
               "intActId": "EBI-389432"
@@ -1718,19 +1667,6 @@
               "intActId": "EBI-7060731"
             },
             "numberOfExperiments": 2,
-            "organismDiffer": false
-          },
-          {
-            "interactantOne": {
-              "uniProtKBAccession": "P04637",
-              "intActId": "EBI-366083"
-            },
-            "interactantTwo": {
-              "uniProtKBAccession": "Q9BUJ2",
-              "geneName": "HNRNPUL1",
-              "intActId": "EBI-1018153"
-            },
-            "numberOfExperiments": 12,
             "organismDiffer": false
           },
           {
@@ -1990,7 +1926,7 @@
               "geneName": "MDM2",
               "intActId": "EBI-389668"
             },
-            "numberOfExperiments": 119,
+            "numberOfExperiments": 117,
             "organismDiffer": false
           },
           {
@@ -2003,20 +1939,7 @@
               "geneName": "MDM4",
               "intActId": "EBI-398437"
             },
-            "numberOfExperiments": 24,
-            "organismDiffer": false
-          },
-          {
-            "interactantOne": {
-              "uniProtKBAccession": "P04637",
-              "intActId": "EBI-366083"
-            },
-            "interactantTwo": {
-              "uniProtKBAccession": "Q15648",
-              "geneName": "MED1",
-              "intActId": "EBI-394459"
-            },
-            "numberOfExperiments": 3,
+            "numberOfExperiments": 27,
             "organismDiffer": false
           },
           {
@@ -2276,7 +2199,7 @@
               "geneName": "PARP1",
               "intActId": "EBI-355676"
             },
-            "numberOfExperiments": 5,
+            "numberOfExperiments": 3,
             "organismDiffer": false
           },
           {
@@ -2367,7 +2290,7 @@
               "geneName": "PIN1",
               "intActId": "EBI-714158"
             },
-            "numberOfExperiments": 14,
+            "numberOfExperiments": 12,
             "organismDiffer": false
           },
           {
@@ -2874,7 +2797,7 @@
               "geneName": "SP1",
               "intActId": "EBI-298336"
             },
-            "numberOfExperiments": 6,
+            "numberOfExperiments": 3,
             "organismDiffer": false
           },
           {
@@ -3121,7 +3044,7 @@
               "geneName": "UBE2I",
               "intActId": "EBI-80168"
             },
-            "numberOfExperiments": 5,
+            "numberOfExperiments": 3,
             "organismDiffer": false
           },
           {
@@ -3199,7 +3122,7 @@
               "geneName": "USP7",
               "intActId": "EBI-302474"
             },
-            "numberOfExperiments": 23,
+            "numberOfExperiments": 19,
             "organismDiffer": false
           },
           {
@@ -3376,19 +3299,6 @@
               "intActId": "EBI-366083"
             },
             "interactantTwo": {
-              "uniProtKBAccession": "P03120",
-              "geneName": "E2",
-              "intActId": "EBI-1779322"
-            },
-            "numberOfExperiments": 3,
-            "organismDiffer": true
-          },
-          {
-            "interactantOne": {
-              "uniProtKBAccession": "P04637",
-              "intActId": "EBI-366083"
-            },
-            "interactantTwo": {
               "uniProtKBAccession": "P03126",
               "geneName": "E6",
               "intActId": "EBI-1177242"
@@ -3402,24 +3312,11 @@
               "intActId": "EBI-366083"
             },
             "interactantTwo": {
-              "uniProtKBAccession": "P04019",
-              "geneName": "E6",
-              "intActId": "EBI-1177232"
-            },
-            "numberOfExperiments": 2,
-            "organismDiffer": true
-          },
-          {
-            "interactantOne": {
-              "uniProtKBAccession": "P04637",
-              "intActId": "EBI-366083"
-            },
-            "interactantTwo": {
               "uniProtKBAccession": "P06463",
               "geneName": "E6",
               "intActId": "EBI-1186926"
             },
-            "numberOfExperiments": 5,
+            "numberOfExperiments": 3,
             "organismDiffer": true
           },
           {
@@ -3548,7 +3445,7 @@
               "uniProtKBAccession": "P03070",
               "intActId": "EBI-617698"
             },
-            "numberOfExperiments": 25,
+            "numberOfExperiments": 22,
             "organismDiffer": true
           },
           {
@@ -3588,32 +3485,6 @@
             },
             "numberOfExperiments": 2,
             "organismDiffer": false
-          },
-          {
-            "interactantOne": {
-              "uniProtKBAccession": "P04637-1",
-              "intActId": "EBI-3895849"
-            },
-            "interactantTwo": {
-              "uniProtKBAccession": "P55209",
-              "geneName": "NAP1L1",
-              "intActId": "EBI-356392"
-            },
-            "numberOfExperiments": 2,
-            "organismDiffer": false
-          },
-          {
-            "interactantOne": {
-              "uniProtKBAccession": "P04637-1",
-              "intActId": "EBI-3895849"
-            },
-            "interactantTwo": {
-              "uniProtKBAccession": "P03126",
-              "geneName": "E6",
-              "intActId": "EBI-1177242"
-            },
-            "numberOfExperiments": 2,
-            "organismDiffer": true
           },
           {
             "interactantOne": {
@@ -3698,6 +3569,11 @@
                 {
                   "evidenceCode": "ECO:0000269",
                   "source": "PubMed",
+                  "id": "22914926"
+                },
+                {
+                  "evidenceCode": "ECO:0000269",
+                  "source": "PubMed",
                   "id": "24625977"
                 },
                 {
@@ -3742,6 +3618,11 @@
                   "evidenceCode": "ECO:0000269",
                   "source": "PubMed",
                   "id": "21597459"
+                },
+                {
+                  "evidenceCode": "ECO:0000269",
+                  "source": "PubMed",
+                  "id": "22914926"
                 },
                 {
                   "evidenceCode": "ECO:0000269",
@@ -41149,14 +41030,14 @@
         ]
       },
       {
-        "type": "Beta strand",
+        "type": "Helix",
         "location": {
           "start": {
-            "value": 95,
+            "value": 92,
             "modifier": "EXACT"
           },
           "end": {
-            "value": 97,
+            "value": 94,
             "modifier": "EXACT"
           }
         },
@@ -41165,7 +41046,28 @@
           {
             "evidenceCode": "ECO:0007829",
             "source": "PDB",
-            "id": "7B49"
+            "id": "6SL6"
+          }
+        ]
+      },
+      {
+        "type": "Helix",
+        "location": {
+          "start": {
+            "value": 97,
+            "modifier": "EXACT"
+          },
+          "end": {
+            "value": 99,
+            "modifier": "EXACT"
+          }
+        },
+        "description": "",
+        "evidences": [
+          {
+            "evidenceCode": "ECO:0007829",
+            "source": "PDB",
+            "id": "4MZI"
           }
         ]
       },
@@ -41215,33 +41117,12 @@
         "type": "Beta strand",
         "location": {
           "start": {
-            "value": 118,
+            "value": 119,
             "modifier": "EXACT"
           },
           "end": {
-            "value": 120,
-            "modifier": "EXACT"
-          }
-        },
-        "description": "",
-        "evidences": [
-          {
-            "evidenceCode": "ECO:0007829",
-            "source": "PDB",
-            "id": "3Q05"
-          }
-        ]
-      },
-      {
-        "type": "Turn",
-        "location": {
-          "start": {
             "value": 121,
             "modifier": "EXACT"
-          },
-          "end": {
-            "value": 123,
-            "modifier": "EXACT"
           }
         },
         "description": "",
@@ -41249,7 +41130,7 @@
           {
             "evidenceCode": "ECO:0007829",
             "source": "PDB",
-            "id": "3Q05"
+            "id": "5BUA"
           }
         ]
       },
@@ -41338,14 +41219,14 @@
         ]
       },
       {
-        "type": "Beta strand",
+        "type": "Helix",
         "location": {
           "start": {
-            "value": 148,
+            "value": 150,
             "modifier": "EXACT"
           },
           "end": {
-            "value": 150,
+            "value": 152,
             "modifier": "EXACT"
           }
         },
@@ -41354,7 +41235,7 @@
           {
             "evidenceCode": "ECO:0007829",
             "source": "PDB",
-            "id": "5UN8"
+            "id": "3D06"
           }
         ]
       },
@@ -41397,6 +41278,27 @@
             "evidenceCode": "ECO:0007829",
             "source": "PDB",
             "id": "3D06"
+          }
+        ]
+      },
+      {
+        "type": "Helix",
+        "location": {
+          "start": {
+            "value": 174,
+            "modifier": "EXACT"
+          },
+          "end": {
+            "value": 176,
+            "modifier": "EXACT"
+          }
+        },
+        "description": "",
+        "evidences": [
+          {
+            "evidenceCode": "ECO:0007829",
+            "source": "PDB",
+            "id": "8GCR"
           }
         ]
       },
@@ -41535,6 +41437,27 @@
           },
           "end": {
             "value": 219,
+            "modifier": "EXACT"
+          }
+        },
+        "description": "",
+        "evidences": [
+          {
+            "evidenceCode": "ECO:0007829",
+            "source": "PDB",
+            "id": "3D06"
+          }
+        ]
+      },
+      {
+        "type": "Helix",
+        "location": {
+          "start": {
+            "value": 222,
+            "modifier": "EXACT"
+          },
+          "end": {
+            "value": 224,
             "modifier": "EXACT"
           }
         },
@@ -41774,7 +41697,7 @@
           {
             "evidenceCode": "ECO:0007829",
             "source": "PDB",
-            "id": "3Q01"
+            "id": "8UQR"
           }
         ]
       },
@@ -41786,7 +41709,7 @@
             "modifier": "EXACT"
           },
           "end": {
-            "value": 354,
+            "value": 349,
             "modifier": "EXACT"
           }
         },
@@ -41795,7 +41718,28 @@
           {
             "evidenceCode": "ECO:0007829",
             "source": "PDB",
-            "id": "1AIE"
+            "id": "8UQR"
+          }
+        ]
+      },
+      {
+        "type": "Turn",
+        "location": {
+          "start": {
+            "value": 353,
+            "modifier": "EXACT"
+          },
+          "end": {
+            "value": 355,
+            "modifier": "EXACT"
+          }
+        },
+        "description": "",
+        "evidences": [
+          {
+            "evidenceCode": "ECO:0007829",
+            "source": "PDB",
+            "id": "7BWN"
           }
         ]
       },
@@ -41817,6 +41761,48 @@
             "evidenceCode": "ECO:0007829",
             "source": "PDB",
             "id": "1YC5"
+          }
+        ]
+      },
+      {
+        "type": "Helix",
+        "location": {
+          "start": {
+            "value": 381,
+            "modifier": "EXACT"
+          },
+          "end": {
+            "value": 383,
+            "modifier": "EXACT"
+          }
+        },
+        "description": "",
+        "evidences": [
+          {
+            "evidenceCode": "ECO:0007829",
+            "source": "PDB",
+            "id": "1H26"
+          }
+        ]
+      },
+      {
+        "type": "Helix",
+        "location": {
+          "start": {
+            "value": 384,
+            "modifier": "EXACT"
+          },
+          "end": {
+            "value": 386,
+            "modifier": "EXACT"
+          }
+        },
+        "description": "",
+        "evidences": [
+          {
+            "evidenceCode": "ECO:0007829",
+            "source": "PDB",
+            "id": "5MHC"
           }
         ]
       }
@@ -47013,6 +46999,43 @@
       {
         "referenceNumber": 140,
         "citation": {
+          "id": "22914926",
+          "citationType": "journal article",
+          "authors": [
+            "Xu L.",
+            "Hu J.",
+            "Zhao Y.",
+            "Hu J.",
+            "Xiao J.",
+            "Wang Y.",
+            "Ma D.",
+            "Chen Y."
+          ],
+          "citationCrossReferences": [
+            {
+              "database": "PubMed",
+              "id": "22914926"
+            },
+            {
+              "database": "DOI",
+              "id": "10.1007/s10495-012-0754-x"
+            }
+          ],
+          "title": "PDCD5 interacts with p53 and functions as a positive regulator in the p53 pathway.",
+          "publicationDate": "2012",
+          "journal": "Apoptosis",
+          "firstPage": "1235",
+          "lastPage": "1245",
+          "volume": "17"
+        },
+        "referencePositions": [
+          "INTERACTION WITH MDM2 AND PDCD5",
+          "SUBCELLULAR LOCATION"
+        ]
+      },
+      {
+        "referenceNumber": 141,
+        "citation": {
           "id": "35122041",
           "citationType": "journal article",
           "authors": [
@@ -47069,7 +47092,7 @@
         ]
       },
       {
-        "referenceNumber": 141,
+        "referenceNumber": 142,
         "citation": {
           "id": "21946351",
           "citationType": "journal article",
@@ -47200,7 +47223,7 @@
         ]
       },
       {
-        "referenceNumber": 142,
+        "referenceNumber": 143,
         "citation": {
           "id": "21317932",
           "citationType": "journal article",
@@ -47235,7 +47258,7 @@
         ]
       },
       {
-        "referenceNumber": 143,
+        "referenceNumber": 144,
         "citation": {
           "id": "22726440",
           "citationType": "journal article",
@@ -47271,7 +47294,7 @@
         ]
       },
       {
-        "referenceNumber": 144,
+        "referenceNumber": 145,
         "citation": {
           "id": "22214662",
           "citationType": "journal article",
@@ -47306,7 +47329,7 @@
         ]
       },
       {
-        "referenceNumber": 145,
+        "referenceNumber": 146,
         "citation": {
           "id": "22522597",
           "citationType": "journal article",
@@ -47342,7 +47365,7 @@
         ]
       },
       {
-        "referenceNumber": 146,
+        "referenceNumber": 147,
         "citation": {
           "id": "22945289",
           "citationType": "journal article",
@@ -47382,7 +47405,7 @@
         ]
       },
       {
-        "referenceNumber": 147,
+        "referenceNumber": 148,
         "citation": {
           "id": "22864287",
           "citationType": "journal article",
@@ -47423,7 +47446,7 @@
         ]
       },
       {
-        "referenceNumber": 148,
+        "referenceNumber": 149,
         "citation": {
           "id": "24051492",
           "citationType": "journal article",
@@ -47455,7 +47478,7 @@
         ]
       },
       {
-        "referenceNumber": 149,
+        "referenceNumber": 150,
         "citation": {
           "id": "23431171",
           "citationType": "journal article",
@@ -47489,7 +47512,7 @@
         ]
       },
       {
-        "referenceNumber": 150,
+        "referenceNumber": 151,
         "citation": {
           "id": "24625977",
           "citationType": "journal article",
@@ -47531,7 +47554,7 @@
         ]
       },
       {
-        "referenceNumber": 151,
+        "referenceNumber": 152,
         "citation": {
           "id": "23752197",
           "citationType": "journal article",
@@ -47567,7 +47590,7 @@
         ]
       },
       {
-        "referenceNumber": 152,
+        "referenceNumber": 153,
         "citation": {
           "id": "24652652",
           "citationType": "journal article",
@@ -47606,7 +47629,7 @@
         ]
       },
       {
-        "referenceNumber": 153,
+        "referenceNumber": 154,
         "citation": {
           "id": "25422469",
           "citationType": "journal article",
@@ -47645,7 +47668,7 @@
         ]
       },
       {
-        "referenceNumber": 154,
+        "referenceNumber": 155,
         "citation": {
           "id": "25168243",
           "citationType": "journal article",
@@ -47680,7 +47703,7 @@
         ]
       },
       {
-        "referenceNumber": 155,
+        "referenceNumber": 156,
         "citation": {
           "id": "26634371",
           "citationType": "journal article",
@@ -47715,7 +47738,7 @@
         ]
       },
       {
-        "referenceNumber": 156,
+        "referenceNumber": 157,
         "citation": {
           "id": "25591766",
           "citationType": "journal article",
@@ -47750,7 +47773,7 @@
         ]
       },
       {
-        "referenceNumber": 157,
+        "referenceNumber": 158,
         "citation": {
           "id": "25772236",
           "citationType": "journal article",
@@ -47786,7 +47809,7 @@
         ]
       },
       {
-        "referenceNumber": 158,
+        "referenceNumber": 159,
         "citation": {
           "id": "26868148",
           "citationType": "journal article",
@@ -47830,7 +47853,7 @@
         ]
       },
       {
-        "referenceNumber": 159,
+        "referenceNumber": 160,
         "citation": {
           "id": "27323408",
           "citationType": "journal article",
@@ -47865,7 +47888,7 @@
         ]
       },
       {
-        "referenceNumber": 160,
+        "referenceNumber": 161,
         "citation": {
           "id": "28842590",
           "citationType": "journal article",
@@ -47900,7 +47923,7 @@
         ]
       },
       {
-        "referenceNumber": 161,
+        "referenceNumber": 162,
         "citation": {
           "id": "28807825",
           "citationType": "journal article",
@@ -47937,7 +47960,7 @@
         ]
       },
       {
-        "referenceNumber": 162,
+        "referenceNumber": 163,
         "citation": {
           "id": "33591310",
           "citationType": "journal article",
@@ -47973,7 +47996,7 @@
         ]
       },
       {
-        "referenceNumber": 163,
+        "referenceNumber": 164,
         "citation": {
           "id": "30146126",
           "citationType": "journal article",
@@ -48040,7 +48063,7 @@
         ]
       },
       {
-        "referenceNumber": 164,
+        "referenceNumber": 165,
         "citation": {
           "id": "29681526",
           "citationType": "journal article",
@@ -48091,7 +48114,7 @@
         ]
       },
       {
-        "referenceNumber": 165,
+        "referenceNumber": 166,
         "citation": {
           "id": "29474172",
           "citationType": "journal article",
@@ -48130,7 +48153,7 @@
         ]
       },
       {
-        "referenceNumber": 166,
+        "referenceNumber": 167,
         "citation": {
           "id": "31527692",
           "citationType": "journal article",
@@ -48162,7 +48185,7 @@
         ]
       },
       {
-        "referenceNumber": 167,
+        "referenceNumber": 168,
         "citation": {
           "id": "31953488",
           "citationType": "journal article",
@@ -48199,7 +48222,7 @@
         ]
       },
       {
-        "referenceNumber": 168,
+        "referenceNumber": 169,
         "citation": {
           "id": "34523970",
           "citationType": "journal article",
@@ -48231,7 +48254,7 @@
         ]
       },
       {
-        "referenceNumber": 169,
+        "referenceNumber": 170,
         "citation": {
           "id": "34404770",
           "citationType": "journal article",
@@ -48284,7 +48307,7 @@
         ]
       },
       {
-        "referenceNumber": 170,
+        "referenceNumber": 171,
         "citation": {
           "id": "35618207",
           "citationType": "journal article",
@@ -48319,7 +48342,7 @@
         ]
       },
       {
-        "referenceNumber": 171,
+        "referenceNumber": 172,
         "citation": {
           "id": "36108750",
           "citationType": "journal article",
@@ -48355,7 +48378,7 @@
         ]
       },
       {
-        "referenceNumber": 172,
+        "referenceNumber": 173,
         "citation": {
           "id": "36634798",
           "citationType": "journal article",
@@ -48389,7 +48412,7 @@
         ]
       },
       {
-        "referenceNumber": 173,
+        "referenceNumber": 174,
         "citation": {
           "id": "38653238",
           "citationType": "journal article",
@@ -48427,7 +48450,7 @@
         ]
       },
       {
-        "referenceNumber": 174,
+        "referenceNumber": 175,
         "citation": {
           "id": "8023159",
           "citationType": "journal article",
@@ -48462,7 +48485,7 @@
         ]
       },
       {
-        "referenceNumber": 175,
+        "referenceNumber": 176,
         "citation": {
           "id": "7773777",
           "citationType": "journal article",
@@ -48496,7 +48519,7 @@
         ]
       },
       {
-        "referenceNumber": 176,
+        "referenceNumber": 177,
         "citation": {
           "id": "9321402",
           "citationType": "journal article",
@@ -48530,7 +48553,7 @@
         ]
       },
       {
-        "referenceNumber": 177,
+        "referenceNumber": 178,
         "citation": {
           "id": "8023157",
           "citationType": "journal article",
@@ -48562,7 +48585,7 @@
         ]
       },
       {
-        "referenceNumber": 178,
+        "referenceNumber": 179,
         "citation": {
           "id": "7878469",
           "citationType": "journal article",
@@ -48593,7 +48616,7 @@
         ]
       },
       {
-        "referenceNumber": 179,
+        "referenceNumber": 180,
         "citation": {
           "id": "8875929",
           "citationType": "journal article",
@@ -48628,7 +48651,7 @@
         ]
       },
       {
-        "referenceNumber": 180,
+        "referenceNumber": 181,
         "citation": {
           "id": "8875926",
           "citationType": "journal article",
@@ -48658,7 +48681,7 @@
         ]
       },
       {
-        "referenceNumber": 181,
+        "referenceNumber": 182,
         "citation": {
           "id": "14534297",
           "citationType": "journal article",
@@ -48690,7 +48713,7 @@
         ]
       },
       {
-        "referenceNumber": 182,
+        "referenceNumber": 183,
         "citation": {
           "id": "16793544",
           "citationType": "journal article",
@@ -48726,7 +48749,7 @@
         ]
       },
       {
-        "referenceNumber": 183,
+        "referenceNumber": 184,
         "citation": {
           "id": "16474402",
           "citationType": "journal article",
@@ -48762,7 +48785,7 @@
         ]
       },
       {
-        "referenceNumber": 184,
+        "referenceNumber": 185,
         "citation": {
           "id": "16402859",
           "citationType": "journal article",
@@ -48798,7 +48821,7 @@
         ]
       },
       {
-        "referenceNumber": 185,
+        "referenceNumber": 186,
         "citation": {
           "id": "20870725",
           "citationType": "journal article",
@@ -48837,7 +48860,7 @@
         ]
       },
       {
-        "referenceNumber": 186,
+        "referenceNumber": 187,
         "citation": {
           "id": "8266092",
           "citationType": "journal article",
@@ -48866,7 +48889,7 @@
         ]
       },
       {
-        "referenceNumber": 187,
+        "referenceNumber": 188,
         "citation": {
           "id": "1905840",
           "citationType": "journal article",
@@ -48898,7 +48921,7 @@
         ]
       },
       {
-        "referenceNumber": 188,
+        "referenceNumber": 189,
         "citation": {
           "id": "8829653",
           "citationType": "journal article",
@@ -48935,7 +48958,7 @@
         ]
       },
       {
-        "referenceNumber": 189,
+        "referenceNumber": 190,
         "citation": {
           "id": "17015838",
           "citationType": "journal article",
@@ -48966,7 +48989,7 @@
         ]
       },
       {
-        "referenceNumber": 190,
+        "referenceNumber": 191,
         "citation": {
           "id": "18453682",
           "citationType": "journal article",
@@ -49001,7 +49024,7 @@
         ]
       },
       {
-        "referenceNumber": 191,
+        "referenceNumber": 192,
         "citation": {
           "id": "18650397",
           "citationType": "journal article",
@@ -49035,7 +49058,7 @@
         ]
       },
       {
-        "referenceNumber": 192,
+        "referenceNumber": 193,
         "citation": {
           "id": "18996393",
           "citationType": "journal article",
@@ -49073,7 +49096,7 @@
         ]
       },
       {
-        "referenceNumber": 193,
+        "referenceNumber": 194,
         "citation": {
           "id": "19515728",
           "citationType": "journal article",
@@ -49105,7 +49128,7 @@
         ]
       },
       {
-        "referenceNumber": 194,
+        "referenceNumber": 195,
         "citation": {
           "id": "20142040",
           "citationType": "journal article",
@@ -49139,7 +49162,7 @@
         ]
       },
       {
-        "referenceNumber": 195,
+        "referenceNumber": 196,
         "citation": {
           "id": "20364130",
           "citationType": "journal article",
@@ -49175,7 +49198,7 @@
         ]
       },
       {
-        "referenceNumber": 196,
+        "referenceNumber": 197,
         "citation": {
           "id": "32442400",
           "citationType": "journal article",
@@ -49217,7 +49240,7 @@
         ]
       },
       {
-        "referenceNumber": 197,
+        "referenceNumber": 198,
         "citation": {
           "id": "1999338",
           "citationType": "journal article",
@@ -49250,7 +49273,7 @@
         ]
       },
       {
-        "referenceNumber": 198,
+        "referenceNumber": 199,
         "citation": {
           "id": "1933902",
           "citationType": "journal article",
@@ -49278,7 +49301,7 @@
         ]
       },
       {
-        "referenceNumber": 199,
+        "referenceNumber": 200,
         "citation": {
           "id": "1978757",
           "citationType": "journal article",
@@ -49317,7 +49340,7 @@
         ]
       },
       {
-        "referenceNumber": 200,
+        "referenceNumber": 201,
         "citation": {
           "id": "2259385",
           "citationType": "journal article",
@@ -49350,7 +49373,7 @@
         ]
       },
       {
-        "referenceNumber": 201,
+        "referenceNumber": 202,
         "citation": {
           "id": "1737852",
           "citationType": "journal article",
@@ -49390,7 +49413,7 @@
         ]
       },
       {
-        "referenceNumber": 202,
+        "referenceNumber": 203,
         "citation": {
           "id": "1565144",
           "citationType": "journal article",
@@ -49429,7 +49452,7 @@
         ]
       },
       {
-        "referenceNumber": 203,
+        "referenceNumber": 204,
         "citation": {
           "id": "1694291",
           "citationType": "journal article",
@@ -49457,7 +49480,7 @@
         ]
       },
       {
-        "referenceNumber": 204,
+        "referenceNumber": 205,
         "citation": {
           "id": "1699228",
           "citationType": "journal article",
@@ -49492,7 +49515,7 @@
         ]
       },
       {
-        "referenceNumber": 205,
+        "referenceNumber": 206,
         "citation": {
           "id": "2263646",
           "citationType": "journal article",
@@ -49525,7 +49548,7 @@
         ]
       },
       {
-        "referenceNumber": 206,
+        "referenceNumber": 207,
         "citation": {
           "id": "1647768",
           "citationType": "journal article",
@@ -49561,7 +49584,7 @@
         ]
       },
       {
-        "referenceNumber": 207,
+        "referenceNumber": 208,
         "citation": {
           "id": "1868473",
           "citationType": "journal article",
@@ -49591,7 +49614,7 @@
         ]
       },
       {
-        "referenceNumber": 208,
+        "referenceNumber": 209,
         "citation": {
           "id": "1849234",
           "citationType": "journal article",
@@ -49625,7 +49648,7 @@
         ]
       },
       {
-        "referenceNumber": 209,
+        "referenceNumber": 210,
         "citation": {
           "id": "1672732",
           "citationType": "journal article",
@@ -49657,7 +49680,7 @@
         ]
       },
       {
-        "referenceNumber": 210,
+        "referenceNumber": 211,
         "citation": {
           "id": "1394225",
           "citationType": "journal article",
@@ -49687,7 +49710,7 @@
         ]
       },
       {
-        "referenceNumber": 211,
+        "referenceNumber": 212,
         "citation": {
           "id": "1327751",
           "citationType": "journal article",
@@ -49717,7 +49740,7 @@
         ]
       },
       {
-        "referenceNumber": 212,
+        "referenceNumber": 213,
         "citation": {
           "id": "1459726",
           "citationType": "journal article",
@@ -49753,7 +49776,7 @@
         ]
       },
       {
-        "referenceNumber": 213,
+        "referenceNumber": 214,
         "citation": {
           "id": "1303181",
           "citationType": "journal article",
@@ -49784,7 +49807,7 @@
         ]
       },
       {
-        "referenceNumber": 214,
+        "referenceNumber": 215,
         "citation": {
           "id": "1437144",
           "citationType": "journal article",
@@ -49816,7 +49839,7 @@
         ]
       },
       {
-        "referenceNumber": 215,
+        "referenceNumber": 216,
         "citation": {
           "id": "1631151",
           "citationType": "journal article",
@@ -49853,7 +49876,7 @@
         ]
       },
       {
-        "referenceNumber": 216,
+        "referenceNumber": 217,
         "citation": {
           "id": "7682763",
           "citationType": "journal article",
@@ -49882,7 +49905,7 @@
         ]
       },
       {
-        "referenceNumber": 217,
+        "referenceNumber": 218,
         "citation": {
           "id": "8402617",
           "citationType": "journal article",
@@ -49916,7 +49939,7 @@
         ]
       },
       {
-        "referenceNumber": 218,
+        "referenceNumber": 219,
         "citation": {
           "id": "8336944",
           "citationType": "journal article",
@@ -49945,7 +49968,7 @@
         ]
       },
       {
-        "referenceNumber": 219,
+        "referenceNumber": 220,
         "citation": {
           "id": "8118819",
           "citationType": "journal article",
@@ -49988,7 +50011,7 @@
         ]
       },
       {
-        "referenceNumber": 220,
+        "referenceNumber": 221,
         "citation": {
           "id": "8013454",
           "citationType": "journal article",
@@ -50022,7 +50045,7 @@
         ]
       },
       {
-        "referenceNumber": 221,
+        "referenceNumber": 222,
         "citation": {
           "id": "7887414",
           "citationType": "journal article",
@@ -50054,7 +50077,7 @@
         ]
       },
       {
-        "referenceNumber": 222,
+        "referenceNumber": 223,
         "citation": {
           "id": "8718514",
           "citationType": "journal article",
@@ -50080,7 +50103,7 @@
         ]
       },
       {
-        "referenceNumber": 223,
+        "referenceNumber": 224,
         "citation": {
           "id": "8825920",
           "citationType": "journal article",
@@ -50118,7 +50141,7 @@
         ]
       },
       {
-        "referenceNumber": 224,
+        "referenceNumber": 225,
         "citation": {
           "id": "8829627",
           "citationType": "journal article",
@@ -50156,7 +50179,7 @@
         ]
       },
       {
-        "referenceNumber": 225,
+        "referenceNumber": 226,
         "citation": {
           "id": "9101296",
           "citationType": "journal article",
@@ -50190,7 +50213,7 @@
         ]
       },
       {
-        "referenceNumber": 226,
+        "referenceNumber": 227,
         "citation": {
           "id": "9419979",
           "citationType": "journal article",
@@ -50234,7 +50257,7 @@
         ]
       },
       {
-        "referenceNumber": 227,
+        "referenceNumber": 228,
         "citation": {
           "id": "9450901",
           "citationType": "journal article",
@@ -50267,7 +50290,7 @@
         ]
       },
       {
-        "referenceNumber": 228,
+        "referenceNumber": 229,
         "citation": {
           "id": "9452042",
           "citationType": "journal article",
@@ -50298,7 +50321,7 @@
         ]
       },
       {
-        "referenceNumber": 229,
+        "referenceNumber": 230,
         "citation": {
           "id": "10484981",
           "citationType": "journal article",
@@ -50329,7 +50352,7 @@
         ]
       },
       {
-        "referenceNumber": 230,
+        "referenceNumber": 231,
         "citation": {
           "id": "10549356",
           "citationType": "journal article",
@@ -50359,7 +50382,7 @@
         ]
       },
       {
-        "referenceNumber": 231,
+        "referenceNumber": 232,
         "citation": {
           "id": "11481490",
           "citationType": "journal article",
@@ -50400,7 +50423,7 @@
         ]
       },
       {
-        "referenceNumber": 232,
+        "referenceNumber": 233,
         "citation": {
           "id": "12085209",
           "citationType": "journal article",
@@ -50437,7 +50460,7 @@
         ]
       },
       {
-        "referenceNumber": 233,
+        "referenceNumber": 234,
         "citation": {
           "id": "16959974",
           "citationType": "journal article",
@@ -50494,7 +50517,7 @@
         ]
       },
       {
-        "referenceNumber": 234,
+        "referenceNumber": 235,
         "citation": {
           "id": "17224074",
           "citationType": "journal article",
@@ -50534,7 +50557,7 @@
         ]
       },
       {
-        "referenceNumber": 235,
+        "referenceNumber": 236,
         "citation": {
           "id": "17311302",
           "citationType": "journal article",
@@ -50569,7 +50592,7 @@
         ]
       },
       {
-        "referenceNumber": 236,
+        "referenceNumber": 237,
         "citation": {
           "id": "25732823",
           "citationType": "journal article",
@@ -50610,7 +50633,7 @@
         ]
       },
       {
-        "referenceNumber": 237,
+        "referenceNumber": 238,
         "citation": {
           "id": "27657329",
           "citationType": "journal article",
@@ -57604,6 +57627,42 @@
       },
       {
         "database": "PDB",
+        "id": "8XCB",
+        "properties": [
+          {
+            "key": "Method",
+            "value": "X-ray"
+          },
+          {
+            "key": "Resolution",
+            "value": "1.83 A"
+          },
+          {
+            "key": "Chains",
+            "value": "A/B/C/D=94-293"
+          }
+        ]
+      },
+      {
+        "database": "PDB",
+        "id": "8XCE",
+        "properties": [
+          {
+            "key": "Method",
+            "value": "X-ray"
+          },
+          {
+            "key": "Resolution",
+            "value": "2.00 A"
+          },
+          {
+            "key": "Chains",
+            "value": "A/B/C/D=94-293"
+          }
+        ]
+      },
+      {
+        "database": "PDB",
         "id": "8XP5",
         "properties": [
           {
@@ -57707,6 +57766,132 @@
           {
             "key": "Chains",
             "value": "A=94-294"
+          }
+        ]
+      },
+      {
+        "database": "PDB",
+        "id": "9G5H",
+        "properties": [
+          {
+            "key": "Method",
+            "value": "X-ray"
+          },
+          {
+            "key": "Resolution",
+            "value": "1.65 A"
+          },
+          {
+            "key": "Chains",
+            "value": "A/B=94-312"
+          }
+        ]
+      },
+      {
+        "database": "PDB",
+        "id": "9G6T",
+        "properties": [
+          {
+            "key": "Method",
+            "value": "X-ray"
+          },
+          {
+            "key": "Resolution",
+            "value": "1.56 A"
+          },
+          {
+            "key": "Chains",
+            "value": "A/B=94-312"
+          }
+        ]
+      },
+      {
+        "database": "PDB",
+        "id": "9G6U",
+        "properties": [
+          {
+            "key": "Method",
+            "value": "X-ray"
+          },
+          {
+            "key": "Resolution",
+            "value": "1.64 A"
+          },
+          {
+            "key": "Chains",
+            "value": "A/B=94-312"
+          }
+        ]
+      },
+      {
+        "database": "PDB",
+        "id": "9R04",
+        "properties": [
+          {
+            "key": "Method",
+            "value": "EM"
+          },
+          {
+            "key": "Resolution",
+            "value": "4.20 A"
+          },
+          {
+            "key": "Chains",
+            "value": "K/L/M/N=1-393"
+          }
+        ]
+      },
+      {
+        "database": "PDB",
+        "id": "9R2M",
+        "properties": [
+          {
+            "key": "Method",
+            "value": "EM"
+          },
+          {
+            "key": "Resolution",
+            "value": "3.50 A"
+          },
+          {
+            "key": "Chains",
+            "value": "K/L/M/N=1-393"
+          }
+        ]
+      },
+      {
+        "database": "PDB",
+        "id": "9R2P",
+        "properties": [
+          {
+            "key": "Method",
+            "value": "EM"
+          },
+          {
+            "key": "Resolution",
+            "value": "4.18 A"
+          },
+          {
+            "key": "Chains",
+            "value": "K/L/M/N=1-393"
+          }
+        ]
+      },
+      {
+        "database": "PDB",
+        "id": "9R2Q",
+        "properties": [
+          {
+            "key": "Method",
+            "value": "EM"
+          },
+          {
+            "key": "Resolution",
+            "value": "3.20 A"
+          },
+          {
+            "key": "Chains",
+            "value": "K/L/M/N=1-393"
           }
         ]
       },
@@ -60512,6 +60697,26 @@
       },
       {
         "database": "PDBsum",
+        "id": "8XCB",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8XCE",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
         "id": "8XP5",
         "properties": [
           {
@@ -60563,6 +60768,76 @@
       {
         "database": "PDBsum",
         "id": "9FZB",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "9G5H",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "9G6T",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "9G6U",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "9R04",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "9R2M",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "9R2P",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "9R2Q",
         "properties": [
           {
             "key": "Description",
@@ -60781,6 +61056,16 @@
         ]
       },
       {
+        "database": "PCDDB",
+        "id": "P04637",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
         "database": "SMR",
         "id": "P04637",
         "properties": [
@@ -60796,7 +61081,7 @@
         "properties": [
           {
             "key": "Interactions",
-            "value": "2577"
+            "value": "2579"
           }
         ]
       },
@@ -60876,7 +61161,7 @@
         "properties": [
           {
             "key": "Interactions",
-            "value": "850"
+            "value": "847"
           }
         ]
       },
@@ -60887,6 +61172,16 @@
           {
             "key": "Description",
             "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "NDEx",
+        "id": "IQUERY-CP-TP53",
+        "properties": [
+          {
+            "key": "Evidences",
+            "value": "109 NDEx IQuery Curated Pathways"
           }
         ]
       },
@@ -60967,6 +61262,16 @@
           {
             "key": "GenericName",
             "value": "AZD 3355"
+          }
+        ]
+      },
+      {
+        "database": "DrugBank",
+        "id": "DB15455",
+        "properties": [
+          {
+            "key": "GenericName",
+            "value": "Cenersen"
           }
         ]
       },
@@ -61375,7 +61680,7 @@
         "properties": [
           {
             "key": "antibodies",
-            "value": "9660 antibodies from 66 providers"
+            "value": "9670 antibodies from 67 providers"
           }
         ]
       },
@@ -61655,6 +61960,81 @@
         "isoformId": "P04637-1"
       },
       {
+        "database": "Ensembl",
+        "id": "ENST00000905353.1",
+        "properties": [
+          {
+            "key": "ProteinId",
+            "value": "ENSP00000575412.1"
+          },
+          {
+            "key": "GeneId",
+            "value": "ENSG00000141510.20"
+          }
+        ],
+        "isoformId": "P04637-1"
+      },
+      {
+        "database": "Ensembl",
+        "id": "ENST00000923566.1",
+        "properties": [
+          {
+            "key": "ProteinId",
+            "value": "ENSP00000593625.1"
+          },
+          {
+            "key": "GeneId",
+            "value": "ENSG00000141510.20"
+          }
+        ],
+        "isoformId": "P04637-1"
+      },
+      {
+        "database": "Ensembl",
+        "id": "ENST00000923567.1",
+        "properties": [
+          {
+            "key": "ProteinId",
+            "value": "ENSP00000593626.1"
+          },
+          {
+            "key": "GeneId",
+            "value": "ENSG00000141510.20"
+          }
+        ],
+        "isoformId": "P04637-1"
+      },
+      {
+        "database": "Ensembl",
+        "id": "ENST00000923568.1",
+        "properties": [
+          {
+            "key": "ProteinId",
+            "value": "ENSP00000593627.1"
+          },
+          {
+            "key": "GeneId",
+            "value": "ENSG00000141510.20"
+          }
+        ],
+        "isoformId": "P04637-1"
+      },
+      {
+        "database": "Ensembl",
+        "id": "ENST00000923569.1",
+        "properties": [
+          {
+            "key": "ProteinId",
+            "value": "ENSP00000593628.1"
+          },
+          {
+            "key": "GeneId",
+            "value": "ENSG00000141510.20"
+          }
+        ],
+        "isoformId": "P04637-1"
+      },
+      {
         "database": "GeneID",
         "id": "7157",
         "properties": [
@@ -61719,7 +62099,7 @@
         "properties": [
           {
             "key": "Number of evidences",
-            "value": "387 evidence items across 280 molecular profiles"
+            "value": "392 evidence items across 285 molecular profiles"
           }
         ]
       },
@@ -62169,7 +62549,7 @@
         "properties": [
           {
             "key": "Number of GO annotations",
-            "value": "3 GO annotations based on evolutionary models"
+            "value": "8 GO annotations based on evolutionary models"
           }
         ]
       },
@@ -62540,6 +62920,16 @@
           {
             "key": "PathwayName",
             "value": "Transcriptional activation of cell cycle inhibitor p21"
+          }
+        ]
+      },
+      {
+        "database": "Reactome",
+        "id": "R-HSA-70635",
+        "properties": [
+          {
+            "key": "PathwayName",
+            "value": "Urea cycle"
           }
         ]
       },
@@ -62981,7 +63371,7 @@
           },
           {
             "key": "GoEvidenceType",
-            "value": "IDA:HPA"
+            "value": "IDA:UniProtKB"
           }
         ],
         "evidences": [
@@ -63003,20 +63393,6 @@
           {
             "key": "GoEvidenceType",
             "value": "IEA:UniProtKB-SubCell"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0043073",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "C:germ cell nucleus"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
           }
         ]
       },
@@ -63112,7 +63488,7 @@
           },
           {
             "key": "GoEvidenceType",
-            "value": "IDA:HPA"
+            "value": "IDA:UniProtKB"
           }
         ],
         "evidences": [
@@ -63258,34 +63634,6 @@
       },
       {
         "database": "GO",
-        "id": "GO:0005657",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "C:replication fork"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0035861",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "C:site of double-strand break"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
         "id": "GO:0005667",
         "properties": [
           {
@@ -63302,32 +63650,6 @@
             "evidenceCode": "ECO:0000316",
             "source": "PubMed",
             "id": "17145718"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0017053",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "C:transcription repressor complex"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IPI:ComplexPortal"
-          }
-        ],
-        "evidences": [
-          {
-            "evidenceCode": "ECO:0000353",
-            "source": "PubMed",
-            "id": "18677113"
-          },
-          {
-            "evidenceCode": "ECO:0000353",
-            "source": "PubMed",
-            "id": "8875929"
           }
         ]
       },
@@ -63673,20 +63995,6 @@
             "evidenceCode": "ECO:0000353",
             "source": "PubMed",
             "id": "23629966"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0035033",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "F:histone deacetylase regulator activity"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
           }
         ]
       },
@@ -64145,20 +64453,6 @@
       },
       {
         "database": "GO",
-        "id": "GO:0002326",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:B cell lineage commitment"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
         "id": "GO:0048539",
         "properties": [
           {
@@ -64175,34 +64469,6 @@
             "evidenceCode": "ECO:0000315",
             "source": "PubMed",
             "id": "30146126"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0010659",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:cardiac muscle cell apoptotic process"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0060411",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:cardiac septum morphogenesis"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
           }
         ]
       },
@@ -64334,20 +64600,6 @@
       },
       {
         "database": "GO",
-        "id": "GO:0071494",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:cellular response to UV-C"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
         "id": "GO:0071466",
         "properties": [
           {
@@ -64385,34 +64637,6 @@
             "evidenceCode": "ECO:0000315",
             "source": "PubMed",
             "id": "12080348"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0021549",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:cerebellum development"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0051276",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:chromosome organization"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
           }
         ]
       },
@@ -64493,34 +64717,6 @@
       },
       {
         "database": "GO",
-        "id": "GO:0006302",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:double-strand break repair"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0048568",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:embryonic organ development"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
         "id": "GO:0043153",
         "properties": [
           {
@@ -64551,62 +64747,6 @@
             "evidenceCode": "ECO:0000314",
             "source": "PubMed",
             "id": "14744935"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0048144",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:fibroblast proliferation"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0007369",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:gastrulation"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0014009",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:glial cell proliferation"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0019661",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:glucose catabolic process to lactate via pyruvate"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
           }
         ]
       },
@@ -64649,20 +64789,6 @@
             "evidenceCode": "ECO:0000315",
             "source": "PubMed",
             "id": "30146126"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0001701",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:in utero embryonic development"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
           }
         ]
       },
@@ -64766,48 +64892,6 @@
       },
       {
         "database": "GO",
-        "id": "GO:1990144",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:intrinsic apoptotic signaling pathway in response to hypoxia"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0043504",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:mitochondrial DNA repair"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0000423",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:mitophagy"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
         "id": "GO:0031571",
         "properties": [
           {
@@ -64845,34 +64929,6 @@
             "evidenceCode": "ECO:0000315",
             "source": "PubMed",
             "id": "16479015"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0035264",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:multicellular organism growth"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0070266",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:necroptotic process"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
           }
         ]
       },
@@ -64941,20 +64997,6 @@
       },
       {
         "database": "GO",
-        "id": "GO:0008156",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:negative regulation of DNA replication"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
         "id": "GO:0045892",
         "properties": [
           {
@@ -65018,34 +65060,6 @@
       },
       {
         "database": "GO",
-        "id": "GO:0060253",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:negative regulation of glial cell proliferation"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:1904024",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:negative regulation of glucose catabolic process to lactate via pyruvate"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
         "id": "GO:0051097",
         "properties": [
           {
@@ -65067,48 +65081,6 @@
       },
       {
         "database": "GO",
-        "id": "GO:1903799",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:negative regulation of miRNA processing"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:1901525",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:negative regulation of mitophagy"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0007406",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:negative regulation of neuroblast proliferation"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
         "id": "GO:1905856",
         "properties": [
           {
@@ -65125,48 +65097,6 @@
             "evidenceCode": "ECO:0000315",
             "source": "PubMed",
             "id": "21336310"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0045861",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:negative regulation of proteolysis"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:2000378",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:negative regulation of reactive oxygen species metabolic process"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:2000647",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:negative regulation of stem cell proliferation"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
           }
         ]
       },
@@ -65209,48 +65139,6 @@
             "evidenceCode": "ECO:0000314",
             "source": "PubMed",
             "id": "10329733"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0030512",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:negative regulation of transforming growth factor beta receptor signaling pathway"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0007405",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:neuroblast proliferation"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0051402",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:neuron apoptotic process"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
           }
         ]
       },
@@ -65345,20 +65233,6 @@
             "evidenceCode": "ECO:0000314",
             "source": "PubMed",
             "id": "20959462"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0010666",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:positive regulation of cardiac muscle cell apoptotic process"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
           }
         ]
       },
@@ -65510,34 +65384,6 @@
       },
       {
         "database": "GO",
-        "id": "GO:0035794",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:positive regulation of mitochondrial membrane permeability"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0043525",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:positive regulation of neuron apoptotic process"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
         "id": "GO:0062100",
         "properties": [
           {
@@ -65655,34 +65501,6 @@
       },
       {
         "database": "GO",
-        "id": "GO:0006606",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:protein import into nucleus"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0050821",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:protein stabilization"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
         "id": "GO:0051262",
         "properties": [
           {
@@ -65734,20 +65552,6 @@
             "evidenceCode": "ECO:0000270",
             "source": "PubMed",
             "id": "9054499"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0072593",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:reactive oxygen species metabolic process"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
           }
         ]
       },
@@ -65816,20 +65620,6 @@
       },
       {
         "database": "GO",
-        "id": "GO:0043516",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:regulation of DNA damage response, signal transduction by p53 class mediator"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
         "id": "GO:0006355",
         "properties": [
           {
@@ -65851,62 +65641,6 @@
       },
       {
         "database": "GO",
-        "id": "GO:2000269",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:regulation of fibroblast apoptotic process"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:1902253",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:regulation of intrinsic apoptotic signaling pathway by p53 class mediator"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:1902108",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:regulation of mitochondrial membrane permeability involved in apoptotic process"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0034103",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:regulation of tissue remodeling"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
         "id": "GO:0006357",
         "properties": [
           {
@@ -65923,20 +65657,6 @@
             "evidenceCode": "ECO:0000314",
             "source": "PubMed",
             "id": "30089260"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0001836",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:release of cytochrome c from mitochondria"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
           }
         ]
       },
@@ -66005,62 +65725,6 @@
       },
       {
         "database": "GO",
-        "id": "GO:0002931",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:response to ischemia"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0009651",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:response to salt stress"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0010165",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:response to X-ray"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0009303",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:rRNA transcription"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
         "id": "GO:0072331",
         "properties": [
           {
@@ -66087,90 +65751,6 @@
       },
       {
         "database": "GO",
-        "id": "GO:0001756",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:somitogenesis"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0072089",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:stem cell proliferation"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0033077",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:T cell differentiation in thymus"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0002360",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:T cell lineage commitment"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0002309",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:T cell proliferation involved in immune response"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0070242",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:thymocyte apoptotic process"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
-          }
-        ]
-      },
-      {
-        "database": "GO",
         "id": "GO:0045815",
         "properties": [
           {
@@ -66187,20 +65767,6 @@
             "evidenceCode": "ECO:0000314",
             "source": "PubMed",
             "id": "16322561"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0007179",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "P:transforming growth factor beta receptor signaling pathway"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IEA:Ensembl"
           }
         ]
       },
@@ -66603,7 +66169,7 @@
         "FUNCTION": 1,
         "COFACTOR": 1,
         "SUBUNIT": 5,
-        "INTERACTION": 198,
+        "INTERACTION": 187,
         "SUBCELLULAR LOCATION": 8,
         "ALTERNATIVE PRODUCTS": 9,
         "TISSUE SPECIFICITY": 1,
@@ -66629,9 +66195,9 @@
         "Alternative sequence": 6,
         "Natural variant": 1363,
         "Mutagenesis": 38,
-        "Helix": 14,
+        "Helix": 21,
         "Turn": 7,
-        "Beta strand": 19
+        "Beta strand": 17
       },
       "uniParcId": "UPI000002ED67"
     }

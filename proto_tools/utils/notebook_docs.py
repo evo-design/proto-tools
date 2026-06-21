@@ -12,6 +12,9 @@ MCP servers, and any non-notebook consumer should not import from this module.
 from __future__ import annotations
 
 import logging
+import typing
+
+from pydantic import BaseModel
 
 from proto_tools.utils.tool_docs import (
     ModelDoc,
@@ -34,41 +37,135 @@ def _docs_url_path(tool: str) -> str:
     return f"{p.parent.name.replace('_', '-')}/{p.name.replace('_', '-')}"
 
 
-def _model_table(doc: ModelDoc, kind: str) -> str:
-    """Render a ``ModelDoc`` as a markdown table for notebook display."""
-    if not doc.fields:
-        return f"*No {kind} fields.*"
+def _esc(text: str) -> str:
+    """Escape ``|`` so a value stays inside one markdown table cell."""
+    return text.replace("|", "\\|")
 
-    def esc(text: str) -> str:
-        """Escape ``|`` so a value stays inside one markdown table cell."""
-        return text.replace("|", "\\|")
 
-    def code(text: str) -> str:
-        """Render inline code via HTML ``<code>`` so pipes survive table cells.
+def _code(text: str) -> str:
+    """Render inline code via HTML ``<code>`` so pipes survive table cells.
 
-        Markdown code spans ignore backslash escapes, so ``|`` inside one breaks
-        the table. HTML ``<code>`` with entity-encoded pipes renders correctly in
-        both Jupyter and GitHub.
-        """
-        html = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("|", "&#124;")
-        return f"<code>{html}</code>"
+    Markdown code spans ignore backslash escapes, so ``|`` inside one breaks
+    the table. HTML ``<code>`` with entity-encoded pipes renders correctly in
+    both Jupyter and GitHub.
+    """
+    html = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("|", "&#124;")
+    return f"<code>{html}</code>"
 
+
+def _field_rows(doc: ModelDoc) -> str:
+    """Render a model's fields as markdown table body rows (one row per field)."""
     rows: list[str] = []
     for f in doc.fields:
         if f.required:
             default = "required"
         elif f.default is not None:
-            default = code(repr(f.default))
+            default = _code(repr(f.default))
         else:
-            default = code("None")
-        desc = esc((f.description or "").replace("\n", " ")).strip()
-        rows.append(f"| {code(f.name)} | {code(f.type_str)} | {default} | {desc} |")
+            default = _code("None")
+        desc = _esc((f.description or "").replace("\n", " ")).strip()
+        rows.append(f"| {_code(f.name)} | {_code(f.type_str)} | {default} | {desc} |")
+    return "\n".join(rows)
+
+
+def _field_table(title: str, doc: ModelDoc) -> str:
+    """Render one model's fields as a titled markdown table."""
+    if not doc.fields:
+        return f"{title}\n\n*No fields.*"
+    header = f"{title}\n\n| Field | Type | Default | Description |\n|-------|------|---------|-------------|"
+    return header + "\n" + _field_rows(doc)
+
+
+def _model_table(doc: ModelDoc, kind: str) -> str:
+    """Render a ``ModelDoc`` as a markdown table for notebook display."""
+    if not doc.fields:
+        return f"*No {kind} fields.*"
+    return _field_table(f"**{kind.capitalize()}** — `{doc.name}`", doc)
+
+
+def _is_entity(cls: type) -> bool:
+    """True for shared entity models (Structure, Ligands, …); rendered as leaf types."""
+    return "proto_tools.entities" in getattr(cls, "__module__", "")
+
+
+def _is_metrics(cls: type) -> bool:
+    """True for Metrics subclasses; rendered from ``metric_spec``, not raw fields."""
+    return hasattr(cls, "metric_spec")
+
+
+def _nested_submodels(model_class: type[BaseModel]) -> list[type[BaseModel]]:
+    """Return nested Pydantic submodels referenced by a model's fields, in field order.
+
+    Walks each field annotation (including inside ``list``/``dict``/``Union``) and
+    collects referenced models, skipping shared entities and Metrics classes — those
+    are rendered specially or left as leaf types.
+    """
+    found: list[type[BaseModel]] = []
+
+    def walk(annotation: object) -> None:
+        if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+            if not _is_entity(annotation) and not _is_metrics(annotation) and annotation not in found:
+                found.append(annotation)
+            return
+        for arg in typing.get_args(annotation):
+            walk(arg)
+
+    for info in model_class.model_fields.values():
+        walk(info.annotation)
+    return found
+
+
+def _metric_table(metrics_class: type, per_item_field: str | None) -> str:
+    """Render a Metrics subclass's ``metric_spec`` as a markdown table, or ``""`` if none."""
+    specs = get_model_doc(metrics_class, metrics_class=metrics_class).metric_specs or []
+    if not specs:
+        return ""
+    rows: list[str] = []
+    for m in specs:
+        if m.min is not None and m.max is not None:
+            rng = _code(f"[{m.min:g}, {m.max:g}]")
+        elif m.min is not None:
+            rng = _code(f">= {m.min:g}")
+        elif m.max is not None:
+            rng = _code(f"<= {m.max:g}")
+        else:
+            rng = ""
+        name = _code(m.name) + (" **(primary)**" if m.is_primary else "")
+        unit = _code(m.unit) if m.unit else ""
+        desc = _esc((m.description or "").replace("\n", " ")).strip()
+        rows.append(f"| {name} | {_code(m.type_str or '')} | {rng} | {unit} | {desc} |")
+    scope = f" (one set per `{per_item_field}` item)" if per_item_field else ""
     header = (
-        f"**{kind.capitalize()}** — `{doc.name}`\n\n"
-        "| Field | Type | Default | Description |\n"
-        "|-------|------|---------|-------------|"
+        f"**Metrics** — `{metrics_class.__name__}`{scope}\n\n"
+        "| Metric | Type | Range | Unit | Description |\n"
+        "|--------|------|-------|------|-------------|"
     )
     return header + "\n" + "\n".join(rows)
+
+
+def _render_output(spec: typing.Any) -> str:
+    """Render a tool's output model: top-level table, nested submodels, then metrics.
+
+    Recurses nested Pydantic submodels (stopping at shared entities and Metrics
+    classes), then appends the metric-spec table for the tool's Metrics model.
+    """
+    blocks: list[str] = []
+    seen: set[type] = set()
+
+    def walk(cls: type, title: str) -> None:
+        if cls in seen:
+            return
+        seen.add(cls)
+        blocks.append(_field_table(title, get_model_doc(cls)))
+        for sub in _nested_submodels(cls):
+            walk(sub, f"**`{sub.__name__}`**")
+
+    walk(spec.output_model, f"**Output** — `{spec.output_model.__name__}`")
+    if spec.metrics_model is not None:
+        metric_md = _metric_table(spec.metrics_model, spec.iterable_output_field)
+        if metric_md:
+            blocks.append(metric_md)
+    return "\n\n".join(blocks)
 
 
 def display_overview(tool: str) -> None:
@@ -200,11 +297,16 @@ def display_api_reference(tool: str, model: str, function_name: str | None = Non
         display(Markdown("*No tools registered for this toolkit.*"))  # type: ignore[no-untyped-call]
         return
 
-    model_attr = {"input": "input_model", "config": "config_model", "output": "output_model"}.get(model.lower())
+    model_key = model.lower()
+    model_attr = {"input": "input_model", "config": "config_model", "output": "output_model"}.get(model_key)
     if model_attr is None:
         msg = f"*Unknown model `{model}` (use 'input', 'config', or 'output').*"
         display(Markdown(msg))  # type: ignore[no-untyped-call]
         return
 
-    doc = get_model_doc(getattr(target, model_attr))
-    display(Markdown(_model_table(doc, model.lower())))  # type: ignore[no-untyped-call]
+    # The output model nests submodel and metric tables; input/config stay flat.
+    if model_key == "output":
+        markdown = _render_output(target)
+    else:
+        markdown = _model_table(get_model_doc(getattr(target, model_attr)), model_key)
+    display(Markdown(markdown))  # type: ignore[no-untyped-call]

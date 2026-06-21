@@ -574,7 +574,11 @@ def get_tool_docs(
 
 def _format_type(annotation: Any) -> str:
     """Stringify a Python type annotation for display."""
-    return re.sub(r"<class '([^']+)'>", r"\1", str(annotation).replace("typing.", ""))
+    text = str(annotation).replace("typing.", "")
+    text = re.sub(r"<class '([^']+)'>", r"\1", text)
+    text = re.sub(r"<enum '([^']+)'>", r"\1", text)
+    # Shorten dotted qualified names (module paths) to their final component.
+    return re.sub(r"(?:[A-Za-z_]\w*\.)+([A-Za-z_]\w*)", r"\1", text)
 
 
 def _format_default(field_info: Any) -> Any:
