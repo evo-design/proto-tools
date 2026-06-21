@@ -163,6 +163,10 @@ _SEED_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
 # - fampnn-pack: per-item seeds are deterministic, but a packed side-chain
 #   coordinate drifts ~1 mÅ across fresh subprocesses (cross-process kernel
 #   numerics). The persistent variant is reproducible.
+# - fampnn-sample: same toolkit/root cause as fampnn-pack — per-item seeds are
+#   deterministic (base_seed + dispatch_idx), but a sampled side-chain
+#   coordinate drifts ~1 mÅ across fresh subprocesses. The persistent variant
+#   is reproducible.
 _SEED_NON_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {
         "progen3-sample",
@@ -176,6 +180,7 @@ _SEED_NON_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
         "esmfold2-prediction",
         "proteinmpnn-sample",
         "fampnn-pack",
+        "fampnn-sample",
     }
 )
 

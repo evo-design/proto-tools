@@ -201,8 +201,12 @@ def _generate_test_params() -> list:
 
     For MSA-capable predictors, generates three variants: cloud (``remote``)
     search, on-disk (``local``) search against UniRef30-2302, and ``without_msa``.
-    The ``local`` variant skips when UniRef30 isn't provisioned or when the host
-    lacks the RAM for an on-disk search.
+    The ``local`` variant is marked ``extensive`` (runs only under ``--ext``)
+    because its on-disk mmseqs2 search dominates runtime (~30 min/test on
+    memory-constrained hosts); ``remote`` and ``without_msa`` give the same
+    folding coverage under a default ``--all`` run. The ``local`` variant also
+    skips when UniRef30 isn't provisioned or when the host lacks the RAM for an
+    on-disk search.
     """
     params = []
     uniref30_skip = _uniref30_skip_reason()
@@ -225,6 +229,7 @@ def _generate_test_params() -> list:
                     if skip_reason:
                         marks.append(pytest.mark.skip(reason=skip_reason))
                     if msa_search_mode == "local":
+                        marks.append(pytest.mark.extensive)
                         if uniref30_skip:
                             marks.append(pytest.mark.skip(reason=uniref30_skip))
                         elif local_memory_skip:

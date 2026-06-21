@@ -7,7 +7,7 @@ import json
 import logging
 import random
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import Field, field_validator
 
@@ -18,7 +18,8 @@ from proto_tools.tools.mutagenesis.codons import amino_acid_weights
 from proto_tools.tools.tool_registry import tool
 from proto_tools.transforms.masking import (
     MASK_TOKEN,
-    MaskingStrategy,
+    MaskingInput,
+    RandomMaskingStrategy,
     apply_masking_strategy,
 )
 from proto_tools.utils import AminoAcid, BaseConfig, BaseToolOutput, ConfigField
@@ -78,7 +79,7 @@ class RandomProteinSampleConfig(BaseConfig):
     """Configuration for random protein sampling.
 
     Attributes:
-        masking_strategy (MaskingStrategy): Controls which positions to mask for sampling.
+        masking_strategy (RandomMaskingStrategy): Controls which positions to mask for sampling.
             Default: random 30%.
         codon_scheme (CodonScheme): Codon scheme controlling amino acid sampling
             probabilities. ``"UNIFORM"`` gives equal weight to all 20
@@ -94,9 +95,12 @@ class RandomProteinSampleConfig(BaseConfig):
             ``None``.
     """
 
-    masking_strategy: MaskingStrategy = ConfigField(
+    # No scoring model → supplies no masker inputs → only random masking is valid.
+    masking_inputs: ClassVar[frozenset[MaskingInput]] = frozenset()
+
+    masking_strategy: RandomMaskingStrategy = ConfigField(
         title="Masking Strategy",
-        default_factory=MaskingStrategy,
+        default_factory=RandomMaskingStrategy,
         description="Controls which positions to mask for sampling. Default: random 30%.",
     )
     codon_scheme: CodonScheme = ConfigField(

@@ -319,15 +319,13 @@ def test_all_fixed_positions_is_identity(
 
 
 @pytest.mark.uses_gpu
-def test_esm2_sample_with_esm3_masking_isolates_overlay(monkeypatch: pytest.MonkeyPatch) -> None:
-    """ESM2 sampling with ESM3-backed masking must not leak 'esm3' into ESM2's auto-persist overlay."""
-    # ESM3 is gated on HuggingFace; the framework auto-resolves the token from
-    # env vars, ``~/.cache/huggingface/token``, or ``~/.git-credentials``.
-    from proto_tools.utils.auth import resolve_hf_token
+def test_esm2_sample_entropy_masking_shares_esm2_worker(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ESM2 sampling with entropy masking scores via the same 'esm2' worker.
 
-    if resolve_hf_token() is None:
-        pytest.skip("ESM3 requires a HuggingFace token; none resolvable via env or ~/.cache/huggingface/")
-
+    Model-informed masking always uses the sampling tool's own model, so the
+    preprocess scoring dispatch and the main sampling dispatch resolve to the
+    single 'esm2' auto-persist overlay entry — no second toolkit is created.
+    """
     from proto_tools.tools.masked_models.esm2 import esm2_sample as esm2_sample_mod
     from proto_tools.utils.tool_instance import _auto_persist_overlay
 
@@ -351,8 +349,13 @@ def test_esm2_sample_with_esm3_masking_isolates_overlay(monkeypatch: pytest.Monk
     # via `from proto_tools.transforms.masking import build_position_score_fn`).
     original_build = esm2_sample_mod.build_position_score_fn
 
-    def _instrumented_build(sampling_model: str, masking_strategy: MaskingStrategy, device: str) -> Any:
-        fn = original_build(sampling_model, masking_strategy, device)
+    def _instrumented_build(
+        sampling_model: str,
+        masking_strategy: MaskingStrategy,
+        device: str,
+        sampling_checkpoint: str | None = None,
+    ) -> Any:
+        fn = original_build(sampling_model, masking_strategy, device, sampling_checkpoint=sampling_checkpoint)
         if fn is None:
             return None
 
@@ -369,7 +372,7 @@ def test_esm2_sample_with_esm3_masking_isolates_overlay(monkeypatch: pytest.Monk
         "GVKLIFYEASKILDHLKVAARKVPQRSSGFGIP",
     ]
     config = ESM2SampleConfig(
-        masking_strategy=MaskingStrategy(method="entropy", model_name="esm3", num_mutations=3),
+        masking_strategy=MaskingStrategy(method="entropy", num_mutations=3),
         temperature=1.0,
         batch_size=1,
         device="cuda",
@@ -384,9 +387,9 @@ def test_esm2_sample_with_esm3_masking_isolates_overlay(monkeypatch: pytest.Monk
     assert preprocess_snaps, "preprocess was never entered"
     for where, keys in preprocess_snaps:
         assert "esm2" in keys, f"snapshot {where}: expected 'esm2' in overlay, got {keys}"
-        assert "esm3" not in keys, f"snapshot {where}: 'esm3' leaked into outer overlay; got {keys}"
 
     score_snaps = [s for s in snapshots if s[0] == "build_position_score_fn-called"]
-    assert score_snaps, "ESM3 scoring path never fired — test would be vacuous"
+    assert score_snaps, "entropy scoring path never fired — test would be vacuous"
     for where, keys in score_snaps:
-        assert "esm3" not in keys, f"snapshot {where}: 'esm3' present in overlay during scoring; got {keys}"
+        # Scoring reuses the sampling toolkit's worker — only 'esm2', never a second toolkit.
+        assert keys == {"esm2"}, f"snapshot {where}: expected only 'esm2' during scoring, got {keys}"

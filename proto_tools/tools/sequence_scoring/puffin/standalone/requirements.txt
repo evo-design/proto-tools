@@ -2,4 +2,5 @@ numpy
 pandas
 docopt
 selene-sdk
+setuptools<81  # provides pkg_resources (dropped in setuptools 81+), which selene-sdk imports
 torch-fftconv

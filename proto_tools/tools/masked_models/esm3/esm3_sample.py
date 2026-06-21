@@ -4,7 +4,7 @@ ESM3 sampling tool.
 """
 
 import logging
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import Field
 
@@ -15,6 +15,7 @@ from proto_tools.tools.masked_models.shared_data_models import (
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.transforms.masking import (
+    MaskingInput,
     MaskingStrategy,
     apply_masking_strategy,
     build_position_score_fn,
@@ -80,6 +81,9 @@ class ESM3SampleConfig(MaskedModelSampleConfig):
         return_logits (bool): Include per-position logits.
     """
 
+    # Has a model → supplies per-position logits, so model-informed masking is valid.
+    masking_inputs: ClassVar[frozenset[MaskingInput]] = frozenset({MaskingInput.LOGITS})
+
     masking_strategy: MaskingStrategy = ConfigField(
         title="Masking Strategy",
         default_factory=MaskingStrategy,
@@ -138,7 +142,9 @@ class ESM3SampleConfig(MaskedModelSampleConfig):
 
     def preprocess(self, inputs: Any) -> Any:
         """Apply masking strategy unless sequences are already pre-masked."""
-        position_score_fn = build_position_score_fn("esm3", self.masking_strategy, self.device)
+        position_score_fn = build_position_score_fn(
+            "esm3", self.masking_strategy, self.device, sampling_checkpoint=self.model_checkpoint
+        )
         return apply_masking_strategy(self, inputs, position_score_fn=position_score_fn)
 
 

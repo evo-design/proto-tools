@@ -1,22 +1,44 @@
 """proto_tools/transforms/masking/maskers.py.
 
 Each masker has:
-- ``supported_models``: which models it works with (None = no model needed)
+- ``requires``: which external input it needs to score positions
+  (``None`` = no input needed, e.g. uniform random)
 - ``__init__(strategy)``: stores the strategy reference
 - ``score(sequences, position_score_fn)``: returns per-position scores
 
 The ``MaskingMethod`` Literal and ``MASKERS`` dict are the single source of
-truth for valid method names.
+truth for valid method names. ``Masker.requires`` plus a sampling tool's
+declared ``masking_inputs`` determine which methods that tool supports
+(see :func:`compatible_methods`).
 """
 
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from enum import Enum
 from typing import Any, ClassVar, Literal, get_args
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# MaskingInput: external inputs a masker may need to score positions
+# ============================================================================
+
+
+class MaskingInput(str, Enum):
+    """An external input a masker needs to score positions.
+
+    A sampling tool declares the set it can supply via ``masking_inputs``;
+    a masker declares the one it needs via :attr:`Masker.requires`. A method
+    is available on a tool iff the tool provides what the masker requires
+    (see :func:`compatible_methods`). Extend this enum to add new
+    model-/data-informed maskers (e.g. ``MSA``, ``STRUCTURE``).
+    """
+
+    LOGITS = "logits"  # per-position model logits
+
 
 # ============================================================================
 # MaskingMethod: single source of truth for valid method names
@@ -38,33 +60,37 @@ class Masker(ABC):
     likely to be masked.
 
     Attributes:
-        supported_models (list[str] | None): List of model names this masker works with
-            (e.g. ``["esm2", "esm3"]``), or ``None`` if no model is needed.
+        requires (MaskingInput | None): The external input this masker needs to
+            score positions (e.g. ``MaskingInput.LOGITS``), or ``None`` if it
+            needs no input (e.g. uniform random). A sampling tool exposes this
+            masker's method only if its ``masking_inputs`` provides ``requires``.
 
     Instance attributes:
-        strategy: The :class:`MaskingStrategy` that owns this masker.
-            Provides access to user-configured fields (method, model_name,
-            model_checkpoint, etc.).
+        strategy: The masking strategy (:class:`RandomMaskingStrategy` or a
+            subclass) that owns this masker. Provides access to user-configured
+            fields (method, num_mutations, etc.).
 
     To implement a new masker:
 
     1. Subclass ``Masker``
-    2. Set ``supported_models`` (``None`` if no model needed)
+    2. Set ``requires`` (``None`` if no input needed; else a ``MaskingInput``)
     3. Implement ``score()``
     4. Register in the ``MASKERS`` dict and add the method name to
        ``MaskingMethod``
+    5. Have sampling tools that can supply ``requires`` add it to their
+       ``masking_inputs`` (and widen their ``masking_strategy`` field type)
 
     Example::
 
         class MyCustomMasker(Masker):
-            supported_models = None  # no model needed
+            requires = None  # no input needed
 
             def score(self, sequences, position_score_fn=None):
                 # Return higher scores for positions you want masked
                 return [[1.0 if c == "A" else 0.0 for c in seq] for seq in sequences]
     """
 
-    supported_models: list[str] | None = None
+    requires: ClassVar[MaskingInput | None] = None
 
     def __init__(self, strategy: Any) -> None:
         """Store the owning MaskingStrategy."""
@@ -98,7 +124,7 @@ class Masker(ABC):
 class RandomMasker(Masker):
     """Uniform random selection; all positions scored equally."""
 
-    supported_models = None
+    requires = None
 
     def score(
         self,
@@ -112,7 +138,7 @@ class RandomMasker(Masker):
 class EntropyMasker(Masker):
     """Score positions by Shannon entropy. High uncertainty leads to masking."""
 
-    supported_models: ClassVar[list[str]] = ["esm2", "esm3"]  # type: ignore[misc]
+    requires = MaskingInput.LOGITS
 
     def score(
         self,
@@ -138,7 +164,7 @@ class EntropyMasker(Masker):
 class MaxLogitMasker(Masker):
     """Score positions by negated max-logit. Low confidence leads to masking."""
 
-    supported_models: ClassVar[list[str]] = ["esm2", "esm3"]  # type: ignore[misc]
+    requires = MaskingInput.LOGITS
 
     def score(
         self,
@@ -168,3 +194,26 @@ MASKERS: dict[str, type[Masker]] = {
 assert set(MASKERS.keys()) == set(get_args(MaskingMethod)), (  # noqa: S101 -- module-level registry consistency check
     f"MASKERS keys {set(MASKERS.keys())} don't match MaskingMethod values {set(get_args(MaskingMethod))}"
 )
+
+
+def compatible_methods(provides: "frozenset[MaskingInput]") -> list[str]:
+    """Return the masking methods available to a tool that supplies ``provides``.
+
+    A method is available iff its masker needs no input (``requires is None``,
+    e.g. ``random``) or the tool supplies the required input. This is the
+    single derivation behind both the per-tool ``masking_strategy`` field type
+    and any compatibility introspection.
+
+    Args:
+        provides (frozenset[MaskingInput]): The inputs the sampling tool can
+            supply (its ``masking_inputs``). Empty for tools with no model.
+
+    Returns:
+        list[str]: Method names from ``MASKERS``, in registry order.
+    """
+    methods: list[str] = []
+    for name, masker in MASKERS.items():
+        req = masker.requires
+        if req is None or req in provides:
+            methods.append(name)
+    return methods

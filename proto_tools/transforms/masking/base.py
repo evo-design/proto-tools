@@ -4,14 +4,19 @@ Masking strategies for masked language model sampling.
 """
 
 import logging
-import warnings
 from collections.abc import Callable
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, PrivateAttr, model_validator
 
-from proto_tools.transforms.masking.maskers import MASKERS, Masker, MaskingMethod
+from proto_tools.transforms.masking.maskers import (
+    MASKERS,
+    Masker,
+    MaskingInput,
+    MaskingMethod,
+    compatible_methods,
+)
 from proto_tools.utils import ConfigField
 from proto_tools.utils.sequence import validate_positions_list
 
@@ -169,7 +174,7 @@ def apply_masking_strategy(config: Any, inputs: Any, position_score_fn: Any = No
 
     already_masked = any(MASK_TOKEN in seq for seq in inputs.sequences)
     if already_masked:
-        if strategy != MaskingStrategy():
+        if strategy != type(strategy)():
             logger.warning(
                 "Sequences already contain mask tokens ('_'); ignoring "
                 "custom masking_strategy. Remove '_' tokens from input "
@@ -190,20 +195,17 @@ def apply_masking_strategy(config: Any, inputs: Any, position_score_fn: Any = No
 
 
 # ============================================================================
-# MaskingStrategy: single class for all masking strategies
+# Masking strategies: RandomMaskingStrategy (base) + MaskingStrategy (model-informed)
 # ============================================================================
 
 
-class MaskingStrategy(BaseModel):
-    """Masking strategy: select positions to mask for re-design.
+class RandomMaskingStrategy(BaseModel):
+    """Random masking strategy: select positions to mask for re-design.
 
-    The ``method`` field selects the scoring behavior:
-
-    - ``"random"`` (default): uniform random selection.
-    - ``"entropy"``: score by Shannon entropy from model logits (high
-      uncertainty → more likely to mask).
-    - ``"max-logit"``: score by negated max-logit (low model confidence
-      → more likely to mask).
+    The base (model-free) tier: positions are chosen uniformly at random.
+    Sampling tools with no scoring model (e.g. the mutagenesis samplers) use
+    this type directly. Tools with a model use :class:`MaskingStrategy`, which
+    adds the model-informed methods.
 
     How many positions to mask (mutually exclusive, pick one):
 
@@ -213,46 +215,36 @@ class MaskingStrategy(BaseModel):
     - Neither: masks ~30% of designable positions (default).
 
     Attributes:
-        method (MaskingMethod): Scoring method for position selection.
-            ``"random"``: uniform random, ``"entropy"``: highest model uncertainty,
-            ``"max-logit"``: lowest model confidence.
+        method (Literal['random']): Position-selection method. Always
+            ``"random"`` for this tier (uniform selection, no model).
         num_mutations (int | None): Exact number of positions to mask per sequence.
         mask_fraction (float | None): Fraction of designable positions to mask
             (e.g. 0.15 for ~15%).
         fixed_positions (list[int] | None): 1-indexed positions that must NOT be
             masked. Applied uniformly to all sequences.
-        temperature (float): Temperature for position selection. < 1.0 is greedy,
-            1.0 uses scores as-is, > 1.0 is more uniform.
-        model_name (Literal['esm2', 'esm3'] | None): Which masked model to use
-            for scoring. Defaults to the sampling tool's model when unset.
-        model_checkpoint (str | None): Model checkpoint override (uses tool default
-            if None).
 
     Examples::
 
-        MaskingStrategy().mask(["MKTLLIFLA"])
+        RandomMaskingStrategy().mask(["MKTLLIFLA"])
         # → ["M_TLLIFLA"]  (random, ~30%)
 
-        MaskingStrategy(method="entropy", model_name="esm2", num_mutations=3).mask(["MKTLLIFLA"])
-        # → ["MK_LL_F_A"]  (3 highest-entropy positions)
-
-        MaskingStrategy(mask_fraction=0.5, fixed_positions=[1]).mask(["MKTLLIFLA"])
+        RandomMaskingStrategy(mask_fraction=0.5, fixed_positions=[1]).mask(["MKTLLIFLA"])
         # → ["M_TL_I__A"]  (roughly half of designable positions masked)
 
         ``mask_fraction`` is applied over designable positions after fixed
         positions are excluded.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     # -- Private state (excluded from serialization, equality, schema) ---------
     _masker: Masker | None = PrivateAttr(default=None)
 
     # -- Scoring method --------------------------------------------------------
-    method: MaskingMethod = ConfigField(
+    method: Literal["random"] = ConfigField(
         default="random",
         title="Scoring Method",
-        description="Position scoring: 'random' (uniform), 'entropy' (most uncertain), 'max-logit' (low confidence)",
+        description="Position scoring. 'random': uniform selection (no model needed).",
     )
 
     # -- How many positions to mask (set one or neither, not both) -------------
@@ -275,26 +267,6 @@ class MaskingStrategy(BaseModel):
         default=None,
         title="Fixed Positions",
         description="1-indexed positions that must NOT be masked. Applied uniformly to all sequences.",
-    )
-
-    # -- Score temperature (only relevant for entropy / max-logit) --------------
-    temperature: float = ConfigField(
-        default=1.0,
-        gt=0.0,
-        title="Selection Temperature",
-        description="Position-selection temperature: <1 greedy, 1 use scores as-is, >1 more uniform.",
-    )
-
-    # -- Model-based method fields (only relevant for entropy / max-logit) -----
-    model_name: Literal["esm2", "esm3"] | None = ConfigField(
-        default=None,
-        title="Model Name",
-        description="Which masked model to use for scoring. Defaults to the sampling tool's model when unset.",
-    )
-    model_checkpoint: str | None = ConfigField(
-        default=None,
-        title="Model Checkpoint",
-        description="Model checkpoint override (uses tool default if None).",
     )
 
     # -- Validators ------------------------------------------------------------
@@ -325,22 +297,6 @@ class MaskingStrategy(BaseModel):
         _validate_mutation_spec(self.num_mutations, self.mask_fraction)
         return self
 
-    @model_validator(mode="after")
-    def _validate_method_fields(self) -> Any:
-        """Validate model fields against the masker class."""
-        masker_cls = MASKERS[self.method]
-        if masker_cls.supported_models is None:
-            if self.model_name is not None or self.model_checkpoint is not None:
-                warnings.warn(f"model_name/model_checkpoint are ignored for method='{self.method}'", stacklevel=2)
-        else:
-            if self.model_name is not None and self.model_name not in masker_cls.supported_models:
-                raise ValueError(
-                    f"model '{self.model_name}' not supported for "
-                    f"method='{self.method}'. "
-                    f"Supported: {masker_cls.supported_models}"
-                )
-        return self
-
     # -- Core API --------------------------------------------------------------
 
     def mask(
@@ -358,11 +314,10 @@ class MaskingStrategy(BaseModel):
             sequences (list[str]): Protein sequences to mask.
             position_score_fn (Callable[..., Any] | None): Callable that takes sequences and returns
                 per-position scores. Required for model-based methods
-                (entropy, max-logit). When called from a tool's
-                ``preprocess()``, this is built by
-                ``build_position_score_fn()``. When called standalone,
-                auto-built from ``model_name`` / ``model_checkpoint``
-                if not provided.
+                (entropy, max-logit); ignored for ``random``. When called from a
+                tool's ``preprocess()``, this is built by
+                ``build_position_score_fn()``. When called standalone with a
+                model-based method, it must be supplied explicitly.
             seed (int | None): Random seed for reproducible masking. Creates a seeded
                 RandomState for position selection. If None, uses global numpy RNG.
 
@@ -377,24 +332,22 @@ class MaskingStrategy(BaseModel):
                 MASKERS[self.method](strategy=self),
             )
 
-        # Auto-build position_score_fn for standalone usage
-        if position_score_fn is None and MASKERS[self.method].supported_models is not None:
-            if self.model_name is None:
-                raise ValueError(
-                    f"model_name required for method='{self.method}' when "
-                    f"used standalone (e.g. MaskingStrategy(method="
-                    f"'{self.method}', model_name='esm2'))"
-                )
-            from proto_tools.utils.device import number_of_visible_gpus
-
-            device = "cuda" if number_of_visible_gpus() > 0 else "cpu"
-            position_score_fn = build_position_score_fn(self.model_name, self, device=device)
+        # Model-based methods need a scorer; standalone has no model to build one from.
+        if position_score_fn is None and MASKERS[self.method].requires is not None:
+            raise ValueError(
+                f"method='{self.method}' requires a position_score_fn. Run it through a "
+                f"sampling tool that supplies one (its preprocess builds it), or pass "
+                f"position_score_fn= explicitly when calling mask() standalone."
+            )
 
         assert self._masker is not None
         all_scores = self._masker.score(sequences, position_score_fn=position_score_fn)
 
         # Create seeded RNG if seed is provided
         rng = np.random.RandomState(seed) if seed is not None else None
+
+        # temperature exists only on the model-informed tier (random scores are uniform).
+        temperature = getattr(self, "temperature", 1.0)
 
         results = []
         for i, seq in enumerate(sequences):
@@ -407,10 +360,67 @@ class MaskingStrategy(BaseModel):
             )
             validate_enough_mutable(seq, mutable, count, i)
 
-            scores = [all_scores[i][j] / self.temperature for j in eligible]
+            scores = [all_scores[i][j] / temperature for j in eligible]
             chosen = weighted_sample(eligible, scores, count, rng=rng)
             results.append(apply_mask(seq, chosen))
         return results
+
+
+class MaskingStrategy(RandomMaskingStrategy):
+    """Model-informed masking strategy: select positions to mask for re-design.
+
+    Extends :class:`RandomMaskingStrategy` with scoring methods that consume
+    per-position model logits. Sampling tools that have a scoring model (e.g.
+    ESM2/ESM3 sampling) type their ``masking_strategy`` field to this class.
+    The logits always come from the **sampling tool's own model** — masking and
+    resampling use the same model and checkpoint (see
+    :func:`build_position_score_fn`).
+
+    The ``method`` field selects the scoring behavior:
+
+    - ``"random"`` (default): uniform random selection (no model needed).
+    - ``"entropy"``: score by Shannon entropy from model logits (high
+      uncertainty → more likely to mask).
+    - ``"max-logit"``: score by negated max-logit (low model confidence
+      → more likely to mask).
+
+    Attributes:
+        method (MaskingMethod): Scoring method for position selection.
+            ``"random"``: uniform random, ``"entropy"``: highest model uncertainty,
+            ``"max-logit"``: lowest model confidence.
+        temperature (float): Temperature for position selection. < 1.0 is greedy,
+            1.0 uses scores as-is, > 1.0 is more uniform. Only affects
+            model-based methods.
+
+    Examples::
+
+        MaskingStrategy(method="entropy", num_mutations=3)  # used via a sampling tool
+        # masks the 3 highest-entropy positions, scored by the tool's model
+    """
+
+    # Deliberate widening of the base's Literal["random"]; mypy flags field-override as invariant.
+    method: MaskingMethod = ConfigField(  # type: ignore[assignment]
+        default="random",
+        title="Scoring Method",
+        description="Position scoring: 'random' (uniform), 'entropy' (most uncertain), 'max-logit' (low confidence)",
+    )
+
+    # -- Score temperature (only relevant for entropy / max-logit) -------------
+    temperature: float = ConfigField(
+        default=1.0,
+        gt=0.0,
+        title="Selection Temperature",
+        description="Position-selection temperature: <1 greedy, 1 use scores as-is, >1 more uniform.",
+    )
+
+
+# Drift guard: each tier's exposed methods must equal what the capability model derives.
+assert set(get_args(RandomMaskingStrategy.model_fields["method"].annotation)) == set(compatible_methods(frozenset())), (
+    "RandomMaskingStrategy.method must match compatible_methods(frozenset())"
+)
+assert set(get_args(MaskingStrategy.model_fields["method"].annotation)) == set(
+    compatible_methods(frozenset({MaskingInput.LOGITS}))
+), "MaskingStrategy.method must match compatible_methods({LOGITS})"
 
 
 # ============================================================================
@@ -420,8 +430,9 @@ class MaskingStrategy(BaseModel):
 
 def build_position_score_fn(
     sampling_model: str,
-    masking_strategy: MaskingStrategy,
+    masking_strategy: RandomMaskingStrategy,
     device: str,
+    sampling_checkpoint: str | None = None,
 ) -> Callable[..., Any] | None:
     """Build a position_score_fn callable for model-based masking methods.
 
@@ -430,13 +441,22 @@ def build_position_score_fn(
     dispatches through the standard tool path, so it benefits from
     ``ToolInstance.persist()`` worker reuse automatically.
 
+    Scoring always uses the **sampling tool's own** model and checkpoint, so
+    masking and resampling stay on the same weights. Passing ``sampling_checkpoint``
+    keeps the shared persistent worker from restarting between the preprocess
+    scoring call and the main sampling call (both are ``reload_on_change`` on
+    ``model_checkpoint``).
+
     Args:
         sampling_model (str): The sampling tool's model name (e.g. ``"esm2"``).
-            Used as default when ``masking_strategy.model_name`` is unset.
-        masking_strategy (MaskingStrategy): The strategy object (provides ``model_name``
-            and ``model_checkpoint`` overrides).
+            Selects which embeddings tool provides the logits.
+        masking_strategy (RandomMaskingStrategy): The strategy object; its
+            ``method`` decides whether logits are needed at all.
         device (str): Device string from the sampling config (e.g. ``"cuda"``,
             ``"cuda:1"``). Passed through to the embeddings tool.
+        sampling_checkpoint (str | None): The sampling tool's selected checkpoint,
+            threaded so scoring uses identical weights. ``None`` uses the
+            embeddings tool's default.
 
     Returns:
         Callable[..., Any] | None: A callable ``(sequences: list[str]) -> list[list[list[float]]]``
@@ -444,15 +464,14 @@ def build_position_score_fn(
             method doesn't need logits (e.g. random).
     """
     masker_cls = MASKERS[masking_strategy.method]
-    if masker_cls.supported_models is None:
+    if masker_cls.requires is None:
         return None
 
-    model_name = masking_strategy.model_name or sampling_model
     config_kwargs: dict[str, Any] = {"device": device, "return_logits": True}
-    if masking_strategy.model_checkpoint is not None:
-        config_kwargs["model_checkpoint"] = masking_strategy.model_checkpoint
+    if sampling_checkpoint is not None:
+        config_kwargs["model_checkpoint"] = sampling_checkpoint
 
-    if model_name == "esm2":
+    if sampling_model == "esm2":
 
         def position_score_fn(sequences: list[str]) -> list[list[list[float]]]:
             from proto_tools.tools.masked_models.esm2.esm2_embeddings import (
@@ -469,7 +488,7 @@ def build_position_score_fn(
 
         return position_score_fn
 
-    if model_name == "esm3":
+    if sampling_model == "esm3":
 
         def position_score_fn(sequences: list[str]) -> list[list[list[float]]]:
             from proto_tools.tools.masked_models.esm3.esm3_embeddings import (
@@ -486,4 +505,4 @@ def build_position_score_fn(
 
         return position_score_fn
 
-    raise ValueError(f"Unknown model: {model_name}")
+    raise ValueError(f"Unknown model: {sampling_model}")
