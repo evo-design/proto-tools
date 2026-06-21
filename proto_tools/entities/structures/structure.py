@@ -27,9 +27,31 @@ from proto_tools.entities.structures.utils import (
     is_valid_structure,
     load_structure_file,
     looks_like_structure_path,
+    looks_like_url,
     pdb_file_to_atomarray,
 )
 from proto_tools.utils.tool_io import Metrics, MetricValue
+
+
+def _fetch_structure_url(url: str, timeout: float = 30.0) -> str:
+    """Fetch structure-file text content from an ``http(s)`` URL.
+
+    Args:
+        url (str): URL returning PDB or CIF content.
+        timeout (float): Request timeout in seconds.
+
+    Returns:
+        str: The response body text.
+
+    Raises:
+        requests.HTTPError: If the request returns an error status.
+    """
+    import requests
+
+    response = requests.get(url, timeout=timeout)
+    response.raise_for_status()
+    return response.text
+
 
 # Per-residue VDW "key atoms" used by ``hotspot_contacts`` with ``germinal_mode=True``.
 _KEY_SIDE_CHAIN_ATOMS: dict[str, list[str]] = {
@@ -257,8 +279,16 @@ class Structure(BaseModel):
         if not isinstance(data, dict):
             return data
 
-        # If structure looks like a path to an existing file, load it transparently.
         structure_value = data.get("structure")
+
+        # If structure is an http(s) URL, fetch its content transparently (mirrors the path branch).
+        if looks_like_url(structure_value):
+            data["structure"] = _fetch_structure_url(structure_value)
+            if not data.get("source"):
+                data["source"] = structure_value
+            structure_value = data["structure"]
+
+        # If structure looks like a path to an existing file, load it transparently.
         if structure_value is not None and looks_like_structure_path(structure_value):
             path = Path(structure_value)
             data["structure"] = load_structure_file(path)
@@ -330,6 +360,78 @@ class Structure(BaseModel):
             b_factor_type=b_factor_type,
             source=source or str(path),
             metrics=metrics,
+        )
+
+    @classmethod
+    def from_url(
+        cls,
+        url: str,
+        structure_format: Literal["pdb", "cif"] | None = None,
+        b_factor_type: BFactorType = BFactorType.UNSPECIFIED,
+        metrics: Metrics | dict[str, Any] | None = None,
+        source: str | None = None,
+        timeout: float = 30.0,
+    ) -> Structure:
+        """Fetch a Structure from a URL serving PDB or CIF content.
+
+        Args:
+            url (str): URL returning ``.pdb`` or ``.cif`` content.
+            structure_format (Literal["pdb", "cif"] | None): Content format; auto-detected if omitted.
+            b_factor_type (BFactorType): What the B-factor column represents.
+            metrics (Metrics | dict[str, Any] | None): Optional metrics to attach.
+            source (str | None): Source identifier. Defaults to the URL.
+            timeout (float): Request timeout in seconds.
+
+        Returns:
+            Structure: The fetched structure.
+
+        Raises:
+            requests.HTTPError: If the request returns an error status.
+        """
+        content = _fetch_structure_url(url, timeout=timeout)
+        if metrics is None:
+            metrics = Metrics()
+        elif isinstance(metrics, dict):
+            metrics = Metrics(**metrics)
+        return cls(
+            structure=content,
+            structure_format=structure_format,
+            b_factor_type=b_factor_type,
+            source=source or url,
+            metrics=metrics,
+        )
+
+    @classmethod
+    def from_rcsb(
+        cls,
+        pdb_id: str,
+        file_format: Literal["pdb", "cif"] = "pdb",
+        b_factor_type: BFactorType = BFactorType.UNSPECIFIED,
+        metrics: Metrics | dict[str, Any] | None = None,
+    ) -> Structure:
+        """Fetch a Structure from the RCSB PDB by its identifier.
+
+        Downloads from ``https://files.rcsb.org/download/{pdb_id}.{file_format}``.
+
+        Args:
+            pdb_id (str): PDB identifier (e.g. ``"1TIM"``); case-insensitive.
+            file_format (Literal["pdb", "cif"]): Structure file format to download.
+            b_factor_type (BFactorType): What the B-factor column represents.
+            metrics (Metrics | dict[str, Any] | None): Optional metrics to attach.
+
+        Returns:
+            Structure: The fetched structure, with ``source`` set to the PDB ID.
+
+        Raises:
+            requests.HTTPError: If the PDB ID is not found or the request fails.
+        """
+        url = f"https://files.rcsb.org/download/{pdb_id.upper()}.{file_format}"
+        return cls.from_url(
+            url,
+            structure_format=file_format,
+            b_factor_type=b_factor_type,
+            metrics=metrics,
+            source=pdb_id.upper(),
         )
 
     # ============================================================================

@@ -1513,3 +1513,36 @@ def test_ca_coordinates_by_chain_rejects_out_of_range_model():
     structure = Structure(structure=synthetic_cif(["A"]))
     with pytest.raises(ValueError, match="model_index"):
         structure.ca_coordinates_by_chain(model_index=5)
+
+
+# ── Remote fetch (from_url / from_rcsb / constructor URL) ──────────────────────
+
+_RCSB_PDB_URL = "https://files.rcsb.org/download/1TIM.pdb"
+
+
+@pytest.mark.integration
+def test_from_rcsb_fetches_structure():
+    """``from_rcsb`` downloads a real PDB and returns a valid Structure."""
+    structure = Structure.from_rcsb("1tim")  # case-insensitive
+    assert structure.structure_format == "pdb"
+    assert structure.source == "1TIM"
+    assert is_valid_structure(structure_filepath_or_content=structure.structure)
+    assert "A" in structure.get_chain_ids()
+
+
+@pytest.mark.integration
+def test_from_url_fetches_structure():
+    """``from_url`` fetches PDB content and auto-detects the format."""
+    structure = Structure.from_url(_RCSB_PDB_URL)
+    assert structure.structure_format == "pdb"
+    assert structure.source == _RCSB_PDB_URL
+    assert is_valid_structure(structure_filepath_or_content=structure.structure)
+
+
+@pytest.mark.integration
+def test_constructor_auto_fetches_url():
+    """A URL passed to the constructor is fetched transparently, like a file path."""
+    structure = Structure(structure=_RCSB_PDB_URL)
+    assert structure.structure_format == "pdb"
+    assert structure.source == _RCSB_PDB_URL
+    assert is_valid_structure(structure_filepath_or_content=structure.structure)
