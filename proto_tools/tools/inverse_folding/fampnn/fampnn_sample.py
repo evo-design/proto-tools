@@ -90,8 +90,8 @@ class FAMPNNSampleConfig(InverseFoldingConfig):
         temperature (float): Controls randomness in sampling from logits.
         seed (int | None): Random seed; None draws a random seed per run.
         model_variant (str): FAMPNN checkpoint variant. '0.3' for sequence design
-            (PDB-trained, 0.3A noise), '0.0' for sidechain packing (PDB-trained,
-            0.0A noise), '0.3_cath' for mutation scoring (CATH-trained).
+            (PDB-trained, 0.3 Å noise), '0.0' for sidechain packing (PDB-trained,
+            0.0 Å noise), '0.3_cath' for mutation scoring (CATH-trained).
         num_steps (int): Number of iterative unmasking steps for sequence design.
             More steps yield higher quality but slower inference. 10 steps is
             sufficient for high self-consistency; 100 for best quality.
