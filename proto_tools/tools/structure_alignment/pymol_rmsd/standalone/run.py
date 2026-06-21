@@ -53,6 +53,23 @@ def _align_metrics(result: tuple[Any, ...], failure_rmsd: float) -> dict[str, An
     }
 
 
+def _object_transform(cmd: Any, name: str) -> dict[str, Any]:
+    """Decompose PyMOL's 4x4 object matrix (row-major, 16 floats) into rotation + translation.
+
+    The matrix maps the aligned object's coordinates into the target frame, so the 3x3 rotation
+    and length-3 translation superpose the mobile structure onto the target. ``None`` if PyMOL
+    returns no matrix.
+    """
+    matrix = cmd.get_object_matrix(name)
+    if not matrix or len(matrix) < 12:
+        return {"rotation": None, "translation": None}
+    m = [float(v) for v in matrix]
+    return {
+        "rotation": [[m[0], m[1], m[2]], [m[4], m[5], m[6]], [m[8], m[9], m[10]]],
+        "translation": [m[3], m[7], m[11]],
+    }
+
+
 def run_pymol_rmsd_alignment(
     target_pdb_text: str,
     mobile_pdb_text: str,
@@ -61,8 +78,9 @@ def run_pymol_rmsd_alignment(
     mobile_selection: str = "mobile",
     failure_rmsd: float = 999.0,
 ) -> dict[str, Any]:
-    """Run a PyMOL alignment and return RMSD metrics."""
+    """Run a PyMOL alignment and return RMSD metrics + the superposition transform."""
     cmd = _cmd()
+    superposition: dict[str, Any] = {"rotation": None, "translation": None}
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
@@ -83,6 +101,13 @@ def run_pymol_rmsd_alignment(
                 metrics = _align_metrics(result, failure_rmsd)
             else:
                 raise ValueError(f"Unsupported PyMOL alignment method: {method}")
+
+            # Best-effort: the alignment moved the "mobile" object onto the target. Capture its
+            # transform without letting a failure here clobber the alignment metrics.
+            try:
+                superposition = _object_transform(cmd, "mobile")
+            except Exception:
+                logger.warning("pymol_rmsd: could not capture superposition transform")
         except Exception as exc:
             metrics = {
                 "rmsd": failure_rmsd,
@@ -96,7 +121,7 @@ def run_pymol_rmsd_alignment(
         finally:
             cmd.reinitialize()
 
-    return {"method": method, **metrics}
+    return {"method": method, **metrics, **superposition}
 
 
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
