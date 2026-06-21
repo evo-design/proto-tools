@@ -1,7 +1,7 @@
 {
   "tool_id": "pdb-fetch-fasta",
-  "execution_time": 0.1684424877166748,
-  "timestamp": "2026-06-19T20:28:33.926850",
+  "execution_time": 0.17605042457580566,
+  "timestamp": "2026-06-20T22:49:16.577478",
   "success": true,
   "warnings": [],
   "errors": [],
@@ -9,26 +9,23 @@
   "chains": [
     {
       "chain_ids": [
-        "A",
-        "B",
-        "C",
-        "D"
+        "D",
+        "E"
       ],
-      "header": "1LBG_2|Chains E[auth A], F[auth B], G[auth C], H[auth D]|PROTEIN (LACTOSE OPERON REPRESSOR)|Escherichia coli (562)",
-      "sequence": "MKPVTLYDVAEYAGVSYQTVSRVVNQASHVSAKTREKVEAAMAELNYIPNRVAQQLAGKQSLLIGVATSSLALHAPSQIVAAIKSRADQLGASVVVSMVERSGVEACKTAVHNLLAQRVSGLIINYPLDDQDAIAVEAACTNVPALFLDVSDQTPINSIIFSHEDGTRLGVEHLVALGHQQIALLAGPLSSVSARLRLAGWHKYLTRNQIQPIAEREGDWSAMSGFQQTMQMLNEGIVPTAMLVANDQMALGAMRAITESGLRVGADISVVGYDDTEDSSCYIPPLTTIKQDFRLLGQTSVDRLLQLSQGQAVKGNQLLPVSLVKRKTTLAPNTQTASPRALADSLMQLARQVSRLESGQ",
-      "is_protein": true
+      "header": "1EFA_1|Chains A[auth D], B[auth E]|DNA (5'-D(*GP*AP*AP*T*TP*GP*TP*GP*AP*GP*CP*GP*CP*TP*CP*AP*CP*AP*AP*TP*T)-3')|",
+      "sequence": "GAATTGTGAGCGCTCACAATT",
+      "is_protein": false
     },
     {
       "chain_ids": [
-        "E",
-        "F",
-        "G",
-        "H"
+        "A",
+        "B",
+        "C"
       ],
-      "header": "1LBG_1|Chains A[auth E], B[auth F], C[auth G], D[auth H]|DNA (5'-D(*GP*AP*AP*TP*TP*GP*TP*GP*AP*GP*CP*GP*CP*TP*CP*AP*CP*AP*AP*TP*T)-3')|",
-      "sequence": "GAATTGTGAGCGCTCACAATT",
-      "is_protein": false
+      "header": "1EFA_2|Chains C[auth A], D[auth B], E[auth C]|LAC REPRESSOR|Escherichia coli (562)",
+      "sequence": "MKPVTLYDVAEYAGVSYQTVSRVVNQASHVSAKTREKVEAAMAELNYIPNRVAQQLAGKQSLLIGVATSSLALHAPSQIVAAIKSRADQLGASVVVSMVERSGVEACKTAVHNLLAQRVSGLIINYPLDDQDAIAVEAACTNVPALFLDVSDQTPINSIIFSHEDGTRLGVEHLVALGHQQIALLAGPLSSVSARLRLAGWHKYLTRNQIQPIAEREGDWSAMSGFQQTMQMLNEGIVPTAMLVANDQMALGAMRAITESGLRVGADISVVGYDDTEDSSCYIPPLTTIKQDFRLLGQTSVDRLLQLSQGQAVKGNQLLPVSLVKRKTTLAPN",
+      "is_protein": true
     }
   ],
-  "source_url": "https://www.rcsb.org/fasta/entry/1LBG"
+  "source_url": "https://www.rcsb.org/fasta/entry/1EFA"
 }
