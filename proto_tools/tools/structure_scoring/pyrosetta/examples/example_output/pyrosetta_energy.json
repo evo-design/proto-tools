@@ -1,522 +1,522 @@
 [
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":1,
     "residue_name":"MET",
-    "residue_energy":2.2523599359
+    "residue_energy":2.2454782291
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":2,
     "residue_name":"ARG",
-    "residue_energy":-1.8985077291
+    "residue_energy":-1.8553978203
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":3,
     "residue_name":"LYS",
-    "residue_energy":-2.3537543389
+    "residue_energy":-1.7282123074
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":4,
     "residue_name":"LYS",
-    "residue_energy":-0.7419951756
+    "residue_energy":-0.641886697
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":5,
     "residue_name":"LEU",
-    "residue_energy":-2.733003979
+    "residue_energy":-2.7179291342
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":6,
     "residue_name":"ASP",
-    "residue_energy":-4.5158401308
+    "residue_energy":-2.8468171892
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":7,
     "residue_name":"LEU",
-    "residue_energy":-4.1688229649
+    "residue_energy":-3.9063850093
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":8,
     "residue_name":"LYS",
-    "residue_energy":0.2982266296
+    "residue_energy":0.3612914757
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":9,
     "residue_name":"LYS",
-    "residue_energy":-0.8425190573
+    "residue_energy":-1.1332423723
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":10,
     "residue_name":"PHE",
-    "residue_energy":-2.0016669313
+    "residue_energy":-1.8212372648
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":11,
     "residue_name":"VAL",
-    "residue_energy":-3.2424073635
+    "residue_energy":-2.1021103894
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":12,
     "residue_name":"GLU",
-    "residue_energy":-1.2896639395
+    "residue_energy":-0.9279508927
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":13,
     "residue_name":"ASP",
-    "residue_energy":0.4970671942
+    "residue_energy":-1.6490389013
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":14,
     "residue_name":"LYS",
-    "residue_energy":-1.5607417081
+    "residue_energy":-0.8438298945
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":15,
     "residue_name":"ASN",
-    "residue_energy":1.0132123784
+    "residue_energy":1.8782007956
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":16,
     "residue_name":"GLN",
-    "residue_energy":-2.8360455747
+    "residue_energy":-1.9324828322
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":17,
     "residue_name":"GLU",
-    "residue_energy":-1.0862606974
+    "residue_energy":-3.1577326174
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":18,
     "residue_name":"TYR",
-    "residue_energy":-0.7532079702
+    "residue_energy":-0.7793695649
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":19,
     "residue_name":"ALA",
-    "residue_energy":-4.5194521479
+    "residue_energy":-4.5976748562
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":20,
     "residue_name":"ALA",
-    "residue_energy":-3.1155946964
+    "residue_energy":-3.2643276858
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":21,
     "residue_name":"ARG",
-    "residue_energy":1.3362907345
+    "residue_energy":0.9696517099
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":22,
     "residue_name":"ALA",
-    "residue_energy":-2.0092766373
+    "residue_energy":-1.8005498628
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":23,
     "residue_name":"LEU",
-    "residue_energy":-4.0485496592
+    "residue_energy":-4.9840111089
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":24,
     "residue_name":"GLY",
-    "residue_energy":-1.6256163135
+    "residue_energy":-1.6699755766
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":25,
     "residue_name":"LEU",
-    "residue_energy":-2.7715830931
+    "residue_energy":-4.1838053252
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":26,
     "residue_name":"SER",
-    "residue_energy":-2.4183264468
+    "residue_energy":-2.0743401176
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":27,
     "residue_name":"GLN",
-    "residue_energy":-0.9837396207
+    "residue_energy":-0.8862248728
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":28,
     "residue_name":"LYS",
-    "residue_energy":0.811979262
+    "residue_energy":0.9355827219
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":29,
     "residue_name":"LEU",
-    "residue_energy":-2.4044216558
+    "residue_energy":-3.2545065822
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":30,
     "residue_name":"ILE",
-    "residue_energy":-4.5202910225
+    "residue_energy":-4.6970810099
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":31,
     "residue_name":"GLU",
-    "residue_energy":-2.4508037318
+    "residue_energy":-2.5013816913
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":32,
     "residue_name":"GLU",
-    "residue_energy":-3.6519558746
+    "residue_energy":-2.9188269882
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":33,
     "residue_name":"VAL",
-    "residue_energy":-4.4343878268
+    "residue_energy":-3.974450509
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":34,
     "residue_name":"LEU",
-    "residue_energy":-2.1640128974
+    "residue_energy":-2.7294734631
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":35,
     "residue_name":"LYS",
-    "residue_energy":-0.3447968952
+    "residue_energy":-0.4073941424
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":36,
     "residue_name":"ARG",
-    "residue_energy":-0.3394524573
+    "residue_energy":0.0069752739
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":37,
     "residue_name":"GLY",
-    "residue_energy":-0.9264410707
+    "residue_energy":-0.8714176633
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":38,
     "residue_name":"LEU",
-    "residue_energy":-1.253633809
+    "residue_energy":-0.8809662554
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":39,
     "residue_name":"PRO",
-    "residue_energy":-4.5015397636
+    "residue_energy":-4.5645854772
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":40,
     "residue_name":"VAL",
-    "residue_energy":-4.3334910818
+    "residue_energy":-4.5751712061
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":41,
     "residue_name":"TYR",
-    "residue_energy":-4.9680462962
+    "residue_energy":-5.0912833604
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":42,
     "residue_name":"VAL",
-    "residue_energy":-3.7395872094
+    "residue_energy":-5.1476567335
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":43,
     "residue_name":"GLU",
-    "residue_energy":-3.9789043647
+    "residue_energy":-4.2687281854
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":44,
     "residue_name":"THR",
-    "residue_energy":-1.0634625681
+    "residue_energy":-1.0251781497
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":45,
     "residue_name":"ASN",
-    "residue_energy":-2.3849424266
+    "residue_energy":-2.2313143885
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":46,
     "residue_name":"LYS",
-    "residue_energy":-1.29627357
+    "residue_energy":-1.3570790643
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":47,
     "residue_name":"ASP",
-    "residue_energy":-1.4728993916
+    "residue_energy":-1.4905331043
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":48,
     "residue_name":"GLY",
-    "residue_energy":-3.0290868672
+    "residue_energy":-2.9533101687
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":49,
     "residue_name":"ASN",
-    "residue_energy":-1.3496923544
+    "residue_energy":-1.3792576412
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":50,
     "residue_name":"ILE",
-    "residue_energy":-0.6167460945
+    "residue_energy":-0.9203990678
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":51,
     "residue_name":"LYS",
-    "residue_energy":-4.5154829186
+    "residue_energy":-2.9536243491
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":52,
     "residue_name":"VAL",
-    "residue_energy":-4.5396886803
+    "residue_energy":-5.1777407433
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":53,
     "residue_name":"TYR",
-    "residue_energy":-6.9138986121
+    "residue_energy":-6.5178600589
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":54,
     "residue_name":"ILE",
-    "residue_energy":-6.7048995122
+    "residue_energy":-6.2134245283
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":55,
     "residue_name":"THR",
-    "residue_energy":-3.7879490438
+    "residue_energy":-4.1940889434
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":56,
     "residue_name":"GLN",
-    "residue_energy":-0.9527781153
+    "residue_energy":-2.4750056115
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":57,
     "residue_name":"ASP",
-    "residue_energy":0.6322536627
+    "residue_energy":-0.1083994538
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":58,
     "residue_name":"GLY",
-    "residue_energy":-1.4737547396
+    "residue_energy":-1.4913067964
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":59,
     "residue_name":"ILE",
-    "residue_energy":-1.3246624337
+    "residue_energy":-1.2632280526
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":60,
     "residue_name":"THR",
-    "residue_energy":-2.1212727383
+    "residue_energy":-2.5673880668
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":61,
     "residue_name":"GLN",
-    "residue_energy":-1.0709823174
+    "residue_energy":-0.7926898842
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":62,
     "residue_name":"PRO",
-    "residue_energy":-3.9717031645
+    "residue_energy":-2.8193697367
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":63,
     "residue_name":"PHE",
-    "residue_energy":0.4632634719
+    "residue_energy":0.0868782458
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":64,
     "residue_name":"PRO",
-    "residue_energy":0.8231605769
+    "residue_energy":0.9910921865
   },
   {
     "structure_index":0,
-    "total_energy":-137.353716211,
+    "total_energy":-137.681800919,
     "chain_id":"A",
     "residue_index":65,
     "residue_name":"PRO",
-    "residue_energy":-1.3630123771
+    "residue_energy":0.1617018123
   }
 ]
