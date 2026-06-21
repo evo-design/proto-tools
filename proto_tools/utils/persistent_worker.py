@@ -914,7 +914,7 @@ class PersistentWorker:
             os.killpg(self._process.pid, sig)
 
     @contextlib.contextmanager
-    def _request_heartbeat(self, request_id: str) -> "Iterator[None]":
+    def _request_heartbeat(self, request_id: str) -> Iterator[None]:
         """Log a WARNING for as long as a request stays in flight past the heartbeat interval.
 
         A background daemon thread wakes every ``interval`` seconds and, while the request is
@@ -965,7 +965,7 @@ class PersistentWorker:
                 self._process.wait(timeout=10)
             except Exception:
                 logger.warning(
-                    "Worker for %s did not exit on SIGTERM within 10s; escalating to SIGKILL.",
+                    "Worker for %s did not stop cleanly on SIGTERM; escalating to SIGKILL.",
                     self.toolkit,
                 )
                 self._killpg(signal.SIGKILL)  # force kill
