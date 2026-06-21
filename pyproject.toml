@@ -24,6 +24,7 @@ dependencies = [
     "pandas>=1.5",
     "pyarrow",  # Required for pandas parquet support (chai1 MSA conversion)
     "umap-learn>=0.5.3",  # 2D projection of embedding outputs (CPU-side, lazy-imported)
+    "numba>=0.60.0",  # transitive via umap-learn/pynndescent; floor avoids old llvmlite without py3.12 wheels
 
     # Bioinformatics
     "biopython",
