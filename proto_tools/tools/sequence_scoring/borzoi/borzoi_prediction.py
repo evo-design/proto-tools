@@ -288,13 +288,11 @@ class BorzoiConfig(BaseConfig):
         title="Species",
         default="human",
         description="Species model to use",
-        reload_on_change=True,
     )
     replicate: Literal["0", "1", "2", "3"] = ConfigField(
         title="Replicate",
         default="0",
         description="Replicate ID to run",
-        reload_on_change=True,
     )
     avg_output_tracks: bool = ConfigField(
         title="Average Tracks",
@@ -377,6 +375,22 @@ def run_borzoi(inputs: BorzoiInput, config: BorzoiConfig, instance: Any = None) 
         instance=instance,
         config=config,
     )
+
+    # The worker holds one checkpoint at a time and swaps it in-process when replicate/species
+    # change. Verify it actually loaded the requested checkpoint, so a failed swap surfaces as a
+    # loud error instead of silently mislabeling another replicate's predictions.
+    applied_replicate = result.get("applied_replicate")
+    if applied_replicate is not None and applied_replicate != config.replicate:
+        raise RuntimeError(
+            f"borzoi worker ran replicate {applied_replicate!r} but {config.replicate!r} was requested "
+            f"(in-process checkpoint reload failed)"
+        )
+    applied_species = result.get("applied_species")
+    if applied_species is not None and applied_species != config.species:
+        raise RuntimeError(
+            f"borzoi worker ran species {applied_species!r} but {config.species!r} was requested "
+            f"(in-process checkpoint reload failed)"
+        )
 
     predictions = result["predictions"]
     if len(predictions) != len(model_sequences):
