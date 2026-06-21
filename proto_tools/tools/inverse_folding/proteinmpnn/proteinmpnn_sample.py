@@ -48,9 +48,11 @@ class ProteinMPNNSampleConfig(InverseFoldingConfig):
         excluded_amino_acids (list[AminoAcid] | None): One-letter codes of amino acids to exclude.
         seed (int | None): Random seed to use for sampling; None draws a fresh seed.
         model_choice (Literal['proteinmpnn', 'v_48_002', 'v_48_010', 'v_48_030', 'abmpnn', 'soluble']): Model
-            weights. ``"proteinmpnn"`` is ColabDesign's default ``v_48_020`` (medium training noise). The
-            ``v_48_*`` variants are the same architecture trained at different noise levels (002 / 010 / 030).
-            ``"abmpnn"`` is antibody-optimized; ``"soluble"`` is soluble-protein-trained.
+            weights. ``"proteinmpnn"`` is ColabDesign's default ``v_48_020`` (0.20 Å backbone noise). The
+            ``v_48_002`` / ``v_48_010`` / ``v_48_030`` variants are the same architecture trained at
+            0.02 / 0.10 / 0.30 Å backbone noise (the suffix is the noise level in Å × 100); more noise
+            yields more diverse, robust designs at some cost to native-sequence recovery. ``"abmpnn"``
+            is antibody-optimized; ``"soluble"`` is soluble-protein-trained.
         backbone_noise (float): Gaussian noise (A) added to backbone coordinates before each forward pass.
     """
 
