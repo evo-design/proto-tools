@@ -1,6 +1,6 @@
 [
   {
-    "sequence_id":"J23119_strong",
+    "sequence_id":"seq_0",
     "tss_name":"Fwd69",
     "tss":69,
     "strand":"+",
@@ -20,7 +20,7 @@
     "disc_end":69
   },
   {
-    "sequence_id":"J23119_strong",
+    "sequence_id":"seq_0",
     "tss_name":"Rev67",
     "tss":28,
     "strand":"-",
@@ -40,7 +40,7 @@
     "disc_end":28
   },
   {
-    "sequence_id":"J23119_strong",
+    "sequence_id":"seq_0",
     "tss_name":"Fwd62",
     "tss":62,
     "strand":"+",
@@ -60,7 +60,7 @@
     "disc_end":62
   },
   {
-    "sequence_id":"J23119_strong",
+    "sequence_id":"seq_0",
     "tss_name":"Fwd61",
     "tss":61,
     "strand":"+",
@@ -80,7 +80,7 @@
     "disc_end":61
   },
   {
-    "sequence_id":"J23119_strong",
+    "sequence_id":"seq_0",
     "tss_name":"Rev63",
     "tss":32,
     "strand":"-",
@@ -100,7 +100,7 @@
     "disc_end":32
   },
   {
-    "sequence_id":"J23119_strong",
+    "sequence_id":"seq_0",
     "tss_name":"Fwd75",
     "tss":75,
     "strand":"+",
@@ -120,7 +120,7 @@
     "disc_end":75
   },
   {
-    "sequence_id":"J23119_strong",
+    "sequence_id":"seq_0",
     "tss_name":"Rev60",
     "tss":35,
     "strand":"-",
@@ -140,7 +140,7 @@
     "disc_end":35
   },
   {
-    "sequence_id":"J23119_strong",
+    "sequence_id":"seq_0",
     "tss_name":"Rev74",
     "tss":21,
     "strand":"-",
@@ -160,7 +160,7 @@
     "disc_end":21
   },
   {
-    "sequence_id":"J23119_strong",
+    "sequence_id":"seq_0",
     "tss_name":"Rev72",
     "tss":23,
     "strand":"-",
@@ -180,7 +180,7 @@
     "disc_end":23
   },
   {
-    "sequence_id":"J23113_weak",
+    "sequence_id":"seq_1",
     "tss_name":"Fwd69",
     "tss":69,
     "strand":"+",
@@ -200,7 +200,7 @@
     "disc_end":69
   },
   {
-    "sequence_id":"J23113_weak",
+    "sequence_id":"seq_1",
     "tss_name":"Fwd72",
     "tss":72,
     "strand":"+",
@@ -220,7 +220,7 @@
     "disc_end":72
   },
   {
-    "sequence_id":"J23113_weak",
+    "sequence_id":"seq_1",
     "tss_name":"Fwd63",
     "tss":63,
     "strand":"+",
@@ -240,7 +240,7 @@
     "disc_end":63
   },
   {
-    "sequence_id":"J23113_weak",
+    "sequence_id":"seq_1",
     "tss_name":"Rev62",
     "tss":33,
     "strand":"-",
@@ -260,7 +260,7 @@
     "disc_end":33
   },
   {
-    "sequence_id":"J23113_weak",
+    "sequence_id":"seq_1",
     "tss_name":"Fwd73",
     "tss":73,
     "strand":"+",
@@ -280,7 +280,7 @@
     "disc_end":73
   },
   {
-    "sequence_id":"J23113_weak",
+    "sequence_id":"seq_1",
     "tss_name":"Fwd75",
     "tss":75,
     "strand":"+",
@@ -300,7 +300,7 @@
     "disc_end":75
   },
   {
-    "sequence_id":"J23113_weak",
+    "sequence_id":"seq_1",
     "tss_name":"Rev68",
     "tss":27,
     "strand":"-",
@@ -320,7 +320,7 @@
     "disc_end":27
   },
   {
-    "sequence_id":"J23113_weak",
+    "sequence_id":"seq_1",
     "tss_name":"Rev60",
     "tss":35,
     "strand":"-",
@@ -340,7 +340,7 @@
     "disc_end":35
   },
   {
-    "sequence_id":"J23113_weak",
+    "sequence_id":"seq_1",
     "tss_name":"Rev74",
     "tss":21,
     "strand":"-",
@@ -360,7 +360,7 @@
     "disc_end":21
   },
   {
-    "sequence_id":"J23113_weak",
+    "sequence_id":"seq_1",
     "tss_name":"Fwd59",
     "tss":59,
     "strand":"+",

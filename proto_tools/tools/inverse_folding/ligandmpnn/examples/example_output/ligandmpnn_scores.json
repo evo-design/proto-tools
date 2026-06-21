@@ -1,8 +1,8 @@
 [
   {
-    "log_likelihood": -106.06794738769531,
-    "avg_log_likelihood": -1.6318145751953126,
-    "perplexity": 5.113144490806844,
+    "log_likelihood": -106.06793212890625,
+    "avg_log_likelihood": -1.6318143404447116,
+    "perplexity": 5.113143290493243,
     "vocab": [
       "A",
       "R",
