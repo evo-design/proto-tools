@@ -957,26 +957,32 @@ class ToolRegistry:
 
     @classmethod
     def get_input_schema(cls, key: str) -> dict[str, Any]:
-        """Get JSON schema for tool inputs."""
+        """Get JSON schema for tool inputs, annotated with per-field docs."""
+        from proto_tools.utils.tool_docs import inject_field_docs
+
         spec = cls.get(key)
-        return spec.input_model.model_json_schema()
+        return inject_field_docs(spec.input_model.model_json_schema(), spec.input_model)
 
     @classmethod
     def get_config_schema(cls, key: str) -> dict[str, Any]:
-        """Get JSON schema for tool configuration."""
+        """Get JSON schema for tool configuration, annotated with per-field docs."""
+        from proto_tools.utils.tool_docs import inject_field_docs
+
         spec = cls.get(key)
-        return spec.config_model.model_json_schema()
+        return inject_field_docs(spec.config_model.model_json_schema(), spec.config_model)
 
     @classmethod
     def get_output_schema(cls, key: str) -> dict[str, Any]:
-        """Get JSON schema for tool output.
+        """Get JSON schema for tool output, annotated with per-field docs.
 
         Args:
             key (str): Tool identifier.
 
         """
+        from proto_tools.utils.tool_docs import inject_field_docs
+
         spec = cls.get(key)
-        return spec.output_model.model_json_schema()
+        return inject_field_docs(spec.output_model.model_json_schema(), spec.output_model)
 
     @classmethod
     def get_schemas(cls, key: str) -> dict[str, dict[str, Any]]:
