@@ -53,7 +53,7 @@ class ProteinMPNNSampleConfig(InverseFoldingConfig):
             0.02 / 0.10 / 0.30 Å backbone noise (the suffix is the noise level in Å x 100); more noise
             yields more diverse, robust designs at some cost to native-sequence recovery. ``"abmpnn"``
             is antibody-optimized; ``"soluble"`` is soluble-protein-trained.
-        backbone_noise (float): Gaussian noise (A) added to backbone coordinates before each forward pass.
+        backbone_noise (float): Gaussian noise (Å) added to backbone coordinates before each forward pass.
     """
 
     model_choice: Literal["proteinmpnn", "v_48_002", "v_48_010", "v_48_030", "abmpnn", "soluble"] = ConfigField(
@@ -67,7 +67,7 @@ class ProteinMPNNSampleConfig(InverseFoldingConfig):
         title="Backbone Noise",
         default=0.0,
         ge=0.0,
-        description="Gaussian noise (A) on backbone coords; raise (e.g. 0.02) for diversity",
+        description="Gaussian noise (Å) on backbone coords; raise (e.g. 0.02) for diversity",
     )
     excluded_amino_acids: list[AminoAcid] | None = ConfigField(
         title="Excluded Amino Acids",

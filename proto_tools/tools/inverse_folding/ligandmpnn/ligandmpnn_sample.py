@@ -57,7 +57,7 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         model_type (LigandMPNNModelType): LigandMPNN variant to load.
         ligand_mpnn_use_atom_context (bool): Whether ligand-aware variants encode ligand atom context.
         ligand_mpnn_use_side_chain_context (bool): Whether to condition on fixed-residue sidechain atoms.
-        ligand_mpnn_cutoff_for_score (float): Ligand-residue distance cutoff (A) for the ligand-interface
+        ligand_mpnn_cutoff_for_score (float): Ligand-residue distance cutoff (Å) for the ligand-interface
             recovery score.
     """
 
@@ -81,7 +81,7 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         title="Ligand Cutoff for Score",
         default=8.0,
         gt=0.0,
-        description="Ligand-residue distance cutoff (A) for interface recovery score",
+        description="Ligand-residue distance cutoff (Å) for interface recovery score",
     )
     excluded_amino_acids: list[AminoAcid] | None = ConfigField(
         title="Excluded Amino Acids",
