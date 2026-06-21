@@ -62,7 +62,7 @@ class ProGen3Model:
 
         restricted_env = get_subprocess_device_env(device)
         os.environ["CUDA_VISIBLE_DEVICES"] = restricted_env["CUDA_VISIBLE_DEVICES"]
-        logger.info(f"Restricted CUDA_VISIBLE_DEVICES to {os.environ['CUDA_VISIBLE_DEVICES']} for device {device}")
+        logger.debug(f"Restricted CUDA_VISIBLE_DEVICES to {os.environ['CUDA_VISIBLE_DEVICES']} for device {device}")
 
         import torch
         from progen3.modeling import ProGen3ForCausalLM
@@ -264,7 +264,7 @@ class ProGen3Model:
                 sequence = (
                     info["aa_prompt"] + stripped if info["direction"] == "fwd" else stripped[::-1] + info["aa_prompt"]
                 )
-                logger.warning(
+                logger.debug(
                     "compile_generation returned None for prompt '%s'; "
                     "falling back to manual compilation (%d residues)",
                     info["raw_prompt"],

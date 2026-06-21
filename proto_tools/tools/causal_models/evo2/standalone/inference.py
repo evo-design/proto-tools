@@ -383,7 +383,7 @@ class Evo2Model:
 
         restricted_env = get_subprocess_device_env(device)
         os.environ["CUDA_VISIBLE_DEVICES"] = restricted_env["CUDA_VISIBLE_DEVICES"]
-        logger.info(f"Restricted CUDA_VISIBLE_DEVICES to {os.environ['CUDA_VISIBLE_DEVICES']} for device {device}")
+        logger.debug(f"Restricted CUDA_VISIBLE_DEVICES to {os.environ['CUDA_VISIBLE_DEVICES']} for device {device}")
 
         from evo2 import Evo2
 
