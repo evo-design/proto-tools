@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import signal
+import subprocess
 import sys
 import textwrap
 import time
@@ -443,6 +444,34 @@ def test_send_cleans_up_when_response_unmatched_even_if_process_exited():
     with patch.object(worker, "stop") as mock_stop, pytest.raises(RuntimeError):
         worker.send({"x": 1})
     mock_stop.assert_called_once()
+
+
+def test_stop_never_raises_when_worker_survives_sigkill(caplog):
+    """A worker that survives SIGTERM then SIGKILL must not crash stop().
+
+    Such a worker is stuck in an uninterruptible GPU driver call; propagating the reap
+    TimeoutExpired masks the caller's real error and aborts in-flight runs
+    (proto-bio/feedback#24).
+    """
+    worker = PersistentWorker(toolkit="borzoi", env_path=Path("/x"), script_path=Path("/y"))
+    proc = MagicMock()
+    proc.pid = 4242
+    proc.stdin.closed = False
+    proc.stdout.closed = True
+    proc.stderr.closed = True
+    # Both the SIGTERM grace wait and the post-SIGKILL reap wait time out.
+    proc.wait.side_effect = subprocess.TimeoutExpired(cmd="worker", timeout=10)
+    worker._process = proc
+
+    with patch.object(worker, "_killpg") as mock_killpg, caplog.at_level(logging.WARNING):
+        worker.stop()  # must not raise
+
+    # Escalated SIGTERM -> SIGKILL, then abandoned the unreapable process.
+    sent_signals = [call.args[0] for call in mock_killpg.call_args_list]
+    assert signal.SIGTERM in sent_signals
+    assert signal.SIGKILL in sent_signals
+    assert worker._process is None
+    assert any("SIGKILL" in record.message for record in caplog.records)
 
 
 def test_stop_and_restart(echo_script: Path):
