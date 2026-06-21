@@ -18,6 +18,7 @@ import tempfile
 import threading
 import time
 import uuid
+from collections.abc import Iterator
 from pathlib import Path
 from typing import IO, Any
 
@@ -34,6 +35,11 @@ _DEFAULT_STDERR_BUFFER_LINES = 20
 # Read response framing: chunk size per os.read, and the post-header window to drain the body.
 _READ_CHUNK = 65536
 _BODY_GRACE_SECONDS = 30
+
+# Heartbeat: while a single worker request is in flight longer than this, log a WARNING so a
+# hung inference / model load is visible live (prod surfaces only proto_tools WARNING+). 0 disables.
+# Override via PROTO_WORKER_HEARTBEAT_SECONDS.
+_DEFAULT_HEARTBEAT_SECONDS = 120.0
 
 
 def _verbose_to_log_level(verbose: int) -> int:
@@ -77,6 +83,17 @@ def _stderr_buffer_lines() -> int:
     except (TypeError, ValueError):
         return _DEFAULT_STDERR_BUFFER_LINES
     return max(1, n)
+
+
+def _heartbeat_interval_seconds() -> float:
+    """Read ``PROTO_WORKER_HEARTBEAT_SECONDS`` as a float, else default. <=0 disables heartbeats."""
+    raw = os.environ.get("PROTO_WORKER_HEARTBEAT_SECONDS")
+    if raw is None:
+        return _DEFAULT_HEARTBEAT_SECONDS
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return _DEFAULT_HEARTBEAT_SECONDS
 
 
 # ============================================================================
@@ -730,7 +747,8 @@ class PersistentWorker:
             # without this, the worker's late response sits in the pipe and corrupts the next send.
             response_matched = False
             try:
-                response = self._read_response(request_id, timeout)
+                with self._request_heartbeat(request_id):
+                    response = self._read_response(request_id, timeout)
 
                 if response.get("id") != request_id:
                     raise RuntimeError(
@@ -895,6 +913,39 @@ class PersistentWorker:
             assert self._process is not None
             os.killpg(self._process.pid, sig)
 
+    @contextlib.contextmanager
+    def _request_heartbeat(self, request_id: str) -> "Iterator[None]":
+        """Log a WARNING for as long as a request stays in flight past the heartbeat interval.
+
+        A background daemon thread wakes every ``interval`` seconds and, while the request is
+        still pending, emits a WARNING with elapsed time. This is the only live signal a wedged
+        inference / model load produces in prod, where proto_tools INFO/DEBUG are dropped and the
+        worker itself is silent. Disabled when the interval is <= 0.
+        """
+        interval = _heartbeat_interval_seconds()
+        if interval <= 0:
+            yield
+            return
+        done = threading.Event()
+        start = time.monotonic()
+
+        def _beat() -> None:
+            while not done.wait(interval):
+                logger.warning(
+                    "Worker for %s still running after %.0fs (request %s, no response yet); worker may be wedged.",
+                    self.toolkit,
+                    time.monotonic() - start,
+                    request_id,
+                )
+
+        thread = threading.Thread(target=_beat, name=f"worker-heartbeat-{self.toolkit}", daemon=True)
+        thread.start()
+        try:
+            yield
+        finally:
+            done.set()
+            thread.join(timeout=1.0)
+
     def stop(self) -> None:
         """Terminate the worker and all of its child processes.
 
@@ -906,12 +957,17 @@ class PersistentWorker:
         unreapable process is logged and abandoned instead.
         """
         if self._process is not None:
+            t0 = time.monotonic()
             try:
                 if self._process.stdin and not self._process.stdin.closed:
                     self._process.stdin.close()
                 self._killpg(signal.SIGTERM)  # graceful shutdown
                 self._process.wait(timeout=10)
             except Exception:
+                logger.warning(
+                    "Worker for %s did not exit on SIGTERM within 10s; escalating to SIGKILL.",
+                    self.toolkit,
+                )
                 self._killpg(signal.SIGKILL)  # force kill
                 try:
                     self._process.wait(timeout=5)  # reap zombie
@@ -928,4 +984,4 @@ class PersistentWorker:
                         with contextlib.suppress(Exception):
                             pipe.close()
                 self._process = None
-                logger.debug("Stopped persistent worker for %s", self.toolkit)
+                logger.debug("Stopped persistent worker for %s in %.1fs", self.toolkit, time.monotonic() - t0)
