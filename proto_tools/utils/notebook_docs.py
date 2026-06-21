@@ -143,7 +143,7 @@ def _metric_table(metrics_class: type, per_item_field: str | None) -> str:
     return header + "\n" + "\n".join(rows)
 
 
-def _render_output(spec: object) -> str:
+def _render_output(spec: typing.Any) -> str:
     """Render a tool's output model: top-level table, nested submodels, then metrics.
 
     Recurses nested Pydantic submodels (stopping at shared entities and Metrics
