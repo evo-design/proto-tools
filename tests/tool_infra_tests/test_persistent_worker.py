@@ -474,6 +474,68 @@ def test_stop_never_raises_when_worker_survives_sigkill(caplog):
     assert any("SIGKILL" in record.message for record in caplog.records)
 
 
+def test_stop_warns_when_graceful_shutdown_times_out(caplog):
+    """A worker that ignores SIGTERM but dies on SIGKILL should still surface a WARNING.
+
+    The SIGTERM-grace timeout is the prod-visible signal for a slow/wedged teardown; in
+    prod only proto_tools WARNING+ records surface, so a slow stop must not be DEBUG/INFO.
+    """
+    worker = PersistentWorker(toolkit="borzoi", env_path=Path("/x"), script_path=Path("/y"))
+    proc = MagicMock()
+    proc.pid = 4242
+    proc.stdin.closed = False
+    proc.stdout.closed = True
+    proc.stderr.closed = True
+    # SIGTERM grace wait times out; the post-SIGKILL reap then succeeds.
+    proc.wait.side_effect = [subprocess.TimeoutExpired(cmd="worker", timeout=10), 0]
+    worker._process = proc
+
+    with patch.object(worker, "_killpg"), caplog.at_level(logging.WARNING):
+        worker.stop()
+
+    assert worker._process is None
+    assert any("SIGTERM" in record.message for record in caplog.records)
+    # SIGKILL reaped it, so we must NOT also log the abandon warning.
+    assert not any("abandoning" in record.message for record in caplog.records)
+
+
+def test_request_heartbeat_warns_while_request_in_flight(monkeypatch, caplog):
+    """A request that outlives the heartbeat interval emits a repeating WARNING.
+
+    Makes a hung inference / model load visible live, before the send() timeout fires.
+    """
+    monkeypatch.setenv("PROTO_WORKER_HEARTBEAT_SECONDS", "0.05")
+    worker = PersistentWorker(toolkit="borzoi", env_path=Path("/x"), script_path=Path("/y"))
+
+    with caplog.at_level(logging.WARNING), worker._request_heartbeat("req123"):
+        time.sleep(0.18)  # ~3 heartbeat intervals
+
+    beats = [r for r in caplog.records if "still running" in r.message]
+    assert len(beats) >= 1
+
+
+def test_request_heartbeat_silent_for_fast_request(monkeypatch, caplog):
+    """A request that completes within the interval emits no heartbeat noise."""
+    monkeypatch.setenv("PROTO_WORKER_HEARTBEAT_SECONDS", "5")
+    worker = PersistentWorker(toolkit="borzoi", env_path=Path("/x"), script_path=Path("/y"))
+
+    with caplog.at_level(logging.WARNING), worker._request_heartbeat("req123"):
+        pass  # returns immediately
+
+    assert not any("still running" in r.message for r in caplog.records)
+
+
+def test_request_heartbeat_disabled_when_interval_nonpositive(monkeypatch, caplog):
+    """Setting the interval to 0 disables heartbeats entirely (escape hatch)."""
+    monkeypatch.setenv("PROTO_WORKER_HEARTBEAT_SECONDS", "0")
+    worker = PersistentWorker(toolkit="borzoi", env_path=Path("/x"), script_path=Path("/y"))
+
+    with caplog.at_level(logging.WARNING), worker._request_heartbeat("req123"):
+        time.sleep(0.05)
+
+    assert not any("still running" in r.message for r in caplog.records)
+
+
 def test_stop_and_restart(echo_script: Path):
     worker = _make_worker(echo_script)
     try:
