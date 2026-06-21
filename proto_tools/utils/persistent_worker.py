@@ -896,7 +896,15 @@ class PersistentWorker:
             os.killpg(self._process.pid, sig)
 
     def stop(self) -> None:
-        """Terminate the worker and all of its child processes."""
+        """Terminate the worker and all of its child processes.
+
+        Never raises. A worker that ignores SIGTERM then SIGKILL is stuck in an
+        uninterruptible kernel sleep (D-state) — typically a wedged GPU/CUDA driver
+        call — and cannot be reaped from the parent; the OS reaps it once the syscall
+        returns or the container exits. Propagating the reap ``TimeoutExpired`` would
+        mask the caller's real error and abort the run (proto-bio/feedback#24), so the
+        unreapable process is logged and abandoned instead.
+        """
         if self._process is not None:
             try:
                 if self._process.stdin and not self._process.stdin.closed:
@@ -905,7 +913,15 @@ class PersistentWorker:
                 self._process.wait(timeout=10)
             except Exception:
                 self._killpg(signal.SIGKILL)  # force kill
-                self._process.wait(timeout=5)  # reap zombie
+                try:
+                    self._process.wait(timeout=5)  # reap zombie
+                except Exception:
+                    logger.warning(
+                        "Worker for %s did not exit after SIGKILL; abandoning unreaped "
+                        "process (pid=%s, likely wedged in a GPU driver call).",
+                        self.toolkit,
+                        self._process.pid,
+                    )
             finally:
                 for pipe in (self._process.stdout, self._process.stderr):
                     if pipe and not pipe.closed:
