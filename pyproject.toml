@@ -50,6 +50,7 @@ dependencies = [
     "requests",
     "tqdm",
     "filelock",
+    "docstring-parser",  # Extract per-field docs from Google-style config docstrings
 ]
 
 [project.urls]
@@ -82,9 +83,6 @@ dev = [
     "types-requests",       # mypy stubs for requests
     "types-tqdm",           # mypy stubs for tqdm
     "types-PyYAML",         # mypy stubs for pyyaml
-
-    # Documentation
-    "docstring-parser",
 ]
 
 # Dependencies: Run tests from parent proto-language context (install.sh or pip install -e ..[dev])

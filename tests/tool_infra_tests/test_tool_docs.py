@@ -186,6 +186,8 @@ def test_get_model_doc_returns_normalized_view() -> None:
     assert return_logits.required is False
     assert return_logits.default is False
     assert return_logits.description
+    # The full docstring text is surfaced alongside the terse description.
+    assert return_logits.doc, "doc should carry the field's docstring text"
 
 
 def test_get_output_doc_nests_metric_specs() -> None:

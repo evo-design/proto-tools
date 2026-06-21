@@ -190,8 +190,10 @@ def _cmd_model_doc(args: argparse.Namespace, kind: str) -> int:
     for f in doc.fields:
         marker = "required" if f.required else f"default={f.default!r}"
         print(f"  {f.name:24s}  {f.type_str:30s}  ({marker})")
-        if f.description:
-            print(f"  {'':24s}  {f.description}")
+        # Prefer the full docstring text; fall back to the terse field description.
+        body = f.doc or f.description
+        if body:
+            print(f"  {'':24s}  {body.replace(chr(10), chr(10) + ' ' * 28)}")
 
     if doc.metric_specs:
         scope = f" (per {doc.metrics_per_item_field} item)" if doc.metrics_per_item_field else ""
