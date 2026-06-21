@@ -415,9 +415,9 @@ class MaskingStrategy(RandomMaskingStrategy):
 
 
 # Drift guard: each tier's exposed methods must equal what the capability model derives.
-assert set(get_args(RandomMaskingStrategy.model_fields["method"].annotation)) == set(
-    compatible_methods(frozenset())
-), "RandomMaskingStrategy.method must match compatible_methods(frozenset())"
+assert set(get_args(RandomMaskingStrategy.model_fields["method"].annotation)) == set(compatible_methods(frozenset())), (
+    "RandomMaskingStrategy.method must match compatible_methods(frozenset())"
+)
 assert set(get_args(MaskingStrategy.model_fields["method"].annotation)) == set(
     compatible_methods(frozenset({MaskingInput.LOGITS}))
 ), "MaskingStrategy.method must match compatible_methods({LOGITS})"
