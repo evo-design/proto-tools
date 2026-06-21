@@ -1,0 +1,11 @@
+# Environment variables for the X3DNA fiber tool.
+#
+# X3DNA is user-provisioned (CC-BY-NC-4.0; not auto-downloaded), so forward the
+# user's install location into the isolated env where setup.sh and run.py look
+# for bin/fiber. PROTO_HOME / PROTO_MODEL_CACHE are forwarded automatically.
+
+[passthrough]
+# Standard X3DNA install root (the variable X3DNA's own tools use).
+X3DNA
+# Per-tool override pointing at the X3DNA install (resolve_weights_dir("x3dna")).
+PROTO_X3DNA_WEIGHTS_DIR

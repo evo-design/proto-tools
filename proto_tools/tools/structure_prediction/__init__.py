@@ -70,6 +70,12 @@ from proto_tools.tools.structure_prediction.viennarna import (
     ViennaRNAOutput,
     run_viennarna,
 )
+from proto_tools.tools.structure_prediction.x3dna import (
+    X3DNAFiberConfig,
+    X3DNAFiberInput,
+    X3DNAFiberOutput,
+    run_x3dna_fiber,
+)
 
 __all__ = [
     # AlphaFold2
@@ -132,6 +138,11 @@ __all__ = [
     "ViennaRNAInput",
     "ViennaRNAConfig",
     "ViennaRNAOutput",
+    # X3DNA
+    "run_x3dna_fiber",
+    "X3DNAFiberInput",
+    "X3DNAFiberConfig",
+    "X3DNAFiberOutput",
     # Shared Data Models
     "Chain",
     "ChainModification",

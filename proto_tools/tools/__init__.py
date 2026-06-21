@@ -673,6 +673,9 @@ from proto_tools.tools.structure_prediction import (
     ViennaRNAConfig,
     ViennaRNAInput,
     ViennaRNAOutput,
+    X3DNAFiberConfig,
+    X3DNAFiberInput,
+    X3DNAFiberOutput,
     predict_structures,
     run_alphafold2,
     run_alphafold2_gradient,
@@ -686,6 +689,7 @@ from proto_tools.tools.structure_prediction import (
     run_protenix,
     run_rf3_prediction,
     run_viennarna,
+    run_x3dna_fiber,
 )
 from proto_tools.tools.structure_scoring import (
     ChainPairScores,
@@ -1041,6 +1045,11 @@ __all__ = [
     "ViennaRNAInput",
     "ViennaRNAConfig",
     "ViennaRNAOutput",
+    # Structure prediction - X3DNA
+    "run_x3dna_fiber",
+    "X3DNAFiberInput",
+    "X3DNAFiberConfig",
+    "X3DNAFiberOutput",
     # Structure prediction - Shared
     "Chain",
     "ChainModification",
