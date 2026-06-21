@@ -26,7 +26,7 @@ Open-Source PyMOL exposes two distinct alignment routines that this toolkit invo
 
 ### PyMOL RMSD Alignment (`pymol-rmsd-alignment`)
 
-Aligns two `Structure` inputs with Open-Source PyMOL and returns the post-alignment RMSD together with method-specific alignment statistics. The `method` configuration field selects between the CE-based `cealign` and the sequence-aware `align` routine.
+Aligns two `Structure` inputs with Open-Source PyMOL and returns the post-alignment RMSD together with method-specific alignment statistics. The `method` configuration field selects between the CE-based `cealign` and the sequence-aware `align` routine. It also returns a `superposition` transform (rotation + translation) that superposes the mobile structure onto the target, so the two structures can be overlaid. Set the `include_superimposed_pdb` config option to also return a multi-model PDB of the overlay for download.
 
 #### Applications
 
@@ -45,5 +45,5 @@ This tool is appropriate for any analysis that needs a pairwise structural super
 
 These apply to every PyMOL RMSD tool in this toolkit (`pymol-rmsd-alignment`).
 
-- **Outputs are returned as typed metric objects.** Each `PyMOLRMSDMetrics` result carries the post-alignment `rmsd` together with the method-specific metrics described under Usage Tips. The headline `primary_metric` is `rmsd`, and results can be exported to JSON through the standard export method.
+- **Outputs are returned as typed metric objects.** Each `PyMOLRMSDMetrics` result carries the post-alignment `rmsd` together with the method-specific metrics described under Usage Tips, and the output's `superposition` field carries the rotation/translation that overlays the mobile structure onto the target (`None` if PyMOL returned no object matrix). The headline `primary_metric` is `rmsd`, and results can be exported to JSON through the standard export method.
 - **Inputs accept a `Structure` object, a file path, or raw PDB or mmCIF content.** Each input is normalised to a `Structure` before scoring, and the corresponding PDB text is passed to PyMOL through a temporary file.

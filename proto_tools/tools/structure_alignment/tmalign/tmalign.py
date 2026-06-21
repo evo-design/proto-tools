@@ -13,11 +13,16 @@ from typing import Any, ClassVar
 from pydantic import Field
 
 from proto_tools.entities import Structure
+from proto_tools.tools.structure_alignment.superposition import (
+    SuperpositionTransform,
+    build_superimposed_pdb,
+)
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
     BaseToolInput,
     BaseToolOutput,
+    ConfigField,
     InputField,
     ToolInstance,
 )
@@ -53,8 +58,16 @@ class TMalignInput(BaseToolInput):
 class TMalignConfig(BaseConfig):
     """Configuration for TMalign alignment.
 
-    No tool-specific parameters. Uses base parameters (verbose, device, timeout).
+    Attributes:
+        include_superimposed_pdb (bool): When true, also return a multi-model PDB
+            overlaying the aligned structures (off by default to keep results small).
     """
+
+    include_superimposed_pdb: bool = ConfigField(
+        title="Include Superimposed PDB",
+        default=False,
+        description="Also return a multi-model PDB overlaying the aligned structures.",
+    )
 
 
 class TMalignMetrics(Metrics):
@@ -92,6 +105,12 @@ class TMalignOutput(BaseToolOutput):
         metrics (TMalignMetrics): Pairwise alignment scores. Access metrics via
             ``output.metrics.tm_score_chain_1`` or ``output.tm_score_chain_1``
             (the forwarded shortcut from :class:`BaseToolOutput`).
+        superposition (SuperpositionTransform | None): Rigid-body transform that
+            superposes the query structure onto the reference. ``None`` if TMalign
+            didn't emit a parseable matrix.
+        superimposed_pdb (str | None): Multi-model PDB overlaying the aligned
+            structures (MODEL 1 = transformed query, MODEL 2 = reference). Present only
+            when ``config.include_superimposed_pdb`` is set and a transform was found.
     """
 
     metrics: TMalignMetrics = Field(
@@ -99,29 +118,47 @@ class TMalignOutput(BaseToolOutput):
         title="Alignment Scores",
         description="Pairwise alignment scores",
     )
+    superposition: SuperpositionTransform | None = Field(
+        default=None,
+        title="Superposition Transform",
+        description="Rigid-body transform that superposes the query onto the reference.",
+    )
+    superimposed_pdb: str | None = Field(
+        default=None,
+        title="Superimposed PDB",
+        description="Multi-model PDB overlaying the aligned structures, for download.",
+    )
 
     @property
     def output_format_options(self) -> list[str]:
-        """Return the supported output format options."""
-        return ["json"]
+        """Supported export formats; ``pdb`` is offered when a superimposed overlay exists."""
+        return ["json", "pdb"] if self.superimposed_pdb else ["json"]
 
     @property
     def output_format_default(self) -> str:
         """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: Path | str, file_format: str) -> None:  # noqa: ARG002 — required by base class _export_output interface
-        path = Path(export_path).with_suffix(".json")
+    def _export_output(self, export_path: Path | str, file_format: str) -> None:
+        path = Path(export_path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w") as f:
-            json.dump(
-                {
-                    "tm_score_chain_1": self.metrics["tm_score_chain_1"],
-                    "tm_score_chain_2": self.metrics["tm_score_chain_2"],
-                },
-                f,
-                indent=2,
-            )
+        if file_format == "pdb":
+            if self.superimposed_pdb is None:
+                raise ValueError("No superimposed structure; rerun with include_superimposed_pdb=True.")
+            path.with_suffix(".pdb").write_text(self.superimposed_pdb)
+            return
+        if file_format == "json":
+            with open(path.with_suffix(".json"), "w") as f:
+                json.dump(
+                    {
+                        "tm_score_chain_1": self.metrics["tm_score_chain_1"],
+                        "tm_score_chain_2": self.metrics["tm_score_chain_2"],
+                    },
+                    f,
+                    indent=2,
+                )
+            return
+        raise ValueError(f"Unsupported format: {file_format}")
 
 
 # ============================================================================
@@ -166,10 +203,21 @@ def run_tmalign(inputs: TMalignInput, config: TMalignConfig, instance: Any = Non
         config=config,
     )
 
+    superposition = SuperpositionTransform.from_optional(output_data.get("rotation"), output_data.get("translation"))
+    superimposed_pdb = None
+    if config.include_superimposed_pdb and superposition is not None:
+        superimposed_pdb = build_superimposed_pdb(
+            inputs.query_structure.structure_pdb,
+            inputs.reference_structure.structure_pdb,
+            superposition,
+        )
+
     return TMalignOutput(
         metrics=TMalignMetrics(
             tm_score_chain_1=output_data["tm_score_chain_1"],
             tm_score_chain_2=output_data["tm_score_chain_2"],
         ),
+        superposition=superposition,
+        superimposed_pdb=superimposed_pdb,
         metadata={"tool": "tmalign"},
     )

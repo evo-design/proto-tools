@@ -7,6 +7,10 @@ from typing import Any, ClassVar, Literal
 from pydantic import Field
 
 from proto_tools.entities.structures import Structure
+from proto_tools.tools.structure_alignment.superposition import (
+    SuperpositionTransform,
+    build_superimposed_pdb,
+)
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -50,6 +54,8 @@ class PyMOLRMSDConfig(BaseConfig):
         target_selection (str): PyMOL selection for the target/reference structure.
         mobile_selection (str): PyMOL selection for the mobile/query structure.
         failure_rmsd (float): RMSD returned when PyMOL cannot align the structures.
+        include_superimposed_pdb (bool): When true, also return a multi-model PDB
+            overlaying the aligned structures (off by default to keep results small).
     """
 
     method: PyMOLAlignmentMethod = ConfigField(
@@ -68,6 +74,11 @@ class PyMOLRMSDConfig(BaseConfig):
         default=999.0,
         description="RMSD returned when PyMOL cannot align the requested structures.",
         include_in_key=False,
+    )
+    include_superimposed_pdb: bool = ConfigField(
+        title="Include Superimposed PDB",
+        default=False,
+        description="Also return a multi-model PDB overlaying the aligned structures.",
     )
 
 
@@ -158,6 +169,12 @@ class PyMOLRMSDOutput(BaseToolOutput):
     Attributes:
         method (PyMOLAlignmentMethod): PyMOL alignment method used.
         metrics (PyMOLRMSDMetrics): RMSD alignment metrics.
+        superposition (SuperpositionTransform | None): Rigid-body transform that
+            superposes the mobile structure onto the target. ``None`` if PyMOL didn't
+            return an object matrix.
+        superimposed_pdb (str | None): Multi-model PDB overlaying the aligned structures
+            (MODEL 1 = transformed mobile, MODEL 2 = target). Present only when
+            ``config.include_superimposed_pdb`` is set and a transform was found.
     """
 
     method: PyMOLAlignmentMethod = Field(title="Method", description="PyMOL alignment method used.")
@@ -166,11 +183,21 @@ class PyMOLRMSDOutput(BaseToolOutput):
         title="RMSD Metrics",
         description="RMSD alignment metrics.",
     )
+    superposition: SuperpositionTransform | None = Field(
+        default=None,
+        title="Superposition Transform",
+        description="Rigid-body transform that superposes the mobile onto the target.",
+    )
+    superimposed_pdb: str | None = Field(
+        default=None,
+        title="Superimposed PDB",
+        description="Multi-model PDB overlaying the aligned structures, for download.",
+    )
 
     @property
     def output_format_options(self) -> list[str]:
-        """Return supported output formats."""
-        return ["json"]
+        """Supported export formats; ``pdb`` is offered when a superimposed overlay exists."""
+        return ["json", "pdb"] if self.superimposed_pdb else ["json"]
 
     @property
     def output_format_default(self) -> str:
@@ -178,12 +205,18 @@ class PyMOLRMSDOutput(BaseToolOutput):
         return "json"
 
     def _export_output(self, export_path: Path | str, file_format: str) -> None:
-        if file_format != "json":
-            raise ValueError(f"Unsupported format: {file_format}")
-        path = Path(export_path).with_suffix(".json")
+        path = Path(export_path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w") as f:
-            json.dump({"method": self.method, **dict(self.metrics.items())}, f, indent=2)
+        if file_format == "pdb":
+            if self.superimposed_pdb is None:
+                raise ValueError("No superimposed structure; rerun with include_superimposed_pdb=True.")
+            path.with_suffix(".pdb").write_text(self.superimposed_pdb)
+            return
+        if file_format == "json":
+            with open(path.with_suffix(".json"), "w") as f:
+                json.dump({"method": self.method, **dict(self.metrics.items())}, f, indent=2)
+            return
+        raise ValueError(f"Unsupported format: {file_format}")
 
 
 _EXAMPLE_PDB_PATH = Path(__file__).parents[1] / "example_input_fixture.pdb"
@@ -229,8 +262,19 @@ def run_pymol_rmsd_alignment(
         config=config,
     )
 
+    superposition = SuperpositionTransform.from_optional(output_data.get("rotation"), output_data.get("translation"))
+    superimposed_pdb = None
+    if config.include_superimposed_pdb and superposition is not None:
+        superimposed_pdb = build_superimposed_pdb(
+            inputs.mobile_structure.structure_pdb,
+            inputs.target_structure.structure_pdb,
+            superposition,
+        )
+
     return PyMOLRMSDOutput(
         method=output_data.get("method", config.method),
+        superposition=superposition,
+        superimposed_pdb=superimposed_pdb,
         metrics=PyMOLRMSDMetrics(
             rmsd=output_data["rmsd"],
             aligned_length=output_data.get("aligned_length"),

@@ -55,11 +55,16 @@ def test_usalign_aligns_two_structures():
     validate_output(result)
     assert 0.0 <= result.tm_score_structure_1 <= 1.0
     assert 0.0 <= result.tm_score_structure_2 <= 1.0
+    # The superposition transform is parsed from the ``-m`` matrix the binary writes.
+    assert result.superposition is not None
+    assert len(result.superposition.rotation) == 3
+    assert all(len(row) == 3 for row in result.superposition.rotation)
+    assert len(result.superposition.translation) == 3
 
 
 @pytest.mark.integration
 def test_usalign_self_alignment_perfect_score():
-    """Aligning a structure to itself should give TM-score = 1.0."""
+    """Aligning a structure to itself gives TM-score = 1.0 and an ~identity superposition."""
     pdb_1 = _PDB_1_PATH.read_text()
     inputs = USalignInput(query_structure=pdb_1, reference_structure=pdb_1)
     result = run_usalign(inputs, USalignConfig())
@@ -67,6 +72,12 @@ def test_usalign_self_alignment_perfect_score():
     validate_output(result)
     assert result.tm_score_structure_1 == pytest.approx(1.0, abs=0.01)
     assert result.tm_score_structure_2 == pytest.approx(1.0, abs=0.01)
+    # Self-alignment ⇒ ~identity rotation and ~zero translation.
+    assert result.superposition is not None
+    for i, row in enumerate(result.superposition.rotation):
+        for j, value in enumerate(row):
+            assert value == pytest.approx(1.0 if i == j else 0.0, abs=1e-3)
+    assert result.superposition.translation == pytest.approx([0.0, 0.0, 0.0], abs=1e-3)
 
 
 # ── Benchmark ─────────────────────────────────────────────────────────────────
