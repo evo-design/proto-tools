@@ -963,9 +963,11 @@ class ToolRegistry:
 
     @classmethod
     def get_config_schema(cls, key: str) -> dict[str, Any]:
-        """Get JSON schema for tool configuration."""
+        """Get JSON schema for tool configuration, annotated with per-field docs."""
+        from proto_tools.utils.tool_docs import inject_field_docs
+
         spec = cls.get(key)
-        return spec.config_model.model_json_schema()
+        return inject_field_docs(spec.config_model.model_json_schema(), spec.config_model)
 
     @classmethod
     def get_output_schema(cls, key: str) -> dict[str, Any]:

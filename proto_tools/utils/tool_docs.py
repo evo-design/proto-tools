@@ -36,8 +36,10 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
+from docstring_parser import DocstringStyle
+from docstring_parser import parse as parse_docstring
 from pydantic import BaseModel, Field
 
 from proto_tools.utils.tool_io import Directionality, Metrics
@@ -661,6 +663,105 @@ def get_model_doc(
         primary_metric=primary_metric,
         metrics_per_item_field=metrics_per_item_field,
     )
+
+
+def field_docs_from_docstrings(model_class: type[BaseModel]) -> dict[str, str]:
+    """Map each field of ``model_class`` to its full docstring description.
+
+    Walks the MRO most-derived first and parses each class's *own* Google-style
+    docstring (``cls.__doc__``, which is never inherited for classes) for
+    ``Attributes:`` entries. The first description seen for a field wins, so a
+    subclass that re-documents an inherited field with richer text overrides the
+    parent. Fields inherited from a base (whose docs live only in that base's
+    docstring) are still picked up further up the MRO.
+
+    Args:
+        model_class (type[BaseModel]): A Pydantic model whose docstrings document
+            fields in a Google-style ``Attributes:`` section.
+
+    Returns:
+        dict[str, str]: Field name to docstring description, restricted to the
+            model's own fields.
+    """
+    field_docs: dict[str, str] = {}
+    for cls in model_class.__mro__:
+        own_doc = cls.__doc__
+        if not own_doc:
+            continue
+        try:
+            parsed = parse_docstring(inspect.cleandoc(own_doc), style=DocstringStyle.GOOGLE)
+        except Exception:
+            logger.debug("Could not parse docstring for %s", cls.__name__, exc_info=True)
+            continue
+        for param in parsed.params:
+            name = param.arg_name
+            if name.startswith("*") or not param.description:
+                continue
+            field_docs.setdefault(name, param.description.strip())
+    return {name: doc for name, doc in field_docs.items() if name in model_class.model_fields}
+
+
+def _models_in_annotation(annotation: Any) -> list[type[BaseModel]]:
+    """Return the ``BaseModel`` subclasses nested anywhere in a type annotation."""
+    models: list[type[BaseModel]] = []
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+        models.append(annotation)
+    for arg in get_args(annotation):
+        models.extend(_models_in_annotation(arg))
+    return models
+
+
+def _collect_nested_models(model_class: type[BaseModel]) -> dict[str, type[BaseModel]]:
+    """Map ``$defs`` names to the nested ``BaseModel`` classes reachable from fields."""
+    found: dict[str, type[BaseModel]] = {}
+
+    def _walk(cls: type[BaseModel]) -> None:
+        for info in cls.model_fields.values():
+            for nested in _models_in_annotation(info.annotation):
+                if nested.__name__ not in found:
+                    found[nested.__name__] = nested
+                    _walk(nested)
+
+    _walk(model_class)
+    return found
+
+
+def _apply_field_docs(schema: dict[str, Any], model_class: type[BaseModel]) -> None:
+    """Set ``x-proto-doc`` on each property of ``schema`` from ``model_class`` docstrings."""
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return
+    docs = field_docs_from_docstrings(model_class)
+    for name, prop in properties.items():
+        doc = docs.get(name)
+        if doc and isinstance(prop, dict):
+            prop["x-proto-doc"] = doc
+
+
+def inject_field_docs(schema: dict[str, Any], model_class: type[BaseModel]) -> dict[str, Any]:
+    """Add ``x-proto-doc`` per-field documentation to a model's JSON schema, in place.
+
+    Each property gets an ``x-proto-doc`` key carrying the field's full
+    Google-style docstring description, so consumers can render help richer than
+    the terse ``description``. Nested model definitions under ``$defs`` are
+    annotated too, matching how clients recurse into nested objects.
+
+    Args:
+        schema (dict[str, Any]): Output of ``model_class.model_json_schema()``.
+        model_class (type[BaseModel]): The model the schema was generated from.
+
+    Returns:
+        dict[str, Any]: The same ``schema`` dict, mutated in place.
+    """
+    _apply_field_docs(schema, model_class)
+    defs = schema.get("$defs")
+    if isinstance(defs, dict):
+        nested = _collect_nested_models(model_class)
+        for name, def_schema in defs.items():
+            nested_cls = nested.get(name)
+            if nested_cls is not None and isinstance(def_schema, dict):
+                _apply_field_docs(def_schema, nested_cls)
+    return schema
 
 
 # =============================================================================
