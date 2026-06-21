@@ -8,7 +8,7 @@ from __future__ import annotations
 import warnings
 from io import StringIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, TypeGuard
 
 import numpy as np
 
@@ -72,6 +72,22 @@ def looks_like_structure_path(value: object) -> bool:
         except OSError:
             return False
     return False
+
+
+def looks_like_url(value: object) -> TypeGuard[str]:
+    """Return True if ``value`` is an ``http(s)://`` URL string.
+
+    Used by ``Structure._handle_construction`` so that
+    ``Structure(structure="https://files.rcsb.org/download/1TIM.pdb")`` transparently
+    fetches the content over HTTP, mirroring the local file-path branch.
+
+    Args:
+        value (object): Value to probe.
+
+    Returns:
+        TypeGuard[str]: True if ``value`` is a string beginning with ``http://`` or ``https://``.
+    """
+    return isinstance(value, str) and value.startswith(("http://", "https://"))
 
 
 def load_structure_file(filepath: Path | str) -> str:
