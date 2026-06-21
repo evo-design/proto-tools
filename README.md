@@ -1,4 +1,4 @@
-# 🧬 Proto Tools 🛠️
+# Proto Tools
 
 ![Proto Tools](https://proto-bio.github.io/proto-assets/covers/open-wings-code/carousel.png)
 
@@ -12,9 +12,9 @@ Every tool runs in its own automatically managed isolated environment, so all de
 
 You can use it as a standalone Python library or as part of the broader [proto-language](https://github.com/evo-design/proto-language) optimization system. Proto-tools is open source under an MIT license. Contributions are welcome!
 
-## Setup 🚧
+## Setup
 
-### Step 1: Install the package 🐍
+### Step 1: Install the package
 
 Proto-tools requires Python 3.10+:
 
@@ -28,7 +28,7 @@ pip install git+https://github.com/evo-design/proto-tools.git
 > [!NOTE]
 > If you are developing or contributing to this project, follow the setup instructions in [CONTRIBUTING.md](CONTRIBUTING.md) instead.
 
-### Step 2: Configure storage (optional) 🗂️
+### Step 2: Configure storage (optional)
 
 All persistent data (model weights and tool environments) is cached under the `PROTO_HOME` directory on first use (defaults to `~/.proto/`).
 
@@ -41,7 +41,7 @@ export PROTO_HOME=/path/to/your/proto_home
 
 For shared filesystems, model weights can be reused to avoid downloading duplicate copies. The `PROTO_MODEL_CACHE` environment variable lets you point just the weights at that shared location (sharing tool environments is not recommended): `export PROTO_MODEL_CACHE=/path/to/shared/weights`. See [notes/storage.md](notes/storage.md) for all details and options.
 
-### Step 3: Gated model access (optional) 🔑
+### Step 3: Gated model access (optional)
 
 Some tools use gated models that require accepting a license / terms-of-use. Two access flows depending on how the upstream author publishes weights:
 
@@ -68,7 +68,7 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 > [!TIP]
 > **You're all set up!** To learn what features are available in the library, check out the [guides](guides/) — four short notebooks covering tool environments, persistent execution, device management, and parallel multi-GPU runs.
 
-## Available Tools 🔬
+## Available Tools
 
 <pre>
 <a href="proto_tools/tools/binder_design/">binder_design/</a>                  # De novo antibody / binder design pipelines
