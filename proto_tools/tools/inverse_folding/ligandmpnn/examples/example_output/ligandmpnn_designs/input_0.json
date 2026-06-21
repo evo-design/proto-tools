@@ -14,6 +14,7 @@
       ],
       "metrics": {
         "primary_metric": "sequence_recovery",
+        "metric_type": "LigandMPNNDesignMetrics",
         "sequence_recovery": 0.5267857313156128,
         "ligand_interface_sequence_recovery": 0.5384615659713745
       }
@@ -32,6 +33,7 @@
       ],
       "metrics": {
         "primary_metric": "sequence_recovery",
+        "metric_type": "LigandMPNNDesignMetrics",
         "sequence_recovery": 0.5446428656578064,
         "ligand_interface_sequence_recovery": 0.5769230723381042
       }

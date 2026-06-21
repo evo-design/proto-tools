@@ -1,5 +1,6 @@
 {
   "primary_metric": "pdockq2",
+  "metric_type": "PDockQ2Metrics",
   "interfaces": [
     {
       "chain_id": "A",

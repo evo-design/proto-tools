@@ -1,2 +1,2 @@
-primary_metric,longest_alpha_helix,gyration_radius,helix_pct,sheet_pct,loop_pct
-,10,11.745495329833469,40.0,29.23076923076923,30.76923076923077
+primary_metric,metric_type,longest_alpha_helix,gyration_radius,helix_pct,sheet_pct,loop_pct
+,StructureQualityMetrics,10,11.745495329833469,40.0,29.23076923076923,30.76923076923077

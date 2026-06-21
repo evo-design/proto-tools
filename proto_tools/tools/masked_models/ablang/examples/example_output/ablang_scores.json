@@ -3,12 +3,56 @@
     "pseudo_log_likelihood": -0.8226096034049988,
     "log_likelihood": -98.71315240859985,
     "avg_log_likelihood": -0.8226096034049988,
-    "perplexity": 2.2764326794548184
+    "perplexity": 2.2764326794548184,
+    "vocab": [
+      "A",
+      "C",
+      "D",
+      "E",
+      "F",
+      "G",
+      "H",
+      "I",
+      "K",
+      "L",
+      "M",
+      "N",
+      "P",
+      "Q",
+      "R",
+      "S",
+      "T",
+      "V",
+      "W",
+      "Y"
+    ]
   },
   {
-    "pseudo_log_likelihood": -3.2055673599243164,
-    "log_likelihood": -381.46251583099365,
-    "avg_log_likelihood": -3.2055673599243164,
-    "perplexity": 24.669492528099394
+    "pseudo_log_likelihood": -3.2055675983428955,
+    "log_likelihood": -381.46254420280457,
+    "avg_log_likelihood": -3.2055675983428955,
+    "perplexity": 24.66949840976545,
+    "vocab": [
+      "A",
+      "C",
+      "D",
+      "E",
+      "F",
+      "G",
+      "H",
+      "I",
+      "K",
+      "L",
+      "M",
+      "N",
+      "P",
+      "Q",
+      "R",
+      "S",
+      "T",
+      "V",
+      "W",
+      "Y"
+    ]
   }
 ]

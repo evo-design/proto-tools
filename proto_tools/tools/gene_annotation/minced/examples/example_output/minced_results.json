@@ -1,6 +1,6 @@
 [
   {
-    "sequence_id":"test_genome",
+    "sequence_id":"seq_0",
     "array_index":0,
     "position":29,
     "repeat":"GTTTTAGAGCTATGCTGTTTTGAATGGTCCCAAAAC",
@@ -9,7 +9,7 @@
     "spacer_length":32.0
   },
   {
-    "sequence_id":"test_genome",
+    "sequence_id":"seq_0",
     "array_index":0,
     "position":97,
     "repeat":"GTTTTAGAGCTATGCTGTTTTGAATGGTCCCAAAAC",
@@ -18,7 +18,7 @@
     "spacer_length":32.0
   },
   {
-    "sequence_id":"test_genome",
+    "sequence_id":"seq_0",
     "array_index":0,
     "position":165,
     "repeat":"GTTTTAGAGCTATGCTGTTTTGAATGGTCCCAAAAC",
@@ -27,7 +27,7 @@
     "spacer_length":32.0
   },
   {
-    "sequence_id":"test_genome",
+    "sequence_id":"seq_0",
     "array_index":0,
     "position":233,
     "repeat":"GTTTTAGAGCTATGCTGTTTTGAATGGTCCCAAAAC",
@@ -36,7 +36,7 @@
     "spacer_length":32.0
   },
   {
-    "sequence_id":"test_genome",
+    "sequence_id":"seq_0",
     "array_index":0,
     "position":301,
     "repeat":"GTTTTAGAGCTATGCTGTTTTGAATGGTCCCAAAAC",
@@ -45,7 +45,7 @@
     "spacer_length":32.0
   },
   {
-    "sequence_id":"test_genome",
+    "sequence_id":"seq_0",
     "array_index":0,
     "position":369,
     "repeat":"GTTTTAGAGCTATGCTGTTTTGAATGGTCCCAAAAC",
