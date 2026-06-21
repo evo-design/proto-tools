@@ -111,6 +111,14 @@ def test_pymol_rmsd_e2e_self_alignment():
     assert align.rmsd == pytest.approx(0.0, abs=1e-4)
     assert align.aligned_atoms > 0
     assert align.aligned_residues > 0
+    # Both methods capture the mobile→target transform via get_object_matrix; self-alignment
+    # ⇒ ~identity rotation and ~zero translation.
+    for result in (cealign, align):
+        assert result.superposition is not None
+        for i, row in enumerate(result.superposition.rotation):
+            for j, value in enumerate(row):
+                assert value == pytest.approx(1.0 if i == j else 0.0, abs=1e-3)
+        assert result.superposition.translation == pytest.approx([0.0, 0.0, 0.0], abs=1e-3)
 
 
 @pytest.mark.benchmark("pymol-rmsd-alignment")

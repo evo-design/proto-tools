@@ -26,7 +26,7 @@ The Template Modeling score (TM-score) ([Zhang and Skolnick, 2004](https://doi.o
 
 ### USalign Structure Alignment (`usalign-alignment`)
 
-Aligns two macromolecular structures with USalign and returns the Template Modeling score normalised by the length of each input structure. The tool takes a query and reference `Structure`, runs the compiled USalign program in multi-chain oligomeric mode (`-mm 1 -ter 1`), and reports `tm_score_structure_1` (normalised by the query length) and `tm_score_structure_2` (normalised by the reference length).
+Aligns two macromolecular structures with USalign and returns the Template Modeling score normalised by the length of each input structure. The tool takes a query and reference `Structure`, runs the compiled USalign program in multi-chain oligomeric mode (`-mm 1 -ter 1`), and reports `tm_score_structure_1` (normalised by the query length) and `tm_score_structure_2` (normalised by the reference length). It also returns a `superposition` transform (rotation + translation) that superposes the query onto the reference, so the two structures can be overlaid. Set the `include_superimposed_pdb` config option to also return a multi-model PDB of the overlay for download.
 
 #### Applications
 
@@ -46,6 +46,6 @@ This tool is the appropriate choice for any pairwise structure comparison that m
 
 These apply to every USalign tool in this toolkit (`usalign-alignment`).
 
-- **Outputs are returned as typed metric objects.** Each `USalignMetrics` result carries both `tm_score_structure_1` and `tm_score_structure_2`. Results can be exported to JSON through the standard export method.
+- **Outputs are returned as typed metric objects.** Each `USalignMetrics` result carries both `tm_score_structure_1` and `tm_score_structure_2`, and the output's `superposition` field carries the rotation/translation that overlays the query onto the reference (`None` if USalign emitted no parseable matrix). Results can be exported to JSON through the standard export method.
 - **Inputs accept a `Structure` object, a file path, or raw PDB or mmCIF content.** Each input is normalised to a `Structure` before scoring, and the corresponding PDB text is passed to USalign through a temporary file.
 - **USalign runs on CPU and is fast enough for batch comparison of large structure sets.** No GPU is used, and per-pair runtime scales with the combined length of the two structures and the number of chains.

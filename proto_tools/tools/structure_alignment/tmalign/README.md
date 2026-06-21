@@ -28,7 +28,7 @@ A subsequent statistical analysis of the TM-score ([Xu and Zhang, 2010](https://
 
 ### TMalign Structure Alignment (`tmalign-alignment`)
 
-Aligns two protein structures with TMalign and returns the Template Modeling score normalised by the length of each input chain. The tool takes a query and reference `Structure`, runs the compiled TMalign program, and reports `tm_score_chain_1` (normalised by the query length) and `tm_score_chain_2` (normalised by the reference length).
+Aligns two protein structures with TMalign and returns the Template Modeling score normalised by the length of each input chain. The tool takes a query and reference `Structure`, runs the compiled TMalign program, and reports `tm_score_chain_1` (normalised by the query length) and `tm_score_chain_2` (normalised by the reference length). It also returns a `superposition` transform (rotation + translation) that superposes the query onto the reference, so the two structures can be overlaid. Set the `include_superimposed_pdb` config option to also return a multi-model PDB of the overlay for download.
 
 #### Applications
 
@@ -47,6 +47,6 @@ This tool is the standard method for pairwise protein structure comparison. Repr
 
 These apply to every TMalign tool in this toolkit (`tmalign-alignment`).
 
-- **Outputs are returned as typed metric objects.** Each `TMalignMetrics` result carries both `tm_score_chain_1` and `tm_score_chain_2`. Results can be exported to JSON through the standard export method.
+- **Outputs are returned as typed metric objects.** Each `TMalignMetrics` result carries both `tm_score_chain_1` and `tm_score_chain_2`, and the output's `superposition` field carries the rotation/translation that overlays the query onto the reference (`None` if TMalign emitted no parseable matrix). Results can be exported to JSON through the standard export method.
 - **Inputs accept a `Structure` object, a file path, or raw PDB or mmCIF content.** Each input is normalised to a `Structure` before scoring, and the corresponding PDB text is passed to TMalign through a temporary file.
 - **TMalign runs on CPU and is fast enough for all-against-all comparison of large structure sets.** No GPU is used, and per-pair runtime scales with the product of the two chain lengths.
