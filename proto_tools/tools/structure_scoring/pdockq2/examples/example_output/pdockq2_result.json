@@ -5,20 +5,20 @@
     {
       "chain_id": "A",
       "neighbor_chains": "B",
-      "if_plddt": 90.0,
-      "norm_pae": 0.6561145276741607,
-      "pmidockq": 0.17272667063218383
+      "if_plddt": 96.99309967041016,
+      "norm_pae": 0.9887049034269357,
+      "pmidockq": 0.9186481864179806
     },
     {
       "chain_id": "B",
       "neighbor_chains": "A",
-      "if_plddt": 70.0,
-      "norm_pae": 0.6561145276741607,
-      "pmidockq": 0.07340252212319355
+      "if_plddt": 97.91909934997558,
+      "norm_pae": 0.9902614435355133,
+      "pmidockq": 0.9403663505481036
     }
   ],
-  "pdockq2": 0.07340252212319355,
-  "avg_interface_plddt": 70.0,
-  "avg_interface_pae": 0.6561145276741607,
-  "num_interface_contacts": 7
+  "pdockq2": 0.9403663505481036,
+  "avg_interface_plddt": 97.91909934997558,
+  "avg_interface_pae": 0.9902614435355133,
+  "num_interface_contacts": 100
 }
