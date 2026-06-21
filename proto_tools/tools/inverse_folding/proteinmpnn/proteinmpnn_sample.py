@@ -50,7 +50,7 @@ class ProteinMPNNSampleConfig(InverseFoldingConfig):
         model_choice (Literal['proteinmpnn', 'v_48_002', 'v_48_010', 'v_48_030', 'abmpnn', 'soluble']): Model
             weights. ``"proteinmpnn"`` is ColabDesign's default ``v_48_020`` (0.20 Å backbone noise). The
             ``v_48_002`` / ``v_48_010`` / ``v_48_030`` variants are the same architecture trained at
-            0.02 / 0.10 / 0.30 Å backbone noise (the suffix is the noise level in Å × 100); more noise
+            0.02 / 0.10 / 0.30 Å backbone noise (the suffix is the noise level in Å x 100); more noise
             yields more diverse, robust designs at some cost to native-sequence recovery. ``"abmpnn"``
             is antibody-optimized; ``"soluble"`` is soluble-protein-trained.
         backbone_noise (float): Gaussian noise (A) added to backbone coordinates before each forward pass.
