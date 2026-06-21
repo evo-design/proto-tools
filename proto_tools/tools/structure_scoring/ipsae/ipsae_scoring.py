@@ -248,15 +248,11 @@ class IPSAEScoringOutput(BaseToolOutput):
 def example_input() -> Any:
     """Minimal valid input for testing and examples.
 
-    Bundled fixture is insulin chains A (21 residues) and B (30 residues)
-    extracted from PDB 4INS. The PAE matrix is synthetic: 0 on the diagonal,
-    3.0 within each chain, 6.0 across the A/B interface (under the default
-    10 Å cutoff so the interface yields non-zero metrics).
+    Bundled fixture is a real barnase-barstar complex (chains A and B) cofolded
+    by Boltz-2, with the model's PAE matrix loaded from the bundled JSON.
     """
     fixture = Path(__file__).parent / "example_input_fixture.pdb"
-    n_a, n_b = 21, 30
-    n = n_a + n_b
-    pae = [[0.0 if i == j else (3.0 if (i < n_a) == (j < n_a) else 6.0) for j in range(n)] for i in range(n)]
+    pae = json.loads((Path(__file__).parent / "example_input_fixture_pae.json").read_text())
     structure = Structure.from_file(fixture, b_factor_type=BFactorType.PLDDT, metrics={"pae": pae})
     return IPSAEScoringInput(
         structure=structure,
