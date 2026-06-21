@@ -67,6 +67,7 @@ class LigandMPNNModel:
         ligand_mpnn_use_atom_context: bool = True,
         ligand_mpnn_use_side_chain_context: bool = False,
         ligand_mpnn_cutoff_for_score: float = 8.0,
+        chains_explicitly_set: bool = False,
     ) -> dict[str, Any]:
         """Sample protein sequences using LigandMPNN.
 
@@ -88,6 +89,9 @@ class LigandMPNNModel:
                 fixed residues.
             ligand_mpnn_cutoff_for_score: Ligand-residue distance cutoff (A) for
                 ligand-interface recovery scoring.
+            chains_explicitly_set: Whether the caller explicitly chose chains to
+                redesign (vs the all-chains default); gates the residue/chain
+                mixing warning so it only fires on a real conflict.
 
         Returns:
             dict[str, Any]: Dictionary with keys ``chain_sequences`` (per
@@ -121,7 +125,7 @@ class LigandMPNNModel:
         if fixed_residues:
             # Use residue-based constraints only
             input_dict["fixed_residues"] = fixed_residues
-            if chain_ids:
+            if chain_ids and chains_explicitly_set:
                 logger.warning(
                     "Both fixed_positions and chain_ids were provided. LigandMPNN does not support mixing residue-based and chain-based "
                     "design constraints. The chain_ids parameter will be ignored; designable scope is determined by residues NOT in fixed_positions."
@@ -362,6 +366,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         return _model.sample(
             pdb_path=pdb_path,
             chain_ids=input_dict["chain_ids"],
+            chains_explicitly_set=input_dict.get("chains_explicitly_set", False),
             batch_size=input_dict["batch_size"],
             temperature=input_dict["temperature"],
             fixed_positions=input_dict.get("fixed_positions"),

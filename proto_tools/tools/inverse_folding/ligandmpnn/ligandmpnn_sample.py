@@ -247,6 +247,7 @@ def run_ligandmpnn_sample(
                     "operation": "sample",
                     "pdb_path": str(pdb_path),
                     "chain_ids": inp.chain_ids_to_redesign,
+                    "chains_explicitly_set": inp.chains_to_redesign is not None,
                     "batch_size": chunk,
                     "temperature": config.temperature,
                     "fixed_positions": inp.fixed_positions.chains if inp.fixed_positions is not None else None,
