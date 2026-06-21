@@ -1183,10 +1183,7 @@ class ToolInstance:
                                 "gpu_only tool" if self._gpu_only else "pinned tool",
                                 self.toolkit,
                             )
-                            try:
-                                worker.stop()
-                            except Exception as e:
-                                logger.error("Failed to stop worker during eviction: %s", e)
+                            worker.stop()  # never raises
                         self.device = "cpu"
                         return
                     worker = self._worker
@@ -1208,10 +1205,7 @@ class ToolInstance:
                     worker = self._worker
                     self._worker = None
                     if worker is not None:
-                        try:
-                            worker.stop()
-                        except Exception as e:
-                            logger.error("Failed to stop worker during RESTART eviction: %s", e)
+                        worker.stop()  # never raises
 
             allocated_device = device_manager.request_device(
                 toolkit=self.toolkit,

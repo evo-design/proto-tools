@@ -920,7 +920,7 @@ class PersistentWorker:
                         "Worker for %s did not exit after SIGKILL; abandoning unreaped "
                         "process (pid=%s, likely wedged in a GPU driver call).",
                         self.toolkit,
-                        getattr(self._process, "pid", "?"),
+                        self._process.pid,
                     )
             finally:
                 for pipe in (self._process.stdout, self._process.stderr):
