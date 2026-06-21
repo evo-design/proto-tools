@@ -122,7 +122,11 @@ class FieldDoc(BaseModel):
     )
     description: str | None = Field(
         default=None,
-        description="Per-field description (from ``Field(description=...)``).",
+        description="Terse per-field description (from ``Field(description=...)``).",
+    )
+    doc: str | None = Field(
+        default=None,
+        description="Full per-field documentation from the class docstring's ``Attributes:`` section.",
     )
     required: bool = Field(description="Whether the field is required (no default).")
 
@@ -633,6 +637,7 @@ def get_model_doc(
     from proto_tools.utils.tool_io import _OUTPUT_METADATA_FIELDS
 
     exclude = _OUTPUT_METADATA_FIELDS
+    field_docs = field_docs_from_docstrings(model_class)
 
     fields: list[FieldDoc] = []
     for name, info in model_class.model_fields.items():
@@ -644,6 +649,7 @@ def get_model_doc(
                 type_str=_format_type(info.annotation),
                 default=_format_default(info),
                 description=info.description,
+                doc=field_docs.get(name),
                 required=info.is_required(),
             )
         )
