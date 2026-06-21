@@ -4,7 +4,6 @@ Tests for masking strategies.
 """
 
 import logging
-import warnings
 
 import pytest
 from pydantic import ValidationError
@@ -13,8 +12,12 @@ from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelInput,
 )
 from proto_tools.transforms.masking import (
+    MaskingInput,
     MaskingStrategy,
+    RandomMaskingStrategy,
     apply_masking_strategy,
+    build_position_score_fn,
+    compatible_methods,
 )
 from proto_tools.transforms.masking.base import (
     MASK_TOKEN,
@@ -303,13 +306,11 @@ def test_method_field_default():
 
 def test_method_field_roundtrip():
     """Method field survives serialization."""
-    s = MaskingStrategy(method="entropy", model_name="esm2")
+    s = MaskingStrategy(method="entropy")
     data = s.model_dump()
     assert data["method"] == "entropy"
-    assert data["model_name"] == "esm2"
     restored = MaskingStrategy(**data)
     assert restored.method == "entropy"
-    assert restored.model_name == "esm2"
 
 
 def test_invalid_method_raises():
@@ -318,19 +319,47 @@ def test_invalid_method_raises():
         MaskingStrategy(method="bogus")
 
 
-def test_invalid_model_for_method():
-    """Unsupported model_name for a method raises a validation error."""
-    with pytest.raises(ValidationError, match="Input should be 'esm2' or 'esm3'"):
-        MaskingStrategy(method="entropy", model_name="bogus_model")
+def test_model_selection_fields_removed():
+    """model_name / model_checkpoint are gone; passing them is rejected (extra='forbid')."""
+    with pytest.raises(ValidationError):
+        MaskingStrategy(method="entropy", model_name="esm2")
+    with pytest.raises(ValidationError):
+        MaskingStrategy(method="entropy", model_checkpoint="esm2_t33_650M_UR50D")
 
 
-def test_model_fields_ignored_for_random():
-    """Setting model_name with method='random' emits a warning."""
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        MaskingStrategy(method="random", model_name="esm2")
-    assert len(w) == 1
-    assert "ignored" in str(w[0].message)
+def test_random_tier_rejects_model_methods():
+    """RandomMaskingStrategy (model-free tier) only allows method='random'."""
+    assert RandomMaskingStrategy().method == "random"
+    with pytest.raises(ValidationError, match="Input should be 'random'"):
+        RandomMaskingStrategy(method="entropy")
+
+
+def test_compatible_methods_derivation():
+    """compatible_methods derives a tool's methods from the inputs it provides."""
+    assert compatible_methods(frozenset()) == ["random"]
+    assert compatible_methods(frozenset({MaskingInput.LOGITS})) == ["random", "entropy", "max-logit"]
+
+
+def test_tool_masking_field_matches_declared_inputs():
+    """Each consumer tool's masking_strategy field exposes exactly the methods its masking_inputs allow.
+
+    Ties the field *type* (what the schema/UI offers) to the tool's declared
+    capability (``masking_inputs``), so the two cannot silently diverge.
+    """
+    from typing import get_args
+
+    from proto_tools.tools.masked_models.esm2.esm2_sample import ESM2SampleConfig
+    from proto_tools.tools.masked_models.esm3.esm3_sample import ESM3SampleConfig
+    from proto_tools.tools.mutagenesis.random_nucleotide.random_nucleotide_sample import RandomNucleotideSampleConfig
+    from proto_tools.tools.mutagenesis.random_protein.random_protein_sample import RandomProteinSampleConfig
+
+    for config_cls in (ESM2SampleConfig, ESM3SampleConfig, RandomProteinSampleConfig, RandomNucleotideSampleConfig):
+        field_type = config_cls.model_fields["masking_strategy"].annotation
+        exposed = set(get_args(field_type.model_fields["method"].annotation))
+        assert exposed == set(compatible_methods(config_cls.masking_inputs)), (
+            f"{config_cls.__name__}: field exposes {exposed}, "
+            f"but masking_inputs={set(config_cls.masking_inputs)} allows {compatible_methods(config_cls.masking_inputs)}"
+        )
 
 
 # ── Temperature ───────────────────────────────────────────────────────────────
@@ -352,7 +381,7 @@ def test_temperature_low_is_greedy():
     from proto_tools.transforms.masking.maskers import Masker
 
     class GreedyTestMasker(Masker):
-        supported_models = None
+        requires = None
 
         def score(self, sequences, position_score_fn=None):
             # Position 0 gets score 2, rest get score 1
@@ -376,7 +405,7 @@ def test_temperature_high_is_uniform():
     from proto_tools.transforms.masking.maskers import Masker
 
     class BiasedTestMasker(Masker):
-        supported_models = None
+        requires = None
 
         def score(self, sequences, position_score_fn=None):
             # Position 0 gets a much higher score
@@ -428,22 +457,27 @@ _E2E_FIXED_POSITIONS = [1, 2, 3]  # 1-indexed: M, K, T are protected
 
 _ALL_METHODS = [
     pytest.param(key, marks=pytest.mark.uses_gpu, id=key)
-    if MASKERS[key].supported_models is not None
+    if MASKERS[key].requires is not None
     else pytest.param(key, id=key)
     for key in MASKERS
 ]
 
 
 def _create_strategy(method, num_mutations=None, mask_fraction=None, fixed_positions=None):
-    """Create a MaskingStrategy, adding model_name if the method needs one."""
+    """Create a MaskingStrategy for the given method."""
     kwargs = {"method": method, "fixed_positions": fixed_positions}
     if num_mutations is not None:
         kwargs["num_mutations"] = num_mutations
     if mask_fraction is not None:
         kwargs["mask_fraction"] = mask_fraction
-    if MASKERS[method].supported_models is not None:
-        kwargs["model_name"] = "esm2"
     return MaskingStrategy(**kwargs)
+
+
+def _score_fn(method, strategy):
+    """Build a position scorer for model-based methods (scores via esm2 on GPU); None for random."""
+    if MASKERS[method].requires is None:
+        return None
+    return build_position_score_fn("esm2", strategy, device="cuda")
 
 
 def _validate_masked_output(original, masked, num_mutations, fixed_positions=None):
@@ -471,7 +505,7 @@ def test_method_num_mutations(method):
         num_mutations=_E2E_NUM_MUTATIONS,
         fixed_positions=_E2E_FIXED_POSITIONS,
     )
-    result = strategy.mask(sequences)
+    result = strategy.mask(sequences, position_score_fn=_score_fn(method, strategy))
     assert len(result) == len(sequences)
     for orig, masked in zip(sequences, result, strict=False):
         _validate_masked_output(
@@ -495,7 +529,7 @@ def test_method_mask_fraction(method):
         mask_fraction=fraction,
         fixed_positions=_E2E_FIXED_POSITIONS,
     )
-    result = strategy.mask(sequences)
+    result = strategy.mask(sequences, position_score_fn=_score_fn(method, strategy))
     assert len(result) == len(sequences)
     for orig, masked in zip(sequences, result, strict=False):
         # Designable = total - fixed positions present in this sequence
