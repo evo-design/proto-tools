@@ -27,7 +27,8 @@ def _resolve_weights_dir() -> str | None:
     try:
         from standalone_helpers import resolve_weights_dir
 
-        return resolve_weights_dir("na_mpnn_specificity")
+        weights_dir: str | None = resolve_weights_dir("na_mpnn_specificity")
+        return weights_dir
     except Exception as exc:  # resolve_weights_dir is best-effort here
         logger.debug("resolve_weights_dir('na_mpnn_specificity') unavailable: %s", exc)
         return None

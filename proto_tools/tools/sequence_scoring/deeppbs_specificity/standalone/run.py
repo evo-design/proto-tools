@@ -41,7 +41,7 @@ def _resolve_deeppbs_repo() -> str:
     try:
         from standalone_helpers import resolve_weights_dir
 
-        weights_dir = resolve_weights_dir("deeppbs_specificity")
+        weights_dir: str | None = resolve_weights_dir("deeppbs_specificity")
     except Exception as exc:  # resolve_weights_dir is best-effort here
         logger.debug("resolve_weights_dir('deeppbs_specificity') unavailable: %s", exc)
         weights_dir = None

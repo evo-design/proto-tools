@@ -51,6 +51,8 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 | AlphaGenome | HuggingFace: [google/alphagenome-all-folds](https://huggingface.co/google/alphagenome-all-folds) | Accept Google DeepMind terms, then authenticate with HF (see below) |
 | AlphaFold3 | DeepMind request form: [google-deepmind/alphafold3#obtaining-model-parameters](https://github.com/google-deepmind/alphafold3#obtaining-model-parameters) | Submit DeepMind's form; if approved, you can download the weights archive and place at `$PROTO_HOME/proto_model_cache/alphafold3/` (or set `PROTO_ALPHAFOLD3_WEIGHTS_DIR`). See [`proto_tools/tools/structure_prediction/alphafold3/README.md`](proto_tools/tools/structure_prediction/alphafold3/README.md) for the full weights-setup flow. |
 
+> **X3DNA** (gated *software*, used by `x3dna-fiber`): register free at [x3dna.org](https://x3dna.org/), then see [`proto_tools/tools/structure_prediction/x3dna/SETUP.md`](proto_tools/tools/structure_prediction/x3dna/SETUP.md) to stage it into the cache (no environment variable needed).
+
 **For HuggingFace-gated models:**
 
 1. Create a [HuggingFace](https://huggingface.co) account
@@ -64,8 +66,6 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
    ```bash
    export HF_TOKEN=hf_...
    ```
-
-**User-provisioned local software:** A few tools shell out to gated *software* (not model weights). **X3DNA** (used by `x3dna-fiber`) requires a free registration at [x3dna.org](https://x3dna.org/) (CC-BY-NC-4.0); after downloading it, drop it into the managed cache and no environment variable is needed. See [`proto_tools/tools/structure_prediction/x3dna/SETUP.md`](proto_tools/tools/structure_prediction/x3dna/SETUP.md) for copy-paste steps.
 
 > [!TIP]
 > **You're all set up!** To learn what features are available in the library, check out the [guides](guides/) — four short notebooks covering tool environments, persistent execution, device management, and parallel multi-GPU runs.
