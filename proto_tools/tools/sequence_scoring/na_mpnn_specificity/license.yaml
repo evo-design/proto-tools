@@ -1,11 +1,11 @@
 code:
   spdx: MIT
-  url: https://github.com/akubaney/NA-MPNN/blob/main/LICENSE
+  url: https://github.com/baker-laboratory/NA-MPNN/blob/main/LICENSE
 weights:
-  spdx: MIT
-  url: https://github.com/akubaney/NA-MPNN/blob/main/LICENSE
+  spdx: BSD-3-Clause
+  url: https://github.com/baker-laboratory/NA-MPNN/blob/main/LICENSE
 commercial_use: 'yes'
 redistribution: true
 attribution_required: true
-notes: NA-MPNN code and checkpoints are released under the MIT License (Copyright (c) 2025 Andrew Kubaney). The specificity checkpoint is not auto-downloaded and must be provisioned locally.
-last_updated: '2026-06-19'
+notes: NA-MPNN is released under the MIT License (Copyright (c) 2025 Andrew Kubaney); cifutils.py, obutils.py, geometry.py, and the model weights are under the BSD 3-Clause License (University of Washington, Institute for Protein Design).
+last_updated: '2026-06-21'

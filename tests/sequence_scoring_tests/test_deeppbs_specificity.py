@@ -58,12 +58,17 @@ def test_input_rejects_extra_fields():
         DeepPBSSpecificityInput(pdb_paths=["one.pdb"], extra_field="x")
 
 
-def test_config_path_defaults_are_unset():
-    """Path configs default to None (resolved from env/cache at runtime), not a hardcoded checkout."""
-    cfg = DeepPBSSpecificityConfig()
-    assert cfg.deeppbs_repo_path is None
-    assert cfg.x3dna_bin_path is None
-    assert cfg.allow_fallback is False
+def test_config_exposes_no_path_fields():
+    """Repo/X3DNA/config paths are auto-provisioned into the cache, so no path field is exposed."""
+    path_fields = {
+        "deeppbs_repo_path",
+        "process_config_path",
+        "prediction_config_path",
+        "x3dna_bin_path",
+        "x3dna_home",
+    }
+    assert not (path_fields & set(DeepPBSSpecificityConfig.model_fields))
+    assert DeepPBSSpecificityConfig().allow_fallback is False
 
 
 def test_config_cloud_unsupported():
@@ -274,6 +279,7 @@ def test_runner_threads_configured_device(tmp_path, monkeypatch):
     """config.device reaches get_subprocess_device_env (regression for the cpu device bug)."""
     repo = _fake_deeppbs_repo(tmp_path)
     pdb = _dna_pdb(tmp_path)
+    monkeypatch.setenv("PROTO_DEEPPBS_SPECIFICITY_WEIGHTS_DIR", str(repo))
 
     seen = {}
 
@@ -286,7 +292,6 @@ def test_runner_threads_configured_device(tmp_path, monkeypatch):
     result = _run.run_deeppbs_specificity(
         {
             "pdb_paths": [str(pdb)],
-            "deeppbs_repo_path": str(repo),
             "device": "cpu",
             "allow_fallback": True,
             "output_directory": str(tmp_path / "out"),
@@ -301,13 +306,13 @@ def test_runner_raises_when_fallback_disabled(tmp_path, monkeypatch):
     """With allow_fallback False (default), a missing dependency raises instead of faking a PPM."""
     repo = _fake_deeppbs_repo(tmp_path)
     pdb = _dna_pdb(tmp_path)
+    monkeypatch.setenv("PROTO_DEEPPBS_SPECIFICITY_WEIGHTS_DIR", str(repo))
     monkeypatch.setattr(_run, "get_subprocess_device_env", lambda device: {"PATH": ""})
 
     with pytest.raises(RuntimeError, match="DeepPBS dependency missing"):
         _run.run_deeppbs_specificity(
             {
                 "pdb_paths": [str(pdb)],
-                "deeppbs_repo_path": str(repo),
                 "output_directory": str(tmp_path / "out"),
             }
         )
@@ -324,13 +329,13 @@ def test_x3dna_env_root_binaries_are_found(tmp_path, monkeypatch):
         binary = bindir / name
         binary.write_text("#!/bin/sh\nexit 0\n")
         binary.chmod(0o755)
+    monkeypatch.setenv("PROTO_DEEPPBS_SPECIFICITY_WEIGHTS_DIR", str(repo))
     monkeypatch.setenv("X3DNA", str(x3dna_root))
     monkeypatch.setattr(_run, "get_subprocess_device_env", lambda device: {"PATH": ""})
 
     result = _run.run_deeppbs_specificity(
         {
             "pdb_paths": [str(pdb)],
-            "deeppbs_repo_path": str(repo),
             "allow_fallback": True,
             "output_directory": str(tmp_path / "out"),
         }

@@ -31,34 +31,27 @@ def _write_text(path: str, content: str) -> None:
         handle.write(content)
 
 
-def _resolve_deeppbs_repo(repo_path: str | None) -> str:
-    """Resolve a local DeepPBS checkout containing ``run/predict.py``.
+def _resolve_deeppbs_repo() -> str:
+    """Resolve the DeepPBS checkout (with ``run/predict.py``) from the weights cache.
 
-    Resolution order: explicit config value, then the ``DEEPPBS_REPO_PATH`` environment
-    variable, then the resolved tool weights cache. Raises when none is usable.
+    The standalone setup clones the repository (with its bundled X3DNA/DSSR binaries,
+    configs, and inference weights) into the managed cache, so resolution is just that
+    directory (overridable via ``PROTO_DEEPPBS_SPECIFICITY_WEIGHTS_DIR``).
     """
-    candidates: list[str] = []
-    if repo_path:
-        candidates.append(repo_path)
-    env_repo = os.environ.get("DEEPPBS_REPO_PATH")
-    if env_repo:
-        candidates.append(env_repo)
     try:
         from standalone_helpers import resolve_weights_dir
 
-        resolved = resolve_weights_dir("deeppbs_specificity")
-        if resolved:
-            candidates.append(resolved)
+        weights_dir = resolve_weights_dir("deeppbs_specificity")
     except Exception as exc:  # resolve_weights_dir is best-effort here
         logger.debug("resolve_weights_dir('deeppbs_specificity') unavailable: %s", exc)
+        weights_dir = None
 
-    for candidate in candidates:
-        if candidate and os.path.isfile(os.path.join(candidate, "run", "predict.py")):
-            return os.path.abspath(candidate)
+    if weights_dir and os.path.isfile(os.path.join(weights_dir, "run", "predict.py")):
+        return os.path.abspath(weights_dir)
     raise FileNotFoundError(
-        "deeppbs-specificity: could not locate a DeepPBS repository (with run/predict.py). Set "
-        "DeepPBSSpecificityConfig.deeppbs_repo_path or the DEEPPBS_REPO_PATH environment "
-        "variable to a checkout containing run/predict.py. Searched: " + ", ".join(candidates or ["<none>"])
+        "deeppbs-specificity: could not locate a DeepPBS checkout (with run/predict.py) in "
+        f"the weights cache ({weights_dir or '<unresolved>'}). The standalone setup provisions it "
+        "automatically; to use an existing checkout set PROTO_DEEPPBS_SPECIFICITY_WEIGHTS_DIR."
     )
 
 
@@ -180,7 +173,7 @@ def _run_one_structure(pdb_path: str, config: dict[str, Any], output_root: str) 
     if not os.path.exists(pdb_path):
         raise FileNotFoundError(f"PDB path does not exist: {pdb_path}")
 
-    repo_path = _resolve_deeppbs_repo(config.get("deeppbs_repo_path"))
+    repo_path = _resolve_deeppbs_repo()
     allow_fallback = bool(config.get("allow_fallback", False))
     process_script = os.path.join(repo_path, "run", "process_co_crystal.py")
     predict_script = os.path.join(repo_path, "run", "predict.py")
@@ -189,21 +182,11 @@ def _run_one_structure(pdb_path: str, config: dict[str, Any], output_root: str) 
     if not os.path.exists(predict_script):
         raise FileNotFoundError(f"DeepPBS predict script missing: {predict_script}")
 
-    process_config = config.get("process_config_path")
-    if process_config is None:
-        process_config = os.path.join(repo_path, "run", "process", "process_config.json")
-    predict_config = config.get("prediction_config_path")
-    if predict_config is None:
-        predict_config = os.path.join(
-            repo_path,
-            "run",
-            "process",
-            "pred_configs",
-            "pred_config_deeppbs.json",
-        )
-
-    process_config = os.path.abspath(process_config)
-    predict_config = os.path.abspath(predict_config)
+    # Process/predict configs ship with the repo clone.
+    process_config = os.path.abspath(os.path.join(repo_path, "run", "process", "process_config.json"))
+    predict_config = os.path.abspath(
+        os.path.join(repo_path, "run", "process", "pred_configs", "pred_config_deeppbs.json")
+    )
     if not os.path.exists(process_config):
         raise FileNotFoundError(f"DeepPBS process config missing: {process_config}")
     if not os.path.exists(predict_config):
@@ -234,25 +217,15 @@ def _run_one_structure(pdb_path: str, config: dict[str, Any], output_root: str) 
         env = get_subprocess_device_env(config.get("device", "cuda"))
         env["PYTHONPATH"] = repo_pythonpath
         env["PYTHONNOUSERSITE"] = "1"
-        configured_x3dna_bin_path = config.get("x3dna_bin_path")
-        default_x3dna_bin_path = os.path.join(repo_path, "dependencies", "bin")
+        # X3DNA/DSSR binaries ship under <repo>/dependencies/bin; the canonical $X3DNA
+        # env var (shared with the x3dna-fiber tool) is honored as an override.
         x3dna_env_root = os.environ.get("X3DNA")
-        x3dna_bin_paths: list[str] = []
-        if configured_x3dna_bin_path:
-            x3dna_bin_paths.append(os.path.abspath(configured_x3dna_bin_path))
-        x3dna_bin_paths.append(os.path.abspath(default_x3dna_bin_path))
+        x3dna_bin_paths: list[str] = [os.path.abspath(os.path.join(repo_path, "dependencies", "bin"))]
         if x3dna_env_root:
-            # Honor the canonical X3DNA env var (matches the x3dna-fiber tool).
             x3dna_bin_paths.append(os.path.abspath(os.path.join(x3dna_env_root, "bin")))
         # Keep order stable while deduplicating.
         x3dna_bin_paths = list(dict.fromkeys(x3dna_bin_paths))
-        x3dna_home = config.get("x3dna_home") or x3dna_env_root
-        if not x3dna_home:
-            x3dna_home = os.path.join(
-                repo_path,
-                "x3dna-v2.3-linux-64bit",
-                "x3dna-v2.3",
-            )
+        x3dna_home = x3dna_env_root or os.path.join(repo_path, "x3dna-v2.3-linux-64bit", "x3dna-v2.3")
         existing_bins = [path for path in x3dna_bin_paths if os.path.isdir(path)]
         if existing_bins:
             env["PATH"] = os.pathsep.join([*existing_bins, env.get("PATH", "")]).strip(os.pathsep)
@@ -428,11 +401,6 @@ def run_deeppbs_specificity(input_data: dict[str, Any]) -> dict[str, Any]:
         os.makedirs(output_root, exist_ok=True)
 
     config = {
-        "deeppbs_repo_path": input_data.get("deeppbs_repo_path"),
-        "process_config_path": input_data.get("process_config_path"),
-        "prediction_config_path": input_data.get("prediction_config_path"),
-        "x3dna_bin_path": input_data.get("x3dna_bin_path"),
-        "x3dna_home": input_data.get("x3dna_home"),
         "keep_intermediate": bool(input_data.get("keep_intermediate", False)),
         "no_clean_protein": bool(input_data.get("no_clean_protein", False)),
         "allow_fallback": bool(input_data.get("allow_fallback", False)),

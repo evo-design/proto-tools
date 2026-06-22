@@ -3,11 +3,11 @@
 # NA-MPNN
 
 > [!NOTE]
-> **License:** NA-MPNN is open source and free for academic and commercial use under an MIT license and may require explicit attribution when utilized. Please refer to [the license](https://github.com/akubaney/NA-MPNN/blob/main/LICENSE) for full terms.
+> **License:** NA-MPNN uses MIT for code and BSD-3-Clause for model weights and may require explicit attribution when utilized. Please refer to the [code license](https://github.com/baker-laboratory/NA-MPNN/blob/main/LICENSE) and [model weights license](https://github.com/baker-laboratory/NA-MPNN/blob/main/LICENSE) for full terms.
 
 ## Overview
 
-[NA-MPNN](https://github.com/akubaney/NA-MPNN) is a message-passing neural network for nucleic-acid sequence design and protein–DNA specificity prediction. Given a protein–DNA complex structure, the specificity mode predicts, for each DNA position, the base preference of the bound protein. This toolkit exposes that specificity prediction as a single tool that returns a canonical DNA-only position probability matrix (PPM) in `A,C,G,T` order.
+[NA-MPNN](https://github.com/baker-laboratory/NA-MPNN) is a message-passing neural network for nucleic-acid sequence design and protein–DNA specificity prediction. Given a protein–DNA complex structure, the specificity mode predicts, for each DNA position, the base preference of the bound protein. This toolkit exposes that specificity prediction as a single tool that returns a canonical DNA-only position probability matrix (PPM) in `A,C,G,T` order.
 
 ## Background
 
@@ -17,7 +17,7 @@ NA-MPNN ([Kubaney et al., 2025](https://www.biorxiv.org/content/10.1101/2025.10.
 
 ### Learning Resources
 
-- [akubaney/NA-MPNN](https://github.com/akubaney/NA-MPNN). Official repository with the training and inference code, installation instructions, and usage examples.
+- [baker-laboratory/NA-MPNN](https://github.com/baker-laboratory/NA-MPNN). Official repository with the training and inference code, installation instructions, and usage examples.
 
 ## Tools
 
@@ -31,7 +31,7 @@ This tool is appropriate for scoring and ranking candidate protein–DNA binder 
 
 #### Usage Tips
 
-- **The tool needs a local NA-MPNN checkout and checkpoint.** Set `na_mpnn_repo_path` to a clone of the NA-MPNN repository and `checkpoint_path` to the specificity checkpoint (e.g. `s_70114.pt`); neither is auto-downloaded. A run that uses `device='cloud'` fails fast because these local resources cannot be staged.
+- **The NA-MPNN checkout and checkpoint are provisioned for you.** The standalone setup clones a pinned revision of the repository (which ships the specificity checkpoint in-tree) into the managed weights cache, so no repository or checkpoint path is configured. Point `PROTO_NA_MPNN_SPECIFICITY_WEIGHTS_DIR` at an existing checkout to reuse it. A run that uses `device='cloud'` fails fast because these local resources cannot be staged.
 - **`predicted_ppm` rows are DNA-only and renormalized.** Only positions that are both valid and DNA are kept, and each row is renormalized over `A,C,G,T`, so the returned matrix already excludes protein and masked positions.
 - **`temperature` controls sampling sharpness.** Lower values (default `0.1`) concentrate probability on the most-preferred base; raise it to soften the distribution.
 - **`output_directory` and `keep_intermediate` control artifacts.** Leave `output_directory` unset to write canonical `.npz` files to a temporary directory, or set it to persist them. Set `keep_intermediate=True` to retain the raw NA-MPNN output for debugging.
@@ -41,4 +41,4 @@ This tool is appropriate for scoring and ranking candidate protein–DNA binder 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
 - NA-MPNN runs as an isolated standalone environment that shells out to the upstream NA-MPNN inference CLI; the heavy model dependencies stay out of the main environment.
-- The specificity checkpoint is a locally provisioned asset. On a host without it, the tool's environment setup signals a clean test skip rather than a hard failure.
+- The standalone setup clones a pinned NA-MPNN revision (with its in-tree specificity checkpoint) into the managed weights cache. If the clone cannot reach GitHub, the environment setup signals a clean test skip rather than a hard failure.

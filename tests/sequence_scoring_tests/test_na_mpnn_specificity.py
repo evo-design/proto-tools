@@ -135,17 +135,30 @@ def test_resolve_repo_from_weights_cache(tmp_path, monkeypatch):
     (repo / "inference" / "run.py").write_text("")
     monkeypatch.setenv("PROTO_NA_MPNN_SPECIFICITY_WEIGHTS_DIR", str(repo))
 
-    resolved = _standalone_run._resolve_na_mpnn_repo(None)
+    resolved = _standalone_run._resolve_na_mpnn_repo()
     assert Path(resolved).samefile(repo)
 
 
 def test_resolve_repo_missing_raises(tmp_path, monkeypatch):
-    """With nothing configured, repo resolution raises an actionable error."""
-    monkeypatch.delenv("NA_MPNN_REPO_PATH", raising=False)
+    """With nothing provisioned, repo resolution raises an actionable error."""
     monkeypatch.delenv("PROTO_NA_MPNN_SPECIFICITY_WEIGHTS_DIR", raising=False)
     monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path / "empty_cache"))
-    with pytest.raises(FileNotFoundError, match="could not locate an NA-MPNN repository"):
-        _standalone_run._resolve_na_mpnn_repo(None)
+    with pytest.raises(FileNotFoundError, match="could not locate an NA-MPNN checkout"):
+        _standalone_run._resolve_na_mpnn_repo()
+
+
+def test_resolve_checkpoint_prefers_nested_specificity_model(tmp_path, monkeypatch):
+    """The checkpoint resolves from the in-repo models/specificity_model/ dir, not the design one."""
+    repo = tmp_path / "cached_na_mpnn"
+    (repo / "models" / "specificity_model").mkdir(parents=True)
+    (repo / "models" / "design_model").mkdir(parents=True)
+    spec_ckpt = repo / "models" / "specificity_model" / "s_70114.pt"
+    spec_ckpt.write_text("")
+    (repo / "models" / "design_model" / "s_19137.pt").write_text("")
+    monkeypatch.setenv("PROTO_NA_MPNN_SPECIFICITY_WEIGHTS_DIR", str(repo))
+
+    resolved = _standalone_run._resolve_checkpoint()
+    assert Path(resolved).samefile(spec_ckpt)
 
 
 # -- Dispatch (mocked) -----------------------------------------------------------------

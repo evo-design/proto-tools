@@ -146,11 +146,11 @@ class NAMPNNSpecificityOutput(BaseToolOutput):
 class NAMPNNSpecificityConfig(BaseConfig):
     """Configuration for NA-MPNN specificity prediction.
 
+    The NA-MPNN checkout and its in-tree specificity checkpoint are provisioned
+    automatically by the standalone setup into the managed weights cache, so no
+    repository or checkpoint path is configured here.
+
     Attributes:
-        na_mpnn_repo_path (str | None): Local NA-MPNN checkout. Resolved from this
-            value, then $NA_MPNN_REPO_PATH.
-        checkpoint_path (str | None): NA-MPNN specificity checkpoint. Resolved from
-            this value, then $NA_MPNN_CHECKPOINT_PATH, then the weights cache.
         batch_size (int): Batch size per inference call.
         number_of_batches (int): Number of prediction batches to run.
         temperature (float): Sampling temperature for NA-MPNN.
@@ -166,18 +166,6 @@ class NAMPNNSpecificityConfig(BaseConfig):
         default="cuda",
         description="Device to run NA-MPNN inference on",
         include_in_key=False,
-    )
-    na_mpnn_repo_path: str | None = ConfigField(
-        title="NA-MPNN Repo Path",
-        default=None,
-        description="Local NA-MPNN checkout; resolved from this value, then $NA_MPNN_REPO_PATH",
-        reload_on_change=True,
-    )
-    checkpoint_path: str | None = ConfigField(
-        title="NA-MPNN Checkpoint",
-        default=None,
-        description="NA-MPNN specificity checkpoint; from config, $NA_MPNN_CHECKPOINT_PATH, or the weights cache",
-        reload_on_change=True,
     )
     batch_size: int = ConfigField(
         title="Batch Size",
@@ -257,7 +245,7 @@ def run_na_mpnn_specificity(
 
     Args:
         inputs (NAMPNNSpecificityInput): Input structure paths for prediction.
-        config (NAMPNNSpecificityConfig): Runtime and path configuration values.
+        config (NAMPNNSpecificityConfig): Runtime configuration values.
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
@@ -270,8 +258,6 @@ def run_na_mpnn_specificity(
         "na_mpnn_specificity",
         {
             "pdb_paths": inputs.pdb_paths,
-            "na_mpnn_repo_path": config.na_mpnn_repo_path,
-            "checkpoint_path": config.checkpoint_path,
             "batch_size": config.batch_size,
             "number_of_batches": config.number_of_batches,
             "temperature": config.temperature,

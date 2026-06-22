@@ -55,17 +55,12 @@ class DeepPBSSpecificityInput(BaseToolInput):
 class DeepPBSSpecificityConfig(BaseConfig):
     """Configuration for DeepPBS specificity prediction.
 
+    The DeepPBS checkout (with its bundled X3DNA/DSSR binaries, process/predict
+    configs, and inference weights) is provisioned automatically by the standalone
+    setup into the managed weights cache, so no repository, config, or X3DNA path is
+    configured here.
+
     Attributes:
-        deeppbs_repo_path (str | None): Local DeepPBS checkout. Resolved from this
-            value, then $DEEPPBS_REPO_PATH, then the weights cache.
-        process_config_path (str | None): Optional path to a DeepPBS process config
-            JSON. Defaults to the repo's bundled process config.
-        prediction_config_path (str | None): Optional path to a DeepPBS predict
-            config JSON. Defaults to the repo's bundled predict config.
-        x3dna_bin_path (str | None): Optional directory containing x3dna-dssr and
-            analyze binaries. Falls back to <repo>/dependencies/bin.
-        x3dna_home (str | None): Optional X3DNA home directory used during DeepPBS
-            preprocessing.
         output_directory (str | None): Optional directory for canonical NPZ
             artifacts. A temporary directory is used when unset.
         keep_intermediate (bool): Keep intermediate process and predict files.
@@ -81,32 +76,6 @@ class DeepPBSSpecificityConfig(BaseConfig):
         default="cuda",
         description="Device to run DeepPBS inference on",
         include_in_key=False,
-    )
-    deeppbs_repo_path: str | None = ConfigField(
-        title="DeepPBS Repo Path",
-        default=None,
-        description="Local DeepPBS checkout; resolved from this value, then $DEEPPBS_REPO_PATH, then the weights cache",
-        reload_on_change=True,
-    )
-    process_config_path: str | None = ConfigField(
-        title="Process Config Path",
-        default=None,
-        description="Optional path to a DeepPBS process config JSON",
-    )
-    prediction_config_path: str | None = ConfigField(
-        title="Predict Config Path",
-        default=None,
-        description="Optional path to a DeepPBS predict config JSON",
-    )
-    x3dna_bin_path: str | None = ConfigField(
-        title="X3DNA Bin Path",
-        default=None,
-        description="Directory with x3dna-dssr/analyze binaries; falls back to <repo>/dependencies/bin",
-    )
-    x3dna_home: str | None = ConfigField(
-        title="X3DNA Home",
-        default=None,
-        description="Optional X3DNA home path for DeepPBS preprocessing",
     )
     output_directory: str | None = ConfigField(
         title="Output Directory",
@@ -135,9 +104,8 @@ class DeepPBSSpecificityConfig(BaseConfig):
     def cloud_unsupported_reason(self) -> str | None:
         """DeepPBS needs a local repository and X3DNA install not staged to cloud."""
         return (
-            "DeepPBS requires a local DeepPBS repository and X3DNA install "
-            "(deeppbs_repo_path/x3dna_bin_path) not available on device='cloud'. "
-            "Run locally with device='cpu'."
+            "DeepPBS requires a local DeepPBS checkout and its bundled X3DNA install, "
+            "which are not available on device='cloud'. Run locally with device='cpu'."
         )
 
 
@@ -310,11 +278,6 @@ def run_deeppbs_specificity(
     logger.debug("Using local venv for deeppbs_specificity prediction")
     input_data = {
         "pdb_paths": inputs.pdb_paths,
-        "deeppbs_repo_path": config.deeppbs_repo_path,
-        "process_config_path": config.process_config_path,
-        "prediction_config_path": config.prediction_config_path,
-        "x3dna_bin_path": config.x3dna_bin_path,
-        "x3dna_home": config.x3dna_home,
         "output_directory": config.output_directory,
         "keep_intermediate": config.keep_intermediate,
         "no_clean_protein": config.no_clean_protein,

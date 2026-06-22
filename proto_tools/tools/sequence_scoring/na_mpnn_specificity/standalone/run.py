@@ -22,62 +22,49 @@ _DEFAULT_RESTYPE_TO_INT = {
 }
 
 
-def _resolve_na_mpnn_repo(repo_path: str | None) -> str:
-    """Resolve a local NA-MPNN checkout containing ``inference/run.py``.
-
-    Resolution order: explicit config value, then the ``NA_MPNN_REPO_PATH`` environment
-    variable, then the resolved tool weights/model cache. Raises when none is usable.
-    """
-    candidates: list[str] = []
-    if repo_path:
-        candidates.append(repo_path)
-    env_repo = os.environ.get("NA_MPNN_REPO_PATH")
-    if env_repo:
-        candidates.append(env_repo)
+def _resolve_weights_dir() -> str | None:
+    """Resolve the managed cache dir holding the NA-MPNN checkout, if available."""
     try:
         from standalone_helpers import resolve_weights_dir
 
-        resolved = resolve_weights_dir("na_mpnn_specificity")
-        if resolved:
-            candidates.append(resolved)
+        return resolve_weights_dir("na_mpnn_specificity")
     except Exception as exc:  # resolve_weights_dir is best-effort here
         logger.debug("resolve_weights_dir('na_mpnn_specificity') unavailable: %s", exc)
+        return None
 
-    for candidate in candidates:
-        if candidate and os.path.isfile(os.path.join(candidate, "inference", "run.py")):
-            return os.path.abspath(candidate)
+
+def _resolve_na_mpnn_repo() -> str:
+    """Resolve the NA-MPNN checkout (with ``inference/run.py``) from the weights cache.
+
+    The standalone setup clones the repository into the managed cache, so resolution
+    is just that directory (overridable via ``PROTO_NA_MPNN_SPECIFICITY_WEIGHTS_DIR``).
+    """
+    weights_dir = _resolve_weights_dir()
+    if weights_dir and os.path.isfile(os.path.join(weights_dir, "inference", "run.py")):
+        return os.path.abspath(weights_dir)
     raise FileNotFoundError(
-        "na-mpnn-specificity: could not locate an NA-MPNN repository (with inference/run.py). Set "
-        "NAMPNNSpecificityConfig.na_mpnn_repo_path or the NA_MPNN_REPO_PATH environment "
-        "variable to a checkout containing inference/run.py. Searched: " + ", ".join(candidates or ["<none>"])
+        "na-mpnn-specificity: could not locate an NA-MPNN checkout (with inference/run.py) in "
+        f"the weights cache ({weights_dir or '<unresolved>'}). The standalone setup provisions it "
+        "automatically; to use an existing checkout set PROTO_NA_MPNN_SPECIFICITY_WEIGHTS_DIR."
     )
 
 
-def _resolve_checkpoint(checkpoint_path: str | None) -> str:
-    """Resolve the NA-MPNN specificity checkpoint (``.pt``)."""
-    candidates: list[str] = []
-    if checkpoint_path:
-        candidates.append(checkpoint_path)
-    env_ckpt = os.environ.get("NA_MPNN_CHECKPOINT_PATH")
-    if env_ckpt:
-        candidates.append(env_ckpt)
-    try:
-        from standalone_helpers import resolve_weights_dir
+def _resolve_checkpoint() -> str:
+    """Resolve the NA-MPNN specificity checkpoint (``.pt``) from the weights cache.
 
-        weights_dir = resolve_weights_dir("na_mpnn_specificity")
-        if weights_dir:
-            candidates.extend(sorted(str(path) for path in Path(weights_dir).glob("*.pt")))
-    except Exception as exc:  # resolve_weights_dir is best-effort here
-        logger.debug("resolve_weights_dir('na_mpnn_specificity') unavailable: %s", exc)
-
-    for candidate in candidates:
-        if candidate and os.path.isfile(candidate):
-            return os.path.abspath(candidate)
+    Prefers the in-repo specificity checkpoint (``models/specificity_model/*.pt``) so the
+    design checkpoint is never picked up, then falls back to any top-level ``*.pt``.
+    """
+    weights_dir = _resolve_weights_dir()
+    if weights_dir:
+        for pattern in ("models/specificity_model/*.pt", "*.pt"):
+            matches = sorted(str(path) for path in Path(weights_dir).glob(pattern))
+            if matches:
+                return os.path.abspath(matches[0])
     raise FileNotFoundError(
-        "na-mpnn-specificity: could not locate a specificity checkpoint (.pt). Set "
-        "NAMPNNSpecificityConfig.checkpoint_path or the NA_MPNN_CHECKPOINT_PATH environment "
-        "variable (or place the .pt under PROTO_NA_MPNN_SPECIFICITY_WEIGHTS_DIR). Searched: "
-        + ", ".join(candidates or ["<none>"])
+        "na-mpnn-specificity: could not locate a specificity checkpoint (.pt) in the weights "
+        f"cache ({weights_dir or '<unresolved>'}). The standalone setup provisions it automatically; "
+        "to use an existing checkout set PROTO_NA_MPNN_SPECIFICITY_WEIGHTS_DIR."
     )
 
 
@@ -163,8 +150,8 @@ def _run_one_structure(pdb_path: str, config: dict[str, Any], output_root: str) 
     if not os.path.exists(pdb_path):
         raise FileNotFoundError(f"PDB path does not exist: {pdb_path}")
 
-    repo_path = _resolve_na_mpnn_repo(config.get("na_mpnn_repo_path"))
-    checkpoint_path = _resolve_checkpoint(config.get("checkpoint_path"))
+    repo_path = _resolve_na_mpnn_repo()
+    checkpoint_path = _resolve_checkpoint()
 
     run_script = os.path.join(repo_path, "inference", "run.py")
     if not os.path.exists(run_script):
@@ -265,8 +252,6 @@ def run_na_mpnn_specificity(input_data: dict[str, Any]) -> dict[str, Any]:
         os.makedirs(output_root, exist_ok=True)
 
     config = {
-        "na_mpnn_repo_path": input_data.get("na_mpnn_repo_path"),
-        "checkpoint_path": input_data.get("checkpoint_path"),
         "batch_size": int(input_data.get("batch_size", 1)),
         "number_of_batches": int(input_data.get("number_of_batches", 1)),
         "temperature": float(input_data.get("temperature", 0.1)),
