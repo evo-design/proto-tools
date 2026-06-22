@@ -207,6 +207,26 @@ Two rules for tool authors:
 Runtime-only fields (e.g. `timeout`) set `reload_on_change=False` and do not
 trigger restarts.
 
+### Exception: in-process checkpoint swap
+
+A few tools expose several **mutually exclusive** checkpoints that callers switch
+between rapidly (e.g. `borzoi`'s four replicates, iterated per `borzoi-ensemble`
+call). Restarting the whole worker process on each switch — the default
+`reload_on_change` path — means a fresh process spawn, re-import, and model
+reload every time, which both dominated runtime and repeatedly exercised the
+GPU-teardown path that could wedge a worker (an internal issue).
+
+Such a tool may instead swap the checkpoint **in-process**: leave the selecting
+field (`replicate`/`species`) *unmarked* (`reload_on_change` absent) and have the
+standalone rebuild its module-level model when the requested checkpoint differs
+from the loaded one, unloading the old one first. This is the one sanctioned
+exception to "standalone scripts must not check for config changes": it is safe
+**only because the field is unmarked**, so the `ToolInstance` layer never also
+restarts — the standalone is the *sole* reloader, so there is no double-load. The
+standalone must return the applied checkpoint (e.g. `applied_replicate`) and the
+wrapper must verify it matches the request, so a failed swap surfaces loudly
+instead of mislabeling another checkpoint's output.
+
 ## ToolPool and parallel execution
 
 `ToolPool` (`tool_pool.py`) parallelizes a single list-input tool call across

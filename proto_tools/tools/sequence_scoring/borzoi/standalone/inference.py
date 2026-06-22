@@ -189,19 +189,31 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
     set_torch_seed(input_dict["seed"])
-    if _model is None:
-        species = input_dict["species"]
-        replicate = input_dict["replicate"]
-        use_flash_attn = input_dict["use_flash_attn"]
 
-        # Auto-detect flash-attn availability
-        if use_flash_attn:
-            try:
-                import flash_attn  # noqa: F401
-            except ImportError:
-                logger.warning("flash-attn not installed, falling back to use_flash_attn=False (standard borzoi model)")
-                use_flash_attn = False
+    species = input_dict["species"]
+    replicate = input_dict["replicate"]
+    use_flash_attn = input_dict["use_flash_attn"]
 
+    # Auto-detect flash-attn availability
+    if use_flash_attn:
+        try:
+            import flash_attn  # noqa: F401
+        except ImportError:
+            logger.warning("flash-attn not installed, falling back to use_flash_attn=False (standard borzoi model)")
+            use_flash_attn = False
+
+    # Hold one checkpoint at a time and swap weights in-process when the requested replicate/species
+    # changes (the four borzoi replicate models don't co-reside in GPU memory). This avoids
+    # restarting the whole worker process per replicate — the churn that triggered the GPU-teardown
+    # wedge and dominated runtime for borzoi-ensemble (an internal issue).
+    if (
+        _model is None
+        or _model.species != species
+        or _model.replicate != replicate
+        or _model.use_flash_attn != use_flash_attn
+    ):
+        if _model is not None and _model._loaded:
+            _model.unload()  # free the old checkpoint's GPU memory before loading the next
         _model = BorzoiModel(
             species=species,
             replicate=replicate,

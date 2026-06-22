@@ -94,7 +94,11 @@ def test_borzoi_run_extracts_target_aligned_window(monkeypatch):
 
     def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured_payloads.append(payload)
-        return {"predictions": [[[0.0] * BORZOI_OUTPUT] for _ in payload["sequences"]]}
+        return {
+            "predictions": [[[0.0] * BORZOI_OUTPUT] for _ in payload["sequences"]],
+            "applied_replicate": payload["replicate"],
+            "applied_species": payload["species"],
+        }
 
     monkeypatch.setattr(borzoi_prediction.ToolInstance, "dispatch", staticmethod(fake_dispatch))
 
@@ -154,7 +158,11 @@ def test_borzoi_flash_attn_is_derived_from_species(monkeypatch, species, expecte
 
     def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured_payloads.append(payload)
-        return {"predictions": [[[0.0] * BORZOI_OUTPUT] for _ in payload["sequences"]]}
+        return {
+            "predictions": [[[0.0] * BORZOI_OUTPUT] for _ in payload["sequences"]],
+            "applied_replicate": payload["replicate"],
+            "applied_species": payload["species"],
+        }
 
     monkeypatch.setattr(borzoi_prediction.ToolInstance, "dispatch", staticmethod(fake_dispatch))
 
@@ -164,6 +172,48 @@ def test_borzoi_flash_attn_is_derived_from_species(monkeypatch, species, expecte
     )
 
     assert captured_payloads[0]["use_flash_attn"] is expected_flash_attn
+
+
+def test_borzoi_config_does_not_restart_worker_per_replicate():
+    """replicate/species must NOT be reload_on_change: the worker swaps checkpoints in-process.
+
+    A full worker restart per replicate (4x per ensemble call) is the churn that triggered the
+    GPU-teardown wedge (an internal issue); inference.py now reloads weights in-process.
+    """
+    from proto_tools.tools.sequence_scoring.borzoi import BorzoiConfig
+
+    reload_fields = BorzoiConfig.reload_fields()
+    assert "replicate" not in reload_fields
+    assert "species" not in reload_fields
+
+
+def test_borzoi_run_raises_when_worker_returns_wrong_replicate(monkeypatch):
+    """run_borzoi must raise when the worker reports a mismatched applied_replicate.
+
+    If the in-process checkpoint swap fails, surfacing it loudly beats silently mislabeling
+    another replicate's predictions.
+    """
+    from proto_tools.tools.sequence_scoring.borzoi import (
+        BorzoiConfig,
+        BorzoiInput,
+        borzoi_prediction,
+        run_borzoi,
+    )
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        return {
+            "predictions": [[[0.0] * BORZOI_OUTPUT] for _ in payload["sequences"]],
+            "applied_replicate": "0",  # worker reused replicate 0 despite the request below
+            "applied_species": payload["species"],
+        }
+
+    monkeypatch.setattr(borzoi_prediction.ToolInstance, "dispatch", staticmethod(fake_dispatch))
+
+    with pytest.raises(RuntimeError, match="replicate"):
+        run_borzoi(
+            BorzoiInput(sequences=["A" * BORZOI_CONTEXT]),
+            BorzoiConfig(output_tracks=[0], replicate="2", device="cuda"),
+        )
 
 
 # -- Ensemble config validation --------------------------------------------------------
