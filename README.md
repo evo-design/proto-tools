@@ -8,9 +8,9 @@
 
 Welcome! This repository contains the open-source implementation of `proto-tools`, a Python package containing a large suite of computational biology and biological AI tools, all accessible through a single, consistent Python interface. Language models, structure predictors, inverse folding, sequence analysis, gene annotation, conformational dynamics, genomic scoring, and more are all available through a single `pip install` command.
 
-Every tool runs in its own automatically managed isolated environment, so all dependency wrangling is handled for you. In addition, `proto-tools` implements extensive infrastructure for features such as device management and GPU fan-out, making it easy to call tools in quick succession.
+Every tool runs in its own automatically managed isolated environment, so all dependency wrangling is handled for you. In addition, `proto-tools` implements extensive infrastructure for features such as device management and GPU fan-out, making it easy to call tools in quick succession. You can use it as a standalone Python library, as part of the broader [proto-language](https://github.com/evo-design/proto-language) optimization system, or through the [proto-client](https://github.com/evo-design/proto-client) Python SDK for hosted access over the Proto Bio API. 
 
-You can use it as a standalone Python library or as part of the broader [proto-language](https://github.com/evo-design/proto-language) optimization system. Proto-tools is open source under an MIT license. Contributions are welcome!
+Proto-tools is open source under an MIT license. Contributions are welcome!
 
 ## Setup
 
