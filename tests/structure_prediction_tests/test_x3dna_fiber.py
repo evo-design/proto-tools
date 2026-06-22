@@ -6,10 +6,13 @@ Validation and helper coverage runs without any external binary; the execution
 tests are marked ``integration`` and skip cleanly when X3DNA is not resolvable.
 """
 
-import os
+import importlib
+import sys
+from pathlib import Path
 
 import pytest
 
+import proto_tools.utils.standalone_helpers_source as _shs
 from proto_tools.tools import (
     X3DNAFiberConfig,
     X3DNAFiberInput,
@@ -20,6 +23,12 @@ from proto_tools.tools.structure_prediction.x3dna.x3dna_fiber import (
     _normalize_bases,
 )
 from tests.conftest import benchmark_twice
+
+# The standalone run.py imports the worker-injected ``standalone_helpers`` package,
+# which only sits on sys.path inside a tool venv. Add its source dir so the X3DNA
+# resolver can be imported and reused for the integration-test skip guard.
+sys.path.insert(0, str(Path(next(iter(_shs.__path__)))))
+_standalone_run = importlib.import_module("proto_tools.tools.structure_prediction.x3dna.standalone.run")
 
 # ── Constants ────────────────────────────────────────────────────────────────
 _DUPLEX_SEQ = "GGGCAAAATGCACTGCACTTTGGG"
@@ -95,9 +104,15 @@ def test_config_cloud_unsupported():
 
 
 def _require_x3dna():
-    """Skip the test when no X3DNA install is resolvable on this host."""
-    if not os.environ.get("X3DNA"):
-        pytest.skip("X3DNA not installed (set $X3DNA to a v2.4 install root)")
+    """Skip the test when no X3DNA install is resolvable on this host.
+
+    Mirrors the tool's own resolution order (config ``x3dna_dir`` -> ``$X3DNA`` ->
+    managed cache) so the recommended cache drop-in (no env var) satisfies the guard.
+    """
+    try:
+        _standalone_run._resolve_x3dna_dir(None)
+    except FileNotFoundError:
+        pytest.skip("X3DNA not installed; see the x3dna toolkit SETUP.md to provision bin/fiber")
 
 
 @pytest.mark.integration
