@@ -242,6 +242,8 @@ def example_input() -> DeepPBSSpecificityInput:
     description="Predict DNA specificity (PPM) from protein-DNA structures using DeepPBS",
     example_input=example_input,
     uses_gpu=True,
+    iterable_input_fields=["pdb_paths"],
+    iterable_output_field="results",
 )
 def run_deeppbs_specificity(
     inputs: DeepPBSSpecificityInput,
