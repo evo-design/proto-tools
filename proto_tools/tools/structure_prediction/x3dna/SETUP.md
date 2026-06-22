@@ -7,8 +7,17 @@ steps below are copy-paste once you have accepted the terms.
 
 ## 1. Register and download
 
-1. Go to [x3dna.org](https://x3dna.org/) and register / accept the terms.
-2. Download the X3DNA v2.4 archive for your platform, for example
+X3DNA v2.4 is distributed through the **3DNA Forum**, not the `x3dna.org`
+homepage (which now points at the DSSR successor product). Go straight to the
+forum:
+
+1. Register a free account at [forum.x3dna.org/register](http://forum.x3dna.org/register/)
+   and accept the registration agreement. Registrations are manually approved by a
+   forum admin, so expect to wait a while (potentially hours to days) before your
+   account is active and you can download.
+2. Once logged in, open the
+   [download instructions](http://forum.x3dna.org/site-announcements/download-instructions/)
+   and download the X3DNA v2.4 archive for your platform, for example
    `x3dna-v2.4-linux-x86_64.tar.gz` (Linux) or the macOS build.
 
 ## 2. Stage it into the managed cache

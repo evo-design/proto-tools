@@ -2,7 +2,8 @@
 # Setup script for the X3DNA fiber standalone environment.
 #
 # X3DNA v2.4 is user-provisioned: it is distributed under CC-BY-NC-4.0 and gated
-# behind a free registration on https://x3dna.org, so it is NOT auto-downloaded.
+# behind a free (admin-approved) registration on the 3DNA Forum
+# (http://forum.x3dna.org/register/), so it is NOT auto-downloaded.
 # Install it once and either set the standard X3DNA environment variable to its
 # root, or point PROTO_X3DNA_WEIGHTS_DIR (or PROTO_MODEL_CACHE/x3dna) at it.
 set -euo pipefail
@@ -41,9 +42,11 @@ else
     {
         echo "[proto-tools] ASSET_NOT_AVAILABLE: x3dna:install"
         echo "X3DNA v2.4 (bin/fiber) is not provisioned; it is required by the x3dna-fiber tool."
-        echo "License / access: https://x3dna.org (CC-BY-NC-4.0)"
+        echo "License / access: CC-BY-NC-4.0, gated behind free 3DNA Forum registration."
         echo "Provisioning steps (see the toolkit's SETUP.md for copy-paste commands):"
-        echo "  1. Register at https://x3dna.org and download x3dna-v2.4-<platform>.tar.gz."
+        echo "  1. Register at http://forum.x3dna.org/register/ (admin-approved; may take"
+        echo "     hours to days), then download x3dna-v2.4-<platform>.tar.gz from"
+        echo "     http://forum.x3dna.org/site-announcements/download-instructions/."
         echo "  2. Extract it (ships a prebuilt bin/fiber plus its config/ data)."
         echo "  3. Move the install into the managed cache so bin/fiber is found"
         echo "     automatically (no environment variable needed), or set X3DNA /"
