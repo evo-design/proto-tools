@@ -1,0 +1,8 @@
+code:
+  spdx: CC-BY-NC-4.0
+  url: https://x3dna.org/
+commercial_use: 'no'
+redistribution: true
+attribution_required: true
+notes: 'X3DNA v2.4 is distributed under Creative Commons Attribution-NonCommercial 4.0 (CC-BY-NC-4.0). The software is user-provisioned: it is gated behind free registration on the 3DNA Forum at x3dna.org and is not auto-downloaded by proto-tools. Non-commercial redistribution is permitted only with attribution; commercial use is not permitted under the standard terms. Cite Lu & Olson (2003, 2008).'
+last_updated: '2026-06-20'

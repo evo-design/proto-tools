@@ -74,6 +74,7 @@ class AlphaFold3Metrics(Metrics):
         pae (list[list[float]]): Full per-residue PAE matrix in Å. Present when include_pae_matrix=True.
         ptm (float): Predicted TM-score (0-1). Depends on model output.
         iptm (float): Interface predicted TM-score (0-1). Depends on model output.
+        chain_pair_iptm (list[list[float]]): Pairwise chain ipTM matrix (0-1). Depends on model output.
         ranking_score (float): AlphaFold3 ranking score. Depends on model output.
     """
 
@@ -103,6 +104,13 @@ class AlphaFold3Metrics(Metrics):
         "iptm": {
             "availability": "depends on model output",
             "type": "float",
+            "min": 0.0,
+            "max": 1.0,
+            "better_values_are": "higher",
+        },
+        "chain_pair_iptm": {
+            "availability": "depends on model output",
+            "type": "list[list[float]]",
             "min": 0.0,
             "max": 1.0,
             "better_values_are": "higher",

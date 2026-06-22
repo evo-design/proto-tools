@@ -1,0 +1,8 @@
+code:
+  spdx: BSD-3-Clause
+  url: https://github.com/timkartar/DeepPBS/blob/main/LICENSE.txt
+commercial_use: 'yes'
+redistribution: true
+attribution_required: true
+notes: DeepPBS is released under the BSD 3-Clause License (University of Southern California). Its repository bundles X3DNA v2.3 (permissively licensed, requiring citation of the 3DNA papers) and the x3dna-dssr binary, which carries its own separate license terms.
+last_updated: '2026-06-21'

@@ -51,6 +51,8 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 | AlphaGenome | HuggingFace: [google/alphagenome-all-folds](https://huggingface.co/google/alphagenome-all-folds) | Accept Google DeepMind terms, then authenticate with HF (see below) |
 | AlphaFold3 | DeepMind request form: [google-deepmind/alphafold3#obtaining-model-parameters](https://github.com/google-deepmind/alphafold3#obtaining-model-parameters) | Submit DeepMind's form; if approved, you can download the weights archive and place at `$PROTO_HOME/proto_model_cache/alphafold3/` (or set `PROTO_ALPHAFOLD3_WEIGHTS_DIR`). See [`proto_tools/tools/structure_prediction/alphafold3/README.md`](proto_tools/tools/structure_prediction/alphafold3/README.md) for the full weights-setup flow. |
 
+> **X3DNA** (gated *software*, used by `x3dna-fiber`): register free at [x3dna.org](https://x3dna.org/), then see [`proto_tools/tools/structure_prediction/x3dna/SETUP.md`](proto_tools/tools/structure_prediction/x3dna/SETUP.md) to stage it into the cache (no environment variable needed).
+
 **For HuggingFace-gated models:**
 
 1. Create a [HuggingFace](https://huggingface.co) account
@@ -125,8 +127,10 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 <a href="proto_tools/tools/sequence_scoring/">sequence_scoring/</a>               # Genomic and regulatory scoring
 ├── <a href="proto_tools/tools/sequence_scoring/alphagenome/">alphagenome/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/borzoi/">borzoi/</a>
+├── <a href="proto_tools/tools/sequence_scoring/deeppbs_specificity/">deeppbs_specificity/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/enformer/">enformer/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/malinois/">malinois/</a>
+├── <a href="proto_tools/tools/sequence_scoring/na_mpnn_specificity/">na_mpnn_specificity/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/puffin/">puffin/</a>
 └── <a href="proto_tools/tools/sequence_scoring/segmasker/">segmasker/</a>
 <a href="proto_tools/tools/structure_alignment/">structure_alignment/</a>            # Structure comparison
@@ -148,7 +152,8 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 ├── <a href="proto_tools/tools/structure_prediction/esmfold2/">esmfold2/</a>
 ├── <a href="proto_tools/tools/structure_prediction/protenix/">protenix/</a>
 ├── <a href="proto_tools/tools/structure_prediction/rf3/">rf3/</a>
-└── <a href="proto_tools/tools/structure_prediction/viennarna/">viennarna/</a>
+├── <a href="proto_tools/tools/structure_prediction/viennarna/">viennarna/</a>
+└── <a href="proto_tools/tools/structure_prediction/x3dna/">x3dna/</a>
 <a href="proto_tools/tools/structure_scoring/">structure_scoring/</a>              # Structure quality scoring
 ├── <a href="proto_tools/tools/structure_scoring/dssp/">dssp/</a>
 ├── <a href="proto_tools/tools/structure_scoring/ipsae/">ipsae/</a>

@@ -51,6 +51,13 @@ from proto_tools.tools.sequence_scoring.borzoi import (
     run_borzoi,
     run_borzoi_ensemble,
 )
+from proto_tools.tools.sequence_scoring.deeppbs_specificity import (
+    DeepPBSSpecificityConfig,
+    DeepPBSSpecificityInput,
+    DeepPBSSpecificityOutput,
+    DeepPBSSpecificityResult,
+    run_deeppbs_specificity,
+)
 from proto_tools.tools.sequence_scoring.enformer import (
     ENFORMER_CONTEXT,
     ENFORMER_OUTPUT,
@@ -82,6 +89,13 @@ from proto_tools.tools.sequence_scoring.malinois import (
     MalinoisScoreResult,
     run_malinois_gradient,
     run_malinois_score,
+)
+from proto_tools.tools.sequence_scoring.na_mpnn_specificity import (
+    NAMPNNSpecificityConfig,
+    NAMPNNSpecificityInput,
+    NAMPNNSpecificityOutput,
+    NAMPNNSpecificityResult,
+    run_na_mpnn_specificity,
 )
 from proto_tools.tools.sequence_scoring.puffin import (
     MOTIF_NAMES,
@@ -195,6 +209,12 @@ __all__ = [
     "MalinoisScoreResult",
     "run_malinois_gradient",
     "run_malinois_score",
+    # NA-MPNN Specificity
+    "NAMPNNSpecificityInput",
+    "NAMPNNSpecificityConfig",
+    "NAMPNNSpecificityOutput",
+    "NAMPNNSpecificityResult",
+    "run_na_mpnn_specificity",
     # Puffin Interpretation
     "MOTIF_NAMES",
     "PuffinInterpretationConfig",
@@ -219,4 +239,10 @@ __all__ = [
     "SegmaskerMetrics",
     "SegmaskerOutput",
     "run_segmasker",
+    # DeepPBS Specificity
+    "DeepPBSSpecificityInput",
+    "DeepPBSSpecificityConfig",
+    "DeepPBSSpecificityResult",
+    "DeepPBSSpecificityOutput",
+    "run_deeppbs_specificity",
 ]

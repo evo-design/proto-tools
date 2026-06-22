@@ -131,6 +131,7 @@ def _extract_structure_and_scores(
         alphafold3_scores["pae"] = full_metrics["pae"]
     alphafold3_scores["ptm"] = summary_metrics.get("ptm")
     alphafold3_scores["iptm"] = summary_metrics.get("iptm")
+    alphafold3_scores["chain_pair_iptm"] = summary_metrics.get("chain_pair_iptm")
     alphafold3_scores["ranking_score"] = summary_metrics.get("ranking_score")
 
     with open(f"{output_dir}/metadata.json", "w") as f:
