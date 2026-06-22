@@ -38,9 +38,11 @@ def _resolve_x3dna_dir(x3dna_dir: str | None) -> str:
         if candidate and (Path(candidate) / "bin" / "fiber").is_file():
             return candidate
     raise FileNotFoundError(
-        "x3dna-fiber: could not find an X3DNA install with bin/fiber. Install X3DNA v2.4 "
-        "(https://x3dna.org, CC-BY-NC-4.0) and set the X3DNA environment variable (or the "
-        "tool's x3dna_dir config) to its root. Searched: " + ", ".join(candidates or ["<none>"])
+        "x3dna-fiber: could not find an X3DNA install with bin/fiber. X3DNA is gated: register and "
+        "download X3DNA v2.4 for your platform at https://x3dna.org (CC-BY-NC-4.0), then place it so "
+        "bin/fiber sits in the managed cache (no environment variable needed), or set the X3DNA "
+        "environment variable or the tool's x3dna_dir config to the install root. See the toolkit's "
+        "SETUP.md for copy-paste steps. Searched: " + ", ".join(candidates or ["<none>"])
     )
 
 
