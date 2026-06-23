@@ -130,6 +130,11 @@ class ESM2GradientConfig(BaseConfig):
         include_in_key=False,
     )
 
+    def cloud_unsupported_reason(self) -> str | None:
+        if self.model_checkpoint == "esm2_t48_15B_UR50D":
+            return "The 15B variant (esm2_t48_15B_UR50D) isn't available with device='cloud'. Choose a smaller variant, or run locally."
+        return None
+
 
 def example_input() -> ESM2GradientInput:
     """Minimal valid input for testing and examples."""

@@ -88,6 +88,11 @@ class ESM2ScoringConfig(MaskedModelScoringConfig):
         reload_on_change=True,
     )
 
+    def cloud_unsupported_reason(self) -> str | None:
+        if self.model_checkpoint == "esm2_t48_15B_UR50D":
+            return "The 15B variant (esm2_t48_15B_UR50D) isn't available with device='cloud'. Choose a smaller variant, or run locally."
+        return None
+
 
 # ============================================================================
 # Tool Implementation

@@ -123,6 +123,11 @@ class ESM2EmbeddingsConfig(MaskedModelEmbeddingsConfig):
         description="Transformer layer index for embeddings (0=embedding output, N=layer N, -1=last)",
     )
 
+    def cloud_unsupported_reason(self) -> str | None:
+        if self.model_checkpoint == "esm2_t48_15B_UR50D":
+            return "The 15B variant (esm2_t48_15B_UR50D) isn't available with device='cloud'. Choose a smaller variant, or run locally."
+        return None
+
 
 # Output:
 # ============================================================================
