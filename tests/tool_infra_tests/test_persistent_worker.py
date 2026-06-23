@@ -450,8 +450,7 @@ def test_stop_never_raises_when_worker_survives_sigkill(caplog):
     """A worker that survives SIGTERM then SIGKILL must not crash stop().
 
     Such a worker is stuck in an uninterruptible GPU driver call; propagating the reap
-    TimeoutExpired masks the caller's real error and aborts in-flight runs
-   .
+    TimeoutExpired masks the caller's real error and aborts in-flight runs.
     """
     worker = PersistentWorker(toolkit="borzoi", env_path=Path("/x"), script_path=Path("/y"))
     proc = MagicMock()
