@@ -14,31 +14,24 @@ authors = [
 
 requires-python = ">=3.10"
 
-# Core dependencies
 dependencies = [
-    # Core framework
     "pydantic>=2.0.0",
 
-    # Scientific computing
     "numpy>=1.20",
     "pandas>=1.5",
-    "pyarrow",  # Required for pandas parquet support (chai1 MSA conversion)
-    "umap-learn>=0.5.3",  # 2D projection of embedding outputs (CPU-side, lazy-imported)
-    "numba>=0.60.0",  # transitive via umap-learn/pynndescent; floor avoids old llvmlite without py3.12 wheels
+    "pyarrow",
+    "umap-learn>=0.5.3",
+    "numba>=0.60.0",
 
-    # Bioinformatics
     "biopython",
     "biotite>=0.38.0",
     "gemmi",
 
-    # Chemistry & structure
-    "rdkit!=2026.3.3",  # 2026.3.3's bundled rdchem.pyi stub is malformed and breaks mypy; drop when fixed upstream
+    "rdkit!=2026.3.3",
     "py3Dmol",
 
-    # Biology-specific tools
     "promotercalculator",
 
-    # Notebooks & visualization
     "jupyter",
     "ipykernel",
     "ipywidgets",
@@ -46,12 +39,12 @@ dependencies = [
     "ipython",
     "ipymol",
 
-    # Utilities
     "pyyaml",
     "requests",
     "tqdm",
     "filelock",
-    "docstring-parser",  # Extract per-field docs from Google-style config docstrings
+    "docstring-parser",
+    "proto-client>=0.1.0",
 ]
 
 [project.urls]
@@ -59,37 +52,25 @@ Homepage = "https://github.com/evo-design/proto-tools"
 Repository = "https://github.com/evo-design/proto-tools"
 
 [project.scripts]
-# Agent/CLI entry point; also reachable via `python -m proto_tools`.
 proto-tools = "proto_tools.cli:main"
 
 [project.optional-dependencies]
 
-# Cloud dispatch (device="cloud")
-cloud = [
-    "proto-client>=0.1.0",
-]
-
-# Development dependencies
 dev = [
-    # Testing
-    "pytest>=7.3.0",        # --strict-markers requires 7.3+
-    "pytest-asyncio>=0.21", # asyncio_mode="auto" requires 0.21+
+    "pytest>=7.3.0",
+    "pytest-asyncio>=0.21",
     "pytest-cov>=4.1.0",
-    "pytest-forked",        # Required on shared clusters running GPUs in exclusive process mode
+    "pytest-forked",
     "pytest-randomly>=3.15",
 
-    # Code quality
     "ruff==0.15.12",
     "mypy==1.20.2",
-    "types-requests",       # mypy stubs for requests
-    "types-tqdm",           # mypy stubs for tqdm
-    "types-PyYAML",         # mypy stubs for pyyaml
+    "types-requests",
+    "types-tqdm",
+    "types-PyYAML",
 ]
 
-# Dependencies: Run tests from parent proto-language context (install.sh or pip install -e ..[dev])
-
 [tool.pytest.ini_options]
-# Run from proto-tools root directory
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = [
@@ -127,20 +108,12 @@ omit = [
     "*/tool_envs/*",
     "*/standalone/*",
     "*/examples/*",
-    # Tool implementation files require GPU or external services to test.
-    # Coverage tracks infra (utils/, entities/, tool_registry) not tool wrappers.
     "proto_tools/tools/*/*/*.py",
-    # Subprocess entry point — only exercised by tool dispatch integration tests
     "proto_tools/utils/_worker_bootstrap.py",
-    # Runs inside standalone tool envs during setup.sh
     "proto_tools/utils/install_binary.py",
-    # Notebook generation utility — output-only, no test-path callers
     "proto_tools/utils/notebook_docs.py",
-    # Logging setup — stdlib wrappers, bugs visible as missing log output
     "proto_tools/utils/logging_config.py",
-    # Progress spinners — threading/display code, tested manually
     "proto_tools/utils/progress.py",
-    # System info collection — reporting/diagnostics, not business logic
     "proto_tools/utils/system_info.py",
 ]
 
@@ -163,33 +136,25 @@ explicit_package_bases = true
 exclude = [
     ".*standalone/standalone_helpers/.*",
     ".*standalone/standalone_helpers\\.py$",
-    # ccd_lookup standalone uses rdkit/pdbeccdutils/gemmi (only available in
-    # the tool's micromamba env); their stubs are incomplete or missing.
     ".*ccd_lookup/standalone/run\\.py$",
-    # Vendored Malinois architecture code is untyped reference model code.
     ".*malinois/standalone/malinois_scoring\\.py$",
-    # Vendored upstream ipSAE script (Dunbrack lab) is untyped reference code.
     ".*ipsae/standalone/ipsae\\.py$",
 ]
 
 [[tool.mypy.overrides]]
 module = [
-    # ML frameworks (not in core deps — need CUDA or standalone envs)
     "torch.*",
     "jax.*",
     "esm.*",
     "transformers.*",
     "flash_attn.*",
-    # Installed but missing library stubs or py.typed marker
     "py3Dmol.*",
     "pymol.*",
     "pandas.*",
     "yaml.*",
     "huggingface_hub.*",
     "tokenizers.*",
-    # Optional cloud extra (not in core deps)
     "proto_client.*",
-    # Bioinformatics tools (only used in standalone/ dirs, not pip deps)
     "pyhmmer.*",
     "pymemesuite.*",
     "pyrodigal.*",
@@ -201,7 +166,6 @@ module = [
     "mini3di.*",
     "faiss.*",
     "affine_gaps.*",
-    # Tool-specific model packages (installed in standalone envs, not on PyPI)
     "standalone_helpers.*",
     "boltz.*",
     "ablang2.*",
@@ -226,11 +190,9 @@ module = [
     "scipy.*",
     "umap.*",
     "hydra.*",
-    # SpliceAI (TensorFlow/Keras model, only installed in the spliceai standalone env)
     "tensorflow.*",
     "keras.*",
     "spliceai.*",
-    # Local sibling imports in standalone dirs (resolved at runtime via sys.path)
     "inference.*",
     "malinois_scoring",
     "malinois_scoring.*",
@@ -239,9 +201,6 @@ module = [
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-# Newer biotite ships a py.typed marker with a generic ``AtomArray``, but the
-# codebase treats biotite structures as untyped (bare ``AtomArray``). Skip
-# following it so its generic-type requirements don't leak into mypy strict.
 module = ["biotite.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
@@ -269,75 +228,72 @@ exclude = [
 
 [tool.ruff.lint]
 select = [
-    # ── Tier 1: Essential ─────────────────────────────────────────────
-    "F",        # Pyflakes — unused imports/vars, undefined names
-    "E",        # pycodestyle errors — comparison bugs, syntax
-    "W",        # pycodestyle warnings — whitespace
-    "I",        # isort — import ordering (fully auto-fixable)
-    "UP",       # pyupgrade — modernize syntax (almost fully auto-fixable)
-    "B",        # flake8-bugbear — mutable defaults, exception chaining
-    "S",        # flake8-bandit — security (hardcoded creds, SQL injection, eval)
-    "T20",      # flake8-print — debug print() left behind
-    "ERA",      # eradicate — commented-out code
-    "D",        # pydocstyle — Google convention docstring quality
-    # ── Tier 2: Strongly recommended ──────────────────────────────────
-    "SIM",      # flake8-simplify — collapse nested ifs, use builtins
-    "C4",       # flake8-comprehensions — unnecessary list()/dict() wrappers
-    "RET",      # flake8-return — clean up return patterns
-    "PIE",      # flake8-pie — unnecessary pass, duplicate class fields
-    "RUF",      # Ruff-specific — mutable defaults, missing f-prefix
-    "PERF",     # Perflint — performance anti-patterns
-    "FURB",     # refurb — modern Python idioms (fully auto-fixable)
-    "PLE",      # Pylint errors — real bugs
-    "PLW",      # Pylint warnings — subprocess without check
-    "ARG",      # flake8-unused-arguments — dead parameters
-    "TID",      # flake8-tidy-imports — import hygiene, ban relative imports
-    "ASYNC",    # flake8-async — catches blocking calls in async functions
-    "A",        # flake8-builtins — catch shadowing of Python builtins
+    "F",
+    "E",
+    "W",
+    "I",
+    "UP",
+    "B",
+    "S",
+    "T20",
+    "ERA",
+    "D",
+    "SIM",
+    "C4",
+    "RET",
+    "PIE",
+    "RUF",
+    "PERF",
+    "FURB",
+    "PLE",
+    "PLW",
+    "ARG",
+    "TID",
+    "ASYNC",
+    "A",
 ]
 ignore = [
-    "E501",     # line too long — enforced by formatter when run manually
-    "PLW1641",  # eq-without-hash — Pydantic models handle __hash__; non-Pydantic uses are intentional
-    "D105",     # missing magic method docstring — __repr__, __eq__ are self-documenting
-    "RUF022",   # unsorted-__all__ — keep logical grouping with section comments
-    "A002",     # argument-shadowing-builtin — `format` param is intentional for export functions
+    "E501",
+    "PLW1641",
+    "D105",
+    "RUF022",
+    "A002",
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
-    "S101",     # assert is the whole point of tests
-    "S105",     # hardcoded password strings ok in test fixtures
-    "S106",     # hardcoded passwords ok in test fixtures
-    "S110",     # try-except-pass ok in test cleanup
-    "S112",     # try-except-continue ok in test loops
-    "S202",     # tarfile.extractall ok in test fixtures
-    "S310",     # URL open with arbitrary schemes ok in test fixtures
-    "S311",     # random ok in tests (not cryptographic)
-    "S603",     # subprocess calls in test fixtures
-    "S607",     # partial executable paths in test fixtures
-    "ERA001",   # commented-out test code sometimes intentional
-    "B017",     # assert-raises-exception — test patterns
-    "SIM117",   # multiple-with-statements — readability preference in tests
-    "T20",      # print() used for test diagnostics
-    "D100", "D101", "D102", "D103", "D104", "D106", "D107",  # docstring presence rules relaxed in tests
-    "ARG",      # pytest fixtures appear as unused arguments
+    "S101",
+    "S105",
+    "S106",
+    "S110",
+    "S112",
+    "S202",
+    "S310",
+    "S311",
+    "S603",
+    "S607",
+    "ERA001",
+    "B017",
+    "SIM117",
+    "T20",
+    "D100", "D101", "D102", "D103", "D104", "D106", "D107",
+    "ARG",
 ]
-"**/standalone_helpers/__init__.py" = ["F401", "TID252"]  # re-exports; relative imports needed for copy-into-subprocess pattern
-"**/standalone_helpers/*.py" = ["TID252"]  # relative imports needed for copy-into-subprocess pattern
+"**/standalone_helpers/__init__.py" = ["F401", "TID252"]
+"**/standalone_helpers/*.py" = ["TID252"]
 "**/standalone/*.py" = ["T20", "S", "PLW0602", "PLW0603", "E402", "PLW1510"]
 "proto_tools/utils/install_binary.py" = ["T20", "S101", "S603", "S607"]
 "proto_tools/utils/device.py" = ["T20", "PLW1510", "S603", "S607"]
 "proto_tools/utils/proto_home.py" = ["T20"]
-"scripts/*.py" = ["T20", "S603", "S607"]  # dev helper scripts: prints are intentional, subprocess calls use literal argv
-"proto_tools/cli.py" = ["T20"]  # CLI entry point: print() is the right way to emit to stdout
-"proto_tools/__main__.py" = ["T20"]  # python -m proto_tools entry point
-"proto_tools/tools/sequence_alignment/mmseqs2/setup_databases.py" = ["T20", "S603", "S607", "PERF203"]  # user-facing provisioning CLI
+"scripts/*.py" = ["T20", "S603", "S607"]
+"proto_tools/cli.py" = ["T20"]
+"proto_tools/__main__.py" = ["T20"]
+"proto_tools/tools/sequence_alignment/mmseqs2/setup_databases.py" = ["T20", "S603", "S607", "PERF203"]
 "proto_tools/utils/system_info.py" = ["PLW0603", "PLW1510", "S603", "S607"]
 "proto_tools/utils/tool_instance.py" = ["S101", "S603", "S607"]
 "proto_tools/utils/foundation_env.py" = ["S603", "S607"]
 "proto_tools/utils/persistent_worker.py" = ["S101", "S603", "S607"]
 "proto_tools/utils/tool_pool.py" = ["S101"]
-# S101: type-narrowing asserts for mypy
 "proto_tools/entities/ligands/ligands.py" = ["S101"]
 "proto_tools/entities/antibody.py" = ["S101"]
 "proto_tools/tools/causal_models/evo2/evo2_sample.py" = ["S101"]
@@ -346,7 +302,6 @@ ignore = [
 "proto_tools/transforms/masking/base.py" = ["S101"]
 "proto_tools/tools/mutagenesis/codons.py" = ["S101"]
 "proto_tools/entities/ligands/ccd_maps/*.py" = ["T20"]
-# Lazy imports behind conditionals are intentional in these tool files
 "proto_tools/tools/structure_prediction/*/[!s]*.py" = ["E402"]
 "proto_tools/tools/tool_registry.py" = ["E402", "S101"]
 
@@ -367,5 +322,4 @@ where = ["."]
 include = ["proto_tools*"]
 
 [tool.setuptools.package-data]
-# Ship docs + example-input fixtures so tool_docs and example_input() work on a non-editable install.
 "*" = ["*.sh", "*.txt", "*.csv", "*.smi", "*.cif", "*.bib", "*.yaml", "*.md", "*.ipynb", "*.pkl", "*.pdb", "*.a3m", "*.fasta", "*.hmm", "*.meme", "*.json"]
