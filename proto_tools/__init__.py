@@ -4,7 +4,7 @@ This package provides a collection of bioinformatics tools and entity definition
 for working with biological sequences, structures, and computational biology tasks.
 """
 
-__version__ = "0.0.0"
+__version__ = "0.1.0"
 
 import sys as _sys
 from pathlib import Path as _Path

@@ -3,16 +3,40 @@ requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "proto_tools"
-version = "0.0.0"
+name = "proto-tools"
+version = "0.1.0"
 description = "A unified library of computational and AI tools for biology"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "Proto Bio Team"}
+    {name = "Proto Team"},
+    {name = "Ben Viggiano"},
+    {name = "Daniel Guo"},
+    {name = "Lucas Brennan-Almaraz"},
+    {name = "Brian Hie"},
+    {name = "Aditi Merchant"},
+]
+maintainers = [
+    {name = "Proto Team"},
+    {name = "Ben Viggiano"},
+    {name = "Daniel Guo"},
+    {name = "Lucas Brennan-Almaraz"},
+    {name = "Brian Hie"},
+    {name = "Aditi Merchant"},
 ]
 
 requires-python = ">=3.10"
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Typing :: Typed",
+]
 
 dependencies = [
     "pydantic>=2.0.0",
@@ -50,6 +74,8 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/evo-design/proto-tools"
 Repository = "https://github.com/evo-design/proto-tools"
+Documentation = "https://proto.evodesign.org/docs/tools/introduction"
+Issues = "https://github.com/evo-design/proto-tools/issues"
 
 [project.scripts]
 proto-tools = "proto_tools.cli:main"
@@ -322,4 +348,4 @@ where = ["."]
 include = ["proto_tools*"]
 
 [tool.setuptools.package-data]
-"*" = ["*.sh", "*.txt", "*.csv", "*.smi", "*.cif", "*.bib", "*.yaml", "*.md", "*.ipynb", "*.pkl", "*.pdb", "*.a3m", "*.fasta", "*.hmm", "*.meme", "*.json"]
+"*" = ["*.sh", "*.txt", "*.csv", "*.smi", "*.cif", "*.bib", "*.yaml", "*.md", "*.ipynb", "*.pkl", "*.pdb", "*.a3m", "*.fasta", "*.hmm", "*.meme", "*.json", "py.typed"]
