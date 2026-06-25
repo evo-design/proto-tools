@@ -994,6 +994,40 @@ def test_ld_library_path_via_set_directive(monkeypatch, tmp_path: Path, conda_pr
     assert ("/opt/conda/lib" in ld_parts) == expect_conda_lib
 
 
+def test_ld_library_path_includes_tool_env_lib(monkeypatch, tmp_path: Path):
+    """Tool env's own /lib is on LD_LIBRARY_PATH, ahead of the outer conda lib.
+
+    The auto-appended conda lib is the outer CONDA_PREFIX, not the tool env, so
+    the tool's own libs (libgfortran, libgomp) reach the loader only via this.
+    """
+    monkeypatch.setenv("CONDA_PREFIX", "/opt/conda")
+    monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
+
+    env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
+
+    ld_parts = env["LD_LIBRARY_PATH"].split(":")
+    tool_env_lib = str(tmp_path / "lib")
+    assert tool_env_lib in ld_parts
+    # Tool env lib precedes the outer conda lib so the tool's own libs win.
+    assert ld_parts.index(tool_env_lib) < ld_parts.index("/opt/conda/lib")
+
+
+def test_ld_library_path_tool_env_lib_present_under_no_passthrough(monkeypatch, tmp_path: Path):
+    """[no_passthrough] strips host LD libs but keeps the tool env's own /lib."""
+    from proto_tools.utils.persistent_worker import _find_driver_lib_dir
+
+    _find_driver_lib_dir.cache_clear()
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/usr/local/cuda/lib64")
+    monkeypatch.delenv("CONDA_PREFIX", raising=False)
+    tool_env_vars = {"passthrough": [], "set": [], "no_passthrough": ["LD_LIBRARY_PATH"]}
+
+    env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path, tool_env_vars=tool_env_vars)
+
+    ld_parts = env.get("LD_LIBRARY_PATH", "").split(":")
+    assert str(tmp_path / "lib") in ld_parts
+    assert "/usr/local/cuda/lib64" not in ld_parts
+
+
 def test_no_passthrough_blocks_whitelisted_var(monkeypatch):
     """[no_passthrough] also blocks whitelisted vars (e.g. HTTP_PROXY) from parent."""
     monkeypatch.setenv("HTTP_PROXY", "http://proxy:8080")
