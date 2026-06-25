@@ -281,13 +281,8 @@ class Structure(BaseModel):
 
         structure_value = data.get("structure")
 
-        # A nested Structure instance under the ``structure`` key — i.e.
-        # ``Structure(structure=<Structure>)`` or ``Structure(**{"structure": <Structure>, ...})``.
-        # This happens when a serialized Structure dict round-trips, or when the API gateway
-        # substitutes a synthetic ``Structure`` for an uploaded asset reference nested inside the
-        # documented ``Structure.model_dump()`` envelope. Unwrap to the inner content and carry its
-        # metadata (outer-provided keys win) so construction is idempotent instead of calling the
-        # str-only helpers below on a ``Structure`` object.
+        # "structure" already holds a built Structure (a round-trip or re-construction): unwrap to its
+        # inner content and inherit its metadata (outer-provided keys win) so re-construction is idempotent.
         if isinstance(structure_value, Structure):
             inner = structure_value
             data["structure"] = inner.structure
