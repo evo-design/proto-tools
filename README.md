@@ -6,6 +6,7 @@
 [![Unit Tests](https://github.com/evo-design/proto-tools/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/evo-design/proto-tools/actions/workflows/unit-tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/evo-design/proto-tools/blob/main/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-proto.evodesign.org-blue)](https://proto.evodesign.org/docs/tools/introduction)
+[![bioRxiv](https://img.shields.io/badge/bioRxiv-2026.06.22.733870-b31b1b.svg)](https://www.biorxiv.org/content/10.64898/2026.06.22.733870)
 
 Welcome! This repository contains the open-source implementation of `proto-tools`, a Python package containing a large suite of computational biology and biological AI tools, all accessible through a single, consistent Python interface. Language models, structure predictors, inverse folding, sequence analysis, gene annotation, conformational dynamics, genomic scoring, and more are all available through a single `pip install` command.
 
@@ -162,3 +163,22 @@ If you've cloned the repo for contributing, agents also pick up `CLAUDE.md` (sym
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for full developer setup, storage
 configuration, PR format, code style, and testing conventions.
+
+## Citation
+
+If you use Proto in your research, please cite our preprint:
+
+> Merchant AT, Guo D, Viggiano B, Brennan-Almaraz LE, Hur E, Mai T, Yin P, King SH, Ashley E, Hie BL. **A high-level programming language for generative biology with Proto.** *bioRxiv* (2026). doi: [10.64898/2026.06.22.733870](https://doi.org/10.64898/2026.06.22.733870)
+
+```bibtex
+@article{Merchant2026.06.22.733870,
+  author = {Merchant, Aditi T and Guo, Daniel and Viggiano, Ben and Brennan-Almaraz, Lucas Emmanuel and Hur, Evelyn and Mai, Tina and Yin, Peter and King, Samuel H and Ashley, Euan and Hie, Brian L},
+  title = {A high-level programming language for generative biology with Proto},
+  elocation-id = {2026.06.22.733870},
+  year = {2026},
+  doi = {10.64898/2026.06.22.733870},
+  publisher = {Cold Spring Harbor Laboratory},
+  URL = {https://www.biorxiv.org/content/10.64898/2026.06.22.733870},
+  journal = {bioRxiv}
+}
+```
