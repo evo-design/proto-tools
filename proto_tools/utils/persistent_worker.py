@@ -531,13 +531,9 @@ def _build_subprocess_env(
     if existing_ld:
         ld_parts.extend(existing_ld.split(":"))
 
-    # The tool env's own lib dir, where conda packages installed into the tool
-    # env (libgfortran, libgomp, etc.) live. Always included — these are the
-    # tool's own shared libs, not host/parent libs gated by [no_passthrough].
-    # The parent conda/lib appended below is the *outer* env (CONDA_PREFIX is
-    # read before being repointed at the tool env), so without this the tool
-    # env's own libs never reach the loader. Required by germinal's DAlphaBall
-    # binary, which dynamically links libgfortran.so.5 from this dir.
+    # The conda/lib appended below is the *outer* env (CONDA_PREFIX is read
+    # before it's repointed at the tool env), so the tool's own shared libs
+    # (libgfortran, libgomp) only reach the loader if we add its /lib here.
     if tool_env_path:
         tool_env_lib = str(Path(tool_env_path) / "lib")
         if tool_env_lib not in ld_parts:

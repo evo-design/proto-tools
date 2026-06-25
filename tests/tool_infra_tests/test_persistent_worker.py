@@ -995,13 +995,10 @@ def test_ld_library_path_via_set_directive(monkeypatch, tmp_path: Path, conda_pr
 
 
 def test_ld_library_path_includes_tool_env_lib(monkeypatch, tmp_path: Path):
-    """The tool env's own /lib (libgfortran, libgomp, …) is on LD_LIBRARY_PATH.
+    """Tool env's own /lib is on LD_LIBRARY_PATH, ahead of the outer conda lib.
 
-    Regression for germinal's DAlphaBall binary, which dynamically links
-    libgfortran.so.5 installed into the tool env. The auto-appended conda lib
-    is the *outer* CONDA_PREFIX (read before being repointed at the tool env),
-    so without an explicit tool-env entry the tool env's own libs never reach
-    the loader and the binary fails with "libgfortran.so.5: cannot open ...".
+    The auto-appended conda lib is the outer CONDA_PREFIX, not the tool env, so
+    the tool's own libs (libgfortran, libgomp) reach the loader only via this.
     """
     monkeypatch.setenv("CONDA_PREFIX", "/opt/conda")
     monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
