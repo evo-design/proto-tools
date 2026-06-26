@@ -14,10 +14,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from moleculekit.molecule import Molecule
-from moleculekit.tools.voxeldescriptors import getVoxelDescriptors
+from moleculekit.molecule import Molecule  # type: ignore[import-not-found]
+from moleculekit.tools.voxeldescriptors import getVoxelDescriptors  # type: ignore[import-not-found]
 from scipy.spatial import KDTree
-from sklearn.cluster import AgglomerativeClustering
+from sklearn.cluster import AgglomerativeClustering  # type: ignore[import-untyped]
 from standalone_helpers import get_logger
 from standalone_helpers.weights import resolve_weights_dir
 
@@ -34,7 +34,7 @@ CHECKPOINT_FILES = {
 METAL_BINDING_RESNAMES = "HIS HID HIE HIP CYS CYX GLU GLH GLN ASP ASH ASN MET"
 
 
-class Model(nn.Module):
+class Model(nn.Module):  # type: ignore[misc, unused-ignore]
     """Metal3D 3D-convolutional network."""
 
     def __init__(self) -> None:
@@ -372,7 +372,8 @@ def _get_probability_mean(grid: np.ndarray, prot_centers: np.ndarray, pvalues: n
         nearest_neighbors, indices = tree.query(point, k=20, distance_upper_bound=0.5, workers=1)
         finite = nearest_neighbors != np.inf
         probabilities.append(float(np.mean(pvalues[indices[finite]])) if np.any(finite) else 0.0)
-    return np.asarray(probabilities)
+    probabilities_array: np.ndarray = np.asarray(probabilities, dtype=np.float64)
+    return probabilities_array
 
 
 def _find_unique_sites(
