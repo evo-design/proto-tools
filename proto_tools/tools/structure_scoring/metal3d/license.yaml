@@ -1,0 +1,11 @@
+code:
+  spdx: MIT
+  url: https://github.com/gelnesr/dEVA/blob/main/LICENSE
+weights:
+  spdx: CC-BY-4.0
+  url: https://github.com/lcbc-epfl/metal-site-prediction#license
+commercial_use: "yes"
+redistribution: true
+attribution_required: true
+notes: Metal3D/dEVA inference code adapted from gelnesr/dEVA (MIT). Checkpoints are downloaded from the dEVA repository during setup; the underlying Metal3D network weights are released under CC BY 4.0 by the original authors (lcbc-epfl/metal-site-prediction), which permits commercial use but requires attribution (cite the Metal3D paper).
+last_updated: "2026-06-25"
