@@ -68,10 +68,10 @@ class Metal3DPredictionConfig(BaseConfig):
     """Configuration for Metal3D metal-ion location prediction.
 
     Attributes:
-        model_checkpoint (Literal["metal3d-cat", "metal3d-clean", "metal3d-original"]): Checkpoint
-            variant to use. ``metal3d-cat`` is the catalytic-metal dEVA checkpoint;
-            ``metal3d-clean`` is the cleaned Metal3D variant; ``metal3d-original`` is the
-            original Metal3D zinc checkpoint from the Nature Communications paper.
+        model_checkpoint (Literal["metal3d-original", "metal3d-cat", "metal3d-clean"]): Checkpoint
+            variant to use. ``metal3d-original`` (default) is the original Metal3D zinc
+            checkpoint from the Nature Communications paper; ``metal3d-cat`` and
+            ``metal3d-clean`` are dEVA's retrained catalytic-metal and cleaned variants.
         probability_threshold (float): Probability threshold used to decide whether a
             predicted site should be annotated as a zinc atom.
         cluster_distance_threshold (float): Agglomerative clustering distance threshold
@@ -80,11 +80,11 @@ class Metal3DPredictionConfig(BaseConfig):
         device (str): Runtime device.
     """
 
-    model_checkpoint: Literal["metal3d-cat", "metal3d-clean", "metal3d-original"] = ConfigField(
-        default="metal3d-cat",
+    model_checkpoint: Literal["metal3d-original", "metal3d-cat", "metal3d-clean"] = ConfigField(
+        default="metal3d-original",
         title="Model Checkpoint",
-        description="Metal3D checkpoint variant to use.",
-        examples=["metal3d-cat", "metal3d-clean", "metal3d-original"],
+        description="Metal3D checkpoint: original Metal3D, or dEVA's metal3d-cat/metal3d-clean variants.",
+        examples=["metal3d-original", "metal3d-cat", "metal3d-clean"],
         reload_on_change=True,
     )
     probability_threshold: float = ConfigField(

@@ -167,7 +167,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"metal3d: unknown operation {operation!r}; valid: ['predict']")
 
     device = input_dict.get("device", "cuda")
-    model_checkpoint = input_dict.get("model_checkpoint", "metal3d-cat")
+    model_checkpoint = input_dict.get("model_checkpoint", "metal3d-original")
     if model_checkpoint not in CHECKPOINT_FILES:
         raise ValueError(f"metal3d: unknown checkpoint {model_checkpoint!r}")
     verbose = bool(input_dict.get("verbose", False))
