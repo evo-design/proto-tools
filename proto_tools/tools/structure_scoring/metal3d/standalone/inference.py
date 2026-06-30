@@ -31,22 +31,34 @@ CHECKPOINT_FILES = {
     "metal3d-clean": "metal3d_clean.pth",
     "metal3d-original": "metal_0.5A_v3_d0.2_16Abox.pth",
 }
+# Conv kernel size per checkpoint: the original Metal3D weights use kernel 3;
+# dEVA's retrained cat/clean checkpoints use kernel 4.
+CHECKPOINT_KERNEL_SIZES = {
+    "metal3d-cat": 4,
+    "metal3d-clean": 4,
+    "metal3d-original": 3,
+}
 METAL_BINDING_RESNAMES = "HIS HID HIE HIP CYS CYX GLU GLH GLN ASP ASH ASN MET"
 
 
 class Model(nn.Module):  # type: ignore[misc, unused-ignore]
-    """Metal3D 3D-convolutional network."""
+    """Metal3D 3D-convolutional network.
 
-    def __init__(self) -> None:
-        """Initialize the Metal3D convolutional layers."""
+    ``kernel_size`` selects the architecture variant: 3 for the original Metal3D
+    weights, 4 for dEVA's retrained cat/clean checkpoints. conv5 always uses a
+    large filter to aggregate features over the whole box.
+    """
+
+    def __init__(self, kernel_size: int = 4) -> None:
+        """Initialize the Metal3D convolutional layers for the given kernel size."""
         super().__init__()
-        self.conv1 = nn.Conv3d(8, 32, 4, padding="same")
-        self.conv2 = nn.Conv3d(32, 64, 4, padding="same")
-        self.conv3 = nn.Conv3d(64, 80, 4, padding="same")
-        self.conv4 = nn.Conv3d(80, 20, 4, padding="same")
+        self.conv1 = nn.Conv3d(8, 32, kernel_size, padding="same")
+        self.conv2 = nn.Conv3d(32, 64, kernel_size, padding="same")
+        self.conv3 = nn.Conv3d(64, 80, kernel_size, padding="same")
+        self.conv4 = nn.Conv3d(80, 20, kernel_size, padding="same")
         self.conv5 = nn.Conv3d(20, 20, 20, padding="same")
-        self.conv6 = nn.Conv3d(20, 16, 4, padding="same")
-        self.conv7 = nn.Conv3d(16, 1, 4, padding="same")
+        self.conv6 = nn.Conv3d(20, 16, kernel_size, padding="same")
+        self.conv7 = nn.Conv3d(16, 1, kernel_size, padding="same")
         self.dropout1 = nn.Dropout(0.2)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -78,7 +90,7 @@ class Metal3DModel:
         checkpoint_path = _resolve_checkpoint_path(model_checkpoint)
         if verbose:
             logger.info("Loading Metal3D checkpoint %s from %s", model_checkpoint, checkpoint_path)
-        model = Model().to(device).eval()
+        model = Model(kernel_size=CHECKPOINT_KERNEL_SIZES[model_checkpoint]).to(device).eval()
         checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
         state_dict = _extract_state_dict(checkpoint)
         model.load_state_dict(state_dict)

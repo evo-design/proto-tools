@@ -18,21 +18,9 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 EXAMPLE_PDB = Path(__file__).parent.parent / "dummy_data" / "pdl1.pdb"
 BENCHMARK_PDB = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
 
-# Exposed checkpoint variants, exercised end-to-end below. metal3d-original ships
-# the upstream kernel-3 weights, which cannot load into the current kernel-4 Model;
-# it xfails until per-checkpoint architecture lands.
-_CHECKPOINTS = [
-    "metal3d-cat",
-    "metal3d-clean",
-    pytest.param(
-        "metal3d-original",
-        marks=pytest.mark.xfail(
-            reason="kernel-3 original weights cannot load into the kernel-4 Model; fixed by per-checkpoint architecture",
-            raises=RuntimeError,
-            strict=True,
-        ),
-    ),
-]
+# Exposed checkpoint variants, exercised end-to-end below. Each loads its own
+# architecture (kernel 3 for the original weights, kernel 4 for dEVA cat/clean).
+_CHECKPOINTS = ["metal3d-cat", "metal3d-clean", "metal3d-original"]
 
 # A handful of metal-binding residues in chain A of pdl1.pdb (ASP/GLU/CYS/HIS).
 _CANDIDATE_RESIDUES = {"A": [9, 14, 23, 52, 61]}
