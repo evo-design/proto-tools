@@ -520,7 +520,7 @@ def _build_subprocess_env(
         env["CONDA_PREFIX"] = str(Path(tool_env_path))
         env["VIRTUAL_ENV"] = str(Path(tool_env_path))
 
-    # Build LD_LIBRARY_PATH: tool [set] > parent LD > conda/lib
+    # Build LD_LIBRARY_PATH: tool [set] > tool env /lib > parent LD > conda/lib
     # (parent LD and conda /lib are skipped if LD_LIBRARY_PATH is in [no_passthrough];
     # in that case just the host driver-lib dir is appended so libcuda.so.1 still resolves)
     ld_parts: list[str] = []
@@ -530,6 +530,14 @@ def _build_subprocess_env(
     existing_ld = env.get("LD_LIBRARY_PATH", "")
     if existing_ld:
         ld_parts.extend(existing_ld.split(":"))
+
+    # The conda/lib appended below is the *outer* env (CONDA_PREFIX is read
+    # before it's repointed at the tool env), so the tool's own shared libs
+    # (libgfortran, libgomp) only reach the loader if we add its /lib here.
+    if tool_env_path:
+        tool_env_lib = str(Path(tool_env_path) / "lib")
+        if tool_env_lib not in ld_parts:
+            ld_parts.append(tool_env_lib)
 
     if not ld_no_passthrough:
         # Parent LD_LIBRARY_PATH (NVIDIA driver, CUDA, module-loaded libs, MKL, etc.)

@@ -92,15 +92,14 @@ elif ! ls "$WEIGHTS_DIR/params"/*.npz >/dev/null 2>&1; then
         | tar x -C "$WEIGHTS_DIR/params"
 fi
 
-# DSSP (secondary-structure assignment) — non-fatal if install fails.
-if [ ! -f "$WEIGHTS_DIR/binaries/dssp" ]; then
-    "$MAMBA_BIN" install -y -p "$VENV_PATH" -c salilab -c conda-forge dssp 2>/dev/null || true
-    if [ -f "$VENV_PATH/bin/mkdssp" ]; then
-        cp "$VENV_PATH/bin/mkdssp" "$WEIGHTS_DIR/binaries/dssp"
-        chmod +x "$WEIGHTS_DIR/binaries/dssp"
-    else
-        echo "WARNING: DSSP install failed; secondary-structure-dependent filters may be skipped."
-    fi
+# DSSP from conda-forge (salilab is dead + linked an unavailable boost 1.73). Symlink in place —
+# copying to $WEIGHTS_DIR breaks RPATH — and always reinstall so its libs stay in the env.
+"$MAMBA_BIN" install -y -p "$VENV_PATH" -c conda-forge dssp 2>/dev/null || true
+mkdir -p "$GERMINAL_DIR/params"
+if [ -f "$VENV_PATH/bin/mkdssp" ]; then
+    ln -sf "$VENV_PATH/bin/mkdssp" "$GERMINAL_DIR/params/dssp"
+else
+    echo "WARNING: DSSP install failed; secondary-structure-dependent filters may be skipped."
 fi
 
 # DAlphaBall (buried-unsat-hbond computation) — compiled from source, non-fatal.
@@ -121,10 +120,9 @@ if [ ! -f "$WEIGHTS_DIR/binaries/DAlphaBall.gcc" ]; then
     ) || echo "WARNING: DAlphaBall build pipeline failed; continuing without it."
 fi
 
-# Symlink binaries so Germinal's relative `params/dssp` / `params/DAlphaBall.gcc` resolve at runtime
-# (inference.py spawns run_germinal.py with cwd=$GERMINAL_DIR).
+# Symlink DAlphaBall so Germinal's relative `params/DAlphaBall.gcc` resolves at runtime
+# (inference.py spawns run_germinal.py with cwd=$GERMINAL_DIR; dssp is symlinked above).
 mkdir -p "$GERMINAL_DIR/params"
-[ -f "$WEIGHTS_DIR/binaries/dssp" ] && ln -sf "$WEIGHTS_DIR/binaries/dssp" "$GERMINAL_DIR/params/dssp"
 [ -f "$WEIGHTS_DIR/binaries/DAlphaBall.gcc" ] && \
     ln -sf "$WEIGHTS_DIR/binaries/DAlphaBall.gcc" "$GERMINAL_DIR/params/DAlphaBall.gcc"
 

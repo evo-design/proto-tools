@@ -281,6 +281,22 @@ class Structure(BaseModel):
 
         structure_value = data.get("structure")
 
+        # "structure" already holds a built Structure (a round-trip or re-construction): unwrap to its
+        # inner content and inherit its metadata (outer-provided keys win) so re-construction is idempotent.
+        if isinstance(structure_value, Structure):
+            inner = structure_value
+            data["structure"] = inner.structure
+            if not data.get("structure_format"):
+                data["structure_format"] = inner.structure_format
+            if not data.get("source"):
+                data["source"] = inner.source
+            current_bft = data.get("b_factor_type")
+            if current_bft in (None, BFactorType.UNSPECIFIED, "unspecified"):
+                data["b_factor_type"] = inner.b_factor_type
+            if data.get("metrics") is None:
+                data["metrics"] = inner.metrics
+            structure_value = data["structure"]
+
         # If structure is an http(s) URL, fetch its content transparently (mirrors the path branch).
         if looks_like_url(structure_value):
             data["structure"] = _fetch_structure_url(structure_value)

@@ -149,6 +149,47 @@ def test_nested_field_typed_structure_accepts_bare_string(test_pdb_file_content)
     assert p.structure.structure == test_pdb_file_content
 
 
+def test_init_accepts_nested_structure_instance(test_pdb_file_content):
+    """Structure(structure=<Structure>) is idempotent rather than crashing.
+
+    Regression for proto-bio/feedback#25: the API gateway substitutes a synthetic
+    ``Structure`` for an uploaded (>1MB) asset ref nested inside the documented
+    ``{"structure": <ref>, ...}`` envelope. Before this fix, the before-validator
+    ran the str-only ``detect_structure_format`` on the ``Structure`` object and
+    raised ``AttributeError: 'Structure' object has no attribute 'split'`` — an
+    unhandled 500 on the tool dispatch path.
+    """
+    inner = Structure(structure=test_pdb_file_content, source="orig.pdb")
+
+    wrapped = Structure(structure=inner)
+    assert wrapped.structure == test_pdb_file_content
+    assert wrapped.structure_format == "pdb"
+    assert wrapped.source == "orig.pdb"  # inner metadata carried over
+
+    # The exact gateway shape: an envelope dict whose ``structure`` is a Structure
+    # object and whose ``structure_format`` is absent (the trigger for detection).
+    from_envelope = Structure.model_validate({"structure": inner})
+    assert from_envelope.structure == test_pdb_file_content
+    assert from_envelope.structure_format == "pdb"
+
+
+def test_nested_field_typed_structure_accepts_structure_instance_envelope(test_pdb_file_content):
+    """A StructureInputBase-style field tolerates the gateway's ``{structure: <Structure>}`` envelope.
+
+    Mirrors how ``proteinmpnn-sample`` / ``esm-if1-*`` / ``dssp`` inputs receive a
+    synthetic ``Structure`` after the >1MB upload's asset ref is swapped in place.
+    """
+
+    class _Pair(BaseModel):
+        sequence: str
+        structure: Structure
+
+    inner = Structure(structure=test_pdb_file_content)
+    p = _Pair.model_validate({"sequence": "MKTL", "structure": {"structure": inner}})
+    assert p.structure.structure_format == "pdb"
+    assert p.structure.structure == test_pdb_file_content
+
+
 # ── Format conversion ────────────────────────────────────────────────────────
 
 
