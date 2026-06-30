@@ -7,18 +7,20 @@
 
 ## Overview
 
-Metal3D predicts metal-ion locations in protein structures from residue-centered 3D voxel features. This toolkit exposes the original Metal3D checkpoint and the dEVA Metal3D-Cat and Metal3D-Clean checkpoints through the Proto tool interface, returning clustered metal-site probabilities, optional per-candidate residue probabilities, and an annotated PDB containing the top predicted zinc site when it passes the configured threshold.
+Metal3D predicts metal-ion locations in protein structures from residue-centered 3D voxel features. This toolkit defaults to the original Metal3D checkpoint and additionally exposes dEVA's retrained Metal3D-Cat and Metal3D-Clean checkpoints through the Proto tool interface, returning clustered metal-site probabilities, optional per-candidate residue probabilities, and an annotated PDB containing the top predicted zinc site when it passes the configured threshold.
 
 ## Background
 
 Metal3D ([Dürr, Levy, and Rothlisberger, 2023](https://doi.org/10.1038/s41467-023-37870-6)) is a 3D convolutional neural network for locating likely zinc-binding sites in protein structures. It evaluates residue-centered voxel boxes around candidate metal-binding residues and converts the predicted grid probabilities into metal-site coordinates.
 
-The dEVA repository provides three compatible checkpoints used by this toolkit: the original Metal3D checkpoint, Metal3D-Cat for catalytic metal-site scoring, and Metal3D-Clean for the cleaned Metal3D variant. The standalone setup downloads those checkpoints from `gelnesr/dEVA`.
+The `metal3d-original` checkpoint is the original Metal3D network; `metal3d-cat` (catalytic) and `metal3d-clean` (cleaned) are dEVA retrains that use a modified architecture (4³ convolution kernels versus the original's 3³) and a wider grid-probability averaging radius. All three checkpoints are downloaded from `gelnesr/dEVA` during standalone setup.
 
 ### Learning Resources
 
 - [Metal3D paper](https://doi.org/10.1038/s41467-023-37870-6). Nature Communications article describing the original Metal3D model.
-- [dEVA repository](https://github.com/gelnesr/dEVA). Upstream repository containing the Metal3D inference code and checkpoint files used by this wrapper.
+- [Metal3D repository](https://github.com/lcbc-epfl/metal-site-prediction). Original Metal3D code and the `metal3d-original` checkpoint.
+- [dEVA paper](https://www.biorxiv.org/content/10.1101/2026.04.23.720277). El Nesr et al., describing the dEVA framework behind the `metal3d-cat` and `metal3d-clean` checkpoints.
+- [dEVA repository](https://github.com/gelnesr/dEVA). Source of the inference code and the checkpoint files used by this wrapper.
 
 ## Tools
 
@@ -32,7 +34,7 @@ This tool is appropriate for scoring enzyme-design proposals by predicted metal-
 
 #### Usage Tips
 
-- **Use `metal3d-cat` for catalytic metal-site examples.** The default checkpoint is the dEVA catalytic-metal model. `metal3d-clean` and `metal3d-original` are also available when the task should use those checkpoint variants.
+- **`metal3d-original` (default) is the original Metal3D zinc model.** Switch to `metal3d-cat` for catalytic metal sites or `metal3d-clean` for the cleaned variant; both are dEVA retrains on the modified architecture.
 - **Pass `candidate_residues` when the pocket is known.** Candidate filtering reduces the scored residue set and returns per-residue probabilities for the configured pocket positions.
 - **Tune `probability_threshold` for reporting, not model inference.** The model always produces grid probabilities; the threshold controls which clustered sites are returned and whether the top zinc site is appended to the annotated PDB.
 - **Use persistent tool instances for repeated calls.** The worker keeps the selected checkpoint loaded when reused through `ToolInstance.persist_tool("metal3d")`.
