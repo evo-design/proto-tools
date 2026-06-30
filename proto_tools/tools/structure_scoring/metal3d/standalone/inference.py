@@ -54,7 +54,7 @@ class Model(nn.Module):  # type: ignore[misc, unused-ignore]
     large filter to aggregate features over the whole box.
     """
 
-    def __init__(self, kernel_size: int = 4) -> None:
+    def __init__(self, kernel_size: int) -> None:
         """Initialize the Metal3D convolutional layers for the given kernel size."""
         super().__init__()
         self.conv1 = nn.Conv3d(8, 32, kernel_size, padding="same")
