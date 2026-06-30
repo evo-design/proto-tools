@@ -10,7 +10,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from proto_tools.entities.structures.structure import Structure
-from proto_tools.entities.structures.utils import SUPPORTED_EXTENSIONS
+from proto_tools.entities.structures.utils import SUPPORTED_EXTENSIONS, looks_like_url
 from proto_tools.utils.sequence import validate_positions_list
 
 logger = logging.getLogger(__name__)
@@ -291,7 +291,7 @@ class StructureInputBase(BaseModel):
 
     structure: Structure = Field(
         title="Input Structure",
-        description="Structure (Path | PDB string | Structure | dict).",
+        description="Structure (Path | PDB/CIF string | Structure | dict).",
     )
 
     @model_validator(mode="before")
@@ -304,7 +304,9 @@ class StructureInputBase(BaseModel):
         structure = data.get("structure")
         if isinstance(structure, (str, Path)):
             # Distinguish file paths from raw PDB/CIF content strings by extension.
-            if str(structure).lower().endswith(SUPPORTED_EXTENSIONS):
+            if looks_like_url(structure):
+                data = {**data, "structure": Structure(structure=str(structure))}
+            elif str(structure).lower().endswith(SUPPORTED_EXTENSIONS):
                 data = {**data, "structure": Structure.from_file(structure)}
             else:
                 data = {**data, "structure": Structure(structure=str(structure))}

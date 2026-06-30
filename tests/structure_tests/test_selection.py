@@ -292,6 +292,29 @@ def test_base_resolves_path_object() -> None:
     assert isinstance(inp.structure, Structure)
 
 
+def test_base_resolves_url_string(monkeypatch: pytest.MonkeyPatch) -> None:
+    content = EXAMPLE_PDB.read_text()
+    url = "https://example.test/example.pdb"
+
+    class Response:
+        text = content
+
+        def raise_for_status(self) -> None:
+            return None
+
+    def fake_get(request_url: str, timeout: float) -> Response:
+        assert request_url == url
+        assert timeout == 30.0
+        return Response()
+
+    import requests
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    inp = _SubInput(structure=url)
+    assert isinstance(inp.structure, Structure)
+    assert inp.structure.source == url
+
+
 def test_base_passes_through_structure_instance() -> None:
     s = Structure.from_file(EXAMPLE_PDB)
     inp = _SubInput(structure=s)
