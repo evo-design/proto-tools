@@ -16,6 +16,16 @@ from proto_tools.tools.structure_scoring.ipsae import (
     IPSAEScoringOutput,
     run_ipsae_scoring,
 )
+from proto_tools.tools.structure_scoring.metal3d import (
+    Metal3DPredictionConfig,
+    Metal3DPredictionInput,
+    Metal3DPredictionOutput,
+    Metal3DPredictionResult,
+    Metal3DResidueProbability,
+    Metal3DSite,
+    Metal3DStructureInput,
+    run_metal3d_prediction,
+)
 from proto_tools.tools.structure_scoring.pdockq2 import (
     InterfacePDockQ2,
     PDockQ2Config,
@@ -75,6 +85,13 @@ __all__ = [
     "IPSAEScoringConfig",
     "IPSAEScoringInput",
     "IPSAEScoringOutput",
+    "Metal3DPredictionConfig",
+    "Metal3DPredictionInput",
+    "Metal3DPredictionOutput",
+    "Metal3DPredictionResult",
+    "Metal3DResidueProbability",
+    "Metal3DSite",
+    "Metal3DStructureInput",
     "InterfacePDockQ2",
     "InterfaceStructureInput",
     "PDockQ2Config",
@@ -111,6 +128,7 @@ __all__ = [
     "StructureQualityMetrics",
     "run_dssp_secondary_structure",
     "run_ipsae_scoring",
+    "run_metal3d_prediction",
     "run_pdockq2",
     "run_pyrosetta_energy",
     "run_pyrosetta_interface_analyzer",
