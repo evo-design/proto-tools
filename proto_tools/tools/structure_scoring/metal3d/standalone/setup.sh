@@ -15,7 +15,8 @@ uv pip install -r requirements.txt
 
 proto_resolve_weights_dir metal3d
 
-REPO_BASE="https://raw.githubusercontent.com/gelnesr/dEVA/main/models/metal3d/weights"
+DEVA_COMMIT="${DEVA_COMMIT:-ee771f6730d170c83d8e63074be3bdd761b21dee}"
+REPO_BASE="https://raw.githubusercontent.com/gelnesr/dEVA/${DEVA_COMMIT}/models/metal3d/weights"
 declare -A WEIGHTS=(
     ["metal3d_cat.pth"]="${REPO_BASE}/metal3d_cat.pth"
     ["metal3d_clean.pth"]="${REPO_BASE}/metal3d_clean.pth"
