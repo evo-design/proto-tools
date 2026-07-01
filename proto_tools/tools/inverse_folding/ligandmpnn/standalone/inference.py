@@ -4,6 +4,7 @@ import gc
 import json
 import os
 import sys
+from io import StringIO
 from typing import Any
 
 import numpy as np
@@ -36,6 +37,21 @@ def _sequence_tokens(sequence: str) -> tuple[list[str], list[int]]:
         return vocab, [token_by_letter[aa] for aa in sequence]
     except KeyError as exc:
         raise ValueError(f"ligandmpnn: unsupported residue {exc.args[0]!r}") from exc
+
+
+def _atom_array_to_pdb(atom_array: Any) -> str:
+    """Serialize a Foundry/Biotite atom array to a PDB string."""
+    from biotite.structure.io.pdb import PDBFile
+
+    finite_atoms = np.isfinite(np.asarray(atom_array.coord)).all(axis=-1)
+    atom_array = atom_array[finite_atoms]
+    if len(atom_array) == 0:
+        raise ValueError("ligandmpnn: sampled structure contains no finite-coordinate atoms.")
+    pdb_file = PDBFile()
+    pdb_file.set_structure(atom_array)
+    buffer = StringIO()
+    pdb_file.write(buffer)
+    return buffer.getvalue()
 
 
 class LigandMPNNModel:
@@ -142,6 +158,7 @@ class LigandMPNNModel:
         # Split designed_sequence by the non-atomized token level (1:1 with it).
         chain_sequences: list[list[dict[str, str]]] = []
         metrics: list[dict[str, Any]] = []
+        pdb_strings: list[str] = []
         for output in results:
             arr = output.atom_array
             # Drop atomized residues; retained backbone atoms cover every non-atomized residue.
@@ -171,9 +188,10 @@ class LigandMPNNModel:
                 groups.append({"id": current_chain, "sequence": "".join(buffer)})
             chain_sequences.append(groups)
             metrics.append(output.output_dict)
+            pdb_strings.append(_atom_array_to_pdb(arr))
 
         self.unload()
-        return {"chain_sequences": chain_sequences, "metrics": metrics}
+        return {"chain_sequences": chain_sequences, "metrics": metrics, "pdb_strings": pdb_strings}
 
     def score(
         self,
@@ -187,6 +205,9 @@ class LigandMPNNModel:
         model_type: str = "ligand_mpnn",
         return_logits: bool = False,
         scoring_mode: str = "single_aa",
+        ligand_mpnn_use_atom_context: bool = True,
+        ligand_mpnn_use_side_chain_context: bool = False,
+        ligand_mpnn_cutoff_for_score: float = 8.0,
     ) -> dict[str, Any]:
         """Score a sequence against a structure."""
         from mpnn.collate.feature_collator import FeatureCollator
@@ -218,6 +239,9 @@ class LigandMPNNModel:
             "decode_type": "teacher_forcing",
             "causality_pattern": SCORING_CAUSALITY[scoring_mode],
             "initialize_sequence_embedding_with_ground_truth": True,
+            "ligand_mpnn_use_atom_context": int(ligand_mpnn_use_atom_context),
+            "ligand_mpnn_use_side_chain_context": int(ligand_mpnn_use_side_chain_context),
+            "ligand_mpnn_cutoff_for_score": ligand_mpnn_cutoff_for_score,
             "features_to_return": {
                 "input_features": ["S", "mask_for_loss"],
                 "decoder_features": ["logits", "log_probs"],
@@ -231,11 +255,19 @@ class LigandMPNNModel:
 
         inference_input = MPNNInferenceInput.from_atom_array_and_dict(input_dict=input_dict)
         input_dict = inference_input.input_dict
+        pipeline_args = {}
+        if input_dict["occupancy_threshold_sidechain"] is not None:
+            pipeline_args["occupancy_threshold_sidechain"] = input_dict["occupancy_threshold_sidechain"]
+        if input_dict["occupancy_threshold_backbone"] is not None:
+            pipeline_args["occupancy_threshold_backbone"] = input_dict["occupancy_threshold_backbone"]
+        if input_dict["undesired_res_names"] is not None:
+            pipeline_args["undesired_res_names"] = input_dict["undesired_res_names"]
         pipeline = build_mpnn_transform_pipeline(
             model_type=self._engine.model_type,
             is_inference=True,
             minimal_return=True,
             device=self._engine.device,
+            **pipeline_args,
         )
         network_input = FeatureCollator()(
             [
@@ -391,6 +423,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             model_type=input_dict["model_type"],
             return_logits=input_dict["return_logits"],
             scoring_mode=input_dict["scoring_mode"],
+            ligand_mpnn_use_atom_context=input_dict.get("ligand_mpnn_use_atom_context", True),
+            ligand_mpnn_use_side_chain_context=input_dict.get("ligand_mpnn_use_side_chain_context", False),
+            ligand_mpnn_cutoff_for_score=input_dict.get("ligand_mpnn_cutoff_for_score", 8.0),
         )
     raise ValueError(f"ligandmpnn: unknown operation {operation!r}; valid: ['sample', 'score']")
 
