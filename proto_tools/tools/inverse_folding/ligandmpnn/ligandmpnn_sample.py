@@ -65,9 +65,9 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
             reference ``ligandmpnn`` Python package when ``backend="reference"``.
         packer_checkpoint_path (str | None): Side-chain packer checkpoint used
             by the reference backend to emit sequence-consistent PDB structures.
-        ligand_mpnn_use_atom_context (bool): Whether ligand-aware variants encode ligand atom context.
-        ligand_mpnn_use_side_chain_context (bool): Whether to condition on fixed-residue sidechain atoms.
-        ligand_mpnn_cutoff_for_score (float): Ligand-residue distance cutoff (Å) for the ligand-interface
+        use_atom_context (bool): Whether ligand-aware variants encode ligand atom context.
+        use_side_chain_context (bool): Whether to condition on fixed-residue sidechain atoms.
+        cutoff_for_score (float): Ligand-residue distance cutoff (Å) for the ligand-interface
             recovery score.
         sc_num_denoising_steps (int): Number of side-chain denoising steps for the reference packer.
         sc_num_samples (int): Number of side-chain samples for the reference packer.
@@ -79,7 +79,7 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         description="LigandMPNN model variant (ligand-aware weights).",
         reload_on_change=True,
     )
-    ligand_mpnn_use_atom_context: bool = ConfigField(
+    use_atom_context: bool = ConfigField(
         title="Use Ligand Atom Context",
         default=True,
         description="Encode ligand atom context in the message-passing graph",
@@ -108,12 +108,12 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         description="Optional side-chain packer checkpoint path for the reference backend.",
         reload_on_change=True,
     )
-    ligand_mpnn_use_side_chain_context: bool = ConfigField(
+    use_side_chain_context: bool = ConfigField(
         title="Use Sidechain Context",
         default=False,
         description="Condition on sidechain atoms of fixed residues",
     )
-    ligand_mpnn_cutoff_for_score: float = ConfigField(
+    cutoff_for_score: float = ConfigField(
         title="Ligand Cutoff for Score",
         default=8.0,
         gt=0.0,
@@ -337,9 +337,9 @@ def run_ligandmpnn_sample(
                     "checkpoint_path": config.checkpoint_path,
                     "reference_backend_path": config.reference_backend_path,
                     "packer_checkpoint_path": config.packer_checkpoint_path,
-                    "ligand_mpnn_use_atom_context": config.ligand_mpnn_use_atom_context,
-                    "ligand_mpnn_use_side_chain_context": config.ligand_mpnn_use_side_chain_context,
-                    "ligand_mpnn_cutoff_for_score": config.ligand_mpnn_cutoff_for_score,
+                    "ligand_mpnn_use_atom_context": config.use_atom_context,
+                    "ligand_mpnn_use_side_chain_context": config.use_side_chain_context,
+                    "ligand_mpnn_cutoff_for_score": config.cutoff_for_score,
                     "sc_num_denoising_steps": config.sc_num_denoising_steps,
                     "sc_num_samples": config.sc_num_samples,
                 }

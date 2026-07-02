@@ -35,8 +35,8 @@ Use this to design or redesign binding sites, enzyme active sites, nucleic-acid-
 
 #### Usage Tips
 
-- **Keep `ligand_mpnn_use_atom_context` enabled.** It defaults to `True` and is the whole point of LigandMPNN: it encodes the surrounding ligand, nucleotide, and metal atoms. Turning it off makes the model effectively ligand-blind, close to plain ProteinMPNN.
-- **Set `ligand_mpnn_use_side_chain_context` to `True` to honor a fixed motif.** It conditions on the sidechain atoms of fixed residues, which helps when redesigning around a preserved catalytic or binding motif. It defaults to `False`.
+- **Keep `use_atom_context` enabled.** It defaults to `True` and is the whole point of LigandMPNN: it encodes the surrounding ligand, nucleotide, and metal atoms. Turning it off makes the model effectively ligand-blind, close to plain ProteinMPNN.
+- **Set `use_side_chain_context` to `True` to honor a fixed motif.** It conditions on the sidechain atoms of fixed residues, which helps when redesigning around a preserved catalytic or binding motif. It defaults to `False`.
 - **`fixed_positions` is counted from 1, not 0**, to match biological residue selection conventions. Listed positions keep their input residue, and chains or atoms you do not redesign still act as context rather than being removed.
 
 ### LigandMPNN Scoring (`ligandmpnn-score`)

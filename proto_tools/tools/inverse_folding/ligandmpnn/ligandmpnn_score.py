@@ -52,9 +52,9 @@ class LigandMPNNScoringConfig(BaseConfig):
         checkpoint_path (str | None): Optional explicit LigandMPNN checkpoint path.
         reference_backend_path (str | None): Path to a checkout containing the
             reference ``ligandmpnn`` Python package when ``backend="reference"``.
-        ligand_mpnn_use_atom_context (bool): Whether ligand-aware variants encode ligand atom context.
-        ligand_mpnn_use_side_chain_context (bool): Whether to condition on fixed-residue sidechain atoms.
-        ligand_mpnn_cutoff_for_score (float): Ligand-residue distance cutoff (Å).
+        use_atom_context (bool): Whether ligand-aware variants encode ligand atom context.
+        use_side_chain_context (bool): Whether to condition on fixed-residue sidechain atoms.
+        cutoff_for_score (float): Ligand-residue distance cutoff (Å).
     """
 
     device: str = ConfigField(
@@ -92,17 +92,17 @@ class LigandMPNNScoringConfig(BaseConfig):
         description="Path to a local reference LigandMPNN checkout when backend='reference'.",
         reload_on_change=True,
     )
-    ligand_mpnn_use_atom_context: bool = ConfigField(
+    use_atom_context: bool = ConfigField(
         title="Use Ligand Atom Context",
         default=True,
         description="Encode ligand atom context in the message-passing graph.",
     )
-    ligand_mpnn_use_side_chain_context: bool = ConfigField(
+    use_side_chain_context: bool = ConfigField(
         title="Use Sidechain Context",
         default=False,
         description="Condition on sidechain atoms of fixed residues.",
     )
-    ligand_mpnn_cutoff_for_score: float = ConfigField(
+    cutoff_for_score: float = ConfigField(
         title="Ligand Cutoff for Score",
         default=8.0,
         gt=0.0,
@@ -169,9 +169,9 @@ def run_ligandmpnn_score(
                     "checkpoint_path": config.checkpoint_path,
                     "reference_backend_path": config.reference_backend_path,
                     "scoring_mode": config.scoring_mode,
-                    "ligand_mpnn_use_atom_context": config.ligand_mpnn_use_atom_context,
-                    "ligand_mpnn_use_side_chain_context": config.ligand_mpnn_use_side_chain_context,
-                    "ligand_mpnn_cutoff_for_score": config.ligand_mpnn_cutoff_for_score,
+                    "ligand_mpnn_use_atom_context": config.use_atom_context,
+                    "ligand_mpnn_use_side_chain_context": config.use_side_chain_context,
+                    "ligand_mpnn_cutoff_for_score": config.cutoff_for_score,
                 },
                 instance=instance,
                 config=config,
