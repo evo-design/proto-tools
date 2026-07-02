@@ -10,7 +10,7 @@ import tempfile
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import torch
@@ -501,11 +501,14 @@ def _run_reference_ligandmpnn(
         array = np.asarray(x)
         if array.size == 1:
             x = array.reshape(()).item()
-        return original_format_float_positional(x, *args_, **kwargs)
+        return str(original_format_float_positional(x, *args_, **kwargs))
 
     ligandmpnn_module.np.format_float_positional = format_float_positional_compat
     try:
-        return ligandmpnn_module.run_ligandmpnn(args, protein_dict, feature_dict, model, device=device)
+        return cast(
+            "dict[str, Any]",
+            ligandmpnn_module.run_ligandmpnn(args, protein_dict, feature_dict, model, device=device),
+        )
     finally:
         ligandmpnn_module.np.format_float_positional = original_format_float_positional
 
@@ -698,7 +701,7 @@ class ReferenceLigandMPNNModel:
             verbose=verbose,
             seed=seed,
         )
-        protein_dict, _, _, feature_dict = self._prepare(pdb_path, args, device)
+        protein_dict, _other_atoms, _icodes, feature_dict = self._prepare(pdb_path, args, device)
         data_utils = self._modules["data_utils"]
         token_ids = [data_utils.restype_str_to_int[aa] for aa in sequence]
         if len(token_ids) != int(feature_dict["mask"].shape[1]):
