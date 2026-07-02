@@ -69,6 +69,8 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         ligand_mpnn_use_side_chain_context (bool): Whether to condition on fixed-residue sidechain atoms.
         ligand_mpnn_cutoff_for_score (float): Ligand-residue distance cutoff (Å) for the ligand-interface
             recovery score.
+        sc_num_denoising_steps (int): Number of side-chain denoising steps for the reference packer.
+        sc_num_samples (int): Number of side-chain samples for the reference packer.
     """
 
     model_type: LigandMPNNModelType = ConfigField(
