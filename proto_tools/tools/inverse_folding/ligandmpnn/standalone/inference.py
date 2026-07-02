@@ -856,24 +856,26 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     pdb_path = input_dict["pdb_path"]
     operation = input_dict["operation"]
     if operation == "sample":
-        return _model.sample(
-            pdb_path=pdb_path,
-            chain_ids=input_dict["chain_ids"],
-            chains_explicitly_set=input_dict.get("chains_explicitly_set", False),
-            batch_size=input_dict["batch_size"],
-            temperature=input_dict["temperature"],
-            fixed_positions=input_dict.get("fixed_positions"),
-            excluded_amino_acids=input_dict.get("excluded_amino_acids"),
-            seed=input_dict["seed"],
-            device=input_dict["device"],
-            verbose=input_dict["verbose"],
-            model_type=input_dict["model_type"],
-            ligand_mpnn_use_atom_context=input_dict["ligand_mpnn_use_atom_context"],
-            ligand_mpnn_use_side_chain_context=input_dict["ligand_mpnn_use_side_chain_context"],
-            ligand_mpnn_cutoff_for_score=input_dict["ligand_mpnn_cutoff_for_score"],
-            sc_num_denoising_steps=input_dict.get("sc_num_denoising_steps", 8),
-            sc_num_samples=input_dict.get("sc_num_samples", 1),
-        )
+        sample_kwargs = {
+            "pdb_path": pdb_path,
+            "chain_ids": input_dict["chain_ids"],
+            "chains_explicitly_set": input_dict.get("chains_explicitly_set", False),
+            "batch_size": input_dict["batch_size"],
+            "temperature": input_dict["temperature"],
+            "fixed_positions": input_dict.get("fixed_positions"),
+            "excluded_amino_acids": input_dict.get("excluded_amino_acids"),
+            "seed": input_dict["seed"],
+            "device": input_dict["device"],
+            "verbose": input_dict["verbose"],
+            "model_type": input_dict["model_type"],
+            "ligand_mpnn_use_atom_context": input_dict["ligand_mpnn_use_atom_context"],
+            "ligand_mpnn_use_side_chain_context": input_dict["ligand_mpnn_use_side_chain_context"],
+            "ligand_mpnn_cutoff_for_score": input_dict["ligand_mpnn_cutoff_for_score"],
+        }
+        if backend == "reference":
+            sample_kwargs["sc_num_denoising_steps"] = input_dict.get("sc_num_denoising_steps", 8)
+            sample_kwargs["sc_num_samples"] = input_dict.get("sc_num_samples", 1)
+        return _model.sample(**sample_kwargs)
     if operation == "score":
         return _model.score(
             pdb_path=pdb_path,
