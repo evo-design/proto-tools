@@ -34,6 +34,7 @@ LigandMPNNModelType = Literal[
     # "per_residue_label_membrane_mpnn",
     # "global_label_membrane_mpnn",
 ]
+LigandMPNNBackend = Literal["foundry", "reference"]
 
 
 # ============================================================================
@@ -56,6 +57,14 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         excluded_amino_acids (list[AminoAcid] | None): One-letter codes of amino acids to exclude.
         seed (int): Random seed to use for sampling.
         model_type (LigandMPNNModelType): LigandMPNN variant to load.
+        backend (LigandMPNNBackend): Inference backend. ``"foundry"`` uses the
+            managed Foundry LigandMPNN implementation; ``"reference"`` uses a
+            local reference LigandMPNN checkout for compatibility experiments.
+        checkpoint_path (str | None): Optional explicit LigandMPNN checkpoint path.
+        reference_backend_path (str | None): Path to a checkout containing the
+            reference ``ligandmpnn`` Python package when ``backend="reference"``.
+        packer_checkpoint_path (str | None): Side-chain packer checkpoint used
+            by the reference backend to emit sequence-consistent PDB structures.
         ligand_mpnn_use_atom_context (bool): Whether ligand-aware variants encode ligand atom context.
         ligand_mpnn_use_side_chain_context (bool): Whether to condition on fixed-residue sidechain atoms.
         ligand_mpnn_cutoff_for_score (float): Ligand-residue distance cutoff (Å) for the ligand-interface
@@ -72,6 +81,30 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         title="Use Ligand Atom Context",
         default=True,
         description="Encode ligand atom context in the message-passing graph",
+    )
+    backend: LigandMPNNBackend = ConfigField(
+        title="Backend",
+        default="foundry",
+        description="Inference backend: managed Foundry implementation or local reference implementation.",
+        reload_on_change=True,
+    )
+    checkpoint_path: str | None = ConfigField(
+        title="Checkpoint Path",
+        default=None,
+        description="Optional explicit LigandMPNN checkpoint path.",
+        reload_on_change=True,
+    )
+    reference_backend_path: str | None = ConfigField(
+        title="Reference Backend Path",
+        default=None,
+        description="Path to a local reference LigandMPNN checkout when backend='reference'.",
+        reload_on_change=True,
+    )
+    packer_checkpoint_path: str | None = ConfigField(
+        title="Packer Checkpoint Path",
+        default=None,
+        description="Optional side-chain packer checkpoint path for the reference backend.",
+        reload_on_change=True,
     )
     ligand_mpnn_use_side_chain_context: bool = ConfigField(
         title="Use Sidechain Context",
@@ -90,6 +123,18 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         description="Single-letter codes of amino acids to exclude (e.g. ['C'] to forbid cysteine)",
         examples=[["C"]],
     )
+    sc_num_denoising_steps: int = ConfigField(
+        title="Sidechain Denoising Steps",
+        default=8,
+        ge=1,
+        description="Number of side-chain denoising steps for the reference backend packer.",
+    )
+    sc_num_samples: int = ConfigField(
+        title="Sidechain Samples",
+        default=1,
+        ge=1,
+        description="Number of side-chain samples for the reference backend packer.",
+    )
 
 
 class LigandMPNNDesignMetrics(Metrics):
@@ -103,6 +148,9 @@ class LigandMPNNDesignMetrics(Metrics):
             ligand-interface residues (0.0-1.0). Present only when a ligand
             interface is present; ``NaN`` or absent when the input structure
             has no ligand interface.
+        pmpnn (float): Mean sequence probability reported by compatible
+            LigandMPNN backends. Higher values indicate higher model
+            probability for the emitted sequence.
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
@@ -115,6 +163,13 @@ class LigandMPNNDesignMetrics(Metrics):
         },
         "ligand_interface_sequence_recovery": {
             "availability": "when a ligand interface is present",
+            "type": "float",
+            "min": 0.0,
+            "max": 1.0,
+            "better_values_are": "higher",
+        },
+        "pmpnn": {
+            "availability": "when emitted by the selected backend",
             "type": "float",
             "min": 0.0,
             "max": 1.0,
@@ -255,6 +310,7 @@ def run_ligandmpnn_sample(
         all_chain_sequences: list[list[dict[str, str]]] = []
         all_recovery: list[float] = []
         all_interface_recovery: list[float] = []
+        all_pmpnn: list[float | None] = []
         all_pdb_strings: list[str | None] = []
         remaining = config.num_sequences_per_structure
         # Materialize the Structure to a tempfile once per input — reused across chunks.
@@ -275,9 +331,15 @@ def run_ligandmpnn_sample(
                     "device": config.device,
                     "verbose": config.verbose,
                     "model_type": config.model_type,
+                    "backend": config.backend,
+                    "checkpoint_path": config.checkpoint_path,
+                    "reference_backend_path": config.reference_backend_path,
+                    "packer_checkpoint_path": config.packer_checkpoint_path,
                     "ligand_mpnn_use_atom_context": config.ligand_mpnn_use_atom_context,
                     "ligand_mpnn_use_side_chain_context": config.ligand_mpnn_use_side_chain_context,
                     "ligand_mpnn_cutoff_for_score": config.ligand_mpnn_cutoff_for_score,
+                    "sc_num_denoising_steps": config.sc_num_denoising_steps,
+                    "sc_num_samples": config.sc_num_samples,
                 }
                 result = ToolInstance.dispatch(
                     "ligandmpnn",
@@ -287,7 +349,10 @@ def run_ligandmpnn_sample(
                 )
                 all_chain_sequences.extend(result["chain_sequences"])
                 all_recovery.extend(m["sequence_recovery"] for m in result["metrics"])
-                all_interface_recovery.extend(m["ligand_interface_sequence_recovery"] for m in result["metrics"])
+                all_interface_recovery.extend(
+                    m.get("ligand_interface_sequence_recovery", math.nan) for m in result["metrics"]
+                )
+                all_pmpnn.extend(m.get("pmpnn") for m in result["metrics"])
                 all_pdb_strings.extend(result.get("pdb_strings", [None] * len(result["chain_sequences"])))
                 dispatch_idx += 1
                 remaining -= chunk  # type: ignore[operator]
@@ -296,8 +361,8 @@ def run_ligandmpnn_sample(
         redesigned_ids = set() if _fixed_positions_cover_structure(inp) else set(inp.chain_ids_to_redesign)
 
         complexes: list[LigandMPNNDesign] = []
-        for chain_seqs, recovery, interface_recovery, pdb_string in zip(
-            all_chain_sequences, all_recovery, all_interface_recovery, all_pdb_strings, strict=True
+        for chain_seqs, recovery, interface_recovery, pmpnn, pdb_string in zip(
+            all_chain_sequences, all_recovery, all_interface_recovery, all_pmpnn, all_pdb_strings, strict=True
         ):
             chains: list[Chain | Fragment] = [Chain(id=entry["id"], sequence=entry["sequence"]) for entry in chain_seqs]
             designed: list[bool] = [entry["id"] in redesigned_ids for entry in chain_seqs]
@@ -311,6 +376,7 @@ def run_ligandmpnn_sample(
                         ligand_interface_sequence_recovery=(
                             interface_recovery if math.isfinite(interface_recovery) else None
                         ),
+                        pmpnn=(pmpnn if pmpnn is not None and math.isfinite(pmpnn) else None),
                     ),
                     structure=(
                         Structure(structure=pdb_string, structure_format="pdb", source="ligandmpnn-sample")
