@@ -5,6 +5,7 @@ import importlib
 import json
 import os
 import random
+import shutil
 import sys
 import tempfile
 from io import StringIO
@@ -24,6 +25,24 @@ SCORING_CAUSALITY = {
     "single_aa": "conditional_minus_self",
     "autoregressive": "auto_regressive",
 }
+
+# ============================================================================
+# Upstream LigandMPNN provisioning (dEVA-compatible side-chain packing)
+# ============================================================================
+# Full-atom side-chain packing runs the upstream dauparas/LigandMPNN code that
+# dEVA vendors at ``models/ligandmpnn/`` (github.com/gelnesr/dEVA). These assets
+# are fetched on first use only (see ``_ensure_legacy_assets``) so callers never
+# supply a checkout path. Pins match dEVA's ``configs/*.yml`` (model_path /
+# packer_path). To repoint at a proto-bio mirror, change only this block.
+_LEGACY_DEVA_COMMIT = "ee771f6730d170c83d8e63074be3bdd761b21dee"
+_LEGACY_CODE_TARBALL_URL = f"https://github.com/gelnesr/dEVA/archive/{_LEGACY_DEVA_COMMIT}.tar.gz"
+_LEGACY_CODE_SUBDIR = f"dEVA-{_LEGACY_DEVA_COMMIT}/models/ligandmpnn"
+# Importable package name expected by ``_load_legacy_modules`` (imports ``ligandmpnn.*``).
+_LEGACY_PACKAGE_DIRNAME = "ligandmpnn"
+_LEGACY_WEIGHT_URLS: tuple[tuple[str, str], ...] = (
+    ("ligandmpnn_v_32_020_25.pt", "https://files.ipd.uw.edu/pub/ligandmpnn/ligandmpnn_v_32_020_25.pt"),
+    ("ligandmpnn_sc_v_32_002_16.pt", "https://files.ipd.uw.edu/pub/ligandmpnn/ligandmpnn_sc_v_32_002_16.pt"),
+)
 
 
 def _fixed_residues(fixed_positions: dict[str, list[int]] | None) -> list[str] | None:
@@ -877,6 +896,79 @@ class LegacyCompatibleLigandMPNNModel:
             torch.cuda.empty_cache()
 
 
+def _download_file(url: str, dest: Path) -> None:
+    """Download ``url`` to ``dest`` via curl-with-retry, staging through a temp file."""
+    import subprocess
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".tmp")
+    logger.info("ligandmpnn: downloading %s", url)
+    subprocess.run(
+        [
+            "curl",
+            "--no-progress-meter",
+            "--show-error",
+            "--location",
+            "--fail",
+            "--retry",
+            "5",
+            "--retry-delay",
+            "10",
+            "--retry-all-errors",
+            "--max-time",
+            "1800",
+            "--output",
+            str(tmp),
+            url,
+        ],
+        check=True,
+    )
+    tmp.replace(dest)
+
+
+def _ensure_legacy_assets() -> Path:
+    """Provision the dEVA-vendored LigandMPNN code + weights on first use; return the package path.
+
+    Fetches nothing unless side-chain packing is actually requested. Code and
+    weights are cached under ``resolve_weights_dir("ligandmpnn")/legacy/`` and
+    reused on subsequent calls. Callers wanting a pre-existing checkout can set
+    ``PROTO_LIGANDMPNN_LEGACY_PATH`` (resolved earlier in ``dispatch``).
+    """
+    import subprocess
+
+    from standalone_helpers import resolve_weights_dir
+
+    weights_dir = resolve_weights_dir("ligandmpnn")
+    if weights_dir is None:
+        raise RuntimeError("ligandmpnn: cannot resolve a weights directory for side-chain packing assets")
+    package_path = Path(weights_dir) / "legacy" / _LEGACY_PACKAGE_DIRNAME
+
+    # 1. Code: fetch the dEVA-vendored ligandmpnn package if the modules are missing.
+    if not _is_legacy_package_path(package_path):
+        package_path.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="ligandmpnn_code_") as tmpdir:
+            tarball = Path(tmpdir) / "deva.tar.gz"
+            _download_file(_LEGACY_CODE_TARBALL_URL, tarball)
+            subprocess.run(["tar", "-zxf", str(tarball), "-C", tmpdir, _LEGACY_CODE_SUBDIR], check=True)
+            extracted = Path(tmpdir) / _LEGACY_CODE_SUBDIR
+            for item in extracted.iterdir():
+                target = package_path / item.name
+                if item.is_dir():
+                    shutil.copytree(item, target, dirs_exist_ok=True)
+                else:
+                    shutil.copy2(item, target)
+        if not _is_legacy_package_path(package_path):
+            raise RuntimeError(f"ligandmpnn: provisioned package at {package_path} is missing required modules")
+
+    # 2. Weights: fetch each checkpoint into model_params if missing.
+    model_params = package_path / "model_params"
+    for filename, url in _LEGACY_WEIGHT_URLS:
+        dest = model_params / filename
+        if not dest.is_file():
+            _download_file(url, dest)
+    return package_path
+
+
 # ============================================================================
 # Dispatch
 # ============================================================================
@@ -889,30 +981,29 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     global _model, _model_key
     checkpoint_path = input_dict.get("checkpoint_path")
     packer_checkpoint_path = input_dict.get("packer_checkpoint_path")
-    legacy_package = _legacy_package_path(
-        checkpoint_path,
-        packer_checkpoint_path,
-        required=packer_checkpoint_path is not None,
-    )
-    use_legacy_compatible = legacy_package is not None and (
-        checkpoint_path is not None or packer_checkpoint_path is not None
-    )
+    pack_side_chains = bool(input_dict.get("pack_side_chains", False))
+    if pack_side_chains:
+        # Prefer an explicit checkout (checkpoint/packer path or PROTO_LIGANDMPNN_LEGACY_PATH);
+        # otherwise auto-provision the dEVA-vendored code + weights on first use.
+        package_path = _legacy_package_path(checkpoint_path, packer_checkpoint_path, required=False)
+        if package_path is None:
+            package_path = _ensure_legacy_assets()
+    else:
+        package_path = None
     model_key = (
-        "legacy-compatible" if use_legacy_compatible else "foundry",
+        "legacy-compatible" if package_path is not None else "foundry",
+        str(package_path) if package_path is not None else None,
         checkpoint_path,
         packer_checkpoint_path,
-        str(legacy_package) if use_legacy_compatible else None,
     )
     if _model is not None and _model_key != model_key:
         _model.unload()
         _model = None
         _model_key = None
     if _model is None:
-        if use_legacy_compatible:
-            if legacy_package is None:
-                raise RuntimeError("ligandmpnn internal error: missing resolved compatibility package")
+        if package_path is not None:
             _model = LegacyCompatibleLigandMPNNModel(
-                package_path=legacy_package,
+                package_path=package_path,
                 checkpoint_path=checkpoint_path,
                 packer_checkpoint_path=packer_checkpoint_path,
             )

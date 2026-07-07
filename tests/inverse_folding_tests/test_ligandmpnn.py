@@ -168,6 +168,7 @@ def test_ligandmpnn_sample_dispatch_contract(monkeypatch):
             batch_size=1,
             seed=7,
             device="cpu",
+            pack_side_chains=True,
             checkpoint_path="ligandmpnn.pt",
             packer_checkpoint_path="ligandmpnn_sc.pt",
             sc_num_denoising_steps=3,
@@ -179,12 +180,39 @@ def test_ligandmpnn_sample_dispatch_contract(monkeypatch):
     assert captured["toolkit"] == "ligandmpnn"
     payload = captured["payload"]
     assert payload["operation"] == "sample"
+    assert payload["pack_side_chains"] is True
     assert payload["checkpoint_path"] == "ligandmpnn.pt"
     assert payload["packer_checkpoint_path"] == "ligandmpnn_sc.pt"
     assert payload["sc_num_denoising_steps"] == 3
     assert payload["sc_num_samples"] == 2
     assert "backend" not in payload
     assert "reference_backend_path" not in payload
+
+
+def test_ligandmpnn_sample_packing_defaults_off(monkeypatch):
+    """By default no packer is requested, so packing weights are never provisioned."""
+    captured = {}
+    structure_input = ligandmpnn_example_input().inputs[0]
+    sequence = structure_input.structure.get_chain_sequence("A")
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        captured["payload"] = payload
+        return {
+            "chain_sequences": [[{"id": "A", "sequence": sequence}]],
+            "metrics": [{"sequence_recovery": 1.0, "ligand_interface_sequence_recovery": math.nan, "pmpnn": 0.5}],
+            "pdb_strings": [None],
+        }
+
+    monkeypatch.setattr(
+        "proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+
+    run_ligandmpnn_sample(
+        InverseFoldingInput(inputs=[structure_input]),
+        LigandMPNNSampleConfig(num_sequences_per_structure=1, batch_size=1, seed=7, device="cpu"),
+    )
+    assert captured["payload"]["pack_side_chains"] is False
 
 
 def test_ligandmpnn_score_dispatch_contract(monkeypatch):

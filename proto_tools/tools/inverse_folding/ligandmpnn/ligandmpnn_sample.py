@@ -57,7 +57,10 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         seed (int): Random seed to use for sampling.
         model_type (LigandMPNNModelType): LigandMPNN variant to load.
         checkpoint_path (str | None): Optional explicit LigandMPNN checkpoint path.
-        packer_checkpoint_path (str | None): Optional side-chain packer checkpoint.
+        pack_side_chains (bool): Emit full-atom structures via LigandMPNN side-chain
+            packing; code and weights are auto-provisioned on first use.
+        packer_checkpoint_path (str | None): Optional override for the side-chain packer
+            checkpoint; auto-provisioned when unset and pack_side_chains is true.
         use_atom_context (bool): Whether ligand-aware variants encode ligand atom context.
         use_side_chain_context (bool): Whether to condition on fixed-residue sidechain atoms.
         cutoff_for_score (float): Ligand-residue distance cutoff (Å) for the ligand-interface
@@ -83,10 +86,16 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         description="Optional explicit LigandMPNN checkpoint path.",
         reload_on_change=True,
     )
+    pack_side_chains: bool = ConfigField(
+        title="Pack Side Chains",
+        default=False,
+        description="Emit full-atom structures via side-chain packing (weights auto-provisioned on first use).",
+        reload_on_change=True,
+    )
     packer_checkpoint_path: str | None = ConfigField(
         title="Packer Checkpoint Path",
         default=None,
-        description="Optional side-chain packer checkpoint path used to emit sequence-consistent full-atom structures.",
+        description="Optional override for the side-chain packer checkpoint; auto-provisioned when packing.",
         reload_on_change=True,
     )
     use_side_chain_context: bool = ConfigField(
@@ -315,6 +324,7 @@ def run_ligandmpnn_sample(
                     "verbose": config.verbose,
                     "model_type": config.model_type,
                     "checkpoint_path": config.checkpoint_path,
+                    "pack_side_chains": config.pack_side_chains,
                     "packer_checkpoint_path": config.packer_checkpoint_path,
                     "ligand_mpnn_use_atom_context": config.use_atom_context,
                     "ligand_mpnn_use_side_chain_context": config.use_side_chain_context,

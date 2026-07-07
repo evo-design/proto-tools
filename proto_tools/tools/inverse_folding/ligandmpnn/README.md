@@ -37,7 +37,7 @@ Use this to design or redesign binding sites, enzyme active sites, nucleic-acid-
 
 - **Keep `use_atom_context` enabled.** It defaults to `True` and is the whole point of LigandMPNN: it encodes the surrounding ligand, nucleotide, and metal atoms. Turning it off makes the model effectively ligand-blind, close to plain ProteinMPNN.
 - **Set `use_side_chain_context` to `True` to honor a fixed motif.** It conditions on the sidechain atoms of fixed residues, which helps when redesigning around a preserved catalytic or binding motif. It defaults to `False`.
-- **Set `packer_checkpoint_path` when you need packed full-atom PDB outputs.** Without it, outputs follow Foundry's default redesigned-backbone structure emission. When a packer checkpoint is supplied from an upstream LigandMPNN checkout, Proto uses that checkout's side-chain packer to return sequence-consistent full-atom structures.
+- **Set `pack_side_chains=True` when you need packed full-atom PDB outputs.** Without it, outputs follow Foundry's default redesigned-backbone structure emission. When enabled, Proto runs the upstream (dEVA-vendored) LigandMPNN side-chain packer to return sequence-consistent full-atom structures. The packer code and weights are auto-provisioned into the model cache on first use, so no manual setup is needed; advanced users can override the source with `packer_checkpoint_path` / `checkpoint_path` or `PROTO_LIGANDMPNN_LEGACY_PATH`.
 - **`fixed_positions` is counted from 1, not 0**, to match biological residue selection conventions. Listed positions keep their input residue, and chains or atoms you do not redesign still act as context rather than being removed.
 
 ### LigandMPNN Scoring (`ligandmpnn-score`)
