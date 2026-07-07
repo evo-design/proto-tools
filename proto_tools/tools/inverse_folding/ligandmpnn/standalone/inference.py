@@ -419,10 +419,6 @@ def _is_legacy_package_path(path: Path) -> bool:
 
 def _candidate_legacy_package_paths(*raw_paths: str | None) -> list[Path]:
     candidates: list[Path] = []
-    env_path = os.environ.get("PROTO_LIGANDMPNN_LEGACY_PATH")
-    if env_path:
-        candidates.append(Path(env_path).expanduser())
-
     for raw_path in raw_paths:
         if not raw_path:
             continue
@@ -457,25 +453,11 @@ def _candidate_legacy_package_paths(*raw_paths: str | None) -> list[Path]:
     return resolved
 
 
-def _legacy_package_path(
-    checkpoint_path: str | None,
-    packer_checkpoint_path: str | None,
-    *,
-    required: bool,
-) -> Path | None:
-    """Resolve an original LigandMPNN checkout from colocated checkpoint paths."""
-    candidates = _candidate_legacy_package_paths(checkpoint_path, packer_checkpoint_path)
-    for candidate in candidates:
+def _legacy_package_path(checkpoint_path: str | None) -> Path | None:
+    """Resolve an original LigandMPNN checkout colocated with an explicit checkpoint path."""
+    for candidate in _candidate_legacy_package_paths(checkpoint_path):
         if _is_legacy_package_path(candidate):
             return candidate
-    if required:
-        checked = ", ".join(str(path) for path in candidates) or "<none>"
-        raise ValueError(
-            "ligandmpnn side-chain packing requires an original LigandMPNN checkout "
-            "containing ligandmpnn.py, model_utils.py, data_utils.py, pdb_utils.py, and sc_utils.py. "
-            "Pass checkpoints from that checkout's model_params directory or set PROTO_LIGANDMPNN_LEGACY_PATH. "
-            f"Checked: {checked}"
-        )
     return None
 
 
@@ -930,56 +912,56 @@ def _download_file(url: str, dest: Path) -> None:
     """Download ``url`` to ``dest`` via curl-with-retry, staging through a temp file."""
     import subprocess
 
+    from standalone_helpers import get_subprocess_device_env
+
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(dest.name + ".tmp")
     logger.info("ligandmpnn: downloading %s", url)
-    subprocess.run(
-        [
-            "curl",
-            "--no-progress-meter",
-            "--show-error",
-            "--location",
-            "--fail",
-            "--retry",
-            "5",
-            "--retry-delay",
-            "10",
-            "--retry-all-errors",
-            "--max-time",
-            "1800",
-            "--output",
-            str(tmp),
-            url,
-        ],
-        check=True,
-    )
+    curl_cmd = [
+        "curl",
+        "--no-progress-meter",
+        "--show-error",
+        "--location",
+        "--fail",
+        "--retry",
+        "5",
+        "--retry-delay",
+        "10",
+        "--retry-all-errors",
+        "--max-time",
+        "1800",
+        "--output",
+        str(tmp),
+        url,
+    ]
+    subprocess.run(curl_cmd, check=True, env=get_subprocess_device_env("cpu"))
     tmp.replace(dest)
 
 
 def _ensure_legacy_assets() -> Path:
-    """Provision the dEVA-vendored LigandMPNN code + weights on first use; return the package path.
+    """Provision the original LigandMPNN code + weights on first use; return the package path.
 
-    Fetches nothing unless side-chain packing is actually requested. Code and
+    Fetches nothing unless the ``original`` model is actually requested. Code and
     weights are cached under ``resolve_weights_dir("ligandmpnn")/legacy/`` and
-    reused on subsequent calls. Callers wanting a pre-existing checkout can set
-    ``PROTO_LIGANDMPNN_LEGACY_PATH`` (resolved earlier in ``dispatch``).
+    reused on subsequent calls.
     """
     import subprocess
 
-    from standalone_helpers import resolve_weights_dir
+    from standalone_helpers import get_subprocess_device_env, resolve_weights_dir
 
     weights_dir = resolve_weights_dir("ligandmpnn")
     if weights_dir is None:
-        raise RuntimeError("ligandmpnn: cannot resolve a weights directory for side-chain packing assets")
+        raise RuntimeError("ligandmpnn: cannot resolve a weights directory for the original LigandMPNN assets")
     package_path = Path(weights_dir) / "legacy" / _LEGACY_PACKAGE_DIRNAME
 
-    # 1. Code: fetch the dEVA-vendored ligandmpnn package if the modules are missing.
+    # 1. Code: fetch the original ligandmpnn package if the modules are missing.
     if not _is_legacy_package_path(package_path):
         package_path.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="ligandmpnn_code_") as tmpdir:
-            tarball = Path(tmpdir) / "deva.tar.gz"
+            tarball = Path(tmpdir) / "source.tar.gz"
             _download_file(_LEGACY_CODE_TARBALL_URL, tarball)
-            subprocess.run(["tar", "-zxf", str(tarball), "-C", tmpdir, _LEGACY_CODE_SUBDIR], check=True)
+            tar_cmd = ["tar", "-zxf", str(tarball), "-C", tmpdir, _LEGACY_CODE_SUBDIR]
+            subprocess.run(tar_cmd, check=True, env=get_subprocess_device_env("cpu"))
             extracted = Path(tmpdir) / _LEGACY_CODE_SUBDIR
             for item in extracted.iterdir():
                 target = package_path / item.name
@@ -1013,10 +995,10 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     use_legacy = input_dict.get("model_type") == "original"
     use_side_chain_context = bool(input_dict.get("ligand_mpnn_use_side_chain_context", False))
     if use_legacy:
-        # Prefer an explicit checkout (PROTO_LIGANDMPNN_LEGACY_PATH or a checkpoint that resolves
-        # to one); otherwise auto-provision the original code + weights on first use. Applies to
-        # both sample (which packs) and score (which runs the original implementation).
-        package_path = _legacy_package_path(checkpoint_path, None, required=False)
+        # Use a checkout colocated with an explicit checkpoint_path if given; otherwise
+        # auto-provision the original code + weights on first use. Applies to both sample
+        # (which packs) and score (which runs the original implementation).
+        package_path = _legacy_package_path(checkpoint_path)
         if package_path is None:
             package_path = _ensure_legacy_assets()
     else:
