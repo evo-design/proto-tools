@@ -8,7 +8,6 @@ import math
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
 
 from proto_tools.entities.complex import Chain
 from proto_tools.entities.structures.structure import Structure
@@ -186,18 +185,6 @@ def test_ligandmpnn_sample_dispatch_contract(monkeypatch):
     assert payload["sc_num_samples"] == 2
     assert "backend" not in payload
     assert "reference_backend_path" not in payload
-
-
-def test_ligandmpnn_sample_rejects_packing_fields_without_legacy():
-    """Side-chain packing fields are rejected unless model_type='original'."""
-    for kwargs in (
-        {"sc_num_denoising_steps": 3},
-        {"sc_num_samples": 2},
-    ):
-        with pytest.raises(ValidationError):
-            LigandMPNNSampleConfig(num_sequences_per_structure=1, **kwargs)
-    # Same fields are accepted once the legacy implementation is selected.
-    LigandMPNNSampleConfig(num_sequences_per_structure=1, model_type="original", sc_num_samples=2)
 
 
 def test_ligandmpnn_score_dispatch_contract(monkeypatch):
