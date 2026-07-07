@@ -57,10 +57,13 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         seed (int): Random seed to use for sampling.
         model_type (LigandMPNNModelType): LigandMPNN variant to load.
         checkpoint_path (str | None): Optional explicit LigandMPNN checkpoint path.
+        packer_checkpoint_path (str | None): Optional side-chain packer checkpoint.
         use_atom_context (bool): Whether ligand-aware variants encode ligand atom context.
         use_side_chain_context (bool): Whether to condition on fixed-residue sidechain atoms.
         cutoff_for_score (float): Ligand-residue distance cutoff (Å) for the ligand-interface
             recovery score.
+        sc_num_denoising_steps (int): Number of side-chain denoising steps when packing.
+        sc_num_samples (int): Number of side-chain samples when packing.
     """
 
     model_type: LigandMPNNModelType = ConfigField(
@@ -80,6 +83,12 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         description="Optional explicit LigandMPNN checkpoint path.",
         reload_on_change=True,
     )
+    packer_checkpoint_path: str | None = ConfigField(
+        title="Packer Checkpoint Path",
+        default=None,
+        description="Optional side-chain packer checkpoint path used to emit sequence-consistent full-atom structures.",
+        reload_on_change=True,
+    )
     use_side_chain_context: bool = ConfigField(
         title="Use Sidechain Context",
         default=False,
@@ -96,6 +105,18 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         default=None,
         description="Single-letter codes of amino acids to exclude (e.g. ['C'] to forbid cysteine)",
         examples=[["C"]],
+    )
+    sc_num_denoising_steps: int = ConfigField(
+        title="Sidechain Denoising Steps",
+        default=8,
+        ge=1,
+        description="Number of denoising steps for side-chain packing.",
+    )
+    sc_num_samples: int = ConfigField(
+        title="Sidechain Samples",
+        default=1,
+        ge=1,
+        description="Number of side-chain samples for side-chain packing.",
     )
 
 
@@ -294,9 +315,12 @@ def run_ligandmpnn_sample(
                     "verbose": config.verbose,
                     "model_type": config.model_type,
                     "checkpoint_path": config.checkpoint_path,
+                    "packer_checkpoint_path": config.packer_checkpoint_path,
                     "ligand_mpnn_use_atom_context": config.use_atom_context,
                     "ligand_mpnn_use_side_chain_context": config.use_side_chain_context,
                     "ligand_mpnn_cutoff_for_score": config.cutoff_for_score,
+                    "sc_num_denoising_steps": config.sc_num_denoising_steps,
+                    "sc_num_samples": config.sc_num_samples,
                 }
                 result = ToolInstance.dispatch(
                     "ligandmpnn",

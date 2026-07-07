@@ -1,11 +1,16 @@
 """LigandMPNN inference implementation using Foundry."""
 
 import gc
+import importlib
 import json
 import os
+import random
 import sys
+import tempfile
 from io import StringIO
-from typing import Any
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, cast
 
 import numpy as np
 import torch
@@ -84,6 +89,7 @@ class LigandMPNNModel:
         ligand_mpnn_use_side_chain_context: bool = False,
         ligand_mpnn_cutoff_for_score: float = 8.0,
         chains_explicitly_set: bool = False,
+        **_: Any,
     ) -> dict[str, Any]:
         """Sample protein sequences using LigandMPNN.
 
@@ -378,6 +384,499 @@ class LigandMPNNModel:
             torch.cuda.empty_cache()
 
 
+def _set_legacy_seed(seed: int | None) -> None:
+    """Set RNGs to match the upstream LigandMPNN sampling path."""
+    if seed is None:
+        return
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.enabled = False
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+def _is_legacy_package_path(path: Path) -> bool:
+    required = ("ligandmpnn.py", "model_utils.py", "data_utils.py", "pdb_utils.py", "sc_utils.py")
+    return all((path / filename).is_file() for filename in required)
+
+
+def _candidate_legacy_package_paths(*raw_paths: str | None) -> list[Path]:
+    candidates: list[Path] = []
+    env_path = os.environ.get("PROTO_LIGANDMPNN_LEGACY_PATH")
+    if env_path:
+        candidates.append(Path(env_path).expanduser())
+
+    for raw_path in raw_paths:
+        if not raw_path:
+            continue
+        path = Path(raw_path).expanduser()
+        if path.is_file():
+            path = path.parent
+        candidates.extend(
+            [
+                path,
+                path.parent,
+                path.parent.parent,
+                path / "ligandmpnn",
+                path / "models" / "ligandmpnn",
+                path.parent / "ligandmpnn",
+                path.parent / "models" / "ligandmpnn",
+                path.parent.parent / "ligandmpnn",
+                path.parent.parent / "models" / "ligandmpnn",
+            ]
+        )
+
+    resolved: list[Path] = []
+    seen: set[Path] = set()
+    for candidate in candidates:
+        try:
+            real_candidate = candidate.resolve()
+        except OSError:
+            continue
+        if real_candidate in seen:
+            continue
+        seen.add(real_candidate)
+        resolved.append(real_candidate)
+    return resolved
+
+
+def _legacy_package_path(
+    checkpoint_path: str | None,
+    packer_checkpoint_path: str | None,
+    *,
+    required: bool,
+) -> Path | None:
+    """Resolve an upstream LigandMPNN checkout from colocated checkpoint paths."""
+    candidates = _candidate_legacy_package_paths(checkpoint_path, packer_checkpoint_path)
+    for candidate in candidates:
+        if _is_legacy_package_path(candidate):
+            return candidate
+    if required:
+        checked = ", ".join(str(path) for path in candidates) or "<none>"
+        raise ValueError(
+            "ligandmpnn side-chain packing requires an upstream LigandMPNN checkout "
+            "containing ligandmpnn.py, model_utils.py, data_utils.py, pdb_utils.py, and sc_utils.py. "
+            "Pass checkpoints from that checkout's model_params directory or set PROTO_LIGANDMPNN_LEGACY_PATH. "
+            f"Checked: {checked}"
+        )
+    return None
+
+
+def _load_legacy_modules(package_path: Path) -> dict[str, Any]:
+    parent = str(package_path.parent)
+    if parent not in sys.path:
+        sys.path.insert(0, parent)
+    package = package_path.name
+    for module_name, module in list(sys.modules.items()):
+        if module_name != package and not module_name.startswith(f"{package}."):
+            continue
+        module_file = getattr(module, "__file__", None)
+        if module_file is not None and not Path(module_file).resolve().is_relative_to(package_path):
+            del sys.modules[module_name]
+    return {
+        "ligandmpnn": importlib.import_module(f"{package}.ligandmpnn"),
+        "pdb_utils": importlib.import_module(f"{package}.pdb_utils"),
+        "sc_utils": importlib.import_module(f"{package}.sc_utils"),
+        "model_utils": importlib.import_module(f"{package}.model_utils"),
+        "data_utils": importlib.import_module(f"{package}.data_utils"),
+        "package_path": package_path,
+    }
+
+
+def _legacy_checkpoint_path(
+    package_path: Path,
+    checkpoint_path: str | None,
+    filename: str,
+) -> str:
+    if checkpoint_path is not None:
+        return checkpoint_path
+    root_candidates = [package_path, package_path.parent, package_path.parent.parent]
+    for root in root_candidates:
+        for candidate in (root / "model_params" / filename, root / "models" / "ligandmpnn" / "model_params" / filename):
+            if candidate.is_file():
+                return str(candidate)
+    raise ValueError(f"ligandmpnn could not locate {filename}; pass an explicit checkpoint path")
+
+
+def _fixed_residue_strings(fixed_positions: dict[str, list[int]] | None) -> list[str]:
+    if not fixed_positions:
+        return []
+    return [f"{chain}{position}" for chain, positions in fixed_positions.items() for position in positions]
+
+
+def _chain_sequences_from_legacy(protein_dict: dict[str, Any], sequence: str) -> list[dict[str, str]]:
+    groups: list[dict[str, str]] = []
+    current_chain: str | None = None
+    buffer: list[str] = []
+    for chain_id, aa in zip([str(chain) for chain in protein_dict["chain_letters"]], sequence, strict=True):
+        if chain_id != current_chain:
+            if current_chain is not None:
+                groups.append({"id": current_chain, "sequence": "".join(buffer)})
+            current_chain = chain_id
+            buffer = []
+        buffer.append(aa)
+    if current_chain is not None:
+        groups.append({"id": current_chain, "sequence": "".join(buffer)})
+    return groups
+
+
+def _legacy_sequence_recovery(output_dict: dict[str, Any]) -> float:
+    native = output_dict["native_sequence"].detach().cpu().numpy()
+    generated = torch.transpose(output_dict["generated_sequence"], 1, 2)[0].squeeze().detach().cpu().numpy()
+    mask = (output_dict["mask"] * output_dict["chain_mask"]).detach().cpu().numpy().astype(bool)
+    if not np.any(mask):
+        return float("nan")
+    return float(np.mean(native[mask] == generated[mask]))
+
+
+def _run_legacy_ligandmpnn(
+    ligandmpnn_module: Any,
+    args: Any,
+    protein_dict: dict[str, Any],
+    feature_dict: dict[str, Any],
+    model: Any,
+    *,
+    device: str,
+) -> dict[str, Any]:
+    original_format_float_positional = ligandmpnn_module.np.format_float_positional
+
+    def format_float_positional_compat(x: Any, *args_: Any, **kwargs: Any) -> str:
+        array = np.asarray(x)
+        if array.size == 1:
+            x = array.reshape(()).item()
+        return str(original_format_float_positional(x, *args_, **kwargs))
+
+    ligandmpnn_module.np.format_float_positional = format_float_positional_compat
+    try:
+        return cast(
+            "dict[str, Any]",
+            ligandmpnn_module.run_ligandmpnn(args, protein_dict, feature_dict, model, device=device),
+        )
+    finally:
+        ligandmpnn_module.np.format_float_positional = original_format_float_positional
+
+
+class LegacyCompatibleLigandMPNNModel:
+    """Upstream LigandMPNN-compatible model used when packed structures are requested."""
+
+    def __init__(
+        self,
+        package_path: Path,
+        checkpoint_path: str | None = None,
+        packer_checkpoint_path: str | None = None,
+    ) -> None:
+        """Initialize upstream package paths and lazy model state."""
+        self.package_path = package_path
+        self.checkpoint_path = _legacy_checkpoint_path(package_path, checkpoint_path, "ligandmpnn_v_32_020_25.pt")
+        self._configured_packer_checkpoint_path = packer_checkpoint_path
+        self.packer_checkpoint_path: str | None = None
+        self._modules = _load_legacy_modules(package_path)
+        self._loaded = False
+        self.device: str | None = None
+        self.model: Any = None
+        self.packer: Any = None
+        self.atom_context_num: int = 16
+
+    def load(self, device: str) -> None:
+        """Load the sequence model and side-chain packer."""
+        if self._loaded and self.device == device:
+            return
+        if self._loaded:
+            self.unload()
+
+        checkpoint = torch.load(self.checkpoint_path, map_location=device, weights_only=False)
+        self.atom_context_num = int(checkpoint["atom_context_num"])
+        k_neighbors = checkpoint["num_edges"]
+        protein_mpnn = self._modules["model_utils"].ProteinMPNN
+        self.model = protein_mpnn(
+            node_features=128,
+            edge_features=128,
+            hidden_dim=128,
+            num_encoder_layers=3,
+            num_decoder_layers=3,
+            k_neighbors=k_neighbors,
+            device=device,
+            atom_context_num=self.atom_context_num,
+            model_type="ligand_mpnn",
+            ligand_mpnn_use_side_chain_context=True,
+        )
+        self.model.load_state_dict(checkpoint["model_state_dict"])
+        self.model.eval()
+        self.model.to(device)
+
+        self.device = device
+        self._loaded = True
+
+    def load_packer(self, device: str) -> None:
+        """Load the side-chain packer on demand."""
+        if self.packer is not None and self.device == device:
+            return
+        if not self._loaded or self.device != device:
+            self.load(device)
+
+        if self.packer_checkpoint_path is None:
+            self.packer_checkpoint_path = _legacy_checkpoint_path(
+                self.package_path,
+                self._configured_packer_checkpoint_path,
+                "ligandmpnn_sc_v_32_002_16.pt",
+            )
+        checkpoint_packer = torch.load(self.packer_checkpoint_path, map_location=device, weights_only=False)
+        packer_cls = self._modules["sc_utils"].Packer
+        self.packer = packer_cls(
+            node_features=128,
+            edge_features=128,
+            num_positional_embeddings=16,
+            num_chain_embeddings=16,
+            num_rbf=16,
+            hidden_dim=128,
+            num_encoder_layers=3,
+            num_decoder_layers=3,
+            atom_context_num=16,
+            lower_bound=0.0,
+            upper_bound=20.0,
+            top_k=32,
+            dropout=0.0,
+            augment_eps=0.0,
+            atom37_order=False,
+            device=device,
+            num_mix=3,
+        )
+        self.packer.load_state_dict(checkpoint_packer["model_state_dict"])
+        self.packer.eval()
+        self.packer.to(device)
+
+    def to_device(self, device: str) -> None:
+        """Reload the compatibility models on a different device."""
+        if not self._loaded:
+            raise ValueError("ligandmpnn cannot move an unloaded compatibility model; call load() first")
+        if self.device != device:
+            self.unload()
+            self.load(device)
+
+    def sample(
+        self,
+        pdb_path: str,
+        chain_ids: list[str],
+        batch_size: int,
+        temperature: float = DEFAULT_TEMPERATURE,
+        fixed_positions: dict[str, list[int]] | None = None,
+        excluded_amino_acids: list[str] | None = None,
+        seed: int | None = None,
+        device: str = "cuda",
+        verbose: bool = False,
+        ligand_mpnn_cutoff_for_score: float = 20.0,
+        sc_num_denoising_steps: int = 8,
+        sc_num_samples: int = 1,
+        **_: Any,
+    ) -> dict[str, Any]:
+        """Sample fixed-backbone sequences and packed full-atom structures."""
+        self.load(device)
+        self.load_packer(device)
+        _set_legacy_seed(seed)
+        args = self._args(
+            chain_ids=chain_ids,
+            fixed_positions=fixed_positions,
+            excluded_amino_acids=excluded_amino_acids,
+            temperature=temperature,
+            ligand_mpnn_cutoff_for_score=ligand_mpnn_cutoff_for_score,
+            sc_num_denoising_steps=sc_num_denoising_steps,
+            sc_num_samples=sc_num_samples,
+            verbose=verbose,
+            seed=seed,
+        )
+        protein_dict, other_atoms, icodes, feature_dict = self._prepare(pdb_path, args, device)
+
+        chain_sequences: list[list[dict[str, str]]] = []
+        metrics: list[dict[str, Any]] = []
+        pdb_strings: list[str] = []
+        with tempfile.TemporaryDirectory(prefix="ligandmpnn_packed_") as tmpdir:
+            for index in range(batch_size):
+                feature_dict["randn"] = torch.randn([1, feature_dict["mask"].shape[1]], device=device)
+                output_dict = _run_legacy_ligandmpnn(
+                    self._modules["ligandmpnn"],
+                    args,
+                    protein_dict,
+                    feature_dict,
+                    self.model,
+                    device=device,
+                )
+                sequence = output_dict["generated_sequence_str"]
+                outfile = os.path.join(tmpdir, f"packed_{index}.pdb")
+                self._modules["pdb_utils"].pack_sc(
+                    args,
+                    self.packer,
+                    protein_dict,
+                    output_dict["generated_sequence"],
+                    other_atoms,
+                    icodes,
+                    outfile=outfile,
+                    device=device,
+                )
+                chain_sequences.append(_chain_sequences_from_legacy(protein_dict, sequence))
+                metrics.append(
+                    {
+                        "sequence_recovery": _legacy_sequence_recovery(output_dict),
+                        "ligand_interface_sequence_recovery": float("nan"),
+                        "pmpnn": float(output_dict["loss_np"]),
+                    }
+                )
+                pdb_strings.append(Path(outfile).read_text())
+        return {"chain_sequences": chain_sequences, "metrics": metrics, "pdb_strings": pdb_strings}
+
+    def score(
+        self,
+        pdb_path: str,
+        chain_ids: list[str],
+        sequence: str,
+        fixed_positions: dict[str, list[int]] | None = None,
+        seed: int | None = None,
+        device: str = "cuda",
+        verbose: bool = False,
+        return_logits: bool = False,
+        scoring_mode: str = "single_aa",
+        ligand_mpnn_cutoff_for_score: float = 20.0,
+        **_: Any,
+    ) -> dict[str, Any]:
+        """Score a sequence against a structure with upstream-compatible semantics."""
+        self.load(device)
+        _set_legacy_seed(seed)
+        args = self._args(
+            chain_ids=chain_ids,
+            fixed_positions=fixed_positions,
+            excluded_amino_acids=None,
+            temperature=1.0,
+            ligand_mpnn_cutoff_for_score=ligand_mpnn_cutoff_for_score,
+            sc_num_denoising_steps=8,
+            sc_num_samples=1,
+            verbose=verbose,
+            seed=seed,
+        )
+        protein_dict, _other_atoms, _icodes, feature_dict = self._prepare(pdb_path, args, device)
+        data_utils = self._modules["data_utils"]
+        token_ids = [data_utils.restype_str_to_int[aa] for aa in sequence]
+        if len(token_ids) != int(feature_dict["mask"].shape[1]):
+            raise ValueError(
+                f"Sequence length {len(token_ids)} does not match structure ({int(feature_dict['mask'].shape[1])} residues)."
+            )
+        feature_dict["S"] = torch.tensor([token_ids], device=device, dtype=torch.int32)
+        with torch.inference_mode():
+            if scoring_mode == "single_aa":
+                score_dict = self.model.single_aa_score(feature_dict, use_sequence=1)
+            elif scoring_mode == "autoregressive":
+                score_dict = self.model.score(feature_dict, use_sequence=1)
+            else:
+                raise ValueError(f"ligandmpnn: scoring_mode must be one of {sorted(SCORING_CAUSALITY)}")
+
+        probs_2d = torch.mean(torch.exp(score_dict["log_probs"]), 0)
+        seq_tensor = feature_dict["S"].squeeze()
+        selected = probs_2d[torch.arange(len(token_ids), device=device), seq_tensor].detach().cpu().numpy()
+        chain_mask = protein_dict["chain_mask"].detach().cpu().numpy().astype(bool)
+        selected_masked = selected[chain_mask]
+        if selected_masked.size == 0:
+            raise ValueError("ligandmpnn score found no residues available to score")
+        avg_log_likelihood = float(np.mean(np.log(np.maximum(selected_masked, 1e-12))))
+        logits = None
+        if return_logits:
+            logits = np.log(np.maximum(probs_2d.detach().cpu().numpy(), 1e-12)).tolist()
+        return {
+            "logits": logits,
+            "metrics": {
+                **log_likelihood_metrics(avg_log_likelihood, int(selected_masked.size)),
+                "mean_current_probability": float(np.mean(selected_masked)),
+            },
+            "vocab": [data_utils.restype_int_to_str[idx] for idx in range(len(data_utils.restype_int_to_str))],
+        }
+
+    def _args(
+        self,
+        *,
+        chain_ids: list[str],
+        fixed_positions: dict[str, list[int]] | None,
+        excluded_amino_acids: list[str] | None,
+        temperature: float,
+        ligand_mpnn_cutoff_for_score: float,
+        sc_num_denoising_steps: int,
+        sc_num_samples: int,
+        verbose: bool,
+        seed: int | None,
+    ) -> SimpleNamespace:
+        return SimpleNamespace(
+            seq_model="ligandmpnn",
+            seed=seed,
+            model_path=self.checkpoint_path,
+            packer_path=self.packer_checkpoint_path,
+            var_residues="",
+            fixed_residues=" ".join(_fixed_residue_strings(fixed_positions)),
+            bias_AA="",
+            bias_AA_per_residue="",
+            omit_AA="".join(excluded_amino_acids or []),
+            omit_AA_per_residue="",
+            symmetry_residues="",
+            symmetry_weights="",
+            homo_oligomer=0,
+            sc_num_denoising_steps=sc_num_denoising_steps,
+            sc_num_samples=sc_num_samples,
+            ligand_mpnn_cutoff_for_score=ligand_mpnn_cutoff_for_score,
+            temperature=temperature,
+            zero_indexed=0,
+            autoregressive_score=0,
+            single_aa_score=1,
+            chains_to_design=",".join(chain_ids),
+            parse_these_chains_only="",
+            parse_atoms_with_zero_occupancy=0,
+            verbose=verbose,
+        )
+
+    def _prepare(
+        self,
+        pdb_path: str,
+        args: SimpleNamespace,
+        device: str,
+    ) -> tuple[dict[str, Any], Any, list[str], dict[str, Any]]:
+        ligandmpnn = self._modules["ligandmpnn"]
+        protein_dict, _, other_atoms, icodes, _ = self._modules["data_utils"].parse_PDB(
+            pdb_path,
+            device=device,
+            chains=[],
+            parse_all_atoms=True,
+            parse_atoms_with_zero_occupancy=args.parse_atoms_with_zero_occupancy,
+        )
+        encoded_residues, encoded_residue_dict, _ = ligandmpnn.get_encoded_residues(protein_dict, icodes)
+        design_params = {
+            "var_residues": ligandmpnn.get_var_residues(args, pdb_path),
+            "fixed_residues": ligandmpnn.get_fixed_residues(args, pdb_path),
+            "bias_AA": ligandmpnn.get_bias_aa(args, pdb_path, device)[0],
+            "bias_AA_per_residue": {},
+            "omit_AA": ligandmpnn.get_omit_aa(args, pdb_path, device)[0],
+            "omit_AA_per_residue": {},
+            "parse_these_chains_only_list": [],
+        }
+        protein_dict, feature_dict = ligandmpnn.prepare_ligandmpnn(
+            args,
+            protein_dict,
+            icodes,
+            design_params,
+            self.atom_context_num,
+            device=device,
+        )
+        omit_per_residue = ligandmpnn.omit_aa(args, encoded_residues, encoded_residue_dict, {}, device)
+        feature_dict["bias"] = feature_dict["bias"] - 1e8 * omit_per_residue[None]
+        return protein_dict, other_atoms, icodes, feature_dict
+
+    def unload(self) -> None:
+        """Unload compatibility models and clear cached GPU memory."""
+        self.model = None
+        self.packer = None
+        self._loaded = False
+        self.device = None
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+
 # ============================================================================
 # Dispatch
 # ============================================================================
@@ -389,15 +888,38 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model, _model_key
     checkpoint_path = input_dict.get("checkpoint_path")
-    model_key = (checkpoint_path,)
+    packer_checkpoint_path = input_dict.get("packer_checkpoint_path")
+    legacy_package = _legacy_package_path(
+        checkpoint_path,
+        packer_checkpoint_path,
+        required=packer_checkpoint_path is not None,
+    )
+    use_legacy_compatible = legacy_package is not None and (
+        checkpoint_path is not None or packer_checkpoint_path is not None
+    )
+    model_key = (
+        "legacy-compatible" if use_legacy_compatible else "foundry",
+        checkpoint_path,
+        packer_checkpoint_path,
+        str(legacy_package) if use_legacy_compatible else None,
+    )
     if _model is not None and _model_key != model_key:
         _model.unload()
         _model = None
         _model_key = None
     if _model is None:
-        _model = LigandMPNNModel(
-            checkpoint_path=checkpoint_path,
-        )
+        if use_legacy_compatible:
+            if legacy_package is None:
+                raise RuntimeError("ligandmpnn internal error: missing resolved compatibility package")
+            _model = LegacyCompatibleLigandMPNNModel(
+                package_path=legacy_package,
+                checkpoint_path=checkpoint_path,
+                packer_checkpoint_path=packer_checkpoint_path,
+            )
+        else:
+            _model = LigandMPNNModel(
+                checkpoint_path=checkpoint_path,
+            )
         _model_key = model_key
 
     pdb_path = input_dict["pdb_path"]
@@ -418,6 +940,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             "ligand_mpnn_use_atom_context": input_dict["ligand_mpnn_use_atom_context"],
             "ligand_mpnn_use_side_chain_context": input_dict["ligand_mpnn_use_side_chain_context"],
             "ligand_mpnn_cutoff_for_score": input_dict["ligand_mpnn_cutoff_for_score"],
+            "sc_num_denoising_steps": input_dict.get("sc_num_denoising_steps", 8),
+            "sc_num_samples": input_dict.get("sc_num_samples", 1),
         }
         return _model.sample(**sample_kwargs)
     if operation == "score":
