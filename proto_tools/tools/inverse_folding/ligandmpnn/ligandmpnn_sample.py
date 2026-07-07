@@ -34,7 +34,6 @@ LigandMPNNModelType = Literal[
     # "per_residue_label_membrane_mpnn",
     # "global_label_membrane_mpnn",
 ]
-LigandMPNNBackend = Literal["foundry", "reference"]
 
 
 # ============================================================================
@@ -57,20 +56,11 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         excluded_amino_acids (list[AminoAcid] | None): One-letter codes of amino acids to exclude.
         seed (int): Random seed to use for sampling.
         model_type (LigandMPNNModelType): LigandMPNN variant to load.
-        backend (LigandMPNNBackend): Inference backend. ``"foundry"`` uses the
-            managed Foundry LigandMPNN implementation; ``"reference"`` uses a
-            local reference LigandMPNN checkout for compatibility experiments.
         checkpoint_path (str | None): Optional explicit LigandMPNN checkpoint path.
-        reference_backend_path (str | None): Path to a checkout containing the
-            reference ``ligandmpnn`` Python package when ``backend="reference"``.
-        packer_checkpoint_path (str | None): Side-chain packer checkpoint used
-            by the reference backend to emit sequence-consistent PDB structures.
         use_atom_context (bool): Whether ligand-aware variants encode ligand atom context.
         use_side_chain_context (bool): Whether to condition on fixed-residue sidechain atoms.
         cutoff_for_score (float): Ligand-residue distance cutoff (Å) for the ligand-interface
             recovery score.
-        sc_num_denoising_steps (int): Number of side-chain denoising steps for the reference packer.
-        sc_num_samples (int): Number of side-chain samples for the reference packer.
     """
 
     model_type: LigandMPNNModelType = ConfigField(
@@ -84,28 +74,10 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         default=True,
         description="Encode ligand atom context in the message-passing graph",
     )
-    backend: LigandMPNNBackend = ConfigField(
-        title="Backend",
-        default="foundry",
-        description="Inference backend: managed Foundry implementation or local reference implementation.",
-        reload_on_change=True,
-    )
     checkpoint_path: str | None = ConfigField(
         title="Checkpoint Path",
         default=None,
         description="Optional explicit LigandMPNN checkpoint path.",
-        reload_on_change=True,
-    )
-    reference_backend_path: str | None = ConfigField(
-        title="Reference Backend Path",
-        default=None,
-        description="Path to a local reference LigandMPNN checkout when backend='reference'.",
-        reload_on_change=True,
-    )
-    packer_checkpoint_path: str | None = ConfigField(
-        title="Packer Checkpoint Path",
-        default=None,
-        description="Optional side-chain packer checkpoint path for the reference backend.",
         reload_on_change=True,
     )
     use_side_chain_context: bool = ConfigField(
@@ -125,18 +97,6 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         description="Single-letter codes of amino acids to exclude (e.g. ['C'] to forbid cysteine)",
         examples=[["C"]],
     )
-    sc_num_denoising_steps: int = ConfigField(
-        title="Sidechain Denoising Steps",
-        default=8,
-        ge=1,
-        description="Number of side-chain denoising steps for the reference backend packer.",
-    )
-    sc_num_samples: int = ConfigField(
-        title="Sidechain Samples",
-        default=1,
-        ge=1,
-        description="Number of side-chain samples for the reference backend packer.",
-    )
 
 
 class LigandMPNNDesignMetrics(Metrics):
@@ -150,9 +110,9 @@ class LigandMPNNDesignMetrics(Metrics):
             ligand-interface residues (0.0-1.0). Present only when a ligand
             interface is present; ``NaN`` or absent when the input structure
             has no ligand interface.
-        pmpnn (float): Mean sequence probability reported by compatible
-            LigandMPNN backends. Higher values indicate higher model
-            probability for the emitted sequence.
+        pmpnn (float): Mean sequence probability reported by LigandMPNN.
+            Higher values indicate higher model probability for the emitted
+            sequence.
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
@@ -171,7 +131,7 @@ class LigandMPNNDesignMetrics(Metrics):
             "better_values_are": "higher",
         },
         "pmpnn": {
-            "availability": "when emitted by the selected backend",
+            "availability": "when LigandMPNN reports a finite sequence probability",
             "type": "float",
             "min": 0.0,
             "max": 1.0,
@@ -333,15 +293,10 @@ def run_ligandmpnn_sample(
                     "device": config.device,
                     "verbose": config.verbose,
                     "model_type": config.model_type,
-                    "backend": config.backend,
                     "checkpoint_path": config.checkpoint_path,
-                    "reference_backend_path": config.reference_backend_path,
-                    "packer_checkpoint_path": config.packer_checkpoint_path,
                     "ligand_mpnn_use_atom_context": config.use_atom_context,
                     "ligand_mpnn_use_side_chain_context": config.use_side_chain_context,
                     "ligand_mpnn_cutoff_for_score": config.cutoff_for_score,
-                    "sc_num_denoising_steps": config.sc_num_denoising_steps,
-                    "sc_num_samples": config.sc_num_samples,
                 }
                 result = ToolInstance.dispatch(
                     "ligandmpnn",
