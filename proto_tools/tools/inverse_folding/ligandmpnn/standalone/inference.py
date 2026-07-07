@@ -588,7 +588,6 @@ class LegacyCompatibleLigandMPNNModel:
         self.checkpoint_path = _legacy_checkpoint_path(package_path, checkpoint_path, "ligandmpnn_v_32_020_25.pt")
         self._configured_packer_checkpoint_path = packer_checkpoint_path
         self.packer_checkpoint_path: str | None = None
-        # Baked into the model at construction (mirrors the upstream ProteinMPNN arg).
         self.use_side_chain_context = use_side_chain_context
         self._modules = _load_legacy_modules(package_path)
         self._loaded = False
