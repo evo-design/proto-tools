@@ -853,6 +853,27 @@ class LegacyCompatibleLigandMPNNModel:
             verbose=verbose,
         )
 
+    def _ligand_context(self, other_atoms: list[Any], device: str) -> tuple[Any, Any, Any]:
+        """Build ligand-atom context (Y coords, Y_t element types, Y_m mask) from BioPython atoms.
+
+        Mirrors the upstream construction, but reads BioPython atoms (``.coord`` / ``.element``)
+        instead of the ProDy accessors the vendored parse_PDB assumes.
+        """
+        element_to_index = {sym: idx for idx, sym in self._modules["data_utils"].element_dict_rev.items()}
+        coords = np.array([atom.coord for atom in other_atoms], dtype=np.float32).reshape(-1, 3)
+        types = np.array([element_to_index.get(atom.element.upper(), 0) for atom in other_atoms], dtype=np.int32)
+        keep = (types != 1) & (types != 0)  # drop hydrogens (1) and unknown elements (0)
+        coords, types = coords[keep], types[keep]
+        if types.size == 0:
+            coords, types, mask = np.zeros([1, 3], np.float32), np.zeros([1], np.int32), np.zeros([1], np.int32)
+        else:
+            mask = np.ones(types.size, dtype=np.int32)
+        return (
+            torch.tensor(coords, device=device, dtype=torch.float32),
+            torch.tensor(types, device=device, dtype=torch.int32),
+            torch.tensor(mask, device=device, dtype=torch.int32),
+        )
+
     def _prepare(
         self,
         pdb_path: str,
@@ -868,6 +889,10 @@ class LegacyCompatibleLigandMPNNModel:
             parse_all_atoms=True,
             parse_atoms_with_zero_occupancy=args.parse_atoms_with_zero_occupancy,
         )
+        # The vendored parse_PDB builds the ligand context (Y) via ProDy calls on what is actually
+        # a BioPython atom list, so it raises and a bare `except` leaves the context empty. Rebuild
+        # it here so ligand/atom conditioning (use_atom_context) is honored.
+        protein_dict["Y"], protein_dict["Y_t"], protein_dict["Y_m"] = self._ligand_context(other_atoms, device)
         encoded_residues, encoded_residue_dict, _ = ligandmpnn.get_encoded_residues(protein_dict, icodes)
         design_params = {
             "var_residues": ligandmpnn.get_var_residues(args, pdb_path),
