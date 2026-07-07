@@ -62,9 +62,9 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         temperature (float): Controls randomness in sampling from logits.
         excluded_amino_acids (list[AminoAcid] | None): One-letter codes of amino acids to exclude.
         seed (int): Random seed to use for sampling.
-        model_type (LigandMPNNModelType): LigandMPNN implementation. ``original`` runs
-            the original LigandMPNN code and weights, auto-provisioned on first use, and emits
-            packed full-atom structures; the default ``ligand_mpnn`` uses Foundry.
+        model_type (LigandMPNNModelType): LigandMPNN implementation. ``ligand_mpnn`` (default) is
+            the Foundry implementation; ``original`` runs the original LigandMPNN code and weights,
+            auto-provisioned on first use, and emits packed full-atom structures.
         checkpoint_path (str | None): Optional explicit LigandMPNN checkpoint path.
         use_atom_context (bool): Whether ligand-aware variants encode ligand atom context.
         use_side_chain_context (bool): Whether to condition on fixed-residue sidechain atoms.

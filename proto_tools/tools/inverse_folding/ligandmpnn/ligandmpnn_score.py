@@ -46,9 +46,9 @@ class LigandMPNNScoringConfig(BaseConfig):
         device (str): Device to run the model on.
         return_logits (bool): Whether to include per-position logits.
         scoring_mode (LigandMPNNScoringMode): Single-position or autoregressive scoring mode.
-        model_type (LigandMPNNModelType): Implementation. ``original`` runs the original
-            LigandMPNN code and weights, auto-provisioned on first use; the default
-            ``ligand_mpnn`` uses Foundry.
+        model_type (LigandMPNNModelType): LigandMPNN implementation. ``ligand_mpnn`` (default) is
+            the Foundry implementation; ``original`` runs the original LigandMPNN code and weights,
+            auto-provisioned on first use.
         checkpoint_path (str | None): Optional explicit LigandMPNN checkpoint path.
         use_atom_context (bool): Whether ligand-aware variants encode ligand atom context.
         use_side_chain_context (bool): Whether to condition on fixed-residue sidechain atoms.
