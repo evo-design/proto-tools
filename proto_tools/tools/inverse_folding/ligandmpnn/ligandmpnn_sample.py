@@ -66,8 +66,6 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
             the original LigandMPNN code and weights, auto-provisioned on first use, and emits
             packed full-atom structures; the default ``ligand_mpnn`` uses Foundry.
         checkpoint_path (str | None): Optional explicit LigandMPNN checkpoint path.
-        packer_checkpoint_path (str | None): Optional override for the side-chain packer
-            checkpoint. Only used when model_type is ``legacy_version``.
         use_atom_context (bool): Whether ligand-aware variants encode ligand atom context.
         use_side_chain_context (bool): Whether to condition on fixed-residue sidechain atoms.
         cutoff_for_score (float): Ligand-residue distance cutoff (Å) for the ligand-interface
@@ -93,12 +91,6 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         title="Checkpoint Path",
         default=None,
         description="Optional explicit LigandMPNN checkpoint path.",
-        reload_on_change=True,
-    )
-    packer_checkpoint_path: str | None = ConfigField(
-        title="Packer Checkpoint Path",
-        default=None,
-        description="Override for the side-chain packer checkpoint; only used with model_type='legacy_version'.",
         reload_on_change=True,
     )
     use_side_chain_context: bool = ConfigField(
@@ -145,7 +137,7 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
             fields = type(self).model_fields
             misused = [
                 name
-                for name in ("packer_checkpoint_path", "sc_num_denoising_steps", "sc_num_samples")
+                for name in ("sc_num_denoising_steps", "sc_num_samples")
                 if getattr(self, name) != fields[name].default
             ]
             if misused:
@@ -351,7 +343,6 @@ def run_ligandmpnn_sample(
                     "verbose": config.verbose,
                     "model_type": config.model_type,
                     "checkpoint_path": config.checkpoint_path,
-                    "packer_checkpoint_path": config.packer_checkpoint_path,
                     "ligand_mpnn_use_atom_context": config.use_atom_context,
                     "ligand_mpnn_use_side_chain_context": config.use_side_chain_context,
                     "ligand_mpnn_cutoff_for_score": config.cutoff_for_score,

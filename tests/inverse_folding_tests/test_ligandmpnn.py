@@ -171,7 +171,6 @@ def test_ligandmpnn_sample_dispatch_contract(monkeypatch):
             device="cpu",
             model_type="legacy_version",
             checkpoint_path="ligandmpnn.pt",
-            packer_checkpoint_path="ligandmpnn_sc.pt",
             sc_num_denoising_steps=3,
             sc_num_samples=2,
         ),
@@ -183,7 +182,6 @@ def test_ligandmpnn_sample_dispatch_contract(monkeypatch):
     assert payload["operation"] == "sample"
     assert payload["model_type"] == "legacy_version"
     assert payload["checkpoint_path"] == "ligandmpnn.pt"
-    assert payload["packer_checkpoint_path"] == "ligandmpnn_sc.pt"
     assert payload["sc_num_denoising_steps"] == 3
     assert payload["sc_num_samples"] == 2
     assert "backend" not in payload
@@ -217,9 +215,8 @@ def test_ligandmpnn_sample_defaults_to_foundry(monkeypatch):
 
 
 def test_ligandmpnn_sample_rejects_packing_fields_without_legacy():
-    """Packer/sc fields are rejected unless model_type='legacy_version'."""
+    """Side-chain packing fields are rejected unless model_type='legacy_version'."""
     for kwargs in (
-        {"packer_checkpoint_path": "x.pt"},
         {"sc_num_denoising_steps": 3},
         {"sc_num_samples": 2},
     ):

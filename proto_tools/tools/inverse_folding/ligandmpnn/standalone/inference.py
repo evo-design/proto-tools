@@ -975,13 +975,12 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model, _model_key
     checkpoint_path = input_dict.get("checkpoint_path")
-    packer_checkpoint_path = input_dict.get("packer_checkpoint_path")
     use_legacy = input_dict.get("model_type") == "legacy_version"
     if use_legacy:
-        # Prefer an explicit checkout (checkpoint/packer path or PROTO_LIGANDMPNN_LEGACY_PATH);
-        # otherwise auto-provision the dEVA-vendored code + weights on first use. Applies to
+        # Prefer an explicit checkout (PROTO_LIGANDMPNN_LEGACY_PATH or a checkpoint that resolves
+        # to one); otherwise auto-provision the original code + weights on first use. Applies to
         # both sample (which packs) and score (which runs the original implementation).
-        package_path = _legacy_package_path(checkpoint_path, packer_checkpoint_path, required=False)
+        package_path = _legacy_package_path(checkpoint_path, None, required=False)
         if package_path is None:
             package_path = _ensure_legacy_assets()
     else:
@@ -990,7 +989,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         "legacy-compatible" if package_path is not None else "foundry",
         str(package_path) if package_path is not None else None,
         checkpoint_path,
-        packer_checkpoint_path,
     )
     if _model is not None and _model_key != model_key:
         _model.unload()
@@ -1001,7 +999,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             _model = LegacyCompatibleLigandMPNNModel(
                 package_path=package_path,
                 checkpoint_path=checkpoint_path,
-                packer_checkpoint_path=packer_checkpoint_path,
             )
         else:
             _model = LigandMPNNModel(
