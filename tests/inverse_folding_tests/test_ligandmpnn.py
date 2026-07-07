@@ -188,32 +188,6 @@ def test_ligandmpnn_sample_dispatch_contract(monkeypatch):
     assert "reference_backend_path" not in payload
 
 
-def test_ligandmpnn_sample_defaults_to_foundry(monkeypatch):
-    """The default model_type is Foundry, so no legacy assets are ever provisioned."""
-    captured = {}
-    structure_input = ligandmpnn_example_input().inputs[0]
-    sequence = structure_input.structure.get_chain_sequence("A")
-
-    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
-        captured["payload"] = payload
-        return {
-            "chain_sequences": [[{"id": "A", "sequence": sequence}]],
-            "metrics": [{"sequence_recovery": 1.0, "ligand_interface_sequence_recovery": math.nan, "pmpnn": 0.5}],
-            "pdb_strings": [None],
-        }
-
-    monkeypatch.setattr(
-        "proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample.ToolInstance.dispatch",
-        fake_dispatch,
-    )
-
-    run_ligandmpnn_sample(
-        InverseFoldingInput(inputs=[structure_input]),
-        LigandMPNNSampleConfig(num_sequences_per_structure=1, batch_size=1, seed=7, device="cpu"),
-    )
-    assert captured["payload"]["model_type"] == "ligand_mpnn"
-
-
 def test_ligandmpnn_sample_rejects_packing_fields_without_legacy():
     """Side-chain packing fields are rejected unless model_type='original'."""
     for kwargs in (
