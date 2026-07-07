@@ -27,16 +27,15 @@ SCORING_CAUSALITY = {
 }
 
 # ============================================================================
-# Upstream LigandMPNN provisioning (dEVA-compatible side-chain packing)
+# Upstream LigandMPNN provisioning (full-atom side-chain packing)
 # ============================================================================
-# Full-atom side-chain packing runs the upstream dauparas/LigandMPNN code that
-# dEVA vendors at ``models/ligandmpnn/`` (github.com/gelnesr/dEVA). These assets
-# are fetched on first use only (see ``_ensure_legacy_assets``) so callers never
-# supply a checkout path. Pins match dEVA's ``configs/*.yml`` (model_path /
-# packer_path). To repoint at a proto-bio mirror, change only this block.
-_LEGACY_DEVA_COMMIT = "ee771f6730d170c83d8e63074be3bdd761b21dee"
-_LEGACY_CODE_TARBALL_URL = f"https://github.com/gelnesr/dEVA/archive/{_LEGACY_DEVA_COMMIT}.tar.gz"
-_LEGACY_CODE_SUBDIR = f"dEVA-{_LEGACY_DEVA_COMMIT}/models/ligandmpnn"
+# The legacy model type runs the original dauparas/LigandMPNN code plus its IPD-hosted
+# weights. Both are fetched on first use only (see ``_ensure_legacy_assets``) so callers
+# never supply a checkout path. The code is pulled from a pinned vendored snapshot. To
+# repoint the source (e.g. at a proto-bio mirror), change only this block.
+_LEGACY_SOURCE_COMMIT = "ee771f6730d170c83d8e63074be3bdd761b21dee"
+_LEGACY_CODE_TARBALL_URL = f"https://github.com/gelnesr/dEVA/archive/{_LEGACY_SOURCE_COMMIT}.tar.gz"
+_LEGACY_CODE_SUBDIR = f"dEVA-{_LEGACY_SOURCE_COMMIT}/models/ligandmpnn"
 # Importable package name expected by ``_load_legacy_modules`` (imports ``ligandmpnn.*``).
 _LEGACY_PACKAGE_DIRNAME = "ligandmpnn"
 _LEGACY_WEIGHT_URLS: tuple[tuple[str, str], ...] = (
@@ -404,7 +403,7 @@ class LigandMPNNModel:
 
 
 def _set_legacy_seed(seed: int | None) -> None:
-    """Set RNGs to match the upstream LigandMPNN sampling path."""
+    """Set RNGs to match the original LigandMPNN sampling path."""
     if seed is None:
         return
     np.random.seed(seed)
@@ -468,7 +467,7 @@ def _legacy_package_path(
     *,
     required: bool,
 ) -> Path | None:
-    """Resolve an upstream LigandMPNN checkout from colocated checkpoint paths."""
+    """Resolve an original LigandMPNN checkout from colocated checkpoint paths."""
     candidates = _candidate_legacy_package_paths(checkpoint_path, packer_checkpoint_path)
     for candidate in candidates:
         if _is_legacy_package_path(candidate):
@@ -476,7 +475,7 @@ def _legacy_package_path(
     if required:
         checked = ", ".join(str(path) for path in candidates) or "<none>"
         raise ValueError(
-            "ligandmpnn side-chain packing requires an upstream LigandMPNN checkout "
+            "ligandmpnn side-chain packing requires an original LigandMPNN checkout "
             "containing ligandmpnn.py, model_utils.py, data_utils.py, pdb_utils.py, and sc_utils.py. "
             "Pass checkpoints from that checkout's model_params directory or set PROTO_LIGANDMPNN_LEGACY_PATH. "
             f"Checked: {checked}"
@@ -587,7 +586,7 @@ class LegacyCompatibleLigandMPNNModel:
         checkpoint_path: str | None = None,
         packer_checkpoint_path: str | None = None,
     ) -> None:
-        """Initialize upstream package paths and lazy model state."""
+        """Initialize original package paths and lazy model state."""
         self.package_path = package_path
         self.checkpoint_path = _legacy_checkpoint_path(package_path, checkpoint_path, "ligandmpnn_v_32_020_25.pt")
         self._configured_packer_checkpoint_path = packer_checkpoint_path
@@ -759,7 +758,7 @@ class LegacyCompatibleLigandMPNNModel:
         ligand_mpnn_cutoff_for_score: float = 20.0,
         **_: Any,
     ) -> dict[str, Any]:
-        """Score a sequence against a structure with upstream-compatible semantics."""
+        """Score a sequence against a structure with original-compatible semantics."""
         self.load(device)
         _set_legacy_seed(seed)
         args = self._args(
@@ -981,10 +980,11 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     global _model, _model_key
     checkpoint_path = input_dict.get("checkpoint_path")
     packer_checkpoint_path = input_dict.get("packer_checkpoint_path")
-    pack_side_chains = bool(input_dict.get("pack_side_chains", False))
-    if pack_side_chains:
+    use_legacy = input_dict.get("model_type") == "legacy_version"
+    if use_legacy:
         # Prefer an explicit checkout (checkpoint/packer path or PROTO_LIGANDMPNN_LEGACY_PATH);
-        # otherwise auto-provision the dEVA-vendored code + weights on first use.
+        # otherwise auto-provision the dEVA-vendored code + weights on first use. Applies to
+        # both sample (which packs) and score (which runs the original implementation).
         package_path = _legacy_package_path(checkpoint_path, packer_checkpoint_path, required=False)
         if package_path is None:
             package_path = _ensure_legacy_assets()

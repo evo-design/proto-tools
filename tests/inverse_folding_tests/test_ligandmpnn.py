@@ -8,6 +8,7 @@ import math
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from proto_tools.entities.complex import Chain
 from proto_tools.entities.structures.structure import Structure
@@ -168,7 +169,7 @@ def test_ligandmpnn_sample_dispatch_contract(monkeypatch):
             batch_size=1,
             seed=7,
             device="cpu",
-            pack_side_chains=True,
+            model_type="legacy_version",
             checkpoint_path="ligandmpnn.pt",
             packer_checkpoint_path="ligandmpnn_sc.pt",
             sc_num_denoising_steps=3,
@@ -180,7 +181,7 @@ def test_ligandmpnn_sample_dispatch_contract(monkeypatch):
     assert captured["toolkit"] == "ligandmpnn"
     payload = captured["payload"]
     assert payload["operation"] == "sample"
-    assert payload["pack_side_chains"] is True
+    assert payload["model_type"] == "legacy_version"
     assert payload["checkpoint_path"] == "ligandmpnn.pt"
     assert payload["packer_checkpoint_path"] == "ligandmpnn_sc.pt"
     assert payload["sc_num_denoising_steps"] == 3
@@ -189,8 +190,8 @@ def test_ligandmpnn_sample_dispatch_contract(monkeypatch):
     assert "reference_backend_path" not in payload
 
 
-def test_ligandmpnn_sample_packing_defaults_off(monkeypatch):
-    """By default no packer is requested, so packing weights are never provisioned."""
+def test_ligandmpnn_sample_defaults_to_foundry(monkeypatch):
+    """The default model_type is Foundry, so no legacy assets are ever provisioned."""
     captured = {}
     structure_input = ligandmpnn_example_input().inputs[0]
     sequence = structure_input.structure.get_chain_sequence("A")
@@ -212,7 +213,20 @@ def test_ligandmpnn_sample_packing_defaults_off(monkeypatch):
         InverseFoldingInput(inputs=[structure_input]),
         LigandMPNNSampleConfig(num_sequences_per_structure=1, batch_size=1, seed=7, device="cpu"),
     )
-    assert captured["payload"]["pack_side_chains"] is False
+    assert captured["payload"]["model_type"] == "ligand_mpnn"
+
+
+def test_ligandmpnn_sample_rejects_packing_fields_without_legacy():
+    """Packer/sc fields are rejected unless model_type='legacy_version'."""
+    for kwargs in (
+        {"packer_checkpoint_path": "x.pt"},
+        {"sc_num_denoising_steps": 3},
+        {"sc_num_samples": 2},
+    ):
+        with pytest.raises(ValidationError):
+            LigandMPNNSampleConfig(num_sequences_per_structure=1, **kwargs)
+    # Same fields are accepted once the legacy implementation is selected.
+    LigandMPNNSampleConfig(num_sequences_per_structure=1, model_type="legacy_version", sc_num_samples=2)
 
 
 def test_ligandmpnn_score_dispatch_contract(monkeypatch):

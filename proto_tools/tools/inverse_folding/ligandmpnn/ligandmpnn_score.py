@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Any, Literal
 
+from proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample import LigandMPNNModelType
 from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingScoringMetrics,
     InverseFoldingScoringOutput,
@@ -45,6 +46,9 @@ class LigandMPNNScoringConfig(BaseConfig):
         device (str): Device to run the model on.
         return_logits (bool): Whether to include per-position logits.
         scoring_mode (LigandMPNNScoringMode): Single-position or autoregressive scoring mode.
+        model_type (LigandMPNNModelType): Implementation. ``legacy_version`` runs the original
+            LigandMPNN code and weights, auto-provisioned on first use; the default
+            ``ligand_mpnn`` uses Foundry.
         checkpoint_path (str | None): Optional explicit LigandMPNN checkpoint path.
         use_atom_context (bool): Whether ligand-aware variants encode ligand atom context.
         use_side_chain_context (bool): Whether to condition on fixed-residue sidechain atoms.
@@ -67,6 +71,12 @@ class LigandMPNNScoringConfig(BaseConfig):
         title="Scoring Mode",
         default="single_aa",
         description="Use single-position probabilities or one seed-determined autoregressive order.",
+    )
+    model_type: LigandMPNNModelType = ConfigField(
+        title="Model Type",
+        default="ligand_mpnn",
+        description="Implementation: 'ligand_mpnn' (Foundry) or 'legacy_version' (original code).",
+        reload_on_change=True,
     )
     checkpoint_path: str | None = ConfigField(
         title="Checkpoint Path",
@@ -146,7 +156,7 @@ def run_ligandmpnn_score(
                     "device": config.device,
                     "return_logits": config.return_logits,
                     "verbose": config.verbose,
-                    "model_type": "ligand_mpnn",
+                    "model_type": config.model_type,
                     "checkpoint_path": config.checkpoint_path,
                     "scoring_mode": config.scoring_mode,
                     "ligand_mpnn_use_atom_context": config.use_atom_context,

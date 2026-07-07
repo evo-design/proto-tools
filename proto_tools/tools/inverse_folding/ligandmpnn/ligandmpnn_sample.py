@@ -8,7 +8,7 @@ import math
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from proto_tools.entities.complex import Chain
 from proto_tools.entities.ligands import Fragment
@@ -30,10 +30,17 @@ logger = logging.getLogger(__name__)
 
 LigandMPNNModelType = Literal[
     "ligand_mpnn",
+    # The original LigandMPNN implementation. Its sampler emits packed full-atom structures and
+    # its scorer runs the same original code; code and weights are auto-provisioned on first use.
+    # Foundry is the default otherwise.
+    "legacy_version",
     # Membrane variants need transmembrane-label inputs that are not wired; disabled for now.
     # "per_residue_label_membrane_mpnn",
     # "global_label_membrane_mpnn",
 ]
+
+# model_type values that run the original implementation instead of Foundry.
+LIGANDMPNN_LEGACY_MODEL_TYPES = frozenset({"legacy_version"})
 
 
 # ============================================================================
@@ -55,24 +62,26 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         temperature (float): Controls randomness in sampling from logits.
         excluded_amino_acids (list[AminoAcid] | None): One-letter codes of amino acids to exclude.
         seed (int): Random seed to use for sampling.
-        model_type (LigandMPNNModelType): LigandMPNN variant to load.
+        model_type (LigandMPNNModelType): LigandMPNN implementation. ``legacy_version`` runs
+            the original LigandMPNN code and weights, auto-provisioned on first use, and emits
+            packed full-atom structures; the default ``ligand_mpnn`` uses Foundry.
         checkpoint_path (str | None): Optional explicit LigandMPNN checkpoint path.
-        pack_side_chains (bool): Emit full-atom structures via LigandMPNN side-chain
-            packing; code and weights are auto-provisioned on first use.
         packer_checkpoint_path (str | None): Optional override for the side-chain packer
-            checkpoint; auto-provisioned when unset and pack_side_chains is true.
+            checkpoint. Only used when model_type is ``legacy_version``.
         use_atom_context (bool): Whether ligand-aware variants encode ligand atom context.
         use_side_chain_context (bool): Whether to condition on fixed-residue sidechain atoms.
         cutoff_for_score (float): Ligand-residue distance cutoff (Å) for the ligand-interface
             recovery score.
-        sc_num_denoising_steps (int): Number of side-chain denoising steps when packing.
-        sc_num_samples (int): Number of side-chain samples when packing.
+        sc_num_denoising_steps (int): Side-chain denoising steps. Only used when model_type
+            is ``legacy_version``.
+        sc_num_samples (int): Side-chain packing samples. Only used when model_type is
+            ``legacy_version``.
     """
 
     model_type: LigandMPNNModelType = ConfigField(
         title="Model Type",
         default="ligand_mpnn",
-        description="LigandMPNN model variant (ligand-aware weights).",
+        description="Implementation: 'ligand_mpnn' (Foundry) or 'legacy_version' (original code, packs).",
         reload_on_change=True,
     )
     use_atom_context: bool = ConfigField(
@@ -86,16 +95,10 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         description="Optional explicit LigandMPNN checkpoint path.",
         reload_on_change=True,
     )
-    pack_side_chains: bool = ConfigField(
-        title="Pack Side Chains",
-        default=False,
-        description="Emit full-atom structures via side-chain packing (weights auto-provisioned on first use).",
-        reload_on_change=True,
-    )
     packer_checkpoint_path: str | None = ConfigField(
         title="Packer Checkpoint Path",
         default=None,
-        description="Optional override for the side-chain packer checkpoint; auto-provisioned when packing.",
+        description="Override for the side-chain packer checkpoint; only used with model_type='legacy_version'.",
         reload_on_change=True,
     )
     use_side_chain_context: bool = ConfigField(
@@ -119,14 +122,38 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         title="Sidechain Denoising Steps",
         default=8,
         ge=1,
-        description="Number of denoising steps for side-chain packing.",
+        description="Side-chain denoising steps; only used with model_type='legacy_version'.",
     )
     sc_num_samples: int = ConfigField(
         title="Sidechain Samples",
         default=1,
         ge=1,
-        description="Number of side-chain samples for side-chain packing.",
+        description="Side-chain packing samples; only used with model_type='legacy_version'.",
     )
+
+    @model_validator(mode="after")
+    def _validate_legacy_only_fields(self) -> "LigandMPNNSampleConfig":
+        """Reject non-default packing/packer fields unless the legacy implementation is selected.
+
+        Compares against each field's default (rather than ``model_fields_set``) so configs
+        survive a ``model_dump``/``model_validate`` round-trip, which re-sets defaulted fields.
+
+        Returns:
+            LigandMPNNSampleConfig: The validated config.
+        """
+        if self.model_type not in LIGANDMPNN_LEGACY_MODEL_TYPES:
+            fields = type(self).model_fields
+            misused = [
+                name
+                for name in ("packer_checkpoint_path", "sc_num_denoising_steps", "sc_num_samples")
+                if getattr(self, name) != fields[name].default
+            ]
+            if misused:
+                raise ValueError(
+                    f"{', '.join(misused)} only apply when model_type='legacy_version'; "
+                    f"got model_type={self.model_type!r}."
+                )
+        return self
 
 
 class LigandMPNNDesignMetrics(Metrics):
@@ -324,7 +351,6 @@ def run_ligandmpnn_sample(
                     "verbose": config.verbose,
                     "model_type": config.model_type,
                     "checkpoint_path": config.checkpoint_path,
-                    "pack_side_chains": config.pack_side_chains,
                     "packer_checkpoint_path": config.packer_checkpoint_path,
                     "ligand_mpnn_use_atom_context": config.use_atom_context,
                     "ligand_mpnn_use_side_chain_context": config.use_side_chain_context,
