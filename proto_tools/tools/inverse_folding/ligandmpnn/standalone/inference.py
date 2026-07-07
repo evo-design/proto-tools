@@ -27,12 +27,8 @@ SCORING_CAUSALITY = {
 }
 
 # ============================================================================
-# Upstream LigandMPNN provisioning (full-atom side-chain packing)
+# Original LigandMPNN provisioning (full-atom side-chain packing)
 # ============================================================================
-# The legacy model type runs the original dauparas/LigandMPNN code plus its IPD-hosted
-# weights. Both are fetched on first use only (see ``_ensure_legacy_assets``) so callers
-# never supply a checkout path. The code is pulled from a pinned vendored snapshot. To
-# repoint the source (e.g. at a proto-bio mirror), change only this block.
 _LEGACY_SOURCE_COMMIT = "ee771f6730d170c83d8e63074be3bdd761b21dee"
 _LEGACY_CODE_TARBALL_URL = f"https://github.com/gelnesr/dEVA/archive/{_LEGACY_SOURCE_COMMIT}.tar.gz"
 _LEGACY_CODE_SUBDIR = f"dEVA-{_LEGACY_SOURCE_COMMIT}/models/ligandmpnn"
