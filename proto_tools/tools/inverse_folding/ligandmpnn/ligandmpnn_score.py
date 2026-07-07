@@ -46,7 +46,7 @@ class LigandMPNNScoringConfig(BaseConfig):
         device (str): Device to run the model on.
         return_logits (bool): Whether to include per-position logits.
         scoring_mode (LigandMPNNScoringMode): Single-position or autoregressive scoring mode.
-        model_type (LigandMPNNModelType): Implementation. ``legacy_version`` runs the original
+        model_type (LigandMPNNModelType): Implementation. ``original`` runs the original
             LigandMPNN code and weights, auto-provisioned on first use; the default
             ``ligand_mpnn`` uses Foundry.
         checkpoint_path (str | None): Optional explicit LigandMPNN checkpoint path.
@@ -75,7 +75,7 @@ class LigandMPNNScoringConfig(BaseConfig):
     model_type: LigandMPNNModelType = ConfigField(
         title="Model Type",
         default="ligand_mpnn",
-        description="Implementation: 'ligand_mpnn' (Foundry) or 'legacy_version' (original code).",
+        description="Implementation: 'ligand_mpnn' (Foundry, default) or the 'original' LigandMPNN implementation.",
         reload_on_change=True,
     )
     checkpoint_path: str | None = ConfigField(

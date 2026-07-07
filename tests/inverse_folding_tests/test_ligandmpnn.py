@@ -169,7 +169,7 @@ def test_ligandmpnn_sample_dispatch_contract(monkeypatch):
             batch_size=1,
             seed=7,
             device="cpu",
-            model_type="legacy_version",
+            model_type="original",
             checkpoint_path="ligandmpnn.pt",
             sc_num_denoising_steps=3,
             sc_num_samples=2,
@@ -180,7 +180,7 @@ def test_ligandmpnn_sample_dispatch_contract(monkeypatch):
     assert captured["toolkit"] == "ligandmpnn"
     payload = captured["payload"]
     assert payload["operation"] == "sample"
-    assert payload["model_type"] == "legacy_version"
+    assert payload["model_type"] == "original"
     assert payload["checkpoint_path"] == "ligandmpnn.pt"
     assert payload["sc_num_denoising_steps"] == 3
     assert payload["sc_num_samples"] == 2
@@ -215,7 +215,7 @@ def test_ligandmpnn_sample_defaults_to_foundry(monkeypatch):
 
 
 def test_ligandmpnn_sample_rejects_packing_fields_without_legacy():
-    """Side-chain packing fields are rejected unless model_type='legacy_version'."""
+    """Side-chain packing fields are rejected unless model_type='original'."""
     for kwargs in (
         {"sc_num_denoising_steps": 3},
         {"sc_num_samples": 2},
@@ -223,7 +223,7 @@ def test_ligandmpnn_sample_rejects_packing_fields_without_legacy():
         with pytest.raises(ValidationError):
             LigandMPNNSampleConfig(num_sequences_per_structure=1, **kwargs)
     # Same fields are accepted once the legacy implementation is selected.
-    LigandMPNNSampleConfig(num_sequences_per_structure=1, model_type="legacy_version", sc_num_samples=2)
+    LigandMPNNSampleConfig(num_sequences_per_structure=1, model_type="original", sc_num_samples=2)
 
 
 def test_ligandmpnn_score_dispatch_contract(monkeypatch):

@@ -975,7 +975,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model, _model_key
     checkpoint_path = input_dict.get("checkpoint_path")
-    use_legacy = input_dict.get("model_type") == "legacy_version"
+    use_legacy = input_dict.get("model_type") == "original"
     if use_legacy:
         # Prefer an explicit checkout (PROTO_LIGANDMPNN_LEGACY_PATH or a checkpoint that resolves
         # to one); otherwise auto-provision the original code + weights on first use. Applies to

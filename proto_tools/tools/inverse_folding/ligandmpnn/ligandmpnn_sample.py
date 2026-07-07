@@ -33,14 +33,14 @@ LigandMPNNModelType = Literal[
     # The original LigandMPNN implementation. Its sampler emits packed full-atom structures and
     # its scorer runs the same original code; code and weights are auto-provisioned on first use.
     # Foundry is the default otherwise.
-    "legacy_version",
+    "original",
     # Membrane variants need transmembrane-label inputs that are not wired; disabled for now.
     # "per_residue_label_membrane_mpnn",
     # "global_label_membrane_mpnn",
 ]
 
 # model_type values that run the original implementation instead of Foundry.
-LIGANDMPNN_LEGACY_MODEL_TYPES = frozenset({"legacy_version"})
+LIGANDMPNN_LEGACY_MODEL_TYPES = frozenset({"original"})
 
 
 # ============================================================================
@@ -62,7 +62,7 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         temperature (float): Controls randomness in sampling from logits.
         excluded_amino_acids (list[AminoAcid] | None): One-letter codes of amino acids to exclude.
         seed (int): Random seed to use for sampling.
-        model_type (LigandMPNNModelType): LigandMPNN implementation. ``legacy_version`` runs
+        model_type (LigandMPNNModelType): LigandMPNN implementation. ``original`` runs
             the original LigandMPNN code and weights, auto-provisioned on first use, and emits
             packed full-atom structures; the default ``ligand_mpnn`` uses Foundry.
         checkpoint_path (str | None): Optional explicit LigandMPNN checkpoint path.
@@ -71,15 +71,15 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         cutoff_for_score (float): Ligand-residue distance cutoff (Å) for the ligand-interface
             recovery score.
         sc_num_denoising_steps (int): Side-chain denoising steps. Only used when model_type
-            is ``legacy_version``.
+            is ``original``.
         sc_num_samples (int): Side-chain packing samples. Only used when model_type is
-            ``legacy_version``.
+            ``original``.
     """
 
     model_type: LigandMPNNModelType = ConfigField(
         title="Model Type",
         default="ligand_mpnn",
-        description="Implementation: 'ligand_mpnn' (Foundry) or 'legacy_version' (original code, packs).",
+        description="Implementation: 'ligand_mpnn' (Foundry, default) or 'original' (packs full-atom structures).",
         reload_on_change=True,
     )
     use_atom_context: bool = ConfigField(
@@ -114,13 +114,13 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         title="Sidechain Denoising Steps",
         default=8,
         ge=1,
-        description="Side-chain denoising steps; only used with model_type='legacy_version'.",
+        description="Side-chain denoising steps; only used with model_type='original'.",
     )
     sc_num_samples: int = ConfigField(
         title="Sidechain Samples",
         default=1,
         ge=1,
-        description="Side-chain packing samples; only used with model_type='legacy_version'.",
+        description="Side-chain packing samples; only used with model_type='original'.",
     )
 
     @model_validator(mode="after")
@@ -142,8 +142,7 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
             ]
             if misused:
                 raise ValueError(
-                    f"{', '.join(misused)} only apply when model_type='legacy_version'; "
-                    f"got model_type={self.model_type!r}."
+                    f"{', '.join(misused)} only apply when model_type='original'; got model_type={self.model_type!r}."
                 )
         return self
 
