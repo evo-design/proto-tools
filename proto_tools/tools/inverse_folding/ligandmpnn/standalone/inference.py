@@ -581,12 +581,15 @@ class LegacyCompatibleLigandMPNNModel:
         package_path: Path,
         checkpoint_path: str | None = None,
         packer_checkpoint_path: str | None = None,
+        use_side_chain_context: bool = False,
     ) -> None:
         """Initialize original package paths and lazy model state."""
         self.package_path = package_path
         self.checkpoint_path = _legacy_checkpoint_path(package_path, checkpoint_path, "ligandmpnn_v_32_020_25.pt")
         self._configured_packer_checkpoint_path = packer_checkpoint_path
         self.packer_checkpoint_path: str | None = None
+        # Baked into the model at construction (mirrors the upstream ProteinMPNN arg).
+        self.use_side_chain_context = use_side_chain_context
         self._modules = _load_legacy_modules(package_path)
         self._loaded = False
         self.device: str | None = None
@@ -615,7 +618,7 @@ class LegacyCompatibleLigandMPNNModel:
             device=device,
             atom_context_num=self.atom_context_num,
             model_type="ligand_mpnn",
-            ligand_mpnn_use_side_chain_context=True,
+            ligand_mpnn_use_side_chain_context=self.use_side_chain_context,
         )
         self.model.load_state_dict(checkpoint["model_state_dict"])
         self.model.eval()
@@ -682,6 +685,7 @@ class LegacyCompatibleLigandMPNNModel:
         device: str = "cuda",
         verbose: bool = False,
         ligand_mpnn_cutoff_for_score: float = 20.0,
+        ligand_mpnn_use_atom_context: bool = True,
         sc_num_denoising_steps: int = 8,
         sc_num_samples: int = 1,
         **_: Any,
@@ -701,7 +705,9 @@ class LegacyCompatibleLigandMPNNModel:
             verbose=verbose,
             seed=seed,
         )
-        protein_dict, other_atoms, icodes, feature_dict = self._prepare(pdb_path, args, device)
+        protein_dict, other_atoms, icodes, feature_dict = self._prepare(
+            pdb_path, args, device, use_atom_context=ligand_mpnn_use_atom_context
+        )
 
         chain_sequences: list[list[dict[str, str]]] = []
         metrics: list[dict[str, Any]] = []
@@ -752,6 +758,7 @@ class LegacyCompatibleLigandMPNNModel:
         return_logits: bool = False,
         scoring_mode: str = "single_aa",
         ligand_mpnn_cutoff_for_score: float = 20.0,
+        ligand_mpnn_use_atom_context: bool = True,
         **_: Any,
     ) -> dict[str, Any]:
         """Score a sequence against a structure with original-compatible semantics."""
@@ -768,7 +775,9 @@ class LegacyCompatibleLigandMPNNModel:
             verbose=verbose,
             seed=seed,
         )
-        protein_dict, _other_atoms, _icodes, feature_dict = self._prepare(pdb_path, args, device)
+        protein_dict, _other_atoms, _icodes, feature_dict = self._prepare(
+            pdb_path, args, device, use_atom_context=ligand_mpnn_use_atom_context
+        )
         data_utils = self._modules["data_utils"]
         token_ids = [data_utils.restype_str_to_int[aa] for aa in sequence]
         if len(token_ids) != int(feature_dict["mask"].shape[1]):
@@ -849,6 +858,7 @@ class LegacyCompatibleLigandMPNNModel:
         pdb_path: str,
         args: SimpleNamespace,
         device: str,
+        use_atom_context: bool = True,
     ) -> tuple[dict[str, Any], Any, list[str], dict[str, Any]]:
         ligandmpnn = self._modules["ligandmpnn"]
         protein_dict, _, other_atoms, icodes, _ = self._modules["data_utils"].parse_PDB(
@@ -874,6 +884,7 @@ class LegacyCompatibleLigandMPNNModel:
             icodes,
             design_params,
             self.atom_context_num,
+            use_atom_context=int(use_atom_context),
             device=device,
         )
         omit_per_residue = ligandmpnn.omit_aa(args, encoded_residues, encoded_residue_dict, {}, device)
@@ -976,6 +987,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     global _model, _model_key
     checkpoint_path = input_dict.get("checkpoint_path")
     use_legacy = input_dict.get("model_type") == "original"
+    use_side_chain_context = bool(input_dict.get("ligand_mpnn_use_side_chain_context", False))
     if use_legacy:
         # Prefer an explicit checkout (PROTO_LIGANDMPNN_LEGACY_PATH or a checkpoint that resolves
         # to one); otherwise auto-provision the original code + weights on first use. Applies to
@@ -989,6 +1001,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         "legacy-compatible" if package_path is not None else "foundry",
         str(package_path) if package_path is not None else None,
         checkpoint_path,
+        # The original model bakes side-chain context in at construction, so a change must reload;
+        # Foundry applies it per call, so it stays out of Foundry's cache key.
+        use_side_chain_context if package_path is not None else None,
     )
     if _model is not None and _model_key != model_key:
         _model.unload()
@@ -999,6 +1014,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             _model = LegacyCompatibleLigandMPNNModel(
                 package_path=package_path,
                 checkpoint_path=checkpoint_path,
+                use_side_chain_context=use_side_chain_context,
             )
         else:
             _model = LigandMPNNModel(
