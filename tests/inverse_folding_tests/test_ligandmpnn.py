@@ -141,6 +141,52 @@ def test_ligandmpnn_sample_multiple_structures(cif_structure: Structure):
             assert all(isinstance(chain.sequence, str) for chain in design.chains)
 
 
+def test_ligandmpnn_sample_dispatch_contract(monkeypatch):
+    """Sampling dispatch includes checkpoint/packer controls without a backend selector."""
+    captured = {}
+    structure_input = ligandmpnn_example_input().inputs[0]
+    sequence = structure_input.structure.get_chain_sequence("A")
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        captured["toolkit"] = toolkit
+        captured["payload"] = payload
+        return {
+            "chain_sequences": [[{"id": "A", "sequence": sequence}]],
+            "metrics": [{"sequence_recovery": 1.0, "ligand_interface_sequence_recovery": math.nan, "pmpnn": 0.5}],
+            "pdb_strings": [None],
+        }
+
+    monkeypatch.setattr(
+        "proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+
+    output = run_ligandmpnn_sample(
+        InverseFoldingInput(inputs=[structure_input]),
+        LigandMPNNSampleConfig(
+            num_sequences_per_structure=1,
+            batch_size=1,
+            seed=7,
+            device="cpu",
+            model_type="original",
+            checkpoint_path="ligandmpnn.pt",
+            sc_num_denoising_steps=3,
+            sc_num_samples=2,
+        ),
+    )
+
+    assert output.tool_id == "ligandmpnn-sample"
+    assert captured["toolkit"] == "ligandmpnn"
+    payload = captured["payload"]
+    assert payload["operation"] == "sample"
+    assert payload["model_type"] == "original"
+    assert payload["checkpoint_path"] == "ligandmpnn.pt"
+    assert payload["sc_num_denoising_steps"] == 3
+    assert payload["sc_num_samples"] == 2
+    assert "backend" not in payload
+    assert "reference_backend_path" not in payload
+
+
 def test_ligandmpnn_score_dispatch_contract(monkeypatch):
     captured = {}
     structure = ligandmpnn_example_input().inputs[0].structure
@@ -190,6 +236,8 @@ def test_ligandmpnn_score_dispatch_contract(monkeypatch):
     assert payload["return_logits"] is True
     assert payload["model_type"] == "ligand_mpnn"
     assert payload["scoring_mode"] == "autoregressive"
+    assert "backend" not in payload
+    assert "reference_backend_path" not in payload
 
 
 @pytest.mark.uses_gpu
