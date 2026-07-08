@@ -29,7 +29,7 @@ SCORING_CAUSALITY = {
 # ============================================================================
 # Original LigandMPNN provisioning (full-atom side-chain packing)
 # ============================================================================
-_LEGACY_SOURCE_COMMIT = "ee771f6730d170c83d8e63074be3bdd761b21dee"
+_LEGACY_SOURCE_COMMIT = "1e42fc763bd37256227437c14a93c99d1f44241d"
 _LEGACY_CODE_TARBALL_URL = f"https://github.com/gelnesr/dEVA/archive/{_LEGACY_SOURCE_COMMIT}.tar.gz"
 _LEGACY_CODE_SUBDIR = f"dEVA-{_LEGACY_SOURCE_COMMIT}/models/ligandmpnn"
 # Importable package name expected by ``_load_legacy_modules`` (imports ``ligandmpnn.*``).
@@ -942,8 +942,9 @@ def _ensure_legacy_assets() -> Path:
     """Provision the original LigandMPNN code + weights on first use; return the package path.
 
     Fetches nothing unless the ``original`` model is actually requested. Code and
-    weights are cached under ``resolve_weights_dir("ligandmpnn")/legacy/`` and
-    reused on subsequent calls.
+    weights are cached under ``resolve_weights_dir("ligandmpnn")/legacy/<commit>/``
+    and reused on subsequent calls. Keying on the source commit means bumping
+    ``_LEGACY_SOURCE_COMMIT`` provisions a fresh checkout instead of reusing a stale one.
     """
     import subprocess
 
@@ -952,7 +953,7 @@ def _ensure_legacy_assets() -> Path:
     weights_dir = resolve_weights_dir("ligandmpnn")
     if weights_dir is None:
         raise RuntimeError("ligandmpnn: cannot resolve a weights directory for the original LigandMPNN assets")
-    package_path = Path(weights_dir) / "legacy" / _LEGACY_PACKAGE_DIRNAME
+    package_path = Path(weights_dir) / "legacy" / _LEGACY_SOURCE_COMMIT[:12] / _LEGACY_PACKAGE_DIRNAME
 
     # 1. Code: fetch the original ligandmpnn package if the modules are missing.
     if not _is_legacy_package_path(package_path):
