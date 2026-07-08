@@ -168,8 +168,8 @@ def test_ligandmpnn_sample_dispatch_contract(monkeypatch):
             batch_size=1,
             seed=7,
             device="cpu",
+            model_type="original",
             checkpoint_path="ligandmpnn.pt",
-            packer_checkpoint_path="ligandmpnn_sc.pt",
             sc_num_denoising_steps=3,
             sc_num_samples=2,
         ),
@@ -179,8 +179,8 @@ def test_ligandmpnn_sample_dispatch_contract(monkeypatch):
     assert captured["toolkit"] == "ligandmpnn"
     payload = captured["payload"]
     assert payload["operation"] == "sample"
+    assert payload["model_type"] == "original"
     assert payload["checkpoint_path"] == "ligandmpnn.pt"
-    assert payload["packer_checkpoint_path"] == "ligandmpnn_sc.pt"
     assert payload["sc_num_denoising_steps"] == 3
     assert payload["sc_num_samples"] == 2
     assert "backend" not in payload

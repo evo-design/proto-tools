@@ -5,6 +5,7 @@ import importlib
 import json
 import os
 import random
+import shutil
 import sys
 import tempfile
 from io import StringIO
@@ -24,6 +25,19 @@ SCORING_CAUSALITY = {
     "single_aa": "conditional_minus_self",
     "autoregressive": "auto_regressive",
 }
+
+# ============================================================================
+# Original LigandMPNN provisioning (full-atom side-chain packing)
+# ============================================================================
+_LEGACY_SOURCE_COMMIT = "1e42fc763bd37256227437c14a93c99d1f44241d"
+_LEGACY_CODE_TARBALL_URL = f"https://github.com/gelnesr/dEVA/archive/{_LEGACY_SOURCE_COMMIT}.tar.gz"
+_LEGACY_CODE_SUBDIR = f"dEVA-{_LEGACY_SOURCE_COMMIT}/models/ligandmpnn"
+# Importable package name expected by ``_load_legacy_modules`` (imports ``ligandmpnn.*``).
+_LEGACY_PACKAGE_DIRNAME = "ligandmpnn"
+_LEGACY_WEIGHT_URLS: tuple[tuple[str, str], ...] = (
+    ("ligandmpnn_v_32_020_25.pt", "https://files.ipd.uw.edu/pub/ligandmpnn/ligandmpnn_v_32_020_25.pt"),
+    ("ligandmpnn_sc_v_32_002_16.pt", "https://files.ipd.uw.edu/pub/ligandmpnn/ligandmpnn_sc_v_32_002_16.pt"),
+)
 
 
 def _fixed_residues(fixed_positions: dict[str, list[int]] | None) -> list[str] | None:
@@ -385,7 +399,7 @@ class LigandMPNNModel:
 
 
 def _set_legacy_seed(seed: int | None) -> None:
-    """Set RNGs to match the upstream LigandMPNN sampling path."""
+    """Set RNGs to match the original LigandMPNN sampling path."""
     if seed is None:
         return
     np.random.seed(seed)
@@ -405,10 +419,6 @@ def _is_legacy_package_path(path: Path) -> bool:
 
 def _candidate_legacy_package_paths(*raw_paths: str | None) -> list[Path]:
     candidates: list[Path] = []
-    env_path = os.environ.get("PROTO_LIGANDMPNN_LEGACY_PATH")
-    if env_path:
-        candidates.append(Path(env_path).expanduser())
-
     for raw_path in raw_paths:
         if not raw_path:
             continue
@@ -443,25 +453,11 @@ def _candidate_legacy_package_paths(*raw_paths: str | None) -> list[Path]:
     return resolved
 
 
-def _legacy_package_path(
-    checkpoint_path: str | None,
-    packer_checkpoint_path: str | None,
-    *,
-    required: bool,
-) -> Path | None:
-    """Resolve an upstream LigandMPNN checkout from colocated checkpoint paths."""
-    candidates = _candidate_legacy_package_paths(checkpoint_path, packer_checkpoint_path)
-    for candidate in candidates:
+def _legacy_package_path(checkpoint_path: str | None) -> Path | None:
+    """Resolve an original LigandMPNN checkout colocated with an explicit checkpoint path."""
+    for candidate in _candidate_legacy_package_paths(checkpoint_path):
         if _is_legacy_package_path(candidate):
             return candidate
-    if required:
-        checked = ", ".join(str(path) for path in candidates) or "<none>"
-        raise ValueError(
-            "ligandmpnn side-chain packing requires an upstream LigandMPNN checkout "
-            "containing ligandmpnn.py, model_utils.py, data_utils.py, pdb_utils.py, and sc_utils.py. "
-            "Pass checkpoints from that checkout's model_params directory or set PROTO_LIGANDMPNN_LEGACY_PATH. "
-            f"Checked: {checked}"
-        )
     return None
 
 
@@ -567,12 +563,14 @@ class LegacyCompatibleLigandMPNNModel:
         package_path: Path,
         checkpoint_path: str | None = None,
         packer_checkpoint_path: str | None = None,
+        use_side_chain_context: bool = False,
     ) -> None:
-        """Initialize upstream package paths and lazy model state."""
+        """Initialize original package paths and lazy model state."""
         self.package_path = package_path
         self.checkpoint_path = _legacy_checkpoint_path(package_path, checkpoint_path, "ligandmpnn_v_32_020_25.pt")
         self._configured_packer_checkpoint_path = packer_checkpoint_path
         self.packer_checkpoint_path: str | None = None
+        self.use_side_chain_context = use_side_chain_context
         self._modules = _load_legacy_modules(package_path)
         self._loaded = False
         self.device: str | None = None
@@ -601,7 +599,7 @@ class LegacyCompatibleLigandMPNNModel:
             device=device,
             atom_context_num=self.atom_context_num,
             model_type="ligand_mpnn",
-            ligand_mpnn_use_side_chain_context=True,
+            ligand_mpnn_use_side_chain_context=self.use_side_chain_context,
         )
         self.model.load_state_dict(checkpoint["model_state_dict"])
         self.model.eval()
@@ -668,6 +666,7 @@ class LegacyCompatibleLigandMPNNModel:
         device: str = "cuda",
         verbose: bool = False,
         ligand_mpnn_cutoff_for_score: float = 20.0,
+        ligand_mpnn_use_atom_context: bool = True,
         sc_num_denoising_steps: int = 8,
         sc_num_samples: int = 1,
         **_: Any,
@@ -687,7 +686,9 @@ class LegacyCompatibleLigandMPNNModel:
             verbose=verbose,
             seed=seed,
         )
-        protein_dict, other_atoms, icodes, feature_dict = self._prepare(pdb_path, args, device)
+        protein_dict, other_atoms, icodes, feature_dict = self._prepare(
+            pdb_path, args, device, use_atom_context=ligand_mpnn_use_atom_context
+        )
 
         chain_sequences: list[list[dict[str, str]]] = []
         metrics: list[dict[str, Any]] = []
@@ -738,9 +739,10 @@ class LegacyCompatibleLigandMPNNModel:
         return_logits: bool = False,
         scoring_mode: str = "single_aa",
         ligand_mpnn_cutoff_for_score: float = 20.0,
+        ligand_mpnn_use_atom_context: bool = True,
         **_: Any,
     ) -> dict[str, Any]:
-        """Score a sequence against a structure with upstream-compatible semantics."""
+        """Score a sequence against a structure with original-compatible semantics."""
         self.load(device)
         _set_legacy_seed(seed)
         args = self._args(
@@ -754,7 +756,9 @@ class LegacyCompatibleLigandMPNNModel:
             verbose=verbose,
             seed=seed,
         )
-        protein_dict, _other_atoms, _icodes, feature_dict = self._prepare(pdb_path, args, device)
+        protein_dict, _other_atoms, _icodes, feature_dict = self._prepare(
+            pdb_path, args, device, use_atom_context=ligand_mpnn_use_atom_context
+        )
         data_utils = self._modules["data_utils"]
         token_ids = [data_utils.restype_str_to_int[aa] for aa in sequence]
         if len(token_ids) != int(feature_dict["mask"].shape[1]):
@@ -830,11 +834,33 @@ class LegacyCompatibleLigandMPNNModel:
             verbose=verbose,
         )
 
+    def _ligand_context(self, other_atoms: list[Any], device: str) -> tuple[Any, Any, Any]:
+        """Build ligand-atom context (Y coords, Y_t element types, Y_m mask) from BioPython atoms.
+
+        Mirrors the upstream construction, but reads BioPython atoms (``.coord`` / ``.element``)
+        instead of the ProDy accessors the vendored parse_PDB assumes.
+        """
+        element_to_index = {sym: idx for idx, sym in self._modules["data_utils"].element_dict_rev.items()}
+        coords = np.array([atom.coord for atom in other_atoms], dtype=np.float32).reshape(-1, 3)
+        types = np.array([element_to_index.get(atom.element.upper(), 0) for atom in other_atoms], dtype=np.int32)
+        keep = (types != 1) & (types != 0)  # drop hydrogens (1) and unknown elements (0)
+        coords, types = coords[keep], types[keep]
+        if types.size == 0:
+            coords, types, mask = np.zeros([1, 3], np.float32), np.zeros([1], np.int32), np.zeros([1], np.int32)
+        else:
+            mask = np.ones(types.size, dtype=np.int32)
+        return (
+            torch.tensor(coords, device=device, dtype=torch.float32),
+            torch.tensor(types, device=device, dtype=torch.int32),
+            torch.tensor(mask, device=device, dtype=torch.int32),
+        )
+
     def _prepare(
         self,
         pdb_path: str,
         args: SimpleNamespace,
         device: str,
+        use_atom_context: bool = True,
     ) -> tuple[dict[str, Any], Any, list[str], dict[str, Any]]:
         ligandmpnn = self._modules["ligandmpnn"]
         protein_dict, _, other_atoms, icodes, _ = self._modules["data_utils"].parse_PDB(
@@ -844,6 +870,10 @@ class LegacyCompatibleLigandMPNNModel:
             parse_all_atoms=True,
             parse_atoms_with_zero_occupancy=args.parse_atoms_with_zero_occupancy,
         )
+        # The vendored parse_PDB builds the ligand context (Y) via ProDy calls on what is actually
+        # a BioPython atom list, so it raises and a bare `except` leaves the context empty. Rebuild
+        # it here so ligand/atom conditioning (use_atom_context) is honored.
+        protein_dict["Y"], protein_dict["Y_t"], protein_dict["Y_m"] = self._ligand_context(other_atoms, device)
         encoded_residues, encoded_residue_dict, _ = ligandmpnn.get_encoded_residues(protein_dict, icodes)
         design_params = {
             "var_residues": ligandmpnn.get_var_residues(args, pdb_path),
@@ -860,6 +890,7 @@ class LegacyCompatibleLigandMPNNModel:
             icodes,
             design_params,
             self.atom_context_num,
+            use_atom_context=int(use_atom_context),
             device=device,
         )
         omit_per_residue = ligandmpnn.omit_aa(args, encoded_residues, encoded_residue_dict, {}, device)
@@ -877,6 +908,80 @@ class LegacyCompatibleLigandMPNNModel:
             torch.cuda.empty_cache()
 
 
+def _download_file(url: str, dest: Path) -> None:
+    """Download ``url`` to ``dest`` via curl-with-retry, staging through a temp file."""
+    import subprocess
+
+    from standalone_helpers import get_subprocess_device_env
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".tmp")
+    logger.info("ligandmpnn: downloading %s", url)
+    curl_cmd = [
+        "curl",
+        "--no-progress-meter",
+        "--show-error",
+        "--location",
+        "--fail",
+        "--retry",
+        "5",
+        "--retry-delay",
+        "10",
+        "--retry-all-errors",
+        "--max-time",
+        "1800",
+        "--output",
+        str(tmp),
+        url,
+    ]
+    subprocess.run(curl_cmd, check=True, env=get_subprocess_device_env("cpu"))
+    tmp.replace(dest)
+
+
+def _ensure_legacy_assets() -> Path:
+    """Provision the original LigandMPNN code + weights on first use; return the package path.
+
+    Fetches nothing unless the ``original`` model is actually requested. Code and
+    weights are cached under ``resolve_weights_dir("ligandmpnn")/legacy/<commit>/``
+    and reused on subsequent calls. Keying on the source commit means bumping
+    ``_LEGACY_SOURCE_COMMIT`` provisions a fresh checkout instead of reusing a stale one.
+    """
+    import subprocess
+
+    from standalone_helpers import get_subprocess_device_env, resolve_weights_dir
+
+    weights_dir = resolve_weights_dir("ligandmpnn")
+    if weights_dir is None:
+        raise RuntimeError("ligandmpnn: cannot resolve a weights directory for the original LigandMPNN assets")
+    package_path = Path(weights_dir) / "legacy" / _LEGACY_SOURCE_COMMIT[:12] / _LEGACY_PACKAGE_DIRNAME
+
+    # 1. Code: fetch the original ligandmpnn package if the modules are missing.
+    if not _is_legacy_package_path(package_path):
+        package_path.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="ligandmpnn_code_") as tmpdir:
+            tarball = Path(tmpdir) / "source.tar.gz"
+            _download_file(_LEGACY_CODE_TARBALL_URL, tarball)
+            tar_cmd = ["tar", "-zxf", str(tarball), "-C", tmpdir, _LEGACY_CODE_SUBDIR]
+            subprocess.run(tar_cmd, check=True, env=get_subprocess_device_env("cpu"))
+            extracted = Path(tmpdir) / _LEGACY_CODE_SUBDIR
+            for item in extracted.iterdir():
+                target = package_path / item.name
+                if item.is_dir():
+                    shutil.copytree(item, target, dirs_exist_ok=True)
+                else:
+                    shutil.copy2(item, target)
+        if not _is_legacy_package_path(package_path):
+            raise RuntimeError(f"ligandmpnn: provisioned package at {package_path} is missing required modules")
+
+    # 2. Weights: fetch each checkpoint into model_params if missing.
+    model_params = package_path / "model_params"
+    for filename, url in _LEGACY_WEIGHT_URLS:
+        dest = model_params / filename
+        if not dest.is_file():
+            _download_file(url, dest)
+    return package_path
+
+
 # ============================================================================
 # Dispatch
 # ============================================================================
@@ -888,33 +993,35 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model, _model_key
     checkpoint_path = input_dict.get("checkpoint_path")
-    packer_checkpoint_path = input_dict.get("packer_checkpoint_path")
-    legacy_package = _legacy_package_path(
-        checkpoint_path,
-        packer_checkpoint_path,
-        required=packer_checkpoint_path is not None,
-    )
-    use_legacy_compatible = legacy_package is not None and (
-        checkpoint_path is not None or packer_checkpoint_path is not None
-    )
+    use_legacy = input_dict.get("model_type") == "original"
+    use_side_chain_context = bool(input_dict.get("ligand_mpnn_use_side_chain_context", False))
+    if use_legacy:
+        # Use a checkout colocated with an explicit checkpoint_path if given; otherwise
+        # auto-provision the original code + weights on first use. Applies to both sample
+        # (which packs) and score (which runs the original implementation).
+        package_path = _legacy_package_path(checkpoint_path)
+        if package_path is None:
+            package_path = _ensure_legacy_assets()
+    else:
+        package_path = None
     model_key = (
-        "legacy-compatible" if use_legacy_compatible else "foundry",
+        "legacy-compatible" if package_path is not None else "foundry",
+        str(package_path) if package_path is not None else None,
         checkpoint_path,
-        packer_checkpoint_path,
-        str(legacy_package) if use_legacy_compatible else None,
+        # The original model bakes side-chain context in at construction, so a change must reload;
+        # Foundry applies it per call, so it stays out of Foundry's cache key.
+        use_side_chain_context if package_path is not None else None,
     )
     if _model is not None and _model_key != model_key:
         _model.unload()
         _model = None
         _model_key = None
     if _model is None:
-        if use_legacy_compatible:
-            if legacy_package is None:
-                raise RuntimeError("ligandmpnn internal error: missing resolved compatibility package")
+        if package_path is not None:
             _model = LegacyCompatibleLigandMPNNModel(
-                package_path=legacy_package,
+                package_path=package_path,
                 checkpoint_path=checkpoint_path,
-                packer_checkpoint_path=packer_checkpoint_path,
+                use_side_chain_context=use_side_chain_context,
             )
         else:
             _model = LigandMPNNModel(
