@@ -8,7 +8,7 @@ import math
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from proto_tools.entities.complex import Chain
 from proto_tools.entities.ligands import Fragment
@@ -30,11 +30,17 @@ logger = logging.getLogger(__name__)
 
 LigandMPNNModelType = Literal[
     "ligand_mpnn",
+    # The original LigandMPNN implementation. Its sampler emits packed full-atom structures and
+    # its scorer runs the same original code; code and weights are auto-provisioned on first use.
+    # Foundry is the default otherwise.
+    "original",
     # Membrane variants need transmembrane-label inputs that are not wired; disabled for now.
     # "per_residue_label_membrane_mpnn",
     # "global_label_membrane_mpnn",
 ]
-LigandMPNNBackend = Literal["foundry", "reference"]
+
+# model_type values that run the original implementation instead of Foundry.
+LIGANDMPNN_LEGACY_MODEL_TYPES = frozenset({"original"})
 
 
 # ============================================================================
@@ -56,27 +62,24 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         temperature (float): Controls randomness in sampling from logits.
         excluded_amino_acids (list[AminoAcid] | None): One-letter codes of amino acids to exclude.
         seed (int): Random seed to use for sampling.
-        model_type (LigandMPNNModelType): LigandMPNN variant to load.
-        backend (LigandMPNNBackend): Inference backend. ``"foundry"`` uses the
-            managed Foundry LigandMPNN implementation; ``"reference"`` uses a
-            local reference LigandMPNN checkout for compatibility experiments.
+        model_type (LigandMPNNModelType): LigandMPNN implementation. ``ligand_mpnn`` (default) is
+            the Foundry implementation; ``original`` runs the original LigandMPNN code and weights,
+            auto-provisioned on first use, and emits packed full-atom structures.
         checkpoint_path (str | None): Optional explicit LigandMPNN checkpoint path.
-        reference_backend_path (str | None): Path to a checkout containing the
-            reference ``ligandmpnn`` Python package when ``backend="reference"``.
-        packer_checkpoint_path (str | None): Side-chain packer checkpoint used
-            by the reference backend to emit sequence-consistent PDB structures.
         use_atom_context (bool): Whether ligand-aware variants encode ligand atom context.
         use_side_chain_context (bool): Whether to condition on fixed-residue sidechain atoms.
         cutoff_for_score (float): Ligand-residue distance cutoff (Å) for the ligand-interface
             recovery score.
-        sc_num_denoising_steps (int): Number of side-chain denoising steps for the reference packer.
-        sc_num_samples (int): Number of side-chain samples for the reference packer.
+        sc_num_denoising_steps (int): Side-chain denoising steps. Only used when model_type
+            is ``original``.
+        sc_num_samples (int): Side-chain packing samples. Only used when model_type is
+            ``original``.
     """
 
     model_type: LigandMPNNModelType = ConfigField(
         title="Model Type",
         default="ligand_mpnn",
-        description="LigandMPNN model variant (ligand-aware weights).",
+        description="Implementation: 'ligand_mpnn' (Foundry, default) or 'original' (packs full-atom structures).",
         reload_on_change=True,
     )
     use_atom_context: bool = ConfigField(
@@ -84,28 +87,10 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         default=True,
         description="Encode ligand atom context in the message-passing graph",
     )
-    backend: LigandMPNNBackend = ConfigField(
-        title="Backend",
-        default="foundry",
-        description="Inference backend: managed Foundry implementation or local reference implementation.",
-        reload_on_change=True,
-    )
     checkpoint_path: str | None = ConfigField(
         title="Checkpoint Path",
         default=None,
         description="Optional explicit LigandMPNN checkpoint path.",
-        reload_on_change=True,
-    )
-    reference_backend_path: str | None = ConfigField(
-        title="Reference Backend Path",
-        default=None,
-        description="Path to a local reference LigandMPNN checkout when backend='reference'.",
-        reload_on_change=True,
-    )
-    packer_checkpoint_path: str | None = ConfigField(
-        title="Packer Checkpoint Path",
-        default=None,
-        description="Optional side-chain packer checkpoint path for the reference backend.",
         reload_on_change=True,
     )
     use_side_chain_context: bool = ConfigField(
@@ -129,14 +114,37 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         title="Sidechain Denoising Steps",
         default=8,
         ge=1,
-        description="Number of side-chain denoising steps for the reference backend packer.",
+        description="Side-chain denoising steps; only used with model_type='original'.",
     )
     sc_num_samples: int = ConfigField(
         title="Sidechain Samples",
         default=1,
         ge=1,
-        description="Number of side-chain samples for the reference backend packer.",
+        description="Side-chain packing samples; only used with model_type='original'.",
     )
+
+    @model_validator(mode="after")
+    def _validate_legacy_only_fields(self) -> "LigandMPNNSampleConfig":
+        """Reject non-default packing/packer fields unless the legacy implementation is selected.
+
+        Compares against each field's default (rather than ``model_fields_set``) so configs
+        survive a ``model_dump``/``model_validate`` round-trip, which re-sets defaulted fields.
+
+        Returns:
+            LigandMPNNSampleConfig: The validated config.
+        """
+        if self.model_type not in LIGANDMPNN_LEGACY_MODEL_TYPES:
+            fields = type(self).model_fields
+            misused = [
+                name
+                for name in ("sc_num_denoising_steps", "sc_num_samples")
+                if getattr(self, name) != fields[name].default
+            ]
+            if misused:
+                raise ValueError(
+                    f"{', '.join(misused)} only apply when model_type='original'; got model_type={self.model_type!r}."
+                )
+        return self
 
 
 class LigandMPNNDesignMetrics(Metrics):
@@ -150,9 +158,9 @@ class LigandMPNNDesignMetrics(Metrics):
             ligand-interface residues (0.0-1.0). Present only when a ligand
             interface is present; ``NaN`` or absent when the input structure
             has no ligand interface.
-        pmpnn (float): Mean sequence probability reported by compatible
-            LigandMPNN backends. Higher values indicate higher model
-            probability for the emitted sequence.
+        pmpnn (float): Mean sequence probability reported by LigandMPNN.
+            Higher values indicate higher model probability for the emitted
+            sequence.
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
@@ -171,7 +179,7 @@ class LigandMPNNDesignMetrics(Metrics):
             "better_values_are": "higher",
         },
         "pmpnn": {
-            "availability": "when emitted by the selected backend",
+            "availability": "when LigandMPNN reports a finite sequence probability",
             "type": "float",
             "min": 0.0,
             "max": 1.0,
@@ -333,10 +341,7 @@ def run_ligandmpnn_sample(
                     "device": config.device,
                     "verbose": config.verbose,
                     "model_type": config.model_type,
-                    "backend": config.backend,
                     "checkpoint_path": config.checkpoint_path,
-                    "reference_backend_path": config.reference_backend_path,
-                    "packer_checkpoint_path": config.packer_checkpoint_path,
                     "ligand_mpnn_use_atom_context": config.use_atom_context,
                     "ligand_mpnn_use_side_chain_context": config.use_side_chain_context,
                     "ligand_mpnn_cutoff_for_score": config.cutoff_for_score,

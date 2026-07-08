@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Any, Literal
 
+from proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample import LigandMPNNModelType
 from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingScoringMetrics,
     InverseFoldingScoringOutput,
@@ -19,7 +20,6 @@ from proto_tools.utils import (
 from proto_tools.utils.progress import progress_bar
 
 LigandMPNNScoringMode = Literal["single_aa", "autoregressive"]
-LigandMPNNBackend = Literal["foundry", "reference"]
 
 
 class LigandMPNNScoringInput(BaseToolInput):
@@ -46,12 +46,10 @@ class LigandMPNNScoringConfig(BaseConfig):
         device (str): Device to run the model on.
         return_logits (bool): Whether to include per-position logits.
         scoring_mode (LigandMPNNScoringMode): Single-position or autoregressive scoring mode.
-        backend (LigandMPNNBackend): Inference backend. ``"foundry"`` uses the
-            managed Foundry implementation; ``"reference"`` uses a local
-            reference LigandMPNN checkout for compatibility experiments.
+        model_type (LigandMPNNModelType): LigandMPNN implementation. ``ligand_mpnn`` (default) is
+            the Foundry implementation; ``original`` runs the original LigandMPNN code and weights,
+            auto-provisioned on first use.
         checkpoint_path (str | None): Optional explicit LigandMPNN checkpoint path.
-        reference_backend_path (str | None): Path to a checkout containing the
-            reference ``ligandmpnn`` Python package when ``backend="reference"``.
         use_atom_context (bool): Whether ligand-aware variants encode ligand atom context.
         use_side_chain_context (bool): Whether to condition on fixed-residue sidechain atoms.
         cutoff_for_score (float): Ligand-residue distance cutoff (Å).
@@ -74,22 +72,16 @@ class LigandMPNNScoringConfig(BaseConfig):
         default="single_aa",
         description="Use single-position probabilities or one seed-determined autoregressive order.",
     )
-    backend: LigandMPNNBackend = ConfigField(
-        title="Backend",
-        default="foundry",
-        description="Inference backend: managed Foundry implementation or local reference implementation.",
+    model_type: LigandMPNNModelType = ConfigField(
+        title="Model Type",
+        default="ligand_mpnn",
+        description="Implementation: 'ligand_mpnn' (Foundry, default) or the 'original' LigandMPNN implementation.",
         reload_on_change=True,
     )
     checkpoint_path: str | None = ConfigField(
         title="Checkpoint Path",
         default=None,
         description="Optional explicit LigandMPNN checkpoint path.",
-        reload_on_change=True,
-    )
-    reference_backend_path: str | None = ConfigField(
-        title="Reference Backend Path",
-        default=None,
-        description="Path to a local reference LigandMPNN checkout when backend='reference'.",
         reload_on_change=True,
     )
     use_atom_context: bool = ConfigField(
@@ -164,10 +156,8 @@ def run_ligandmpnn_score(
                     "device": config.device,
                     "return_logits": config.return_logits,
                     "verbose": config.verbose,
-                    "model_type": "ligand_mpnn",
-                    "backend": config.backend,
+                    "model_type": config.model_type,
                     "checkpoint_path": config.checkpoint_path,
-                    "reference_backend_path": config.reference_backend_path,
                     "scoring_mode": config.scoring_mode,
                     "ligand_mpnn_use_atom_context": config.use_atom_context,
                     "ligand_mpnn_use_side_chain_context": config.use_side_chain_context,
