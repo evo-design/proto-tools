@@ -165,6 +165,12 @@ exclude = [
     ".*ccd_lookup/standalone/run\\.py$",
     ".*malinois/standalone/malinois_scoring\\.py$",
     ".*ipsae/standalone/ipsae\\.py$",
+    ".*parade/standalone/parade_scoring\\.py$",
+    ".*parade/standalone/legnet\\.py$",
+    ".*parade/standalone/legnet_classifier\\.py$",
+    ".*parade/standalone/pl_regressor\\.py$",
+    ".*parade/standalone/utrdata_cl\\.py$",
+    ".*parade/standalone/stability_data\\.py$",
 ]
 
 [[tool.mypy.overrides]]
@@ -222,6 +228,8 @@ module = [
     "inference.*",
     "malinois_scoring",
     "malinois_scoring.*",
+    "parade_scoring",
+    "parade_scoring.*",
     "model.*",
 ]
 ignore_missing_imports = true

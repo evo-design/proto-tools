@@ -73,6 +73,15 @@ _SETUP_TIME_EXEMPT: set[Path] = {p for p in _ALL_SCRIPTS if p.name == "binary_co
 _VENDORED_EXEMPT: set[Path] = {
     # Upstream ipsae script copied verbatim; uses its own print-based output.
     _TOOLS_DIR / "structure_scoring" / "ipsae" / "standalone" / "ipsae.py",
+    # PARADE model/data modules copied verbatim from autosome-ru/parade. They are kept
+    # byte-for-byte so the published Lightning checkpoints unpickle against the exact
+    # ``legnet_classifier.LegNetClassifier`` class the paper trained; editing them (even
+    # to add a logger) risks breaking checkpoint compatibility.
+    _TOOLS_DIR / "sequence_scoring" / "parade" / "standalone" / "legnet.py",
+    _TOOLS_DIR / "sequence_scoring" / "parade" / "standalone" / "legnet_classifier.py",
+    _TOOLS_DIR / "sequence_scoring" / "parade" / "standalone" / "pl_regressor.py",
+    _TOOLS_DIR / "sequence_scoring" / "parade" / "standalone" / "utrdata_cl.py",
+    _TOOLS_DIR / "sequence_scoring" / "parade" / "standalone" / "stability_data.py",
 }
 
 _EXEMPT: set[Path] = _SETUP_TIME_EXEMPT | _VENDORED_EXEMPT
