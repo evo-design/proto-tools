@@ -1,4 +1,4 @@
 numpy
-moleculekit==1.14.8
+moleculekit==1.15.3
 scipy
 scikit-learn
