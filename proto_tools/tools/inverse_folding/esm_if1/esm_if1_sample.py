@@ -229,7 +229,11 @@ def run_esm_if1_sample(
                     "device": config.device,
                     "weights_variant": config.weights_variant,
                     "verbose": config.verbose,
-                    "fixed_positions": inp.fixed_positions.chains if inp.fixed_positions is not None else None,
+                    "fixed_positions": (
+                        inp.fixed_positions.to_residue_numbers(inp.structure)
+                        if inp.fixed_positions is not None
+                        else None
+                    ),
                 }
                 result = ToolInstance.dispatch(
                     "esm_if1",

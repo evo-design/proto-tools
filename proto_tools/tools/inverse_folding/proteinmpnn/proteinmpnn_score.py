@@ -198,7 +198,7 @@ def run_proteinmpnn_score(
                 "sequence": sequence_structure_pair.sequence,
                 "seed": seed,
                 "fixed_positions": (
-                    sequence_structure_pair.fixed_positions.chains
+                    sequence_structure_pair.fixed_positions.to_residue_numbers(sequence_structure_pair.structure)
                     if sequence_structure_pair.fixed_positions is not None
                     else None
                 ),

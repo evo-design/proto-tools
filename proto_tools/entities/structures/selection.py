@@ -241,15 +241,19 @@ class ResidueSelection(BaseModel):
         return self.chains[chain_id]
 
     def validate_against(self, structure: Structure, label: str = "selection") -> None:
-        """Raise if any selected chain or position is missing from ``structure``.
+        """Raise if any selected chain is missing or any position is out of range.
+
+        Positions are 1-indexed over each chain's residues (position 1 = the first
+        residue), so a valid position lies in ``1..N`` where ``N`` is the chain's
+        residue count. Construction already rejects positions ``< 1``.
 
         Args:
             structure (Structure): The structure to check against.
             label (str): Prefix for error messages, typically the parent field name.
 
         Raises:
-            ValueError: If any selected chain is absent from the structure, or
-                any selected position is not a real residue in its chain.
+            ValueError: If any selected chain is absent from the structure, or any
+                selected position exceeds its chain's residue count.
         """
         available = set(structure.get_chain_ids())
         for chain_id, positions in self.chains.items():
@@ -257,12 +261,32 @@ class ResidueSelection(BaseModel):
                 raise ValueError(
                     f"{label}: chain {chain_id!r} not in structure (available: {sorted(available)})",
                 )
-            valid = set(structure.get_chain_positions(chain_id))
-            invalid = set(positions) - valid
+            length = len(structure.get_chain_positions(chain_id))
+            invalid = sorted(p for p in positions if p > length)
             if invalid:
                 raise ValueError(
-                    f"{label}: invalid positions {sorted(invalid)} for chain {chain_id!r}",
+                    f"{label}: invalid positions {invalid} for chain {chain_id!r} (chain has {length} residues)",
                 )
+
+    def to_residue_numbers(self, structure: Structure) -> dict[str, list[int]]:
+        """Resolve each chain's 1-indexed positions to its residue numbers.
+
+        Position ``i`` maps to the residue number of the ``i``-th residue in the chain
+        (``get_chain_positions(chain)[i - 1]``), so a selection is independent of how the
+        structure numbers or gaps its residues. Positions must already be validated with
+        :meth:`validate_against` (position ``i`` requires the chain to have ``>= i`` residues).
+
+        Args:
+            structure (Structure): The structure whose residue numbering to resolve against.
+
+        Returns:
+            dict[str, list[int]]: Per-chain lists of residue numbers.
+        """
+        resolved: dict[str, list[int]] = {}
+        for chain_id, positions in self.chains.items():
+            numbering = structure.get_chain_positions(chain_id)
+            resolved[chain_id] = [numbering[position - 1] for position in positions]
+        return resolved
 
 
 class StructureInputBase(BaseModel):
