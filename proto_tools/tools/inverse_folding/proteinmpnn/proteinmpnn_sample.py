@@ -238,7 +238,11 @@ def run_proteinmpnn_sample(
                     "chain_ids": inp.chain_ids_to_redesign,
                     "batch_size": chunk,
                     "temperature": config.temperature,
-                    "fixed_positions": inp.fixed_positions.chains if inp.fixed_positions is not None else None,
+                    "fixed_positions": (
+                        inp.fixed_positions.to_residue_numbers(inp.structure)
+                        if inp.fixed_positions is not None
+                        else None
+                    ),
                     "excluded_amino_acids": config.excluded_amino_acids,
                     "seed": seed_rng.randint(0, 2**31 - 1),
                     "device": config.device,

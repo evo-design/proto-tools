@@ -251,7 +251,7 @@ def _fixed_positions_cover_structure(inp: InverseFoldingStructureInput) -> bool:
     """Return whether fixed_positions cover every residue in every structure chain."""
     if inp.fixed_positions is None:
         return False
-    fixed = inp.fixed_positions.chains
+    fixed = inp.fixed_positions.to_residue_numbers(inp.structure)
     for chain_id in inp.structure.get_chain_ids():
         if set(fixed.get(chain_id, [])) != set(inp.structure.get_chain_positions(chain_id)):
             return False
@@ -335,7 +335,11 @@ def run_ligandmpnn_sample(
                     "chains_explicitly_set": inp.chains_to_redesign is not None and not all_positions_fixed,
                     "batch_size": chunk,
                     "temperature": config.temperature,
-                    "fixed_positions": inp.fixed_positions.chains if inp.fixed_positions is not None else None,
+                    "fixed_positions": (
+                        inp.fixed_positions.to_residue_numbers(inp.structure)
+                        if inp.fixed_positions is not None
+                        else None
+                    ),
                     "excluded_amino_acids": config.excluded_amino_acids,
                     "seed": base_seed + dispatch_idx,
                     "device": config.device,
