@@ -12,9 +12,14 @@ from abc import ABC, abstractmethod
 from collections.abc import ItemsView, Iterator, KeysView, Mapping, ValuesView
 from datetime import datetime
 from pathlib import Path
-from typing import Any, ClassVar, Literal, TypedDict
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypedDict
 
-from pydantic import BaseModel, ConfigDict, Field, ModelWrapValidatorHandler, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+if TYPE_CHECKING:
+    # Type-only: ModelWrapValidatorHandler was added in pydantic 2.5, but the runtime code
+    # only uses it as an annotation. Importing it lazily keeps the actual floor at pydantic>=2.0.
+    from pydantic import ModelWrapValidatorHandler
 
 from proto_tools.utils.compressed_array import is_compressed_array
 from proto_tools.utils.export_names import sanitize_field
@@ -243,7 +248,7 @@ class Metrics(BaseModel):
 
     @model_validator(mode="wrap")
     @classmethod
-    def _rebuild_subtype(cls, data: Any, handler: ModelWrapValidatorHandler["Metrics"]) -> "Metrics":
+    def _rebuild_subtype(cls, data: Any, handler: "ModelWrapValidatorHandler[Metrics]") -> "Metrics":
         """Rebuild the concrete subclass when validating a dict carrying its ``metric_type`` tag.
 
         A cloud round-trip dumps a subclass (e.g. ``ESMFold2Metrics``) to a plain dict with no
