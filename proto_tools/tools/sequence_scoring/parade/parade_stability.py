@@ -4,7 +4,7 @@ import csv
 import json
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from pydantic import BaseModel, Field
 
@@ -24,10 +24,17 @@ ParadeStabilityConfig = ParadeCheckpointConfig
 
 
 class ParadeStabilityMetrics(Metrics):
-    """PARADE mRNA stability prediction for one 3' UTR sequence.
+    """PARADE mRNA stability metric for one 3' UTR sequence.
+
+    Emitted as ``ParadeStabilityResult.scores`` and registered as the tool's
+    ``metrics_class``; the value is also exposed via the result's ``log_ratio``
+    convenience property.
 
     Metrics documented in ``metric_spec``:
         log_ratio (float): Predicted RNA/gDNA log-ratio; higher means more stable.
+
+    Attributes:
+        primary_metric (str | None): Headline metric used to rank results.
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
@@ -40,6 +47,11 @@ class ParadeStabilityMetrics(Metrics):
             "better_values_are": "higher",
         },
     }
+    primary_metric: str | None = Field(
+        default="log_ratio",
+        title="Primary Metric",
+        description="Headline metric used to rank results.",
+    )
 
 
 class ParadeStabilityResult(BaseModel):
@@ -48,14 +60,21 @@ class ParadeStabilityResult(BaseModel):
     Attributes:
         sequence (str): 3' UTR sequence that was scored (DNA alphabet).
         sequence_length (int): Length of the scored sequence.
-        log_ratio (float): Predicted RNA/gDNA log-ratio; higher means more stable.
+        scores (ParadeStabilityMetrics): Stability metrics; the ``log_ratio`` metric
+            (RNA/gDNA log-ratio, higher means more stable) is also exposed via the
+            ``log_ratio`` convenience property.
     """
 
     sequence: str = Field(title="Sequence", description="3' UTR sequence scored by PARADE")
     sequence_length: int = Field(title="Sequence Length", description="Length of the scored UTR sequence")
-    log_ratio: float = Field(
-        title="Log Ratio", description="Predicted RNA/gDNA log-ratio; higher is more stable"
+    scores: ParadeStabilityMetrics = Field(
+        title="Stability Scores", description="PARADE stability metrics keyed by metric name"
     )
+
+    @property
+    def log_ratio(self) -> float:
+        """Predicted RNA/gDNA log-ratio; higher means more stable."""
+        return float(cast(float, self.scores["log_ratio"]))
 
 
 class ParadeStabilityOutput(BaseToolOutput):
@@ -66,7 +85,7 @@ class ParadeStabilityOutput(BaseToolOutput):
     """
 
     results: list[ParadeStabilityResult] = Field(
-        title="Results", description="Per-sequence PARADE stability scoring results"
+        default_factory=list, title="Results", description="Per-sequence PARADE stability scoring results"
     )
 
     def __len__(self) -> int:
@@ -118,8 +137,8 @@ class ParadeStabilityOutput(BaseToolOutput):
 
 
 def example_input() -> Any:
-    """Minimal valid input for testing and examples."""
-    return ParadeStabilityInput(sequences=["ACGT" * 12 + "AC"])
+    """Minimal valid input for testing and examples (186 nt: the stability training length)."""
+    return ParadeStabilityInput(sequences=["ACGT" * 46 + "AC"])
 
 
 @tool(
@@ -152,12 +171,10 @@ def run_parade_stability(
     Returns:
         ParadeStabilityOutput: Per-sequence predicted RNA/gDNA log-ratios.
     """
-    # Sequences in one call are stacked into a single batched tensor, so they must share
-    # a length; callers with mixed lengths should group by length across separate calls.
-    lengths = {len(sequence) for sequence in inputs.sequences}
-    if len(lengths) != 1:
-        raise ValueError(f"All PARADE sequences in one call must share a length; got {sorted(lengths)}")
-
+    inputs = ParadeStabilityInput.model_validate(inputs.model_dump())
+    config = ParadeStabilityConfig.model_validate(config.model_dump())
+    # Sequences may have mixed lengths; the standalone batches them per length group, so this
+    # is safe under the framework's per-item iterable cache (partial cache hits pass any subset).
     url, md5, filename = resolve_checkpoint_source("stability", config.checkpoint_url, config.checkpoint_md5)
 
     output_data = ToolInstance.dispatch(
@@ -187,7 +204,7 @@ def run_parade_stability(
             ParadeStabilityResult(
                 sequence=sequence,
                 sequence_length=len(sequence),
-                log_ratio=float(log_ratio),
+                scores=ParadeStabilityMetrics.model_validate({"log_ratio": float(log_ratio)}),
             )
             for sequence, log_ratio in zip(inputs.sequences, log_ratios, strict=True)
         ]

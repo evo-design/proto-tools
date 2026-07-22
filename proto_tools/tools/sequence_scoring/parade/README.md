@@ -19,7 +19,7 @@ The activity models are trained per construct type — one for 5' UTRs and one f
 
 ### PARADE UTR Activity (`parade-activity`)
 
-Predicts cell-type-specific activity for one or more equal-length 5' or 3' UTR sequences, returning one value per requested cell code.
+Predicts cell-type-specific activity for one or more 5' or 3' UTR sequences, returning one value per requested cell code.
 
 #### Applications
 
@@ -29,11 +29,12 @@ Use this tool to rank UTR designs by predicted activity, screen candidate UTRs f
 
 - **Pick the construct type.** Set `construct_type` to `utr5` or `utr3`; it selects the matching checkpoint and cell-code panel.
 - **Cell codes are panel-specific.** `c13` exists only for `utr3`. Leave `cell_types` empty to return the full panel for the construct type.
-- **Sequences share a length.** All sequences in one call must be the same length; RNA input (`U`) is accepted and mapped to `T`.
+- **Match the training length.** Upstream trained the 5' UTR model on ~50-nt inserts and the 3' UTR model on ~240-nt (roughly 200–300 nt) inserts; the model accepts any length (adaptive pooling) but predictions are only meaningful near the training regime.
+- **Mixed lengths batch together.** Different-length sequences in one call are batched per length group; RNA input (`U`) is accepted and mapped to `T`.
 
 ### PARADE mRNA Stability (`parade-stability`)
 
-Predicts 3' UTR mRNA stability as an RNA/gDNA log-ratio for one or more equal-length sequences; higher is more stable.
+Predicts 3' UTR mRNA stability as an RNA/gDNA log-ratio for one or more sequences; higher is more stable.
 
 #### Applications
 
@@ -42,7 +43,7 @@ Use this tool to rank 3' UTR designs by predicted mRNA stability or to pair stab
 #### Usage Tips
 
 - **Stability has no cell conditioning.** The model returns a single log-ratio per sequence.
-- **Sequences share a length.** All sequences in one call must be the same length.
+- **Use the training length.** Upstream trained this stability model on 186-nt sequences (its `seqsize`); score near that length. Mixed lengths in one call are batched per length group.
 - **Higher is more stable.** The `log_ratio` output is directly comparable across candidates.
 
 ### PARADE UTR Activity Gradient (`parade-gradient`)
@@ -67,7 +68,7 @@ These apply to every PARADE tool in this toolkit (`parade-activity`, `parade-sta
 
 - **Runs on GPU or CPU.** The tools load a small PyTorch LegNet checkpoint; a GPU speeds up large batches but is not required.
 - **Weights are provisioned automatically.** By default, the standalone worker downloads the published checkpoint from the pinned `autosome-ru/parade` commit into the managed model cache and verifies its MD5 checksum.
-- **Predictions are faithful to the reference.** The vendored PARADE model/data modules are byte-for-byte copies of the upstream repository, so the published checkpoints load and score exactly as they do upstream.
+- **Predictions are faithful to the reference.** The vendored PARADE model/data modules are the verbatim upstream bodies (with only a provenance/Ruff header added per file), so the published checkpoints load and score exactly as they do upstream.
 
 ## References
 

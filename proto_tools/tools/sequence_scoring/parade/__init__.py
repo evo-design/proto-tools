@@ -34,27 +34,32 @@ from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
 )
 
 __all__ = [
+    # Shared constants and types
     "PARADE_CELL_TYPES",
     "PARADE_CHECKPOINTS",
     "PARADE_COMMIT",
-    "ParadeActivityConfig",
+    "ParadeCellType",
+    "ParadeConstructType",
+    # Activity
     "ParadeActivityInput",
+    "ParadeActivityConfig",
     "ParadeActivityMetrics",
     "ParadeActivityOutput",
     "ParadeActivityResult",
-    "ParadeCellType",
-    "ParadeConstructType",
-    "ParadeGradientConfig",
+    # Gradient
     "ParadeGradientInput",
+    "ParadeGradientConfig",
     "ParadeGradientLossTerm",
     "ParadeGradientOutput",
     "ParadeGradientSampleMetrics",
     "ParadeObjectiveDirection",
-    "ParadeStabilityConfig",
+    # Stability
     "ParadeStabilityInput",
+    "ParadeStabilityConfig",
     "ParadeStabilityMetrics",
     "ParadeStabilityOutput",
     "ParadeStabilityResult",
+    # Run functions
     "run_parade_activity",
     "run_parade_gradient",
     "run_parade_stability",

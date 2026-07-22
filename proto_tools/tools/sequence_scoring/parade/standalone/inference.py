@@ -1,12 +1,15 @@
 """PARADE standalone inference implementation for venv execution."""
 
 import contextlib
+import fcntl
 import hashlib
 import json
 import os
+import stat
 import sys
 import tempfile
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Iterator
@@ -29,24 +32,31 @@ LOCK_TIMEOUT_SECONDS = 600
 
 @contextlib.contextmanager
 def _file_lock(lock_path: Path) -> Iterator[None]:
-    """Cross-process lock using O_EXCL so concurrent workers do not race downloads."""
+    """Cross-process advisory lock via ``fcntl.flock``; concurrent workers don't race downloads.
+
+    The kernel releases an ``flock`` automatically when the holding process exits, so a crashed
+    downloader leaves no stale lock — no PID inspection, no inspect-then-unlink race, and no
+    ten-minute wedge. The lock is tied to the open file description (mutually exclusive across
+    both processes and threads), and the 0-byte lock file is intentionally never unlinked, which
+    would reintroduce a delete-the-inode-someone-else-just-locked race.
+    """
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    started = time.monotonic()
-    fd: int | None = None
-    while fd is None:
-        try:
-            fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError as err:  # noqa: PERF203 - lock acquisition is intentionally retry-based.
-            if time.monotonic() - started > LOCK_TIMEOUT_SECONDS:
-                raise TimeoutError(f"parade: timed out waiting for lock {lock_path}") from err
-            time.sleep(1)
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
     try:
-        os.write(fd, str(os.getpid()).encode())
+        started = time.monotonic()
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError as err:
+                if time.monotonic() - started > LOCK_TIMEOUT_SECONDS:
+                    raise TimeoutError(f"parade: timed out waiting for lock {lock_path}") from err
+                time.sleep(1)
         yield
     finally:
+        with contextlib.suppress(OSError):
+            fcntl.flock(fd, fcntl.LOCK_UN)
         os.close(fd)
-        with contextlib.suppress(FileNotFoundError):
-            lock_path.unlink()
 
 
 def _md5(path: Path) -> str:
@@ -55,6 +65,25 @@ def _md5(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _is_regular_cache_file(path: Path) -> bool:
+    """Return whether a cache entry is a regular file without following symlinks."""
+    try:
+        return stat.S_ISREG(path.lstat().st_mode)
+    except FileNotFoundError:
+        return False
+
+
+def _installed_cache_file_mode(cache_dir: Path) -> int:
+    """Return a private-writable mode readable by principals allowed through the cache directory."""
+    directory_mode = cache_dir.stat().st_mode
+    mode = stat.S_IRUSR | stat.S_IWUSR
+    if directory_mode & stat.S_IXGRP:
+        mode |= stat.S_IRGRP
+    if directory_mode & stat.S_IXOTH:
+        mode |= stat.S_IROTH
+    return mode
 
 
 def _weights_dir() -> Path:
@@ -66,40 +95,126 @@ def _weights_dir() -> Path:
     return fallback
 
 
+def _is_trusted_hf_url(url: str) -> bool:
+    """True only for an HTTPS URL on ``huggingface.co`` or a real subdomain.
+
+    Requires HTTPS (never send the bearer token over plaintext) and an exact host or a real
+    ``.huggingface.co`` subdomain — ``endswith`` alone would match ``evil-huggingface.co``.
+    """
+    parsed = urllib.parse.urlparse(url)
+    host = (parsed.hostname or "").lower()
+    return parsed.scheme == "https" and (host == "huggingface.co" or host.endswith(".huggingface.co"))
+
+
+class _SecureRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Abort insecure redirects and drop ``Authorization`` when a hop leaves trusted HF.
+
+    A checkpoint is unpickled after download, so a network attacker who can force an
+    HTTPS→HTTP downgrade (then MITM the plaintext hop) could swap in an arbitrary pickle —
+    stripping the token is not enough. Refuse any non-HTTPS redirect destination outright,
+    and for HTTPS hops that leave a trusted HF host, drop the bearer token that Python's
+    default handler would otherwise forward verbatim.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        if urllib.parse.urlparse(newurl).scheme != "https":
+            raise urllib.error.HTTPError(
+                newurl, code, "parade: refusing insecure (non-HTTPS) checkpoint redirect", headers, fp
+            )
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new is not None and not _is_trusted_hf_url(newurl):
+            new.headers.pop("Authorization", None)
+            new.unredirected_hdrs.pop("Authorization", None)
+        return new
+
+
+def _redact_url(url: str) -> str:
+    """Strip path/query credentials and userinfo so signed URLs don't reach logs.
+
+    HTTPS checkpoint URLs may carry credentials in userinfo, path segments, or a signed
+    ``?token=…`` query; the full value must never land in a log line or exception message.
+    Preserve only the origin for diagnosis and replace every non-empty path with a fixed marker.
+    """
+    try:
+        parsed = urllib.parse.urlparse(url)
+        netloc = parsed.hostname or ""
+        if ":" in netloc:
+            netloc = f"[{netloc}]"
+        if parsed.port:  # accessing .port raises ValueError for a malformed port
+            netloc = f"{netloc}:{parsed.port}"
+    except ValueError:
+        return "<unparseable-url>"
+    cleaned = parsed._replace(
+        netloc=netloc,
+        path=("/<redacted-path>" if parsed.path else ""),
+        params="",
+        query=("REDACTED" if parsed.query else ""),
+        fragment="",
+    )
+    return urllib.parse.urlunparse(cleaned)
+
+
 def _download_checkpoint(url: str, expected_md5: str, filename: str, cache_dir: Path) -> Path:
     """Download a PARADE checkpoint into the cache, verifying its MD5 checksum."""
     if not url:
         raise FileNotFoundError("parade: checkpoint_path is unavailable and checkpoint_url is empty")
+    if (
+        not filename
+        or filename != Path(filename).name
+        or "\\" in filename
+        or any(ord(character) < 32 or ord(character) == 127 for character in filename)
+        or not filename.endswith(".ckpt")
+    ):
+        raise ValueError("parade: checkpoint_filename must be a .ckpt basename without path separators")
+    if urllib.parse.urlparse(url).scheme != "https":
+        # The checkpoint is unpickled; never fetch it over a downgradeable/MITM-able transport.
+        raise ValueError(f"parade: checkpoint URL must use https, got {_redact_url(url)!r}")
 
     dest = cache_dir / filename
-    if dest.is_file() and (not expected_md5 or _md5(dest) == expected_md5):
+    if _is_regular_cache_file(dest) and (not expected_md5 or _md5(dest) == expected_md5):
         return dest
 
     with _file_lock(cache_dir / f".{filename}.download.lock"):
-        if dest.is_file() and (not expected_md5 or _md5(dest) == expected_md5):
+        if _is_regular_cache_file(dest) and (not expected_md5 or _md5(dest) == expected_md5):
             return dest
-        tmp = dest.with_name(f".{dest.name}.{os.getpid()}.tmp")
-        with contextlib.suppress(FileNotFoundError):
-            tmp.unlink()
-        logger.info("Downloading PARADE checkpoint from %s to %s", url, dest)
+        # Use an exclusively created 0600 file rather than a predictable PID-derived path.
+        # A shared writable cache must not let another process preplant a symlink that this
+        # downloader then follows and truncates outside the cache.
+        tmp_fd, tmp_name = tempfile.mkstemp(prefix=f".{dest.name}.", suffix=".tmp", dir=dest.parent)
+        tmp = Path(tmp_name)
+        tmp_handle = os.fdopen(tmp_fd, "wb")
         try:
+            logger.info("Downloading PARADE checkpoint from %s to %s", _redact_url(url), dest)
             request = urllib.request.Request(url)
-            if urllib.parse.urlparse(url).netloc.endswith("huggingface.co") and os.environ.get("HF_TOKEN"):
+            # Only over HTTPS to a real HF host; the redirect handler strips the token if a
+            # later hop leaves that trust boundary (plaintext or a non-HF destination).
+            if _is_trusted_hf_url(url) and os.environ.get("HF_TOKEN"):
                 request.add_header("Authorization", f"Bearer {os.environ['HF_TOKEN']}")
-            with urllib.request.urlopen(request, timeout=120) as response, open(tmp, "wb") as handle:
-                while chunk := response.read(1024 * 1024):
-                    handle.write(chunk)
-            if expected_md5:
-                observed = _md5(tmp)
-                if observed != expected_md5:
-                    raise RuntimeError(
-                        f"parade: checkpoint checksum mismatch for {url}; expected {expected_md5}, got {observed}"
-                    )
+            opener = urllib.request.build_opener(_SecureRedirectHandler())
+            # Wrap the already-open exclusive descriptor directly; reopening by pathname would
+            # reintroduce a symlink-swap race between creation and writing.
+            with tmp_handle as handle:
+                with opener.open(request, timeout=120) as response:
+                    while chunk := response.read(1024 * 1024):
+                        handle.write(chunk)
+                handle.flush()
+                if expected_md5:
+                    observed = _md5(tmp)
+                    if observed != expected_md5:
+                        raise RuntimeError(
+                            f"parade: checkpoint checksum mismatch for {_redact_url(url)}; "
+                            f"expected {expected_md5}, got {observed}"
+                        )
+                # Keep the partial file at mkstemp's 0600 while downloading. Once verified,
+                # make it readable to the same group/world principals that can traverse the
+                # cache directory, preserving documented cross-user model-cache reuse.
+                os.fchmod(handle.fileno(), _installed_cache_file_mode(cache_dir))
             os.replace(tmp, dest)
-        except Exception:
+        finally:
+            with contextlib.suppress(OSError):
+                tmp_handle.close()
             with contextlib.suppress(FileNotFoundError):
                 tmp.unlink()
-            raise
     return dest
 
 

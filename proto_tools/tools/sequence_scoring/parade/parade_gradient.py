@@ -1,15 +1,19 @@
 """Differentiable PARADE UTR activity objectives for gradient-based design."""
 
 import json
+import math
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
     PARADE_CELL_TYPES,
     ParadeCellType,
     ParadeConstructType,
+    _SafeCheckpointUrlConfigMixin,
+    normalize_checkpoint_md5,
+    require_https_checkpoint_url,
     resolve_checkpoint_source,
 )
 from proto_tools.tools.tool_registry import tool
@@ -43,9 +47,9 @@ class ParadeGradientLossTerm(BaseModel):
         sigmoid_scale (float): Positive scale for the raw activity transform.
     """
 
-    cell_type: ParadeCellType = Field(
-        default="c2", title="Cell Type", description="PARADE cell code to optimize."
-    )
+    model_config = ConfigDict(extra="forbid", validate_assignment=True, frozen=True)
+
+    cell_type: ParadeCellType = Field(default="c2", title="Cell Type", description="PARADE cell code to optimize.")
     direction: ParadeObjectiveDirection = Field(
         default="max",
         title="Direction",
@@ -54,17 +58,20 @@ class ParadeGradientLossTerm(BaseModel):
     weight: float = Field(
         default=1.0,
         ge=0.0,
+        allow_inf_nan=False,
         title="Weight",
         description="Relative weight of this term in the summed objective (must be non-negative)",
     )
     sigmoid_center: float = Field(
         default=2.0,
+        allow_inf_nan=False,
         title="Sigmoid Center",
         description="Raw PARADE activity at the sigmoid midpoint (0.5 output)",
     )
     sigmoid_scale: float = Field(
         default=1.0,
         gt=0.0,
+        allow_inf_nan=False,
         title="Sigmoid Scale",
         description="Sigmoid steepness in raw-activity units; larger values produce a wider transition",
     )
@@ -87,6 +94,7 @@ class ParadeGradientInput(BaseToolInput):
     temperature: float = InputField(
         default=1.0,
         gt=0.0,
+        allow_inf_nan=False,
         title="Temperature",
         description="Softmax temperature used to convert logits into relaxed nucleotide probabilities.",
     )
@@ -116,10 +124,12 @@ class ParadeGradientInput(BaseToolInput):
                     raise ValueError(
                         f"logits batch {batch_idx} row {row_idx} must have {expected_width} columns, got {len(row)}"
                     )
+                if not all(math.isfinite(value) for value in row):
+                    raise ValueError(f"logits batch {batch_idx} row {row_idx} must contain only finite numbers")
         return logits
 
 
-class ParadeGradientConfig(BaseConfig):
+class ParadeGradientConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
     """Configuration for differentiable PARADE UTR-activity objectives.
 
     Attributes:
@@ -129,10 +139,11 @@ class ParadeGradientConfig(BaseConfig):
             into one scalar loss.
         checkpoint_path (str): Optional local override path to a PARADE ``.ckpt``.
             Leave empty to download the pinned upstream checkpoint.
-        checkpoint_url (str): Optional HTTPS override for the checkpoint download.
-            Leave empty to use the pinned per-target URL.
-        checkpoint_md5 (str): Optional MD5 override for the downloaded checkpoint.
-            Leave empty to use the pinned per-target checksum.
+        checkpoint_url (str): Optional HTTPS override for the checkpoint download, for local
+            devices only (rejected on ``device="cloud"``). Leave empty to use the pinned URL.
+        checkpoint_md5 (str): Optional MD5 override for the downloaded checkpoint. With the
+            pinned URL, empty uses the pinned checksum; with a custom ``checkpoint_url``,
+            empty disables verification.
         soft (float): Blend hard argmax one-hot (0) to softmax probabilities (1).
         hard (float): Straight-through hard-forward coefficient.
         compute_gradient (bool): Run backward pass and return gradient.
@@ -164,13 +175,14 @@ class ParadeGradientConfig(BaseConfig):
     checkpoint_url: str = ConfigField(
         title="Checkpoint URL",
         default="",
-        description="Optional HTTPS override for the checkpoint; empty uses the pinned per-target URL.",
+        description="HTTPS checkpoint override (local only; rejected on device='cloud'); empty uses pinned URL.",
         reload_on_change=True,
+        repr=False,
     )
     checkpoint_md5: str = ConfigField(
         title="Checkpoint MD5",
         default="",
-        description="Optional MD5 override; empty uses the pinned per-target checksum.",
+        description="MD5 override; empty = pinned checksum for the pinned URL, or no verification for a custom URL.",
         reload_on_change=True,
     )
     soft: float = ConfigField(
@@ -193,23 +205,57 @@ class ParadeGradientConfig(BaseConfig):
         description="Run backward pass and return gradient; set False for forward-only scoring.",
     )
 
-    @model_validator(mode="after")
-    def validate_loss_terms(self) -> "ParadeGradientConfig":
-        """Require at least one loss term whose cell code is in the construct panel."""
-        if not self.loss_terms:
-            raise ValueError("loss_terms cannot be empty")
-        panel = PARADE_CELL_TYPES[self.construct_type]
-        offpanel = sorted({term.cell_type for term in self.loss_terms} - set(panel))
+    @field_validator("checkpoint_url")
+    @classmethod
+    def _validate_checkpoint_url(cls, value: str) -> str:
+        """Reject a non-HTTPS custom checkpoint URL (the artifact is unpickled)."""
+        return require_https_checkpoint_url(value)
+
+    @field_validator("checkpoint_md5")
+    @classmethod
+    def _validate_checkpoint_md5(cls, value: str) -> str:
+        """Normalize and validate an optional checkpoint checksum."""
+        return normalize_checkpoint_md5(value)
+
+    @field_validator("construct_type")
+    @classmethod
+    def validate_construct_type(cls, value: ParadeConstructType, info: ValidationInfo) -> ParadeConstructType:
+        """Reject a construct update that would invalidate the current loss terms."""
+        loss_terms = info.data.get("loss_terms", [])
+        offpanel = sorted({term.cell_type for term in loss_terms} - set(PARADE_CELL_TYPES[value]))
         if offpanel:
-            raise ValueError(f"loss_terms cell codes {offpanel} are not in the {self.construct_type} panel {list(panel)}")
-        return self
+            raise ValueError(
+                f"loss_terms cell codes {offpanel} are not in the {value} panel {list(PARADE_CELL_TYPES[value])}"
+            )
+        return value
+
+    @field_validator("loss_terms")
+    @classmethod
+    def validate_loss_terms(
+        cls, value: list[ParadeGradientLossTerm], info: ValidationInfo
+    ) -> list[ParadeGradientLossTerm]:
+        """Require at least one loss term whose cell code is in the construct panel."""
+        if not value:
+            raise ValueError("loss_terms cannot be empty")
+        construct_type = info.data.get("construct_type", "utr5")
+        panel = PARADE_CELL_TYPES[construct_type]
+        offpanel = sorted({term.cell_type for term in value} - set(panel))
+        if offpanel:
+            raise ValueError(f"loss_terms cell codes {offpanel} are not in the {construct_type} panel {list(panel)}")
+        return value
 
     def cloud_unsupported_reason(self) -> str | None:
-        """A local checkpoint override isn't present on a hosted worker."""
+        """Custom checkpoint overrides aren't available (or trusted) on a hosted worker."""
         if self.checkpoint_path:
             return (
                 "checkpoint_path points to a local file not available on device='cloud'. "
                 "Leave it empty (the managed cache is used), or run locally with device='cpu'."
+            )
+        if self.checkpoint_url:
+            return (
+                "checkpoint_url downloads a caller-specified checkpoint, which device='cloud' does not "
+                "permit: a PyTorch checkpoint is an executable pickle, so only the pinned upstream "
+                "checkpoints run on a hosted worker. Leave checkpoint_url empty, or run locally with device='cpu'."
             )
         return None
 
@@ -303,6 +349,10 @@ class ParadeGradientOutput(GradientOutput):
         vocab (list[str]): DNA column ordering for logits and gradient.
     """
 
+    loss: float = Field(
+        title="Loss",
+        description="Sum of per-sample weighted PARADE sigmoid objective values.",
+    )
     gradient: ParadeGradientValue = Field(
         default=None,
         title="Gradient",
@@ -318,7 +368,7 @@ class ParadeGradientOutput(GradientOutput):
     def populate_sample_metrics(self) -> "ParadeGradientOutput":
         """Populate metric containers from the standalone metrics payload."""
         if not self.sample_metrics:
-            self.sample_metrics = _build_gradient_sample_metrics(self.metrics)
+            object.__setattr__(self, "sample_metrics", _build_gradient_sample_metrics(self.metrics))
         return self
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
@@ -364,6 +414,10 @@ def run_parade_gradient(
     Returns:
         ParadeGradientOutput: Loss, optional gradient, and per-sample activity metrics.
     """
+    inputs = ParadeGradientInput.model_validate(inputs.model_dump())
+    # Revalidate a dumped copy so nested/container mutation cannot reach the worker
+    # without re-running the cross-field and finite-number checks.
+    config = ParadeGradientConfig.model_validate(config.model_dump())
     # The objective runs through the same per-construct activity checkpoint as parade-activity.
     url, md5, filename = resolve_checkpoint_source(config.construct_type, config.checkpoint_url, config.checkpoint_md5)
 

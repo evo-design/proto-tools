@@ -1,6 +1,7 @@
 """PARADE checkpoint loading, featurization, and inference over the vendored modules."""
 
 import itertools
+from collections import defaultdict
 from typing import Any
 
 import numpy as np
@@ -62,6 +63,18 @@ def _predict(model: Any, dataset: Any, batch_size: int, device: str) -> np.ndarr
     return torch.cat(chunks, dim=0).numpy()
 
 
+def _group_by_length(sequences: list[str]) -> dict[int, list[int]]:
+    """Map sequence length -> original indices, so each batch tensor stacks uniformly.
+
+    Grouping by length keeps mixed-length inputs correct and makes the tools safe under the
+    framework's per-item iterable cache, which can hand us any subset of the caller's items.
+    """
+    by_length: dict[int, list[int]] = defaultdict(list)
+    for index, sequence in enumerate(sequences):
+        by_length[len(sequence)].append(index)
+    return by_length
+
+
 def predict_activity(
     model: Any,
     *,
@@ -71,11 +84,35 @@ def predict_activity(
     batch_size: int,
     device: str,
 ) -> list[dict[str, float]]:
-    """Predict per-cell-type activity for each sequence.
+    """Predict per-cell-type activity for each sequence, batching per length group."""
+    rows: list[dict[str, float] | None] = [None] * len(sequences)
+    for indices in _group_by_length(sequences).values():
+        group = _predict_activity_group(
+            model,
+            sequences=[sequences[i] for i in indices],
+            construct_type=construct_type,
+            cell_types=cell_types,
+            batch_size=batch_size,
+            device=device,
+        )
+        for local_index, original_index in enumerate(indices):
+            rows[original_index] = group[local_index]
+    return [row for row in rows if row is not None]
 
-    Builds one row per (sequence, cell type) pair exactly like the upstream
-    ``predict.py``, runs the conditioned model, and pivots back to one dict per sequence
-    keyed by cell code.
+
+def _predict_activity_group(
+    model: Any,
+    *,
+    sequences: list[str],
+    construct_type: str,
+    cell_types: list[str],
+    batch_size: int,
+    device: str,
+) -> list[dict[str, float]]:
+    """Score one equal-length group.
+
+    Builds one row per (sequence, cell type) pair exactly like the upstream ``predict.py``,
+    runs the conditioned model, and pivots back to one dict per sequence keyed by cell code.
     """
     # PARADE conditions the model on the cell type through input channels, so we score
     # one row per (sequence, cell type) pair and pivot the predictions back per sequence.
@@ -92,7 +129,10 @@ def predict_activity(
         augment_test_time=False,
         augment_kws=dict(_ACTIVITY_AUGMENT_KWS),
     )
-    frame["activity"] = _predict(model, dataset, batch_size, device)[:, _ACTIVITY_MASS_CENTER_INDEX]
+    # `batch_size` counts sequences (per the public schema); each expands to one conditioned
+    # row per cell type, so scale the row-level loader batch by the number of cell types.
+    row_batch_size = batch_size * len(cell_types)
+    frame["activity"] = _predict(model, dataset, row_batch_size, device)[:, _ACTIVITY_MASS_CENTER_INDEX]
 
     rows: list[dict[str, float]] = []
     for seq_id in range(len(sequences)):
@@ -103,7 +143,19 @@ def predict_activity(
 
 
 def predict_stability(model: Any, *, sequences: list[str], batch_size: int, device: str) -> list[float]:
-    """Predict the RNA/gDNA log-ratio for each 3' UTR sequence."""
+    """Predict the RNA/gDNA log-ratio for each 3' UTR sequence, batching per length group."""
+    values: list[float | None] = [None] * len(sequences)
+    for indices in _group_by_length(sequences).values():
+        group = _predict_stability_group(
+            model, sequences=[sequences[i] for i in indices], batch_size=batch_size, device=device
+        )
+        for local_index, original_index in enumerate(indices):
+            values[original_index] = group[local_index]
+    return [value for value in values if value is not None]
+
+
+def _predict_stability_group(model: Any, *, sequences: list[str], batch_size: int, device: str) -> list[float]:
+    """Score one equal-length group of 3' UTR sequences."""
     frame = pd.DataFrame({"id": np.arange(len(sequences)), "seq": list(sequences)})
     dataset = stability_data.StabilityData(df=frame, features=("sequence",), predict_cols=[])
     predictions = _predict(model, dataset, batch_size, device)[:, _STABILITY_LOG_RATIO_INDEX]

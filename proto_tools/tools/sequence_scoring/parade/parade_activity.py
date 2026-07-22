@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationInfo, computed_field, field_validator
 
 from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
     PARADE_CELL_TYPES,
@@ -29,17 +29,19 @@ class ParadeActivityConfig(ParadeCheckpointConfig):
 
     Attributes:
         construct_type (ParadeConstructType): Which UTR model to use — ``"utr5"``
-            (5' UTR) or ``"utr3"`` (3' UTR). Selects the checkpoint, the cell-code
-            panel, and the fixed reporter flanks the model was trained with.
+            (5' UTR) or ``"utr3"`` (3' UTR). Selects the checkpoint and the cell-code
+            panel. Matching the upstream predictor, the model scores the bare insert
+            (no reporter flanks are added).
         cell_types (list[ParadeCellType]): PARADE cell codes to return. Empty means
             the full panel for ``construct_type``. Requested codes must belong to
             that panel.
         checkpoint_path (str): Optional local override path to a PARADE ``.ckpt``.
             Leave empty to download the pinned upstream checkpoint.
-        checkpoint_url (str): Optional HTTPS override for the checkpoint download.
-            Leave empty to use the pinned per-target URL.
-        checkpoint_md5 (str): Optional MD5 override for the downloaded checkpoint.
-            Leave empty to use the pinned per-target checksum.
+        checkpoint_url (str): Optional HTTPS override for the checkpoint download, for local
+            devices only (rejected on ``device="cloud"``). Leave empty to use the pinned URL.
+        checkpoint_md5 (str): Optional MD5 override for the downloaded checkpoint. With the
+            pinned URL, empty uses the pinned checksum; with a custom ``checkpoint_url``,
+            empty disables verification.
         batch_size (int): Number of sequences to run per GPU batch.
     """
 
@@ -65,21 +67,33 @@ class ParadeActivityConfig(ParadeCheckpointConfig):
             return [value]
         return value  # type: ignore[no-any-return]
 
-    @model_validator(mode="after")
-    def validate_cell_types(self) -> "ParadeActivityConfig":
-        """Resolve the default panel and validate requested codes against it."""
-        panel = PARADE_CELL_TYPES[self.construct_type]
-        if not self.cell_types:
-            self.cell_types = list(panel)
-            return self
-        if len(set(self.cell_types)) != len(self.cell_types):
-            raise ValueError("cell_types must be unique")
-        unsupported = [code for code in self.cell_types if code not in panel]
+    @field_validator("construct_type")
+    @classmethod
+    def validate_construct_type(cls, value: ParadeConstructType, info: ValidationInfo) -> ParadeConstructType:
+        """Reject a construct update that would invalidate explicitly selected cells."""
+        cell_types = info.data.get("cell_types", [])
+        unsupported = [code for code in cell_types if code not in PARADE_CELL_TYPES[value]]
         if unsupported:
-            raise ValueError(
-                f"cell_types {unsupported} are not in the {self.construct_type} panel {list(panel)}"
-            )
-        return self
+            raise ValueError(f"cell_types {unsupported} are not in the {value} panel {list(PARADE_CELL_TYPES[value])}")
+        return value
+
+    @field_validator("cell_types")
+    @classmethod
+    def validate_cell_types(cls, value: list[ParadeCellType], info: ValidationInfo) -> list[ParadeCellType]:
+        """Validate explicitly requested codes while preserving empty as the full-panel sentinel."""
+        if len(set(value)) != len(value):
+            raise ValueError("cell_types must be unique")
+        construct_type = info.data.get("construct_type", "utr5")
+        panel = PARADE_CELL_TYPES[construct_type]
+        unsupported = [code for code in value if code not in panel]
+        if unsupported:
+            raise ValueError(f"cell_types {unsupported} are not in the {construct_type} panel {list(panel)}")
+        return value
+
+    @property
+    def resolved_cell_types(self) -> list[ParadeCellType]:
+        """Requested cell codes, or the full panel when ``cell_types`` is empty."""
+        return list(self.cell_types or PARADE_CELL_TYPES[self.construct_type])
 
 
 class ParadeActivityResult(BaseModel):
@@ -88,11 +102,16 @@ class ParadeActivityResult(BaseModel):
     Attributes:
         sequence (str): UTR sequence that was scored (DNA alphabet).
         sequence_length (int): Length of the scored sequence.
+        construct_type (ParadeConstructType): UTR model that produced these scores.
+            Carried per-result so the provenance survives iterable-cache reconstruction.
         scores (ParadeActivityMetrics): Predicted activity keyed by cell code.
     """
 
     sequence: str = Field(title="Sequence", description="UTR sequence scored by PARADE")
     sequence_length: int = Field(title="Sequence Length", description="Length of the scored UTR sequence")
+    construct_type: ParadeConstructType = Field(
+        title="Construct Type", description="UTR model that produced these scores"
+    )
     scores: ParadeActivityMetrics = Field(
         title="Activity Scores", description="PARADE activity predictions keyed by cell code"
     )
@@ -102,16 +121,33 @@ class ParadeActivityOutput(BaseToolOutput):
     """Output from PARADE UTR activity scoring.
 
     Attributes:
-        results (list[ParadeActivityResult]): Per-sequence PARADE predictions.
-        construct_type (str): UTR model used (``"utr5"`` or ``"utr3"``).
-        cell_types (list[str]): Cell codes included in each result's ``scores``.
+        results (list[ParadeActivityResult]): Per-sequence PARADE predictions. The only
+            stored field, so the output survives the framework's iterable-cache
+            reconstruction (which preserves only the iterable field).
+        construct_type (str): UTR model used, derived from ``results`` (computed field).
+        cell_types (list[str]): Cell codes in each result, derived from ``results``
+            (computed field).
     """
 
     results: list[ParadeActivityResult] = Field(
-        title="Results", description="Per-sequence PARADE activity scoring results"
+        default_factory=list, title="Results", description="Per-sequence PARADE activity scoring results"
     )
-    construct_type: str = Field(title="Construct Type", description="UTR model used for scoring")
-    cell_types: list[str] = Field(title="Cell Types", description="Cell codes included in each score dictionary")
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def construct_type(self) -> str:
+        """UTR model that produced the scores, derived from ``results``.
+
+        A computed field (not stored) so it persists through ``model_dump``/serialization
+        and stays correct after a full iterable-cache hit, where only ``results`` is kept.
+        """
+        return self.results[0].construct_type if self.results else ""
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def cell_types(self) -> list[str]:
+        """Cell codes present in each result, derived from ``results`` (computed field)."""
+        return [code for code, _ in self.results[0].scores.items()] if self.results else []
 
     def __len__(self) -> int:
         """Return the number of per-sequence results."""
@@ -205,12 +241,12 @@ def run_parade_activity(
     Returns:
         ParadeActivityOutput: Per-sequence PARADE activity predictions keyed by cell code.
     """
-    # Sequences in one call are stacked into a single batched tensor, so they must share
-    # a length; callers with mixed lengths should group by length across separate calls.
-    lengths = {len(sequence) for sequence in inputs.sequences}
-    if len(lengths) != 1:
-        raise ValueError(f"All PARADE sequences in one call must share a length; got {sorted(lengths)}")
-
+    inputs = ParadeActivityInput.model_validate(inputs.model_dump())
+    # Revalidate a dumped copy so in-place mutation of the list field cannot bypass
+    # Pydantic's assignment hooks between config construction and execution.
+    config = ParadeActivityConfig.model_validate(config.model_dump())
+    # Sequences may have mixed lengths; the standalone batches them per length group, so this
+    # is safe under the framework's per-item iterable cache (partial cache hits pass any subset).
     url, md5, filename = resolve_checkpoint_source(config.construct_type, config.checkpoint_url, config.checkpoint_md5)
 
     output_data = ToolInstance.dispatch(
@@ -219,7 +255,7 @@ def run_parade_activity(
             "operation": "activity",
             "sequences": inputs.sequences,
             "construct_type": config.construct_type,
-            "cell_types": list(config.cell_types),
+            "cell_types": config.resolved_cell_types,
             "checkpoint_path": config.checkpoint_path,
             "checkpoint_url": url,
             "checkpoint_md5": md5,
@@ -242,12 +278,11 @@ def run_parade_activity(
             ParadeActivityResult(
                 sequence=sequence,
                 sequence_length=len(sequence),
+                construct_type=config.construct_type,
                 scores=ParadeActivityMetrics.model_validate(
-                    {cell_type: float(scores[cell_type]) for cell_type in config.cell_types}
+                    {cell_type: float(scores[cell_type]) for cell_type in config.resolved_cell_types}
                 ),
             )
             for sequence, scores in zip(inputs.sequences, score_rows, strict=True)
         ],
-        construct_type=config.construct_type,
-        cell_types=list(config.cell_types),
     )
