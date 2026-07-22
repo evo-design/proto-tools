@@ -216,6 +216,46 @@ def test_residue_selection_validate_against_bad_position(structure: Structure) -
         ResidueSelection(chains={"A": [9999]}).validate_against(structure)
 
 
+def _offset_gapped_structure() -> Structure:
+    """Chain A numbered 27, 28, 29, 35, 36 (author offset plus an internal 30-34 gap)."""
+
+    def residue(num: int, base_id: int) -> str:
+        return (
+            f"ATOM  {base_id + 1:>5}  N   MET A{num:>4}      27.340  24.430   2.614  1.00  9.67           N\n"
+            f"ATOM  {base_id + 2:>5}  CA  MET A{num:>4}      26.266  25.413   2.842  1.00 10.38           C\n"
+            f"ATOM  {base_id + 3:>5}  C   MET A{num:>4}      26.913  26.639   3.531  1.00  9.62           C\n"
+            f"ATOM  {base_id + 4:>5}  O   MET A{num:>4}      27.886  26.463   4.263  1.00  9.62           O\n"
+        )
+
+    pdb = "".join(residue(num, i * 4) for i, num in enumerate([27, 28, 29, 35, 36])) + "END\n"
+    return Structure(structure=pdb)
+
+
+def test_residue_selection_validate_against_1indexed_offset_numbering() -> None:
+    """Positions are 1-indexed over residues, so 1..N is valid even when the file numbers from 27."""
+    structure = _offset_gapped_structure()  # chain A has 5 residues: 27, 28, 29, 35, 36
+    ResidueSelection(chains={"A": [1, 2, 3, 4, 5]}).validate_against(structure)
+
+
+def test_residue_selection_validate_against_rejects_out_of_range() -> None:
+    """A position past the chain's residue count is rejected."""
+    structure = _offset_gapped_structure()  # 5 residues
+    with pytest.raises(ValueError, match="invalid positions"):
+        ResidueSelection(chains={"A": [6]}).validate_against(structure)
+
+
+def test_residue_selection_to_residue_numbers_maps_offset_and_gaps() -> None:
+    """Position i resolves to the i-th residue's number, skipping unmodeled gaps."""
+    structure = _offset_gapped_structure()
+    resolved = ResidueSelection(chains={"A": [1, 4, 5]}).to_residue_numbers(structure)
+    assert resolved == {"A": [27, 35, 36]}  # position 4 skips the 30-34 gap to residue 35
+
+
+def test_residue_selection_to_residue_numbers_identity_when_numbered_from_one(structure: Structure) -> None:
+    """When a chain is numbered 1..N, resolution is the identity map."""
+    assert ResidueSelection(chains={"A": [1, 2, 3]}).to_residue_numbers(structure) == {"A": [1, 2, 3]}
+
+
 # ============================================================================
 # SingleChainSelection
 # ============================================================================

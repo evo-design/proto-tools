@@ -152,7 +152,11 @@ def run_ligandmpnn_score(
                     "chain_ids": pair.structure.get_chain_ids(),
                     "sequence": pair.sequence,
                     "seed": seed,
-                    "fixed_positions": (pair.fixed_positions.chains if pair.fixed_positions is not None else None),
+                    "fixed_positions": (
+                        pair.fixed_positions.to_residue_numbers(pair.structure)
+                        if pair.fixed_positions is not None
+                        else None
+                    ),
                     "device": config.device,
                     "return_logits": config.return_logits,
                     "verbose": config.verbose,

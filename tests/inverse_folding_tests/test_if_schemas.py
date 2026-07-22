@@ -62,6 +62,41 @@ def test_structure_with_fixed():
     assert structure.fixed_positions.chains == {"A": [1, 2, 3]}
 
 
+def _offset_multichain_pdb() -> str:
+    """Two chains whose residues are numbered off 1 with gaps: A = 27,28,29,35,36; B = 10,11,12."""
+
+    def residue(chain: str, num: int, base_id: int) -> str:
+        return "".join(
+            f"ATOM  {base_id + k:>5}  {atom:<3} MET {chain}{num:>4}      "
+            f"27.340  24.430   2.614  1.00  9.67           {atom[0]}\n"
+            for k, atom in enumerate(["N", "CA", "C", "O"], start=1)
+        )
+
+    lines, base_id = "", 0
+    for chain, nums in (("A", [27, 28, 29, 35, 36]), ("B", [10, 11, 12])):
+        for num in nums:
+            lines += residue(chain, num, base_id)
+            base_id += 4
+    return lines + "END\n"
+
+
+def test_structure_with_fixed_positions_1indexed_on_offset_numbering():
+    """1-indexed fixed positions across chains validate on offset/gapped numbering and resolve to residue numbers."""
+    structure = InverseFoldingStructureInput(
+        structure=_offset_multichain_pdb(),
+        fixed_positions={"A": [1, 2, 4], "B": [1, 3]},
+    )
+    assert structure.fixed_positions is not None
+    # Position i targets the i-th residue: A[4] skips the 30-34 gap to residue 35; B is offset at 10.
+    assert structure.fixed_positions.to_residue_numbers(structure.structure) == {"A": [27, 28, 35], "B": [10, 12]}
+
+
+def test_structure_rejects_fixed_position_past_chain_length():
+    """A fixed position beyond the chain's residue count is rejected."""
+    with pytest.raises(ValueError, match="invalid positions"):
+        InverseFoldingStructureInput(structure=_offset_multichain_pdb(), fixed_positions={"A": [6]})
+
+
 def test_structure_rejects_invalid_pdb_content():
     with pytest.raises(ValueError):
         InverseFoldingStructureInput(structure="not a pdb file")

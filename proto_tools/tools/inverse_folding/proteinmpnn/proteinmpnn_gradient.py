@@ -205,7 +205,11 @@ def run_proteinmpnn_gradient(
                 "temperature": inputs.temperature,
                 "use_ste": config.use_ste,
                 "compute_gradient": config.compute_gradient,
-                "fixed_positions": inputs.fixed_positions.chains if inputs.fixed_positions is not None else None,
+                "fixed_positions": (
+                    inputs.fixed_positions.to_residue_numbers(inputs.structure)
+                    if inputs.fixed_positions is not None
+                    else None
+                ),
                 "model_choice": config.model_choice,
                 "seed": seed,
                 "device": config.device,
