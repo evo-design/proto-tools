@@ -258,6 +258,13 @@ exclude = [
     "**/examples",
     "**/*.ipynb",
     "notes",
+    # Vendored byte-verbatim from upstream autosome-ru/parade (only a provenance/Ruff header
+    # added) so the published Lightning checkpoints load unchanged. Ruff format has no
+    # file-level skip, so exclude them here to keep them identical to upstream.
+    "**/sequence_scoring/parade/standalone/legnet.py",
+    "**/sequence_scoring/parade/standalone/pl_regressor.py",
+    "**/sequence_scoring/parade/standalone/stability_data.py",
+    "**/sequence_scoring/parade/standalone/utrdata_cl.py",
 ]
 
 [tool.ruff.lint]

@@ -21,7 +21,7 @@ from collections.abc import Callable, MutableMapping
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 import yaml
 from pydantic import BaseModel, Field, field_serializer
@@ -1434,7 +1434,9 @@ def _coerce_model(instance: BaseModel, expected_class: type[BaseModel], tool_key
             # The overwhelmingly common path: validation succeeded without normalization.
             # Keep object identity and nested Pydantic private state intact.
             return instance
-        return _restore_model_runtime_state(instance, validated)
+        # Both args are BaseModel, so the top-level restore returns a BaseModel (the recursive
+        # helper is Any-typed because it also threads nested list/dict/tuple values).
+        return cast(BaseModel, _restore_model_runtime_state(instance, validated))
     actual_type = type(instance)
     if not issubclass(expected_class, actual_type):
         raise TypeError(
