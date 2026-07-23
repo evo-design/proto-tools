@@ -128,23 +128,45 @@ def require_https_checkpoint_url(value: str) -> str:
     return value
 
 
-def normalize_checkpoint_md5(value: str) -> str:
-    """Normalize an optional MD5 checksum and reject malformed values before download."""
-    normalized = value.strip().lower()
-    if normalized and re.fullmatch(r"[0-9a-f]{32}", normalized) is None:
-        raise ValueError("checkpoint_md5 must be exactly 32 hexadecimal characters")
-    return normalized
+def _looks_like_checkpoint_url(value: str) -> bool:
+    """True if ``value`` is a download link — ``http(s)://…`` or a schemeless ``host.tld/path``.
+
+    A bare filename or local path (``model.ckpt``, ``sub/x.ckpt``, ``/oak/x.ckpt``, ``./x``) is not a
+    link; a schemeless ``huggingface.co/user/model.ckpt`` is (and is normalized to ``https://`` on use).
+    """
+    if not value:
+        return False
+    scheme = urllib.parse.urlparse(value).scheme
+    if scheme:
+        return scheme in ("http", "https")
+    head, _, rest = value.partition("/")
+    if not rest or "." not in head:
+        return False
+    return all(re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?", label) for label in head.split("."))
+
+
+def normalize_checkpoint_override(value: str) -> str:
+    """Validate a checkpoint override: an https link (schemeless allowed) or a local path.
+
+    A link (``http(s)://…`` or ``host.tld/path``) is normalized to ``https://`` and validated
+    (HTTPS-only, real host, no embedded credentials); a local path passes through unchanged. A
+    checkpoint is unpickled after download, so a link must use a non-downgradeable HTTPS transport.
+    """
+    if not value or not _looks_like_checkpoint_url(value):
+        return value
+    normalized = value if urllib.parse.urlparse(value).scheme else f"https://{value}"
+    return require_https_checkpoint_url(normalized)
 
 
 def _redact_checkpoint_url_input(value: Any, *, redact_all_strings: bool = False) -> Any:
     """Recursively replace checkpoint URL values inside a rejected model input."""
     if redact_all_strings and isinstance(value, (str, bytes, bytearray)):
-        return "<redacted-checkpoint-url>"
+        return "<redacted-checkpoint>"
     if isinstance(value, dict):
         return {
             ("<redacted-key>" if redact_all_strings and isinstance(key, str) else key): (
-                "<redacted-checkpoint-url>"
-                if key == "checkpoint_url"
+                "<redacted-checkpoint>"
+                if key == "checkpoint"
                 else _redact_checkpoint_url_input(item, redact_all_strings=redact_all_strings)
             )
             for key, item in value.items()
@@ -176,8 +198,8 @@ class _SafeCheckpointUrlConfigMixin:
                 for line_error in line_errors:
                     error_input = line_error.get("input")
                     location = line_error.get("loc", ())
-                    if "checkpoint_url" in location:
-                        line_error["input"] = "<redacted-checkpoint-url>"
+                    if "checkpoint" in location:
+                        line_error["input"] = "<redacted-checkpoint>"
                     elif not location:
                         # Top-level error: input is the whole config (dict) or a bare scalar. A bare
                         # string might be a credentialed URL, so redact it — under a NEUTRAL label,
@@ -222,14 +244,14 @@ class _SafeCheckpointUrlConfigMixin:
         ) from None
 
     def __setattr__(self, name: str, value: Any) -> None:
-        """Prevalidate a checkpoint_url assignment so the error is a plain, non-echoing ValueError.
+        """Prevalidate a ``checkpoint`` assignment so the error is a plain, non-echoing ValueError.
 
         NOT redundant with ``validate_assignment``: assignment re-validation runs the field schema
         directly (never the model wrap-validator above), so its ValidationError would render the raw
-        URL. Raising a plain ValueError here first keeps the credential out of the exception text.
+        value. Raising a plain ValueError here first keeps any embedded credential out of the text.
         """
-        if name == "checkpoint_url" and isinstance(value, str):
-            require_https_checkpoint_url(value)
+        if name == "checkpoint" and isinstance(value, str):
+            normalize_checkpoint_override(value)
         super().__setattr__(name, value)
 
 
@@ -276,15 +298,11 @@ class ParadeCheckpointConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
 
     Attributes:
         device (str): Device used for inference.
-        checkpoint_path (str): Optional local override path to a PARADE ``.ckpt``.
-            Leave empty to download the pinned upstream checkpoint into the managed
-            weights cache.
-        checkpoint_url (str): Optional HTTPS override for the checkpoint download, for local
-            devices only (rejected on ``device="cloud"`` — a checkpoint is an executable
-            pickle). Leave empty to use the pinned per-target URL.
-        checkpoint_md5 (str): Optional MD5 override for the downloaded checkpoint. With the
-            pinned URL, empty uses the pinned per-target checksum; with a custom
-            ``checkpoint_url``, empty disables verification (pass a checksum to verify).
+        checkpoint (str): Optional override for the pinned upstream checkpoint — a local ``.ckpt``
+            path or an ``https`` link (a schemeless ``host.tld/path`` is accepted and normalized to
+            ``https://``). A caller override runs on local devices only (rejected on
+            ``device="cloud"``, since a checkpoint is an executable pickle). Empty uses the pinned
+            per-target checkpoint, verified against its built-in checksum.
         batch_size (int): Number of sequences to run per GPU batch.
     """
 
@@ -294,24 +312,12 @@ class ParadeCheckpointConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
         description="Device to run PARADE inference on.",
         include_in_key=False,
     )
-    checkpoint_path: str = ConfigField(
-        title="Checkpoint Path",
+    checkpoint: str = ConfigField(
+        title="Checkpoint",
         default="",
-        description="Optional local PARADE .ckpt path; empty downloads the pinned upstream checkpoint.",
-        reload_on_change=True,
-    )
-    checkpoint_url: str = ConfigField(
-        title="Checkpoint URL",
-        default="",
-        description="HTTPS checkpoint override (local only; rejected on device='cloud'); empty uses pinned URL.",
+        description="Local .ckpt path or https link overriding the pinned checkpoint (empty = pinned upstream).",
         reload_on_change=True,
         repr=False,
-    )
-    checkpoint_md5: str = ConfigField(
-        title="Checkpoint MD5",
-        default="",
-        description="MD5 override; empty = pinned checksum for the pinned URL, or no verification for a custom URL.",
-        reload_on_change=True,
     )
     batch_size: int = ConfigField(
         title="Batch Size",
@@ -321,30 +327,20 @@ class ParadeCheckpointConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
         include_in_key=False,
     )
 
-    @field_validator("checkpoint_url")
+    @field_validator("checkpoint")
     @classmethod
-    def _validate_checkpoint_url(cls, value: str) -> str:
-        """Reject a non-HTTPS custom checkpoint URL (the artifact is unpickled)."""
-        return require_https_checkpoint_url(value)
-
-    @field_validator("checkpoint_md5")
-    @classmethod
-    def _validate_checkpoint_md5(cls, value: str) -> str:
-        """Normalize and validate an optional checkpoint checksum."""
-        return normalize_checkpoint_md5(value)
+    def _validate_checkpoint(cls, value: str) -> str:
+        """Validate a checkpoint override: an https link (schemeless allowed) or a local path."""
+        return normalize_checkpoint_override(value)
 
     def cloud_unsupported_reason(self) -> str | None:
-        """Custom checkpoint overrides aren't available (or trusted) on a hosted worker."""
-        if self.checkpoint_path:
+        """A caller-specified checkpoint override isn't available (or trusted) on a hosted worker."""
+        if self.checkpoint:
             return (
-                "checkpoint_path points to a local file not available on device='cloud'. "
-                "Leave it empty (the managed cache is used), or run locally with device='cpu'."
-            )
-        if self.checkpoint_url:
-            return (
-                "checkpoint_url downloads a caller-specified checkpoint, which device='cloud' does not "
-                "permit: a PyTorch checkpoint is an executable pickle, so only the pinned upstream "
-                "checkpoints run on a hosted worker. Leave checkpoint_url empty, or run locally with device='cpu'."
+                "checkpoint is a caller-specified override (a local path or a custom download link), which "
+                "device='cloud' does not permit: a PyTorch checkpoint is an executable pickle, so only the "
+                "pinned upstream checkpoints run on a hosted worker. Leave checkpoint empty, or run locally "
+                "with device='cpu'."
             )
         return None
 
@@ -370,25 +366,25 @@ class ParadeActivityMetrics(Metrics):
     }
 
 
-def resolve_checkpoint_source(target: str, checkpoint_url: str, checkpoint_md5: str) -> tuple[str, str, str]:
-    """Resolve the download URL, checksum, and cache filename for a PARADE target.
+def resolve_checkpoint_source(target: str, checkpoint: str) -> tuple[str, str, str, str]:
+    """Resolve ``(checkpoint_path, url, md5, filename)`` for the standalone dispatch.
 
-    A custom ``checkpoint_url`` uses **only** the caller's ``checkpoint_md5`` (never the
-    pinned checksum, which would always false-fail) and a URL-specific cache filename (so it
-    does not collide with the official checkpoint). The pinned URL keeps the pinned checksum
-    unless ``checkpoint_md5`` overrides it.
+    - ``checkpoint`` empty            -> pinned URL + built-in pinned checksum (no local path)
+    - ``checkpoint`` is a link        -> download it (no checksum), under a link-specific cache name
+    - ``checkpoint`` is a local path  -> pass the path through (no download)
 
     Args:
         target (str): One of ``"utr5"``, ``"utr3"``, or ``"stability"``.
-        checkpoint_url (str): Optional URL override; empty uses the pinned URL.
-        checkpoint_md5 (str): Optional MD5 override. Applied to whichever URL is used; an
-            empty value on a custom URL skips checksum verification.
+        checkpoint (str): Optional override — empty, an https link, or a local ``.ckpt`` path.
 
     Returns:
-        tuple[str, str, str]: ``(url, md5, filename)`` for the resolved checkpoint.
+        tuple[str, str, str, str]: ``(checkpoint_path, url, md5, filename)`` for the resolved checkpoint.
     """
     entry = PARADE_CHECKPOINTS[target]
-    if checkpoint_url:
-        digest = hashlib.sha256(checkpoint_url.encode()).hexdigest()[:12]
-        return checkpoint_url, checkpoint_md5, f"parade-{target}-custom-{digest}.ckpt"
-    return entry["url"], checkpoint_md5 or entry["md5"], entry["filename"]
+    if not checkpoint:
+        return "", entry["url"], entry["md5"], entry["filename"]
+    if _looks_like_checkpoint_url(checkpoint):
+        url = checkpoint if urllib.parse.urlparse(checkpoint).scheme else f"https://{checkpoint}"
+        digest = hashlib.sha256(url.encode()).hexdigest()[:12]
+        return "", url, "", f"parade-{target}-custom-{digest}.ckpt"
+    return checkpoint, "", "", ""

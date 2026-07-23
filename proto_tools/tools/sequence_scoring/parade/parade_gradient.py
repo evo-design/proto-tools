@@ -12,8 +12,7 @@ from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
     ParadeCellType,
     ParadeConstructType,
     _SafeCheckpointUrlConfigMixin,
-    normalize_checkpoint_md5,
-    require_https_checkpoint_url,
+    normalize_checkpoint_override,
     resolve_checkpoint_source,
 )
 from proto_tools.tools.tool_registry import tool
@@ -137,13 +136,9 @@ class ParadeGradientConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
         construct_type (ParadeConstructType): UTR model to use — ``"utr5"`` or ``"utr3"``.
         loss_terms (list[ParadeGradientLossTerm]): Per-cell objective terms summed
             into one scalar loss.
-        checkpoint_path (str): Optional local override path to a PARADE ``.ckpt``.
-            Leave empty to download the pinned upstream checkpoint.
-        checkpoint_url (str): Optional HTTPS override for the checkpoint download, for local
-            devices only (rejected on ``device="cloud"``). Leave empty to use the pinned URL.
-        checkpoint_md5 (str): Optional MD5 override for the downloaded checkpoint. With the
-            pinned URL, empty uses the pinned checksum; with a custom ``checkpoint_url``,
-            empty disables verification.
+        checkpoint (str): Optional override for the pinned checkpoint — a local ``.ckpt`` path or an
+            ``https`` link (a schemeless ``host.tld/path`` is accepted). Caller overrides run on local
+            devices only (rejected on ``device="cloud"``). Empty uses the pinned per-target checkpoint.
         soft (float): Blend hard argmax one-hot (0) to softmax probabilities (1).
         hard (float): Straight-through hard-forward coefficient.
         compute_gradient (bool): Run backward pass and return gradient.
@@ -166,24 +161,12 @@ class ParadeGradientConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
         title="Loss Terms",
         description="Per-cell PARADE activity objectives to sum before backpropagation.",
     )
-    checkpoint_path: str = ConfigField(
-        title="Checkpoint Path",
+    checkpoint: str = ConfigField(
+        title="Checkpoint",
         default="",
-        description="Optional local PARADE .ckpt path; empty downloads the pinned upstream checkpoint.",
-        reload_on_change=True,
-    )
-    checkpoint_url: str = ConfigField(
-        title="Checkpoint URL",
-        default="",
-        description="HTTPS checkpoint override (local only; rejected on device='cloud'); empty uses pinned URL.",
+        description="Local .ckpt path or https link overriding the pinned checkpoint (empty = pinned upstream).",
         reload_on_change=True,
         repr=False,
-    )
-    checkpoint_md5: str = ConfigField(
-        title="Checkpoint MD5",
-        default="",
-        description="MD5 override; empty = pinned checksum for the pinned URL, or no verification for a custom URL.",
-        reload_on_change=True,
     )
     soft: float = ConfigField(
         title="Soft Mixing",
@@ -205,17 +188,11 @@ class ParadeGradientConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
         description="Run backward pass and return gradient; set False for forward-only scoring.",
     )
 
-    @field_validator("checkpoint_url")
+    @field_validator("checkpoint")
     @classmethod
-    def _validate_checkpoint_url(cls, value: str) -> str:
-        """Reject a non-HTTPS custom checkpoint URL (the artifact is unpickled)."""
-        return require_https_checkpoint_url(value)
-
-    @field_validator("checkpoint_md5")
-    @classmethod
-    def _validate_checkpoint_md5(cls, value: str) -> str:
-        """Normalize and validate an optional checkpoint checksum."""
-        return normalize_checkpoint_md5(value)
+    def _validate_checkpoint(cls, value: str) -> str:
+        """Validate a checkpoint override: an https link (schemeless allowed) or a local path."""
+        return normalize_checkpoint_override(value)
 
     @field_validator("construct_type")
     @classmethod
@@ -245,17 +222,13 @@ class ParadeGradientConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
         return value
 
     def cloud_unsupported_reason(self) -> str | None:
-        """Custom checkpoint overrides aren't available (or trusted) on a hosted worker."""
-        if self.checkpoint_path:
+        """A caller-specified checkpoint override isn't available (or trusted) on a hosted worker."""
+        if self.checkpoint:
             return (
-                "checkpoint_path points to a local file not available on device='cloud'. "
-                "Leave it empty (the managed cache is used), or run locally with device='cpu'."
-            )
-        if self.checkpoint_url:
-            return (
-                "checkpoint_url downloads a caller-specified checkpoint, which device='cloud' does not "
-                "permit: a PyTorch checkpoint is an executable pickle, so only the pinned upstream "
-                "checkpoints run on a hosted worker. Leave checkpoint_url empty, or run locally with device='cpu'."
+                "checkpoint is a caller-specified override (a local path or a custom download link), which "
+                "device='cloud' does not permit: a PyTorch checkpoint is an executable pickle, so only the "
+                "pinned upstream checkpoints run on a hosted worker. Leave checkpoint empty, or run locally "
+                "with device='cpu'."
             )
         return None
 
@@ -419,7 +392,7 @@ def run_parade_gradient(
     # without re-running the cross-field and finite-number checks.
     config = ParadeGradientConfig.model_validate(config.model_dump())
     # The objective runs through the same per-construct activity checkpoint as parade-activity.
-    url, md5, filename = resolve_checkpoint_source(config.construct_type, config.checkpoint_url, config.checkpoint_md5)
+    checkpoint_path, url, md5, filename = resolve_checkpoint_source(config.construct_type, config.checkpoint)
 
     result = ToolInstance.dispatch(
         "parade",
@@ -429,7 +402,7 @@ def run_parade_gradient(
             "temperature": inputs.temperature,
             "construct_type": config.construct_type,
             "loss_terms": [term.model_dump() for term in config.loss_terms],
-            "checkpoint_path": config.checkpoint_path,
+            "checkpoint_path": checkpoint_path,
             "checkpoint_url": url,
             "checkpoint_md5": md5,
             "checkpoint_filename": filename,
