@@ -79,49 +79,61 @@ def test_parade_checkpoint_download_security_runs_in_env() -> None:
     assert "ALL CHECKS PASSED" in output, output
 
 
-def test_parade_custom_checkpoint_url_rejected_on_cloud() -> None:
-    """A caller-supplied checkpoint_url (an executable pickle) is refused on device='cloud'."""
+def test_parade_custom_checkpoint_override_rejected_on_cloud() -> None:
+    """A caller-supplied checkpoint override (an executable pickle) is refused on device='cloud'."""
     from proto_tools.tools.sequence_scoring.parade import ParadeActivityConfig
     from proto_tools.tools.sequence_scoring.parade.parade_gradient import (
         ParadeGradientConfig,
         ParadeGradientLossTerm,
     )
 
-    activity_reason = ParadeActivityConfig(checkpoint_url="https://example.com/evil.ckpt").cloud_unsupported_reason()
-    assert activity_reason is not None and "checkpoint_url" in activity_reason
+    activity_reason = ParadeActivityConfig(checkpoint="https://example.com/evil.ckpt").cloud_unsupported_reason()
+    assert activity_reason is not None and "checkpoint" in activity_reason
     assert ParadeActivityConfig().cloud_unsupported_reason() is None  # pinned checkpoint is fine on cloud
+    assert ParadeActivityConfig(checkpoint="checkpoints/model.ckpt").cloud_unsupported_reason() is not None  # local path too
 
     gradient = ParadeGradientConfig(
         loss_terms=[ParadeGradientLossTerm(cell_type="c1", direction="max", weight=1.0)],
-        checkpoint_url="https://example.com/evil.ckpt",
+        checkpoint="https://example.com/evil.ckpt",
     )
-    assert (gradient.cloud_unsupported_reason() or "").find("checkpoint_url") != -1
+    assert (gradient.cloud_unsupported_reason() or "").find("checkpoint") != -1
 
 
-def test_parade_non_https_checkpoint_url_rejected() -> None:
-    """A non-HTTPS checkpoint_url is rejected at config validation (the artifact is unpickled)."""
+def test_parade_checkpoint_link_vs_path_and_https_enforcement() -> None:
+    """``checkpoint`` accepts local paths and https links (schemeless allowed); non-https links are rejected."""
     from proto_tools.tools.sequence_scoring.parade import ParadeActivityConfig
     from proto_tools.tools.sequence_scoring.parade.parade_gradient import (
         ParadeGradientConfig,
         ParadeGradientLossTerm,
     )
 
-    for bad in ("http://example.com/x.ckpt", "ftp://example.com/x.ckpt"):
-        with pytest.raises(ValueError, match="https"):
-            ParadeActivityConfig(checkpoint_url=bad)
-        with pytest.raises(ValueError, match="https"):
-            ParadeGradientConfig(
-                loss_terms=[ParadeGradientLossTerm(cell_type="c1", direction="max", weight=1.0)],
-                checkpoint_url=bad,
-            )
-    # Malformed HTTPS URLs (no host) are rejected at validation, not after worker startup.
+    # A non-HTTPS link is rejected (the artifact is unpickled).
+    with pytest.raises(ValueError, match="https"):
+        ParadeActivityConfig(checkpoint="http://example.com/x.ckpt")
+    with pytest.raises(ValueError, match="https"):
+        ParadeGradientConfig(
+            loss_terms=[ParadeGradientLossTerm(cell_type="c1", direction="max", weight=1.0)],
+            checkpoint="http://example.com/x.ckpt",
+        )
+    # A schemeless link (host.tld/path) is accepted and normalized to https://.
+    assert (
+        ParadeActivityConfig(checkpoint="huggingface.co/org/model.ckpt").checkpoint
+        == "https://huggingface.co/org/model.ckpt"
+    )
+    assert ParadeActivityConfig(checkpoint="https://example.com/x.ckpt").checkpoint == "https://example.com/x.ckpt"
+    # Local paths pass through unchanged and are NOT treated as links.
+    for path in ("/oak/checkpoints/model.ckpt", "model.ckpt", "sub/model.ckpt", "./model.ckpt"):
+        assert ParadeActivityConfig(checkpoint=path).checkpoint == path
+    assert ParadeActivityConfig().checkpoint == ""
+
+    # Malformed HTTPS links (no host) are rejected at validation, not after worker startup.
     for malformed in ("https:relative", "https:///no-host", "https://"):
         with pytest.raises(ValueError, match="host"):
-            ParadeActivityConfig(checkpoint_url=malformed)
+            ParadeActivityConfig(checkpoint=malformed)
     # Malformed ports are rejected at validation (else _redact_url crashes the worker on .port).
     for bad_port in ("https://example.com:abc/x.ckpt", "https://example.com:99999/x.ckpt"):
         with pytest.raises(ValueError, match="valid URL"):
-            ParadeActivityConfig(checkpoint_url=bad_port)
+            ParadeActivityConfig(checkpoint=bad_port)
     for malformed in (
         "https://exa mple.com/x.ckpt",
         "https://example.com/x y.ckpt",
@@ -132,8 +144,16 @@ def test_parade_non_https_checkpoint_url_rejected() -> None:
         "https://example|evil.com/x.ckpt",
     ):
         with pytest.raises(ValueError):
-            ParadeActivityConfig(checkpoint_url=malformed)
+            ParadeActivityConfig(checkpoint=malformed)
 
+
+def test_parade_checkpoint_secret_redacted_from_errors() -> None:
+    """A credentialed/signed checkpoint link never appears in any error representation."""
+    from proto_tools.tools.sequence_scoring.parade import ParadeActivityConfig
+    from proto_tools.tools.sequence_scoring.parade.parade_gradient import (
+        ParadeGradientConfig,
+        ParadeGradientLossTerm,
+    )
     from proto_tools.tools.sequence_scoring.parade.shared_data_models import require_https_checkpoint_url
 
     secret_url = "https://bob:s3cr3t-token@example.com/x.ckpt"
@@ -143,12 +163,12 @@ def test_parade_non_https_checkpoint_url_rejected() -> None:
     assert "s3cr3t-token" not in str(excinfo.value)
     # ...and no public Pydantic error representation retains the rejected URL input.
     constructors = (
-        lambda: ParadeActivityConfig(checkpoint_url=secret_url),
-        lambda: ParadeActivityConfig.model_validate({"checkpoint_url": secret_url}),
-        lambda: ParadeActivityConfig.model_validate_json(f'{{"checkpoint_url": "{secret_url}"}}'),
+        lambda: ParadeActivityConfig(checkpoint=secret_url),
+        lambda: ParadeActivityConfig.model_validate({"checkpoint": secret_url}),
+        lambda: ParadeActivityConfig.model_validate_json(f'{{"checkpoint": "{secret_url}"}}'),
         lambda: ParadeGradientConfig(
             loss_terms=[ParadeGradientLossTerm(cell_type="c1", direction="max", weight=1.0)],
-            checkpoint_url=secret_url,
+            checkpoint=secret_url,
         ),
     )
     for constructor in constructors:
@@ -165,7 +185,7 @@ def test_parade_non_https_checkpoint_url_rejected() -> None:
         lambda: ParadeActivityConfig.model_validate_json(f'"{secret_url}"'),
         lambda: TypeAdapter(ParadeActivityConfig).validate_python(secret_url),
         lambda: TypeAdapter(ParadeActivityConfig).validate_json(f'"{secret_url}"'),
-        lambda: TypeAdapter(ParadeActivityConfig).validate_python([{"checkpoint_url": secret_url}]),
+        lambda: TypeAdapter(ParadeActivityConfig).validate_python([{"checkpoint": secret_url}]),
         lambda: TypeAdapter(ParadeActivityConfig).validate_python([secret_url]),
         lambda: TypeAdapter(ParadeActivityConfig).validate_python([{"other": secret_url}]),
     )
@@ -180,7 +200,7 @@ def test_parade_non_https_checkpoint_url_rejected() -> None:
         ParadeActivityConfig(construct_type="bogus")  # type: ignore[arg-type]
     assert "bogus" in str(unrelated_exc.value)
 
-    malformed_json = f'{{"checkpoint_url": "{secret_url}"'
+    malformed_json = f'{{"checkpoint": "{secret_url}"'
     with pytest.raises(ValidationError) as json_exc:
         ParadeActivityConfig.model_validate_json(malformed_json)
     rendered = str(json_exc.value) + repr(json_exc.value.errors()) + json_exc.value.json()
@@ -197,27 +217,12 @@ def test_parade_non_https_checkpoint_url_rejected() -> None:
 
     activity = ParadeActivityConfig()
     with pytest.raises(ValueError) as assignment_exc:
-        activity.checkpoint_url = secret_url
+        activity.checkpoint = secret_url
     assert "s3cr3t-token" not in str(assignment_exc.value)
-    assert activity.checkpoint_url == ""
-    # HTTPS with a host and empty (pinned URL) both pass.
-    assert ParadeActivityConfig(checkpoint_url="https://example.com/x.ckpt").checkpoint_url
-    assert ParadeActivityConfig().checkpoint_url == ""
+    assert activity.checkpoint == ""
 
 
-def test_parade_checkpoint_md5_normalizes_and_validates() -> None:
-    """Checkpoint MD5 values normalize to lowercase and malformed values fail before dispatch."""
-    from proto_tools.tools.sequence_scoring.parade import ParadeActivityConfig, ParadeGradientConfig
-
-    uppercase = "A48AEFFC516E32F4D8780B855BBCD849"
-    assert ParadeActivityConfig(checkpoint_md5=uppercase).checkpoint_md5 == uppercase.lower()
-    assert ParadeGradientConfig(checkpoint_md5=f"  {uppercase}  ").checkpoint_md5 == uppercase.lower()
-    for malformed in ("nope", "a" * 31, "g" * 32):
-        with pytest.raises(ValidationError, match="32 hexadecimal"):
-            ParadeActivityConfig(checkpoint_md5=malformed)
-
-
-def test_parade_checkpoint_url_is_hidden_from_config_repr() -> None:
+def test_parade_checkpoint_is_hidden_from_config_repr() -> None:
     """Signed checkpoint query tokens stay out of config repr while remaining available for dispatch."""
     from proto_tools.tools.sequence_scoring.parade import (
         ParadeActivityConfig,
@@ -227,12 +232,12 @@ def test_parade_checkpoint_url_is_hidden_from_config_repr() -> None:
 
     signed_url = "https://example.com/x.ckpt?X-Amz-Signature=s3cr3t-token"
     for config in (
-        ParadeActivityConfig(checkpoint_url=signed_url),
-        ParadeGradientConfig(checkpoint_url=signed_url),
-        ParadeStabilityConfig(checkpoint_url=signed_url),
+        ParadeActivityConfig(checkpoint=signed_url),
+        ParadeGradientConfig(checkpoint=signed_url),
+        ParadeStabilityConfig(checkpoint=signed_url),
     ):
         assert "s3cr3t-token" not in repr(config)
-        assert config.model_dump()["checkpoint_url"] == signed_url
+        assert config.model_dump()["checkpoint"] == signed_url
 
 
 def test_parade_activity_config_resolves_panel() -> None:
