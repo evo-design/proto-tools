@@ -1434,7 +1434,9 @@ def _coerce_model(instance: BaseModel, expected_class: type[BaseModel], tool_key
             # The overwhelmingly common path: validation succeeded without normalization.
             # Keep object identity and nested Pydantic private state intact.
             return instance
-        return _restore_model_runtime_state(instance, validated)
+        restored = _restore_model_runtime_state(instance, validated)
+        assert isinstance(restored, BaseModel)  # inputs are same-typed BaseModels; restore returns one
+        return restored
     actual_type = type(instance)
     if not issubclass(expected_class, actual_type):
         raise TypeError(

@@ -90,7 +90,9 @@ def test_parade_custom_checkpoint_override_rejected_on_cloud() -> None:
     activity_reason = ParadeActivityConfig(checkpoint="https://example.com/evil.ckpt").cloud_unsupported_reason()
     assert activity_reason is not None and "checkpoint" in activity_reason
     assert ParadeActivityConfig().cloud_unsupported_reason() is None  # pinned checkpoint is fine on cloud
-    assert ParadeActivityConfig(checkpoint="checkpoints/model.ckpt").cloud_unsupported_reason() is not None  # local path too
+    assert (
+        ParadeActivityConfig(checkpoint="checkpoints/model.ckpt").cloud_unsupported_reason() is not None
+    )  # local path too
 
     gradient = ParadeGradientConfig(
         loss_terms=[ParadeGradientLossTerm(cell_type="c1", direction="max", weight=1.0)],

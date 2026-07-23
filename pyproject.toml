@@ -258,6 +258,13 @@ exclude = [
     "**/examples",
     "**/*.ipynb",
     "notes",
+    # PARADE upstream model/data modules are vendored byte-verbatim (see their provenance headers);
+    # exclude from ruff so they are not reformatted. They are already excluded from mypy above.
+    "**/parade/standalone/legnet.py",
+    "**/parade/standalone/legnet_classifier.py",
+    "**/parade/standalone/pl_regressor.py",
+    "**/parade/standalone/utrdata_cl.py",
+    "**/parade/standalone/stability_data.py",
 ]
 
 [tool.ruff.lint]
