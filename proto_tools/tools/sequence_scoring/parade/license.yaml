@@ -1,0 +1,11 @@
+code:
+  spdx: MIT
+  url: https://github.com/autosome-ru/parade/blob/main/LICENSE
+weights:
+  spdx: MIT
+  url: https://github.com/autosome-ru/parade/blob/main/LICENSE
+commercial_use: 'yes'
+redistribution: true
+attribution_required: true
+notes: PARADE code and its trained checkpoints are distributed under the MIT license in the autosome-ru/parade repository. Proto-tools vendors the PARADE model/data modules verbatim and provisions the published checkpoints from that repository under the same MIT license.
+last_updated: '2026-07-09'

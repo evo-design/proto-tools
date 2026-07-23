@@ -111,6 +111,7 @@ A few tools use gated models or software that require accepting a license / term
 ├── <a href="proto_tools/tools/sequence_scoring/enformer/">enformer/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/malinois/">malinois/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/na_mpnn_specificity/">na_mpnn_specificity/</a>
+├── <a href="proto_tools/tools/sequence_scoring/parade/">parade/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/puffin/">puffin/</a>
 └── <a href="proto_tools/tools/sequence_scoring/segmasker/">segmasker/</a>
 <a href="proto_tools/tools/structure_alignment/">structure_alignment/</a>            # Structure comparison
