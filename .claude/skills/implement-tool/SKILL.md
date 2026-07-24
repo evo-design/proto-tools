@@ -214,6 +214,24 @@ def exactly_one_target(self) -> "Mmseqs2SearchProteinsInput":
     return self
 ```
 
+## Model / checkpoint selection: one `model_checkpoint` field
+
+When a tool exposes **both** a fixed set of known/bundled checkpoints **and** the ability to load an arbitrary checkpoint file, collapse them into a **single** `model_checkpoint: str` field — do **not** ship separate `model_name` (an enum) and `checkpoint_path` fields. Contributors reflexively add both; standardize on one. The single field takes **either** a bundled model name **or** a path to a checkpoint file:
+
+- **Bundled names** are the tool's known presets. They **must be auto-downloaded by `setup.sh`** into the managed weights cache (`proto_resolve_weights_dir` → `PROTO_MODEL_CACHE`), so a user never fetches anything to use them. A small map is the single source of truth for "which names exist," each resolving to a file under the weights dir (or `None` = the framework's own default weights).
+- **Anything else** is treated as an explicit path to the user's own checkpoint, used as-is with a clear not-found error (which also guards typos like `"opendde_v2"`).
+
+```python
+model_checkpoint: str = ConfigField(
+    title="Model / Checkpoint", default="<default_name>",
+    description="Bundled model name ('<name_a>' or '<name_b>') or a path to a custom .pt checkpoint.",
+)
+```
+
+- `cloud_unsupported_reason` rejects only a **non-bundled** value (a local path isn't on a hosted worker); bundled names are cloud-OK because they're provisioned.
+- Keep the bundled-name map in sync with `setup.sh`'s download list, and add a test asserting `setup.sh` fetches every bundled checkpoint.
+- Reference implementation: `tools/structure_prediction/opendde` (`_BUNDLED_MODELS` in the tool, `_BUNDLED_CHECKPOINTS` in `standalone/inference.py`).
+
 ## Code Style Conventions
 
 These ensure consistent formatting across all generated tools:
