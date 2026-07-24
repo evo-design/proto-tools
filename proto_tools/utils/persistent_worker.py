@@ -406,6 +406,13 @@ def _build_subprocess_env(
         if val is not None:
             env[var] = val
 
+    # Isolate the venv from the host user-site (~/.local/lib/pythonX/site-packages), which the
+    # interpreter adds to sys.path by DEFAULT even inside a venv — the whitelist above can't stop
+    # it because it's interpreter behavior, not an inherited env var. A polluted user-site (e.g. a
+    # broken `transformers` missing `huggingface_hub`) otherwise shadows the venv's own packages
+    # and breaks the isolated tool. This is the env-var equivalent of `python -s`.
+    env["PYTHONNOUSERSITE"] = "1"
+
     # Ensure HF_TOKEN is explicitly set even if the token was stored
     # in a file (~/.cache/huggingface/token or ~/.git-credentials).
     # Subprocesses may have a different HF_HOME, so file-based tokens

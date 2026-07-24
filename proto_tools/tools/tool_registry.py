@@ -21,7 +21,7 @@ from collections.abc import Callable, MutableMapping
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 import yaml
 from pydantic import BaseModel, Field, field_serializer
@@ -1402,10 +1402,14 @@ class ToolRegistry:
 
 
 def _coerce_model(instance: BaseModel, expected_class: type[BaseModel], tool_key: str, role: str) -> BaseModel:
-    """Coerce a Pydantic model to the expected class if a parent class was passed.
+    """Revalidate an exact model or coerce it when a parent class was passed.
 
     Only explicitly-set fields are forwarded so child class defaults take
-    precedence over parent defaults.
+    precedence over parent defaults. Exact-class instances are round-tripped
+    through ``model_dump`` so unchecked ``model_copy(update=...)`` data and
+    in-place container mutations cannot bypass the tool boundary. This must
+    happen before backend, cloud, and cache routing, all of which may skip the
+    local tool function entirely.
 
     Args:
         instance (BaseModel): The model instance to coerce.
@@ -1414,13 +1418,25 @@ def _coerce_model(instance: BaseModel, expected_class: type[BaseModel], tool_key
         role (str): "input" or "config" for log messages.
 
     Returns:
-        BaseModel: The coerced model instance, or the original if already correct.
+        BaseModel: A revalidated expected/subclass model or a coerced parent model.
 
     Raises:
         TypeError: If the instance is not the expected class or a parent of it.
     """
     if isinstance(instance, expected_class):
-        return instance
+        # Preserve a more-specific accepted subclass while still re-running its own schema;
+        # otherwise an unchecked ``model_copy`` on that subclass would reopen the same
+        # pre-routing validation bypass. ``round_trip`` keeps non-idempotent field encodings
+        # suitable for validation, while computed fields are outputs rather than inputs.
+        dumped = instance.model_dump(round_trip=True, exclude_computed_fields=True)
+        validated = type(instance).model_validate(dumped)
+        if validated.model_dump(round_trip=True, exclude_computed_fields=True) == dumped:
+            # The overwhelmingly common path: validation succeeded without normalization.
+            # Keep object identity and nested Pydantic private state intact.
+            return instance
+        # Both args are BaseModel, so the top-level restore returns a BaseModel (the recursive
+        # helper is Any-typed because it also threads nested list/dict/tuple values).
+        return cast(BaseModel, _restore_model_runtime_state(instance, validated))
     actual_type = type(instance)
     if not issubclass(expected_class, actual_type):
         raise TypeError(
@@ -1432,6 +1448,38 @@ def _coerce_model(instance: BaseModel, expected_class: type[BaseModel], tool_key
         f"Use {expected_class.__name__} directly to silence this warning."
     )
     return coerced
+
+
+def _restore_model_runtime_state(source: Any, target: Any) -> Any:
+    """Restore unchanged identities and Pydantic runtime state after normalization."""
+    if isinstance(source, BaseModel) and isinstance(target, BaseModel) and type(source) is type(target):
+        if source.model_dump(round_trip=True, exclude_computed_fields=True) == target.model_dump(
+            round_trip=True, exclude_computed_fields=True
+        ):
+            return source
+        object.__setattr__(target, "__pydantic_fields_set__", source.model_fields_set.copy())
+        private = getattr(source, "__pydantic_private__", None)
+        if private is not None:
+            object.__setattr__(target, "__pydantic_private__", private.copy())
+        for field_name in type(source).model_fields:
+            restored = _restore_model_runtime_state(getattr(source, field_name), getattr(target, field_name))
+            object.__setattr__(target, field_name, restored)
+        return target
+    if isinstance(source, list) and isinstance(target, list):
+        return [
+            _restore_model_runtime_state(source_item, target_item)
+            for source_item, target_item in zip(source, target, strict=False)
+        ]
+    if isinstance(source, tuple) and isinstance(target, tuple):
+        return tuple(
+            _restore_model_runtime_state(source_item, target_item)
+            for source_item, target_item in zip(source, target, strict=False)
+        )
+    if isinstance(source, dict) and isinstance(target, dict):
+        for key in source.keys() & target.keys():
+            target[key] = _restore_model_runtime_state(source[key], target[key])
+        return target
+    return target
 
 
 def _make_error_output(

@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 import pytest
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from proto_tools.tools.tool_registry import (
     MAX_RETRIES,
@@ -64,6 +64,12 @@ class DispatchBackendConfig(BaseConfig):
 
     def preprocess(self, inputs):
         raise AssertionError("dispatch backend should run before preprocess")
+
+
+class DispatchBackendInput(BaseToolInput):
+    """Backend input with a constraint used to test unchecked-copy revalidation."""
+
+    input_data: str = Field(min_length=1, description="Non-empty backend input")
 
 
 class AnotherMockToolInput(BaseToolInput):
@@ -365,6 +371,110 @@ def test_dispatch_backend_short_circuits_before_local_execution(clean_registry):
     assert result.success is True
     assert result.execution_time is not None
     assert result.result == "from backend"
+
+
+def test_dispatch_backend_revalidates_unchecked_model_copies(clean_registry):
+    """Invalid ``model_copy`` updates are rejected before an external backend sees them."""
+
+    @clean_registry.register(
+        key="backend-validation",
+        label="Backend Validation",
+        category="test",
+        input_class=DispatchBackendInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="Tool whose backend boundary revalidates models",
+    )
+    def backend_validation_tool(inputs: DispatchBackendInput, config: MockToolConfig, instance=None) -> MockToolOutput:
+        raise AssertionError("local function should not run when backend handles the call")
+
+    calls = []
+
+    def backend(key: str, inputs: BaseToolInput, config: BaseConfig) -> MockToolOutput:
+        calls.append((key, inputs, config))
+        return MockToolOutput(result="from backend")
+
+    clean_registry.configure_dispatch_backend(backend)
+    spec = clean_registry.get("backend-validation")
+    valid_input = DispatchBackendInput(input_data="test")
+    valid_config = MockToolConfig(param1="value")
+
+    with pytest.raises(ValidationError, match="input_data"):
+        spec.function(valid_input.model_copy(update={"input_data": ""}), valid_config)
+    with pytest.raises(ValidationError, match="param2"):
+        spec.function(valid_input, valid_config.model_copy(update={"param2": -1}))
+
+    assert calls == []
+
+
+def test_dispatch_backend_revalidates_unchecked_expected_subclass(clean_registry):
+    """An accepted schema subclass cannot bypass boundary validation with ``model_copy``."""
+
+    class SpecializedBackendInput(DispatchBackendInput):
+        label: str = Field(default="specialized", min_length=1, description="Subclass label")
+
+    @clean_registry.register(
+        key="backend-subclass-validation",
+        label="Backend Subclass Validation",
+        category="test",
+        input_class=DispatchBackendInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="Tool whose accepted input subclasses are revalidated",
+    )
+    def backend_subclass_tool(inputs: DispatchBackendInput, config: MockToolConfig, instance=None) -> MockToolOutput:
+        raise AssertionError("local function should not run when backend handles the call")
+
+    calls = []
+
+    def backend(key: str, inputs: BaseToolInput, config: BaseConfig) -> MockToolOutput:
+        calls.append((key, inputs, config))
+        return MockToolOutput(result="from backend")
+
+    clean_registry.configure_dispatch_backend(backend)
+    invalid = SpecializedBackendInput(input_data="valid").model_copy(update={"label": ""})
+
+    with pytest.raises(ValidationError, match="label"):
+        clean_registry.get("backend-subclass-validation").function(invalid, MockToolConfig(param1="value"))
+
+    assert calls == []
+
+
+def test_dispatch_boundary_preserves_nested_private_state_and_identity(clean_registry):
+    """Validation does not rebuild unchanged nested entities with runtime private provenance."""
+    from proto_tools.entities.complex import Chain
+
+    class ChainBoundaryInput(BaseToolInput):
+        chain: Chain = Field(description="Chain whose inferred entity-type provenance must survive")
+
+    @clean_registry.register(
+        key="backend-private-state",
+        label="Backend Private State",
+        category="test",
+        input_class=ChainBoundaryInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="Tool used to verify nested Pydantic runtime state",
+    )
+    def backend_private_state_tool(inputs: ChainBoundaryInput, config: MockToolConfig, instance=None) -> MockToolOutput:
+        raise AssertionError("local function should not run when backend handles the call")
+
+    captured = []
+
+    def backend(key: str, inputs: BaseToolInput, config: BaseConfig) -> MockToolOutput:
+        captured.append(inputs)
+        return MockToolOutput(result="from backend")
+
+    chain = Chain(sequence="ACGT")
+    assert chain.entity_type_inferred is True
+    inputs = ChainBoundaryInput(chain=chain)
+    clean_registry.configure_dispatch_backend(backend)
+
+    clean_registry.get("backend-private-state").function(inputs, MockToolConfig(param1="value"))
+
+    assert captured[0] is inputs
+    assert captured[0].chain is chain
+    assert captured[0].chain.entity_type_inferred is True
 
 
 def test_dispatch_backend_configured_state(clean_registry):
@@ -1126,6 +1236,18 @@ class MockIterableOutput(MockToolOutputBase):
     results: list[str] = Field(description="Processed results")
 
 
+class MockIterableBoundaryConfig(MockToolConfig):
+    """Iterable config with a runtime-only field that does not affect cache identity."""
+
+    batch_size: int = ConfigField(
+        default=1,
+        ge=1,
+        include_in_key=False,
+        title="Batch Size",
+        description="Items processed per internal batch",
+    )
+
+
 def _register_cacheable_iterable(registry, key, func):
     """Helper to register a cacheable iterable tool."""
     registry.register(
@@ -1247,6 +1369,41 @@ def test_cacheable_iterable_full_hit_skips_dispatch(clean_registry, _setup_cache
     assert call_count == 2  # unchanged
     assert result2.results == ["out_a", "out_b"]
     assert result2.execution_time == 0.0  # full cache hit
+
+
+def test_cacheable_iterable_full_hit_revalidates_unchecked_config(clean_registry, _setup_cache):
+    """A full cache hit cannot hide invalid data introduced by unchecked ``model_copy``."""
+    call_count = 0
+
+    @clean_registry.register(
+        key="cache-hit-boundary-validation",
+        label="Cache Hit Boundary Validation",
+        category="test",
+        input_class=MockIterableInput,
+        config_class=MockIterableBoundaryConfig,
+        output_class=MockIterableOutput,
+        description="Iterable cache boundary validation test",
+        iterable_input_fields=["items"],
+        iterable_output_field="results",
+        cacheable=True,
+    )
+    def run_tool(inputs, config=None, instance=None):
+        nonlocal call_count
+        call_count += 1
+        return MockIterableOutput(results=[f"out_{item}" for item in inputs.items])
+
+    spec = clean_registry.get("cache-hit-boundary-validation")
+    inputs = MockIterableInput(items=["a"])
+    config = MockIterableBoundaryConfig(param1="v", batch_size=1)
+
+    assert spec.function(inputs, config).results == ["out_a"]
+    assert call_count == 1
+
+    invalid_config = config.model_copy(update={"batch_size": 0})
+    with pytest.raises(ValidationError, match="batch_size"):
+        spec.function(inputs, invalid_config)
+
+    assert call_count == 1
 
 
 def test_cacheable_iterable_partial_hit(clean_registry, _setup_cache):
