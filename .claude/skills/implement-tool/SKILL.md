@@ -185,6 +185,8 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
 
 **Inherited field audit:** When reusing a shared base config (e.g., `InverseFoldingConfig`) or base input, enumerate every inherited field and verify the target model can implement it. For each unsupported field, either implement support (e.g., logit masking for `excluded_amino_acids`) or override the field with a validator that raises `ValueError("'{field_name}' is not supported by {tool_display_name}")` when a non-default value is provided. Do not silently inherit fields that the model ignores.
 
+**No config fields for internal/ephemeral plumbing:** Don't expose a config field that doesn't change the computation result — e.g., an internal job name, a scratch/output directory, or intermediate-file labels. The wrapper returns results via the `Output` object, and the **export API** (`_export_output()` / `output.export(...)`) owns user-facing output files and naming — so such fields add API surface without behavior, and (unless marked `include_in_key=False`) wrongly split the cache so identical calls miss each other. Hardcode the internal value instead. Contributors reflexively add these; drop them. Example: `opendde` removed its `name` (job label → ephemeral temp-file names) and `root_dir` (duplicated the managed weights-cache resolution) fields for exactly this reason.
+
 **Cloud fail-fast for local-resource configs:** If a config setting needs a **local resource that can't be staged to the hosted service** — a local database/index, an on-disk weights/artifact directory, or a local file path — override `BaseConfig.cloud_unsupported_reason(self) -> str | None` so `device='cloud'` fails fast at dispatch with a clear message instead of a late runtime error (a missing-file crash, or silently ignoring the override). Return a user-facing reason when the offending setting is active, `None` otherwise (the default means cloud-compatible). Guard on the setting actually being non-default so ordinary cloud runs are untouched:
 
 ```python
@@ -213,6 +215,24 @@ def exactly_one_target(self) -> "Mmseqs2SearchProteinsInput":
         raise ValueError("provide exactly one of `mmseqs_db` or `target_sequences`")
     return self
 ```
+
+## Model / checkpoint selection: one `model_checkpoint` field
+
+When a tool exposes **both** a fixed set of known/bundled checkpoints **and** the ability to load an arbitrary checkpoint file, collapse them into a **single** `model_checkpoint: str` field — do **not** ship separate `model_name` (an enum) and `checkpoint_path` fields. Contributors reflexively add both; standardize on one. The single field takes **either** a bundled model name **or** a path to a checkpoint file:
+
+- **Bundled names** are the tool's known presets. They **must be auto-downloaded by `setup.sh`** into the managed weights cache (`proto_resolve_weights_dir` → `PROTO_MODEL_CACHE`), so a user never fetches anything to use them. A small map is the single source of truth for "which names exist," each resolving to a file under the weights dir (or `None` = the framework's own default weights).
+- **Anything else** is treated as an explicit path to the user's own checkpoint, used as-is with a clear not-found error (which also guards typos like `"opendde_v2"`).
+
+```python
+model_checkpoint: str = ConfigField(
+    title="Model / Checkpoint", default="<default_name>",
+    description="Bundled model name ('<name_a>' or '<name_b>') or a path to a custom .pt checkpoint.",
+)
+```
+
+- `cloud_unsupported_reason` rejects only a **non-bundled** value (a local path isn't on a hosted worker); bundled names are cloud-OK because they're provisioned.
+- Keep the bundled-name map in sync with `setup.sh`'s download list, and add a test asserting `setup.sh` fetches every bundled checkpoint.
+- Reference implementation: `tools/structure_prediction/opendde` (`_BUNDLED_MODELS` in the tool, `_BUNDLED_CHECKPOINTS` in `standalone/inference.py`).
 
 ## Code Style Conventions
 
