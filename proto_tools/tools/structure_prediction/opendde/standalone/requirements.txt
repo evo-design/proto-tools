@@ -1,0 +1,4 @@
+# OpenDDE with the GPU extra (adds cuequivariance + triton; Linux x86_64, CUDA 12.6).
+# torch (==2.7.1) is installed separately via proto_install_pytorch in setup.sh so
+# it comes from the compute-matched CUDA index — it is intentionally NOT listed here.
+opendde[gpu]==1.0.2

@@ -46,6 +46,13 @@ from proto_tools.tools.structure_prediction.esmfold2 import (
     ESMFold2Output,
     run_esmfold2,
 )
+from proto_tools.tools.structure_prediction.opendde import (
+    OpenDDEConfig,
+    OpenDDEInput,
+    OpenDDEMetrics,
+    OpenDDEOutput,
+    run_opendde,
+)
 from proto_tools.tools.structure_prediction.protenix import ProtenixConfig, ProtenixInput, ProtenixOutput, run_protenix
 from proto_tools.tools.structure_prediction.rf3 import (
     RF3Config,
@@ -122,6 +129,12 @@ __all__ = [
     "ESMFold2Config",
     "ESMFold2Output",
     "ESMFold2Metrics",
+    # OpenDDE
+    "run_opendde",
+    "OpenDDEInput",
+    "OpenDDEConfig",
+    "OpenDDEOutput",
+    "OpenDDEMetrics",
     # Protenix
     "run_protenix",
     "ProtenixInput",

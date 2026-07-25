@@ -76,6 +76,13 @@ def test_masking_strategy_seeded():
 #   ~1-2 mÅ even with the same seed. Upstream:
 #   - https://github.com/bytedance/Protenix/issues/116
 #   - https://github.com/bytedance/Protenix/issues/119
+# - opendde-prediction: all-atom co-folding model run as a fresh ``opendde pred``
+#   subprocess per fold. The CLI ``--seeds`` value is honoured, but OpenDDE runs
+#   the same cuequivariance triangle multiplication / attention kernels as
+#   protenix (``Triangle_*_kernel: cuequivariance``), which accumulate
+#   floating-point ops non-deterministically across runs, so same-seed
+#   coordinates drift beyond tolerance in both the persistent and non-persistent
+#   variants.
 # - alphafold2-gradient: JAX bfloat16 / CUDA autotune drift (ColabDesign's
 #   default ``global_config.bfloat16=True``) amplified by gradient backprop
 #   beyond tolerances even within a single persistent worker (~12% relative
@@ -100,6 +107,7 @@ _SEED_EXCLUDED_KEYS: frozenset[str] = frozenset(
         "rfdiffusion3-design",
         "rf3-prediction",
         "protenix-prediction",
+        "opendde-prediction",
         "alphafold2-gradient",
         "alphafold3-prediction",
         "germinal-design",

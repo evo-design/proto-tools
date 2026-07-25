@@ -35,6 +35,11 @@ from proto_tools.tools.structure_prediction.esmfold2 import (
     ESMFold2Input,
     run_esmfold2,
 )
+from proto_tools.tools.structure_prediction.opendde import (
+    OpenDDEConfig,
+    OpenDDEInput,
+    run_opendde,
+)
 from proto_tools.tools.structure_prediction.protenix import (
     ProtenixConfig,
     ProtenixInput,
@@ -58,6 +63,7 @@ SP_TOOL_MAP = {
     "alphafold3": {"config": AlphaFold3Config, "input": AlphaFold3Input, "run_func": run_alphafold3},
     "boltz2": {"config": Boltz2Config, "input": Boltz2Input, "run_func": run_boltz2},
     "chai1": {"config": Chai1Config, "input": Chai1Input, "run_func": run_chai1},
+    "opendde": {"config": OpenDDEConfig, "input": OpenDDEInput, "run_func": run_opendde},
     "protenix": {"config": ProtenixConfig, "input": ProtenixInput, "run_func": run_protenix},
     "rf3": {"config": RF3Config, "input": RF3Input, "run_func": run_rf3_prediction},
 }
@@ -72,6 +78,7 @@ def predict_structures(
     | AlphaFold3Config
     | Boltz2Config
     | Chai1Config
+    | OpenDDEConfig
     | ProtenixConfig
     | RF3Config
     | dict[str, Any]
@@ -86,8 +93,8 @@ def predict_structures(
     Args:
         complexes (Complex | list[Complex]): List of Complex objects to predict.
         toolkit (str): Name of the structure prediction tool. Supported values:
-            ``"esmfold"``, ``"esmfold2"``, ``"alphafold2"``, ``"alphafold3"``, ``"boltz2"``, ``"chai1"``, ``"protenix"``, ``"rf3"``.
-        tool_config (ESMFoldConfig | ESMFold2Config | AlphaFold2Config | AlphaFold3Config | Boltz2Config | Chai1Config | ProtenixConfig | RF3Config | dict[str, Any] | None): Tool-specific config object, a dict coerced to it, or None for defaults.
+            ``"esmfold"``, ``"esmfold2"``, ``"alphafold2"``, ``"alphafold3"``, ``"boltz2"``, ``"chai1"``, ``"opendde"``, ``"protenix"``, ``"rf3"``.
+        tool_config (ESMFoldConfig | ESMFold2Config | AlphaFold2Config | AlphaFold3Config | Boltz2Config | Chai1Config | OpenDDEConfig | ProtenixConfig | RF3Config | dict[str, Any] | None): Tool-specific config object, a dict coerced to it, or None for defaults.
         msas (ComplexMSAs | list[ComplexMSAs] | None): Pre-computed MSAs, one per complex (a single ``ComplexMSAs`` is normalized to a one-element list, mirroring ``complexes``); chains omitted from a complex's ``per_chain`` map stay single-sequence. When supplied, the tool consumes them directly and skips MMseqs2 homology search.
 
     Returns:
