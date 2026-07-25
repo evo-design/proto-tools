@@ -44,6 +44,9 @@ from proto_tools.tools.structure_prediction import (
     ESMFoldConfig,
     ESMFoldInput,
     ESMFoldOutput,
+    OpenDDEConfig,
+    OpenDDEInput,
+    OpenDDEOutput,
     ProtenixConfig,
     ProtenixInput,
     ProtenixOutput,
@@ -58,6 +61,7 @@ from proto_tools.tools.structure_prediction import (
     run_chai1,
     run_esmfold,
     run_esmfold2,
+    run_opendde,
     run_protenix,
     run_rf3_prediction,
 )
@@ -81,6 +85,7 @@ _STRUCTURE_PREDICTORS = {
     "alphafold3": (run_alphafold3, AlphaFold3Input, AlphaFold3Config, AlphaFold3Output),
     "chai1": (run_chai1, Chai1Input, Chai1Config, Chai1Output),
     "boltz2": (run_boltz2, Boltz2Input, Boltz2Config, Boltz2Output),
+    "opendde": (run_opendde, OpenDDEInput, OpenDDEConfig, OpenDDEOutput),
     "protenix": (run_protenix, ProtenixInput, ProtenixConfig, ProtenixOutput),
     "rf3": (run_rf3_prediction, RF3Input, RF3Config, RF3Output),
 }

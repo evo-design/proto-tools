@@ -1,0 +1,19 @@
+# Environment variables for OpenDDE (structure prediction)
+#
+# Lines starting with # are comments and will be ignored.
+# Variables listed under [passthrough] are inherited from the parent environment.
+# Variables under [set] are set to specific values in the subprocess.
+#
+# Compute detection (RECOMMENDED_TORCH_SPEC, etc.) is injected automatically.
+# Weights + common assets are resolved at runtime to OPENDDE_ROOT_DIR
+# (PROTO_OPENDDE_WEIGHTS_DIR / PROTO_MODEL_CACHE / PROTO_HOME); PROTO_HOME and
+# PROTO_MODEL_CACHE are forwarded automatically by persistent_worker.py.
+
+[passthrough]
+# OpenDDE runtime/asset root (checkpoints + common assets). Optional advanced
+# override; when unset inference.py resolves the managed weights cache.
+OPENDDE_ROOT_DIR
+# Per-tool weights override (point at an external OpenDDE asset directory).
+PROTO_OPENDDE_WEIGHTS_DIR
+# Optional HuggingFace token (repo is public; only lifts download rate limits).
+HF_TOKEN

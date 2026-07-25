@@ -1,0 +1,8 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/aurekaresearch/OpenDDE/blob/main/LICENSE
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: OpenDDE (Aureka AI Research) releases both the code (LICENSE, pyproject license = "Apache-2.0") and the HuggingFace model weights (aurekaresearch/OpenDDE — opendde.pt, opendde_abag.pt) under Apache-2.0, with no separate weights license.
+last_updated: '2026-07-17'
