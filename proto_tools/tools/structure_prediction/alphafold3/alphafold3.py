@@ -397,6 +397,77 @@ def run_alphafold3(
 # ============================================================================
 # Helper Functions
 # ============================================================================
+def make_af3_template(
+    structure_path: str,
+    chain_id: str,
+    query_indices: list[int],
+    template_indices: list[int],
+) -> dict:
+    """Build one AF3 template dict from a structure file, in the format AF3 requires.
+
+    AF3's template featuriser rejects any template whose mmCIF is not filtered to a single chain
+    (``templates.py``: "The structure must be filtered to a single chain."), and it needs the
+    polymer/entity categories populated. This loads ``structure_path`` (PDB or mmCIF), keeps only
+    ``chain_id``, runs ``setup_entities`` so the required categories exist, and emits a clean
+    single-chain mmCIF — so callers don't hand AF3 a raw multi-chain prediction and hit that error.
+
+    ``query_indices`` / ``template_indices`` are 0-based and map query-sequence positions to
+    template positions (identity-like when the template is the query's own domain). Requires gemmi.
+
+    Returns the AF3 template dict ``{"mmcif", "queryIndices", "templateIndices"}`` for
+    ``AlphaFold3Input.templates``.
+    """
+    import gemmi
+
+    if len(query_indices) != len(template_indices):
+        raise ValueError("query_indices and template_indices must have equal length")
+
+    st = gemmi.read_structure(structure_path)
+    if len(st) == 0:
+        raise ValueError(f"no models in {structure_path}")
+    model = st[0]
+    if chain_id not in [ch.name for ch in model]:
+        raise ValueError(f"chain {chain_id!r} not found in {structure_path} (chains: {[c.name for c in model]})")
+    for name in [ch.name for ch in model if ch.name != chain_id]:
+        model.remove_chain(name)
+
+    # AF3's mmCIF parser needs (a) exactly one chain, (b) INTEGER label_seq_id on every atom, and
+    # (c) an _entity_poly_seq with integer nums. A PDB has no SEQRES, so gemmi leaves label_seq
+    # None -> written as '.', which AF3 int()-parses and dies on ("invalid literal for int(): '.'").
+    # Fix: classify entities, then seed each polymer entity's full_sequence from its OBSERVED
+    # residues (predicted monomers are gap-free, so observed == full) so assign_label_seq_id can
+    # map residues to poly_seq numbers.
+    observed = {ch.name: [r.name for r in ch] for ch in model}
+    st.add_entity_types(True)
+    st.assign_subchains(True)
+    st.setup_entities()
+    for ent in st.entities:
+        if ent.entity_type == gemmi.EntityType.Polymer and ent.subchains:
+            for ch in model:
+                if ch.name in observed and (not ent.full_sequence):
+                    ent.full_sequence = observed[ch.name]
+                    break
+    st.assign_label_seq_id()
+
+    # AF3's template featuriser also requires a release date (templates.py: "The structure must
+    # have a release date."), normally present on PDB templates. A predicted monomer has none, so
+    # inject an early _pdbx_audit_revision_history date — early enough that no max_template_date
+    # cutoff ever filters it out.
+    doc = st.make_mmcif_document()
+    block = doc.sole_block()
+    loop = block.init_loop(
+        "_pdbx_audit_revision_history.",
+        ["ordinal", "data_content_type", "major_revision", "minor_revision", "revision_date"],
+    )
+    loop.add_row(["1", "'Structure model'", "1", "0", "1900-01-01"])
+
+    return {
+        "mmcif": doc.as_string(),
+        "queryIndices": list(query_indices),
+        "templateIndices": list(template_indices),
+    }
+
+
 def _assign_templates_to_input_json(
     input_json_data: AlphaFold3JSON,
     templates_by_chain: dict[int, list[dict]],
