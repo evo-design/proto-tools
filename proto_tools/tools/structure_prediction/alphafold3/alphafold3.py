@@ -31,7 +31,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance
 from proto_tools.utils.device import RemoteDevice
-from proto_tools.utils.tool_io import Metrics, MetricSpec
+from proto_tools.utils.tool_io import InputField, Metrics, MetricSpec
 
 # Type alias for AlphaFold3 JSON format
 AlphaFold3JSON = dict[str, Any]
@@ -62,6 +62,22 @@ class AlphaFold3Input(StructurePredictionInput):
     # AlphaFold3 supports all standard entity types except glycan
     SUPPORTED_ENTITY_TYPES: ClassVar[set[str]] = {"protein", "dna", "rna", "ligand"}
     ALLOWS_CHAIN_MODIFICATIONS = True
+
+    # Optional structural templates, one entry per complex (parallel to ``complexes``), each a
+    # mapping {chain_index: [af3_template_dict, ...]}. Each af3_template_dict is AlphaFold3's
+    # native per-chain template object: ``{"mmcif": <mmCIF string>, "queryIndices": [...],
+    # "templateIndices": [...]}`` (0-based indices into the query sequence and template
+    # respectively). ``None`` (default) preserves standard behaviour (no templates). Only protein
+    # chains are templated; other chain indices are ignored.
+    templates: list[dict[int, list[dict]] | None] | None = InputField(
+        default=None,
+        title="Structural Templates",
+        description=(
+            "Per-complex structural templates: list parallel to complexes, each entry a "
+            "{chain_index: [AF3 template dict]} mapping or None. Template dict is AF3's native "
+            "{mmcif, queryIndices, templateIndices}. Default None = no templates."
+        ),
+    )
 
 
 class AlphaFold3Metrics(Metrics):
@@ -321,6 +337,15 @@ def run_alphafold3(
                         input_json, per_chain_msas, unpaired_per_chain, is_paired, comp, input_dir, config.verbose
                     )
 
+            # Inject structural templates (per-complex slice), after MSAs so the two are
+            # independent. Templates ride inside the JSON, which is written to disk below and
+            # passed to the worker by path -- so nothing about the dispatch/serialization
+            # changes.
+            if inputs.templates and inputs.templates[dispatch_idx]:
+                input_json = _assign_templates_to_input_json(
+                    input_json, inputs.templates[dispatch_idx], comp, config.verbose
+                )
+
             # Write input JSON to file for worker protocol
             input_json_path = os.path.join(input_dir, f"{config.name}_{dispatch_idx}.json")
             with open(input_json_path, "w") as f:
@@ -372,6 +397,56 @@ def run_alphafold3(
 # ============================================================================
 # Helper Functions
 # ============================================================================
+def _assign_templates_to_input_json(
+    input_json_data: AlphaFold3JSON,
+    templates_by_chain: dict[int, list[dict]],
+    sp_complex: Complex,
+    verbose: int = 0,
+) -> AlphaFold3JSON:
+    """Inject per-chain structural templates into the input JSON's protein entries.
+
+    Mirrors :func:`_assign_msas_to_input_json`: protein-only sequence-entry positions are mapped
+    back to chain indices in ``sp_complex.chains``, then each templated chain's ``templates`` list
+    (default ``[]``) is overwritten with the supplied AF3 template dicts. Non-protein chains and
+    chains absent from ``templates_by_chain`` are left untouched.
+
+    Each template dict must be AlphaFold3's native shape --
+    ``{"mmcif": str, "queryIndices": list[int], "templateIndices": list[int]}`` -- with 0-based
+    indices; this function does not validate the mmCIF or the index mapping, only routes it to the
+    correct chain. Building that dict (e.g. from a monomer fold) is the caller's job.
+
+    Args:
+        input_json_data (AlphaFold3JSON): JSON to update in place and return.
+        templates_by_chain (dict[int, list[dict]]): chain index -> list of AF3 template dicts.
+        sp_complex (Complex): used to map protein seq-entry positions to chain indices.
+        verbose (int): truthy = log per-chain assignment.
+
+    Returns:
+        AlphaFold3JSON: the updated JSON.
+    """
+    protein_chains_idx = [
+        i for i, ch in enumerate(sp_complex.chains) if hasattr(ch, "entity_type") and ch.entity_type == "protein"
+    ]
+    n_protein_chains = len(protein_chains_idx)
+
+    protein_seq_entry_iter = (s for s in input_json_data["sequences"] if "protein" in s)
+    for proto_pos, seq_entry in enumerate(protein_seq_entry_iter):
+        if proto_pos >= n_protein_chains:
+            break
+        chain_idx = protein_chains_idx[proto_pos]
+        templates = templates_by_chain.get(chain_idx)
+        if not templates:
+            continue
+        seq_entry["protein"]["templates"] = templates
+        if verbose:
+            chain_id = seq_entry["protein"]["id"]
+            if isinstance(chain_id, list):
+                chain_id = chain_id[0]
+            logger.info(f"Assigned {len(templates)} template(s) to chain {chain_id} (chain index {chain_idx})")
+
+    return input_json_data
+
+
 def _assign_msas_to_input_json(
     input_json_data: AlphaFold3JSON,
     per_chain_msas: dict[int, MSA],
