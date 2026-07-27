@@ -1,0 +1,25 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/ccsb-scripps/AutoDock-Vina/blob/develop/LICENSE
+data:
+  name: the RCSB Protein Data Bank
+  spdx: CC0-1.0
+  url: https://www.rcsb.org/pages/policies
+  attribution_required: false
+bundled_dependencies:
+  - name: Meeko
+    spdx: Custom (LGPL-2.1-or-later)
+    url: https://github.com/forlilab/Meeko/blob/develop/LICENSE
+    text: |
+      Meeko is free software that may be redistributed and modified under the
+      GNU Lesser General Public License as published by the Free Software
+      Foundation, version 2.1 or any later version. It is distributed without
+      warranty. Full terms are available at the canonical URL above.
+  - name: RCSB Protein Data Bank fixture data
+    spdx: CC0-1.0
+    url: https://www.rcsb.org/pages/policies
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: AutoDock Vina is Apache-2.0 licensed. Meeko is installed as a separate Python dependency under LGPL-2.1-or-later and is used for receptor and ligand PDBQT preparation and pose conversion. The bundled receptor and reference-ligand fixtures are derived from chain A of RCSB PDB entry 1IEP and are distributed under CC0-1.0.
+last_updated: '2026-07-27'
