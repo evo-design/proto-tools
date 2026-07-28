@@ -1,21 +1,21 @@
-<a href="https://bio-pro.mintlify.app/tools/masked-models/esmc"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a>
+<a href="https://bio-pro.mintlify.app/tools/masked-models/esmc"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
 # ESM C (Cambrian)
 
 ![ESM C (Cambrian)](https://proto-bio.github.io/proto-assets/images/tool/esmc/hero.png)
 
 > [!NOTE]
-> **License:** ESM C (Cambrian) is licensed under Custom (Cambrian Open License Agreement) and has restrictions around commercial use and may require explicit attribution when utilized. Please refer to [the license](https://www.evolutionaryscale.ai/policies/cambrian-open-license-agreement) for full terms.
+> **License:** ESM C (Cambrian) is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/Biohub/esm/blob/main/LICENSE.md) for full terms.
 
 ## Overview
 
-ESM C ("Cambrian") is EvolutionaryScale's embedding-focused protein language model. This toolkit wraps the openly licensed `esmc_300m` and `esmc_600m` models to produce per-sequence embeddings and optional per-position scores (logits) from supplied protein sequences. It provides only an embedding interface; it does not support sequence sampling or scoring.
+ESM C ("Cambrian") is [Biohub](https://biohub.ai)'s embedding-focused protein language model. This toolkit wraps the `esmc_300m`, `esmc_600m`, and `esmc_6b` models to produce per-sequence embeddings and optional per-position scores (logits) from supplied protein sequences. It provides only an embedding interface; it does not support sequence sampling or scoring.
 
 ## Background
 
-ESM C ([EvolutionaryScale, 2024](https://www.evolutionaryscale.ai/blog/esm-cambrian)) is a protein language model trained with the masked language modeling objective: during training, residues are hidden at random and the model learns to predict the original amino acid from the surrounding residues on both sides. For each residue it produces a contextual numerical representation (an embedding), along with per-position scores (logits) over the 20 standard amino acids.
+ESM C ([Biohub](https://biohub.ai/papers/esm_protein.pdf)) is a protein language model trained with the masked language modeling objective: during training, residues are hidden at random and the model learns to predict the original amino acid from the surrounding residues on both sides. For each residue it produces a contextual numerical representation (an embedding), along with per-position scores (logits) over the 20 standard amino acids.
 
-ESM C is distributed in the same `esm` software package as ESM3, but does not include ESM3's structure track or sequence-generation capability; it provides only embeddings and per-position scores. Two openly licensed model sizes are wrapped here: `esmc_300m` (embedding size 960, Cambrian Open License, commercial use permitted) and `esmc_600m` (embedding size 1152, Cambrian Non-Commercial License, research and internal use only). A larger 6B-parameter ESM C model is available only through EvolutionaryScale's hosted Forge service and is not exposed by this wrapper.
+ESM C is distributed in the same `esm` software package as ESM3, but does not include ESM3's structure track or sequence-generation capability; it provides only embeddings and per-position scores. Three model sizes are wrapped here, all MIT-licensed: `esmc_300m` (embedding size 960, 30 layers), `esmc_600m` (embedding size 1152, 36 layers), and `esmc_6b` (embedding size 2560, 80 layers). The 6B model is the largest ESM C variant and underpins both the ESM Atlas and the ESMFold2 structure predictor, which is trained on top of a frozen ESM C 6B.
 
 ## Tools
 
@@ -29,7 +29,7 @@ The averaged embedding is a learned numerical representation of a protein, suita
 
 #### Usage Tips
 
-- **`model_checkpoint` selects the model size.** `esmc_300m` (the default) has embedding size 960 and `esmc_600m` has embedding size 1152. The two checkpoints carry different licenses (see Toolkit Notes), so `esmc_300m` is the choice for any commercial use.
+- **`model_checkpoint` selects the model size.** `esmc_300m` (the default) has embedding size 960, `esmc_600m` has 1152, and `esmc_6b` has 2560. Larger checkpoints give richer representations but cost more GPU memory and time — `esmc_6b` holds roughly 13 GB of bf16 weights and needs a 16 GB or larger card.
 - **`repr_layer` selects which internal model layer the embedding is taken from.** The default `-1` uses the final layer; other values select earlier layers.
 - **Per-position scores are large.** Enabling `return_logits` adds an array of size (sequence length by 20) per sequence, which dominates runtime and memory for long inputs. Leave it set to `False` unless you need the per-position scores.
 
@@ -40,5 +40,5 @@ The averaged embedding is a learned numerical representation of a protein, suita
 These apply to every ESM C tool in this toolkit (`esmc-embedding`).
 
 - **ESM C shares the Biohub `esm` environment with ESM3.** Both are distributed in the same `esm` package and use a single shared on-disk environment (`biohub_esm`); installing either tool installs the environment for both.
-- **The license depends on the model size.** `esmc_300m` (the default) is under the Cambrian Open License, with commercial use permitted subject to the naming and attribution requirement; `esmc_600m` is under the Cambrian Non-Commercial License and must not be used commercially. The 6B model is available only through EvolutionaryScale's hosted Forge service and is not wrapped here.
+- **All checkpoints are MIT-licensed and ungated.** `esmc_300m`, `esmc_600m`, and `esmc_6b` are all free for academic and commercial use, and none require a HuggingFace token. Weights download automatically on first use; `esmc_6b` pulls roughly 25 GB.
 - **`batch_size` controls memory usage.** Lower it if you run out of GPU memory; raise it to process short sequences faster. For repeated single-batch calls, use `ToolInstance.persist_tool("esmc")` to keep the model loaded in memory between calls; for multi-GPU or large-batch runs, prefer `ToolPool`.

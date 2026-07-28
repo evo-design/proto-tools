@@ -4,9 +4,7 @@
 set -euo pipefail
 source standalone_helpers.sh
 
-# ESM3 is gated on HuggingFace; the check ensures the user has accepted the license.
-# ESM C 300M is open; ESM C 600M is non-commercial-only and not gated on HF.
-proto_check_gated_hf_repo "biohub/esm3-sm-open-v1" "https://huggingface.co/biohub/esm3-sm-open-v1"
+# All ESM3 and ESM C weights are MIT-licensed and ungated, so no HF token is needed.
 
 echo "Setting up Biohub ESM env (covers ESM3 and ESM C)..."
 
