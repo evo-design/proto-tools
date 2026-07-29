@@ -29,7 +29,7 @@ The averaged embedding is a learned numerical representation of a protein, suita
 
 #### Usage Tips
 
-- **`model_checkpoint` selects the model size.** `esmc_300m` (the default) has embedding size 960, `esmc_600m` has 1152, and `esmc_6b` has 2560. Larger checkpoints give richer representations but cost more GPU memory and time — `esmc_6b` holds roughly 13 GB of bf16 weights and needs a 16 GB or larger card.
+- **`model_checkpoint` selects the model size.** `esmc_300m` (the default) has embedding size 960, `esmc_600m` has 1152, and `esmc_6b` has 2560. Larger checkpoints give richer representations but cost more GPU memory and time — `esmc_6b` loads about 13 GB of bf16 weights, before activations that grow with sequence length and `batch_size`.
 - **`repr_layer` selects which internal model layer the embedding is taken from.** The default `-1` uses the final layer; other values select earlier layers.
 - **Per-position scores are large.** Enabling `return_logits` adds an array of size (sequence length by 20) per sequence, which dominates runtime and memory for long inputs. Leave it set to `False` unless you need the per-position scores.
 
@@ -40,5 +40,5 @@ The averaged embedding is a learned numerical representation of a protein, suita
 These apply to every ESM C tool in this toolkit (`esmc-embedding`).
 
 - **ESM C shares the Biohub `esm` environment with ESM3.** Both are distributed in the same `esm` package and use a single shared on-disk environment (`biohub_esm`); installing either tool installs the environment for both.
-- **All checkpoints are MIT-licensed and ungated.** `esmc_300m`, `esmc_600m`, and `esmc_6b` are all free for academic and commercial use, and none require a HuggingFace token. Weights download automatically on first use; `esmc_6b` pulls roughly 25 GB.
+- **All checkpoints are MIT-licensed and ungated.** `esmc_300m`, `esmc_600m`, and `esmc_6b` are all free for academic and commercial use, and none require a HuggingFace token. Weights download automatically on first use; `esmc_6b` downloads roughly 25 GB.
 - **`batch_size` controls memory usage.** Lower it if you run out of GPU memory; raise it to process short sequences faster. For repeated single-batch calls, use `ToolInstance.persist_tool("esmc")` to keep the model loaded in memory between calls; for multi-GPU or large-batch runs, prefer `ToolPool`.
