@@ -11,6 +11,11 @@ from proto_tools.tools import ToolRegistry
 
 _all_gpu_specs = [spec for spec in ToolRegistry.list_all() if spec.uses_gpu]
 
+# Tools that can use a GPU but should not default to one, so they are exempt from the
+# generic-cuda default check. Both search locally on GPU only when asked; the mmseqs2
+# default is a remote (network) search that claims no device at all.
+_CPU_DEFAULT_GPU_TOOLS = frozenset({"mmseqs2-homology-search", "mmseqs2-search-proteins"})
+
 
 def _find_standalone_script(tool_spec):
     """Return the standalone script path for a tool spec, or None."""
@@ -143,6 +148,13 @@ def test_gpu_tools_default_to_generic_cuda(tool_spec):
     assert device_field_info is not None, f"{tool_key}: missing device field"
 
     default_device = device_field_info.default
+
+    if tool_key in _CPU_DEFAULT_GPU_TOOLS:
+        assert default_device == "cpu", (
+            f"{tool_key}: listed as a CPU-defaulting GPU tool but defaults to '{default_device}'; "
+            "drop it from _CPU_DEFAULT_GPU_TOOLS"
+        )
+        return
 
     assert default_device != "cpu", f"{tool_key}: GPU tool defaults to 'cpu' (should be 'cuda' or 'cudaxN')"
 

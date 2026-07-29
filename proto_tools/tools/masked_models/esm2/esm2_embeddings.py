@@ -17,6 +17,7 @@ from proto_tools.tools.masked_models.shared_data_models import (
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance
+from proto_tools.utils.device import RemoteDevice
 
 logger = logging.getLogger(__name__)
 
@@ -123,10 +124,13 @@ class ESM2EmbeddingsConfig(MaskedModelEmbeddingsConfig):
         description="Transformer layer index for embeddings (0=embedding output, N=layer N, -1=last)",
     )
 
-    def cloud_unsupported_reason(self) -> str | None:
-        """The 15B variant is too large to host on Proto's cloud GPUs."""
-        if self.model_checkpoint == "esm2_t48_15B_UR50D":
-            return "The 15B variant (esm2_t48_15B_UR50D) isn't available with device='cloud'. Choose a smaller variant, or run locally."
+    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
+        """The 15B variant is too large for Proto to host; other remotes are unaffected."""
+        if device == "proto" and self.model_checkpoint == "esm2_t48_15B_UR50D":
+            return (
+                "The 15B variant (esm2_t48_15B_UR50D) is not hosted on device='proto'. Choose a "
+                "smaller variant, run locally, or deploy it yourself with device='modal'."
+            )
         return None
 
 
@@ -151,6 +155,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["sequences"],
     iterable_output_field="results",
+    max_chunk_size=32,
     cacheable=True,
     post_process_iterable=attach_projections,
 )

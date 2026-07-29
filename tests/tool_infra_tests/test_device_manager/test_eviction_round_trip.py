@@ -20,6 +20,11 @@ _GPU_TOOLS = [
     if _spec.uses_gpu and _spec.category != "testing"
 ]
 
+# Tools that take a GPU only when explicitly asked, so their minimal() config runs on CPU and
+# never occupies a device to evict. Their to_device() is a passthrough — the CLI subprocess
+# releases the GPU when it exits — so there is no residency for this round-trip to exercise.
+_NO_EVICTION_TOOLS = frozenset({"mmseqs2-homology-search", "mmseqs2-search-proteins"})
+
 
 @pytest.mark.extensive
 @pytest.mark.uses_gpu
@@ -39,6 +44,13 @@ def test_gpu_tool_eviction_round_trip(tool_spec):
     Each tool runs with ``config_model.minimal()``, so a broken ``minimal()`` for
     any GPU tool surfaces here, not just a device-lifecycle regression.
     """
+    if tool_spec.key in _NO_EVICTION_TOOLS:
+        assert tool_spec.config_model.minimal().gpus_per_instance == 0, (
+            f"{tool_spec.key}: listed in _NO_EVICTION_TOOLS but its minimal() config claims a GPU; "
+            "drop it from the set so the round-trip runs"
+        )
+        pytest.skip(f"{tool_spec.key}: minimal() config runs on CPU, so there is no eviction to exercise")
+
     n_gpus = parse_min_gpu_count(tool_spec.device_count)
 
     # Build managed device list: tool's GPUs + 1 extra for the evictor

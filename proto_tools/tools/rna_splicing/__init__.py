@@ -30,6 +30,7 @@ from proto_tools.tools.rna_splicing.spliceai import (
     SpliceAIGeneScore,
     SpliceAIPredictConfig,
     SpliceAIPredictInput,
+    SpliceAIPrediction,
     SpliceAIPredictOutput,
     SpliceAIScoreConfig,
     SpliceAIScoreInput,
@@ -42,6 +43,7 @@ from proto_tools.tools.rna_splicing.spliceai import (
 )
 
 __all__ = [
+    "SpliceAIPrediction",
     "PANGOLIN_FLANK",
     "PangolinPredictConfig",
     "PangolinPredictInput",

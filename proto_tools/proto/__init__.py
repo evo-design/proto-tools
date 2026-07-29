@@ -1,11 +1,11 @@
-"""Cloud-dispatch support for the ``device="cloud"`` option.
+"""Dispatch support for the ``device="proto"`` option.
 
-When a tool is called with ``config.device == "cloud"``, the registry
+When a tool is called with ``config.device == "proto"``, the registry
 routes the call to Proto's hosted execution service via
-:func:`dispatch_to_cloud`.
+:func:`dispatch_to_proto`.
 
 The dispatcher reads ``PROTO_API_KEY`` from the environment (or accepts
-an explicit ``api_key`` kwarg). No setup ceremony is required — cloud is
+an explicit ``api_key`` kwarg). No setup ceremony is required — remote execution is
 available whenever ``proto-client`` is installed and a key is configured.
 
 Example::
@@ -13,7 +13,7 @@ Example::
     from proto_tools import run_esmfold, ESMFoldInput, ESMFoldConfig
 
     inputs = ESMFoldInput(complexes=["MKT..."])
-    result = run_esmfold(inputs, ESMFoldConfig(device="cloud"))  # uses PROTO_API_KEY
+    result = run_esmfold(inputs, ESMFoldConfig(device="proto"))  # uses PROTO_API_KEY
 """
 
 import functools
@@ -35,7 +35,7 @@ from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 logger = logging.getLogger(__name__)
 
 # Replayed server records land here so the user's configured handlers render them like local logs.
-_remote_logger = logging.getLogger("proto_tools.cloud.remote")
+_remote_logger = logging.getLogger("proto_tools.proto.remote")
 
 
 def _status_box(title: str, body: str) -> str:
@@ -55,11 +55,11 @@ def _status_box(title: str, body: str) -> str:
     return "\n".join(boxed)
 
 
-_CLOUD_STATUS = _status_box(
+_PROTO_STATUS = _status_box(
     "Proto Cloud: set up your API key",
     "No PROTO_API_KEY was detected.\n"
     "\n"
-    "device='cloud' dispatches this tool to Proto's hosted GPUs. To use\n"
+    "device='proto' dispatches this tool to Proto's hosted GPUs. To use\n"
     "it, create an API key in your workspace settings, then set\n"
     "PROTO_API_KEY in your environment and re-run:\n"
     "\n"
@@ -85,14 +85,14 @@ _INVALID_KEY = _status_box(
 )
 
 
-def is_cloud_hostable(key: str) -> bool:
-    """True iff the tool's license permits running on Proto's hosted cloud service.
+def is_proto_hostable(key: str) -> bool:
+    """True iff the tool's license permits running on Proto's hosted service.
 
     Mirrors the hosted service's deploy gate: a tool is hostable iff its
     ``license.yaml`` declares ``redistribution: true``. Fails closed; an
     unknown key, a missing/unreadable/malformed ``license.yaml``, or a
     missing/false ``redistribution`` field all read as "not hostable", so we
-    never promise cloud support the hosted service can't honor.
+    never promise support the hosted service can't honor.
 
     Note: the hosted service additionally licenses a few non-redistributable
     tools by allowlist; that exception is not mirrored here yet, so those tools
@@ -107,11 +107,11 @@ def is_cloud_hostable(key: str) -> bool:
     return bool(license_data and license_data.get("redistribution"))
 
 
-def cloud_unhostable_message(key: str) -> str:
-    """Boxed error shown when ``device='cloud'`` targets a tool the cloud can't host."""
+def proto_unhostable_message(key: str) -> str:
+    """Boxed error shown when ``device='proto'`` targets a tool Proto can't host."""
     return _status_box(
         "Proto Cloud: tool not hostable",
-        f"Tool {key!r} can't run with device='cloud'.\n"
+        f"Tool {key!r} can't run with device='proto'.\n"
         "\n"
         "Its license prohibits redistribution, so Proto's hosted service\n"
         "can't run it remotely.\n"
@@ -150,19 +150,19 @@ _VERBOSE_STREAM_FILTER: dict[int, list[str] | None] = {
 }
 
 
-def _cloud_spinner() -> tuple[str, str | None]:
-    """Cloud-mode spinner as a ``(spinner_style, prefix)`` pair for ``progress_bar``.
+def _proto_spinner() -> tuple[str, str | None]:
+    """Remote-dispatch spinner as a ``(spinner_style, prefix)`` pair for ``progress_bar``.
 
     On emoji-capable terminals (and notebooks, which render in the browser) it's the
-    ``cloud`` style — a pulse bouncing between a 💻 and a ☁️. Non-UTF terminals fall
-    back to the plain dotted spinner with a ``[cloud]`` badge.
+    ``proto`` style — a pulse bouncing between a 💻 and a ☁️. Non-UTF terminals fall
+    back to the plain dotted spinner with a ``[proto]`` badge.
     """
     if _in_notebook():
-        return "cloud", None
+        return "proto", None
     enc = (getattr(sys.stderr, "encoding", "") or "").lower()
     if "utf" in enc:
-        return "cloud", None
-    return "dots", "[cloud]"
+        return "proto", None
+    return "dots", "[proto]"
 
 
 @functools.lru_cache(maxsize=4)
@@ -241,8 +241,8 @@ def _stream_remote_logs(client: Any, key: str, job_id: str, verbose: int) -> Non
 
 
 # Cloud job status → spinner phase shown while polling; unmapped statuses display verbatim.
-_CLOUD_STATUS_PHASE = {"pending": "queued", "running": "running"}
-_CLOUD_INITIAL_PHASE = "queued"
+_PROTO_STATUS_PHASE = {"pending": "queued", "running": "running"}
+_PROTO_INITIAL_PHASE = "queued"
 
 
 def _poll_until_terminal(client: Any, key: str, job_id: str, poll_interval: float, timeout: float | None) -> Any:
@@ -264,7 +264,7 @@ def _poll_until_terminal(client: Any, key: str, job_id: str, poll_interval: floa
             raise RuntimeError(f"Cloud job {job_id} was cancelled")
         if status_value != last_status:
             # Coarse phase from job status; streamed system records (if any) refine it.
-            set_substatus(_CLOUD_STATUS_PHASE.get(status_value, status_value))
+            set_substatus(_PROTO_STATUS_PHASE.get(status_value, status_value))
             last_status = status_value
         if deadline is None:
             time.sleep(poll_interval)
@@ -275,7 +275,7 @@ def _poll_until_terminal(client: Any, key: str, job_id: str, poll_interval: floa
         time.sleep(min(poll_interval, remaining))
 
 
-def dispatch_to_cloud(
+def dispatch_to_proto(
     key: str,
     inputs: BaseToolInput,
     config: BaseConfig | None,
@@ -307,17 +307,17 @@ def dispatch_to_cloud(
     try:
         from proto_client.errors import ProtoAuthError
     except ImportError as exc:
-        raise ImportError("device='cloud' requires proto-client. Install with `pip install proto-client`.") from exc
+        raise ImportError("device='proto' requires proto-client. Install with `pip install proto-client`.") from exc
 
     resolved_key = api_key if api_key is not None else os.environ.get("PROTO_API_KEY")
     if not resolved_key:
-        raise NotImplementedError(_CLOUD_STATUS)
+        raise NotImplementedError(_PROTO_STATUS)
 
     client = _get_client(resolved_key)
     output_class = ToolRegistry.get(key).output_model
 
-    # device='cloud' is the client-side routing signal; the server picks its own physical device, so strip it before sending.
-    config_payload = config.model_dump(exclude_none=True) if config is not None else {}
+    # device='proto' is the client-side routing signal; the server picks its own physical device, so strip it before sending.
+    config_payload = config.to_transport_dict(exclude_none=True) if config is not None else {}
     config_payload.pop("device", None)
 
     tool_timeout: float | None = config.effective_timeout() if config is not None else None
@@ -325,8 +325,8 @@ def dispatch_to_cloud(
     verbose = _effective_verbose(config)
 
     # Status-only spinner across the round-trip; its substatus tracks job status and streamed phases.
-    spinner_style, spinner_prefix = _cloud_spinner()
-    with progress_bar(desc=_CLOUD_INITIAL_PHASE, prefix=spinner_prefix, spinner_style=spinner_style, show_bar=False):
+    spinner_style, spinner_prefix = _proto_spinner()
+    with progress_bar(desc=_PROTO_INITIAL_PHASE, prefix=spinner_prefix, spinner_style=spinner_style, show_bar=False):
         try:
             job_id = client.tools.submit(
                 key,
@@ -364,4 +364,111 @@ def dispatch_to_cloud(
         raise TypeError(f"Tool {key!r} result does not conform to {output_class.__name__}: {exc}") from exc
 
 
-__all__ = ["cloud_unhostable_message", "dispatch_to_cloud", "is_cloud_hostable"]
+def dispatch_batch_to_proto(
+    key: str,
+    inputs: list[BaseToolInput],
+    config: BaseConfig | list[BaseConfig] | None = None,
+    *,
+    api_key: str | None = None,
+) -> list[BaseToolOutput | Exception]:
+    """Run one tool over several inputs, submitting every job before waiting on any.
+
+    Proto executes submitted jobs concurrently, so waiting on them in turn costs the slowest
+    job rather than the sum. Submitting first is what makes that true: waiting on each job
+    before submitting the next would serialize the batch on the client side.
+
+    Per-job log streaming is left off here. One stream per job would interleave into
+    unreadable output, and the single-input path already covers the case where following
+    along matters.
+
+    Args:
+        key (str): Registry key.
+        inputs (list[BaseToolInput]): One payload per run.
+        config (BaseConfig | list[BaseConfig] | None): Shared configuration, or one per input
+            when they differ, as they do when each carries its position in a split batch.
+        api_key (str | None): Overrides ``PROTO_API_KEY``.
+
+    Returns:
+        list[BaseToolOutput | Exception]: One entry per input, in the order given. A job that
+            failed contributes the exception it hit rather than aborting the batch, leaving the
+            caller to decide what a partial result is worth.
+
+    Raises:
+        ImportError: If proto-client is not installed.
+        NotImplementedError: If no API key is configured.
+        PermissionError: If the server does not accept the configured key.
+    """
+    if not inputs:
+        return []
+
+    try:
+        from proto_client.errors import ProtoAuthError
+    except ImportError as exc:
+        raise ImportError("device='proto' requires proto-client. Install with `pip install proto-client`.") from exc
+
+    resolved_key = api_key if api_key is not None else os.environ.get("PROTO_API_KEY")
+    if not resolved_key:
+        raise NotImplementedError(_PROTO_STATUS)
+
+    client = _get_client(resolved_key)
+    output_class = ToolRegistry.get(key).output_model
+
+    configs: list[BaseConfig | None] = list(config) if isinstance(config, list) else [config] * len(inputs)
+    if len(configs) != len(inputs):
+        raise ValueError(f"{key}: {len(configs)} config(s) for {len(inputs)} input(s)")
+
+    payloads = []
+    for one in configs:
+        payload = one.to_transport_dict(exclude_none=True) if one is not None else {}
+        payload.pop("device", None)
+        payloads.append(payload)
+    first = configs[0]
+    tool_timeout: float | None = first.effective_timeout() if first is not None else None
+
+    spinner_style, spinner_prefix = _proto_spinner()
+    with progress_bar(desc=_PROTO_INITIAL_PHASE, prefix=spinner_prefix, spinner_style=spinner_style, show_bar=False):
+        try:
+            job_ids: list[str] = [
+                client.tools.submit(key, inputs=item.model_dump(exclude_none=True), config=cfg_payload)
+                for item, cfg_payload in zip(inputs, payloads, strict=True)
+            ]
+        except ProtoAuthError as exc:
+            logger.debug("Cloud auth error for %r: %s", key, exc, exc_info=True)
+            raise PermissionError(_INVALID_KEY) from exc
+
+        responses: list[Any] = []
+        for job_id in job_ids:
+            try:
+                responses.append(
+                    _poll_until_terminal(
+                        client,
+                        key,
+                        job_id,
+                        _DEFAULT_POLL_INTERVAL,
+                        None if tool_timeout is None else float(tool_timeout),
+                    )
+                )
+            except Exception as exc:  # noqa: PERF203 -- one job's failure must not end the batch
+                logger.debug("Cloud job for %r failed: %s", key, exc, exc_info=True)
+                responses.append(exc)
+
+    outputs: list[BaseToolOutput | Exception] = []
+    for response in responses:
+        if isinstance(response, Exception):
+            outputs.append(response)
+            continue
+        decoded = _decode_output_assets(response.result, client.assets)
+        try:
+            outputs.append(output_class.model_validate(decoded))
+        except ValidationError as exc:
+            # A malformed result belongs to its own job; raising would drop the intact ones.
+            outputs.append(TypeError(f"Tool {key!r} result does not conform to {output_class.__name__}: {exc}"))
+    return outputs
+
+
+__all__ = [
+    "dispatch_batch_to_proto",
+    "dispatch_to_proto",
+    "is_proto_hostable",
+    "proto_unhostable_message",
+]

@@ -267,6 +267,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["inputs"],
     iterable_output_field="results",
+    max_chunk_size=32,
     cacheable=True,
     stochastic=True,
 )

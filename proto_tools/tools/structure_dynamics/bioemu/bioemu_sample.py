@@ -31,6 +31,7 @@ from proto_tools.utils import (
     ToolInstance,
     return_invalid_protein_chars,
 )
+from proto_tools.utils.device import RemoteDevice
 from proto_tools.utils.tool_io import Metrics
 
 logger = logging.getLogger(__name__)
@@ -264,15 +265,12 @@ class BioEmuConfig(StructurePredictionConfig):
         Returns:
             StructurePredictionInput: Updated inputs with ``msas`` field populated.
         """
-        if self.msa_search_config is None:
-            self.msa_search_config = Mmseqs2HomologySearchConfig()
-        self.msa_search_config.verbose = self.verbose
         return _preprocess_structure_prediction_msas(inputs, self.msa_search_config, self.verbose)
 
-    def cloud_unsupported_reason(self) -> str | None:
+    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
         """A custom local denoiser YAML (``denoiser_config``) isn't present on a hosted worker."""
         if self.denoiser_config:
-            return "denoiser_config is a local YAML file not available on device='cloud'. Unset it, or run locally with device='cpu'."
+            return f"denoiser_config is a local YAML file not available on device='{device}'. Unset it, or run locally with device='cpu'."
         return None
 
 
@@ -302,6 +300,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["complexes", "msas"],
     iterable_output_field="ensembles",
+    max_chunk_size=32,
 )
 def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance: Any = None) -> BioEmuOutput:
     """Generate protein conformational ensembles using BioEmu."""

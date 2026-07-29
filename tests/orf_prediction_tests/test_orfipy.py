@@ -12,7 +12,7 @@ from proto_tools.tools.orf_prediction import (
     OrfipyTranslationTable,
     run_orfipy_prediction,
 )
-from proto_tools.tools.orf_prediction.orf import ORF
+from proto_tools.tools.orf_prediction.orf import ORF, OrfPredictionResult
 from tests.conftest import benchmark_twice, random_dna_sequences
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -174,7 +174,12 @@ def test_computed_fields_count(orfs_per_sequence, expected_total):
     predicted_orfs = [
         [_create_sample_orf(f"seq_{i}", f"ORF.{j}") for j in range(count)] for i, count in enumerate(orfs_per_sequence)
     ]
-    output = OrfipyOutput(predicted_orfs=predicted_orfs, tool_id="orfipy-prediction", execution_time=0.1, success=True)
+    output = OrfipyOutput(
+        results=[OrfPredictionResult(orfs=orfs) for orfs in predicted_orfs],
+        tool_id="orfipy-prediction",
+        execution_time=0.1,
+        success=True,
+    )
     assert output.num_orfs == expected_total
 
 
@@ -182,7 +187,12 @@ def test_cache_reconstruction():
     """Output works when reconstructed from cache (only predicted_orfs passed)."""
     orfs = [_create_sample_orf("seq_0", "ORF.1"), _create_sample_orf("seq_0", "ORF.2")]
     output = OrfipyOutput(
-        tool_id="orfipy-prediction", execution_time=0.0, success=True, warnings=[], metadata={}, predicted_orfs=[orfs]
+        tool_id="orfipy-prediction",
+        execution_time=0.0,
+        success=True,
+        warnings=[],
+        metadata={},
+        results=[OrfPredictionResult(orfs=orfs)],
     )
     assert output.num_orfs == 2
     assert output.predicted_orfs[0][0].orf_id == "ORF.1"

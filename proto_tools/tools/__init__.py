@@ -72,10 +72,10 @@ from proto_tools.tools.database_retrieval import (
     AlphaMissenseDBFetchInput,
     AlphaMissenseDBFetchOutput,
     AlphaMissensePrediction,
-    CcdEnrichment,
     CcdLookupConfig,
     CcdLookupInput,
     CcdLookupOutput,
+    CcdLookupResult,
     EnsemblAssembly,
     EnsemblExon,
     EnsemblGene,
@@ -348,9 +348,11 @@ from proto_tools.tools.masked_models import (
 
 # Mutagenesis tools
 from proto_tools.tools.mutagenesis import (
+    RandomNucleotideSample,
     RandomNucleotideSampleConfig,
     RandomNucleotideSampleInput,
     RandomNucleotideSampleOutput,
+    RandomProteinSample,
     RandomProteinSampleConfig,
     RandomProteinSampleInput,
     RandomProteinSampleOutput,
@@ -367,6 +369,7 @@ from proto_tools.tools.orf_prediction import (
     OrfipyInput,
     OrfipyOutput,
     OrfipyTranslationTable,
+    OrfPredictionResult,
     ProdigalConfig,
     ProdigalInput,
     ProdigalOutput,
@@ -396,6 +399,7 @@ from proto_tools.tools.rna_splicing import (
     SpliceAIGeneScore,
     SpliceAIPredictConfig,
     SpliceAIPredictInput,
+    SpliceAIPrediction,
     SpliceAIPredictOutput,
     SpliceAIScoreConfig,
     SpliceAIScoreInput,
@@ -790,6 +794,10 @@ from proto_tools.utils.tool_cache import (
 from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 __all__ = [
+    "OrfPredictionResult",
+    "RandomNucleotideSample",
+    "RandomProteinSample",
+    "SpliceAIPrediction",
     # Base classes and registry
     "BaseToolInput",
     "BaseToolOutput",
@@ -1310,7 +1318,7 @@ __all__ = [
     "CcdLookupInput",
     "CcdLookupConfig",
     "CcdLookupOutput",
-    "CcdEnrichment",
+    "CcdLookupResult",
     # Database retrieval - Ensembl REST (lookup / sequence / overlap / xrefs + VEP)
     "run_ensembl_lookup",
     "EnsemblLookupInput",

@@ -16,7 +16,7 @@ import random
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseConfig, BaseToolInput, BaseToolOutput, ConfigField, InputField
@@ -74,13 +74,22 @@ class MockIterableStochasticConfig(BaseConfig):
     )
 
 
+class MockStochasticCompletion(BaseModel):
+    """One per-prompt result.
+
+    Attributes:
+        completion (str): Per-prompt sampled tokens for this prompt.
+    """
+
+    completion: str = Field(title="Completion", description="Per-prompt sampled tokens for this prompt")
+
+
 class MockIterableStochasticOutput(BaseToolOutput):
     """Output from the stochastic iterable mock.
 
     Attributes:
-        completions (list[str]): Per-prompt completions, in input order.
-            Each completion is SEQ_LEN characters drawn from VOCAB
-            weighted by the prompt's logits.
+        results (list[MockStochasticCompletion]): One entry per prompt, in input order,
+            each holding SEQ_LEN characters drawn from VOCAB weighted by the prompt's logits.
         items_processed (int): Number of items the tool's function
             actually received in this call (before framework
             stitch/expand). Tests assert this matches ``len(prompts)``
@@ -88,11 +97,17 @@ class MockIterableStochasticOutput(BaseToolOutput):
             stochastic iterables.
     """
 
-    completions: list[str] = Field(
+    results: list[MockStochasticCompletion] = Field(
         default_factory=list,
-        title="Completions",
-        description="Per-prompt sampled tokens",
+        title="Results",
+        description="Per-prompt sampled tokens, one entry per prompt",
     )
+
+    @property
+    def completions(self) -> list[str]:
+        """The per-prompt values, in input order."""
+        return [result.completion for result in self.results]
+
     items_processed: int = Field(
         default=0,
         title="Items Processed",
@@ -141,7 +156,8 @@ def example_input() -> MockIterableStochasticInput:
     uses_gpu=False,
     example_input=example_input,
     iterable_input_fields=["prompts"],
-    iterable_output_field="completions",
+    iterable_output_field="results",
+    max_chunk_size=1,
     cacheable=True,
     stochastic=True,
 )
@@ -183,6 +199,6 @@ def run_mock_iterable_stochastic(
             completions.append("".join(tokens))
 
     return MockIterableStochasticOutput(
-        completions=completions,
+        results=[MockStochasticCompletion(completion=v) for v in completions],
         items_processed=len(prompts),
     )

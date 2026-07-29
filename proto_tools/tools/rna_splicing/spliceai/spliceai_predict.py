@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -66,20 +66,36 @@ class SpliceAIPredictConfig(BaseConfig):
     )
 
 
+class SpliceAIPrediction(BaseModel):
+    """Splice-site probabilities for one input sequence.
+
+    Attributes:
+        probabilities (list[list[float]]): Per position, a ``[neither, acceptor, donor]``
+            probability triple. Length equals the input sequence's length.
+    """
+
+    probabilities: list[list[float]] = Field(
+        title="Probabilities",
+        description="Per-position [neither, acceptor, donor] probabilities for this sequence",
+    )
+
+
 class SpliceAIPredictOutput(BaseToolOutput):
     """Output from SpliceAI raw splice-site prediction.
 
     Attributes:
-        predictions (list[list[list[float]]]): Per sequence, per position, a
-            ``[neither, acceptor, donor]`` probability triple. Outer length and
-            order match the input ``sequences``; each inner length equals the
-            corresponding input sequence's length.
+        results (list[SpliceAIPrediction]): One entry per input sequence, in input order.
     """
 
-    predictions: list[list[list[float]]] = Field(
-        title="Predictions",
-        description="Per-sequence, per-position [neither, acceptor, donor] probabilities",
+    results: list[SpliceAIPrediction] = Field(
+        title="Results",
+        description="Splice-site probabilities, one entry per input sequence",
     )
+
+    @property
+    def predictions(self) -> list[list[list[float]]]:
+        """The per-position probability triples per sequence, in input order."""
+        return [result.probabilities for result in self.results]
 
     @property
     def output_format_options(self) -> list[str]:
@@ -130,7 +146,8 @@ def example_input() -> Any:
     uses_gpu=True,
     example_input=example_input,
     iterable_input_fields=["sequences"],
-    iterable_output_field="predictions",
+    iterable_output_field="results",
+    max_chunk_size=64,
     cacheable=True,
 )
 def run_spliceai_predict(
@@ -161,4 +178,4 @@ def run_spliceai_predict(
         config=config,
     )
 
-    return SpliceAIPredictOutput(predictions=dispatch_result["predictions"])
+    return SpliceAIPredictOutput(results=[SpliceAIPrediction(probabilities=p) for p in dispatch_result["predictions"]])

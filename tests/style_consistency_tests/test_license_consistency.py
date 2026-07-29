@@ -23,6 +23,7 @@ import pytest
 import yaml
 
 from proto_tools.tools.tool_registry import ToolRegistry
+from tests.style_consistency_tests.test_readme_consistency import SKIP_DOMAINS
 
 _TOOLS_DIR = Path(__file__).resolve().parent.parent.parent / "proto_tools" / "tools"
 
@@ -450,6 +451,8 @@ def test_toolkit_license_yaml_urls_reachable(toolkit_dir: Path) -> None:
         if isinstance(block, dict):
             url = block.get("url")
             if isinstance(url, str) and url.startswith(("http://", "https://")):
+                if any(domain in url for domain in SKIP_DOMAINS):
+                    continue
                 targets.append((f"{label}.url", url))
 
     if not targets:

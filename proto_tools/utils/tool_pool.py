@@ -15,12 +15,25 @@ import os
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import ContextVar
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Literal
 
+from proto_tools.utils.base_config import RANDOM_SEED_UPPER_BOUND
 from proto_tools.utils.device import (
     determine_visible_devices,
     number_of_available_gpus,
+)
+from proto_tools.utils.fanout import (
+    DeviceCapability,
+    FailedItem,
+    WorkerAssignment,
+    WorkItem,
+    derive_chunk_seed,
+    is_fatal_dispatch_error,
+    item_costs,
+    lpt_schedule,
+    merge_piece_outputs,
+    on_partial_failure,
 )
 from proto_tools.utils.tool_instance import ToolInstance, _persist_mode
 
@@ -49,6 +62,7 @@ def _detect_cpus() -> int:
 
 
 logger = logging.getLogger(__name__)
+
 
 # ============================================================================
 # Error types
@@ -99,50 +113,6 @@ def is_pool_executing() -> bool:
 # ============================================================================
 # Data classes
 # ============================================================================
-
-
-@dataclass
-class DeviceCapability:
-    """Describes a device (or device group) available for scheduling.
-
-    Attributes:
-        device_id (str): Device string, e.g. ``"cuda:0"`` or ``"cuda:0,cuda:1"``
-            for multi-GPU worker slots.
-        throughput_weight (float): Relative speed of this device compared to others.
-            The scheduler divides a device's accumulated cost by its weight
-            to estimate finish time, so a weight of 2.0 means "twice as fast"
-            and the device will be assigned roughly twice the work. **Currently
-            unused**; all devices default to 1.0 (uniform). Reserved for
-            future heterogeneous GPU support (e.g., mixed H100/A100 pools).
-        max_item_cost (float | None): Maximum item cost this device can handle, or None for
-            no limit. Items whose ``item_cost()`` exceeds this cap are routed
-            to other devices that can handle them (falls back to least-loaded
-            if no device qualifies). **Currently unused**; all devices
-            default to None. Reserved for future VRAM-aware scheduling
-            (e.g., a 24 GB GPU cannot fold a 5000-residue protein).
-    """
-
-    device_id: str
-    throughput_weight: float = 1.0
-    max_item_cost: float | None = None
-
-
-@dataclass
-class WorkItem:
-    """A single item to be scheduled, with its original position for reassembly."""
-
-    original_index: int
-    item: Any
-    cost: float
-
-
-@dataclass
-class WorkerAssignment:
-    """Items assigned to a specific device after scheduling."""
-
-    device: DeviceCapability
-    items: list[WorkItem] = field(default_factory=list)
-    total_cost: float = 0.0
 
 
 @dataclass
@@ -274,53 +244,6 @@ def _compute_worker_layout(
 # ============================================================================
 # LPT Scheduling
 # ============================================================================
-
-
-def lpt_schedule(
-    items: list[WorkItem],
-    devices: list[DeviceCapability],
-) -> list[WorkerAssignment]:
-    """Cost-aware Longest Processing Time (LPT) bin-packing.
-
-    Sorts items by cost descending, then greedily assigns each to the device
-    with the lowest estimated finish time (``total_cost / throughput_weight``).
-    Gives a 4/3-approximation to optimal makespan.
-
-    With the current defaults (uniform ``throughput_weight=1.0`` and no
-    ``max_item_cost`` caps), this reduces to standard LPT, which itself
-    degrades to round-robin when all item costs are equal (the common case
-    for tools that don't override ``BaseToolInput.item_cost()``).
-
-    Args:
-        items (list[WorkItem]): Work items with cost estimates (from ``item_cost()``).
-        devices (list[DeviceCapability]): Available devices. ``throughput_weight`` and ``max_item_cost``
-            are supported by the algorithm but currently unused (all devices
-            get weight 1.0 and no cap).
-
-    Returns:
-        list[WorkerAssignment]: List of WorkerAssignments, one per device (devices with no items
-            are included but have empty item lists).
-    """
-    assignments = [WorkerAssignment(device=d) for d in devices]
-
-    # Sort items by cost descending (LPT)
-    sorted_items = sorted(items, key=lambda w: w.cost, reverse=True)
-
-    for work_item in sorted_items:
-        # Filter devices that can handle this item
-        eligible = [
-            a for a in assignments if a.device.max_item_cost is None or work_item.cost <= a.device.max_item_cost
-        ]
-        if not eligible:
-            # No device can handle this item; assign to least-loaded anyway
-            eligible = assignments
-
-        # Pick device with lowest estimated finish time
-        best = min(eligible, key=lambda a: a.total_cost / a.device.throughput_weight)
-        best.items.append(work_item)
-        best.total_cost += work_item.cost
-
-    return assignments
 
 
 def _build_dispatch_stats(
@@ -532,10 +455,10 @@ class ToolPool:
             finally:
                 _pool_executing.reset(token)
 
-        # Compute costs
-        input_cls = type(inputs)
+        # Through the shared helper, so a remote device and the pool value an item identically.
         work_items = [
-            WorkItem(original_index=i, item=item, cost=input_cls.item_cost(item)) for i, item in enumerate(items)
+            WorkItem(original_index=i, item=item, cost=cost)
+            for i, (item, cost) in enumerate(zip(items, item_costs(type(inputs), items), strict=True))
         ]
 
         # Build DeviceCapability list (one per slot — labels carry across to LPT)
@@ -553,6 +476,7 @@ class ToolPool:
 
         # Execute local partitions via LPT
         all_indexed: list[tuple[int, Any]] = []
+        all_results: list[Any] = []
         all_warnings: list[str] = []
         all_errors: list[str] = []
         last_result = None
@@ -589,7 +513,13 @@ class ToolPool:
                         update={f: [getattr(inputs, f)[idx] for idx in partition_indices] for f in active_iter_fields}
                     )
 
-                    config_copy = config.model_copy(update={"device": slot.device_override})
+                    # A stochastic tool seeds once per execution, so partitions sharing one seed
+                    # would draw identically at matching positions. Rebase on the partition's
+                    # first item, which is unique across partitions since they are disjoint.
+                    updates: dict[str, Any] = {"device": slot.device_override}
+                    if spec.stochastic and config.seed is not None:
+                        updates["seed"] = derive_chunk_seed(config.seed, partition_indices[0], RANDOM_SEED_UPPER_BOUND)
+                    config_copy = config.model_copy(update=updates)
                     result = func(partition_input, config_copy, instance=slot.worker_name)
 
                     output_items = getattr(result, iterable_output_field, [])
@@ -620,6 +550,8 @@ class ToolPool:
                     try:
                         indexed, result = future.result()
                     except Exception as e:
+                        if is_fatal_dispatch_error(e):
+                            raise
                         indices = [wi.original_index for wi in assignment.items]
                         logger.error(
                             "ToolPool partition failed on device %s (%d items, indices %s): %s",
@@ -637,6 +569,7 @@ class ToolPool:
                         )
                         continue
                     all_indexed.extend(indexed)
+                    all_results.append(result)
                     all_warnings.extend(getattr(result, "warnings", []))
                     all_errors.extend(getattr(result, "errors", []))
                     last_result = result
@@ -648,13 +581,27 @@ class ToolPool:
                 first_msg = str(first_exc).splitlines()[0] if str(first_exc) else "<no message>"
                 if len(first_msg) > 200:
                     first_msg = first_msg[:200] + "..."
-                raise PartialFailureError(
+                summary = (
                     f"ToolPool: {len(failed)}/{len(active_assignments)} partition(s) failed "
                     f"({n_failed} items lost, {n_ok} succeeded); "
-                    f"first failure: {type(first_exc).__name__}: {first_msg}",
-                    succeeded=list(all_indexed),
-                    failed=failed,
+                    f"first failure: {type(first_exc).__name__}: {first_msg}"
                 )
+                # A partition is one execution of a split batch, exactly as a remote chunk is, so
+                # the caller's choice has to mean the same thing on both paths.
+                if on_partial_failure() == "return_partial" and all_results:
+                    logger.warning(summary)
+                    all_errors = [*all_errors, summary]
+                    all_indexed.extend(
+                        (index, FailedItem(error=f"{type(f['exception']).__name__}: {f['exception']}"))
+                        for f in failed
+                        for index in f["indices"]
+                    )
+                else:
+                    raise PartialFailureError(
+                        summary,
+                        succeeded=list(all_indexed),
+                        failed=failed,
+                    )
 
         # Reassemble in original order
         all_indexed.sort(key=lambda x: x[0])
@@ -667,11 +614,22 @@ class ToolPool:
             len(capabilities),
         )
 
-        return output_model.model_construct(
-            **{  # type: ignore[arg-type]
-                iterable_output_field: merged_items,
-                "warnings": all_warnings,
-                "errors": all_errors,
-                "metadata": metadata,
-            }
-        )
+        if last_result is not None:
+            merged = merge_piece_outputs(
+                tool_key,
+                "ToolPool",
+                iterable_output_field,
+                all_results,
+                merged_items,
+                extra_updates={"metadata": metadata},
+            )
+            # The pool collects warnings and errors across partitions itself, including any
+            # raised outside a partition's own output.
+            return merged.model_copy(update={"warnings": all_warnings, "errors": all_errors})
+        updates: dict[str, Any] = {
+            iterable_output_field: merged_items,
+            "warnings": all_warnings,
+            "errors": all_errors,
+            "metadata": metadata,
+        }
+        return output_model.model_construct(**updates)

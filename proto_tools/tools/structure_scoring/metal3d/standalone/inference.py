@@ -18,7 +18,7 @@ from moleculekit.molecule import Molecule  # type: ignore[import-not-found]
 from moleculekit.tools.voxeldescriptors import getVoxelDescriptors  # type: ignore[import-not-found]
 from scipy.spatial import KDTree
 from sklearn.cluster import AgglomerativeClustering  # type: ignore[import-untyped]
-from standalone_helpers import get_logger
+from standalone_helpers import get_logger, get_pytorch_memory_stats
 from standalone_helpers.weights import resolve_weights_dir
 
 logger = get_logger(__name__)
@@ -496,15 +496,9 @@ def to_device(device: str) -> dict[str, Any]:
 
 
 def get_memory_stats() -> dict[str, Any]:
-    """Return CUDA memory statistics for the worker."""
-    if not torch.cuda.is_available():
-        return {"available": False, "framework": "torch", "reason": "CUDA not available"}
-    return {
-        "available": True,
-        "framework": "torch",
-        "allocated_gb": torch.cuda.memory_allocated() / 1e9,
-        "reserved_gb": torch.cuda.memory_reserved() / 1e9,
-    }
+    """Return CUDA memory statistics for the device the model is on."""
+    stats: dict[str, Any] = get_pytorch_memory_stats(_model.device or 0)
+    return stats
 
 
 if __name__ == "__main__":

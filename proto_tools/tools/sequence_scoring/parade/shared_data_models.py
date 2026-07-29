@@ -321,9 +321,9 @@ class ParadeCheckpointConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
     )
     batch_size: int = ConfigField(
         title="Batch Size",
-        default=1,
+        default=8,
         ge=1,
-        description="Number of sequences to score simultaneously on GPU.",
+        description="Sequences per GPU forward pass; raise for throughput, lower if OOM",
         include_in_key=False,
     )
 

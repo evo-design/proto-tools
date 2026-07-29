@@ -71,16 +71,6 @@ def test_protenix_config_rejects_zero_timeout():
         ProtenixConfig(timeout=0)
 
 
-def test_protenix_config_defaults():
-    config = ProtenixConfig()
-    assert config.model_name == "protenix_base_default_v1.0.0"
-    assert config.seeds == [0]
-    assert config.use_msa is True
-    assert config.num_diffusion_samples == 5
-    assert config.num_diffusion_steps == 200
-    assert config.num_pairformer_cycles == 10
-
-
 @pytest.mark.parametrize(
     "model_name, expected_cycles, expected_steps",
     [

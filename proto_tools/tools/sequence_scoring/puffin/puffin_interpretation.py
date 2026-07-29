@@ -351,6 +351,7 @@ def example_input() -> PuffinInterpretationInput:
     example_input=example_input,
     iterable_input_fields=["sequences"],
     iterable_output_field="results",
+    max_chunk_size=64,
     cacheable=True,
 )
 def run_puffin_interpretation(

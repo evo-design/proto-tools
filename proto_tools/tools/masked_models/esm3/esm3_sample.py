@@ -6,12 +6,11 @@ ESM3 sampling tool.
 import logging
 from typing import Any, ClassVar, Literal
 
-from pydantic import Field
-
 from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelInput,
     MaskedModelSampleConfig,
     MaskedModelSampleOutput,
+    build_masked_model_samples,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.transforms.masking import (
@@ -43,20 +42,9 @@ class ESM3SampleOutput(MaskedModelSampleOutput):
     Inherits from ``MaskedModelSampleOutput``.
 
     Attributes:
-        sequences (list[str]): Sampled or mutated protein sequences. Each sequence
-            is a string of amino acid characters and is a modified version of the
-            input sequence with masked positions changed to model-predicted
-            alternatives.
-        logits (list[list[list[float]]] | None): Per-position logits for each
-            sequence. Shape is (num_sequences, seq_len, vocab_size=20). Only present
-            if return_logits=True in config.
+        results (list[MaskedModelSample]): One entry per input sequence, in input order,
+            each holding the sampled sequence and its optional per-position logits.
     """
-
-    logits: list[list[list[float]]] | None = Field(
-        default=None,
-        title="Logits",
-        description="Per-position amino acid logits. Shape: [num_sequences, seq_len, 20].",
-    )
 
 
 # Config:
@@ -167,7 +155,8 @@ def example_input() -> Any:
     stochastic=True,
     example_input=example_input,
     iterable_input_fields=["sequences"],
-    iterable_output_field="sequences",
+    iterable_output_field="results",
+    max_chunk_size=32,
 )
 def run_esm3_sample(
     inputs: ESM3SampleInput,
@@ -219,6 +208,5 @@ def run_esm3_sample(
             "num_sequences": len(inputs.sequences),
             "temperature": config.temperature,
         },
-        sequences=result["sequences"],
-        logits=result["logits"],
+        results=build_masked_model_samples(result["sequences"], result["logits"]),
     )

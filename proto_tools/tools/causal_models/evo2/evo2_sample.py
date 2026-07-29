@@ -9,6 +9,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from proto_tools.tools.causal_models.shared_data_models import (
+    CausalModelSample,
     CausalModelSampleConfig,
     CausalModelSampleInput,
     CausalModelSampleOutput,
@@ -18,6 +19,7 @@ from proto_tools.utils import (
     ConfigField,
     ToolInstance,
 )
+from proto_tools.utils.device import RemoteDevice
 
 logger = logging.getLogger(__name__)
 
@@ -53,26 +55,40 @@ class Evo2KVCacheRef(BaseModel):
     )
 
 
+class Evo2Sample(CausalModelSample):
+    """One generated DNA sequence with its logits and worker-local cache handle.
+
+    Attributes:
+        sequence (str): The generated DNA sequence.
+        logits (Any | None): Per-position logits for this sequence
+            (shape: [num_generated_tokens, vocab_size]).
+        kv_cache (Evo2KVCacheRef | None): Opaque worker-local cache handle for continued
+            generation, valid only on the worker that produced it.
+    """
+
+    logits: Any | None = Field(
+        default=None,
+        title="Logits",
+        description="Per-step logits for this generated sequence (shape [gen_len, vocab_size])",
+    )
+    kv_cache: Evo2KVCacheRef | None = Field(
+        default=None,
+        title="KV Cache",
+        description="Opaque worker-local KV cache handle (only valid on the same worker)",
+    )
+
+
 class Evo2SampleOutput(CausalModelSampleOutput):
     """Output from Evo2 DNA sequence sampling.
 
     Attributes:
-        sequences (list[str]): Generated DNA sequences.
-        logits (list[Any] | None): Per-position logits for each generated sequence
-            (shape: [num_sequences, num_generated_tokens, vocab_size]).
-        kv_caches (list[Evo2KVCacheRef] | None): Worker-local cache handles
-            for continued generation inside the same persistent worker.
+        results (list[Evo2Sample]): One generated DNA sequence per prompt, with its
+            logits and cache handle.
     """
 
-    logits: list[Any] | None = Field(
-        default=None,
-        title="Logits",
-        description="Per-step logits for each generated sequence (shape [n_outputs, gen_len, vocab_size])",
-    )
-    kv_caches: list[Evo2KVCacheRef] | None = Field(
-        default=None,
-        title="KV Caches",
-        description="Opaque worker-local KV cache handles (only valid on the same worker)",
+    results: list[Evo2Sample] = Field(  # type: ignore[assignment]
+        title="Results",
+        description="Generated DNA sequences with their logits and cache handles, one per prompt",
     )
 
 
@@ -101,6 +117,13 @@ class Evo2SampleConfig(CausalModelSampleConfig):
         return_kv_cache (bool): Return worker-local KV cache handles for continued generation.
         return_logits (bool): Include per-position logits in the output.
     """
+
+    batch_size: int = ConfigField(
+        title="Batch Size",
+        default=4,
+        ge=1,
+        description="Sequences per GPU forward pass; raise for throughput, lower if OOM",
+    )
 
     @model_validator(mode="after")
     def _validate_40b(self) -> Any:
@@ -195,10 +218,10 @@ class Evo2SampleConfig(CausalModelSampleConfig):
         description="Include per-position logits in the output (large; disable to save memory)",
     )
 
-    def cloud_unsupported_reason(self) -> str | None:
+    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
         """A local weights directory (``local_path``) isn't present on a hosted worker."""
         if self.local_path:
-            return "local_path points to a local weights directory not available on device='cloud'. Unset it, or run locally with device='cpu'."
+            return f"local_path points to a local weights directory not available on device='{device}'. Unset it, or run locally with device='cpu'."
         return None
 
 
@@ -222,7 +245,8 @@ def example_input() -> Any:
     stochastic=True,
     example_input=example_input,
     iterable_input_fields=["prompts"],
-    iterable_output_field="sequences",
+    iterable_output_field="results",
+    max_chunk_size=32,
 )
 def run_evo2_sample(
     inputs: Evo2SampleInput,
@@ -322,10 +346,22 @@ def run_evo2_sample(
             "cached_generation": config.cached_generation,
             "prepend_prompt": config.prepend_prompt,
         },
-        sequences=result["sequences"],
-        kv_caches=result["kv_caches"],
-        logits=logits,
+        results=_build_evo2_samples(result["sequences"], logits, result["kv_caches"]),
     )
+
+
+def _build_evo2_samples(
+    sequences: list[str], logits: list[Any] | None, kv_caches: list[Evo2KVCacheRef] | None
+) -> list[Evo2Sample]:
+    """Pair each generated sequence with its own logits and cache handle."""
+    return [
+        Evo2Sample(
+            sequence=sequence,
+            logits=None if logits is None else logits[i],
+            kv_cache=None if kv_caches is None else kv_caches[i],
+        )
+        for i, sequence in enumerate(sequences)
+    ]
 
 
 def release_evo2_kv_caches(

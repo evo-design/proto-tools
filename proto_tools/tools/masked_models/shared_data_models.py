@@ -85,7 +85,7 @@ class MaskedModelEmbeddingsConfig(BaseConfig):
 
     batch_size: int = ConfigField(
         title="Batch Size",
-        default=1,
+        default=8,
         ge=1,
         description="Sequences per GPU forward pass; raise for throughput, lower if OOM",
     )
@@ -218,7 +218,7 @@ class MaskedModelSampleConfig(BaseConfig):
 
     batch_size: int = ConfigField(
         title="Batch Size",
-        default=1,
+        default=8,
         ge=1,
         description="Sequences per GPU forward pass; raise for throughput, lower if OOM",
     )
@@ -230,17 +230,50 @@ class MaskedModelSampleConfig(BaseConfig):
     )
 
 
+class MaskedModelSample(BaseModel):
+    """One sampled sequence and everything the model produced for it.
+
+    Attributes:
+        sequence (str): The sampled or restored protein sequence.
+        logits (list[list[float]] | None): Per-position amino acid logits for this
+            sequence, shape ``[seq_len, 20]``. Present only when the tool's config sets
+            ``return_logits=True``.
+    """
+
+    sequence: str = Field(title="Sequence", description="Sampled/restored protein sequence")
+    logits: list[list[float]] | None = Field(
+        default=None,
+        title="Logits",
+        description="Per-position amino acid logits for this sequence. Shape: [seq_len, 20].",
+    )
+
+
+def build_masked_model_samples(
+    sequences: list[str], logits: list[list[list[float]]] | None = None
+) -> list["MaskedModelSample"]:
+    """Pair each sampled sequence with its own logits, if the worker returned any."""
+    return [
+        MaskedModelSample(sequence=sequence, logits=None if logits is None else logits[i])
+        for i, sequence in enumerate(sequences)
+    ]
+
+
 class MaskedModelSampleOutput(BaseToolOutput):
     """Base output for masked language model sampling tools.
 
     Attributes:
-        sequences (list[str]): Sampled or restored protein sequences.
+        results (list[MaskedModelSample]): One entry per input sequence, in input order.
     """
 
-    sequences: list[str] = Field(
-        title="Sequences",
-        description="Sampled/restored protein sequences",
+    results: list[MaskedModelSample] = Field(
+        title="Results",
+        description="Sampled sequences with their optional logits, one per input",
     )
+
+    @property
+    def sequences(self) -> list[str]:
+        """The sampled sequences, in input order."""
+        return [result.sequence for result in self.results]
 
     @property
     def output_format_options(self) -> list[str]:
@@ -257,13 +290,13 @@ class MaskedModelSampleOutput(BaseToolOutput):
 
         if file_format == "fasta":
             with open(path, "w") as f:
-                f.writelines(f">seq_{i}\n{seq}\n" for i, seq in enumerate(self.sequences))
+                f.writelines(f">seq_{i}\n{r.sequence}\n" for i, r in enumerate(self.results))
         elif file_format == "txt":
             with open(path, "w") as f:
-                f.writelines(f"{seq}\n" for seq in self.sequences)
+                f.writelines(f"{r.sequence}\n" for r in self.results)
         elif file_format == "json":
             with open(path, "w") as f:
-                json.dump(self.sequences, f, indent=2)
+                json.dump([r.sequence for r in self.results], f, indent=2)
         else:
             raise ValueError(f"Unsupported format: {file_format}")
 
@@ -287,7 +320,7 @@ class MaskedModelScoringConfig(BaseConfig):
 
     batch_size: int = ConfigField(
         title="Batch Size",
-        default=1,
+        default=8,
         ge=1,
         description="Sequences per GPU forward pass; raise for throughput, lower if OOM",
     )
@@ -323,6 +356,7 @@ class MaskedModelScoringMetrics(Metrics):
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
         "log_likelihood": {
+            "description": "Sum over all positions. Grows with sequence length, so compare only at equal length.",
             "availability": "always",
             "type": "float",
             "min": None,
@@ -330,6 +364,7 @@ class MaskedModelScoringMetrics(Metrics):
             "better_values_are": "higher",
         },
         "avg_log_likelihood": {
+            "description": "Mean per position. Length independent, so comparable across sequences.",
             "availability": "always",
             "type": "float",
             "min": None,
@@ -337,6 +372,7 @@ class MaskedModelScoringMetrics(Metrics):
             "better_values_are": "higher",
         },
         "perplexity": {
+            "description": "Exponential of the negated mean log-likelihood. Lower means a more confident model.",
             "availability": "always",
             "type": "float",
             "min": 1.0,

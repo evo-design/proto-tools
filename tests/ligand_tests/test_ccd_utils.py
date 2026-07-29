@@ -7,6 +7,7 @@ import pytest
 
 from proto_tools.entities.ligands.ccd_utils import (
     COMMON_MODIFICATIONS,
+    count_heavy_atoms_for_ccd,
     get_all_ccd_codes,
     get_canonical_component,
     get_ccd_description,
@@ -431,3 +432,21 @@ def test_get_all_ccd_codes_includes_rdkit_unparseable_entries():
     """get_all_ccd_codes returns the full raw set, not just the canonicalizable subset."""
     all_codes = get_all_ccd_codes()
     assert "08T" in all_codes  # RDKit-unparseable but file-present
+
+
+def test_count_heavy_atoms_falls_back_for_unsanitizable_entries():
+    """A real component whose SMILES RDKit will not sanitize is still counted, not refused.
+
+    A1IPL is para-boronophenylalanine: its four-bond boron breaks RDKit's valence rules, so it
+    never reaches the canonical cache. Counting atoms needs only the molecular graph, and these
+    codes are reachable as residue modifications, so refusing them would fail token counting.
+    """
+    assert map_ccd_code_to_smiles("A1IPL") is None  # not canonicalizable
+    assert count_heavy_atoms_for_ccd("A1IPL") == 16
+    assert count_heavy_atoms_for_ccd("A1LZ3") == 28
+
+
+def test_count_heavy_atoms_still_rejects_codes_absent_from_the_database():
+    """The fallback does not turn an unknown code into a silent answer."""
+    with pytest.raises(ValueError, match="Unknown CCD code"):
+        count_heavy_atoms_for_ccd("ZZZZZ")

@@ -3,7 +3,7 @@
 import logging
 import platform
 from pathlib import Path
-from typing import Any, get_args
+from typing import Any, Literal, get_args
 
 import pytest
 from pydantic import ValidationError
@@ -20,6 +20,8 @@ from proto_tools.tools.sequence_alignment.mmseqs2.homology_search import (
     _check_dataset_provisioned,
     _rename_a3m_to_sequence_id,
 )
+from proto_tools.tools.sequence_alignment.mmseqs2.remote_search import _parse_pair_a3m
+from proto_tools.utils import ConfigField
 from proto_tools.utils.tool_instance import ToolInstance
 
 logger = logging.getLogger(__name__)
@@ -35,6 +37,27 @@ HEMOGLOBIN_ALPHA = "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"
 # Full-length human hemoglobin alpha/beta: a vertebrate-wide heterodimer, so the chains pair into deep, row-aligned MSAs.
 HBA_HUMAN = "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSHGSAQVKGHGKKVADALTNAVAHVDDMPNALSALSDLHAHKLRVDPVNFKLLSHCLLVTLAAHLPAEFTPAVHASLDKFLASVSTVLTSKYR"
 HBB_HUMAN = "MVHLTPEEKSAVTALWGKVNVDEVGGEALGRLLVVYPWTQRFFESFGDLSTPDAVMGNPKVKAHGKKVLGAFSDGLAHLDNLKGTFATLSELHCDKLHVDPENFRLLGNVLVCVLAHHFGKEFTPPVQAAYQKVVAGVANALAHKYH"
+
+
+# ============================================================================
+# Fixture-database config
+# ============================================================================
+
+
+class FixtureDbConfig(Mmseqs2HomologySearchConfig):
+    """Config that may name the in-tree ``tiny-test-colabfold`` database.
+
+    The fixture is a registered dataset but is kept out of the product ``dataset`` Literal, so a
+    plain config cannot name it. Widening the field on a subclass leaves that Literal untouched and
+    still validates: the tool wrapper re-validates against ``type(instance)``, so tests using this
+    run the real dispatch path rather than bypassing validation.
+    """
+
+    dataset: Literal["colabfold-envdb-202108", "uniref30-2302", "tiny-test-colabfold"] = ConfigField(
+        title="Dataset",
+        default="tiny-test-colabfold",
+        description="Registered ColabFold protein database to search, widened to admit the test fixture.",
+    )
 
 
 # ============================================================================
@@ -186,7 +209,7 @@ def test_unknown_dataset_rejected() -> None:
 def test_non_searchable_dataset_not_selectable() -> None:
     """A registered but non-ColabFold DB (a3m_adapter != 'colabfold') is not a valid ``dataset`` value."""
     with pytest.raises(ValidationError, match="Input should be"):
-        Mmseqs2HomologySearchConfig(dataset="small-bfd", use_gpu=False)
+        Mmseqs2HomologySearchConfig(dataset="small-bfd", device="cpu")
 
 
 def test_dataset_field_schema_carries_inline_enum_and_default() -> None:
@@ -219,30 +242,31 @@ def test_dataset_literal_matches_registry_searchable_set() -> None:
 
 
 def test_default_search_mode_is_remote_and_claims_no_gpu() -> None:
-    """The default config is remote: no local DB, and it claims no GPU even though use_gpu stays True."""
+    """The default config is remote: no local DB, and it claims no GPU."""
     cfg = Mmseqs2HomologySearchConfig()
     assert cfg.search_mode == "remote"
     assert cfg.gpus_per_instance == 0
 
 
 def test_remote_mode_skips_gpu_platform_validation() -> None:
-    """Remote mode skips the GPU-platform validator, so use_gpu=True doesn't raise even on non-Linux."""
-    cfg = Mmseqs2HomologySearchConfig(search_mode="remote", use_gpu=True)
+    """Remote mode skips the GPU-platform validator, so a cuda device doesn't raise even on non-Linux."""
+    cfg = Mmseqs2HomologySearchConfig(search_mode="remote", device="cuda")
     assert cfg.search_mode == "remote"
     assert cfg.gpus_per_instance == 0
 
 
 @pytest.mark.skipif(platform.system() != "Linux", reason="GPU validation is Linux-only")
-def test_local_use_gpu_default_true() -> None:
-    """In local mode, GPU is on by default and claims one GPU per instance."""
-    cfg = Mmseqs2HomologySearchConfig(search_mode="local")
-    assert cfg.use_gpu is True
+def test_local_cuda_device_is_honoured() -> None:
+    """A specific cuda device survives onto the config and claims one GPU per instance."""
+    cfg = Mmseqs2HomologySearchConfig(search_mode="local", device="cuda:1")
+    assert cfg.device == "cuda:1"
+    assert cfg.uses_gpu_search is True
     assert cfg.gpus_per_instance == 1
 
 
 def test_gpus_per_instance_zero_when_cpu() -> None:
     """A local CPU-mode config reports zero GPU usage."""
-    cfg = Mmseqs2HomologySearchConfig(search_mode="local", use_gpu=False)
+    cfg = Mmseqs2HomologySearchConfig(search_mode="local", device="cpu")
     assert cfg.gpus_per_instance == 0
 
 
@@ -254,12 +278,12 @@ def test_missing_dataset_dir_gives_provisioning_hint(tmp_path: Path) -> None:
         _check_dataset_provisioned("uniref30-2302", entry, bogus_cache, require_idx_pad=True)
 
 
-def test_missing_gpu_padded_marker_gives_use_gpu_false_hint(tmp_path: Path) -> None:
-    """Dispatch-time check explains the missing GPU marker and suggests use_gpu=False."""
+def test_missing_gpu_padded_marker_gives_cpu_device_hint(tmp_path: Path) -> None:
+    """Dispatch-time check explains the missing GPU marker and suggests a cpu device."""
     entry = DatasetRegistry.get("uniref30-2302")
     # Provision dbtype but NOT the gpu_padded_marker — simulates a CPU-only DB build.
     (tmp_path / f"{entry.db_prefix}.dbtype").write_bytes(b"")
-    with pytest.raises(FileNotFoundError, match=r"use_gpu=False"):
+    with pytest.raises(FileNotFoundError, match=r"device='cpu'"):
         _check_dataset_provisioned("uniref30-2302", entry, tmp_path, require_idx_pad=True)
 
 
@@ -335,7 +359,7 @@ def test_dispatch_payload_carries_operation_key(tmp_path: Path, monkeypatch: pyt
     # empty) so the call returns rather than raising. We only need the payload.
     run_mmseqs2_homology_search(
         Mmseqs2HomologySearchInput(queries=["MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLI"]),
-        Mmseqs2HomologySearchConfig(search_mode="local", use_gpu=False),
+        Mmseqs2HomologySearchConfig(search_mode="local", device="cpu"),
     )
 
     assert captured["toolkit"] == "mmseqs2"
@@ -438,10 +462,10 @@ def test_e2e_search_against_provisioned_protein_dataset(dataset_name: str) -> No
     if entry.a3m_adapter != "colabfold":
         pytest.skip(f"{dataset_name} uses a3m_adapter={entry.a3m_adapter!r}; tool only handles colabfold-style DBs")
     if dataset_name == "tiny-test-colabfold":
-        pytest.skip("test fixture excluded from the product Literal; exercised separately via model_construct")
+        pytest.skip("test fixture excluded from the product Literal; exercised separately via FixtureDbConfig")
 
     inp = Mmseqs2HomologySearchInput(queries=[(UBIQUITIN, "ubiquitin")])
-    cfg = Mmseqs2HomologySearchConfig(search_mode="local", dataset=dataset_name, use_gpu=True)
+    cfg = Mmseqs2HomologySearchConfig(search_mode="local", dataset=dataset_name, device="cuda")
     result = run_mmseqs2_homology_search(inp, cfg)
 
     assert result.success, f"Search against {dataset_name} failed: {result.errors}"
@@ -495,7 +519,7 @@ def test_local_metagenomic_search_deepens_msa() -> None:
     """
     inp = Mmseqs2HomologySearchInput(queries=[(UBIQUITIN, "ubiquitin")])
     # Generous timeout: UniRef30 + 650 GB envdb is I/O-bound and slow when RAM < DB size.
-    base = {"search_mode": "local", "use_gpu": True, "timeout": 21600}
+    base = {"search_mode": "local", "device": "cuda", "timeout": 21600}
 
     uniref_only = run_mmseqs2_homology_search(inp, Mmseqs2HomologySearchConfig(**base, use_metagenomic_db=False))
     with_env = run_mmseqs2_homology_search(inp, Mmseqs2HomologySearchConfig(**base, use_metagenomic_db=True))
@@ -524,7 +548,7 @@ def test_paired_group_produces_row_aligned_paired_msas(tmp_path: Path, monkeypat
     _install_fake_dispatch(monkeypatch, captured, paired_depth=3)
 
     inp = Mmseqs2HomologySearchInput(queries=[[(UBIQUITIN, "chainA"), (HEMOGLOBIN_ALPHA, "chainB")]])
-    out = run_mmseqs2_homology_search(inp, Mmseqs2HomologySearchConfig(search_mode="local", use_gpu=False))
+    out = run_mmseqs2_homology_search(inp, Mmseqs2HomologySearchConfig(search_mode="local", device="cpu"))
 
     assert len(out.results) == 1
     grp = out.results[0]
@@ -562,13 +586,13 @@ def test_remote_paired_group_fetches_paired_and_deep_unpaired(tmp_path: Path, mo
         _write_a3m(up, q.sequence, 6)
         unpaired_map[str(i)] = str(up)
 
-    def fake_dispatch(remote_queries, output_dir, config, instance, script_path):  # type: ignore[no-untyped-def]
+    def fake_dispatch(remote_queries, output_dir, config):  # type: ignore[no-untyped-def]
         if isinstance(remote_queries[0]["sequences"], list):
             return {"success": True, "paired_msa_paths": {"0": paired_paths}}
         return {"success": True, "msa_paths": unpaired_map}
 
     monkeypatch.setattr(hs, "_dispatch_remote", fake_dispatch)
-    result = hs._remote_paired_group(members, tmp_path / "grp", Mmseqs2HomologySearchConfig(), None, Path("x"))
+    result = hs._remote_paired_group(members, tmp_path / "grp", Mmseqs2HomologySearchConfig())
 
     assert all(m is not None for m in result.paired_msas)
     assert all(m is not None for m in result.msas)
@@ -592,13 +616,13 @@ def test_remote_paired_group_degrades_when_unpaired_fails(tmp_path: Path, monkey
         _write_a3m(pp, q.sequence, 3)
         paired_paths.append(str(pp))
 
-    def fake_dispatch(remote_queries, output_dir, config, instance, script_path):  # type: ignore[no-untyped-def]
+    def fake_dispatch(remote_queries, output_dir, config):  # type: ignore[no-untyped-def]
         if isinstance(remote_queries[0]["sequences"], list):
             return {"success": True, "paired_msa_paths": {"0": paired_paths}}
         raise RuntimeError("unpaired API down")
 
     monkeypatch.setattr(hs, "_dispatch_remote", fake_dispatch)
-    result = hs._remote_paired_group(members, tmp_path / "grp", Mmseqs2HomologySearchConfig(), None, Path("x"))
+    result = hs._remote_paired_group(members, tmp_path / "grp", Mmseqs2HomologySearchConfig())
 
     assert all(m is not None for m in result.paired_msas)  # paired result intact
     assert all(m is None for m in result.msas)  # unpaired degraded, no exception
@@ -626,7 +650,7 @@ def test_paired_homomultimer_yields_per_chain_msas_with_correct_query_rows(
             ]
         ]
     )
-    out = run_mmseqs2_homology_search(inp, Mmseqs2HomologySearchConfig(search_mode="local", use_gpu=False))
+    out = run_mmseqs2_homology_search(inp, Mmseqs2HomologySearchConfig(search_mode="local", device="cpu"))
 
     grp = out.results[0]
     assert grp.sequence_ids == ["chainA", "chainB", "chainC", "chainD"]
@@ -657,7 +681,7 @@ def test_paired_assembly_raises_on_unmatched_query_row(tmp_path: Path, monkeypat
 
     inp = Mmseqs2HomologySearchInput(queries=[[(UBIQUITIN, "a"), (HBB_HUMAN, "b")]])
     with pytest.raises(RuntimeError, match=r"0\.paired\.a3m for chain 'a'"):
-        run_mmseqs2_homology_search(inp, Mmseqs2HomologySearchConfig(search_mode="local", use_gpu=False))
+        run_mmseqs2_homology_search(inp, Mmseqs2HomologySearchConfig(search_mode="local", device="cpu"))
 
 
 @pytest.mark.parametrize(("strategy", "expected_int"), [("greedy", 0), ("complete", 1)])
@@ -671,7 +695,7 @@ def test_pairing_strategy_maps_to_mmseqs_int(
 
     inp = Mmseqs2HomologySearchInput(queries=[[(UBIQUITIN, "a"), (HEMOGLOBIN_ALPHA, "b")]])
     run_mmseqs2_homology_search(
-        inp, Mmseqs2HomologySearchConfig(search_mode="local", use_gpu=False, pairing_strategy=strategy)
+        inp, Mmseqs2HomologySearchConfig(search_mode="local", device="cpu", pairing_strategy=strategy)
     )
 
     assert captured[0]["pairing_strategy"] == expected_int
@@ -692,7 +716,7 @@ def test_singletons_batch_while_paired_group_dispatches_separately(
             (HEMOGLOBIN_ALPHA, "solo2"),
         ]
     )
-    out = run_mmseqs2_homology_search(inp, Mmseqs2HomologySearchConfig(search_mode="local", use_gpu=False))
+    out = run_mmseqs2_homology_search(inp, Mmseqs2HomologySearchConfig(search_mode="local", device="cpu"))
 
     # Results stay parallel to input groups.
     assert [r.sequence_ids for r in out.results] == [["solo1"], ["pairA", "pairB"], ["solo2"]]
@@ -781,10 +805,7 @@ def test_real_paired_search_against_mini_db() -> None:
     row-aligned MSAs.
     """
     inp = Mmseqs2HomologySearchInput(queries=[[(HBA_HUMAN, "hba"), (HBB_HUMAN, "hbb")]])
-    # tiny-test-colabfold is excluded from the product `dataset` Literal, so build
-    # the config via model_construct to bypass enum validation — this test exercises
-    # the search pipeline, not the field's product allowlist.
-    cfg = Mmseqs2HomologySearchConfig.model_construct(search_mode="local", dataset="tiny-test-colabfold", use_gpu=False)
+    cfg = FixtureDbConfig(search_mode="local", device="cpu")
     out = run_mmseqs2_homology_search(inp, cfg)
 
     assert out.success, f"paired search failed: {out.errors}"
@@ -812,7 +833,7 @@ def test_real_paired_homooligomer_against_mini_db() -> None:
     blocks come back; hba's block is broadcast to both alpha copies in input order.
     """
     inp = Mmseqs2HomologySearchInput(queries=[[(HBA_HUMAN, "hbaA"), (HBA_HUMAN, "hbaB"), (HBB_HUMAN, "hbb")]])
-    cfg = Mmseqs2HomologySearchConfig.model_construct(search_mode="local", dataset="tiny-test-colabfold", use_gpu=False)
+    cfg = FixtureDbConfig(search_mode="local", device="cpu")
     out = run_mmseqs2_homology_search(inp, cfg)
 
     assert out.success, f"paired search failed: {out.errors}"
@@ -841,12 +862,7 @@ def test_local_sensitivity_actually_changes_msa_depth() -> None:
     """
 
     def search(sensitivity: float) -> int:
-        cfg = Mmseqs2HomologySearchConfig.model_construct(
-            search_mode="local",
-            dataset="tiny-test-colabfold",
-            use_gpu=False,
-            sensitivity=sensitivity,
-        )
+        cfg = FixtureDbConfig(search_mode="local", device="cpu", sensitivity=sensitivity)
         out = run_mmseqs2_homology_search(Mmseqs2HomologySearchInput(queries=[(UBIQUITIN, "ubi")]), cfg)
         assert out.success, f"sensitivity={sensitivity} failed: {out.errors}"
         return out.results[0].num_homologs_found[0]
@@ -878,7 +894,7 @@ def _install_fake_remote_dispatch(
     paired_homologs: int = 3,
     unpaired_homologs: int = 4,
 ) -> None:
-    """Patch ``ToolInstance.dispatch`` to emulate the ColabFold remote standalone.
+    """Patch ``search_remote_msas`` to emulate the remote MSA server.
 
     A paired call (``sequences`` is a list) returns ``paired_msa_paths["0"]`` with
     ``paired_homologs`` homologs per chain (0 → query-only, triggers the fallback);
@@ -886,10 +902,10 @@ def _install_fake_remote_dispatch(
     use ColabFold's numeric ``101`` so header normalization is exercised.
     """
 
-    def fake(toolkit: str, payload: dict[str, Any], **_: Any) -> dict[str, Any]:
-        out_dir = Path(payload["output_dir"])
+    def fake(queries: list[dict[str, Any]], output_dir: Path, **_: Any) -> dict[str, Any]:
+        out_dir = Path(output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
-        first = payload["queries"][0]["sequences"]
+        first = queries[0]["sequences"]
         if isinstance(first, list):
             calls.append("paired")
             paths = []
@@ -906,7 +922,7 @@ def _install_fake_remote_dispatch(
             }
         calls.append("unpaired")
         msa_paths = {}
-        for idx, q in enumerate(payload["queries"]):
+        for idx, q in enumerate(queries):
             p = out_dir / f"unpaired_{idx}.a3m"
             _write_remote_a3m(p, q["sequences"], "101", unpaired_homologs)
             msa_paths[str(idx)] = str(p)
@@ -918,7 +934,9 @@ def _install_fake_remote_dispatch(
             "num_failed": 0,
         }
 
-    monkeypatch.setattr(ToolInstance, "dispatch", staticmethod(fake))
+    from proto_tools.tools.sequence_alignment.mmseqs2 import homology_search as hs
+
+    monkeypatch.setattr(hs, "search_remote_msas", fake)
 
 
 def test_remote_singleton_normalizes_header_and_parses(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -972,13 +990,14 @@ def test_remote_paired_group_no_pairing_keeps_unpaired(monkeypatch: pytest.Monke
 
 
 def test_remote_paired_chain_path_count_mismatch_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A standalone returning the wrong number of chain paths is a contract violation, not 'no homologs'."""
+    """A search returning the wrong number of chain paths is a contract violation, not 'no homologs'."""
+    from proto_tools.tools.sequence_alignment.mmseqs2 import homology_search as hs
 
-    def fake(toolkit: str, payload: dict[str, Any], **_: Any) -> dict[str, Any]:
+    def fake(queries: list[dict[str, Any]], output_dir: Path, **_: Any) -> dict[str, Any]:
         # 2-chain query, but only one chain path returned.
         return {"paired_msa_paths": {"0": [str(tmp_path / "only_one.a3m")]}, "success": True}
 
-    monkeypatch.setattr(ToolInstance, "dispatch", staticmethod(fake))
+    monkeypatch.setattr(hs, "search_remote_msas", fake)
     inp = Mmseqs2HomologySearchInput(queries=[[(HBA_HUMAN, "hba"), (HBB_HUMAN, "hbb")]])
     with pytest.raises(RuntimeError, match="expected 2"):
         run_mmseqs2_homology_search(inp, Mmseqs2HomologySearchConfig(search_mode="remote"))
@@ -1013,16 +1032,18 @@ def test_remote_mixed_groups_preserve_order(monkeypatch: pytest.MonkeyPatch) -> 
 def test_use_metagenomic_db_defaults_false() -> None:
     """The metagenomic/environmental DB is off by default in both modes."""
     assert Mmseqs2HomologySearchConfig().use_metagenomic_db is False
-    assert Mmseqs2HomologySearchConfig(search_mode="local", use_gpu=False).use_metagenomic_db is False
+    assert Mmseqs2HomologySearchConfig(search_mode="local", device="cpu").use_metagenomic_db is False
 
 
 def test_remote_use_metagenomic_db_passes_through(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Remote mode forwards use_metagenomic_db to the standalone (→ ColabFold API use_env)."""
+    """Remote mode forwards use_metagenomic_db to the search (→ the server's use_env)."""
+    from proto_tools.tools.sequence_alignment.mmseqs2 import homology_search as hs
+
     captured: dict[str, Any] = {}
 
-    def fake(toolkit: str, payload: dict[str, Any], **_: Any) -> dict[str, Any]:
-        captured["payload"] = payload
-        out_dir = Path(payload["output_dir"])
+    def fake(queries: list[dict[str, Any]], output_dir: Path, **kwargs: Any) -> dict[str, Any]:
+        captured.update(kwargs)
+        out_dir = Path(output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         p = out_dir / "0.a3m"
         _write_remote_a3m(p, UBIQUITIN, "101", 4)
@@ -1034,18 +1055,18 @@ def test_remote_use_metagenomic_db_passes_through(monkeypatch: pytest.MonkeyPatc
             "num_failed": 0,
         }
 
-    monkeypatch.setattr(ToolInstance, "dispatch", staticmethod(fake))
+    monkeypatch.setattr(hs, "search_remote_msas", fake)
     inp = Mmseqs2HomologySearchInput(queries=[(UBIQUITIN, "ubi")])
     run_mmseqs2_homology_search(inp, Mmseqs2HomologySearchConfig(search_mode="remote", use_metagenomic_db=True))
 
-    assert captured["payload"]["use_metagenomic_db"] is True
+    assert captured["use_metagenomic_db"] is True
 
 
 def test_local_metagenomic_requires_envdb_provisioned(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Local metagenomic search hard-errors with a provisioning hint when the envdb isn't on disk."""
     _provision_fake_cache(tmp_path, monkeypatch)  # provisions UniRef30 only; the envdb is absent
     inp = Mmseqs2HomologySearchInput(queries=[(UBIQUITIN, "ubi")])
-    cfg = Mmseqs2HomologySearchConfig(search_mode="local", use_gpu=False, use_metagenomic_db=True)
+    cfg = Mmseqs2HomologySearchConfig(search_mode="local", device="cpu", use_metagenomic_db=True)
     with pytest.raises(FileNotFoundError, match=r"colabfold-envdb-202108"):
         run_mmseqs2_homology_search(inp, cfg)
 
@@ -1059,7 +1080,7 @@ def test_local_metagenomic_dispatch_carries_env_db(tmp_path: Path, monkeypatch: 
 
     inp = Mmseqs2HomologySearchInput(queries=[(UBIQUITIN, "ubi")])
     run_mmseqs2_homology_search(
-        inp, Mmseqs2HomologySearchConfig(search_mode="local", use_gpu=False, use_metagenomic_db=True)
+        inp, Mmseqs2HomologySearchConfig(search_mode="local", device="cpu", use_metagenomic_db=True)
     )
 
     assert captured[0]["use_metagenomic_db"] is True
@@ -1122,22 +1143,6 @@ def test_rename_a3m_avoids_collision_with_adversarial_numeric_ids(tmp_path: Path
 # ============================================================================
 
 
-def _load_remote_msa_search():
-    """Import the standalone `remote_msa_search` module (needs the standalone helpers on sys.path)."""
-    import importlib.util
-    import sys
-
-    root = Path(__file__).resolve().parents[2]
-    helpers = root / "proto_tools/utils/standalone_helpers_source"
-    if str(helpers) not in sys.path:
-        sys.path.insert(0, str(helpers))
-    path = root / "proto_tools/tools/sequence_alignment/mmseqs2/standalone/remote_msa_search.py"
-    spec = importlib.util.spec_from_file_location("remote_msa_search", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def _pair_block(query: str, n_rows: int) -> bytes:
     """A row-aligned A3M block whose first record is the chain `query`."""
     records = [f">row_{i}\n{query}" for i in range(n_rows)]
@@ -1146,46 +1151,43 @@ def _pair_block(query: str, n_rows: int) -> bytes:
 
 def test_parse_pair_a3m_broadcasts_deduped_homomultimer_blocks(tmp_path: Path) -> None:
     """ColabFold dedups identical chains; the deduped block is broadcast to every chain that shares it."""
-    rms = _load_remote_msa_search()
     ubiq = _pair_block(UBIQUITIN, 3)
     hba = _pair_block(HEMOGLOBIN_ALPHA, 3)
     pair_a3m = tmp_path / "pair.a3m"
 
     # Homodimer: two identical chains -> one returned block -> broadcast to both.
     pair_a3m.write_bytes(ubiq + b"\x00")
-    assert rms._parse_pair_a3m(pair_a3m, [UBIQUITIN, UBIQUITIN]) == [ubiq, ubiq]
+    assert _parse_pair_a3m(pair_a3m, [UBIQUITIN, UBIQUITIN]) == [ubiq, ubiq]
 
     # 3-chain with a repeat split across positions: two blocks -> three chains, input order preserved.
     pair_a3m.write_bytes(ubiq + b"\x00" + hba + b"\x00")
-    assert rms._parse_pair_a3m(pair_a3m, [UBIQUITIN, HEMOGLOBIN_ALPHA, UBIQUITIN]) == [ubiq, hba, ubiq]
+    assert _parse_pair_a3m(pair_a3m, [UBIQUITIN, HEMOGLOBIN_ALPHA, UBIQUITIN]) == [ubiq, hba, ubiq]
 
     # Heterodimer (all-distinct) is unchanged: one block per chain.
-    assert rms._parse_pair_a3m(pair_a3m, [UBIQUITIN, HEMOGLOBIN_ALPHA]) == [ubiq, hba]
+    assert _parse_pair_a3m(pair_a3m, [UBIQUITIN, HEMOGLOBIN_ALPHA]) == [ubiq, hba]
 
 
 def test_parse_pair_a3m_raises_when_blocks_do_not_cover_chains(tmp_path: Path) -> None:
     """A block set that can't serve every unique chain sequence is a hard error."""
-    rms = _load_remote_msa_search()
     pair_a3m = tmp_path / "pair.a3m"
     pair_a3m.write_bytes(_pair_block(UBIQUITIN, 3) + b"\x00")
     with pytest.raises(RuntimeError, match="do not match"):
-        rms._parse_pair_a3m(pair_a3m, [UBIQUITIN, HEMOGLOBIN_ALPHA])
+        _parse_pair_a3m(pair_a3m, [UBIQUITIN, HEMOGLOBIN_ALPHA])
 
 
 def test_parse_pair_a3m_maps_blocks_by_content_not_position(tmp_path: Path) -> None:
     """Blocks are matched to chains by query identity, regardless of file order or case."""
-    rms = _load_remote_msa_search()
     ubiq = _pair_block(UBIQUITIN, 3)
     hba = _pair_block(HEMOGLOBIN_ALPHA, 3)
     pair_a3m = tmp_path / "pair.a3m"
 
     # Block order reversed relative to chain order -> still mapped by content.
     pair_a3m.write_bytes(hba + b"\x00" + ubiq + b"\x00")
-    assert rms._parse_pair_a3m(pair_a3m, [UBIQUITIN, HEMOGLOBIN_ALPHA]) == [ubiq, hba]
+    assert _parse_pair_a3m(pair_a3m, [UBIQUITIN, HEMOGLOBIN_ALPHA]) == [ubiq, hba]
 
     # Interleaved repeats: two blocks fan out to four chains in input order.
     pair_a3m.write_bytes(ubiq + b"\x00" + hba + b"\x00")
-    assert rms._parse_pair_a3m(pair_a3m, [UBIQUITIN, HEMOGLOBIN_ALPHA, UBIQUITIN, HEMOGLOBIN_ALPHA]) == [
+    assert _parse_pair_a3m(pair_a3m, [UBIQUITIN, HEMOGLOBIN_ALPHA, UBIQUITIN, HEMOGLOBIN_ALPHA]) == [
         ubiq,
         hba,
         ubiq,
@@ -1194,7 +1196,7 @@ def test_parse_pair_a3m_maps_blocks_by_content_not_position(tmp_path: Path) -> N
 
     # Lowercase chains still match the uppercase block query (the input validator only strips).
     pair_a3m.write_bytes(ubiq + b"\x00")
-    assert rms._parse_pair_a3m(pair_a3m, [UBIQUITIN.lower(), UBIQUITIN.lower()]) == [ubiq, ubiq]
+    assert _parse_pair_a3m(pair_a3m, [UBIQUITIN.lower(), UBIQUITIN.lower()]) == [ubiq, ubiq]
 
 
 @pytest.mark.integration

@@ -138,7 +138,18 @@ class AlphaGenomePredictSequencesOutput(BaseToolOutput):
         return iter(self.results)
 
 
-AlphaGenomePredictSequencesConfig = AlphaGenomePredictConfig
+class AlphaGenomePredictSequencesConfig(AlphaGenomePredictConfig):
+    """Configuration for AlphaGenome sequence prediction.
+
+    Attributes:
+        model_version (str): AlphaGenome Hugging Face model version.
+        requested_outputs (list[OutputTypeName]): Output type names to request.
+        ontology_terms (list[str] | None): Optional ontology term filters.
+        organism (Literal['human', 'mouse']): Organism for predictions.
+        device (str): Device to run inference on.
+        timeout (int | None): Maximum execution time in seconds. AlphaGenome JAX
+            compilation is slow on first run. ``None`` waits indefinitely.
+    """
 
 
 # ============================================================================
@@ -162,6 +173,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["sequences"],
     iterable_output_field="results",
+    max_chunk_size=64,
     cacheable=True,
 )
 def run_alphagenome_predict_sequences(

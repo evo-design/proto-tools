@@ -97,7 +97,8 @@ class PdbFetchFastaOutput(BaseToolOutput):
         raise ValueError(f"Unsupported format: {file_format}")
 
 
-PdbFetchFastaConfig = PdbFetchConfig
+class PdbFetchFastaConfig(PdbFetchConfig):
+    """Configuration for PDB FASTA fetches (no user-facing settings)."""
 
 
 # ============================================================================
@@ -115,7 +116,7 @@ def example_input() -> Any:
     label="PDB Fetch FASTA",
     category="database_retrieval",
     input_class=PdbFetchFastaInput,
-    config_class=PdbFetchConfig,
+    config_class=PdbFetchFastaConfig,
     output_class=PdbFetchFastaOutput,
     description="Fetch chain sequences from RCSB PDB with protein/nucleotide classification",
     uses_gpu=False,

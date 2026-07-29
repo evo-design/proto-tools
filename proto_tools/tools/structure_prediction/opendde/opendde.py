@@ -266,6 +266,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["complexes", "msas"],
     iterable_output_field="structures",
+    max_chunk_size=1,
     cacheable=True,
     stochastic=True,
 )

@@ -149,7 +149,19 @@ class NCBIEsearchOutput(BaseToolOutput):
         raise ValueError(f"Unsupported format: {file_format}")
 
 
-NCBIEsearchConfig = NCBIFetchConfig
+class NCBIEsearchConfig(NCBIFetchConfig):
+    """Configuration for NCBI ESearch queries.
+
+    Attributes:
+        ncbi_api_key (str | None): Optional NCBI API key (lifts rate limit
+            from 3 to 10 requests/second). Defaults to the ``NCBI_API_KEY``
+            environment variable; an explicit value passed to the config
+            overrides the env var.
+        ncbi_email (str | None): Optional contact email. NCBI usage policy
+            requires both ``tool`` and ``email`` for traceability. Defaults
+            to the ``NCBI_EMAIL`` environment variable; an explicit value
+            passed to the config overrides the env var.
+    """
 
 
 # ============================================================================
@@ -167,7 +179,7 @@ def example_input() -> Any:
     label="NCBI Entrez ESearch",
     category="database_retrieval",
     input_class=NCBIEsearchInput,
-    config_class=NCBIFetchConfig,
+    config_class=NCBIEsearchConfig,
     output_class=NCBIEsearchOutput,
     description="Search NCBI Entrez databases by query term to find matching IDs",
     uses_gpu=False,
