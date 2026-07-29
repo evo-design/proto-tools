@@ -15,12 +15,13 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _persistent_tool = make_persistent_fixture("esmc")
 
-# (checkpoint, hidden_dim)
-_CHECKPOINTS = [("esmc_300m", 960), ("esmc_600m", 1152)]
-_CHECKPOINT_IDS = [c for c, _ in _CHECKPOINTS]
-
-# esmc_6b is shape-checked only; it pulls ~25 GB and forces a worker reload.
-_SHAPE_CHECKPOINTS = [*_CHECKPOINTS, pytest.param("esmc_6b", 2560, marks=pytest.mark.slow)]
+# (checkpoint, hidden_dim). esmc_6b is shape-checked only; it downloads ~25 GB.
+_SHAPE_CHECKPOINTS = [
+    ("esmc_300m", 960),
+    ("esmc_600m", 1152),
+    pytest.param("esmc_6b", 2560, marks=pytest.mark.slow),
+]
+_CHECKPOINT_IDS = ["esmc_300m", "esmc_600m"]
 
 
 @pytest.mark.uses_gpu
