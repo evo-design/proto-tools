@@ -239,6 +239,13 @@ module = ["biotite.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
 
+# proto-modal is an optional peer used only by the device="modal" dispatch
+# branch. proto-tools must never depend on it (that would be circular), so it
+# is not installed for type-checking; the runtime import is guarded.
+[[tool.mypy.overrides]]
+module = ["proto_modal.*"]
+ignore_missing_imports = true
+
 [tool.pydantic-mypy]
 init_forbid_extra = false
 init_typed = true

@@ -958,6 +958,7 @@ def _canonicalize_design_chain_ids(structure: Structure) -> Structure:
     example_input=example_input,
     iterable_input_fields=["design_specs"],
     iterable_output_field="designed_structures",
+    max_chunk_size=1,
     cacheable=True,
     stochastic=True,
 )

@@ -4,7 +4,7 @@ Config, helpers, sequence validation, I/O, caching, env management, device, logg
 """
 
 from proto_tools.utils.auth import require_hf_token
-from proto_tools.utils.base_config import BaseConfig, ConfigField
+from proto_tools.utils.base_config import BaseConfig, ConfigField, run_preprocess
 from proto_tools.utils.chemistry import validate_smiles
 from proto_tools.utils.device import (
     determine_visible_devices,
@@ -60,6 +60,7 @@ __all__ = [
     # Config
     "BaseConfig",
     "ConfigField",
+    "run_preprocess",
     # System info
     "get_platform_info",
     "get_gpu_info",

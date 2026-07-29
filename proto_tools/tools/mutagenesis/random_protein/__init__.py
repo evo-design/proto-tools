@@ -1,6 +1,7 @@
 """Random protein mutagenesis."""
 
 from proto_tools.tools.mutagenesis.random_protein.random_protein_sample import (
+    RandomProteinSample,
     RandomProteinSampleConfig,
     RandomProteinSampleInput,
     RandomProteinSampleOutput,
@@ -8,6 +9,7 @@ from proto_tools.tools.mutagenesis.random_protein.random_protein_sample import (
 )
 
 __all__ = [
+    "RandomProteinSample",
     "RandomProteinSampleInput",
     "RandomProteinSampleConfig",
     "RandomProteinSampleOutput",

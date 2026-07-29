@@ -5,7 +5,7 @@
 ![PARADE](https://proto-bio.github.io/proto-assets/images/tool/parade/hero.png)
 
 > [!NOTE]
-> **License:** PARADE is open source and free for academic and commercial use under an MIT license and may require explicit attribution when utilized. Please refer to [the license](https://github.com/autosome-ru/parade/blob/main/LICENSE) for full terms.
+> **License:** PARADE is open source and free for academic and commercial use under an MIT license and may require explicit attribution when utilized. Please refer to [the license](https://github.com/autosome-ru/parade/blob/master/LICENSE) for full terms.
 
 ## Overview
 

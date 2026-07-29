@@ -176,6 +176,30 @@ this scope even if the preprocess does not touch the model. Keep `preprocess`
 cheap, and rely on `reload_on_change` (below) rather than re-dispatching inside
 it where avoidable.
 
+### The preprocess contract
+
+`preprocess` returns the prepared inputs and must not assign to `self`. A
+preprocess that also resolves a config setting needed at execution time returns
+the pair `(inputs, config)` instead.
+
+```python
+def preprocess(self, inputs):
+    if inputs.msas is not None:
+        return inputs, self.model_copy(update={"use_msa": True})
+    return inputs
+```
+
+Returning the inputs alone is the normal case, and only one override in the
+repository returns a config. `run_preprocess()` accepts either shape and always
+yields the pair.
+
+The restriction keeps preprocess idempotent, so a caller may reuse one config
+across calls without altering later results, and the framework may run
+preprocess once per chunk when a batch is distributed across workers. Assignment
+to `self` raises `TypeError` at the offending line, and
+`tests/style_consistency_tests/test_preprocess_purity.py` applies the same rule
+statically for tools whose preprocess CI never executes.
+
 ## Persistent workers
 
 A warm `ToolInstance` owns a `PersistentWorker` (`persistent_worker.py`), a

@@ -1,6 +1,6 @@
 """tests/tool_infra_tests/test_cloud.py.
 
-Tests for device="cloud" dispatch via proto_tools.cloud.dispatch_to_cloud.
+Tests for device="proto" dispatch via proto_tools.proto.dispatch_to_proto.
 
 ``proto_client`` is stubbed via ``sys.modules`` so tests run without the
 real SDK installed and without hitting a network.
@@ -19,6 +19,7 @@ from pydantic import Field
 
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.utils import BaseConfig, ConfigField
+from proto_tools.utils.base_config import INTERNAL_STATE_KEY
 from proto_tools.utils.tool_io import BaseToolInput
 from tests.tool_infra_tests.test_export_functionality import MockToolOutputBase
 
@@ -45,10 +46,13 @@ class _CloudAssetOutput(MockToolOutputBase):
 
 
 class _PreprocessConfig(_CloudConfig):
+    """Config whose preprocess rewrites the payload, making its effect visible in the dispatch."""
+
     local_path: str | None = ConfigField(default=None, title="Local Path", description="Local path override")
 
     def preprocess(self, inputs: BaseToolInput) -> BaseToolInput:
-        raise AssertionError("cloud dispatch should not run local preprocess")
+        """Mark the payload so the test can tell prepared inputs from raw ones."""
+        return type(inputs)(payload=f"prepared:{inputs.payload}")
 
 
 @dataclass
@@ -157,7 +161,7 @@ class _FakeProtoAuthError(Exception):
 
 @pytest.fixture
 def fake_proto_client(monkeypatch):
-    """Install a fake ``proto_client`` module + stub key so dispatch_to_cloud can construct a client."""
+    """Install a fake ``proto_client`` module + stub key so dispatch_to_proto can construct a client."""
     fake_module = types.ModuleType("proto_client")
     fake_module.ProtoClient = _StubProtoClient  # type: ignore[attr-defined]
     fake_errors = types.ModuleType("proto_client.errors")
@@ -168,7 +172,7 @@ def fake_proto_client(monkeypatch):
     monkeypatch.setenv("PROTO_API_KEY", "test-stub-key")
 
     # Clear the lru_cache so each test gets a fresh client.
-    from proto_tools.cloud import _get_client
+    from proto_tools.proto import _get_client
 
     _get_client.cache_clear()
     _StubProtoClient.last_instance = None
@@ -223,7 +227,7 @@ def _register_cloud_tool(
 
     def _must_not_run_locally(inputs, config, instance=None):
         del inputs, config, instance
-        raise AssertionError(f"Local execution of {key!r} should not happen when device='cloud'")
+        raise AssertionError(f"Local execution of {key!r} should not happen when device='proto'")
 
     registry.register(
         key=key,
@@ -241,51 +245,51 @@ def _register_cloud_tool(
 # ─ cloud hostability gate (license redistribution) ───────────────────────────
 
 
-def test_is_cloud_hostable_reads_redistribution(monkeypatch):
-    """``is_cloud_hostable`` reflects the tool's license ``redistribution`` flag, failing closed."""
-    from proto_tools.cloud import is_cloud_hostable
+def test_is_proto_hostable_reads_redistribution(monkeypatch):
+    """``is_proto_hostable`` reflects the tool's license ``redistribution`` flag, failing closed."""
+    from proto_tools.proto import is_proto_hostable
 
     monkeypatch.setattr(ToolRegistry, "get_license", lambda key: {"redistribution": True})
-    assert is_cloud_hostable("any-tool") is True
+    assert is_proto_hostable("any-tool") is True
 
     monkeypatch.setattr(ToolRegistry, "get_license", lambda key: {"redistribution": False})
-    assert is_cloud_hostable("any-tool") is False
+    assert is_proto_hostable("any-tool") is False
 
     # Missing license, missing field, and unknown key all fail closed.
     monkeypatch.setattr(ToolRegistry, "get_license", lambda key: None)
-    assert is_cloud_hostable("any-tool") is False
+    assert is_proto_hostable("any-tool") is False
 
     monkeypatch.setattr(ToolRegistry, "get_license", lambda key: {})
-    assert is_cloud_hostable("any-tool") is False
+    assert is_proto_hostable("any-tool") is False
 
     def _raise(key):
         raise ValueError("unknown tool")
 
     monkeypatch.setattr(ToolRegistry, "get_license", _raise)
-    assert is_cloud_hostable("any-tool") is False
+    assert is_proto_hostable("any-tool") is False
 
 
-def test_is_cloud_hostable_fails_closed_on_malformed_license(monkeypatch):
+def test_is_proto_hostable_fails_closed_on_malformed_license(monkeypatch):
     """A corrupt/unreadable license.yaml (a non-ValueError from get_license) blocks cloud instead of crashing the run."""
     import yaml
 
-    from proto_tools.cloud import is_cloud_hostable
+    from proto_tools.proto import is_proto_hostable
 
     def _raise_yaml(key):
         raise yaml.YAMLError("could not parse license.yaml")
 
     monkeypatch.setattr(ToolRegistry, "get_license", _raise_yaml)
-    assert is_cloud_hostable("any-tool") is False
+    assert is_proto_hostable("any-tool") is False
 
     def _raise_os(key):
         raise OSError("permission denied reading license.yaml")
 
     monkeypatch.setattr(ToolRegistry, "get_license", _raise_os)
-    assert is_cloud_hostable("any-tool") is False
+    assert is_proto_hostable("any-tool") is False
 
 
-def test_cloud_blocks_non_redistributable_tool(fake_proto_client, arm_stub_client, monkeypatch, clean_registry):
-    """device='cloud' on a non-redistributable tool fails fast with a clear error and never dispatches."""
+def test_proto_blocks_non_redistributable_tool(fake_proto_client, arm_stub_client, monkeypatch, clean_registry):
+    """device='proto' on a non-redistributable tool fails fast with a clear error and never dispatches."""
     arm_stub_client(lambda c: setattr(c.tools, "output_to_return", {"result": "should-not-run"}))
     spec = _register_cloud_tool(clean_registry, "gated-tool")
 
@@ -293,31 +297,31 @@ def test_cloud_blocks_non_redistributable_tool(fake_proto_client, arm_stub_clien
     monkeypatch.setattr(ToolRegistry, "get_license", lambda key: {"redistribution": False})
 
     with pytest.raises(ValueError, match="redistribution"):
-        spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
+        spec.function(_CloudInput(payload="x"), _CloudConfig(device="proto"))
 
     # The gate is purely local: no client constructed, no submit attempted.
     assert fake_proto_client.last_instance is None
 
 
-def test_cloud_blocks_unsupported_config(fake_proto_client, clean_registry):
-    """device='cloud' with a config whose ``cloud_unsupported_reason()`` is non-None fails fast, never dispatches."""
+def test_proto_blocks_unsupported_config(fake_proto_client, clean_registry):
+    """device='proto' with a config whose ``remote_unsupported_reason()`` is non-None fails fast, never dispatches."""
 
     class _LocalOnlyConfig(_CloudConfig):
-        def cloud_unsupported_reason(self) -> str | None:
+        def remote_unsupported_reason(self, device: str) -> str | None:
             return "needs a local database file"
 
     spec = _register_cloud_tool(clean_registry, "local-only-config", config_class=_LocalOnlyConfig)
 
     with pytest.raises(ValueError, match="needs a local database file"):
-        spec.function(_CloudInput(payload="x"), _LocalOnlyConfig(device="cloud"))
+        spec.function(_CloudInput(payload="x"), _LocalOnlyConfig(device="proto"))
 
     # Fails fast locally: no client constructed, no submit attempted.
     assert fake_proto_client.last_instance is None
 
 
-def test_base_config_cloud_unsupported_reason_defaults_none():
+def test_base_config_remote_unsupported_reason_defaults_none():
     """The default hook returns None so ordinary tools still dispatch to cloud."""
-    assert _CloudConfig().cloud_unsupported_reason() is None
+    assert _CloudConfig().remote_unsupported_reason("proto") is None
 
 
 def test_local_file_tools_declare_cloud_unsupported():
@@ -326,10 +330,12 @@ def test_local_file_tools_declare_cloud_unsupported():
     from proto_tools.tools.gene_annotation.pyhmmer.hmmsearch import PyHmmsearchConfig
     from proto_tools.tools.sequence_alignment.blast.blast_search import BlastSearchConfig
 
-    assert BlastSearchConfig(search_mode="local", local_db="/db").cloud_unsupported_reason() is not None
-    assert BlastSearchConfig(search_mode="online").cloud_unsupported_reason() is None  # online (NCBI) is cloud-OK
-    assert PyHmmscanConfig().cloud_unsupported_reason() is not None
-    assert PyHmmsearchConfig().cloud_unsupported_reason() is not None
+    assert BlastSearchConfig(search_mode="local", local_db="/db").remote_unsupported_reason("proto") is not None
+    assert (
+        BlastSearchConfig(search_mode="online").remote_unsupported_reason("proto") is None
+    )  # online (NCBI) is cloud-OK
+    assert PyHmmscanConfig().remote_unsupported_reason("proto") is not None
+    assert PyHmmsearchConfig().remote_unsupported_reason("proto") is not None
 
 
 def test_local_resource_override_configs_declare_cloud_unsupported():
@@ -354,17 +360,17 @@ def test_local_resource_override_configs_declare_cloud_unsupported():
         MalinoisGradientConfig(),
         BioEmuConfig(),
     ):
-        assert cfg.cloud_unsupported_reason() is None
+        assert cfg.remote_unsupported_reason("proto") is None
 
     # An explicitly-set local override is rejected before dispatch.
-    assert Evo2SampleConfig(local_path="/w").cloud_unsupported_reason() is not None
-    assert Evo2ScoringConfig(local_path="/w").cloud_unsupported_reason() is not None
-    assert ProGen2SampleConfig(local_path="/w").cloud_unsupported_reason() is not None
-    assert ProGen2ScoringConfig(local_path="/w").cloud_unsupported_reason() is not None
-    assert MalinoisScoreConfig(artifact_path="/a").cloud_unsupported_reason() is not None
-    assert MalinoisScoreConfig(malinois_dir="/d").cloud_unsupported_reason() is not None
-    assert MalinoisGradientConfig(malinois_dir="/d").cloud_unsupported_reason() is not None
-    assert BioEmuConfig(denoiser_config="steer.yaml").cloud_unsupported_reason() is not None
+    assert Evo2SampleConfig(local_path="/w").remote_unsupported_reason("proto") is not None
+    assert Evo2ScoringConfig(local_path="/w").remote_unsupported_reason("proto") is not None
+    assert ProGen2SampleConfig(local_path="/w").remote_unsupported_reason("proto") is not None
+    assert ProGen2ScoringConfig(local_path="/w").remote_unsupported_reason("proto") is not None
+    assert MalinoisScoreConfig(artifact_path="/a").remote_unsupported_reason("proto") is not None
+    assert MalinoisScoreConfig(malinois_dir="/d").remote_unsupported_reason("proto") is not None
+    assert MalinoisGradientConfig(malinois_dir="/d").remote_unsupported_reason("proto") is not None
+    assert BioEmuConfig(denoiser_config="steer.yaml").remote_unsupported_reason("proto") is not None
 
 
 # ─ parse_device_string ───────────────────────────────────────────────────────
@@ -374,21 +380,21 @@ def test_parse_device_string_accepts_cloud():
     """parse_device_string returns DeviceSpec(kind='cloud') for 'cloud'."""
     from proto_tools.utils.device import parse_device_string
 
-    spec = parse_device_string("cloud")
-    assert spec.kind == "cloud"
-    assert spec.devices == ["cloud"]
+    spec = parse_device_string("proto")
+    assert spec.kind == "proto"
+    assert spec.devices == ["proto"]
     assert spec.count == 1
 
 
-# ─ device='cloud' dispatch ───────────────────────────────────────────────────
+# ─ device='proto' dispatch ───────────────────────────────────────────────────
 
 
 def test_device_cloud_returns_validated_output(fake_proto_client, arm_stub_client, clean_registry):
-    """A registered tool with device='cloud' returns the validated cloud response."""
+    """A registered tool with device='proto' returns the validated cloud response."""
     arm_stub_client(lambda c: setattr(c.tools, "output_to_return", {"result": "from-api"}))
     spec = _register_cloud_tool(clean_registry, "api-tool-2")
 
-    result = spec.function(_CloudInput(payload="hi"), _CloudConfig(device="cloud"))
+    result = spec.function(_CloudInput(payload="hi"), _CloudConfig(device="proto"))
 
     assert isinstance(result, _CloudOutput)
     assert result.result == "from-api"
@@ -401,7 +407,7 @@ def test_device_cloud_returns_validated_output(fake_proto_client, arm_stub_clien
     call = client.tools.calls[0]
     assert call["tool_key"] == "api-tool-2"
     assert call["inputs"] == {"payload": "hi"}
-    # device='cloud' is the client-side routing signal; the server picks its
+    # device='proto' is the client-side routing signal; the server picks its
     # own physical device, so the dispatcher strips device before sending.
     assert "device" not in call["config"]
 
@@ -412,7 +418,7 @@ def test_device_cloud_uses_tool_config_timeout(fake_proto_client, arm_stub_clien
     spec = _register_cloud_tool(clean_registry, "slow-api-tool", config_class=_SlowCloudConfig)
 
     # Spy on _poll_until_terminal — the dispatcher's poll loop owns the timeout now (no single SDK call carries it).
-    import proto_tools.cloud as cloud_mod
+    import proto_tools.proto as cloud_mod
 
     captured: dict[str, Any] = {}
     real_poll = cloud_mod._poll_until_terminal
@@ -424,7 +430,7 @@ def test_device_cloud_uses_tool_config_timeout(fake_proto_client, arm_stub_clien
 
     monkeypatch.setattr(cloud_mod, "_poll_until_terminal", _spy_poll)
 
-    spec.function(_CloudInput(payload="hi"), _SlowCloudConfig(device="cloud"))
+    spec.function(_CloudInput(payload="hi"), _SlowCloudConfig(device="proto"))
 
     assert captured["timeout"] == 1200.0
 
@@ -440,7 +446,7 @@ def test_device_cloud_none_timeout_polls_until_terminal(
     arm_stub_client(lambda c: setattr(c.tools, "output_to_return", {"result": "from-api"}))
     spec = _register_cloud_tool(clean_registry, "unbounded-api-tool", config_class=_NoTimeoutCloudConfig)
 
-    import proto_tools.cloud as cloud_mod
+    import proto_tools.proto as cloud_mod
 
     captured: dict[str, Any] = {}
     real_poll = cloud_mod._poll_until_terminal
@@ -451,12 +457,12 @@ def test_device_cloud_none_timeout_polls_until_terminal(
 
     monkeypatch.setattr(cloud_mod, "_poll_until_terminal", _spy_poll)
 
-    spec.function(_CloudInput(payload="hi"), _NoTimeoutCloudConfig(device="cloud"))
+    spec.function(_CloudInput(payload="hi"), _NoTimeoutCloudConfig(device="proto"))
 
     assert captured["timeout"] is None
 
 
-def test_cloud_output_assets_are_decoded_before_validation(fake_proto_client, arm_stub_client, clean_registry):
+def test_proto_output_assets_are_decoded_before_validation(fake_proto_client, arm_stub_client, clean_registry):
     """Cloud dispatch materializes output AssetRefs before applying the proto-tools output model."""
 
     def _seed(c):
@@ -482,7 +488,7 @@ def test_cloud_output_assets_are_decoded_before_validation(fake_proto_client, ar
     arm_stub_client(_seed)
     spec = _register_cloud_tool(clean_registry, "asset-tool", output_class=_CloudAssetOutput)
 
-    result = spec.function(_CloudInput(payload="hi"), _CloudConfig(device="cloud"))
+    result = spec.function(_CloudInput(payload="hi"), _CloudConfig(device="proto"))
 
     assert isinstance(result, _CloudAssetOutput)
     assert result.structure == "data_test\n#"
@@ -492,8 +498,8 @@ def test_cloud_output_assets_are_decoded_before_validation(fake_proto_client, ar
     assert [ref["id"] for ref in client.assets.calls] == ["structure_asset", "scores_asset"]
 
 
-def test_device_cloud_dispatches_before_preprocess(fake_proto_client, arm_stub_client, clean_registry):
-    """device='cloud' sends the original request instead of running local preprocess first."""
+def test_device_cloud_preprocesses_before_dispatching(fake_proto_client, arm_stub_client, clean_registry):
+    """device='proto' prepares the request locally and tells the server preprocess already ran."""
     arm_stub_client(lambda c: setattr(c.tools, "output_to_return", {"result": "from-api"}))
     clean_registry.register(
         key="preprocess-tool",
@@ -507,13 +513,18 @@ def test_device_cloud_dispatches_before_preprocess(fake_proto_client, arm_stub_c
     )(lambda inputs, config, instance=None: _CloudOutput(result="local"))
     spec = clean_registry.get("preprocess-tool")
 
-    result = spec.function(_CloudInput(payload="raw"), _PreprocessConfig(device="cloud"))
+    result = spec.function(_CloudInput(payload="raw"), _PreprocessConfig(device="proto"))
 
     assert result.result == "from-api"
     client = fake_proto_client.last_instance
     assert client is not None
     call = client.tools.calls[0]
-    assert call["inputs"] == {"payload": "raw"}
+    assert call["inputs"] == {"payload": "prepared:raw"}, "the server should receive prepared inputs"
+    envelope = call["config"][INTERNAL_STATE_KEY]
+    # Asserted per key rather than whole: the envelope carries whatever framework state has to
+    # cross the boundary, so pinning it exactly breaks every time something is added.
+    assert envelope["preprocess_completed"] is True
+    assert envelope["client_identity"], "a hosted worker needs to know who it is acting for"
     assert "local_path" not in call["config"]
 
 
@@ -550,7 +561,7 @@ def test_device_cloud_noops_for_local_cpu_without_cloud_hostability(
     fake_proto_client,
     clean_registry,
 ):
-    """device='cloud' on a local_cpu tool runs locally without cloud hostability or transport."""
+    """device='proto' on a local_cpu tool runs locally without cloud hostability or transport."""
 
     def _get_license_should_not_run(key):
         raise AssertionError(f"local_cpu cloud no-op should not check cloud hostability for {key!r}")
@@ -574,7 +585,7 @@ def test_device_cloud_noops_for_local_cpu_without_cloud_hostability(
     spec = clean_registry.get("local-cpu-tool")
     assert spec.local_cpu is True
 
-    result = spec.function(_CloudInput(payload="hi"), _CloudConfig(device="cloud"))
+    result = spec.function(_CloudInput(payload="hi"), _CloudConfig(device="proto"))
 
     assert result.result == "local:hi"
     assert result.success is True
@@ -599,18 +610,18 @@ def test_device_cloud_noop_leaves_caller_config_untouched(clean_registry):
         description="verifies caller-config immutability under cloud no-op",
     )(_local_impl)
     spec = clean_registry.get("local-cpu-config-untouched")
-    caller_config = _CloudConfig(device="cloud")
+    caller_config = _CloudConfig(device="proto")
 
     spec.function(_CloudInput(payload="x"), caller_config)
 
-    assert caller_config.device == "cloud"
+    assert caller_config.device == "proto"
 
 
 # ─ failure handling ──────────────────────────────────────────────────────────
 
 
 def test_no_api_key_raises_cloud_status(monkeypatch, clean_registry):
-    """device='cloud' with no PROTO_API_KEY surfaces the set-up-your-key guidance."""
+    """device='proto' with no PROTO_API_KEY surfaces the set-up-your-key guidance."""
     monkeypatch.delenv("PROTO_API_KEY", raising=False)
     # Need a stub proto_client so the ImportError path doesn't fire first.
     fake_module = types.ModuleType("proto_client")
@@ -623,7 +634,7 @@ def test_no_api_key_raises_cloud_status(monkeypatch, clean_registry):
     spec = _register_cloud_tool(clean_registry, "no-key")
 
     with pytest.raises(NotImplementedError, match="workspace/keys"):
-        spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
+        spec.function(_CloudInput(payload="x"), _CloudConfig(device="proto"))
 
 
 def test_missing_proto_client_raises_install_hint(monkeypatch, clean_registry):
@@ -645,7 +656,7 @@ def test_missing_proto_client_raises_install_hint(monkeypatch, clean_registry):
     spec = _register_cloud_tool(clean_registry, "no-sdk")
 
     with pytest.raises(ImportError, match=r"pip install proto-client"):
-        spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
+        spec.function(_CloudInput(payload="x"), _CloudConfig(device="proto"))
 
 
 def test_invalid_api_key_raises_permission_error(fake_proto_client, arm_stub_client, clean_registry):
@@ -654,7 +665,7 @@ def test_invalid_api_key_raises_permission_error(fake_proto_client, arm_stub_cli
     spec = _register_cloud_tool(clean_registry, "bad-key-tool")
 
     with pytest.raises(PermissionError, match="couldn't validate"):
-        spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
+        spec.function(_CloudInput(payload="x"), _CloudConfig(device="proto"))
 
 
 def test_transport_error_propagates_to_caller(fake_proto_client, arm_stub_client, clean_registry):
@@ -663,7 +674,7 @@ def test_transport_error_propagates_to_caller(fake_proto_client, arm_stub_client
     spec = _register_cloud_tool(clean_registry, "transport-failing-tool")
 
     with pytest.raises(ConnectionError, match="network down"):
-        spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
+        spec.function(_CloudInput(payload="x"), _CloudConfig(device="proto"))
 
 
 def test_real_tool_failure_propagates_to_caller(fake_proto_client, arm_stub_client, clean_registry):
@@ -674,7 +685,7 @@ def test_real_tool_failure_propagates_to_caller(fake_proto_client, arm_stub_clie
     spec = _register_cloud_tool(clean_registry, "failing-cloud-tool")
 
     with pytest.raises(RuntimeError, match="chain 'A'"):
-        spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
+        spec.function(_CloudInput(payload="x"), _CloudConfig(device="proto"))
 
 
 def test_unexpected_result_type_raises(fake_proto_client, arm_stub_client, clean_registry):
@@ -683,7 +694,7 @@ def test_unexpected_result_type_raises(fake_proto_client, arm_stub_client, clean
     spec = _register_cloud_tool(clean_registry, "type-check-tool")
 
     with pytest.raises(Exception, match="does not conform to _CloudOutput"):
-        spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
+        spec.function(_CloudInput(payload="x"), _CloudConfig(device="proto"))
 
 
 # ─ log streaming ─────────────────────────────────────────────────────────────
@@ -710,10 +721,10 @@ class _StubLogsEnd:
     final_seq: int = 0
 
 
-def test_cloud_streams_remote_logs_through_local_logger(
+def test_proto_streams_remote_logs_through_local_logger(
     fake_proto_client, arm_stub_client, caplog, monkeypatch, clean_registry
 ):
-    """LogRecord rows from the server are replayed via ``proto_tools.cloud.remote`` so the user sees live progress."""
+    """LogRecord rows from the server are replayed via ``proto_tools.proto.remote`` so the user sees live progress."""
     # See verbose-mapping test: conftest pins PROTO_WORKER_VERBOSE=3 globally.
     monkeypatch.delenv("PROTO_WORKER_VERBOSE", raising=False)
 
@@ -731,17 +742,17 @@ def test_cloud_streams_remote_logs_through_local_logger(
     arm_stub_client(_seed)
     spec = _register_cloud_tool(clean_registry, "streaming-tool")
 
-    caplog.set_level(logging.DEBUG, logger="proto_tools.cloud.remote")
-    spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud", verbose=1))
+    caplog.set_level(logging.DEBUG, logger="proto_tools.proto.remote")
+    spec.function(_CloudInput(payload="x"), _CloudConfig(device="proto", verbose=1))
 
-    messages = [r.message for r in caplog.records if r.name == "proto_tools.cloud.remote"]
+    messages = [r.message for r in caplog.records if r.name == "proto_tools.proto.remote"]
     assert "Starting ESMFold" in messages
     assert "Folded 1/3" in messages
     assert "GPU OOM averted" in messages
     assert "should not be replayed" not in messages
 
     # The warning record must map to Python WARNING, not INFO.
-    levels = {r.message: r.levelno for r in caplog.records if r.name == "proto_tools.cloud.remote"}
+    levels = {r.message: r.levelno for r in caplog.records if r.name == "proto_tools.proto.remote"}
     assert levels["GPU OOM averted"] == logging.WARNING
     assert levels["Starting ESMFold"] == logging.INFO
 
@@ -755,7 +766,7 @@ def test_cloud_streams_remote_logs_through_local_logger(
     assert call["level"] == ["info", "notice", "warning", "error", "critical", "alert", "emergency"]
 
 
-def test_cloud_verbose_levels_map_to_server_filters(fake_proto_client, arm_stub_client, monkeypatch, clean_registry):
+def test_proto_verbose_levels_map_to_server_filters(fake_proto_client, arm_stub_client, monkeypatch, clean_registry):
     """``config.verbose`` translates 1:1 to ``iter_job_logs`` level/stream filters so cloud mirrors local verbosity."""
     # Clear PROTO_WORKER_VERBOSE (conftest pins it to 3) so config.verbose drives each case.
     monkeypatch.delenv("PROTO_WORKER_VERBOSE", raising=False)
@@ -770,19 +781,19 @@ def test_cloud_verbose_levels_map_to_server_filters(fake_proto_client, arm_stub_
     ]:
         key = f"verbose-tool-{verbose}"
         spec = _register_cloud_tool(clean_registry, key)
-        spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud", verbose=verbose))
+        spec.function(_CloudInput(payload="x"), _CloudConfig(device="proto", verbose=verbose))
         call = fake_proto_client.last_instance.tools.log_iter_calls[-1]
         assert call["level"] == expected_level, f"verbose={verbose}"
         assert call["stream"] == expected_stream, f"verbose={verbose}"
 
 
-def test_cloud_dispatch_opens_cloud_spinner(fake_proto_client, arm_stub_client, monkeypatch, clean_registry):
+def test_proto_dispatch_opens_cloud_spinner(fake_proto_client, arm_stub_client, monkeypatch, clean_registry):
     """The cloud dispatch path opens a progress_bar with the computer↔cloud spinner so a glance shows it's a cloud run."""
     arm_stub_client(lambda c: setattr(c.tools, "output_to_return", {"result": "ok"}))
     spec = _register_cloud_tool(clean_registry, "spinner-tool")
 
     # Spy on ``progress_bar`` to capture how dispatch invokes it (kwargs are the contract).
-    import proto_tools.cloud as cloud_mod
+    import proto_tools.proto as cloud_mod
 
     captured: dict[str, Any] = {}
     real_progress_bar = cloud_mod.progress_bar
@@ -793,19 +804,19 @@ def test_cloud_dispatch_opens_cloud_spinner(fake_proto_client, arm_stub_client, 
 
     monkeypatch.setattr(cloud_mod, "progress_bar", _spy)
 
-    spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
+    spec.function(_CloudInput(payload="x"), _CloudConfig(device="proto"))
 
-    # Emoji terminals get the "cloud" pulse style (no separate prefix); non-UTF falls back to dots + [cloud].
-    assert (captured.get("spinner_style"), captured.get("prefix")) in {("cloud", None), ("dots", "[cloud]")}
+    # Emoji terminals get the "proto" pulse style (no separate prefix); non-UTF falls back to dots + [cloud].
+    assert (captured.get("spinner_style"), captured.get("prefix")) in {("proto", None), ("dots", "[cloud]")}
     # The description shows the live phase, opening at "queued".
     assert captured.get("desc") == "queued"
     # status-only spinner: no progress bar widget, only the spinner + description
     assert captured.get("show_bar") is False
 
 
-def test_cloud_spinner_substatus_tracks_job_status(fake_proto_client, arm_stub_client, monkeypatch, clean_registry):
+def test_proto_spinner_substatus_tracks_job_status(fake_proto_client, arm_stub_client, monkeypatch, clean_registry):
     """The cloud spinner's substatus follows job status while polling (queued → running) before the result returns."""
-    import proto_tools.cloud as cloud_mod
+    import proto_tools.proto as cloud_mod
 
     seen: list[str] = []
     monkeypatch.setattr(cloud_mod, "set_substatus", lambda msg, *a, **k: seen.append(msg))
@@ -817,14 +828,14 @@ def test_cloud_spinner_substatus_tracks_job_status(fake_proto_client, arm_stub_c
 
     arm_stub_client(_seed)
     spec = _register_cloud_tool(clean_registry, "status-tool")
-    spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
+    spec.function(_CloudInput(payload="x"), _CloudConfig(device="proto"))
 
     assert "running" in seen  # the running status was mapped onto the spinner substatus
 
 
 def test_strip_logger_prefix():
     """The worker logger-name prefix is removed from phase markers; ordinary 'word:' messages are kept."""
-    from proto_tools.cloud import _strip_logger_prefix
+    from proto_tools.proto import _strip_logger_prefix
 
     assert (
         _strip_logger_prefix("proto_tools.worker.esmfold.esmfold-prediction: Loading ESMFold model: v1 on cuda")
@@ -836,7 +847,7 @@ def test_strip_logger_prefix():
     assert _strip_logger_prefix("Folding 1 complex(es), num_recycles=3") == "Folding 1 complex(es), num_recycles=3"
 
 
-def test_cloud_replay_strips_logger_prefix_on_plain_lines(
+def test_proto_replay_strips_logger_prefix_on_plain_lines(
     fake_proto_client, arm_stub_client, monkeypatch, caplog, clean_registry
 ):
     """Cloud log lines read like local: the worker logger-name prefix is stripped on every replayed line."""
@@ -851,15 +862,15 @@ def test_cloud_replay_strips_logger_prefix_on_plain_lines(
 
     arm_stub_client(_seed)
     spec = _register_cloud_tool(clean_registry, "prefix-tool")
-    caplog.set_level(logging.DEBUG, logger="proto_tools.cloud.remote")
-    spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud", verbose=1))
+    caplog.set_level(logging.DEBUG, logger="proto_tools.proto.remote")
+    spec.function(_CloudInput(payload="x"), _CloudConfig(device="proto", verbose=1))
 
-    msgs = [r.message for r in caplog.records if r.name == "proto_tools.cloud.remote"]
+    msgs = [r.message for r in caplog.records if r.name == "proto_tools.proto.remote"]
     assert "Starting worker" in msgs
     assert "proto_tools.utils.progress: Starting worker" not in msgs
 
 
-def test_cloud_update_status_records_drive_spinner_substatus(
+def test_proto_update_status_records_drive_spinner_substatus(
     fake_proto_client, arm_stub_client, monkeypatch, caplog, clean_registry
 ):
     """update_status records replay with the flag so the local spinner handler drives the bar; plain lines don't."""
@@ -875,16 +886,16 @@ def test_cloud_update_status_records_drive_spinner_substatus(
 
     arm_stub_client(_seed)
     spec = _register_cloud_tool(clean_registry, "phase-tool")
-    caplog.set_level(logging.DEBUG, logger="proto_tools.cloud.remote")
-    spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud", verbose=1))
+    caplog.set_level(logging.DEBUG, logger="proto_tools.proto.remote")
+    spec.function(_CloudInput(payload="x"), _CloudConfig(device="proto", verbose=1))
 
     # The flag rides through onto the replayed record; SpinnerFromLogsHandler (tested separately) routes it to the bar.
-    by_msg = {r.message: r for r in caplog.records if r.name == "proto_tools.cloud.remote"}
+    by_msg = {r.message: r for r in caplog.records if r.name == "proto_tools.proto.remote"}
     assert getattr(by_msg["Loading checkpoint"], "update_status", False) is True
     assert getattr(by_msg["Folded 1/3"], "update_status", False) is False
 
 
-def test_cloud_log_stream_failure_does_not_break_run(fake_proto_client, arm_stub_client, caplog, clean_registry):
+def test_proto_log_stream_failure_does_not_break_run(fake_proto_client, arm_stub_client, caplog, clean_registry):
     """A broken log stream must not fail the run — the result is what matters."""
 
     def _seed(c):
@@ -899,8 +910,8 @@ def test_cloud_log_stream_failure_does_not_break_run(fake_proto_client, arm_stub
     arm_stub_client(_seed)
     spec = _register_cloud_tool(clean_registry, "log-fail-tool")
 
-    caplog.set_level(logging.DEBUG, logger="proto_tools.cloud")
-    result = spec.function(_CloudInput(payload="x"), _CloudConfig(device="cloud"))
+    caplog.set_level(logging.DEBUG, logger="proto_tools.proto")
+    result = spec.function(_CloudInput(payload="x"), _CloudConfig(device="proto"))
     assert result.result == "ok"
 
 
@@ -908,20 +919,208 @@ def test_cloud_log_stream_failure_does_not_break_run(fake_proto_client, arm_stub
 
 
 def test_explicit_api_key_overrides_env(fake_proto_client, arm_stub_client, monkeypatch, clean_registry):
-    """dispatch_to_cloud's api_key kwarg takes precedence over PROTO_API_KEY."""
+    """dispatch_to_proto's api_key kwarg takes precedence over PROTO_API_KEY."""
     monkeypatch.setenv("PROTO_API_KEY", "env-key")
     arm_stub_client(lambda c: setattr(c.tools, "output_to_return", {"result": "ok"}))
     _register_cloud_tool(clean_registry, "explicit-key-tool")
 
-    from proto_tools.cloud import dispatch_to_cloud
+    from proto_tools.proto import dispatch_to_proto
 
-    dispatch_to_cloud(
+    dispatch_to_proto(
         "explicit-key-tool",
         _CloudInput(payload="hi"),
-        _CloudConfig(device="cloud"),
+        _CloudConfig(device="proto"),
         api_key="explicit-key",
     )
 
     client = fake_proto_client.last_instance
     assert client is not None
     assert client.kwargs == {"api_key": "explicit-key"}
+
+
+# ---------------------------------------------------------------------------
+# Device validation and per-device remote restrictions
+# ---------------------------------------------------------------------------
+
+VALID_DEVICE_STRINGS = [
+    "cpu",
+    "cuda",
+    "cuda:0",
+    "cuda:7",
+    "cudax2",
+    "cudax64",
+    "cuda:0,1",
+    "cuda:0,1,2",
+    "cuda:1,cuda:2",
+    "cuda:0,cuda:1,cuda:2",
+    " cpu ",
+    "cuda:0, 1",
+    "proto",
+    "modal",
+]
+
+INVALID_DEVICE_STRINGS = ["banana", "gpu", "cuda:-1", "0,1", "cuda:", "cudax0", "CUDA:0", "Cuda"]
+
+
+@pytest.mark.parametrize("device", VALID_DEVICE_STRINGS)
+def test_base_config_accepts_every_supported_device_form(device):
+    """Validation is syntactic, so every documented form works without that hardware present."""
+    from proto_tools.utils.base_config import BaseConfig
+
+    assert BaseConfig(device=device).device == device
+
+
+@pytest.mark.parametrize("device", INVALID_DEVICE_STRINGS)
+def test_base_config_rejects_malformed_devices(device):
+    """A typo used to survive construction and fail much later, at dispatch."""
+    from pydantic import ValidationError
+
+    from proto_tools.utils.base_config import BaseConfig
+
+    with pytest.raises(ValidationError):
+        BaseConfig(device=device)
+
+
+# ─ device='modal' routing (delegates to the optional proto-modal package) ────
+
+
+def _install_fake_proto_modal(monkeypatch, dispatch):
+    """Inject a stand-in ``proto_modal`` so routing tests run without the real package.
+
+    CI has no proto-modal (it is an optional peer, never a proto-tools
+    dependency), so the router's ``from proto_modal import dispatch_to_modal``
+    must be satisfiable by a fake.
+    """
+    import sys
+    import types
+
+    fake = types.ModuleType("proto_modal")
+    fake.dispatch_to_modal = dispatch
+    # The router imports both forms; the batch one carries chunks, one config each, when a tool
+    # sets max_chunk_size.
+    fake.dispatch_batch_to_modal = lambda key, inputs_list, configs: [
+        dispatch(key, chunk, one) for chunk, one in zip(inputs_list, configs, strict=True)
+    ]
+    monkeypatch.setitem(sys.modules, "proto_modal", fake)
+
+
+def test_device_modal_delegates_and_returns_validated_output(clean_registry, monkeypatch):
+    """device='modal' routes to proto_modal.dispatch_to_modal and validates its result."""
+    captured = {}
+
+    def _dispatch(key, inputs, config):
+        captured["key"] = key
+        captured["payload"] = inputs.payload
+        captured["device"] = config.device
+        return _CloudOutput(result="from-modal")
+
+    _install_fake_proto_modal(monkeypatch, _dispatch)
+    spec = _register_cloud_tool(clean_registry, "modal-tool")  # uses_gpu; local impl asserts if reached
+
+    result = spec.function(_CloudInput(payload="hi"), _CloudConfig(device="modal"))
+
+    assert isinstance(result, _CloudOutput)
+    assert result.result == "from-modal"
+    assert result.success is True
+    assert result.tool_id == "modal-tool"
+    assert captured == {"key": "modal-tool", "payload": "hi", "device": "modal"}
+
+
+def test_device_modal_no_ops_trivially_local_tools(clean_registry, monkeypatch):
+    """A tool with no GPU and no standalone environment runs in-process rather than on Modal.
+
+    ``local_cpu`` means there is nothing to accelerate and nothing to build, so a worker can
+    offer the tool nothing and the round trip is pure cost. This does not reach the CPU tools
+    that are actually deployed: those carry a standalone environment, which is precisely what
+    makes running them remotely worthwhile.
+    """
+
+    def _dispatch_should_not_run(key, inputs, config):
+        raise AssertionError("a local_cpu tool has nothing to gain from Modal and must stay local")
+
+    _install_fake_proto_modal(monkeypatch, _dispatch_should_not_run)
+
+    def _local_impl(inputs, config, instance=None):
+        del instance
+        return _CloudOutput(result=f"local:{inputs.payload}:{config.device}")
+
+    clean_registry.register(
+        key="modal-local-cpu",
+        label="modal-local-cpu",
+        category="test",
+        input_class=_CloudInput,
+        config_class=_CloudConfig,
+        output_class=_CloudOutput,
+        description="pure-python tool — no GPU, no standalone env",
+    )(_local_impl)
+    spec = clean_registry.get("modal-local-cpu")
+    assert spec.local_cpu is True
+
+    result = spec.function(_CloudInput(payload="hi"), _CloudConfig(device="modal"))
+
+    # The device is rewritten to cpu so the tool sees where it actually ran.
+    assert result.result == "local:hi:cpu"
+
+
+def test_device_modal_blocks_unsupported_config(clean_registry, monkeypatch):
+    """A config needing a local resource fails fast before any dispatch is attempted."""
+
+    class _ModalUnsupportedConfig(_CloudConfig):
+        def remote_unsupported_reason(self, device):
+            return "needs a local database file" if device == "modal" else None
+
+    def _dispatch_should_not_run(key, inputs, config):
+        raise AssertionError("must not dispatch a config that declares itself unsupported")
+
+    _install_fake_proto_modal(monkeypatch, _dispatch_should_not_run)
+    spec = _register_cloud_tool(clean_registry, "modal-tool-3", config_class=_ModalUnsupportedConfig)
+
+    with pytest.raises(ValueError, match="needs a local database file"):
+        spec.function(_CloudInput(payload="hi"), _ModalUnsupportedConfig(device="modal"))
+
+
+def test_batch_dispatch_submits_every_job_before_waiting(fake_proto_client, arm_stub_client, clean_registry):
+    """All jobs are submitted first, so Proto runs them concurrently rather than one at a time.
+
+    Waiting on each job before submitting the next would serialize the batch on the client, which
+    is the whole cost fan-out exists to remove. The stub records the order of submit and get calls,
+    so a regression to submit-wait-submit is visible rather than merely slower.
+    """
+    from proto_tools.proto import dispatch_batch_to_proto
+
+    order: list[str] = []
+
+    def _seed(client):
+        client.tools.output_to_return = {"result": "ok"}
+        original_submit, original_get = client.tools.submit, client.tools.get
+
+        def submit(*args, **kwargs):
+            order.append("submit")
+            return original_submit(*args, **kwargs)
+
+        def get(*args, **kwargs):
+            order.append("get")
+            return original_get(*args, **kwargs)
+
+        client.tools.submit, client.tools.get = submit, get
+
+    arm_stub_client(_seed)
+    spec = _register_cloud_tool(clean_registry, "batch-tool")
+
+    results = dispatch_batch_to_proto("batch-tool", [_CloudInput(payload=p) for p in ("a", "b", "c")])
+
+    assert [r.result for r in results] == ["ok", "ok", "ok"]
+    assert order[:3] == ["submit", "submit", "submit"], f"submits must all precede any wait, got {order}"
+    assert "get" in order[3:]
+    assert spec is not None
+
+
+def test_batch_dispatch_of_nothing_contacts_no_server(fake_proto_client, arm_stub_client, clean_registry):
+    """An empty batch returns immediately rather than opening a job."""
+    from proto_tools.proto import dispatch_batch_to_proto
+
+    arm_stub_client(lambda c: setattr(c.tools, "output_to_return", {"result": "unreachable"}))
+    _register_cloud_tool(clean_registry, "batch-tool-empty")
+
+    assert dispatch_batch_to_proto("batch-tool-empty", []) == []
+    assert fake_proto_client.last_instance is None

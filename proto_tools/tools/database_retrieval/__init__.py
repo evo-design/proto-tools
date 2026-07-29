@@ -20,10 +20,10 @@ from proto_tools.tools.database_retrieval.alphamissense_db import (
 
 # CCD lookup
 from proto_tools.tools.database_retrieval.ccd_lookup import (
-    CcdEnrichment,
     CcdLookupConfig,
     CcdLookupInput,
     CcdLookupOutput,
+    CcdLookupResult,
     run_ccd_lookup,
 )
 
@@ -152,7 +152,7 @@ __all__ = [
     "AlphaMissensePrediction",
     "run_alphamissense_db_fetch",
     # CCD lookup
-    "CcdEnrichment",
+    "CcdLookupResult",
     "CcdLookupConfig",
     "CcdLookupInput",
     "CcdLookupOutput",

@@ -4,6 +4,7 @@ import logging
 from typing import Any, Literal
 
 from proto_tools.tools.causal_models.shared_data_models import (
+    CausalModelSample,
     CausalModelSampleConfig,
     CausalModelSampleInput,
     CausalModelSampleOutput,
@@ -91,7 +92,7 @@ class ProGen3SampleConfig(CausalModelSampleConfig):
         description="Nucleus sampling cutoff over per-position token probabilities",
     )
     batch_size: int = ConfigField(
-        default=1,
+        default=8,
         ge=1,
         title="Batch Size",
         description="Same-length prompts per GPU forward pass; raise for throughput, lower if OOM",
@@ -130,7 +131,8 @@ def example_input() -> ProGen3SampleInput:
     stochastic=True,
     example_input=example_input,
     iterable_input_fields=["prompts"],
-    iterable_output_field="sequences",
+    iterable_output_field="results",
+    max_chunk_size=32,
 )
 def run_progen3_sample(
     inputs: ProGen3SampleInput,
@@ -233,5 +235,5 @@ def run_progen3_sample(
             "max_new_tokens": config.max_new_tokens,
             "prepend_prompt": config.prepend_prompt,
         },
-        sequences=sequences,
+        results=[CausalModelSample(sequence=sequence) for sequence in sequences],
     )

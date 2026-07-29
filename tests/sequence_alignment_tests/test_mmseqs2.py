@@ -260,21 +260,21 @@ def test_resolve_gpu_db_stem_rejects_padded_data_without_dbtype(tmp_path):
     assert _resolve_gpu_db_stem(str(db)) is None
 
 
-def test_run_protein_search_use_gpu_without_padded_db_fails(tmp_path):
-    """End-to-end: ``use_gpu=True`` with no padded DB raises with remediation message."""
+def test_run_protein_search_cuda_without_padded_db_fails(tmp_path):
+    """End-to-end: a cuda device with no padded DB raises with remediation message."""
     fasta = tmp_path / "tiny.faa"
     fasta.write_text(">seq_0\nMKTL\n")
     with pytest.raises(Exception, match=r"(?s)GPU-padded MMseqs2 DB.*makepaddedseqdb"):
         run_mmseqs2_search_proteins(
             Mmseqs2SearchProteinsInput(query_sequences=["MKTL"]),
-            Mmseqs2SearchProteinsConfig(mmseqs_db=str(fasta), use_gpu=True),
+            Mmseqs2SearchProteinsConfig(mmseqs_db=str(fasta), device="cuda"),
         )
 
 
-def test_search_proteins_gpus_per_instance_reflects_use_gpu():
-    """Per-call GPU need: 1 when ``use_gpu``, 0 otherwise."""
+def test_search_proteins_gpus_per_instance_reflects_device():
+    """Per-call GPU need: 1 on a cuda device, 0 otherwise."""
     assert Mmseqs2SearchProteinsConfig().gpus_per_instance == 0
-    assert Mmseqs2SearchProteinsConfig(use_gpu=True).gpus_per_instance == 1
+    assert Mmseqs2SearchProteinsConfig(device="cuda").gpus_per_instance == 1
 
 
 def test_standalone_dispatch_rejects_unknown_operation():

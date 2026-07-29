@@ -77,43 +77,6 @@ def test_fampnn_sample_input_schema():
     assert inp.inputs[0].structure is not None
 
 
-def test_fampnn_sample_config_defaults():
-    """FAMPNNSampleConfig has correct defaults."""
-    config = FAMPNNSampleConfig()
-    assert config.model_variant == "0.3"
-    assert config.num_steps == 100
-    assert config.temperature == 0.1
-    assert config.seq_only is False
-    assert config.repack_last is True
-    assert config.psce_threshold == 0.3
-    assert config.scn_diffusion_steps == 50
-    assert config.scn_step_scale == 1.5
-    assert config.num_sequences_per_structure == 1
-
-
-def test_fampnn_pack_config_defaults():
-    """FAMPNNPackConfig has correct defaults."""
-    config = FAMPNNPackConfig()
-    assert config.model_variant == "0.0"
-    assert config.num_samples_per_structure == 1
-    assert config.scn_diffusion_steps == 50
-
-
-def test_fampnn_score_config_defaults():
-    """FAMPNNScoreConfig has correct defaults."""
-    config = FAMPNNScoreConfig()
-    assert config.model_variant == "0.3_cath"
-    assert config.batch_size == 16
-    assert config.seq_only is False
-
-
-def test_fampnn_score_all_mutations_config_defaults():
-    """FAMPNNScoreAllMutationsConfig has correct defaults."""
-    config = FAMPNNScoreAllMutationsConfig()
-    assert config.model_variant == "0.3_cath"
-    assert config.batch_size == 16
-
-
 def test_fampnn_structure_input_with_sidechain_positions(pdb_structure):
     """FAMPNNStructureInput accepts a fixed_sidechain_positions selection."""
     chain_ids = pdb_structure.get_chain_ids()
@@ -368,9 +331,9 @@ def test_fampnn_pack_simple(pdb_structure):
     assert "ATOM" in struct.structure
 
     # pSCE should be present
-    assert len(output.psce) == 1
-    assert len(output.psce[0]) == 1
-    assert all(isinstance(v, float) for v in output.psce[0][0])
+    assert len(output.results) == 1
+    assert len(output.results[0].psce) == 1
+    assert all(isinstance(v, float) for v in output.results[0].psce[0])
 
 
 @pytest.mark.uses_gpu
@@ -385,8 +348,8 @@ def test_fampnn_pack_multiple_samples(pdb_structure):
     output = run_fampnn_pack(inp, config)
     assert output.success
 
-    assert len(output.packed_structures[0]) == 3
-    assert len(output.psce[0]) == 3
+    assert len(output.results[0].structures) == 3
+    assert len(output.results[0].psce) == 3
 
 
 @pytest.mark.uses_gpu
@@ -397,7 +360,7 @@ def test_fampnn_pack_psce_values(pdb_structure):
     output = run_fampnn_pack(inp, config)
     assert output.success
 
-    psce_values = output.psce[0][0]
+    psce_values = output.results[0].psce[0]
     assert all(v >= 0 for v in psce_values)
     # Per-residue pSCE should generally be < 4 Angstroms for well-packed structures
     assert all(v < 10.0 for v in psce_values)

@@ -16,7 +16,7 @@ from proto_tools.tools.tool_registry import (
     ToolRegistry,
     ToolSpec,
 )
-from proto_tools.utils import BaseConfig, ConfigField
+from proto_tools.utils import BaseConfig, ConfigField, run_preprocess
 from proto_tools.utils.tool_io import BaseToolInput
 from tests.tool_infra_tests.test_export_functionality import MockToolOutputBase
 
@@ -1260,6 +1260,7 @@ def _register_cacheable_iterable(registry, key, func):
         description=key,
         iterable_input_fields=["items"],
         iterable_output_field="results",
+        max_chunk_size=None,
         cacheable=True,
     )(func)
     return registry.get(key)
@@ -1311,6 +1312,7 @@ def test_tool_wrapper_dedup_skipped_without_cacheable(clean_registry):
         description="Non-cacheable iterable tool",
         iterable_input_fields=["items"],
         iterable_output_field="results",
+        max_chunk_size=None,
         cacheable=False,
     )
     def run_no_cache(inputs, config=None, instance=None):
@@ -1385,6 +1387,7 @@ def test_cacheable_iterable_full_hit_revalidates_unchecked_config(clean_registry
         description="Iterable cache boundary validation test",
         iterable_input_fields=["items"],
         iterable_output_field="results",
+        max_chunk_size=1,
         cacheable=True,
     )
     def run_tool(inputs, config=None, instance=None):
@@ -1814,6 +1817,211 @@ def test_preprocess_default_noop(clean_registry):
     assert result.result == "unchanged"
 
 
+def test_wrapper_executes_with_the_config_preprocess_returns(clean_registry):
+    """The wrapper runs the tool with preprocess's returned config, not the caller's."""
+
+    class ResolvingConfig(BaseConfig):
+        """Config whose preprocess resolves a setting without touching the caller's copy."""
+
+        resolved: bool = ConfigField(default=False, title="Resolved", description="Resolved flag")
+
+        def preprocess(self, inputs):
+            """Return a copy with resolved=True."""
+            return inputs, self.model_copy(update={"resolved": True})
+
+    @clean_registry.register(
+        key="preprocess-config-return-test",
+        label="Preprocess Config Return Test",
+        category="test",
+        input_class=MockToolInput,
+        config_class=ResolvingConfig,
+        output_class=MockToolOutput,
+        description="Test preprocess config return",
+    )
+    def run_tool(inputs, config=None, instance=None):
+        return MockToolOutput(result=str(config.resolved))
+
+    config = ResolvingConfig()
+    result = run_tool(MockToolInput(input_data="x"), config)
+
+    assert result.result == "True"  # execution saw the resolved copy
+    assert config.resolved is False  # the caller's config was left alone
+
+
+def test_preprocess_mutating_self_is_refused(clean_registry):
+    """A preprocess that assigns to self raises, naming the field and the fix."""
+
+    class MutatingConfig(BaseConfig):
+        """Config whose preprocess illegally assigns to self."""
+
+        resolved: bool = ConfigField(default=False, title="Resolved", description="Resolved flag")
+
+        def preprocess(self, inputs):
+            """Assign to self, which the runtime guard must refuse."""
+            self.resolved = True
+            return inputs, self
+
+    @clean_registry.register(
+        key="preprocess-mutation-guard-test",
+        label="Preprocess Mutation Guard Test",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MutatingConfig,
+        output_class=MockToolOutput,
+        description="Test preprocess mutation guard",
+    )
+    def run_tool(inputs, config=None, instance=None):
+        return MockToolOutput(result="unreachable")
+
+    with pytest.raises(TypeError, match="preprocess must not mutate its config"):
+        run_tool(MockToolInput(input_data="x"), MutatingConfig())
+
+
+def test_local_tool_reusing_one_config_preprocesses_every_call(clean_registry):
+    """A config reused across local calls prepares inputs every time, not just the first.
+
+    The completed marker rides on the config the wrapper executes with, so recording it on the
+    caller's object would make later calls believe the work was done and run on raw inputs. That
+    would skip whatever preprocess resolves, an MSA search or a model-based selection, with no
+    error. Nothing here is remote, which is why the local path needs its own guard.
+    """
+    calls: list[str] = []
+
+    class CountingConfig(BaseConfig):
+        """Config whose preprocess records each invocation and rewrites the input."""
+
+        def preprocess(self, inputs):
+            """Prepare the inputs, recording that this ran."""
+            calls.append(inputs.input_data)
+            return inputs.model_copy(update={"input_data": f"prepared:{inputs.input_data}"})
+
+    @clean_registry.register(
+        key="preprocess-config-reuse-test",
+        label="Preprocess Config Reuse Test",
+        category="test",
+        input_class=MockToolInput,
+        config_class=CountingConfig,
+        output_class=MockToolOutput,
+        description="Test that a reused config still preprocesses",
+    )
+    def run_tool(inputs, config=None, instance=None):
+        return MockToolOutput(result=inputs.input_data)
+
+    config = CountingConfig()
+    results = [run_tool(MockToolInput(input_data=item), config).result for item in ("a", "b", "c")]
+
+    assert results == ["prepared:a", "prepared:b", "prepared:c"]
+    assert calls == ["a", "b", "c"], "preprocess must run once per call, not once per config"
+    assert config._preprocess_completed is False, "the caller's config must not be marked spent"
+
+
+def test_config_assignment_allowed_outside_preprocess():
+    """The freeze is scoped to the preprocess call; normal assignment still works."""
+    config = MockToolConfig(param1="x")
+    config.param1 = "y"
+    assert config.param1 == "y"
+
+
+@pytest.mark.parametrize("returns_pair", [False, True], ids=["bare_inputs", "inputs_and_config"])
+def test_run_preprocess_normalizes_both_return_shapes(returns_pair):
+    """Both return shapes yield the pair: bare inputs keep the caller's settings, a pair the returned ones.
+
+    Neither shape hands back the caller's own object, since the returned config records that
+    preprocess has run and marking the caller's would make a later call reusing it skip preprocess.
+    """
+
+    class ShapeConfig(BaseConfig):
+        """Config whose preprocess returns one shape or the other."""
+
+        resolved: bool = ConfigField(default=False, title="Resolved", description="Resolved flag")
+
+        def preprocess(self, inputs):
+            """Return inputs alone, or inputs paired with a resolved copy."""
+            prepared = inputs.model_copy(update={"input_data": "prepared"})
+            if returns_pair:
+                return prepared, self.model_copy(update={"resolved": True})
+            return prepared
+
+    config = ShapeConfig()
+    inputs, used_config = run_preprocess(config, MockToolInput(input_data="x"))
+
+    assert inputs.input_data == "prepared"
+    assert used_config.resolved is returns_pair
+    assert used_config is not config
+    assert config._preprocess_completed is False
+
+
+def test_run_preprocess_freezes_configs_held_in_collections():
+    """A config nested inside a list field is frozen alongside one held directly."""
+
+    class Leaf(BaseConfig):
+        """Config held inside a collection."""
+
+        x: int = ConfigField(default=0, title="X", description="X")
+
+    class HoldsList(BaseConfig):
+        """Config holding configs in a list field."""
+
+        subs: list[Leaf] = ConfigField(default_factory=list, title="Subs", description="Subs")
+
+        def preprocess(self, inputs):
+            """Assign to a config inside a container field, which the guard must refuse."""
+            self.subs[0].x = 99
+            return inputs
+
+    config = HoldsList(subs=[Leaf()])
+    with pytest.raises(TypeError, match="preprocess must not mutate its config"):
+        run_preprocess(config, MockToolInput(input_data="x"))
+    assert config.subs[0].x == 0
+
+
+def test_run_preprocess_terminates_on_a_cyclic_model_graph():
+    """A self-referencing plain model reachable from the config does not loop the freeze walk."""
+
+    class Node(BaseModel):
+        """Plain model that can reference another instance."""
+
+        peer: "Node | None" = None
+
+    Node.model_rebuild()
+
+    class HoldsCycle(BaseConfig):
+        """Config holding a cyclic plain-model graph."""
+
+        node: Node = ConfigField(default_factory=Node, title="Node", description="Node")
+
+    first, second = Node(), Node()
+    first.peer = second
+    second.peer = first
+
+    inputs, used_config = run_preprocess(HoldsCycle(node=first), MockToolInput(input_data="x"))
+
+    assert inputs.input_data == "x"
+    assert isinstance(used_config, HoldsCycle)
+
+
+@pytest.mark.parametrize(
+    "returned,match",
+    [
+        (lambda inputs, cfg: (inputs, cfg, cfg), "3-tuple"),
+        (lambda inputs, cfg: (inputs, "not-a-config"), "must be a BaseConfig"),
+    ],
+    ids=["three_tuple", "second_element_not_a_config"],
+)
+def test_run_preprocess_rejects_malformed_returns(returned, match):
+    """A preprocess return that is neither inputs nor (inputs, config) fails with a clear error."""
+
+    class BadShapeConfig(BaseConfig):
+        """Config whose preprocess returns an unsupported shape."""
+
+        def preprocess(self, inputs):
+            """Return a shape the contract does not allow."""
+            return returned(inputs, self)
+
+    with pytest.raises(TypeError, match=match):
+        run_preprocess(BadShapeConfig(), MockToolInput(input_data="x"))
+
+
 # ── get_links / get_doi ──────────────────────────────────────────────────────
 
 
@@ -1938,6 +2146,7 @@ def _register_batch_aware_tool(registry, key, run_fn, hook):
         description=key,
         iterable_input_fields=["items"],
         iterable_output_field="results",
+        max_chunk_size=None,
         cacheable=True,
         post_process_iterable=hook,
     )(run_fn)
@@ -2073,6 +2282,7 @@ def test_iterable_dispatch_scales_config_timeout_by_item_count(clean_registry):
         description="mock",
         iterable_input_fields=["sequences"],
         iterable_output_field="processed_data",
+        max_chunk_size=None,
     )(run_fn)
 
     config = AnotherMockToolConfig(timeout=100)
@@ -2098,6 +2308,7 @@ def test_single_item_iterable_dispatch_does_not_scale_timeout(clean_registry):
         description="mock",
         iterable_input_fields=["sequences"],
         iterable_output_field="processed_data",
+        max_chunk_size=None,
     )(run_fn)
 
     config = AnotherMockToolConfig(timeout=100)
@@ -2123,6 +2334,7 @@ def test_iterable_dispatch_no_scaling_when_timeout_none(clean_registry):
         description="mock",
         iterable_input_fields=["sequences"],
         iterable_output_field="processed_data",
+        max_chunk_size=None,
     )(run_fn)
 
     config = AnotherMockToolConfig(timeout=None)
@@ -2158,6 +2370,7 @@ def test_iterable_dispatch_respects_effective_timeout_override(clean_registry):
         description="mock",
         iterable_input_fields=["sequences"],
         iterable_output_field="processed_data",
+        max_chunk_size=None,
     )(run_fn)
 
     config = UnboundedConfig(unbounded=True)
@@ -2166,3 +2379,56 @@ def test_iterable_dispatch_respects_effective_timeout_override(clean_registry):
         "effective_timeout() override returning None must be honored — scaling must not "
         "fire model_copy and contaminate model_fields_set"
     )
+
+
+class _BatchingConfig(BaseConfig):
+    """A config that batches — has a batch_size field, so max_chunk_size must be explicit."""
+
+    batch_size: int = ConfigField(default=8, ge=1, title="Batch Size", description="Items per forward pass")
+
+
+class _IterInput(BaseToolInput):
+    items: list[str] = Field(default_factory=list, description="Items to process")
+
+
+class _IterOutput(MockToolOutputBase):
+    results: list[str] = Field(default_factory=list, description="Per-item results")
+
+
+def test_batch_size_tool_accepts_explicit_max_chunk_size(clean_registry):
+    """A batching tool registers once max_chunk_size is given; 1 is allowed, it just must be stated."""
+
+    @clean_registry.register(
+        key="batching-ok",
+        label="Batching",
+        category="test",
+        input_class=_IterInput,
+        config_class=_BatchingConfig,
+        output_class=_IterOutput,
+        description="batches with explicit max_chunk_size",
+        iterable_input_fields=["items"],
+        iterable_output_field="results",
+        max_chunk_size=1,
+    )
+    def _f(inputs: _IterInput, config: _BatchingConfig) -> _IterOutput:
+        return _IterOutput(tool_id="batching-ok", execution_time=0.0, success=True, results=[])
+
+    assert clean_registry.get("batching-ok").max_chunk_size == 1
+
+
+def test_non_iterable_tool_rejects_max_chunk_size(clean_registry):
+    """max_chunk_size is meaningless without an iterable field, so it is refused there."""
+    with pytest.raises(ValueError, match="only valid for iterable tools"):
+
+        @clean_registry.register(
+            key="scalar-with-chunk",
+            label="Scalar",
+            category="test",
+            input_class=MockToolInput,
+            config_class=MockToolConfig,
+            output_class=MockToolOutput,
+            description="not iterable but sets max_chunk_size",
+            max_chunk_size=4,
+        )
+        def _f(inputs: MockToolInput, config: MockToolConfig) -> MockToolOutput:
+            return MockToolOutput(tool_id="scalar-with-chunk", execution_time=0.0, success=True, result="x")

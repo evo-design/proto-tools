@@ -1,1 +1,3 @@
 rc-foundry[rf3]==0.1.12
+cuequivariance<0.11
+cuequivariance-torch<0.11

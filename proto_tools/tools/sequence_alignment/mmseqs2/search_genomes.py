@@ -296,6 +296,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["query_genomes"],
     iterable_output_field="results",
+    max_chunk_size=32,
     cacheable=True,
 )
 def run_mmseqs2_search_genomes(

@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseConfig, BaseToolInput, BaseToolOutput, ConfigField, InputField
@@ -65,26 +65,42 @@ class MockIterableDeterministicConfig(BaseConfig):
     )
 
 
+class MockDeterministicScore(BaseModel):
+    """One per-prompt result.
+
+    Attributes:
+        score (str): Per-prompt deterministic argmax token for this prompt.
+    """
+
+    score: str = Field(title="Score", description="Per-prompt deterministic argmax token for this prompt")
+
+
 class MockIterableDeterministicOutput(BaseToolOutput):
     """Output from the deterministic iterable mock.
 
     Attributes:
-        scores (list[str]): Per-prompt scores, in input order. Each
-            score is the argmax-token of the prompt's logits — fully
-            determined by the prompt.
+        results (list[MockDeterministicScore]): One entry per prompt, in input order,
+            each holding the argmax-token of that prompt's logits — fully determined
+            by the prompt.
         items_processed (int): Number of items the tool function
             actually received in this call (before framework
             stitch/expand). For duplicate inputs to a deterministic
             iterable tool, this is the *deduped* count — strictly less
-            than ``len(scores)`` once the framework expands the
+            than ``len(results)`` once the framework expands the
             stitched output.
     """
 
-    scores: list[str] = Field(
+    results: list[MockDeterministicScore] = Field(
         default_factory=list,
-        title="Scores",
-        description="Per-prompt deterministic argmax tokens",
+        title="Results",
+        description="Per-prompt deterministic argmax token, one entry per prompt",
     )
+
+    @property
+    def scores(self) -> list[str]:
+        """The per-prompt values, in input order."""
+        return [result.score for result in self.results]
+
     items_processed: int = Field(
         default=0,
         title="Items Processed",
@@ -133,7 +149,8 @@ def example_input() -> MockIterableDeterministicInput:
     uses_gpu=False,
     example_input=example_input,
     iterable_input_fields=["prompts"],
-    iterable_output_field="scores",
+    iterable_output_field="results",
+    max_chunk_size=1,
     cacheable=True,
 )
 def run_mock_iterable_deterministic(
@@ -165,6 +182,6 @@ def run_mock_iterable_deterministic(
         scores.extend(batch_scores)
 
     return MockIterableDeterministicOutput(
-        scores=scores,
+        results=[MockDeterministicScore(score=v) for v in scores],
         items_processed=len(prompts),
     )

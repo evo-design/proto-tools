@@ -35,6 +35,28 @@ _REQUIRED_SECTIONS = [
 # Overview section length cap (characters of body text, excluding the heading).
 _OVERVIEW_MAX_CHARS = 600
 
+# Domains that are known-valid but unreliable for automated checks. Shared with
+# test_license_consistency.py so a host is excused, and later re-enabled, in one place.
+# - bio-pro.mintlify.app: our own docs site, assume it's up
+# - doi.org: permanent academic identifiers, never break but resolver is slow
+# - proteininformationresource.org: valid PIR database, intermittently slow in CI
+# - www.ensembl.org: genome browser homepage, intermittently slow in CI
+# - www.mirbase.org: canonical miRBase database, TLS handshake intermittently times out in CI
+# - smart.embl.de: canonical SMART domain database, intermittently times out in CI
+# - mafft.cbrc.jp: MAFFT's home and licence text, served from a single university host that
+#   refuses connections for long stretches; still the correct citation source
+SKIP_DOMAINS = frozenset(
+    {
+        "bio-pro.mintlify.app",
+        "doi.org",
+        "proteininformationresource.org",
+        "www.ensembl.org",
+        "www.mirbase.org",
+        "smart.embl.de",
+        "mafft.cbrc.jp",
+    }
+)
+
 # Permissive OSI / public-domain SPDX identifiers used to gate the fully-open License callout.
 _PERMISSIVE_SPDX = frozenset(
     {
@@ -1021,27 +1043,12 @@ def test_all_links_reachable(readme: Path) -> None:
     if not urls:
         return
 
-    # Skip domains that are known-valid but unreliable for automated checks.
-    # - bio-pro.mintlify.app: our own docs site, assume it's up
-    # - doi.org: permanent academic identifiers, never break but resolver is slow
-    # - proteininformationresource.org: valid PIR database, intermittently slow in CI
-    # - www.ensembl.org: genome browser homepage, intermittently slow in CI
-    # - www.mirbase.org: canonical miRBase database, TLS handshake intermittently times out in CI
-    # - smart.embl.de: canonical SMART domain database, intermittently times out in CI
-    _SKIP_DOMAINS = {
-        "bio-pro.mintlify.app",
-        "doi.org",
-        "proteininformationresource.org",
-        "www.ensembl.org",
-        "www.mirbase.org",
-        "smart.embl.de",
-    }
     # Self-references to this project's own repo; no need to validate our own links.
     _SKIP_SUBSTRINGS = ("proto-tools",)
 
     broken = []
     for lineno, url in urls:
-        if any(domain in url for domain in _SKIP_DOMAINS):
+        if any(domain in url for domain in SKIP_DOMAINS):
             continue
         if any(substring in url for substring in _SKIP_SUBSTRINGS):
             continue

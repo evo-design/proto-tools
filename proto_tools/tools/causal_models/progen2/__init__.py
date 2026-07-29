@@ -1,6 +1,7 @@
 """ProGen2 protein language model for sequence generation."""
 
 from proto_tools.tools.causal_models.progen2.progen2_sample import (
+    ProGen2Sample,
     ProGen2SampleConfig,
     ProGen2SampleInput,
     ProGen2SampleOutput,
@@ -14,6 +15,7 @@ from proto_tools.tools.causal_models.progen2.progen2_score import (
 )
 
 __all__ = [
+    "ProGen2Sample",
     # Tools layer - sampling
     "ProGen2SampleInput",
     "ProGen2SampleConfig",

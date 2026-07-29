@@ -3,11 +3,11 @@
 Routes the four operations exposed by this toolkit to the right helper:
 
 - ``protein_search`` — ``mmseqs easy-search``; optional ``--gpu 1`` when the
-  payload sets ``use_gpu`` and the target DB has a ``*.idx_pad`` index.
+  the dispatched ``device`` is a CUDA device and the target DB has a ``*.idx_pad`` index.
 - ``genome_search`` — ``createdb`` + ``search`` + ``convertalis`` workflow
   for nucleotide-vs-nucleotide search. CPU only.
 - ``clustering`` — ``mmseqs cluster`` greedy set-cover. CPU only.
-- ``homology_search`` — ColabFold-style iterative MSA pipeline; GPU by default
+- ``homology_search`` — ColabFold-style iterative MSA pipeline; GPU when dispatched
   via the upstream ``colabfold_search`` CLI shipped with this env.
 
 Communicates via JSON input/output files (one-shot CLI) or via the
@@ -25,13 +25,24 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import get_logger
+from standalone_helpers import get_logger, get_subprocess_device_env
 
 logger = get_logger(__name__)
 
 # ============================================================================
 # Shared helpers
 # ============================================================================
+
+
+def _device_uses_gpu(device: Any) -> bool:
+    """Whether the dispatched device selects MMseqs2-GPU."""
+    return str(device or "cpu").startswith("cuda")
+
+
+def _device_env(device: Any) -> dict[str, str]:
+    """Environment restricting a CLI subprocess to the dispatched device's physical GPU."""
+    env: dict[str, str] = get_subprocess_device_env(str(device or "cpu"))
+    return env
 
 
 def _find_binary(name: str = "mmseqs") -> str:
@@ -44,10 +55,10 @@ def _find_binary(name: str = "mmseqs") -> str:
     return str(binary)
 
 
-def _run_cmd(cmd: list[str], description: str) -> subprocess.CompletedProcess:  # type: ignore[type-arg]
-    """Run a subprocess command and raise on failure."""
+def _run_cmd(cmd: list[str], description: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:  # type: ignore[type-arg]
+    """Run a subprocess command and raise on failure; ``env`` pins it to a device when given."""
     try:
-        return subprocess.run(cmd, check=True, capture_output=True, text=True)
+        return subprocess.run(cmd, check=True, capture_output=True, text=True, env=env)
     except subprocess.CalledProcessError as e:
         stderr_tail = (e.stderr or "").strip().splitlines()
         raise RuntimeError(
@@ -117,13 +128,14 @@ def run_protein_search(input_data: dict[str, Any]) -> dict[str, Any]:
         input_data: Dict with keys: sequences, sequence_ids, mmseqs_db,
             target_sequences (mutually exclusive with mmseqs_db), threads,
             split, sensitivity, evalue, min_seq_id, coverage, cov_mode,
-            max_seqs, m8_columns, use_gpu (optional).
+            max_seqs, m8_columns, device (optional).
 
     Returns:
         Dict with keys: stdout (raw tab-separated m8 output)
     """
     mmseqs = _find_binary()
-    use_gpu = bool(input_data.get("use_gpu", False))
+    use_gpu = _device_uses_gpu(input_data.get("device"))
+    device_env = _device_env(input_data.get("device"))
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
@@ -186,7 +198,7 @@ def run_protein_search(input_data: dict[str, Any]) -> dict[str, Any]:
             cmd += ["--split-memory-limit", str(input_data["split_memory_limit"])]
         cmd.extend(str(arg) for arg in input_data.get("extra_args", []))
 
-        _run_cmd(cmd, "mmseqs easy-search")
+        _run_cmd(cmd, "mmseqs easy-search", env=device_env)
 
         m8_file = Path(m8_path)
         stdout = m8_file.read_text() if m8_file.exists() else ""
@@ -626,7 +638,7 @@ def run_homology_search(input_dict: dict[str, Any]) -> dict[str, Any]:
             Optional: ``sensitivity`` (float | None), ``prefilter_mode``
             (int | None), ``max_seqs`` (int | None), ``db_load_mode`` (int,
             default 0; 2 mmaps the sequence DB to cap resident memory),
-            ``extra_args`` (list[str]), ``use_gpu`` (bool, default False),
+            ``extra_args`` (list[str]), ``device`` (str, default ``"cpu"``),
             ``verbose`` (bool, default False),
             ``colabfold_timeout`` (float | None), ``use_metagenomic_db`` (bool,
             default False) plus ``env_dataset_dir`` / ``env_db_prefix`` (the
@@ -641,7 +653,7 @@ def run_homology_search(input_dict: dict[str, Any]) -> dict[str, Any]:
     output_dir = Path(input_dict["output_dir"])
     db_prefix: str | None = input_dict.get("db_prefix")
     num_threads: int = int(input_dict["num_threads"])
-    use_gpu: bool = bool(input_dict.get("use_gpu", False))
+    use_gpu: bool = _device_uses_gpu(input_dict.get("device"))
     verbose: bool = bool(input_dict.get("verbose", False))
     sensitivity = input_dict.get("sensitivity")
     prefilter_mode = input_dict.get("prefilter_mode")
@@ -707,7 +719,9 @@ def run_homology_search(input_dict: dict[str, Any]) -> dict[str, Any]:
         # Always capture so we can inspect stderr for known recovery markers
         # (e.g. "prof_res does not exist") regardless of verbose. When verbose
         # is set, replay captured streams to our own stdout/stderr at the end.
-        completed = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=timeout)
+        completed = subprocess.run(
+            cmd, check=True, capture_output=True, text=True, timeout=timeout, env=_device_env(input_dict.get("device"))
+        )
         if verbose:
             if completed.stdout:
                 print(completed.stdout)

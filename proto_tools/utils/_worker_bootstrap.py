@@ -306,9 +306,10 @@ def main() -> None:
                     if hasattr(module, "get_memory_stats"):
                         result = module.get_memory_stats()
                     else:
-                        # Graceful fallback if tool doesn't support get_memory_stats
+                        # Graceful fallback if tool doesn't support get_memory_stats; framework is
+                        # None because there is no ML runtime to report allocations from.
                         sys.stderr.write(f"[worker] Warning: {script_path} does not have get_memory_stats() function\n")
-                        result = {"available": False, "error": "get_memory_stats not supported"}
+                        result = {"available": False, "framework": None, "reason": "get_memory_stats not supported"}
                     result = _serialize(result)
                     response = {"id": request_id, "result": result}
                 else:

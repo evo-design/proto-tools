@@ -506,12 +506,12 @@ def test_progen2_sample_logits_returned():
     result = run_progen2_sample(inputs=inputs, config=config)
     validate_output(result)
 
-    assert result.logits is not None, "Logits should not be None when return_logits=True"
-    assert len(result.logits) == 2, f"Should have logits for 2 sequences, got {len(result.logits)}"
+    assert len(result.results) == 2, f"Should have 2 results, got {len(result.results)}"
 
-    for i, seq_logits in enumerate(result.logits):
-        assert len(seq_logits) > 0, f"Logits[{i}] should have at least one position"
-        assert len(seq_logits[0]) == 30, f"Logits vocab size should be 30, got {len(seq_logits[0])}"
+    for i, sample in enumerate(result.results):
+        assert sample.logits is not None, f"Logits[{i}] should not be None when return_logits=True"
+        assert len(sample.logits) > 0, f"Logits[{i}] should have at least one position"
+        assert len(sample.logits[0]) == 30, f"Logits vocab size should be 30, got {len(sample.logits[0])}"
 
 
 @pytest.mark.uses_gpu
@@ -529,7 +529,9 @@ def test_progen2_sample_logits_not_returned_by_default():
     result = run_progen2_sample(inputs=inputs, config=config)
     validate_output(result)
 
-    assert result.logits is None, f"Logits should be None when return_logits=False, got {type(result.logits)}"
+    assert all(sample.logits is None for sample in result.results), (
+        "Logits should be None on every result when return_logits=False"
+    )
 
 
 # ── Benchmarks ──────────────────────────────────────────────────────────────

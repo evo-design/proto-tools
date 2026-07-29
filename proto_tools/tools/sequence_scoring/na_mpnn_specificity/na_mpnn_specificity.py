@@ -17,6 +17,7 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
+from proto_tools.utils.device import RemoteDevice
 
 logger = logging.getLogger(__name__)
 
@@ -169,9 +170,9 @@ class NAMPNNSpecificityConfig(BaseConfig):
     )
     batch_size: int = ConfigField(
         title="Batch Size",
-        default=1,
+        default=8,
         ge=1,
-        description="Batch size used for each NA-MPNN prediction pass",
+        description="Sequences per GPU forward pass; raise for throughput, lower if OOM",
     )
     number_of_batches: int = ConfigField(
         title="Num Batches",
@@ -207,11 +208,11 @@ class NAMPNNSpecificityConfig(BaseConfig):
         description="Keep intermediate raw NA-MPNN output directories",
     )
 
-    def cloud_unsupported_reason(self) -> str | None:
+    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
         """NA-MPNN needs a local repo checkout + checkpoint that can't be staged to cloud."""
         return (
             "NA-MPNN requires a local repository checkout and checkpoint on disk, which "
-            "can't be staged to device='cloud'. Run locally with device='cuda' or 'cpu'."
+            f"can't be staged to device='{device}'. Run locally with device='cuda' or 'cpu'."
         )
 
 
@@ -235,6 +236,7 @@ def example_input() -> NAMPNNSpecificityInput:
     example_input=example_input,
     iterable_input_fields=["pdb_paths"],
     iterable_output_field="results",
+    max_chunk_size=32,
 )
 def run_na_mpnn_specificity(
     inputs: NAMPNNSpecificityInput,

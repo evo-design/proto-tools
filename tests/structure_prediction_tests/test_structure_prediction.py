@@ -72,6 +72,7 @@ from proto_tools.utils.tool_cache import (
     get_cache_info,
 )
 from proto_tools.utils.tool_instance import ToolInstance
+from tests.sequence_alignment_tests.test_mmseqs2_homology_search import FixtureDbConfig
 from tests.structure_prediction_tests._fasta_helpers import load_all_test_complexes
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
@@ -628,13 +629,8 @@ def _mini_db_skip_reason() -> str | None:
 
 
 def _build_local_mmseqs2_config() -> Mmseqs2HomologySearchConfig:
-    # tiny-test-colabfold is excluded from the product `dataset` Literal so it isn't a selectable option; use model_construct to bypass the enum validator. CPU because the mmseqs2-homology-search subprocess can't see the GPU under pytest's DeviceManager mask.
-    return Mmseqs2HomologySearchConfig.model_construct(
-        search_mode="local",
-        dataset=_MSA_TEST_DATASET,
-        use_gpu=False,
-        verbose=False,
-    )
+    # CPU because the mmseqs2-homology-search subprocess can't see the GPU under pytest's DeviceManager mask.
+    return FixtureDbConfig(search_mode="local", device="cpu", verbose=False)
 
 
 @pytest.fixture(scope="module")

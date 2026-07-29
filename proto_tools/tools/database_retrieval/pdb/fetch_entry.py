@@ -89,7 +89,8 @@ class PdbFetchEntryOutput(BaseToolOutput):
         raise ValueError(f"Unsupported format: {file_format}")
 
 
-PdbFetchEntryConfig = PdbFetchConfig
+class PdbFetchEntryConfig(PdbFetchConfig):
+    """Configuration for PDB entry metadata fetches (no user-facing settings)."""
 
 
 # ============================================================================
@@ -107,7 +108,7 @@ def example_input() -> Any:
     label="PDB Fetch Entry",
     category="database_retrieval",
     input_class=PdbFetchEntryInput,
-    config_class=PdbFetchConfig,
+    config_class=PdbFetchEntryConfig,
     output_class=PdbFetchEntryOutput,
     description="Fetch structure metadata (title, method, resolution) from RCSB PDB",
     uses_gpu=False,

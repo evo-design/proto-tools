@@ -84,6 +84,7 @@ def example_input() -> AbLangScoringInput:
     example_input=example_input,
     iterable_input_fields=["antibodies"],
     iterable_output_field="scores",
+    max_chunk_size=32,
     cacheable=True,
 )
 def run_ablang_score(

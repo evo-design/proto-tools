@@ -199,11 +199,15 @@ The duplicates in the same internal batch (`[s1, s1]`) diverge because the tool'
 
 Three invariants underpin the design.
 
-### 1. The seed is set once per dispatch, not per element
+### 1. The seed is set once per execution, not per element
 
-The framework MUST NOT call `set_torch_seed`, derive per-item seeds, or otherwise inject seed manipulation between batch elements. The seed that enters a `stochastic=True` tool's inference is the user-supplied `config.seed` (or a fresh random base when `seed is None`), set **once** at the top of the tool's inference.
+The framework MUST NOT call `set_torch_seed`, derive per-item seeds, or otherwise inject seed manipulation between batch elements. The seed that enters a `stochastic=True` tool's inference is whatever `config.seed` holds (or a fresh random base when `seed is None`), set **once** at the top of the tool's inference.
 
-**Enforcement:** architectural. `tool_registry.py` does not contain unroll/re-seed logic. Re-introducing it should be visible at code-review time.
+One execution is not always one call. A batch that exceeds `max_chunk_size` is split across several remote executions, and `ToolPool` partitions a batch across local workers, so what the caller made as one call can become several. Each piece is an independent execution that seeds from scratch, so pieces sharing one seed would put items at matching positions in the same RNG state — exactly the diversity invariant 2 provides.
+
+The framework therefore gives each piece a seed derived from the index of its first item, via `derive_chunk_seed` in `fanout.py`. The piece holding item 0 keeps the caller's seed, so a batch that is never split is unchanged. A tool sees an ordinary `config.seed` and needs no awareness that its batch was split, which keeps the derivation working for a remote device, the local pool, and the MCP surface alike.
+
+**Enforcement:** architectural for the per-element prohibition — `tool_registry.py` contains no unroll/re-seed logic, and re-introducing it should be visible at code-review time. Functional for the derivation: `test_remote_device_pipeline.py` and `test_tool_pool.py` assert that pieces of a seeded batch receive distinct seeds and that a deterministic tool receives one.
 
 ### 2. Per-item diversification is the tool's responsibility
 
@@ -233,7 +237,8 @@ A few subtleties worth knowing:
 
 1. **Ordering matters.** Reproducibility holds for `(inputs in order, config)`. `[i1, i2, i3]` and `[i2, i1, i3]` with the same seed produce different outputs because per-item RNG advancement is sequential.
 2. **Bit-exact reproducibility on GPU is not promised.** Float noise from fused kernels, cuDNN autotune, and bfloat16 reductions can cause small variation between runs. `BaseToolOutput.approx_equal` (used by `test_seed_reproducibility.py`) handles this contractually.
-3. **Per-item cache is incompatible with skip-dedup for `stochastic=True` tools.** Per-item cache keys are position-independent (`(item, config)`), but for stochastic tools two identical items in one call produce different outputs (per-item RNG advancement), so caching item 0's result as `(i1, seed=2)` and later reusing it at position 1 would be wrong. Stochastic tools therefore use whole-call cache only (key = `(full_input_iterable, config)`), not per-item cache. The realistic call pattern for samplers doesn't exercise partial-batch re-runs, so the loss is minimal.
+3. **How a batch was split is part of the result.** Splitting re-bases each piece's seed, so a stochastic batch run at `max_chunk_size=8` does not match the same batch run whole, or across two local workers rather than four. Matching an unsplit run would mean knowing how many draws each item consumed, which is internal to the tool. Reproducibility holds for a given seed, batch, and split, and the whole-call cache key includes `max_chunk_size` so a stored result is never returned for a size that did not produce it.
+4. **Per-item cache is incompatible with skip-dedup for `stochastic=True` tools.** Per-item cache keys are position-independent (`(item, config)`), but for stochastic tools two identical items in one call produce different outputs (per-item RNG advancement), so caching item 0's result as `(i1, seed=2)` and later reusing it at position 1 would be wrong. Stochastic tools therefore use whole-call cache only (key = `(full_input_iterable, config)`), not per-item cache. The realistic call pattern for samplers doesn't exercise partial-batch re-runs, so the loss is minimal.
 
 ## Testing
 

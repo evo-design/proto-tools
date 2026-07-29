@@ -104,6 +104,24 @@ Based on official sources (PyTorch RELEASE.md, JAX docs, NVIDIA CUDA compatibili
 
 See `tests/tool_infra_tests/test_compute_deps.py` for comprehensive test coverage.
 
+## Hosted execution
+
+`PROTO_IS_HOSTED_ENV=1` marks a process running tools for someone else — a proto-modal container
+today, the proto service later. Set by whichever environment hosts them; proto-tools only reads it.
+
+Such an environment cannot stage a large corpus on demand, and proto-modal rules a tool needing one
+out of scope. A config declares its own adjustment by overriding `BaseConfig.for_hosted_env`,
+returning a copy with whatever setting has to give way; the default returns it unchanged.
+`run_preprocess` applies it before freezing. `MSAStructurePredictionConfig` overrides it to force
+`search_mode="remote"`, since `uniref30-2302` is hundreds of gigabytes.
+
+Only fires when `preprocess` runs in the hosted process, so the Python API is unaffected — those
+callers prepare the work on their own machine. It fires on the MCP path.
+
+A remote search uses a different database, so a hosted prediction will not match a local one. That
+is logged, but the log does not reach the output's `warnings`: `preprocess` runs before the wrapper
+starts capturing them.
+
 ## Debugging Env Setup (`PROTO_ENV_VERBOSE`, `PROTO_ENV_LOG_DIR`)
 
 When `ToolInstance._create_env()` runs `standalone/setup.sh` to build a tool's venv, the subprocess output is normally captured quietly and only surfaced on failure (via `STATUS.txt` and the raised `RuntimeError`). Two env vars opt into richer visibility:

@@ -110,6 +110,7 @@ def example_input() -> AbLangEmbeddingsInput:
     example_input=example_input,
     iterable_input_fields=["antibodies"],
     iterable_output_field="results",
+    max_chunk_size=32,
     cacheable=True,
     post_process_iterable=attach_projections,
 )

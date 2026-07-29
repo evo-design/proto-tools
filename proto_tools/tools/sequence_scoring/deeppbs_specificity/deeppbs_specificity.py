@@ -17,6 +17,7 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
+from proto_tools.utils.device import RemoteDevice
 
 logger = logging.getLogger(__name__)
 
@@ -101,11 +102,11 @@ class DeepPBSSpecificityConfig(BaseConfig):
         include_in_key=False,
     )
 
-    def cloud_unsupported_reason(self) -> str | None:
+    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
         """DeepPBS needs a local repository and X3DNA install not staged to cloud."""
         return (
             "DeepPBS requires a local DeepPBS checkout and its bundled X3DNA install, "
-            "which are not available on device='cloud'. Run locally with device='cpu'."
+            f"which are not available on device='{device}'. Run locally with device='cpu'."
         )
 
 
@@ -244,6 +245,7 @@ def example_input() -> DeepPBSSpecificityInput:
     uses_gpu=True,
     iterable_input_fields=["pdb_paths"],
     iterable_output_field="results",
+    max_chunk_size=64,
 )
 def run_deeppbs_specificity(
     inputs: DeepPBSSpecificityInput,

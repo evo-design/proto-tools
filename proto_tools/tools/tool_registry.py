@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import difflib
+import functools
 import logging
 import math
 import os
@@ -71,10 +72,21 @@ def _should_capture_errors() -> bool:
     return os.environ.get(_CAPTURE_ERRORS_ENV_VAR, "0") == "1"
 
 
-from proto_tools.utils import BaseConfig
+from proto_tools.utils import BaseConfig, run_preprocess
+from proto_tools.utils.base_config import RANDOM_SEED_UPPER_BOUND
 from proto_tools.utils.device import (
+    is_remote_device,
     parse_device_string,
     validate_device_allocation,
+)
+from proto_tools.utils.fanout import (
+    FailedItem,
+    chunk_indices,
+    derive_chunk_seed,
+    is_fatal_dispatch_error,
+    item_costs,
+    merge_piece_outputs,
+    on_partial_failure,
 )
 from proto_tools.utils.progress import (
     reset_current_tool_function,
@@ -94,6 +106,10 @@ from proto_tools.utils.tool_instance import ToolInstance
 from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, Metrics, MissingAssetError
 
 ToolDispatchBackend = Callable[[str, BaseToolInput, BaseConfig], BaseToolOutput | None]
+
+# Distinguishes "the author omitted max_chunk_size" from "the author chose None", which is a
+# real choice meaning the whole batch goes to one execution.
+_UNSET_CHUNK_SIZE = -1
 
 # ---------------------------------------------------------------------------
 # Parallel iterable-field helpers
@@ -146,6 +162,404 @@ def _apply_iter_items(inputs: Any, fields: list[str], items: list[_ParallelItem]
     """Rebuild ``inputs`` with each parallel field set from the bundles (kept aligned)."""
     update: dict[str, Any] = {f: [it.values[j] for it in items] for j, f in enumerate(fields)}
     return inputs.model_copy(update=update)
+
+
+def _config_for_chunk(config: BaseConfig, spec: ToolSpec, offset: int) -> BaseConfig:
+    """Config for the chunk starting at ``offset``, re-seeded when the tool is stochastic.
+
+    A stochastic tool seeds once per execution, so every chunk of one batch would otherwise
+    start from the same RNG state and items at matching positions would draw identically.
+    Giving each chunk a derived seed keeps the batch as varied as it was unsplit.
+
+    The chunk sees an ordinary ``config.seed``, so a tool needs no awareness of chunking and
+    the derivation applies equally to a remote device and the local worker pool. Returns the
+    caller's config unchanged for a deterministic tool, an unseeded call, or the first chunk.
+
+    Args:
+        config (BaseConfig): Config the batch was called with.
+        spec (ToolSpec): Tool spec, consulted for ``stochastic``.
+        offset (int): Index of the chunk's first item within the original batch.
+
+    Returns:
+        BaseConfig: Config to execute this chunk with.
+    """
+    if not spec.stochastic or config.seed is None:
+        return config
+    derived = derive_chunk_seed(config.seed, offset, RANDOM_SEED_UPPER_BOUND)
+    return config if derived == config.seed else config.model_copy(update={"seed": derived})
+
+
+class _PartialChunkFailure(RuntimeError):
+    """Carries a partly-successful split batch from the chunk dispatcher up to the wrapper.
+
+    Internal, and never seen by a caller. The dispatcher knows which chunks survived but not how
+    the batch was deduplicated or cache-stripped on the way in, so it cannot name the positions a
+    caller would recognise. The wrapper owns that translation, stores the successes, and then
+    applies ``config.on_partial_failure``.
+
+    Attributes:
+        succeeded: ``(dispatch_index, item)`` for each item that came back.
+        failed: One entry per failed chunk, shaped as :class:`PartialFailureError` expects.
+        merged_output: The surviving chunks stitched into one output, with ``None`` at each failed
+            position, or ``None`` when no chunk survived.
+        stats: The split's ``dispatch_stats``.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        succeeded: list[tuple[int, Any]],
+        failed: list[dict[str, Any]],
+        merged_output: BaseToolOutput | None,
+        stats: dict[str, Any],
+    ) -> None:
+        """Build the carrier."""
+        super().__init__(message)
+        self.succeeded = succeeded
+        self.failed = failed
+        self.merged_output = merged_output
+        self.stats = stats
+
+
+def _partial_failure_message(
+    key: str, n_failed_chunks: int, n_chunks: int, failures: list[dict[str, Any]], n_ok_items: int
+) -> str:
+    """One-line summary naming the scale of the loss and the first cause."""
+    n_failed_items = sum(len(f["indices"]) for f in failures)
+    first = failures[0]["exception"]
+    detail = str(first).splitlines()[0] if str(first) else "<no message>"
+    if len(detail) > 200:
+        detail = detail[:200] + "..."
+    return (
+        f"{key}: {n_failed_chunks}/{n_chunks} chunk(s) failed "
+        f"({n_failed_items} items lost, {n_ok_items} succeeded); "
+        f"first failure: {type(first).__name__}: {detail}"
+    )
+
+
+def _placeholder_items(total: int, succeeded: list[tuple[int, Any]], failed: list[dict[str, Any]]) -> list[Any]:
+    """Items in batch order, with a :class:`FailedItem` wherever a chunk failed.
+
+    Keeps the list the same length as the input so a caller can still line results up against what
+    they sent; omitting the failures would silently shift every position after the first gap. The
+    placeholder names why its position is empty rather than leaving the caller to guess.
+    """
+    items: list[Any] = [None] * total
+    for index, item in succeeded:
+        items[index] = item
+    for failure in failed:
+        reason = f"{type(failure['exception']).__name__}: {failure['exception']}"
+        for index in failure["indices"]:
+            items[index] = FailedItem(error=reason)
+    return items
+
+
+def _translate_indices(indices: list[int], strip: CacheStripResult | None, deduped: Any | None) -> list[int]:
+    """Map positions in the dispatched batch back to the caller's own positions.
+
+    Dedup and the per-item cache both shorten the batch before dispatch, so position 3 as
+    dispatched is rarely position 3 as sent. A caller cannot act on positions in a list it never
+    saw, so every index that reaches them is translated first.
+
+    Args:
+        indices (list[int]): Positions within the batch as dispatched.
+        strip (CacheStripResult | None): Cache-strip result, when items were cached.
+        deduped (Any | None): Dedup result, when duplicates were collapsed.
+
+    Returns:
+        list[int]: The caller's positions, ascending. One dispatched item can map to several when
+            duplicates were collapsed onto it.
+    """
+    unique = [strip.uncached_indices[i] for i in indices] if strip is not None else list(indices)
+    if not deduped:
+        return sorted(unique)
+    wanted = set(unique)
+    return sorted(original for original, unique_index in deduped.index_map if unique_index in wanted)
+
+
+def _translate_to_caller_indices(
+    succeeded: list[tuple[int, Any]], strip: CacheStripResult | None, deduped: Any | None
+) -> list[tuple[int, Any]]:
+    """Re-index successful items onto the caller's positions, expanding collapsed duplicates."""
+    out: list[tuple[int, Any]] = [
+        (original, item)
+        for dispatch_index, item in succeeded
+        for original in _translate_indices([dispatch_index], strip, deduped)
+    ]
+    return sorted(out, key=lambda pair: pair[0])
+
+
+def _cache_partial_successes(
+    key: str,
+    spec: ToolSpec | None,
+    is_cacheable: bool,
+    stochastic_tool: bool,
+    strip: CacheStripResult | None,
+    partial: _PartialChunkFailure,
+) -> None:
+    """Store the items that came back, so a retry only pays for the chunks that failed.
+
+    Skipped for a stochastic tool, which uses the whole-call cache rather than per-item entries
+    (see the dedup gate in the wrapper) and has no correct partial entry to write.
+    """
+    if not (is_cacheable and spec and spec.iterable_input_fields) or stochastic_tool:
+        return
+    if strip is None or not partial.succeeded:
+        return
+    cache_keys = [strip.cache_keys[i] for i, _ in partial.succeeded]
+    cache_store_items(key, cache_keys, [item for _, item in partial.succeeded])
+    logger.debug("Tool %s: cached %d item(s) from chunks that survived", key, len(cache_keys))
+
+
+def _is_retryable_chunk_error(exc: BaseException) -> bool:
+    """Whether a failed chunk is worth sending again.
+
+    Deliberately narrow. A chunk that came back malformed, or that the tool rejected, fails the
+    same way on a second attempt, and #100 shows a container whose CUDA context is poisoned fails
+    every later request — so retrying either one buys nothing and is billed for the attempt.
+    ``TimeoutError`` stays out for the reason given at :data:`_RETRYABLE_EXCEPTIONS`.
+    """
+    return isinstance(exc, _RETRYABLE_EXCEPTIONS) or _is_transient_gpu_acquisition_error(exc)
+
+
+def _run_chunks_with_retry(
+    key: str,
+    chunks: list[BaseToolInput],
+    configs: list[BaseConfig],
+    dispatch_one: Callable[[BaseToolInput, BaseConfig], BaseToolOutput],
+    dispatch_many: Callable[[list[BaseToolInput], list[BaseConfig]], list[BaseToolOutput | Exception]] | None,
+) -> tuple[list[BaseToolOutput | Exception], int]:
+    """Dispatch every chunk, resending only those that failed transiently.
+
+    Retries the failed chunks rather than the batch, so a chunk that already succeeded is never
+    paid for twice. A retried chunk keeps its own config, so its derived seed is unchanged and a
+    stochastic result stays reproducible.
+
+    Args:
+        key (str): Registry key, used in messages.
+        chunks (list[BaseToolInput]): One input per chunk.
+        configs (list[BaseConfig]): One config per chunk, positionally aligned with ``chunks``.
+        dispatch_one (Callable[[BaseToolInput, BaseConfig], BaseToolOutput]): Sends one input,
+            returning one output.
+        dispatch_many (Callable[[list[BaseToolInput], list[BaseConfig]], list[BaseToolOutput | Exception]] | None):
+            Sends several at once, returning one entry per input: an output, or the exception
+            that chunk hit.
+
+    Returns:
+        tuple[list[BaseToolOutput | Exception], int]: One entry per chunk — an output or the
+            exception it ended on — and the number of retry rounds spent.
+    """
+
+    def attempt(indices: list[int]) -> dict[int, BaseToolOutput | Exception]:
+        """Run the chunks at ``indices``, returning an output or exception for each."""
+        if dispatch_many:
+            try:
+                returned = list(dispatch_many([chunks[i] for i in indices], [configs[i] for i in indices]))
+            except Exception as exc:
+                if is_fatal_dispatch_error(exc):
+                    raise
+                # The batch call itself failed, so nothing came back to attribute per chunk and
+                # every chunk in it is marked failed. Retrying then resends all of them, not only
+                # those that would have failed individually: "retry just the failures" holds while
+                # the dispatcher reports per-entry exceptions, which both endpoints do.
+                return dict.fromkeys(indices, exc)
+            if len(returned) != len(indices):
+                error = ValueError(f"{key}: dispatched {len(indices)} chunk(s) but received {len(returned)} result(s)")
+                return dict.fromkeys(indices, error)
+            return dict(zip(indices, returned, strict=True))
+
+        outcomes: dict[int, BaseToolOutput | Exception] = {}
+        for i in indices:
+            try:
+                outcomes[i] = dispatch_one(chunks[i], configs[i])
+            except Exception as exc:  # noqa: PERF203 -- one chunk's failure must not end the batch
+                if is_fatal_dispatch_error(exc):
+                    raise
+                outcomes[i] = exc
+        return outcomes
+
+    results: dict[int, BaseToolOutput | Exception] = attempt(list(range(len(chunks))))
+    for outcome in results.values():
+        if isinstance(outcome, Exception) and is_fatal_dispatch_error(outcome):
+            raise outcome
+    retries = 0
+    for _ in range(MAX_RETRIES):
+        pending = [
+            i for i, outcome in results.items() if isinstance(outcome, Exception) and _is_retryable_chunk_error(outcome)
+        ]
+        if not pending:
+            break
+        delay = RETRY_DELAY * (2**retries)
+        logger.warning(
+            "Tool %s: %d chunk(s) hit a transient failure, retrying in %.1fs (round %d/%d)",
+            key,
+            len(pending),
+            delay,
+            retries + 1,
+            MAX_RETRIES,
+        )
+        time.sleep(delay)
+        retries += 1
+        results.update(attempt(pending))
+
+    return [results[i] for i in range(len(chunks))], retries
+
+
+def _dispatch_remote_in_chunks(
+    key: str,
+    spec: ToolSpec | None,
+    inputs: BaseToolInput,
+    config: BaseConfig,
+    dispatch_one: Callable[[BaseToolInput, BaseConfig], BaseToolOutput],
+    dispatch_many: Callable[[list[BaseToolInput], list[BaseConfig]], list[BaseToolOutput | Exception]] | None,
+) -> BaseToolOutput:
+    """Send a batch to a remote device, split across executions by ``max_chunk_size``.
+
+    One execution per chunk lets a remote device run chunks concurrently rather than working
+    through the batch in a single container. A tool that declares no ``max_chunk_size`` keeps
+    the whole batch in one execution, as does any batch that fits within one chunk, so the
+    single-chunk path is exactly what it was before chunking existed.
+
+    Each chunk carries its own config so a stochastic tool can be given a seed derived from
+    where the chunk starts. The tool itself is unchanged: it reads ``config.seed`` as always,
+    and only the framework knows the batch was split.
+
+    Args:
+        key (str): Registry key, used in messages.
+        spec (ToolSpec | None): Tool spec supplying the iterable fields and chunk size.
+        inputs (BaseToolInput): Prepared inputs, already deduplicated and cache-stripped.
+        config (BaseConfig): Config to execute with.
+        dispatch_one (Callable[[BaseToolInput, BaseConfig], BaseToolOutput]): Sends one input,
+            returning one output.
+        dispatch_many (Callable[[list[BaseToolInput], list[BaseConfig]], list[BaseToolOutput | Exception]] | None):
+            Sends several inputs at once, one config per input. When absent, chunks go
+            through ``dispatch_one`` in turn, which still bounds how much work one execution
+            receives even though it does not overlap them.
+
+    Returns:
+        BaseToolOutput: One output covering the whole batch, items in original order.
+    """
+    if spec is None or not spec.iterable_input_fields or not spec.iterable_output_field:
+        return dispatch_one(inputs, config)
+
+    fields = _active_iter_fields(inputs, spec)
+    if not fields:
+        return dispatch_one(inputs, config)
+
+    items = _zip_iter_items(inputs, fields)
+    # ``values[0]`` is the primary field, which is what a tool's ``item_cost`` is written against;
+    # the pool reads the same column. A tool declaring no cost reports 1.0 and the split is by count.
+    costs = item_costs(type(inputs), [item.values[0] for item in items])
+    spans = chunk_indices(len(items), spec.max_chunk_size, costs)
+    if len(spans) <= 1:
+        return dispatch_one(inputs, config)
+
+    chunks = [_apply_iter_items(inputs, fields, items[start:stop]) for start, stop in spans]
+    configs = [_config_for_chunk(config, spec, start) for start, _ in spans]
+    logger.debug("Tool %s: fanning %d item(s) across %d chunk(s)", key, len(items), len(chunks))
+
+    outcomes, retries = _run_chunks_with_retry(key, chunks, configs, dispatch_one, dispatch_many)
+
+    # A chunk is all-or-nothing: the count check below rejects a short one, so what survives here
+    # is a complete validated output. That is what makes caching a survivor safe.
+    field = spec.iterable_output_field
+    ok: list[BaseToolOutput] = []
+    ok_spans: list[tuple[int, int]] = []
+    failures: list[dict[str, Any]] = []
+    for span, outcome in zip(spans, outcomes, strict=True):
+        indices = list(range(*span))
+        if isinstance(outcome, Exception):
+            failures.append({"device_id": str(config.device), "indices": indices, "exception": outcome})
+            continue
+        returned = len(getattr(outcome, field, []))
+        if returned != span[1] - span[0]:
+            error = ValueError(
+                f"{key}: chunk of {span[1] - span[0]} item(s) starting at {span[0]} returned "
+                f"{returned} item(s) in {field!r}."
+            )
+            failures.append({"device_id": str(config.device), "indices": indices, "exception": error})
+            continue
+        ok.append(outcome)
+        ok_spans.append(span)
+
+    # How the batch was split is otherwise invisible to the caller, who asked for one call and
+    # cannot tell from the output that it became several. `ToolPool` reports the same thing for
+    # its partitions. The rest of the metadata is one chunk's, as it is on the pool side.
+    stats: dict[str, Any] = {
+        "total_items": len(items),
+        "chunks": len(chunks),
+        "chunk_sizes": [stop - start for start, stop in spans],
+        "device": str(config.device),
+    }
+    if retries:
+        stats["retry_rounds"] = retries
+    if failures:
+        stats["failed_chunks"] = len(failures)
+        stats["failed_items"] = sum(len(f["indices"]) for f in failures)
+
+    def merged(results: list[BaseToolOutput], merged_items: list[Any]) -> BaseToolOutput:
+        """Stitch the surviving chunks into one output carrying the split's stats."""
+        metadata = dict(results[0].metadata or {})
+        metadata["dispatch_stats"] = stats
+        return merge_piece_outputs(
+            key, f"device={config.device}", field, results, merged_items, extra_updates={"metadata": metadata}
+        )
+
+    if not failures:
+        return merged(ok, [item for result in ok for item in getattr(result, field, [])])
+
+    # Indices here are positions in the batch as dispatched. The wrapper translates them back
+    # through cache-strip and dedup before a caller sees them.
+    succeeded: list[tuple[int, Any]] = [
+        (index, item)
+        for span, result in zip(ok_spans, ok, strict=True)
+        for index, item in zip(range(*span), getattr(result, field, []), strict=True)
+    ]
+    raise _PartialChunkFailure(
+        _partial_failure_message(key, len(failures), len(chunks), failures, len(succeeded)),
+        succeeded=succeeded,
+        failed=failures,
+        merged_output=merged(ok, _placeholder_items(len(items), succeeded, failures)) if ok else None,
+        stats=stats,
+    )
+
+
+def _invariant_output_fields(output_class: type[BaseToolOutput], spec: ToolSpec) -> list[str]:
+    """Output fields other than the per-item list, i.e. those invariant across items."""
+    return [
+        name
+        for name in output_class.model_fields
+        if name not in BaseToolOutput.model_fields and name != spec.iterable_output_field
+    ]
+
+
+def _get_output_template(key: str, template_cache_key: str) -> BaseToolOutput | None:
+    """Fetch the stored output shell carrying this tool's invariant fields, if any."""
+    cache = _program_tool_cache.get()
+    if cache is None:
+        return None
+    return cache.get(f"{key}::template", template_cache_key)
+
+
+def _store_output_template(key: str, template_cache_key: str, spec: ToolSpec, result: BaseToolOutput) -> None:
+    """Store an output shell with the per-item lists emptied.
+
+    A full per-item cache hit skips dispatch, so fields that are invariant across items have no
+    computed result to come from. Keeping this shell lets that path rebuild a complete output.
+    """
+    cache = _program_tool_cache.get()
+    if cache is None:
+        return
+    assert spec.iterable_output_field is not None  # iterable tools only
+    cache.set(f"{key}::template", template_cache_key, result.model_copy(update={spec.iterable_output_field: []}))
+
+
+def _template_cache_key(key: str, inputs: Any, spec: ToolSpec, config: Any) -> str:
+    """Cache key for a tool's invariant output fields, which vary with config, not with items."""
+    iter_fields = set(spec.iterable_input_fields or [])
+    non_iterable = {name: getattr(inputs, name, None) for name in type(inputs).model_fields if name not in iter_fields}
+    return _generate_cache_key(f"{key}::template", non_iterable, config)
 
 
 class ToolSpec(BaseModel):
@@ -256,6 +670,16 @@ class ToolSpec(BaseModel):
         exclude=True,
         description="Output field name containing the iterable list of results (for ToolPool fan-out)",
     )
+    max_chunk_size: int | None = Field(
+        default=None,
+        exclude=True,
+        description=(
+            "Largest number of iterable items sent to one worker per call when fanning out "
+            "(e.g. across Modal containers); the framework may hand out a smaller chunk but never "
+            "a larger one. Set iff the tool is iterable. Required to be explicit when the config has "
+            "a batch_size field (a tool that batches must state its granularity); otherwise defaults to 1."
+        ),
+    )
     cacheable: bool = Field(
         default=False,
         exclude=True,
@@ -303,9 +727,11 @@ class ToolSpec(BaseModel):
     def local_cpu(self) -> bool:
         """Whether this tool runs trivially in-process on CPU.
 
-        ``True`` iff ``uses_gpu=False`` and ``has_standalone_env=False``;
-        ``device='cloud'`` is a no-op for these tools. Opt out by giving the
-        tool a ``standalone/`` directory.
+        ``True`` iff ``uses_gpu=False`` and ``has_standalone_env=False``, meaning there is
+        nothing to accelerate and nothing to build. Every remote device is a no-op for these
+        tools, since a worker can offer them nothing the calling process cannot. Opt out by
+        giving the tool a ``standalone/`` directory, which is why the CPU tools that are
+        deployed remotely are excluded: that environment is what makes remote worthwhile.
         """
         return not self.uses_gpu and not self.has_standalone_env
 
@@ -398,6 +824,7 @@ class ToolRegistry:
         example_input: Callable[[], BaseToolInput] | None = None,
         iterable_input_fields: list[str] | None = None,
         iterable_output_field: str | None = None,
+        max_chunk_size: int | None = _UNSET_CHUNK_SIZE,
         cacheable: bool = False,
         stochastic: bool = False,
         post_process_iterable: Callable[[list[Any]], None] | None = None,
@@ -441,6 +868,10 @@ class ToolRegistry:
                 (e.g. structure-prediction ``["complexes", "msas"]``).
             iterable_output_field (str | None): Output field name containing the iterable list of
                 results for ToolPool fan-out and per-item caching.
+            max_chunk_size (int | None): Largest number of iterable items sent to one worker per
+                call when fanning out; the framework may hand out a smaller chunk, never larger.
+                Valid only for iterable tools. Required to be explicit when the config has a
+                ``batch_size`` field; other iterable tools default to 1 (per-item).
             cacheable (bool): Declares that this tool's output is a
                 deterministic function of (input, config), making it
                 eligible for the program-scoped cache and the framework's
@@ -471,11 +902,36 @@ class ToolRegistry:
             func: Callable[..., BaseToolOutput],
         ) -> Callable[..., BaseToolOutput]:
             cls._check_duplicate(key, func.__name__)
+            source_file = Path(func.__code__.co_filename)
 
             if (iterable_input_fields is None) != (iterable_output_field is None):
                 raise ValueError(
                     f"@tool({key!r}): iterable_input_fields and iterable_output_field must both be set or both None"
                 )
+
+            # Fan-out granularity: iterable-only, and opt-in. Left unset, a remote device sends the
+            # whole batch to one execution, which is what it did before chunking existed. A value
+            # is a claim about this tool's economics, since one execution per chunk is right for a
+            # fold that takes minutes and ruinous for work measured in milliseconds.
+            if iterable_input_fields is None:
+                if max_chunk_size not in (None, _UNSET_CHUNK_SIZE):
+                    raise ValueError(f"@tool({key!r}): max_chunk_size is only valid for iterable tools")
+                resolved_max_chunk_size: int | None = None
+            elif max_chunk_size == _UNSET_CHUNK_SIZE:
+                # A tool with no GPU and no standalone environment always runs in this process, so
+                # it never splits across executions and has no granularity to state.
+                if uses_gpu or (source_file.parent / "standalone").is_dir():
+                    raise ValueError(
+                        f"@tool({key!r}): iterable tools must state max_chunk_size, the number of items "
+                        f"one execution takes. Pass an int to fan out, or None to send the whole batch "
+                        f"to one execution. There is no default because the answer depends on what an "
+                        f"item costs."
+                    )
+                resolved_max_chunk_size = None
+            else:
+                resolved_max_chunk_size = max_chunk_size
+                if resolved_max_chunk_size is not None and resolved_max_chunk_size < 1:
+                    raise ValueError(f"@tool({key!r}): max_chunk_size must be >= 1, got {resolved_max_chunk_size}")
 
             if gpu_only and not uses_gpu:
                 raise ValueError(f"@tool({key!r}): gpu_only=True requires uses_gpu=True")
@@ -483,7 +939,8 @@ class ToolRegistry:
             if pin_visible_devices and not uses_gpu:
                 raise ValueError(f"@tool({key!r}): pin_visible_devices=True requires uses_gpu=True")
 
-            source_file = Path(func.__code__.co_filename)
+            # Stamp the tool key onto its config; one config class per tool is checked by test_config_carries_its_tool_key.
+            config_class.tool_key = key
 
             @wraps(func)
             def wrapper(
@@ -545,8 +1002,9 @@ class ToolRegistry:
                 original_items = None
                 strip = None
                 whole_cache_key = None
+                template_cache_key = None
 
-                def _finish_dispatched(dispatched: BaseToolOutput) -> BaseToolOutput:
+                def _finish_dispatched(dispatched: BaseToolOutput, *, partial_result: bool = False) -> BaseToolOutput:
                     dispatched.tool_id = key
                     if dispatched.success is None:
                         dispatched.success = True
@@ -561,6 +1019,8 @@ class ToolRegistry:
                         deduped,
                         original_items,
                         whole_cache_key,
+                        template_cache_key,
+                        partial_result,
                     )
 
                 backend = cls._dispatch_backend
@@ -596,64 +1056,87 @@ class ToolRegistry:
                             )
                         return _finish_dispatched(dispatched)
 
-                # Validate device allocation against tool requirements.
-                # device="cloud" delegates all resource allocation to the cloud
-                # service, so local validation is skipped.
-                if hasattr(config, "device"):
-                    device_str = str(config.device)
-                    if device_str == "cloud":
-                        from proto_tools.cloud import (
-                            cloud_unhostable_message,
-                            dispatch_to_cloud,
-                            is_cloud_hostable,
-                        )
+                # Endpoint for a remote device, bound here but called at the execute step below, so
+                # a remote device gets the same deduplicated, cached, preprocessed work a local one
+                # does. ``None`` means run locally.
+                remote_dispatch: Callable[[BaseToolInput, BaseConfig], BaseToolOutput] | None = None
+                # Set when the endpoint can take several chunks at once and overlap them. An entry
+                # is an output, or the exception that chunk hit — a failure never ends the batch.
+                remote_dispatch_many: (
+                    Callable[[list[BaseToolInput], list[BaseConfig]], list[BaseToolOutput | Exception]] | None
+                ) = None
 
-                        # local_cpu tools have nothing to offload — rewrite device and fall through.
+                if hasattr(config, "device"):
+                    device_str = str(config.device).strip()
+
+                    if is_remote_device(device_str):
+                        # --- Nothing to offload ---
+                        # No GPU and no environment to build, so no remote worker can help.
                         if spec is not None and spec.local_cpu:
                             logger.debug(
-                                "Tool %s: device='cloud' is a no-op for local_cpu tools; running in-process",
+                                "Tool %s: device=%r is a no-op for local_cpu tools; running in-process",
                                 key,
+                                device_str,
                             )
                             config = config.model_copy(update={"device": "cpu"})
                             device_str = "cpu"
-                        # Fail fast if the tool's license bars it from Proto's cloud; after the local_cpu no-op.
-                        elif not is_cloud_hostable(key):
-                            raise ValueError(cloud_unhostable_message(key))
-                        # Fail fast on a config the cloud can't run (e.g. a local database/file).
-                        elif (reason := config.cloud_unsupported_reason()) is not None:
-                            raise ValueError(f"{key}: {reason}")
                         else:
-                            try:
-                                dispatched = dispatch_to_cloud(key, inputs, config)
-                            except Exception as e:
-                                logger.error(
-                                    "Tool %s: cloud dispatch raised %s: %s",
-                                    key,
-                                    type(e).__name__,
-                                    e,
+                            # --- Every remote device ---
+                            # Refuse a config needing something local, such as a database or file.
+                            if (reason := config.remote_unsupported_reason(device_str)) is not None:
+                                raise ValueError(f"{key}: {reason}")
+
+                            # --- Proto endpoint ---
+                            if device_str == "proto":
+                                from proto_tools.proto import (
+                                    dispatch_batch_to_proto,
+                                    dispatch_to_proto,
+                                    is_proto_hostable,
+                                    proto_unhostable_message,
                                 )
-                                return _make_error_output_or_raise(
-                                    output_class,
-                                    key,
-                                    start_time,
-                                    e,
-                                    traceback.format_exc(),
+
+                                # Proto hosts under its own licence; a deployment the caller owns does not.
+                                if not is_proto_hostable(key):
+                                    raise ValueError(proto_unhostable_message(key))
+                                remote_dispatch = functools.partial(dispatch_to_proto, key)
+                                remote_dispatch_many = functools.partial(dispatch_batch_to_proto, key)
+                            # --- Modal endpoint ---
+                            else:
+                                # An optional peer that depends on proto-tools, so imported lazily.
+                                try:
+                                    from proto_modal import dispatch_batch_to_modal, dispatch_to_modal
+                                except ImportError as exc:
+                                    # Restore the install instruction once proto-modal is published.
+                                    raise ImportError(
+                                        "device='modal' is coming soon and is not available yet."
+                                    ) from exc
+                                # proto_modal is untyped here; the result is a BaseToolOutput at runtime.
+                                remote_dispatch = cast(
+                                    "Callable[[BaseToolInput, BaseConfig], BaseToolOutput]",
+                                    functools.partial(dispatch_to_modal, key),
                                 )
-                            return _finish_dispatched(dispatched)
-                    if gpu_only_flag and device_str == "cpu":
-                        raise ValueError(
-                            f"Tool {key!r} is gpu_only and rejects device='cpu'; use 'cuda', 'cuda:N', or 'cudaxN'"
-                        )
-                    if device_str != "cpu" and not uses_gpu:
-                        logger.warning(
-                            "Tool %s does not use a GPU but device=%r was requested; "
-                            "the tool will run on CPU regardless",
-                            key,
-                            device_str,
-                        )
-                    elif device_str != "cpu":
-                        device_spec = parse_device_string(device_str)
-                        validate_device_allocation(device_spec.count, device_count, key)
+                                remote_dispatch_many = cast(
+                                    "Callable[[list[BaseToolInput], list[BaseConfig]], list[BaseToolOutput | Exception]]",
+                                    functools.partial(dispatch_batch_to_modal, key),
+                                )
+
+                    # --- Local hardware ---
+                    # A remote endpoint allocates its own, so this validates only local devices.
+                    if remote_dispatch is None:
+                        if gpu_only_flag and device_str == "cpu":
+                            raise ValueError(
+                                f"Tool {key!r} is gpu_only and rejects device='cpu'; use 'cuda', 'cuda:N', or 'cudaxN'"
+                            )
+                        if device_str != "cpu" and not uses_gpu:
+                            logger.warning(
+                                "Tool %s does not use a GPU but device=%r was requested; "
+                                "the tool will run on CPU regardless",
+                                key,
+                                device_str,
+                            )
+                        elif device_str != "cpu":
+                            device_spec = parse_device_string(device_str)
+                            validate_device_allocation(device_spec.count, device_count, key)
 
                 # --- Dedup + Cache (cacheable tools only) ---
                 if runtime_cacheable and spec and spec.iterable_input_fields and not stochastic_tool:
@@ -677,17 +1160,20 @@ class ToolRegistry:
                     # Strip cached items from the (possibly deduped) input
                     current_items = _zip_iter_items(inputs, _iter_fields)
                     strip = cache_strip_items(key, current_items, config)
+                    # Keyed before preprocess so the store and the lookup agree if it resolves a setting.
+                    if _invariant_output_fields(output_class, spec):
+                        template_cache_key = _template_cache_key(key, inputs, spec, config)
                     if strip is not None and strip.all_cached:
                         logger.debug(
                             "[Iterable Cache] %s: full cache hit, skipping dispatch",
                             key,
                         )
-                        cached_list = [strip.cached_results[i] for i in range(len(current_items))]
+                        payloads = [strip.cached_results[i] for i in range(len(current_items))]
                         # Expand dedup if needed
                         if deduped and len(deduped.unique_items) < len(original_items):
-                            cached_list = [cached_list[uid] for _, uid in deduped.index_map]
+                            payloads = [payloads[uid] for _, uid in deduped.index_map]
                         if spec.post_process_iterable is not None:
-                            spec.post_process_iterable(cached_list)
+                            spec.post_process_iterable(payloads)
                         cache_kwargs: dict[str, Any] = {
                             "tool_id": key,
                             "execution_time": 0.0,
@@ -696,9 +1182,19 @@ class ToolRegistry:
                             "warnings": [],
                             "errors": [],
                             "metadata": {},
-                            spec.iterable_output_field: cached_list,
+                            spec.iterable_output_field: payloads,
                         }
-                        return output_class.model_construct(**cache_kwargs)
+                        # Invariant fields live in a separate template; dispatch rather than return without them.
+                        if template_cache_key is None:
+                            return output_class.model_construct(**cache_kwargs)
+                        template = _get_output_template(key, template_cache_key)
+                        if template is not None:
+                            return template.model_copy(update=cache_kwargs)
+                        logger.debug(
+                            "[Iterable Cache] %s: items cached but no output template; dispatching to rebuild it",
+                            key,
+                        )
+                        strip = None
 
                     # Narrow inputs to uncached items only (all parallel fields kept aligned)
                     if strip is not None and strip.uncached_items:
@@ -708,7 +1204,10 @@ class ToolRegistry:
                     # Whole-output path: check full cache
                     cache = _program_tool_cache.get()
                     if cache is not None:
-                        whole_cache_key = _generate_cache_key(key, inputs, config)
+                        # Chunk size selects each chunk's derived seed, so a stochastic result is
+                        # only reproducible at the size that produced it.
+                        split = {"max_chunk_size": spec.max_chunk_size} if stochastic_tool and spec else {}
+                        whole_cache_key = _generate_cache_key(key, inputs, config, **split)
                         cached: BaseToolOutput | None = cache.get(key, whole_cache_key)
                         if cached is not None:
                             logger.debug("[Cache Hit] %s: using cached result", key)
@@ -735,11 +1234,50 @@ class ToolRegistry:
                 )
 
                 with auto_persist_ctx:
-                    inputs = config.preprocess(inputs)
+                    # Execute with the config preprocess returns, not the caller's: preprocess
+                    # may resolve settings (e.g. use_msa) but must never write to the original.
+                    # A caller that already ran it hands the work over prepared, and running it
+                    # again would repeat an MSA search or a model-based selection on the worker.
+                    if not config._preprocess_completed:
+                        inputs, config = run_preprocess(config, inputs)
 
-                    # --- Dispatch (pool or local) ---
+                    # --- Execute: a remote endpoint, the worker pool, or in-process ---
+                    # The first two return a finished output directly; both finish the same way.
 
-                    # Check for active ToolPool (transparent parallel dispatch)
+                    if remote_dispatch is not None:
+                        try:
+                            dispatched = _dispatch_remote_in_chunks(
+                                key, spec, inputs, config, remote_dispatch, remote_dispatch_many
+                            )
+                        except _PartialChunkFailure as partial:
+                            # Store what came back before reporting the loss, so a retry pays only
+                            # for the chunks that failed rather than repeating the whole batch.
+                            _cache_partial_successes(key, spec, runtime_cacheable, stochastic_tool, strip, partial)
+                            if on_partial_failure() == "return_partial" and partial.merged_output is not None:
+                                logger.warning("Tool %s: %s", key, partial)
+                                return _finish_dispatched(
+                                    partial.merged_output.model_copy(
+                                        update={"errors": [*(partial.merged_output.errors or []), str(partial)]}
+                                    ),
+                                    partial_result=True,
+                                )
+                            # Imported here, as the pool is elsewhere in this function: tool_pool
+                            # reaches back into the registry, so a module-level import would cycle.
+                            from proto_tools.utils.tool_pool import PartialFailureError
+
+                            raise PartialFailureError(
+                                str(partial),
+                                succeeded=_translate_to_caller_indices(partial.succeeded, strip, deduped),
+                                failed=[
+                                    {**f, "indices": _translate_indices(f["indices"], strip, deduped)}
+                                    for f in partial.failed
+                                ],
+                            ) from partial.failed[0]["exception"]
+                        except Exception as e:
+                            logger.error("Tool %s: %s dispatch raised %s: %s", key, device_str, type(e).__name__, e)
+                            return _make_error_output_or_raise(output_class, key, start_time, e, traceback.format_exc())
+                        return _finish_dispatched(dispatched)
+
                     from proto_tools.utils.tool_pool import (
                         get_active_pool,
                         is_pool_executing,
@@ -747,22 +1285,8 @@ class ToolRegistry:
 
                     pool = get_active_pool()
                     if pool is not None and not is_pool_executing() and spec and spec.iterable_input_fields is not None:
-                        result = pool._parallel_dispatch(key, func, inputs, config)
-                        result.tool_id = key
-                        if result.success is None:
-                            result.success = True
-                        result.execution_time = time.time() - start_time
-                        return _post_dispatch_cache_and_expand(
-                            key,
-                            spec,
-                            runtime_cacheable,
-                            stochastic_tool,
-                            result,
-                            strip,
-                            deduped,
-                            original_items,
-                            whole_cache_key,
-                        )
+                        pooled = pool._parallel_dispatch(key, func, inputs, config)
+                        return _finish_dispatched(pooled, partial_result=_holds_failed_items(pooled, spec))
 
                     # Scale effective_timeout() by the iterable batch size.
                     if spec is not None and spec.iterable_input_fields is not None:
@@ -835,6 +1359,7 @@ class ToolRegistry:
                                     deduped,
                                     original_items,
                                     whole_cache_key,
+                                    template_cache_key,
                                 )
 
                                 logger.debug(f"Tool {key}: completed in {result.execution_time:.2f}s")
@@ -917,6 +1442,7 @@ class ToolRegistry:
                 example_input=example_input,
                 iterable_input_fields=iterable_input_fields,
                 iterable_output_field=iterable_output_field,
+                max_chunk_size=resolved_max_chunk_size,
                 cacheable=cacheable,
                 stochastic=stochastic,
                 post_process_iterable=post_process_iterable,
@@ -1535,6 +2061,45 @@ def _make_error_output_or_raise(
     raise exception
 
 
+def _holds_failed_items(result: BaseToolOutput, spec: ToolSpec | None) -> bool:
+    """Whether an output carries a :class:`FailedItem`, i.e. only part of the batch succeeded.
+
+    The remote path knows this outright and says so. ``ToolPool`` merges its own partial output
+    and returns it like any other, so the only honest way to tell is to look at what came back —
+    and getting it wrong caches a failure, which makes it permanent.
+
+    Args:
+        result (BaseToolOutput): Output to inspect.
+        spec (ToolSpec | None): Tool spec supplying the per-item field.
+
+    Returns:
+        bool: True when at least one position holds a placeholder rather than a result.
+    """
+    if spec is None or not spec.iterable_output_field:
+        return False
+    return any(isinstance(item, FailedItem) for item in getattr(result, spec.iterable_output_field, []) or [])
+
+
+def _set_items(result: BaseToolOutput, output_field: str, items: list[Any]) -> BaseToolOutput:
+    """Put the reassembled item list on the output without re-validating it.
+
+    Outputs set ``validate_assignment``, and under ``return_partial`` the list holds a
+    :class:`FailedItem` where an execution failed — not the item type the field declares. Assigning
+    it would raise and take the whole call with it, losing the survivors that mode exists to
+    return. ``model_copy`` is the same non-validating path :func:`merge_piece_outputs` already uses
+    to assemble that list, so both halves of the reassembly agree.
+
+    Args:
+        result (BaseToolOutput): Output being reassembled.
+        output_field (str): Field holding the per-item list.
+        items (list[Any]): Items in their final order.
+
+    Returns:
+        BaseToolOutput: A copy carrying ``items``.
+    """
+    return result.model_copy(update={output_field: items})
+
+
 def _post_dispatch_cache_and_expand(
     key: str,
     spec: ToolSpec | None,
@@ -1545,6 +2110,8 @@ def _post_dispatch_cache_and_expand(
     deduped: Any | None,
     original_items: list[Any] | None,
     whole_cache_key: str | None,
+    template_cache_key: str | None = None,
+    partial_result: bool = False,
 ) -> BaseToolOutput:
     """Store results in cache and expand deduped items back to original positions.
 
@@ -1563,28 +2130,44 @@ def _post_dispatch_cache_and_expand(
         deduped (Any | None): Deduplication result mapping original to unique indices.
         original_items (list[Any] | None): Original input items before dedup/strip.
         whole_cache_key (str | None): Cache key for whole-output caching path.
+        template_cache_key (str | None): Cache key for the output template holding fields that
+            are invariant across items; ``None`` when the output has no such fields.
+        partial_result (bool): True when only some executions of a split batch succeeded, so the
+            output carries a :class:`FailedItem` where each failure was. Suppresses every cache
+            write: a failure is not a result, and storing one makes it permanent — a later
+            identical call would hit the cache and return the failures without ever retrying
+            them. The items that did succeed are stored separately, by
+            :func:`_cache_partial_successes`, before this runs.
     """
     if is_cacheable and spec and spec.iterable_input_fields and not stochastic_tool:
         assert spec.iterable_output_field is not None  # validated at registration
         output_field = spec.iterable_output_field
-        # Per-item cache store + stitch (deterministic iterable only)
+        # Per-item store + stitch (deterministic iterable only); invariant fields ride in the template.
         computed_items = getattr(result, output_field, [])
+        # One item must come back per item sent, or the stitch below silently misaligns.
+        if strip is not None and len(computed_items) != len(strip.uncached_items):
+            raise ValueError(
+                f"{key}: dispatch returned {len(computed_items)} item(s) in {output_field!r} for "
+                f"{len(strip.uncached_items)} sent."
+            )
         if strip is not None and strip.cached_results:
-            cache_store_items(key, strip.cache_keys, computed_items)
+            if not partial_result:
+                cache_store_items(key, strip.cache_keys, computed_items)
             total = len(strip.cached_results) + len(strip.uncached_items)
             stitched = cache_stitch_items(strip, computed_items, total)
-            setattr(result, output_field, stitched)
-        elif strip is not None:
+            result = _set_items(result, output_field, stitched)
+        elif strip is not None and not partial_result:
             # No cached items existed, but we still store the new ones
             cache_store_items(key, strip.cache_keys, computed_items)
+        if template_cache_key is not None and not partial_result:
+            _store_output_template(key, template_cache_key, spec, result)
 
         # Expand deduped results back to original positions
         if deduped and original_items and len(deduped.unique_items) < len(original_items):
             unique_results = getattr(result, output_field)
-            expanded = [unique_results[uid] for _, uid in deduped.index_map]
-            setattr(result, output_field, expanded)
+            result = _set_items(result, output_field, [unique_results[uid] for _, uid in deduped.index_map])
 
-    elif is_cacheable and whole_cache_key is not None:
+    elif is_cacheable and whole_cache_key is not None and not partial_result:
         # Whole-output cache store (non-iterable OR stochastic iterable)
         cache = _program_tool_cache.get()
         if cache is not None:
@@ -1596,7 +2179,12 @@ def _post_dispatch_cache_and_expand(
     # (no dedup happened).
     if is_cacheable and spec is not None and spec.iterable_input_fields and spec.post_process_iterable is not None:
         assert spec.iterable_output_field is not None
-        spec.post_process_iterable(getattr(result, spec.iterable_output_field))
+        # Placeholders are withheld: a hook works on the item type its tool declares, so handing it
+        # a FailedItem raises and destroys the partial result the caller asked to receive. It still
+        # sees every item that succeeded, and mutates them in place, so the survivors are
+        # post-processed exactly as they would be in a batch that never failed.
+        items = [item for item in getattr(result, spec.iterable_output_field) if not isinstance(item, FailedItem)]
+        spec.post_process_iterable(items)
 
     paths = _find_non_finite_paths(result.model_dump())
     if paths:

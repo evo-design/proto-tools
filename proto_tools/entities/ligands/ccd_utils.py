@@ -65,6 +65,8 @@ _ALL_CCD_CODES: set[str] | None = None
 _RDKIT_CANONICAL_TO_CCD: dict[str, str] | None = None
 _CCD_TO_RDKIT_CANONICAL: dict[str, str] | None = None
 _INCHIKEY_TO_CCD: dict[str, str] | None = None
+# Heavy-atom counts for components whose SMILES RDKit will not sanitize; filled on demand.
+_UNSANITIZABLE_HEAVY_ATOMS: dict[str, int] = {}
 
 
 def _build_caches() -> tuple[set[str], dict[str, str], dict[str, str], dict[str, str]]:
@@ -302,6 +304,37 @@ def map_ccd_code_to_smiles(ccd_code: str) -> str | None:
     return ccd_to_smiles.get(ccd_code.upper())
 
 
+def _heavy_atoms_without_sanitization(ccd_code: str) -> int | None:
+    """Heavy-atom count for a real component whose SMILES RDKit refuses to sanitize.
+
+    A few hundred CCD entries carry SMILES that are structurally fine but violate RDKit's
+    valence rules (a four-bond boron, say), so they never reach the canonical cache. Counting
+    atoms only needs the molecular graph, so the raw SMILES is parsed unsanitized. Returns
+    ``None`` if the code is not in the database at all.
+    """
+    from rdkit import Chem, RDLogger
+
+    if ccd_code in _UNSANITIZABLE_HEAVY_ATOMS:
+        return _UNSANITIZABLE_HEAVY_ATOMS[ccd_code]
+    if not is_valid_ccd_code(ccd_code):
+        return None
+    with open(CCD_DATABASE_PATH) as handle:
+        for line in handle:
+            fields = line.rstrip().split("\t")
+            if len(fields) > 1 and fields[1].upper() == ccd_code:
+                RDLogger.DisableLog("rdApp.*")  # type: ignore[attr-defined]
+                try:
+                    mol = Chem.MolFromSmiles(fields[0], sanitize=False)
+                finally:
+                    RDLogger.EnableLog("rdApp.*")  # type: ignore[attr-defined]
+                # RDKit's stubs say non-optional, but a malformed string still returns None.
+                if mol is None:
+                    return None  # type: ignore[unreachable]
+                _UNSANITIZABLE_HEAVY_ATOMS[ccd_code] = int(mol.GetNumHeavyAtoms())
+                return _UNSANITIZABLE_HEAVY_ATOMS[ccd_code]
+    return None
+
+
 def count_heavy_atoms_for_ccd(ccd_code: str) -> int:
     """Count heavy (non-hydrogen) atoms for a CCD-coded component.
 
@@ -309,16 +342,21 @@ def count_heavy_atoms_for_ccd(ccd_code: str) -> int:
         ccd_code (str): CCD code. Case-insensitive.
 
     Returns:
-        int: Heavy-atom count of the component's RDKit-canonical structure.
+        int: Heavy-atom count of the component's structure.
 
     Raises:
         ValueError: If the CCD code is not found in the database.
     """
     from rdkit import Chem
 
-    smiles = map_ccd_code_to_smiles(ccd_code)
+    code = ccd_code.upper()
+    smiles = map_ccd_code_to_smiles(code)
     if smiles is None:
-        raise ValueError(f"Unknown CCD code: {ccd_code!r}")
+        # Real component, unsanitizable SMILES: count from the raw graph rather than refuse.
+        unsanitized = _heavy_atoms_without_sanitization(code)
+        if unsanitized is None:
+            raise ValueError(f"Unknown CCD code: {ccd_code!r}")
+        return unsanitized
     mol = Chem.MolFromSmiles(smiles)
     return int(mol.GetNumHeavyAtoms())
 

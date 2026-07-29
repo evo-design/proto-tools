@@ -1,4 +1,4 @@
-"""Rich CCD enrichment via pdbeccdutils (standalone subprocess)."""
+"""Rich CCD result via pdbeccdutils (standalone subprocess)."""
 
 import contextlib
 import json
@@ -36,21 +36,22 @@ def _silence_rdkit_logger() -> Iterator[None]:
 
 
 # ============================================================================
-# Per-identifier enrichment record (CCD-specific metadata that doesn't fit
+# Per-identifier result record (CCD-specific metadata that doesn't fit
 # on Fragment). Pairs 1:1 with the corresponding Fragment in `ligands`.
 # ============================================================================
-class CcdEnrichment(BaseModel):
-    """CCD-specific metadata for a single ligand.
+class CcdLookupResult(BaseModel):
+    """One resolved ligand and its CCD-specific metadata.
 
-    Attached one-to-one to a ``Fragment`` in the tool's output. Holds the
+    Carries the ``Fragment`` built for this identifier alongside the
     pdbeccdutils-derived fields that don't fit on ``Fragment`` (formula strings,
     descriptors, release status, optional network data). When the input was a
-    SMILES with no CCD match, ``ccd_code`` is None and the descriptive fields
-    are also None.
+    SMILES with no CCD match, the fragment carries no ``ccd_code`` and the descriptive
+    fields are also None.
 
     Attributes:
-        ccd_code (str | None): Three-letter CCD identifier; None when a SMILES
-            input has no matching CCD entry.
+        fragment (Fragment): The ligand built for this identifier, carrying the CCD code
+            when one could be resolved to a usable structure. ``fragment.ccd_code`` is the
+            single source of truth for which CCD entry this is.
         formula (str | None): Chemical formula (e.g. ``"C10 H16 N5 O13 P3"``).
         formula_weight (float | None): Formula weight in Daltons.
         inchi (str | None): InChI string as recorded in the CCD.
@@ -66,13 +67,20 @@ class CcdEnrichment(BaseModel):
             Populated only when ``include_cross_references=True``; requires network.
         pdb_structures (list[str] | None): PDB IDs of structures containing this
             ligand. Populated only when ``include_pdb_usage=True``; requires network.
+        resolved_without_structure (bool): True when the identifier matched a CCD entry
+            whose structure could not be rebuilt. The CCD metadata below is populated,
+            but ``fragment.ccd_code`` is None and the entry counts as unresolved.
         warnings (list[str]): Non-fatal warnings emitted while reading the entry.
         errors (list[str]): Errors that prevented full parsing.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    ccd_code: str | None = Field(default=None, title="CCD Code", description="CCD code (None if SMILES has no match)")
+    fragment: Fragment = Field(
+        title="Resolved Fragment",
+        description="The ligand built for this identifier",
+    )
+
     formula: str | None = Field(default=None, title="Formula", description="Chemical formula string")
     formula_weight: float | None = Field(default=None, title="Formula Weight", description="Formula weight in Daltons")
     inchi: str | None = Field(default=None, title="InChI", description="InChI from CCD")
@@ -99,13 +107,26 @@ class CcdEnrichment(BaseModel):
         title="PDB Structures",
         description="PDB IDs containing this ligand (network, opt-in)",
     )
+    resolved_without_structure: bool = Field(
+        default=False,
+        title="Resolved Without Structure",
+        description="CCD entry matched but its structure could not be rebuilt",
+    )
     warnings: list[str] = Field(default_factory=list, title="Warnings", description="Non-fatal parsing warnings")
     errors: list[str] = Field(default_factory=list, title="Errors", description="Parsing errors")
 
     @model_validator(mode="after")
-    def _check_resolved_or_fully_unresolved(self) -> "CcdEnrichment":
-        """When ccd_code is None, the descriptive fields must also be None."""
-        if self.ccd_code is None:
+    def _check_unresolved_metadata_is_explained(self) -> "CcdLookupResult":
+        """CCD metadata without a resolved code must say why.
+
+        These fields can only come from a CCD record, so their presence beside a fragment
+        that carries no code is either a leak from another record or the narrow legitimate
+        case where the lookup resolved an entry whose structure could not be rebuilt. The
+        second is declared by ``resolved_without_structure``; the first is a bug and is
+        still caught. The flag is checked rather than the presence of a warning, since
+        unrelated warnings would otherwise disable the check.
+        """
+        if self.fragment.ccd_code is None and not self.resolved_without_structure:
             stale = [
                 k
                 for k, v in (
@@ -120,7 +141,9 @@ class CcdEnrichment(BaseModel):
             ]
             if stale:
                 raise ValueError(
-                    f"ccd_code is None but {stale} are set; CcdEnrichment must be fully resolved or fully None"
+                    f"fragment carries no ccd_code but {stale} are set, and resolved_without_structure "
+                    "is False; a CcdLookupResult must be resolved, fully unresolved, or declare that its "
+                    "CCD entry matched without a rebuildable structure"
                 )
         return self
 
@@ -129,7 +152,7 @@ class CcdEnrichment(BaseModel):
 # Tool Input / Config / Output
 # ============================================================================
 class CcdLookupInput(BaseToolInput):
-    """Input for CCD enrichment.
+    """Input for CCD result.
 
     Each identifier is auto-detected as either a 1- to 5-character CCD code or
     a SMILES string. Mixed batches are supported.
@@ -153,7 +176,7 @@ class CcdLookupInput(BaseToolInput):
 
 
 class CcdLookupConfig(BaseConfig):
-    """Configuration for CCD enrichment.
+    """Configuration for CCD result.
 
     Network features are off by default; enable explicitly when needed. For
     2D / 3D ligand visualization use
@@ -181,59 +204,51 @@ class CcdLookupConfig(BaseConfig):
 
 
 class CcdLookupOutput(BaseToolOutput):
-    """Output from CCD enrichment.
+    """Output from CCD result.
 
-    The output exposes both the standard proto_tools ligand types (``Ligands``
-    collection of ``Fragment`` objects ready to feed downstream tools that take
-    ligands as input) and a parallel list of CCD-specific enrichment records
-    that hold the pdbeccdutils metadata.
+    Each entry holds one resolved ligand together with its pdbeccdutils metadata.
+    ``ligands`` gathers those fragments into the standard proto_tools ``Ligands``
+    collection, ready to feed downstream tools that take ligands as input.
 
     Attributes:
-        ligands (Ligands): Collection of Fragment objects, one per input
-            identifier in input order. SMILES inputs with no CCD match still
-            produce a Fragment (with ``ccd_code=None``); see ``enrichments[i]``
-            for the resolution status.
-        enrichments (list[CcdEnrichment]): Per-identifier CCD-specific metadata
-            (formula, descriptors, release status, optional network data).
-            Same length and order as ``ligands.fragments``.
-        num_resolved (int): Count of identifiers that resolved to a CCD record.
-            Computed from ``enrichments``.
-        num_unresolved (int): Count of identifiers that did not resolve.
-            Computed from ``enrichments``.
+        results (list[CcdLookupResult]): One entry per input identifier, in input
+            order, each holding the resolved ``Fragment`` and its CCD-specific
+            metadata (formula, descriptors, release status, optional network data).
+        ligands (Ligands): The resolved fragments gathered into a ``Ligands`` collection,
+            in input order. Derived from ``results``.
+        num_resolved (int): Count of identifiers that correspond to a known CCD component,
+            whether the lookup returned the code or the fragment matched one by structure.
+        num_unresolved (int): Count of identifiers with no usable CCD component.
     """
 
-    ligands: Ligands = Field(
-        default_factory=Ligands,
-        title="Resolved Ligands",
-        description="Resolved fragments, one per input identifier (in input order)",
-    )
-    enrichments: list[CcdEnrichment] = Field(
+    results: list[CcdLookupResult] = Field(
         default_factory=list,
         title="Enrichments",
-        description="Per-identifier CCD enrichment metadata, parallel to ligands.fragments",
+        description="Resolved ligand plus CCD metadata, one entry per input identifier",
     )
 
-    @model_validator(mode="after")
-    def _check_parallel_arrays(self) -> "CcdLookupOutput":
-        """Enforce ligands.fragments and enrichments are parallel arrays."""
-        if len(self.ligands.fragments) != len(self.enrichments):
-            raise ValueError(
-                f"ligands ({len(self.ligands.fragments)}) and enrichments ({len(self.enrichments)}) "
-                "must be parallel arrays of the same length"
-            )
-        return self
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def ligands(self) -> Ligands:
+        """The resolved fragments as a ``Ligands`` collection, in input order."""
+        return Ligands(fragments=[result.fragment for result in self.results])
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def num_resolved(self) -> int:
-        """Number of identifiers that resolved to a CCD record."""
-        return sum(1 for e in self.enrichments if e.ccd_code is not None)
+        """Number of identifiers carrying a CCD code, by lookup or by structural match."""
+        return sum(1 for e in self.results if e.fragment.ccd_code is not None)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def num_unresolved(self) -> int:
-        """Number of identifiers that did not resolve to any CCD entry."""
-        return sum(1 for e in self.enrichments if e.ccd_code is None)
+        """Number of identifiers with no usable CCD component.
+
+        Includes entries whose CCD code matched but whose structure could not be
+        rebuilt. Those carry ``resolved_without_structure=True`` and retain their
+        CCD metadata, so resolution here means a usable structure, not merely a match.
+        """
+        return sum(1 for e in self.results if e.fragment.ccd_code is None)
 
     @property
     def output_format_options(self) -> list[str]:
@@ -262,19 +277,18 @@ def example_input() -> CcdLookupInput:
 
 
 def _build_fragment(record: dict[str, Any], original_identifier: str) -> Fragment:
-    """Construct a Fragment from a standalone enrichment record.
+    """Construct a Fragment from a standalone result record.
 
-    Tries (smiles, ccd_code), then (smiles only), then (original_identifier as
-    smiles), in order of decreasing fidelity. Falls back to a wildcard-atom
-    placeholder if none parse — the caller relies on a 1:1 ``ligands`` /
-    ``enrichments`` parallel array, and the corresponding ``CcdEnrichment``
-    already carries the failure reason in ``errors``.
+    Tries (smiles, ccd_code), then the code alone so a resolved entry survives a record
+    whose SMILES will not parse, then (smiles only), then (original_identifier as smiles),
+    in order of decreasing fidelity. Falls back to a wildcard-atom placeholder if none
+    parse; the result carries the failure reason in ``errors``.
     """
     smiles = record.get("smiles")
     ccd_code = record.get("ccd_code")
     name = record.get("name")
 
-    for s, c in ((smiles, ccd_code), (smiles, None), (original_identifier, None)):
+    for s, c in ((smiles, ccd_code), (None, ccd_code), (smiles, None), (original_identifier, None)):
         if s is None and c is None:
             continue
         try:
@@ -296,14 +310,15 @@ def _build_fragment(record: dict[str, Any], original_identifier: str) -> Fragmen
     config_class=CcdLookupConfig,
     output_class=CcdLookupOutput,
     description=(
-        "Rich enrichment for wwPDB Chemical Component Dictionary entries via "
+        "Rich result for wwPDB Chemical Component Dictionary entries via "
         "pdbeccdutils: returns Fragment objects plus formula, descriptors, "
         "parent component, physchem properties, and optional UniChem "
         "cross-references and PDB usage."
     ),
     example_input=example_input,
     iterable_input_fields=["identifiers"],
-    iterable_output_field="enrichments",
+    iterable_output_field="results",
+    max_chunk_size=256,
     cacheable=True,
     uses_gpu=False,
 )
@@ -324,12 +339,12 @@ def run_ccd_lookup(
     Args:
         inputs (CcdLookupInput): Identifiers to enrich.
         config (CcdLookupConfig): Configuration controlling optional network
-            enrichments (UniChem cross-refs, PDB usage).
+            results (UniChem cross-refs, PDB usage).
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         CcdLookupOutput: A ``Ligands`` collection plus a parallel list of
-            CCD-specific ``CcdEnrichment`` records.
+            CCD-specific ``CcdLookupResult`` records.
     """
     logger.debug("Running ccd-lookup for %d identifier(s)", len(inputs.identifiers))
 
@@ -347,17 +362,24 @@ def run_ccd_lookup(
         config=config,
     )
 
-    fragments: list[Fragment] = []
-    enrichments: list[CcdEnrichment] = []
+    results: list[CcdLookupResult] = []
     # Fragment's validator re-runs RDKit canonicalization and InChIKey
     # generation; silence the chemistry logger across the build to keep
     # stderr clean for unusual user-supplied SMILES.
     with _silence_rdkit_logger():
         for original, record in zip(inputs.identifiers, output_data["records"], strict=True):
-            fragments.append(_build_fragment(record, original))
-            enrichments.append(
-                CcdEnrichment(
-                    ccd_code=record.get("ccd_code"),
+            fragment = _build_fragment(record, original)
+            warnings = list(record.get("warnings") or [])
+            # Resolved a code no molecule could be built for: say so rather than leaving it unexplained.
+            resolved_without_structure = fragment.ccd_code is None and bool(record.get("ccd_code"))
+            if resolved_without_structure:
+                warnings.append(
+                    f"CCD entry {record['ccd_code']!r} resolved, but no usable structure could be built "
+                    f"for it; the fragment carries no ccd_code and counts as unresolved."
+                )
+            results.append(
+                CcdLookupResult(
+                    fragment=fragment,
                     formula=record.get("formula"),
                     formula_weight=record.get("formula_weight"),
                     inchi=record.get("inchi"),
@@ -368,7 +390,8 @@ def run_ccd_lookup(
                     physchem_properties=record.get("physchem_properties") or {},
                     cross_references=record.get("cross_references"),
                     pdb_structures=record.get("pdb_structures"),
-                    warnings=list(record.get("warnings") or []),
+                    resolved_without_structure=resolved_without_structure,
+                    warnings=warnings,
                     errors=list(record.get("errors") or []),
                 )
             )
@@ -378,6 +401,5 @@ def run_ccd_lookup(
             "include_cross_references": config.include_cross_references,
             "include_pdb_usage": config.include_pdb_usage,
         },
-        ligands=Ligands(fragments=fragments),
-        enrichments=enrichments,
+        results=results,
     )

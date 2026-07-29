@@ -11,12 +11,14 @@ from proto_tools.tools.mutagenesis.codons import (
     sample_nucleotide,
 )
 from proto_tools.tools.mutagenesis.random_nucleotide import (
+    RandomNucleotideSample,
     RandomNucleotideSampleConfig,
     RandomNucleotideSampleInput,
     RandomNucleotideSampleOutput,
     run_random_nucleotide_sample,
 )
 from proto_tools.tools.mutagenesis.random_protein import (
+    RandomProteinSample,
     RandomProteinSampleConfig,
     RandomProteinSampleInput,
     RandomProteinSampleOutput,
@@ -24,6 +26,8 @@ from proto_tools.tools.mutagenesis.random_protein import (
 )
 
 __all__ = [
+    "RandomNucleotideSample",
+    "RandomProteinSample",
     # Codon infrastructure
     "CODON_TO_AA",
     "COMMON_CODON_SCHEMES",
