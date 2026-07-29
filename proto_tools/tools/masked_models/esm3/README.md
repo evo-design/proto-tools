@@ -65,7 +65,5 @@ ESM3 pseudo-perplexity is a fitness proxy for ranking variants, filtering genera
 
 These apply to every ESM3 tool in this toolkit (`esm3-embedding`, `esm3-sample`, `esm3-score`).
 
-- **No HuggingFace token is required.** The open checkpoint lives in an ungated HuggingFace repo ([biohub/esm3-sm-open-v1](https://huggingface.co/biohub/esm3-sm-open-v1)) and downloads automatically on first use.
-- **One open checkpoint is available.** `esm3_sm_open_v1` is the only public open-weights checkpoint; larger ESM3 models are hosted-API-only and not wrapped here.
 - **ESM3 is larger than many ESM-2 variants.** For sequence-embedding-only workloads, smaller ESM-2 variants are faster; consider reaching for ESM3 when you want masked generative editing. This toolkit takes only amino-acid sequences as input and does not expose the structure or function tracks.
 - **`batch_size` controls memory usage across the toolkit.** Lower it if you OOM; raise it for short-sequence throughput. For `esm3-score`, `batch_size` counts masked variants pooled across all input sequences rather than sequences themselves (each input contributes one masked variant per position).
