@@ -19,14 +19,14 @@ logger = get_logger(__name__)
 logging.getLogger("esm").setLevel(logging.ERROR)
 logging.getLogger("esm.sdk").setLevel(logging.ERROR)
 
-ESMC_MODEL_CHECKPOINTS = Literal["esmc_300m", "esmc_600m"]
+ESMC_MODEL_CHECKPOINTS = Literal["esmc_300m", "esmc_600m", "esmc_6b"]
 
 
 class ESMCModel:
     """ESM C (Cambrian) model for protein sequence embeddings and logits.
 
-    Embedding-focused masked language model from EvolutionaryScale. Both the
-    300M (open-license) and 600M (non-commercial) variants are supported.
+    Embedding-focused masked language model from Biohub. The 300M, 600M, and 6B
+    variants are all supported.
     """
 
     def __init__(self, model_checkpoint: ESMC_MODEL_CHECKPOINTS = "esmc_300m"):

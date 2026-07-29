@@ -102,10 +102,10 @@ def test_get_tool_docs_omits_toolkit_notes_when_disabled() -> None:
 
 def test_get_tool_docs_includes_license_by_default() -> None:
     """``get_tool_docs`` attaches the parsed license.yaml, incl. weights.access."""
-    entry = get_tool_docs("esm3-embedding")
+    entry = get_tool_docs("alphagenome-score-variants")
     assert entry is not None
     assert entry.license is not None
-    assert entry.license["code"]["spdx"] == "Custom (Cambrian Open License Agreement)"
+    assert entry.license["code"]["spdx"] == "Apache-2.0"
     assert entry.license["weights"]["access"] == "hf-gated"
 
 

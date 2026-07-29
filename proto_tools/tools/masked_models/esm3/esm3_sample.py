@@ -22,7 +22,6 @@ from proto_tools.transforms.masking import (
 from proto_tools.utils import (
     ConfigField,
     ToolInstance,
-    require_hf_token,
 )
 
 logger = logging.getLogger(__name__)
@@ -179,8 +178,6 @@ def run_esm3_sample(
     Returns:
         ESM3SampleOutput: ESM3SampleOutput with sampled sequences and optional logits.
     """
-    require_hf_token("ESM3", "https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1")
-
     logger.debug(f"Using local for ESM3 sampling: {config.model_checkpoint}")
     result = ToolInstance.dispatch(
         "esm3",
