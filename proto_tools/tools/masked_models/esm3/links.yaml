@@ -1,4 +1,6 @@
-github: https://github.com/evolutionaryscale/esm
-huggingface: https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1
+github: https://github.com/Biohub/esm
+website: https://biohub.ai/
+paper: https://doi.org/10.1126/science.ads0018
+huggingface: https://huggingface.co/biohub/esm3-sm-open-v1
 organizations:
   - Biohub

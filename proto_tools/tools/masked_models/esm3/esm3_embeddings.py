@@ -14,7 +14,7 @@ from proto_tools.tools.masked_models.shared_data_models import (
     SequenceEmbedding,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import ConfigField, ToolInstance, require_hf_token
+from proto_tools.utils import ConfigField, ToolInstance
 
 logger = logging.getLogger(__name__)
 
@@ -161,8 +161,6 @@ def run_esm3_embeddings(
         >>> result = run_esm3_embeddings(inputs, config)
 
     """
-    require_hf_token("ESM3", "https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1")
-
     # Local execution
     logger.debug(f"Using local for ESM3 inference: {config.model_checkpoint}")
     outputs = ToolInstance.dispatch(

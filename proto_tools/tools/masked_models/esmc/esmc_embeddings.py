@@ -18,7 +18,7 @@ from proto_tools.utils import ConfigField, ToolInstance
 
 logger = logging.getLogger(__name__)
 
-ESMC_MODEL_CHECKPOINTS = Literal["esmc_300m", "esmc_600m"]
+ESMC_MODEL_CHECKPOINTS = Literal["esmc_300m", "esmc_600m", "esmc_6b"]
 
 # ============================================================================
 # Data Models
@@ -54,16 +54,16 @@ class ESMCEmbeddingsOutput(MaskedModelEmbeddingsOutput):
 class ESMCEmbeddingsConfig(MaskedModelEmbeddingsConfig):
     """Configuration for ESM C protein language model embedding extraction.
 
-    ESM C (Cambrian) is an embedding-focused masked language model from
-    EvolutionaryScale. Two open-weights variants are self-hostable; the 6B variant
-    is API-only via Forge and not exposed here.
+    ESM C (Cambrian) is an embedding-focused masked language model from Biohub.
+    All three open-weights variants are self-hostable and MIT-licensed.
 
     Inherits from ``MaskedModelEmbeddingsConfig``.
 
     Attributes:
-        model_checkpoint (ESMC_MODEL_CHECKPOINTS): ESM C weights variant. ``"esmc_300m"`` is
-            the Cambrian Open License (commercial use permitted with attribution);
-            ``"esmc_600m"`` is the Cambrian Non-Commercial License (research/internal only).
+        model_checkpoint (ESMC_MODEL_CHECKPOINTS): ESM C weights variant. ``"esmc_300m"``
+            (960-dim embeddings), ``"esmc_600m"`` (1152-dim), and ``"esmc_6b"``
+            (2560-dim). Larger checkpoints give richer representations at the cost of
+            GPU memory; ``"esmc_6b"`` holds ~13 GB of bf16 weights.
         batch_size (int): Number of sequences to process in parallel. Larger batches
             improve throughput but require more GPU memory.
         device (str): Device to run the model on.
@@ -73,7 +73,7 @@ class ESMCEmbeddingsConfig(MaskedModelEmbeddingsConfig):
         repr_layer (int): Transformer layer index for embeddings. ``-1`` returns the
             post-norm final-layer output (``outputs.embeddings``); other indices select
             from pre-norm per-block ``outputs.hidden_states``. Range is checkpoint-
-            dependent (esmc_300m: 30 layers, esmc_600m: 36 layers).
+            dependent (esmc_300m: 30 layers, esmc_600m: 36 layers, esmc_6b: 80 layers).
 
     Note:
         The model is loaded on-demand for each call.
@@ -82,7 +82,7 @@ class ESMCEmbeddingsConfig(MaskedModelEmbeddingsConfig):
     model_checkpoint: ESMC_MODEL_CHECKPOINTS = ConfigField(
         title="ESM C Model Checkpoint",
         default="esmc_300m",
-        description="ESM C weights variant ('esmc_300m' open license, 'esmc_600m' non-commercial)",
+        description="ESM C weights variant; larger checkpoints embed better but need more GPU memory",
         reload_on_change=True,
     )
     return_logits: bool = ConfigField(
@@ -126,7 +126,7 @@ def run_esmc_embeddings(
 ) -> ESMCEmbeddingsOutput:
     """Extract protein sequence embeddings and logits using ESM C.
 
-    Uses ESM C (Cambrian) from EvolutionaryScale to produce contextualized
+    Uses ESM C (Cambrian) from Biohub to produce contextualized
     per-sequence embeddings and (optionally) per-position logits. Runs locally
     on GPU in an isolated Python environment shared with the ESM3 wrapper
     (both ship in the same ``esm`` package).
@@ -145,8 +145,8 @@ def run_esmc_embeddings(
             per-position amino acid logits.
 
     See Also:
-        - ESM C blog post: https://www.evolutionaryscale.ai/blog/esm-cambrian
-        - ESM GitHub: https://github.com/evolutionaryscale/esm
+        - ESM C model card: https://huggingface.co/biohub/ESMC-6B
+        - ESM GitHub: https://github.com/Biohub/esm
 
     Examples:
         >>> from proto_tools.tools.masked_models.esmc import (
