@@ -4,9 +4,9 @@ Tests for tool_cache.
 """
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from proto_tools.utils import BaseConfig
+from proto_tools.utils import BaseConfig, ConfigField
 from proto_tools.utils.tool_cache import (
     CacheStripResult,
     ToolCache,
@@ -18,8 +18,20 @@ from proto_tools.utils.tool_cache import (
     cache_strip_items,
     deduplicate_items,
 )
+from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def clean_registry():
+    """Provide a clean registry for each test."""
+    from proto_tools.tools.tool_registry import ToolRegistry
+
+    original_registry = ToolRegistry._registry.copy()
+    ToolRegistry._registry.clear()
+    yield ToolRegistry
+    ToolRegistry._registry = original_registry
 
 
 @pytest.fixture
@@ -488,3 +500,169 @@ def test_deduplicate_items_with_pydantic_models():
     assert len(result.unique_items) == 3
     assert [it.value for it in result.unique_items] == [1, 2, 3]
     assert result.index_map == [(0, 0), (1, 1), (2, 0), (3, 2)]
+
+
+# ── Nested-config inheritance and cache keys ────────────────────────────────
+
+
+class _NestedCfg(BaseConfig):
+    """Config nested inside another config."""
+
+    dataset: str = ConfigField(default="a", title="Dataset", description="Dataset")
+
+
+class _OuterCfg(BaseConfig):
+    """Config holding a nested config directly and in a list."""
+
+    nested: _NestedCfg = ConfigField(default_factory=_NestedCfg, title="Nested", description="Nested")
+    many: list[_NestedCfg] = ConfigField(default_factory=list, title="Many", description="Many")
+
+
+@pytest.mark.parametrize(
+    "nested,expected",
+    [(None, 2), (_NestedCfg(verbose=0), 0)],
+    ids=["unset_inherits", "explicit_kept"],
+)
+def test_nested_config_inherits_verbose_unless_it_sets_its_own(nested, expected):
+    """A nested config takes the outer verbosity only when it did not name its own."""
+    config = _OuterCfg(verbose=2) if nested is None else _OuterCfg(verbose=2, nested=nested)
+
+    assert config.nested.verbose == expected
+
+
+def test_nested_config_in_a_collection_inherits_verbose():
+    """Inheritance reaches configs held in list fields, not only direct attributes."""
+    config = _OuterCfg(verbose=3, many=[_NestedCfg()])
+
+    assert config.many[0].verbose == 3
+
+
+def test_reassigning_the_outer_value_reaches_nested_configs():
+    """Changing the outer verbosity flows down again, because inheritance never marks a field set."""
+    config = _OuterCfg(verbose=1)
+
+    config.verbose = 3
+
+    assert config.nested.verbose == 3
+
+
+@pytest.mark.parametrize(
+    "field,value", [("verbose", 3), ("timeout", 99), ("device", "cuda")], ids=["verbose", "timeout", "device"]
+)
+def test_nested_non_key_fields_do_not_split_the_cache(field, value):
+    """A nested setting that cannot change the result is excluded from the cache key."""
+    baseline = _OuterCfg()
+    varied = _OuterCfg(nested=_NestedCfg(**{field: value}))
+
+    assert baseline.cache_key() == varied.cache_key()
+
+
+def test_nested_result_affecting_fields_still_split_the_cache():
+    """A nested setting that does change the result still reaches the cache key."""
+    baseline = _OuterCfg()
+    varied = _OuterCfg(nested=_NestedCfg(dataset="b"))
+
+    assert baseline.cache_key() != varied.cache_key()
+
+
+# ── Output fields beyond the iterable one, through the cache ────────────────
+
+
+class _ItemsIn(BaseToolInput):
+    """Iterable input."""
+
+    items: list[str] = InputField(title="Items", description="Items")
+
+
+class _RichItem(BaseModel):
+    """One result and everything produced for it."""
+
+    value: str = Field(description="Per-item value")
+    score: int = Field(description="Per-item score")
+
+
+class _RichOut(BaseToolOutput):
+    """Per-item results plus an invariant required field."""
+
+    results: list[_RichItem] = Field(default_factory=list, description="One entry per item")
+    run_label: str = Field(description="Invariant across items, required")
+
+    @property
+    def output_format_options(self) -> list[str]:
+        """Supported export formats."""
+        return ["json"]
+
+    @property
+    def output_format_default(self) -> str:
+        """Default export format."""
+        return "json"
+
+    def _export_output(self, export_path, file_format) -> None:
+        """No-op export."""
+        return
+
+
+def _register_rich_tool(registry, calls: list[int]):
+    """Register a cacheable iterable tool carrying both kinds of extra output field."""
+
+    @registry.register(
+        key="rich-cache-tool",
+        label="Rich",
+        category="test",
+        input_class=_ItemsIn,
+        config_class=BaseConfig,
+        output_class=_RichOut,
+        description="Aligned + invariant output fields",
+        iterable_input_fields=["items"],
+        iterable_output_field="results",
+        max_chunk_size=None,
+        cacheable=True,
+    )
+    def run_tool(inputs, config=None, instance=None):
+        calls.append(len(inputs.items))
+        return _RichOut(
+            results=[_RichItem(value=f"out_{i}", score=len(i)) for i in inputs.items],
+            run_label="fixed",
+        )
+
+    return registry.get("rich-cache-tool").function
+
+
+def test_full_cache_hit_restores_invariant_and_aligned_fields(clean_registry, _setup_cache):
+    """A repeat call served from cache returns the same object shape as the computed one."""
+    calls: list[int] = []
+    fn = _register_rich_tool(clean_registry, calls)
+
+    first = fn(_ItemsIn(items=["a", "bb"]))
+    second = fn(_ItemsIn(items=["a", "bb"]))
+
+    assert calls == [2]  # second call was served from cache
+    assert second.results == first.results
+    assert [r.score for r in second.results] == [1, 2]
+    assert second.run_label == "fixed"
+
+
+def test_partial_cache_hit_stitches_per_item_values(clean_registry, _setup_cache):
+    """Cached and freshly computed items are stitched back in input order."""
+    calls: list[int] = []
+    fn = _register_rich_tool(clean_registry, calls)
+
+    fn(_ItemsIn(items=["a", "bb"]))
+    result = fn(_ItemsIn(items=["a", "bb", "ccc"]))
+
+    assert calls == [2, 1]  # only the new item was computed
+    assert [r.value for r in result.results] == ["out_a", "out_bb", "out_ccc"]
+    assert [r.score for r in result.results] == [1, 2, 3]
+    assert result.run_label == "fixed"
+
+
+def test_dedup_expansion_restores_every_original_position(clean_registry, _setup_cache):
+    """A duplicated input gets its full item back in both positions."""
+    calls: list[int] = []
+    fn = _register_rich_tool(clean_registry, calls)
+
+    result = fn(_ItemsIn(items=["a", "bb", "a"]))
+
+    assert calls == [2]  # 'a' deduped away
+    assert [r.value for r in result.results] == ["out_a", "out_bb", "out_a"]
+    assert [r.score for r in result.results] == [1, 2, 1]

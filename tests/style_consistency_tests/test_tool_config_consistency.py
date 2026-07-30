@@ -125,3 +125,53 @@ def test_tool_config_accepts_none(config_model):
     except ValidationError as exc:
         pytest.skip(f"{config_model.__name__} default config does not construct on this platform: {exc}")
     assert isinstance(default_config, config_model)
+
+
+# ── Tool-key stamping ────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("spec", ToolRegistry.list_all(), ids=lambda s: s.key)
+def test_config_carries_its_tool_key(spec):
+    """Every registered config knows its tool, stamped at registration.
+
+    ``ToolRegistry.register`` rejects two tools sharing a config class, so this
+    is unambiguous: exactly one key per config. A shared family shape must be
+    subclassed per tool rather than reused directly.
+    """
+    config_model = spec.config_model
+    assert config_model.tool_key == spec.key, (
+        f"{config_model.__name__}.tool_key is {config_model.tool_key!r}, expected {spec.key!r}. "
+        f"Give this tool its own config class (subclass the shared one if fields are identical)."
+    )
+    # tool_key is class state (ClassVar), never a serialized config field.
+    assert "tool_key" not in config_model.model_fields, (
+        f"{config_model.__name__}.tool_key leaked into model_fields; it must stay a ClassVar."
+    )
+
+
+# ── Fan-out granularity (max_chunk_size) ─────────────────────────────────────
+
+
+@pytest.mark.parametrize("spec", ToolRegistry.list_all(), ids=lambda s: s.key)
+def test_iterable_tools_declare_max_chunk_size(spec):
+    """A declared fan-out granularity must be usable, and a non-iterable tool must carry none.
+
+    ``max_chunk_size`` has no default. It used to default to 1, which made this test vacuous:
+    every iterable tool passed without anyone having chosen. Registration now refuses an
+    iterable tool that omits it, so reaching this test at all means a value was stated, or the
+    tool is one of the cases registration exempts.
+
+    Exempt: a tool with no GPU and no standalone environment always runs in this process, so it
+    never splits across executions and has no granularity to state.
+
+    ``None`` is also a legitimate answer, meaning the whole batch goes to one execution. It is
+    distinct from omission, which raises for any tool that can actually fan out.
+    """
+    if spec.iterable_input_fields is not None:
+        assert spec.max_chunk_size is None or (isinstance(spec.max_chunk_size, int) and spec.max_chunk_size >= 1), (
+            f"{spec.key}: max_chunk_size must be >= 1 when declared, got {spec.max_chunk_size!r}."
+        )
+    else:
+        assert spec.max_chunk_size is None, (
+            f"{spec.key}: max_chunk_size only applies to iterable tools, got {spec.max_chunk_size!r}."
+        )

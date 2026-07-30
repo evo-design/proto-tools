@@ -3,6 +3,7 @@
 from proto_tools.tools.rna_splicing.spliceai.spliceai_predict import (
     SpliceAIPredictConfig,
     SpliceAIPredictInput,
+    SpliceAIPrediction,
     SpliceAIPredictOutput,
     run_spliceai_predict,
 )
@@ -18,6 +19,7 @@ from proto_tools.tools.rna_splicing.spliceai.spliceai_score import (
 )
 
 __all__ = [
+    "SpliceAIPrediction",
     "SpliceAIGeneScore",
     "SpliceAIPredictConfig",
     "SpliceAIPredictInput",

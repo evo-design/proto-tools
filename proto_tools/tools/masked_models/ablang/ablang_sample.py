@@ -3,13 +3,12 @@
 import logging
 from typing import Any
 
-from pydantic import Field
-
 from proto_tools.entities.antibody import Antibody
 from proto_tools.tools.masked_models.ablang.ablang_embeddings import _resolve_model_choice
 from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelSampleConfig,
     MaskedModelSampleOutput,
+    build_masked_model_samples,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField
@@ -89,18 +88,9 @@ class AbLangSampleOutput(MaskedModelSampleOutput):
     Inherits from ``MaskedModelSampleOutput``.
 
     Attributes:
-        sequences (list[str]): Restored antibody sequences with masked
-            positions replaced by model predictions.
-        logits (list[list[list[float]]] | None): Per-position logits for each restored
-            sequence. Shape is (num_sequences, seq_len, vocab_size=20). Only present if
-            ``return_logits=True`` in config.
+        results (list[MaskedModelSample]): One entry per input sequence, in input order,
+            each holding the restored sequence and its optional per-position logits.
     """
-
-    logits: list[list[list[float]]] | None = Field(
-        default=None,
-        title="Logits",
-        description="Per-position amino acid logits. Shape: [num_sequences, seq_len, 20].",
-    )
 
 
 # ============================================================================
@@ -124,7 +114,8 @@ def example_input() -> AbLangSampleInput:
     uses_gpu=True,
     example_input=example_input,
     iterable_input_fields=["antibodies"],
-    iterable_output_field="sequences",
+    iterable_output_field="results",
+    max_chunk_size=32,
     cacheable=True,
     stochastic=True,
 )
@@ -160,6 +151,5 @@ def run_ablang_sample(
             "model_choice": model_choice,
             "num_sequences": len(sequences),
         },
-        sequences=result["sequences"],
-        logits=result["logits"],
+        results=build_masked_model_samples(result["sequences"], result["logits"]),
     )

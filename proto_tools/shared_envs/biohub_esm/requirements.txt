@@ -1,2 +1,3 @@
 tqdm
-esm @ git+https://github.com/bviggiano/esm.git@faddbd8ef4a6bd5698ddeb6c088a8c06955c9702
+# Fork of Biohub/esm: checkpoint loader fixes for ESM C and a dtype fix for ESM3.
+esm @ git+https://github.com/bviggiano/esm.git@be7da06509c255a646de9b15e793013bdada7cc3

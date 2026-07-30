@@ -205,6 +205,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["inputs"],
     iterable_output_field="results",
+    max_chunk_size=32,
 )
 def run_fampnn_score(
     inputs: FAMPNNScoreInput,

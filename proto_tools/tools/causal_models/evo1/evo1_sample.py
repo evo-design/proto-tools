@@ -11,6 +11,7 @@ from typing import Any, Literal
 from pydantic import Field
 
 from proto_tools.tools.causal_models.shared_data_models import (
+    CausalModelSample,
     CausalModelSampleConfig,
     CausalModelSampleInput,
     CausalModelSampleOutput,
@@ -41,19 +42,32 @@ Evo1SampleInput = CausalModelSampleInput
 
 
 # Output:
+class Evo1Sample(CausalModelSample):
+    """One generated DNA sequence and its scoring metrics.
+
+    Attributes:
+        sequence (str): The generated DNA sequence.
+        metrics (CausalModelScoringMetrics | None): Scoring metrics for this sequence,
+            including log_likelihood, avg_log_likelihood, and perplexity.
+    """
+
+    metrics: CausalModelScoringMetrics | None = Field(
+        default=None,
+        title="Metrics",
+        description="Scoring metrics for this generated sequence",
+    )
+
+
 class Evo1SampleOutput(CausalModelSampleOutput):
     """Output from Evo1 DNA sequence sampling.
 
     Attributes:
-        sequences (list[str]): Generated DNA sequences.
-        scores (list[CausalModelScoringMetrics] | None): Scoring metrics per
-            sequence, including log_likelihood, avg_log_likelihood, and perplexity.
+        results (list[Evo1Sample]): One generated DNA sequence per prompt, with its scores.
     """
 
-    scores: list[CausalModelScoringMetrics] | None = Field(
-        default=None,
-        title="Scores",
-        description="Scoring metrics per generated sequence",
+    results: list[Evo1Sample] = Field(  # type: ignore[assignment]
+        title="Results",
+        description="Generated DNA sequences with their scoring metrics, one per prompt",
     )
 
 
@@ -77,6 +91,13 @@ class Evo1SampleConfig(CausalModelSampleConfig):
         force_prompt_threshold (int): Number of tokens to prefill in parallel before
             switching to autoregressive prompt forcing; lower values reduce peak memory.
     """
+
+    batch_size: int = ConfigField(
+        title="Batch Size",
+        default=4,
+        ge=1,
+        description="Sequences per GPU forward pass; raise for throughput, lower if OOM",
+    )
 
     prepend_prompt: bool = ConfigField(
         title="Prepend Prompt",
@@ -141,7 +162,8 @@ def example_input() -> Any:
     stochastic=True,
     example_input=example_input,
     iterable_input_fields=["prompts"],
-    iterable_output_field="sequences",
+    iterable_output_field="results",
+    max_chunk_size=32,
 )
 def run_evo1_sample(
     inputs: Evo1SampleInput,
@@ -202,6 +224,10 @@ def run_evo1_sample(
     scores: list[CausalModelScoringMetrics] | None = (
         [CausalModelScoringMetrics(**m) for m in raw_metrics] if raw_metrics else None
     )
+    results = [
+        Evo1Sample(sequence=sequence, metrics=None if scores is None else scores[i])
+        for i, sequence in enumerate(sequences)
+    ]
 
     return Evo1SampleOutput(
         metadata={
@@ -213,6 +239,5 @@ def run_evo1_sample(
             "max_new_tokens": config.max_new_tokens,
             "prepend_prompt": config.prepend_prompt,
         },
-        sequences=sequences,
-        scores=scores,
+        results=results,
     )

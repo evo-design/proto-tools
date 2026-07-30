@@ -456,6 +456,7 @@ def example_gradient_input() -> ESMFoldGradientInput:
     example_input=example_input,
     iterable_input_fields=["complexes", "msas"],
     iterable_output_field="structures",
+    max_chunk_size=1024,
     cacheable=True,
 )
 def run_esmfold(

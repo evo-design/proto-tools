@@ -93,7 +93,7 @@ def test_form_flags_mapping():
 
 def test_config_cloud_unsupported():
     """X3DNA is a local-only binary; cloud execution must be reported unsupported."""
-    reason = X3DNAFiberConfig().cloud_unsupported_reason()
+    reason = X3DNAFiberConfig().remote_unsupported_reason("proto")
     assert reason is not None
     assert isinstance(reason, str) and reason
 

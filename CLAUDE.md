@@ -32,6 +32,14 @@ builds and manages standalone tool environments automatically.
 Integration tests are skipped by default. See `notes/testing.md` for markers,
 selection flags, logs, and test layout.
 
+Do not write frivolous tests. A test that asserts Pydantic stored the default you
+just wrote (`test_sample_config_defaults`, `test_*_config_defaults`) proves nothing:
+it restates the source in a second place, so changing a default means editing both
+and the test never catches a mistake. Test computed properties, validators,
+normalization, error cases, and defaults that are *derived* from other fields.
+Pinning a value is only worth it when it must agree with something external, such as
+an upstream snapshot.
+
 Before pushing any PR, run the full `tests/style_consistency_tests/` suite (fast,
 CPU-only, no env). These run in CI and enforce consistency checks (docstring style,
 config/schema field metadata including the <100-char description limit,

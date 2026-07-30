@@ -20,6 +20,7 @@ from proto_tools.utils import (
     ToolInstance,
     return_invalid_nucleotide_chars,
 )
+from proto_tools.utils.device import RemoteDevice
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 DEFAULT_MALINOIS_ARTIFACT_PATH = ""
@@ -269,9 +270,9 @@ class MalinoisScoreConfig(BaseConfig):
     )
     batch_size: int = ConfigField(
         title="Batch Size",
-        default=1,
+        default=8,
         ge=1,
-        description="Number of sequences to score simultaneously on GPU.",
+        description="Sequences per GPU forward pass; raise for throughput, lower if OOM",
         include_in_key=False,
     )
 
@@ -292,10 +293,10 @@ class MalinoisScoreConfig(BaseConfig):
             raise ValueError("cell_types must be unique")
         return self
 
-    def cloud_unsupported_reason(self) -> str | None:
+    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
         """Local artifact/metadata overrides aren't present on a hosted worker."""
         if self.artifact_path or self.malinois_dir:
-            return "artifact_path/malinois_dir point to local files not available on device='cloud'. Leave them empty (the managed cache is used), or run locally with device='cpu'."
+            return f"artifact_path/malinois_dir point to local files not available on device='{device}'. Leave them empty (the managed cache is used), or run locally with device='cpu'."
         return None
 
 
@@ -475,10 +476,10 @@ class MalinoisGradientConfig(BaseConfig):
             raise ValueError("loss_terms cannot be empty")
         return self
 
-    def cloud_unsupported_reason(self) -> str | None:
+    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
         """Local artifact/metadata overrides aren't present on a hosted worker."""
         if self.artifact_path or self.malinois_dir:
-            return "artifact_path/malinois_dir point to local files not available on device='cloud'. Leave them empty (the managed cache is used), or run locally with device='cpu'."
+            return f"artifact_path/malinois_dir point to local files not available on device='{device}'. Leave them empty (the managed cache is used), or run locally with device='cpu'."
         return None
 
 
@@ -643,6 +644,7 @@ def example_gradient_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["sequences"],
     iterable_output_field="results",
+    max_chunk_size=32,
     cacheable=True,
 )
 def run_malinois_score(

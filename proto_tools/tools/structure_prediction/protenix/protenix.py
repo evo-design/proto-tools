@@ -32,6 +32,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance
+from proto_tools.utils.device import RemoteDevice
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = getLogger(__name__)
@@ -380,13 +381,13 @@ class ProtenixConfig(MSAStructurePredictionConfig):
             self.num_diffusion_steps = steps
         return self
 
-    def cloud_unsupported_reason(self) -> str | None:
-        """``protenix-v2`` is ByteDance-gated and not hosted for cloud execution."""
-        if self.model_name == _PROTENIX_V2_MODEL:
+    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
+        """``protenix-v2`` is ByteDance-gated, so Proto cannot host it; self-hosting is unaffected."""
+        if device == "proto" and self.model_name == _PROTENIX_V2_MODEL:
             return (
-                "The 'protenix-v2' checkpoint is gated by ByteDance and is not available for "
-                "cloud execution. Choose a different model_name, or run locally (device='cpu' "
-                "or 'cuda') with manually provisioned weights."
+                "The 'protenix-v2' checkpoint is gated by ByteDance and is not hosted on "
+                "device='proto'. Choose a different model_name, run locally (device='cpu' or "
+                "'cuda'), or deploy it yourself with device='modal'."
             )
         return None
 
@@ -412,6 +413,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["complexes", "msas"],
     iterable_output_field="structures",
+    max_chunk_size=1,
     cacheable=True,
     stochastic=True,
 )

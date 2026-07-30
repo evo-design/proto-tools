@@ -2,6 +2,7 @@
 
 from proto_tools.tools.causal_models.evo2.evo2_sample import (
     Evo2KVCacheRef,
+    Evo2Sample,
     Evo2SampleConfig,
     Evo2SampleInput,
     Evo2SampleOutput,
@@ -16,6 +17,7 @@ from proto_tools.tools.causal_models.evo2.evo2_score import (
 )
 
 __all__ = [
+    "Evo2Sample",
     # Tools layer - simple sampling interface
     "Evo2SampleInput",
     "Evo2SampleConfig",

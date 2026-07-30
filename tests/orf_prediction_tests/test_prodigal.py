@@ -54,12 +54,6 @@ def test_config_rejects_bad_translation_table(bad_value):
         ProdigalConfig(translation_table=bad_value)
 
 
-def test_config_defaults():
-    config = ProdigalConfig()
-    assert config.translation_table == "bacterial"
-    assert config.meta_mode is True
-
-
 def test_translation_table_map_matches_literal():
     from typing import get_args
 

@@ -133,7 +133,7 @@ SPINNER_STYLES: dict[str, SpinnerStyle] = {
         frames=["|", "/", "-", "\\"],
         interval=0.10,
     ),
-    "cloud": SpinnerStyle(
+    "proto": SpinnerStyle(
         frames=_cloud_frames(),
         interval=0.28,
     ),

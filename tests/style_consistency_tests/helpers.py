@@ -83,6 +83,11 @@ def normalize_type(type_string: str) -> str:
 
 def _normalize_ast(node: ast.expr) -> ast.expr:
     """Recursively normalize an AST type expression to modern Python form."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        # Nested forward reference: tuple[X, 'Y'] -> tuple[X, Y]. The quotes are a Python
+        # requirement for a not-yet-defined name, not part of the type.
+        return _normalize_ast(ast.Name(id=node.value, ctx=ast.Load()))
+
     if isinstance(node, ast.Name):
         # List -> list, Dict -> dict, etc.
         if node.id in _TYPING_TO_BUILTIN:

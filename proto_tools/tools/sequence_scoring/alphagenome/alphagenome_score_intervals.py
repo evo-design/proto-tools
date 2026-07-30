@@ -177,6 +177,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["intervals"],
     iterable_output_field="results",
+    max_chunk_size=64,
     cacheable=True,
 )
 def run_alphagenome_score_intervals(

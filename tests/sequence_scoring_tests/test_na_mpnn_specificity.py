@@ -45,11 +45,11 @@ def test_input_rejects_empty_list():
 # -- Cloud gating ----------------------------------------------------------------------
 
 
-def test_cloud_unsupported_reason_is_always_set():
+def test_proto_unsupported_reason_is_always_set():
     """NA-MPNN needs local repo + checkpoint, so cloud is unconditionally rejected."""
-    reason = NAMPNNSpecificityConfig().cloud_unsupported_reason()
+    reason = NAMPNNSpecificityConfig().remote_unsupported_reason("proto")
     assert reason is not None
-    assert "cloud" in reason
+    assert "proto" in reason
 
 
 # -- Registration ----------------------------------------------------------------------

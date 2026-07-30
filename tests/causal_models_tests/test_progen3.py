@@ -15,6 +15,7 @@ from proto_tools.tools.causal_models.progen3 import (
     run_progen3_sample,
     run_progen3_score,
 )
+from proto_tools.tools.causal_models.shared_data_models import CausalModelSample
 from proto_tools.utils import PROTEIN_AMINO_ACIDS
 from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
@@ -49,21 +50,6 @@ def test_sample_input_rejects_empty():
 # ── Sample config validation ────────────────────────────────────────────────
 
 
-def test_sample_config_defaults():
-    """All defaults are set correctly."""
-    cfg = ProGen3SampleConfig()
-    assert cfg.model_checkpoint == "progen3-762m"
-    assert cfg.direction == "forward"
-    assert cfg.temperature == 0.2
-    assert cfg.top_p == 0.95
-    assert cfg.max_new_tokens == 256
-    assert cfg.min_new_tokens == 1
-    assert cfg.prepend_prompt is True
-    assert cfg.batch_size == 1
-    assert cfg.device == "cuda"
-    assert cfg.local_path is None
-
-
 def test_sample_dispatches_one_sequence_per_prompt(monkeypatch):
     """Multi-prompt input goes through a single dispatch carrying the full batch."""
     captured_payloads = []
@@ -87,15 +73,6 @@ def test_sample_dispatches_one_sequence_per_prompt(monkeypatch):
 
     assert result.sequences == ["AAAAG", "CCCCG"]
     assert [payload["prompts"] for payload in captured_payloads] == [["1AAAA", "1CCCC"]]
-
-
-def test_scoring_config_defaults():
-    """All defaults are set correctly."""
-    cfg = ProGen3ScoringConfig()
-    assert cfg.model_checkpoint == "progen3-762m"
-    assert cfg.device == "cuda"
-    assert cfg.batch_size == 1
-    assert cfg.local_path is None
 
 
 def test_sample_config_rejects_invalid_temperature():
@@ -132,7 +109,7 @@ def test_sample_config_rejects_invalid_direction():
 def test_sample_output_export_fasta(tmp_path):
     """Test FASTA export from a manually constructed output."""
     output = ProGen3SampleOutput(
-        sequences=["MKTLVIVTGA", "EVQLVESGGS"],
+        results=[CausalModelSample(sequence="MKTLVIVTGA"), CausalModelSample(sequence="EVQLVESGGS")],
         tool_id="progen3-sample",
         success=True,
     )
@@ -150,7 +127,7 @@ def test_sample_output_export_fasta(tmp_path):
 def test_sample_output_export_json(tmp_path):
     """Test JSON export from a manually constructed output."""
     output = ProGen3SampleOutput(
-        sequences=["MKTLVIVTGA", "EVQLVESGGS"],
+        results=[CausalModelSample(sequence="MKTLVIVTGA"), CausalModelSample(sequence="EVQLVESGGS")],
         tool_id="progen3-sample",
         success=True,
     )

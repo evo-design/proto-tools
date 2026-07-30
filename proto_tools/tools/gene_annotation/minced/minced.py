@@ -236,6 +236,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["sequences"],
     iterable_output_field="results",
+    max_chunk_size=256,
     cacheable=True,
 )
 def run_minced(inputs: MincedInput, config: MincedConfig, instance: Any = None) -> MincedOutput:

@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, ClassVar
 
-from pydantic import Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from proto_tools.utils import (
     BaseConfig,
@@ -62,7 +62,7 @@ class CausalModelScoringConfig(BaseConfig):
 
     batch_size: int = ConfigField(
         title="Batch Size",
-        default=1,
+        default=8,
         ge=1,
         description="Sequences per GPU forward pass; raise for throughput, lower if OOM",
     )
@@ -103,6 +103,7 @@ class CausalModelScoringMetrics(Metrics):
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
         "log_likelihood": {
+            "description": "Sum over all positions. Grows with sequence length, so compare only at equal length.",
             "availability": "always",
             "type": "float",
             "min": None,
@@ -110,6 +111,7 @@ class CausalModelScoringMetrics(Metrics):
             "better_values_are": "higher",
         },
         "avg_log_likelihood": {
+            "description": "Mean per position. Length independent, so comparable across sequences.",
             "availability": "always",
             "type": "float",
             "min": None,
@@ -117,6 +119,7 @@ class CausalModelScoringMetrics(Metrics):
             "better_values_are": "higher",
         },
         "perplexity": {
+            "description": "Exponential of the negated mean log-likelihood. Lower means a more confident model.",
             "availability": "always",
             "type": "float",
             "min": 1.0,
@@ -286,7 +289,7 @@ class CausalModelSampleConfig(BaseConfig):
     )
     batch_size: int = ConfigField(
         title="Batch Size",
-        default=1,
+        default=8,
         ge=1,
         description="Prompts per GPU forward pass; raise for throughput, lower if OOM",
     )
@@ -298,17 +301,32 @@ class CausalModelSampleConfig(BaseConfig):
     )
 
 
+class CausalModelSample(BaseModel):
+    """One generated sequence. Tools extend this with whatever else they produce per sequence.
+
+    Attributes:
+        sequence (str): The generated sequence.
+    """
+
+    sequence: str = Field(title="Sequence", description="Generated sequence")
+
+
 class CausalModelSampleOutput(BaseToolOutput):
     """Base output for causal model sampling/generation tools.
 
     Attributes:
-        sequences (list[str]): Generated sequences.
+        results (list[CausalModelSample]): One entry per generated sequence, in input order.
     """
 
-    sequences: list[str] = Field(
-        title="Sequences",
-        description="Generated sequences",
+    results: list[CausalModelSample] = Field(
+        title="Results",
+        description="Generated sequences with their per-sequence outputs, one per input",
     )
+
+    @property
+    def sequences(self) -> list[str]:
+        """The generated sequences, in input order."""
+        return [result.sequence for result in self.results]
 
     @property
     def output_format_options(self) -> list[str]:
@@ -326,7 +344,7 @@ class CausalModelSampleOutput(BaseToolOutput):
         if file_format == "fasta":
             fasta_path = path.with_suffix(".fasta")
             with open(fasta_path, "w") as f:
-                f.writelines(f">seq_{i}\n{seq}\n" for i, seq in enumerate(self.sequences))
+                f.writelines(f">seq_{i}\n{r.sequence}\n" for i, r in enumerate(self.results))
         elif file_format == "txt":
             txt_path = path.with_suffix(".txt")
             with open(txt_path, "w") as f:

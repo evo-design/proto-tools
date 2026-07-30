@@ -4,6 +4,8 @@ Verifies that all 4 causal model tools (evo1, evo2, progen2, progen3) honor
 the shared Input/Config/Output contracts after migration to base classes.
 """
 
+import typing
+
 import pytest
 from pydantic import ValidationError
 
@@ -93,10 +95,12 @@ def test_sample_config_contract(input_cls, config_cls, output_cls):
 
 @pytest.mark.parametrize("input_cls,config_cls,output_cls", SAMPLE_TOOLS)
 def test_sample_output_contract(input_cls, config_cls, output_cls):
-    """Output inherits base, has sequences field, supports fasta/txt export."""
+    """Output inherits base, exposes one item per generated sequence, supports fasta/txt export."""
     assert issubclass(output_cls, CausalModelSampleOutput)
-    output = output_cls(sequences=["ATCG", "GCTA"])
-    assert output.sequences == ["ATCG", "GCTA"]
+    element_cls = typing.get_args(output_cls.model_fields["results"].annotation)[0]
+    output = output_cls(results=[element_cls(sequence="ATCG"), element_cls(sequence="GCTA")])
+    assert [r.sequence for r in output.results] == ["ATCG", "GCTA"]
+    assert output.sequences == ["ATCG", "GCTA"]  # convenience view
     assert {"fasta", "txt"} <= set(output.output_format_options)
 
 

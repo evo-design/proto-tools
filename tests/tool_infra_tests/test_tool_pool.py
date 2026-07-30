@@ -3,6 +3,7 @@
 Tests for ToolPool parallel fan-out across devices.
 """
 
+import logging
 import threading
 from unittest.mock import MagicMock, patch
 
@@ -65,7 +66,11 @@ class MockNonIterableOutput(MockToolOutputBase):
 
 
 def _register_mock_tool(
-    registry, key="mock-process", iterable_input_fields=("items",), iterable_output_field="results"
+    registry,
+    key="mock-process",
+    iterable_input_fields=("items",),
+    iterable_output_field="results",
+    stochastic=False,
 ):
     """Register a mock tool and return (wrapper_function, call_log)."""
     call_log = []
@@ -80,12 +85,15 @@ def _register_mock_tool(
         description="Mock tool for testing",
         iterable_input_fields=list(iterable_input_fields),
         iterable_output_field=iterable_output_field,
+        max_chunk_size=None,
+        stochastic=stochastic,
     )
     def run_mock_process(inputs, config=None, instance=None):
         call_log.append(
             {
                 "items": list(inputs.items),
                 "device": config.device if config else None,
+                "seed": config.seed if config else None,
                 "instance": instance,
                 "thread": threading.current_thread().name,
             }
@@ -360,6 +368,37 @@ def test_dispatch_items_split_across_devices(clean_registry):
     assert result.results == ["processed_a", "processed_b", "processed_c", "processed_d"]
 
 
+def test_each_partition_of_a_seeded_batch_gets_its_own_seed(clean_registry):
+    """A stochastic tool seeds per execution, so partitions sharing one seed would draw identically."""
+    func, call_log = _register_mock_tool(clean_registry, key="mock-stochastic", stochastic=True)
+
+    pool = ToolPool(gpus=["cuda:0", "cuda:1"])
+    pool._gpu_devices = ["cuda:0", "cuda:1"]
+
+    pool._parallel_dispatch(
+        "mock-stochastic", func, MockInput(items=["a", "b", "c", "d"]), MockConfig(device="cuda", seed=7)
+    )
+
+    seeds = [call["seed"] for call in call_log]
+    assert len(seeds) == 2
+    assert 7 in seeds, "the partition holding the first item keeps the caller's seed"
+    assert len(set(seeds)) == 2, f"partitions must not share a seed, got {seeds}"
+
+
+def test_a_deterministic_pool_dispatch_keeps_one_seed(clean_registry):
+    """Re-seeding a deterministic tool would change nothing and only obscure the config."""
+    func, call_log = _register_mock_tool(clean_registry)
+
+    pool = ToolPool(gpus=["cuda:0", "cuda:1"])
+    pool._gpu_devices = ["cuda:0", "cuda:1"]
+
+    pool._parallel_dispatch(
+        "mock-process", func, MockInput(items=["a", "b", "c", "d"]), MockConfig(device="cuda", seed=7)
+    )
+
+    assert [call["seed"] for call in call_log] == [7, 7]
+
+
 def test_dispatch_results_reassembled_in_order(clean_registry):
     """Output items must match original input order."""
     func, _call_log = _register_mock_tool(clean_registry)
@@ -451,6 +490,7 @@ def test_dispatch_gpus_per_instance_grouping(clean_registry):
         description="Multi-GPU test",
         iterable_input_fields=["items"],
         iterable_output_field="results",
+        max_chunk_size=None,
     )
     def run_multi(inputs, config=None, instance=None):
         call_log.append({"device": config.device, "instance": instance})
@@ -514,6 +554,7 @@ def test_dispatch_gpus_per_instance_zero_bypasses_pool(clean_registry):
         description="CPU-only test",
         iterable_input_fields=["items"],
         iterable_output_field="results",
+        max_chunk_size=None,
     )
     def run_cpu_only(inputs, config=None, instance=None):
         call_log.append({"device": config.device, "instance": instance, "items": list(inputs.items)})
@@ -572,6 +613,7 @@ def test_dispatch_collects_warnings_and_errors(clean_registry):
         description="Mock tool that produces warnings and errors",
         iterable_input_fields=["items"],
         iterable_output_field="results",
+        max_chunk_size=None,
     )
     def run_with_warnings(inputs, config=None, instance=None):
         items = inputs.items
@@ -665,6 +707,7 @@ def test_interception_iterable_tool_intercepted_by_pool(clean_registry):
         description="Iterable tool",
         iterable_input_fields=["items"],
         iterable_output_field="results",
+        max_chunk_size=None,
     )
     def run_iterable(inputs, config=None, instance=None):
         return MockOutput(
@@ -706,6 +749,7 @@ def test_interception_pool_executing_prevents_re_interception(clean_registry):
         description="Inner tool call",
         iterable_input_fields=["items"],
         iterable_output_field="results",
+        max_chunk_size=None,
     )
     def run_inner(inputs, config=None, instance=None):
         return MockOutput(
@@ -745,6 +789,7 @@ def test_toolspec_iterable_fields_stored(clean_registry):
         description="Test",
         iterable_input_fields=["items"],
         iterable_output_field="results",
+        max_chunk_size=None,
     )
     def run_spec_test(inputs, config=None, instance=None):
         return MockOutput(results=[], tool_id="spec-test", success=True)
@@ -767,6 +812,7 @@ def test_toolspec_iterable_input_fields_parallel_group(clean_registry):
         description="Test",
         iterable_input_fields=["items", "tags"],
         iterable_output_field="results",
+        max_chunk_size=None,
     )
     def run_parallel(inputs, config=None, instance=None):
         return MockOutput(results=[], tool_id="parallel-spec-test", success=True)
@@ -847,6 +893,7 @@ def test_parallel_group_dedup_keys_and_aligns_through_wrapper(clean_registry):
         description="Records the (items, tags) rows it actually receives post-dedup",
         iterable_input_fields=["items", "tags"],
         iterable_output_field="results",
+        max_chunk_size=None,
         cacheable=True,
     )
     def run_parallel_dedup(inputs, config=None, instance=None):
@@ -951,6 +998,7 @@ def test_broadcast_field_is_folded_into_dedup_key_through_wrapper(clean_registry
         description="Records the (items, weight) rows it receives post-dedup",
         iterable_input_fields=["items", "weight"],
         iterable_output_field="results",
+        max_chunk_size=None,
         cacheable=True,
     )
     def run_broadcast_dedup(inputs, config=None, instance=None):
@@ -1009,6 +1057,7 @@ def test_toolspec_iterable_fields_excluded_from_serialization(clean_registry):
         description="Test",
         iterable_input_fields=["items"],
         iterable_output_field="results",
+        max_chunk_size=None,
     )
     def run_serial(inputs, config=None, instance=None):
         return MockOutput(results=[], tool_id="serial-test", success=True)
@@ -1124,6 +1173,7 @@ def test_dispatch_cpu_fanout_partitions_items(clean_registry):
         description="CPU fan-out test",
         iterable_input_fields=["items"],
         iterable_output_field="results",
+        max_chunk_size=None,
     )
     def run_cpu_fanout(inputs, config=None, instance=None):
         call_log.append(
@@ -1190,6 +1240,7 @@ def test_dispatch_cpu_short_circuit_preserved(clean_registry):
         description="Internal-threading CPU tool",
         iterable_input_fields=["items"],
         iterable_output_field="results",
+        max_chunk_size=None,
     )
     def run_mmseqs_style(inputs, config=None, instance=None):
         call_log.append({"items": list(inputs.items), "instance": instance})
@@ -1232,7 +1283,7 @@ def test_gpus_per_instance_derived_from_device_string():
     assert BaseConfig(device="cudax2").gpus_per_instance == 2
     assert BaseConfig(device="cudax4").gpus_per_instance == 4
     assert BaseConfig(device="cuda:0,cuda:1").gpus_per_instance == 2
-    assert BaseConfig(device="cloud").gpus_per_instance == 1
+    assert BaseConfig(device="proto").gpus_per_instance == 1
 
 
 def test_gpus_per_instance_override():
@@ -1266,6 +1317,7 @@ def test_local_partition_failure_preserves_other_results(clean_registry):
         description="Tool that fails on second device",
         iterable_input_fields=["items"],
         iterable_output_field="results",
+        max_chunk_size=None,
     )
     def run_fail_tool(inputs, config=None, instance=None):
         nonlocal call_count
@@ -1311,6 +1363,7 @@ def test_all_partitions_fail(clean_registry):
         description="Tool that always fails",
         iterable_input_fields=["items"],
         iterable_output_field="results",
+        max_chunk_size=None,
     )
     def run_all_fail(inputs, config=None, instance=None):
         raise RuntimeError("everything is broken")
@@ -1665,3 +1718,211 @@ def test_cpu_fanout_explicit_opt_out_short_circuits():
     finally:
         ToolInstance.clear_all()
         DeviceManager.reset_instance()
+
+
+# ── Invariant carry-through is an unchecked promise, so it is at least noticed ──
+
+
+class _DisagreeOutput(MockOutput):
+    """Iterable results plus a field that partitions will disagree on."""
+
+    per_worker: str = Field(default="", description="Differs per partition, so not truly invariant")
+
+
+def test_partition_disagreement_on_a_carried_field_is_warned(clean_registry, caplog):
+    """A field carried through as invariant but differing between partitions is surfaced."""
+
+    @clean_registry.register(
+        key="disagree-process",
+        label="Disagree",
+        category="test",
+        input_class=MockInput,
+        config_class=MockConfig,
+        output_class=_DisagreeOutput,
+        description="Partition-dependent field",
+        iterable_input_fields=["items"],
+        iterable_output_field="results",
+        max_chunk_size=None,
+    )
+    def run_tool(inputs, config=None, instance=None):
+        return _DisagreeOutput(
+            results=[f"processed_{i}" for i in inputs.items],
+            per_worker=str(config.device),  # differs per slot
+        )
+
+    func = clean_registry.get("disagree-process").function.__wrapped__
+    pool = ToolPool(gpus=["cuda:0", "cuda:1"])
+    pool._gpu_devices = ["cuda:0", "cuda:1"]
+
+    with caplog.at_level(logging.WARNING):
+        pool._parallel_dispatch("disagree-process", func, MockInput(items=["a", "b"]), MockConfig(device="cuda"))
+
+    assert "per_worker" in caplog.text
+    assert "carried through as invariant" in caplog.text
+
+
+def test_agreeing_invariant_field_is_not_warned(clean_registry, caplog):
+    """A genuinely invariant field produces no warning."""
+    func = _register_mock_tool(clean_registry)[0].__wrapped__
+    pool = ToolPool(gpus=["cuda:0", "cuda:1"])
+    pool._gpu_devices = ["cuda:0", "cuda:1"]
+
+    with caplog.at_level(logging.WARNING):
+        pool._parallel_dispatch("mock-process", func, MockInput(items=["a", "b"]), MockConfig(device="cuda"))
+
+    assert "carried through as invariant" not in caplog.text
+
+
+def test_pool_honours_return_partial(clean_registry, monkeypatch):
+    """The same setting must mean the same thing here as it does for a remote chunk."""
+    _register_mock_tool(clean_registry, key="mock-pool-partial")
+
+    def flaky(inputs, config=None, instance=None):
+        if "b" in inputs.items:
+            raise RuntimeError("partition exploded")
+        return MockOutput(
+            results=[f"processed_{item}" for item in inputs.items],
+            tool_id="mock-pool-partial",
+            execution_time=0.01,
+            success=True,
+        )
+
+    pool = ToolPool(gpus=["cuda:0", "cuda:1"])
+    pool._gpu_devices = ["cuda:0", "cuda:1"]
+
+    monkeypatch.setenv("PROTO_ON_PARTIAL_FAILURE", "return_partial")
+
+    result = pool._parallel_dispatch("mock-pool-partial", flaky, MockInput(items=["a", "b"]), MockConfig(device="cuda"))
+
+    assert result.results[0] == "processed_a", "length preserved, survivor in place"
+    assert "partition exploded" in result.results[1].error, "the failed position names the cause"
+    assert any("partition(s) failed" in e for e in result.errors)
+
+
+def test_a_pool_partial_result_is_never_cached(monkeypatch):
+    """A pool partial result must not be cached, exactly as a remote partial result must not.
+
+    Goes through the ``@tool`` wrapper with a registered mock tool rather than calling
+    ``_parallel_dispatch`` directly, because the wrapper is where the caching decision is made —
+    a test that bypasses it cannot see this. The mock also carries an invariant output field
+    (``items_processed``), which routes through the output-template cache the in-test probes never
+    reach.
+    """
+    import proto_tools.tools.testing.mock_iterable_deterministic  # noqa: F401 -- registers the tool
+    from proto_tools.tools import ToolRegistry as _Registry
+    from proto_tools.utils.fanout import FailedItem
+    from proto_tools.utils.tool_cache import ToolCache, _program_tool_cache
+
+    spec = _Registry.get("mock-iterable-deterministic")
+    field = spec.iterable_output_field
+    monkeypatch.setenv("PROTO_ON_PARTIAL_FAILURE", "return_partial")
+
+    def failing_pool(self, key, func, inputs, config):
+        """Stand in for a pool run where one partition failed."""
+        out = func(inputs, config)
+        items = list(getattr(out, field))
+        items[-1] = FailedItem(error="RuntimeError: partition exploded")
+        return out.model_copy(update={field: items, "errors": ["1/2 partition(s) failed"]})
+
+    monkeypatch.setattr(ToolPool, "_parallel_dispatch", failing_pool)
+    token = _program_tool_cache.set(ToolCache())
+    try:
+        with ToolPool(gpus=0, cpus=2):
+            result = spec.function(spec.input_model(prompts=[f"p{i}" for i in range(4)]), spec.config_model())
+        assert any(isinstance(item, FailedItem) for item in getattr(result, field)), "the failure is reported"
+
+        cached: list[str] = []
+
+        def walk(value):
+            if isinstance(value, FailedItem):
+                cached.append(value.error)
+            elif hasattr(value, "model_fields"):
+                for name in type(value).model_fields:
+                    walk(getattr(value, name, None))
+            elif isinstance(value, (list, tuple)):
+                for entry in value:
+                    walk(entry)
+            elif isinstance(value, dict):
+                for entry in value.values():
+                    walk(entry)
+
+        for entries in getattr(_program_tool_cache.get(), "_cache", {}).values():
+            for stored in entries.values():
+                walk(stored)
+        assert cached == [], "a pool failure must not be cached either"
+    finally:
+        _program_tool_cache.reset(token)
+
+
+def test_post_process_hook_is_not_handed_placeholders(monkeypatch):
+    """A tool's post-process hook works on the item type it declares, not on failure placeholders.
+
+    Four shipped tools attach UMAP projections this way and reach for a field only a real item
+    has, so handing one a FailedItem raises and destroys the partial result the caller asked to
+    receive. The mock has no hook of its own, so one is attached here to reach the path.
+    """
+    import proto_tools.tools.testing.mock_iterable_deterministic  # noqa: F401 -- registers the tool
+    from proto_tools.utils.fanout import FailedItem
+    from proto_tools.utils.tool_cache import ToolCache, _program_tool_cache
+
+    spec = ToolRegistry.get("mock-iterable-deterministic")
+    field = spec.iterable_output_field
+    monkeypatch.setenv("PROTO_ON_PARTIAL_FAILURE", "return_partial")
+    seen: list[list[object]] = []
+
+    def hook(items: list[object]) -> None:
+        """Stand in for a real hook by touching a field only a genuine item has."""
+        seen.append(list(items))
+        for item in items:
+            _ = item.score  # AttributeError on a FailedItem, as the shipped hooks would raise
+
+    def failing_pool(self, key, func, inputs, config):
+        """Stand in for a pool run where one partition failed."""
+        out = func(inputs, config)
+        items = list(getattr(out, field))
+        items[-1] = FailedItem(error="RuntimeError: partition exploded")
+        return out.model_copy(update={field: items, "errors": ["1/2 partition(s) failed"]})
+
+    monkeypatch.setattr(spec, "post_process_iterable", hook)
+    monkeypatch.setattr(ToolPool, "_parallel_dispatch", failing_pool)
+    token = _program_tool_cache.set(ToolCache())
+    try:
+        with ToolPool(gpus=0, cpus=2):
+            result = spec.function(spec.input_model(prompts=[f"p{i}" for i in range(4)]), spec.config_model())
+    finally:
+        _program_tool_cache.reset(token)
+
+    assert seen, "the hook still runs for the items that succeeded"
+    assert not any(isinstance(item, FailedItem) for batch in seen for item in batch)
+    assert any(isinstance(item, FailedItem) for item in getattr(result, field)), "the failure is still reported"
+
+
+class MockCostlyInput(MockInput):
+    """Inputs whose items carry a real cost, as a structure predictor's do."""
+
+    @classmethod
+    def item_cost(cls, item: object) -> float:
+        """Cost is the item's length, so one long item outweighs several short ones."""
+        return float(len(str(item)))
+
+
+def test_partitions_balance_by_declared_cost_not_by_count(clean_registry):
+    """The pool reads cost from the tool's input class, so a heavy item counts for more.
+
+    Splitting evenly by count would put roughly half the items on each device and leave the one
+    holding the heavy item running long after the other finished. The pool cannot rebalance once
+    partitions are handed out, so this has to be right before anything starts.
+    """
+    func, call_log = _register_mock_tool(clean_registry, key="mock-costly")
+
+    pool = ToolPool(gpus=["cuda:0", "cuda:1"])
+    pool._gpu_devices = ["cuda:0", "cuda:1"]
+
+    # One item worth as much as all the others together.
+    items = ["x" * 20, "a", "b", "c", "d"]
+    pool._parallel_dispatch("mock-costly", func, MockCostlyInput(items=items), MockConfig(device="cuda"))
+
+    sizes = sorted(len(call["items"]) for call in call_log)
+    assert sizes == [1, 4], f"the heavy item should be alone; splitting by count gives 2/3, got {sizes}"
+    heavy = next(call for call in call_log if len(call["items"]) == 1)
+    assert heavy["items"] == ["x" * 20], "and the partition of one is the expensive item"

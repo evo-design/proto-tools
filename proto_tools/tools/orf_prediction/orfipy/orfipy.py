@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import ConfigDict, Field, computed_field, field_validator, model_validator
 
-from proto_tools.tools.orf_prediction.orf import ORF
+from proto_tools.tools.orf_prediction.orf import ORF, OrfPredictionResult
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -282,9 +282,8 @@ class OrfipyOutput(BaseToolOutput):
     objects for downstream analysis.
 
     Attributes:
-        predicted_orfs (list[list[ORF]]): List of ORF results per input sequence.
-            This is the source of truth for all predicted ORFs. Each inner list
-            contains the ORFs found in a single input sequence.
+        results (list[OrfPredictionResult]): One entry per input sequence, in input
+            order, each holding the ORFs found in that sequence.
 
         num_orfs: Total number of ORFs predicted across all input sequences.
             Computed property derived from predicted_orfs.
@@ -293,23 +292,28 @@ class OrfipyOutput(BaseToolOutput):
             Computed property derived from predicted_orfs.
     """
 
-    predicted_orfs: list[list[ORF]] = Field(
+    results: list[OrfPredictionResult] = Field(
         default_factory=list,
-        title="Predicted ORFs",
-        description="List of ORF results per input sequence",
+        title="Results",
+        description="ORFs found, one entry per input sequence",
     )
+
+    @property
+    def predicted_orfs(self) -> list[list[ORF]]:
+        """The ORFs per input sequence, in input order."""
+        return [result.orfs for result in self.results]
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def num_orfs(self) -> int:
         """Total number of ORFs predicted across all input sequences."""
-        return sum(len(result) for result in self.predicted_orfs)
+        return sum(len(result.orfs) for result in self.results)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def num_orfs_per_sequence(self) -> list[int]:
         """Number of ORFs predicted for each input sequence."""
-        return [len(result) for result in self.predicted_orfs]
+        return [len(result.orfs) for result in self.results]
 
     @property
     def output_format_options(self) -> list[str]:
@@ -363,7 +367,8 @@ def example_input() -> Any:
     description="ORF (Open Reading Frame) prediction using Orfipy",
     example_input=example_input,
     iterable_input_fields=["sequences"],
-    iterable_output_field="predicted_orfs",
+    iterable_output_field="results",
+    max_chunk_size=256,
     cacheable=True,
 )
 def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig, instance: Any = None) -> OrfipyOutput:
@@ -454,5 +459,5 @@ def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig, instance: A
             "max_len": config.max_len,
             "strand": config.strand,
         },
-        predicted_orfs=predicted_orfs,
+        results=[OrfPredictionResult(orfs=orfs) for orfs in predicted_orfs],
     )

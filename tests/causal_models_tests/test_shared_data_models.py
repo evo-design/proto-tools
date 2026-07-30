@@ -25,14 +25,6 @@ def test_sample_input_rejects_empty():
 # ── CausalModelSampleConfig (new fields) ────────────────────────────────────
 
 
-def test_sample_config_defaults():
-    config = CausalModelSampleConfig()
-    assert config.prepend_prompt is True
-    assert config.temperature == 1.0
-    assert config.top_p == 1.0
-    assert config.batch_size == 1
-
-
 @pytest.mark.parametrize(
     "field,bad_value",
     [("temperature", 0.0), ("temperature", -1.0), ("top_p", 0.0), ("top_p", 1.5), ("batch_size", 0)],
@@ -61,13 +53,6 @@ def test_scoring_input_rejects_empty():
 
 
 # ── CausalModelScoringConfig ─────────────────────────────────────────────────
-
-
-def test_scoring_config_defaults():
-    config = CausalModelScoringConfig()
-    assert config.batch_size == 1
-    assert config.device == "cuda"
-    assert config.return_logits is False
 
 
 @pytest.mark.parametrize("field,bad_value", [("batch_size", 0), ("batch_size", -1)])

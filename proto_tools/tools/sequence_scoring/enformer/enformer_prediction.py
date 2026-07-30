@@ -292,7 +292,7 @@ class EnformerConfig(BaseConfig):
         title="Batch Size",
         default=1,
         ge=1,
-        description="Number of sequences to process simultaneously on GPU",
+        description="Sequences per GPU forward pass; raise for throughput, lower if OOM",
     )
 
 
@@ -316,6 +316,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["sequences"],
     iterable_output_field="results",
+    max_chunk_size=32,
 )
 def run_enformer(inputs: EnformerInput, config: EnformerConfig, instance: Any = None) -> EnformerOutput:
     """Predict regulatory activity with Enformer.

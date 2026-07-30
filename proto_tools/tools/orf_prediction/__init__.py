@@ -1,6 +1,6 @@
 """Open reading frame prediction tools."""
 
-from proto_tools.tools.orf_prediction.orf import ORF
+from proto_tools.tools.orf_prediction.orf import ORF, OrfPredictionResult
 from proto_tools.tools.orf_prediction.orfipy import (
     ORFIPY_TRANSLATION_TABLE_MAP,
     OrfipyConfig,
@@ -22,6 +22,7 @@ from proto_tools.tools.orf_prediction.prodigal import (
 
 __all__ = [
     "ORF",
+    "OrfPredictionResult",
     # Orfipy
     "ORFIPY_TRANSLATION_TABLE_MAP",
     "OrfipyConfig",

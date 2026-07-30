@@ -2,6 +2,7 @@
 
 from proto_tools.tools.inverse_folding.fampnn.fampnn_pack import (
     FAMPNNPackConfig,
+    FAMPNNPackedStructure,
     FAMPNNPackingResult,
     FAMPNNPackInput,
     run_fampnn_pack,
@@ -33,6 +34,7 @@ from proto_tools.tools.inverse_folding.fampnn.fampnn_score_all_mutations import 
 )
 
 __all__ = [
+    "FAMPNNPackedStructure",
     # Sampling
     "FAMPNNDesign",
     "FAMPNNDesignMetrics",

@@ -149,13 +149,6 @@ def test_mafft_input_invalid(sequences, error_match):
 # ── Config validation tests ──────────────────────────────────────────────────
 
 
-def test_mafft_config_defaults():
-    config = MafftConfig()
-    assert config.align_method == "auto"
-    assert config.max_iterations == 0
-    assert config.threads == 1
-
-
 @pytest.mark.parametrize("method", ["auto", "localpair", "globalpair", "genafpair"])
 def test_mafft_config_valid_align_methods(method):
     config = MafftConfig(align_method=method)

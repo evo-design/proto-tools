@@ -13,6 +13,7 @@ Supports the same CLI options and markers as the main proto-language tests:
 """
 
 import functools
+import hashlib
 import json
 import logging
 import os
@@ -48,6 +49,29 @@ from proto_tools.utils.system_info import (
 )
 from proto_tools.utils.tool_instance import ToolInstance
 from proto_tools.utils.tool_io import MissingAssetError
+
+# Characters of a -k expression kept in a log filename, leaving room for the prefix,
+# the suffix, and the hash appended when the expression is truncated.
+_MAX_K_EXPRESSION_IN_FILENAME = 200
+
+
+def log_filename_for_k_expression(k_expression: str) -> str:
+    """Return a filesystem-safe log filename for a ``-k`` selection expression.
+
+    Args:
+        k_expression (str): The value passed to pytest's ``-k`` option.
+
+    Returns:
+        str: A filename within the 255-byte limit that filesystems impose.
+    """
+    sanitized = re.sub(r"[^\w\s-]", "", k_expression)  # Remove special chars except spaces, hyphens, underscores
+    sanitized = re.sub(r"\s+", "_", sanitized)  # Replace spaces with underscores
+    sanitized = sanitized.strip("_")  # Remove leading/trailing underscores
+    # Filenames are limited to 255 bytes; a hash keeps truncated expressions distinct
+    if len(sanitized) > _MAX_K_EXPRESSION_IN_FILENAME:
+        digest = hashlib.sha256(k_expression.encode()).hexdigest()[:8]
+        sanitized = f"{sanitized[:_MAX_K_EXPRESSION_IN_FILENAME]}_{digest}"
+    return f"pytest_{sanitized}.log"
 
 
 @functools.cache
@@ -692,7 +716,7 @@ def pytest_addoption(parser):
         "--use-cloud",
         action="store_true",
         default=False,
-        help="Route every tool run through device='cloud'. Requires PROTO_API_KEY in the environment.",
+        help="Route every tool run through device='proto'. Requires PROTO_API_KEY in the environment.",
     )
     parser.addoption(
         "--benchmark-report",
@@ -1215,12 +1239,7 @@ def setup_test_logging(request):
         file_timestamp = now.strftime("%Y%m%d_%H%M%S")
         log_filename = f"pytest_env_report_{file_timestamp}.log"
     elif k_expression:
-        # Sanitize the -k expression to make it filename-safe
-        # Replace spaces with underscores, remove special characters
-        sanitized = re.sub(r"[^\w\s-]", "", k_expression)  # Remove special chars except spaces, hyphens, underscores
-        sanitized = re.sub(r"\s+", "_", sanitized)  # Replace spaces with underscores
-        sanitized = sanitized.strip("_")  # Remove leading/trailing underscores
-        log_filename = f"pytest_{sanitized}.log"
+        log_filename = log_filename_for_k_expression(k_expression)
     else:
         # Use timestamp for the log file
         file_timestamp = now.strftime("%Y%m%d_%H%M%S")

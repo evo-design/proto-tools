@@ -447,17 +447,17 @@ def test_ablang_sample_return_logits():
 
     default = run_ablang_sample(inputs, AbLangSampleConfig())
     validate_output(default)
-    assert default.logits is None
+    assert all(sample.logits is None for sample in default.results)
 
     with_logits = run_ablang_sample(inputs, AbLangSampleConfig(return_logits=True))
     validate_output(with_logits)
-    assert with_logits.logits is not None
-    assert len(with_logits.logits) == len(masked)
-    for restored, seq_logits in zip(with_logits.sequences, with_logits.logits, strict=True):
+    assert len(with_logits.results) == len(masked)
+    for sample in with_logits.results:
+        assert sample.logits is not None
         # Restored output rows include format-time special tokens; AA columns are 20.
-        assert all(len(row) == 20 for row in seq_logits)
-        assert all(math.isfinite(v) for row in seq_logits for v in row)
-        assert len(seq_logits) >= len(restored)
+        assert all(len(row) == 20 for row in sample.logits)
+        assert all(math.isfinite(v) for row in sample.logits for v in row)
+        assert len(sample.logits) >= len(sample.sequence)
 
 
 @pytest.mark.uses_gpu
