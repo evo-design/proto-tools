@@ -146,7 +146,12 @@ def test_vina_tool_is_registered_with_expected_contract() -> None:
     assert spec.cacheable is True
     assert spec.stochastic is True
     assert isinstance(ToolRegistry.get_example_input("vina-docking"), VinaDockingInput)
-    assert ToolRegistry.get_links("vina-docking") == {"github": "https://github.com/ccsb-scripps/AutoDock-Vina"}
+    assert ToolRegistry.get_links("vina-docking") == {
+        "github": "https://github.com/ccsb-scripps/AutoDock-Vina",
+        "website": "https://vina.scripps.edu",
+        "paper": "https://doi.org/10.1021/acs.jcim.1c00203",
+        "organizations": ["Scripps Research", "Forli Lab"],
+    }
     assert VinaDockingPoseMetrics.metric_spec["rmsd_lower_bound"]["better_values_are"] == "context-dependent"
     assert VinaDockingPoseMetrics.metric_spec["rmsd_upper_bound"]["better_values_are"] == "context-dependent"
 
@@ -322,7 +327,7 @@ def test_vina_wrapper_dispatches_normalized_payload(monkeypatch: pytest.MonkeyPa
         "seed": 17,
         "verbose": 2,
     }
-    assert captured["kwargs"]["config"] is config
+    assert captured["kwargs"]["config"].model_dump() == config.model_dump()
     assert output.seed == 17
     assert output.scoring_function == "vinardo"
     assert output.metadata["vina_version"] == "1.2.7"
