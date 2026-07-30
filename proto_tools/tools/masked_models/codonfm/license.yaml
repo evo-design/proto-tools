@@ -1,0 +1,12 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/NVIDIA-BioNeMo/CodonFM/blob/main/LICENSE
+weights:
+  spdx: Custom (NVIDIA Open Model License)
+  url: https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/
+  text: 'NVIDIA Open Model License Agreement: permits research, educational, and commercial use of the released Encodon model weights, subject to the license terms (including a trustworthy-AI/prohibited-use policy and attribution). Full terms at the canonical URL above.'
+commercial_use: 'yes'
+redistribution: true
+attribution_required: true
+notes: The CodonFM/Encodon codebase (NVIDIA-BioNeMo/CodonFM) is Apache-2.0; proto-tools vendors the model/inference modules verbatim. The published Encodon checkpoints (nvidia/NV-CodonFM-Encodon-*-v1 on HuggingFace) are public (not gated) and are released under the NVIDIA Open Model License, which governs their use.
+last_updated: '2026-07-27'

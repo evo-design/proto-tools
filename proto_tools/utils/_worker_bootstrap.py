@@ -35,6 +35,23 @@ _FILE_FALLBACK_THRESHOLD = 100_000_000
 _VALID_COMMANDS = ("to_device", "get_memory_stats")
 
 
+def _copy_contents_only(source: Path, target: Path) -> None:
+    """Recursively copy file *content* only (no metadata), skipping bytecode caches.
+
+    ``shutil.copytree``/``copy2`` preserve metadata via ``copystat`` (chmod/utime), which some
+    mounted filesystems — notably GCSFuse — reject with ``EPERM``, so the copy "fails" even though
+    the bytes are fine. Copying only bytes (``copyfile``) and skipping ``__pycache__`` avoids it.
+    """
+    for root, dirs, files in os.walk(source):
+        dirs[:] = [d for d in dirs if d != "__pycache__"]
+        rel = Path(root).relative_to(source)
+        (target / rel).mkdir(parents=True, exist_ok=True)
+        for filename in files:
+            if filename.endswith(".pyc"):
+                continue
+            shutil.copyfile(Path(root) / filename, target / rel / filename)
+
+
 def _copy_standalone_helpers(script_path: str) -> None:
     """Copy standalone helpers (Python package and shell file) to the tool's standalone directory.
 
@@ -75,9 +92,9 @@ def _copy_standalone_helpers(script_path: str) -> None:
                     sys.stderr.write(f"[worker] Warning: Failed to remove stale {stale_py}: {exc}\n")
         try:
             if source.is_dir():
-                shutil.copytree(source, target, dirs_exist_ok=True)
+                _copy_contents_only(source, target)
             else:
-                shutil.copy2(source, target)
+                shutil.copyfile(source, target)
         except Exception as exc:
             sys.stderr.write(f"[worker] Warning: Failed to copy {name}: {exc}\n")
 

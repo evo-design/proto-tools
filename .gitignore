@@ -12,6 +12,12 @@ __pycache__/
 **/__pycache__/
 .ipynb_checkpoints/
 data/
+# CodonFM vendors upstream Python modules under a package named ``src/data``.
+# They are runtime code, not generated datasets, and must ship in clean clones/wheels.
+!proto_tools/tools/masked_models/codonfm/standalone/src/data/
+!proto_tools/tools/masked_models/codonfm/standalone/src/data/**/
+!proto_tools/tools/masked_models/codonfm/standalone/src/data/**/*.py
+proto_tools/tools/masked_models/codonfm/standalone/src/data/**/__pycache__/
 tool_envs
 proto_tool_envs
 model_cache

@@ -82,6 +82,11 @@ _VENDORED_EXEMPT: set[Path] = {
     _TOOLS_DIR / "sequence_scoring" / "parade" / "standalone" / "pl_regressor.py",
     _TOOLS_DIR / "sequence_scoring" / "parade" / "standalone" / "utrdata_cl.py",
     _TOOLS_DIR / "sequence_scoring" / "parade" / "standalone" / "stability_data.py",
+    # CodonFM/Encodon model, data, tokenizer, and inference modules copied verbatim from
+    # NVIDIA-BioNeMo/CodonFM under ``standalone/src/``. Kept byte-for-byte so the published
+    # Encodon safetensors checkpoints load against the exact module topology upstream trained;
+    # editing them (even to add a logger) risks breaking checkpoint compatibility.
+    *(_TOOLS_DIR / "masked_models" / "codonfm" / "standalone" / "src").rglob("*.py"),
 }
 
 _EXEMPT: set[Path] = _SETUP_TIME_EXEMPT | _VENDORED_EXEMPT
