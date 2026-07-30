@@ -253,6 +253,11 @@ _SYSTEM_PATH_DIRS = [
 # Prepended to PATH for GPU tools so nvcc/nvidia-smi are available
 _CUDA_BIN_DIR = "/usr/local/cuda/bin"
 
+# Shared helpers published to every tool subprocess. Tool envs don't contain proto_tools, so
+# standalone scripts resolve `import standalone_helpers` via PYTHONPATH and setup.sh resolves
+# `source standalone_helpers.sh` via PATH, both pointing here. Nothing is ever copied.
+_STANDALONE_HELPERS_DIR = Path(__file__).parent / "standalone_helpers_source"
+
 
 # Fallback locations searched if ldconfig is unavailable or doesn't list libcuda.
 _DRIVER_LIB_FALLBACK_DIRS = (
@@ -362,6 +367,24 @@ def _parse_env_vars_file(
         if current_section is not None:
             result[current_section].append(line)
     return result
+
+
+def standalone_helpers_dir() -> Path:
+    """Return the helpers directory published to tool subprocesses.
+
+    Returns:
+        Path: The ``standalone_helpers_source`` directory inside the installed package.
+
+    Raises:
+        RuntimeError: If the directory or its package is missing, which means a broken or
+            partial proto_tools install rather than anything wrong with the tool.
+    """
+    if not (_STANDALONE_HELPERS_DIR / "standalone_helpers" / "__init__.py").is_file():
+        raise RuntimeError(
+            f"Shared standalone helpers are missing from {_STANDALONE_HELPERS_DIR}. "
+            'This means a broken or partial proto_tools install; reinstall with `pip install -e ".[dev]"`.'
+        )
+    return _STANDALONE_HELPERS_DIR
 
 
 def _build_subprocess_env(
@@ -577,6 +600,13 @@ def _build_subprocess_env(
         env["LD_LIBRARY_PATH"] = ":".join(ld_parts)
     else:
         env.pop("LD_LIBRARY_PATH", None)
+
+    # Publish the shared helpers. Applied after env_vars.txt [set] so a tool can't clobber them.
+    helpers_dir = str(standalone_helpers_dir())
+    env["PROTO_STANDALONE_HELPERS_DIR"] = helpers_dir
+    env["PATH"] = f"{env['PATH']}:{helpers_dir}" if env.get("PATH") else helpers_dir
+    existing_pythonpath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = f"{helpers_dir}:{existing_pythonpath}" if existing_pythonpath else helpers_dir
 
     # Caller-supplied overrides (applied last so they win over every other source).
     if env_overrides:

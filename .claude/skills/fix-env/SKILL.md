@@ -81,7 +81,7 @@ Both modes edit the same files — the ejected copy (local) or the repo copy (co
 | **Network** | Binary Download (Pattern 13) | `Failed after 3 attempts` | Check network, platform support in binary_config.py |
 | **Platform** | CUDA Headers (Pattern 14) | `cuda_runtime.h: No such file` | Conditional symlinks |
 | **Platform** | Python Version (Pattern 15) | `No wheel for Python 3.12` | python_version.txt |
-| **Device Mgmt** | Standalone Helpers Import (Pattern 16) | `ImportError: standalone_helpers` | Check bootstrap copy, verify source exists |
+| **Device Mgmt** | Standalone Helpers Import (Pattern 16) | `ImportError: standalone_helpers` | Verify source dir exists; check for a stale in-tree copy |
 | **Device Mgmt** | CUDA Visibility Mismatch (Pattern 17) | `No available device`, wrong GPU | Check CUDA_VISIBLE_DEVICES vs BIO_TOOLS_MANAGED_DEVICES |
 
 For detailed patterns with full bash examples: Read `.claude/skills/fix-env/PATTERNS.md`

@@ -13,8 +13,8 @@ Parent-side logging setup for proto_tools.
   ``update_status=True`` kwarg.
 
 The subprocess-side bridge lives in
-``standalone_helpers/proto_logging.py`` (copied into each tool's micromamba
-venv at worker startup). It writes ``\\x00LOG\\x00<json>\\n`` lines on stderr;
+``standalone_helpers/proto_logging.py`` (published to each tool's micromamba
+venv on ``PYTHONPATH``). It writes ``\\x00LOG\\x00<json>\\n`` lines on stderr;
 :data:`_TAG_PREFIX` here is the parent-side counterpart and must match the
 producer constant. The drain thread in
 ``proto_tools/utils/persistent_worker.py`` demultiplexes those lines and

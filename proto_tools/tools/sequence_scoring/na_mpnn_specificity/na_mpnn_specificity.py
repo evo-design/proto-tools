@@ -221,7 +221,7 @@ class NAMPNNSpecificityConfig(BaseConfig):
 # ============================================================================
 def example_input() -> NAMPNNSpecificityInput:
     """Minimal valid input for testing and examples."""
-    return NAMPNNSpecificityInput(pdb_paths=["protein_dna_complex.pdb"])
+    return NAMPNNSpecificityInput(pdb_paths=[str(Path(__file__).parent / "example_input_fixture.pdb")])
 
 
 @tool(

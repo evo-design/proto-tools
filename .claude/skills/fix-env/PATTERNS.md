@@ -423,22 +423,23 @@ Failures related to the DeviceManager infrastructure — specifically environmen
 
 **Symptoms:** `ImportError: cannot import name 'get_subprocess_device_env'`, `ModuleNotFoundError: No module named 'standalone_helpers'`.
 
-**Root Cause:** `_worker_bootstrap.py` copies `standalone_helpers.py` from `utils/` to each tool's `standalone/` at runtime. If copy fails (permissions, disk full, race condition), worker scripts crash.
+**Root Cause:** helpers are not copied anywhere. `_build_subprocess_env()` publishes `utils/standalone_helpers_source/` to each subprocess on `PYTHONPATH` (Python package), on `PATH` (`standalone_helpers.sh`), and as `PROTO_STANDALONE_HELPERS_DIR`. This fails only if the source directory is missing (broken install) or something clobbered those variables.
+
+A `standalone_helpers/` directory sitting inside a tool's `standalone/` dir does not shadow the installed package: the worker bootstrap puts the published helpers dir at `sys.path[0]`, and `source standalone_helpers.sh` resolves off `PATH`. Delete any such directory — nothing reads it.
 
 **Debugging:**
 ```bash
-# Check if file exists in tool's standalone dir
-ls proto_tools/tools/{category}/{tool}/standalone/standalone_helpers.py
+# Source must exist (this is the only copy)
+ls proto_tools/utils/standalone_helpers_source/standalone_helpers/__init__.py
 
-# Check source exists
-ls proto_tools/utils/standalone_helpers_source/standalone_helpers.py
+# No stale copies should remain next to the tool's script
+ls proto_tools/tools/{category}/{tool}/standalone/standalone_helpers 2>/dev/null
 
-# Manual copy to test
-cp proto_tools/utils/standalone_helpers_source/standalone_helpers.py \
-   proto_tools/tools/{category}/{tool}/standalone/
+# Reproduce the subprocess view
+python -c "from proto_tools.utils.persistent_worker import standalone_helpers_dir; print(standalone_helpers_dir())"
 ```
 
-**Solution:** Bootstrap copy failed — check `_worker_bootstrap.py` stderr. If source missing, reinstall with `pip install -e ".[dev]"`. Race conditions resolve on retry. See `utils/_worker_bootstrap.py` (`_copy_standalone_helpers`), `utils/standalone_helpers_source/`.
+**Solution:** if the source directory is missing, reinstall with `pip install -e ".[dev]"`. If a stale copy is present and the warning says it could not be removed, delete it by hand. To use a tool env's interpreter directly, set `PYTHONPATH` to the path printed above. See `utils/persistent_worker.py` (`standalone_helpers_dir`, `_build_subprocess_env`), `utils/standalone_helpers_source/`.
 
 ---
 

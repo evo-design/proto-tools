@@ -111,7 +111,7 @@ if weights_dir:
 
 HF-based tools need no code changes. `persistent_worker.py` sets `HF_HOME` automatically.
 
-For `setup.sh` scripts that download weights during environment setup, use the shared helper from `standalone_helpers.sh` (auto-copied):
+For `setup.sh` scripts that download weights during environment setup, use the shared helper from `standalone_helpers.sh` (resolved off `PATH`):
 
 ```bash
 source standalone_helpers.sh

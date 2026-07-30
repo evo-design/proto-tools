@@ -2,9 +2,9 @@
 
 Provides decompression of arrays compressed by
 ``standalone_helpers.compress_array()``. The compression side lives in
-``standalone_helpers_source/standalone_helpers.py`` (copied into each tool's
-isolated subprocess environment); the decompression side lives here in
-the main ``proto_tools`` package (parent process).
+``standalone_helpers_source/standalone_helpers/compression.py`` (published to
+each tool's isolated subprocess environment); the decompression side lives here
+in the main ``proto_tools`` package (parent process).
 """
 
 from __future__ import annotations
