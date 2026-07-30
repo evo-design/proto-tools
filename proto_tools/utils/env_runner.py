@@ -13,7 +13,6 @@ from contextlib import ExitStack, suppress
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from proto_tools.utils._worker_bootstrap import _copy_standalone_helpers
 from proto_tools.utils.device_manager import DeviceManager
 from proto_tools.utils.logging_config import verbose_level_from_env
 from proto_tools.utils.persistent_worker import (
@@ -74,7 +73,6 @@ def run_in_env(
 
     instance = ToolInstance(toolkit)
     instance._ensure_env()
-    _copy_standalone_helpers(str(instance.script_path))
 
     standalone_dir = str(instance.script_path.parent)
     python_exe = str(instance.env_path / "bin" / "python")
@@ -102,7 +100,8 @@ def run_in_env(
         )
         env["TOOL_VENV_PATH"] = str(instance.env_path)
         env["RUN_IN_ENV_DEVICE"] = run_device  # resolved device for the in-env program to use
-        env["PYTHONPATH"] = os.pathsep.join(p for p in (standalone_dir, env.get("PYTHONPATH", "")) if p)
+        # Append, so the published helpers stay ahead of any stale copy in the standalone dir.
+        env["PYTHONPATH"] = os.pathsep.join(p for p in (env.get("PYTHONPATH", ""), standalone_dir) if p)
 
         logger.debug("run_in_env: %s on device=%s (%s)", toolkit, run_device, "script" if script else "code")
 

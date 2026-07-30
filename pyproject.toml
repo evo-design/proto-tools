@@ -89,6 +89,9 @@ dev = [
     "pytest-forked",
     "pytest-randomly>=3.15",
 
+    # test_packaging_excludes_helper_copies runs setuptools' own package discovery.
+    "setuptools>=64",
+
     "ruff==0.15.12",
     "mypy==1.20.2",
     "types-requests",
@@ -368,6 +371,10 @@ docstring-code-format = true
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["proto_tools*"]
+# Helper copies older releases wrote into standalone/ dirs are gitignored but still on disk in a
+# working tree, and would otherwise be packaged and then shadow the real ones. The authoritative
+# copy lives in utils/standalone_helpers_source/ and is unaffected by these patterns.
+exclude = ["*.standalone.standalone_helpers", "*.standalone.standalone_helpers.*"]
 
 [tool.setuptools.package-data]
 "*" = ["*.sh", "*.txt", "*.csv", "*.smi", "*.cif", "*.bib", "*.yaml", "*.md", "*.ipynb", "*.pkl", "*.pdb", "*.a3m", "*.fasta", "*.hmm", "*.meme", "*.json", "py.typed"]

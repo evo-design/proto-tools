@@ -63,7 +63,7 @@ class ProGen2SampleOutput(CausalModelSampleOutput):
         results (list[ProGen2Sample]): One generated protein sequence per prompt, with its logits.
     """
 
-    results: list["ProGen2Sample"] = Field(  # type: ignore[assignment]
+    results: list[ProGen2Sample] = Field(  # type: ignore[assignment]
         title="Results",
         description="Generated protein sequences with their optional logits, one per prompt",
     )

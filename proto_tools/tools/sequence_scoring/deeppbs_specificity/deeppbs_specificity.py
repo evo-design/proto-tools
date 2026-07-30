@@ -230,7 +230,7 @@ class DeepPBSSpecificityOutput(BaseToolOutput):
 
 def example_input() -> DeepPBSSpecificityInput:
     """Minimal valid input for testing and examples."""
-    return DeepPBSSpecificityInput(pdb_paths=["complex.pdb"])
+    return DeepPBSSpecificityInput(pdb_paths=[str(Path(__file__).parent / "example_input_fixture.pdb")])
 
 
 @tool(

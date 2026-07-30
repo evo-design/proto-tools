@@ -229,12 +229,49 @@ def _cmd_schema(args: argparse.Namespace) -> int:
     return 0
 
 
+def _render_example_as_python(spec: ToolSpec, example: BaseModel) -> str:
+    """Render a runnable call to ``spec``, with the symbol names spelled out.
+
+    Model and run-function names are derived from the toolkit, not the registry key, so
+    they are not reliably guessable from the key an agent resolved the tool by. Emitting
+    them removes the guess. Imports come from each symbol's defining module rather than
+    the toolkit package, so they do not depend on ``__init__`` re-exports.
+
+    Args:
+        spec (ToolSpec): The resolved tool.
+        example (BaseModel): The tool's example input instance.
+
+    Returns:
+        str: Python source that constructs the input and calls the run function.
+    """
+    run_fn = spec.function.__name__
+    input_cls = spec.input_model.__name__
+    module = spec.input_model.__module__
+
+    symbols = sorted({input_cls, run_fn})
+    if spec.function.__module__ == module:
+        imports = f"from {module} import (\n" + "".join(f"    {s},\n" for s in symbols) + ")"
+    else:
+        imports = f"from {module} import {input_cls}\nfrom {spec.function.__module__} import {run_fn}"
+
+    fields = example.model_dump(mode="json", exclude_defaults=True) or example.model_dump(mode="json")
+    kwargs = "".join(f"        {name}={value!r},\n" for name, value in fields.items())
+    call = f"result = {run_fn}(\n    {input_cls}(\n{kwargs}    ),\n)"
+
+    config_cls = getattr(spec.config_model, "__name__", None)
+    hint = f"\n\n# Optional: pass {config_cls}(...) as the second argument to override defaults." if config_cls else ""
+    return f"{imports}\n\n{call}{hint}\n"
+
+
 def _cmd_example_input(args: argparse.Namespace) -> int:
-    """``proto-tools example-input <tool>``."""
+    """``proto-tools example-input <tool> [--as-python]``."""
     example = ToolRegistry.get_example_input(args.tool)
     if example is None:
         print(f"No example input defined for '{args.tool}'.", file=sys.stderr)
         return 1
+    if args.as_python:
+        print(_render_example_as_python(ToolRegistry.get(args.tool), example), end="")
+        return 0
     print(_dump_json(example))
     return 0
 
@@ -429,6 +466,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     p_example_input = sub.add_parser("example-input", help="A minimal valid Input for the tool.")
     p_example_input.add_argument("tool")
+    p_example_input.add_argument(
+        "--as-python",
+        action="store_true",
+        help="Emit a runnable snippet with the correct import and symbol names instead of JSON.",
+    )
     p_example_input.set_defaults(func=_cmd_example_input)
 
     p_example = sub.add_parser(

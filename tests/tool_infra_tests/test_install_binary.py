@@ -106,3 +106,17 @@ def test_install_binary_exhausts_retries_with_exponential_backoff(stub_platform)
         for i in range(install_binary._MAX_DOWNLOAD_RETRIES - 1)
     ]
     assert sleeps == expected
+
+
+def test_download_failure_names_the_url(stub_platform, capsys):
+    """Behind an egress allowlist the URL is the only clue about which host to permit."""
+
+    def always_fail(_url, _dest):
+        raise urllib.error.URLError("Tunnel connection failed: 403 Forbidden")
+
+    stub_platform.setattr(install_binary, "_download_with_progress", always_fail)
+
+    with pytest.raises(RuntimeError, match="http://example/file"):
+        install_binary.install_binary("dummy")
+
+    assert "http://example/file" in capsys.readouterr().out

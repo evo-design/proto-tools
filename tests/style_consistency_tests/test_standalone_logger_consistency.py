@@ -2,16 +2,14 @@
 
 Worker-runtime standalones (``inference.py``, ``run.py``, etc.) are loaded
 inside the worker subprocess that ``ToolInstance`` spawns; ``standalone_helpers/``
-is staged into the standalone dir alongside them by ``_copy_standalone_helpers``,
-so they can ``from standalone_helpers import get_logger`` and route records
-through the parent's structured-logging bridge.
+reaches them on the ``PYTHONPATH`` published by ``_build_subprocess_env``, so they
+can ``from standalone_helpers import get_logger`` and route records through the
+parent's structured-logging bridge.
 
 ``binary_config.py`` is the exception: it runs in the **setup-time subprocess**
-that ``setup.sh`` invokes via ``python utils/install_binary.py <toolkit>``,
-which executes ``install_binary._load_tool_config`` *before* any bridge staging.
-``standalone_helpers`` isn't on ``sys.path`` in that subprocess, and there's no
-parent drain thread to demultiplex tagged records anyway — setup.sh's stderr is
-mirrored to ``PROTO_ENV_LOG_DIR`` directly. ``binary_config.py`` files therefore
+that ``setup.sh`` invokes via ``python utils/install_binary.py <toolkit>``. There
+is no parent drain thread to demultiplex tagged records there — setup.sh's stderr
+is mirrored to ``PROTO_ENV_LOG_DIR`` directly. ``binary_config.py`` files therefore
 don't use the bridge at all (they fall back to stdlib ``logging`` if they need
 to log, and most don't log).
 
@@ -64,8 +62,7 @@ def _discover_standalone_scripts() -> list[Path]:
 _ALL_SCRIPTS = _discover_standalone_scripts()
 
 # binary_config.py runs at setup time in a subprocess that loads it via
-# install_binary._load_tool_config — before standalone_helpers/ is staged into
-# the standalone dir, and without a parent drain thread to demux tagged records.
+# install_binary._load_tool_config, without a parent drain thread to demux tagged records.
 # Records here flow through setup.sh's stderr to PROTO_ENV_LOG_DIR, not the bridge.
 _SETUP_TIME_EXEMPT: set[Path] = {p for p in _ALL_SCRIPTS if p.name == "binary_config.py"}
 

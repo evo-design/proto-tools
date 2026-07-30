@@ -152,6 +152,59 @@ def test_example_input_is_valid_json() -> None:
     assert "sequences" in payload
 
 
+def test_example_input_as_python_runs_verbatim() -> None:
+    """The emitted snippet is executable as-is, not just syntactically valid."""
+    code, out, _ = _run("example-input", "random-protein-sample", "--as-python")
+    assert code == 0
+
+    namespace: dict[str, object] = {}
+    exec(out, namespace)  # noqa: S102 -- executing our own generated snippet is the assertion
+    assert namespace["result"].success is True  # type: ignore[union-attr]
+
+
+def test_example_input_as_python_names_symbols_the_key_cannot_predict() -> None:
+    """The point of the flag: registry key 'blast-create-db' does not yield these names."""
+    code, out, _ = _run("example-input", "blast-create-db", "--as-python")
+    assert code == 0
+    assert "CreateBlastDbInput" in out  # not BlastCreateDbInput
+    assert "run_create_blast_db" in out  # not run_blast_create_db
+    assert "CreateBlastDbConfig" in out
+
+
+@pytest.mark.extensive
+def test_example_input_as_python_imports_resolve_for_every_tool() -> None:
+    """Every generated snippet parses and its imports bind the names it then uses."""
+    import ast
+
+    from proto_tools.tools.tool_registry import ToolRegistry
+
+    specs = {s.key: s for s in [*ToolRegistry.list_cpu_tools(), *ToolRegistry.list_gpu_tools()]}
+    failures: list[str] = []
+    for key, spec in sorted(specs.items()):
+        code, out, _ = _run("example-input", key, "--as-python")
+        if code != 0:
+            continue  # tools without an example input are covered by the JSON path
+        try:
+            tree = ast.parse(out)
+        except SyntaxError as exc:
+            failures.append(f"{key}: {exc}")
+            continue
+        imports = [node for node in tree.body if isinstance(node, ast.Import | ast.ImportFrom)]
+        namespace: dict[str, object] = {}
+        try:
+            exec(compile(ast.Module(body=imports, type_ignores=[]), "<generated>", "exec"), namespace)  # noqa: S102
+        except Exception as exc:
+            failures.append(f"{key}: {type(exc).__name__}: {exc}")
+            continue
+        failures.extend(
+            f"{key}: emitted import did not bind {symbol}"
+            for symbol in (spec.input_model.__name__, spec.function.__name__)
+            if symbol not in namespace
+        )
+
+    assert not failures, "generated snippets with unusable imports:\n" + "\n".join(failures)
+
+
 # ── Example notebook ───────────────────────────────────────────────────────
 
 

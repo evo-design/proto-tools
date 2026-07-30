@@ -45,8 +45,47 @@ output. Resolve a tool by registry key (`esm2-embedding`), run-function name
 | `proto-tools docs <tool>` | Intro, applications, usage tips, license |
 | `proto-tools schema <tool> [--input/--config/--output]` | JSON Schema(s) |
 | `proto-tools input/config/output <tool>` | Field-level model docs |
-| `proto-tools example-input <tool>` | A minimal valid `Input` |
+| `proto-tools example-input <tool> [--as-python]` | A minimal valid `Input`, as JSON or as a runnable snippet |
 | `proto-tools example <tool>` | The toolkit example notebook as markdown |
+
+## Don't guess symbol names from the registry key
+
+Model and run-function names come from the toolkit, not the registry key, so
+`esm2-embedding` lining up with `ESM2EmbeddingsInput` is the exception rather
+than the rule. `blast-create-db` exports `CreateBlastDbInput` and
+`run_create_blast_db`; `mafft-align` exports `MafftInput`, not `MafftAlignInput`.
+
+Ask instead of guessing:
+
+```bash
+proto-tools example-input blast-create-db --as-python
+```
+
+```python
+from proto_tools.tools.sequence_alignment.blast.create_blast_db import (
+    CreateBlastDbInput,
+    run_create_blast_db,
+)
+
+result = run_create_blast_db(
+    CreateBlastDbInput(
+        fasta='.../example_input_fixture.fasta',
+    ),
+)
+```
+
+From Python, when you already hold a registry key, call the tool through its
+spec rather than importing anything (there is no `ToolRegistry.run()`):
+
+```python
+from proto_tools import ToolRegistry
+
+spec = ToolRegistry.get("blast-create-db")
+result = spec.function(ToolRegistry.get_example_input("blast-create-db"))
+```
+
+`spec.input_model`, `spec.config_model`, and `spec.output_model` give the
+classes directly, and `Model.model_fields` gives their fields.
 
 ## Keep models warm and fan out across GPUs
 
