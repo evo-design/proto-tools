@@ -89,6 +89,9 @@ dev = [
     "pytest-forked",
     "pytest-randomly>=3.15",
 
+    # test_packaging_excludes_helper_copies runs setuptools' own package discovery.
+    "setuptools>=64",
+
     "ruff==0.15.12",
     "mypy==1.20.2",
     "types-requests",
