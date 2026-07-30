@@ -2142,9 +2142,6 @@ def test_host_probe_falls_through_when_gcc_too_old(monkeypatch, tmp_path):
 
     monkeypatch.delenv("PROTO_USE_FOUNDATION_ENV", raising=False)
     monkeypatch.setenv("PROTO_HOME", str(tmp_path))
-    from proto_tools.utils.proto_home import get_proto_home
-
-    get_proto_home.cache_clear()
 
     present = _all_foundation_tools_present()
     install_called = False
@@ -2174,7 +2171,6 @@ def test_host_probe_falls_through_when_gcc_too_old(monkeypatch, tmp_path):
 
     assert install_called, "expected mamba create to be invoked when host gcc too old"
     assert result == foundation_path
-    get_proto_home.cache_clear()
 
 
 def test_host_probe_falls_through_when_binary_missing(monkeypatch):
@@ -2216,9 +2212,6 @@ def test_use_env_var_one_forces_install_even_when_host_modern(monkeypatch, tmp_p
     """PROTO_USE_FOUNDATION_ENV=1 → bypass autodetect and create the env."""
     monkeypatch.setenv("PROTO_USE_FOUNDATION_ENV", "1")
     monkeypatch.setenv("PROTO_HOME", str(tmp_path))
-    from proto_tools.utils.proto_home import get_proto_home
-
-    get_proto_home.cache_clear()
 
     install_called = False
     foundation_path = ToolInstance._get_foundation_env_path()
@@ -2239,7 +2232,6 @@ def test_use_env_var_one_forces_install_even_when_host_modern(monkeypatch, tmp_p
 
     assert install_called, "PROTO_USE_FOUNDATION_ENV=1 should force install"
     assert result == foundation_path
-    get_proto_home.cache_clear()
 
 
 # ── Tool-env path guard (conda binary-relocation safety) ─────────────────────
@@ -2247,23 +2239,15 @@ def test_use_env_var_one_forces_install_even_when_host_modern(monkeypatch, tmp_p
 
 def test_get_tool_envs_root_under_proto_home(monkeypatch, tmp_path):
     """Tool envs stay strictly coupled to PROTO_HOME."""
-    from proto_tools.utils.proto_home import get_proto_home
-
     monkeypatch.setenv("PROTO_HOME", str(tmp_path))
-    get_proto_home.cache_clear()
     assert ToolInstance._get_tool_envs_root() == tmp_path / "proto_tool_envs"
-    get_proto_home.cache_clear()
 
 
 def test_get_tool_envs_root_raises_when_proto_home_too_deep(monkeypatch):
     """A PROTO_HOME too long for conda binary relocation fails fast (no silent corruption)."""
-    from proto_tools.utils.proto_home import get_proto_home
-
     monkeypatch.setenv("PROTO_HOME", "/" + "d" * 250 + "/.proto")
-    get_proto_home.cache_clear()
     with pytest.raises(RuntimeError, match="Set PROTO_HOME to a shorter path"):
         ToolInstance._get_tool_envs_root()
-    get_proto_home.cache_clear()
 
 
 # ── Standalone env override (PROTO_<TOOLKIT>_STANDALONE_DIR + eject-standalone) ──
@@ -2351,14 +2335,10 @@ def test_env_path_too_long_fails_fast(tmp_path, monkeypatch):
     A long env name (e.g. an override) must fail fast against conda's relocation
     limit rather than silently corrupt binaries.
     """
-    from proto_tools.utils.proto_home import get_proto_home
-
     monkeypatch.setenv("PROTO_HOME", str(tmp_path / ".proto"))
-    get_proto_home.cache_clear()
     monkeypatch.setattr("proto_tools.utils.tool_instance.MAX_ENV_PREFIX_LEN", 10)
     with pytest.raises(RuntimeError, match="binary-relocation limit"):
         ToolInstance(_OVERRIDE_TOOLKIT)
-    get_proto_home.cache_clear()
 
 
 @pytest.mark.slow

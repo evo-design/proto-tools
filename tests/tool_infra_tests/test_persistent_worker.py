@@ -22,18 +22,10 @@ from proto_tools.utils.persistent_worker import (
     _handle_raw_stderr_line,
     _parse_env_vars_file,
 )
-from proto_tools.utils.proto_home import get_proto_home
 
 _STANDALONE_HELPERS_SOURCE = (
     Path(__file__).parent.parent.parent / "proto_tools" / "utils" / "standalone_helpers_source" / "standalone_helpers"
 )
-
-
-@pytest.fixture(autouse=True)
-def _clear_proto_home_cache():
-    """Clear cached value computed with patched expanduser."""
-    yield
-    get_proto_home.cache_clear()
 
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -855,7 +847,6 @@ def test_uv_pip_cache_defaults_under_proto_home(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("PROTO_HOME", str(tmp_path))
     monkeypatch.delenv("UV_CACHE_DIR", raising=False)
     monkeypatch.delenv("PIP_CACHE_DIR", raising=False)
-    get_proto_home.cache_clear()
 
     env = _build_subprocess_env(device="cpu")
 
@@ -868,7 +859,6 @@ def test_uv_pip_cache_user_override_preserved(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("PROTO_HOME", str(tmp_path))
     monkeypatch.setenv("UV_CACHE_DIR", "/custom/uv")
     monkeypatch.setenv("PIP_CACHE_DIR", "/custom/pip")
-    get_proto_home.cache_clear()
 
     env = _build_subprocess_env(device="cpu")
 
@@ -1499,15 +1489,9 @@ def test_default_sets_hf_home_to_proto_model_cache(monkeypatch, tmp_path: Path):
     """Default mode sets HF_HOME to {PROTO_HOME}/proto_model_cache/huggingface/."""
     monkeypatch.delenv("PROTO_MODEL_CACHE", raising=False)
     monkeypatch.setenv("PROTO_HOME", str(tmp_path / "proto_home"))
-    # Clear the lru_cache so monkeypatched PROTO_HOME takes effect
-    from proto_tools.utils.proto_home import get_proto_home
 
-    get_proto_home.cache_clear()
-    try:
-        env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
-        assert env["HF_HOME"] == str(tmp_path / "proto_home" / "proto_model_cache" / "huggingface")
-    finally:
-        get_proto_home.cache_clear()
+    env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
+    assert env["HF_HOME"] == str(tmp_path / "proto_home" / "proto_model_cache" / "huggingface")
 
 
 def test_in_env_sets_hf_home(monkeypatch, tmp_path: Path):
@@ -1577,7 +1561,6 @@ def test_hf_hub_cache_not_in_env(monkeypatch):
 def test_hf_token_resolved_from_file(monkeypatch, tmp_path: Path):
     """HF_TOKEN is set in subprocess env when token exists only as a file."""
     monkeypatch.setenv("PROTO_HOME", str(tmp_path))
-    get_proto_home.cache_clear()
     monkeypatch.delenv("HF_TOKEN", raising=False)
     monkeypatch.delenv("HUGGING_FACE_HUB_TOKEN", raising=False)
     token_file = tmp_path / "token"
@@ -1593,7 +1576,6 @@ def test_hf_token_resolved_from_file(monkeypatch, tmp_path: Path):
 def test_hf_token_resolved_from_git_credentials(monkeypatch, tmp_path: Path):
     """HF_TOKEN is set in subprocess env when token exists only in git-credentials."""
     monkeypatch.setenv("PROTO_HOME", str(tmp_path))
-    get_proto_home.cache_clear()
     monkeypatch.delenv("HF_TOKEN", raising=False)
     monkeypatch.delenv("HUGGING_FACE_HUB_TOKEN", raising=False)
     git_creds = tmp_path / "git-credentials"
