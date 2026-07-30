@@ -2,6 +2,8 @@
 
 # AutoDock Vina
 
+![AutoDock Vina](https://proto-bio.github.io/proto-assets/images/tool/vina/hero.png)
+
 > [!NOTE]
 > **License:** AutoDock Vina's own code is licensed under Apache-2.0, and it federates over bundled data sources and components, each under its own license terms.
 >

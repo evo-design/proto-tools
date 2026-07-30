@@ -441,6 +441,11 @@ def example_input() -> VinaDockingInput:
     )
 
 
+def example_reference_ligand() -> Structure:
+    """Return the bundled imatinib reference ligand for search-box construction."""
+    return Structure.from_file(Path(__file__).parent / "example_reference_imatinib.pdb")
+
+
 @tool(
     key="vina-docking",
     label="AutoDock Vina Docking",
