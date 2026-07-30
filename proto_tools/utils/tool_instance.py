@@ -1564,9 +1564,11 @@ class ToolInstance:
             else:
                 raise RuntimeError(f"Unsupported operating system: {system} (arch: {arch})")
 
+            # Pin the fallback to 2.x: macOS 1.x builds use SecureTransport, which ignores MAMBA_SSL_VERIFY
+            # and custom CA bundles, so it can't be pointed at a proxy's CA the way the OpenSSL backend can.
             urls = [
                 f"https://micro.mamba.pm/api/micromamba/{platform_id}/latest",
-                f"https://conda.anaconda.org/conda-forge/{platform_id}/micromamba-1.5.12-0.tar.bz2",
+                f"https://conda.anaconda.org/conda-forge/{platform_id}/micromamba-2.8.1-0.tar.bz2",
             ]
             last_err: Exception | None = None
             set_substatus("Downloading micromamba")
