@@ -8,7 +8,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from proto_tools.tools.masked_models.esmc_sae import (
+from proto_tools.tools.masked_models.esmc import (
     DESCRIBED_SAE_REPO,
     ESMCSAEFeaturesConfig,
     ESMCSAEFeaturesInput,
@@ -19,7 +19,7 @@ from proto_tools.tools.masked_models.esmc_sae import (
 from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
-_persistent_tool = make_persistent_fixture("esmc_sae")
+_persistent_tool = make_persistent_fixture("esmc")
 
 
 # ── Repo resolution ───────────────────────────────────────────────────────────
@@ -178,7 +178,7 @@ def test_esmc_sae_features_benchmark(request):
     inputs = ESMCSAEFeaturesInput(sequences=sequences)
     config = ESMCSAEFeaturesConfig(batch_size=8)
 
-    result = benchmark_twice(request, "esmc_sae", lambda: run_esmc_sae_features(inputs=inputs, config=config))
+    result = benchmark_twice(request, "esmc", lambda: run_esmc_sae_features(inputs=inputs, config=config))
 
     assert result.tool_id == "esmc-sae-features"
     assert len(result.results) == 50
