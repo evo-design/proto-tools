@@ -237,12 +237,11 @@ module = [
 ]
 ignore_missing_imports = true
 
-# IPython ships partial and version-varying annotations, so analyzing it makes the
-# correctness of a `type: ignore` here depend on which IPython happens to be installed.
+# IPython ships partial, version-varying annotations, so whether these ignores are
+# needed depends on the installed version. Keep them without failing when unused.
 [[tool.mypy.overrides]]
-module = ["IPython.*"]
-follow_imports = "skip"
-ignore_missing_imports = true
+module = ["proto_tools.utils.progress"]
+warn_unused_ignores = false
 
 [[tool.mypy.overrides]]
 module = ["biotite.*"]

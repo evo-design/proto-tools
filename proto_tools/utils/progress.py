@@ -159,9 +159,9 @@ def _is_disabled() -> bool:
 def _in_notebook() -> bool:
     """Check if running inside a Jupyter notebook."""
     try:
-        from IPython import get_ipython
+        from IPython import get_ipython  # type: ignore[attr-defined]
 
-        shell = get_ipython()
+        shell = get_ipython()  # type: ignore[no-untyped-call]
         return shell is not None and shell.__class__.__name__ == "ZMQInteractiveShell"
     except Exception:
         return False
