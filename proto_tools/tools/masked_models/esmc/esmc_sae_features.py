@@ -1,4 +1,4 @@
-"""proto_tools/tools/masked_models/esmc_sae/esmc_sae_features.py.
+"""proto_tools/tools/masked_models/esmc/esmc_sae_features.py.
 
 ESM C sparse autoencoder (SAE) feature extraction.
 """
@@ -391,7 +391,7 @@ def run_esmc_sae_features(
         - ESM GitHub: https://github.com/Biohub/esm
 
     Examples:
-        >>> from proto_tools.tools.masked_models.esmc_sae import (
+        >>> from proto_tools.tools.masked_models.esmc import (
         ...     ESMCSAEFeaturesConfig,
         ...     ESMCSAEFeaturesInput,
         ...     run_esmc_sae_features,
@@ -413,7 +413,7 @@ def run_esmc_sae_features(
         f"(~{estimated_gb:.2f} GB for layers {config.resolved_layers})"
     )
     outputs = ToolInstance.dispatch(
-        "esmc_sae",
+        "esmc",
         {
             "operation": "sae_features",
             "sequences": inputs.sequences,

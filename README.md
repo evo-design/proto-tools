@@ -94,8 +94,7 @@ A few tools use gated models or software that require accepting a license / term
 ├── <a href="proto_tools/tools/masked_models/ablang/">ablang/</a>
 ├── <a href="proto_tools/tools/masked_models/esm2/">esm2/</a>
 ├── <a href="proto_tools/tools/masked_models/esm3/">esm3/</a>
-├── <a href="proto_tools/tools/masked_models/esmc/">esmc/</a>
-└── <a href="proto_tools/tools/masked_models/esmc_sae/">esmc_sae/</a>
+└── <a href="proto_tools/tools/masked_models/esmc/">esmc/</a>
 <a href="proto_tools/tools/molecular_docking/">molecular_docking/</a>              # Protein-ligand binding pose prediction
 └── <a href="proto_tools/tools/molecular_docking/vina/">vina/</a>
 <a href="proto_tools/tools/mutagenesis/">mutagenesis/</a>                    # Random sequence mutagenesis
