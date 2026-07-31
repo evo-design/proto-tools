@@ -10,6 +10,7 @@ from proto_tools.tools.molecular_docking.vina import (
     VinaReferenceLigandBox,
     VinaSearchBox,
     run_vina_docking,
+    visualize_search_box,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "VinaReferenceLigandBox",
     "VinaSearchBox",
     "run_vina_docking",
+    "visualize_search_box",
 ]

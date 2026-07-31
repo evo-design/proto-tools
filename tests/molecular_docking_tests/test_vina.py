@@ -2,10 +2,12 @@
 
 import csv
 import json
+import logging
 import math
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from pydantic import ValidationError
@@ -476,6 +478,114 @@ def test_vina_output_exports_all_supported_formats(tmp_path: Path) -> None:
     exported_json = json.loads((tmp_path / "docking.json").read_text())
     assert exported_json["seed"] == 7
     assert exported_json["results"][0]["poses"][0]["metrics"]["affinity"] == -8.25
+
+
+def test_vina_rejects_a_receptor_with_non_polymer_residues(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Waters and co-crystallized ligands are named up front instead of failing inside Meeko."""
+    from proto_tools.tools.molecular_docking.vina import vina_docking as module
+
+    monkeypatch.setattr(module, "_non_polymer_residues", lambda receptor: ["A:HOH301", "A:STI1", "A:CL2"])
+
+    with pytest.raises(ValueError, match=r"3 non-polymer residues") as excinfo:
+        run_vina_docking(_example_input(), VinaDockingConfig(seed=7))
+    message = str(excinfo.value)
+    assert "A:HOH301" in message and "allow_bad_residues=True" in message
+
+    # The escape hatch skips the pre-flight entirely and lets Meeko decide.
+    captured: dict[str, Any] = {}
+
+    def fake_dispatch(cls, toolkit, input_dict, **kwargs):  # type: ignore[no-untyped-def]
+        captured["dispatched"] = True
+        return _fake_output()
+
+    monkeypatch.setattr(ToolInstance, "dispatch", classmethod(fake_dispatch))
+    run_vina_docking(_example_input(), VinaDockingConfig(seed=7, allow_bad_residues=True))
+    assert captured["dispatched"]
+
+
+def test_vina_non_polymer_scan_ignores_a_clean_receptor() -> None:
+    """The bundled fixture is already stripped, so the pre-flight must not fire on it."""
+    from proto_tools.tools.molecular_docking.vina.vina_docking import _non_polymer_residues
+
+    assert _non_polymer_residues(_example_input().receptor) == []
+
+
+# Search-box visualization helper
+
+
+def test_visualize_search_box_draws_the_resolved_box(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The cage is drawn at the resolved coordinates, and only a reference box adds a ligand."""
+    import py3Dmol
+
+    from proto_tools.tools.molecular_docking.vina.helpers import visualize_search_box
+
+    class _Recorder:
+        def __init__(self) -> None:
+            self.cylinders: list[dict[str, Any]] = []
+            self.models: list[str] = []
+
+        def addModel(self, data: str, fmt: str) -> None:
+            self.models.append(fmt)
+
+        def addCylinder(self, spec: dict[str, Any]) -> None:
+            self.cylinders.append(spec)
+
+        def bounds(self) -> tuple[list[float], list[float]]:
+            """Min and max corner spanned by the drawn edges."""
+            points = [c[end] for c in self.cylinders for end in ("start", "end")]
+            return (
+                [min(p[axis] for p in points) for axis in "xyz"],
+                [max(p[axis] for p in points) for axis in "xyz"],
+            )
+
+        def __getattr__(self, _name: str) -> Any:
+            return lambda *args, **kwargs: None
+
+    recorders: list[_Recorder] = []
+
+    def fake_view(**kwargs: Any) -> _Recorder:
+        recorders.append(_Recorder())
+        return recorders[-1]
+
+    monkeypatch.setattr(py3Dmol, "view", fake_view)
+
+    visualize_search_box(_example_input())
+    explicit = recorders[-1]
+    assert len(explicit.cylinders) == 12, "a box is drawn as its twelve edges"
+    lo, hi = explicit.bounds()
+    assert [round(v, 3) for v in lo] == [5.19, 43.903, 6.917]
+    assert [round(v, 3) for v in hi] == [25.19, 63.903, 26.917]
+    assert explicit.models == ["pdb"], "an explicit box has no reference ligand to draw"
+
+    reference_input = VinaDockingInput(
+        receptor=_RECEPTOR_PATH,  # type: ignore[arg-type]
+        ligands=[_IMATINIB_SMILES],  # type: ignore[arg-type]
+        search_box=VinaReferenceLigandBox(reference_ligand=_REFERENCE_LIGAND_PATH),  # type: ignore[arg-type]
+    )
+    visualize_search_box(reference_input)
+    derived = recorders[-1]
+    assert derived.models == ["pdb", "pdb"], "a reference box also draws the ligand that defined it"
+    # The cage must span the resolved coordinates, not the unresolved reference-ligand form.
+    resolved = reference_input.resolved_search_box()
+    lo, hi = derived.bounds()
+    assert [hi[axis] - lo[axis] for axis in range(3)] == pytest.approx(list(resolved.size))
+
+
+def test_visualize_search_box_grid_count_matches_the_dispatch_check(caplog) -> None:
+    """The pre-flight grid count reproduces the count the tool enforces at dispatch."""
+    import py3Dmol
+
+    from proto_tools.tools.molecular_docking.vina.helpers import visualize_search_box
+    from proto_tools.tools.molecular_docking.vina.vina_docking import _validated_grid_point_count
+
+    inputs = _example_input()
+    config = VinaDockingConfig(grid_spacing=0.375)
+    expected = _validated_grid_point_count(inputs.resolved_search_box(), config.grid_spacing)
+
+    with patch.object(py3Dmol, "view"), caplog.at_level(logging.INFO):
+        visualize_search_box(inputs, config)
+
+    assert f"{expected:,} points" in caplog.text
 
 
 # Standalone parsing

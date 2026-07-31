@@ -126,6 +126,20 @@ class VinaReferenceLigandBox(BaseModel):
         return VinaSearchBox(center=center, size=size)
 
 
+def _non_polymer_residues(receptor: Structure) -> list[str]:
+    """Return ``chain:NAMEseqid`` labels for waters and ligands left in a receptor.
+
+    Meeko parameterizes a receptor against polymer chemical templates, so waters, ions, and
+    co-crystallized ligands have no template and abort preparation. Reporting them by name
+    up front is more actionable than the template-match failure raised mid-run.
+    """
+    labels = []
+    for chain_id in receptor.get_chain_ids():
+        for name, seqid in receptor.get_chain_waters(chain_id) + receptor.get_chain_ligands(chain_id):
+            labels.append(f"{chain_id}:{name}{seqid}")
+    return sorted(set(labels))
+
+
 def _validated_grid_point_count(search_box: VinaSearchBox, spacing: float) -> int:
     """Return the Vina grid size after enforcing a practical allocation limit."""
     dimensions = tuple(math.ceil(axis_size / spacing) + 1 for axis_size in search_box.size)
@@ -553,6 +567,17 @@ def run_vina_docking(
 ) -> VinaDockingOutput:
     """Dock one or more small molecules into a rigid receptor with AutoDock Vina."""
     logger.debug("Using local venv for AutoDock Vina docking")
+
+    if not config.allow_bad_residues:
+        non_polymer = _non_polymer_residues(inputs.receptor)
+        if non_polymer:
+            shown = ", ".join(non_polymer[:10])
+            more = f" (and {len(non_polymer) - 10} more)" if len(non_polymer) > 10 else ""
+            raise ValueError(
+                f"receptor contains {len(non_polymer)} non-polymer residues Meeko cannot "
+                f"parameterize: {shown}{more}. Remove them from the receptor, or set "
+                f"allow_bad_residues=True to drop them during preparation."
+            )
 
     search_box = inputs.resolved_search_box()
     grid_point_count = _validated_grid_point_count(search_box, config.grid_spacing)
