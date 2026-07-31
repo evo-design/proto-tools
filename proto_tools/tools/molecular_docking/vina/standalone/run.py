@@ -42,7 +42,7 @@ def _prepare_receptor(
     allow_bad_residues: bool,
 ) -> tuple[str, dict[str, Any]]:
     """Parameterize a rigid receptor and return PDBQT plus preparation provenance."""
-    from meeko import (  # type: ignore[import-untyped]
+    from meeko import (  # type: ignore[import-not-found]
         MoleculePreparation,
         PDBQTWriterLegacy,
         Polymer,
@@ -222,7 +222,7 @@ def _convert_poses_to_sdf(poses_pdbqt: str) -> str:
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Prepare inputs, run Vina, and return ranked poses."""
     import meeko
-    import vina  # type: ignore[import-untyped]
+    import vina  # type: ignore[import-not-found]
     from rdkit import rdBase
     from vina import Vina
 
