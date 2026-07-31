@@ -159,11 +159,9 @@ def _is_disabled() -> bool:
 def _in_notebook() -> bool:
     """Check if running inside a Jupyter notebook."""
     try:
-        # Import from the defining module: the IPython package re-export is not marked
-        # explicit, so `from IPython import get_ipython` needs a version-dependent ignore.
-        from IPython.core.getipython import get_ipython
+        from IPython import get_ipython
 
-        shell = get_ipython()  # type: ignore[no-untyped-call]
+        shell = get_ipython()
         return shell is not None and shell.__class__.__name__ == "ZMQInteractiveShell"
     except Exception:
         return False

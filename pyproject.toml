@@ -237,6 +237,13 @@ module = [
 ]
 ignore_missing_imports = true
 
+# IPython ships partial and version-varying annotations, so analyzing it makes the
+# correctness of a `type: ignore` here depend on which IPython happens to be installed.
+[[tool.mypy.overrides]]
+module = ["IPython.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
+
 [[tool.mypy.overrides]]
 module = ["biotite.*"]
 follow_imports = "skip"
