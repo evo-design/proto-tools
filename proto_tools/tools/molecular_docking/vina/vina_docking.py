@@ -1,4 +1,7 @@
-"""AutoDock Vina rigid-receptor molecular docking tool."""
+"""proto_tools/tools/molecular_docking/vina/vina_docking.py.
+
+AutoDock Vina rigid-receptor molecular docking tool.
+"""
 
 import csv
 import json
@@ -141,7 +144,9 @@ class VinaDockingInput(BaseToolInput):
 
     Attributes:
         receptor (Structure): Receptor coordinates to parameterize as a rigid PDBQT model.
-        ligand (Fragment): Single small molecule to dock; a SMILES string is accepted directly.
+        ligands (list[Fragment]): Small molecules to dock against the receptor, each scored
+            independently. SMILES strings are accepted, and a single ligand is normalized
+            into a one-element list.
         search_box (VinaSearchBox | VinaReferenceLigandBox): Explicit search box or a box
             derived from a reference ligand in the receptor coordinate frame.
     """
@@ -150,24 +155,30 @@ class VinaDockingInput(BaseToolInput):
         title="Receptor",
         description="Rigid receptor structure in PDB or mmCIF format.",
     )
-    ligand: Fragment = InputField(
-        title="Ligand",
-        description="Single ligand Fragment or SMILES string to dock.",
+    ligands: list[Fragment] = InputField(
+        title="Ligands",
+        description="Ligand Fragments or SMILES strings to dock into the receptor.",
+        min_length=1,
     )
     search_box: VinaSearchBox | VinaReferenceLigandBox = InputField(
         title="Search Box",
         description="Explicit search-box coordinates or a coordinate-bearing reference ligand.",
     )
 
-    @field_validator("ligand", mode="before")
+    @field_validator("ligands", mode="before")
     @classmethod
     def _coerce_smiles(cls, value: Any) -> Any:
-        """Accept a bare SMILES string as shorthand for ``Fragment``."""
-        if isinstance(value, str):
-            return {"smiles": value}
-        if isinstance(value, dict):
-            return value.copy()
-        return value
+        """Accept bare SMILES strings, and a single ligand, as shorthand for ``list[Fragment]``."""
+        items = value if isinstance(value, (list, tuple)) else [value]
+        coerced = []
+        for item in items:
+            if isinstance(item, str):
+                coerced.append({"smiles": item})
+            elif isinstance(item, dict):
+                coerced.append(item.copy())
+            else:
+                coerced.append(item)
+        return coerced
 
     @model_validator(mode="after")
     def _validate_resolved_box(self) -> "VinaDockingInput":
@@ -240,21 +251,82 @@ class VinaDockingPose(BaseModel):
     )
 
 
-class VinaDockingOutput(BaseToolOutput):
-    """Ranked AutoDock Vina poses and reproducibility metadata.
+class VinaLigandResult(BaseModel):
+    """Docking result for one ligand, holding everything specific to that ligand.
 
     Attributes:
+        smiles (str): SMILES of the docked ligand, echoed for provenance.
         poses (list[VinaDockingPose]): Ranked poses in ascending affinity order.
-        seed (int): Concrete random seed used by Vina and ligand conformer generation.
-        search_box (VinaSearchBox): Resolved search-box coordinates.
-        scoring_function (Literal["vina", "vinardo"]): Scoring function used.
-        poses_sdf (str): All returned poses in a combined SDF payload.
-        poses_pdbqt (str): All returned poses in a combined PDBQT payload.
+        poses_sdf (str): This ligand's returned poses in a combined SDF payload.
+        poses_pdbqt (str): This ligand's returned poses in a combined PDBQT payload.
+        optimization_method (str | None): Force field used to minimize the input conformer.
+        optimization_converged (bool | None): Whether conformer minimization converged.
+        optimization_attempts (int | None): Conformer minimization attempts made.
+        optimization_iteration_limits (list[int]): Iteration cap used for each attempt.
+        warnings (list[str]): Ligand-specific preparation warnings.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
+    smiles: str = Field(
+        min_length=1,
+        title="Ligand SMILES",
+        description="SMILES of the ligand these poses were docked from.",
+    )
     poses: list[VinaDockingPose] = Field(
         title="Docking Poses",
         description="Ranked docking poses with affinity and RMSD metrics.",
+    )
+    poses_sdf: str = Field(
+        min_length=1,
+        title="Combined SDF",
+        description="This ligand's returned docking poses as SDF records.",
+    )
+    poses_pdbqt: str = Field(
+        min_length=1,
+        title="Combined PDBQT",
+        description="This ligand's returned docking poses as PDBQT MODEL blocks.",
+    )
+    optimization_method: str | None = Field(
+        default=None,
+        title="Optimization Method",
+        description="Force field used to minimize the input conformer, if any.",
+    )
+    optimization_converged: bool | None = Field(
+        default=None,
+        title="Optimization Converged",
+        description="Whether conformer minimization converged.",
+    )
+    optimization_attempts: int | None = Field(
+        default=None,
+        title="Optimization Attempts",
+        description="Number of conformer minimization attempts made.",
+    )
+    optimization_iteration_limits: list[int] = Field(
+        default_factory=list,
+        title="Optimization Iteration Limits",
+        description="Iteration cap applied on each minimization attempt.",
+    )
+    warnings: list[str] = Field(
+        default_factory=list,
+        title="Ligand Warnings",
+        description="Preparation warnings specific to this ligand.",
+    )
+
+
+class VinaDockingOutput(BaseToolOutput):
+    """Per-ligand AutoDock Vina results and shared reproducibility metadata.
+
+    Attributes:
+        results (list[VinaLigandResult]): One entry per input ligand, in input order.
+        seed (int): Concrete random seed used by Vina and ligand conformer generation.
+        search_box (VinaSearchBox): Resolved search-box coordinates.
+        scoring_function (Literal["vina", "vinardo"]): Scoring function used.
+    """
+
+    results: list[VinaLigandResult] = Field(
+        title="Results",
+        description="Docking result per input ligand, in input order.",
     )
     seed: int = Field(
         ge=1,
@@ -270,16 +342,14 @@ class VinaDockingOutput(BaseToolOutput):
         title="Scoring Function",
         description="Vina-family scoring function used for docking.",
     )
-    poses_sdf: str = Field(
-        min_length=1,
-        title="Combined SDF",
-        description="All returned docking poses as SDF records.",
-    )
-    poses_pdbqt: str = Field(
-        min_length=1,
-        title="Combined PDBQT",
-        description="All returned docking poses as PDBQT MODEL blocks.",
-    )
+
+    def __len__(self) -> int:
+        """Return the number of per-ligand results."""
+        return len(self.results)
+
+    def __getitem__(self, index: int) -> VinaLigandResult:
+        """Return the per-ligand result at ``index``."""
+        return self.results[index]
 
     @property
     def output_format_options(self) -> list[str]:
@@ -294,13 +364,15 @@ class VinaDockingOutput(BaseToolOutput):
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
         if file_format == "sdf":
-            path.write_text(self.poses_sdf)
+            path.write_text("".join(result.poses_sdf for result in self.results))
         elif file_format == "pdbqt":
-            path.write_text(self.poses_pdbqt)
+            path.write_text("".join(result.poses_pdbqt for result in self.results))
         elif file_format == "csv":
             center = self.search_box.center
             size = self.search_box.size
             fieldnames = [
+                "ligand_index",
+                "smiles",
                 "rank",
                 "affinity",
                 "rmsd_lower_bound",
@@ -317,21 +389,24 @@ class VinaDockingOutput(BaseToolOutput):
             with path.open("w", newline="") as handle:
                 writer = csv.DictWriter(handle, fieldnames=fieldnames)
                 writer.writeheader()
-                for pose in self.poses:
-                    writer.writerow(
-                        {
-                            "rank": pose.rank,
-                            **dict(pose.metrics.items()),
-                            "seed": self.seed,
-                            "scoring_function": self.scoring_function,
-                            "center_x": center[0],
-                            "center_y": center[1],
-                            "center_z": center[2],
-                            "size_x": size[0],
-                            "size_y": size[1],
-                            "size_z": size[2],
-                        }
-                    )
+                for ligand_index, result in enumerate(self.results):
+                    for pose in result.poses:
+                        writer.writerow(
+                            {
+                                "ligand_index": ligand_index,
+                                "smiles": result.smiles,
+                                "rank": pose.rank,
+                                **dict(pose.metrics.items()),
+                                "seed": self.seed,
+                                "scoring_function": self.scoring_function,
+                                "center_x": center[0],
+                                "center_y": center[1],
+                                "center_z": center[2],
+                                "size_x": size[0],
+                                "size_y": size[1],
+                                "size_z": size[2],
+                            }
+                        )
         elif file_format == "json":
             path.write_text(json.dumps(self.model_dump(mode="json"), indent=2))
         else:
@@ -436,7 +511,7 @@ def example_input() -> VinaDockingInput:
     toolkit_dir = Path(__file__).parent
     return VinaDockingInput(
         receptor=toolkit_dir / "example_receptor_1iep.pdb",  # type: ignore[arg-type]
-        ligand="Cc1ccc(NC(=O)c2ccc(CN3CC[NH+](C)CC3)cc2)cc1Nc1nccc(-c2cccnc2)n1",  # type: ignore[arg-type]
+        ligands=["Cc1ccc(NC(=O)c2ccc(CN3CC[NH+](C)CC3)cc2)cc1Nc1nccc(-c2cccnc2)n1"],  # type: ignore[list-item]
         search_box=VinaSearchBox(center=(15.190, 53.903, 16.917), size=(20.0, 20.0, 20.0)),
     )
 
@@ -457,6 +532,9 @@ def example_reference_ligand() -> Structure:
     description="Dock a small molecule into a rigid receptor with AutoDock Vina or Vinardo scoring.",
     uses_gpu=False,
     example_input=example_input,
+    iterable_input_fields=["ligands"],
+    iterable_output_field="results",
+    max_chunk_size=32,
     cacheable=True,
     stochastic=True,
 )
@@ -465,7 +543,7 @@ def run_vina_docking(
     config: VinaDockingConfig,
     instance: ToolInstance | None = None,
 ) -> VinaDockingOutput:
-    """Dock one small molecule into a rigid receptor with AutoDock Vina."""
+    """Dock one or more small molecules into a rigid receptor with AutoDock Vina."""
     logger.debug("Using local venv for AutoDock Vina docking")
 
     search_box = inputs.resolved_search_box()
@@ -476,7 +554,7 @@ def run_vina_docking(
         "vina",
         {
             "receptor_pdb": receptor_pdb,
-            "ligand_smiles": inputs.ligand.smiles,
+            "ligand_smiles": [ligand.smiles for ligand in inputs.ligands],
             "search_box": search_box.model_dump(),
             "config": {
                 "scoring_function": config.scoring_function,
@@ -496,28 +574,38 @@ def run_vina_docking(
         config=config,
     )
 
-    poses = [
-        VinaDockingPose(
-            rank=pose["rank"],
-            metrics=VinaDockingPoseMetrics(
-                affinity=pose["affinity"],
-                rmsd_lower_bound=pose["rmsd_lower_bound"],
-                rmsd_upper_bound=pose["rmsd_upper_bound"],
-            ),
-            sdf=pose["sdf"],
-            pdbqt=pose["pdbqt"],
+    results = [
+        VinaLigandResult(
+            smiles=result["smiles"],
+            poses=[
+                VinaDockingPose(
+                    rank=pose["rank"],
+                    metrics=VinaDockingPoseMetrics(
+                        affinity=pose["affinity"],
+                        rmsd_lower_bound=pose["rmsd_lower_bound"],
+                        rmsd_upper_bound=pose["rmsd_upper_bound"],
+                    ),
+                    sdf=pose["sdf"],
+                    pdbqt=pose["pdbqt"],
+                )
+                for pose in result["poses"]
+            ],
+            poses_sdf=result["poses_sdf"],
+            poses_pdbqt=result["poses_pdbqt"],
+            optimization_method=result["ligand_preparation"].get("optimization_method"),
+            optimization_converged=result["ligand_preparation"].get("optimization_converged"),
+            optimization_attempts=result["ligand_preparation"].get("optimization_attempts"),
+            optimization_iteration_limits=result["ligand_preparation"].get("optimization_iteration_limits", []),
+            warnings=result.get("warnings", []),
         )
-        for pose in output_data["poses"]
+        for result in output_data["results"]
     ]
     receptor_preparation = output_data.get("receptor_preparation", {})
-    ligand_preparation = output_data.get("ligand_preparation", {})
     return VinaDockingOutput(
-        poses=poses,
+        results=results,
         seed=output_data["seed"],
         search_box=search_box,
         scoring_function=config.scoring_function,
-        poses_sdf=output_data["poses_sdf"],
-        poses_pdbqt=output_data["poses_pdbqt"],
         warnings=output_data.get("warnings", []),
         metadata={
             "vina_version": output_data.get("vina_version"),
@@ -526,7 +614,7 @@ def run_vina_docking(
             "scoring_function": config.scoring_function,
             "exhaustiveness": config.exhaustiveness,
             "requested_num_poses": config.num_poses,
-            "returned_num_poses": len(poses),
+            "num_ligands": len(results),
             "energy_range": config.energy_range,
             "min_rmsd": config.min_rmsd,
             "max_evaluations": config.max_evaluations,
@@ -536,9 +624,5 @@ def run_vina_docking(
             "allow_bad_residues": config.allow_bad_residues,
             "ignored_receptor_residues": receptor_preparation.get("ignored_residue_ids", []),
             "receptor_template_assignments": receptor_preparation.get("template_assignments", []),
-            "ligand_optimization_method": ligand_preparation.get("optimization_method"),
-            "ligand_optimization_converged": ligand_preparation.get("optimization_converged"),
-            "ligand_optimization_attempts": ligand_preparation.get("optimization_attempts"),
-            "ligand_optimization_iteration_limits": ligand_preparation.get("optimization_iteration_limits", []),
         },
     )

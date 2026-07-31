@@ -1,4 +1,7 @@
-"""AutoDock Vina standalone runner for rigid-receptor docking."""
+"""proto_tools/tools/molecular_docking/vina/standalone/run.py.
+
+AutoDock Vina standalone runner for rigid-receptor docking.
+"""
 
 import json
 import math
@@ -241,12 +244,17 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if not math.isfinite(min_rmsd) or min_rmsd <= 0:
         raise ValueError("vina: min_rmsd must be finite and greater than zero")
 
-    _update_status("Preparing receptor and ligand")
+    ligand_smiles_list = input_dict["ligand_smiles"]
+    if not ligand_smiles_list:
+        raise ValueError("vina: ligand_smiles must contain at least one SMILES")
+
+    # Meeko receptor parameterization is the expensive setup step and depends only on the
+    # receptor, so it is done once and reused for every ligand in the request.
+    _update_status("Preparing receptor")
     receptor_pdbqt, receptor_preparation = _prepare_receptor(
         input_dict["receptor_pdb"],
         bool(config["allow_bad_residues"]),
     )
-    ligand_pdbqt, ligand_preparation = _prepare_ligand(input_dict["ligand_smiles"], seed)
     warnings: list[str] = []
     ignored_residue_ids = receptor_preparation["ignored_residue_ids"]
     if ignored_residue_ids:
@@ -255,85 +263,103 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         )
         logger.warning(warning)
         warnings.append(warning)
-    if ligand_preparation["optimization_method"] is None:
-        warning = (
-            "Ligand conformer was not force-field minimized because RDKit found no complete MMFF94 or UFF parameters"
-        )
-        logger.warning(warning)
-        warnings.append(warning)
-    elif not ligand_preparation["optimization_converged"]:
-        warning = (
-            f"Ligand conformer did not converge after {ligand_preparation['optimization_attempts']} "
-            f"{ligand_preparation['optimization_method']} optimization attempts"
-        )
-        logger.warning(warning)
-        warnings.append(warning)
 
-    _update_status("Computing affinity maps")
-    docking = Vina(
-        sf_name=config["scoring_function"],
-        cpu=cpu,
-        seed=seed,
-        verbosity=min(int(config["verbose"]), 2),
-    )
+    results = []
+    resolved_seed = seed
     with tempfile.TemporaryDirectory() as temporary_directory:
         receptor_path = Path(temporary_directory) / "receptor.pdbqt"
         receptor_path.write_text(receptor_pdbqt)
-        docking.set_receptor(str(receptor_path))
-        docking.set_ligand_from_string(ligand_pdbqt)
-        docking.compute_vina_maps(
-            center=center,
-            box_size=size,
-            spacing=grid_spacing,
-        )
 
-        _update_status("Searching docking poses")
-        docking.dock(
-            exhaustiveness=exhaustiveness,
-            n_poses=num_poses,
-            min_rmsd=min_rmsd,
-            max_evals=max_evaluations,
-        )
-        poses_pdbqt = docking.poses(
-            n_poses=num_poses,
-            energy_range=energy_range,
-        )
+        for ligand_index, ligand_smiles in enumerate(ligand_smiles_list):
+            _update_status(f"Preparing ligand {ligand_index + 1}/{len(ligand_smiles_list)}")
+            ligand_pdbqt, ligand_preparation = _prepare_ligand(ligand_smiles, seed)
+            ligand_warnings: list[str] = []
+            if ligand_preparation["optimization_method"] is None:
+                warning = (
+                    "Ligand conformer was not force-field minimized because RDKit found no "
+                    "complete MMFF94 or UFF parameters"
+                )
+                logger.warning(warning)
+                ligand_warnings.append(warning)
+            elif not ligand_preparation["optimization_converged"]:
+                warning = (
+                    f"Ligand conformer did not converge after {ligand_preparation['optimization_attempts']} "
+                    f"{ligand_preparation['optimization_method']} optimization attempts"
+                )
+                logger.warning(warning)
+                ligand_warnings.append(warning)
 
-    _update_status("Converting docking poses")
-    poses_sdf = _convert_poses_to_sdf(poses_pdbqt)
-    pdbqt_models = _split_pdbqt_models(poses_pdbqt)
-    sdf_records = _split_sdf_records(poses_sdf)
-    if len(pdbqt_models) != len(sdf_records):
-        raise ValueError(
-            f"vina: pose-count mismatch after conversion: {len(pdbqt_models)} PDBQT models, "
-            f"{len(sdf_records)} SDF records"
-        )
+            _update_status(f"Computing affinity maps {ligand_index + 1}/{len(ligand_smiles_list)}")
+            docking = Vina(
+                sf_name=config["scoring_function"],
+                cpu=cpu,
+                seed=seed,
+                verbosity=min(int(config["verbose"]), 2),
+            )
+            docking.set_receptor(str(receptor_path))
+            docking.set_ligand_from_string(ligand_pdbqt)
+            docking.compute_vina_maps(
+                center=center,
+                box_size=size,
+                spacing=grid_spacing,
+            )
 
-    poses = []
-    for rank, (pdbqt_model, sdf_record) in enumerate(zip(pdbqt_models, sdf_records, strict=True), start=1):
-        affinity, rmsd_lower_bound, rmsd_upper_bound = _pose_metrics(pdbqt_model)
-        poses.append(
-            {
-                "rank": rank,
-                "affinity": affinity,
-                "rmsd_lower_bound": rmsd_lower_bound,
-                "rmsd_upper_bound": rmsd_upper_bound,
-                "sdf": sdf_record,
-                "pdbqt": pdbqt_model,
-            }
-        )
+            _update_status(f"Searching docking poses {ligand_index + 1}/{len(ligand_smiles_list)}")
+            docking.dock(
+                exhaustiveness=exhaustiveness,
+                n_poses=num_poses,
+                min_rmsd=min_rmsd,
+                max_evals=max_evaluations,
+            )
+            poses_pdbqt = docking.poses(
+                n_poses=num_poses,
+                energy_range=energy_range,
+            )
+            resolved_seed = int(docking.info()["seed"])
+
+            _update_status(f"Converting docking poses {ligand_index + 1}/{len(ligand_smiles_list)}")
+            poses_sdf = _convert_poses_to_sdf(poses_pdbqt)
+            pdbqt_models = _split_pdbqt_models(poses_pdbqt)
+            sdf_records = _split_sdf_records(poses_sdf)
+            if len(pdbqt_models) != len(sdf_records):
+                raise ValueError(
+                    f"vina: pose-count mismatch after conversion for ligand {ligand_index}: "
+                    f"{len(pdbqt_models)} PDBQT models, {len(sdf_records)} SDF records"
+                )
+
+            poses = []
+            for rank, (pdbqt_model, sdf_record) in enumerate(zip(pdbqt_models, sdf_records, strict=True), start=1):
+                affinity, rmsd_lower_bound, rmsd_upper_bound = _pose_metrics(pdbqt_model)
+                poses.append(
+                    {
+                        "rank": rank,
+                        "affinity": affinity,
+                        "rmsd_lower_bound": rmsd_lower_bound,
+                        "rmsd_upper_bound": rmsd_upper_bound,
+                        "sdf": sdf_record,
+                        "pdbqt": pdbqt_model,
+                    }
+                )
+
+            results.append(
+                {
+                    "smiles": ligand_smiles,
+                    "poses": poses,
+                    "poses_sdf": poses_sdf,
+                    "poses_pdbqt": poses_pdbqt,
+                    "ligand_preparation": ligand_preparation,
+                    "warnings": ligand_warnings,
+                }
+            )
 
     return {
-        "poses": poses,
-        "seed": int(docking.info()["seed"]),
-        "poses_sdf": poses_sdf,
-        "poses_pdbqt": poses_pdbqt,
+        "results": results,
+        "seed": resolved_seed,
         "vina_version": getattr(vina, "__version__", "unknown"),
         "meeko_version": getattr(meeko, "__version__", "unknown"),
         "rdkit_version": rdBase.rdkitVersion,
         "grid_point_count": grid_point_count,
         "receptor_preparation": receptor_preparation,
-        "ligand_preparation": ligand_preparation,
         "warnings": warnings,
     }
 

@@ -19,6 +19,7 @@ from proto_tools.tools.molecular_docking.vina import (
     VinaDockingOutput,
     VinaDockingPose,
     VinaDockingPoseMetrics,
+    VinaLigandResult,
     VinaReferenceLigandBox,
     VinaSearchBox,
     run_vina_docking,
@@ -57,7 +58,7 @@ def _example_input() -> VinaDockingInput:
     """Build the bundled c-Abl/imatinib input."""
     return VinaDockingInput(
         receptor=_RECEPTOR_PATH,  # type: ignore[arg-type]
-        ligand=_IMATINIB_SMILES,  # type: ignore[arg-type]
+        ligands=[_IMATINIB_SMILES],  # type: ignore[arg-type]
         search_box=_CANONICAL_BOX,
     )
 
@@ -65,19 +66,32 @@ def _example_input() -> VinaDockingInput:
 def _fake_output(seed: int = 7) -> dict[str, Any]:
     """Return a valid one-pose standalone payload."""
     return {
-        "poses": [
+        "results": [
             {
-                "rank": 1,
-                "affinity": -8.25,
-                "rmsd_lower_bound": 0.0,
-                "rmsd_upper_bound": 0.0,
-                "sdf": _POSE_SDF,
-                "pdbqt": _POSE_PDBQT,
+                "smiles": _IMATINIB_SMILES,
+                "poses": [
+                    {
+                        "rank": 1,
+                        "affinity": -8.25,
+                        "rmsd_lower_bound": 0.0,
+                        "rmsd_upper_bound": 0.0,
+                        "sdf": _POSE_SDF,
+                        "pdbqt": _POSE_PDBQT,
+                    }
+                ],
+                "poses_sdf": _POSE_SDF,
+                "poses_pdbqt": _POSE_PDBQT,
+                "ligand_preparation": {
+                    "optimization_method": "MMFF94",
+                    "optimization_converged": True,
+                    "optimization_status": 0,
+                    "optimization_attempts": 2,
+                    "optimization_iteration_limits": [200, 500],
+                },
+                "warnings": [],
             }
         ],
         "seed": seed,
-        "poses_sdf": _POSE_SDF,
-        "poses_pdbqt": _POSE_PDBQT,
         "vina_version": "1.2.7",
         "meeko_version": "0.7.1",
         "rdkit_version": "2025.09.6",
@@ -91,13 +105,6 @@ def _fake_output(seed: int = 7) -> dict[str, Any]:
                     "assigned_template": "HIE",
                 }
             ],
-        },
-        "ligand_preparation": {
-            "optimization_method": "MMFF94",
-            "optimization_converged": True,
-            "optimization_status": 0,
-            "optimization_attempts": 2,
-            "optimization_iteration_limits": [200, 500],
         },
         "warnings": [],
     }
@@ -160,8 +167,9 @@ def test_vina_input_accepts_bare_smiles() -> None:
     """A bare SMILES ligand is normalized to a single Fragment."""
     inputs = _example_input()
 
-    assert inputs.ligand.smiles is not None
-    assert inputs.ligand.heavy_atom_count == 37
+    assert len(inputs.ligands) == 1
+    assert inputs.ligands[0].smiles is not None
+    assert inputs.ligands[0].heavy_atom_count == 37
     assert inputs.search_box == _CANONICAL_BOX
 
 
@@ -183,7 +191,7 @@ def test_vina_input_rejects_invalid_or_multicomponent_smiles(ligand: str) -> Non
     with pytest.raises(ValidationError):
         VinaDockingInput(
             receptor=_RECEPTOR_PATH,  # type: ignore[arg-type]
-            ligand=ligand,  # type: ignore[arg-type]
+            ligands=[ligand],  # type: ignore[arg-type]
             search_box=_CANONICAL_BOX,
         )
 
@@ -260,7 +268,7 @@ def test_vina_rejects_a_grid_allocation_above_the_safety_limit(monkeypatch: pyte
     monkeypatch.setattr(ToolInstance, "dispatch", unexpected_dispatch)
     inputs = VinaDockingInput(
         receptor=_RECEPTOR_PATH,  # type: ignore[arg-type]
-        ligand=_IMATINIB_SMILES,  # type: ignore[arg-type]
+        ligands=[_IMATINIB_SMILES],  # type: ignore[arg-type]
         search_box=VinaSearchBox(center=(0.0, 0.0, 0.0), size=(100.0, 100.0, 100.0)),
     )
 
@@ -269,6 +277,37 @@ def test_vina_rejects_a_grid_allocation_above_the_safety_limit(monkeypatch: pyte
 
 
 # Wrapper and export behavior
+
+
+def test_vina_returns_one_result_per_ligand_in_input_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each ligand gets its own result, aligned to input order rather than merged."""
+    aspirin = "CC(=O)Oc1ccccc1C(=O)O"
+
+    def fake_dispatch(
+        cls: type[ToolInstance],
+        toolkit: str,
+        input_dict: dict[str, Any],
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        payload = _fake_output()
+        # One element per dispatched SMILES, echoing it back so a mis-zip is visible.
+        payload["results"] = [{**payload["results"][0], "smiles": smiles} for smiles in input_dict["ligand_smiles"]]
+        return payload
+
+    monkeypatch.setattr(ToolInstance, "dispatch", classmethod(fake_dispatch))
+    output = run_vina_docking(
+        VinaDockingInput(
+            receptor=_RECEPTOR_PATH,  # type: ignore[arg-type]
+            ligands=[_IMATINIB_SMILES, aspirin],  # type: ignore[arg-type]
+            search_box=_CANONICAL_BOX,
+        ),
+        VinaDockingConfig(seed=7),
+    )
+
+    assert [result.smiles for result in output.results] == [_IMATINIB_SMILES, aspirin]
+    assert output.metadata["num_ligands"] == 2
+    assert len(output) == 2
+    assert output[1].smiles == aspirin
 
 
 def test_vina_wrapper_dispatches_normalized_payload(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -308,7 +347,7 @@ def test_vina_wrapper_dispatches_normalized_payload(monkeypatch: pytest.MonkeyPa
     assert captured["toolkit"] == "vina"
     assert "\nATOM" in payload["receptor_pdb"]
     assert payload["receptor_pdb"].endswith("END\n")
-    assert payload["ligand_smiles"] == inputs.ligand.smiles
+    assert payload["ligand_smiles"] == [ligand.smiles for ligand in inputs.ligands]
     assert payload["search_box"] == {
         "mode": "coordinates",
         "center": (15.190, 53.903, 16.917),
@@ -334,7 +373,7 @@ def test_vina_wrapper_dispatches_normalized_payload(monkeypatch: pytest.MonkeyPa
     assert output.metadata["meeko_version"] == "0.7.1"
     assert output.metadata["rdkit_version"] == "2025.09.6"
     assert output.metadata["requested_num_poses"] == 2
-    assert output.metadata["returned_num_poses"] == 1
+    assert len(output.results[0].poses) == 1
     assert output.metadata["energy_range"] == 5.0
     assert output.metadata["min_rmsd"] == 1.5
     assert output.metadata["max_evaluations"] == 500
@@ -349,11 +388,11 @@ def test_vina_wrapper_dispatches_normalized_payload(monkeypatch: pytest.MonkeyPa
             "assigned_template": "HIE",
         }
     ]
-    assert output.metadata["ligand_optimization_method"] == "MMFF94"
-    assert output.metadata["ligand_optimization_converged"] is True
-    assert output.metadata["ligand_optimization_attempts"] == 2
-    assert output.metadata["ligand_optimization_iteration_limits"] == [200, 500]
-    assert output.poses[0].metrics.affinity == -8.25
+    assert output.results[0].optimization_method == "MMFF94"
+    assert output.results[0].optimization_converged is True
+    assert output.results[0].optimization_attempts == 2
+    assert output.results[0].optimization_iteration_limits == [200, 500]
+    assert output.results[0].poses[0].metrics.affinity == -8.25
 
 
 def test_vina_wrapper_concretizes_an_omitted_zero_seed(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -382,23 +421,28 @@ def test_vina_wrapper_concretizes_an_omitted_zero_seed(monkeypatch: pytest.Monke
 def test_vina_output_exports_all_supported_formats(tmp_path: Path) -> None:
     """SDF, PDBQT, CSV, and JSON exports preserve poses and provenance."""
     output = VinaDockingOutput(
-        poses=[
-            VinaDockingPose(
-                rank=1,
-                metrics=VinaDockingPoseMetrics(
-                    affinity=-8.25,
-                    rmsd_lower_bound=0.0,
-                    rmsd_upper_bound=0.0,
-                ),
-                sdf=_POSE_SDF,
-                pdbqt=_POSE_PDBQT,
+        results=[
+            VinaLigandResult(
+                smiles=_IMATINIB_SMILES,
+                poses=[
+                    VinaDockingPose(
+                        rank=1,
+                        metrics=VinaDockingPoseMetrics(
+                            affinity=-8.25,
+                            rmsd_lower_bound=0.0,
+                            rmsd_upper_bound=0.0,
+                        ),
+                        sdf=_POSE_SDF,
+                        pdbqt=_POSE_PDBQT,
+                    )
+                ],
+                poses_sdf=_POSE_SDF,
+                poses_pdbqt=_POSE_PDBQT,
             )
         ],
         seed=7,
         search_box=_CANONICAL_BOX,
         scoring_function="vina",
-        poses_sdf=_POSE_SDF,
-        poses_pdbqt=_POSE_PDBQT,
     )
 
     for file_format in output.output_format_options:
@@ -411,6 +455,8 @@ def test_vina_output_exports_all_supported_formats(tmp_path: Path) -> None:
         rows = list(csv.DictReader(handle))
     assert rows == [
         {
+            "ligand_index": "0",
+            "smiles": _IMATINIB_SMILES,
             "rank": "1",
             "affinity": "-8.25",
             "rmsd_lower_bound": "0.0",
@@ -427,7 +473,7 @@ def test_vina_output_exports_all_supported_formats(tmp_path: Path) -> None:
     ]
     exported_json = json.loads((tmp_path / "docking.json").read_text())
     assert exported_json["seed"] == 7
-    assert exported_json["poses"][0]["metrics"]["affinity"] == -8.25
+    assert exported_json["results"][0]["poses"][0]["metrics"]["affinity"] == -8.25
 
 
 # Standalone parsing
@@ -510,15 +556,15 @@ def test_vina_redocks_imatinib_through_tool_instance() -> None:
         }
         for residue_id in ("A:246", "A:295", "A:361", "A:375", "A:396", "A:490")
     ]
-    assert output.metadata["ligand_optimization_method"] == "MMFF94"
-    assert output.metadata["ligand_optimization_converged"] is True
-    assert 1 <= len(output.poses) <= 5
-    assert output.poses[0].rank == 1
-    assert output.poses[0].metrics.affinity < -8.0
-    assert output.poses[0].metrics.rmsd_lower_bound == 0.0
-    assert min(_crystallographic_heavy_atom_rmsd(pose.sdf) for pose in output.poses) < 2.0
-    assert output.poses[0].sdf.endswith("$$$$\n")
-    assert output.poses[0].pdbqt.startswith("MODEL 1")
+    assert output.results[0].optimization_method == "MMFF94"
+    assert output.results[0].optimization_converged is True
+    assert 1 <= len(output.results[0].poses) <= 5
+    assert output.results[0].poses[0].rank == 1
+    assert output.results[0].poses[0].metrics.affinity < -8.0
+    assert output.results[0].poses[0].metrics.rmsd_lower_bound == 0.0
+    assert min(_crystallographic_heavy_atom_rmsd(pose.sdf) for pose in output.results[0].poses) < 2.0
+    assert output.results[0].poses[0].sdf.endswith("$$$$\n")
+    assert output.results[0].poses[0].pdbqt.startswith("MODEL 1")
 
 
 @pytest.mark.integration
@@ -526,7 +572,7 @@ def test_vina_supports_vinardo_with_a_reference_derived_box() -> None:
     """Vinardo docking resolves its search box from the bundled crystal ligand."""
     inputs = VinaDockingInput(
         receptor=_RECEPTOR_PATH,  # type: ignore[arg-type]
-        ligand=_IMATINIB_SMILES,  # type: ignore[arg-type]
+        ligands=[_IMATINIB_SMILES],  # type: ignore[arg-type]
         search_box=VinaReferenceLigandBox(
             reference_ligand=_REFERENCE_LIGAND_PATH,  # type: ignore[arg-type]
             padding=4.0,
@@ -543,10 +589,10 @@ def test_vina_supports_vinardo_with_a_reference_derived_box() -> None:
     assert output.scoring_function == "vinardo"
     assert output.search_box == inputs.search_box.resolve()
     assert output.seed == 19
-    assert output.poses[0].metrics.affinity < -4.0
+    assert output.results[0].poses[0].metrics.affinity < -4.0
     assert output.metadata["scoring_function"] == "vinardo"
     assert output.metadata["requested_num_poses"] == 1
-    assert output.metadata["returned_num_poses"] == 1
+    assert len(output.results[0].poses) == 1
 
 
 @pytest.mark.benchmark("vina-docking")
@@ -568,6 +614,6 @@ def test_vina_docking_benchmark(request: pytest.FixtureRequest) -> None:
     assert_metrics_in_spec(output)
     assert output.tool_id == "vina-docking"
     assert output.seed == 7
-    assert 1 <= len(output.poses) <= 3
-    assert output.poses[0].metrics.affinity < -8.0
-    assert [pose.rank for pose in output.poses] == list(range(1, len(output.poses) + 1))
+    assert 1 <= len(output.results[0].poses) <= 3
+    assert output.results[0].poses[0].metrics.affinity < -8.0
+    assert [pose.rank for pose in output.results[0].poses] == list(range(1, len(output.results[0].poses) + 1))

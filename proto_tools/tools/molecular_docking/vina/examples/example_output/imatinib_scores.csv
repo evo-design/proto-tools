@@ -1,6 +1,6 @@
-rank,affinity,rmsd_lower_bound,rmsd_upper_bound,seed,scoring_function,center_x,center_y,center_z,size_x,size_y,size_z
-1,-12.959,0.0,0.0,7,vina,15.19,53.903,16.917,20.0,20.0,20.0
-2,-11.183,3.109,12.223,7,vina,15.19,53.903,16.917,20.0,20.0,20.0
-3,-10.832,3.723,12.278,7,vina,15.19,53.903,16.917,20.0,20.0,20.0
-4,-10.812,2.491,12.49,7,vina,15.19,53.903,16.917,20.0,20.0,20.0
-5,-9.561,2.357,12.6,7,vina,15.19,53.903,16.917,20.0,20.0,20.0
+ligand_index,smiles,rank,affinity,rmsd_lower_bound,rmsd_upper_bound,seed,scoring_function,center_x,center_y,center_z,size_x,size_y,size_z
+0,Cc1ccc(NC(=O)c2ccc(CN3CC[NH+](C)CC3)cc2)cc1Nc1nccc(-c2cccnc2)n1,1,-12.959,0.0,0.0,7,vina,15.19,53.903,16.917,20.0,20.0,20.0
+0,Cc1ccc(NC(=O)c2ccc(CN3CC[NH+](C)CC3)cc2)cc1Nc1nccc(-c2cccnc2)n1,2,-11.183,3.109,12.223,7,vina,15.19,53.903,16.917,20.0,20.0,20.0
+0,Cc1ccc(NC(=O)c2ccc(CN3CC[NH+](C)CC3)cc2)cc1Nc1nccc(-c2cccnc2)n1,3,-10.832,3.723,12.278,7,vina,15.19,53.903,16.917,20.0,20.0,20.0
+0,Cc1ccc(NC(=O)c2ccc(CN3CC[NH+](C)CC3)cc2)cc1Nc1nccc(-c2cccnc2)n1,4,-10.812,2.491,12.49,7,vina,15.19,53.903,16.917,20.0,20.0,20.0
+0,Cc1ccc(NC(=O)c2ccc(CN3CC[NH+](C)CC3)cc2)cc1Nc1nccc(-c2cccnc2)n1,5,-9.561,2.357,12.6,7,vina,15.19,53.903,16.917,20.0,20.0,20.0
