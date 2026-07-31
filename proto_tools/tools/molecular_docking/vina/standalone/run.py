@@ -265,14 +265,16 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         warnings.append(warning)
 
     results = []
-    resolved_seed = seed
     with tempfile.TemporaryDirectory() as temporary_directory:
         receptor_path = Path(temporary_directory) / "receptor.pdbqt"
         receptor_path.write_text(receptor_pdbqt)
 
         for ligand_index, ligand_smiles in enumerate(ligand_smiles_list):
+            # Advance the seed per ligand so duplicate ligands in one request still sample
+            # independently, while staying reproducible for a given (seed, position).
+            ligand_seed = (seed + ligand_index - 1) % _SIGNED_INT32_MAX + 1
             _update_status(f"Preparing ligand {ligand_index + 1}/{len(ligand_smiles_list)}")
-            ligand_pdbqt, ligand_preparation = _prepare_ligand(ligand_smiles, seed)
+            ligand_pdbqt, ligand_preparation = _prepare_ligand(ligand_smiles, ligand_seed)
             ligand_warnings: list[str] = []
             if ligand_preparation["optimization_method"] is None:
                 warning = (
@@ -293,7 +295,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             docking = Vina(
                 sf_name=config["scoring_function"],
                 cpu=cpu,
-                seed=seed,
+                seed=ligand_seed,
                 verbosity=min(int(config["verbose"]), 2),
             )
             docking.set_receptor(str(receptor_path))
@@ -315,7 +317,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 n_poses=num_poses,
                 energy_range=energy_range,
             )
-            resolved_seed = int(docking.info()["seed"])
 
             _update_status(f"Converting docking poses {ligand_index + 1}/{len(ligand_smiles_list)}")
             poses_sdf = _convert_poses_to_sdf(poses_pdbqt)
@@ -344,6 +345,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             results.append(
                 {
                     "smiles": ligand_smiles,
+                    "seed": int(docking.info()["seed"]),
                     "poses": poses,
                     "poses_sdf": poses_sdf,
                     "poses_pdbqt": poses_pdbqt,
@@ -354,7 +356,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "results": results,
-        "seed": resolved_seed,
+        "seed": seed,
         "vina_version": getattr(vina, "__version__", "unknown"),
         "meeko_version": getattr(meeko, "__version__", "unknown"),
         "rdkit_version": rdBase.rdkitVersion,

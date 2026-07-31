@@ -69,6 +69,7 @@ def _fake_output(seed: int = 7) -> dict[str, Any]:
         "results": [
             {
                 "smiles": _IMATINIB_SMILES,
+                "seed": seed,
                 "poses": [
                     {
                         "rank": 1,
@@ -424,6 +425,7 @@ def test_vina_output_exports_all_supported_formats(tmp_path: Path) -> None:
         results=[
             VinaLigandResult(
                 smiles=_IMATINIB_SMILES,
+                seed=7,
                 poses=[
                     VinaDockingPose(
                         rank=1,

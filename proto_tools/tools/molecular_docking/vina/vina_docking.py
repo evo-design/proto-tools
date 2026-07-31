@@ -256,6 +256,8 @@ class VinaLigandResult(BaseModel):
 
     Attributes:
         smiles (str): SMILES of the docked ligand, echoed for provenance.
+        seed (int): Seed actually used for this ligand, advanced from the request seed
+            by the ligand's position so duplicate ligands still sample independently.
         poses (list[VinaDockingPose]): Ranked poses in ascending affinity order.
         poses_sdf (str): This ligand's returned poses in a combined SDF payload.
         poses_pdbqt (str): This ligand's returned poses in a combined PDBQT payload.
@@ -272,6 +274,12 @@ class VinaLigandResult(BaseModel):
         min_length=1,
         title="Ligand SMILES",
         description="SMILES of the ligand these poses were docked from.",
+    )
+    seed: int = Field(
+        ge=1,
+        lt=2**31,
+        title="Ligand Seed",
+        description="Seed used for this ligand's conformer generation and docking search.",
     )
     poses: list[VinaDockingPose] = Field(
         title="Docking Poses",
@@ -332,7 +340,7 @@ class VinaDockingOutput(BaseToolOutput):
         ge=1,
         lt=2**31,
         title="Random Seed",
-        description="Concrete random seed used for conformer generation and docking.",
+        description="Base seed for the request; each ligand advances it by its position.",
     )
     search_box: VinaSearchBox = Field(
         title="Resolved Search Box",
@@ -577,6 +585,7 @@ def run_vina_docking(
     results = [
         VinaLigandResult(
             smiles=result["smiles"],
+            seed=result["seed"],
             poses=[
                 VinaDockingPose(
                     rank=pose["rank"],
