@@ -159,6 +159,14 @@ This works whether proto-tools is run from a clone or pip-installed, editable or
 
 Proto-tools writes `register_envs: false` to `PROTO_HOME/.micromamba/condarc` so micromamba-managed tool environments do not appear in the user's global `conda env list`. During micromamba setup, `ToolInstance` also removes existing registry entries under the current `PROTO_HOME/proto_tool_envs/` and `PROTO_HOME/.foundation_env/` roots from `~/.conda/environments.txt`. Unrelated conda environments are left untouched.
 
+## Architecture and `--platform` Forcing
+
+A conda prefix holds packages from exactly one subdir. `ToolInstance._create_env` creates the tool env natively (`micromamba create -p $VENV_PATH python=...` on the host's own subdir), so **`setup.sh` must never pass `--platform` to a `micromamba install -p "$VENV_PATH"`**. Doing so mixes subdirs inside one prefix: the build succeeds, and the tool then dies at first invocation with dyld's `incompatible architecture` (foreign-arch executables resolving `@rpath` against the prefix's native libraries).
+
+When a package genuinely has no build for the host arch, give it its own internally consistent prefix instead. `gene_annotation/crispr_tracr_rna` is the reference: its x86_64-only bioconda dependencies (`vmatch`, `scikit-learn=0.22.1`) go into `$VENV_PATH/conda_deps` via `micromamba create --platform osx-64`, leaving the tool env native. Before reaching for either, check whether conda-forge already ships the package for the host subdir; bioconda's coverage of `osx-arm64` is thin, and channel order (`-c conda-forge` first) is often the whole fix.
+
+`tests/style_consistency_tests/test_conda_platform_forcing.py` enforces the `install` half of this rule across every `setup.sh`.
+
 ## env_vars.txt
 
 Each tool's `standalone/env_vars.txt` supports three sections:
