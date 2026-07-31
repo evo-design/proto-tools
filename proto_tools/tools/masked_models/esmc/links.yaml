@@ -1,6 +1,10 @@
 github: https://github.com/Biohub/esm
 website: https://biohub.ai/
-paper: https://biohub.ai/papers/esm_protein.pdf
-huggingface: https://huggingface.co/biohub/ESMC-6B
+paper:
+  - https://biohub.ai/papers/esm_protein.pdf
+  - https://www.biorxiv.org/content/10.64898/2026.06.03.729735
+huggingface:
+  - https://huggingface.co/biohub/ESMC-6B
+  - https://huggingface.co/biohub/ESMC-SAE-Overview
 organizations:
   - Biohub
