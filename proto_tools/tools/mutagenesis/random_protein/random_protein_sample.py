@@ -12,7 +12,7 @@ from typing import Any, ClassVar, Literal
 from pydantic import BaseModel, Field, field_validator
 
 from proto_tools.tools.masked_models.shared_data_models import (
-    MaskedModelInput,
+    MaskedModelSampleInput,
 )
 from proto_tools.tools.mutagenesis.codons import amino_acid_weights
 from proto_tools.tools.tool_registry import tool
@@ -30,8 +30,8 @@ logger = logging.getLogger(__name__)
 # Data Models
 # ============================================================================
 
-# Input: reuse MaskedModelInput (protein sequences, optional _ masks)
-RandomProteinSampleInput = MaskedModelInput
+# Input: protein sequences, optionally pre-masked with '_'
+RandomProteinSampleInput = MaskedModelSampleInput
 
 CodonScheme = Literal["UNIFORM", "NNN", "NNK", "NNS", "NDT", "DBK", "NRT"]
 

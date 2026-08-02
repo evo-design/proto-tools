@@ -9,8 +9,8 @@ from typing import Any, ClassVar, Literal
 from pydantic import field_validator
 
 from proto_tools.tools.masked_models.shared_data_models import (
-    MaskedModelInput,
     MaskedModelSampleConfig,
+    MaskedModelSampleInput,
     MaskedModelSampleOutput,
     build_masked_model_samples,
 )
@@ -45,7 +45,7 @@ ESM2_MAX_SEQ_LENGTH = 1022
 # Data Models
 # ============================================================================
 # Input:
-class ESM2SampleInput(MaskedModelInput):
+class ESM2SampleInput(MaskedModelSampleInput):
     """ESM-2 sampling input.
 
     Attributes:
