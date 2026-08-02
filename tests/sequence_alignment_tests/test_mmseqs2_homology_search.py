@@ -19,6 +19,7 @@ from proto_tools.tools.sequence_alignment.mmseqs2.homology_search import (
     _assemble_paired_result,
     _check_dataset_provisioned,
     _rename_a3m_to_sequence_id,
+    local_search_low_memory_reason,
 )
 from proto_tools.tools.sequence_alignment.mmseqs2.remote_search import _parse_pair_a3m
 from proto_tools.utils import ConfigField
@@ -442,6 +443,30 @@ def test_registry_entry_outputs_match_disk_when_provisioned(dataset_name: str) -
     )
 
 
+def _low_memory_skip_reason(*dataset_names: str) -> str | None:
+    """The tool's own low-memory reason for any of ``dataset_names``, or ``None`` when RAM suffices.
+
+    A local search whose sequence DB outsizes available RAM does not fail: the tool warns and drops to
+    ``db-load-mode 2``, mmapping the DB instead of loading it. That is the right call for a user — a slow
+    answer beats an OOM kill — but under a test sweep it means mmapping a hundred-plus GB over the filesystem,
+    which reads as a hang rather than a result. Tests reuse :func:`local_search_low_memory_reason` rather than
+    carrying a RAM threshold of their own, so there is one definition to keep true and the skip line quotes
+    the same sentence the tool would have logged.
+    """
+    for name in dataset_names:
+        reason = local_search_low_memory_reason(DatasetRegistry.get(name), get_dataset_dir(name))
+        if reason:
+            return reason
+    return None
+
+
+# Bounds a search that clears the guard, so an unforeseen slow path fails loudly instead of grinding to the
+# 3600s config default. A search that fits in RAM returns in minutes.
+_E2E_SEARCH_TIMEOUT_S = 900
+
+
+@pytest.mark.integration
+@pytest.mark.slow
 @pytest.mark.uses_gpu
 @pytest.mark.parametrize("dataset_name", _provisioned_datasets() or ["__none_provisioned__"])
 def test_e2e_search_against_provisioned_protein_dataset(dataset_name: str) -> None:
@@ -463,9 +488,13 @@ def test_e2e_search_against_provisioned_protein_dataset(dataset_name: str) -> No
         pytest.skip(f"{dataset_name} uses a3m_adapter={entry.a3m_adapter!r}; tool only handles colabfold-style DBs")
     if dataset_name == "tiny-test-colabfold":
         pytest.skip("test fixture excluded from the product Literal; exercised separately via FixtureDbConfig")
+    if reason := _low_memory_skip_reason(dataset_name):
+        pytest.skip(reason)
 
     inp = Mmseqs2HomologySearchInput(queries=[(UBIQUITIN, "ubiquitin")])
-    cfg = Mmseqs2HomologySearchConfig(search_mode="local", dataset=dataset_name, device="cuda")
+    cfg = Mmseqs2HomologySearchConfig(
+        search_mode="local", dataset=dataset_name, device="cuda", timeout=_E2E_SEARCH_TIMEOUT_S
+    )
     result = run_mmseqs2_homology_search(inp, cfg)
 
     assert result.success, f"Search against {dataset_name} failed: {result.errors}"
@@ -515,10 +544,15 @@ def test_local_metagenomic_search_deepens_msa() -> None:
 
     Marked ``extensive`` (run with ``--ext``): a full UniRef30 + ~650 GB envdb search
     takes many minutes. Requires both DBs provisioned with GPU indexes — point
-    ``PROTO_DATABASES_DIR`` at wherever they live (e.g. scratch).
+    ``PROTO_DATABASES_DIR`` at wherever they live (e.g. scratch) — and enough RAM to
+    hold the sequence DBs; below that the search mmaps and ``--ext`` alone is not a
+    strong enough gate for the hours that follow.
     """
+    if reason := _low_memory_skip_reason("uniref30-2302", "colabfold-envdb-202108"):
+        pytest.skip(reason)
+
     inp = Mmseqs2HomologySearchInput(queries=[(UBIQUITIN, "ubiquitin")])
-    # Generous timeout: UniRef30 + 650 GB envdb is I/O-bound and slow when RAM < DB size.
+    # Generous timeout: UniRef30 + 650 GB envdb is I/O-bound even when it fits in RAM.
     base = {"search_mode": "local", "device": "cuda", "timeout": 21600}
 
     uniref_only = run_mmseqs2_homology_search(inp, Mmseqs2HomologySearchConfig(**base, use_metagenomic_db=False))
