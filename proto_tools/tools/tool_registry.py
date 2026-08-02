@@ -135,6 +135,34 @@ class _ParallelItem:
         return "\x1f".join(_serialize_for_cache_key(v) for v in self.values)
 
 
+def _reject_empty_batch(key: str, spec: ToolSpec | None, inputs: Any) -> None:
+    """Refuse a call whose primary iterable field is an empty list.
+
+    Only the primary field is checked. The parallel siblings that follow it are optional by
+    design -- ``msas`` alongside ``complexes`` is the usual case, and a caller who has no
+    alignments to supply passes none. Requiring those would reject a perfectly ordinary call.
+
+    Checked here rather than as a field constraint so a tool cannot omit it, and early enough
+    that nothing has been built or started. Without it an empty batch reaches the tool and fails
+    inside it, which on a remote device means a container start and a model load first.
+
+    Args:
+        key (str): Registry key, for the message.
+        spec (ToolSpec | None): Tool spec supplying the iterable fields.
+        inputs (Any): The call's inputs.
+
+    Raises:
+        ValueError: If the primary iterable field is present and empty.
+    """
+    fields = (spec.iterable_input_fields or []) if spec is not None else []
+    if not fields:
+        return
+    primary = fields[0]
+    value = getattr(inputs, primary, None)
+    if isinstance(value, list) and not value:
+        raise ValueError(f"{key}: {primary!r} is empty, so there is nothing to run. Pass at least one item.")
+
+
 def _active_iter_fields(inputs: Any, spec: ToolSpec) -> list[str]:
     """Parallel iterable fields present (non-None) on ``inputs``, primary first."""
     return [f for f in (spec.iterable_input_fields or []) if getattr(inputs, f, None) is not None]
@@ -997,6 +1025,8 @@ class ToolRegistry:
                 stochastic_tool = spec.stochastic if spec is not None else stochastic
                 # Unseeded calls to stochastic tools skip cache so repeat dispatches advance RNG.
                 runtime_cacheable = cache_enabled and (not stochastic_tool or config.seed is not None)
+
+                _reject_empty_batch(key, spec, inputs)
 
                 deduped = None
                 original_items = None
