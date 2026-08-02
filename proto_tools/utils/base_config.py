@@ -5,6 +5,7 @@ Base configuration class for all pydantic configs.
 
 import getpass
 import json
+import logging
 import os
 import random
 import socket
@@ -173,6 +174,11 @@ class BaseConfig(BaseModel):
     # originated it, where the identity is derived instead.
     _client_identity: str | None = PrivateAttr(default=None)
 
+    # Where a remote worker should stream this call's log output, and from what level. ``None``
+    # disables streaming, which is what a caller who is not watching a spinner wants.
+    _progress_partition: str | None = PrivateAttr(default=None)
+    _progress_level: int = PrivateAttr(default=logging.INFO)
+
     verbose: int = ConfigField(
         title="Verbose",
         default=0,
@@ -237,6 +243,8 @@ class BaseConfig(BaseModel):
         if internal:
             config._preprocess_completed = bool(internal.get("preprocess_completed", False))
             config._client_identity = internal.get("client_identity")
+            config._progress_partition = internal.get("progress_partition")
+            config._progress_level = int(internal.get("progress_level", logging.INFO))
         return config
 
     def to_transport_dict(self, **dump_kwargs: Any) -> dict[str, Any]:
@@ -262,6 +270,11 @@ class BaseConfig(BaseModel):
             "preprocess_completed": self._preprocess_completed,
             "client_identity": self._client_identity or client_identity(),
         }
+        # Only sent when the caller asked for it. A worker predating the key ignores it, and a
+        # worker that understands it streams nothing when it is absent.
+        if self._progress_partition:
+            data[INTERNAL_STATE_KEY]["progress_partition"] = self._progress_partition
+            data[INTERNAL_STATE_KEY]["progress_level"] = self._progress_level
         return data
 
     @classmethod

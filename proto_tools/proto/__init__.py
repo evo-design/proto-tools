@@ -6,7 +6,7 @@ routes the call to Proto's hosted execution service via
 
 The dispatcher reads ``PROTO_API_KEY`` from the environment (or accepts
 an explicit ``api_key`` kwarg). No setup ceremony is required — remote execution is
-available whenever ``proto-client`` is installed and a key is configured.
+available whenever a key is configured.
 
 Example::
 
@@ -19,7 +19,6 @@ Example::
 import functools
 import logging
 import os
-import sys
 import threading
 import time
 from typing import Any
@@ -29,7 +28,7 @@ from pydantic import ValidationError
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.utils.base_config import BaseConfig
 from proto_tools.utils.logging_config import verbose_level_from_env
-from proto_tools.utils.progress import _in_notebook, progress_bar, set_substatus
+from proto_tools.utils.progress import remote_connecting_status, remote_progress, set_substatus
 from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 logger = logging.getLogger(__name__)
@@ -150,24 +149,9 @@ _VERBOSE_STREAM_FILTER: dict[int, list[str] | None] = {
 }
 
 
-def _proto_spinner() -> tuple[str, str | None]:
-    """Remote-dispatch spinner as a ``(spinner_style, prefix)`` pair for ``progress_bar``.
-
-    On emoji-capable terminals (and notebooks, which render in the browser) it's the
-    ``proto`` style — a pulse bouncing between a 💻 and a ☁️. Non-UTF terminals fall
-    back to the plain dotted spinner with a ``[proto]`` badge.
-    """
-    if _in_notebook():
-        return "proto", None
-    enc = (getattr(sys.stderr, "encoding", "") or "").lower()
-    if "utf" in enc:
-        return "proto", None
-    return "dots", "[proto]"
-
-
 @functools.lru_cache(maxsize=4)
 def _get_client(api_key: str) -> Any:
-    from proto_client import ProtoClient
+    from proto_tools.proto._client import ProtoClient
 
     return ProtoClient(api_key=api_key)
 
@@ -242,7 +226,9 @@ def _stream_remote_logs(client: Any, key: str, job_id: str, verbose: int) -> Non
 
 # Cloud job status → spinner phase shown while polling; unmapped statuses display verbatim.
 _PROTO_STATUS_PHASE = {"pending": "queued", "running": "running"}
-_PROTO_INITIAL_PHASE = "queued"
+
+# Shown until the server reports a status of its own. Not "queued", which the job is not yet.
+_PROTO_INITIAL_PHASE = remote_connecting_status("proto")
 
 
 def _poll_until_terminal(client: Any, key: str, job_id: str, poll_interval: float, timeout: float | None) -> Any:
@@ -296,18 +282,13 @@ def dispatch_to_proto(
         BaseToolOutput: The validated tool output.
 
     Raises:
-        ImportError: If ``proto-client`` is not installed. Install with
-            ``pip install proto-client``.
         NotImplementedError: If no API key is configured. Surfaces the
             cloud-access status message.
         PermissionError: If the server does not accept the configured key.
         TypeError: If the server response doesn't match the tool's
             ``output_model`` schema.
     """
-    try:
-        from proto_client.errors import ProtoAuthError
-    except ImportError as exc:
-        raise ImportError("device='proto' requires proto-client. Install with `pip install proto-client`.") from exc
+    from proto_tools.proto._client import ProtoAuthError
 
     resolved_key = api_key if api_key is not None else os.environ.get("PROTO_API_KEY")
     if not resolved_key:
@@ -325,8 +306,7 @@ def dispatch_to_proto(
     verbose = _effective_verbose(config)
 
     # Status-only spinner across the round-trip; its substatus tracks job status and streamed phases.
-    spinner_style, spinner_prefix = _proto_spinner()
-    with progress_bar(desc=_PROTO_INITIAL_PHASE, prefix=spinner_prefix, spinner_style=spinner_style, show_bar=False):
+    with remote_progress("proto"):
         try:
             job_id = client.tools.submit(
                 key,
@@ -394,17 +374,13 @@ def dispatch_batch_to_proto(
             caller to decide what a partial result is worth.
 
     Raises:
-        ImportError: If proto-client is not installed.
         NotImplementedError: If no API key is configured.
         PermissionError: If the server does not accept the configured key.
     """
     if not inputs:
         return []
 
-    try:
-        from proto_client.errors import ProtoAuthError
-    except ImportError as exc:
-        raise ImportError("device='proto' requires proto-client. Install with `pip install proto-client`.") from exc
+    from proto_tools.proto._client import ProtoAuthError
 
     resolved_key = api_key if api_key is not None else os.environ.get("PROTO_API_KEY")
     if not resolved_key:
@@ -425,8 +401,7 @@ def dispatch_batch_to_proto(
     first = configs[0]
     tool_timeout: float | None = first.effective_timeout() if first is not None else None
 
-    spinner_style, spinner_prefix = _proto_spinner()
-    with progress_bar(desc=_PROTO_INITIAL_PHASE, prefix=spinner_prefix, spinner_style=spinner_style, show_bar=False):
+    with remote_progress("proto"):
         try:
             job_ids: list[str] = [
                 client.tools.submit(key, inputs=item.model_dump(exclude_none=True), config=cfg_payload)

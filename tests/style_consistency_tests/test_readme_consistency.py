@@ -1022,7 +1022,7 @@ def _fetch_url(url: str, method: str = "HEAD", timeout: int = 10, attempts: int 
         try:
             urllib.request.urlopen(req, timeout=timeout)
             return
-        except urllib.error.HTTPError:  # noqa: PERF203 — retry on transient errors
+        except urllib.error.HTTPError:
             raise
         except (urllib.error.URLError, OSError):
             if attempt == attempts - 1:

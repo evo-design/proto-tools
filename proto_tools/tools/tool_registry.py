@@ -1102,23 +1102,12 @@ class ToolRegistry:
                                 remote_dispatch_many = functools.partial(dispatch_batch_to_proto, key)
                             # --- Modal endpoint ---
                             else:
-                                # An optional peer that depends on proto-tools, so imported lazily.
-                                try:
-                                    from proto_modal import dispatch_batch_to_modal, dispatch_to_modal
-                                except ImportError as exc:
-                                    # Restore the install instruction once proto-modal is published.
-                                    raise ImportError(
-                                        "device='modal' is coming soon and is not available yet."
-                                    ) from exc
-                                # proto_modal is untyped here; the result is a BaseToolOutput at runtime.
-                                remote_dispatch = cast(
-                                    "Callable[[BaseToolInput, BaseConfig], BaseToolOutput]",
-                                    functools.partial(dispatch_to_modal, key),
-                                )
-                                remote_dispatch_many = cast(
-                                    "Callable[[list[BaseToolInput], list[BaseConfig]], list[BaseToolOutput | Exception]]",
-                                    functools.partial(dispatch_batch_to_modal, key),
-                                )
+                                # Imported here rather than at module scope to keep the Modal SDK off
+                                # the import path of callers who never dispatch to it.
+                                from proto_tools.modal import dispatch_batch_to_modal, dispatch_to_modal
+
+                                remote_dispatch = functools.partial(dispatch_to_modal, key)
+                                remote_dispatch_many = functools.partial(dispatch_batch_to_modal, key)
 
                     # --- Local hardware ---
                     # A remote endpoint allocates its own, so this validates only local devices.

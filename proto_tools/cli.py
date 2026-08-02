@@ -373,6 +373,21 @@ def _cmd_eject_standalone(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_deploy(args: argparse.Namespace) -> int:
+    """Deploy tools into a Modal workspace you own."""
+    from proto_tools.modal.deploy import main as deploy_main
+
+    return deploy_main(args.rest, prog="proto-tools deploy")
+
+
+def _cmd_mcp(args: argparse.Namespace) -> int:
+    """Run the MCP server over stdio."""
+    from proto_tools.mcp import main as mcp_main
+
+    mcp_main(args.rest)
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="proto-tools",
@@ -508,11 +523,28 @@ def _build_parser() -> argparse.ArgumentParser:
     p_url.add_argument("tool")
     p_url.set_defaults(func=_cmd_url)
 
+    p_deploy = sub.add_parser(
+        "deploy",
+        help="Deploy tools into your own Modal workspace, and smoke-test them.",
+    )
+    p_deploy.set_defaults(func=_cmd_deploy)
+
+    p_mcp = sub.add_parser("mcp", help="Run the MCP server over stdio (needs the 'mcp' extra).")
+    p_mcp.set_defaults(func=_cmd_mcp)
+
     return parser
+
+
+_PASSTHROUGH = {"deploy": _cmd_deploy, "mcp": _cmd_mcp}
 
 
 def main(argv: list[str] | None = None) -> int:
     """Entry point. Returns a process exit code."""
+    args_in = sys.argv[1:] if argv is None else argv
+    # These own their whole option surface, which argparse would try to claim first.
+    if args_in and args_in[0] in _PASSTHROUGH:
+        return _PASSTHROUGH[args_in[0]](argparse.Namespace(rest=args_in[1:]))
+
     parser = _build_parser()
     args = parser.parse_args(argv)
     try:

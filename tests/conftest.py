@@ -708,12 +708,12 @@ def pytest_addoption(parser):
         help="Run only @pytest.mark.benchmark tests. Selecting benchmark mode deselects "
         "everything that isn't benchmark-marked (similar to --env-report). The 'slow' gate is "
         "bypassed for benchmarks (no need to also pass --slow); hardware gates (uses_gpu, GPU "
-        "count) are bypassed only when --use-cloud is set. Without this flag (or any of "
+        "count) are bypassed only when --use-proto is set. Without this flag (or any of "
         "--benchmark-report / --benchmark-tool / --benchmark-toolkit, which imply --benchmark), "
         "benchmark-marked tests are skipped — they do NOT run under --all or --slow.",
     )
     parser.addoption(
-        "--use-cloud",
+        "--use-proto",
         action="store_true",
         default=False,
         help="Route every tool run through device='proto'. Requires PROTO_API_KEY in the environment.",
@@ -801,11 +801,9 @@ def pytest_configure(config):
     # Handle --benchmark-report (implies --benchmark via pytest_collection_modifyitems below)
     benchmark_report_opt = config.getoption("--benchmark-report")
     if benchmark_report_opt:
-        backend_url = (
-            os.environ.get("PROTO_TOOLS_BASE_URL", "<proto-client default>")
-            if config.getoption("--use-cloud")
-            else None
-        )
+        from proto_tools.proto._client import _resolve_base_url
+
+        backend_url = _resolve_base_url(None) if config.getoption("--use-proto") else None
         _benchmark_report_collector = BenchmarkReportCollector(
             output_dir=Path(benchmark_report_opt),
             backend_url=backend_url,
@@ -1094,15 +1092,15 @@ def pytest_collection_modifyitems(config, items):
 
     # GPU/CPU dispatch: --cpu-only and --gpu-only are *selection filters* only.
     # Whether a uses_gpu test runs is decided solely by the hardware availability
-    # check below (number_of_visible_gpus). --use-cloud bypasses every hardware
+    # check below (number_of_visible_gpus). --use-proto bypasses every hardware
     # gate because the GPUs live on the server.
-    use_cloud = config.getoption("--use-cloud")
+    use_proto = config.getoption("--use-proto")
 
     # Skip GPU tests when --cpu-only is specified
     if config.getoption("--cpu-only"):
         skip_gpu = pytest.mark.skip(reason="--cpu-only specified")
         for item in items:
-            if "uses_gpu" in item.keywords and not use_cloud:
+            if "uses_gpu" in item.keywords and not use_proto:
                 item.add_marker(skip_gpu)
 
     # Skip CPU tests when --gpu-only is specified
@@ -1190,10 +1188,10 @@ def pytest_collection_modifyitems(config, items):
                 item.add_marker(pytest.mark.skip(reason=f"Requires platform {allowed}, current is {current_arch}"))
 
     # Skip uses_gpu(n) tests when fewer than n GPUs are visible — bypassed
-    # under --use-cloud (the GPUs live on the server).
+    # under --use-proto (the GPUs live on the server).
     visible_gpus = number_of_visible_gpus()
     for item in items:
-        if use_cloud:
+        if use_proto:
             continue
         for marker in item.iter_markers("uses_gpu"):
             required = marker.args[0] if marker.args else 1
@@ -1331,15 +1329,15 @@ def _env_report_clean_envs(request, setup_test_logging):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _route_tests_to_cloud(request):
-    """Patch BaseConfig.device default to 'cloud' when --use-cloud is set.
+def _route_tests_to_proto(request):
+    """Patch BaseConfig.device default to 'proto' when --use-proto is set.
 
     Lets a test that already passes ``Config()`` without an explicit ``device=`` run
     locally (default ``"cpu"``) or against Proto's hosted execution service
-    (``--use-cloud``) without any change to the test body. The cloud path
+    (``--use-proto``) without any change to the test body. The hosted path
     activates automatically as long as ``PROTO_API_KEY`` is in the env.
     """
-    if not request.config.getoption("--use-cloud"):
+    if not request.config.getoption("--use-proto"):
         yield
         return
 
@@ -1351,7 +1349,7 @@ def _route_tests_to_cloud(request):
         fi = cls.model_fields.get("device")
         if fi is not None:
             originals[cls] = fi.default
-            fi.default = "cloud"
+            fi.default = "proto"
     for cls in all_classes:
         cls.model_rebuild(force=True)
 

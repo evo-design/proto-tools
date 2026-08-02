@@ -15,7 +15,7 @@
 
 Welcome! This repository contains the open-source implementation of `proto-tools`, a Python package containing a large suite of computational biology and biological AI tools, all accessible through a single, consistent Python interface. Language models, structure predictors, inverse folding, sequence analysis, gene annotation, conformational dynamics, genomic scoring, and more are all available through a single `pip install` command.
 
-Every tool runs in its own automatically managed isolated environment, so all dependency wrangling is handled for you. In addition, `proto-tools` implements extensive infrastructure for features such as device management and GPU fan-out, making it easy to call tools in quick succession. You can use it as a standalone Python library, as part of the broader [proto-language](https://github.com/evo-design/proto-language) optimization system, or through the [proto-client](https://github.com/evo-design/proto-client) Python SDK for hosted access over the Proto Bio API. 
+Every tool runs in its own automatically managed isolated environment, so all dependency wrangling is handled for you. In addition, `proto-tools` implements extensive infrastructure for features such as device management and GPU fan-out, making it easy to call tools in quick succession. You can use it as a standalone Python library, as part of the broader [proto-language](https://github.com/evo-design/proto-language) optimization system, or as an MCP server that exposes the same tools to AI agents. Tools can run on local compute or on Modal.
 
 Proto-tools is open source under an MIT license. Contributions are welcome!
 
@@ -52,8 +52,16 @@ For shared filesystems, model weights can be reused to avoid downloading duplica
 
 A few tools use gated models or software that require accepting a license / terms-of-use first (e.g. ESM3, AlphaGenome, AlphaFold3, X3DNA). See [notes/gated-models.md](notes/gated-models.md) for the full list and per-model access steps.
 
+### Step 4: Remote compute (optional)
+
+`proto-tools` enables users to scale their tool use beyond their local machine through an
+integration with [Modal](https://modal.com), a serverless compute platform that
+allows users to execute models and tools in remote containers. To learn more about
+setting up Modal, see [proto_tools/modal/README.md](proto_tools/modal/README.md)
+for instructions related to account setup, deploying a tool, and costs, or the [Cloud Inference guide](guides/cloud_inference.ipynb) for a runnable walkthrough.
+
 > [!TIP]
-> **You're all set up!** To learn what features are available in the library, check out the [guides](guides/) — four short notebooks covering tool environments, persistent execution, device management, and parallel multi-GPU runs.
+> **You're all set up!** Start with the [quickstart](guides/quickstart.ipynb), then check out the rest of the [guides](guides/) — short notebooks covering tool environments, persistent execution, device management, parallel multi-GPU runs, and remote execution.
 
 ## Available Tools
 
@@ -155,10 +163,12 @@ A few tools use gated models or software that require accepting a license / term
 
 Runnable walkthroughs of the core framework features live in [`guides/`](guides/) and are also available on our [docs page](https://proto.evodesign.org/docs/tools/introduction):
 
-1. [Tool Environments](guides/tool_environments.ipynb) — how isolated environments are built and cached on first call.
-2. [Tool Persistence](guides/tool_persistence.ipynb) — keep models warm across calls
-3. [Device Management](guides/device_management.ipynb) — GPU allocation, LRU eviction, CPU offload
-4. [Parallel Execution](guides/parallel_execution.ipynb) — fan out work across every GPU with `ToolPool`
+1. [Quickstart](guides/quickstart.ipynb) — installation, the `Input + Config → run → Output` contract, and running a tool
+2. [Tool Environments](guides/tool_environments.ipynb) — how isolated environments are built and cached on first call.
+3. [Tool Persistence](guides/tool_persistence.ipynb) — keep models warm across calls
+4. [Device Management](guides/device_management.ipynb) — GPU allocation, LRU eviction, CPU offload
+5. [Parallel Execution](guides/parallel_execution.ipynb) — fan out work across every GPU with `ToolPool`
+6. [Cloud Inference](guides/cloud_inference.ipynb) — deploy tools to a Modal workspace you own, then call them with `device="modal"`
 
 Each specific tool also ships a minimal `examples/example.ipynb` under `proto_tools/tools/{category}/{tool}/examples/`.
 
@@ -167,6 +177,28 @@ Each specific tool also ships a minimal `examples/example.ipynb` under `proto_to
 Run tools through natural language with any coding agent (Claude Code, Gemini CLI, OpenAI Codex CLI, etc.). Point the agent at `proto-tools agent-context`: it prints a primer covering the `Input → Config → run_*() → Output` pattern, the offline CLI discovery verbs, persistence and parallel execution, and links to the long-form notes on GitHub. The command ships in the wheel, so it works on a plain `pip install` with no repo checkout.
 
 If you've cloned the repo for contributing, agents also pick up `CLAUDE.md` (symlinked as `AGENTS.md`/`GEMINI.md`) and the task-specific guides in [`.claude/skills/`](.claude/skills/) automatically.
+
+## Running on remote compute
+
+Set up in [Step 4](#step-4-remote-compute-optional), then deploy a tool and call it with `device="modal"`:
+
+```bash
+proto-tools deploy --apps protenix --env proto-env
+```
+
+```python
+run_protenix(ProtenixInput(complexes=[GFP]), ProtenixConfig(device="modal"))
+```
+
+After a call finishes, a Modal container stays alive briefly holding its model in memory so the next call skips the load. `PROTO_MODAL_SCALEDOWN_WINDOW` sets that window in seconds, defaulting to `30`:
+
+```bash
+export PROTO_MODAL_SCALEDOWN_WINDOW=300     # keep containers warm for 5 minutes
+```
+
+This is a direct trade rather than a free optimization: a longer window skips cold starts and also bills for an idle GPU for that long. Raise it while working interactively, leave it low for occasional calls, and set it in the environment you deploy from, since the value is baked into the deployed service.
+
+See [`proto_tools/modal/README.md`](proto_tools/modal/README.md) for setup and the full list of options, and the [Cloud Inference guide](guides/cloud_inference.ipynb) for a runnable walkthrough.
 
 ## Development & Contributing
 
