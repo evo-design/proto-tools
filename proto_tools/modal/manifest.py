@@ -3,6 +3,11 @@
 Declares which services belong to which app, their timeouts, and their modules.
 """
 
+import logging
+import os
+
+logger = logging.getLogger(__name__)
+
 APP_BUCKETS: dict[str, list[str]] = {
     # GPU services.
     "proto-tools-ablang": ["AbLangService"],
@@ -58,46 +63,101 @@ def _invert_buckets(buckets: dict[str, list[str]]) -> dict[str, str]:
 SERVICE_TO_APP: dict[str, str] = _invert_buckets(APP_BUCKETS)
 
 
+# Container wall tiers, in seconds. A service picks a tier rather than its own number, so the fleet
+# runs on a handful of understood budgets instead of one constant per service that nobody can compare.
+#
+# Tiers are deliberately generous. A wall has to cover the slowest input a tool accepts, under the
+# slowest config it accepts, on a cold container — and per-item cost varies by orders of magnitude
+# with sequence length. A tier that merely covers the typical case is a tier that fails in production.
+TIER_SECONDS: dict[str, int] = {
+    "fast": 600,  # 10 min — parsers and short CPU scans
+    "medium": 1800,  # 30 min — light model work
+    "long": 3600,  # 1 hour — most GPU model work
+    "extended": 14400,  # 4 hours — sampling and trajectory work
+    "batch": 86400,  # 24 hours — full design pipelines
+}
+
+# Wall tier per service. Raising a service to a longer tier is always safe; shortening one can fail
+# work that used to complete, so treat a reduction as a change that needs measurement behind it.
+SERVICE_TIERS: dict[str, str] = {
+    "AbLangService": "long",
+    "AlphaFold2Service": "long",
+    "BioEmuService": "extended",
+    "Boltz2Service": "long",
+    "BorzoiService": "long",
+    "Chai1Service": "long",
+    "CrisprTracrRNAService": "extended",
+    "DSSPService": "fast",
+    "ESM2Service": "long",
+    "ESMCService": "long",
+    "ESMFold2Service": "long",
+    "ESMFoldService": "long",
+    "ESMIF1Service": "long",
+    "EnformerService": "medium",
+    "Evo1Service": "long",
+    "Evo2Service": "long",
+    "FAMPNNService": "long",
+    "FreeBindCraftService": "batch",
+    "IPSAEService": "fast",
+    # Raised from medium: ligandmpnn-score chunks 64 items, the same as proteinmpnn-score, which
+    # gets an hour for the same work.
+    "LigandMPNNService": "long",
+    "MafftAlignService": "medium",
+    "MalinoisService": "medium",
+    "Metal3DService": "long",
+    "MincedService": "medium",
+    "OrfipyService": "fast",
+    "PangolinService": "long",
+    "ProGen2Service": "long",
+    "ProteinMPNNService": "long",
+    "ProtenixService": "long",
+    "PyMOLService": "fast",
+    "RF3Service": "long",
+    "RFdiffusion3Service": "long",
+    "SegmaskerService": "fast",
+    "SpliceTransformerService": "medium",
+    "TMalignService": "fast",
+    "USalignService": "fast",
+}
+
+
+def _resolve_timeout_scale() -> float:
+    """Read ``PROTO_MODAL_TIMEOUT_SCALE``, refusing any value that would shorten a wall.
+
+    Lengthening a tier is a deployer's call to make; shortening one kills work that used to
+    complete, and would do it from an environment variable that no test covers. A value below 1
+    is therefore ignored rather than honoured, as is one that does not parse.
+
+    Returns:
+        float: Multiplier to apply to every tier, never less than 1.
+    """
+    raw = os.getenv("PROTO_MODAL_TIMEOUT_SCALE")
+    if raw is None:
+        return 1.0
+    try:
+        scale = float(raw)
+    except ValueError:
+        logger.warning("PROTO_MODAL_TIMEOUT_SCALE=%r is not a number; using 1.", raw)
+        return 1.0
+    if scale < 1.0:
+        logger.warning("PROTO_MODAL_TIMEOUT_SCALE=%r would shorten every container wall; using 1.", raw)
+        return 1.0
+    return scale
+
+
+# Multiplies every tier, for a workload whose inputs are larger than the shipped budgets assume.
+# Baked in at deploy time, like PROTO_MODAL_SCALEDOWN_WINDOW:
+#
+#     PROTO_MODAL_TIMEOUT_SCALE=2 proto-tools deploy --apps esmfold --env proto-env
+TIMEOUT_SCALE = _resolve_timeout_scale()
+
 # Per-service Modal container wall, in seconds. This is the SINGLE source of
 # truth: each service's ``@app.cls(timeout=...)`` reads its value from here.
-# Keep these aligned with what each tool actually needs.
+#
+# Modal restarts the wall on every retry, so a wedged call can bill up to
+# ``(1 + max_retries) x`` this value. See SERVICE_RETRIES in app.py.
 SERVICE_MODAL_TIMEOUTS: dict[str, int] = {
-    "AbLangService": 3600,
-    "AlphaFold2Service": 3600,
-    "BioEmuService": 14400,
-    "Boltz2Service": 3600,
-    "BorzoiService": 3600,
-    "Chai1Service": 3600,
-    "CrisprTracrRNAService": 14400,
-    "DSSPService": 600,
-    "ESM2Service": 3600,
-    "ESMCService": 3600,
-    "ESMFold2Service": 3600,
-    "ESMFoldService": 3600,
-    "ESMIF1Service": 3600,
-    "EnformerService": 1800,
-    "Evo1Service": 3600,
-    "Evo2Service": 3600,
-    "FAMPNNService": 3600,
-    "FreeBindCraftService": 86400,
-    "IPSAEService": 600,
-    "LigandMPNNService": 1800,
-    "MafftAlignService": 1800,
-    "MalinoisService": 1800,
-    "Metal3DService": 3600,
-    "MincedService": 1800,
-    "OrfipyService": 600,
-    "PangolinService": 3600,
-    "ProGen2Service": 3600,
-    "ProteinMPNNService": 3600,
-    "ProtenixService": 3600,
-    "PyMOLService": 600,
-    "RF3Service": 3600,
-    "RFdiffusion3Service": 3600,
-    "SegmaskerService": 600,
-    "SpliceTransformerService": 1800,
-    "TMalignService": 600,
-    "USalignService": 600,
+    service: int(TIER_SECONDS[tier] * TIMEOUT_SCALE) for service, tier in SERVICE_TIERS.items()
 }
 
 

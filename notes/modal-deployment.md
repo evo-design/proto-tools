@@ -235,7 +235,7 @@ and therefore logs a warning rather than passing silently.
 
 ## Configuration
 
-Four environment variables, all optional, read in the environment a deploy runs from. Only
+Five environment variables, all optional, read in the environment a deploy runs from. Only
 `PROTO_MODAL_SCALEDOWN_WINDOW` appears in the user-facing README; the rest are here.
 
 | Variable | Default | Effect |
@@ -243,7 +243,30 @@ Four environment variables, all optional, read in the environment a deploy runs 
 | `PROTO_MODAL_HF_SECRET` | unset | Name of a Modal secret holding `HF_TOKEN`. Set to `none` to force anonymous downloads. |
 | `PROTO_MODAL_CACHE_VOLUME` | `proto-cache` | Volume holding model weights, shared by every service. |
 | `PROTO_MODAL_SCALEDOWN_WINDOW` | `30` | Seconds an idle container stays alive holding its model. |
+| `PROTO_MODAL_TIMEOUT_SCALE` | `1` | Multiplies every container wall tier. Values below 1 are ignored. |
 | `PROTO_MODAL_PROTO_TOOLS` | unset | Build from this proto-tools checkout instead of the installed one. |
+
+### Container wall tiers
+
+Each service picks a wall from `TIER_SECONDS` in `proto_tools/modal/manifest.py` rather than
+carrying its own number, so the fleet runs on five understood budgets: `fast` (10 min),
+`medium` (30 min), `long` (1 hour), `extended` (4 hours), `batch` (24 hours).
+
+The tiers are deliberately generous. A wall covers the slowest input a tool accepts, under the
+slowest config it accepts, on a cold container, and per-item cost varies by orders of magnitude
+with sequence length. Modal also restarts the wall on every retry, so a wedged call can bill up
+to four times the tier before it is killed.
+
+`PROTO_MODAL_TIMEOUT_SCALE` lengthens every tier for a workload whose inputs exceed what the
+shipped budgets assume, and is baked in at deploy time:
+
+```bash
+PROTO_MODAL_TIMEOUT_SCALE=2 proto-tools deploy --apps esmfold --env proto-env
+```
+
+It cannot shorten a wall. A value below 1 is ignored with a warning, since shortening a wall
+kills work that used to complete, and the deploy-time knob would otherwise silently defeat the
+floor that `tests/modal_tests/test_entrypoints.py` enforces on the tier table itself.
 
 ### Gated model weights
 

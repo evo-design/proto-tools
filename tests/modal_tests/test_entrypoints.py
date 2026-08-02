@@ -4,6 +4,8 @@ Disagreement is silent at deploy time and confusing at call time: a wrong entry
 sends calls to the wrong Modal method, or reports a deployed tool as missing.
 """
 
+import pytest
+
 from tests.modal_tests.helpers import REPO
 
 
@@ -90,3 +92,112 @@ def test_tool_map_gpu_flags_match_the_manifest():
 
     wrong = [k for k, e in TOOL_MAP.items() if e.gpu != (e.service in GPU_SERVICES)]
     assert not wrong, f"tool_map gpu flags disagree with GPU_SERVICES: {wrong}"
+
+
+# ── Wall tiers ───────────────────────────────────────────────────────────────
+# Walls in force before tiers were named. A tier assignment may raise a service's wall but must
+# never shorten one: work that used to finish would start being killed mid-flight.
+_WALLS_BEFORE_TIERS: dict[str, int] = {
+    "AbLangService": 3600,
+    "AlphaFold2Service": 3600,
+    "BioEmuService": 14400,
+    "Boltz2Service": 3600,
+    "BorzoiService": 3600,
+    "Chai1Service": 3600,
+    "CrisprTracrRNAService": 14400,
+    "DSSPService": 600,
+    "ESM2Service": 3600,
+    "ESMCService": 3600,
+    "ESMFold2Service": 3600,
+    "ESMFoldService": 3600,
+    "ESMIF1Service": 3600,
+    "EnformerService": 1800,
+    "Evo1Service": 3600,
+    "Evo2Service": 3600,
+    "FAMPNNService": 3600,
+    "FreeBindCraftService": 86400,
+    "IPSAEService": 600,
+    "LigandMPNNService": 1800,
+    "MafftAlignService": 1800,
+    "MalinoisService": 1800,
+    "Metal3DService": 3600,
+    "MincedService": 1800,
+    "OrfipyService": 600,
+    "PangolinService": 3600,
+    "ProGen2Service": 3600,
+    "ProteinMPNNService": 3600,
+    "ProtenixService": 3600,
+    "PyMOLService": 600,
+    "RF3Service": 3600,
+    "RFdiffusion3Service": 3600,
+    "SegmaskerService": 600,
+    "SpliceTransformerService": 1800,
+    "TMalignService": 600,
+    "USalignService": 600,
+}
+
+# Floor on a GPU service's per-item budget (wall / max_chunk_size). Chosen to sit just under the
+# 56 s/item that every correctly-sized GPU service already clears, so it catches a chunk size
+# grown out of step with its wall without pinning the exact values.
+_MIN_GPU_SECONDS_PER_ITEM = 50
+
+
+def test_every_service_has_a_tier():
+    """A service without a tier gets no wall, and its @app.cls would fail at deploy."""
+    from proto_tools.modal.manifest import SERVICE_TIERS, SERVICE_TO_MODULE, TIER_SECONDS
+
+    assert set(SERVICE_TIERS) == set(SERVICE_TO_MODULE), "SERVICE_TIERS and SERVICE_TO_MODULE disagree"
+    unknown = {s: t for s, t in SERVICE_TIERS.items() if t not in TIER_SECONDS}
+    assert not unknown, f"services assigned an undefined tier: {unknown}"
+
+
+def test_no_service_wall_was_shortened():
+    """Tiers may lengthen a wall; shortening one kills work that used to complete."""
+    from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
+
+    shortened = {
+        service: (before, SERVICE_MODAL_TIMEOUTS[service])
+        for service, before in _WALLS_BEFORE_TIERS.items()
+        if SERVICE_MODAL_TIMEOUTS[service] < before
+    }
+    assert not shortened, f"tier assignment shortened walls (service: before -> after): {shortened}"
+
+
+def test_gpu_walls_leave_a_plausible_per_item_budget():
+    """A chunk size grown out of step with its wall cannot finish; esmfold shipped at 3.5 s/sequence."""
+    from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
+    from proto_tools.modal.tool_map import TOOL_MAP
+    from proto_tools.tools import ToolRegistry
+
+    specs = {spec.key: spec for spec in ToolRegistry.list_all()}
+    too_tight = {}
+    for key, entry in TOOL_MAP.items():
+        if not entry.gpu:
+            continue
+        chunk = specs[key].max_chunk_size or 1
+        budget = SERVICE_MODAL_TIMEOUTS[entry.service] / chunk
+        if budget < _MIN_GPU_SECONDS_PER_ITEM:
+            too_tight[key] = f"{chunk} items in {SERVICE_MODAL_TIMEOUTS[entry.service]}s = {budget:.1f}s/item"
+    assert not too_tight, f"GPU tools whose chunk cannot finish inside their wall: {too_tight}"
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        pytest.param(None, 1.0, id="unset"),
+        pytest.param("2", 2.0, id="lengthens"),
+        pytest.param("1", 1.0, id="identity"),
+        pytest.param("0.5", 1.0, id="would_shorten"),
+        pytest.param("0", 1.0, id="zero"),
+        pytest.param("-3", 1.0, id="negative"),
+        pytest.param("later", 1.0, id="unparseable"),
+    ],
+)
+def test_timeout_scale_never_shortens_a_wall(monkeypatch, raw, expected):
+    """The deploy-time override may lengthen a wall; a value below 1 is ignored, not honoured."""
+    from proto_tools.modal.manifest import _resolve_timeout_scale
+
+    monkeypatch.delenv("PROTO_MODAL_TIMEOUT_SCALE", raising=False)
+    if raw is not None:
+        monkeypatch.setenv("PROTO_MODAL_TIMEOUT_SCALE", raw)
+    assert _resolve_timeout_scale() == expected
