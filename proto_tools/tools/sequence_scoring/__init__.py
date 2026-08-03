@@ -274,6 +274,13 @@ __all__ = [
     "run_parade_activity",
     "run_parade_gradient",
     "run_parade_stability",
+    # Primer3
+    "Primer3Oligo",
+    "Primer3OligoResult",
+    "Primer3ThermodynamicsConfig",
+    "Primer3ThermodynamicsInput",
+    "Primer3ThermodynamicsOutput",
+    "run_primer3_thermodynamics",
     # Puffin Interpretation
     "MOTIF_NAMES",
     "PuffinInterpretationConfig",
@@ -292,13 +299,6 @@ __all__ = [
     "PuffinPredictionResult",
     "TRACK_NAMES",
     "run_puffin_prediction",
-    # Primer3
-    "Primer3Oligo",
-    "Primer3OligoResult",
-    "Primer3ThermodynamicsConfig",
-    "Primer3ThermodynamicsInput",
-    "Primer3ThermodynamicsOutput",
-    "run_primer3_thermodynamics",
     # Segmasker
     "SegmaskerInput",
     "SegmaskerConfig",
