@@ -1,4 +1,4 @@
-"""proto_tools/tools/masked_models/esmc_sae/helpers.py.
+"""proto_tools/tools/masked_models/esmc/helpers.py.
 
 Look up Biohub's agent-generated descriptions for ESM C SAE features.
 """
@@ -34,7 +34,7 @@ def _fetch_feature_or_none(feature_index: int, timeout: float) -> dict[str, Any]
     try:
         return _fetch_feature(feature_index, timeout)
     except Exception as exc:
-        logger.debug("esmc_sae: no description for feature %s: %s", feature_index, exc)
+        logger.debug("esmc-sae-features: no description for feature %s: %s", feature_index, exc)
         return None
 
 
@@ -71,7 +71,7 @@ def describe_sae_features(
         ValueError: If an index falls outside the described SAE's codebook.
 
     Examples:
-        >>> from proto_tools.tools.masked_models.esmc_sae import describe_sae_features
+        >>> from proto_tools.tools.masked_models.esmc import describe_sae_features
         >>> described = describe_sae_features([1251])
         >>> described[1251]["label"]
         'Histidine kinase transmitter module recognition'
