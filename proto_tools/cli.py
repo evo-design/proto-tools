@@ -458,7 +458,13 @@ def _cmd_deploy(args: argparse.Namespace) -> int:
 
 def _cmd_mcp(args: argparse.Namespace) -> int:
     """Run the MCP server over stdio."""
-    from proto_tools.mcp import main as mcp_main
+    try:
+        from proto_tools.mcp import main as mcp_main
+    except ImportError as exc:
+        # fastmcp ships in the 'mcp' extra, so a plain install reaches here.
+        print(f"error: the MCP server needs the 'mcp' extra ({exc}).", file=sys.stderr)
+        print('Install it with: pip install "proto-tools[mcp]"', file=sys.stderr)
+        return 2
 
     mcp_main(args.rest)
     return 0

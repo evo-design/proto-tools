@@ -8,7 +8,7 @@ from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any
 
-from proto_tools.mcp.device import Device
+from proto_tools.mcp.device import Device, is_remote
 from proto_tools.utils.base_config import BaseConfig
 
 logger = logging.getLogger(__name__)
@@ -70,17 +70,81 @@ def _hosted_catalogue() -> dict[str, dict[str, Any]]:
     return {entry["key"]: entry for entry in entries}
 
 
-def available_keys(device: Device) -> set[str]:
-    """Return the tool keys that can actually run on ``device``."""
+def _all_registered() -> set[str]:
+    """Every tool key in the registry, deployable or not."""
+    from proto_tools.tools import ToolRegistry
+
+    return {spec.key for spec in ToolRegistry.list_all()}
+
+
+def runs_in_process(tool_key: str) -> bool:
+    """Report whether a call to ``tool_key`` on a remote device is answered here instead.
+
+    A ``local_only`` tool never has a deployment, and its inputs are on this machine anyway. A
+    ``local_cpu`` tool has no GPU and no environment, so it runs here only when nothing serves it
+    — deploying one is a choice, and ``pdockq2`` and ``structure-metrics`` were deployed. That is
+    the same question the tool wrapper asks, so the two paths agree on where a call landed.
+
+    Config-dependent redirects — a search mode that is an HTTP call — are excluded, because
+    whether they apply depends on a config the caller has not written yet.
+    """
+    from proto_tools.tools import ToolRegistry
+
+    spec = ToolRegistry.get(tool_key)
+    if spec.local_only:
+        return True
+    return bool(spec.local_cpu) and tool_key not in _registry()
+
+
+def answered_in_process_keys() -> set[str]:
+    """Return the tools a remote session answers here rather than dispatching."""
+    from proto_tools.tools import ToolRegistry
+
+    return {spec.key for spec in ToolRegistry.list_all() if runs_in_process(spec.key)}
+
+
+def deployed_keys(device: Device) -> set[str]:
+    """Return the tools ``device`` actually serves, ignoring anything answered in-process."""
+    if device == "local":
+        return set()
     if device == "proto":
         return {key for key, entry in _hosted_catalogue().items() if entry.get("hosted")}
     live = _deployed_apps()
     return {key for key in _registry() if _app_for(key) in live}
 
 
+def available_keys(device: Device) -> set[str]:
+    """Return the tool keys that can actually run on ``device``."""
+    if device == "local":
+        # Every registered tool runs here: a standalone env builds on first use, so availability
+        # is a question of time and disk rather than of what has been provisioned in advance.
+        return _all_registered()
+    return deployed_keys(device) | answered_in_process_keys()
+
+
 def workspace_info(device: Device = "modal") -> dict[str, Any]:
     """Report where calls will land, and whether the caller can deploy there."""
     import os
+
+    if device == "local":
+        from proto_tools.tools import ToolRegistry
+        from proto_tools.utils.device import number_of_visible_gpus
+        from proto_tools.utils.proto_home import get_proto_home
+
+        gpus = number_of_visible_gpus()
+        return {
+            "device": "local",
+            "authenticated": True,  # nothing to authenticate against
+            "tools_total": len(ToolRegistry.list_all()),
+            "gpus_visible": gpus,
+            "proto_home": str(get_proto_home()),
+            "deployable": False,
+            "note": (
+                "Tools run in this process. Each builds its standalone environment and downloads "
+                "its weights on first use, so a first call can be slow."
+                + ("" if gpus else " No GPU is visible, so GPU-only tools cannot run here.")
+            ),
+        }
 
     if device == "proto":
         catalogue = _hosted_catalogue()
@@ -136,19 +200,31 @@ def list_tools(deployed_only: bool = True, device: Device = "modal") -> list[dic
     Defaults to available-only: an agent choosing from the full catalogue will
     pick tools that cannot run and hit an error it cannot resolve itself.
 
-    When using ``modal``, "available" means deployed in your workspace, which you
-    can change. When using ``proto``, it means hosted by Proto, which you cannot.
+    "Available" is wider than "deployed". A tool needing no GPU and no environment, or one that
+    can never be deployed, is answered in this process instead, so it runs on a remote device
+    too. Those carry ``runs_in_process`` to explain why they are usable without a deployment.
+
+    When using ``modal``, "deployed" means deployed in your workspace, which you can change. When
+    using ``proto``, it means hosted by Proto, which you cannot.
     """
     available = available_keys(device)
+    in_process = set() if device == "local" else answered_in_process_keys()
+    # Resolved once: on ``modal`` this reads the live app list, which is a network call.
+    deployed = deployed_keys(device)
+    # The catalogue itself differs by device: the dispatch table lists what a container could
+    # serve, which is the right universe for a remote backend but omits the tools answered here.
+    catalogue = available if device == "local" else set(_registry()) | in_process
     out = []
-    for key in sorted(_registry()):
+    for key in sorted(catalogue):
         is_available = key in available
         if deployed_only and not is_available:
             continue
         entry: dict[str, Any] = {"tool": key, "available": is_available}
+        if key in in_process:
+            entry["runs_in_process"] = True
         if device == "modal":
-            entry["app"] = _app_for(key)
-            entry["deployed"] = is_available
+            entry["app"] = app_for_tool(key)
+            entry["deployed"] = key in deployed
         out.append(entry)
     return out
 
@@ -317,6 +393,9 @@ def _summarize(value: Any, key_path: str, output_dir: Path) -> Any:
 
 def _setup_errors(device: Device) -> tuple[type[Exception], ...]:
     """Exceptions meaning "this cannot run as configured", rather than "the tool failed"."""
+    if device == "local":
+        # Nothing to configure: a failure here is the tool's own, reported as such.
+        return ()
     if device == "proto":
         # No key configured, or a key the server will not accept.
         return (NotImplementedError, PermissionError)
@@ -325,36 +404,50 @@ def _setup_errors(device: Device) -> tuple[type[Exception], ...]:
     return (ModalDispatchError,)
 
 
-def _dispatch(device: Device, tool_key: str, payload: Any, cfg: Any) -> Any:
-    """Route one call to the backend ``device`` names.
+def _dispatch(device: Device, tool_key: str, payload: Any, cfg: Any) -> tuple[Any, Device]:
+    """Route one call to the backend ``device`` names, and report where it ran.
 
-    A ``local_cpu`` tool goes through the tool wrapper rather than straight to a backend, because
-    for those the answer depends on whether a deployment exists: one that has one is dispatched
-    remotely like any other tool, and one that does not runs in this process. The wrapper already
-    makes exactly that choice for a direct call, so deferring to it keeps the two paths identical
-    instead of restating the rule here. Dispatching unconditionally would raise "ships no
-    deployment" for the undeployed ones and send the caller to a command that cannot succeed.
+    The server is a stdio process on the caller's own machine, so "run it here" is always an
+    option and is sometimes the only correct one. Which tools that covers is a property of the
+    tool rather than a choice for the caller, so the answer comes from the registry and the config,
+    the same three questions the tool wrapper asks for a direct call.
+
+    Returns:
+        tuple[Any, Device]: The tool's output, and the device it actually ran on. The two differ
+            whenever a tool that cannot run remotely was asked for on a remote device.
     """
     from proto_tools.tools import ToolRegistry
 
     spec = ToolRegistry.get(tool_key)
+    if device == "local":
+        return spec.function(payload, cfg), "local"
+
+    # A local_cpu tool has no GPU and no environment, so a deployment is optional. The wrapper
+    # decides between dispatching and running here on whether one exists; ``runs_in_process`` asks
+    # the same question, so the reported device matches where the call actually went.
     if spec.local_cpu:
-        return spec.function(payload, cfg)
-    # A search mode whose implementation is an HTTP call is answered from here, the same as the
-    # wrapper does for a direct call. Otherwise the server would look for a deployment that a tool
-    # offering only such modes has no reason to have, and report it missing.
+        ran_on: Device = "local" if runs_in_process(tool_key) else device
+        return spec.function(payload, cfg), ran_on
+    # A search mode whose implementation is an HTTP call is answered from here. Otherwise the
+    # server would look for a deployment that such a tool has no reason to have.
     if (reason := cfg.local_execution_reason(device)) is not None:
         logger.info("Tool %s: %s Running in this process instead.", tool_key, reason)
         cfg.device = "cpu"
-        return spec.function(payload, cfg)
+        return spec.function(payload, cfg), "local"
+    # Declared undeployable. Its inputs live on this machine, which is where the server is, so
+    # running it here answers the call instead of naming a deployment that will never exist.
+    if spec.local_only is not None:
+        logger.info("Tool %s: %s Running in this process instead.", tool_key, spec.local_only)
+        cfg.device = "cpu"
+        return spec.function(payload, cfg), "local"
 
     if device == "proto":
         from proto_tools.proto import dispatch_to_proto
 
-        return dispatch_to_proto(tool_key, payload, cfg)
+        return dispatch_to_proto(tool_key, payload, cfg), device
     from proto_tools.modal.client import dispatch_to_modal
 
-    return dispatch_to_modal(tool_key, payload, cfg)
+    return dispatch_to_modal(tool_key, payload, cfg), device
 
 
 def _unavailable(device: Device, tool_key: str, error: str) -> dict[str, Any]:
@@ -420,14 +513,18 @@ def run_tool(
 
     if not isinstance(cfg, BaseConfig):
         return {"ok": False, "error": f"config model is {type(cfg).__name__}, not a BaseConfig"}
-    cfg.device = device
+    cfg.device = device if is_remote(device) else "cpu"
     # The registry's wrapper asks this before dispatching, but this path does not go through it.
     # Without the check a setting the device cannot honour -- a custom checkpoint on Proto, a
     # local database on any remote worker -- reaches a container and fails there instead.
-    if (reason := cfg.remote_unsupported_reason(device)) is not None:
+    #
+    # Asked before _dispatch, where the wrapper asks it after local_only. The order is visible
+    # only for a tool that is both local_only and refuses the device by config, which none is
+    # today: such a tool would be refused here and run in-process by a direct call.
+    if is_remote(device) and (reason := cfg.remote_unsupported_reason(device)) is not None:
         return {"ok": False, "error": reason, "not_supported_on": device}
     try:
-        result = _dispatch(device, tool_key, payload, cfg)
+        result, ran_on = _dispatch(device, tool_key, payload, cfg)
     except _setup_errors(device) as exc:
         return {"ok": False, **_unavailable(device, tool_key, str(exc))}
     except Exception as exc:
@@ -436,7 +533,9 @@ def run_tool(
     target = Path(output_dir) if output_dir else DEFAULT_OUTPUT_DIR
     body = _summarize(result.model_dump(mode="json"), "", target)
     saved = [v["_saved_to"] for v in _walk_saved(body)]
-    return {"ok": True, "tool": tool_key, "result": body, "saved_files": saved}
+    # ``ran_on`` because the two can differ: a tool that cannot run remotely is answered here even
+    # in a Modal session, and the caller should not have to infer that from the timing.
+    return {"ok": True, "tool": tool_key, "ran_on": ran_on, "result": body, "saved_files": saved}
 
 
 def _walk_saved(node: Any) -> list[dict[str, Any]]:

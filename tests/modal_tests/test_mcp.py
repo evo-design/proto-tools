@@ -109,7 +109,7 @@ def test_summarize_recurses_into_nested_structures(tmp_path):
     assert "_saved_to" in out["outer"]["inner"]
 
 
-def test_search_matches_natural_language_queries():
+def test_search_matches_natural_language_queries(monkeypatch):
     """Agents ask in prose; a literal substring search returns nothing for that.
 
     Regression for a real failure: search_tools("compare two protein
@@ -122,12 +122,11 @@ def test_search_matches_natural_language_queries():
         {"tool": "tmalign-alignment", "app": "a", "deployed": True},
         {"tool": "esm2-score", "app": "b", "deployed": True},
     ]
-    impl.list_tools = lambda **_kwargs: catalogue  # type: ignore[assignment]
-    try:
-        hits = impl.search_tools("compare two protein structures")
-        assert [h["tool"] for h in hits][:1] == ["tmalign-alignment"], hits
-    finally:
-        del impl.list_tools
+    # setattr, not assign-then-del: deleting removes the real function for the rest of the
+    # session rather than restoring it, and every later test calling it then fails.
+    monkeypatch.setattr(impl, "list_tools", lambda **_kwargs: catalogue)
+    hits = impl.search_tools("compare two protein structures")
+    assert [h["tool"] for h in hits][:1] == ["tmalign-alignment"], hits
 
 
 def test_example_elides_bulky_values():

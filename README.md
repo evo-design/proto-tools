@@ -29,6 +29,12 @@ Proto-tools requires Python 3.10+:
 pip install git+https://github.com/evo-design/proto-tools.git
 ```
 
+To also run the MCP server, which exposes these tools to coding agents, install the `mcp` extra:
+
+```bash
+pip install "proto-tools[mcp] @ git+https://github.com/evo-design/proto-tools.git"
+```
+
 > [!NOTE]
 > A direct PyPI install (`pip install proto-tools`) will be available soon.
 

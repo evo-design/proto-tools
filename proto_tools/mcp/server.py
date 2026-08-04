@@ -56,7 +56,27 @@ Large outputs, such as predicted structures and embeddings, are written to disk
 and returned as file paths rather than inline.
 """
 
-INSTRUCTIONS = {"modal": _MODAL_INSTRUCTIONS, "proto": _PROTO_INSTRUCTIONS}
+_LOCAL_INSTRUCTIONS = """Run bioinformatics tools on this machine.
+
+Tools execute in this process rather than on a remote backend, so there is nothing
+to deploy. Every registered tool is available: begin with `list_tools` to see them.
+
+Each tool builds its own isolated environment and downloads its model weights the
+first time it runs, so a first call can take several minutes. Later calls reuse
+both and are fast.
+
+A tool that requires a GPU requires one on this machine. Check `workspace_info`
+and the tool's description before calling one.
+
+Large outputs, such as predicted structures and embeddings, are written to disk
+and returned as file paths rather than inline.
+"""
+
+INSTRUCTIONS = {
+    "modal": _MODAL_INSTRUCTIONS,
+    "proto": _PROTO_INSTRUCTIONS,
+    "local": _LOCAL_INSTRUCTIONS,
+}
 
 
 def build_server(device: Device = "modal") -> FastMCP:
