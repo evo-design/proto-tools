@@ -234,11 +234,13 @@ Please also cite the underlying tools you use in your work, in addition to our p
 
 ## Acknowledgements
 
-Thank you to [Modal](https://modal.com) for sponsoring the compute used to develop and test the
-remote execution layer, and for making it straightforward to host this catalogue.
+Thank you to <a href="https://modal.com"><img src="https://github.com/modal-labs.png?size=40" alt="" height="16" align="center"> Modal</a>
+for sponsoring the compute used to develop and test the remote execution layer, and for making it
+straightforward to host this catalogue.
 
-Thank you to [Stanford University](https://www.stanford.edu) and the
-[Arc Institute](https://arcinstitute.org) for supporting this work's development.
+Thank you to <a href="https://www.stanford.edu"><img src="https://github.com/stanford.png?size=40" alt="" height="16" align="center"> Stanford University</a>
+and the <a href="https://arcinstitute.org"><img src="https://github.com/arcinstitute.png?size=40" alt="" height="16" align="center"> Arc Institute</a>
+for supporting this work's development.
 
 Thank you to everyone who has contributed to `proto-tools`. Contributions of every size are
 welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
