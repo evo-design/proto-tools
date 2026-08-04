@@ -18,9 +18,9 @@ from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
 from proto_tools.modal.utils import (
     RUNTIME_ENV,
-    dispatch_tool_call,
     ensure_gpu_ready,
     env_for,
+    run_tool_call,
 )
 
 _BOLTZ2_CACHE_DIR = Path("/weights/boltz2")
@@ -118,9 +118,7 @@ class Boltz2Service:
         )
         from proto_tools.tools.structure_prediction.boltz2.boltz2 import run_boltz2
 
-        inputs = Boltz2Input(**input_dict)
-        config = Boltz2Config(**config_dict)
-        return dispatch_tool_call(run_boltz2, inputs, config, instance=self.instance)
+        return run_tool_call(run_boltz2, Boltz2Input, Boltz2Config, input_dict, config_dict, instance=self.instance)
 
     @modal.method()
     def affinity(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -142,6 +140,11 @@ class Boltz2Service:
         )
         from proto_tools.tools.structure_prediction.boltz2.boltz2_affinity import run_boltz2_affinity
 
-        inputs = Boltz2AffinityInput(**input_dict)
-        config = Boltz2AffinityConfig(**config_dict)
-        return dispatch_tool_call(run_boltz2_affinity, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_boltz2_affinity,
+            Boltz2AffinityInput,
+            Boltz2AffinityConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )

@@ -15,7 +15,7 @@ from proto_tools.modal.base_images import GPU_BASE, with_proto_tools
 from proto_tools.modal.gpu_profiles import GPU_DEFAULT
 from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
-from proto_tools.modal.utils import RUNTIME_ENV, dispatch_tool_call, ensure_gpu_ready, env_for
+from proto_tools.modal.utils import RUNTIME_ENV, ensure_gpu_ready, env_for, run_tool_call
 
 
 def _warmup() -> None:
@@ -87,6 +87,4 @@ class RF3Service:
         )
         from proto_tools.tools.structure_prediction.rf3.rf3_prediction import run_rf3_prediction
 
-        inputs = RF3Input(**input_dict)
-        config = RF3Config(**config_dict)
-        return dispatch_tool_call(run_rf3_prediction, inputs, config, instance=self.instance)
+        return run_tool_call(run_rf3_prediction, RF3Input, RF3Config, input_dict, config_dict, instance=self.instance)

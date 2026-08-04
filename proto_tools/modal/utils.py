@@ -9,9 +9,10 @@ from typing import Any
 
 import modal
 
+from proto_tools.modal.hooks import CallContext, apply_payload_hooks, run_with_middleware
 from proto_tools.modal.progress import container_progress
 from proto_tools.utils.base_config import BaseConfig
-from proto_tools.utils.tool_io import BaseToolOutput, MissingAssetError
+from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, MissingAssetError
 
 _utils_logger = logging.getLogger(__name__)
 
@@ -245,6 +246,15 @@ def apply_tool_envelope(
     return strip_base_fields(result.model_dump())
 
 
+def mark_hosted_env() -> None:
+    """Tell the tool it runs for someone else, so a config reaching for a large local corpus adapts.
+
+    Set per call rather than at import, since the value has to be visible wherever the call
+    executes, and before payload hooks run, since one may branch on it.
+    """
+    os.environ["PROTO_IS_HOSTED_ENV"] = "1"
+
+
 def dispatch_tool_call(
     run_fn: Callable[..., BaseToolOutput],
     *args: Any,
@@ -257,22 +267,49 @@ def dispatch_tool_call(
     the workspace running the container, so nothing needs configuring.
     Worker logs are read with ``modal app logs <app>``.
     """
-    # This container hosts the tool for someone else, so a config that would reach for a large
-    # local corpus adjusts itself before preprocess runs. Set per call rather than at import, since
-    # the value has to be visible wherever the call actually executes.
-    os.environ["PROTO_IS_HOSTED_ENV"] = "1"
+    mark_hosted_env()
 
     # @app.cls(timeout=...) is Modal's outer wall; null the inner timer so it can't fire early.
     configs = [arg for arg in (*args, *kwargs.values()) if isinstance(arg, BaseConfig)]
     for config in configs:
         config.timeout = None
 
-    # Stream this call's log output back to the caller's spinner when they asked for it. Wired here
-    # rather than in each service method, so every deployed tool reports progress on the same terms.
     partition = next((config._progress_partition for config in configs if config._progress_partition), None)
     level = next((config._progress_level for config in configs if config._progress_partition), logging.INFO)
     with container_progress(partition, level=level):
-        return apply_tool_envelope(run_fn, *args, **kwargs)
+        return run_with_middleware(CallContext(run_fn), lambda: apply_tool_envelope(run_fn, *args, **kwargs))
+
+
+def run_tool_call(
+    run_fn: Callable[..., BaseToolOutput],
+    input_model: type[BaseToolInput],
+    config_model: type[BaseConfig],
+    input_dict: dict[str, Any],
+    config_dict: dict[str, Any],
+    *,
+    instance: Any = None,
+) -> dict[str, Any]:
+    """Validate one call's mappings and run it. The entry point a service method calls.
+
+    Construction happens here so payload hooks have somewhere to run: once a mapping becomes a
+    model, validation has already accepted or rejected it.
+
+    Args:
+        run_fn (Callable[..., BaseToolOutput]): The tool's ``run_*`` function.
+        input_model (type[BaseToolInput]): Input model to validate ``input_dict`` with.
+        config_model (type[BaseConfig]): Config model to validate ``config_dict`` with.
+        input_dict (dict[str, Any]): Raw input mapping as received from the caller.
+        config_dict (dict[str, Any]): Raw config mapping as received from the caller.
+        instance (Any): Persistent worker to run on, when the service keeps one.
+
+    Returns:
+        dict[str, Any]: The tool's serialized output.
+    """
+    # Hooks run before the progress context opens, so a slow one is silent on the caller's
+    # spinner. Opening a second context here would double-register the log handler.
+    mark_hosted_env()
+    apply_payload_hooks(input_dict, config_dict)
+    return dispatch_tool_call(run_fn, input_model(**input_dict), config_model(**config_dict), instance=instance)
 
 
 def apply_standalone_overrides(image: modal.Image, tool: str, source_dir: Path | str) -> modal.Image:
