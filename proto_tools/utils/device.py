@@ -69,14 +69,42 @@ def is_exclusive_process_mode() -> bool:
 # cuInit / "No visible GPU devices" — a CUDA context cannot be acquired (typically a device-handoff race).
 _GPU_ACQUISITION_ERROR_SIGNATURES = ("no visible gpu devices", "failed call to cuinit")
 
+# Runtime faults of this family destroy the CUDA context rather than only the operation that raised:
+# device-side asserts, illegal memory accesses, misaligned addresses, unspecified launch failures.
+# The two backends report them differently, so both spellings are listed:
+#
+#   torch   RuntimeError: CUDA error: device-side assert triggered
+#   JAX/XLA XlaRuntimeError: INTERNAL: ... CUDA_ERROR_ILLEGAL_ADDRESS
+#
+# XLA is matched by driver enum rather than by a "cuda_error_" prefix, so that CUDA_ERROR_NO_DEVICE
+# (an acquisition failure) and CUDA_ERROR_OUT_OF_MEMORY are not swept in.
+#
+# Known hole: torch's caching allocator reports a recoverable exhaustion as "CUDA out of memory",
+# which correctly does not match, but a raw-runtime exhaustion can surface as "CUDA error: out of
+# memory", which does. That path retires a worker it did not need to, costing a warm model rather
+# than correctness, and is rare enough to be worth less than the precision it would take to exclude.
+_POISONED_CUDA_CONTEXT_SIGNATURES = (
+    "cuda error:",
+    "cuda_error_illegal_address",
+    "cuda_error_launch_failed",
+    "cuda_error_misaligned_address",
+    "cuda_error_assert",
+    "cuda_error_ecc_uncorrectable",
+)
 
-def is_gpu_acquisition_error(error: object) -> bool:
-    """Return True if *error* is a GPU context-acquisition failure (cuInit / "No visible GPU devices").
 
-    Accepts an exception or a message string. For exceptions, scans the message, any subprocess
-    ``stderr``/``output``, and the ``__cause__``/``__context__`` chain, so the signature is caught
-    whether it lands in ``str(exc)`` (persistent-worker path) or only in ``CalledProcessError.stderr``
-    (one-shot subprocess path).
+def _error_text(error: object) -> str:
+    """Flatten an exception or message into one lowercase blob for signature matching.
+
+    For exceptions, collects the message, any subprocess ``stderr``/``output``, and the
+    ``__cause__``/``__context__`` chain, so a signature is caught whether it lands in ``str(exc)``
+    (persistent-worker path) or only in ``CalledProcessError.stderr`` (one-shot subprocess path).
+
+    Args:
+        error (object): Exception or message string to flatten.
+
+    Returns:
+        str: Lowercased text of the error and everything it carries.
     """
     parts: list[str] = []
     if isinstance(error, BaseException):
@@ -92,8 +120,40 @@ def is_gpu_acquisition_error(error: object) -> bool:
             depth += 1
     else:
         parts.append(str(error))
-    blob = " ".join(parts).lower()
-    return any(sig in blob for sig in _GPU_ACQUISITION_ERROR_SIGNATURES)
+    return " ".join(parts).lower()
+
+
+def _matches_signature(error: object, signatures: tuple[str, ...]) -> bool:
+    """Report whether any of *signatures* appears in *error*'s flattened text."""
+    text = _error_text(error)
+    return any(signature in text for signature in signatures)
+
+
+def is_gpu_acquisition_error(error: object) -> bool:
+    """Return True if *error* is a GPU context-acquisition failure (cuInit / "No visible GPU devices").
+
+    Accepts an exception or a message string.
+    """
+    return _matches_signature(error, _GPU_ACQUISITION_ERROR_SIGNATURES)
+
+
+def poisons_cuda_context(error: object) -> bool:
+    """Return True if *error* is a CUDA fault that leaves the process unable to serve further work.
+
+    A device-side assert (and its siblings) destroys the whole context, so the process that hit it
+    fails every later request until it is replaced. Accepts an exception or a message string.
+    """
+    return _matches_signature(error, _POISONED_CUDA_CONTEXT_SIGNATURES)
+
+
+def leaves_worker_unusable(error: object) -> bool:
+    """Return True if *error* means the process that raised it can no longer serve GPU work.
+
+    Either the backend cached a context-acquisition failure, or a runtime fault destroyed the
+    context outright. Both make every later request on that process fail, so the caller's remedy
+    is the same: retire it and let the next request start a fresh one.
+    """
+    return _matches_signature(error, _GPU_ACQUISITION_ERROR_SIGNATURES + _POISONED_CUDA_CONTEXT_SIGNATURES)
 
 
 def number_of_physical_gpus() -> int:

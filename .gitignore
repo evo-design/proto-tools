@@ -69,3 +69,6 @@ uv.lock
 
 # Local env-report fallback output (when PROTO_ENV_REPORT_DIR is unset).
 .environment_checks/
+
+# Benchmark reports from a local run; a remote run writes into the deployment folders instead.
+benchmark_reports/

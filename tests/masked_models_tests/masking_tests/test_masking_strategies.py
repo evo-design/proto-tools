@@ -9,7 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from proto_tools.tools.masked_models.shared_data_models import (
-    MaskedModelInput,
+    MaskedModelSampleInput,
 )
 from proto_tools.transforms.masking import (
     MaskingInput,
@@ -255,7 +255,7 @@ class _MockConfig:
 def test_apply_masking_strategy_masks_unmasked_sequences():
     """Applies masking strategy when no '_' tokens are present."""
     config = _MockConfig(MaskingStrategy(num_mutations=2))
-    inputs = MaskedModelInput(sequences=["MKTLLIFLA"])
+    inputs = MaskedModelSampleInput(sequences=["MKTLLIFLA"])
     result = apply_masking_strategy(config, inputs)
     assert result.sequences[0].count("_") == 2
     assert len(result.sequences[0]) == len("MKTLLIFLA")
@@ -264,7 +264,7 @@ def test_apply_masking_strategy_masks_unmasked_sequences():
 def test_apply_masking_strategy_skips_premasked():
     """Leaves sequences unchanged when they already contain '_'."""
     config = _MockConfig(MaskingStrategy(num_mutations=5))
-    inputs = MaskedModelInput(sequences=["MKT_LIFLA"])
+    inputs = MaskedModelSampleInput(sequences=["MKT_LIFLA"])
     result = apply_masking_strategy(config, inputs)
     assert result.sequences == ["MKT_LIFLA"]
 
@@ -272,7 +272,7 @@ def test_apply_masking_strategy_skips_premasked():
 def test_apply_masking_strategy_warns_custom_strategy_ignored(caplog):
     """Warns when a non-default strategy is ignored due to pre-masking."""
     config = _MockConfig(MaskingStrategy(num_mutations=3))
-    inputs = MaskedModelInput(sequences=["MKT_LIFLA"])
+    inputs = MaskedModelSampleInput(sequences=["MKT_LIFLA"])
     with caplog.at_level(logging.WARNING):
         apply_masking_strategy(config, inputs)
     assert "ignoring custom masking_strategy" in caplog.text
@@ -281,7 +281,7 @@ def test_apply_masking_strategy_warns_custom_strategy_ignored(caplog):
 def test_apply_masking_strategy_no_warning_default_strategy(caplog):
     """No warning when default strategy is used with pre-masked input."""
     config = _MockConfig(MaskingStrategy())
-    inputs = MaskedModelInput(sequences=["MKT_LIFLA"])
+    inputs = MaskedModelSampleInput(sequences=["MKT_LIFLA"])
     with caplog.at_level(logging.WARNING):
         apply_masking_strategy(config, inputs)
     assert "ignoring" not in caplog.text
@@ -290,7 +290,7 @@ def test_apply_masking_strategy_no_warning_default_strategy(caplog):
 def test_apply_masking_strategy_does_not_mutate_original():
     """Returns a new inputs object; original is untouched."""
     config = _MockConfig(MaskingStrategy(num_mutations=2))
-    inputs = MaskedModelInput(sequences=["MKTLLIFLA"])
+    inputs = MaskedModelSampleInput(sequences=["MKTLLIFLA"])
     result = apply_masking_strategy(config, inputs)
     assert inputs.sequences == ["MKTLLIFLA"]
     assert result is not inputs

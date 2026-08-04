@@ -147,6 +147,10 @@ def example_input() -> MockIterableStochasticInput:
 
 @tool(
     key="mock-iterable-stochastic",
+    local_only=(
+        "mock-iterable-stochastic is an in-process test fixture with no model and no environment. "
+        "It does not need to be deployed and can run in this process."
+    ),
     label="Mock Iterable Stochastic LLM",
     category="testing",
     input_class=MockIterableStochasticInput,

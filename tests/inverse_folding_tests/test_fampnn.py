@@ -545,7 +545,9 @@ def test_fampnn_pack_benchmark(request: pytest.FixtureRequest, benchmark_pdb_str
     assert len(result.packed_structures[0]) == 20
     for struct in result.packed_structures[0]:
         assert "ATOM" in struct.structure
-    assert len(result.psce[0]) == 20
+    # psce is per packed structure, not on the envelope: results[i].psce holds one list of
+    # per-residue errors per sample.
+    assert len(result.results[0].psce) == 20
 
 
 @pytest.mark.benchmark("fampnn-score")

@@ -1,4 +1,4 @@
-"""Dataset entries — one module per registered homology database.
+"""Dataset entries — one module per registered homology database or reference genome.
 
 Each module defines a ``DatasetEntry`` and calls
 ``DatasetRegistry.register(ENTRY)`` at import time. Importing this package
@@ -9,6 +9,8 @@ triggers registration of every entry.
 # with DatasetRegistry at import time.
 from proto_tools.databases.entries import (
     colabfold_envdb_202108,  # noqa: F401
+    grch37_ensembl_112,  # noqa: F401
+    grch38_ensembl_112,  # noqa: F401
     mgnify_2022_05,  # noqa: F401
     nt_rna_2023_02_23_90_80,  # noqa: F401
     pdb_seqres_2022_09_28,  # noqa: F401

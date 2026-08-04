@@ -251,7 +251,11 @@ def provision(name: str, workdir: Path | None = None, *, force: bool = False) ->
         _download_file(spec, cache_dir, downloader)
 
     print("\n  Running index recipe...")
-    split_memory_limit = _split_memory_limit()
+    # Only meaningful to a recipe that asks for it. An entry whose steps are plain shell — a
+    # reference genome that just decompresses — would otherwise report an mmseqs memory budget it
+    # never uses, which reads as though an index were about to be built.
+    wants_memory_limit = any("{split_memory_limit}" in arg for step in entry.index_recipe.steps for arg in step.command)
+    split_memory_limit = _split_memory_limit() if wants_memory_limit else "0"
     if split_memory_limit != "0":
         print(f"  memory budget: capping mmseqs index splits at {split_memory_limit}iB")
     for step in entry.index_recipe.steps:

@@ -159,6 +159,7 @@ def example_input() -> Any:
 
 @tool(
     key="ncbi-efetch",
+    local_only="ncbi-efetch does not use a gpu and does not need an environment, so it can run in process",
     label="NCBI Entrez EFetch",
     category="database_retrieval",
     input_class=NCBIEfetchInput,

@@ -289,6 +289,11 @@ def _config_overrides_env(model_dir: str | None) -> Iterator[None]:
 
 @tool(
     key="alphafold3-prediction",
+    local_only=(
+        "alphafold3 needs model parameters requested from DeepMind and held on your own disk, which "
+        "are not available on a remote worker. Run locally with device='cuda', pointing model_dir at "
+        "the parameters you were granted."
+    ),
     label="AlphaFold3 Structure Prediction",
     category="structure_prediction",
     input_class=AlphaFold3Input,

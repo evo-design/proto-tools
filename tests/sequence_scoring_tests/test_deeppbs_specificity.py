@@ -71,9 +71,12 @@ def test_config_exposes_no_path_fields():
     assert DeepPBSSpecificityConfig().allow_fallback is False
 
 
-def test_config_cloud_unsupported():
-    """DeepPBS cannot run on device='proto' (needs local repo/X3DNA)."""
-    assert DeepPBSSpecificityConfig().remote_unsupported_reason("proto") is not None
+def test_tool_declared_local_only():
+    """DeepPBS needs a local repo and X3DNA install, so the tool declares itself local-only."""
+    from proto_tools.tools import ToolRegistry
+
+    spec = next(s for s in ToolRegistry.list_all() if s.key == "deeppbs-specificity")
+    assert spec.local_only and "DeepPBS" in spec.local_only
 
 
 # ── Dispatch (mocked) ─────────────────────────────────────────────────────────

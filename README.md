@@ -7,6 +7,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/evo-design/proto-tools/blob/main/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-proto.evodesign.org-blue)](https://proto.evodesign.org/docs/tools/introduction)
 [![bioRxiv](https://img.shields.io/badge/bioRxiv-2026.06.22.733870-b31b1b.svg)](https://www.biorxiv.org/content/10.64898/2026.06.22.733870)
+[![Modal](https://img.shields.io/badge/Modal-ready--to--deploy-brightgreen?logo=modal&logoColor=white)](proto_tools/modal/README.md)
+[![Arc Institute blog](https://img.shields.io/badge/Blog-0073E6?logo=data%3Aimage%2Fpng%3Bbase64%2CiVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAQAAAD9CzEMAAADrElEQVR42u2WX4jUVRTHv%2Bf%2BfjM7iqXWmFZGmWEFWiBR%2BxBBsSY9CFKQGT1ElKhsEuRrEVFPGVu2RpsplWGUCWbURpkSYZtDEj4oKmYvGxHUruui7czvz6eHuTPzm3HsaQSD%2BcIMzJl77znf7zn33CN10UUX%2F39YqwFvMS6xZ%2BySMCCnuGqztDMOXObwQFKfftUxHdVxHsYIOiwKxiz%2BoIrvJVyndQ8kdhJRJiZmSYddYBJFxoCUCBiQCNsyDaviYYTNQhIQ4jBcbU12YyixnjJfAxHwJzObqwkjvDgnrLXyWtbiJE7wObcACRHwZDsOXMdjfMprGDN4hRHeoafGg%2FsYosRJfmCQB5rCI5BYDKyUOAxUgIONKDCMhWzkSyYA2CYxDEDKHEliPnuBw6ynn1EANrcKNMQ40zDWAhEJCUt9%2BYoA40HOATBFxEs8BJSBCeZK3MRvwCf%2BtIVMkgArsgkuMMlmCeNqxjyHLQ2RMInZHCChDLzNUeAcE4xSxPEj8DfXSOQJJY4QU%2BHNevwYq4DbJfISW72Dv7iqoSR5iXeBCinjlFjFAuYwV%2BIJIGF3na9xEoD%2BbIJ%2F4oiEI8DorSd6TYZDiPEBMEXKPnIZgUdIgeex6lqM99jPFgqN4xcAT2PkCMlJHPQcSlg90aHE%2B8A%2FwCaJgg%2FnBqZIgNUXVp2rf69VRZ%2FJWWSxRTh9I8mU6i7dLdp0pQKm2FLJ0CL1KG5unbiq81DClBDoKX1hZySu1Uqt0B0KlShUrFDP2CHa3itq%2FXieJCRloq91Y%2Bc%2Fy1XUCyxmj47rOZ1Sv5Zqp9%2F2CEVL%2FvN9cH7lrW3vMoHEML8zxFk%2Bprf%2B5z31RD%2Fr9c%2Fm4C3%2FO5BY5vN1qFZF2eOdxHwmgRGW1KslIMAo%2BY2%2F4LCLOKjunwJi4H6JHq9%2FIHFbddFG4HV%2FdLZi1vgbDfdiBE0OBmsVg5P4jpQKKae4McPgUU6InMRpfq7dwKbGW2Tcc%2FhQIk%2BekO3ewRsEFDAvUh9QIQZG2cCd3EwfA8C6agdM2dW2AecZJaJMhTGu97YdREwSsb3loRoAUsr%2BPTwPwFeS%2BIgEgBKDLPKEHcZytnKaBs6wgWXsyFi%2BZRNF32cDiZeJyGIvs3ChAm1TLGmGisrXithSrtCVOqBhmZAp0XT1aJrO6tV64DM1XYGfoRKcvchuPa5ezdN5HdMe29W54acxlaj5BZGsqXckjXkOp9bHEXGBLclOgDg5pZZWnVlymc%2BEXXTRxeWDfwGkGF0Pfq%2BibAAAAABJRU5ErkJggg%3D%3D)](https://arcinstitute.org/news/proto)
 
 > [!NOTE]
 > **To add a tool, please fork our repo and open a pull request!** We will help you integrate it. See [CONTRIBUTING.md](CONTRIBUTING.md) for layout and conventions.
@@ -15,7 +17,7 @@
 
 Welcome! This repository contains the open-source implementation of `proto-tools`, a Python package containing a large suite of computational biology and biological AI tools, all accessible through a single, consistent Python interface. Language models, structure predictors, inverse folding, sequence analysis, gene annotation, conformational dynamics, genomic scoring, and more are all available through a single `pip install` command.
 
-Every tool runs in its own automatically managed isolated environment, so all dependency wrangling is handled for you. In addition, `proto-tools` implements extensive infrastructure for features such as device management and GPU fan-out, making it easy to call tools in quick succession. You can use it as a standalone Python library, as part of the broader [proto-language](https://github.com/evo-design/proto-language) optimization system, or through the [proto-client](https://github.com/evo-design/proto-client) Python SDK for hosted access over the Proto Bio API. 
+Every tool runs in its own automatically managed isolated environment, so all dependency wrangling is handled for you. In addition, `proto-tools` implements extensive infrastructure for features such as device management and GPU fan-out, making it easy to call tools in quick succession. You can use it as a standalone Python library, as part of the broader [proto-language](https://github.com/evo-design/proto-language) optimization system, or as an MCP server that exposes the same tools to AI agents. Tools can run on local compute or on Modal.
 
 Proto-tools is open source under an MIT license. Contributions are welcome!
 
@@ -27,6 +29,12 @@ Proto-tools requires Python 3.10+:
 
 ```bash
 pip install git+https://github.com/evo-design/proto-tools.git
+```
+
+To also run the MCP server, which exposes these tools to coding agents, install the `mcp` extra:
+
+```bash
+pip install "proto-tools[mcp] @ git+https://github.com/evo-design/proto-tools.git"
 ```
 
 > [!NOTE]
@@ -52,8 +60,16 @@ For shared filesystems, model weights can be reused to avoid downloading duplica
 
 A few tools use gated models or software that require accepting a license / terms-of-use first (e.g. ESM3, AlphaGenome, AlphaFold3, X3DNA). See [notes/gated-models.md](notes/gated-models.md) for the full list and per-model access steps.
 
+### Step 4: Remote compute (optional) <a href="https://modal.com"><img src="guides/assets/modal/modal-logo.png" alt="Modal" height="20" align="center"></a>
+
+`proto-tools` enables users to scale their tool use beyond their local machine through an
+integration with [Modal](https://modal.com), a serverless compute platform that
+allows users to execute models and tools in remote containers. To learn more about
+setting up Modal, see [proto_tools/modal/README.md](proto_tools/modal/README.md)
+for instructions related to account setup, deploying a tool, and costs, or the [Cloud Inference guide](guides/cloud_inference.ipynb) for a runnable walkthrough.
+
 > [!TIP]
-> **You're all set up!** To learn what features are available in the library, check out the [guides](guides/) — four short notebooks covering tool environments, persistent execution, device management, and parallel multi-GPU runs.
+> **You're all set up!** Start with the [quickstart](guides/quickstart.ipynb), then check out the rest of the [guides](guides/) — short notebooks covering tool environments, persistent execution, device management, parallel multi-GPU runs, and remote execution.
 
 ## Available Tools
 
@@ -154,10 +170,12 @@ A few tools use gated models or software that require accepting a license / term
 
 Runnable walkthroughs of the core framework features live in [`guides/`](guides/) and are also available on our [docs page](https://proto.evodesign.org/docs/tools/introduction):
 
-1. [Tool Environments](guides/tool_environments.ipynb) — how isolated environments are built and cached on first call.
-2. [Tool Persistence](guides/tool_persistence.ipynb) — keep models warm across calls
-3. [Device Management](guides/device_management.ipynb) — GPU allocation, LRU eviction, CPU offload
-4. [Parallel Execution](guides/parallel_execution.ipynb) — fan out work across every GPU with `ToolPool`
+1. [Quickstart](guides/quickstart.ipynb) — installation, the `Input + Config → run → Output` contract, and running a tool
+2. [Tool Environments](guides/tool_environments.ipynb) — how isolated environments are built and cached on first call.
+3. [Tool Persistence](guides/tool_persistence.ipynb) — keep models warm across calls
+4. [Device Management](guides/device_management.ipynb) — GPU allocation, LRU eviction, CPU offload
+5. [Parallel Execution](guides/parallel_execution.ipynb) — fan out work across every GPU with `ToolPool`
+6. [Cloud Inference](guides/cloud_inference.ipynb) — deploy tools to a Modal workspace you own, then call them with `device="modal"`
 
 Each specific tool also ships a minimal `examples/example.ipynb` under `proto_tools/tools/{category}/{tool}/examples/`.
 
@@ -192,3 +210,22 @@ If you use Proto in your research, please cite our preprint:
 ```
 
 Please also cite the underlying tools you use in your work, in addition to our preprint. Every tool's citation is available on its [documentation page](https://proto.evodesign.org/docs/tools/introduction).
+
+## Acknowledgements
+
+Thank you to <a href="https://modal.com"><img src="https://github.com/modal-labs.png?size=40" alt="" height="16" align="center"> Modal</a>
+for sponsoring the compute used to develop and test the remote execution layer, and for making it
+straightforward to host this catalogue.
+
+Thank you to <a href="https://www.stanford.edu"><img src="https://www.stanford.edu/icon1.png" alt="" height="16" align="center"> Stanford University</a>
+and the <a href="https://arcinstitute.org"><img src="https://github.com/arcinstitute.png?size=40" alt="" height="16" align="center"> Arc Institute</a>
+for supporting this work's development.
+
+Thank you to everyone who has contributed to `proto-tools`. Contributions of every size are
+welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
+
+<p align="center">
+  <a href="https://github.com/evo-design/proto-tools/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=evo-design/proto-tools" alt="Contributors">
+  </a>
+</p>

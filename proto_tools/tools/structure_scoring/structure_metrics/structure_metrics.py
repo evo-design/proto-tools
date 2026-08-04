@@ -167,6 +167,10 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["structures"],
     iterable_output_field="metrics",
+    # Geometry over one structure is milliseconds, so a chunk of 1 would spend a container round
+    # trip per item and lose to running locally. Matches dssp, which does comparable per-structure
+    # work; the point of fanning out here is a large batch, not a single call.
+    max_chunk_size=256,
     cacheable=True,
 )
 def run_structure_metrics(

@@ -70,10 +70,8 @@ def is_fatal_dispatch_error(exc: BaseException) -> bool:
     # placeholder would break both.
     if isinstance(exc, (ImportError, NotImplementedError, PermissionError, MissingAssetError)):
         return True
-    try:
-        from proto_modal import ModalDispatchError
-    except ImportError:
-        return False
+    from proto_tools.modal import ModalDispatchError
+
     return isinstance(exc, ModalDispatchError)
 
 

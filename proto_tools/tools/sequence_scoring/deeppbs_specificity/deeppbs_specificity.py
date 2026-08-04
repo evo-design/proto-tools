@@ -17,7 +17,6 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
-from proto_tools.utils.device import RemoteDevice
 
 logger = logging.getLogger(__name__)
 
@@ -101,13 +100,6 @@ class DeepPBSSpecificityConfig(BaseConfig):
         description="On missing DeepPBS deps/outputs, return a uniform fallback PPM instead of raising",
         include_in_key=False,
     )
-
-    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
-        """DeepPBS needs a local repository and X3DNA install not staged to cloud."""
-        return (
-            "DeepPBS requires a local DeepPBS checkout and its bundled X3DNA install, "
-            f"which are not available on device='{device}'. Run locally with device='cpu'."
-        )
 
 
 class DeepPBSSpecificityResult(BaseModel):
@@ -235,6 +227,10 @@ def example_input() -> DeepPBSSpecificityInput:
 
 @tool(
     key="deeppbs-specificity",
+    local_only=(
+        "DeepPBS requires a local DeepPBS checkout and its bundled X3DNA install, neither of which "
+        "is available on a remote worker. Run locally with device='cpu'."
+    ),
     label="DeepPBS Specificity",
     category="sequence_scoring",
     input_class=DeepPBSSpecificityInput,
