@@ -828,6 +828,12 @@ def pytest_addoption(parser):
         help="Run only GPU tests, skip CPU tests",
     )
     parser.addoption(
+        "--random-order",
+        action="store_true",
+        default=False,
+        help="Shuffle test order (pytest-randomly's reordering, which this suite disables by default)",
+    )
+    parser.addoption(
         "--all",
         action="store_true",
         default=False,
@@ -936,6 +942,9 @@ def pytest_configure(config):
             "--use-proto and --use-modal are mutually exclusive: each routes every tool run to a "
             "different remote device. Pass one."
         )
+
+    if hasattr(config.option, "randomly_reorganize"):
+        config.option.randomly_reorganize = bool(config.getoption("--random-order"))
 
     config.addinivalue_line("markers", "uses_gpu: mark test as requiring GPU")
     config.addinivalue_line(
