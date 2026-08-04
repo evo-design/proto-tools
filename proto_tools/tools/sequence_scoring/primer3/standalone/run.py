@@ -20,7 +20,7 @@ _CAL_PER_KCAL = 1000.0
 # Implementation
 # =============================================================================
 def _gc_content(sequence: str) -> float:
-    """Fraction of G/C bases in the oligo (0–1)."""
+    """Fraction of G/C bases in the oligo (0-1)."""
     return (sequence.count("G") + sequence.count("C")) / len(sequence)
 
 
@@ -31,7 +31,7 @@ def _gc_clamp(sequence: str) -> bool:
 
 def _score_oligo(oligo: dict[str, Any], oligo_id: str, thermo_kwargs: dict[str, float]) -> dict[str, Any]:
     """Compute Primer3 thermodynamic scores for a single oligo (and optional partner)."""
-    import primer3
+    import primer3  # type: ignore[import-not-found]
 
     sequence = oligo["sequence"]
     partner = oligo.get("partner")
@@ -79,10 +79,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     }
 
     logger.debug("Scoring %d oligo(s) with primer3 thermodynamics", len(oligos))
-    results = [
-        _score_oligo(oligo, oligo_id, thermo_kwargs)
-        for oligo, oligo_id in zip(oligos, oligo_ids, strict=True)
-    ]
+    results = [_score_oligo(oligo, oligo_id, thermo_kwargs) for oligo, oligo_id in zip(oligos, oligo_ids, strict=True)]
     return {"results": results}
 
 

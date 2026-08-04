@@ -25,9 +25,7 @@ def _validate_oligo_sequence(sequence: str) -> str:
         raise ValueError("oligo sequence must not be empty")
     invalid = sorted(set(normalized) - _VALID_BASES)
     if invalid:
-        raise ValueError(
-            f"oligo sequence has non-ACGT characters {invalid}; thermodynamics needs concrete bases"
-        )
+        raise ValueError(f"oligo sequence has non-ACGT characters {invalid}; thermodynamics needs concrete bases")
     return normalized
 
 
@@ -81,7 +79,7 @@ class Primer3OligoResult(BaseModel):
         homodimer_dg (float): Self-dimer ΔG in kcal/mol.
         heterodimer_dg (float | None): Cross-dimer ΔG with the partner, or None
             when no partner was supplied.
-        gc_content (float): Fraction of G/C bases, 0–1.
+        gc_content (float): Fraction of G/C bases, 0-1.
         gc_clamp (bool): True if either of the last two 3' bases is G or C.
         hairpin_structure_found (bool): Whether a hairpin structure was found.
         homodimer_structure_found (bool): Whether a homodimer structure was found.
@@ -97,7 +95,7 @@ class Primer3OligoResult(BaseModel):
     heterodimer_dg: float | None = Field(
         default=None, title="Heterodimer ΔG", description="Cross-dimer ΔG with the partner in kcal/mol"
     )
-    gc_content: float = Field(title="GC Content", description="Fraction of G/C bases (0–1)")
+    gc_content: float = Field(title="GC Content", description="Fraction of G/C bases (0-1)")
     gc_clamp: bool = Field(title="GC Clamp", description="True if a G/C is in the last two 3' bases")
     hairpin_structure_found: bool = Field(
         title="Hairpin Structure Found", description="Whether a hairpin structure was found"
@@ -136,10 +134,7 @@ class Primer3ThermodynamicsInput(BaseToolInput):
             value = [value]
         if not isinstance(value, list):
             return value
-        coerced: list[Any] = []
-        for item in value:
-            coerced.append(Primer3Oligo(sequence=item) if isinstance(item, str) else item)
-        return coerced
+        return [Primer3Oligo(sequence=item) if isinstance(item, str) else item for item in value]
 
 
 # Config:
@@ -147,8 +142,8 @@ class Primer3ThermodynamicsConfig(BaseConfig):
     """Configuration for Primer3 thermodynamics.
 
     Defaults match primer3-py's own defaults so results are reproducible against
-    Primer3 directly. For qPCR, common practice is mv_conc≈50, dv_conc≈1.5–3,
-    dntp_conc≈0.8, dna_conc≈200–250; see the README for target ranges.
+    Primer3 directly. For qPCR, common practice is mv_conc≈50, dv_conc≈1.5-3,
+    dntp_conc≈0.8, dna_conc≈200-250; see the README for target ranges.
 
     Attributes:
         mv_conc (float): Monovalent cation concentration in mM. Default 50.0.
@@ -247,6 +242,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["oligos"],
     iterable_output_field="results",
+    max_chunk_size=256,
     cacheable=True,
 )
 def run_primer3_thermodynamics(
@@ -273,8 +269,7 @@ def run_primer3_thermodynamics(
     Examples:
         >>> result = run_primer3_thermodynamics(
         ...     Primer3ThermodynamicsInput(
-        ...         oligos=[{"sequence": "ACCCACTCCTCCACCTTTGA",
-        ...                  "partner": "CTGTTGCTGTAGCCAAATTCGT"}]
+        ...         oligos=[{"sequence": "ACCCACTCCTCCACCTTTGA", "partner": "CTGTTGCTGTAGCCAAATTCGT"}]
         ...     ),
         ...     Primer3ThermodynamicsConfig(),
         ... )
