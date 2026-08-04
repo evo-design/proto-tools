@@ -184,28 +184,6 @@ Run tools through natural language with any coding agent (Claude Code, Gemini CL
 
 If you've cloned the repo for contributing, agents also pick up `CLAUDE.md` (symlinked as `AGENTS.md`/`GEMINI.md`) and the task-specific guides in [`.claude/skills/`](.claude/skills/) automatically.
 
-## Running on remote compute
-
-Set up in [Step 4](#step-4-remote-compute-optional), then deploy a tool and call it with `device="modal"`:
-
-```bash
-proto-tools deploy --apps protenix --env proto-env
-```
-
-```python
-run_protenix(ProtenixInput(complexes=[GFP]), ProtenixConfig(device="modal"))
-```
-
-After a call finishes, a Modal container stays alive briefly holding its model in memory so the next call skips the load. `PROTO_MODAL_SCALEDOWN_WINDOW` sets that window in seconds, defaulting to `30`:
-
-```bash
-export PROTO_MODAL_SCALEDOWN_WINDOW=300     # keep containers warm for 5 minutes
-```
-
-This is a direct trade rather than a free optimization: a longer window skips cold starts and also bills for an idle GPU for that long. Raise it while working interactively, leave it low for occasional calls, and set it in the environment you deploy from, since the value is baked into the deployed service.
-
-See [`proto_tools/modal/README.md`](proto_tools/modal/README.md) for setup and the full list of options, and the [Cloud Inference guide](guides/cloud_inference.ipynb) for a runnable walkthrough.
-
 ## Development & Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for full developer setup, storage

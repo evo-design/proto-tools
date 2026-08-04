@@ -235,8 +235,7 @@ and therefore logs a warning rather than passing silently.
 
 ## Configuration
 
-Five environment variables, all optional, read in the environment a deploy runs from. Only
-`PROTO_MODAL_SCALEDOWN_WINDOW` appears in the user-facing README; the rest are here.
+Five environment variables, all optional, read in the environment a deploy runs from.
 
 | Variable | Default | Effect |
 |---|---|---|
