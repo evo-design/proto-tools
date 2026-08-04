@@ -116,6 +116,11 @@ class SpinnerStyle:
         self.interval = interval
 
 
+# Marks a finished remote call. An emoji rather than an ANSI-coloured ✔ because a notebook bar
+# is an ipywidget, where an escape sequence would print literally instead of colouring anything.
+COMPLETE_MARK = "✅"
+
+
 SPINNER_STYLES: dict[str, SpinnerStyle] = {
     "dots": SpinnerStyle(
         frames=["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
@@ -161,7 +166,10 @@ def _in_notebook() -> bool:
     try:
         from IPython import get_ipython  # type: ignore[attr-defined]
 
-        shell = get_ipython()  # type: ignore[no-untyped-call]
+        # ``unused-ignore`` is listed deliberately: whether ``get_ipython`` carries annotations
+        # varies by IPython version, so the ignore is required against some and redundant against
+        # others. Without it the check passes locally and fails on whatever CI resolves.
+        shell = get_ipython()  # type: ignore[no-untyped-call, unused-ignore]
         return shell is not None and shell.__class__.__name__ == "ZMQInteractiveShell"
     except Exception:
         return False
@@ -343,6 +351,11 @@ class _NotebookProgressBar(tqdm_auto):  # type: ignore[type-arg]
             completed = self.total is not None and self.n >= self.total
             icon = "\u2714" if completed else "\u2718"
             self.set_description(_compose_desc(self._prefix, icon, self._base_desc), refresh=True)
+        else:
+            # Draw the substatus one last time. Only the animation thread renders, and it has
+            # just been stopped, so without this the frame left on screen is whatever phase it
+            # happened to stop on rather than the final one the caller set.
+            self.set_description(_compose_desc(self._prefix, "", self._base_desc), refresh=True)
         _pop_active_bar(self)
         super().close()
 
@@ -490,9 +503,83 @@ def progress_bar(  # noqa: D417
     """
     if _is_disabled() or kwargs.get("disable"):
         return tqdm(*args, **kwargs)
+    # Tested before interactivity, not after. A Jupyter kernel's stderr is a ZMQ stream rather
+    # than a tty, so an ``isatty`` gate placed first makes this branch unreachable -- which is
+    # exactly backwards, since this renderer exists because notebooks are not ttys.
     if _in_notebook():
         return _NotebookProgressBar(*args, spinner_style=spinner_style, show_bar=show_bar, prefix=prefix, **kwargs)
+    # A non-interactive stderr cannot redraw: `\r` stops overwriting, so every animation
+    # frame becomes its own line and a long call fills a log file with spinner states.
+    if not _is_interactive():
+        return tqdm(*args, **kwargs)
     return _AnimatedProgressBar(*args, spinner_style=spinner_style, show_bar=show_bar, prefix=prefix, **kwargs)
+
+
+def remote_spinner_style(device: str) -> tuple[str, str | None]:
+    """Spinner style and prefix for a remote dispatch, as ``(style, prefix)`` for ``progress_bar``.
+
+    On emoji-capable terminals, and in notebooks which render in the browser, this is the
+    ``proto`` style, a pulse bouncing between a computer and a cloud. A terminal that cannot
+    encode it falls back to the dotted spinner with a badge naming the device.
+
+    Args:
+        device (str): The remote device, ``"proto"`` or ``"modal"``.
+
+    Returns:
+        tuple[str, str | None]: The style name and an optional static prefix.
+    """
+    if _in_notebook():
+        return "proto", None
+    encoding = (getattr(sys.stderr, "encoding", "") or "").lower()
+    return ("proto", None) if "utf" in encoding else ("dots", f"[{device}]")
+
+
+@contextmanager
+def remote_progress(device: str) -> Generator[None, None, None]:
+    """Hold a status-only spinner for the round trip to a remote worker.
+
+    Both remote devices use this, so a call reads the same however it was dispatched. Nothing
+    else opens a bar on either path: the tool wrapper's bar belongs to local subprocess
+    execution, and a tool's own bar runs inside the remote container. Without this a remote call
+    shows nothing at all, and the machinery that streams a worker's log output finds no active
+    bar to write into.
+
+    A bar already open is left alone rather than nested, which is what happens under
+    ``ToolPool`` or inside a tool that opened its own.
+
+    Args:
+        device (str): The remote device, used for the opening status and the fallback badge.
+    """
+    if has_active_progress_bar():
+        yield
+        return
+    style, prefix = remote_spinner_style(device)
+    with progress_bar(desc=remote_connecting_status(device), prefix=prefix, spinner_style=style, show_bar=False):
+        yield
+        # Only on the way out of a clean run. The bar's last frame is what stays on screen, so
+        # leaving it mid-phase reads as though the call stopped there. An exception skips this
+        # and leaves the phase it failed in, which is the more useful thing to see.
+        #
+        # The mark rides in the text rather than as a rendered icon, because a status-only bar
+        # closes the same way whether the call succeeded or raised. Carrying it here keeps it
+        # tied to the success path.
+        update_active_substatus(f"{COMPLETE_MARK} Complete")
+
+
+def remote_connecting_status(device: str) -> str:
+    """Spinner text for the wait between dispatching a call and the worker's first report.
+
+    A remote worker reports nothing while its container is scheduled and started, which on a cold
+    start is several seconds of an otherwise motionless spinner. Naming the backend says which
+    machine is being waited on.
+
+    Args:
+        device (str): The remote device, ``"proto"`` or ``"modal"``.
+
+    Returns:
+        str: The status line.
+    """
+    return f"Connecting to {device} container"
 
 
 def set_substatus(message: str, style: str | None = None) -> None:

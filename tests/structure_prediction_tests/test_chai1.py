@@ -76,14 +76,14 @@ def test_msa_to_pqt_without_unpaired_keeps_paired_only(tmp_path):
 @pytest.mark.slow
 @pytest.mark.uses_gpu
 def test_chai1_benchmark(request):
-    """Benchmark chai1-prediction on the MfnG protein + L-tyrosine ligand (cold + warm).
+    """Benchmark chai1-prediction on the MfnG protein + L-tyrosine ligand with MSA (cold + warm).
 
-    Single ~390-residue protein-ligand complex — a representative target for the
-    Chai1 multi-modal predictor without MSA.
+    Single ~390-residue protein-ligand complex. The MSA search is included because it is usually
+    the dominant cost of a real fold, and because nothing else exercises that path.
     """
     complex_ = load_benchmark_complex("MfnG_and_ligand")
     inputs = Chai1Input(complexes=[complex_])
-    config = Chai1Config(use_msa=False, verbose=True)
+    config = Chai1Config(use_msa=True, verbose=True)
 
     result = benchmark_twice(request, "chai1", lambda: run_chai1(inputs=inputs, config=config))
 

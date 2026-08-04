@@ -79,26 +79,33 @@ def test_parade_checkpoint_download_security_runs_in_env() -> None:
     assert "ALL CHECKS PASSED" in output, output
 
 
-def test_parade_custom_checkpoint_override_rejected_on_cloud() -> None:
-    """A caller-supplied checkpoint override (an executable pickle) is refused on device='cloud'."""
+def test_parade_custom_checkpoint_rejected_on_proto() -> None:
+    """Loading a caller's checkpoint executes its code, which Proto's shared service will not do."""
     from proto_tools.tools.sequence_scoring.parade import ParadeActivityConfig
     from proto_tools.tools.sequence_scoring.parade.parade_gradient import (
         ParadeGradientConfig,
         ParadeGradientLossTerm,
     )
 
-    activity_reason = ParadeActivityConfig(checkpoint="https://example.com/evil.ckpt").cloud_unsupported_reason()
-    assert activity_reason is not None and "checkpoint" in activity_reason
-    assert ParadeActivityConfig().cloud_unsupported_reason() is None  # pinned checkpoint is fine on cloud
-    assert (
-        ParadeActivityConfig(checkpoint="checkpoints/model.ckpt").cloud_unsupported_reason() is not None
-    )  # local path too
+    for checkpoint in ("https://example.com/evil.ckpt", "checkpoints/model.ckpt"):
+        reason = ParadeActivityConfig(checkpoint=checkpoint).remote_unsupported_reason("proto")
+        assert reason is not None and "checkpoint" in reason
+
+    assert ParadeActivityConfig().remote_unsupported_reason("proto") is None, "the pinned checkpoint is fine"
 
     gradient = ParadeGradientConfig(
         loss_terms=[ParadeGradientLossTerm(cell_type="c1", direction="max", weight=1.0)],
         checkpoint="https://example.com/evil.ckpt",
     )
-    assert (gradient.cloud_unsupported_reason() or "").find("checkpoint") != -1
+    assert "checkpoint" in (gradient.remote_unsupported_reason("proto") or "")
+
+
+def test_parade_custom_checkpoint_allowed_on_your_own_deployment() -> None:
+    """A Modal workspace belongs to the caller, so running their own checkpoint there is their choice."""
+    from proto_tools.tools.sequence_scoring.parade import ParadeActivityConfig
+
+    config = ParadeActivityConfig(checkpoint="https://example.com/mine.ckpt")
+    assert config.remote_unsupported_reason("modal") is None
 
 
 def test_parade_checkpoint_link_vs_path_and_https_enforcement() -> None:

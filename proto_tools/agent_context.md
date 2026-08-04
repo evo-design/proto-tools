@@ -45,6 +45,7 @@ output. Resolve a tool by registry key (`esm2-embedding`), run-function name
 | `proto-tools docs <tool>` | Intro, applications, usage tips, license |
 | `proto-tools schema <tool> [--input/--config/--output]` | JSON Schema(s) |
 | `proto-tools input/config/output <tool>` | Field-level model docs |
+| `proto-tools signature <tool>` | Imports, symbol names, and required input fields for the call |
 | `proto-tools example-input <tool> [--as-python]` | A minimal valid `Input`, as JSON or as a runnable snippet |
 | `proto-tools example <tool>` | The toolkit example notebook as markdown |
 
@@ -58,21 +59,27 @@ than the rule. `blast-create-db` exports `CreateBlastDbInput` and
 Ask instead of guessing:
 
 ```bash
-proto-tools example-input blast-create-db --as-python
+proto-tools signature blast-create-db
 ```
 
 ```python
 from proto_tools.tools.sequence_alignment.blast.create_blast_db import (
+    CreateBlastDbConfig,
     CreateBlastDbInput,
     run_create_blast_db,
 )
 
 result = run_create_blast_db(
-    CreateBlastDbInput(
-        fasta='.../example_input_fixture.fasta',
-    ),
-)
+    CreateBlastDbInput(fasta=...),
+    CreateBlastDbConfig(),  # optional, omit for defaults
+)  # -> CreateBlastDbOutput
 ```
+
+`signature` is the cheap call: it renders symbol names and required field names
+only, so it costs the same few hundred bytes for every tool. `example-input`
+carries real values and scales with them, which for a structure or a
+model-context-length window means hundreds of KB; reach for it when you want a
+payload to actually run, not when you want the names.
 
 From Python, when you already hold a registry key, call the tool through its
 spec rather than importing anything (there is no `ToolRegistry.run()`):

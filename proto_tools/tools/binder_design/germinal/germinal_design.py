@@ -805,6 +805,11 @@ def example_input() -> GerminalInput:
 
 @tool(
     key="germinal-design",
+    local_only=(
+        "germinal-design is a multi-hour, multi-step design pipeline, which is better run on your "
+        "own machine than billed to a remote worker for a whole campaign. Run locally with "
+        "device='cuda'. For a hosted binder-design run, freebindcraft-design is deployable."
+    ),
     label="Germinal Antibody Design",
     category="binder_design",
     input_class=GerminalInput,

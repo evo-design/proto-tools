@@ -150,6 +150,7 @@ def example_input() -> Any:
 
 @tool(
     key="ensembl-xrefs",
+    local_only="ensembl-xrefs does not use a gpu and does not need an environment, so it can run in process",
     label="Ensembl Xrefs",
     category="database_retrieval",
     input_class=EnsemblXrefsInput,

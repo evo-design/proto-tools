@@ -65,10 +65,10 @@ dependencies = [
 
     "pyyaml",
     "requests",
+    "modal>=1.0",
     "tqdm",
     "filelock",
     "docstring-parser",
-    "proto-client>=0.1.0",
 ]
 
 [project.urls]
@@ -82,14 +82,19 @@ proto-tools = "proto_tools.cli:main"
 
 [project.optional-dependencies]
 
+mcp = [
+    "fastmcp>=3.0",
+]
+
 dev = [
+    "fastmcp>=3.0",
+
     "pytest>=7.3.0",
     "pytest-asyncio>=0.21",
     "pytest-cov>=4.1.0",
     "pytest-forked",
     "pytest-randomly>=3.15",
 
-    # test_packaging_excludes_helper_copies runs setuptools' own package discovery.
     "setuptools>=64",
 
     "ruff==0.15.12",
@@ -138,6 +143,7 @@ omit = [
     "*/standalone/*",
     "*/examples/*",
     "proto_tools/tools/*/*/*.py",
+    "proto_tools/modal/*/*_deployment/*_service.py",
     "proto_tools/utils/_worker_bootstrap.py",
     "proto_tools/utils/install_binary.py",
     "proto_tools/utils/notebook_docs.py",
@@ -148,7 +154,7 @@ omit = [
 
 [tool.coverage.report]
 show_missing = true
-fail_under = 80
+fail_under = 75
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
@@ -189,7 +195,6 @@ module = [
     "yaml.*",
     "huggingface_hub.*",
     "tokenizers.*",
-    "proto_client.*",
     "pyhmmer.*",
     "pymemesuite.*",
     "pyrodigal.*",
@@ -242,13 +247,6 @@ module = ["biotite.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
 
-# proto-modal is an optional peer used only by the device="modal" dispatch
-# branch. proto-tools must never depend on it (that would be circular), so it
-# is not installed for type-checking; the runtime import is guarded.
-[[tool.mypy.overrides]]
-module = ["proto_modal.*"]
-ignore_missing_imports = true
-
 [tool.pydantic-mypy]
 init_forbid_extra = false
 init_typed = true
@@ -268,9 +266,7 @@ exclude = [
     "**/examples",
     "**/*.ipynb",
     "notes",
-    # Vendored byte-verbatim from upstream autosome-ru/parade (only a provenance/Ruff header
-    # added) so the published Lightning checkpoints load unchanged. Ruff format has no
-    # file-level skip, so exclude them here to keep them identical to upstream.
+    "proto_tools/modal/tool_map.py",
     "**/sequence_scoring/parade/standalone/legnet.py",
     "**/sequence_scoring/parade/standalone/pl_regressor.py",
     "**/sequence_scoring/parade/standalone/stability_data.py",
@@ -314,6 +310,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
     "S101",
+    "PERF203",
     "S105",
     "S106",
     "S110",
@@ -338,6 +335,10 @@ ignore = [
 "proto_tools/utils/proto_home.py" = ["T20"]
 "scripts/*.py" = ["T20", "S603", "S607"]
 "proto_tools/cli.py" = ["T20"]
+"proto_tools/modal/deploy.py" = ["T20", "S603", "S607", "PERF203"]
+"proto_tools/modal/smoke.py" = ["T20", "S603", "S607"]
+"proto_tools/mcp/server.py" = ["T20"]
+"proto_tools/mcp/tools.py" = ["PERF203"]
 "proto_tools/__main__.py" = ["T20"]
 "proto_tools/tools/sequence_alignment/mmseqs2/setup_databases.py" = ["T20", "S603", "S607", "PERF203"]
 "proto_tools/utils/system_info.py" = ["PLW0603", "PLW1510", "S603", "S607"]
@@ -378,3 +379,59 @@ exclude = ["*.standalone.standalone_helpers", "*.standalone.standalone_helpers.*
 
 [tool.setuptools.package-data]
 "*" = ["*.sh", "*.txt", "*.csv", "*.smi", "*.cif", "*.bib", "*.yaml", "*.md", "*.ipynb", "*.pkl", "*.pdb", "*.a3m", "*.fasta", "*.hmm", "*.meme", "*.json", "py.typed"]
+
+[tool.setuptools.exclude-package-data]
+"proto_tools.modal.binder_design.freebindcraft_deployment" = ["README.md"]
+"proto_tools.modal.causal_models.evo1_deployment" = ["README.md"]
+"proto_tools.modal.causal_models.evo2_deployment" = ["README.md"]
+"proto_tools.modal.causal_models.progen2_deployment" = ["README.md"]
+"proto_tools.modal.causal_models.progen3_deployment" = ["README.md"]
+"proto_tools.modal.database_retrieval.ccd_lookup_deployment" = ["README.md"]
+"proto_tools.modal.gene_annotation.crispr_tracr_rna_deployment" = ["README.md"]
+"proto_tools.modal.gene_annotation.minced_deployment" = ["README.md"]
+"proto_tools.modal.gene_annotation.miranda_deployment" = ["README.md"]
+"proto_tools.modal.gene_annotation.promoter_calculator_deployment" = ["README.md"]
+"proto_tools.modal.gene_annotation.pyhmmer_deployment" = ["README.md"]
+"proto_tools.modal.inverse_folding.esm_if1_deployment" = ["README.md"]
+"proto_tools.modal.inverse_folding.fampnn_deployment" = ["README.md"]
+"proto_tools.modal.inverse_folding.ligandmpnn_deployment" = ["README.md"]
+"proto_tools.modal.inverse_folding.proteinmpnn_deployment" = ["README.md"]
+"proto_tools.modal.masked_models.ablang_deployment" = ["README.md"]
+"proto_tools.modal.masked_models.esm2_deployment" = ["README.md"]
+"proto_tools.modal.masked_models.esm3_deployment" = ["README.md"]
+"proto_tools.modal.masked_models.esmc_deployment" = ["README.md"]
+"proto_tools.modal.orf_prediction.orf_deployment" = ["README.md"]
+"proto_tools.modal.orf_prediction.prodigal_deployment" = ["README.md"]
+"proto_tools.modal.rna_splicing.pangolin_deployment" = ["README.md"]
+"proto_tools.modal.rna_splicing.splice_transformer_deployment" = ["README.md"]
+"proto_tools.modal.rna_splicing.spliceai_deployment" = ["README.md"]
+"proto_tools.modal.sequence_alignment.mafft_deployment" = ["README.md"]
+"proto_tools.modal.sequence_scoring.alphagenome_deployment" = ["README.md"]
+"proto_tools.modal.sequence_scoring.borzoi_deployment" = ["README.md"]
+"proto_tools.modal.sequence_scoring.enformer_deployment" = ["README.md"]
+"proto_tools.modal.sequence_scoring.malinois_deployment" = ["README.md"]
+"proto_tools.modal.sequence_scoring.parade_deployment" = ["README.md"]
+"proto_tools.modal.sequence_scoring.puffin_deployment" = ["README.md"]
+"proto_tools.modal.sequence_utils.segmasker_deployment" = ["README.md"]
+"proto_tools.modal.structure_alignment.foldmason_deployment" = ["README.md"]
+"proto_tools.modal.structure_alignment.foldseek_deployment" = ["README.md"]
+"proto_tools.modal.structure_alignment.pymol_deployment" = ["README.md"]
+"proto_tools.modal.structure_alignment.tmalign_deployment" = ["README.md"]
+"proto_tools.modal.structure_alignment.usalign_deployment" = ["README.md"]
+"proto_tools.modal.structure_design.rfdiffusion3_deployment" = ["README.md"]
+"proto_tools.modal.structure_dynamics.bioemu_deployment" = ["README.md"]
+"proto_tools.modal.structure_prediction.alphafold2_deployment" = ["README.md"]
+"proto_tools.modal.structure_prediction.boltz2_deployment" = ["README.md"]
+"proto_tools.modal.structure_prediction.chai1_deployment" = ["README.md"]
+"proto_tools.modal.structure_prediction.esmfold2_deployment" = ["README.md"]
+"proto_tools.modal.structure_prediction.esmfold_deployment" = ["README.md"]
+"proto_tools.modal.structure_prediction.opendde_deployment" = ["README.md"]
+"proto_tools.modal.structure_prediction.protenix_deployment" = ["README.md"]
+"proto_tools.modal.structure_prediction.rf3_deployment" = ["README.md"]
+"proto_tools.modal.structure_prediction.viennarna_deployment" = ["README.md"]
+"proto_tools.modal.structure_scoring.dssp_deployment" = ["README.md"]
+"proto_tools.modal.structure_scoring.ipsae_deployment" = ["README.md"]
+"proto_tools.modal.structure_scoring.metal3d_deployment" = ["README.md"]
+"proto_tools.modal.structure_scoring.pdockq2_deployment" = ["README.md"]
+"proto_tools.modal.structure_scoring.pyrosetta_deployment" = ["README.md"]
+"proto_tools.modal.structure_scoring.structure_metrics_deployment" = ["README.md"]

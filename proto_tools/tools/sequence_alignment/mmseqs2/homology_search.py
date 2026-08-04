@@ -32,6 +32,7 @@ from proto_tools.utils import (
     ToolInstance,
     resolve_num_threads,
 )
+from proto_tools.utils.device import RemoteDevice
 from proto_tools.utils.system_info import available_memory_bytes
 
 logger = logging.getLogger(__name__)
@@ -400,6 +401,15 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
         """Number of GPUs the configured search uses; remote search runs over the network and claims none."""
         return 0 if self.search_mode == "remote" else super().gpus_per_instance
 
+    def local_execution_reason(self, device: RemoteDevice) -> str | None:
+        """Remote search is an HTTP call to the ColabFold API, reachable from wherever the caller is."""
+        if self.search_mode == "remote":
+            return (
+                f"search_mode='remote' queries the ColabFold MSA API over HTTP, so device='{device}' "
+                f"would only add a network hop."
+            )
+        return None
+
     @classmethod
     def minimal(cls, **kwargs: Any) -> "Mmseqs2HomologySearchConfig":
         """Cheap-mode defaults for construct-time test infrastructure.
@@ -435,6 +445,11 @@ def example_input() -> Mmseqs2HomologySearchInput:
 
 @tool(
     key="mmseqs2-homology-search",
+    local_only=(
+        "mmseqs2-homology-search runs either against a provisioned corpus too large to stage, or "
+        "against the ColabFold API, which a remote worker would only add a hop to. Run it locally; "
+        "the remote search reaches the same API from your machine."
+    ),
     label="MMseqs2 Homology Search",
     category="sequence_alignment",
     input_class=Mmseqs2HomologySearchInput,

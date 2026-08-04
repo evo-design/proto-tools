@@ -2,14 +2,13 @@
 
 Tests for device="proto" dispatch via proto_tools.proto.dispatch_to_proto.
 
-``proto_client`` is stubbed via ``sys.modules`` so tests run without the
+The absorbed client is stubbed by attribute so tests run without touching the
 real SDK installed and without hitting a network.
 """
 
 from __future__ import annotations
 
 import logging
-import sys
 import types
 from dataclasses import dataclass, field
 from typing import Any
@@ -20,6 +19,7 @@ from pydantic import Field
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.utils import BaseConfig, ConfigField
 from proto_tools.utils.base_config import INTERNAL_STATE_KEY
+from proto_tools.utils.progress import remote_connecting_status
 from proto_tools.utils.tool_io import BaseToolInput
 from tests.tool_infra_tests.test_export_functionality import MockToolOutputBase
 
@@ -57,14 +57,14 @@ class _PreprocessConfig(_CloudConfig):
 
 @dataclass
 class _StubJobStatus:
-    """Stand-in for proto_client.models.JobStatus enum entries."""
+    """Stand-in for the client's job-status values."""
 
     value: str
 
 
 @dataclass
 class _StubJobStatusResponse:
-    """Stand-in for proto_client.models.JobStatusResponse."""
+    """Stand-in for the client's job-status response."""
 
     status: _StubJobStatus
     result: Any = None
@@ -138,7 +138,7 @@ class _StubAssetsNamespace:
 
 
 class _StubProtoClient:
-    """Fake proto_client.ProtoClient for tests."""
+    """Fake ProtoClient for tests."""
 
     last_instance: _StubProtoClient | None = None
 
@@ -150,7 +150,7 @@ class _StubProtoClient:
 
 
 class _FakeProtoAuthError(Exception):
-    """Stand-in for ``proto_client.errors.ProtoAuthError`` (401/403)."""
+    """Stand-in for ``ProtoAuthError`` (401/403)."""
 
     def __init__(self, message: str, *, status_code: int, request_id: str | None = None) -> None:
         super().__init__(message)
@@ -161,14 +161,9 @@ class _FakeProtoAuthError(Exception):
 
 @pytest.fixture
 def fake_proto_client(monkeypatch):
-    """Install a fake ``proto_client`` module + stub key so dispatch_to_proto can construct a client."""
-    fake_module = types.ModuleType("proto_client")
-    fake_module.ProtoClient = _StubProtoClient  # type: ignore[attr-defined]
-    fake_errors = types.ModuleType("proto_client.errors")
-    fake_errors.ProtoAuthError = _FakeProtoAuthError  # type: ignore[attr-defined]
-    fake_module.errors = fake_errors  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "proto_client", fake_module)
-    monkeypatch.setitem(sys.modules, "proto_client.errors", fake_errors)
+    """Point the client at a stub and set a key so dispatch_to_proto can construct one."""
+    monkeypatch.setattr("proto_tools.proto._client.ProtoClient", _StubProtoClient)
+    monkeypatch.setattr("proto_tools.proto._client.ProtoAuthError", _FakeProtoAuthError)
     monkeypatch.setenv("PROTO_API_KEY", "test-stub-key")
 
     # Clear the lru_cache so each test gets a fresh client.
@@ -201,7 +196,7 @@ def arm_stub_client(monkeypatch):
     """Helper: monkey-patch ``_StubProtoClient.__init__`` to seed tools/assets state at construction.
 
     Required because the dispatcher constructs ``ProtoClient`` lazily inside the
-    call path, so we can't reach into ``last_instance`` before the SDK call has
+    call path, so we cannot reach into ``last_instance`` before the call has
     already happened. Each test calls ``arm_stub_client(setup=...)`` to inject
     output, raise_on_run, or asset state into the stub at construction time.
     """
@@ -242,67 +237,6 @@ def _register_cloud_tool(
     return registry.get(key)
 
 
-# ─ cloud hostability gate (license redistribution) ───────────────────────────
-
-
-def test_is_proto_hostable_reads_redistribution(monkeypatch):
-    """``is_proto_hostable`` reflects the tool's license ``redistribution`` flag, failing closed."""
-    from proto_tools.proto import is_proto_hostable
-
-    monkeypatch.setattr(ToolRegistry, "get_license", lambda key: {"redistribution": True})
-    assert is_proto_hostable("any-tool") is True
-
-    monkeypatch.setattr(ToolRegistry, "get_license", lambda key: {"redistribution": False})
-    assert is_proto_hostable("any-tool") is False
-
-    # Missing license, missing field, and unknown key all fail closed.
-    monkeypatch.setattr(ToolRegistry, "get_license", lambda key: None)
-    assert is_proto_hostable("any-tool") is False
-
-    monkeypatch.setattr(ToolRegistry, "get_license", lambda key: {})
-    assert is_proto_hostable("any-tool") is False
-
-    def _raise(key):
-        raise ValueError("unknown tool")
-
-    monkeypatch.setattr(ToolRegistry, "get_license", _raise)
-    assert is_proto_hostable("any-tool") is False
-
-
-def test_is_proto_hostable_fails_closed_on_malformed_license(monkeypatch):
-    """A corrupt/unreadable license.yaml (a non-ValueError from get_license) blocks cloud instead of crashing the run."""
-    import yaml
-
-    from proto_tools.proto import is_proto_hostable
-
-    def _raise_yaml(key):
-        raise yaml.YAMLError("could not parse license.yaml")
-
-    monkeypatch.setattr(ToolRegistry, "get_license", _raise_yaml)
-    assert is_proto_hostable("any-tool") is False
-
-    def _raise_os(key):
-        raise OSError("permission denied reading license.yaml")
-
-    monkeypatch.setattr(ToolRegistry, "get_license", _raise_os)
-    assert is_proto_hostable("any-tool") is False
-
-
-def test_proto_blocks_non_redistributable_tool(fake_proto_client, arm_stub_client, monkeypatch, clean_registry):
-    """device='proto' on a non-redistributable tool fails fast with a clear error and never dispatches."""
-    arm_stub_client(lambda c: setattr(c.tools, "output_to_return", {"result": "should-not-run"}))
-    spec = _register_cloud_tool(clean_registry, "gated-tool")
-
-    # This tool's license forbids redistribution → not hostable on Proto's cloud.
-    monkeypatch.setattr(ToolRegistry, "get_license", lambda key: {"redistribution": False})
-
-    with pytest.raises(ValueError, match="redistribution"):
-        spec.function(_CloudInput(payload="x"), _CloudConfig(device="proto"))
-
-    # The gate is purely local: no client constructed, no submit attempted.
-    assert fake_proto_client.last_instance is None
-
-
 def test_proto_blocks_unsupported_config(fake_proto_client, clean_registry):
     """device='proto' with a config whose ``remote_unsupported_reason()`` is non-None fails fast, never dispatches."""
 
@@ -324,18 +258,28 @@ def test_base_config_remote_unsupported_reason_defaults_none():
     assert _CloudConfig().remote_unsupported_reason("proto") is None
 
 
-def test_local_file_tools_declare_cloud_unsupported():
-    """Local-file tools (blast local-DB search, pyhmmer hmmscan/hmmsearch) declare themselves cloud-unsupported."""
-    from proto_tools.tools.gene_annotation.pyhmmer.hmmscan import PyHmmscanConfig
-    from proto_tools.tools.gene_annotation.pyhmmer.hmmsearch import PyHmmsearchConfig
+def test_config_dependent_local_file_refusal():
+    """A refusal that depends on how the tool is configured stays on the config."""
     from proto_tools.tools.sequence_alignment.blast.blast_search import BlastSearchConfig
 
     assert BlastSearchConfig(search_mode="local", local_db="/db").remote_unsupported_reason("proto") is not None
     assert (
         BlastSearchConfig(search_mode="online").remote_unsupported_reason("proto") is None
     )  # online (NCBI) is cloud-OK
-    assert PyHmmscanConfig().remote_unsupported_reason("proto") is not None
-    assert PyHmmsearchConfig().remote_unsupported_reason("proto") is not None
+
+
+def test_tool_level_local_file_refusal():
+    """A tool that can never run remotely declares it statically, so listing needs no config.
+
+    ``foldseek-rbh`` is the case that motivates the split: its config cannot be constructed at
+    all without ``local_db``, so a config-based answer is unreachable.
+    """
+    from proto_tools.tools import ToolRegistry
+
+    specs = {spec.key: spec for spec in ToolRegistry.list_all()}
+    for key in ("pyhmmer-hmmscan", "pyhmmer-hmmsearch", "foldseek-rbh", "blast-create-db"):
+        assert specs[key].local_only, f"{key} should declare local_only"
+    assert specs["blast-search"].local_only is None, "blast-search is deployable in online mode"
 
 
 def test_local_resource_override_configs_declare_cloud_unsupported():
@@ -529,7 +473,7 @@ def test_device_cloud_preprocesses_before_dispatching(fake_proto_client, arm_stu
 
 
 def test_device_cpu_runs_locally(fake_proto_client, clean_registry):
-    """Non-cloud devices must still run locally, even when fake_proto_client is installed."""
+    """Local devices must still run locally, even with a key configured and the client stubbed."""
 
     def _local_impl(inputs, config, instance=None):
         del config, instance
@@ -623,39 +567,11 @@ def test_device_cloud_noop_leaves_caller_config_untouched(clean_registry):
 def test_no_api_key_raises_cloud_status(monkeypatch, clean_registry):
     """device='proto' with no PROTO_API_KEY surfaces the set-up-your-key guidance."""
     monkeypatch.delenv("PROTO_API_KEY", raising=False)
-    # Need a stub proto_client so the ImportError path doesn't fire first.
-    fake_module = types.ModuleType("proto_client")
-    fake_module.ProtoClient = _StubProtoClient  # type: ignore[attr-defined]
-    fake_errors = types.ModuleType("proto_client.errors")
-    fake_errors.ProtoAuthError = _FakeProtoAuthError  # type: ignore[attr-defined]
-    fake_module.errors = fake_errors  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "proto_client", fake_module)
-    monkeypatch.setitem(sys.modules, "proto_client.errors", fake_errors)
+    monkeypatch.setattr("proto_tools.proto._client.ProtoClient", _StubProtoClient)
+    monkeypatch.setattr("proto_tools.proto._client.ProtoAuthError", _FakeProtoAuthError)
     spec = _register_cloud_tool(clean_registry, "no-key")
 
     with pytest.raises(NotImplementedError, match="workspace/keys"):
-        spec.function(_CloudInput(payload="x"), _CloudConfig(device="proto"))
-
-
-def test_missing_proto_client_raises_install_hint(monkeypatch, clean_registry):
-    """If proto-client isn't installed, the user gets a `pip install proto-client` hint."""
-    import builtins
-
-    monkeypatch.delitem(sys.modules, "proto_client", raising=False)
-    monkeypatch.delitem(sys.modules, "proto_client.errors", raising=False)
-    real_import = builtins.__import__
-
-    def _blocked_import(name, *args, **kwargs):
-        if name == "proto_client" or name.startswith("proto_client."):
-            raise ImportError(f"No module named {name!r}")
-        return real_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", _blocked_import)
-    monkeypatch.setenv("PROTO_API_KEY", "test-stub-key")
-
-    spec = _register_cloud_tool(clean_registry, "no-sdk")
-
-    with pytest.raises(ImportError, match=r"pip install proto-client"):
         spec.function(_CloudInput(payload="x"), _CloudConfig(device="proto"))
 
 
@@ -678,7 +594,7 @@ def test_transport_error_propagates_to_caller(fake_proto_client, arm_stub_client
 
 
 def test_real_tool_failure_propagates_to_caller(fake_proto_client, arm_stub_client, clean_registry):
-    """A RuntimeError from proto-client (failed/cancelled job) propagates with the original message."""
+    """A RuntimeError from a failed or cancelled job propagates with the original message."""
     arm_stub_client(
         lambda c: setattr(c.tools, "raise_on_run", RuntimeError("Job fc-1 failed: ValueError: chain 'A' not present"))
     )
@@ -689,7 +605,7 @@ def test_real_tool_failure_propagates_to_caller(fake_proto_client, arm_stub_clie
 
 
 def test_unexpected_result_type_raises(fake_proto_client, arm_stub_client, clean_registry):
-    """If proto-client returns a non-conforming result, cloud dispatch flags it."""
+    """If the server returns a non-conforming result, remote dispatch flags it."""
     arm_stub_client(lambda c: setattr(c.tools, "output_to_return", {"unexpected": "ok"}))
     spec = _register_cloud_tool(clean_registry, "type-check-tool")
 
@@ -702,7 +618,7 @@ def test_unexpected_result_type_raises(fake_proto_client, arm_stub_client, clean
 
 @dataclass
 class _StubLogRecord:
-    """Stand-in for proto_client.models.LogRecord."""
+    """Stand-in for a streamed log record."""
 
     msg: str
     level: str = "info"
@@ -714,7 +630,7 @@ class _StubLogRecord:
 
 @dataclass
 class _StubLogsEnd:
-    """Stand-in for proto_client.models.LogsEnd terminator."""
+    """Stand-in for the terminator that ends a log stream."""
 
     type: str = "end"
     reason: str = "completed"
@@ -792,24 +708,25 @@ def test_proto_dispatch_opens_cloud_spinner(fake_proto_client, arm_stub_client, 
     arm_stub_client(lambda c: setattr(c.tools, "output_to_return", {"result": "ok"}))
     spec = _register_cloud_tool(clean_registry, "spinner-tool")
 
-    # Spy on ``progress_bar`` to capture how dispatch invokes it (kwargs are the contract).
-    import proto_tools.proto as cloud_mod
+    # Spy where the bar is now opened: both remote devices share ``remote_progress``, so the
+    # call lives in utils.progress rather than in either device's module.
+    import proto_tools.utils.progress as progress_mod
 
     captured: dict[str, Any] = {}
-    real_progress_bar = cloud_mod.progress_bar
+    real_progress_bar = progress_mod.progress_bar
 
     def _spy(*args, **kwargs):
         captured.update(kwargs)
         return real_progress_bar(*args, **kwargs)
 
-    monkeypatch.setattr(cloud_mod, "progress_bar", _spy)
+    monkeypatch.setattr(progress_mod, "progress_bar", _spy)
 
     spec.function(_CloudInput(payload="x"), _CloudConfig(device="proto"))
 
-    # Emoji terminals get the "proto" pulse style (no separate prefix); non-UTF falls back to dots + [cloud].
-    assert (captured.get("spinner_style"), captured.get("prefix")) in {("proto", None), ("dots", "[cloud]")}
-    # The description shows the live phase, opening at "queued".
-    assert captured.get("desc") == "queued"
+    # Emoji terminals get the "proto" pulse style (no separate prefix); non-UTF falls back to dots + [proto].
+    assert (captured.get("spinner_style"), captured.get("prefix")) in {("proto", None), ("dots", "[proto]")}
+    # Opens by naming the backend being waited on; the poll loop replaces it with real job status.
+    assert captured.get("desc") == remote_connecting_status("proto")
     # status-only spinner: no progress bar widget, only the spinner + description
     assert captured.get("show_bar") is False
 
@@ -981,31 +898,24 @@ def test_base_config_rejects_malformed_devices(device):
         BaseConfig(device=device)
 
 
-# ─ device='modal' routing (delegates to the optional proto-modal package) ────
+# ─ device='modal' routing (delegates to proto_tools.modal) ───────────────────
 
 
-def _install_fake_proto_modal(monkeypatch, dispatch):
-    """Inject a stand-in ``proto_modal`` so routing tests run without the real package.
-
-    CI has no proto-modal (it is an optional peer, never a proto-tools
-    dependency), so the router's ``from proto_modal import dispatch_to_modal``
-    must be satisfiable by a fake.
-    """
-    import sys
-    import types
-
-    fake = types.ModuleType("proto_modal")
-    fake.dispatch_to_modal = dispatch
+def _patch_modal_dispatch(monkeypatch, dispatch):
+    """Replace both Modal dispatch entry points so routing tests reach no real workspace."""
+    monkeypatch.setattr("proto_tools.modal.dispatch_to_modal", dispatch)
     # The router imports both forms; the batch one carries chunks, one config each, when a tool
     # sets max_chunk_size.
-    fake.dispatch_batch_to_modal = lambda key, inputs_list, configs: [
-        dispatch(key, chunk, one) for chunk, one in zip(inputs_list, configs, strict=True)
-    ]
-    monkeypatch.setitem(sys.modules, "proto_modal", fake)
+    monkeypatch.setattr(
+        "proto_tools.modal.dispatch_batch_to_modal",
+        lambda key, inputs_list, configs: [
+            dispatch(key, chunk, one) for chunk, one in zip(inputs_list, configs, strict=True)
+        ],
+    )
 
 
 def test_device_modal_delegates_and_returns_validated_output(clean_registry, monkeypatch):
-    """device='modal' routes to proto_modal.dispatch_to_modal and validates its result."""
+    """device='modal' routes to the Modal dispatcher and validates its result."""
     captured = {}
 
     def _dispatch(key, inputs, config):
@@ -1014,7 +924,7 @@ def test_device_modal_delegates_and_returns_validated_output(clean_registry, mon
         captured["device"] = config.device
         return _CloudOutput(result="from-modal")
 
-    _install_fake_proto_modal(monkeypatch, _dispatch)
+    _patch_modal_dispatch(monkeypatch, _dispatch)
     spec = _register_cloud_tool(clean_registry, "modal-tool")  # uses_gpu; local impl asserts if reached
 
     result = spec.function(_CloudInput(payload="hi"), _CloudConfig(device="modal"))
@@ -1038,7 +948,7 @@ def test_device_modal_no_ops_trivially_local_tools(clean_registry, monkeypatch):
     def _dispatch_should_not_run(key, inputs, config):
         raise AssertionError("a local_cpu tool has nothing to gain from Modal and must stay local")
 
-    _install_fake_proto_modal(monkeypatch, _dispatch_should_not_run)
+    _patch_modal_dispatch(monkeypatch, _dispatch_should_not_run)
 
     def _local_impl(inputs, config, instance=None):
         del instance
@@ -1072,7 +982,7 @@ def test_device_modal_blocks_unsupported_config(clean_registry, monkeypatch):
     def _dispatch_should_not_run(key, inputs, config):
         raise AssertionError("must not dispatch a config that declares itself unsupported")
 
-    _install_fake_proto_modal(monkeypatch, _dispatch_should_not_run)
+    _patch_modal_dispatch(monkeypatch, _dispatch_should_not_run)
     spec = _register_cloud_tool(clean_registry, "modal-tool-3", config_class=_ModalUnsupportedConfig)
 
     with pytest.raises(ValueError, match="needs a local database file"):
@@ -1124,3 +1034,103 @@ def test_batch_dispatch_of_nothing_contacts_no_server(fake_proto_client, arm_stu
 
     assert dispatch_batch_to_proto("batch-tool-empty", []) == []
     assert fake_proto_client.last_instance is None
+
+
+# --- transport retry -------------------------------------------------------
+
+
+class _FakeResponse:
+    """Minimal stand-in for a requests.Response in retry tests."""
+
+    def __init__(self, status_code: int, headers: dict[str, str] | None = None) -> None:
+        self.status_code = status_code
+        self.headers = headers or {}
+        self.ok = status_code < 400
+
+    def close(self) -> None:
+        """No-op; the retry path closes a response before sleeping."""
+
+
+@pytest.fixture
+def no_sleep(monkeypatch):
+    """Collapse backoff so retry tests do not actually wait."""
+    from proto_tools.proto import _client
+
+    monkeypatch.setattr(_client.time, "sleep", lambda _s: None)
+
+
+def test_transient_status_is_retried_then_succeeds(no_sleep):
+    """A 503 mid-poll must be re-sent, not surfaced — the wrapper's own retry would resubmit the job."""
+    from proto_tools.proto._client import _request_with_retry
+
+    attempts = {"n": 0}
+
+    def _flaky(method, url, **kwargs):
+        attempts["n"] += 1
+        return _FakeResponse(503) if attempts["n"] == 1 else _FakeResponse(200)
+
+    response = _request_with_retry(types.SimpleNamespace(request=_flaky), "GET", "http://x")
+    assert attempts["n"] == 2
+    assert response.status_code == 200
+
+
+def test_client_error_is_not_retried(no_sleep):
+    """A 422 describes the request itself, so repeating it only wastes round trips."""
+    from proto_tools.proto._client import _request_with_retry
+
+    attempts = {"n": 0}
+
+    def _reject(method, url, **kwargs):
+        attempts["n"] += 1
+        return _FakeResponse(422)
+
+    _request_with_retry(types.SimpleNamespace(request=_reject), "GET", "http://x")
+    assert attempts["n"] == 1
+
+
+def test_connection_error_retries_then_reraises(no_sleep):
+    """Transport faults get a bounded number of attempts, then propagate unchanged."""
+    import requests
+
+    from proto_tools.proto._client import _MAX_RETRIES, _request_with_retry
+
+    attempts = {"n": 0}
+
+    def _down(method, url, **kwargs):
+        attempts["n"] += 1
+        raise requests.ConnectionError("down")
+
+    with pytest.raises(requests.ConnectionError):
+        _request_with_retry(types.SimpleNamespace(request=_down), "GET", "http://x")
+    assert attempts["n"] == _MAX_RETRIES + 1
+
+
+def test_retry_after_is_honored_and_capped():
+    """A rate-limited caller waits as long as the server asked, but not unboundedly."""
+    from proto_tools.proto._client import _RETRY_AFTER_MAX, _backoff_delay
+
+    assert _backoff_delay(0, _FakeResponse(429, {"Retry-After": "7"})) == 7.0
+    assert _backoff_delay(0, _FakeResponse(429, {"Retry-After": "99999"})) == _RETRY_AFTER_MAX
+    # An HTTP-date Retry-After is not parsed; the caller falls back to its own backoff.
+    assert _backoff_delay(0, _FakeResponse(429, {"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"})) > 0
+
+
+def test_submit_sends_an_idempotency_key():
+    """Retrying a submit must return the job already created, which needs a key on every send."""
+    from proto_tools.proto._client import _ToolsNamespace
+
+    sent: dict[str, object] = {}
+
+    class _SubmitResponse(_FakeResponse):
+        def json(self) -> dict[str, str]:
+            return {"job_id": "fc-1"}
+
+    class _Session:
+        def request(self, method: str, url: str, **kwargs: object) -> _SubmitResponse:
+            sent.update(kwargs)
+            return _SubmitResponse(200)
+
+    job_id = _ToolsNamespace(_Session(), "https://example.test").submit("some-tool", inputs={}, config={})
+
+    assert job_id == "fc-1"
+    assert "Idempotency-Key" in sent["headers"]

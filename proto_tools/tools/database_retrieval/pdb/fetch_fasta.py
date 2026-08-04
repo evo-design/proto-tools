@@ -113,6 +113,7 @@ def example_input() -> Any:
 
 @tool(
     key="pdb-fetch-fasta",
+    local_only="pdb-fetch-fasta does not use a gpu and does not need an environment, so it can run in process",
     label="PDB Fetch FASTA",
     category="database_retrieval",
     input_class=PdbFetchFastaInput,

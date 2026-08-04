@@ -7,8 +7,8 @@ import logging
 from typing import Any, ClassVar, Literal
 
 from proto_tools.tools.masked_models.shared_data_models import (
-    MaskedModelInput,
     MaskedModelSampleConfig,
+    MaskedModelSampleInput,
     MaskedModelSampleOutput,
     build_masked_model_samples,
 )
@@ -32,7 +32,7 @@ ESM3_MODEL_CHECKPOINTS = Literal["esm3_sm_open_v1",]
 # Data Models
 # ============================================================================
 # Input:
-ESM3SampleInput = MaskedModelInput
+ESM3SampleInput = MaskedModelSampleInput
 
 
 # Output:

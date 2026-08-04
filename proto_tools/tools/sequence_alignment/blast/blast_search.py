@@ -516,6 +516,15 @@ class BlastSearchConfig(BaseConfig):
             )
         return None
 
+    def local_execution_reason(self, device: RemoteDevice) -> str | None:
+        """Online search is an HTTP call to NCBI, so a remote worker would only add a hop."""
+        if self.search_mode == "online":
+            return (
+                f"search_mode='online' submits to NCBI QBLAST over HTTP, so device='{device}' would "
+                f"only add a network hop and NCBI's queue would dominate either way."
+            )
+        return None
+
 
 # ============================================================================
 # Tool Implementation

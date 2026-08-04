@@ -1640,3 +1640,101 @@ def test_send_keeps_worker_alive_on_generic_error():
     with pytest.raises(RuntimeError, match="chain 'A' not present"):
         worker.send({"op": "x"})
     worker.stop.assert_not_called()
+
+
+# ── Poisoned CUDA context ────────────────────────────────────────────────────
+@pytest.mark.parametrize(
+    "error_message",
+    [
+        pytest.param("torch.AcceleratorError: CUDA error: device-side assert triggered", id="torch_assert"),
+        pytest.param("RuntimeError: CUDA error: an illegal memory access was encountered", id="torch_illegal_access"),
+        pytest.param(
+            "XlaRuntimeError: INTERNAL: external/xla/xla/stream_executor/cuda/cuda_driver.cc:1234: "
+            "CUDA_ERROR_ILLEGAL_ADDRESS: an illegal memory access was encountered",
+            id="xla_illegal_access",
+        ),
+        pytest.param("XlaRuntimeError: INTERNAL: ... CUDA_ERROR_LAUNCH_FAILED", id="xla_launch_failed"),
+    ],
+)
+def test_send_stops_worker_on_poisoned_cuda_context(error_message: str):
+    """A context-fatal fault retires the worker, whether torch or XLA reported it."""
+    worker = _build_error_worker(error_message)
+    with pytest.raises(RuntimeError, match="worker error"):
+        worker.send({"op": "x"})
+    worker.stop.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "error_message",
+    [
+        pytest.param(
+            "torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 20.00 GiB", id="torch_allocator_oom"
+        ),
+        pytest.param("XlaRuntimeError: RESOURCE_EXHAUSTED: Out of memory while trying to allocate", id="xla_oom"),
+    ],
+)
+def test_send_keeps_worker_alive_on_out_of_memory(error_message: str):
+    """OOM is recoverable and must not retire the worker, unlike a context fault.
+
+    Covers the allocator path both backends take. A raw-runtime exhaustion reported as
+    "CUDA error: out of memory" is a known exception, documented at the signature list.
+    """
+    worker = _build_error_worker(error_message)
+    with pytest.raises(RuntimeError, match="worker error"):
+        worker.send({"op": "x"})
+    worker.stop.assert_not_called()
+
+
+def test_worker_is_replaced_after_a_poisoned_cuda_context(tmp_path: Path):
+    """The faulting request gets its own error, the worker retires, and the next call gets a fresh one."""
+    marker = tmp_path / "faulted"
+    script = tmp_path / "cuda_fault_script.py"
+    script.write_text(
+        textwrap.dedent(f"""\
+        from pathlib import Path
+
+        _MARKER = Path({str(marker)!r})
+
+        def dispatch(input_dict):
+            if not _MARKER.exists():
+                _MARKER.touch()
+                raise RuntimeError("CUDA error: device-side assert triggered")
+            return {{"served": True}}
+        """)
+    )
+    worker = _make_worker(script)
+    try:
+        with pytest.raises(RuntimeError, match="device-side assert triggered"):
+            worker.send({})
+        assert not worker.alive
+
+        assert worker.send({}) == {"served": True}
+        assert worker.alive
+    finally:
+        worker.stop()
+
+
+def test_worker_survives_cuda_out_of_memory(tmp_path: Path):
+    """An OOM leaves the same process serving, so a warm model is not thrown away."""
+    script = tmp_path / "oom_script.py"
+    script.write_text(
+        textwrap.dedent("""\
+        def dispatch(input_dict):
+            if input_dict.get("fail"):
+                raise RuntimeError("CUDA out of memory. Tried to allocate 20.00 GiB")
+            return {"served": True}
+        """)
+    )
+    worker = _make_worker(script)
+    try:
+        assert worker.send({}) == {"served": True}
+        pid = worker._process.pid
+
+        with pytest.raises(RuntimeError, match="out of memory"):
+            worker.send({"fail": True})
+
+        assert worker.alive
+        assert worker.send({}) == {"served": True}
+        assert worker._process.pid == pid
+    finally:
+        worker.stop()

@@ -15,6 +15,7 @@ import ast
 import pathlib
 
 from proto_tools.tools.tool_registry import ToolRegistry
+from tests.conftest import DEVICE_PINNED_BENCHMARKS
 
 _TESTS_ROOT = pathlib.Path(__file__).parent.parent
 
@@ -38,6 +39,10 @@ _EXEMPT_TOOLS = frozenset(
 # when you add its benchmark; do NOT add new entries — write the benchmark
 # instead. The test below keeps this set honest.
 _KNOWN_MISSING: frozenset[str] = frozenset()
+
+# Defined in conftest because the report writer needs it too: a pinned benchmark measures this
+# machine, so its report must not carry the run's remote backend label.
+_DEVICE_PINNED_BENCHMARKS = DEVICE_PINNED_BENCHMARKS
 
 
 def _benchmarked_tool_keys() -> set[str]:
@@ -128,4 +133,57 @@ def test_benchmark_keys_are_registered() -> None:
     assert not unknown, (
         f"@pytest.mark.benchmark names that match no registered tool: {unknown}. "
         "Fix the marker argument to the tool's registry key."
+    )
+
+
+def _benchmarks_pinning_device() -> dict[str, str]:
+    """Return ``{tool_key: file:line}`` for benchmarks passing an explicit ``device=``.
+
+    Walks the body of each ``@pytest.mark.benchmark`` function looking for a ``device=`` keyword on
+    any call, which is how a config gets one. An AST scan rather than a run, so the guard costs
+    nothing and does not need the tools installed.
+    """
+    found: dict[str, str] = {}
+    for path in _TESTS_ROOT.rglob("test_*.py"):
+        tree = ast.parse(path.read_text(), str(path))
+        for node in ast.walk(tree):
+            for dec in getattr(node, "decorator_list", []):
+                if not (
+                    isinstance(dec, ast.Call)
+                    and isinstance(dec.func, ast.Attribute)
+                    and dec.func.attr == "benchmark"
+                    and dec.args
+                    and isinstance(dec.args[0], ast.Constant)
+                ):
+                    continue
+                for inner in ast.walk(node):
+                    if isinstance(inner, ast.Call) and any(kw.arg == "device" for kw in inner.keywords):
+                        found[dec.args[0].value] = f"{path.name}:{inner.lineno}"
+    return found
+
+
+def test_benchmarks_do_not_pin_device() -> None:
+    """A benchmark must let the harness choose the device, or it cannot measure a deployment.
+
+    ``--use-modal`` and ``--use-proto`` route a run by patching the ``device`` default on every
+    config class. An explicit ``device=`` in the test body overrides that, so the benchmark quietly
+    runs here and reports local timings as though they came from the remote backend — a wrong
+    answer that looks like a right one.
+    """
+    pinned = _benchmarks_pinning_device()
+    unexplained = sorted((key, where) for key, where in pinned.items() if key not in _DEVICE_PINNED_BENCHMARKS)
+    assert not unexplained, (
+        f"Benchmarks pin device=, which defeats --use-modal/--use-proto: {unexplained}. Drop the "
+        f"argument (the config default is already the right local device), or add the tool to "
+        f"_DEVICE_PINNED_BENCHMARKS with the reason it can only run locally."
+    )
+
+
+def test_device_pinned_exemptions_are_still_pinned() -> None:
+    """The exemption list may not outlive the pins it excuses."""
+    pinned = _benchmarks_pinning_device()
+    stale = sorted(set(_DEVICE_PINNED_BENCHMARKS) - set(pinned))
+    assert not stale, (
+        f"_DEVICE_PINNED_BENCHMARKS names benchmarks that no longer pin a device: {stale}. "
+        f"Remove them — the exemption is no longer needed."
     )

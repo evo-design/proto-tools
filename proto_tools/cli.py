@@ -229,6 +229,82 @@ def _cmd_schema(args: argparse.Namespace) -> int:
     return 0
 
 
+def _signature_payload(spec: ToolSpec) -> dict[str, Any]:
+    """Collect the symbol names and import modules that make up a tool's call surface."""
+    return {
+        "key": spec.key,
+        "run_function": spec.function.__name__,
+        "input_class": spec.input_model.__name__,
+        "config_class": spec.config_model.__name__,
+        "output_class": spec.output_model.__name__,
+        "modules": {
+            "run_function": spec.function.__module__,
+            "input_class": spec.input_model.__module__,
+            "config_class": spec.config_model.__module__,
+            "output_class": spec.output_model.__module__,
+        },
+        "required_input_fields": [name for name, field in spec.input_model.model_fields.items() if field.is_required()],
+    }
+
+
+def _render_signature(spec: ToolSpec) -> str:
+    """Render a tool's call surface: imports, symbol names, and required input fields.
+
+    Everything here is fixed-size, so surveying tools costs the same whether the tool
+    takes a peptide or a 524,288 bp window. ``example-input`` carries real values and
+    scales with them; this does not, which is what makes it the cheap discovery path.
+
+    ``Output`` is named but not imported: callers never construct one, so importing it
+    would leave an unused name in pasted code, and for 24 of the registered tools it
+    lives in a different module from the ``Input`` anyway.
+
+    Args:
+        spec (ToolSpec): The resolved tool.
+
+    Returns:
+        str: Python source sketching the call, with ``...`` in place of argument values.
+    """
+    run_fn = spec.function.__name__
+    input_cls = spec.input_model.__name__
+    config_cls = spec.config_model.__name__
+
+    by_module: dict[str, set[str]] = {}
+    for symbol, module in (
+        (input_cls, spec.input_model.__module__),
+        (config_cls, spec.config_model.__module__),
+        (run_fn, spec.function.__module__),
+    ):
+        by_module.setdefault(module, set()).add(symbol)
+    imports = "\n".join(
+        f"from {module} import (\n" + "".join(f"    {s},\n" for s in sorted(symbols)) + ")"
+        for module, symbols in sorted(by_module.items())
+    )
+
+    required = [name for name, field in spec.input_model.model_fields.items() if field.is_required()]
+    args = ", ".join(f"{name}=..." for name in required)
+    call = (
+        f"result = {run_fn}(\n"
+        f"    {input_cls}({args}),\n"
+        f"    {config_cls}(),  # optional, omit for defaults\n"
+        f")  # -> {spec.output_model.__name__}"
+    )
+
+    hint = f"\n\n# Field-level docs: proto-tools input|config|output {spec.key}"
+    return f"{imports}\n\n{call}{hint}\n"
+
+
+def _cmd_signature(args: argparse.Namespace) -> int:
+    """``proto-tools signature <tool> [--json]``."""
+    from proto_tools.utils.tool_docs import _normalize_tool_key
+
+    spec = ToolRegistry.get(_normalize_tool_key(args.tool))
+    if args.json:
+        print(_dump_json(_signature_payload(spec)))
+        return 0
+    print(_render_signature(spec), end="")
+    return 0
+
+
 def _render_example_as_python(spec: ToolSpec, example: BaseModel) -> str:
     """Render a runnable call to ``spec``, with the symbol names spelled out.
 
@@ -373,6 +449,27 @@ def _cmd_eject_standalone(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_deploy(args: argparse.Namespace) -> int:
+    """Deploy tools into a Modal workspace you own."""
+    from proto_tools.modal.deploy import main as deploy_main
+
+    return deploy_main(args.rest, prog="proto-tools deploy")
+
+
+def _cmd_mcp(args: argparse.Namespace) -> int:
+    """Run the MCP server over stdio."""
+    try:
+        from proto_tools.mcp import main as mcp_main
+    except ImportError as exc:
+        # fastmcp ships in the 'mcp' extra, so a plain install reaches here.
+        print(f"error: the MCP server needs the 'mcp' extra ({exc}).", file=sys.stderr)
+        print('Install it with: pip install "proto-tools[mcp]"', file=sys.stderr)
+        return 2
+
+    mcp_main(args.rest)
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="proto-tools",
@@ -464,6 +561,14 @@ def _build_parser() -> argparse.ArgumentParser:
     p_schema_g.add_argument("--output", action="store_true")
     p_schema.set_defaults(func=_cmd_schema)
 
+    p_signature = sub.add_parser(
+        "signature",
+        help="Imports, symbol names, and required input fields for the tool's call. No example payload.",
+    )
+    p_signature.add_argument("tool")
+    p_signature.add_argument("--json", action="store_true", help="Emit the symbol names as JSON.")
+    p_signature.set_defaults(func=_cmd_signature)
+
     p_example_input = sub.add_parser("example-input", help="A minimal valid Input for the tool.")
     p_example_input.add_argument("tool")
     p_example_input.add_argument(
@@ -508,11 +613,28 @@ def _build_parser() -> argparse.ArgumentParser:
     p_url.add_argument("tool")
     p_url.set_defaults(func=_cmd_url)
 
+    p_deploy = sub.add_parser(
+        "deploy",
+        help="Deploy tools into your own Modal workspace, and smoke-test them.",
+    )
+    p_deploy.set_defaults(func=_cmd_deploy)
+
+    p_mcp = sub.add_parser("mcp", help="Run the MCP server over stdio (needs the 'mcp' extra).")
+    p_mcp.set_defaults(func=_cmd_mcp)
+
     return parser
+
+
+_PASSTHROUGH = {"deploy": _cmd_deploy, "mcp": _cmd_mcp}
 
 
 def main(argv: list[str] | None = None) -> int:
     """Entry point. Returns a process exit code."""
+    args_in = sys.argv[1:] if argv is None else argv
+    # These own their whole option surface, which argparse would try to claim first.
+    if args_in and args_in[0] in _PASSTHROUGH:
+        return _PASSTHROUGH[args_in[0]](argparse.Namespace(rest=args_in[1:]))
+
     parser = _build_parser()
     args = parser.parse_args(argv)
     try:

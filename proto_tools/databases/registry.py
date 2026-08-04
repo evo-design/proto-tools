@@ -121,8 +121,13 @@ class DatasetEntry(BaseModel):
         mmseqs_flags (MmseqsFlags): Search-time MMseqs2 parameters.
         db_prefix (str): Filename prefix of the final DB files on disk
             (e.g. ``"uniref30_2302_db"`` → ``{cache_dir}/uniref30_2302_db*``).
+            Read only by the MMseqs2 toolkit, so an entry that is not a search
+            database leaves it empty and must declare
+            ``index_recipe.output_files`` instead — that is what marks such an
+            entry provisioned.
         supports_gpu (bool): Whether a GPU-padded index is produced
-            (``.idx_pad`` file present after indexing).
+            (``.idx_pad`` file present after indexing). MMseqs2-only, like
+            ``db_prefix``.
         min_gpu_memory_gb (float | None): Minimum GPU memory for GPU search.
             None when the dataset is CPU-only or negligible.
         gpu_padded_marker (str | None): Filename whose presence signals the
@@ -151,9 +156,20 @@ class DatasetEntry(BaseModel):
     index_recipe: IndexRecipe
     mmseqs_flags: MmseqsFlags = Field(default_factory=MmseqsFlags)
 
-    db_prefix: str
-    supports_gpu: bool
+    db_prefix: str = ""
+    supports_gpu: bool = False
     min_gpu_memory_gb: float | None = None
+
+    @property
+    def is_search_database(self) -> bool:
+        """Whether this entry is an MMseqs2-searchable database rather than a plain reference asset.
+
+        ``a3m_adapter`` alone cannot answer this: it defaults to ``"colabfold"``, which was
+        harmless while every registered entry was a search database and wrong as soon as one was
+        not. Producing DB files is the thing that actually distinguishes them.
+        """
+        return bool(self.db_prefix)
+
     gpu_padded_marker: str | None = Field(
         default=None,
         description=(

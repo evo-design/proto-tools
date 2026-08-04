@@ -14,7 +14,6 @@ from proto_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, InputField, ToolInstance
-from proto_tools.utils.device import RemoteDevice
 
 # ============================================================================
 # Data Models
@@ -88,10 +87,6 @@ class PyHmmsearchConfig(PyHmmerConfig):
         description="HMM curated cutoff: 'gathering' (Pfam GA), 'noise' (permissive), 'trusted' (strictest)",
     )
 
-    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
-        """Reads a local HMM file (``hmm``) that can't be staged to the hosted cloud."""
-        return f"needs a local HMM file (hmm) that can't be staged to device='{device}'. Run locally with device='cpu'."
-
 
 # ============================================================================
 # Tool Implementation
@@ -106,6 +101,10 @@ def example_input() -> Any:
 
 @tool(
     key="pyhmmer-hmmsearch",
+    local_only=(
+        "pyhmmer-hmmsearch searches an HMM profile file on your own disk, which is not available on "
+        "a remote worker. Run locally with device='cpu'."
+    ),
     label="PyHMMER Profile Search",
     category="gene_annotation",
     input_class=PyHmmsearchInput,

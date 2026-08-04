@@ -10,6 +10,22 @@ from standalone_helpers import get_logger
 logger = get_logger(__name__)
 
 
+def _set_interface(iam: Any, spec: str) -> None:
+    """Point an ``InterfaceAnalyzerMover`` at the ``targets_binder`` interface *spec*.
+
+    Args:
+        iam (Any): The ``InterfaceAnalyzerMover`` to configure.
+        spec (str): Interface spec, target-side chains then binder (e.g. ``"A_B"``).
+    """
+    from pyrosetta.rosetta.core import pose
+
+    docking_partners = getattr(pose, "DockingPartners", None)
+    if docking_partners is None:
+        iam.set_interface(spec)
+        return
+    iam.set_interface(docking_partners.docking_partners_from_string(spec))
+
+
 # ============================================================================
 # PyRosetta Scorer
 # ============================================================================
@@ -741,7 +757,7 @@ class PyRosettaScorer:
             target_side = target_chains[i]
 
             iam = InterfaceAnalyzerMover()
-            iam.set_interface(f"{''.join(target_side)}_{binder_chain}")
+            _set_interface(iam, f"{''.join(target_side)}_{binder_chain}")
             sfxn = pyrosetta.create_score_function(scorefxn_name)
             iam.set_scorefunction(sfxn)
             iam.set_compute_packstat(True)
