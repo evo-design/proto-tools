@@ -166,6 +166,7 @@ def example_input() -> Any:
 
 @tool(
     key="random-protein-sample",
+    local_only="random-protein-sample does not use a gpu and does not need an environment, so it can run in process",
     label="Random Protein Sampling",
     category="mutagenesis",
     input_class=RandomProteinSampleInput,

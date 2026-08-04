@@ -176,6 +176,7 @@ def example_input() -> Any:
 
 @tool(
     key="ncbi-esearch",
+    local_only="ncbi-esearch does not use a gpu and does not need an environment, so it can run in process",
     label="NCBI Entrez ESearch",
     category="database_retrieval",
     input_class=NCBIEsearchInput,

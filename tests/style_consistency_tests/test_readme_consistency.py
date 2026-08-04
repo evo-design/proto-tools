@@ -228,47 +228,48 @@ def test_has_doc_badge(readme: Path) -> None:
     assert expected_path in text, f"{_tool_id(readme)}/README.md badge should link to {expected_path}"
 
 
-# The "Use in Proto Tools" badge advertises that a toolkit can be run on the
-# hosted Proto Tools platform. Hosting requires redistributing the tool, so the
-# badge is present only when `redistribution: true` in the toolkit's
-# license.yaml. Hostable toolkits must use this exact markup verbatim so the
-# badge is byte-for-byte identical catalog-wide (label, message, color,
-# flat-square style, matching labelColor, lightning logo, alt text). Tools that
-# cannot be hosted omit it entirely.
+# The "Use on Proto" badge marks a toolkit that can run on the hosted platform. A
+# toolkit earns it when at least one of its tools runs on a remote device, since
+# per toolkit is the granularity a README has. Badged toolkits use this markup
+# verbatim, so the badge is identical catalog-wide.
 _PROTO_TOOLS_BADGE_LABEL = "Use_on_Proto"
 _PROTO_TOOLS_BADGE_IMG = '<img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">'
 
 
-@pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
-def test_proto_tools_badge_matches_license(readme: Path) -> None:
-    """The 'Use in Proto Tools' badge must be present iff the license permits hosting.
+def _toolkit_runs_remotely(toolkit_dir: Path) -> bool:
+    """Report whether any tool in *toolkit_dir* can run on a remote device.
 
-    Hosting a tool on the Proto Tools platform requires redistributing it, so
-    the badge (purple ``coming soon``, with the lightning logo) appears only
-    when ``license.yaml`` declares ``redistribution: true``. Toolkits that
-    cannot be hosted must omit the badge entirely.
+    Reads the static ``local_only`` declaration rather than constructing each config, so a tool
+    whose config needs a local resource just to be built is answered without catching the failure.
+    """
+    from proto_tools.tools import ToolRegistry
+
+    return any(
+        spec.local_only is None for spec in ToolRegistry.list_all() if Path(str(spec.source_file)).parent == toolkit_dir
+    )
+
+
+@pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
+def test_proto_tools_badge_matches_remote_capability(readme: Path) -> None:
+    """The 'Use in Proto Tools' badge must be present iff some tool in the toolkit runs remotely.
+
+    The badge (purple ``coming soon``, with the lightning logo) is a capability claim, not a
+    licence one: the platform runs tools on Proto's compute or on cloud compute the user brings,
+    and in neither case does ``license.yaml``'s ``redistribution`` field decide the answer. A
+    toolkit whose every tool refuses a remote device must omit the badge entirely.
     """
     text = readme.read_text()
 
-    license_path = readme.parent / "license.yaml"
-    assert license_path.exists(), f"{_tool_id(readme)} has no license.yaml to gate the Proto Tools badge."
-    license_data = yaml.safe_load(license_path.read_text())
-    assert "redistribution" in license_data, (
-        f"{_tool_id(readme)}/license.yaml is missing the 'redistribution' field, which gates the "
-        f"'{_PROTO_TOOLS_BADGE_LABEL}' badge."
-    )
-
-    has_badge = _PROTO_TOOLS_BADGE_LABEL in text
-    if license_data["redistribution"]:
+    if _toolkit_runs_remotely(readme.parent):
         assert _PROTO_TOOLS_BADGE_IMG in text, (
-            f"{_tool_id(readme)}/README.md has redistribution=true, so it must carry the exact canonical "
-            f"'{_PROTO_TOOLS_BADGE_LABEL}' badge markup (see _PROTO_TOOLS_BADGE_IMG in this module) — "
-            f"identical label, color, flat-square style, labelColor, lightning logo, and alt text."
+            f"{_tool_id(readme)}/README.md has a tool that runs remotely, so it must carry the exact "
+            f"canonical '{_PROTO_TOOLS_BADGE_LABEL}' badge markup (see _PROTO_TOOLS_BADGE_IMG in this "
+            f"module) — identical label, color, flat-square style, labelColor, lightning logo, and alt text."
         )
     else:
-        assert not has_badge, (
-            f"{_tool_id(readme)}/README.md has redistribution=false, so it must NOT carry the "
-            f"'{_PROTO_TOOLS_BADGE_LABEL}' badge — the tool cannot be hosted on Proto Tools."
+        assert _PROTO_TOOLS_BADGE_LABEL not in text, (
+            f"{_tool_id(readme)}/README.md must NOT carry the '{_PROTO_TOOLS_BADGE_LABEL}' badge — every "
+            f"tool in this toolkit refuses a remote device via remote_unsupported_reason."
         )
 
 

@@ -6,4 +6,10 @@ aiohttp
 # extras. Adding it explicitly here makes the env self-sufficient and is
 # forward-compatible if orbax fixes the unconditional import.
 flax
+# alphagenome_research declares a bare ``pandas``, and the commit setup.sh pins predates pandas 3.
+# pandas 3 backs string columns with PyArrow by default, so ``DataFrame[col].values`` returns an
+# ArrowExtensionArray; ``gene_mask.finalize_variant`` indexes that result with ``[None]``
+# (numpy newaxis), which only a numpy-backed array accepts. Without this bound a fresh env resolves
+# pandas 3 and breaks alphagenome-score-variants and alphagenome-score-ism-variants-batch.
+pandas<3
 # JAX with CUDA is installed by setup.sh (auto-detects CUDA 12 vs 13 and uses bundled libraries)

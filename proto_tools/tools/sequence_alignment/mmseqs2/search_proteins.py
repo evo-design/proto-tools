@@ -388,6 +388,10 @@ def example_input() -> Any:
 
 @tool(
     key="mmseqs2-search-proteins",
+    local_only=(
+        "mmseqs2-search-proteins searches a target collection staged on your own disk, which is not "
+        "available on a remote worker. Run locally with device='cpu'."
+    ),
     label="MMseqs2 Protein Search",
     category="sequence_alignment",
     input_class=Mmseqs2SearchProteinsInput,

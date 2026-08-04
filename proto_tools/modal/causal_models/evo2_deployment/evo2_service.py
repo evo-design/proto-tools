@@ -37,8 +37,7 @@ def _warmup() -> None:
 
 image = with_proto_tools(GPU_BASE, overrides="evo2", overrides_dir=Path(__file__).parent)
 image = (
-    image.run_commands("pip install -e /pkg/proto-tools --no-deps")
-    .env(
+    image.env(
         {
             **env_for(),
             # UV_INDEX_STRATEGY=unsafe-best-match allows uv to search all configured

@@ -237,67 +237,6 @@ def _register_cloud_tool(
     return registry.get(key)
 
 
-# ─ cloud hostability gate (license redistribution) ───────────────────────────
-
-
-def test_is_proto_hostable_reads_redistribution(monkeypatch):
-    """``is_proto_hostable`` reflects the tool's license ``redistribution`` flag, failing closed."""
-    from proto_tools.proto import is_proto_hostable
-
-    monkeypatch.setattr(ToolRegistry, "get_license", lambda key: {"redistribution": True})
-    assert is_proto_hostable("any-tool") is True
-
-    monkeypatch.setattr(ToolRegistry, "get_license", lambda key: {"redistribution": False})
-    assert is_proto_hostable("any-tool") is False
-
-    # Missing license, missing field, and unknown key all fail closed.
-    monkeypatch.setattr(ToolRegistry, "get_license", lambda key: None)
-    assert is_proto_hostable("any-tool") is False
-
-    monkeypatch.setattr(ToolRegistry, "get_license", lambda key: {})
-    assert is_proto_hostable("any-tool") is False
-
-    def _raise(key):
-        raise ValueError("unknown tool")
-
-    monkeypatch.setattr(ToolRegistry, "get_license", _raise)
-    assert is_proto_hostable("any-tool") is False
-
-
-def test_is_proto_hostable_fails_closed_on_malformed_license(monkeypatch):
-    """A corrupt/unreadable license.yaml (a non-ValueError from get_license) blocks cloud instead of crashing the run."""
-    import yaml
-
-    from proto_tools.proto import is_proto_hostable
-
-    def _raise_yaml(key):
-        raise yaml.YAMLError("could not parse license.yaml")
-
-    monkeypatch.setattr(ToolRegistry, "get_license", _raise_yaml)
-    assert is_proto_hostable("any-tool") is False
-
-    def _raise_os(key):
-        raise OSError("permission denied reading license.yaml")
-
-    monkeypatch.setattr(ToolRegistry, "get_license", _raise_os)
-    assert is_proto_hostable("any-tool") is False
-
-
-def test_proto_blocks_non_redistributable_tool(fake_proto_client, arm_stub_client, monkeypatch, clean_registry):
-    """device='proto' on a non-redistributable tool fails fast with a clear error and never dispatches."""
-    arm_stub_client(lambda c: setattr(c.tools, "output_to_return", {"result": "should-not-run"}))
-    spec = _register_cloud_tool(clean_registry, "gated-tool")
-
-    # This tool's license forbids redistribution → not hostable on Proto's cloud.
-    monkeypatch.setattr(ToolRegistry, "get_license", lambda key: {"redistribution": False})
-
-    with pytest.raises(ValueError, match="redistribution"):
-        spec.function(_CloudInput(payload="x"), _CloudConfig(device="proto"))
-
-    # The gate is purely local: no client constructed, no submit attempted.
-    assert fake_proto_client.last_instance is None
-
-
 def test_proto_blocks_unsupported_config(fake_proto_client, clean_registry):
     """device='proto' with a config whose ``remote_unsupported_reason()`` is non-None fails fast, never dispatches."""
 
@@ -319,18 +258,28 @@ def test_base_config_remote_unsupported_reason_defaults_none():
     assert _CloudConfig().remote_unsupported_reason("proto") is None
 
 
-def test_local_file_tools_declare_cloud_unsupported():
-    """Local-file tools (blast local-DB search, pyhmmer hmmscan/hmmsearch) declare themselves cloud-unsupported."""
-    from proto_tools.tools.gene_annotation.pyhmmer.hmmscan import PyHmmscanConfig
-    from proto_tools.tools.gene_annotation.pyhmmer.hmmsearch import PyHmmsearchConfig
+def test_config_dependent_local_file_refusal():
+    """A refusal that depends on how the tool is configured stays on the config."""
     from proto_tools.tools.sequence_alignment.blast.blast_search import BlastSearchConfig
 
     assert BlastSearchConfig(search_mode="local", local_db="/db").remote_unsupported_reason("proto") is not None
     assert (
         BlastSearchConfig(search_mode="online").remote_unsupported_reason("proto") is None
     )  # online (NCBI) is cloud-OK
-    assert PyHmmscanConfig().remote_unsupported_reason("proto") is not None
-    assert PyHmmsearchConfig().remote_unsupported_reason("proto") is not None
+
+
+def test_tool_level_local_file_refusal():
+    """A tool that can never run remotely declares it statically, so listing needs no config.
+
+    ``foldseek-rbh`` is the case that motivates the split: its config cannot be constructed at
+    all without ``local_db``, so a config-based answer is unreachable.
+    """
+    from proto_tools.tools import ToolRegistry
+
+    specs = {spec.key: spec for spec in ToolRegistry.list_all()}
+    for key in ("pyhmmer-hmmscan", "pyhmmer-hmmsearch", "foldseek-rbh", "blast-create-db"):
+        assert specs[key].local_only, f"{key} should declare local_only"
+    assert specs["blast-search"].local_only is None, "blast-search is deployable in online mode"
 
 
 def test_local_resource_override_configs_declare_cloud_unsupported():

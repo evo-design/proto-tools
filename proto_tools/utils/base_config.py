@@ -505,6 +505,22 @@ class BaseConfig(BaseModel):
         """
         return None
 
+    def local_execution_reason(self, device: RemoteDevice) -> str | None:  # noqa: ARG002 — overrides use it
+        """Reason this call runs here rather than on ``device``, or ``None`` to dispatch normally.
+
+        The soft counterpart to :meth:`remote_unsupported_reason`. That one refuses a call that
+        cannot work remotely; this one redirects a call that would work but gains nothing, such as
+        a search mode whose whole implementation is an HTTP request to a third-party service. The
+        dispatcher rewrites ``device`` to ``"cpu"`` and logs the reason instead of raising.
+
+        Args:
+            device (RemoteDevice): Remote target, ``"proto"`` or ``"modal"``.
+
+        Returns:
+            str | None: Reason to log, or ``None`` to dispatch to ``device``.
+        """
+        return None
+
 
 def _cache_exclude_map(model: BaseModel, _visited: set[int] | None = None) -> dict[str, Any]:
     """Build a ``model_dump(exclude=...)`` mapping that drops non-key fields at every level.

@@ -229,14 +229,20 @@ def test_dataset_field_schema_carries_inline_enum_and_default() -> None:
 def test_dataset_literal_matches_registry_searchable_set() -> None:
     """Drift guard: the ``dataset`` Literal must equal the registry's searchable product DBs.
 
-    Searchable == ``a3m_adapter == "colabfold"`` minus the in-tree
-    ``tiny-test-colabfold`` fixture. Registering a new searchable DB fails this
-    assertion, prompting an update to the Literal.
+    Searchable == a search database (``is_search_database``) whose ``a3m_adapter`` is
+    ``"colabfold"``, minus the in-tree ``tiny-test-colabfold`` fixture. Registering a new
+    searchable DB fails this assertion, prompting an update to the Literal.
+
+    The ``is_search_database`` term matters: ``a3m_adapter`` defaults to ``"colabfold"``, so a
+    registered entry that is a plain reference asset rather than a DB — a reference genome, say —
+    would otherwise be counted as searchable.
     """
     searchable = {
         name
         for name in DatasetRegistry.list_all()
-        if DatasetRegistry.get(name).a3m_adapter == "colabfold" and name != "tiny-test-colabfold"
+        if DatasetRegistry.get(name).is_search_database
+        and DatasetRegistry.get(name).a3m_adapter == "colabfold"
+        and name != "tiny-test-colabfold"
     }
     literal_values = set(get_args(Mmseqs2HomologySearchConfig.model_fields["dataset"].annotation))
     assert literal_values == searchable

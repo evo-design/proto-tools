@@ -1,10 +1,9 @@
 """ESM C Modal service.
 
-Delegates to proto-tools ``run_esmc_embeddings`` for parameter validation,
-environment setup, and model inference. The build-time warmup creates the
-tool env and downloads the default checkpoint, both persisted on the
-Modal volume via ``PROTO_MODEL_CACHE``. Non-default checkpoints download
-on first use.
+Delegates to proto-tools ``run_esmc_embeddings`` and ``run_esmc_sae_features`` for parameter
+validation, environment setup, and model inference. The build-time warmup creates the tool env
+and downloads the default checkpoint and the sparse autoencoder, all persisted on the Modal
+volume via ``PROTO_MODEL_CACHE``. Non-default checkpoints download on first use.
 """
 
 from typing import Any
@@ -20,14 +19,13 @@ from proto_tools.modal.utils import RUNTIME_ENV, dispatch_tool_call, ensure_gpu_
 
 
 def _warmup() -> None:
-    """Deploy-time: warm only the default checkpoint."""
-    from proto_tools.tools.masked_models.esmc.esmc_embeddings import (
-        ESMCEmbeddingsConfig,
-        example_input,
-        run_esmc_embeddings,
-    )
+    """Deploy-time: warm the default checkpoint and stage the sparse autoencoder."""
+    from proto_tools.tools.masked_models.esmc import esmc_embeddings, esmc_sae_features
 
-    run_esmc_embeddings(example_input(), ESMCEmbeddingsConfig())
+    esmc_embeddings.run_esmc_embeddings(esmc_embeddings.example_input(), esmc_embeddings.ESMCEmbeddingsConfig())
+    esmc_sae_features.run_esmc_sae_features(
+        esmc_sae_features.example_input(), esmc_sae_features.ESMCSAEFeaturesConfig()
+    )
 
 
 image = (
@@ -53,9 +51,14 @@ app = get_app_for_service("ESMCService")
     retries=SERVICE_RETRIES,
     secrets=[HF_TOKEN_SECRET],
 )
-@register_tools({"esmc-embedding": "inference"})
+@register_tools(
+    {
+        "esmc-embedding": "inference",
+        "esmc-sae-features": "sae_features",
+    }
+)
 class ESMCService:
-    """Modal service for ESM C masked language model inference."""
+    """Modal service for ESM C masked language model inference and sparse-autoencoder features."""
 
     @modal.enter()
     def setup(self) -> None:
@@ -91,3 +94,24 @@ class ESMCService:
         inputs = ESMCEmbeddingsInput(**input_dict)
         config = ESMCEmbeddingsConfig(**config_dict)
         return dispatch_tool_call(run_esmc_embeddings, inputs, config, instance=self.instance)
+
+    @modal.method()
+    def sae_features(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
+        """Extract sparse-autoencoder features from ESM C representations.
+
+        Args:
+            input_dict (dict[str, Any]): Mapping of input names to their serialized values.
+            config_dict (dict[str, Any]): Mapping of configuration parameter names to values.
+
+        Returns:
+            dict[str, Any]: Per-sequence sparse feature activations.
+        """
+        from proto_tools.tools.masked_models.esmc.esmc_sae_features import (
+            ESMCSAEFeaturesConfig,
+            ESMCSAEFeaturesInput,
+            run_esmc_sae_features,
+        )
+
+        inputs = ESMCSAEFeaturesInput(**input_dict)
+        config = ESMCSAEFeaturesConfig(**config_dict)
+        return dispatch_tool_call(run_esmc_sae_features, inputs, config, instance=self.instance)

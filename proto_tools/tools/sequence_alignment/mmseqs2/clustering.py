@@ -284,6 +284,10 @@ def example_input() -> Any:
 
 @tool(
     key="mmseqs2-clustering",
+    local_only=(
+        "mmseqs2-clustering clusters an MMseqs2 database built on your own disk, which is not "
+        "available on a remote worker. Run locally with device='cpu'."
+    ),
     label="MMseqs2 Clustering",
     category="sequence_alignment",
     input_class=Mmseqs2ClusteringInput,

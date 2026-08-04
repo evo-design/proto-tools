@@ -19,11 +19,18 @@ CACHE_MOUNT = "/weights"
 
 
 def toolkits_we_ship() -> set[str]:
-    """Toolkit directory names backing the services in this repo."""
+    """Toolkit directory names backing the services in this repo, for toolkits that own an env.
+
+    Everything below concerns what reaches a tool's subprocess. A deployed toolkit with no
+    ``standalone/`` directory has no such subprocess and no ``env_vars.txt`` to inspect — its
+    service calls the tool function in the container's own interpreter — so including it would ask
+    ``_resolve_env_def`` for an environment that was never meant to exist.
+    """
     from proto_tools.modal import available_tools
     from proto_tools.tools import ToolRegistry
 
-    return {ToolRegistry.get(k).source_file.parent.name for k in available_tools()}
+    specs = (ToolRegistry.get(k) for k in available_tools())
+    return {spec.source_file.parent.name for spec in specs if spec.has_standalone_env}
 
 
 # --------------------------------------------------------------------------

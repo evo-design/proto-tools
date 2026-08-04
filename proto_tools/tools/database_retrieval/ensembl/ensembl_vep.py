@@ -390,6 +390,7 @@ def example_input() -> Any:
 
 @tool(
     key="ensembl-vep",
+    local_only="ensembl-vep does not use a gpu and does not need an environment, so it can run in process",
     label="Ensembl VEP",
     category="database_retrieval",
     input_class=EnsemblVEPInput,

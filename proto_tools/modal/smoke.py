@@ -31,9 +31,13 @@ def run_tool(service_class: str, tool_key: str, method_name: str) -> tuple[bool,
     if example is None:
         return True, "skipped — no example_input declared"
 
-    config = ToolRegistry.get(tool_key).config_model()
-    if not isinstance(config, BaseConfig):
-        return False, f"config model is {type(config).__name__}, not a BaseConfig"
+    config_model = ToolRegistry.get(tool_key).config_model
+    if not issubclass(config_model, BaseConfig):
+        return False, f"config model is {config_model.__name__}, not a BaseConfig"
+    # ``minimal()`` rather than the bare defaults: it is the constructor that supplies whatever a
+    # tool needs to run at all (miranda's microRNA queries) and reduces the work to the cheapest
+    # path through it, which is what keeps a design pipeline's smoke test from billing a full run.
+    config = config_model.minimal()
     config.device = physical_device_for_service(service_class)
 
     app_name = get_app_name_for_service(service_class)

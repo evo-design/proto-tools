@@ -5,7 +5,13 @@ from typing import Any
 
 import modal
 
-from proto_tools.modal.app import HF_TOKEN_SECRET, MODEL_CACHE, SCALEDOWN_WINDOW, SERVICE_RETRIES, get_app_for_service
+from proto_tools.modal.app import (
+    HF_TOKEN_SECRET,
+    MODEL_CACHE,
+    SCALEDOWN_WINDOW,
+    get_app_for_service,
+    retries_for_service,
+)
 from proto_tools.modal.base_images import with_dependencies, with_proto_tools
 from proto_tools.modal.gpu_profiles import GPU_DEFAULT
 from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
@@ -64,7 +70,7 @@ app = get_app_for_service("FreeBindCraftService")
     scaledown_window=SCALEDOWN_WINDOW,
     volumes={"/weights": MODEL_CACHE},
     timeout=SERVICE_MODAL_TIMEOUTS["FreeBindCraftService"],
-    retries=SERVICE_RETRIES,
+    retries=retries_for_service("FreeBindCraftService"),
     secrets=[HF_TOKEN_SECRET],
 )
 @register_tools({"freebindcraft-design": "design"})

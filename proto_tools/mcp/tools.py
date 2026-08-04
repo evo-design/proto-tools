@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any
 
 from proto_tools.mcp.device import Device
 from proto_tools.utils.base_config import BaseConfig
+
+logger = logging.getLogger(__name__)
 
 # Fields large enough to hurt an agent's context if returned inline. Anything
 # longer than this is written to disk and replaced with a path.
@@ -323,7 +326,28 @@ def _setup_errors(device: Device) -> tuple[type[Exception], ...]:
 
 
 def _dispatch(device: Device, tool_key: str, payload: Any, cfg: Any) -> Any:
-    """Route one call to the backend ``device`` names."""
+    """Route one call to the backend ``device`` names.
+
+    A ``local_cpu`` tool goes through the tool wrapper rather than straight to a backend, because
+    for those the answer depends on whether a deployment exists: one that has one is dispatched
+    remotely like any other tool, and one that does not runs in this process. The wrapper already
+    makes exactly that choice for a direct call, so deferring to it keeps the two paths identical
+    instead of restating the rule here. Dispatching unconditionally would raise "ships no
+    deployment" for the undeployed ones and send the caller to a command that cannot succeed.
+    """
+    from proto_tools.tools import ToolRegistry
+
+    spec = ToolRegistry.get(tool_key)
+    if spec.local_cpu:
+        return spec.function(payload, cfg)
+    # A search mode whose implementation is an HTTP call is answered from here, the same as the
+    # wrapper does for a direct call. Otherwise the server would look for a deployment that a tool
+    # offering only such modes has no reason to have, and report it missing.
+    if (reason := cfg.local_execution_reason(device)) is not None:
+        logger.info("Tool %s: %s Running in this process instead.", tool_key, reason)
+        cfg.device = "cpu"
+        return spec.function(payload, cfg)
+
     if device == "proto":
         from proto_tools.proto import dispatch_to_proto
 

@@ -104,7 +104,6 @@ def _register_probe(
     import proto_tools.proto as proto_module
 
     monkeypatch.setattr(proto_module, "dispatch_to_proto", fake_dispatch, raising=False)
-    monkeypatch.setattr(proto_module, "is_proto_hostable", lambda _k: True, raising=False)
 
     def fake_batch_dispatch(tool_key: str, inputs_list, configs):
         """Chunked fan-out path; one config per chunk, recorded as the single-call form does."""

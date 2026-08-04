@@ -202,6 +202,35 @@ def _warn_once_on_drift(tool_key: str, service_class: str) -> None:
         warnings.warn(message, DeploymentDriftWarning, stacklevel=2)
 
 
+class LongRunningToolWarning(UserWarning):
+    """A dispatched tool can occupy a container for hours."""
+
+
+@functools.cache
+def _warn_once_if_long_running(tool_key: str, service_class: str) -> None:
+    """Warn before the first dispatch of a batch-tier tool, which can run for most of a day.
+
+    A design pipeline gives no output until it finishes, so without this the caller cannot tell a
+    run that will take twelve hours from one that has hung — and either way they are paying for GPU
+    the whole time. Said once per tool per session, like the drift warning, since a caller running a
+    sweep already knows after the first.
+    """
+    from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS, runs_for_hours
+
+    if not runs_for_hours(service_class):
+        return
+    hours = SERVICE_MODAL_TIMEOUTS[service_class] / 3600
+    warnings.warn(
+        f"{tool_key} is a long-running pipeline: one call occupies a container until it finishes, "
+        f"for up to {hours:.0f} hours of billed compute, and returns nothing before then. It is "
+        f"deployed without retries, so a failure costs one run rather than several — but the run it "
+        f"does cost is charged to your own Modal account whether or not the result is usable. "
+        f"Consider running it locally first with device='cpu'/'cuda' on a small input.",
+        LongRunningToolWarning,
+        stacklevel=2,
+    )
+
+
 def _raise_if_asset_missing(tool_key: str, result: dict[str, Any]) -> None:
     """Rebuild :class:`MissingAssetError` from a container that reported an unprovisioned asset.
 
@@ -340,6 +369,7 @@ def dispatch_to_modal(
     # where an app of the same name may belong to an entirely different project.
     os.environ[ENVIRONMENT_VAR] = resolve_environment(environment)
     _warn_once_on_drift(key, service_class)
+    _warn_once_if_long_running(key, service_class)
 
     config = _resolve_device(config, service_class)
     method = _bound_method(app_name, service_class, method_name, key, scaledown_window)
@@ -383,6 +413,7 @@ def dispatch_batch_to_modal(
     # where an app of the same name may belong to an entirely different project.
     os.environ[ENVIRONMENT_VAR] = resolve_environment(environment)
     _warn_once_on_drift(key, service_class)
+    _warn_once_if_long_running(key, service_class)
 
     configs = list(config) if isinstance(config, list) else [config] * len(inputs)
     if len(configs) != len(inputs):

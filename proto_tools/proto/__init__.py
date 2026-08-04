@@ -84,41 +84,6 @@ _INVALID_KEY = _status_box(
 )
 
 
-def is_proto_hostable(key: str) -> bool:
-    """True iff the tool's license permits running on Proto's hosted service.
-
-    Mirrors the hosted service's deploy gate: a tool is hostable iff its
-    ``license.yaml`` declares ``redistribution: true``. Fails closed; an
-    unknown key, a missing/unreadable/malformed ``license.yaml``, or a
-    missing/false ``redistribution`` field all read as "not hostable", so we
-    never promise support the hosted service can't honor.
-
-    Note: the hosted service additionally licenses a few non-redistributable
-    tools by allowlist; that exception is not mirrored here yet, so those tools
-    report ``False`` even though the server can run them.
-    """
-    try:
-        license_data = ToolRegistry.get_license(key)
-    except Exception as exc:
-        # Fail closed on any license-read error (unknown key, unreadable / malformed YAML).
-        logger.debug("Cloud hostability check for %r failed closed: %s", key, exc, exc_info=True)
-        return False
-    return bool(license_data and license_data.get("redistribution"))
-
-
-def proto_unhostable_message(key: str) -> str:
-    """Boxed error shown when ``device='proto'`` targets a tool Proto can't host."""
-    return _status_box(
-        "Proto Cloud: tool not hostable",
-        f"Tool {key!r} can't run with device='proto'.\n"
-        "\n"
-        "Its license prohibits redistribution, so Proto's hosted service\n"
-        "can't run it remotely.\n"
-        "\n"
-        "Run it locally instead with device='cpu' or device='cuda'.",
-    )
-
-
 _DEFAULT_POLL_INTERVAL = 1.0
 _LOG_THREAD_JOIN_TIMEOUT = 2.0
 
@@ -444,6 +409,4 @@ def dispatch_batch_to_proto(
 __all__ = [
     "dispatch_batch_to_proto",
     "dispatch_to_proto",
-    "is_proto_hostable",
-    "proto_unhostable_message",
 ]

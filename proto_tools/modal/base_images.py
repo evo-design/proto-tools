@@ -46,6 +46,19 @@ def with_dependencies(image: modal.Image) -> modal.Image:
     return image.pip_install(*requirements) if requirements else image
 
 
+# Benchmark results recorded beside each deployment. They describe what a service costs, which is
+# useful in the repository and useless inside the image: no container reads them, and rewriting one
+# after a benchmark run would otherwise invalidate the mount layer and force every image to rebuild.
+#
+# Anything but the empty list here is load-bearing. The default for add_local_python_source keeps
+# only .py files, which would drop every setup.sh and requirements.txt a standalone environment
+# needs — hence an explicit list naming exactly the reports rather than a broader pattern.
+#
+# Scoped to `*_deployment/` because that is the only place a report is written, and because
+# `proto_tools/modal/README.md` is the package's own setup documentation, which does ship.
+BENCHMARK_REPORT_PATTERNS: list[str] = ["**/modal/*/*_deployment/README.md"]
+
+
 def with_proto_tools(
     image: modal.Image, *, overrides: str | None = None, overrides_dir: Path | str | None = None
 ) -> modal.Image:
@@ -70,9 +83,14 @@ def with_proto_tools(
     override = os.environ.get(PATH_ENV)
     if override:
         # An explicit tree is not what `import proto_tools` resolves to, so mount it by path.
-        image = image.add_local_dir(str(Path(override) / "proto_tools"), container_package_root(), copy=True)
+        image = image.add_local_dir(
+            str(Path(override) / "proto_tools"),
+            container_package_root(),
+            copy=True,
+            ignore=BENCHMARK_REPORT_PATTERNS,
+        )
     else:
-        image = image.add_local_python_source("proto_tools", copy=True, ignore=[])
+        image = image.add_local_python_source("proto_tools", copy=True, ignore=BENCHMARK_REPORT_PATTERNS)
     if overrides and overrides_dir:
         image = apply_standalone_overrides(image, overrides, overrides_dir)
     return image

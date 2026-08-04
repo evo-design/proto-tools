@@ -81,6 +81,27 @@ MODEL_CACHE = modal.Volume.from_name(CACHE_VOLUME_NAME, create_if_missing=True)
 # Shared retries — Modal retries individual inputs on transient failures.
 SERVICE_RETRIES = modal.Retries(max_retries=3, initial_delay=2.0, backoff_coefficient=2.0)
 
+# The policy applied to batch-tier services instead. Modal restarts the container wall on every
+# retry, so under the batch tier's 24-hour wall the shared policy may bill up to 96 GPU-hours for a
+# single call that cannot succeed. Retries also provide the least benefit for a long design
+# pipeline, where a failure after several hours indicates a fault in the inputs or the model rather
+# than the transient condition retries are intended to absorb.
+NO_RETRIES = modal.Retries(max_retries=0)
+
+
+def retries_for_service(service_class_name: str) -> modal.Retries:
+    """Return the retry policy for a service, by tier.
+
+    Batch-tier services get :data:`NO_RETRIES`; everything else gets :data:`SERVICE_RETRIES`, which
+    is what those services already pass directly. Adopting this helper in a non-batch service is
+    therefore a no-op, and adopting it in a new batch-tier one is what keeps the policy from being
+    re-decided per service.
+    """
+    from proto_tools.modal.manifest import runs_for_hours
+
+    return NO_RETRIES if runs_for_hours(service_class_name) else SERVICE_RETRIES
+
+
 # Seconds an idle container stays alive before Modal scales it down. A container
 # holds its model loaded on the GPU, so a call arriving inside this window skips
 # both the container start and the model load.
@@ -109,7 +130,9 @@ __all__ = [
     "CACHE_VOLUME_NAME",
     "HF_TOKEN_SECRET",
     "MODEL_CACHE",
+    "NO_RETRIES",
     "SERVICE_RETRIES",
     "get_app",
     "get_app_for_service",
+    "retries_for_service",
 ]
