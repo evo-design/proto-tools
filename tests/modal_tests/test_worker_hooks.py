@@ -7,12 +7,15 @@ from typing import Any
 import pytest
 
 from proto_tools.modal.hooks import (
+    CallContext,
     apply_payload_hooks,
     clear_hooks,
     register_call_middleware,
     register_payload_hook,
     run_with_middleware,
 )
+
+_CTX = CallContext(run_fn=lambda: None)
 
 
 @pytest.fixture(autouse=True)
@@ -30,7 +33,7 @@ def test_nothing_registered_is_a_pass_through() -> None:
     apply_payload_hooks(payload, config)
     assert payload == {"sequences": ["ACGT"]}
     assert config == {"batch_size": 2}
-    assert run_with_middleware(lambda: {"ok": True}) == {"ok": True}
+    assert run_with_middleware(_CTX, lambda: {"ok": True}) == {"ok": True}
 
 
 def test_a_payload_hook_sees_both_mappings() -> None:
@@ -69,21 +72,21 @@ def test_middleware_wraps_the_call() -> None:
     """The common case: do something before and after, and return the result untouched."""
     events: list[str] = []
 
-    def timing(next_step):
+    def timing(_ctx, next_step):
         events.append("before")
         result = next_step()
         events.append("after")
         return result
 
     register_call_middleware(timing)
-    assert run_with_middleware(lambda: {"value": 1}) == {"value": 1}
+    assert run_with_middleware(_CTX, lambda: {"value": 1}) == {"value": 1}
     assert events == ["before", "after"]
 
 
 def test_middleware_can_transform_the_result() -> None:
     """A large field may need moving elsewhere before the transport sees it."""
-    register_call_middleware(lambda nxt: {**nxt(), "added": True})
-    assert run_with_middleware(lambda: {"value": 1}) == {"value": 1, "added": True}
+    register_call_middleware(lambda _ctx, nxt: {**nxt(), "added": True})
+    assert run_with_middleware(_CTX, lambda: {"value": 1}) == {"value": 1, "added": True}
 
 
 def test_middleware_may_wrap_the_call_in_a_context() -> None:
@@ -100,12 +103,12 @@ def test_middleware_may_wrap_the_call_in_a_context() -> None:
         finally:
             entered.append("close")
 
-    def with_capture(next_step):
+    def with_capture(_ctx, next_step):
         with capture():
             return next_step()
 
     register_call_middleware(with_capture)
-    run_with_middleware(lambda: {"ok": True})
+    run_with_middleware(_CTX, lambda: {"ok": True})
     assert entered == ["open", "close"]
 
 
@@ -113,13 +116,13 @@ def test_the_first_registered_middleware_is_outermost() -> None:
     """Documented ordering. Reversing it would silently invert nesting for anyone relying on it."""
     order: list[str] = []
 
-    def outer(next_step):
+    def outer(_ctx, next_step):
         order.append("outer-in")
         result = next_step()
         order.append("outer-out")
         return result
 
-    def inner(next_step):
+    def inner(_ctx, next_step):
         order.append("inner-in")
         result = next_step()
         order.append("inner-out")
@@ -127,7 +130,7 @@ def test_the_first_registered_middleware_is_outermost() -> None:
 
     register_call_middleware(outer)
     register_call_middleware(inner)
-    run_with_middleware(dict)
+    run_with_middleware(_CTX, dict)
     assert order == ["outer-in", "inner-in", "inner-out", "outer-out"]
 
 
@@ -136,7 +139,7 @@ def test_each_middleware_binds_its_own_next_step() -> None:
     calls: list[int] = []
 
     def make(index: int):
-        def middleware(next_step):
+        def middleware(_ctx, next_step):
             calls.append(index)
             return next_step()
 
@@ -144,47 +147,56 @@ def test_each_middleware_binds_its_own_next_step() -> None:
 
     for index in range(3):
         register_call_middleware(make(index))
-    run_with_middleware(dict)
+    run_with_middleware(_CTX, dict)
     assert calls == [0, 1, 2]
 
 
 def test_a_raising_middleware_propagates() -> None:
     """Swallowing an error here would report a failed call as a successful one."""
-    register_call_middleware(lambda nxt: nxt())
+    register_call_middleware(lambda _ctx, nxt: nxt())
 
-    def explode(_next_step):
+    def explode(_ctx, _next_step):
         raise RuntimeError("middleware failed")
 
     register_call_middleware(explode)
     with pytest.raises(RuntimeError, match="middleware failed"):
-        run_with_middleware(dict)
+        run_with_middleware(_CTX, dict)
 
 
 def test_no_service_bypasses_the_hook_point() -> None:
     """Every service method must dispatch through ``run_tool_call``.
 
-    A method that builds its own models and calls ``dispatch_tool_call`` directly still works,
-    which is the problem: payload hooks never see that call, and the omission shows up as a
-    tool that quietly ignores whatever the operator installed rather than as an error.
+    Asserted positively rather than by banning ``dispatch_tool_call``: calling the run function
+    or the envelope directly bypasses hooks just as effectively, and a bypass shows up as a tool
+    quietly ignoring whatever the operator installed rather than as an error.
     """
     import ast
     import pathlib
 
     modal_root = pathlib.Path(__file__).resolve().parents[2] / "proto_tools" / "modal"
     offenders: list[str] = []
+    checked = 0
     for path in sorted(modal_root.rglob("*_service.py")):
         tree = ast.parse(path.read_text(), str(path))
         for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
+            if not isinstance(node, ast.FunctionDef):
                 continue
-            func = node.func
-            name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
-            if name == "dispatch_tool_call":
-                offenders.append(f"{path.relative_to(modal_root)}:{node.lineno}")
+            decorators = [d.func if isinstance(d, ast.Call) else d for d in node.decorator_list]
+            if not any(getattr(d, "attr", None) == "method" for d in decorators):
+                continue
+            checked += 1
+            called = {
+                inner.func.id if isinstance(inner.func, ast.Name) else getattr(inner.func, "attr", None)
+                for inner in ast.walk(node)
+                if isinstance(inner, ast.Call)
+            }
+            if "run_tool_call" not in called:
+                offenders.append(f"{path.relative_to(modal_root)}:{node.lineno} ({node.name})")
 
+    assert checked, "found no service methods to check — the scan itself is broken"
     assert not offenders, (
-        f"Service methods call dispatch_tool_call directly, bypassing payload hooks: {offenders}. "
-        f"Use run_tool_call(run_fn, InputModel, ConfigModel, input_dict, config_dict) instead."
+        f"Service methods do not dispatch through run_tool_call, so hooks never see them: {offenders}. "
+        f"Use run_tool_call(run_fn, InputModel, ConfigModel, input_dict, config_dict)."
     )
 
 
@@ -214,3 +226,51 @@ def test_run_tool_call_applies_payload_hooks_before_validation() -> None:
     with pytest.raises(RuntimeError, match="stop here"):
         run_tool_call(fake_run, _Input, _Config, {"sequence": "ref://ACGT"}, {})
     assert seen["sequence"] == "ACGT", "the hook must run before the model is constructed"
+
+
+def test_middleware_cleanup_runs_when_the_tool_raises() -> None:
+    """The guarantee that matters for a context-manager middleware, and the one a success cannot show."""
+    import contextlib
+
+    entered: list[str] = []
+
+    @contextlib.contextmanager
+    def capture():
+        entered.append("open")
+        try:
+            yield
+        finally:
+            entered.append("close")
+
+    def with_capture(_ctx, next_step):
+        with capture():
+            return next_step()
+
+    register_call_middleware(with_capture)
+
+    def explode() -> dict[str, Any]:
+        raise RuntimeError("the tool failed")
+
+    with pytest.raises(RuntimeError, match="the tool failed"):
+        run_with_middleware(_CTX, explode)
+    assert entered == ["open", "close"], "cleanup must run when the wrapped call raises"
+
+
+def test_a_middleware_that_forgets_to_return_is_named() -> None:
+    """Otherwise the None travels to the client and fails somewhere pointing at no middleware."""
+
+    def forgets(_ctx, next_step) -> None:
+        next_step()
+
+    register_call_middleware(forgets)
+    with pytest.raises(TypeError, match="middleware returned NoneType"):
+        run_with_middleware(_CTX, lambda: {"ok": True})
+
+
+def test_middleware_is_told_which_tool_it_wrapped() -> None:
+    """Timings and destinations need naming; the run function alone is not a stable label."""
+    from proto_tools.modal.hooks import CallContext as _CallContext
+    from proto_tools.tools.masked_models.esm2.esm2_embeddings import run_esm2_embeddings
+
+    assert _CallContext(run_esm2_embeddings).tool_key == "esm2-embedding"
+    assert _CallContext(lambda: None).tool_key is None, "an unregistered function resolves to nothing"

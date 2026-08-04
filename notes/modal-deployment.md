@@ -224,28 +224,26 @@ belongs at Proto's submission path and is tracked in proto-tools-api#567.
 ## Worker extension points
 
 A service method ends in `run_tool_call(run_fn, InputModel, ConfigModel, input_dict, config_dict)`,
-which validates the mappings and hands off to `dispatch_tool_call`. Going through one function is
-what gives an operator somewhere to intervene, and a guard test fails any service that calls
-`dispatch_tool_call` directly — that path still works, which is exactly why it needs catching.
+which validates the mappings and hands off to `dispatch_tool_call`. A guard test asserts every
+`@modal.method` goes through it — a method that dispatches some other way silently ignores hooks
+rather than erroring.
 
-`proto_tools/modal/hooks.py` offers two, distinguished by what they can still see:
+`proto_tools/modal/hooks.py` offers two:
 
 | | Runs | Sees |
 |---|---|---|
 | `register_payload_hook` | before validation | the raw `input_dict` and `config_dict`, mutable |
-| `register_call_middleware` | around the call | the next step; may transform the result |
+| `register_call_middleware` | around the call | a `CallContext` and the next step; may transform the result |
 
-A payload hook is the only place a value can still be rewritten — once a mapping becomes a model,
-validation has already accepted or rejected it. So resolving a reference the caller passed instead
-of a value belongs here.
+A payload hook is the only place a value can still be rewritten. Middleware follows the ASGI
+shape; first registered is outermost, and `CallContext.tool_key` says which tool it wrapped.
 
-Middleware follows the ASGI shape: take the next step, call it, return a mapping. Timing a call,
-wrapping it in a context manager, or moving a large field somewhere the transport prefers all fit.
-The first registered is outermost.
+Both are process-wide. Register during import, from whatever module defines the deployment's
+entry point — registration is not synchronized. Nothing registers by default.
 
-Both are process-wide. Register at import time from whatever module defines the deployment's entry
-point, so every call through that worker sees them. Nothing registers by default, and with nothing
-registered both are pass-throughs.
+Two limits worth knowing: payload hooks run before the progress context opens, so a slow one is
+silent on the caller's spinner; and a middleware that forgets to return raises `TypeError` rather
+than returning `None` to the client.
 
 ## Hosted environments
 

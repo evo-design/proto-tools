@@ -1,33 +1,55 @@
 """Extension points for code that runs inside a deployed worker.
 
-A deployment is not always just the tool. Whoever operates one may need to adapt a call or
-observe it — resolving a reference the caller passed instead of a value, recording timings,
-moving a large result somewhere the transport is happier with — without forking every service
-class to do it.
+Whoever operates a deployment may need to adapt a call or observe it without forking every
+service class. Two extension points cover that, distinguished by what they can still see:
 
-Two extension points cover that, distinguished by what they can still see:
+- A :data:`PayloadHook` runs on the raw mappings, before validation. The only place a value can
+  still be rewritten.
+- A :data:`CallMiddleware` wraps the call, and may transform what it returns.
 
-- A :data:`PayloadHook` runs on the raw mappings, before they are validated into models. This is
-  the only place a value can still be rewritten, because validation may reject or normalize it.
-- A :data:`CallMiddleware` wraps the call itself, and may transform what it returns.
-
-Both are process-wide and applied in registration order. Register them at import time, from the
-module that defines a deployment's entry point, so every call through that worker sees them.
+Both are process-wide and applied in registration order. Register during import, before any call
+is served: registration is not synchronized.
 """
 
-from collections.abc import Callable
+import functools
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from typing import Any
 
 #: Adjusts a call's raw input and config mappings in place, before either is validated.
 PayloadHook = Callable[[dict[str, Any], dict[str, Any]], None]
 
-#: Wraps one tool call. Receives a zero-argument callable that performs the call and returns its
-#: result mapping; must call it and return a mapping. Wrapping it in a context manager, timing it,
-#: or transforming the result are all ordinary uses.
-CallMiddleware = Callable[[Callable[[], dict[str, Any]]], dict[str, Any]]
+
+@dataclass(frozen=True)
+class CallContext:
+    """What a middleware is told about the call it is wrapping.
+
+    Attributes:
+        run_fn (Callable[..., Any]): The tool's ``run_*`` function.
+    """
+
+    run_fn: Callable[..., Any]
+
+    @property
+    def tool_key(self) -> str | None:
+        """Registry key for this tool, or ``None``. A middleware's only handle on which call it is."""
+        return _tool_key_for(self.run_fn)
+
+
+#: Wraps one tool call. Receives its :class:`CallContext` and a zero-argument callable that
+#: performs it; must call that and return a mapping.
+CallMiddleware = Callable[[CallContext, Callable[[], dict[str, Any]]], dict[str, Any]]
 
 _payload_hooks: list[PayloadHook] = []
 _call_middleware: list[CallMiddleware] = []
+
+
+@functools.cache
+def _tool_key_for(run_fn: Callable[..., Any]) -> str | None:
+    """Return the registry key whose tool is ``run_fn``, or ``None``. Cached: the map is static."""
+    from proto_tools.tools import ToolRegistry
+
+    return next((spec.key for spec in ToolRegistry.list_all() if spec.function is run_fn), None)
 
 
 def register_payload_hook(hook: PayloadHook) -> None:
@@ -69,29 +91,43 @@ def apply_payload_hooks(input_dict: dict[str, Any], config_dict: dict[str, Any])
         hook(input_dict, config_dict)
 
 
-def run_with_middleware(call: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+def run_with_middleware(context: CallContext, call: Callable[[], dict[str, Any]]) -> dict[str, Any]:
     """Invoke ``call`` through every registered middleware, outermost first.
 
     Args:
+        context (CallContext): Describes the call, passed to each middleware.
         call (Callable[[], dict[str, Any]]): Performs the call and returns its result mapping.
 
     Returns:
         dict[str, Any]: The result, as returned by the outermost middleware. With none
             registered, exactly what ``call`` returned.
+
+    Raises:
+        TypeError: If a middleware returns a non-mapping — usually one that forgot to return at
+            all, whose ``None`` would otherwise surface as a client-side error naming no middleware.
     """
     wrapped = call
     # Reversed so the first registered ends up outermost, matching the documented order.
     for middleware in reversed(_call_middleware):
-        wrapped = _bind(middleware, wrapped)
-    return wrapped()
+        wrapped = _bind(middleware, context, wrapped)
+    result = wrapped()
+    if not isinstance(result, Mapping):
+        raise TypeError(
+            f"A registered call middleware returned {type(result).__name__}, not a mapping. "
+            f"Middleware must return the result of the step it wraps."
+        )
+    return result
 
 
-def _bind(middleware: CallMiddleware, next_step: Callable[[], dict[str, Any]]) -> Callable[[], dict[str, Any]]:
-    """Bind ``next_step`` into ``middleware``, so the chain can be built without late binding."""
-    return lambda: middleware(next_step)
+def _bind(
+    middleware: CallMiddleware, context: CallContext, next_step: Callable[[], dict[str, Any]]
+) -> Callable[[], dict[str, Any]]:
+    """Bind this layer's arguments, so building the chain in a loop cannot late-bind them."""
+    return lambda: middleware(context, next_step)
 
 
 __all__ = [
+    "CallContext",
     "CallMiddleware",
     "PayloadHook",
     "apply_payload_hooks",
