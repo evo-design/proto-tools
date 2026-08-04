@@ -16,9 +16,7 @@
 
 Welcome! This repository contains the open-source implementation of `proto-tools`, a Python package containing a large suite of computational biology and biological AI tools, all accessible through a single, consistent Python interface. Language models, structure predictors, inverse folding, sequence analysis, gene annotation, conformational dynamics, genomic scoring, and more are all available through a single `pip install` command.
 
-Every tool runs in its own automatically managed isolated environment, so all dependency wrangling is handled for you. In addition, `proto-tools` implements extensive infrastructure for features such as device management and GPU fan-out, making it easy to call tools in quick succession. You can use it as a standalone Python library, as part of the broader [proto-language](https://github.com/evo-design/proto-language) optimization system, or as an MCP server that exposes the same tools to AI agents.
-
-Tools can run on local compute or on [Modal](https://modal.com). Deployments ship with the package for the great majority of the catalogue — 54 apps serving 99 tools — so hosting one is a single command rather than a container to write. Each keeps its model weights warm between calls in your own Modal workspace, and a benchmark report recording what it costs to run, cold and warm, sits beside every deployment. The tools that stay local do so for a stated reason, such as reading a database from your own disk, and `proto-tools` runs those in-process for you instead of failing.
+Every tool runs in its own automatically managed isolated environment, so all dependency wrangling is handled for you. In addition, `proto-tools` implements extensive infrastructure for features such as device management and GPU fan-out, making it easy to call tools in quick succession. You can use it as a standalone Python library, as part of the broader [proto-language](https://github.com/evo-design/proto-language) optimization system, or as an MCP server that exposes the same tools to AI agents. Tools can run on local compute or on Modal.
 
 Proto-tools is open source under an MIT license. Contributions are welcome!
 
@@ -233,3 +231,15 @@ If you use Proto in your research, please cite our preprint:
 ```
 
 Please also cite the underlying tools you use in your work, in addition to our preprint. Every tool's citation is available on its [documentation page](https://proto.evodesign.org/docs/tools/introduction).
+
+## Acknowledgements
+
+Thank you to [Modal](https://modal.com) for sponsoring the compute used to develop and test the
+remote execution layer, and for making it straightforward to host this catalogue.
+
+Thank you to everyone who has contributed to `proto-tools`. Contributions of every size are
+welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
+
+<a href="https://github.com/evo-design/proto-tools/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=evo-design/proto-tools" alt="Contributors">
+</a>
