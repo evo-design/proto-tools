@@ -352,6 +352,19 @@ from proto_tools.tools.masked_models import (
     run_esmc_sae_features,
 )
 
+# Molecular docking tools
+from proto_tools.tools.molecular_docking import (
+    VinaDockingConfig,
+    VinaDockingInput,
+    VinaDockingOutput,
+    VinaDockingPose,
+    VinaDockingPoseMetrics,
+    VinaLigandResult,
+    VinaReferenceLigandBox,
+    VinaSearchBox,
+    run_vina_docking,
+)
+
 # Mutagenesis tools
 from proto_tools.tools.mutagenesis import (
     RandomNucleotideSample,
@@ -1525,6 +1538,16 @@ __all__ = [
     "ESMCSAEFeaturesOutput",
     "SAELayerFeatures",
     "SequenceSAEFeatures",
+    # Molecular docking - AutoDock Vina
+    "VinaDockingConfig",
+    "VinaDockingInput",
+    "VinaDockingOutput",
+    "VinaDockingPose",
+    "VinaDockingPoseMetrics",
+    "VinaLigandResult",
+    "VinaReferenceLigandBox",
+    "VinaSearchBox",
+    "run_vina_docking",
     # RNA splicing - SpliceTransformer
     "run_splice_transformer",
     "SpliceTransformerInput",

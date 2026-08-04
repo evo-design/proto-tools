@@ -111,6 +111,8 @@ for instructions related to account setup, deploying a tool, and costs, or the [
 ├── <a href="proto_tools/tools/masked_models/esm2/">esm2/</a>
 ├── <a href="proto_tools/tools/masked_models/esm3/">esm3/</a>
 └── <a href="proto_tools/tools/masked_models/esmc/">esmc/</a>
+<a href="proto_tools/tools/molecular_docking/">molecular_docking/</a>              # Protein-ligand binding pose prediction
+└── <a href="proto_tools/tools/molecular_docking/vina/">vina/</a>
 <a href="proto_tools/tools/mutagenesis/">mutagenesis/</a>                    # Random sequence mutagenesis
 ├── <a href="proto_tools/tools/mutagenesis/random_nucleotide/">random_nucleotide/</a>
 └── <a href="proto_tools/tools/mutagenesis/random_protein/">random_protein/</a>
