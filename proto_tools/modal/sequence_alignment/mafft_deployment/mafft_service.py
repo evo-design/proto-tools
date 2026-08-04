@@ -13,7 +13,7 @@ from proto_tools.modal.app import HF_TOKEN_SECRET, MODEL_CACHE, SERVICE_RETRIES,
 from proto_tools.modal.base_images import CPU_BASE, with_proto_tools
 from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
-from proto_tools.modal.utils import RUNTIME_ENV, dispatch_tool_call, env_for
+from proto_tools.modal.utils import RUNTIME_ENV, env_for, run_tool_call
 
 
 def _warmup() -> None:
@@ -79,6 +79,4 @@ class MafftAlignService:
             run_mafft_align,
         )
 
-        inputs = MafftInput(**input_dict)
-        config = MafftConfig(**config_dict)
-        return dispatch_tool_call(run_mafft_align, inputs, config, instance=self.instance)
+        return run_tool_call(run_mafft_align, MafftInput, MafftConfig, input_dict, config_dict, instance=self.instance)

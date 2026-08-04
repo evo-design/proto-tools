@@ -16,7 +16,7 @@ from proto_tools.modal.base_images import GPU_BASE, with_proto_tools
 from proto_tools.modal.gpu_profiles import GPU_DEFAULT
 from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
-from proto_tools.modal.utils import RUNTIME_ENV, dispatch_tool_call, ensure_gpu_ready, env_for
+from proto_tools.modal.utils import RUNTIME_ENV, ensure_gpu_ready, env_for, run_tool_call
 
 
 def _warmup() -> None:
@@ -90,9 +90,14 @@ class ESM2Service:
             run_esm2_embeddings,
         )
 
-        inputs = ESM2EmbeddingsInput(**input_dict)
-        config = ESM2EmbeddingsConfig(**config_dict)
-        return dispatch_tool_call(run_esm2_embeddings, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_esm2_embeddings,
+            ESM2EmbeddingsInput,
+            ESM2EmbeddingsConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
 
     @modal.method()
     def sample(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -111,9 +116,9 @@ class ESM2Service:
             run_esm2_sample,
         )
 
-        inputs = ESM2SampleInput(**input_dict)
-        config = ESM2SampleConfig(**config_dict)
-        return dispatch_tool_call(run_esm2_sample, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_esm2_sample, ESM2SampleInput, ESM2SampleConfig, input_dict, config_dict, instance=self.instance
+        )
 
     @modal.method()
     def score(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -132,9 +137,9 @@ class ESM2Service:
             run_esm2_score,
         )
 
-        inputs = ESM2ScoringInput(**input_dict)
-        config = ESM2ScoringConfig(**config_dict)
-        return dispatch_tool_call(run_esm2_score, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_esm2_score, ESM2ScoringInput, ESM2ScoringConfig, input_dict, config_dict, instance=self.instance
+        )
 
     @modal.method()
     def gradient(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -145,6 +150,6 @@ class ESM2Service:
             run_esm2_gradient,
         )
 
-        inputs = ESM2GradientInput(**input_dict)
-        config = ESM2GradientConfig(**config_dict)
-        return dispatch_tool_call(run_esm2_gradient, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_esm2_gradient, ESM2GradientInput, ESM2GradientConfig, input_dict, config_dict, instance=self.instance
+        )

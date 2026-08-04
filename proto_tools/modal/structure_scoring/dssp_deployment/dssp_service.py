@@ -16,8 +16,8 @@ from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
 from proto_tools.modal.utils import (
     RUNTIME_ENV,
-    dispatch_tool_call,
     env_for,
+    run_tool_call,
     stage_all_excluded_fixtures,
 )
 
@@ -86,6 +86,11 @@ class DSSPService:
             run_dssp_secondary_structure,
         )
 
-        inputs = DSSPSecondaryStructureInput(**input_dict)
-        config = DSSPSecondaryStructureConfig(**config_dict)
-        return dispatch_tool_call(run_dssp_secondary_structure, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_dssp_secondary_structure,
+            DSSPSecondaryStructureInput,
+            DSSPSecondaryStructureConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )

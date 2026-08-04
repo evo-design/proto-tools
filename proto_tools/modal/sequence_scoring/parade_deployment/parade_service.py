@@ -15,7 +15,7 @@ from proto_tools.modal.base_images import GPU_BASE, with_proto_tools
 from proto_tools.modal.gpu_profiles import GPU_DEFAULT
 from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
-from proto_tools.modal.utils import RUNTIME_ENV, dispatch_tool_call, ensure_gpu_ready, env_for
+from proto_tools.modal.utils import RUNTIME_ENV, ensure_gpu_ready, env_for, run_tool_call
 
 
 def _warmup() -> None:
@@ -93,9 +93,14 @@ class ParadeService:
         )
         from proto_tools.tools.sequence_scoring.parade.shared_data_models import ParadeSequenceInput
 
-        inputs = ParadeSequenceInput(**input_dict)
-        config = ParadeActivityConfig(**config_dict)
-        return dispatch_tool_call(run_parade_activity, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_parade_activity,
+            ParadeSequenceInput,
+            ParadeActivityConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
 
     @modal.method()
     def gradient(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -114,9 +119,14 @@ class ParadeService:
             run_parade_gradient,
         )
 
-        inputs = ParadeGradientInput(**input_dict)
-        config = ParadeGradientConfig(**config_dict)
-        return dispatch_tool_call(run_parade_gradient, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_parade_gradient,
+            ParadeGradientInput,
+            ParadeGradientConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
 
     @modal.method()
     def stability(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -135,6 +145,11 @@ class ParadeService:
             ParadeSequenceInput,
         )
 
-        inputs = ParadeSequenceInput(**input_dict)
-        config = ParadeCheckpointConfig(**config_dict)
-        return dispatch_tool_call(run_parade_stability, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_parade_stability,
+            ParadeSequenceInput,
+            ParadeCheckpointConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )

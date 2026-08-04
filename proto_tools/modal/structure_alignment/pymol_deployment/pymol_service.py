@@ -10,8 +10,8 @@ from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
 from proto_tools.modal.utils import (
     RUNTIME_ENV,
-    dispatch_tool_call,
     env_for,
+    run_tool_call,
     stage_all_excluded_fixtures,
 )
 
@@ -76,6 +76,6 @@ class PyMOLService:
             run_pymol_rmsd_alignment,
         )
 
-        inputs = PyMOLRMSDInput(**input_dict)
-        config = PyMOLRMSDConfig(**config_dict)
-        return dispatch_tool_call(run_pymol_rmsd_alignment, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_pymol_rmsd_alignment, PyMOLRMSDInput, PyMOLRMSDConfig, input_dict, config_dict, instance=self.instance
+        )

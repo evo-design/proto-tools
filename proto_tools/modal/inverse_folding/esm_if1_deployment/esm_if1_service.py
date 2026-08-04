@@ -17,9 +17,9 @@ from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
 from proto_tools.modal.utils import (
     RUNTIME_ENV,
-    dispatch_tool_call,
     ensure_gpu_ready,
     env_for,
+    run_tool_call,
     stage_all_excluded_fixtures,
 )
 
@@ -93,9 +93,14 @@ class ESMIF1Service:
             run_esm_if1_sample,
         )
 
-        inputs = ESMIF1SampleInput(**input_dict)
-        config = ESMIF1SampleConfig(**config_dict)
-        return dispatch_tool_call(run_esm_if1_sample, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_esm_if1_sample,
+            ESMIF1SampleInput,
+            ESMIF1SampleConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
 
     @modal.method()
     def score(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -114,6 +119,11 @@ class ESMIF1Service:
             run_esm_if1_score,
         )
 
-        inputs = ESMIF1ScoringInput(**input_dict)
-        config = ESMIF1ScoringConfig(**config_dict)
-        return dispatch_tool_call(run_esm_if1_score, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_esm_if1_score,
+            ESMIF1ScoringInput,
+            ESMIF1ScoringConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )

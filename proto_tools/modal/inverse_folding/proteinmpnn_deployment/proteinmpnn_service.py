@@ -17,9 +17,9 @@ from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
 from proto_tools.modal.utils import (
     RUNTIME_ENV,
-    dispatch_tool_call,
     ensure_gpu_ready,
     env_for,
+    run_tool_call,
     stage_all_excluded_fixtures,
 )
 
@@ -93,9 +93,14 @@ class ProteinMPNNService:
             run_proteinmpnn_sample,
         )
 
-        inputs = ProteinMPNNSampleInput(**input_dict)
-        config = ProteinMPNNSampleConfig(**config_dict)
-        return dispatch_tool_call(run_proteinmpnn_sample, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_proteinmpnn_sample,
+            ProteinMPNNSampleInput,
+            ProteinMPNNSampleConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
 
     @modal.method()
     def score(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -114,9 +119,14 @@ class ProteinMPNNService:
             run_proteinmpnn_score,
         )
 
-        inputs = ProteinMPNNScoringInput(**input_dict)
-        config = ProteinMPNNScoringConfig(**config_dict)
-        return dispatch_tool_call(run_proteinmpnn_score, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_proteinmpnn_score,
+            ProteinMPNNScoringInput,
+            ProteinMPNNScoringConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
 
     @modal.method()
     def gradient(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -127,6 +137,11 @@ class ProteinMPNNService:
             run_proteinmpnn_gradient,
         )
 
-        inputs = ProteinMPNNGradientInput(**input_dict)
-        config = ProteinMPNNGradientConfig(**config_dict)
-        return dispatch_tool_call(run_proteinmpnn_gradient, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_proteinmpnn_gradient,
+            ProteinMPNNGradientInput,
+            ProteinMPNNGradientConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )

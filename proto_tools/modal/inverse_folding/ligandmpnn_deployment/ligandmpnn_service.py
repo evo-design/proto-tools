@@ -16,9 +16,9 @@ from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
 from proto_tools.modal.utils import (
     RUNTIME_ENV,
-    dispatch_tool_call,
     ensure_gpu_ready,
     env_for,
+    run_tool_call,
     stage_all_excluded_fixtures,
 )
 
@@ -92,9 +92,14 @@ class LigandMPNNService:
             run_ligandmpnn_sample,
         )
 
-        inputs = LigandMPNNSampleInput(**input_dict)
-        config = LigandMPNNSampleConfig(**config_dict)
-        return dispatch_tool_call(run_ligandmpnn_sample, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_ligandmpnn_sample,
+            LigandMPNNSampleInput,
+            LigandMPNNSampleConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
 
     @modal.method()
     def score(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -105,6 +110,11 @@ class LigandMPNNService:
             run_ligandmpnn_score,
         )
 
-        inputs = LigandMPNNScoringInput(**input_dict)
-        config = LigandMPNNScoringConfig(**config_dict)
-        return dispatch_tool_call(run_ligandmpnn_score, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_ligandmpnn_score,
+            LigandMPNNScoringInput,
+            LigandMPNNScoringConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )

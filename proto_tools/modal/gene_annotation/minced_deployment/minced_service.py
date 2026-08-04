@@ -13,7 +13,7 @@ from proto_tools.modal.app import HF_TOKEN_SECRET, MODEL_CACHE, SERVICE_RETRIES,
 from proto_tools.modal.base_images import CPU_BASE, with_proto_tools
 from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
-from proto_tools.modal.utils import RUNTIME_ENV, dispatch_tool_call, env_for
+from proto_tools.modal.utils import RUNTIME_ENV, env_for, run_tool_call
 
 
 def _warmup() -> None:
@@ -72,6 +72,4 @@ class MincedService:
         """
         from proto_tools.tools.gene_annotation.minced import MincedConfig, MincedInput, run_minced
 
-        inputs = MincedInput(**input_dict)
-        config = MincedConfig(**config_dict)
-        return dispatch_tool_call(run_minced, inputs, config, instance=self.instance)
+        return run_tool_call(run_minced, MincedInput, MincedConfig, input_dict, config_dict, instance=self.instance)

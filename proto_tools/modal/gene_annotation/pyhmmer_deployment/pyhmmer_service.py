@@ -14,7 +14,7 @@ from proto_tools.modal.app import HF_TOKEN_SECRET, MODEL_CACHE, SERVICE_RETRIES,
 from proto_tools.modal.base_images import CPU_BASE, with_proto_tools
 from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
-from proto_tools.modal.utils import RUNTIME_ENV, dispatch_tool_call, env_for
+from proto_tools.modal.utils import RUNTIME_ENV, env_for, run_tool_call
 
 
 def _warmup() -> None:
@@ -83,9 +83,14 @@ class PyHmmerService:
             run_pyhmmer_jackhmmer,
         )
 
-        inputs = PyJackhmmerInput(**input_dict)
-        config = PyJackhmmerConfig(**config_dict)
-        return dispatch_tool_call(run_pyhmmer_jackhmmer, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_pyhmmer_jackhmmer,
+            PyJackhmmerInput,
+            PyJackhmmerConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
 
     @modal.method()
     def nhmmer(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -104,9 +109,9 @@ class PyHmmerService:
             run_pyhmmer_nhmmer,
         )
 
-        inputs = PyNhmmerInput(**input_dict)
-        config = PyNhmmerConfig(**config_dict)
-        return dispatch_tool_call(run_pyhmmer_nhmmer, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_pyhmmer_nhmmer, PyNhmmerInput, PyNhmmerConfig, input_dict, config_dict, instance=self.instance
+        )
 
     @modal.method()
     def phmmer(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -122,6 +127,6 @@ class PyHmmerService:
         from proto_tools.tools.gene_annotation.pyhmmer.phmmer import PyPhmmerInput, run_pyhmmer_phmmer
         from proto_tools.tools.gene_annotation.pyhmmer.shared_data_models import PyHmmerConfig
 
-        inputs = PyPhmmerInput(**input_dict)
-        config = PyHmmerConfig(**config_dict)
-        return dispatch_tool_call(run_pyhmmer_phmmer, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_pyhmmer_phmmer, PyPhmmerInput, PyHmmerConfig, input_dict, config_dict, instance=self.instance
+        )

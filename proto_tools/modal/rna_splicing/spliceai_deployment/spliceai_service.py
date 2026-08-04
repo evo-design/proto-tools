@@ -22,7 +22,7 @@ from proto_tools.modal.base_images import GPU_BASE, with_proto_tools
 from proto_tools.modal.gpu_profiles import GPU_DEFAULT
 from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
-from proto_tools.modal.utils import RUNTIME_ENV, dispatch_tool_call, ensure_gpu_ready, env_for
+from proto_tools.modal.utils import RUNTIME_ENV, ensure_gpu_ready, env_for, run_tool_call
 
 
 def _warmup() -> None:
@@ -110,9 +110,14 @@ class SpliceAIService:
             run_spliceai_predict,
         )
 
-        inputs = SpliceAIPredictInput(**input_dict)
-        config = SpliceAIPredictConfig(**config_dict)
-        return dispatch_tool_call(run_spliceai_predict, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_spliceai_predict,
+            SpliceAIPredictInput,
+            SpliceAIPredictConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
 
     @modal.method()
     def score(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -131,6 +136,6 @@ class SpliceAIService:
             run_spliceai_score,
         )
 
-        inputs = SpliceAIScoreInput(**input_dict)
-        config = SpliceAIScoreConfig(**config_dict)
-        return dispatch_tool_call(run_spliceai_score, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_spliceai_score, SpliceAIScoreInput, SpliceAIScoreConfig, input_dict, config_dict, instance=self.instance
+        )

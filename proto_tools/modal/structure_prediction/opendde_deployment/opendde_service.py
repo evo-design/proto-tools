@@ -14,7 +14,7 @@ from proto_tools.modal.base_images import GPU_BASE, with_proto_tools
 from proto_tools.modal.gpu_profiles import GPU_DEFAULT
 from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
-from proto_tools.modal.utils import RUNTIME_ENV, dispatch_tool_call, ensure_gpu_ready, env_for
+from proto_tools.modal.utils import RUNTIME_ENV, ensure_gpu_ready, env_for, run_tool_call
 
 
 def _warmup() -> None:
@@ -86,6 +86,4 @@ class OpenDDEService:
             run_opendde,
         )
 
-        inputs = OpenDDEInput(**input_dict)
-        config = OpenDDEConfig(**config_dict)
-        return dispatch_tool_call(run_opendde, inputs, config, instance=self.instance)
+        return run_tool_call(run_opendde, OpenDDEInput, OpenDDEConfig, input_dict, config_dict, instance=self.instance)

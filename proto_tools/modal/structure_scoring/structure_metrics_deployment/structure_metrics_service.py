@@ -18,7 +18,7 @@ from proto_tools.modal.app import HF_TOKEN_SECRET, SERVICE_RETRIES, get_app_for_
 from proto_tools.modal.base_images import CPU_BASE, with_proto_tools
 from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
-from proto_tools.modal.utils import RUNTIME_ENV, dispatch_tool_call, env_for
+from proto_tools.modal.utils import RUNTIME_ENV, env_for, run_tool_call
 
 
 def _warmup() -> None:
@@ -71,6 +71,6 @@ class StructureMetricsService:
             run_structure_metrics,
         )
 
-        inputs = StructureMetricsInput(**input_dict)
-        config = StructureMetricsConfig(**config_dict)
-        return dispatch_tool_call(run_structure_metrics, inputs, config)
+        return run_tool_call(
+            run_structure_metrics, StructureMetricsInput, StructureMetricsConfig, input_dict, config_dict
+        )

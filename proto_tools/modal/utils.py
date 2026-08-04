@@ -9,9 +9,10 @@ from typing import Any
 
 import modal
 
+from proto_tools.modal.hooks import apply_payload_hooks, run_with_middleware
 from proto_tools.modal.progress import container_progress
 from proto_tools.utils.base_config import BaseConfig
-from proto_tools.utils.tool_io import BaseToolOutput, MissingAssetError
+from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, MissingAssetError
 
 _utils_logger = logging.getLogger(__name__)
 
@@ -272,7 +273,38 @@ def dispatch_tool_call(
     partition = next((config._progress_partition for config in configs if config._progress_partition), None)
     level = next((config._progress_level for config in configs if config._progress_partition), logging.INFO)
     with container_progress(partition, level=level):
-        return apply_tool_envelope(run_fn, *args, **kwargs)
+        # Inside the progress context, so anything a middleware logs reaches the caller too.
+        return run_with_middleware(lambda: apply_tool_envelope(run_fn, *args, **kwargs))
+
+
+def run_tool_call(
+    run_fn: Callable[..., BaseToolOutput],
+    input_model: type[BaseToolInput],
+    config_model: type[BaseConfig],
+    input_dict: dict[str, Any],
+    config_dict: dict[str, Any],
+    *,
+    instance: Any = None,
+) -> dict[str, Any]:
+    """Validate one call's mappings and run it. The entry point a service method calls.
+
+    Construction happens here rather than in each service method so payload hooks have somewhere
+    to run: once a mapping becomes a model it has already been validated, and a value that needed
+    resolving first has already been rejected or normalized.
+
+    Args:
+        run_fn (Callable[..., BaseToolOutput]): The tool's ``run_*`` function.
+        input_model (type[BaseToolInput]): Input model to validate ``input_dict`` with.
+        config_model (type[BaseConfig]): Config model to validate ``config_dict`` with.
+        input_dict (dict[str, Any]): Raw input mapping as received from the caller.
+        config_dict (dict[str, Any]): Raw config mapping as received from the caller.
+        instance (Any): Persistent worker to run on, when the service keeps one.
+
+    Returns:
+        dict[str, Any]: The tool's serialized output.
+    """
+    apply_payload_hooks(input_dict, config_dict)
+    return dispatch_tool_call(run_fn, input_model(**input_dict), config_model(**config_dict), instance=instance)
 
 
 def apply_standalone_overrides(image: modal.Image, tool: str, source_dir: Path | str) -> modal.Image:

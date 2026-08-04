@@ -21,9 +21,9 @@ from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
 from proto_tools.modal.utils import (
     RUNTIME_ENV,
-    dispatch_tool_call,
     ensure_gpu_ready,
     env_for,
+    run_tool_call,
     stage_all_excluded_fixtures,
 )
 
@@ -104,9 +104,9 @@ class FAMPNNService:
             run_fampnn_sample,
         )
 
-        inputs = FAMPNNSampleInput(**input_dict)
-        config = FAMPNNSampleConfig(**config_dict)
-        return dispatch_tool_call(run_fampnn_sample, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_fampnn_sample, FAMPNNSampleInput, FAMPNNSampleConfig, input_dict, config_dict, instance=self.instance
+        )
 
     @modal.method()
     def score(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -125,9 +125,9 @@ class FAMPNNService:
             run_fampnn_score,
         )
 
-        inputs = FAMPNNScoreInput(**input_dict)
-        config = FAMPNNScoreConfig(**config_dict)
-        return dispatch_tool_call(run_fampnn_score, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_fampnn_score, FAMPNNScoreInput, FAMPNNScoreConfig, input_dict, config_dict, instance=self.instance
+        )
 
     @modal.method()
     def score_all_mutations(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -146,9 +146,14 @@ class FAMPNNService:
             run_fampnn_score_all_mutations,
         )
 
-        inputs = FAMPNNScoreAllMutationsInput(**input_dict)
-        config = FAMPNNScoreAllMutationsConfig(**config_dict)
-        return dispatch_tool_call(run_fampnn_score_all_mutations, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_fampnn_score_all_mutations,
+            FAMPNNScoreAllMutationsInput,
+            FAMPNNScoreAllMutationsConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
 
     @modal.method()
     def pack(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -167,6 +172,6 @@ class FAMPNNService:
             run_fampnn_pack,
         )
 
-        inputs = FAMPNNPackInput(**input_dict)
-        config = FAMPNNPackConfig(**config_dict)
-        return dispatch_tool_call(run_fampnn_pack, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_fampnn_pack, FAMPNNPackInput, FAMPNNPackConfig, input_dict, config_dict, instance=self.instance
+        )

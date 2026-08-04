@@ -15,7 +15,7 @@ from proto_tools.modal.base_images import GPU_BASE, with_proto_tools
 from proto_tools.modal.gpu_profiles import GPU_BASIC
 from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
-from proto_tools.modal.utils import RUNTIME_ENV, dispatch_tool_call, ensure_gpu_ready, env_for
+from proto_tools.modal.utils import RUNTIME_ENV, ensure_gpu_ready, env_for, run_tool_call
 
 
 def _warmup() -> None:
@@ -86,6 +86,11 @@ class SpliceTransformerService:
             run_splice_transformer,
         )
 
-        inputs = SpliceTransformerInput(**input_dict)
-        config = SpliceTransformerConfig(**config_dict)
-        return dispatch_tool_call(run_splice_transformer, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_splice_transformer,
+            SpliceTransformerInput,
+            SpliceTransformerConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
