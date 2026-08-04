@@ -7,6 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/evo-design/proto-tools/blob/main/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-proto.evodesign.org-blue)](https://proto.evodesign.org/docs/tools/introduction)
 [![bioRxiv](https://img.shields.io/badge/bioRxiv-2026.06.22.733870-b31b1b.svg)](https://www.biorxiv.org/content/10.64898/2026.06.22.733870)
+[![Modal](https://img.shields.io/badge/Modal-ready--to--deploy-brightgreen?logo=modal&logoColor=white)](proto_tools/modal/README.md)
 
 > [!NOTE]
 > **To add a tool, please fork our repo and open a pull request!** We will help you integrate it. See [CONTRIBUTING.md](CONTRIBUTING.md) for layout and conventions.
@@ -15,7 +16,9 @@
 
 Welcome! This repository contains the open-source implementation of `proto-tools`, a Python package containing a large suite of computational biology and biological AI tools, all accessible through a single, consistent Python interface. Language models, structure predictors, inverse folding, sequence analysis, gene annotation, conformational dynamics, genomic scoring, and more are all available through a single `pip install` command.
 
-Every tool runs in its own automatically managed isolated environment, so all dependency wrangling is handled for you. In addition, `proto-tools` implements extensive infrastructure for features such as device management and GPU fan-out, making it easy to call tools in quick succession. You can use it as a standalone Python library, as part of the broader [proto-language](https://github.com/evo-design/proto-language) optimization system, or as an MCP server that exposes the same tools to AI agents. Tools can run on local compute or on Modal.
+Every tool runs in its own automatically managed isolated environment, so all dependency wrangling is handled for you. In addition, `proto-tools` implements extensive infrastructure for features such as device management and GPU fan-out, making it easy to call tools in quick succession. You can use it as a standalone Python library, as part of the broader [proto-language](https://github.com/evo-design/proto-language) optimization system, or as an MCP server that exposes the same tools to AI agents.
+
+Tools can run on local compute or on [Modal](https://modal.com). Deployments ship with the package for the great majority of the catalogue — 54 apps serving 99 tools — so hosting one is a single command rather than a container to write. Each keeps its model weights warm between calls in your own Modal workspace, and a benchmark report recording what it costs to run, cold and warm, sits beside every deployment. The tools that stay local do so for a stated reason, such as reading a database from your own disk, and `proto-tools` runs those in-process for you instead of failing.
 
 Proto-tools is open source under an MIT license. Contributions are welcome!
 
@@ -59,6 +62,8 @@ For shared filesystems, model weights can be reused to avoid downloading duplica
 A few tools use gated models or software that require accepting a license / terms-of-use first (e.g. ESM3, AlphaGenome, AlphaFold3, X3DNA). See [notes/gated-models.md](notes/gated-models.md) for the full list and per-model access steps.
 
 ### Step 4: Remote compute (optional)
+
+<img src="guides/assets/modal/modal-logo.png" alt="Modal" width="150">
 
 `proto-tools` enables users to scale their tool use beyond their local machine through an
 integration with [Modal](https://modal.com), a serverless compute platform that
