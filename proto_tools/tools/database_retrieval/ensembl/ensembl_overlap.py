@@ -164,6 +164,7 @@ def example_input() -> Any:
 
 @tool(
     key="ensembl-overlap",
+    local_only="ensembl-overlap does not use a gpu and does not need an environment, so it can run in process",
     label="Ensembl Overlap",
     category="database_retrieval",
     input_class=EnsemblOverlapInput,

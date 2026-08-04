@@ -608,15 +608,15 @@ def test_homooligomer():
 @pytest.mark.slow
 @pytest.mark.uses_gpu
 def test_alphafold2_benchmark(request):
-    """Benchmark alphafold2-prediction on the trp heterodimer (cold + warm).
+    """Benchmark alphafold2-prediction on the trp heterodimer with MSA (cold + warm).
 
-    Two-chain protein complex (~500 residues total) folded without MSA. Cold
-    pass measures weight load + first inference; warm pass measures inference
-    only.
+    Two-chain protein complex (~500 residues total). The MSA search is included because it is
+    usually the dominant cost of a real fold, and because nothing else exercises that path.
+    Cold pass measures weight load + first inference; warm pass measures inference only.
     """
     complex_ = load_benchmark_complex("trp_heterodimer")
     inputs = AlphaFold2Input(complexes=[complex_])
-    config = AlphaFold2Config(use_msa=False, verbose=True)
+    config = AlphaFold2Config(use_msa=True, verbose=True)
 
     result = benchmark_twice(request, "alphafold2", lambda: run_alphafold2(inputs=inputs, config=config))
 

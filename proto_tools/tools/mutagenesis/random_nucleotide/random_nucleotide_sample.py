@@ -200,6 +200,7 @@ def example_input() -> Any:
 
 @tool(
     key="random-nucleotide-sample",
+    local_only="random-nucleotide-sample does not use a gpu and does not need an environment, so it can run in process",
     label="Random Nucleotide Sampling",
     category="mutagenesis",
     input_class=RandomNucleotideSampleInput,

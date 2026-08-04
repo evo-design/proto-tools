@@ -179,7 +179,10 @@ def test_foldseek_multimer_search_benchmark(request: pytest.FixtureRequest, tmp_
             (target_dir / f"renin_{i}.cif").write_text(renin_cif)
 
     inputs = FoldseekMultimerSearchInput(structure=multimer_pdb)
-    config = FoldseekMultimerSearchConfig(search_mode="local", local_db=str(target_dir), num_threads=4)
+    # device is pinned deliberately: see the note on foldseek-search. This measures local-DB
+    # multimer search against a database built on this machine, which the config refuses on a
+    # remote device by design.
+    config = FoldseekMultimerSearchConfig(search_mode="local", local_db=str(target_dir), num_threads=4, device="cpu")
 
     def run_batch():
         last = None

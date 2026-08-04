@@ -206,6 +206,10 @@ def example_input() -> Any:
 
 @tool(
     key="foldseek-rbh",
+    local_only=(
+        "foldseek-rbh searches a local structure database (local_db), which is not available on a "
+        "remote worker. Run locally with device='cpu'."
+    ),
     label="Foldseek Reciprocal Best Hits",
     category="structure_alignment",
     input_class=FoldseekRBHInput,

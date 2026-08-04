@@ -215,11 +215,11 @@ def test_rf3_seed_advances_per_complex():
 @pytest.mark.slow
 @pytest.mark.uses_gpu
 def test_rf3_prediction_benchmark(request: pytest.FixtureRequest) -> None:
-    """Benchmark rf3-prediction on 8 random 256-residue proteins, MSA-free, diffusion_batch_size=1 (cold + warm)."""
+    """Benchmark rf3-prediction on 8 random 256-residue proteins with MSA, diffusion_batch_size=1 (cold + warm)."""
     sequences = random_protein_sequences(n=8, length=256, seed=0)
     complexes = [Complex(chains=[Chain(sequence=seq, entity_type="protein")]) for seq in sequences]
     inputs = RF3Input(complexes=complexes)
-    config = RF3Config(use_msa=False, diffusion_batch_size=1, verbose=False)
+    config = RF3Config(use_msa=True, diffusion_batch_size=1, verbose=False)
 
     result = benchmark_twice(request, "rf3", lambda: run_rf3_prediction(inputs, config))
 

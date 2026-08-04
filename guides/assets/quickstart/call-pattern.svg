@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 200" role="img" aria-label="Input plus Config feed into run_*(), which returns an Output">
+  <style>
+    .border      { stroke: #94A3B8; stroke-opacity: 0.7; fill: none; }
+    .connector   { stroke: #94A3B8; stroke-opacity: 0.55; stroke-width: 1.2; fill: none; }
+    .label       { fill: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; font-weight: 600; }
+    .muted       { fill: #64748B; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 9.5px; }
+    .caption     { fill: #475569; font-family: ui-serif, Georgia, serif; font-style: italic; font-size: 11px; }
+    .plus        { fill: #64748B; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 16px; font-weight: 700; }
+    .marker      { stroke: #64748B; stroke-width: 1.2; fill: none; }
+    .marker-head { fill: #64748B; }
+    .pill        { fill: #4B85E8; }
+    .pill-text   { fill: #ffffff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; font-weight: 600; }
+    .out         { fill: #1E3A6A; }
+    .out-text    { fill: #ffffff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; font-weight: 600; }
+    .on-fill     { fill: #DDE7F5; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 9.5px; }
+    @media (prefers-color-scheme: dark) {
+      .border      { stroke: #64748B; stroke-opacity: 0.7; }
+      .connector   { stroke: #64748B; stroke-opacity: 0.55; }
+      .label       { fill: #CBD5E1; }
+      .muted       { fill: #94A3B8; }
+      .caption     { fill: #CBD5E1; }
+      .plus        { fill: #94A3B8; }
+      .marker      { stroke: #94A3B8; }
+      .marker-head { fill: #94A3B8; }
+      .out         { fill: #3B5A8A; }
+    }
+  </style>
+
+  <!-- Input -->
+  <rect x="10" y="28" width="122" height="46" rx="6" class="border" />
+  <text x="71" y="49" text-anchor="middle" class="label">Input</text>
+  <text x="71" y="64" text-anchor="middle" class="muted">your biological data</text>
+
+  <!-- Combined, not sequential -->
+  <text x="71" y="101" text-anchor="middle" class="plus">+</text>
+
+  <!-- Config -->
+  <rect x="10" y="112" width="122" height="46" rx="6" class="border" />
+  <text x="71" y="133" text-anchor="middle" class="label">Config</text>
+  <text x="71" y="148" text-anchor="middle" class="muted">settings · optional</text>
+
+  <!-- Both converge into one call -->
+  <path d="M132 51 C 162 51, 164 94, 186 94" class="connector" />
+  <path d="M132 135 C 162 135, 164 94, 186 94" class="connector" />
+  <line x1="186" y1="94" x2="204" y2="94" class="marker" />
+  <polygon points="204,89 213,94 204,99" class="marker-head" />
+
+  <!-- The call -->
+  <rect x="217" y="70" width="104" height="48" rx="6" class="pill" />
+  <text x="269" y="91" text-anchor="middle" class="pill-text">run_*()</text>
+  <text x="269" y="106" text-anchor="middle" class="on-fill">runs the tool</text>
+
+  <!-- Result -->
+  <line x1="321" y1="94" x2="341" y2="94" class="marker" />
+  <polygon points="341,89 350,94 341,99" class="marker-head" />
+
+  <rect x="354" y="70" width="116" height="48" rx="6" class="out" />
+  <text x="412" y="91" text-anchor="middle" class="out-text">Output</text>
+  <text x="412" y="106" text-anchor="middle" class="on-fill">results + metadata</text>
+
+  <text x="240" y="184" text-anchor="middle" class="caption">Config is optional; omitting it applies the tool's documented defaults.</text>
+</svg>

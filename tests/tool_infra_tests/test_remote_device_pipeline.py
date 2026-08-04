@@ -12,13 +12,12 @@ far side does not repeat it.
 from __future__ import annotations
 
 import contextlib
-import sys
-import types
 from typing import Any, ClassVar
 
 import pytest
 from pydantic import BaseModel, Field
 
+from proto_tools.modal import ModalDispatchError
 from proto_tools.tools.tool_registry import ToolRegistry, tool
 from proto_tools.utils import BaseConfig, ConfigField
 from proto_tools.utils.base_config import INTERNAL_STATE_KEY
@@ -105,20 +104,14 @@ def _register_probe(
     import proto_tools.proto as proto_module
 
     monkeypatch.setattr(proto_module, "dispatch_to_proto", fake_dispatch, raising=False)
-    monkeypatch.setattr(proto_module, "is_proto_hostable", lambda _k: True, raising=False)
 
     def fake_batch_dispatch(tool_key: str, inputs_list, configs):
         """Chunked fan-out path; one config per chunk, recorded as the single-call form does."""
         return [fake_dispatch(tool_key, chunk, one) for chunk, one in zip(inputs_list, configs, strict=True)]
 
-    # Stand in for proto-modal rather than importing it. It is an optional peer that depends on
-    # proto-tools, so CI never installs it, and importing it here would fail after the tool above
-    # was registered, leaking the key into every later test. Both entry points are replaced
-    # anyway, so the real package would contribute nothing.
-    fake_modal = types.ModuleType("proto_modal")
-    fake_modal.dispatch_to_modal = fake_dispatch  # type: ignore[attr-defined]
-    fake_modal.dispatch_batch_to_modal = fake_batch_dispatch  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "proto_modal", fake_modal)
+    # Replace both dispatch entry points so no call reaches a real Modal workspace.
+    monkeypatch.setattr("proto_tools.modal.dispatch_to_modal", fake_dispatch)
+    monkeypatch.setattr("proto_tools.modal.dispatch_batch_to_modal", fake_batch_dispatch)
 
     return ToolRegistry.get(key), seen
 
@@ -218,7 +211,7 @@ def test_a_short_remote_result_is_reported_clearly(remote_tool, program_cache, m
         # this version reads, so validation drops it and the list arrives empty.
         return _RemoteOutput(tool_id=tool_key, execution_time=0.0, success=True, results=[])
 
-    monkeypatch.setattr(sys.modules["proto_modal"], "dispatch_to_modal", short_dispatch, raising=False)
+    monkeypatch.setattr("proto_tools.modal.dispatch_to_modal", short_dispatch)
 
     with pytest.raises(ValueError, match=r"returned 0 item\(s\) in 'results' for 2 sent"):
         spec.function(_RemoteInput(items=["a", "b"]), _RemoteConfig(device="modal"))
@@ -315,7 +308,7 @@ def test_chunks_that_return_the_wrong_count_are_reported(chunked_tool, monkeypat
         assert len(configs) == len(inputs_list)
         return [_RemoteOutput(tool_id=tool_key, execution_time=0.0, success=True, results=[]) for _ in inputs_list]
 
-    monkeypatch.setattr(sys.modules["proto_modal"], "dispatch_batch_to_modal", short_batch, raising=False)
+    monkeypatch.setattr("proto_tools.modal.dispatch_batch_to_modal", short_batch)
 
     # Every chunk is short, so every chunk fails and nothing survives to return.
     with pytest.raises(PartialFailureError, match=r"chunk of 3 item\(s\) starting at 0 returned 0 item"):
@@ -439,7 +432,7 @@ def _fail_chunks(monkeypatch, *, failing: set[int], exc: Exception | None = None
             )
         return out
 
-    monkeypatch.setattr(sys.modules["proto_modal"], "dispatch_batch_to_modal", batch, raising=False)
+    monkeypatch.setattr("proto_tools.modal.dispatch_batch_to_modal", batch)
     return seen
 
 
@@ -519,7 +512,7 @@ def test_the_surviving_chunks_are_cached_so_a_retry_only_repeats_the_failure(chu
 
     # Same batch again. The five items that came back are cached, so only the failed three go out.
     seen["dispatches"].clear()
-    monkeypatch.setattr(sys.modules["proto_modal"], "dispatch_batch_to_modal", _unused_batch, raising=False)
+    monkeypatch.setattr("proto_tools.modal.dispatch_batch_to_modal", _unused_batch)
     result = spec.function(_RemoteInput(items=[f"s{n}" for n in range(8)]), _RemoteConfig(device="modal"))
 
     assert seen["dispatches"] == [["s3", "s4", "s5"]], "cached survivors must not be recomputed"
@@ -536,7 +529,7 @@ def test_reported_indices_are_the_callers_not_post_strip_positions(chunked_tool,
     spec, _ = chunked_tool
 
     # Warm one item so cache-strip shifts every later position by one.
-    monkeypatch.setattr(sys.modules["proto_modal"], "dispatch_batch_to_modal", _unused_batch, raising=False)
+    monkeypatch.setattr("proto_tools.modal.dispatch_batch_to_modal", _unused_batch)
     spec.function(_RemoteInput(items=["s0"]), _RemoteConfig(device="modal"))
 
     _fail_chunks(monkeypatch, failing={1})
@@ -590,7 +583,7 @@ def test_return_partial_does_not_cache_the_failures(chunked_tool, program_cache,
 
     # Same batch again, nothing failing this time: the three failed items must go back out.
     seen["dispatches"].clear()
-    monkeypatch.setattr(sys.modules["proto_modal"], "dispatch_batch_to_modal", _unused_batch, raising=False)
+    monkeypatch.setattr("proto_tools.modal.dispatch_batch_to_modal", _unused_batch)
     second = spec.function(_RemoteInput(items=[f"s{n}" for n in range(8)]), _RemoteConfig(device="modal"))
 
     assert seen["dispatches"] == [["s3", "s4", "s5"]], "the failures must be retried, not served from cache"
@@ -678,7 +671,7 @@ def test_return_partial_survives_a_warm_cache(chunked_tool, program_cache, monke
     monkeypatch.setenv("PROTO_ON_PARTIAL_FAILURE", "return_partial")
 
     # Warm two items so the failing run below has to stitch against cached results.
-    monkeypatch.setattr(sys.modules["proto_modal"], "dispatch_batch_to_modal", _unused_batch, raising=False)
+    monkeypatch.setattr("proto_tools.modal.dispatch_batch_to_modal", _unused_batch)
     spec.function(_RemoteInput(items=["s0", "s1"]), _RemoteConfig(device="modal"))
 
     _fail_chunks(monkeypatch, failing={1})
@@ -728,18 +721,15 @@ def test_a_total_failure_raises_even_under_return_partial(chunked_tool, monkeypa
     assert sum(len(f["indices"]) for f in caught.value.failed) == 8
 
 
-class _FakeModalDispatchError(RuntimeError):
-    """Stands in for proto-modal's setup errors, which CI cannot import."""
-
-
 @pytest.mark.parametrize(
     "error",
     [
         PermissionError("cloud rejected the configured key"),
         NotImplementedError("no API key is configured"),
-        ImportError("device='modal' requires proto-modal"),
+        ImportError("device='modal' requires the Modal SDK"),
+        ModalDispatchError("the app is not deployed in this workspace"),
     ],
-    ids=["bad-credentials", "no-api-key", "client-not-installed"],
+    ids=["bad-credentials", "no-api-key", "client-not-installed", "not-deployed"],
 )
 @pytest.mark.parametrize("policy", ["raise", "return_partial"])
 def test_a_setup_failure_surfaces_instead_of_becoming_partial(chunked_tool, monkeypatch, error, policy):
@@ -755,7 +745,7 @@ def test_a_setup_failure_surfaces_instead_of_becoming_partial(chunked_tool, monk
     def cannot_dispatch(tool_key, inputs_list, configs):
         raise error
 
-    monkeypatch.setattr(sys.modules["proto_modal"], "dispatch_batch_to_modal", cannot_dispatch, raising=False)
+    monkeypatch.setattr("proto_tools.modal.dispatch_batch_to_modal", cannot_dispatch)
 
     with pytest.raises(type(error)) as caught:
         spec.function(_RemoteInput(items=[f"s{n}" for n in range(8)]), _RemoteConfig(device="modal"))
@@ -772,7 +762,7 @@ def test_a_setup_failure_is_not_retried(chunked_tool, monkeypatch):
         attempts.append(len(inputs_list))
         raise PermissionError("cloud rejected the configured key")
 
-    monkeypatch.setattr(sys.modules["proto_modal"], "dispatch_batch_to_modal", cannot_dispatch, raising=False)
+    monkeypatch.setattr("proto_tools.modal.dispatch_batch_to_modal", cannot_dispatch)
 
     with pytest.raises(PermissionError):
         spec.function(_RemoteInput(items=[f"s{n}" for n in range(8)]), _RemoteConfig(device="modal"))
@@ -794,7 +784,7 @@ def test_a_missing_asset_still_propagates_through_the_partial_machinery(chunked_
     def no_asset(tool_key, inputs_list, configs):
         raise MissingAssetError("esmfold", "weights")
 
-    monkeypatch.setattr(sys.modules["proto_modal"], "dispatch_batch_to_modal", no_asset, raising=False)
+    monkeypatch.setattr("proto_tools.modal.dispatch_batch_to_modal", no_asset)
 
     with pytest.raises(MissingAssetError):
         spec.function(_RemoteInput(items=[f"s{n}" for n in range(8)]), _RemoteConfig(device="modal"))
@@ -933,7 +923,7 @@ def test_isolating_an_expensive_item_may_cost_an_extra_piece():
 def test_a_local_database_search_is_forced_remote_only_when_hosted(monkeypatch):
     """A hosted environment cannot stage a corpus, so a search that needs one has to give way.
 
-    proto-modal rules a tool needing a staged corpus out of scope outright — ``uniref30-2302`` is
+    a tool needing a staged corpus is out of scope for a hosted deployment — ``uniref30-2302`` is
     hundreds of gigabytes — so the remote API is the only search such a process can run.
     """
     from proto_tools.tools.sequence_alignment.mmseqs2.homology_search import Mmseqs2HomologySearchConfig

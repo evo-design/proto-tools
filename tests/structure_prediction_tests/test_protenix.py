@@ -400,15 +400,16 @@ def test_protenix_pae_surface():
 @pytest.mark.slow
 @pytest.mark.uses_gpu
 def test_protenix_benchmark(request):
-    """Benchmark protenix-prediction on the MfnG protein + L-tyrosine ligand (cold + warm).
+    """Benchmark protenix-prediction on the MfnG protein + L-tyrosine ligand with MSA (cold + warm).
 
-    Single ~390-residue protein-ligand complex without MSA, run with the default
-    base model. Cold pass measures weight load + first inference; warm pass
-    measures inference only.
+    Single ~390-residue protein-ligand complex, run with the default base model. The MSA search is
+    included because it is usually the dominant cost of a real fold, and because nothing else
+    exercises that path. Cold pass measures weight load + first inference; warm pass measures
+    inference only.
     """
     complex_ = load_benchmark_complex("MfnG_and_ligand")
     inputs = ProtenixInput(complexes=[complex_])
-    config = ProtenixConfig(use_msa=False, verbose=True)
+    config = ProtenixConfig(use_msa=True, verbose=True)
 
     result = benchmark_twice(request, "protenix", lambda: run_protenix(inputs=inputs, config=config))
 
