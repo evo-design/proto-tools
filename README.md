@@ -243,6 +243,8 @@ Thank you to [Stanford University](https://www.stanford.edu) and the
 Thank you to everyone who has contributed to `proto-tools`. Contributions of every size are
 welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
 
-<a href="https://github.com/evo-design/proto-tools/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=evo-design/proto-tools" alt="Contributors">
-</a>
+<p align="center">
+  <a href="https://github.com/evo-design/proto-tools/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=evo-design/proto-tools" alt="Contributors" width="380">
+  </a>
+</p>
