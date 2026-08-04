@@ -245,6 +245,6 @@ welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
 
 <p align="center">
   <a href="https://github.com/evo-design/proto-tools/graphs/contributors">
-    <img src="https://contrib.rocks/image?repo=evo-design/proto-tools" alt="Contributors" width="380">
+    <img src="https://contrib.rocks/image?repo=evo-design/proto-tools" alt="Contributors">
   </a>
 </p>
