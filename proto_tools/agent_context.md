@@ -45,8 +45,54 @@ output. Resolve a tool by registry key (`esm2-embedding`), run-function name
 | `proto-tools docs <tool>` | Intro, applications, usage tips, license |
 | `proto-tools schema <tool> [--input/--config/--output]` | JSON Schema(s) |
 | `proto-tools input/config/output <tool>` | Field-level model docs |
-| `proto-tools example-input <tool>` | A minimal valid `Input` |
+| `proto-tools signature <tool>` | Imports, symbol names, and required input fields for the call |
+| `proto-tools example-input <tool> [--as-python]` | A minimal valid `Input`, as JSON or as a runnable snippet |
 | `proto-tools example <tool>` | The toolkit example notebook as markdown |
+
+## Don't guess symbol names from the registry key
+
+Model and run-function names come from the toolkit, not the registry key, so
+`esm2-embedding` lining up with `ESM2EmbeddingsInput` is the exception rather
+than the rule. `blast-create-db` exports `CreateBlastDbInput` and
+`run_create_blast_db`; `mafft-align` exports `MafftInput`, not `MafftAlignInput`.
+
+Ask instead of guessing:
+
+```bash
+proto-tools signature blast-create-db
+```
+
+```python
+from proto_tools.tools.sequence_alignment.blast.create_blast_db import (
+    CreateBlastDbConfig,
+    CreateBlastDbInput,
+    run_create_blast_db,
+)
+
+result = run_create_blast_db(
+    CreateBlastDbInput(fasta=...),
+    CreateBlastDbConfig(),  # optional, omit for defaults
+)  # -> CreateBlastDbOutput
+```
+
+`signature` is the cheap call: it renders symbol names and required field names
+only, so it costs the same few hundred bytes for every tool. `example-input`
+carries real values and scales with them, which for a structure or a
+model-context-length window means hundreds of KB; reach for it when you want a
+payload to actually run, not when you want the names.
+
+From Python, when you already hold a registry key, call the tool through its
+spec rather than importing anything (there is no `ToolRegistry.run()`):
+
+```python
+from proto_tools import ToolRegistry
+
+spec = ToolRegistry.get("blast-create-db")
+result = spec.function(ToolRegistry.get_example_input("blast-create-db"))
+```
+
+`spec.input_model`, `spec.config_model`, and `spec.output_model` give the
+classes directly, and `Model.model_fields` gives their fields.
 
 ## Keep models warm and fan out across GPUs
 

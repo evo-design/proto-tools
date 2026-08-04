@@ -15,7 +15,7 @@ import random
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseConfig, BaseToolInput, BaseToolOutput, InputField
@@ -60,24 +60,39 @@ class MockIterableStochasticSerialConfig(BaseConfig):
     """
 
 
+class MockSerialCompletion(BaseModel):
+    """One per-prompt result.
+
+    Attributes:
+        completion (str): Per-prompt sampled token for this prompt.
+    """
+
+    completion: str = Field(title="Completion", description="Per-prompt sampled token for this prompt")
+
+
 class MockIterableStochasticSerialOutput(BaseToolOutput):
     """Output from the serial stochastic iterable mock.
 
     Attributes:
-        completions (list[str]): Per-prompt sampled tokens, in input
-            order. Each completion is one character drawn from VOCAB
-            weighted by the prompt's logits.
+        results (list[MockSerialCompletion]): One entry per prompt, in input order,
+            each holding one character drawn from VOCAB weighted by the prompt's logits.
         items_processed (int): Number of items the tool function
             actually received from the framework. With stochastic-iterable
             routing this equals ``len(prompts)`` even for duplicate
             inputs.
     """
 
-    completions: list[str] = Field(
+    results: list[MockSerialCompletion] = Field(
         default_factory=list,
-        title="Completions",
-        description="Per-prompt sampled tokens",
+        title="Results",
+        description="Per-prompt sampled token, one entry per prompt",
     )
+
+    @property
+    def completions(self) -> list[str]:
+        """The per-prompt values, in input order."""
+        return [result.completion for result in self.results]
+
     items_processed: int = Field(
         default=0,
         title="Items Processed",
@@ -117,6 +132,10 @@ def example_input() -> MockIterableStochasticSerialInput:
 
 @tool(
     key="mock-iterable-stochastic-serial",
+    local_only=(
+        "mock-iterable-stochastic-serial is an in-process test fixture with no model and no "
+        "environment. It does not need to be deployed and can run in this process."
+    ),
     label="Mock Iterable Stochastic LM (serial)",
     category="testing",
     input_class=MockIterableStochasticSerialInput,
@@ -126,7 +145,8 @@ def example_input() -> MockIterableStochasticSerialInput:
     uses_gpu=False,
     example_input=example_input,
     iterable_input_fields=["prompts"],
-    iterable_output_field="completions",
+    iterable_output_field="results",
+    max_chunk_size=1,
     cacheable=True,
     stochastic=True,
 )
@@ -164,6 +184,6 @@ def run_mock_iterable_stochastic_serial(
     ]
 
     return MockIterableStochasticSerialOutput(
-        completions=completions,
+        results=[MockSerialCompletion(completion=v) for v in completions],
         items_processed=len(prompts),
     )

@@ -94,13 +94,6 @@ class X3DNAFiberConfig(BaseConfig):
         description="Local X3DNA v2.4 install root (contains bin/fiber); overrides $X3DNA.",
     )
 
-    def cloud_unsupported_reason(self) -> str | None:
-        """X3DNA is a user-provisioned local binary not available on a hosted worker."""
-        return (
-            "x3dna-fiber requires a local X3DNA v2.4 install (bin/fiber) not available on "
-            "device='cloud'. Run locally with device='cpu'."
-        )
-
 
 class X3DNAFiberOutput(BaseToolOutput):
     """Output from X3DNA fiber generation.
@@ -161,6 +154,10 @@ def _normalize_bases(sequence: str, form: str) -> str:
 
 @tool(
     key="x3dna-fiber",
+    local_only=(
+        "x3dna-fiber requires a local X3DNA v2.4 install (bin/fiber), which is not available on a "
+        "remote worker. Run locally with device='cpu'."
+    ),
     label="X3DNA Fiber",
     category="structure_prediction",
     input_class=X3DNAFiberInput,
@@ -171,6 +168,7 @@ def _normalize_bases(sequence: str, form: str) -> str:
     uses_gpu=False,
     iterable_input_fields=["sequences"],
     iterable_output_field="structures",
+    max_chunk_size=256,
 )
 def run_x3dna_fiber(
     inputs: X3DNAFiberInput,

@@ -30,6 +30,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance
+from proto_tools.utils.device import RemoteDevice
 from proto_tools.utils.progress import progress_bar
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
@@ -233,13 +234,13 @@ class OpenDDEConfig(MSAStructurePredictionConfig):
         include_in_key=False,
     )
 
-    def cloud_unsupported_reason(self) -> str | None:
-        """A custom ``model_checkpoint`` path is not present on a hosted worker (bundled names are)."""
+    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:  # noqa: ARG002 - registry contract
+        """A local checkpoint file exists only on this machine, so no remote worker can read it."""
         if self.model_checkpoint not in _BUNDLED_MODELS:
             return (
-                "model_checkpoint points to a local checkpoint file not available on device='cloud'. "
+                "model_checkpoint points to a local file. "
                 f"Use a bundled model name ({', '.join(sorted(_BUNDLED_MODELS))}), or run locally with "
-                "device='cuda'/'cpu'."
+                "device='cuda' or device='cpu'."
             )
         return None
 
@@ -266,6 +267,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["complexes", "msas"],
     iterable_output_field="structures",
+    max_chunk_size=1,
     cacheable=True,
     stochastic=True,
 )

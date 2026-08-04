@@ -13,6 +13,7 @@ Supports the same CLI options and markers as the main proto-language tests:
 """
 
 import functools
+import hashlib
 import json
 import logging
 import os
@@ -48,6 +49,29 @@ from proto_tools.utils.system_info import (
 )
 from proto_tools.utils.tool_instance import ToolInstance
 from proto_tools.utils.tool_io import MissingAssetError
+
+# Characters of a -k expression kept in a log filename, leaving room for the prefix,
+# the suffix, and the hash appended when the expression is truncated.
+_MAX_K_EXPRESSION_IN_FILENAME = 200
+
+
+def log_filename_for_k_expression(k_expression: str) -> str:
+    """Return a filesystem-safe log filename for a ``-k`` selection expression.
+
+    Args:
+        k_expression (str): The value passed to pytest's ``-k`` option.
+
+    Returns:
+        str: A filename within the 255-byte limit that filesystems impose.
+    """
+    sanitized = re.sub(r"[^\w\s-]", "", k_expression)  # Remove special chars except spaces, hyphens, underscores
+    sanitized = re.sub(r"\s+", "_", sanitized)  # Replace spaces with underscores
+    sanitized = sanitized.strip("_")  # Remove leading/trailing underscores
+    # Filenames are limited to 255 bytes; a hash keeps truncated expressions distinct
+    if len(sanitized) > _MAX_K_EXPRESSION_IN_FILENAME:
+        digest = hashlib.sha256(k_expression.encode()).hexdigest()[:8]
+        sanitized = f"{sanitized[:_MAX_K_EXPRESSION_IN_FILENAME]}_{digest}"
+    return f"pytest_{sanitized}.log"
 
 
 @functools.cache
@@ -467,6 +491,33 @@ _env_report_collector: EnvReportCollector | None = None
 # ============================================================================
 # Benchmark Report Collector
 # ============================================================================
+# Benchmarks that pin ``device=``, and why. Pinning defeats ``--use-modal`` and ``--use-proto``,
+# which route a run by patching config defaults — an explicit value wins. An entry here says the
+# benchmark can only run on this machine, and the report writer labels its backend accordingly
+# rather than repeating the run's remote one. ``test_benchmark_coverage`` keeps the two in step.
+DEVICE_PINNED_BENCHMARKS: dict[str, str] = {
+    "spliceai-score": (
+        "scores against a fixture mini-genome that exists only on the machine running the test, so "
+        "SpliceAIScoreConfig.remote_unsupported_reason refuses a remote device by design"
+    ),
+    "foldseek-search": (
+        "measures local-DB search throughput against a database built on this machine, which the "
+        "config refuses on a remote device; search_mode='remote' would measure the public server"
+    ),
+    "foldseek-multimer-search": (
+        "measures local-DB multimer search against a database built on this machine, which the "
+        "config refuses on a remote device; search_mode='remote' would measure the public server"
+    ),
+    "blast-search": (
+        "measures local BLAST+ throughput against a database built on this machine, which the "
+        "config refuses on a remote device; search_mode='online' would measure NCBI's queue"
+    ),
+}
+
+# What a pinned benchmark's report says instead of the run's remote backend.
+_PINNED_BACKEND_LABEL = "local (this benchmark pins `device=`; see DEVICE_PINNED_BENCHMARKS)"
+
+
 @dataclass
 class BenchmarkResult:
     """Outcome of a single @pytest.mark.benchmark test.
@@ -517,10 +568,16 @@ def _summarize_callspec(item: pytest.Item) -> dict[str, str] | None:
 
 @dataclass
 class BenchmarkReportCollector:
-    """Collects benchmark test results and writes per-tool markdown reports.
+    """Collects benchmark test results and writes them as markdown.
 
-    Layout: ``<output_dir>/{toolkit}/{tool_key}.md``. Each run overwrites the
-    canonical file for that tool — no merging, no embedded JSON.
+    Two destinations, chosen by where the run measured. A local run writes one file per tool under
+    ``<output_dir>/{toolkit}/{tool_key}.md``. A run routed to a remote device writes one README per
+    deployed app, beside the service it describes, so a reader opening a deployment folder sees what
+    that deployment costs. Local timings never land in a deployment README: they describe this
+    machine, not the deployment.
+
+    A deployment README is merged rather than overwritten. Benchmarking one tool of a multi-tool app
+    must not erase its siblings' numbers, which is the normal way of iterating on a single failure.
 
     The ``results`` mapping is keyed by ``tool_key`` and uses last-write-wins
     semantics. Today only one parametrize row per tool carries the benchmark
@@ -530,6 +587,8 @@ class BenchmarkReportCollector:
 
     output_dir: Path
     backend_url: str | None = None
+    # Set when the run is routed to a remote device. Deployment READMEs are written only then.
+    remote_device: str | None = None
     results: dict[str, BenchmarkResult] = field(default_factory=dict)
 
     def record_result(
@@ -550,7 +609,7 @@ class BenchmarkReportCollector:
             status=outcome,
             duration_seconds=round(duration_seconds, 2),
             error_message=error_message,
-            backend_url=self.backend_url,
+            backend_url=_PINNED_BACKEND_LABEL if tool_key in DEVICE_PINNED_BENCHMARKS else self.backend_url,
             parametrize_summary=_summarize_callspec(item),
             timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             cold_seconds=round(cold_seconds, 2) if cold_seconds is not None else None,
@@ -567,7 +626,9 @@ class BenchmarkReportCollector:
         )
 
     def write_reports(self) -> list[Path]:
-        """Render one markdown file per recorded tool. Returns the paths written."""
+        """Render the recorded results. Returns the paths written."""
+        if self.remote_device:
+            return self._write_deployment_readmes()
         written: list[Path] = []
         for result in self.results.values():
             target = self.output_dir / result.toolkit / f"{result.tool_key}.md"
@@ -575,6 +636,127 @@ class BenchmarkReportCollector:
             target.write_text(_render_benchmark_markdown(result))
             written.append(target)
         return written
+
+    def _write_deployment_readmes(self) -> list[Path]:
+        """Write one merged README per deployed app, beside the service it describes.
+
+        A tool with no deployment is dropped rather than filed somewhere else: it was skipped on a
+        remote device, so there is no deployment cost to report for it. Its numbers come from a
+        local run, which writes to ``output_dir`` instead.
+        """
+        by_dir: dict[Path, list[BenchmarkResult]] = {}
+        for result in self.results.values():
+            target_dir = _deployment_dir_for_tool(result.tool_key)
+            if target_dir is None:
+                continue
+            by_dir.setdefault(target_dir, []).append(result)
+
+        written: list[Path] = []
+        for target_dir, results in by_dir.items():
+            readme = target_dir / "README.md"
+            merged = _merge_benchmark_readme(readme.read_text() if readme.is_file() else "", results, target_dir)
+            readme.write_text(merged)
+            written.append(readme)
+        return written
+
+
+# Opens a tool's section in a deployment README. The heading carries the tool key so a merge can
+# replace one section without disturbing the others.
+_TOOL_SECTION_PREFIX = "## `"
+
+
+def _deployment_dir_for_tool(tool_key: str) -> Path | None:
+    """Return the Modal deployment directory serving ``tool_key``, or ``None`` if none does.
+
+    Resolved through the dispatch table and the manifest, so the report lands beside the service
+    that owns the tool rather than a directory named after its toolkit. The two differ: the
+    ``orfipy`` toolkit is served by ``orf_deployment``.
+    """
+    from proto_tools.modal.manifest import SERVICE_TO_MODULE
+    from proto_tools.modal.tool_map import TOOL_MAP
+
+    entry = TOOL_MAP.get(tool_key)
+    if entry is None:
+        return None
+    module = SERVICE_TO_MODULE.get(entry.service)
+    if module is None:
+        return None
+    import proto_tools
+
+    package_root = Path(proto_tools.__file__).resolve().parent
+    # "proto_tools.modal.masked_models.ablang_deployment.ablang_service" -> that directory
+    return package_root.joinpath(*module.split(".")[1:-1])
+
+
+def _split_readme_sections(text: str) -> tuple[str, dict[str, str]]:
+    """Split a deployment README into its preamble and ``{tool_key: section}``.
+
+    A section runs from its ``## `tool-key`` heading to the next one. Anything before the first
+    heading is preamble and is preserved untouched, so hand-written notes at the top of a README
+    survive a benchmark run.
+    """
+    lines = text.splitlines(keepends=True)
+    preamble: list[str] = []
+    sections: dict[str, list[str]] = {}
+    current: str | None = None
+    for line in lines:
+        if line.startswith(_TOOL_SECTION_PREFIX) and line.rstrip().endswith("`"):
+            current = line.strip()[len(_TOOL_SECTION_PREFIX) : -1]
+            sections[current] = [line]
+        elif current is None:
+            preamble.append(line)
+        else:
+            sections[current].append(line)
+    return "".join(preamble), {k: "".join(v) for k, v in sections.items()}
+
+
+def _toolkit_readme_links(tool_keys: list[str], deployment_dir: Path) -> list[str]:
+    """Return markdown links from a deployment folder to the toolkit READMEs it serves.
+
+    The report says what a deployment costs, the toolkit README says what the tool does, and they
+    live in different halves of the tree. Relative, so the link resolves on GitHub and locally.
+    """
+    seen: dict[str, str] = {}
+    for tool_key in tool_keys:
+        try:
+            spec = ToolRegistry.get(tool_key)
+        except Exception:  # a report for a tool that no longer exists should not break the write
+            continue
+        readme = spec.source_file.parent / "README.md"
+        if not readme.is_file():
+            continue
+        toolkit = spec.source_file.parent.name
+        seen[toolkit] = os.path.relpath(readme, deployment_dir)
+    return [f"[`{toolkit}` toolkit]({path})" for toolkit, path in sorted(seen.items())]
+
+
+def _merge_benchmark_readme(existing: str, results: list[BenchmarkResult], deployment_dir: Path) -> str:
+    """Merge fresh results into a deployment README, leaving untouched tools alone.
+
+    Sections are replaced by tool key, so re-running one tool of a multi-tool app keeps its
+    siblings' numbers, and ordered by key so the file does not churn. The header is regenerated
+    rather than preserved, so the toolkit links track the tools present.
+    """
+    _, sections = _split_readme_sections(existing)
+    for result in results:
+        sections[result.tool_key] = _render_benchmark_section(result)
+
+    links = _toolkit_readme_links(sorted(sections), deployment_dir)
+    header = ["# Benchmarks", ""]
+    if links:
+        header += ["Deployment tests for " + " · ".join(links), ""]
+    header += ["Generated by `pytest --benchmark --use-modal` (or `--use-proto`).", ""]
+    return "\n".join(header) + "\n" + "".join(sections[key] for key in sorted(sections))
+
+
+def _render_benchmark_section(result: BenchmarkResult) -> str:
+    """Render one tool's result as a README section, headed by its tool key."""
+    body = _render_benchmark_markdown(result)
+    # Demote the standalone renderer's headings one level so its H2s do not read as sibling tools.
+    body = body.replace(f"# `{result.tool_key}`", f"## `{result.tool_key}`", 1)
+    body = body.replace("\n## Parametrize values", "\n### Parametrize values")
+    body = body.replace("\n## Error", "\n### Error")
+    return body.rstrip() + "\n\n"
 
 
 def _render_benchmark_markdown(result: BenchmarkResult) -> str:
@@ -646,6 +828,12 @@ def pytest_addoption(parser):
         help="Run only GPU tests, skip CPU tests",
     )
     parser.addoption(
+        "--random-order",
+        action="store_true",
+        default=False,
+        help="Shuffle test order (pytest-randomly's reordering, which this suite disables by default)",
+    )
+    parser.addoption(
         "--all",
         action="store_true",
         default=False,
@@ -684,15 +872,23 @@ def pytest_addoption(parser):
         help="Run only @pytest.mark.benchmark tests. Selecting benchmark mode deselects "
         "everything that isn't benchmark-marked (similar to --env-report). The 'slow' gate is "
         "bypassed for benchmarks (no need to also pass --slow); hardware gates (uses_gpu, GPU "
-        "count) are bypassed only when --use-cloud is set. Without this flag (or any of "
+        "count) are bypassed only when --use-proto is set. Without this flag (or any of "
         "--benchmark-report / --benchmark-tool / --benchmark-toolkit, which imply --benchmark), "
         "benchmark-marked tests are skipped — they do NOT run under --all or --slow.",
     )
     parser.addoption(
-        "--use-cloud",
+        "--use-proto",
         action="store_true",
         default=False,
-        help="Route every tool run through device='cloud'. Requires PROTO_API_KEY in the environment.",
+        help="Route every tool run through device='proto'. Requires PROTO_API_KEY in the environment.",
+    )
+    parser.addoption(
+        "--use-modal",
+        action="store_true",
+        default=False,
+        help="Route every tool run through device='modal', against the apps deployed in your own "
+        "Modal workspace. Requires Modal credentials; the environment comes from MODAL_ENVIRONMENT, "
+        "else 'proto-env'. Benchmarks for tools with no deployment are skipped, not failed.",
     )
     parser.addoption(
         "--benchmark-report",
@@ -740,6 +936,16 @@ def pytest_configure(config):
     global _env_report_collector  # noqa: PLW0603 -- test infrastructure
     global _benchmark_report_collector  # noqa: PLW0603 -- test infrastructure
 
+    # Both patch the same field, so the second would silently win. Refuse rather than pick.
+    if config.getoption("--use-proto") and config.getoption("--use-modal"):
+        raise pytest.UsageError(
+            "--use-proto and --use-modal are mutually exclusive: each routes every tool run to a "
+            "different remote device. Pass one."
+        )
+
+    if hasattr(config.option, "randomly_reorganize"):
+        config.option.randomly_reorganize = bool(config.getoption("--random-order"))
+
     config.addinivalue_line("markers", "uses_gpu: mark test as requiring GPU")
     config.addinivalue_line(
         "markers",
@@ -777,14 +983,25 @@ def pytest_configure(config):
     # Handle --benchmark-report (implies --benchmark via pytest_collection_modifyitems below)
     benchmark_report_opt = config.getoption("--benchmark-report")
     if benchmark_report_opt:
-        backend_url = (
-            os.environ.get("PROTO_TOOLS_BASE_URL", "<proto-client default>")
-            if config.getoption("--use-cloud")
-            else None
-        )
+        use_proto = config.getoption("--use-proto")
+        use_modal = config.getoption("--use-modal")
+
+        # Name the backend the numbers came from, or the report claims "local (default device)".
+        if use_proto:
+            from proto_tools.proto._client import _resolve_base_url
+
+            backend_url = _resolve_base_url(None)
+        elif use_modal:
+            from proto_tools.modal.app import resolve_environment
+
+            backend_url = f"modal environment {resolve_environment(None)!r}"
+        else:
+            backend_url = None
+
         _benchmark_report_collector = BenchmarkReportCollector(
             output_dir=Path(benchmark_report_opt),
             backend_url=backend_url,
+            remote_device=("proto" if use_proto else "modal" if use_modal else None),
         )
 
 
@@ -1070,15 +1287,27 @@ def pytest_collection_modifyitems(config, items):
 
     # GPU/CPU dispatch: --cpu-only and --gpu-only are *selection filters* only.
     # Whether a uses_gpu test runs is decided solely by the hardware availability
-    # check below (number_of_visible_gpus). --use-cloud bypasses every hardware
-    # gate because the GPUs live on the server.
-    use_cloud = config.getoption("--use-cloud")
+    # check below (number_of_visible_gpus). A remote device bypasses every hardware
+    # gate because the GPUs live on the server, not on this machine.
+    use_proto = config.getoption("--use-proto") or config.getoption("--use-modal")
+
+    # Under --use-modal a benchmark can only run where a deployment exists, and TOOL_MAP is that
+    # set. A tool with no deployment has nothing to measure, so skip rather than fail.
+    if config.getoption("--use-modal"):
+        from proto_tools.modal.tool_map import TOOL_MAP
+
+        for item in items:
+            marker = item.get_closest_marker("benchmark")
+            if marker and marker.args and marker.args[0] not in TOOL_MAP:
+                item.add_marker(
+                    pytest.mark.skip(reason=f"{marker.args[0]} has no Modal deployment; nothing to benchmark remotely")
+                )
 
     # Skip GPU tests when --cpu-only is specified
     if config.getoption("--cpu-only"):
         skip_gpu = pytest.mark.skip(reason="--cpu-only specified")
         for item in items:
-            if "uses_gpu" in item.keywords and not use_cloud:
+            if "uses_gpu" in item.keywords and not use_proto:
                 item.add_marker(skip_gpu)
 
     # Skip CPU tests when --gpu-only is specified
@@ -1166,10 +1395,10 @@ def pytest_collection_modifyitems(config, items):
                 item.add_marker(pytest.mark.skip(reason=f"Requires platform {allowed}, current is {current_arch}"))
 
     # Skip uses_gpu(n) tests when fewer than n GPUs are visible — bypassed
-    # under --use-cloud (the GPUs live on the server).
+    # under --use-proto (the GPUs live on the server).
     visible_gpus = number_of_visible_gpus()
     for item in items:
-        if use_cloud:
+        if use_proto:
             continue
         for marker in item.iter_markers("uses_gpu"):
             required = marker.args[0] if marker.args else 1
@@ -1215,12 +1444,7 @@ def setup_test_logging(request):
         file_timestamp = now.strftime("%Y%m%d_%H%M%S")
         log_filename = f"pytest_env_report_{file_timestamp}.log"
     elif k_expression:
-        # Sanitize the -k expression to make it filename-safe
-        # Replace spaces with underscores, remove special characters
-        sanitized = re.sub(r"[^\w\s-]", "", k_expression)  # Remove special chars except spaces, hyphens, underscores
-        sanitized = re.sub(r"\s+", "_", sanitized)  # Replace spaces with underscores
-        sanitized = sanitized.strip("_")  # Remove leading/trailing underscores
-        log_filename = f"pytest_{sanitized}.log"
+        log_filename = log_filename_for_k_expression(k_expression)
     else:
         # Use timestamp for the log file
         file_timestamp = now.strftime("%Y%m%d_%H%M%S")
@@ -1312,27 +1536,39 @@ def _env_report_clean_envs(request, setup_test_logging):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _route_tests_to_cloud(request):
-    """Patch BaseConfig.device default to 'cloud' when --use-cloud is set.
+def _route_tests_to_proto(request):
+    """Patch BaseConfig.device default to a remote device when --use-proto or --use-modal is set.
 
-    Lets a test that already passes ``Config()`` without an explicit ``device=`` run
-    locally (default ``"cpu"``) or against Proto's hosted execution service
-    (``--use-cloud``) without any change to the test body. The cloud path
-    activates automatically as long as ``PROTO_API_KEY`` is in the env.
+    Lets a test that already passes ``Config()`` without an explicit ``device=`` run locally
+    (default ``"cpu"``), against Proto's hosted execution service (``--use-proto``), or against the
+    apps in your own Modal workspace (``--use-modal``), without any change to the test body. Proto
+    activates on ``PROTO_API_KEY``; Modal on your Modal credentials plus a deployed app.
+
+    The two options are refused together in ``pytest_configure`` — they patch one field to
+    different values, so there is no coherent meaning for both at once.
+
+    Configs belonging to ``local_only`` tools keep their own default. A tool can construct one
+    internally — a structure predictor builds an ``Mmseqs2HomologySearchConfig`` to generate an MSA
+    — and that tool refuses every remote device by declaration. Patching it would route a nested
+    search to a backend that has already said no, failing the outer tool for a reason the test never
+    asked for.
     """
-    if not request.config.getoption("--use-cloud"):
+    device = "modal" if request.config.getoption("--use-modal") else "proto"
+    if not (request.config.getoption("--use-proto") or request.config.getoption("--use-modal")):
         yield
         return
 
+    from proto_tools.tools import ToolRegistry
     from proto_tools.utils.base_config import BaseConfig
 
-    all_classes = {BaseConfig} | _all_subclasses(BaseConfig)
+    local_only_configs = {spec.config_model for spec in ToolRegistry.list_all() if spec.local_only}
+    all_classes = ({BaseConfig} | _all_subclasses(BaseConfig)) - local_only_configs
     originals = {}
     for cls in all_classes:
         fi = cls.model_fields.get("device")
         if fi is not None:
             originals[cls] = fi.default
-            fi.default = "cloud"
+            fi.default = device
     for cls in all_classes:
         cls.model_rebuild(force=True)
 

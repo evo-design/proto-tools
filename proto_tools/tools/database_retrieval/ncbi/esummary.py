@@ -112,7 +112,19 @@ class NCBIEsummaryOutput(BaseToolOutput):
         raise ValueError(f"Unsupported format: {file_format}")
 
 
-NCBIEsummaryConfig = NCBIFetchConfig
+class NCBIEsummaryConfig(NCBIFetchConfig):
+    """Configuration for NCBI ESummary retrieval.
+
+    Attributes:
+        ncbi_api_key (str | None): Optional NCBI API key (lifts rate limit
+            from 3 to 10 requests/second). Defaults to the ``NCBI_API_KEY``
+            environment variable; an explicit value passed to the config
+            overrides the env var.
+        ncbi_email (str | None): Optional contact email. NCBI usage policy
+            requires both ``tool`` and ``email`` for traceability. Defaults
+            to the ``NCBI_EMAIL`` environment variable; an explicit value
+            passed to the config overrides the env var.
+    """
 
 
 # ============================================================================
@@ -127,10 +139,11 @@ def example_input() -> Any:
 
 @tool(
     key="ncbi-esummary",
+    local_only="ncbi-esummary does not use a gpu and does not need an environment, so it can run in process",
     label="NCBI Entrez ESummary",
     category="database_retrieval",
     input_class=NCBIEsummaryInput,
-    config_class=NCBIFetchConfig,
+    config_class=NCBIEsummaryConfig,
     output_class=NCBIEsummaryOutput,
     description="Retrieve record summary metadata from NCBI Entrez by ID",
     uses_gpu=False,

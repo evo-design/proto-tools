@@ -1,11 +1,16 @@
 # Standalone Helpers
 
-**These files are auto-copied to each tool's `standalone/` directory at runtime.**
+**This directory is published to every tool subprocess; it is never copied.**
 
-Do NOT import from this directory directly. The bootstrap mechanism in
-`_worker_bootstrap.py` and `tool_instance.py` copies these files into each
-tool's standalone environment so they are available to `inference.py`, `run.py`,
-and `setup.sh` scripts.
+Tool environments contain the tool's dependencies but not `proto_tools`, so
+`_build_subprocess_env()` puts this directory on the subprocess's `PYTHONPATH`
+(for `inference.py` / `run.py`) and on its `PATH` (so `setup.sh` can
+`source standalone_helpers.sh`), and exports it as
+`PROTO_STANDALONE_HELPERS_DIR`. Nothing is written into the installed package,
+so proto-tools works from a read-only install.
+
+Do NOT import from this directory by its full dotted path in tool code; use the
+published name, `from standalone_helpers import ...`.
 
 ## Layout
 
@@ -20,7 +25,7 @@ and `setup.sh` scripts.
 Imported by standalone scripts via `from standalone_helpers import ...` (package entry point) or
 `from standalone_helpers.seeding import ...` (specific submodule).
 
-Standalone worker environments receive this copied helper package and may not
+Standalone worker environments import this package off `PYTHONPATH` and may not
 have the full `proto_tools` package importable.
 
 - **`standalone_helpers.sh`** — Bash helper functions for `setup.sh` scripts.
@@ -31,7 +36,10 @@ have the full `proto_tools` package importable.
 
 ## Editing
 
-Edit these source files here. The copies in `tools/*/standalone/` are
-overwritten on every tool invocation and are gitignored. When adding a new
-helper, add it to the appropriate submodule and re-export it from
-`standalone_helpers/__init__.py`.
+Edit these source files here; they take effect on the next tool invocation with
+no environment rebuild. When adding a new helper, add it to the appropriate
+submodule and re-export it from `standalone_helpers/__init__.py`.
+
+Keep this directory free of anything that is not part of the published surface.
+It lands on both `PATH` and `PYTHONPATH` inside every tool environment, so a
+stray script or module here would leak into all of them.

@@ -101,13 +101,6 @@ class DeepPBSSpecificityConfig(BaseConfig):
         include_in_key=False,
     )
 
-    def cloud_unsupported_reason(self) -> str | None:
-        """DeepPBS needs a local repository and X3DNA install not staged to cloud."""
-        return (
-            "DeepPBS requires a local DeepPBS checkout and its bundled X3DNA install, "
-            "which are not available on device='cloud'. Run locally with device='cpu'."
-        )
-
 
 class DeepPBSSpecificityResult(BaseModel):
     """Canonicalized DeepPBS specificity result for one structure.
@@ -229,11 +222,15 @@ class DeepPBSSpecificityOutput(BaseToolOutput):
 
 def example_input() -> DeepPBSSpecificityInput:
     """Minimal valid input for testing and examples."""
-    return DeepPBSSpecificityInput(pdb_paths=["complex.pdb"])
+    return DeepPBSSpecificityInput(pdb_paths=[str(Path(__file__).parent / "example_input_fixture.pdb")])
 
 
 @tool(
     key="deeppbs-specificity",
+    local_only=(
+        "DeepPBS requires a local DeepPBS checkout and its bundled X3DNA install, neither of which "
+        "is available on a remote worker. Run locally with device='cpu'."
+    ),
     label="DeepPBS Specificity",
     category="sequence_scoring",
     input_class=DeepPBSSpecificityInput,
@@ -244,6 +241,7 @@ def example_input() -> DeepPBSSpecificityInput:
     uses_gpu=True,
     iterable_input_fields=["pdb_paths"],
     iterable_output_field="results",
+    max_chunk_size=64,
 )
 def run_deeppbs_specificity(
     inputs: DeepPBSSpecificityInput,

@@ -72,10 +72,10 @@ from proto_tools.tools.database_retrieval import (
     AlphaMissenseDBFetchInput,
     AlphaMissenseDBFetchOutput,
     AlphaMissensePrediction,
-    CcdEnrichment,
     CcdLookupConfig,
     CcdLookupInput,
     CcdLookupOutput,
+    CcdLookupResult,
     EnsemblAssembly,
     EnsemblExon,
     EnsemblGene,
@@ -328,10 +328,15 @@ from proto_tools.tools.masked_models import (
     ESMCEmbeddingsConfig,
     ESMCEmbeddingsInput,
     ESMCEmbeddingsOutput,
+    ESMCSAEFeaturesConfig,
+    ESMCSAEFeaturesInput,
+    ESMCSAEFeaturesOutput,
     MaskedModelScoringMetrics,
     MaskingStrategy,
     Projection2D,
+    SAELayerFeatures,
     SequenceEmbedding,
+    SequenceSAEFeatures,
     run_ablang_embeddings,
     run_ablang_gradient,
     run_ablang_sample,
@@ -344,13 +349,29 @@ from proto_tools.tools.masked_models import (
     run_esm3_sample,
     run_esm3_score,
     run_esmc_embeddings,
+    run_esmc_sae_features,
+)
+
+# Molecular docking tools
+from proto_tools.tools.molecular_docking import (
+    VinaDockingConfig,
+    VinaDockingInput,
+    VinaDockingOutput,
+    VinaDockingPose,
+    VinaDockingPoseMetrics,
+    VinaLigandResult,
+    VinaReferenceLigandBox,
+    VinaSearchBox,
+    run_vina_docking,
 )
 
 # Mutagenesis tools
 from proto_tools.tools.mutagenesis import (
+    RandomNucleotideSample,
     RandomNucleotideSampleConfig,
     RandomNucleotideSampleInput,
     RandomNucleotideSampleOutput,
+    RandomProteinSample,
     RandomProteinSampleConfig,
     RandomProteinSampleInput,
     RandomProteinSampleOutput,
@@ -367,6 +388,7 @@ from proto_tools.tools.orf_prediction import (
     OrfipyInput,
     OrfipyOutput,
     OrfipyTranslationTable,
+    OrfPredictionResult,
     ProdigalConfig,
     ProdigalInput,
     ProdigalOutput,
@@ -396,6 +418,7 @@ from proto_tools.tools.rna_splicing import (
     SpliceAIGeneScore,
     SpliceAIPredictConfig,
     SpliceAIPredictInput,
+    SpliceAIPrediction,
     SpliceAIPredictOutput,
     SpliceAIScoreConfig,
     SpliceAIScoreInput,
@@ -796,6 +819,10 @@ from proto_tools.utils.tool_cache import (
 from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 __all__ = [
+    "OrfPredictionResult",
+    "RandomNucleotideSample",
+    "RandomProteinSample",
+    "SpliceAIPrediction",
     # Base classes and registry
     "BaseToolInput",
     "BaseToolOutput",
@@ -1323,7 +1350,7 @@ __all__ = [
     "CcdLookupInput",
     "CcdLookupConfig",
     "CcdLookupOutput",
-    "CcdEnrichment",
+    "CcdLookupResult",
     # Database retrieval - Ensembl REST (lookup / sequence / overlap / xrefs + VEP)
     "run_ensembl_lookup",
     "EnsemblLookupInput",
@@ -1517,6 +1544,23 @@ __all__ = [
     "ESMCEmbeddingsInput",
     "ESMCEmbeddingsConfig",
     "ESMCEmbeddingsOutput",
+    # Masked models - ESM C SAE Features
+    "run_esmc_sae_features",
+    "ESMCSAEFeaturesInput",
+    "ESMCSAEFeaturesConfig",
+    "ESMCSAEFeaturesOutput",
+    "SAELayerFeatures",
+    "SequenceSAEFeatures",
+    # Molecular docking - AutoDock Vina
+    "VinaDockingConfig",
+    "VinaDockingInput",
+    "VinaDockingOutput",
+    "VinaDockingPose",
+    "VinaDockingPoseMetrics",
+    "VinaLigandResult",
+    "VinaReferenceLigandBox",
+    "VinaSearchBox",
+    "run_vina_docking",
     # RNA splicing - SpliceTransformer
     "run_splice_transformer",
     "SpliceTransformerInput",

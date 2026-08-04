@@ -287,6 +287,10 @@ def example_input() -> Any:
 
 @tool(
     key="mmseqs2-search-genomes",
+    local_only=(
+        "mmseqs2-search-genomes searches a target collection staged on your own disk, which is not "
+        "available on a remote worker. Run locally with device='cpu'."
+    ),
     label="MMseqs2 Genome Search",
     category="sequence_alignment",
     input_class=Mmseqs2SearchGenomesInput,
@@ -296,6 +300,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["query_genomes"],
     iterable_output_field="results",
+    max_chunk_size=32,
     cacheable=True,
 )
 def run_mmseqs2_search_genomes(

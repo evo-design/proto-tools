@@ -15,13 +15,17 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _persistent_tool = make_persistent_fixture("esmc")
 
-# (checkpoint, hidden_dim): 300M is open license, 600M is non-commercial.
-_CHECKPOINTS = [("esmc_300m", 960), ("esmc_600m", 1152)]
-_CHECKPOINT_IDS = [c for c, _ in _CHECKPOINTS]
+# (checkpoint, hidden_dim). esmc_6b is shape-checked only; it downloads ~25 GB.
+_SHAPE_CHECKPOINTS = [
+    ("esmc_300m", 960),
+    ("esmc_600m", 1152),
+    pytest.param("esmc_6b", 2560, marks=pytest.mark.slow),
+]
+_CHECKPOINT_IDS = ["esmc_300m", "esmc_600m"]
 
 
 @pytest.mark.uses_gpu
-@pytest.mark.parametrize(("checkpoint", "embedding_dim"), _CHECKPOINTS)
+@pytest.mark.parametrize(("checkpoint", "embedding_dim"), _SHAPE_CHECKPOINTS)
 def test_esmc_forward_pass_shapes(checkpoint, embedding_dim):
     """End-to-end embedding extraction returns the expected shapes."""
     sequences = ["MKTAYIAKQR", "GSSGSSGSS"]

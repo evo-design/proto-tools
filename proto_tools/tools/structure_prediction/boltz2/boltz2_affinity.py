@@ -240,6 +240,7 @@ def example_input() -> Boltz2AffinityInput:
     example_input=example_input,
     iterable_input_fields=["complexes", "msas", "binder_chain"],
     iterable_output_field="structures",
+    max_chunk_size=1,
     cacheable=True,
     stochastic=True,
 )

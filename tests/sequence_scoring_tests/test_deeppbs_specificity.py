@@ -71,9 +71,12 @@ def test_config_exposes_no_path_fields():
     assert DeepPBSSpecificityConfig().allow_fallback is False
 
 
-def test_config_cloud_unsupported():
-    """DeepPBS cannot run on device='cloud' (needs local repo/X3DNA)."""
-    assert DeepPBSSpecificityConfig().cloud_unsupported_reason() is not None
+def test_tool_declared_local_only():
+    """DeepPBS needs a local repo and X3DNA install, so the tool declares itself local-only."""
+    from proto_tools.tools import ToolRegistry
+
+    spec = next(s for s in ToolRegistry.list_all() if s.key == "deeppbs-specificity")
+    assert spec.local_only and "DeepPBS" in spec.local_only
 
 
 # ── Dispatch (mocked) ─────────────────────────────────────────────────────────
@@ -354,14 +357,10 @@ def test_x3dna_env_root_binaries_are_found(tmp_path, monkeypatch):
 @pytest.mark.uses_gpu
 def test_deeppbs_specificity_runs_on_structure():
     """Run DeepPBS end-to-end on a real protein-DNA PDB (requires local env + X3DNA)."""
-    import os
-
-    pdb = os.environ.get("DEEPPBS_TEST_PDB")
-    if not pdb or not os.path.exists(pdb):
-        pytest.skip("Set DEEPPBS_TEST_PDB to a protein-DNA PDB to run this integration test")
+    pdb_file = Path(__file__).parent.parent / "dummy_data" / "protein_dna_complex.pdb"
 
     output = run_deeppbs_specificity(
-        DeepPBSSpecificityInput(pdb_paths=[pdb]),
+        DeepPBSSpecificityInput(pdb_paths=[str(pdb_file)]),
         DeepPBSSpecificityConfig(),
     )
     validate_output(output)
@@ -369,7 +368,7 @@ def test_deeppbs_specificity_runs_on_structure():
     result = output.results[0]
     # PPM is L x 4 in ACGT order; rows normalized.
     assert all(len(row) == 4 for row in result.predicted_ppm)
-    assert os.path.exists(result.output_npz_path)
+    assert Path(result.output_npz_path).exists()
 
 
 # ── Benchmark ─────────────────────────────────────────────────────────────────
@@ -381,16 +380,11 @@ def test_deeppbs_specificity_runs_on_structure():
 def test_deeppbs_specificity_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark deeppbs-specificity on a real protein-DNA structure (cold + warm).
 
-    Requires a local DeepPBS repository, an X3DNA install, and the standalone
-    env. Skips cleanly when ``DEEPPBS_TEST_PDB`` is unset or the env is absent.
+    Requires a local DeepPBS repository, an X3DNA install, and the standalone env.
     """
-    import os
+    pdb_file = Path(__file__).parent.parent / "dummy_data" / "protein_dna_complex.pdb"
 
-    pdb = os.environ.get("DEEPPBS_TEST_PDB")
-    if not pdb or not os.path.exists(pdb):
-        pytest.skip("Set DEEPPBS_TEST_PDB to a protein-DNA PDB to run this benchmark")
-
-    inputs = DeepPBSSpecificityInput(pdb_paths=[pdb])
+    inputs = DeepPBSSpecificityInput(pdb_paths=[str(pdb_file)])
     config = DeepPBSSpecificityConfig()
 
     # Cold + warm to exercise persistent-worker reuse.

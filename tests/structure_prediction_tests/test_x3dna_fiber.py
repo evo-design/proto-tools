@@ -91,11 +91,12 @@ def test_form_flags_mapping():
 # ── Config cloud support ─────────────────────────────────────────────────────
 
 
-def test_config_cloud_unsupported():
-    """X3DNA is a local-only binary; cloud execution must be reported unsupported."""
-    reason = X3DNAFiberConfig().cloud_unsupported_reason()
-    assert reason is not None
-    assert isinstance(reason, str) and reason
+def test_tool_declared_local_only():
+    """X3DNA is a user-provisioned binary, so the tool declares itself local-only."""
+    from proto_tools.tools import ToolRegistry
+
+    spec = next(s for s in ToolRegistry.list_all() if s.key == "x3dna-fiber")
+    assert spec.local_only and "X3DNA" in spec.local_only
 
 
 # ---------------------------------------------------------------------------

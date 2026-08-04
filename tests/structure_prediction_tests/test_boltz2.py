@@ -343,15 +343,15 @@ def test_boltz2_pae_surface():
 @pytest.mark.slow
 @pytest.mark.uses_gpu
 def test_boltz2_benchmark(request):
-    """Benchmark boltz2-prediction on the MfnG protein + L-tyrosine ligand (cold + warm).
+    """Benchmark boltz2-prediction on the MfnG protein + L-tyrosine ligand with MSA (cold + warm).
 
-    Single ~390-residue protein-ligand complex without MSA — a representative
-    Boltz2 workload. Cold pass measures weight load + first inference; warm
-    pass measures inference only.
+    Single ~390-residue protein-ligand complex. The MSA search is included because it is usually
+    the dominant cost of a real fold, and because nothing else exercises that path. Cold pass
+    measures weight load + first inference; warm pass measures inference only.
     """
     complex_ = load_benchmark_complex("MfnG_and_ligand")
     inputs = Boltz2Input(complexes=[complex_])
-    config = Boltz2Config(use_msa=False, verbose=True)
+    config = Boltz2Config(use_msa=True, verbose=True)
 
     result = benchmark_twice(request, "boltz2", lambda: run_boltz2(inputs=inputs, config=config))
 
@@ -394,7 +394,7 @@ def test_boltz2_affinity_end_to_end():
 @pytest.mark.slow
 @pytest.mark.uses_gpu
 def test_boltz2_affinity_benchmark(request):
-    """Benchmark boltz2-affinity: virtual-screen 8 diverse small molecules against Cro repressor, MSA-free (cold + warm)."""
+    """Benchmark boltz2-affinity: virtual-screen 8 small molecules against Cro repressor, with MSA (cold + warm)."""
     ligands = [
         _TYR_SMILES,  # L-tyrosine
         "CC(=O)Oc1ccccc1C(=O)O",  # aspirin
@@ -407,7 +407,7 @@ def test_boltz2_affinity_benchmark(request):
     ]
     inputs = Boltz2AffinityInput(complexes=[[_CRO_SEQUENCE, smiles] for smiles in ligands])
     config = Boltz2AffinityConfig(
-        use_msa=False,
+        use_msa=True,
         sampling_steps=50,
         diffusion_samples=1,
         sampling_steps_affinity=50,

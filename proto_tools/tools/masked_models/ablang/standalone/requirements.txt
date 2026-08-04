@@ -1,2 +1,3 @@
 ablang2==0.2.1
 numba
+numpy<2.5  # numba 0.66 raises ImportError on numpy 2.5+, which ablang2 imports via ablang1

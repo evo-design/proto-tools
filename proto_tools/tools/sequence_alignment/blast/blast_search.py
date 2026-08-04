@@ -20,6 +20,7 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
+from proto_tools.utils.device import RemoteDevice
 
 logger = logging.getLogger(__name__)
 
@@ -506,12 +507,21 @@ class BlastSearchConfig(BaseConfig):
 
         return self
 
-    def cloud_unsupported_reason(self) -> str | None:
+    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
         """Local-DB search can't run on the hosted cloud — the database lives on the caller's machine."""
         if self.search_mode == "local":
             return (
                 "search_mode='local' needs a local BLAST database, which can't be staged to "
-                "device='cloud'. Use search_mode='online', or run locally with device='cpu'."
+                f"device='{device}'. Use search_mode='online', or run locally with device='cpu'."
+            )
+        return None
+
+    def local_execution_reason(self, device: RemoteDevice) -> str | None:
+        """Online search is an HTTP call to NCBI, so a remote worker would only add a hop."""
+        if self.search_mode == "online":
+            return (
+                f"search_mode='online' submits to NCBI QBLAST over HTTP, so device='{device}' would "
+                f"only add a network hop and NCBI's queue would dominate either way."
             )
         return None
 

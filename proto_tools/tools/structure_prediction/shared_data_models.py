@@ -386,7 +386,35 @@ class MSAStructurePredictionConfig(StructurePredictionConfig):
         kwargs.setdefault("use_msa", False)
         return super().minimal(**kwargs)  # type: ignore[return-value]
 
-    def preprocess(self, inputs: StructurePredictionInput) -> StructurePredictionInput:  # type: ignore[override]
+    def for_hosted_env(self) -> "MSAStructurePredictionConfig":
+        """Force the MSA search onto the remote API when this process hosts the tool.
+
+        A local search reads a provisioned database — ``uniref30-2302`` is hundreds of gigabytes —
+        which a hosted environment cannot stage on demand, and a deployment rules a tool needing a
+        staged corpus out of scope outright. The remote API needs no database and no GPU, so it is
+        the only search a hosted process can actually run.
+
+        The substitution is real and worth knowing about: a different database gives a different
+        MSA depth and therefore a different structure, so a hosted result will not match one
+        produced locally against the user's own database.
+
+        Returns:
+            MSAStructurePredictionConfig: This config, or a copy searching remotely.
+        """
+        if self.msa_search_config is None or self.msa_search_config.search_mode == "remote":
+            return self
+        logger.warning(
+            "%s: searching MSAs remotely instead of against %r. A hosted environment cannot stage "
+            "a local database, so results will differ from a local search.",
+            type(self).__name__,
+            self.msa_search_config.dataset,
+        )
+        remote = self.msa_search_config.model_copy(update={"search_mode": "remote"})
+        return self.model_copy(update={"msa_search_config": remote})
+
+    def preprocess(  # type: ignore[override]
+        self, inputs: StructurePredictionInput
+    ) -> StructurePredictionInput | tuple[StructurePredictionInput, "MSAStructurePredictionConfig"]:
         """Preprocess structure prediction inputs before execution.
 
         Pre-supplied MSAs are always honored: they skip the MMseqs2 search and force
@@ -394,19 +422,23 @@ class MSAStructurePredictionConfig(StructurePredictionConfig):
         request to use them, so it overrides ``use_msa=False`` (which otherwise folds
         single-sequence); without this, predictors that gate model-level MSA usage on
         ``use_msa`` (e.g. Protenix) would silently ignore the supplied alignments.
+
+        Args:
+            inputs (StructurePredictionInput): Complexes and optional pre-computed MSAs.
+
+        Returns:
+            StructurePredictionInput | tuple[StructurePredictionInput, MSAStructurePredictionConfig]:
+                Inputs with MSAs populated, paired with a use_msa-enabled config when MSAs were supplied.
         """
-        # Pre-supplied MSAs bypass the search and its query-row remap; validate their
-        # chain keying so every predictor catches mis-keyed MSAs uniformly, then force
-        # use_msa=True so the model actually consumes them.
+        # Pre-supplied MSAs bypass the search and its query-row remap; validate their chain
+        # keying so every predictor catches mis-keyed MSAs uniformly, then return a config
+        # with use_msa=True so the model actually consumes them. Returned as a copy, never
+        # assigned: mutating self would carry use_msa=True into the caller's later calls.
         if inputs.msas is not None:
             _validate_complex_msas_match_chains(inputs.complexes, inputs.msas)
-            self.use_msa = True
-            return inputs
+            return inputs, self.model_copy(update={"use_msa": True})
         if not self.use_msa:
             return inputs
-        if self.msa_search_config is None:
-            self.msa_search_config = Mmseqs2HomologySearchConfig()
-        self.msa_search_config.verbose = self.verbose
         return _preprocess_structure_prediction_msas(
             inputs,
             self.msa_search_config,

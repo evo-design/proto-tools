@@ -87,10 +87,6 @@ class PyHmmsearchConfig(PyHmmerConfig):
         description="HMM curated cutoff: 'gathering' (Pfam GA), 'noise' (permissive), 'trusted' (strictest)",
     )
 
-    def cloud_unsupported_reason(self) -> str | None:
-        """Reads a local HMM file (``hmm``) that can't be staged to the hosted cloud."""
-        return "needs a local HMM file (hmm) that can't be staged to device='cloud'. Run locally with device='cpu'."
-
 
 # ============================================================================
 # Tool Implementation
@@ -105,6 +101,10 @@ def example_input() -> Any:
 
 @tool(
     key="pyhmmer-hmmsearch",
+    local_only=(
+        "pyhmmer-hmmsearch searches an HMM profile file on your own disk, which is not available on "
+        "a remote worker. Run locally with device='cpu'."
+    ),
     label="PyHMMER Profile Search",
     category="gene_annotation",
     input_class=PyHmmsearchInput,

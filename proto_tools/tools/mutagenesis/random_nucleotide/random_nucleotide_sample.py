@@ -9,7 +9,7 @@ import random
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
-from pydantic import Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from proto_tools.tools.mutagenesis.codons import sample_nucleotide
 from proto_tools.tools.tool_registry import tool
@@ -74,18 +74,34 @@ class RandomNucleotideSampleInput(BaseToolInput):
         return value  # type: ignore[no-any-return]
 
 
+class RandomNucleotideSample(BaseModel):
+    """One sampled sequence.
+
+    Attributes:
+        sequence (str): Nucleotide sequence with masked positions filled by random bases.
+    """
+
+    sequence: str = Field(
+        title="Sequence", description="Nucleotide sequence with masked positions filled by random bases"
+    )
+
+
 class RandomNucleotideSampleOutput(BaseToolOutput):
     """Output from random nucleotide sampling.
 
     Attributes:
-        sequences (list[str]): Nucleotide sequences with masked positions filled
-            by random bases drawn from the configured substitution scheme.
+        results (list[RandomNucleotideSample]): One sampled sequence per input, in input order.
     """
 
-    sequences: list[str] = Field(
-        title="Sequences",
-        description="Nucleotide sequences with masked positions randomly filled",
+    results: list[RandomNucleotideSample] = Field(
+        title="Results",
+        description="Sampled sequences, one per input",
     )
+
+    @property
+    def sequences(self) -> list[str]:
+        """The sampled sequences, in input order."""
+        return [result.sequence for result in self.results]
 
     @property
     def output_format_options(self) -> list[str]:
@@ -102,10 +118,10 @@ class RandomNucleotideSampleOutput(BaseToolOutput):
 
         if file_format == "fasta":
             with open(path, "w") as f:
-                f.writelines(f">seq_{i}\n{seq}\n" for i, seq in enumerate(self.sequences))
+                f.writelines(f">seq_{i}\n{r.sequence}\n" for i, r in enumerate(self.results))
         elif file_format == "txt":
             with open(path, "w") as f:
-                f.writelines(f"{seq}\n" for seq in self.sequences)
+                f.writelines(f"{r.sequence}\n" for r in self.results)
         elif file_format == "json":
             with open(path, "w") as f:
                 json.dump(self.sequences, f, indent=2)
@@ -184,6 +200,7 @@ def example_input() -> Any:
 
 @tool(
     key="random-nucleotide-sample",
+    local_only="random-nucleotide-sample does not use a gpu and does not need an environment, so it can run in process",
     label="Random Nucleotide Sampling",
     category="mutagenesis",
     input_class=RandomNucleotideSampleInput,
@@ -193,7 +210,7 @@ def example_input() -> Any:
     uses_gpu=False,
     example_input=example_input,
     iterable_input_fields=["sequences"],
-    iterable_output_field="sequences",
+    iterable_output_field="results",
     cacheable=False,
     stochastic=True,
 )
@@ -246,5 +263,5 @@ def run_random_nucleotide_sample(
             "sequence_type": seq_type,
             "num_sequences": len(inputs.sequences),
         },
-        sequences=sampled,
+        results=[RandomNucleotideSample(sequence=seq) for seq in sampled],
     )

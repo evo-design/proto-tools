@@ -11,6 +11,7 @@ from proto_tools.tools import (
     SpliceAIGeneScore,
     SpliceAIPredictConfig,
     SpliceAIPredictInput,
+    SpliceAIPrediction,
     SpliceAIPredictOutput,
     SpliceAIScoreConfig,
     SpliceAIScoreInput,
@@ -122,7 +123,9 @@ def test_predict_export_npy_ragged(tmp_path: Path) -> None:
         [[0.9, 0.05, 0.05], [0.8, 0.1, 0.1]],
         [[0.7, 0.2, 0.1], [0.6, 0.3, 0.1], [0.5, 0.4, 0.1]],
     ]
-    SpliceAIPredictOutput(predictions=preds).export("preds", tmp_path, file_format="npy")
+    SpliceAIPredictOutput(results=[SpliceAIPrediction(probabilities=p) for p in preds]).export(
+        "preds", tmp_path, file_format="npy"
+    )
     loaded = np.load(tmp_path / "preds.npy", allow_pickle=True)
     assert len(loaded) == 2
     assert len(loaded[0]) == 2 and len(loaded[1]) == 3
@@ -132,25 +135,27 @@ def test_predict_export_npy_ragged(tmp_path: Path) -> None:
 
 
 def _run_score(tmp_path: Path, device: str) -> None:
-    """Score a scorable SNV and a complex MNV; verify real scores vs null (no crash)."""
+    """Score a known pathogenic SNV and a complex MNV; verify real scores vs null (no crash)."""
     # Copy into tmp_path so pyfaidx writes its .fai index alongside the copy,
     # not into the committed source tree.
-    genome = tmp_path / "example_genome.fa"
-    annotation = tmp_path / "example_annotation.txt"
-    shutil.copy(_EXAMPLES_DIR / "example_genome.fa", genome)
-    shutil.copy(_EXAMPLES_DIR / "example_annotation.txt", annotation)
+    genome = tmp_path / "hbb_locus.fasta"
+    annotation = tmp_path / "hbb_annotation.txt"
+    shutil.copy(_EXAMPLES_DIR / "hbb_locus.fasta", genome)
+    shutil.copy(_EXAMPLES_DIR / "hbb_annotation.txt", annotation)
 
     # A complex MNV (multi-base ref AND alt) hits SpliceAI's '.'-null path; its
     # ref must match the genome, so read the two bases at the locus.
     gseq = "".join(ln.strip() for ln in genome.read_text().splitlines() if not ln.startswith(">"))
-    mnv_ref = gseq[29999:30001]  # 1-based positions 30000-30001
+    mnv_ref = gseq[5142:5144]  # 1-based positions 5143-5144
     mnv_alt = "TT" if mnv_ref != "TT" else "GG"
 
+    # IVS-I-1 (HBB:c.92+1G>A), the classic beta-thalassemia variant that abolishes the
+    # intron-1 donor. Exon 1 ends at 5142, so 5143 is the donor's +1 base.
     result = run_spliceai_score(
         SpliceAIScoreInput(
             variants=[
-                SpliceAIVariant(chromosome="1", position=30000, ref="A", alt="C"),
-                SpliceAIVariant(chromosome="1", position=30000, ref=mnv_ref, alt=mnv_alt),
+                SpliceAIVariant(chromosome="HBB", position=5143, ref="G", alt="A"),
+                SpliceAIVariant(chromosome="HBB", position=5143, ref=mnv_ref, alt=mnv_alt),
             ]
         ),
         SpliceAIScoreConfig(reference_fasta=str(genome), annotation=str(annotation), device=device),
@@ -162,10 +167,12 @@ def _run_score(tmp_path: Path, device: str) -> None:
 
     # SNV → real per-gene scores.
     snv = result.results[0]
-    assert snv.scores, "Expected non-empty scores: the variant must overlap the synthetic gene"
+    assert snv.scores, "Expected non-empty scores: the variant must overlap the HBB gene"
     gene = snv.scores[0]
-    assert gene.symbol == "SPLICEAI_DEMO"
+    assert gene.symbol == "HBB"
     assert all(0.0 <= ds <= 1.0 for ds in (gene.ds_ag, gene.ds_al, gene.ds_dg, gene.ds_dl))
+    # Abolishing the donor is what this variant is known for, so donor-loss must dominate.
+    assert gene.ds_dl > 0.5, f"Expected a strong donor-loss signal for IVS-I-1, got {gene.ds_dl}"
     assert all(isinstance(dp, int) for dp in (gene.dp_ag, gene.dp_al, gene.dp_dg, gene.dp_dl))
     assert_metrics_in_spec(result)
     assert 0.0 <= snv.metrics["max_delta_score"] <= 1.0
@@ -224,7 +231,9 @@ def test_spliceai_predict_benchmark(request: pytest.FixtureRequest) -> None:
     n, length = 100, 10000
     sequences = random_dna_sequences(n=n, length=length, seed=0)
     inputs = SpliceAIPredictInput(sequences=sequences)
-    config = SpliceAIPredictConfig(device="cuda")
+    # No device= — 'cuda' is already the default, and pinning it here would override the harness,
+    # so --use-modal would silently measure a local run instead of the deployment.
+    config = SpliceAIPredictConfig()
 
     result = benchmark_twice(request, "spliceai", lambda: run_spliceai_predict(inputs, config))
 
@@ -240,24 +249,31 @@ def test_spliceai_predict_benchmark(request: pytest.FixtureRequest) -> None:
 @pytest.mark.slow
 @pytest.mark.uses_gpu
 def test_spliceai_score_benchmark(request: pytest.FixtureRequest, tmp_path: Path) -> None:
-    """Benchmark spliceai-score on 1000 SNVs spanning the demo gene (cold + warm)."""
+    """Benchmark spliceai-score on 1000 SNVs spanning the HBB transcript (cold + warm)."""
     # Copy into tmp_path so pyfaidx writes its .fai index next to the copy, not the committed source tree.
-    genome = tmp_path / "example_genome.fa"
-    annotation = tmp_path / "example_annotation.txt"
-    shutil.copy(_EXAMPLES_DIR / "example_genome.fa", genome)
-    shutil.copy(_EXAMPLES_DIR / "example_annotation.txt", annotation)
+    genome = tmp_path / "hbb_locus.fasta"
+    annotation = tmp_path / "hbb_annotation.txt"
+    shutil.copy(_EXAMPLES_DIR / "hbb_locus.fasta", genome)
+    shutil.copy(_EXAMPLES_DIR / "hbb_annotation.txt", annotation)
 
     gseq = "".join(ln.strip() for ln in genome.read_text().splitlines() if not ln.startswith(">")).upper()
     n = 1000
     alt_map = {"A": "C", "C": "G", "G": "T", "T": "A"}
-    margin = 1000
-    lo, hi = 20000 + margin, 40000 - margin
-    positions = [lo + i * ((hi - lo) // n) for i in range(n)]
+    # Spaced to span the HBB transcript (5002-6474 in hbb_annotation.txt) evenly, but the lower
+    # bound is set by SpliceAI's context window rather than by the transcript: it reads
+    # 10000 + 2*max_distance nt centred on each variant, so with a 12071 nt locus only positions
+    # 5051..7021 have enough flank. Below that the slice start goes negative, the sequence comes
+    # back empty, the reference base fails to match, and the variant is skipped with no scores.
+    lo, hi = 5051, 6474
+    positions = [lo + (i * (hi - lo)) // n for i in range(n)]
     variants = [
-        SpliceAIVariant(chromosome="1", position=p, ref=gseq[p - 1], alt=alt_map[gseq[p - 1]]) for p in positions
+        SpliceAIVariant(chromosome="HBB", position=p, ref=gseq[p - 1], alt=alt_map[gseq[p - 1]]) for p in positions
     ]
 
     inputs = SpliceAIScoreInput(variants=variants)
+    # device is pinned deliberately: this benchmark scores against a fixture mini-genome that
+    # exists only on this machine, so the config refuses a remote device by design. Leaving the
+    # harness to route it would turn --use-modal into a guaranteed refusal rather than a measurement.
     config = SpliceAIScoreConfig(reference_fasta=str(genome), annotation=str(annotation), device="cuda")
 
     result = benchmark_twice(request, "spliceai", lambda: run_spliceai_score(inputs, config))
@@ -267,8 +283,8 @@ def test_spliceai_score_benchmark(request: pytest.FixtureRequest, tmp_path: Path
     assert result.tool_id == "spliceai-score"
     assert len(result.results) == n
     first = result.results[0]
-    assert first.scores, "Expected non-empty scores: variants must overlap the synthetic gene"
+    assert first.scores, "Expected non-empty scores: variants must overlap the HBB gene"
     gene = first.scores[0]
-    assert gene.symbol == "SPLICEAI_DEMO"
+    assert gene.symbol == "HBB"
     assert all(0.0 <= ds <= 1.0 for ds in (gene.ds_ag, gene.ds_al, gene.ds_dg, gene.ds_dl))
     assert 0.0 <= first.metrics["max_delta_score"] <= 1.0

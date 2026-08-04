@@ -2,6 +2,7 @@
 
 from proto_tools.tools.causal_models.evo1.evo1_sample import (
     EVO1_MODEL_CHECKPOINTS,
+    Evo1Sample,
     Evo1SampleConfig,
     Evo1SampleInput,
     Evo1SampleOutput,
@@ -15,6 +16,7 @@ from proto_tools.tools.causal_models.evo1.evo1_score import (
 )
 
 __all__ = [
+    "Evo1Sample",
     "Evo1SampleInput",
     "Evo1SampleConfig",
     "Evo1SampleOutput",

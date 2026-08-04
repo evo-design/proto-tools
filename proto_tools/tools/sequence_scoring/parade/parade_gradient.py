@@ -8,6 +8,7 @@ from typing import Any, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
+    _CUSTOM_CHECKPOINT_REJECTED,
     PARADE_CELL_TYPES,
     ParadeCellType,
     ParadeConstructType,
@@ -25,6 +26,7 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
+from proto_tools.utils.device import RemoteDevice
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 ParadeObjectiveDirection = Literal["max", "min"]
@@ -136,9 +138,10 @@ class ParadeGradientConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
         construct_type (ParadeConstructType): UTR model to use — ``"utr5"`` or ``"utr3"``.
         loss_terms (list[ParadeGradientLossTerm]): Per-cell objective terms summed
             into one scalar loss.
-        checkpoint (str): Optional override for the pinned checkpoint — a local ``.ckpt`` path or an
-            ``https`` link (a schemeless ``host.tld/path`` is accepted). Caller overrides run on local
-            devices only (rejected on ``device="cloud"``). Empty uses the pinned per-target checkpoint.
+        checkpoint (str): Your own checkpoint to use instead of the pinned one, given as a local
+            ``.ckpt`` path or an ``https`` download link (a schemeless ``host.tld/path`` is
+            accepted). Works on ``device="cpu"``, ``device="cuda"``, and ``device="modal"``.
+            Rejected on ``device="proto"``. Leave empty to use the pinned per-target checkpoint.
         soft (float): Blend hard argmax one-hot (0) to softmax probabilities (1).
         hard (float): Straight-through hard-forward coefficient.
         compute_gradient (bool): Run backward pass and return gradient.
@@ -164,7 +167,7 @@ class ParadeGradientConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
     checkpoint: str = ConfigField(
         title="Checkpoint",
         default="",
-        description="Local .ckpt path or https link overriding the pinned checkpoint (empty = pinned upstream).",
+        description="Your own .ckpt path or https link, used instead of the pinned checkpoint.",
         reload_on_change=True,
         repr=False,
     )
@@ -221,15 +224,10 @@ class ParadeGradientConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
             raise ValueError(f"loss_terms cell codes {offpanel} are not in the {construct_type} panel {list(panel)}")
         return value
 
-    def cloud_unsupported_reason(self) -> str | None:
-        """A caller-specified checkpoint override isn't available (or trusted) on a hosted worker."""
-        if self.checkpoint:
-            return (
-                "checkpoint is a caller-specified override (a local path or a custom download link), which "
-                "device='cloud' does not permit: a PyTorch checkpoint is an executable pickle, so only the "
-                "pinned upstream checkpoints run on a hosted worker. Leave checkpoint empty, or run locally "
-                "with device='cpu'."
-            )
+    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
+        """Proto will not load a custom checkpoint; a deployment the caller owns may."""
+        if device == "proto" and self.checkpoint:
+            return _CUSTOM_CHECKPOINT_REJECTED
         return None
 
 

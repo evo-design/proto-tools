@@ -203,6 +203,10 @@ def example_input() -> Any:
 
 @tool(
     key="meme-fimo-scan",
+    local_only=(
+        "meme-fimo-scan reads a MEME-format motif file from your own disk, which is not available "
+        "on a remote worker. Run locally with device='cpu'."
+    ),
     label="MEME FIMO Motif Scan",
     category="gene_annotation",
     input_class=MEMEFimoScanInput,
@@ -212,6 +216,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["sequences"],
     iterable_output_field="results",
+    max_chunk_size=256,
     cacheable=True,
 )
 def run_meme_fimo_scan(

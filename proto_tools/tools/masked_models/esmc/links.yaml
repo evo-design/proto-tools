@@ -1,5 +1,10 @@
-github: https://github.com/evolutionaryscale/esm
-blog: https://www.evolutionaryscale.ai/blog/esm-cambrian
-huggingface: https://huggingface.co/EvolutionaryScale/esmc-300m-2024-12
+github: https://github.com/Biohub/esm
+website: https://biohub.ai/
+paper:
+  - https://biohub.ai/papers/esm_protein.pdf
+  - https://www.biorxiv.org/content/10.64898/2026.06.03.729735
+huggingface:
+  - https://huggingface.co/biohub/ESMC-6B
+  - https://huggingface.co/biohub/ESMC-SAE-Overview
 organizations:
   - Biohub

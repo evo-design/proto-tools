@@ -1,1 +1,4 @@
 bioemu==1.3.1
+# bioemu pins jax==0.4.35, and dm-haiku 0.0.17 calls jax.core.take_current_trace,
+# which that jax does not have. Left unpinned the build breaks on import haiku.
+dm-haiku==0.0.16

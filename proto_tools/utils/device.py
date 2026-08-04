@@ -13,7 +13,7 @@ import os
 import shutil
 import subprocess
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal, TypeGuard, get_args
 
 logger = logging.getLogger(__name__)
 
@@ -37,10 +37,10 @@ class DeviceSpec:
     """Structured result from :func:`parse_device_string`.
 
     Attributes:
-        kind (str): ``"cpu"``, ``"cuda"``, or ``"cloud"``.
+        kind (str): ``"cpu"``, ``"cuda"``, ``"proto"``, or ``"modal"``.
         devices (list[str] | None): Explicit device IDs when provided (e.g. ``["cuda:0"]``),
             ``None`` for auto-allocate CUDA.
-        count (int): Number of CUDA devices requested (always 1 for cpu and cloud).
+        count (int): Number of CUDA devices requested (always 1 for cpu and remote devices).
     """
 
     kind: str
@@ -69,14 +69,42 @@ def is_exclusive_process_mode() -> bool:
 # cuInit / "No visible GPU devices" — a CUDA context cannot be acquired (typically a device-handoff race).
 _GPU_ACQUISITION_ERROR_SIGNATURES = ("no visible gpu devices", "failed call to cuinit")
 
+# Runtime faults of this family destroy the CUDA context rather than only the operation that raised:
+# device-side asserts, illegal memory accesses, misaligned addresses, unspecified launch failures.
+# The two backends report them differently, so both spellings are listed:
+#
+#   torch   RuntimeError: CUDA error: device-side assert triggered
+#   JAX/XLA XlaRuntimeError: INTERNAL: ... CUDA_ERROR_ILLEGAL_ADDRESS
+#
+# XLA is matched by driver enum rather than by a "cuda_error_" prefix, so that CUDA_ERROR_NO_DEVICE
+# (an acquisition failure) and CUDA_ERROR_OUT_OF_MEMORY are not swept in.
+#
+# Known hole: torch's caching allocator reports a recoverable exhaustion as "CUDA out of memory",
+# which correctly does not match, but a raw-runtime exhaustion can surface as "CUDA error: out of
+# memory", which does. That path retires a worker it did not need to, costing a warm model rather
+# than correctness, and is rare enough to be worth less than the precision it would take to exclude.
+_POISONED_CUDA_CONTEXT_SIGNATURES = (
+    "cuda error:",
+    "cuda_error_illegal_address",
+    "cuda_error_launch_failed",
+    "cuda_error_misaligned_address",
+    "cuda_error_assert",
+    "cuda_error_ecc_uncorrectable",
+)
 
-def is_gpu_acquisition_error(error: object) -> bool:
-    """Return True if *error* is a GPU context-acquisition failure (cuInit / "No visible GPU devices").
 
-    Accepts an exception or a message string. For exceptions, scans the message, any subprocess
-    ``stderr``/``output``, and the ``__cause__``/``__context__`` chain, so the signature is caught
-    whether it lands in ``str(exc)`` (persistent-worker path) or only in ``CalledProcessError.stderr``
-    (one-shot subprocess path).
+def _error_text(error: object) -> str:
+    """Flatten an exception or message into one lowercase blob for signature matching.
+
+    For exceptions, collects the message, any subprocess ``stderr``/``output``, and the
+    ``__cause__``/``__context__`` chain, so a signature is caught whether it lands in ``str(exc)``
+    (persistent-worker path) or only in ``CalledProcessError.stderr`` (one-shot subprocess path).
+
+    Args:
+        error (object): Exception or message string to flatten.
+
+    Returns:
+        str: Lowercased text of the error and everything it carries.
     """
     parts: list[str] = []
     if isinstance(error, BaseException):
@@ -92,8 +120,40 @@ def is_gpu_acquisition_error(error: object) -> bool:
             depth += 1
     else:
         parts.append(str(error))
-    blob = " ".join(parts).lower()
-    return any(sig in blob for sig in _GPU_ACQUISITION_ERROR_SIGNATURES)
+    return " ".join(parts).lower()
+
+
+def _matches_signature(error: object, signatures: tuple[str, ...]) -> bool:
+    """Report whether any of *signatures* appears in *error*'s flattened text."""
+    text = _error_text(error)
+    return any(signature in text for signature in signatures)
+
+
+def is_gpu_acquisition_error(error: object) -> bool:
+    """Return True if *error* is a GPU context-acquisition failure (cuInit / "No visible GPU devices").
+
+    Accepts an exception or a message string.
+    """
+    return _matches_signature(error, _GPU_ACQUISITION_ERROR_SIGNATURES)
+
+
+def poisons_cuda_context(error: object) -> bool:
+    """Return True if *error* is a CUDA fault that leaves the process unable to serve further work.
+
+    A device-side assert (and its siblings) destroys the whole context, so the process that hit it
+    fails every later request until it is replaced. Accepts an exception or a message string.
+    """
+    return _matches_signature(error, _POISONED_CUDA_CONTEXT_SIGNATURES)
+
+
+def leaves_worker_unusable(error: object) -> bool:
+    """Return True if *error* means the process that raised it can no longer serve GPU work.
+
+    Either the backend cached a context-acquisition failure, or a runtime fault destroyed the
+    context outright. Both make every later request on that process fail, so the caller's remedy
+    is the same: retire it and let the next request start a fresh one.
+    """
+    return _matches_signature(error, _GPU_ACQUISITION_ERROR_SIGNATURES + _POISONED_CUDA_CONTEXT_SIGNATURES)
 
 
 def number_of_physical_gpus() -> int:
@@ -291,12 +351,43 @@ def _validate_cuda_index(idx_str: str, device: str) -> int:
     return idx
 
 
+# Device strings that dispatch the tool somewhere else instead of running it
+# locally. "proto" is Proto's hosted service; "modal" is the caller's own
+# Modal deployment. What each can run differs, so availability is decided per
+# device rather than shared.
+#
+# This is only the remote set. Local device strings ("cpu", "cuda", "cuda:0",
+# "cudax4", ...) are unconstrained and validated by parse_device_string.
+RemoteDevice = Literal["proto", "modal"]
+
+# Derived, so the type and the runtime set cannot drift apart.
+_REMOTE_DEVICES: frozenset[str] = frozenset(get_args(RemoteDevice))
+
+
+def is_remote_device(device: str) -> TypeGuard[RemoteDevice]:
+    """Return whether ``device`` dispatches elsewhere rather than running locally.
+
+    Narrows to :data:`RemoteDevice`, so a caller inside the guard may pass ``device`` where a
+    remote device is required without asserting the type by hand. The comparison is exact for
+    that reason: accepting ``" proto"`` would narrow a value that no later comparison against
+    ``"proto"`` will match. Normalize before calling.
+
+    Args:
+        device (str): Device string to classify, already stripped.
+
+    Returns:
+        TypeGuard[RemoteDevice]: True when ``device`` names a remote endpoint.
+    """
+    return device in _REMOTE_DEVICES
+
+
 def parse_device_string(device: str) -> DeviceSpec:
     """Parse a device string into a structured :class:`DeviceSpec`.
 
-    Supports CPU, CUDA (single/multi, auto/explicit), and ``"cloud"`` device
-    strings. ``"cloud"`` runs the tool on Proto's remote execution service
-    (see :mod:`proto_tools.cloud`); its ``count`` is always 1.
+    Supports CPU, CUDA (single/multi, auto/explicit), and the remote device
+    strings ``"proto"`` and ``"modal"``. ``"proto"`` runs the tool on Proto's
+    hosted service (see :mod:`proto_tools.proto`); ``"modal"`` runs it on the
+    caller's own Modal deployment. Both always have ``count`` 1.
 
     Args:
         device (str): Device string to parse.
@@ -307,8 +398,10 @@ def parse_device_string(device: str) -> DeviceSpec:
     Examples:
         >>> parse_device_string("cpu")
         DeviceSpec(kind='cpu', devices=['cpu'], count=1)
-        >>> parse_device_string("cloud")
-        DeviceSpec(kind='cloud', devices=['cloud'], count=1)
+        >>> parse_device_string("proto")
+        DeviceSpec(kind='proto', devices=['proto'], count=1)
+        >>> parse_device_string("modal")
+        DeviceSpec(kind='modal', devices=['modal'], count=1)
         >>> parse_device_string("cuda")
         DeviceSpec(kind='cuda', devices=None, count=1)
         >>> parse_device_string("cudax2")
@@ -327,9 +420,10 @@ def parse_device_string(device: str) -> DeviceSpec:
     if device == "cpu":
         return DeviceSpec(kind="cpu", devices=["cpu"], count=1)
 
-    # Cloud (dispatch delegated to proto_tools.cloud when enabled)
-    if device == "cloud":
-        return DeviceSpec(kind="cloud", devices=["cloud"], count=1)
+    # Remote devices. Dispatch is delegated before pool partitioning, so the
+    # count is nominal: the remote side decides its own physical hardware.
+    if device in _REMOTE_DEVICES:
+        return DeviceSpec(kind=device, devices=[device], count=1)
 
     # Auto-allocate N GPUs: "cudax2", "cudax3", etc.
     if device.startswith("cudax"):

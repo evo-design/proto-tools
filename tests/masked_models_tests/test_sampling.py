@@ -162,11 +162,11 @@ def test_protein_sample_fills_masks(
     _validate_sample_output(sequences, result.sequences, entity_type)
 
     if has_logits:
-        assert result.logits is not None, "Logits should be returned"
-        assert len(result.logits) == len(sequences)
-        for seq, logits in zip(sequences, result.logits, strict=False):
-            assert len(logits) == len(seq), f"Expected {len(seq)} positions, got {len(logits)}"
-            assert len(logits[0]) == 20, f"Expected vocab size 20, got {len(logits[0])}"
+        assert len(result.results) == len(sequences)
+        for seq, sample in zip(sequences, result.results, strict=False):
+            assert sample.logits is not None, "Logits should be returned"
+            assert len(sample.logits) == len(seq), f"Expected {len(seq)} positions, got {len(sample.logits)}"
+            assert len(sample.logits[0]) == 20, f"Expected vocab size 20, got {len(sample.logits[0])}"
 
 
 ITERATIVE_PROTEIN_SAMPLING_TOOLS = [
@@ -197,11 +197,11 @@ def test_protein_sample_iterative_refinement(run_fn, input_cls, config_cls, sequ
     _validate_sample_output(sequences, result.sequences, "protein")
 
     if return_logits:
-        assert result.logits is not None
-        assert len(result.logits) == len(sequences)
-        for seq, logits in zip(sequences, result.logits, strict=False):
-            assert len(logits) == len(seq), f"Expected {len(seq)} positions, got {len(logits)}"
-            assert len(logits[0]) == 20, f"Expected vocab size 20, got {len(logits[0])}"
+        assert len(result.results) == len(sequences)
+        for seq, sample in zip(sequences, result.results, strict=False):
+            assert sample.logits is not None
+            assert len(sample.logits) == len(seq), f"Expected {len(seq)} positions, got {len(sample.logits)}"
+            assert len(sample.logits[0]) == 20, f"Expected vocab size 20, got {len(sample.logits[0])}"
 
 
 @pytest.mark.parametrize(

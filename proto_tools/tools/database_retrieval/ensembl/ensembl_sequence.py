@@ -199,6 +199,7 @@ def example_input() -> Any:
 
 @tool(
     key="ensembl-sequence",
+    local_only="ensembl-sequence does not use a gpu and does not need an environment, so it can run in process",
     label="Ensembl Sequence",
     category="database_retrieval",
     input_class=EnsemblSequenceInput,

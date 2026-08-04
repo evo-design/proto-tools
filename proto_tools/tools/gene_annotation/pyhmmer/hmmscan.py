@@ -86,10 +86,6 @@ class PyHmmscanConfig(PyHmmerConfig):
         description="HMM curated cutoff: 'gathering' (Pfam GA), 'noise' (permissive), 'trusted' (strictest)",
     )
 
-    def cloud_unsupported_reason(self) -> str | None:
-        """Reads a local HMM database file (``hmm_db``) that can't be staged to the hosted cloud."""
-        return "needs a local HMM database file (hmm_db) that can't be staged to device='cloud'. Run locally with device='cpu'."
-
 
 # ============================================================================
 # Tool Implementation
@@ -104,6 +100,10 @@ def example_input() -> Any:
 
 @tool(
     key="pyhmmer-hmmscan",
+    local_only=(
+        "pyhmmer-hmmscan scans against an HMM database file on your own disk, which is not available "
+        "on a remote worker. Run locally with device='cpu'."
+    ),
     label="PyHMMER Scan",
     category="gene_annotation",
     input_class=PyHmmscanInput,

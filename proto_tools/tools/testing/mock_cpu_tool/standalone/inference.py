@@ -14,7 +14,7 @@ import sys
 import uuid
 from typing import Any
 
-# Auto-copied by worker bootstrap; same convention as the other mocks.
+# Published on PYTHONPATH; same convention as the other mocks.
 from standalone_helpers import get_logger
 
 logger = get_logger(__name__)

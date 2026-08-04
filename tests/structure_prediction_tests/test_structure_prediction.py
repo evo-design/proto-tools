@@ -72,6 +72,7 @@ from proto_tools.utils.tool_cache import (
     get_cache_info,
 )
 from proto_tools.utils.tool_instance import ToolInstance
+from tests.sequence_alignment_tests.test_mmseqs2_homology_search import FixtureDbConfig
 from tests.structure_prediction_tests._fasta_helpers import load_all_test_complexes
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
@@ -377,8 +378,76 @@ def test_normalize_complexes_roundtrip_with_modifications():
 # ── Primary folding test (GPU) ─────────────────────────────────────────────────
 
 
+class _Mmseqs2OnlyCache(ToolCache):
+    """A :class:`ToolCache` that admits ``mmseqs2-homology-search`` entries and nothing else.
+
+    Every MSA folding parametrization asks its predictor to run its own homology search, and the same
+    handful of complexes recur across predictors — so each search is recomputed once per predictor for
+    input it has already seen. Locally that is the dominant cost of the suite; remotely it is repeat
+    traffic to the public ColabFold server for answers already received, which is worth not sending
+    regardless of what it saves in wall clock.
+
+    Structure predictors are cacheable too, though, and serving a cached *prediction* would hollow out
+    the very thing these tests assert. Filtering on ``tool_key`` keeps the saving confined to the MSA
+    search: every predictor still folds for real. Both cache paths route through ``get``/``set`` with
+    the tool key (the per-item path for iterable tools via ``cache_strip_items`` / ``cache_store_items``,
+    and the whole-output path otherwise), so overriding the pair covers both.
+    """
+
+    _CACHED_TOOL = "mmseqs2-homology-search"
+
+    def get(self, tool_key: str, cache_key: str) -> object | None:
+        """Return a cached entry, but only for the homology search."""
+        if tool_key != self._CACHED_TOOL:
+            return None
+        return super().get(tool_key, cache_key)
+
+    def set(self, tool_key: str, cache_key: str, result: object) -> None:
+        """Store an entry, but only for the homology search."""
+        if tool_key != self._CACHED_TOOL:
+            return
+        super().set(tool_key, cache_key, result)
+
+
+@pytest.fixture(scope="session")
+def _msa_search_cache():
+    """One MSA-search cache shared by every MSA folding parametrization, released when they finish.
+
+    MSAs are held in memory, so the entries are dropped once the last parametrization has run rather
+    than left resident for whatever the session does afterwards.
+    """
+    cache = _Mmseqs2OnlyCache()
+    try:
+        yield cache
+    finally:
+        cache.clear()
+
+
+@pytest.fixture
+def _share_msa_search(request, _msa_search_cache):
+    """Serve repeat homology searches from cache across the MSA folding parametrizations.
+
+    Covers both search modes. ``search_mode`` is part of the cache key, so local and remote occupy
+    separate entries and each mode still performs one real search per distinct query — neither surface
+    is served the other's answer, and neither goes untested.
+
+    Left unset for the ``without_msa`` parametrizations, which never reach the search, and for every
+    other test in the module — notably ``test_folding_cache``, which installs its own cache and asserts
+    exact entry counts.
+    """
+    callspec = getattr(request.node, "callspec", None)
+    if callspec is None or callspec.params.get("msa_search_mode") is None:
+        yield
+        return
+    token = _program_tool_cache.set(_msa_search_cache)
+    try:
+        yield
+    finally:
+        _program_tool_cache.reset(token)
+
+
 @pytest.mark.uses_gpu
-@pytest.mark.usefixtures("_release_between_predictors")
+@pytest.mark.usefixtures("_release_between_predictors", "_share_msa_search")
 @pytest.mark.parametrize(
     "test_name,predictor_name,use_msa,msa_search_mode",
     _generate_test_params(),
@@ -628,13 +697,8 @@ def _mini_db_skip_reason() -> str | None:
 
 
 def _build_local_mmseqs2_config() -> Mmseqs2HomologySearchConfig:
-    # tiny-test-colabfold is excluded from the product `dataset` Literal so it isn't a selectable option; use model_construct to bypass the enum validator. CPU because the mmseqs2-homology-search subprocess can't see the GPU under pytest's DeviceManager mask.
-    return Mmseqs2HomologySearchConfig.model_construct(
-        search_mode="local",
-        dataset=_MSA_TEST_DATASET,
-        use_gpu=False,
-        verbose=False,
-    )
+    # CPU because the mmseqs2-homology-search subprocess can't see the GPU under pytest's DeviceManager mask.
+    return FixtureDbConfig(search_mode="local", device="cpu", verbose=False)
 
 
 @pytest.fixture(scope="module")

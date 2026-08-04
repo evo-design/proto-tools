@@ -57,6 +57,13 @@ class Evo1ScoringConfig(CausalModelScoringConfig):
         - DNA nucleotides: 'A'=65, 'C'=67, 'G'=71, 'T'=84, 'N'=78 (ASCII values).
     """
 
+    batch_size: int = ConfigField(
+        title="Batch Size",
+        default=8,
+        ge=1,
+        description="Sequences per GPU forward pass; raise for throughput, lower if OOM",
+    )
+
     model_name: EVO1_MODEL_CHECKPOINTS = ConfigField(
         title="Model Name",
         default="evo-1-8k-base",
@@ -93,6 +100,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["sequences"],
     iterable_output_field="scores",
+    max_chunk_size=32,
     cacheable=True,
 )
 def run_evo1_score(

@@ -25,6 +25,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     unwrap_complex_msas,
     write_paired_a3m_with_uniprot_headers,
 )
+from proto_tools.utils import run_preprocess
 
 # Distinct protein sequences (valid amino acids) for orchestration tests.
 _SEQ_A = "MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ"
@@ -331,9 +332,10 @@ def test_preprocess_supplied_msas_override_use_msa_false():
     inputs = _SPInput(complexes=[_protein_complex(_SEQ_A)], msas=[ComplexMSAs(per_chain={0: msa})])
     config = sdm.MSAStructurePredictionConfig(use_msa=False)
 
-    out = config.preprocess(inputs)
+    out, prepared_config = config.preprocess(inputs)  # this branch returns the pair
 
-    assert config.use_msa is True  # overridden because MSAs were supplied
+    assert prepared_config.use_msa is True  # overridden because MSAs were supplied
+    assert config.use_msa is False  # the caller's config is left untouched
     assert out.msas[0].per_chain[0].aligned_sequences == [_SEQ_A, _SEQ_A]  # supplied MSAs retained
 
 
@@ -437,3 +439,34 @@ def test_preprocess_rejects_presupplied_length_mismatch(monkeypatch):
 def test_count_structure_tokens(chains, expected):
     """1 token per residue/nucleotide; heavy-atom count per ligand and modified residue."""
     assert count_structure_tokens(chains) == expected
+
+
+# ── preprocess purity ───────────────────────────────────────────────────────
+
+
+def test_preprocess_leaves_caller_config_untouched(monkeypatch):
+    """Preprocess never writes to the caller's config or its nested search config."""
+    monkeypatch.setattr(sdm, "_preprocess_structure_prediction_msas", lambda inputs, *a, **k: inputs)
+    config = sdm.MSAStructurePredictionConfig(
+        use_msa=True, verbose=2, msa_search_config=Mmseqs2HomologySearchConfig(verbose=0)
+    )
+    before = config.model_dump()
+
+    run_preprocess(config, _SPInput(complexes=[_protein_complex(_SEQ_A)]))
+
+    assert config.model_dump() == before
+
+
+def test_preprocess_is_idempotent_across_calls(monkeypatch):
+    """Supplying MSAs once must not enable the MMseqs2 search on a later call with the same config."""
+    searches = []
+    monkeypatch.setattr(
+        sdm, "_preprocess_structure_prediction_msas", lambda inputs, *a, **k: searches.append(1) or inputs
+    )
+    config = sdm.MSAStructurePredictionConfig(use_msa=False)
+    msa = MSA(aligned_sequences=[_SEQ_A, _SEQ_A])
+
+    run_preprocess(config, _SPInput(complexes=[_protein_complex(_SEQ_A)], msas=[ComplexMSAs(per_chain={0: msa})]))
+    run_preprocess(config, _SPInput(complexes=[_protein_complex(_SEQ_A)]))
+
+    assert searches == []  # use_msa=False was honoured both times

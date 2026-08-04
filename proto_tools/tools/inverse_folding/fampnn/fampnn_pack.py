@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.inverse_folding.fampnn.fampnn_sample import (
@@ -92,24 +92,38 @@ class FAMPNNPackConfig(BaseConfig):
     )
 
 
+class FAMPNNPackedStructure(BaseModel):
+    """Packing samples for one input structure.
+
+    Attributes:
+        structures (list[Structure]): Packed structures for this input, one per packing
+            sample. B-factor column carries per-atom pSCE.
+        psce (list[list[float]]): Per-residue predicted sidechain error in Angstroms,
+            one list per packing sample.
+    """
+
+    structures: list[Structure] = Field(
+        title="Structures", description="Packed structures for this input, one per sample"
+    )
+    psce: list[list[float]] = Field(title="pSCE", description="Per-residue predicted sidechain error in Å, per sample")
+
+
 class FAMPNNPackingResult(BaseToolOutput):
     """Output for FAMPNN sidechain packing.
 
     Attributes:
-        packed_structures (list[list[Structure]]): Packed structures with sidechain
-            coordinates. Outer list corresponds to input structures, inner list
-            to packing samples. B-factor column carries per-atom pSCE.
-        psce (list[list[list[float]]]): Per-residue predicted sidechain error (Angstroms) for each sample.
+        results (list[FAMPNNPackedStructure]): One entry per input structure, in input order.
     """
 
-    packed_structures: list[list[Structure]] = Field(
-        title="Packed Structures",
-        description="Packed structures (outer=inputs, inner=samples)",
+    results: list[FAMPNNPackedStructure] = Field(
+        title="Results",
+        description="Packed structures with their pSCE, one entry per input structure",
     )
-    psce: list[list[list[float]]] = Field(
-        title="pSCE",
-        description="Per-residue predicted sidechain error in Å (shape [n_inputs, n_samples, n_residues])",
-    )
+
+    @property
+    def packed_structures(self) -> list[list[Structure]]:
+        """Packed structures per input, in input order."""
+        return [result.structures for result in self.results]
 
     @property
     def output_format_options(self) -> list[str]:
@@ -130,9 +144,13 @@ class FAMPNNPackingResult(BaseToolOutput):
                 for j, struct in enumerate(struct_list):
                     struct.write_pdb(path / f"packed_{i}_sample_{j}.pdb")
         elif file_format == "json":
-            for i, (struct_list, psce_list) in enumerate(zip(self.packed_structures, self.psce, strict=False)):
+            for i, result in enumerate(self.results):
                 with open(path / f"packed_{i}.json", "w") as f:
-                    json.dump({"pdb_strings": [s.structure for s in struct_list], "psce": psce_list}, f, indent=2)
+                    json.dump(
+                        {"pdb_strings": [s.structure for s in result.structures], "psce": result.psce},
+                        f,
+                        indent=2,
+                    )
         else:
             raise ValueError(f"Unsupported format: {file_format}")
 
@@ -162,7 +180,8 @@ def example_input() -> Any:
     uses_gpu=True,
     example_input=example_input,
     iterable_input_fields=["inputs"],
-    iterable_output_field="packed_structures",
+    iterable_output_field="results",
+    max_chunk_size=32,
     cacheable=True,
     stochastic=True,
 )
@@ -242,6 +261,8 @@ def run_fampnn_pack(
         all_psce.append(struct_psce)
 
     return FAMPNNPackingResult(
-        packed_structures=all_packed,
-        psce=all_psce,
+        results=[
+            FAMPNNPackedStructure(structures=structures, psce=psce)
+            for structures, psce in zip(all_packed, all_psce, strict=True)
+        ],
     )

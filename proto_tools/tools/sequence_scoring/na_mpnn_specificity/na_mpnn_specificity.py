@@ -169,9 +169,9 @@ class NAMPNNSpecificityConfig(BaseConfig):
     )
     batch_size: int = ConfigField(
         title="Batch Size",
-        default=1,
+        default=8,
         ge=1,
-        description="Batch size used for each NA-MPNN prediction pass",
+        description="Sequences per GPU forward pass; raise for throughput, lower if OOM",
     )
     number_of_batches: int = ConfigField(
         title="Num Batches",
@@ -207,24 +207,21 @@ class NAMPNNSpecificityConfig(BaseConfig):
         description="Keep intermediate raw NA-MPNN output directories",
     )
 
-    def cloud_unsupported_reason(self) -> str | None:
-        """NA-MPNN needs a local repo checkout + checkpoint that can't be staged to cloud."""
-        return (
-            "NA-MPNN requires a local repository checkout and checkpoint on disk, which "
-            "can't be staged to device='cloud'. Run locally with device='cuda' or 'cpu'."
-        )
-
 
 # ============================================================================
 # Tool Implementation
 # ============================================================================
 def example_input() -> NAMPNNSpecificityInput:
     """Minimal valid input for testing and examples."""
-    return NAMPNNSpecificityInput(pdb_paths=["protein_dna_complex.pdb"])
+    return NAMPNNSpecificityInput(pdb_paths=[str(Path(__file__).parent / "example_input_fixture.pdb")])
 
 
 @tool(
     key="na-mpnn-specificity",
+    local_only=(
+        "NA-MPNN requires a local repository checkout and checkpoint on disk, which are not available "
+        "on a remote worker. Run locally with device='cuda' or 'cpu'."
+    ),
     label="NA-MPNN Specificity",
     category="sequence_scoring",
     input_class=NAMPNNSpecificityInput,
@@ -235,6 +232,7 @@ def example_input() -> NAMPNNSpecificityInput:
     example_input=example_input,
     iterable_input_fields=["pdb_paths"],
     iterable_output_field="results",
+    max_chunk_size=32,
 )
 def run_na_mpnn_specificity(
     inputs: NAMPNNSpecificityInput,

@@ -3,13 +3,26 @@
 Base configuration class for all pydantic configs.
 """
 
+import getpass
 import json
+import logging
+import os
 import random
-from typing import Any
+import socket
+from contextvars import ContextVar
+from typing import Any, ClassVar
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    ModelWrapValidatorHandler,
+    PrivateAttr,
+    field_validator,
+    model_validator,
+)
 from pydantic import Field as PydanticField
 
+from proto_tools.utils.device import RemoteDevice
 from proto_tools.utils.tool_io import (
     BaseToolInput,
     _extra_dict,
@@ -19,6 +32,45 @@ from proto_tools.utils.tool_io import (
 
 DEFAULT_TIMEOUT = 3600  # seconds (generous default; heavy GPU tools need headroom under load)
 RANDOM_SEED_UPPER_BOUND = 2**31
+
+# Set by an environment that hosts tools rather than running on a user's own machine. Read rather
+# than sniffed from any one provider, so proto-tools stays unaware of which it is running on.
+HOSTED_ENV_VAR = "PROTO_IS_HOSTED_ENV"
+
+
+def is_hosted_env() -> bool:
+    """Whether this process hosts tools for someone else rather than running on their machine."""
+    return os.environ.get(HOSTED_ENV_VAR, "") not in ("", "0")
+
+
+# Overrides who a call says it is when reaching an external service. Unset derives the account and
+# host, so one installation is distinguishable from another without anyone configuring anything.
+CLIENT_IDENTITY_ENV_VAR = "PROTO_CLIENT_IDENTITY"
+
+
+def client_identity() -> str:
+    """Who is asking, for services that want callers to identify themselves.
+
+    Derived where the call originates, not where it is sent. A hosted process runs on someone's
+    behalf, so naming the container would attribute every user's traffic to one source — which is
+    what the services asking for identification are trying to avoid.
+    """
+    configured = os.environ.get(CLIENT_IDENTITY_ENV_VAR, "").strip()
+    if configured:
+        return configured
+    try:
+        return f"{getpass.getuser()}@{socket.gethostname()}"
+    except Exception:  # an account this process cannot name is not a failure
+        return "unknown"
+
+
+# Payload key carrying framework state across a process boundary. Stripped before validation,
+# so a config crossing to a remote worker never presents it as a field.
+INTERNAL_STATE_KEY = "_proto_internal"
+
+# ``id()`` of every config frozen for the duration of an in-flight ``preprocess`` call. A
+# ContextVar so concurrent per-chunk preprocess in worker threads each guard their own config.
+_preprocess_frozen: ContextVar[frozenset[int]] = ContextVar("_preprocess_frozen", default=frozenset())
 
 
 def ConfigField(
@@ -76,7 +128,7 @@ class BaseConfig(BaseModel):
         gpus_per_instance: Number of GPUs each worker needs. Default is
             derived from the ``device`` field via :func:`parse_device_string`
             (``cpu`` → 0, ``cuda`` / ``cuda:N`` → 1, ``cudaxN`` / multi → N,
-            ``cloud`` → 1). Override in tool configs where GPU need is
+            ``proto`` → 1). Override in tool configs where GPU need is
             decoupled from the device string — e.g. a large checkpoint that
             needs 2 GPUs regardless of input device, or a tool with a
             separate ``use_gpu`` flag toggling real GPU work. ``ToolPool``
@@ -110,6 +162,23 @@ class BaseConfig(BaseModel):
         validate_default=True,  # Validate default values
     )
 
+    # The tool this config belongs to, stamped by ``ToolRegistry.register``; ``None`` until registered.
+    tool_key: ClassVar[str | None] = None
+
+    # True once ``preprocess`` has run for this call. Private rather than a field: it describes
+    # what the framework has already done, not anything a caller chooses, so it stays out of the
+    # published schema, out of the cache key, and out of the constructor.
+    _preprocess_completed: bool = PrivateAttr(default=False)
+
+    # Who asked for this call, when it came from somewhere else. ``None`` on the machine that
+    # originated it, where the identity is derived instead.
+    _client_identity: str | None = PrivateAttr(default=None)
+
+    # Where a remote worker should stream this call's log output, and from what level. ``None``
+    # disables streaming, which is what a caller who is not watching a spinner wants.
+    _progress_partition: str | None = PrivateAttr(default=None)
+    _progress_level: int = PrivateAttr(default=logging.INFO)
+
     verbose: int = ConfigField(
         title="Verbose",
         default=0,
@@ -118,6 +187,95 @@ class BaseConfig(BaseModel):
         description="Verbosity level (0=quiet, 1=info, 2=debug, 3=raw subprocess stderr). True→1, False→0.",
         include_in_key=False,
     )
+
+    # Fields a nested config takes from the config holding it when it did not set its own.
+    # A nested config is part of one call, so settings that describe how that call should be
+    # carried out belong to the whole tree rather than to whichever config was named directly.
+    INHERITED_BY_NESTED_CONFIGS: ClassVar[tuple[str, ...]] = ("verbose",)
+
+    @model_validator(mode="after")
+    def _inherit_fields_into_nested_configs(self) -> "BaseConfig":
+        """Push :attr:`INHERITED_BY_NESTED_CONFIGS` down to nested configs that left them unset.
+
+        ``Boltz2Config(verbose=2)`` makes its MMseqs2 search verbose too, while a nested config
+        that names its own value keeps it. Values are written straight into the instance so the
+        nested config stays recorded as unset, letting a later change to the outer value flow
+        through again.
+        """
+        for nested in _reachable_configs(self):
+            if nested is self:
+                continue
+            for name in self.INHERITED_BY_NESTED_CONFIGS:
+                if name in type(nested).model_fields and name not in nested.model_fields_set:
+                    nested.__dict__[name] = getattr(self, name)
+        return self
+
+    def for_hosted_env(self) -> "BaseConfig":
+        """Return a config this call can honour in a hosted environment.
+
+        A hosted environment runs tools for someone else and cannot stage a large corpus on
+        demand, so a setting that depends on one has to give way. Return a copy with that setting
+        changed; the default changes nothing, which is what almost every config wants.
+
+        Only reached when ``preprocess`` runs in the hosted process itself. A caller who prepared
+        the work on their own machine keeps every setting they chose, since the corpus was
+        available where it was actually needed.
+
+        Returns:
+            BaseConfig: This config, or a copy adjusted for hosted execution.
+        """
+        return self
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _restore_internal_state(cls, data: Any, handler: ModelWrapValidatorHandler["BaseConfig"]) -> "BaseConfig":
+        """Rebuild framework state carried in ``INTERNAL_STATE_KEY`` by :meth:`to_transport_dict`.
+
+        The key is removed before validation so ``extra="forbid"`` never sees it, which lets a
+        payload cross a process boundary without the receiving side needing to know about it.
+        """
+        internal: dict[str, Any] | None = None
+        if isinstance(data, dict) and INTERNAL_STATE_KEY in data:
+            raw = data[INTERNAL_STATE_KEY]
+            internal = raw if isinstance(raw, dict) else None
+            data = {k: v for k, v in data.items() if k != INTERNAL_STATE_KEY}
+        config = handler(data)
+        if internal:
+            config._preprocess_completed = bool(internal.get("preprocess_completed", False))
+            config._client_identity = internal.get("client_identity")
+            config._progress_partition = internal.get("progress_partition")
+            config._progress_level = int(internal.get("progress_level", logging.INFO))
+        return config
+
+    def to_transport_dict(self, **dump_kwargs: Any) -> dict[str, Any]:
+        """Serialize for dispatch to another process, including framework state.
+
+        Used instead of :meth:`model_dump` when sending a config to a remote device, so the
+        receiver learns that preprocess already ran. Serialization is explicit rather than a
+        :func:`model_serializer` override so that :meth:`cache_key`, which dumps the same model,
+        cannot pick the state up and split the cache between caller and worker. A sender that
+        forgets this method therefore sends no state, and the worker preprocesses as it does today.
+
+        Args:
+            dump_kwargs (Any): Passed to :meth:`model_dump`, letting each transport keep its own
+                serialization. Defaults to ``mode="json"``.
+
+        Returns:
+            dict[str, Any]: The dumped config, carrying ``INTERNAL_STATE_KEY`` when state is set.
+        """
+        data = self.model_dump(**{"mode": "json", **dump_kwargs})
+        # Always sent, so a hosted process can say who it is acting for; the receiver strips the
+        # envelope before validation, so a field it does not recognise costs nothing.
+        data[INTERNAL_STATE_KEY] = {
+            "preprocess_completed": self._preprocess_completed,
+            "client_identity": self._client_identity or client_identity(),
+        }
+        # Only sent when the caller asked for it. A worker predating the key ignores it, and a
+        # worker that understands it streams nothing when it is absent.
+        if self._progress_partition:
+            data[INTERNAL_STATE_KEY]["progress_partition"] = self._progress_partition
+            data[INTERNAL_STATE_KEY]["progress_level"] = self._progress_level
+        return data
 
     @classmethod
     def reload_fields(cls) -> set[str]:
@@ -130,14 +288,19 @@ class BaseConfig(BaseModel):
         return {name for name, info in cls.model_fields.items() if not _extra_dict(info).get("include_in_key", True)}
 
     def cache_key(self) -> str:
-        """Deterministic string for cache key generation, excluding non-key fields."""
-        model_dict = self.model_dump(exclude_none=True, exclude=self.cache_exclude_fields())
+        """Deterministic string for cache key generation, excluding non-key fields at every level.
+
+        Nested configs are excluded field by field like the outer one, so a setting that does not
+        change the result (``verbose``, ``device``, ``timeout``) never splits the cache, whether it
+        sits on this config or on one nested inside it.
+        """
+        model_dict = self.model_dump(exclude_none=True, exclude=_cache_exclude_map(self))
         return json.dumps(model_dict, sort_keys=True, default=str)
 
     device: str = ConfigField(
         title="Device",
         default="cpu",
-        description="Device to run the tool on (e.g., 'cpu', 'cuda', 'cuda:0', 'cloud')",
+        description="Device to run the tool on (e.g., 'cpu', 'cuda', 'cuda:0', 'proto', 'modal')",
         include_in_key=False,
     )
 
@@ -190,7 +353,7 @@ class BaseConfig(BaseModel):
             - ``"cpu"`` → 0 (no GPUs needed)
             - ``"cuda"`` / ``"cuda:N"`` → 1
             - ``"cudaxN"`` / ``"cuda:0,cuda:1"`` → N
-            - ``"cloud"`` → 1 (cloud dispatch handled before pool partitioning)
+            - ``"proto"`` / ``"modal"`` → 1 (remote dispatch happens before pool partitioning)
 
         Override in subclasses when GPU need is decoupled from the device
         string — e.g. a model whose large checkpoint needs 4 GPUs regardless
@@ -270,15 +433,227 @@ class BaseConfig(BaseModel):
         """
         return self.timeout
 
-    def preprocess(self, inputs: BaseToolInput) -> BaseToolInput:
-        """Transform inputs before tool execution. Override in subclasses."""
+    @field_validator("device")
+    @classmethod
+    def _validate_device(cls, value: str) -> str:
+        """Reject malformed device strings at construction rather than at dispatch.
+
+        Parsing is purely syntactic, so this stays independent of the hardware
+        actually present: ``"cuda:7"`` validates on a machine with no GPU. Whether
+        a remote device can run *this* tool is a separate question, answered at
+        dispatch where the tool key is known.
+
+        Args:
+            value (str): Device string being validated.
+
+        Returns:
+            str: The device string, unchanged.
+
+        Raises:
+            ValueError: If the string is not a recognized device form.
+        """
+        from proto_tools.utils.device import parse_device_string
+
+        parse_device_string(value)
+        return value
+
+    def preprocess(self, inputs: BaseToolInput) -> "BaseToolInput | tuple[BaseToolInput, BaseConfig]":
+        """Transform inputs before tool execution. Override in subclasses.
+
+        Return the prepared inputs alone, or — when preprocess also resolves a config setting
+        that execution must see — ``(inputs, config)``. Never assign to ``self``: return an
+        updated copy instead, so preprocess is idempotent and safe to run per chunk when a
+        batch is fanned across workers.
+
+        Args:
+            inputs (BaseToolInput): Tool inputs to prepare.
+
+        Returns:
+            BaseToolInput | tuple[BaseToolInput, BaseConfig]: Prepared inputs, optionally
+                paired with the config to execute with.
+        """
         return inputs
 
-    def cloud_unsupported_reason(self) -> str | None:
-        """Reason this config can't run via ``device='cloud'``, or ``None`` if it can.
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Assign a field, refusing writes to a config frozen for the duration of ``preprocess``."""
+        if name in type(self).model_fields and id(self) in _preprocess_frozen.get():
+            raise TypeError(
+                f"{type(self).__name__}.preprocess assigned to self.{name}. preprocess must not "
+                f"mutate its config — the caller's config would carry the change into later "
+                f"calls. Return an updated copy alongside the inputs instead:\n"
+                f"    return inputs, self.model_copy(update={{{name!r}: ...}})"
+            )
+        super().__setattr__(name, value)
+
+    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:  # noqa: ARG002 — overrides use it
+        """Reason this config can't run on ``device``, or ``None`` if it can.
 
         Override in a tool's config to fail fast at dispatch when a setting needs a local
-        resource (e.g. a local database or file) that can't be staged to the hosted service.
+        resource (e.g. a local database or file) that can't be staged to a remote worker.
         The returned message is surfaced to the caller; ``None`` (the default) means compatible.
+
+        Takes the device because remote targets differ in what they can run. A local file
+        is unstageable everywhere and should be refused regardless, but a restriction that
+        reflects what Proto chooses to host says nothing about a deployment the caller
+        owns and pays for — those must branch on ``device``.
+
+        Args:
+            device (RemoteDevice): Remote target, ``"proto"`` or ``"modal"``.
+
+        Returns:
+            str | None: User-facing reason, or ``None`` when the config is compatible.
         """
         return None
+
+    def local_execution_reason(self, device: RemoteDevice) -> str | None:  # noqa: ARG002 — overrides use it
+        """Reason this call runs here rather than on ``device``, or ``None`` to dispatch normally.
+
+        The soft counterpart to :meth:`remote_unsupported_reason`. That one refuses a call that
+        cannot work remotely; this one redirects a call that would work but gains nothing, such as
+        a search mode whose whole implementation is an HTTP request to a third-party service. The
+        dispatcher rewrites ``device`` to ``"cpu"`` and logs the reason instead of raising.
+
+        Args:
+            device (RemoteDevice): Remote target, ``"proto"`` or ``"modal"``.
+
+        Returns:
+            str | None: Reason to log, or ``None`` to dispatch to ``device``.
+        """
+        return None
+
+
+def _cache_exclude_map(model: BaseModel, _visited: set[int] | None = None) -> dict[str, Any]:
+    """Build a ``model_dump(exclude=...)`` mapping that drops non-key fields at every level.
+
+    ``cache_exclude_fields()`` names the fields of one config that do not affect its result.
+    Applied only to the outer config, a nested config's ``verbose``, ``device``, and ``timeout``
+    would still reach the cache key and split it. This walks the model tree and produces the
+    nested exclude mapping Pydantic expects, including ``__all__`` entries for configs held in
+    lists or dicts.
+    """
+    _visited = set() if _visited is None else _visited
+    if id(model) in _visited:
+        return {}
+    _visited.add(id(model))
+
+    exclude: dict[str, Any] = {}
+    skip = model.cache_exclude_fields() if isinstance(model, BaseConfig) else set()
+    for name in type(model).model_fields:
+        if name in skip:
+            exclude[name] = True
+            continue
+        value = getattr(model, name, None)
+        if isinstance(value, BaseModel):
+            if child := _cache_exclude_map(value, _visited):
+                exclude[name] = child
+        elif isinstance(value, list | tuple | set | frozenset | dict):
+            members = value.values() if isinstance(value, dict) else value
+            merged: dict[str, Any] = {}
+            for member in members:
+                if isinstance(member, BaseModel):
+                    merged.update(_cache_exclude_map(member, _visited))
+            if merged:
+                exclude[name] = {"__all__": merged}
+    return exclude
+
+
+def _reachable_configs(config: BaseConfig) -> list[BaseConfig]:
+    """Return ``config`` and every :class:`BaseConfig` reachable from it.
+
+    Descends through nested models and through list, tuple, set, and dict fields, so a config
+    held in a collection is found alongside one held directly. Every expanded object is
+    recorded, so a shared or self-referencing model graph is walked once and terminates.
+    """
+    found: list[BaseConfig] = []
+    visited: set[int] = set()
+    pending: list[Any] = [config]
+    while pending:
+        current = pending.pop()
+        if id(current) in visited:
+            continue
+        if isinstance(current, BaseModel):
+            visited.add(id(current))
+            if isinstance(current, BaseConfig):
+                found.append(current)
+            pending.extend(getattr(current, name, None) for name in type(current).model_fields)
+        elif isinstance(current, list | tuple | set | frozenset):
+            visited.add(id(current))
+            pending.extend(current)
+        elif isinstance(current, dict):
+            visited.add(id(current))
+            pending.extend(current.values())
+    return found
+
+
+def _nested_configs(config: BaseConfig) -> set[int]:
+    """Collect ``id()`` of ``config`` and every :class:`BaseConfig` reachable from it."""
+    return {id(nested) for nested in _reachable_configs(config)}
+
+
+def _marked_preprocessed(config: BaseConfig) -> BaseConfig:
+    """Return a copy of ``config`` recording that preprocess has run.
+
+    A copy rather than the object itself, since ``preprocess`` may return the caller's config
+    unchanged. Recording it in place would make the caller's own object claim the work was
+    already done, and a second call reusing that object would skip preprocess entirely.
+
+    Args:
+        config (BaseConfig): Config to mark.
+
+    Returns:
+        BaseConfig: A copy carrying the completed state.
+    """
+    prepared = config.model_copy()
+    prepared._preprocess_completed = True
+    return prepared
+
+
+def run_preprocess(config: BaseConfig, inputs: BaseToolInput) -> tuple[BaseToolInput, BaseConfig]:
+    """Run ``config.preprocess`` with the config frozen, returning prepared inputs and config.
+
+    Accepts either return shape: bare prepared inputs (the common case), or
+    ``(inputs, config)`` when preprocess also resolves a config setting that execution must
+    see. Callers always get the pair, so the two shapes are normalized in one place.
+
+    Freezing makes the no-mutation contract enforced rather than merely documented: a
+    ``preprocess`` that assigns to ``self`` (or to a nested config the caller owns) raises at
+    the offending line instead of silently changing the caller's config for later calls.
+
+    Args:
+        config (BaseConfig): Config whose ``preprocess`` to run.
+        inputs (BaseToolInput): Tool inputs to prepare.
+
+    The returned config records that preprocess ran, so a remote worker handed these prepared
+    inputs does not repeat the work. See :meth:`BaseConfig.to_transport_dict`.
+
+    Returns:
+        tuple[BaseToolInput, BaseConfig]: Prepared inputs and the config to execute with.
+
+    Raises:
+        TypeError: If ``preprocess`` returns neither inputs nor an ``(inputs, config)`` pair.
+    """
+    # Adjusted before freezing, so preprocess sees the config this environment can actually honour.
+    if is_hosted_env():
+        config = config.for_hosted_env()
+
+    token = _preprocess_frozen.set(_preprocess_frozen.get() | _nested_configs(config))
+    try:
+        result = config.preprocess(inputs)
+    finally:
+        _preprocess_frozen.reset(token)
+
+    # A BaseToolInput is never a tuple, so the shape is unambiguous.
+    if not isinstance(result, tuple):
+        return result, _marked_preprocessed(config)
+    if len(result) != 2:
+        raise TypeError(
+            f"{type(config).__name__}.preprocess returned a {len(result)}-tuple; return either "
+            f"inputs, or (inputs, config)."
+        )
+    prepared, prepared_config = result
+    if not isinstance(prepared_config, BaseConfig):
+        raise TypeError(
+            f"{type(config).__name__}.preprocess returned ({type(prepared).__name__}, "
+            f"{type(prepared_config).__name__}); the second element must be a BaseConfig."
+        )
+    return prepared, _marked_preprocessed(prepared_config)

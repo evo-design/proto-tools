@@ -119,3 +119,17 @@ class ORF(BaseModel):
             if k not in data:
                 data[k] = v
         return data
+
+
+class OrfPredictionResult(BaseModel):
+    """ORFs predicted for one input sequence.
+
+    Attributes:
+        orfs (list[ORF]): ORFs found in this sequence, in the caller's order.
+    """
+
+    orfs: list[ORF] = Field(
+        default_factory=list,
+        title="ORFs",
+        description="ORFs found in this input sequence",
+    )

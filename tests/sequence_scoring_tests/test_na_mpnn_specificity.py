@@ -45,11 +45,12 @@ def test_input_rejects_empty_list():
 # -- Cloud gating ----------------------------------------------------------------------
 
 
-def test_cloud_unsupported_reason_is_always_set():
-    """NA-MPNN needs local repo + checkpoint, so cloud is unconditionally rejected."""
-    reason = NAMPNNSpecificityConfig().cloud_unsupported_reason()
-    assert reason is not None
-    assert "cloud" in reason
+def test_tool_declared_local_only():
+    """NA-MPNN needs a local repo and checkpoint, so the tool declares itself local-only."""
+    from proto_tools.tools import ToolRegistry
+
+    spec = next(s for s in ToolRegistry.list_all() if s.key == "na-mpnn-specificity")
+    assert spec.local_only and "NA-MPNN" in spec.local_only
 
 
 # -- Registration ----------------------------------------------------------------------

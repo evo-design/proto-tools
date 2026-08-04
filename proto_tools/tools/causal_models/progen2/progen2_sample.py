@@ -9,6 +9,7 @@ from typing import Any, Literal
 from pydantic import Field
 
 from proto_tools.tools.causal_models.shared_data_models import (
+    CausalModelSample,
     CausalModelSampleConfig,
     CausalModelSampleInput,
     CausalModelSampleOutput,
@@ -18,6 +19,7 @@ from proto_tools.utils import (
     ConfigField,
     ToolInstance,
 )
+from proto_tools.utils.device import RemoteDevice
 
 logger = logging.getLogger(__name__)
 
@@ -38,19 +40,32 @@ PROGEN2_MODEL_CHECKPOINTS = Literal[
 ProGen2SampleInput = CausalModelSampleInput
 
 
+class ProGen2Sample(CausalModelSample):
+    """One generated protein sequence and its per-position logits.
+
+    Attributes:
+        sequence (str): The generated protein sequence.
+        logits (list[list[float]] | None): Per-position logits for this sequence
+            (shape: [generated_len, vocab_size]).
+    """
+
+    logits: list[list[float]] | None = Field(
+        default=None,
+        title="Logits",
+        description="Per-position logits for this generated sequence",
+    )
+
+
 class ProGen2SampleOutput(CausalModelSampleOutput):
     """Output from ProGen2 protein sequence generation.
 
     Attributes:
-        sequences (list[str]): Generated protein sequences.
-        logits (list[list[list[float]]] | None): Per-position logits for each
-            generated sequence (shape: [n_outputs, generated_len, vocab_size]).
+        results (list[ProGen2Sample]): One generated protein sequence per prompt, with its logits.
     """
 
-    logits: list[list[list[float]]] | None = Field(
-        default=None,
-        title="Logits",
-        description="Per-position logits for each generated sequence",
+    results: list[ProGen2Sample] = Field(  # type: ignore[assignment]
+        title="Results",
+        description="Generated protein sequences with their optional logits, one per prompt",
     )
 
 
@@ -132,10 +147,10 @@ class ProGen2SampleConfig(CausalModelSampleConfig):
         description="Include per-position logits in the output (large; disable to save memory)",
     )
 
-    def cloud_unsupported_reason(self) -> str | None:
+    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
         """A local weights directory (``local_path``) isn't present on a hosted worker."""
         if self.local_path:
-            return "local_path points to a local weights directory not available on device='cloud'. Unset it, or run locally with device='cpu'."
+            return f"local_path points to a local weights directory not available on device='{device}'. Unset it, or run locally with device='cpu'."
         return None
 
 
@@ -145,6 +160,14 @@ class ProGen2SampleConfig(CausalModelSampleConfig):
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return ProGen2SampleInput(prompts=["MKTL"])
+
+
+def _build_progen2_samples(sequences: list[str], logits: list[list[list[float]]] | None) -> list[ProGen2Sample]:
+    """Pair each generated sequence with its own logits, if the worker returned any."""
+    return [
+        ProGen2Sample(sequence=sequence, logits=None if logits is None else logits[i])
+        for i, sequence in enumerate(sequences)
+    ]
 
 
 @tool(
@@ -159,7 +182,8 @@ def example_input() -> Any:
     stochastic=True,
     example_input=example_input,
     iterable_input_fields=["prompts"],
-    iterable_output_field="sequences",
+    iterable_output_field="results",
+    max_chunk_size=32,
 )
 def run_progen2_sample(
     inputs: ProGen2SampleInput,
@@ -248,6 +272,5 @@ def run_progen2_sample(
             "temperature": config.temperature,
             "max_new_tokens": config.max_new_tokens,
         },
-        sequences=result["sequences"],
-        logits=result.get("logits"),
+        results=_build_progen2_samples(result["sequences"], result.get("logits")),
     )

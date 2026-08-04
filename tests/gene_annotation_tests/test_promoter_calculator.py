@@ -150,7 +150,13 @@ def test_run_promoter_calculator_homopolymer():
 @pytest.mark.slow
 def test_promoter_calculator_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark promoter-calculator: 100 distinct sigma70 consensus-bearing sequences (cold + warm)."""
-    sequences = [CONSENSUS_PROMOTER + f"AAAA{i:08d}AAAA" for i in range(100)]
+    # Distinct suffixes written in base 4 over ACGT: a decimal counter would put digits into the
+    # sequence, and the calculator reverse-complements it character by character.
+    bases = "ACGT"
+    sequences = [
+        CONSENSUS_PROMOTER + "AAAA" + "".join(bases[(i >> shift) & 3] for shift in (6, 4, 2, 0)) + "AAAA"
+        for i in range(100)
+    ]
     inputs = PromoterCalculatorInput(sequences=sequences)
 
     result = benchmark_twice(

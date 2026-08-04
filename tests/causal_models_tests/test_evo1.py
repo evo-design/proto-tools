@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from proto_tools.tools.causal_models.evo1 import (
+    Evo1Sample,
     Evo1SampleConfig,
     Evo1SampleInput,
     Evo1SampleOutput,
@@ -19,7 +20,6 @@ from proto_tools.tools.causal_models.evo1 import (
     run_evo1_score,
 )
 from proto_tools.tools.causal_models.shared_data_models import CausalModelScoringMetrics
-from proto_tools.utils.standalone_helpers_source.standalone_helpers.serialization import DNA_NUCLEOTIDES
 from tests.conftest import benchmark_twice, make_persistent_fixture, random_dna_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
@@ -89,7 +89,12 @@ def test_evo1_sample_export_fasta(tmp_path):
         CausalModelScoringMetrics(log_likelihood=-100.0, avg_log_likelihood=-1.0, perplexity=2.72),
         CausalModelScoringMetrics(log_likelihood=-150.0, avg_log_likelihood=-1.5, perplexity=4.48),
     ]
-    output = Evo1SampleOutput(sequences=["ATCGATCG", "GCTAGCTA"], scores=scores)
+    output = Evo1SampleOutput(
+        results=[
+            Evo1Sample(sequence="ATCGATCG", metrics=scores[0]),
+            Evo1Sample(sequence="GCTAGCTA", metrics=scores[1]),
+        ]
+    )
     output.export(name="test", export_path=tmp_path, file_format="fasta")
     fasta_file = tmp_path / "test.fasta"
     assert fasta_file.exists()
@@ -102,7 +107,7 @@ def test_evo1_sample_export_fasta(tmp_path):
 
 def test_evo1_sample_export_json(tmp_path):
     scores = [CausalModelScoringMetrics(log_likelihood=-100.0, avg_log_likelihood=-1.0, perplexity=2.72)]
-    output = Evo1SampleOutput(sequences=["ATCGATCG"], scores=scores)
+    output = Evo1SampleOutput(results=[Evo1Sample(sequence="ATCGATCG", metrics=scores[0])])
     output.export(name="test", export_path=tmp_path, file_format="json")
     json_file = tmp_path / "test.json"
     assert json_file.exists()
@@ -116,7 +121,12 @@ def test_evo1_sample_export_txt(tmp_path):
         CausalModelScoringMetrics(log_likelihood=-100.0, avg_log_likelihood=-1.0, perplexity=2.72),
         CausalModelScoringMetrics(log_likelihood=-150.0, avg_log_likelihood=-1.5, perplexity=4.48),
     ]
-    output = Evo1SampleOutput(sequences=["ATCGATCG", "GCTAGCTA"], scores=scores)
+    output = Evo1SampleOutput(
+        results=[
+            Evo1Sample(sequence="ATCGATCG", metrics=scores[0]),
+            Evo1Sample(sequence="GCTAGCTA", metrics=scores[1]),
+        ]
+    )
     output.export(name="test", export_path=tmp_path, file_format="txt")
     txt_file = tmp_path / "test.txt"
     assert txt_file.exists()
@@ -176,9 +186,8 @@ def test_evo1_sample_tool():
     assert result.tool_id == "evo1-sample"
     assert result.metadata["model_name"] == "evo-1-8k-base"
     assert result.metadata["max_new_tokens"] == 50
-    assert len(result.sequences) == 2
-    assert result.scores is not None
-    assert len(result.scores) == 2
+    assert len(result.results) == 2
+    assert all(sample.metrics is not None for sample in result.results)
 
     valid_chars = set("ACGTacgt")
     for seq in result.sequences:
@@ -202,9 +211,8 @@ def test_evo1_sample_batched():
     result = run_evo1_sample(inputs=inputs, config=config)
     validate_output(result)
 
-    assert len(result.sequences) == 6
-    assert result.scores is not None
-    assert len(result.scores) == 6
+    assert len(result.results) == 6
+    assert all(sample.metrics is not None for sample in result.results)
 
 
 @pytest.mark.uses_gpu
@@ -297,6 +305,7 @@ def test_evo1_sample_benchmark(request):
         temperature=1.0,
         batch_size=16,
         prepend_prompt=True,
+        seed=0,
         verbose=False,
     )
 
@@ -304,11 +313,10 @@ def test_evo1_sample_benchmark(request):
 
     assert result.tool_id == "evo1-sample"
     assert len(result.sequences) == 20, "Should have 20 sampled sequences"
-    valid_chars = set(DNA_NUCLEOTIDES) | set(DNA_NUCLEOTIDES.lower())
-    for seq in result.sequences:
-        assert isinstance(seq, str) and len(seq) >= 1000, "Output should include the 1000nt prompt at minimum"
-        invalid = set(seq) - valid_chars
-        assert not invalid, f"Non-DNA characters in output: {invalid}"
+    for prompt, seq in zip(prompts, result.sequences, strict=True):
+        assert isinstance(seq, str)
+        assert seq.startswith(prompt), "prepend_prompt=True should return the prompt followed by the continuation"
+        assert len(seq) > len(prompt), "Should have generated at least one token beyond the prompt"
 
 
 @pytest.mark.benchmark("evo1-score")

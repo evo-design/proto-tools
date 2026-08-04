@@ -127,6 +127,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["sequence_structure_pairs"],
     iterable_output_field="scores",
+    max_chunk_size=64,
     cacheable=True,
 )
 def run_proteinmpnn_score(

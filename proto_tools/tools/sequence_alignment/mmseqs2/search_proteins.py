@@ -254,7 +254,7 @@ class Mmseqs2SearchProteinsConfig(BaseConfig):
         max_seqs (int): Max prefilter results per query.
         only_top_hits (bool): Wrapper filter; keep only the best hit
             (highest pident) per query sequence.
-        use_gpu (bool): Run MMseqs2-GPU (``--gpu 1``); requires a ``.idx_pad``
+        device (str): A ``cuda`` device runs MMseqs2-GPU (``--gpu 1``); requires a ``.idx_pad``
             sibling on the target DB (built via ``mmseqs makepaddedseqdb``).
         extra_args (list[str]): Verbatim ``mmseqs easy-search`` CLI tokens
             for niche flags (e.g. ``["--alignment-mode", "3"]``).
@@ -331,10 +331,10 @@ class Mmseqs2SearchProteinsConfig(BaseConfig):
         default=True,
         description="Wrapper-side filter: when True, keep only the best hit (highest pident) per query sequence.",
     )
-    use_gpu: bool = ConfigField(
-        title="Use GPU",
-        default=False,
-        description="Run MMseqs2-GPU (`--gpu 1`); requires a `*.idx_pad` GPU index alongside the target DB.",
+    device: str = ConfigField(
+        title="Device",
+        default="cpu",
+        description="`cuda` (or `cuda:N`) runs MMseqs2-GPU, needing a `*.idx_pad` index beside the DB; `cpu` runs on CPU.",
     )
     extra_args: list[str] = ConfigField(
         title="Extra CLI Arguments",
@@ -343,9 +343,11 @@ class Mmseqs2SearchProteinsConfig(BaseConfig):
     )
 
     @property
-    def gpus_per_instance(self) -> int:
-        """Per-call GPU need: 1 when ``use_gpu`` is set, 0 otherwise."""
-        return 1 if self.use_gpu else 0
+    def uses_gpu_search(self) -> bool:
+        """Whether ``device`` selects MMseqs2-GPU."""
+        from proto_tools.utils.device import parse_device_string
+
+        return parse_device_string(self.device).kind == "cuda"
 
     @field_validator("target_sequences", mode="before")
     @classmethod
@@ -386,6 +388,10 @@ def example_input() -> Any:
 
 @tool(
     key="mmseqs2-search-proteins",
+    local_only=(
+        "mmseqs2-search-proteins searches a target collection staged on your own disk, which is not "
+        "available on a remote worker. Run locally with device='cpu'."
+    ),
     label="MMseqs2 Protein Search",
     category="sequence_alignment",
     input_class=Mmseqs2SearchProteinsInput,
@@ -395,7 +401,9 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["query_sequences"],
     iterable_output_field="results",
+    max_chunk_size=32,
     cacheable=True,
+    uses_gpu=True,
 )
 def run_mmseqs2_search_proteins(
     inputs: Mmseqs2SearchProteinsInput,
@@ -440,9 +448,9 @@ def run_mmseqs2_search_proteins(
     # GPU mode needs a pre-built padded DB; inline targets are CPU-only.
     mmseqs_db_for_dispatch: str | None = None
     if config.target_sequences is not None:
-        if config.use_gpu:
+        if config.uses_gpu_search:
             raise ValueError(
-                "mmseqs2-search-proteins: use_gpu=True requires a pre-built GPU-padded "
+                "mmseqs2-search-proteins: a cuda device requires a pre-built GPU-padded "
                 "MMseqs2 DB; inline `target_sequences` aren't supported in GPU mode."
             )
     else:
@@ -450,24 +458,24 @@ def run_mmseqs2_search_proteins(
         assert config.mmseqs_db is not None  # mypy narrowing
         mmseqs_db_for_dispatch, resolved_registry_db = _resolve_registered_mmseqs_db(
             config.mmseqs_db,
-            use_gpu=config.use_gpu,
+            use_gpu=config.uses_gpu_search,
         )
-        if config.use_gpu and not resolved_registry_db:
+        if config.uses_gpu_search and not resolved_registry_db:
             padded_stem = _resolve_gpu_db_stem(mmseqs_db_for_dispatch)
             if padded_stem is None:
                 raise ValueError(
-                    f"mmseqs2-search-proteins: use_gpu=True requires a GPU-padded MMseqs2 DB "
+                    f"mmseqs2-search-proteins: a cuda device requires a GPU-padded MMseqs2 DB "
                     f"alongside {config.mmseqs_db!r}. Build one with:\n"
                     f"  mmseqs createdb <fasta> <db>     # only if your input is a FASTA file\n"
                     f"  mmseqs makepaddedseqdb <db> <db>.idx_pad\n"
-                    f"or set use_gpu=False."
+                    f"or set device='cpu'."
                 )
             mmseqs_db_for_dispatch = padded_stem
 
     output_data = ToolInstance.dispatch(
         "mmseqs2",
         {
-            "device": "cuda" if config.use_gpu else "cpu",
+            "device": config.device,
             "operation": "protein_search",
             "sequences": sequences,
             "sequence_ids": sequence_ids,
@@ -482,7 +490,6 @@ def run_mmseqs2_search_proteins(
             "coverage": config.coverage,
             "cov_mode": config.cov_mode,
             "max_seqs": config.max_seqs,
-            "use_gpu": config.use_gpu,
             "extra_args": list(config.extra_args),
             "m8_columns": M8_COLUMNS,
         },
@@ -513,7 +520,7 @@ def run_mmseqs2_search_proteins(
             "max_seqs": config.max_seqs,
             "only_top_hits": config.only_top_hits,
             "num_sequences": num_sequences,
-            "use_gpu": config.use_gpu,
+            "device": config.device,
             "resolved_mmseqs_db": mmseqs_db_for_dispatch,
         },
         results=results,

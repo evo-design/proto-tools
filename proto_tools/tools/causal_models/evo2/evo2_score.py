@@ -19,6 +19,7 @@ from proto_tools.utils import (
     ConfigField,
     ToolInstance,
 )
+from proto_tools.utils.device import RemoteDevice
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,13 @@ class Evo2ScoringConfig(CausalModelScoringConfig):
         - Evo2 is a large model; batch_size tuning may be needed for memory.
     """
 
+    batch_size: int = ConfigField(
+        title="Batch Size",
+        default=8,
+        ge=1,
+        description="Sequences per GPU forward pass; raise for throughput, lower if OOM",
+    )
+
     @model_validator(mode="after")
     def _validate_40b(self) -> Any:
         if "40b" in self.model_checkpoint:
@@ -98,10 +106,10 @@ class Evo2ScoringConfig(CausalModelScoringConfig):
         include_in_key=False,
     )
 
-    def cloud_unsupported_reason(self) -> str | None:
+    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
         """A local weights directory (``local_path``) isn't present on a hosted worker."""
         if self.local_path:
-            return "local_path points to a local weights directory not available on device='cloud'. Unset it, or run locally with device='cpu'."
+            return f"local_path points to a local weights directory not available on device='{device}'. Unset it, or run locally with device='cpu'."
         return None
 
 
@@ -126,6 +134,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["sequences"],
     iterable_output_field="scores",
+    max_chunk_size=32,
     cacheable=True,
 )
 def run_evo2_score(

@@ -37,7 +37,7 @@ class ParadeActivityConfig(ParadeCheckpointConfig):
             that panel.
         checkpoint (str): Optional override for the pinned checkpoint — a local ``.ckpt`` path or an
             ``https`` link (a schemeless ``host.tld/path`` is accepted). Caller overrides run on local
-            devices only (rejected on ``device="cloud"``). Empty uses the pinned per-target checkpoint.
+            devices only (rejected on ``device="proto"``). Empty uses the pinned per-target checkpoint.
         batch_size (int): Number of sequences to run per GPU batch.
     """
 
@@ -220,6 +220,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["sequences"],
     iterable_output_field="results",
+    max_chunk_size=32,
     cacheable=True,
 )
 def run_parade_activity(

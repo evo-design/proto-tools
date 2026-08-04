@@ -1,0 +1,412 @@
+"""Dispatch support for the ``device="proto"`` option.
+
+When a tool is called with ``config.device == "proto"``, the registry
+routes the call to Proto's hosted execution service via
+:func:`dispatch_to_proto`.
+
+The dispatcher reads ``PROTO_API_KEY`` from the environment (or accepts
+an explicit ``api_key`` kwarg). No setup ceremony is required — remote execution is
+available whenever a key is configured.
+
+Example::
+
+    from proto_tools import run_esmfold, ESMFoldInput, ESMFoldConfig
+
+    inputs = ESMFoldInput(complexes=["MKT..."])
+    result = run_esmfold(inputs, ESMFoldConfig(device="proto"))  # uses PROTO_API_KEY
+"""
+
+import functools
+import logging
+import os
+import threading
+import time
+from typing import Any
+
+from pydantic import ValidationError
+
+from proto_tools.tools.tool_registry import ToolRegistry
+from proto_tools.utils.base_config import BaseConfig
+from proto_tools.utils.logging_config import verbose_level_from_env
+from proto_tools.utils.progress import remote_connecting_status, remote_progress, set_substatus
+from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+
+logger = logging.getLogger(__name__)
+
+# Replayed server records land here so the user's configured handlers render them like local logs.
+_remote_logger = logging.getLogger("proto_tools.proto.remote")
+
+
+def _status_box(title: str, body: str) -> str:
+    """Wrap a status message in a double-ruled box so it stands out in the terminal."""
+    lines = body.strip("\n").splitlines()
+    w = max(len(title) + 4, max((len(line) for line in lines), default=0) + 4)
+    border = "═" * w
+    boxed = [
+        "",
+        f"╔{border}╗",
+        f"║{title:^{w}}║",
+        f"║{'':{w}}║",
+        *[f"║  {line:<{w - 2}}║" for line in lines],
+        f"╚{border}╝",
+        "",
+    ]
+    return "\n".join(boxed)
+
+
+_PROTO_STATUS = _status_box(
+    "Proto Cloud: set up your API key",
+    "No PROTO_API_KEY was detected.\n"
+    "\n"
+    "device='proto' dispatches this tool to Proto's hosted GPUs. To use\n"
+    "it, create an API key in your workspace settings, then set\n"
+    "PROTO_API_KEY in your environment and re-run:\n"
+    "\n"
+    "    https://proto.evodesign.org/settings/workspace/keys\n"
+    "\n"
+    "You'll need a Proto account — sign in or sign up at\n"
+    "https://proto.evodesign.org first.\n"
+    "\n"
+    "Prefer to stay local? Run with device='cpu' or device='cuda'.",
+)
+
+_INVALID_KEY = _status_box(
+    "Proto Cloud: API key not recognized",
+    "We couldn't validate your PROTO_API_KEY.\n"
+    "\n"
+    "Double-check the value, and confirm the key is still active in your\n"
+    "workspace settings (you can create a new one there):\n"
+    "\n"
+    "    https://proto.evodesign.org/settings/workspace/keys\n"
+    "\n"
+    "If you believe this is an error, use the in-app feedback button at\n"
+    "https://proto.evodesign.org to reach the Proto team.",
+)
+
+
+_DEFAULT_POLL_INTERVAL = 1.0
+_LOG_THREAD_JOIN_TIMEOUT = 2.0
+
+# RFC 5424 severity → Python logging level.
+_RFC5424_TO_PY_LEVEL = {
+    "debug": logging.DEBUG,
+    "info": logging.INFO,
+    "notice": logging.INFO,
+    "warning": logging.WARNING,
+    "error": logging.ERROR,
+    "critical": logging.CRITICAL,
+    "alert": logging.CRITICAL,
+    "emergency": logging.CRITICAL,
+}
+
+# Map verbose (0=quiet, 1=info, 2=debug, 3=raw) to server-side level/stream filters; None = unfiltered.
+_VERBOSE_LEVEL_FILTER: dict[int, list[str] | None] = {
+    0: ["warning", "error", "critical", "alert", "emergency"],
+    1: ["info", "notice", "warning", "error", "critical", "alert", "emergency"],
+    2: None,
+    3: None,
+}
+_VERBOSE_STREAM_FILTER: dict[int, list[str] | None] = {
+    0: ["system"],
+    1: ["system", "stdout"],
+    2: ["system", "stdout"],
+    3: None,
+}
+
+
+@functools.lru_cache(maxsize=4)
+def _get_client(api_key: str) -> Any:
+    from proto_tools.proto._client import ProtoClient
+
+    return ProtoClient(api_key=api_key)
+
+
+def _is_output_asset_ref(value: Any) -> bool:
+    return isinstance(value, dict) and isinstance(value.get("id"), str) and value.get("kind") == "output"
+
+
+def _decode_output_assets(value: Any, assets: Any) -> Any:
+    if _is_output_asset_ref(value):
+        try:
+            return assets.decode(value)
+        except Exception as exc:
+            raise RuntimeError(f"Failed to decode cloud output asset {value.get('id')!r}: {exc}") from exc
+    if isinstance(value, dict):
+        return {k: _decode_output_assets(v, assets) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_decode_output_assets(v, assets) for v in value]
+    return value
+
+
+def _effective_verbose(config: BaseConfig | None) -> int:
+    """Mirror local execution: max of ``config.verbose`` and ``PROTO_WORKER_VERBOSE``."""
+    cfg_verbose = int(config.verbose) if config is not None else 0
+    return max(cfg_verbose, verbose_level_from_env())
+
+
+def _strip_logger_prefix(msg: str) -> str:
+    """Drop the leading ``<logger.name>: `` the server prepends to logging records, so cloud output reads like local.
+
+    Only strips a dotted, space-free head (a logger name like ``proto_tools.worker.esmfold``); a message that
+    merely starts with ``word: `` (e.g. ``Done: 5``) or real tool stdout (``Epoch 1: loss=0.5``) is left untouched.
+    """
+    head, sep, tail = msg.partition(": ")
+    return tail if sep and "." in head and " " not in head else msg
+
+
+def _stream_remote_logs(client: Any, key: str, job_id: str, verbose: int) -> None:
+    """Stream NDJSON job logs from the server and replay each through the local logger.
+
+    Best-effort: any failure (network blip, missing endpoint on an older
+    server) downgrades to a debug log and lets the main thread finish the run
+    normally. Exit conditions, in order: the server emits a ``LogsEnd``
+    terminator (normal path), or the connection closes / errors out, or the
+    main thread reaches its join timeout and abandons the daemon thread
+    (slow-server safety net).
+    """
+    level_filter = _VERBOSE_LEVEL_FILTER.get(verbose)
+    stream_filter = _VERBOSE_STREAM_FILTER.get(verbose)
+    try:
+        records = client.tools.iter_job_logs(
+            key,
+            job_id,
+            follow=True,
+            level=level_filter,
+            stream=stream_filter,
+        )
+        for rec in records:
+            if getattr(rec, "type", None) == "end":
+                break
+            msg = getattr(rec, "msg", None)
+            if not msg:
+                continue
+            update_status = getattr(rec, "update_status", False)
+            py_level = _RFC5424_TO_PY_LEVEL.get(getattr(rec, "level", "info"), logging.INFO)
+            # Replay the phase flag so the local SpinnerFromLogsHandler drives the bar, exactly like a local run.
+            # Strip the worker logger-name prefix from every line so cloud output reads identically to local.
+            _remote_logger.log(py_level, "%s", _strip_logger_prefix(msg), extra={"update_status": update_status})
+    except Exception as exc:
+        logger.debug("Remote log stream for job %s ended: %s", job_id, exc, exc_info=True)
+
+
+# Cloud job status → spinner phase shown while polling; unmapped statuses display verbatim.
+_PROTO_STATUS_PHASE = {"pending": "queued", "running": "running"}
+
+# Shown until the server reports a status of its own. Not "queued", which the job is not yet.
+_PROTO_INITIAL_PHASE = remote_connecting_status("proto")
+
+
+def _poll_until_terminal(client: Any, key: str, job_id: str, poll_interval: float, timeout: float | None) -> Any:
+    """Block until the job reaches a terminal status; return the final job envelope.
+
+    ``timeout=None`` polls with no client-side deadline, honoring
+    ``config.timeout=None`` ("wait indefinitely").
+    """
+    deadline = None if timeout is None else time.monotonic() + timeout
+    last_status: str | None = None
+    while True:
+        status = client.tools.get(key, job_id)
+        status_value = getattr(status.status, "value", status.status)
+        if status_value == "completed":
+            return status
+        if status_value == "failed":
+            raise RuntimeError(f"Cloud job {job_id} failed: {status.error}")
+        if status_value == "cancelled":
+            raise RuntimeError(f"Cloud job {job_id} was cancelled")
+        if status_value != last_status:
+            # Coarse phase from job status; streamed system records (if any) refine it.
+            set_substatus(_PROTO_STATUS_PHASE.get(status_value, status_value))
+            last_status = status_value
+        if deadline is None:
+            time.sleep(poll_interval)
+            continue
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError(f"Cloud job {job_id} did not complete within {timeout}s")
+        time.sleep(min(poll_interval, remaining))
+
+
+def dispatch_to_proto(
+    key: str,
+    inputs: BaseToolInput,
+    config: BaseConfig | None,
+    *,
+    api_key: str | None = None,
+) -> BaseToolOutput:
+    """Submit a tool call to Proto's hosted execution service.
+
+    Args:
+        key (str): Registry key (e.g. ``"esmfold-prediction"``).
+        inputs (BaseToolInput): Tool input payload.
+        config (BaseConfig | None): Tool configuration. ``config.device``
+            is stripped before sending — the server picks its own
+            physical device.
+        api_key (str | None): Overrides ``PROTO_API_KEY`` env var.
+
+    Returns:
+        BaseToolOutput: The validated tool output.
+
+    Raises:
+        NotImplementedError: If no API key is configured. Surfaces the
+            cloud-access status message.
+        PermissionError: If the server does not accept the configured key.
+        TypeError: If the server response doesn't match the tool's
+            ``output_model`` schema.
+    """
+    from proto_tools.proto._client import ProtoAuthError
+
+    resolved_key = api_key if api_key is not None else os.environ.get("PROTO_API_KEY")
+    if not resolved_key:
+        raise NotImplementedError(_PROTO_STATUS)
+
+    client = _get_client(resolved_key)
+    output_class = ToolRegistry.get(key).output_model
+
+    # device='proto' is the client-side routing signal; the server picks its own physical device, so strip it before sending.
+    config_payload = config.to_transport_dict(exclude_none=True) if config is not None else {}
+    config_payload.pop("device", None)
+
+    tool_timeout: float | None = config.effective_timeout() if config is not None else None
+
+    verbose = _effective_verbose(config)
+
+    # Status-only spinner across the round-trip; its substatus tracks job status and streamed phases.
+    with remote_progress("proto"):
+        try:
+            job_id = client.tools.submit(
+                key,
+                inputs=inputs.model_dump(exclude_none=True),
+                config=config_payload,
+            )
+        except ProtoAuthError as exc:
+            # Auth fails on submit, before we have a job_id.
+            logger.debug("Cloud auth error for %r: %s", key, exc, exc_info=True)
+            raise PermissionError(_INVALID_KEY) from exc
+
+        log_thread: threading.Thread | None = None
+        if hasattr(client.tools, "iter_job_logs"):
+            log_thread = threading.Thread(
+                target=_stream_remote_logs,
+                args=(client, key, job_id, verbose),
+                name=f"proto-cloud-logs-{job_id[:8]}",
+                daemon=True,
+            )
+            log_thread.start()
+
+        try:
+            response = _poll_until_terminal(
+                client, key, job_id, _DEFAULT_POLL_INTERVAL, None if tool_timeout is None else float(tool_timeout)
+            )
+        finally:
+            # Brief join to drain the trailing log stream; the daemon thread is abandoned if it stalls.
+            if log_thread is not None:
+                log_thread.join(timeout=_LOG_THREAD_JOIN_TIMEOUT)
+
+    decoded_result = _decode_output_assets(response.result, client.assets)
+    try:
+        return output_class.model_validate(decoded_result)
+    except ValidationError as exc:
+        raise TypeError(f"Tool {key!r} result does not conform to {output_class.__name__}: {exc}") from exc
+
+
+def dispatch_batch_to_proto(
+    key: str,
+    inputs: list[BaseToolInput],
+    config: BaseConfig | list[BaseConfig] | None = None,
+    *,
+    api_key: str | None = None,
+) -> list[BaseToolOutput | Exception]:
+    """Run one tool over several inputs, submitting every job before waiting on any.
+
+    Proto executes submitted jobs concurrently, so waiting on them in turn costs the slowest
+    job rather than the sum. Submitting first is what makes that true: waiting on each job
+    before submitting the next would serialize the batch on the client side.
+
+    Per-job log streaming is left off here. One stream per job would interleave into
+    unreadable output, and the single-input path already covers the case where following
+    along matters.
+
+    Args:
+        key (str): Registry key.
+        inputs (list[BaseToolInput]): One payload per run.
+        config (BaseConfig | list[BaseConfig] | None): Shared configuration, or one per input
+            when they differ, as they do when each carries its position in a split batch.
+        api_key (str | None): Overrides ``PROTO_API_KEY``.
+
+    Returns:
+        list[BaseToolOutput | Exception]: One entry per input, in the order given. A job that
+            failed contributes the exception it hit rather than aborting the batch, leaving the
+            caller to decide what a partial result is worth.
+
+    Raises:
+        NotImplementedError: If no API key is configured.
+        PermissionError: If the server does not accept the configured key.
+    """
+    if not inputs:
+        return []
+
+    from proto_tools.proto._client import ProtoAuthError
+
+    resolved_key = api_key if api_key is not None else os.environ.get("PROTO_API_KEY")
+    if not resolved_key:
+        raise NotImplementedError(_PROTO_STATUS)
+
+    client = _get_client(resolved_key)
+    output_class = ToolRegistry.get(key).output_model
+
+    configs: list[BaseConfig | None] = list(config) if isinstance(config, list) else [config] * len(inputs)
+    if len(configs) != len(inputs):
+        raise ValueError(f"{key}: {len(configs)} config(s) for {len(inputs)} input(s)")
+
+    payloads = []
+    for one in configs:
+        payload = one.to_transport_dict(exclude_none=True) if one is not None else {}
+        payload.pop("device", None)
+        payloads.append(payload)
+    first = configs[0]
+    tool_timeout: float | None = first.effective_timeout() if first is not None else None
+
+    with remote_progress("proto"):
+        try:
+            job_ids: list[str] = [
+                client.tools.submit(key, inputs=item.model_dump(exclude_none=True), config=cfg_payload)
+                for item, cfg_payload in zip(inputs, payloads, strict=True)
+            ]
+        except ProtoAuthError as exc:
+            logger.debug("Cloud auth error for %r: %s", key, exc, exc_info=True)
+            raise PermissionError(_INVALID_KEY) from exc
+
+        responses: list[Any] = []
+        for job_id in job_ids:
+            try:
+                responses.append(
+                    _poll_until_terminal(
+                        client,
+                        key,
+                        job_id,
+                        _DEFAULT_POLL_INTERVAL,
+                        None if tool_timeout is None else float(tool_timeout),
+                    )
+                )
+            except Exception as exc:  # noqa: PERF203 -- one job's failure must not end the batch
+                logger.debug("Cloud job for %r failed: %s", key, exc, exc_info=True)
+                responses.append(exc)
+
+    outputs: list[BaseToolOutput | Exception] = []
+    for response in responses:
+        if isinstance(response, Exception):
+            outputs.append(response)
+            continue
+        decoded = _decode_output_assets(response.result, client.assets)
+        try:
+            outputs.append(output_class.model_validate(decoded))
+        except ValidationError as exc:
+            # A malformed result belongs to its own job; raising would drop the intact ones.
+            outputs.append(TypeError(f"Tool {key!r} result does not conform to {output_class.__name__}: {exc}"))
+    return outputs
+
+
+__all__ = [
+    "dispatch_batch_to_proto",
+    "dispatch_to_proto",
+]

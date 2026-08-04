@@ -9,10 +9,10 @@ import random
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
-from pydantic import Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from proto_tools.tools.masked_models.shared_data_models import (
-    MaskedModelInput,
+    MaskedModelSampleInput,
 )
 from proto_tools.tools.mutagenesis.codons import amino_acid_weights
 from proto_tools.tools.tool_registry import tool
@@ -30,24 +30,40 @@ logger = logging.getLogger(__name__)
 # Data Models
 # ============================================================================
 
-# Input: reuse MaskedModelInput (protein sequences, optional _ masks)
-RandomProteinSampleInput = MaskedModelInput
+# Input: protein sequences, optionally pre-masked with '_'
+RandomProteinSampleInput = MaskedModelSampleInput
 
 CodonScheme = Literal["UNIFORM", "NNN", "NNK", "NNS", "NDT", "DBK", "NRT"]
+
+
+class RandomProteinSample(BaseModel):
+    """One sampled sequence.
+
+    Attributes:
+        sequence (str): Sampled protein sequence with masked positions filled by random amino acids.
+    """
+
+    sequence: str = Field(
+        title="Sequence", description="Sampled protein sequence with masked positions filled by random amino acids"
+    )
 
 
 class RandomProteinSampleOutput(BaseToolOutput):
     """Output from random protein sampling.
 
     Attributes:
-        sequences (list[str]): Sampled protein sequences with masked positions filled
-            by random amino acids drawn from the configured codon scheme.
+        results (list[RandomProteinSample]): One sampled sequence per input, in input order.
     """
 
-    sequences: list[str] = Field(
-        title="Sequences",
-        description="Protein sequences with masked positions randomly filled",
+    results: list[RandomProteinSample] = Field(
+        title="Results",
+        description="Sampled sequences, one per input",
     )
+
+    @property
+    def sequences(self) -> list[str]:
+        """The sampled sequences, in input order."""
+        return [result.sequence for result in self.results]
 
     @property
     def output_format_options(self) -> list[str]:
@@ -64,10 +80,10 @@ class RandomProteinSampleOutput(BaseToolOutput):
 
         if file_format == "fasta":
             with open(path, "w") as f:
-                f.writelines(f">seq_{i}\n{seq}\n" for i, seq in enumerate(self.sequences))
+                f.writelines(f">seq_{i}\n{r.sequence}\n" for i, r in enumerate(self.results))
         elif file_format == "txt":
             with open(path, "w") as f:
-                f.writelines(f"{seq}\n" for seq in self.sequences)
+                f.writelines(f"{r.sequence}\n" for r in self.results)
         elif file_format == "json":
             with open(path, "w") as f:
                 json.dump(self.sequences, f, indent=2)
@@ -150,6 +166,7 @@ def example_input() -> Any:
 
 @tool(
     key="random-protein-sample",
+    local_only="random-protein-sample does not use a gpu and does not need an environment, so it can run in process",
     label="Random Protein Sampling",
     category="mutagenesis",
     input_class=RandomProteinSampleInput,
@@ -159,7 +176,7 @@ def example_input() -> Any:
     uses_gpu=False,
     example_input=example_input,
     iterable_input_fields=["sequences"],
-    iterable_output_field="sequences",
+    iterable_output_field="results",
     cacheable=False,
     stochastic=True,
 )
@@ -207,5 +224,5 @@ def run_random_protein_sample(
             "excluded_amino_acids": config.excluded_amino_acids,
             "num_sequences": len(inputs.sequences),
         },
-        sequences=sampled,
+        results=[RandomProteinSample(sequence=seq) for seq in sampled],
     )

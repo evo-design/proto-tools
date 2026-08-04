@@ -23,7 +23,7 @@ from typing import Any
 import numpy as np
 from Bio import PDB
 
-# Import from auto-copied standalone_helpers
+# Import from the published standalone_helpers
 from standalone_helpers import get_logger, get_subprocess_device_env, resolve_weights_dir
 
 logger = get_logger(__name__)

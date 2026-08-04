@@ -1,6 +1,7 @@
 """Random nucleotide mutagenesis."""
 
 from proto_tools.tools.mutagenesis.random_nucleotide.random_nucleotide_sample import (
+    RandomNucleotideSample,
     RandomNucleotideSampleConfig,
     RandomNucleotideSampleInput,
     RandomNucleotideSampleOutput,
@@ -8,6 +9,7 @@ from proto_tools.tools.mutagenesis.random_nucleotide.random_nucleotide_sample im
 )
 
 __all__ = [
+    "RandomNucleotideSample",
     "RandomNucleotideSampleInput",
     "RandomNucleotideSampleConfig",
     "RandomNucleotideSampleOutput",

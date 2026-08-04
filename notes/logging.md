@@ -43,7 +43,7 @@ The convention is enforced by `tests/style_consistency_tests/test_standalone_log
 
 ## Why the bridge ships in `standalone_helpers/`
 
-Tool subprocesses run in isolated micromamba venvs that don't have `proto_tools` (or `pydantic`, etc.) installed. The bridge implementation lives at `proto_tools/utils/standalone_helpers_source/standalone_helpers/proto_logging.py` and is copied into each tool's `standalone/` directory at worker startup by `_copy_standalone_helpers()`. The bootstrap then triggers `install()` via `import standalone_helpers` (gated on `TOOL_VENV_PATH` in the package `__init__`), so the bridge is in place before the standalone module's body runs.
+Tool subprocesses run in isolated micromamba venvs that don't have `proto_tools` (or `pydantic`, etc.) installed. The bridge implementation lives at `proto_tools/utils/standalone_helpers_source/standalone_helpers/proto_logging.py`, which `_build_subprocess_env()` publishes to the subprocess on `PYTHONPATH`. The bootstrap then triggers `install()` via `import standalone_helpers` (gated on `TOOL_VENV_PATH` in the package `__init__`), so the bridge is in place before the standalone module's body runs.
 
 This avoids any cross-venv `proto_tools` import. The producer side of the architecture is purely stdlib.
 
@@ -121,4 +121,4 @@ Standard Python logging hierarchy applies to records re-emitted by the drain thr
 - `install()` sets `propagate=False` on the `worker` logger so records don't double-emit through any host-configured root handler.
 - The parent re-emits each tagged record under `proto_tools.worker.{toolkit}.{name}`. This is also where `SpinnerFromLogsHandler` (attached at `proto_tools`) sees flagged records via standard logging propagation.
 - stdout is **never written by the logging system**. It's reserved for the JSON-line request/response protocol between parent and worker.
-- `proto_tools/__init__.py` adds `proto_tools/utils/standalone_helpers_source/` to `sys.path` so any parent-side code that imports a standalone module (e.g. `proteinmpnn/__init__.py` re-exporting `ALPHAFOLD_VOCAB`) can resolve `from standalone_helpers import X`. Inside a tool subprocess, the bootstrap inserts the per-tool `standalone/` dir ahead of this entry, so the freshly-copied local version always wins.
+- `proto_tools/__init__.py` adds `proto_tools/utils/standalone_helpers_source/` to `sys.path` so any parent-side code that imports a standalone module (e.g. `proteinmpnn/__init__.py` re-exporting `ALPHAFOLD_VOCAB`) can resolve `from standalone_helpers import X`. Inside a tool subprocess the same directory arrives via `PYTHONPATH`, and the bootstrap promotes it to `sys.path[0]` so the installed package outranks any `standalone_helpers/` copy an older proto-tools left in the tool's `standalone/` dir.

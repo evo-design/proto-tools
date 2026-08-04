@@ -21,7 +21,6 @@ import contextlib
 import importlib.util
 import json
 import os
-import shutil
 import sys
 import tempfile
 import traceback
@@ -33,53 +32,6 @@ _FILE_FALLBACK_THRESHOLD = 100_000_000
 
 # Commands accepted by the worker dispatch loop; keep in sync with the if/elif chain below.
 _VALID_COMMANDS = ("to_device", "get_memory_stats")
-
-
-def _copy_standalone_helpers(script_path: str) -> None:
-    """Copy standalone helpers (Python package and shell file) to the tool's standalone directory.
-
-    Checks if 'standalone' appears in the script's absolute path. If found,
-    copies the ``standalone_helpers/`` package and ``standalone_helpers.sh``
-    from ``utils/standalone_helpers_source/`` into that standalone directory.
-
-    Args:
-        script_path (str): Path to the standalone inference.py or run.py script
-    """
-    script = Path(script_path).resolve()
-
-    if "standalone" not in script.parts:
-        sys.stderr.write(
-            f"[worker] Warning: Script {script_path} is not in a 'standalone' directory. "
-            f"Skipping standalone helpers copy.\n"
-        )
-        return
-
-    standalone_idx = script.parts.index("standalone")
-    standalone_dir = Path(*script.parts[: standalone_idx + 1])
-
-    # Source directory: utils/standalone_helpers_source/
-    helpers_dir = Path(__file__).parent / "standalone_helpers_source"
-
-    for name in ("standalone_helpers", "standalone_helpers.sh"):
-        source = helpers_dir / name
-        target = standalone_dir / name
-        if not source.exists():
-            continue
-        # Remove any stale single-file standalone_helpers.py copy so it doesn't shadow the package on sys.path.
-        if source.is_dir():
-            stale_py = standalone_dir / f"{name}.py"
-            if stale_py.exists():
-                try:
-                    stale_py.unlink()
-                except OSError as exc:
-                    sys.stderr.write(f"[worker] Warning: Failed to remove stale {stale_py}: {exc}\n")
-        try:
-            if source.is_dir():
-                shutil.copytree(source, target, dirs_exist_ok=True)
-            else:
-                shutil.copy2(source, target)
-        except Exception as exc:
-            sys.stderr.write(f"[worker] Warning: Failed to copy {name}: {exc}\n")
 
 
 def _remove_bootstrap_dir_from_sys_path() -> None:
@@ -95,10 +47,26 @@ def _remove_bootstrap_dir_from_sys_path() -> None:
 
 
 def _prepend_standalone_dir_to_sys_path(script_path: str) -> None:
-    """Idempotently put the script's parent dir on sys.path so ``standalone_helpers`` resolves."""
+    """Idempotently put the script's parent dir on sys.path so it can import its siblings."""
     standalone_dir = str(Path(script_path).resolve().parent)
     if standalone_dir not in sys.path:
         sys.path.insert(0, standalone_dir)
+
+
+def _prepend_helpers_dir_to_sys_path() -> None:
+    """Put the published helpers dir at ``sys.path[0]`` so the canonical package always wins.
+
+    ``PROTO_STANDALONE_HELPERS_DIR`` is already on ``PYTHONPATH``, but that ranks below the
+    standalone dir. Inserting it at the front means anything sitting in the standalone dir
+    under a helper name cannot shadow the installed package.
+    """
+    helpers_dir = os.environ.get("PROTO_STANDALONE_HELPERS_DIR")
+    if not helpers_dir:
+        return
+    if sys.path and sys.path[0] == helpers_dir:
+        return
+    sys.path[:] = [entry for entry in sys.path if entry != helpers_dir]
+    sys.path.insert(0, helpers_dir)
 
 
 def _install_subprocess_logging_bridge() -> None:
@@ -248,12 +216,13 @@ def main() -> None:
 
     script_path = sys.argv[1]
 
-    # Copy standalone helpers to the tool's directory if not present
-    _copy_standalone_helpers(script_path)
     _remove_bootstrap_dir_from_sys_path()
 
     # Put the standalone dir on sys.path once; both the bridge install and the module load assume this.
     _prepend_standalone_dir_to_sys_path(script_path)
+
+    # Then the helpers dir, so the installed package outranks any stale in-tree copy.
+    _prepend_helpers_dir_to_sys_path()
 
     # Install the worker logging bridge (via standalone_helpers) before loading the standalone module.
     _install_subprocess_logging_bridge()
@@ -306,9 +275,10 @@ def main() -> None:
                     if hasattr(module, "get_memory_stats"):
                         result = module.get_memory_stats()
                     else:
-                        # Graceful fallback if tool doesn't support get_memory_stats
+                        # Graceful fallback if tool doesn't support get_memory_stats; framework is
+                        # None because there is no ML runtime to report allocations from.
                         sys.stderr.write(f"[worker] Warning: {script_path} does not have get_memory_stats() function\n")
-                        result = {"available": False, "error": "get_memory_stats not supported"}
+                        result = {"available": False, "framework": None, "reason": "get_memory_stats not supported"}
                     result = _serialize(result)
                     response = {"id": request_id, "result": result}
                 else:

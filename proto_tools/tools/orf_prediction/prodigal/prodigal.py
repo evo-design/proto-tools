@@ -10,7 +10,7 @@ from typing import Any, Literal
 
 from pydantic import Field, computed_field, field_validator, model_validator
 
-from proto_tools.tools.orf_prediction.orf import ORF
+from proto_tools.tools.orf_prediction.orf import ORF, OrfPredictionResult
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -221,9 +221,8 @@ class ProdigalOutput(BaseToolOutput):
     and quality metrics.
 
     Attributes:
-        predicted_orfs (list[list[ORF]]): List of ORF results per input
-            sequence. Each inner list contains the ORF objects found in a
-            single input sequence. The outer list order matches the input sequences.
+        results (list[OrfPredictionResult]): One entry per input sequence, in input
+            order, each holding the ORFs found in that sequence.
 
         num_orfs: Total number of ORFs predicted across all input sequences.
             Computed property derived from predicted_orfs.
@@ -232,23 +231,28 @@ class ProdigalOutput(BaseToolOutput):
             Computed property derived from predicted_orfs.
     """
 
-    predicted_orfs: list[list[ORF]] = Field(
+    results: list[OrfPredictionResult] = Field(
         default_factory=list,
-        title="Predicted ORFs",
-        description="List of ORF results per input sequence",
+        title="Results",
+        description="ORFs found, one entry per input sequence",
     )
+
+    @property
+    def predicted_orfs(self) -> list[list[ORF]]:
+        """The ORFs per input sequence, in input order."""
+        return [result.orfs for result in self.results]
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def num_orfs(self) -> int:
         """Total number of ORFs predicted across all input sequences."""
-        return sum(len(result) for result in self.predicted_orfs)
+        return sum(len(result.orfs) for result in self.results)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def num_orfs_per_sequence(self) -> list[int]:
         """Number of ORFs predicted for each input sequence."""
-        return [len(result) for result in self.predicted_orfs]
+        return [len(result.orfs) for result in self.results]
 
     @property
     def output_format_options(self) -> list[str]:
@@ -329,7 +333,8 @@ def example_input() -> Any:
     description="Prokaryotic ORF and gene prediction using Prodigal",
     example_input=example_input,
     iterable_input_fields=["input_sequences"],
-    iterable_output_field="predicted_orfs",
+    iterable_output_field="results",
+    max_chunk_size=256,
     cacheable=True,
 )
 def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig, instance: Any = None) -> ProdigalOutput:
@@ -400,5 +405,5 @@ def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig, insta
             "num_threads": config.num_threads,
             "num_input_sequences": len(inputs.input_sequences),
         },
-        predicted_orfs=predicted_orfs,
+        results=[OrfPredictionResult(orfs=orfs) for orfs in predicted_orfs],
     )
