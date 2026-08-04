@@ -1,6 +1,6 @@
-# Modal Set Up
+<a href="https://modal.com"><img src="../../guides/assets/modal/modal-logo.png" alt="Modal" width="260"></a>
 
-<img src="../../guides/assets/modal/modal-logo.png" alt="Modal" width="400">
+# Modal Set Up
 
 `proto-tools` enables users to scale their tool use beyond their local machine through an
 integration with [Modal](https://modal.com). Modal is a third party serverless compute
