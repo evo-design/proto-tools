@@ -61,9 +61,7 @@ For shared filesystems, model weights can be reused to avoid downloading duplica
 
 A few tools use gated models or software that require accepting a license / terms-of-use first (e.g. ESM3, AlphaGenome, AlphaFold3, X3DNA). See [notes/gated-models.md](notes/gated-models.md) for the full list and per-model access steps.
 
-### Step 4: Remote compute (optional)
-
-<img src="guides/assets/modal/modal-logo.png" alt="Modal" width="150">
+### Step 4: Remote compute (optional) <a href="https://modal.com"><img src="guides/assets/modal/modal-logo.png" alt="Modal" height="20" align="center"></a>
 
 `proto-tools` enables users to scale their tool use beyond their local machine through an
 integration with [Modal](https://modal.com), a serverless compute platform that
