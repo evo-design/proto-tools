@@ -417,6 +417,7 @@ exclude = ["*.standalone.standalone_helpers", "*.standalone.standalone_helpers.*
 "proto_tools.modal.sequence_scoring.enformer_deployment" = ["README.md"]
 "proto_tools.modal.sequence_scoring.malinois_deployment" = ["README.md"]
 "proto_tools.modal.sequence_scoring.parade_deployment" = ["README.md"]
+"proto_tools.modal.sequence_scoring.primer3_deployment" = ["README.md"]
 "proto_tools.modal.sequence_scoring.puffin_deployment" = ["README.md"]
 "proto_tools.modal.sequence_utils.segmasker_deployment" = ["README.md"]
 "proto_tools.modal.structure_alignment.foldmason_deployment" = ["README.md"]
