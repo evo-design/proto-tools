@@ -452,7 +452,7 @@ class CodonFMModel:
                 total_loss_val += loss_sum.item()
 
                 if backprop:
-                    (loss_sum / sequence_length).backward()  # type: ignore[no-untyped-call]
+                    (loss_sum / sequence_length).backward()  # type: ignore[no-untyped-call, unused-ignore]
                     ie_chunk_grad = ie_chunk.grad
                     if ie_chunk_grad is None:
                         raise RuntimeError("codonfm: missing input-embedding gradient")
