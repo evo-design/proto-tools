@@ -31,8 +31,10 @@ class DownloadSpec(BaseModel):
         url (str): HTTPS URL to fetch from.
         filename (str): Local filename under the dataset's cache directory.
             Used for resume and post-download verification.
-        sha256 (str | None): Optional SHA-256 of the downloaded file for
-            integrity check.
+        expected_bytes (int | None): Size of the completed file. When set, a
+            cached file of a different size is discarded and fetched again.
+        sha256 (str | None): Optional SHA-256 of the downloaded file, checked
+            once after a download completes.
         required (bool): When False, download failure is non-fatal
             (e.g. taxonomy files needed only for paired-MSA workflows).
     """
@@ -41,6 +43,7 @@ class DownloadSpec(BaseModel):
 
     url: str = Field(description="HTTPS URL to fetch from")
     filename: str = Field(description="Local filename under the dataset cache dir")
+    expected_bytes: int | None = Field(default=None, description="Size of the completed file")
     sha256: str | None = Field(default=None, description="Optional SHA-256 checksum")
     required: bool = Field(default=True, description="Whether failure is fatal")
 
