@@ -185,12 +185,16 @@ def build_server(device: Device = "modal") -> FastMCP:
         output_dir: str | None = None,
         use_example: bool = False,
     ) -> dict[str, Any]:
-        """Run a deployed tool on the user's Modal compute and return the result.
+        """Run a tool on this session's backend and return the result.
 
         Blocks until it finishes. Most tools return in seconds once warm, but
         the first call after a few minutes idle pays a container start and
         model load, and a few tools (binder design, diffusion) legitimately run
         for many minutes. Check the tool description before calling.
+
+        Some tools are answered in this process whatever the backend, because
+        they need no GPU and no environment, or cannot be deployed at all. The
+        `ran_on` field in the result reports where the call actually ran.
 
         Structure inputs take a file path or an http(s) URL in place of inlined
         content — {"query_structure": "/path/to/file.pdb"} — so a file already on
