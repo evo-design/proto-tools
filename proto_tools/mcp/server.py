@@ -33,6 +33,12 @@ subsequent calls fast.
 - If a user needs a tool that is deployable but that they have not yet deployed,
   use `deploy_tool`. It prompts the user to confirm before proceeding.
 
+- `deploy_tool` requires the name of the Modal environment to deploy into. Users
+  create one while setting up their account, and the documented name is
+  `proto-env`. `workspace_info` reports the one in use, which is where a deploy
+  should go; ask the user before deploying anywhere else, since a workspace can
+  hold several.
+
 - Any deployed tool can then be run using `run_tool`.
 
 IMPORTANT: Deploying and running tools bills activity to the user's Modal account.
