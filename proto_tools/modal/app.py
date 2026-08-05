@@ -4,6 +4,7 @@ import functools
 import logging
 import os
 import re
+from typing import Any
 
 import modal
 
@@ -107,6 +108,41 @@ def resolve_environment(explicit: str | None = None) -> str:
         str: ``explicit``, else ``MODAL_ENVIRONMENT``, else :data:`DEFAULT_ENVIRONMENT`.
     """
     return explicit or os.environ.get(ENVIRONMENT_VAR) or DEFAULT_ENVIRONMENT
+
+
+def environment_names(client: Any | None = None) -> list[str] | None:
+    """Return the Modal environments this workspace has, or ``None`` if they cannot be read.
+
+    Best-effort: a workspace that cannot be listed is reported as unknown rather than as empty,
+    so a caller never mistakes "we could not ask" for "there are none".
+
+    Args:
+        client (Any | None): Modal client to list against, or ``None`` for the process's own.
+
+    Returns:
+        list[str] | None: Environment names, or ``None`` when the listing failed.
+    """
+    try:
+        from modal.environments import list_environments
+
+        return [item.name for item in list_environments(client=client)]
+    except Exception:
+        logger.debug("could not list Modal environments", exc_info=True)
+        return None
+
+
+def environment_exists(name: str, client: Any | None = None) -> bool | None:
+    """Report whether ``name`` has been created, or ``None`` when that cannot be determined.
+
+    Args:
+        name (str): Environment name to look for.
+        client (Any | None): Modal client to list against, or ``None`` for the process's own.
+
+    Returns:
+        bool | None: Whether it exists, or ``None`` if the workspace could not be listed.
+    """
+    names = environment_names(client)
+    return None if names is None else name in names
 
 
 # The single persistent volume every service mounts at /weights for model

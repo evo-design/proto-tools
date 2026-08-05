@@ -223,18 +223,26 @@ def write_manifest(service_class: str, environment: str | None = None) -> int:
     return len(fps)
 
 
-def read_manifest(service_class: str) -> dict[str, Any] | None:
+def read_manifest(
+    service_class: str, environment: str | None = None, client: Any | None = None
+) -> dict[str, Any] | None:
     """Read a service's recorded fingerprints, or ``None`` if absent or unreadable.
 
     Absent is normal: a deployment made without ``scripts/deploy.py``, or one
     predating this mechanism, simply has nothing recorded.
+
+    Args:
+        service_class (str): Service whose manifest to read.
+        environment (str | None): Modal environment holding the cache volume. Must match the one
+            the call resolves in, or this compares against a different deployment.
+        client (Any | None): Modal client to read as, or ``None`` for the process's own.
     """
     import modal
 
     try:
         from proto_tools.modal.app import CACHE_VOLUME_NAME
 
-        volume = modal.Volume.from_name(CACHE_VOLUME_NAME)
+        volume = modal.Volume.from_name(CACHE_VOLUME_NAME, environment_name=environment, client=client)
         raw = b"".join(volume.read_file(manifest_path(service_class)))
         parsed: dict[str, Any] = json.loads(raw)
         return parsed
@@ -242,14 +250,23 @@ def read_manifest(service_class: str) -> dict[str, Any] | None:
         return None
 
 
-def drift_warnings(tool_key: str, service_class: str) -> list[str]:
+def drift_warnings(
+    tool_key: str, service_class: str, environment: str | None = None, client: Any | None = None
+) -> list[str]:
     """Return human-readable drift warnings for ``tool_key``, empty if aligned.
 
     Never raises: a check that breaks a working call is worse than a missed
     warning, so any failure reads as "nothing to report".
+
+    Args:
+        tool_key (str): Tool being dispatched.
+        service_class (str): Service backing it.
+        environment (str | None): Modal environment the call resolves in, so the comparison is
+            against the deployment the call will actually reach.
+        client (Any | None): Modal client to read as, or ``None`` for the process's own.
     """
     try:
-        recorded = read_manifest(service_class)
+        recorded = read_manifest(service_class, environment=environment, client=client)
         if recorded is None:
             return []
         if recorded.get("algorithm") != ALGORITHM:

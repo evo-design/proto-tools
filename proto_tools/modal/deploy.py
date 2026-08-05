@@ -464,9 +464,43 @@ def build_parser(prog: str | None = None) -> argparse.ArgumentParser:
     parser.add_argument(
         "--verbose", action="store_true", help="Stream Modal's full output; with --status, list every app"
     )
+    parser.add_argument(
+        "--create-env",
+        action="store_true",
+        help=f"Create the Modal environment named by --env (default: {DEFAULT_ENVIRONMENT}), then exit",
+    )
     parser.add_argument("--list", action="store_true", help="List available apps and their services, then exit")
     parser.add_argument("--max-parallel", type=int, default=4, help="Max parallel app deploys (default: 4)")
     return parser
+
+
+def create_env(name: str) -> int:
+    """Create one Modal environment, reporting a name that already exists as success.
+
+    Deliberately its own command rather than something a deploy does implicitly. Creating an
+    environment changes the shape of someone's Modal workspace, which is theirs to decide;
+    proto-tools only names the default and offers the command.
+
+    Args:
+        name (str): Environment to create.
+
+    Returns:
+        int: Process exit code.
+    """
+    from proto_tools.modal.app import environment_exists
+
+    if environment_exists(name) is True:
+        print(f"Modal environment {name!r} already exists; nothing to do.")
+        return 0
+    try:
+        from modal.environments import create_environment
+
+        create_environment(name)
+    except Exception as exc:
+        print(f"Could not create Modal environment {name!r}: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    print(f"Created Modal environment {name!r}. Deploy into it with:\n\n    proto-tools deploy --apps <slug>\n")
+    return 0
 
 
 def main(argv: list[str] | None = None, prog: str | None = None) -> int:
@@ -495,6 +529,13 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     # project entirely. ``--env-default`` is the deliberate way to accept it anyway.
     args.env = None if args.env_default else resolve_environment(args.env)
 
+    # Answered before the --apps guard below, because creating an environment targets no app and
+    # spends nothing. It is also the fix that guard's own error cannot offer.
+    if args.create_env:
+        if not args.env:
+            parser.error("--create-env needs a name; drop --env-default or pass --env <name>")
+        return create_env(args.env)
+
     # Both deploying and smoke-testing cost money — a build runs a real warmup
     # inference, and a smoke test runs the tool for real. Neither may default to
     # every app: naming the targets has to be deliberate.
@@ -515,6 +556,19 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
 
     if args.env:
         os.environ["MODAL_ENVIRONMENT"] = args.env
+        # A deploy into an environment that does not exist fails deep inside Modal with a
+        # message about the app. Asked here, the answer names the missing environment and the
+        # command that creates it, which is the one-time setup a new workspace has not run.
+        from proto_tools.modal.app import environment_exists
+
+        if environment_exists(args.env) is False:
+            print(
+                f"Modal environment {args.env!r} has not been created in this workspace.\n"
+                f"Nothing can be deployed to it until it exists. Create it with:\n\n"
+                f"    proto-tools deploy --create-env --env {args.env}\n",
+                file=sys.stderr,
+            )
+            return 1
 
     try:
         targets = resolve_targets(args.apps)
