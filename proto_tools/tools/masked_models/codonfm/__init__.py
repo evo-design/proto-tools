@@ -29,6 +29,7 @@ from proto_tools.tools.masked_models.codonfm.codonfm_sample import (
     CodonFMSampleConfig,
     CodonFMSampleInput,
     CodonFMSampleOutput,
+    CodonFMSampleResult,
     run_codonfm_sample,
 )
 from proto_tools.tools.masked_models.codonfm.codonfm_score import (
@@ -73,6 +74,7 @@ __all__ = [
     "CodonFMSampleConfig",
     "CodonFMSampleInput",
     "CodonFMSampleOutput",
+    "CodonFMSampleResult",
     "CodonFMScoreConfig",
     "CodonFMScoreInput",
     "CodonFMScoreOutput",

@@ -322,6 +322,7 @@ from proto_tools.tools.masked_models import (
     CodonFMSampleConfig,
     CodonFMSampleInput,
     CodonFMSampleOutput,
+    CodonFMSampleResult,
     CodonFMScoreConfig,
     CodonFMScoreInput,
     CodonFMScoreOutput,
@@ -1563,6 +1564,7 @@ __all__ = [
     "CodonFMSampleConfig",
     "CodonFMSampleInput",
     "CodonFMSampleOutput",
+    "CodonFMSampleResult",
     "run_codonfm_sample",
     # Masked models - ESM2 Embeddings
     "run_esm2_embeddings",

@@ -17,7 +17,15 @@ from proto_tools.tools.masked_models.codonfm.shared_data_models import (
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseToolInput, BaseToolOutput, InputField, ToolInstance
 
-CodonFMScoreConfig = CodonFMConfig
+
+class CodonFMScoreConfig(CodonFMConfig):
+    """Configuration for CodonFM codon-substitution scoring.
+
+    Attributes:
+        model_checkpoint (CodonFMCheckpoint): Encodon checkpoint to run.
+        batch_size (int): Mutations processed per GPU forward pass.
+    """
+
 
 _DNA = frozenset("ACGT")
 
@@ -170,7 +178,12 @@ def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return CodonFMScoreInput(
         mutations=[
-            {"sequence": "ATGGTGAGCAAGGGC", "codon_position": 2, "ref_codon": "GTG", "alt_codon": "GTA"},
+            CodonFMMutation(
+                sequence="ATGGTGAGCAAGGGC",
+                codon_position=2,
+                ref_codon="GTG",
+                alt_codon="GTA",
+            ),
         ]
     )
 
@@ -187,6 +200,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["mutations"],
     iterable_output_field="results",
+    max_chunk_size=32,
     cacheable=True,
 )
 def run_codonfm_score(
@@ -258,5 +272,5 @@ def run_codonfm_score(
                 llr=values[2],
             )
             for mutation, values in zip(inputs.mutations, numeric_rows, strict=True)
-        ]
+        ],
     )
