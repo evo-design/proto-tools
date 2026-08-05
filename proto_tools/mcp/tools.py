@@ -300,30 +300,63 @@ def _matches(term: str, haystack: str) -> bool:
     return term in haystack or _stem(term) in haystack
 
 
-def search_tools(query: str, deployed_only: bool = True, device: Device = "modal") -> list[dict[str, Any]]:
-    """Find tools by keyword, ranked by how many query terms match.
+# Where a term matched, strongest first. A tool named for what you asked for is a better
+# answer than one that merely mentions it.
+_KEY_SCORE, _CATEGORY_SCORE, _SUMMARY_SCORE = 3, 2, 1
+
+
+def _field_score(term: str, key: str, category: str, summary: str) -> int:
+    """Score one term against one tool, by the strongest field it matches."""
+    if _matches(term, key):
+        return _KEY_SCORE
+    if _matches(term, category):
+        return _CATEGORY_SCORE
+    if _matches(term, summary):
+        return _SUMMARY_SCORE
+    return 0
+
+
+def _no_match_hint() -> str:
+    """Say what to do next, so an empty result does not read as "no such capability"."""
+    from proto_tools.tools import ToolRegistry
+
+    categories = ", ".join(sorted({spec.category for spec in ToolRegistry.list_all()}))
+    return f"Nothing matched. Browse instead with list_tools(category=...); the categories are: {categories}."
+
+
+def search_tools(query: str, deployed_only: bool = True, limit: int = 10, device: Device = "modal") -> dict[str, Any]:
+    """Find tools by keyword, best match first.
 
     Matches per term rather than on the whole string: agents ask in natural
     language ("compare two protein structures"), and a literal substring
     search returns nothing for those, which reads as "no such tool exists"
     rather than "rephrase".
+
+    Returns the top ``limit`` under ``hits``, each carrying the ``score`` it ranked on, with
+    ``n_total`` for how many matched in all. Broad queries match half the catalogue, and an
+    agent that cannot tell first place from fiftieth pays for the whole list to find out.
     """
     terms = [t for t in query.lower().split() if t not in _STOPWORDS and len(t) > 1]
-    terms = [_SYNONYMS.get(t, t) for t in terms]
-    if not terms:
-        return []
+    # Both the term and its expansion are scored: rewriting "fold" to "structure" otherwise
+    # discards the literal token that matches esmfold and foldseek in a key.
+    forms = [{t, _SYNONYMS.get(t, t)} for t in terms]
+    if not forms:
+        return {"hits": [], "n_total": 0, "hint": _no_match_hint()}
 
     scored = []
     for entry in list_tools(deployed_only=deployed_only, device=device):
-        key = entry["tool"]
-        haystack = f"{key} {entry.get('summary') or ''}".lower()
-        # A term in the tool key is a stronger signal than one buried in prose.
-        score = sum(2 if _matches(t, key.lower()) else 1 for t in terms if _matches(t, haystack))
+        key, category = entry["tool"].lower(), (entry.get("category") or "").lower()
+        summary = (entry.get("summary") or "").lower()
+        score = sum(max(_field_score(t, key, category, summary) for t in form) for form in forms)
         if score:
             scored.append((score, entry))
 
-    scored.sort(key=lambda pair: -pair[0])
-    return [entry for _score, entry in scored]
+    # Key order after score, so a tie ranks the same way twice rather than by registry order.
+    scored.sort(key=lambda pair: (-pair[0], pair[1]["tool"]))
+    found = {"hits": [{**entry, "score": score} for score, entry in scored[:limit]], "n_total": len(scored)}
+    if not scored:
+        found["hint"] = _no_match_hint()
+    return found
 
 
 def _unknown_key(tool_key: str) -> dict[str, Any]:

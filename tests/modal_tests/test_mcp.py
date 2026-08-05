@@ -326,8 +326,39 @@ def test_search_matches_natural_language_queries(monkeypatch):
     # setattr, not assign-then-del: deleting removes the real function for the rest of the
     # session rather than restoring it, and every later test calling it then fails.
     monkeypatch.setattr(impl, "list_tools", lambda **_kwargs: catalogue)
-    hits = impl.search_tools("compare two protein structures")
-    assert [h["tool"] for h in hits][:1] == ["tmalign-alignment"], hits
+    found = impl.search_tools("compare two protein structures")
+    assert [h["tool"] for h in found["hits"]][:1] == ["tmalign-alignment"], found
+
+
+def test_search_is_capped_and_says_how_many_it_left_out():
+    """Broad queries match half the catalogue; the agent should not pay for it to find that out."""
+    from proto_tools.mcp import tools as impl
+
+    found = impl.search_tools("compare two protein structures", deployed_only=False, limit=5, device="local")
+
+    assert len(found["hits"]) == 5
+    assert found["n_total"] > 5, "the total is what tells a caller whether raising the limit is worth it"
+    assert found["hits"][0]["score"] >= found["hits"][-1]["score"], "hits are ordered by the score they carry"
+
+
+def test_search_ranks_a_tool_named_for_the_query_above_one_that_merely_mentions_it():
+    """Rewriting "fold" to "structure" used to discard the token that matches esmfold in the key."""
+    from proto_tools.mcp import tools as impl
+
+    hits = impl.search_tools("fold a protein", deployed_only=False, limit=133, device="local")["hits"]
+    ranked = [h["tool"] for h in hits]
+
+    assert ranked.index("esmfold-prediction") < ranked.index("esm-if1-sample"), "inverse folding is the opposite"
+
+
+def test_a_query_that_matches_nothing_says_what_to_do_instead():
+    """An empty list reads as "no such capability exists" rather than "rephrase"."""
+    from proto_tools.mcp import tools as impl
+
+    found = impl.search_tools("crystallography", deployed_only=False, device="local")
+
+    assert found["hits"] == [] and found["n_total"] == 0
+    assert "list_tools(category=" in found["hint"] and "structure_prediction" in found["hint"]
 
 
 def test_example_elides_bulky_values():
