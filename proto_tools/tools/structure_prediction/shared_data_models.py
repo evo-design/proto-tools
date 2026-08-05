@@ -390,7 +390,7 @@ class MSAStructurePredictionConfig(StructurePredictionConfig):
         """Force the MSA search onto the remote API when this process hosts the tool.
 
         A local search reads a provisioned database — ``uniref30-2302`` is hundreds of gigabytes —
-        which a hosted environment cannot stage on demand, and proto-modal rules a tool needing a
+        which a hosted environment cannot stage on demand, and a deployment rules a tool needing a
         staged corpus out of scope outright. The remote API needs no database and no GPU, so it is
         the only search a hosted process can actually run.
 

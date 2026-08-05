@@ -162,24 +162,26 @@ def test_extract_msa_out_of_bounds(bad_index):
 # ── proto_home.py ─────────────────────────────────────────────────────────────
 
 
-@pytest.fixture()
-def _clear_proto_home_cache():
-    get_proto_home.cache_clear()
-    yield
-    get_proto_home.cache_clear()
-
-
-def test_get_proto_home_from_env(monkeypatch, tmp_path, _clear_proto_home_cache):
+def test_get_proto_home_from_env(monkeypatch, tmp_path):
     monkeypatch.setenv("PROTO_HOME", str(tmp_path / "custom"))
     assert get_proto_home() == (tmp_path / "custom").resolve()
 
 
-def test_get_proto_home_default(monkeypatch, _clear_proto_home_cache):
+def test_get_proto_home_default(monkeypatch):
     monkeypatch.delenv("PROTO_HOME", raising=False)
     assert get_proto_home() == Path.home() / ".proto"
 
 
-def test_first_run_notice_sentinel_exists(monkeypatch, tmp_path, capsys, _clear_proto_home_cache):
+def test_get_proto_home_reflects_later_env_change(monkeypatch, tmp_path):
+    """Regression: a cached resolution silently ignored PROTO_HOME set after import."""
+    monkeypatch.delenv("PROTO_HOME", raising=False)
+    assert get_proto_home() == Path.home() / ".proto"
+
+    monkeypatch.setenv("PROTO_HOME", str(tmp_path / "later"))
+    assert get_proto_home() == (tmp_path / "later").resolve()
+
+
+def test_first_run_notice_sentinel_exists(monkeypatch, tmp_path, capsys):
     monkeypatch.setenv("PROTO_HOME", str(tmp_path))
     monkeypatch.delenv("PROTO_MODEL_CACHE", raising=False)
     (tmp_path / ".initialized").touch()
@@ -187,7 +189,7 @@ def test_first_run_notice_sentinel_exists(monkeypatch, tmp_path, capsys, _clear_
     assert capsys.readouterr().err == ""
 
 
-def test_first_run_notice_both_env_vars_silent(monkeypatch, tmp_path, capsys, _clear_proto_home_cache):
+def test_first_run_notice_both_env_vars_silent(monkeypatch, tmp_path, capsys):
     monkeypatch.setenv("PROTO_HOME", str(tmp_path))
     monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path / "weights"))
     show_first_run_notice()
@@ -195,7 +197,7 @@ def test_first_run_notice_both_env_vars_silent(monkeypatch, tmp_path, capsys, _c
     assert capsys.readouterr().err == ""
 
 
-def test_first_run_notice_shows_notice(monkeypatch, tmp_path, capsys, _clear_proto_home_cache):
+def test_first_run_notice_shows_notice(monkeypatch, tmp_path, capsys):
     monkeypatch.setenv("PROTO_HOME", str(tmp_path))
     monkeypatch.delenv("PROTO_MODEL_CACHE", raising=False)
     show_first_run_notice()

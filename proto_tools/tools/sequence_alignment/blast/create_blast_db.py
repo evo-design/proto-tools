@@ -167,6 +167,10 @@ def example_input() -> Any:
 
 @tool(
     key="blast-create-db",
+    local_only=(
+        "blast-create-db reads a local FASTA and writes database files you need to keep, neither of "
+        "which is available on a remote worker. Run locally with device='cpu'."
+    ),
     label="Create BLAST Database",
     category="sequence_alignment",
     input_class=CreateBlastDbInput,

@@ -308,7 +308,11 @@ def test_foldseek_search_benchmark(request: pytest.FixtureRequest, tmp_path) -> 
         (target_dir / f"target_{i}.pdb").write_text(src[i % len(src)])
 
     inputs = FoldseekSearchInput(structure=src[0])
-    config = FoldseekSearchConfig(search_mode="local", local_db=str(target_dir), num_threads=4)
+    # device is pinned deliberately: this measures local-DB search throughput against a database
+    # built on this machine, which FoldseekSearchConfig.remote_unsupported_reason refuses on a
+    # remote device. Switching to search_mode='remote' would measure the public Foldseek server
+    # instead — a different thing — so the benchmark stays local rather than changing what it means.
+    config = FoldseekSearchConfig(search_mode="local", local_db=str(target_dir), num_threads=4, device="cpu")
 
     def run_batch():
         last = None

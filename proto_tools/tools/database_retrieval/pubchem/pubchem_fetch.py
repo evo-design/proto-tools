@@ -313,6 +313,7 @@ def example_input() -> Any:
 
 @tool(
     key="pubchem-fetch",
+    local_only="pubchem-fetch does not use a gpu and does not need an environment, so it can run in process",
     label="PubChem Fetch",
     category="database_retrieval",
     input_class=PubChemFetchInput,

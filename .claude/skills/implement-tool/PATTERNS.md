@@ -97,7 +97,7 @@ if __name__ == "__main__":
         json.dump(output_data, f)
 ```
 
-**standalone/setup.sh** (Subagent 1) — sources `standalone_helpers.sh` (auto-copied) for shared functions:
+**standalone/setup.sh** (Subagent 1) — sources `standalone_helpers.sh` (resolved off `PATH`) for shared functions:
 ```bash
 #!/bin/bash
 set -euo pipefail
@@ -290,7 +290,7 @@ def to_device(device: str) -> dict:
 
 def get_memory_stats() -> dict:
     """Report GPU memory usage (called by DeviceManager)."""
-    from standalone_helpers import get_pytorch_memory_stats  # Auto-copied by worker bootstrap
+    from standalone_helpers import get_pytorch_memory_stats  # Published on PYTHONPATH by the tool runner
     global _model
     device = _model.device if _model and hasattr(_model, "device") else 0
     return get_pytorch_memory_stats(device)
@@ -434,7 +434,7 @@ def get_memory_stats() -> dict:
 
 **Key points:**
 - Both functions must be defined at module level (not inside classes)
-- Import the appropriate helper from `standalone_helpers` (auto-copied by worker bootstrap)
+- Import the appropriate helper from `standalone_helpers` (published on PYTHONPATH)
 - `to_device()` must return a dict with `{"success": bool, "device": str}`
 - `get_memory_stats()` must return a dict with `{"available": bool, "framework": str, ...}`
 - The standalone helpers already include the 'framework' key in all return paths — just call them directly
@@ -453,14 +453,14 @@ def get_memory_stats() -> dict:
 {tool_display_name} standalone runner for ToolInstance venv execution.
 
 CRITICAL: This script runs in an isolated environment and CANNOT import from proto_tools.
-Only import from: stdlib, requirements.txt dependencies, and standalone_helpers (auto-copied).
+Only import from: stdlib, requirements.txt dependencies, and standalone_helpers (published on PYTHONPATH).
 """
 
 import json
 import subprocess
 import sys
 
-from standalone_helpers import get_logger, get_subprocess_device_env  # Auto-copied by worker bootstrap
+from standalone_helpers import get_logger, get_subprocess_device_env  # Published on PYTHONPATH by the tool runner
 
 # REQUIRED: every .py file under standalone/ uses get_logger from standalone_helpers
 # (plain logging.getLogger lands outside the worker bridge and is silently dropped).
@@ -508,7 +508,7 @@ if __name__ == "__main__":
 ```
 
 **Key points:**
-- Import `get_subprocess_device_env` from `standalone_helpers` (auto-copied by worker bootstrap)
+- Import `get_subprocess_device_env` from `standalone_helpers` (published on PYTHONPATH)
 - Accept `device` parameter in operation functions
 - Call `env = get_subprocess_device_env(device)` before subprocess calls
 - Pass `env=env` to `subprocess.run()` or `subprocess.Popen()`

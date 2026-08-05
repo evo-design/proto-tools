@@ -20,7 +20,6 @@ from proto_tools.tools.causal_models.evo1 import (
     run_evo1_score,
 )
 from proto_tools.tools.causal_models.shared_data_models import CausalModelScoringMetrics
-from proto_tools.utils.standalone_helpers_source.standalone_helpers.serialization import DNA_NUCLEOTIDES
 from tests.conftest import benchmark_twice, make_persistent_fixture, random_dna_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
@@ -306,6 +305,7 @@ def test_evo1_sample_benchmark(request):
         temperature=1.0,
         batch_size=16,
         prepend_prompt=True,
+        seed=0,
         verbose=False,
     )
 
@@ -313,11 +313,10 @@ def test_evo1_sample_benchmark(request):
 
     assert result.tool_id == "evo1-sample"
     assert len(result.sequences) == 20, "Should have 20 sampled sequences"
-    valid_chars = set(DNA_NUCLEOTIDES) | set(DNA_NUCLEOTIDES.lower())
-    for seq in result.sequences:
-        assert isinstance(seq, str) and len(seq) >= 1000, "Output should include the 1000nt prompt at minimum"
-        invalid = set(seq) - valid_chars
-        assert not invalid, f"Non-DNA characters in output: {invalid}"
+    for prompt, seq in zip(prompts, result.sequences, strict=True):
+        assert isinstance(seq, str)
+        assert seq.startswith(prompt), "prepend_prompt=True should return the prompt followed by the continuation"
+        assert len(seq) > len(prompt), "Should have generated at least one token beyond the prompt"
 
 
 @pytest.mark.benchmark("evo1-score")

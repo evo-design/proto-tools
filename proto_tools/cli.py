@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -229,12 +230,125 @@ def _cmd_schema(args: argparse.Namespace) -> int:
     return 0
 
 
+def _signature_payload(spec: ToolSpec) -> dict[str, Any]:
+    """Collect the symbol names and import modules that make up a tool's call surface."""
+    return {
+        "key": spec.key,
+        "run_function": spec.function.__name__,
+        "input_class": spec.input_model.__name__,
+        "config_class": spec.config_model.__name__,
+        "output_class": spec.output_model.__name__,
+        "modules": {
+            "run_function": spec.function.__module__,
+            "input_class": spec.input_model.__module__,
+            "config_class": spec.config_model.__module__,
+            "output_class": spec.output_model.__module__,
+        },
+        "required_input_fields": [name for name, field in spec.input_model.model_fields.items() if field.is_required()],
+    }
+
+
+def _render_signature(spec: ToolSpec) -> str:
+    """Render a tool's call surface: imports, symbol names, and required input fields.
+
+    Everything here is fixed-size, so surveying tools costs the same whether the tool
+    takes a peptide or a 524,288 bp window. ``example-input`` carries real values and
+    scales with them; this does not, which is what makes it the cheap discovery path.
+
+    ``Output`` is named but not imported: callers never construct one, so importing it
+    would leave an unused name in pasted code, and for 24 of the registered tools it
+    lives in a different module from the ``Input`` anyway.
+
+    Args:
+        spec (ToolSpec): The resolved tool.
+
+    Returns:
+        str: Python source sketching the call, with ``...`` in place of argument values.
+    """
+    run_fn = spec.function.__name__
+    input_cls = spec.input_model.__name__
+    config_cls = spec.config_model.__name__
+
+    by_module: dict[str, set[str]] = {}
+    for symbol, module in (
+        (input_cls, spec.input_model.__module__),
+        (config_cls, spec.config_model.__module__),
+        (run_fn, spec.function.__module__),
+    ):
+        by_module.setdefault(module, set()).add(symbol)
+    imports = "\n".join(
+        f"from {module} import (\n" + "".join(f"    {s},\n" for s in sorted(symbols)) + ")"
+        for module, symbols in sorted(by_module.items())
+    )
+
+    required = [name for name, field in spec.input_model.model_fields.items() if field.is_required()]
+    args = ", ".join(f"{name}=..." for name in required)
+    call = (
+        f"result = {run_fn}(\n"
+        f"    {input_cls}({args}),\n"
+        f"    {config_cls}(),  # optional, omit for defaults\n"
+        f")  # -> {spec.output_model.__name__}"
+    )
+
+    hint = f"\n\n# Field-level docs: proto-tools input|config|output {spec.key}"
+    return f"{imports}\n\n{call}{hint}\n"
+
+
+def _cmd_signature(args: argparse.Namespace) -> int:
+    """``proto-tools signature <tool> [--json]``."""
+    from proto_tools.utils.tool_docs import _normalize_tool_key
+
+    spec = ToolRegistry.get(_normalize_tool_key(args.tool))
+    if args.json:
+        print(_dump_json(_signature_payload(spec)))
+        return 0
+    print(_render_signature(spec), end="")
+    return 0
+
+
+def _render_example_as_python(spec: ToolSpec, example: BaseModel) -> str:
+    """Render a runnable call to ``spec``, with the symbol names spelled out.
+
+    Model and run-function names are derived from the toolkit, not the registry key, so
+    they are not reliably guessable from the key an agent resolved the tool by. Emitting
+    them removes the guess. Imports come from each symbol's defining module rather than
+    the toolkit package, so they do not depend on ``__init__`` re-exports.
+
+    Args:
+        spec (ToolSpec): The resolved tool.
+        example (BaseModel): The tool's example input instance.
+
+    Returns:
+        str: Python source that constructs the input and calls the run function.
+    """
+    run_fn = spec.function.__name__
+    input_cls = spec.input_model.__name__
+    module = spec.input_model.__module__
+
+    symbols = sorted({input_cls, run_fn})
+    if spec.function.__module__ == module:
+        imports = f"from {module} import (\n" + "".join(f"    {s},\n" for s in symbols) + ")"
+    else:
+        imports = f"from {module} import {input_cls}\nfrom {spec.function.__module__} import {run_fn}"
+
+    fields = example.model_dump(mode="json", exclude_defaults=True) or example.model_dump(mode="json")
+    kwargs = "".join(f"        {name}={value!r},\n" for name, value in fields.items())
+    call = f"result = {run_fn}(\n    {input_cls}(\n{kwargs}    ),\n)"
+
+    config_cls = getattr(spec.config_model, "__name__", None)
+    hint = f"\n\n# Optional: pass {config_cls}(...) as the second argument to override defaults." if config_cls else ""
+    return f"{imports}\n\n{call}{hint}\n"
+
+
 def _cmd_example_input(args: argparse.Namespace) -> int:
-    """``proto-tools example-input <tool>``."""
+    """``proto-tools example-input <tool> [--as-python]``."""
     example = ToolRegistry.get_example_input(args.tool)
     if example is None:
         print(f"No example input defined for '{args.tool}'.", file=sys.stderr)
         return 1
+    if args.as_python:
+        print(_render_example_as_python(ToolRegistry.get(args.tool), example), end="")
+        return 0
     print(_dump_json(example))
     return 0
 
@@ -336,6 +450,177 @@ def _cmd_eject_standalone(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_deploy(args: argparse.Namespace) -> int:
+    """Deploy tools into a Modal workspace you own."""
+    from proto_tools.modal.deploy import main as deploy_main
+
+    return deploy_main(args.rest, prog="proto-tools deploy")
+
+
+def _cmd_mcp(args: argparse.Namespace) -> int:
+    """Run the MCP server over stdio."""
+    try:
+        from proto_tools.mcp import main as mcp_main
+    except ImportError as exc:
+        # fastmcp ships in the 'mcp' extra, so a plain install reaches here.
+        print(f"error: the MCP server needs the 'mcp' extra ({exc}).", file=sys.stderr)
+        print('Install it with: pip install "proto-tools[mcp]"', file=sys.stderr)
+        return 2
+
+    mcp_main(args.rest)
+    return 0
+
+
+_CREDENTIAL_REMEDY = (
+    "Set MODAL_TOKEN_ID and MODAL_TOKEN_SECRET (these work in a container, CI job, or agent "
+    "sandbox), point MODAL_CONFIG_PATH at a token file, or run `modal token new` on a machine "
+    "you work on directly."
+)
+
+
+def _modal_auth_check() -> tuple[str, str | None]:
+    """Return how Modal authenticated, and the remedy when it did not.
+
+    Calls the server rather than stopping at ``from_env``, which only checks that a token is
+    present. A revoked or mistyped token passes that check and fails every real call, so the
+    two are reported apart: they need different fixes.
+    """
+    from proto_tools.utils import modal_status as status
+
+    try:
+        import modal
+        from modal.exception import AuthError
+    except ImportError as exc:
+        return f"unavailable — {exc}", "Reinstall proto-tools: Modal is a required dependency."
+
+    try:
+        client = modal.Client.from_env()
+    except Exception as exc:
+        checked = f"checked {'/'.join(status.TOKEN_VARS)}, {status.config_path()} ({status.config_state()})"
+        return f"not found — {checked}", f"{_CREDENTIAL_REMEDY} Modal reported: {type(exc).__name__}: {exc}"
+
+    mechanism = status.auth_mechanism() or "a source the SDK resolved itself"
+    try:
+        client.hello()
+    except AuthError as exc:
+        return (
+            f"rejected — a credential was found via {mechanism}, and Modal refused it",
+            f"The token exists but is not valid: {exc}. It may have been revoked, or belong to "
+            f"another workspace. {_CREDENTIAL_REMEDY}",
+        )
+    except Exception as exc:
+        # Reaching Modal at all is a separate failure from the credential being wrong.
+        return (
+            f"unverified — found via {mechanism}, but Modal was unreachable",
+            f"Could not reach Modal to check the credential: {type(exc).__name__}: {exc}",
+        )
+
+    return f"OK via {mechanism}", None
+
+
+def _proto_home_check() -> tuple[str, str | None]:
+    """Return the PROTO_HOME line, and the remedy when it cannot be written to.
+
+    A directory that does not exist yet is not a fault: it is created on first use. What
+    matters is whether the nearest existing ancestor can be written to.
+    """
+    from proto_tools.utils.proto_home import get_proto_home
+
+    home = get_proto_home()
+    existing = next((p for p in (home, *home.parents) if p.exists()), home)
+    if not os.access(existing, os.W_OK):
+        return (
+            f"{home}   writable: no ({existing} is read-only)",
+            f"Grant write access to {existing}, or point PROTO_HOME at a writable directory.",
+        )
+    suffix = "writable: yes" if existing == home else "writable: yes (created on first use)"
+    return f"{home}   {suffix}", None
+
+
+def _temp_space_check() -> tuple[str, str | None]:
+    """Return the temp-space line, and the remedy when a build directory cannot be made.
+
+    Tool environments build under the temp directory, so a sandbox that confines it stops
+    every local build before it starts.
+    """
+    import tempfile
+
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "probe").write_text("probe")
+    except OSError as exc:
+        return (
+            f"cannot write to {tempfile.gettempdir()}",
+            f"Point TMPDIR at a writable directory: {type(exc).__name__}: {exc}",
+        )
+    return f"OK ({tempfile.gettempdir()})", None
+
+
+def _mcp_extra_check() -> tuple[str, str | None]:
+    """Return the MCP extra line. Its absence is reported, not treated as a fault."""
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        import fastmcp  # noqa: F401
+
+        return f"installed (fastmcp {version('fastmcp')})", None
+    except (ImportError, PackageNotFoundError):
+        return 'not installed — `pip install "proto-tools[mcp]"` to run the MCP server', None
+
+
+def _workspace_lines() -> dict[str, str]:
+    """Describe the workspace calls land in. Only meaningful once Modal has authenticated."""
+    import modal
+
+    from proto_tools.modal.app import resolve_environment
+    from proto_tools.modal.manifest import APP_BUCKETS
+    from proto_tools.utils.modal_status import deployed_apps
+
+    deployed = sorted(deployed_apps())
+    lines = {
+        "workspace": getattr(modal.config, "_profile", None) or "(unknown)",
+        "environment": resolve_environment(),
+        "apps deployed": f"{len(deployed)} of {len(APP_BUCKETS)}",
+    }
+    if deployed:
+        lines["apps deployed"] += f"   ({', '.join(deployed)})"
+    return lines
+
+
+def _cmd_doctor(args: argparse.Namespace) -> int:
+    """Report whether this environment can run tools, and name the fix for whatever cannot."""
+    lines: dict[str, str] = {}
+    remedies: list[str] = []
+
+    for label, check in (
+        ("modal auth", _modal_auth_check),
+        ("PROTO_HOME", _proto_home_check),
+        ("temp space", _temp_space_check),
+        ("mcp extra", _mcp_extra_check),
+    ):
+        lines[label], remedy = check()
+        if remedy:
+            remedies.append(f"{label}: {remedy}")
+
+    # Only ask where calls land once the credential is known good; anything else would
+    # report a workspace this machine cannot actually reach.
+    if not any(r.startswith("modal auth:") for r in remedies):
+        lines.update(_workspace_lines())
+
+    if args.json:
+        print(_dump_json({"checks": lines, "remedies": remedies}))
+        return 1 if remedies else 0
+
+    order = ["modal auth", "workspace", "environment", "apps deployed", "PROTO_HOME", "temp space", "mcp extra"]
+    for label in order:
+        if label in lines:
+            print(f"{label:<16}: {lines[label]}")
+    sys.stdout.flush()  # keep the remedies below the report when the two streams are captured
+    for remedy in remedies:
+        print(f"\n{remedy}", file=sys.stderr)
+    return 1 if remedies else 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="proto-tools",
@@ -427,8 +712,21 @@ def _build_parser() -> argparse.ArgumentParser:
     p_schema_g.add_argument("--output", action="store_true")
     p_schema.set_defaults(func=_cmd_schema)
 
+    p_signature = sub.add_parser(
+        "signature",
+        help="Imports, symbol names, and required input fields for the tool's call. No example payload.",
+    )
+    p_signature.add_argument("tool")
+    p_signature.add_argument("--json", action="store_true", help="Emit the symbol names as JSON.")
+    p_signature.set_defaults(func=_cmd_signature)
+
     p_example_input = sub.add_parser("example-input", help="A minimal valid Input for the tool.")
     p_example_input.add_argument("tool")
+    p_example_input.add_argument(
+        "--as-python",
+        action="store_true",
+        help="Emit a runnable snippet with the correct import and symbol names instead of JSON.",
+    )
     p_example_input.set_defaults(func=_cmd_example_input)
 
     p_example = sub.add_parser(
@@ -466,11 +764,35 @@ def _build_parser() -> argparse.ArgumentParser:
     p_url.add_argument("tool")
     p_url.set_defaults(func=_cmd_url)
 
+    p_deploy = sub.add_parser(
+        "deploy",
+        help="Deploy tools into your own Modal workspace, and smoke-test them.",
+    )
+    p_deploy.set_defaults(func=_cmd_deploy)
+
+    p_mcp = sub.add_parser("mcp", help="Run the MCP server over stdio (needs the 'mcp' extra).")
+    p_mcp.set_defaults(func=_cmd_mcp)
+
+    p_doctor = sub.add_parser(
+        "doctor",
+        help="Check this environment can reach Modal and build tools; exits non-zero with a remedy.",
+    )
+    p_doctor.add_argument("--json", action="store_true", help="Emit JSON instead of text.")
+    p_doctor.set_defaults(func=_cmd_doctor)
+
     return parser
+
+
+_PASSTHROUGH = {"deploy": _cmd_deploy, "mcp": _cmd_mcp}
 
 
 def main(argv: list[str] | None = None) -> int:
     """Entry point. Returns a process exit code."""
+    args_in = sys.argv[1:] if argv is None else argv
+    # These own their whole option surface, which argparse would try to claim first.
+    if args_in and args_in[0] in _PASSTHROUGH:
+        return _PASSTHROUGH[args_in[0]](argparse.Namespace(rest=args_in[1:]))
+
     parser = _build_parser()
     args = parser.parse_args(argv)
     try:

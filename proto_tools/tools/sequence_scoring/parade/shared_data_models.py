@@ -11,6 +11,7 @@ from pydantic import ValidationError, field_validator
 from pydantic_core import InitErrorDetails, core_schema
 
 from proto_tools.utils import BaseConfig, BaseToolInput, ConfigField, InputField
+from proto_tools.utils.device import RemoteDevice
 from proto_tools.utils.sequence import return_invalid_nucleotide_chars
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
@@ -54,6 +55,13 @@ PARADE_CELL_TYPES: dict[str, tuple[ParadeCellType, ...]] = {
 }
 
 _VALID_INPUT_CHARS = "N"  # U is normalized to T; A/C/G/T come from DNA_NUCLEOTIDES.
+
+_CUSTOM_CHECKPOINT_REJECTED = (
+    "A custom checkpoint cannot be used with device='proto'. Loading a checkpoint executes "
+    "the code inside it, and Proto's hosted service runs only the pinned checkpoints it can "
+    "verify. Leave checkpoint empty to use the pinned one, run locally with device='cpu' or "
+    "device='cuda', or use device='modal' to run it in a Modal workspace you own."
+)
 
 
 def normalize_utr_sequence(sequence: str) -> str:
@@ -298,11 +306,13 @@ class ParadeCheckpointConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
 
     Attributes:
         device (str): Device used for inference.
-        checkpoint (str): Optional override for the pinned upstream checkpoint — a local ``.ckpt``
-            path or an ``https`` link (a schemeless ``host.tld/path`` is accepted and normalized to
-            ``https://``). A caller override runs on local devices only (rejected on
-            ``device="cloud"``, since a checkpoint is an executable pickle). Empty uses the pinned
-            per-target checkpoint, verified against its built-in checksum.
+        checkpoint (str): Your own checkpoint to use instead of the pinned upstream one, given
+            as a local ``.ckpt`` path or an ``https`` download link (a schemeless
+            ``host.tld/path`` is accepted and normalized to ``https://``). Works on
+            ``device="cpu"``, ``device="cuda"``, and ``device="modal"``, all of which run on
+            hardware you control. Rejected on ``device="proto"``, because loading a checkpoint
+            executes the code inside it and Proto's hosted service runs only checkpoints it can
+            verify. Leave empty to use the pinned per-target checkpoint.
         batch_size (int): Number of sequences to run per GPU batch.
     """
 
@@ -315,7 +325,7 @@ class ParadeCheckpointConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
     checkpoint: str = ConfigField(
         title="Checkpoint",
         default="",
-        description="Local .ckpt path or https link overriding the pinned checkpoint (empty = pinned upstream).",
+        description="Your own .ckpt path or https link, used instead of the pinned checkpoint.",
         reload_on_change=True,
         repr=False,
     )
@@ -333,15 +343,10 @@ class ParadeCheckpointConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
         """Validate a checkpoint override: an https link (schemeless allowed) or a local path."""
         return normalize_checkpoint_override(value)
 
-    def cloud_unsupported_reason(self) -> str | None:
-        """A caller-specified checkpoint override isn't available (or trusted) on a hosted worker."""
-        if self.checkpoint:
-            return (
-                "checkpoint is a caller-specified override (a local path or a custom download link), which "
-                "device='cloud' does not permit: a PyTorch checkpoint is an executable pickle, so only the "
-                "pinned upstream checkpoints run on a hosted worker. Leave checkpoint empty, or run locally "
-                "with device='cpu'."
-            )
+    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
+        """Proto will not load a custom checkpoint; a deployment the caller owns may."""
+        if device == "proto" and self.checkpoint:
+            return _CUSTOM_CHECKPOINT_REJECTED
         return None
 
 

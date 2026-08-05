@@ -165,6 +165,7 @@ def example_input() -> Any:
 
 @tool(
     key="ensembl-lookup",
+    local_only="ensembl-lookup does not use a gpu and does not need an environment, so it can run in process",
     label="Ensembl Lookup",
     category="database_retrieval",
     input_class=EnsemblLookupInput,

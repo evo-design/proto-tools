@@ -57,11 +57,9 @@ file_store/
 analyses/*
 !analyses/examples/
 
-# Auto-generated helpers in standalone directories (source is in utils/standalone_helpers_source/)
 **/standalone/standalone_helpers/
 **/standalone/standalone_helpers.py
 **/standalone/standalone_helpers.sh
-# Same helpers, copied next to setup.sh for shared envs
 **/shared_envs/*/standalone_helpers.sh
 
 # Vendored upstream scripts fetched by standalone setup.sh (not committed)
@@ -77,3 +75,6 @@ uv.lock
 
 # Local env-report fallback output (when PROTO_ENV_REPORT_DIR is unset).
 .environment_checks/
+
+# Benchmark reports from a local run; a remote run writes into the deployment folders instead.
+benchmark_reports/

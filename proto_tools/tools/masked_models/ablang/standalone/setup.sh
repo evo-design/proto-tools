@@ -14,7 +14,8 @@ echo "Installing dependencies from requirements.txt..."
 uv pip install -r requirements.txt
 
 # bioconda::anarci pulls HMMER + germline DBs; needed for ablang's align=True path.
-"$MAMBA_BIN" install -p "$VENV_PATH" -c conda-forge -c bioconda -y anarci
+# numpy is constrained here too: the solver installs it as a dependency and would override the pip build.
+"$MAMBA_BIN" install -p "$VENV_PATH" -c conda-forge -c bioconda -y anarci "numpy<2.5"
 
 # Pre-fetch ~825 MB of ablang weights into PROTO_MODEL_CACHE and symlink the
 # cache into ablang2's hardcoded $(dirname ablang2.__file__)/model-weights-<name>

@@ -36,7 +36,7 @@ Phase 1: Research → Phase 2: Contract → Phase 3: Fan-out (5 parallel agents)
 **CRITICAL: Standalone scripts run in isolated environments and MUST NOT import from `proto_tools`:**
 - `from proto_tools.utils import ...` — will fail at runtime
 - `from proto_tools.entities import ...` — will fail at runtime
-- `from standalone_helpers import get_subprocess_device_env` — auto-copied by worker bootstrap (OK)
+- `from standalone_helpers import get_subprocess_device_env` — published on PYTHONPATH (OK)
 - Standard library imports: `import json`, `import subprocess`, etc. (OK)
 - Dependencies from `requirements.txt`: `import torch`, `import numpy`, etc. (OK)
 - NEVER install `proto_tools` in standalone environments (creates circular dependency, breaks isolation)
@@ -334,7 +334,7 @@ from standalone_helpers import get_logger
 logger = get_logger(__name__)
 ```
 
-Why: standalones run inside isolated micromamba subprocesses where `proto_tools` is NOT importable. `get_logger` is shipped via `standalone_helpers/proto_logging.py` (auto-copied at worker startup). Records emitted through it are bridged back to the parent process for re-emission under `proto_tools.worker.{toolkit}.*`. Plain `logging.getLogger(__name__)` produces a logger outside the bridge namespace and its records are silently dropped.
+Why: standalones run inside isolated micromamba subprocesses where `proto_tools` is NOT importable. `get_logger` is shipped via `standalone_helpers/proto_logging.py` (published on PYTHONPATH). Records emitted through it are bridged back to the parent process for re-emission under `proto_tools.worker.{toolkit}.*`. Plain `logging.getLogger(__name__)` produces a logger outside the bridge namespace and its records are silently dropped.
 
 `__init__.py` is the only exemption (no log calls there). The consistency test enforces this on every other `.py` file in the standalone tree.
 
@@ -385,7 +385,7 @@ def to_device(device: str) -> dict:
 ```
 
 #### 2. `get_memory_stats() -> dict`
-Enables DeviceManager to query GPU memory usage. Import the helper from `standalone_helpers` (auto-copied by worker bootstrap).
+Enables DeviceManager to query GPU memory usage. Import the helper from `standalone_helpers` (published on PYTHONPATH).
 
 **PyTorch tools:**
 ```python
@@ -420,11 +420,11 @@ def get_memory_stats() -> dict:
 - Both functions MUST be at module level (not inside classes)
 - `to_device()` returns `{"success": bool, "device": str}`
 - `get_memory_stats()` returns `{"available": bool, "framework": str, ...}`
-- Import `standalone_helpers` (auto-copied by worker bootstrap) — do NOT import from `proto_tools`
+- Import `standalone_helpers` (published on PYTHONPATH) — do NOT import from `proto_tools`
 
 ### 2. setup.sh
 
-All setup.sh scripts source `standalone_helpers.sh` (auto-copied alongside `standalone_helpers.py`) for shared infrastructure functions. Reference: `tools/inverse_folding/fampnn/standalone/setup.sh`.
+All setup.sh scripts source `standalone_helpers.sh`, resolved off `PATH` inside the build subprocess, for shared infrastructure functions. Reference: `tools/inverse_folding/fampnn/standalone/setup.sh`.
 
 ```bash
 #!/bin/bash

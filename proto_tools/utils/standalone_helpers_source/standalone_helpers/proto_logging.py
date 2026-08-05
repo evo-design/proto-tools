@@ -1,8 +1,8 @@
 r"""Subprocess-side logging bridge.
 
-Lives inside ``standalone_helpers/`` so it ships into every tool's micromamba
-venv via ``_copy_standalone_helpers``. This is the producer side of the
-proto_tools structured worker logging architecture.
+Lives inside ``standalone_helpers/`` so it reaches every tool's micromamba venv
+via the ``PYTHONPATH`` published by ``_build_subprocess_env``. This is the
+producer side of the proto_tools structured worker logging architecture.
 
 How it fits together:
 

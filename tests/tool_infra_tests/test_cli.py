@@ -134,6 +134,100 @@ def test_unknown_section_exits_one() -> None:
     assert "not found" in err
 
 
+# ── Signature ──────────────────────────────────────────────────────────────
+
+
+def test_signature_names_symbols_the_key_cannot_predict() -> None:
+    """The point of the verb: registry key 'blast-create-db' does not yield these names."""
+    code, out, _ = _run("signature", "blast-create-db")
+    assert code == 0
+    assert "CreateBlastDbInput" in out  # not BlastCreateDbInput
+    assert "run_create_blast_db" in out  # not run_blast_create_db
+    assert "CreateBlastDbConfig" in out
+    assert "CreateBlastDbOutput" in out
+    assert "proto_tools.tools.sequence_alignment.blast.create_blast_db" in out
+
+
+def test_signature_names_the_output_without_importing_it() -> None:
+    """Callers never construct an Output, so importing it would leave an unused name."""
+    code, out, _ = _run("signature", "ipsae-scoring")
+    assert code == 0
+    imports, call = out.split("\n\nresult =", maxsplit=1)
+    assert "IPSAEScoringOutput" not in imports
+    assert "-> IPSAEScoringOutput" in call
+
+
+def test_signature_lists_required_input_fields_only() -> None:
+    code, out, _ = _run("signature", "ipsae-scoring")
+    assert code == 0
+    assert "IPSAEScoringInput(structure=..., binder_chain=..., target_chains=...)" in out
+
+
+def test_signature_resolves_a_run_function_name() -> None:
+    code, out, _ = _run("signature", "run_create_blast_db")
+    assert code == 0
+    assert "CreateBlastDbInput" in out
+
+
+def test_signature_stays_small_for_a_tool_with_a_huge_example() -> None:
+    """The reason the verb exists: cost is fixed, not proportional to the example payload.
+
+    borzoi's example input is a 524,288 bp window (the model context length, enforced by
+    ``BorzoiInput``), so ``example-input`` cannot be made cheap for it at any fixture size.
+    """
+    code, signature, _ = _run("signature", "borzoi-prediction")
+    assert code == 0
+    _, example, _ = _run("example-input", "borzoi-prediction")
+    assert len(signature) < 1024
+    assert len(example) > 500_000
+
+
+def test_signature_json_carries_symbols_and_modules() -> None:
+    code, out, _ = _run("signature", "blast-create-db", "--json")
+    assert code == 0
+    payload = json.loads(out)
+    assert payload["input_class"] == "CreateBlastDbInput"
+    assert payload["run_function"] == "run_create_blast_db"
+    assert payload["output_class"] == "CreateBlastDbOutput"
+    assert payload["required_input_fields"] == ["fasta"]
+    assert payload["modules"]["input_class"].startswith("proto_tools.tools.")
+
+
+@pytest.mark.extensive
+def test_signature_parses_and_imports_resolve_for_every_tool() -> None:
+    """Every rendered signature is valid Python whose imports bind the names it uses."""
+    import ast
+
+    from proto_tools.tools.tool_registry import ToolRegistry
+
+    specs = {s.key: s for s in [*ToolRegistry.list_cpu_tools(), *ToolRegistry.list_gpu_tools()]}
+    failures: list[str] = []
+    for key, spec in sorted(specs.items()):
+        code, out, _ = _run("signature", key)
+        if code != 0:
+            failures.append(f"{key}: exit {code}")
+            continue
+        try:
+            tree = ast.parse(out)
+        except SyntaxError as exc:
+            failures.append(f"{key}: {exc}")
+            continue
+        imports = [node for node in tree.body if isinstance(node, ast.Import | ast.ImportFrom)]
+        namespace: dict[str, object] = {}
+        try:
+            exec(compile(ast.Module(body=imports, type_ignores=[]), "<generated>", "exec"), namespace)  # noqa: S102
+        except Exception as exc:
+            failures.append(f"{key}: {type(exc).__name__}: {exc}")
+            continue
+        failures.extend(
+            f"{key}: emitted import did not bind {symbol}"
+            for symbol in (spec.input_model.__name__, spec.config_model.__name__, spec.function.__name__)
+            if symbol not in namespace
+        )
+
+    assert not failures, "signatures with unusable imports:\n" + "\n".join(failures)
+
+
 # ── Schema / example-input ─────────────────────────────────────────────────
 
 
@@ -150,6 +244,59 @@ def test_example_input_is_valid_json() -> None:
     assert code == 0
     payload = json.loads(out)
     assert "sequences" in payload
+
+
+def test_example_input_as_python_runs_verbatim() -> None:
+    """The emitted snippet is executable as-is, not just syntactically valid."""
+    code, out, _ = _run("example-input", "random-protein-sample", "--as-python")
+    assert code == 0
+
+    namespace: dict[str, object] = {}
+    exec(out, namespace)  # noqa: S102 -- executing our own generated snippet is the assertion
+    assert namespace["result"].success is True  # type: ignore[union-attr]
+
+
+def test_example_input_as_python_names_symbols_the_key_cannot_predict() -> None:
+    """The point of the flag: registry key 'blast-create-db' does not yield these names."""
+    code, out, _ = _run("example-input", "blast-create-db", "--as-python")
+    assert code == 0
+    assert "CreateBlastDbInput" in out  # not BlastCreateDbInput
+    assert "run_create_blast_db" in out  # not run_blast_create_db
+    assert "CreateBlastDbConfig" in out
+
+
+@pytest.mark.extensive
+def test_example_input_as_python_imports_resolve_for_every_tool() -> None:
+    """Every generated snippet parses and its imports bind the names it then uses."""
+    import ast
+
+    from proto_tools.tools.tool_registry import ToolRegistry
+
+    specs = {s.key: s for s in [*ToolRegistry.list_cpu_tools(), *ToolRegistry.list_gpu_tools()]}
+    failures: list[str] = []
+    for key, spec in sorted(specs.items()):
+        code, out, _ = _run("example-input", key, "--as-python")
+        if code != 0:
+            continue  # tools without an example input are covered by the JSON path
+        try:
+            tree = ast.parse(out)
+        except SyntaxError as exc:
+            failures.append(f"{key}: {exc}")
+            continue
+        imports = [node for node in tree.body if isinstance(node, ast.Import | ast.ImportFrom)]
+        namespace: dict[str, object] = {}
+        try:
+            exec(compile(ast.Module(body=imports, type_ignores=[]), "<generated>", "exec"), namespace)  # noqa: S102
+        except Exception as exc:
+            failures.append(f"{key}: {type(exc).__name__}: {exc}")
+            continue
+        failures.extend(
+            f"{key}: emitted import did not bind {symbol}"
+            for symbol in (spec.input_model.__name__, spec.function.__name__)
+            if symbol not in namespace
+        )
+
+    assert not failures, "generated snippets with unusable imports:\n" + "\n".join(failures)
 
 
 # ── Example notebook ───────────────────────────────────────────────────────
@@ -177,3 +324,79 @@ def test_model_doc_verbs(verb: str) -> None:
     code, out, _ = _run(verb, "esm2-embedding")
     assert code == 0
     assert "ESM2Embeddings" in out
+
+
+# ── doctor ─────────────────────────────────────────────────────────────────
+
+
+def _modal_auth(monkeypatch, tmp_path, *, found: bool, accepted: bool = True, from_env_vars: bool = False) -> None:
+    """Pin Modal's credential state, so doctor is tested against it and not against this host.
+
+    ``found`` is what ``from_env`` decides from the environment alone; ``accepted`` is what the
+    server says about the token. They fail separately and are reported separately.
+    """
+    import modal
+    from modal.exception import AuthError
+
+    def from_env(*args, **kwargs):
+        if not found:
+            raise AuthError("Token missing.")
+        return modal.Client
+
+    def hello(*args, **kwargs):
+        if not accepted:
+            raise AuthError("Token not found")
+
+    monkeypatch.setattr(modal.Client, "from_env", from_env)
+    monkeypatch.setattr(modal.Client, "hello", hello)
+    monkeypatch.setattr("proto_tools.utils.modal_status.deployed_apps", lambda: {"proto-tools-esm2"})
+    monkeypatch.setenv("MODAL_CONFIG_PATH", str(tmp_path / "absent.toml"))
+    for var in ("MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET"):
+        if from_env_vars:
+            monkeypatch.setenv(var, "placeholder")
+        else:
+            monkeypatch.delenv(var, raising=False)
+
+
+def test_doctor_names_both_environment_variables_when_no_credential_is_found(monkeypatch, tmp_path) -> None:
+    """The remedy is the whole point of the verb: `modal token new` is unactionable in a sandbox."""
+    _modal_auth(monkeypatch, tmp_path, found=False)
+    code, out, _ = _run("doctor", "--json")
+
+    payload = json.loads(out)
+    assert code == 1
+    assert all(var in payload["remedies"][0] for var in ("MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET"))
+    assert "not found" in payload["checks"]["modal auth"]
+    assert "workspace" not in payload["checks"], "nothing may claim a workspace it could not reach"
+
+
+def test_doctor_separates_a_rejected_token_from_a_missing_one(monkeypatch, tmp_path) -> None:
+    """A revoked token satisfies `from_env` and fails every real call; reporting it OK is the bug."""
+    _modal_auth(monkeypatch, tmp_path, found=True, accepted=False, from_env_vars=True)
+    code, out, _ = _run("doctor", "--json")
+
+    payload = json.loads(out)
+    assert code == 1
+    assert "rejected" in payload["checks"]["modal auth"]
+    assert "workspace" not in payload["checks"]
+    assert "revoked" in payload["remedies"][0], "a found-but-refused token needs a different fix"
+
+
+def test_doctor_reports_which_mechanism_authenticated(monkeypatch, tmp_path) -> None:
+    """Which of the three mechanisms was used is the fact that ends the diagnosis."""
+    _modal_auth(monkeypatch, tmp_path, found=True, from_env_vars=True)
+    code, out, _ = _run("doctor")
+
+    assert code == 0
+    assert "OK via MODAL_TOKEN_ID/MODAL_TOKEN_SECRET" in out
+    assert "proto-tools-esm2" in out, "deployed apps are listed so the caller sees what is reachable"
+
+
+def test_doctor_json_carries_the_remedy_for_a_bug_report(monkeypatch, tmp_path) -> None:
+    """The JSON form is what gets pasted into an issue, so it must carry the fix, not just the fault."""
+    _modal_auth(monkeypatch, tmp_path, found=False)
+    code, out, _ = _run("doctor", "--json")
+
+    payload = json.loads(out)
+    assert code == 1
+    assert any("MODAL_TOKEN_ID" in r for r in payload["remedies"])

@@ -341,6 +341,7 @@ def example_input() -> Any:
 
 @tool(
     key="interproscan-fetch",
+    local_only="interproscan-fetch does not use a gpu and does not need an environment, so it can run in process",
     label="InterProScan Fetch",
     category="database_retrieval",
     input_class=InterProScanFetchInput,
