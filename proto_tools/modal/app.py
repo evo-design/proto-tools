@@ -71,6 +71,20 @@ def service_secrets() -> list[modal.Secret]:
     return [HF_TOKEN_SECRET, *(modal.Secret.from_name(name) for name in named)]
 
 
+def secrets_env() -> dict[str, str]:
+    """Return :data:`EXTRA_SECRETS_ENV` as image env, or empty when unset.
+
+    A container re-imports the service module, so :func:`service_secrets` runs there too. Without
+    the variable it would build a shorter list than the deploy did, and Modal refuses to start a
+    container whose dependency count disagrees with what the deploy registered.
+
+    Returns:
+        dict[str, str]: Mapping to merge into a service image's runtime environment.
+    """
+    raw = os.getenv(EXTRA_SECRETS_ENV)
+    return {EXTRA_SECRETS_ENV: raw} if raw else {}
+
+
 # The Modal environment proto-tools deploys into and dispatches to, unless told otherwise.
 #
 # Naming one matters more than which name it is. Without it, both sides fall back to whatever

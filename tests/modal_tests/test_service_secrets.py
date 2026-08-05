@@ -51,3 +51,28 @@ def test_every_app_carries_the_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
         assert len(app._local_state.secrets_default) == 2, "an app must carry the default secrets"
     finally:
         get_app.cache_clear()
+
+
+def test_the_secret_names_travel_into_the_image(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A container rebuilds the app, so it must name the same secrets the deploy did.
+
+    Modal refuses to start a container whose dependency count disagrees with the deployed
+    function's, and the failure is a container that dies on startup while the caller's call
+    hangs through every retry.
+    """
+    import importlib
+
+    from proto_tools.modal import app as app_module
+
+    monkeypatch.setenv(EXTRA_SECRETS_ENV, "one,two")
+    assert app_module.secrets_env() == {EXTRA_SECRETS_ENV: "one,two"}
+
+    utils = importlib.reload(importlib.import_module("proto_tools.modal.utils"))
+    assert utils.RUNTIME_ENV[EXTRA_SECRETS_ENV] == "one,two", "the image must carry the secret names"
+
+
+def test_no_secret_names_add_nothing_to_the_image(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty variable baked into every image would be noise in each one's environment."""
+    from proto_tools.modal.app import secrets_env
+
+    assert secrets_env() == {}
