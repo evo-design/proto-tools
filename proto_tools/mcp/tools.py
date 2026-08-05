@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any
 
 from proto_tools.mcp.device import Device, is_remote
 from proto_tools.utils.base_config import BaseConfig
+from proto_tools.utils.modal_status import credentials_checked, deployed_apps
 
 logger = logging.getLogger(__name__)
 
@@ -40,26 +42,6 @@ def app_for_tool(tool_key: str) -> str | None:
         return _app_for(tool_key)
     except KeyError:
         return None
-
-
-def _deployed_apps() -> set[str]:
-    """Apps that currently resolve in the active Modal workspace.
-
-    One hydrate per app, no containers started. Failures read as "not deployed"
-    rather than propagating.
-    """
-    import modal
-
-    from proto_tools.modal.manifest import APP_BUCKETS
-
-    live = set()
-    for app_name, services in APP_BUCKETS.items():
-        try:
-            modal.Cls.from_name(app_name, services[0]).hydrate()
-            live.add(app_name)
-        except Exception:  # noqa: S112 — an unreachable app is "not deployed", not an error
-            continue
-    return live
 
 
 def _hosted_catalogue() -> dict[str, dict[str, Any]]:
@@ -109,7 +91,7 @@ def deployed_keys(device: Device) -> set[str]:
         return set()
     if device == "proto":
         return {key for key, entry in _hosted_catalogue().items() if entry.get("hosted")}
-    live = _deployed_apps()
+    live = deployed_apps()
     return {key for key in _registry() if _app_for(key) in live}
 
 
@@ -124,8 +106,6 @@ def available_keys(device: Device) -> set[str]:
 
 def workspace_info(device: Device = "modal") -> dict[str, Any]:
     """Report where calls will land, and whether the caller can deploy there."""
-    import os
-
     if device == "local":
         from proto_tools.tools import ToolRegistry
         from proto_tools.utils.device import number_of_visible_gpus
@@ -172,7 +152,13 @@ def workspace_info(device: Device = "modal") -> dict[str, Any]:
             "device": "modal",
             "authenticated": False,
             "error": f"{type(exc).__name__}: {exc}",
-            "hint": "Run `modal token new` to authenticate.",
+            "hint": (
+                "Interactive shell: run `modal token new` (writes ~/.modal.toml). "
+                "Container, CI, or agent sandbox: set the MODAL_TOKEN_ID and "
+                "MODAL_TOKEN_SECRET environment variables instead — a token file written "
+                "outside this process is not visible to it."
+            ),
+            "credentials_checked": credentials_checked(),
         }
 
     # Modal exposes no public reader for the active profile: ``config_profiles()`` lists them all
@@ -181,7 +167,7 @@ def workspace_info(device: Device = "modal") -> dict[str, Any]:
     # rather than reporting a working install as unauthenticated.
     workspace = getattr(modal.config, "_profile", None) or "(unknown)"
 
-    deployed = _deployed_apps()
+    deployed = deployed_apps()
     return {
         "device": "modal",
         "authenticated": True,

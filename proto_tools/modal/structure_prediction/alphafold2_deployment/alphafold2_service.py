@@ -21,7 +21,7 @@ from proto_tools.modal.base_images import GPU_BASE, with_proto_tools
 from proto_tools.modal.gpu_profiles import GPU_DEFAULT
 from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
-from proto_tools.modal.utils import RUNTIME_ENV, dispatch_tool_call, ensure_gpu_ready, env_for
+from proto_tools.modal.utils import RUNTIME_ENV, ensure_gpu_ready, env_for, run_tool_call
 
 
 def _warmup() -> None:
@@ -99,9 +99,9 @@ class AlphaFold2Service:
             run_alphafold2,
         )
 
-        inputs = AlphaFold2Input(**input_dict)
-        config = AlphaFold2Config(**config_dict)
-        return dispatch_tool_call(run_alphafold2, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_alphafold2, AlphaFold2Input, AlphaFold2Config, input_dict, config_dict, instance=self.instance
+        )
 
     @modal.method()
     def gradient(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -120,6 +120,11 @@ class AlphaFold2Service:
             run_alphafold2_gradient,
         )
 
-        inputs = AlphaFold2GradientInput(**input_dict)
-        config = AlphaFold2GradientConfig(**config_dict)
-        return dispatch_tool_call(run_alphafold2_gradient, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_alphafold2_gradient,
+            AlphaFold2GradientInput,
+            AlphaFold2GradientConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )

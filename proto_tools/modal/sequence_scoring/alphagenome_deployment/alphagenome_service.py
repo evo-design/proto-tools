@@ -16,7 +16,7 @@ from proto_tools.modal.base_images import GPU_BASE, with_proto_tools
 from proto_tools.modal.gpu_profiles import GPU_DEFAULT
 from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
-from proto_tools.modal.utils import RUNTIME_ENV, dispatch_tool_call, ensure_gpu_ready, env_for
+from proto_tools.modal.utils import RUNTIME_ENV, ensure_gpu_ready, env_for, run_tool_call
 
 
 def _warmup() -> None:
@@ -97,9 +97,14 @@ class AlphaGenomeService:
             run_alphagenome_predict_intervals,
         )
 
-        inputs = AlphaGenomePredictIntervalsInput(**input_dict)
-        config = AlphaGenomePredictIntervalsConfig(**config_dict)
-        return dispatch_tool_call(run_alphagenome_predict_intervals, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_alphagenome_predict_intervals,
+            AlphaGenomePredictIntervalsInput,
+            AlphaGenomePredictIntervalsConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
 
     @modal.method()
     def predict_sequences(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -118,9 +123,14 @@ class AlphaGenomeService:
             run_alphagenome_predict_sequences,
         )
 
-        inputs = AlphaGenomePredictSequencesInput(**input_dict)
-        config = AlphaGenomePredictSequencesConfig(**config_dict)
-        return dispatch_tool_call(run_alphagenome_predict_sequences, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_alphagenome_predict_sequences,
+            AlphaGenomePredictSequencesInput,
+            AlphaGenomePredictSequencesConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
 
     @modal.method()
     def predict_variants(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -139,9 +149,14 @@ class AlphaGenomeService:
             run_alphagenome_predict_variants,
         )
 
-        inputs = AlphaGenomePredictVariantsInput(**input_dict)
-        config = AlphaGenomePredictVariantsConfig(**config_dict)
-        return dispatch_tool_call(run_alphagenome_predict_variants, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_alphagenome_predict_variants,
+            AlphaGenomePredictVariantsInput,
+            AlphaGenomePredictVariantsConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
 
     @modal.method()
     def score_intervals(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -160,9 +175,14 @@ class AlphaGenomeService:
             run_alphagenome_score_intervals,
         )
 
-        inputs = AlphaGenomeScoreIntervalsInput(**input_dict)
-        config = AlphaGenomeScoreIntervalsConfig(**config_dict)
-        return dispatch_tool_call(run_alphagenome_score_intervals, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_alphagenome_score_intervals,
+            AlphaGenomeScoreIntervalsInput,
+            AlphaGenomeScoreIntervalsConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
 
     @modal.method()
     def score_ism_variants(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -181,9 +201,14 @@ class AlphaGenomeService:
             run_alphagenome_score_ism_variants_batch,
         )
 
-        inputs = AlphaGenomeScoreISMInput(**input_dict)
-        config = AlphaGenomeScoreISMConfig(**config_dict)
-        return dispatch_tool_call(run_alphagenome_score_ism_variants_batch, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_alphagenome_score_ism_variants_batch,
+            AlphaGenomeScoreISMInput,
+            AlphaGenomeScoreISMConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
 
     @modal.method()
     def score_variants(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -202,6 +227,11 @@ class AlphaGenomeService:
             run_alphagenome_score_variants,
         )
 
-        inputs = AlphaGenomeScoreVariantsInput(**input_dict)
-        config = AlphaGenomeScoreVariantsConfig(**config_dict)
-        return dispatch_tool_call(run_alphagenome_score_variants, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_alphagenome_score_variants,
+            AlphaGenomeScoreVariantsInput,
+            AlphaGenomeScoreVariantsConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )

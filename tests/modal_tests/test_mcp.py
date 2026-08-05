@@ -5,6 +5,8 @@ smoke tests, not here.
 """
 
 import asyncio
+import json
+import os
 
 import pytest
 
@@ -43,6 +45,83 @@ def test_proto_exposes_no_deploy_tool():
 
     names = {t.name for t in asyncio.run(build_server("proto").list_tools())}
     assert "deploy_tool" not in names
+
+
+def _unauthenticated(monkeypatch, config_path, **env):
+    """Report what an unauthenticated caller sees, whatever this host's own credentials are."""
+    import modal
+
+    from proto_tools.mcp import tools as impl
+
+    def refuse(*args, **kwargs):
+        raise RuntimeError("AuthError: Token missing.")
+
+    monkeypatch.setattr(modal.Client, "from_env", refuse)
+    for name in ("MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET", "MODAL_PROFILE"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("MODAL_CONFIG_PATH", str(config_path))
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    return impl.workspace_info("modal")
+
+
+def test_the_auth_hint_names_the_environment_variables(monkeypatch, tmp_path):
+    """`modal token new` is unactionable in a container, so the hint has to name the other path."""
+    absent = tmp_path / "absent.toml"
+    info = _unauthenticated(monkeypatch, absent)
+
+    assert info["authenticated"] is False
+    assert "MODAL_TOKEN_ID" in info["hint"] and "MODAL_TOKEN_SECRET" in info["hint"]
+    assert info["credentials_checked"] == {
+        "MODAL_TOKEN_ID": "unset",
+        "MODAL_TOKEN_SECRET": "unset",
+        "MODAL_PROFILE": "unset",
+        "config_file": str(absent),
+        "config_file_state": "absent",
+    }
+
+
+def test_a_half_configured_caller_sees_which_half_is_missing(monkeypatch, tmp_path):
+    """One variable set without the other fails identically to setting neither."""
+    checked = _unauthenticated(monkeypatch, tmp_path / "absent.toml", MODAL_TOKEN_ID="ak-secret")["credentials_checked"]
+
+    assert checked["MODAL_TOKEN_ID"] == "set"
+    assert checked["MODAL_TOKEN_SECRET"] == "unset"
+
+
+def test_an_empty_variable_is_not_reported_as_absent(monkeypatch, tmp_path):
+    """Modal reads an empty variable and fails, rather than falling back to a readable file."""
+    config = tmp_path / "modal.toml"
+    config.write_text("[default]\n")
+    checked = _unauthenticated(monkeypatch, config, MODAL_TOKEN_ID="", MODAL_TOKEN_SECRET="")["credentials_checked"]
+
+    assert checked["MODAL_TOKEN_ID"] == "empty", "reporting this as unset hides why a good config file is ignored"
+    assert checked["config_file_state"] == "readable"
+
+
+def test_credentials_are_reported_by_presence_and_never_by_value(monkeypatch, tmp_path):
+    """The payload goes to an agent and into logs; a token in it would leak from both."""
+    info = _unauthenticated(
+        monkeypatch,
+        tmp_path / "absent.toml",
+        MODAL_TOKEN_ID="ak-leak-me",
+        MODAL_TOKEN_SECRET="as-leak-me",
+    )
+
+    assert "leak-me" not in json.dumps(info)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads through any mode, so 0o000 proves nothing")
+def test_an_unreadable_config_is_distinguished_from_an_absent_one(monkeypatch, tmp_path):
+    """Both look like no file to an existence check, but only one is fixed by writing a token."""
+    present = tmp_path / "modal.toml"
+    present.write_text("[default]\n")
+    assert _unauthenticated(monkeypatch, present)["credentials_checked"]["config_file_state"] == "readable"
+
+    present.chmod(0o000)
+    state = _unauthenticated(monkeypatch, present)["credentials_checked"]["config_file_state"]
+    present.chmod(0o644)
+    assert state == "unreadable"
 
 
 def test_every_tool_has_a_description():

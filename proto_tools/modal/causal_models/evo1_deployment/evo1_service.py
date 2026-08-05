@@ -18,9 +18,9 @@ from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
 from proto_tools.modal.utils import (
     RUNTIME_ENV,
-    dispatch_tool_call,
     ensure_gpu_ready,
     env_for,
+    run_tool_call,
 )
 
 
@@ -93,9 +93,9 @@ class Evo1Service:
             run_evo1_sample,
         )
 
-        inputs = Evo1SampleInput(**input_dict)
-        config = Evo1SampleConfig(**config_dict)
-        return dispatch_tool_call(run_evo1_sample, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_evo1_sample, Evo1SampleInput, Evo1SampleConfig, input_dict, config_dict, instance=self.instance
+        )
 
     @modal.method()
     def score(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -114,6 +114,6 @@ class Evo1Service:
             run_evo1_score,
         )
 
-        inputs = Evo1ScoringInput(**input_dict)
-        config = Evo1ScoringConfig(**config_dict)
-        return dispatch_tool_call(run_evo1_score, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_evo1_score, Evo1ScoringInput, Evo1ScoringConfig, input_dict, config_dict, instance=self.instance
+        )

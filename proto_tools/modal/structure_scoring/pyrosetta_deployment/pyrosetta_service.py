@@ -16,8 +16,8 @@ from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
 from proto_tools.modal.utils import (
     RUNTIME_ENV,
-    dispatch_tool_call,
     env_for,
+    run_tool_call,
     stage_all_excluded_fixtures,
 )
 
@@ -94,9 +94,14 @@ class PyRosettaService:
             run_pyrosetta_energy,
         )
 
-        inputs = PyRosettaEnergyInput(**input_dict)
-        config = PyRosettaEnergyConfig(**config_dict)
-        return dispatch_tool_call(run_pyrosetta_energy, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_pyrosetta_energy,
+            PyRosettaEnergyInput,
+            PyRosettaEnergyConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
 
     @modal.method()
     def interface_analyzer(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -115,9 +120,14 @@ class PyRosettaService:
             run_pyrosetta_interface_analyzer,
         )
 
-        inputs = PyRosettaInterfaceAnalyzerInput(**input_dict)
-        config = PyRosettaInterfaceAnalyzerConfig(**config_dict)
-        return dispatch_tool_call(run_pyrosetta_interface_analyzer, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_pyrosetta_interface_analyzer,
+            PyRosettaInterfaceAnalyzerInput,
+            PyRosettaInterfaceAnalyzerConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
 
     @modal.method()
     def relax(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -136,9 +146,14 @@ class PyRosettaService:
             run_pyrosetta_relax,
         )
 
-        inputs = PyRosettaRelaxInput(**input_dict)
-        config = PyRosettaRelaxConfig(**config_dict)
-        return dispatch_tool_call(run_pyrosetta_relax, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_pyrosetta_relax,
+            PyRosettaRelaxInput,
+            PyRosettaRelaxConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
 
     @modal.method()
     def sap(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -157,9 +172,14 @@ class PyRosettaService:
             run_pyrosetta_sap,
         )
 
-        inputs = PyRosettaSAPInput(**input_dict)
-        config = PyRosettaSAPConfig(**config_dict)
-        return dispatch_tool_call(run_pyrosetta_sap, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_pyrosetta_sap,
+            PyRosettaSAPInput,
+            PyRosettaSAPConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
 
     @modal.method()
     def sasa(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -178,6 +198,11 @@ class PyRosettaService:
             run_pyrosetta_sasa,
         )
 
-        inputs = PyRosettaSASAInput(**input_dict)
-        config = PyRosettaSASAConfig(**config_dict)
-        return dispatch_tool_call(run_pyrosetta_sasa, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_pyrosetta_sasa,
+            PyRosettaSASAInput,
+            PyRosettaSASAConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )

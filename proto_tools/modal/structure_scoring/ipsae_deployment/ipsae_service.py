@@ -10,8 +10,8 @@ from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
 from proto_tools.modal.utils import (
     RUNTIME_ENV,
-    dispatch_tool_call,
     env_for,
+    run_tool_call,
     stage_all_excluded_fixtures,
 )
 
@@ -67,6 +67,6 @@ class IPSAEService:
             run_ipsae_scoring,
         )
 
-        inputs = IPSAEScoringInput(**input_dict)
-        config = IPSAEScoringConfig(**config_dict)
-        return dispatch_tool_call(run_ipsae_scoring, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_ipsae_scoring, IPSAEScoringInput, IPSAEScoringConfig, input_dict, config_dict, instance=self.instance
+        )

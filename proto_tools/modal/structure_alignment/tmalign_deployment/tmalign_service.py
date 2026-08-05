@@ -13,7 +13,7 @@ from proto_tools.modal.app import HF_TOKEN_SECRET, MODEL_CACHE, SERVICE_RETRIES,
 from proto_tools.modal.base_images import CPU_BASE, with_proto_tools
 from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
-from proto_tools.modal.utils import dispatch_tool_call, env_for, stage_all_excluded_fixtures
+from proto_tools.modal.utils import RUNTIME_ENV, env_for, run_tool_call, stage_all_excluded_fixtures
 
 
 def _tmalign_warmup() -> None:
@@ -24,8 +24,10 @@ def _tmalign_warmup() -> None:
 
 
 tmalign_image = with_proto_tools(CPU_BASE).env(env_for())
-tmalign_image = stage_all_excluded_fixtures(tmalign_image).run_function(
-    _tmalign_warmup, volumes={"/weights": MODEL_CACHE}, secrets=[HF_TOKEN_SECRET]
+tmalign_image = (
+    stage_all_excluded_fixtures(tmalign_image)
+    .run_function(_tmalign_warmup, volumes={"/weights": MODEL_CACHE}, secrets=[HF_TOKEN_SECRET])
+    .env(RUNTIME_ENV)
 )
 
 
@@ -74,6 +76,4 @@ class TMalignService:
             run_tmalign,
         )
 
-        inputs = TMalignInput(**input_dict)
-        config = TMalignConfig(**config_dict)
-        return dispatch_tool_call(run_tmalign, inputs, config, instance=self.instance)
+        return run_tool_call(run_tmalign, TMalignInput, TMalignConfig, input_dict, config_dict, instance=self.instance)

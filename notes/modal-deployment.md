@@ -221,6 +221,70 @@ defining a differently named hook.
 request crafted directly against the API bypasses it entirely. Server-side enforcement
 belongs at Proto's submission path and is tracked in proto-tools-api#567.
 
+## Worker extension points
+
+A service method ends in `run_tool_call(run_fn, InputModel, ConfigModel, input_dict, config_dict)`,
+which validates the mappings and hands off to `dispatch_tool_call`. A guard test asserts every
+`@modal.method` goes through it — a method that dispatches some other way silently ignores hooks
+rather than erroring.
+
+`proto_tools/modal/hooks.py` offers two:
+
+| | Runs | Sees |
+|---|---|---|
+| `register_payload_hook` | before validation | the raw `input_dict` and `config_dict`, mutable |
+| `register_call_middleware` | around the call | a `CallContext` and the next step; may transform the result |
+
+A payload hook is the only place a value can still be rewritten. Middleware follows the ASGI
+shape; first registered is outermost, and `CallContext.tool_key` says which tool it wrapped.
+
+Both are process-wide. Register during import, from whatever module defines the deployment's
+entry point — registration is not synchronized. Nothing registers by default.
+
+Two limits worth knowing: payload hooks run before the progress context opens, so a slow one is
+silent on the caller's spinner; and a middleware that forgets to return raises `TypeError` rather
+than returning `None` to the client.
+
+### Getting extension code into a worker
+
+A deployed container imports only what a service module reaches, and carries only what its image
+was built with. Three variables, read where the deploy runs, cover both:
+
+| Variable | Effect |
+|---|---|
+| `PROTO_MODAL_EXTRA_PACKAGES` | Requirements every service image installs. Whitespace-separated, since a specifier may contain a comma — which also means an environment marker cannot be expressed here. |
+| `PROTO_MODAL_EXTRA_SOURCE` | Directories every service image carries, separated by `os.pathsep`. Each is mounted under `/root` by its own name and imports as that name, so the name must be a Python identifier. |
+| `PROTO_MODAL_WORKER_PLUGINS` | Modules a worker imports before serving its first call. Comma- or whitespace-separated. |
+
+```bash
+PROTO_MODAL_EXTRA_PACKAGES="alpha>=1 beta" \
+PROTO_MODAL_EXTRA_SOURCE=/path/to/extras \
+PROTO_MODAL_WORKER_PLUGINS=extras.hooks \
+proto-tools deploy --apps tmalign --env proto-env
+```
+
+Packages and source are added by `with_proto_tools`, below proto-tools' own layers, so editing
+proto-tools does not rebuild them. The plugin list travels in `RUNTIME_ENV` instead, applied
+*above* the warmup: it is runtime metadata, and renaming a module would otherwise rebuild and
+re-warm all 54 images. Guard tests assert every service applies both, since the two that once
+omitted `RUNTIME_ENV` loaded no plugins at all while deploying and smoke-testing green.
+
+Plugins are imported once per process, on the first call a worker serves — not at `@modal.enter`.
+So a middleware cannot observe what a service does in its enter hook, and a cold container charges
+the import to its first request. The deploy-time warmup calls run functions directly rather than
+through `run_tool_call`, so it never loads them.
+
+Both failure modes are surfaced rather than deferred, because a worker serving calls with a
+deployment's extensions silently absent is worse than a loud failure:
+
+- a module that cannot be imported raises an `ImportError` naming `PROTO_MODAL_WORKER_PLUGINS`;
+- a directory that does not exist, or whose name nothing could import, fails the deploy up front
+  rather than inside a subprocess whose output is filtered to phase lines.
+
+A mounted directory excludes `.git` and the usual build artefacts. It does *not* exclude `tests`,
+which in someone else's tree may be a package their code imports. Note that `/root` precedes
+site-packages, so a directory sharing a name with an installed package shadows it.
+
 ## Hosted environments
 
 `PROTO_IS_HOSTED_ENV` marks a process running tools for someone else rather than on a
@@ -233,9 +297,56 @@ A config adjusts itself for that case by overriding `BaseConfig.for_hosted_env`,
 because a hosted container cannot stage `uniref30-2302`. The substitution changes results
 and therefore logs a warning rather than passing silently.
 
+## Credentials
+
+Modal accepts a credential from three sources, and `proto_tools/utils/modal_status.py`
+resolves them the same way the SDK does.
+
+| Source | Set by | Suits |
+|---|---|---|
+| `~/.modal.toml` | `modal setup` | A machine you work on directly. |
+| `MODAL_TOKEN_ID` + `MODAL_TOKEN_SECRET` | The environment | A container, CI job, or agent sandbox. |
+| `MODAL_CONFIG_PATH` | The environment | A host that mounts a token file rather than injecting variables. |
+
+Environment variables take precedence over the file. Precedence is by *membership*, not
+truthiness — `MODAL_TOKEN_ID=""` still shadows a readable config file and then fails to
+authenticate, which is why `credentials_checked` reports `set`/`empty`/`unset` rather than a
+boolean.
+
+The distinction matters most where proto-tools does not run on a laptop. A token file written
+outside the process is frequently unreadable from inside it: the file may be absent, or present
+in a directory the uid cannot traverse. Those two states are indistinguishable to
+`Path.exists()`, so `config_state()` separates `absent` from `unreadable` — only the first is
+fixed by writing a token. For the same reason `config_path()` uses `os.path.expanduser` rather
+than `Path.home()`, which raises when `HOME` is unset and the uid has no passwd entry.
+
+`proto_tools/utils/modal_status.py` deliberately sits outside `proto_tools/modal/`. That
+package builds Modal objects at import time, which is precisely what fails when Modal is
+unconfigured, so a credential check living there could not run in the state it exists to
+diagnose.
+
+### `proto-tools doctor`
+
+One command that reports whether this environment can reach Modal, and exits non-zero naming a
+remedy when it cannot. It verifies the credential with `Client.hello()` rather than stopping at
+`Client.from_env()`, which only checks that a token is *present* — a revoked or wrong-workspace
+token passes that check and fails every real call. Four outcomes are reported apart because
+each needs a different fix:
+
+| Outcome | Meaning |
+|---|---|
+| `OK via <source>` | Verified against the server, naming which of the three sources was used. |
+| `not found` | No credential in any source, listing what was checked. |
+| `rejected` | A credential was found and the server refused it — revoked, or another workspace. |
+| `unverified` | A credential was found but Modal was unreachable; a network fault, not a bad token. |
+
+`workspace_info` in the MCP still stops at `from_env()`, so it reports `authenticated: true`
+for a token the server would refuse. Verifying there would add a network roundtrip to an
+agent's first orienting call, so the two surfaces differ on purpose.
+
 ## Configuration
 
-Five environment variables, all optional, read in the environment a deploy runs from.
+Eight environment variables, all optional, read in the environment a deploy runs from.
 
 | Variable | Default | Effect |
 |---|---|---|
@@ -244,6 +355,9 @@ Five environment variables, all optional, read in the environment a deploy runs 
 | `PROTO_MODAL_SCALEDOWN_WINDOW` | `30` | Seconds an idle container stays alive holding its model. |
 | `PROTO_MODAL_TIMEOUT_SCALE` | `1` | Multiplies every container wall tier. Values below 1 are ignored. |
 | `PROTO_MODAL_PROTO_TOOLS` | unset | Build from this proto-tools checkout instead of the installed one. |
+| `PROTO_MODAL_EXTRA_PACKAGES` | unset | Requirements every service image installs. |
+| `PROTO_MODAL_EXTRA_SOURCE` | unset | Directories every service image carries, importable by their own names. |
+| `PROTO_MODAL_WORKER_PLUGINS` | unset | Modules a worker imports before serving its first call. Also re-read inside the container, which is where the import happens. |
 
 ### Container wall tiers
 

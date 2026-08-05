@@ -324,3 +324,79 @@ def test_model_doc_verbs(verb: str) -> None:
     code, out, _ = _run(verb, "esm2-embedding")
     assert code == 0
     assert "ESM2Embeddings" in out
+
+
+# ── doctor ─────────────────────────────────────────────────────────────────
+
+
+def _modal_auth(monkeypatch, tmp_path, *, found: bool, accepted: bool = True, from_env_vars: bool = False) -> None:
+    """Pin Modal's credential state, so doctor is tested against it and not against this host.
+
+    ``found`` is what ``from_env`` decides from the environment alone; ``accepted`` is what the
+    server says about the token. They fail separately and are reported separately.
+    """
+    import modal
+    from modal.exception import AuthError
+
+    def from_env(*args, **kwargs):
+        if not found:
+            raise AuthError("Token missing.")
+        return modal.Client
+
+    def hello(*args, **kwargs):
+        if not accepted:
+            raise AuthError("Token not found")
+
+    monkeypatch.setattr(modal.Client, "from_env", from_env)
+    monkeypatch.setattr(modal.Client, "hello", hello)
+    monkeypatch.setattr("proto_tools.utils.modal_status.deployed_apps", lambda: {"proto-tools-esm2"})
+    monkeypatch.setenv("MODAL_CONFIG_PATH", str(tmp_path / "absent.toml"))
+    for var in ("MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET"):
+        if from_env_vars:
+            monkeypatch.setenv(var, "placeholder")
+        else:
+            monkeypatch.delenv(var, raising=False)
+
+
+def test_doctor_names_both_environment_variables_when_no_credential_is_found(monkeypatch, tmp_path) -> None:
+    """The remedy is the whole point of the verb: `modal token new` is unactionable in a sandbox."""
+    _modal_auth(monkeypatch, tmp_path, found=False)
+    code, out, _ = _run("doctor", "--json")
+
+    payload = json.loads(out)
+    assert code == 1
+    assert all(var in payload["remedies"][0] for var in ("MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET"))
+    assert "not found" in payload["checks"]["modal auth"]
+    assert "workspace" not in payload["checks"], "nothing may claim a workspace it could not reach"
+
+
+def test_doctor_separates_a_rejected_token_from_a_missing_one(monkeypatch, tmp_path) -> None:
+    """A revoked token satisfies `from_env` and fails every real call; reporting it OK is the bug."""
+    _modal_auth(monkeypatch, tmp_path, found=True, accepted=False, from_env_vars=True)
+    code, out, _ = _run("doctor", "--json")
+
+    payload = json.loads(out)
+    assert code == 1
+    assert "rejected" in payload["checks"]["modal auth"]
+    assert "workspace" not in payload["checks"]
+    assert "revoked" in payload["remedies"][0], "a found-but-refused token needs a different fix"
+
+
+def test_doctor_reports_which_mechanism_authenticated(monkeypatch, tmp_path) -> None:
+    """Which of the three mechanisms was used is the fact that ends the diagnosis."""
+    _modal_auth(monkeypatch, tmp_path, found=True, from_env_vars=True)
+    code, out, _ = _run("doctor")
+
+    assert code == 0
+    assert "OK via MODAL_TOKEN_ID/MODAL_TOKEN_SECRET" in out
+    assert "proto-tools-esm2" in out, "deployed apps are listed so the caller sees what is reachable"
+
+
+def test_doctor_json_carries_the_remedy_for_a_bug_report(monkeypatch, tmp_path) -> None:
+    """The JSON form is what gets pasted into an issue, so it must carry the fix, not just the fault."""
+    _modal_auth(monkeypatch, tmp_path, found=False)
+    code, out, _ = _run("doctor", "--json")
+
+    payload = json.loads(out)
+    assert code == 1
+    assert any("MODAL_TOKEN_ID" in r for r in payload["remedies"])
