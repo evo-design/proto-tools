@@ -281,6 +281,13 @@ deployment's extensions silently absent is worse than a loud failure:
 - a directory that does not exist, or whose name nothing could import, fails the deploy up front
   rather than inside a subprocess whose output is filtered to phase lines.
 
+Extension code that reaches a credentialed service needs credentials in the container.
+`PROTO_MODAL_SECRETS` names further Modal secrets, attached to the app rather than to each service
+class — Modal gives a function its app's secrets in addition to its own, so a service declaring
+secrets of its own keeps them. The HuggingFace secret is the default member of that list and needs
+no entry; naming others adds to it rather than replacing it, so gated weight downloads keep
+working. A name that does not exist in the workspace fails the deploy.
+
 A mounted directory excludes `.git` and the usual build artefacts. It does *not* exclude `tests`,
 which in someone else's tree may be a package their code imports. Note that `/root` precedes
 site-packages, so a directory sharing a name with an installed package shadows it.
@@ -346,7 +353,7 @@ agent's first orienting call, so the two surfaces differ on purpose.
 
 ## Configuration
 
-Eight environment variables, all optional, read in the environment a deploy runs from.
+Nine environment variables, all optional, read in the environment a deploy runs from.
 
 | Variable | Default | Effect |
 |---|---|---|
@@ -358,6 +365,7 @@ Eight environment variables, all optional, read in the environment a deploy runs
 | `PROTO_MODAL_EXTRA_PACKAGES` | unset | Requirements every service image installs. |
 | `PROTO_MODAL_EXTRA_SOURCE` | unset | Directories every service image carries, importable by their own names. |
 | `PROTO_MODAL_WORKER_PLUGINS` | unset | Modules a worker imports before serving its first call. Also re-read inside the container, which is where the import happens. |
+| `PROTO_MODAL_SECRETS` | unset | Names of further Modal secrets every service receives, alongside the HuggingFace one. |
 
 ### Container wall tiers
 
