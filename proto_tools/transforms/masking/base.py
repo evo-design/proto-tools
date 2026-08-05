@@ -16,6 +16,7 @@ from proto_tools.transforms.masking.maskers import (
     MaskingInput,
     MaskingMethod,
     compatible_methods,
+    split_tokens,
 )
 from proto_tools.utils import ConfigField
 from proto_tools.utils.sequence import validate_positions_list
@@ -32,32 +33,37 @@ MASK_TOKEN = "_"  # noqa: S105 -- not a password
 # ============================================================================
 
 
-def mutable_mask(seq: str, fixed: list[int] | None = None) -> list[bool]:
+def mutable_mask(seq: str, fixed: list[int] | None = None, token_size: int = 1) -> list[bool]:
     """Return a boolean mask where True = designable (eligible for masking).
 
     Args:
-        seq (str): Protein sequence (e.g. "MKTLLIFLA").
-        fixed (list[int] | None): 1-indexed positions to keep unchanged. Applied uniformly
-            to every sequence in a batch by the caller.
+        seq (str): Sequence to inspect (e.g. "MKTLLIFLA", or "AUGGCC" as codons).
+        fixed (list[int] | None): 1-indexed token positions to keep unchanged. Applied
+            uniformly to every sequence in a batch by the caller.
+        token_size (int): Characters per token.
 
     Returns:
-        list[bool]: List of bools, one per character in *seq*.
+        list[bool]: List of bools, one per token in *seq*.
     """
     fixed_set = set(fixed) if fixed else set()
     return [
-        # Position is designable if it's not already masked
+        # A token is designable if it is not already masked
         # and not in the fixed set (convert 0-indexed i to 1-indexed)
-        c != MASK_TOKEN and (i + 1) not in fixed_set
-        for i, c in enumerate(seq)
+        MASK_TOKEN not in token and (i + 1) not in fixed_set
+        for i, token in enumerate(split_tokens(seq, token_size))
     ]
 
 
-def apply_mask(seq: str, positions: list[int]) -> str:
-    """Replace characters at 0-indexed *positions* with MASK_TOKEN."""
-    chars = list(seq)
+def apply_mask(seq: str, positions: list[int], token_size: int = 1) -> str:
+    """Replace the tokens at 0-indexed *positions* with MASK_TOKEN.
+
+    A masked token keeps its width, so a codon becomes ``"___"`` rather than one character
+    and the reading frame survives masking.
+    """
+    tokens = split_tokens(seq, token_size)
     for p in positions:
-        chars[p] = MASK_TOKEN
-    return "".join(chars)
+        tokens[p] = MASK_TOKEN * token_size
+    return "".join(tokens)
 
 
 def validate_enough_mutable(
@@ -71,7 +77,7 @@ def validate_enough_mutable(
     if count > n_mutable:
         raise ValueError(
             f"Sequence {seq_index}: requested {count} mutations but only "
-            f"{n_mutable} mutable positions available (len={len(seq)})"
+            f"{n_mutable} mutable positions available (length {len(seq)}, {len(mutable)} tokens)"
         )
 
 
@@ -148,7 +154,7 @@ def weighted_sample(
     return [eligible[i] for i in chosen_idx]
 
 
-def apply_masking_strategy(config: Any, inputs: Any, position_score_fn: Any = None) -> Any:
+def apply_masking_strategy(config: Any, inputs: Any, position_score_fn: Any = None, token_size: int = 1) -> Any:
     """Apply a masking strategy to tool inputs, skipping if already masked.
 
     Intended to be called from a sample config's ``preprocess()`` hook.
@@ -164,8 +170,10 @@ def apply_masking_strategy(config: Any, inputs: Any, position_score_fn: Any = No
         inputs (Any): A ``BaseToolInput``-like object with a ``sequences`` field
             and a ``model_copy(update=...)`` method (Pydantic model).
         position_score_fn (Any): Optional callable that takes sequences and returns
-            per-position scores. Built by ``build_position_score_fn()`` in
+            one score per token. Built by ``build_position_score_fn()`` in
             the tool's ``preprocess()`` hook.
+        token_size (int): Characters per token for this tool's model. Passed by the tool
+            rather than configured, since it is fixed by the model's vocabulary.
 
     Returns:
         Any: The (possibly updated) inputs object.
@@ -188,6 +196,7 @@ def apply_masking_strategy(config: Any, inputs: Any, position_score_fn: Any = No
                     inputs.sequences,
                     position_score_fn=position_score_fn,
                     seed=config.seed,
+                    token_size=token_size,
                 )
             }
         )
@@ -304,6 +313,7 @@ class RandomMaskingStrategy(BaseModel):
         sequences: list[str],
         position_score_fn: Callable[..., Any] | None = None,
         seed: int | None = None,
+        token_size: int = 1,
     ) -> list[str]:
         """Apply the masking strategy to a batch of sequences.
 
@@ -320,9 +330,13 @@ class RandomMaskingStrategy(BaseModel):
                 model-based method, it must be supplied explicitly.
             seed (int | None): Random seed for reproducible masking. Creates a seeded
                 RandomState for position selection. If None, uses global numpy RNG.
+            token_size (int): Characters per token, supplied by the calling tool rather
+                than configured: it is a property of the model, not a choice. One for a
+                residue-level model, three for a codon-level one.
 
         Returns:
-            list[str]: List of masked sequences with ``_`` at selected positions.
+            list[str]: List of masked sequences, each selected token replaced by ``_``
+                repeated to the token's width.
         """
         # Lazy-init the masker (persists for the lifetime of this strategy)
         if self._masker is None:
@@ -341,7 +355,7 @@ class RandomMaskingStrategy(BaseModel):
             )
 
         assert self._masker is not None
-        all_scores = self._masker.score(sequences, position_score_fn=position_score_fn)
+        all_scores = self._masker.score(sequences, position_score_fn=position_score_fn, token_size=token_size)
 
         # Create seeded RNG if seed is provided
         rng = np.random.RandomState(seed) if seed is not None else None
@@ -351,7 +365,7 @@ class RandomMaskingStrategy(BaseModel):
 
         results = []
         for i, seq in enumerate(sequences):
-            mutable = mutable_mask(seq, self.fixed_positions)
+            mutable = mutable_mask(seq, self.fixed_positions, token_size)
             eligible = [j for j, m in enumerate(mutable) if m]
             count = _resolve_count(
                 self.num_mutations,
@@ -362,7 +376,7 @@ class RandomMaskingStrategy(BaseModel):
 
             scores = [all_scores[i][j] / temperature for j in eligible]
             chosen = weighted_sample(eligible, scores, count, rng=rng)
-            results.append(apply_mask(seq, chosen))
+            results.append(apply_mask(seq, chosen, token_size))
         return results
 
 
