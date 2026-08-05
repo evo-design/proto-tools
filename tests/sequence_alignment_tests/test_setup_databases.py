@@ -7,8 +7,19 @@ from typing import Any
 
 import pytest
 
-from proto_tools.databases import DatasetRegistry, IndexStep
+from proto_tools.databases import DatasetRegistry, DownloadSpec, IndexStep
 from proto_tools.tools.sequence_alignment.mmseqs2 import setup_databases
+
+CURL = ("curl", ["curl", "-L", "--fail"])
+
+
+def _serving(monkeypatch: pytest.MonkeyPatch, payload: bytes) -> None:
+    """Stub the downloader so it writes ``payload`` to whatever path the argv names."""
+
+    def fake_run(cmd: list[str], *_: Any, **__: Any) -> None:
+        Path(cmd[cmd.index("-o") + 1]).write_bytes(payload)
+
+    monkeypatch.setattr(setup_databases.subprocess, "run", fake_run)
 
 
 def test_split_memory_limit_caps_at_safety_fraction(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -108,3 +119,62 @@ def test_ensure_mmseqs_on_path_raises_when_binary_absent(monkeypatch: pytest.Mon
 
     with pytest.raises(RuntimeError, match="mmseqs binary not found"):
         setup_databases._ensure_mmseqs_on_path()
+
+
+def test_incomplete_cached_file_is_downloaded_again(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A cached file whose size disagrees with the spec is replaced, not trusted."""
+    spec = DownloadSpec(url="https://example.invalid/g.fa.gz", filename="g.fa.gz", expected_bytes=8)
+    (tmp_path / "g.fa.gz").write_bytes(b"cut")
+    _serving(monkeypatch, b"complete")
+
+    assert setup_databases._download_file(spec, tmp_path, CURL) is True
+    assert (tmp_path / "g.fa.gz").read_bytes() == b"complete"
+
+
+def test_complete_cached_file_is_reused(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A cached file of the declared size is kept without re-downloading."""
+    spec = DownloadSpec(url="https://example.invalid/g.fa.gz", filename="g.fa.gz", expected_bytes=8)
+    (tmp_path / "g.fa.gz").write_bytes(b"complete")
+
+    def explode(*_: Any, **__: Any) -> None:
+        raise AssertionError("should not download an already-complete file")
+
+    monkeypatch.setattr(setup_databases.subprocess, "run", explode)
+
+    assert setup_databases._download_file(spec, tmp_path, CURL) is True
+
+
+def test_short_download_leaves_nothing_at_the_final_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A transfer that ends early raises and leaves neither the target nor the partial file."""
+    spec = DownloadSpec(url="https://example.invalid/g.fa.gz", filename="g.fa.gz", expected_bytes=8)
+    _serving(monkeypatch, b"cut")
+
+    with pytest.raises(RuntimeError, match="did not download completely"):
+        setup_databases._download_file(spec, tmp_path, CURL)
+
+    assert not (tmp_path / "g.fa.gz").exists()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_checksum_mismatch_is_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A download of the right size but the wrong SHA-256 is discarded."""
+    spec = DownloadSpec(url="https://example.invalid/g.fa.gz", filename="g.fa.gz", sha256="00" * 32)
+    _serving(monkeypatch, b"complete")
+
+    with pytest.raises(RuntimeError, match="did not download completely"):
+        setup_databases._download_file(spec, tmp_path, CURL)
+
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_unverifiable_spec_keeps_previous_behaviour(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Without a declared size or checksum, any existing file is still reused."""
+    spec = DownloadSpec(url="https://example.invalid/g.fa.gz", filename="g.fa.gz")
+    (tmp_path / "g.fa.gz").write_bytes(b"whatever")
+
+    def explode(*_: Any, **__: Any) -> None:
+        raise AssertionError("should not download when the file is present and unverifiable")
+
+    monkeypatch.setattr(setup_databases.subprocess, "run", explode)
+
+    assert setup_databases._download_file(spec, tmp_path, CURL) is True
