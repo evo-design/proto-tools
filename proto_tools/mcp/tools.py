@@ -167,12 +167,31 @@ def workspace_info(device: Device = "modal") -> dict[str, Any]:
     # rather than reporting a working install as unauthenticated.
     workspace = getattr(modal.config, "_profile", None) or "(unknown)"
 
+    from proto_tools.modal.app import environment_exists
+
+    environment = resolve_environment()
+    # Asked before counting, because an environment that does not exist counts zero apps and
+    # reads as "nothing deployed yet" — which sends the caller off to deploy into a place that
+    # cannot receive it. The one-time setup is the actual answer.
+    if environment_exists(environment) is False:
+        return {
+            "device": "modal",
+            "authenticated": True,
+            "workspace": workspace,
+            "environment": environment,
+            "environment_exists": False,
+            "deployable": False,
+            "error": f"Modal environment {environment!r} has not been created in this workspace.",
+            "hint": f"Create it with: proto-tools deploy --create-env --env {environment}",
+        }
+
     deployed = deployed_apps()
     return {
         "device": "modal",
         "authenticated": True,
         "workspace": workspace,
-        "environment": resolve_environment(),
+        "environment": environment,
+        "environment_exists": True,
         "apps_deployed": len(deployed),
         "apps_available": len(APP_BUCKETS),
         "tools_total": len(_registry()),

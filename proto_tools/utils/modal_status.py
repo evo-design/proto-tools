@@ -74,19 +74,25 @@ def auth_mechanism() -> str | None:
 
 
 def deployed_apps() -> set[str]:
-    """Apps that currently resolve in the active Modal workspace.
+    """Apps that currently resolve in the Modal environment this session dispatches into.
 
     One hydrate per app, no containers started. Failures read as "not deployed"
     rather than propagating.
+
+    The environment is named rather than inherited, and must be: a dispatch resolves
+    ``proto-env`` while an unconfigured Modal profile resolves the workspace default, so asking
+    ambiently reports on a different environment than the one a call would actually reach.
     """
     import modal
 
+    from proto_tools.modal.app import resolve_environment
     from proto_tools.modal.manifest import APP_BUCKETS
 
+    environment = resolve_environment()
     live = set()
     for app_name, services in APP_BUCKETS.items():
         try:
-            modal.Cls.from_name(app_name, services[0]).hydrate()
+            modal.Cls.from_name(app_name, services[0], environment_name=environment).hydrate()
             live.add(app_name)
         except Exception:  # noqa: S112 — an unreachable app is "not deployed", not an error
             continue
