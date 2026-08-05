@@ -3,6 +3,7 @@
 import functools
 import logging
 import os
+import re
 
 import modal
 
@@ -45,6 +46,44 @@ def _hf_token_secret() -> modal.Secret:
 
 
 HF_TOKEN_SECRET = _hf_token_secret()
+
+# Additional Modal secrets attached to every service, by name, separated by commas or whitespace.
+# A deployment whose workers reach a private registry, an object store, or any other credentialed
+# service names those secrets here rather than editing each service.
+#
+#     PROTO_MODAL_SECRETS=my-object-store,my-registry proto-tools deploy --apps esm2
+#
+# Names are resolved in the workspace being deployed into; one that does not exist there fails the
+# deploy. The HuggingFace secret is the default member of this list and needs no entry.
+EXTRA_SECRETS_ENV = "PROTO_MODAL_SECRETS"
+
+
+def service_secrets() -> list[modal.Secret]:
+    """Return the secrets every service in every app receives.
+
+    Attached to the app rather than to each service class, since Modal gives a function its app's
+    secrets in addition to its own. A service listing further secrets keeps them.
+
+    Returns:
+        list[modal.Secret]: The HuggingFace secret, then each name in :data:`EXTRA_SECRETS_ENV`.
+    """
+    named = [name for name in re.split(r"[,\s]+", os.getenv(EXTRA_SECRETS_ENV, "")) if name]
+    return [HF_TOKEN_SECRET, *(modal.Secret.from_name(name) for name in named)]
+
+
+def secrets_env() -> dict[str, str]:
+    """Return :data:`EXTRA_SECRETS_ENV` as image env, or empty when unset.
+
+    A container re-imports the service module, so :func:`service_secrets` runs there too. Without
+    the variable it would build a shorter list than the deploy did, and Modal refuses to start a
+    container whose dependency count disagrees with what the deploy registered.
+
+    Returns:
+        dict[str, str]: Mapping to merge into a service image's runtime environment.
+    """
+    raw = os.getenv(EXTRA_SECRETS_ENV)
+    return {EXTRA_SECRETS_ENV: raw} if raw else {}
+
 
 # The Modal environment proto-tools deploys into and dispatches to, unless told otherwise.
 #
@@ -117,8 +156,8 @@ SCALEDOWN_WINDOW = int(os.getenv("PROTO_MODAL_SCALEDOWN_WINDOW", "30"))
 
 @functools.cache
 def get_app(name: str) -> modal.App:
-    """Return the memoized ``modal.App`` for ``name``."""
-    return modal.App(name)
+    """Return the memoized ``modal.App`` for ``name``, carrying the secrets every service needs."""
+    return modal.App(name, secrets=service_secrets())
 
 
 def get_app_for_service(service_class_name: str) -> modal.App:
@@ -128,6 +167,7 @@ def get_app_for_service(service_class_name: str) -> modal.App:
 
 __all__ = [
     "CACHE_VOLUME_NAME",
+    "EXTRA_SECRETS_ENV",
     "HF_TOKEN_SECRET",
     "MODEL_CACHE",
     "NO_RETRIES",
@@ -135,4 +175,5 @@ __all__ = [
     "get_app",
     "get_app_for_service",
     "retries_for_service",
+    "service_secrets",
 ]

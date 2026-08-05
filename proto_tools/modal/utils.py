@@ -9,6 +9,7 @@ from typing import Any
 
 import modal
 
+from proto_tools.modal.app import secrets_env
 from proto_tools.modal.hooks import CallContext, apply_payload_hooks, load_plugins, plugin_env, run_with_middleware
 from proto_tools.modal.progress import container_progress
 from proto_tools.utils.base_config import BaseConfig
@@ -179,7 +180,11 @@ def env_for() -> dict[str, str]:
 #
 # The plugin list belongs here rather than in an image layer below the warmup: it is runtime
 # metadata, and renaming a module would otherwise rebuild and re-warm every service.
-RUNTIME_ENV: dict[str, str] = {"PROTO_CAPTURE_ERRORS": "1", **plugin_env()}
+#
+# The secret names travel with it because a container re-imports the service module and rebuilds
+# the app. Absent, it would name fewer secrets there than the deploy did, and Modal rejects a
+# container whose dependency count disagrees with the deployed function's.
+RUNTIME_ENV: dict[str, str] = {"PROTO_CAPTURE_ERRORS": "1", **plugin_env(), **secrets_env()}
 
 
 # Don't add ``examples`` — :func:`stage_all_excluded_fixtures` reads
