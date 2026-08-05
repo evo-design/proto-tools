@@ -14,6 +14,7 @@ from typing import Any, Literal
 
 from pydantic import field_validator
 
+from proto_tools.transforms.masking import MASK_TOKEN, validate_whole_token_masks
 from proto_tools.utils import BaseConfig, BaseToolInput, ConfigField, InputField
 from proto_tools.utils.sequence import return_invalid_nucleotide_chars
 
@@ -42,6 +43,9 @@ CODONFM_CHECKPOINTS: dict[str, dict[str, str]] = {
 
 # Encodon's ``max_position_embeddings`` is 2048 tokens; two are the CLS/SEP specials, so a CDS is
 # capped at (2048 - 2) * 3 = 6138 nt (2046 codons). Longer inputs are out of the training regime.
+# Nucleotides per codon: Encodon's token width, and the unit masking counts in.
+CODON_SIZE = 3
+
 CODONFM_MAX_TOKENS = 2048
 CODONFM_MAX_NT = (CODONFM_MAX_TOKENS - 2) * 3
 
@@ -85,7 +89,7 @@ def one_hot_codon_logits(sequence: str, *, sharpness: float = 20.0) -> list[list
     return rows
 
 
-def normalize_codon_sequence(sequence: str) -> str:
+def normalize_codon_sequence(sequence: str, *, allow_masks: bool = False) -> str:
     """Uppercase, strip whitespace, map RNA ``U`` to ``T``, and validate a codon-aligned CDS.
 
     Encodon reads coding sequences in the DNA alphabet at 3-nt codon resolution, so the length
@@ -95,18 +99,21 @@ def normalize_codon_sequence(sequence: str) -> str:
 
     Args:
         sequence (str): A single coding sequence.
+        allow_masks (bool): Accept ``_`` as a mask. Only sampling redesigns codons, so only its
+            input permits them, and a mask must cover a whole codon: ``"ATG___TTT"`` asks for
+            codon 2, while ``"ATG_CCTTT"`` leaves ``"_CC"``, which is neither codon nor mask.
 
     Returns:
         str: The normalized DNA-alphabet CDS.
 
     Raises:
-        ValueError: If empty, not a multiple of 3 in length, over the length cap, or containing
-            characters other than A, C, G, T, or U.
+        ValueError: If empty, not a multiple of 3 in length, over the length cap, containing
+            characters other than A, C, G, T, or U, or masking part of a codon.
     """
     if not sequence or not sequence.strip():
         raise ValueError("Sequence cannot be empty")
     seq = "".join(sequence.upper().split()).replace("U", "T")
-    invalid = return_invalid_nucleotide_chars(seq)
+    invalid = return_invalid_nucleotide_chars(seq, additional_valid_chars=MASK_TOKEN if allow_masks else None)
     if invalid:
         raise ValueError(f"Invalid nucleotide characters in sequence: {', '.join(sorted(invalid))}")
     if len(seq) % 3 != 0:
@@ -115,6 +122,8 @@ def normalize_codon_sequence(sequence: str) -> str:
         raise ValueError(
             f"CodonFM supports CDS up to {CODONFM_MAX_NT} nt ({CODONFM_MAX_TOKENS - 2} codons); got {len(seq)}"
         )
+    if allow_masks:
+        validate_whole_token_masks(seq, CODON_SIZE)
     return seq
 
 
@@ -155,6 +164,32 @@ class CodonSequenceInput(BaseToolInput):
     def __len__(self) -> int:
         """Return the number of input sequences."""
         return len(self.sequences)
+
+
+class MaskableCodonSequenceInput(CodonSequenceInput):
+    """Coding sequences for a tool that redesigns codons, so ``_`` is allowed.
+
+    Sampling is the only CodonFM tool that rewrites its input, and therefore the only one where
+    naming the codons to rewrite makes sense. Scoring a sequence with a hole in it does not, so
+    the other tools keep rejecting ``_`` and say so at validation rather than inside the model.
+
+    Attributes:
+        sequences (list[str]): Coding sequence(s) at codon resolution, optionally with whole
+            codons masked as ``___`` to choose which positions are resampled.
+    """
+
+    sequences: list[str] = InputField(
+        title="Sequences",
+        description="Coding sequence(s) to resample; mask whole codons as '___' to pick which, or leave unmasked.",
+        min_length=1,
+        examples=["ATGGTGAGCAAGGGCGAGGAG", ["ATG___AGCAAG", "ATGGCCACC"]],
+    )
+
+    @field_validator("sequences")
+    @classmethod
+    def validate_sequences(cls, sequences: list[str]) -> list[str]:
+        """Validate and normalize, permitting whole-codon masks."""
+        return [normalize_codon_sequence(sequence, allow_masks=True) for sequence in sequences]
 
 
 class CodonFMConfig(BaseConfig):

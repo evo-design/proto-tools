@@ -8,14 +8,16 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from proto_tools.tools.masked_models.codonfm.shared_data_models import (
+    CODON_SIZE,
     CodonFMCheckpoint,
-    CodonSequenceInput,
+    MaskableCodonSequenceInput,
     resolve_checkpoint_source,
 )
 from proto_tools.tools.tool_registry import tool
+from proto_tools.transforms.masking import RandomMaskingStrategy, apply_masking_strategy
 from proto_tools.utils import BaseConfig, BaseToolOutput, ConfigField, ToolInstance
 
-CodonFMSampleInput = CodonSequenceInput
+CodonFMSampleInput = MaskableCodonSequenceInput
 
 
 class CodonFMSampleConfig(BaseConfig):
@@ -23,9 +25,10 @@ class CodonFMSampleConfig(BaseConfig):
 
     Attributes:
         model_checkpoint (CodonFMCheckpoint): Encodon checkpoint to sample from.
-        num_mutations (int | None): Exact number of codon positions to resample per sequence.
-            The sampled codon can equal the original. When ``None``, ``mask_fraction`` is used.
-        mask_fraction (float): Fraction of codons to resample when ``num_mutations`` is ``None``.
+        masking_strategy (RandomMaskingStrategy): Which codons to resample, counted in codons
+            rather than nucleotides. Ignored when the input already carries ``___`` masks, which
+            name the positions outright. ``fixed_positions`` pins codons that must survive, which
+            is how a start or stop codon is kept intact.
         temperature (float): Softmax temperature for codon sampling; higher is more diverse.
         device (str): Device used for CodonFM inference.
         batch_size (int): Number of (same-length) sequences per GPU forward pass.
@@ -37,19 +40,10 @@ class CodonFMSampleConfig(BaseConfig):
         description="Encodon checkpoint: encodon_80m | encodon_600m | encodon_1b | encodon_1b_cdwt.",
         reload_on_change=True,
     )
-    num_mutations: int | None = ConfigField(
-        title="Num Mutations",
-        default=None,
-        ge=1,
-        description="Exact codons to resample per sequence; None uses mask_fraction.",
-    )
-    mask_fraction: float = ConfigField(
-        title="Mask Fraction",
-        default=0.15,
-        gt=0.0,
-        allow_inf_nan=False,
-        le=1.0,
-        description="Fraction of codons to resample when num_mutations is None.",
+    masking_strategy: RandomMaskingStrategy = ConfigField(
+        title="Masking Strategy",
+        default_factory=RandomMaskingStrategy,
+        description="Codon positions to resample. Ignored when the input already contains '___'.",
     )
     temperature: float = ConfigField(
         title="Temperature",
@@ -71,6 +65,14 @@ class CodonFMSampleConfig(BaseConfig):
         description="Number of same-length sequences to sample per GPU batch.",
         include_in_key=False,
     )
+
+    def preprocess(self, inputs: Any) -> Any:
+        """Mask the codons to resample, unless the caller already marked them.
+
+        ``token_size`` is the model's codon width rather than a setting: it comes from Encodon's
+        vocabulary, so it is passed here and never exposed as a config field.
+        """
+        return apply_masking_strategy(self, inputs, token_size=CODON_SIZE)
 
 
 class CodonFMSampleResult(BaseModel):
@@ -159,7 +161,8 @@ def run_codonfm_sample(
 ) -> CodonFMSampleOutput:
     """Resample masked codons in coding sequences with CodonFM (Encodon).
 
-    A subset of codon positions (``num_mutations`` or ``mask_fraction``) is masked and refilled
+    A subset of codon positions (chosen by ``masking_strategy``, or marked as ``___`` in the
+    input) is masked and refilled
     by sampling from the model's per-codon distribution over the 61 sense codons (stop codons are
     excluded, so a resampled codon is never a premature stop); sequence length is preserved.
 
@@ -172,20 +175,13 @@ def run_codonfm_sample(
         CodonFMSampleOutput: One resampled coding sequence per input.
     """
     safetensors_url, config_url, filename, subdir = resolve_checkpoint_source(config.model_checkpoint)
-    if config.num_mutations is not None:
-        shortest = min(len(sequence) // 3 for sequence in inputs.sequences)
-        if config.num_mutations > shortest:
-            raise ValueError(
-                f"num_mutations ({config.num_mutations}) exceeds the shortest input sequence ({shortest} codons)"
-            )
 
     output_data = ToolInstance.dispatch(
         "codonfm",
         {
             "operation": "sample",
+            # Already masked: preprocess() ran the strategy, or the caller marked codons itself.
             "sequences": inputs.sequences,
-            "num_mutations": config.num_mutations,
-            "mask_fraction": config.mask_fraction,
             "temperature": config.temperature,
             "safetensors_url": safetensors_url,
             "config_url": config_url,

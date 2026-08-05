@@ -43,6 +43,10 @@ LOCK_TIMEOUT_SECONDS = 600
 # so sampling is restricted to the 61 sense codons.
 _STOP_CODONS = frozenset({"TAA", "TAG", "TGA"})
 
+# A codon marked for resampling. The caller masks whole codons, so a mask is three characters
+# wide and the reading frame is unchanged by masking.
+_MASK_CODON = "___"
+
 
 # ---------------------------------------------------------------------------
 # HuggingFace checkpoint provisioning (public NVIDIA Open Model License weights)
@@ -479,29 +483,24 @@ class CodonFMModel:
         self,
         *,
         sequences: list[str],
-        num_mutations: int | None,
-        mask_fraction: float,
         temperature: float,
         batch_size: int,
         device: str,
-        seed: int | None = None,
     ) -> list[str]:
-        """Resample masked codons: mask a subset of codon positions and draw new codons from Encodon.
+        """Refill the codons marked ``___`` by drawing new ones from Encodon.
 
-        For each sequence, ``num_mutations`` (or ``round(mask_fraction * n_codons)``) codon
-        positions are chosen uniformly at random, masked, and refilled by sampling from the
-        model's per-codon distribution (temperature-scaled softmax over the 61 sense codons; the
-        three stop codons are excluded so resampling never inserts a premature stop) in a single
-        forward pass. Sequence length is preserved.
+        Which codons to resample is decided before the call and carried in the sequences
+        themselves, the same contract the ESM samplers use. Each masked codon is refilled from
+        the model's per-codon distribution (temperature-scaled softmax over the 61 sense codons;
+        the three stop codons are excluded so resampling never inserts a premature stop) in a
+        single forward pass. Sequence length is preserved.
 
         Args:
-            sequences: Coding sequences (codon-aligned DNA).
-            num_mutations: Exact number of codons to resample; ``None`` uses ``mask_fraction``.
-            mask_fraction: Fraction of codons to resample when ``num_mutations`` is ``None``.
+            sequences: Coding sequences (codon-aligned DNA) with resample positions as ``___``.
             temperature: Softmax temperature for codon sampling (higher = more diverse).
             batch_size: Sequences per forward pass (grouped by length).
-            device: Execution device.
-            seed: Seed for reproducible position selection.
+            device: Execution device. Codon draws follow the process-wide torch seed, set by
+                the dispatcher before this runs.
 
         Returns:
             list[str]: One mutated coding sequence per input, in input order.
@@ -512,25 +511,24 @@ class CodonFMModel:
 
         self.to_device(device)
         dev = torch.device(device)
-        rng = np.random.default_rng(seed)
         # Restrict resampling to the 61 sense codons so a masked interior codon can never be
         # replaced with a premature stop (TAA/TAG/TGA); ``codons``/``codon_token_ids`` stay aligned.
         codons = [c for c in self.tokenizer.codons if c not in _STOP_CODONS]
         codon_token_ids = torch.tensor([self.tokenizer.encoder[c] for c in codons], device=dev)
         mask_id = int(self.tokenizer.mask_token_id)
 
-        # Pick the codon positions to resample for each sequence up front (deterministic given the seed).
+        # Read the resample positions off the sequences, and fill each masked codon with a
+        # placeholder so the tokenizer sees a real codon. The placeholder never reaches the
+        # model: every masked position is overwritten with mask_id before the forward pass.
+        placeholder = codons[0]
         plans: list[tuple[int, list[int]]] = []
+        unmasked: list[str] = []
         for seq in sequences:
-            n_codons = len(seq) // 3
-            if num_mutations is not None:
-                k = int(num_mutations)
-                if k > n_codons:
-                    raise ValueError(f"codonfm: num_mutations ({k}) exceeds sequence length ({n_codons} codons)")
-            else:
-                k = min(n_codons, max(1, round(mask_fraction * n_codons)))
-            positions = sorted(rng.choice(n_codons, size=k, replace=False).tolist()) if k > 0 else []
-            plans.append((n_codons, positions))
+            seq_codons = [seq[i : i + 3] for i in range(0, len(seq), 3)]
+            positions = [i for i, codon in enumerate(seq_codons) if codon == _MASK_CODON]
+            plans.append((len(seq_codons), positions))
+            unmasked.append("".join(placeholder if codon == _MASK_CODON else codon for codon in seq_codons))
+        sequences = unmasked
 
         mutated = list(sequences)
         # Group by codon count so a batch shares one context length.
@@ -572,19 +570,22 @@ _MODEL = CodonFMModel()
 
 def _validate_request(input_dict: dict[str, Any], operation: str) -> None:
     """Reject malformed raw-worker payloads before resolving or loading a checkpoint."""
+    # Sampling rewrites codons, so its sequences carry ``___`` marking which ones to redraw.
+    # No other operation does, and a mask reaching one of those is a caller error worth naming.
+    alphabet = "ACGT_" if operation == "sample" else "ACGT"
 
     def valid_sequence(sequence: Any) -> bool:
         return (
             isinstance(sequence, str)
             and 0 < len(sequence) <= 6138
             and len(sequence) % 3 == 0
-            and all(base in "ACGT" for base in sequence)
+            and all(base in alphabet for base in sequence)
         )
 
     if operation in {"fitness", "embeddings", "sample"}:
         sequences = input_dict.get("sequences")
         if not isinstance(sequences, list) or not sequences or not all(valid_sequence(seq) for seq in sequences):
-            raise ValueError(f"codonfm: {operation} requires non-empty, codon-aligned ACGT sequences")
+            raise ValueError(f"codonfm: {operation} requires non-empty, codon-aligned {alphabet} sequences")
     elif operation == "score":
         mutations = input_dict.get("mutations")
         if not isinstance(mutations, list) or not mutations or not all(isinstance(item, dict) for item in mutations):
@@ -613,17 +614,11 @@ def _validate_request(input_dict: dict[str, Any], operation: str) -> None:
             raise ValueError("codonfm: gradient logits must be a finite L x 64 numeric matrix")
 
     if operation == "sample":
-        num_mutations = input_dict.get("num_mutations")
-        if num_mutations is not None and (
-            isinstance(num_mutations, bool) or not isinstance(num_mutations, int) or num_mutations < 1
-        ):
-            raise ValueError("codonfm: num_mutations must be a positive integer or null")
-        for name, default, upper in (("mask_fraction", 0.15, 1.0), ("temperature", 1.0, None)):
-            value = input_dict.get(name, default)
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
-                raise ValueError(f"codonfm: {name} must be a positive finite number")
-            if upper is not None and value > upper:
-                raise ValueError(f"codonfm: {name} must be at most {upper}")
+        value = input_dict.get("temperature", 1.0)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+            raise ValueError("codonfm: temperature must be a positive finite number")
+        if not any(_MASK_CODON in sequence for sequence in input_dict["sequences"]):
+            raise ValueError("codonfm: sample needs at least one masked codon ('___') to resample")
     elif operation == "gradient":
         temperature = input_dict.get("temperature")
         if temperature is not None and (
@@ -680,12 +675,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         return {
             "sequences": _MODEL.sample_sequences(
                 sequences=input_dict["sequences"],
-                num_mutations=input_dict.get("num_mutations"),
-                mask_fraction=float(input_dict.get("mask_fraction", 0.15)),
                 temperature=float(input_dict.get("temperature", 1.0)),
                 batch_size=batch_size,
                 device=device,
-                seed=input_dict.get("seed"),
             )
         }
     if operation == "gradient":
