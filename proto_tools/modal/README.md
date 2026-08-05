@@ -30,22 +30,7 @@ modal setup
 
 This writes a token to `~/.modal.toml`.
 
-To check your setup at any point, run `proto-tools doctor`. It reports whether Modal is reachable
-from where `proto-tools` runs, and names the fix when it is not.
-
-#### Where credentials come from
-
-`modal setup` writes `~/.modal.toml`, which suits a machine you work on directly. Inside a
-container, a CI job, or an agent sandbox, that file is often unwritable or invisible to the
-process, so Modal reads credentials from the environment as well:
-
-```bash
-export MODAL_TOKEN_ID=...
-export MODAL_TOKEN_SECRET=...
-```
-
-`MODAL_CONFIG_PATH` is a third option, pointing Modal at a token file elsewhere on disk. Any of
-the three works, and `proto-tools doctor` reports which one was used.
+To check your setup at any point, run `proto-tools doctor`.
 
 If you have multiple people who need access to the same tools, you can create a
 shared workspace. This will enable each user to access the same deployed apps and
