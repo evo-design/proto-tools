@@ -135,13 +135,15 @@ def build_server(device: Device = "modal") -> FastMCP:
         return impl.list_tools(deployed_only=deployed_only, category=category, device=device)
 
     @mcp.tool
-    def search_tools(query: str, deployed_only: bool = True) -> list[dict[str, Any]]:
-        """Find tools by keyword, matching the tool key and its description.
+    def search_tools(query: str, deployed_only: bool = True, limit: int = 10) -> dict[str, Any]:
+        """Find tools by keyword, matching the tool key, category and summary.
 
         Useful for questions like "what can fold a protein" or "which tools
-        score sequences".
+        score sequences". Returns the best `limit` matches under `hits`, each
+        with the `score` it ranked on, plus `n_total` for how many matched in
+        all — raise `limit` only if the total says it is worth it.
         """
-        return impl.search_tools(query, deployed_only=deployed_only, device=device)
+        return impl.search_tools(query, deployed_only=deployed_only, limit=limit, device=device)
 
     @mcp.tool
     def get_tool_schema(tool_key: str) -> dict[str, Any]:
