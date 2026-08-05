@@ -252,28 +252,38 @@ was built with. Three variables, read where the deploy runs, cover both:
 
 | Variable | Effect |
 |---|---|
-| `PROTO_MODAL_EXTRA_PACKAGES` | Requirements every service image installs. Whitespace-separated, since a specifier may contain a comma. |
-| `PROTO_MODAL_EXTRA_SOURCE` | Directories every service image carries, separated by `os.pathsep`. Each is mounted under `/root` by its own name and imports as that name. |
+| `PROTO_MODAL_EXTRA_PACKAGES` | Requirements every service image installs. Whitespace-separated, since a specifier may contain a comma — which also means an environment marker cannot be expressed here. |
+| `PROTO_MODAL_EXTRA_SOURCE` | Directories every service image carries, separated by `os.pathsep`. Each is mounted under `/root` by its own name and imports as that name, so the name must be a Python identifier. |
 | `PROTO_MODAL_WORKER_PLUGINS` | Modules a worker imports before serving its first call. Comma- or whitespace-separated. |
 
 ```bash
 PROTO_MODAL_EXTRA_PACKAGES="alpha>=1 beta" \
-PROTO_MODAL_EXTRA_SOURCE=/path/to/observability \
-PROTO_MODAL_WORKER_PLUGINS=observability.hooks \
+PROTO_MODAL_EXTRA_SOURCE=/path/to/extras \
+PROTO_MODAL_WORKER_PLUGINS=extras.hooks \
 proto-tools deploy --apps tmalign --env proto-env
 ```
 
-All three are applied by `with_proto_tools`, which every service image is built through — a guard
-test asserts that, since a service bypassing it would silently ignore all three.
+Packages and source are added by `with_proto_tools`, below proto-tools' own layers, so editing
+proto-tools does not rebuild them. The plugin list travels in `RUNTIME_ENV` instead, applied
+*above* the warmup: it is runtime metadata, and renaming a module would otherwise rebuild and
+re-warm all 54 images. Guard tests assert every service applies both, since the two that once
+omitted `RUNTIME_ENV` loaded no plugins at all while deploying and smoke-testing green.
 
-Plugins are imported once per process, on the first call a worker serves. The deploy-time warmup
-calls run functions directly rather than through `run_tool_call`, so it never loads them. A module
-that cannot be imported raises rather than being skipped: a worker that served calls without a
-deployment's extensions would silently drop whatever they were responsible for.
+Plugins are imported once per process, on the first call a worker serves — not at `@modal.enter`.
+So a middleware cannot observe what a service does in its enter hook, and a cold container charges
+the import to its first request. The deploy-time warmup calls run functions directly rather than
+through `run_tool_call`, so it never loads them.
 
-Extra layers are added below proto-tools' own, so editing proto-tools does not rebuild them. A
-directory named by `PROTO_MODAL_EXTRA_SOURCE` that does not exist fails the deploy rather than the
-first call.
+Both failure modes are surfaced rather than deferred, because a worker serving calls with a
+deployment's extensions silently absent is worse than a loud failure:
+
+- a module that cannot be imported raises an `ImportError` naming `PROTO_MODAL_WORKER_PLUGINS`;
+- a directory that does not exist, or whose name nothing could import, fails the deploy up front
+  rather than inside a subprocess whose output is filtered to phase lines.
+
+A mounted directory excludes `.git` and the usual build artefacts. It does *not* exclude `tests`,
+which in someone else's tree may be a package their code imports. Note that `/root` precedes
+site-packages, so a directory sharing a name with an installed package shadows it.
 
 ## Hosted environments
 
@@ -300,7 +310,7 @@ Eight environment variables, all optional, read in the environment a deploy runs
 | `PROTO_MODAL_PROTO_TOOLS` | unset | Build from this proto-tools checkout instead of the installed one. |
 | `PROTO_MODAL_EXTRA_PACKAGES` | unset | Requirements every service image installs. |
 | `PROTO_MODAL_EXTRA_SOURCE` | unset | Directories every service image carries, importable by their own names. |
-| `PROTO_MODAL_WORKER_PLUGINS` | unset | Modules a worker imports before serving its first call. |
+| `PROTO_MODAL_WORKER_PLUGINS` | unset | Modules a worker imports before serving its first call. Also re-read inside the container, which is where the import happens. |
 
 ### Container wall tiers
 

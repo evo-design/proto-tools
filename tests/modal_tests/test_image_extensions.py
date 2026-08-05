@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import os
 from pathlib import Path
 from typing import Any
@@ -11,10 +12,20 @@ import pytest
 from proto_tools.modal.base_images import (
     EXTRA_PACKAGES_ENV,
     EXTRA_SOURCE_ENV,
+    EXTRA_SOURCE_IGNORE,
     _with_extras,
     extra_packages,
     extra_source_dirs,
 )
+from proto_tools.modal.hooks import PLUGINS_ENV
+from tests.modal_tests.helpers import MODAL_ROOT, service_modules
+
+
+@pytest.fixture(autouse=True)
+def _clear_extension_env(monkeypatch: pytest.MonkeyPatch):
+    """A developer with any of these exported would otherwise fail tests that assert exact layers."""
+    for name in (EXTRA_PACKAGES_ENV, EXTRA_SOURCE_ENV, PLUGINS_ENV):
+        monkeypatch.delenv(name, raising=False)
 
 
 class _RecordingImage:
@@ -31,16 +42,9 @@ class _RecordingImage:
         self.calls.append(("add_local_dir", args, kwargs))
         return self
 
-    def env(self, *args: Any, **kwargs: Any) -> _RecordingImage:
-        self.calls.append(("env", args, kwargs))
-        return self
 
-
-def test_no_extras_leaves_the_image_untouched(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_no_extras_leaves_the_image_untouched() -> None:
     """Every deployment that asks for nothing must get the image it would have had."""
-    monkeypatch.delenv(EXTRA_PACKAGES_ENV, raising=False)
-    monkeypatch.delenv(EXTRA_SOURCE_ENV, raising=False)
-
     image = _RecordingImage()
     assert _with_extras(image) is image
     assert image.calls == []
@@ -54,23 +58,43 @@ def test_packages_split_on_whitespace_not_commas(monkeypatch: pytest.MonkeyPatch
 
 def test_a_source_dir_is_mounted_under_its_own_name(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """The mount name is what a container imports it as, so it must follow the directory."""
-    package = tmp_path / "observability"
+    package = tmp_path / "extras"
     package.mkdir()
-    monkeypatch.delenv(EXTRA_PACKAGES_ENV, raising=False)
     monkeypatch.setenv(EXTRA_SOURCE_ENV, str(package))
 
     image = _RecordingImage()
     _with_extras(image)
-    assert image.calls == [("add_local_dir", (str(package), "/root/observability"), {"copy": True})]
+    assert image.calls == [
+        ("add_local_dir", (str(package), "/root/extras"), {"copy": True, "ignore": EXTRA_SOURCE_IGNORE})
+    ]
+
+
+def test_a_mounted_dir_excludes_its_repository_metadata() -> None:
+    """A checkout is the obvious thing to point this at, and git rewrites its index as you work.
+
+    Mounting that would change the layer hash between two deploys of identical code, rebuilding
+    every image below it.
+    """
+    assert ".git" in EXTRA_SOURCE_IGNORE
+    assert "tests" not in EXTRA_SOURCE_IGNORE, "someone else's tests/ may be a package their code imports"
 
 
 def test_several_source_dirs_are_path_separated(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """A path may contain spaces, so the list separator cannot be whitespace."""
-    first, second = tmp_path / "one", tmp_path / "two dirs"
+    first, second = tmp_path / "one", tmp_path / "two"
     first.mkdir()
     second.mkdir()
     monkeypatch.setenv(EXTRA_SOURCE_ENV, os.pathsep.join([str(first), str(second)]))
     assert extra_source_dirs() == [first, second]
+
+
+def test_a_home_relative_source_dir_is_expanded(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Nothing expands ``~`` when the value arrives from a config file rather than a shell."""
+    package = tmp_path / "extras"
+    package.mkdir()
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv(EXTRA_SOURCE_ENV, "~/extras")
+    assert extra_source_dirs() == [package]
 
 
 def test_a_missing_source_dir_fails_the_build(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -80,26 +104,34 @@ def test_a_missing_source_dir_fails_the_build(monkeypatch: pytest.MonkeyPatch, t
         extra_source_dirs()
 
 
-def test_the_plugin_list_is_baked_into_the_image(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A container reads the variable from its own environment, not the one that deployed it."""
-    from proto_tools.modal.hooks import PLUGINS_ENV
-
-    monkeypatch.delenv(EXTRA_PACKAGES_ENV, raising=False)
-    monkeypatch.delenv(EXTRA_SOURCE_ENV, raising=False)
-    monkeypatch.setenv(PLUGINS_ENV, "observability.hooks")
-
-    image = _RecordingImage()
-    _with_extras(image)
-    assert image.calls == [("env", ({PLUGINS_ENV: "observability.hooks"},), {})]
+@pytest.mark.parametrize("name", ["my-lib", "2foo", ""])
+def test_a_dir_nothing_could_import_is_refused(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, name: str) -> None:
+    """It mounts by its own name, so a name that is not an identifier promises an import that fails."""
+    target = tmp_path / name if name else Path(os.sep)
+    if name:
+        target.mkdir()
+    monkeypatch.setenv(EXTRA_SOURCE_ENV, str(target))
+    with pytest.raises(ValueError, match="identifier"):
+        extra_source_dirs()
 
 
 def test_every_service_image_is_built_through_with_proto_tools() -> None:
-    """The extension points live there, so a service bypassing it would silently ignore all three."""
-    import pathlib
-
-    modal_root = pathlib.Path(__file__).resolve().parents[2] / "proto_tools" / "modal"
-    services = sorted(p for p in modal_root.rglob("*_service.py") if "__pycache__" not in p.parts)
-    missing = [str(p.relative_to(modal_root)) for p in services if "with_proto_tools" not in p.read_text()]
-
-    assert services, "found no service modules to check — the scan itself is broken"
+    """The image extension points live there, so a service bypassing it would ignore them."""
+    missing = [str(path.relative_to(MODAL_ROOT)) for path in service_modules() if not _calls(path, "with_proto_tools")]
+    assert service_modules(), "found no service modules to check — the scan itself is broken"
     assert not missing, f"service images not built through with_proto_tools: {missing}"
+
+
+def test_every_service_image_applies_the_runtime_environment() -> None:
+    """``RUNTIME_ENV`` carries the plugin list, and two services once omitted it and loaded none."""
+    missing = [str(path.relative_to(MODAL_ROOT)) for path in service_modules() if "RUNTIME_ENV" not in path.read_text()]
+    assert not missing, f"service images that never apply RUNTIME_ENV: {missing}"
+
+
+def _calls(path: Path, name: str) -> bool:
+    """Report whether ``path`` calls ``name``, rather than merely importing or mentioning it."""
+    tree = ast.parse(path.read_text(), str(path))
+    return any(
+        isinstance(node, ast.Call) and getattr(node.func, "id", getattr(node.func, "attr", None)) == name
+        for node in ast.walk(tree)
+    )

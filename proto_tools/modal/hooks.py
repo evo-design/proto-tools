@@ -85,33 +85,52 @@ def register_call_middleware(middleware: CallMiddleware) -> None:
     _call_middleware.append(middleware)
 
 
-def plugin_modules(value: str | None = None) -> tuple[str, ...]:
-    """Return the module names in ``value``, defaulting to :data:`PLUGINS_ENV`.
+def _plugin_modules(raw: str) -> tuple[str, ...]:
+    """Return the module names in ``raw``.
 
     Args:
-        value (str | None): Raw variable value. Read from the environment when omitted.
+        raw (str): Raw variable value, comma- or whitespace-separated.
 
     Returns:
-        tuple[str, ...]: Module names in the order given, empty when the variable is unset.
+        tuple[str, ...]: Module names in the order given, empty when ``raw`` names none.
     """
-    raw = os.environ.get(PLUGINS_ENV, "") if value is None else value
     return tuple(name for name in re.split(r"[,\s]+", raw) if name)
 
 
 @functools.cache
 def load_plugins() -> tuple[str, ...]:
-    """Import every module named in :data:`PLUGINS_ENV`, once per process.
+    """Import every module named in :data:`PLUGINS_ENV`.
 
     An unimportable name raises rather than being skipped. A worker that quietly served calls
     without a deployment's extensions would drop whatever they were responsible for.
 
+    Cached to keep this off the hot path; ``sys.modules`` is what makes a module body run once.
+
     Returns:
         tuple[str, ...]: The module names imported, in the order given.
+
+    Raises:
+        ImportError: If a named module cannot be imported.
     """
-    names = plugin_modules()
+    names = _plugin_modules(os.environ.get(PLUGINS_ENV, ""))
     for name in names:
-        importlib.import_module(name)
+        _import_plugin(name)
     return names
+
+
+def _import_plugin(name: str) -> None:
+    """Import one plugin module, naming the variable it came from when that fails.
+
+    Args:
+        name (str): Module to import.
+
+    Raises:
+        ImportError: If the module cannot be imported.
+    """
+    try:
+        importlib.import_module(name)
+    except ImportError as exc:
+        raise ImportError(f"{PLUGINS_ENV} names {name!r}, which this worker cannot import") from exc
 
 
 def plugin_env() -> dict[str, str]:
@@ -125,7 +144,10 @@ def plugin_env() -> dict[str, str]:
 
 
 def clear_hooks() -> None:
-    """Remove every registered hook. Intended for tests, which must not leak into each other."""
+    """Remove every registered hook and forget which plugins were loaded.
+
+    Intended for tests, which must not leak into each other.
+    """
     _payload_hooks.clear()
     _call_middleware.clear()
     load_plugins.cache_clear()
@@ -186,7 +208,6 @@ __all__ = [
     "clear_hooks",
     "load_plugins",
     "plugin_env",
-    "plugin_modules",
     "register_call_middleware",
     "register_payload_hook",
     "run_with_middleware",

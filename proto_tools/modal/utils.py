@@ -9,7 +9,7 @@ from typing import Any
 
 import modal
 
-from proto_tools.modal.hooks import CallContext, apply_payload_hooks, load_plugins, run_with_middleware
+from proto_tools.modal.hooks import CallContext, apply_payload_hooks, load_plugins, plugin_env, run_with_middleware
 from proto_tools.modal.progress import container_progress
 from proto_tools.utils.base_config import BaseConfig
 from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, MissingAssetError
@@ -176,7 +176,10 @@ def env_for() -> dict[str, str]:
 #   RemoteError) and Modal autoscaling/retry would replay deterministic tool
 #   failures and burn GPU minutes. Capture-mode preserves the traceback and
 #   hands the caller a structured result it can inspect.
-RUNTIME_ENV: dict[str, str] = {"PROTO_CAPTURE_ERRORS": "1"}
+#
+# The plugin list belongs here rather than in an image layer below the warmup: it is runtime
+# metadata, and renaming a module would otherwise rebuild and re-warm every service.
+RUNTIME_ENV: dict[str, str] = {"PROTO_CAPTURE_ERRORS": "1", **plugin_env()}
 
 
 # Don't add ``examples`` — :func:`stage_all_excluded_fixtures` reads
