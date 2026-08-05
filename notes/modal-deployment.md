@@ -297,6 +297,53 @@ A config adjusts itself for that case by overriding `BaseConfig.for_hosted_env`,
 because a hosted container cannot stage `uniref30-2302`. The substitution changes results
 and therefore logs a warning rather than passing silently.
 
+## Credentials
+
+Modal accepts a credential from three sources, and `proto_tools/utils/modal_status.py`
+resolves them the same way the SDK does.
+
+| Source | Set by | Suits |
+|---|---|---|
+| `~/.modal.toml` | `modal setup` | A machine you work on directly. |
+| `MODAL_TOKEN_ID` + `MODAL_TOKEN_SECRET` | The environment | A container, CI job, or agent sandbox. |
+| `MODAL_CONFIG_PATH` | The environment | A host that mounts a token file rather than injecting variables. |
+
+Environment variables take precedence over the file. Precedence is by *membership*, not
+truthiness — `MODAL_TOKEN_ID=""` still shadows a readable config file and then fails to
+authenticate, which is why `credentials_checked` reports `set`/`empty`/`unset` rather than a
+boolean.
+
+The distinction matters most where proto-tools does not run on a laptop. A token file written
+outside the process is frequently unreadable from inside it: the file may be absent, or present
+in a directory the uid cannot traverse. Those two states are indistinguishable to
+`Path.exists()`, so `config_state()` separates `absent` from `unreadable` — only the first is
+fixed by writing a token. For the same reason `config_path()` uses `os.path.expanduser` rather
+than `Path.home()`, which raises when `HOME` is unset and the uid has no passwd entry.
+
+`proto_tools/utils/modal_status.py` deliberately sits outside `proto_tools/modal/`. That
+package builds Modal objects at import time, which is precisely what fails when Modal is
+unconfigured, so a credential check living there could not run in the state it exists to
+diagnose.
+
+### `proto-tools doctor`
+
+One command that reports whether this environment can reach Modal, and exits non-zero naming a
+remedy when it cannot. It verifies the credential with `Client.hello()` rather than stopping at
+`Client.from_env()`, which only checks that a token is *present* — a revoked or wrong-workspace
+token passes that check and fails every real call. Four outcomes are reported apart because
+each needs a different fix:
+
+| Outcome | Meaning |
+|---|---|
+| `OK via <source>` | Verified against the server, naming which of the three sources was used. |
+| `not found` | No credential in any source, listing what was checked. |
+| `rejected` | A credential was found and the server refused it — revoked, or another workspace. |
+| `unverified` | A credential was found but Modal was unreachable; a network fault, not a bad token. |
+
+`workspace_info` in the MCP still stops at `from_env()`, so it reports `authenticated: true`
+for a token the server would refuse. Verifying there would add a network roundtrip to an
+agent's first orienting call, so the two surfaces differ on purpose.
+
 ## Configuration
 
 Eight environment variables, all optional, read in the environment a deploy runs from.
