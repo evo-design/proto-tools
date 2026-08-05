@@ -6,6 +6,7 @@ smoke tests, not here.
 
 import asyncio
 import json
+import os
 
 import pytest
 
@@ -72,9 +73,9 @@ def test_the_auth_hint_names_the_environment_variables(monkeypatch, tmp_path):
     assert info["authenticated"] is False
     assert "MODAL_TOKEN_ID" in info["hint"] and "MODAL_TOKEN_SECRET" in info["hint"]
     assert info["credentials_checked"] == {
-        "MODAL_TOKEN_ID": False,
-        "MODAL_TOKEN_SECRET": False,
-        "MODAL_PROFILE": False,
+        "MODAL_TOKEN_ID": "unset",
+        "MODAL_TOKEN_SECRET": "unset",
+        "MODAL_PROFILE": "unset",
         "config_file": str(absent),
         "config_file_state": "absent",
     }
@@ -84,8 +85,18 @@ def test_a_half_configured_caller_sees_which_half_is_missing(monkeypatch, tmp_pa
     """One variable set without the other fails identically to setting neither."""
     checked = _unauthenticated(monkeypatch, tmp_path / "absent.toml", MODAL_TOKEN_ID="ak-secret")["credentials_checked"]
 
-    assert checked["MODAL_TOKEN_ID"] is True
-    assert checked["MODAL_TOKEN_SECRET"] is False
+    assert checked["MODAL_TOKEN_ID"] == "set"
+    assert checked["MODAL_TOKEN_SECRET"] == "unset"
+
+
+def test_an_empty_variable_is_not_reported_as_absent(monkeypatch, tmp_path):
+    """Modal reads an empty variable and fails, rather than falling back to a readable file."""
+    config = tmp_path / "modal.toml"
+    config.write_text("[default]\n")
+    checked = _unauthenticated(monkeypatch, config, MODAL_TOKEN_ID="", MODAL_TOKEN_SECRET="")["credentials_checked"]
+
+    assert checked["MODAL_TOKEN_ID"] == "empty", "reporting this as unset hides why a good config file is ignored"
+    assert checked["config_file_state"] == "readable"
 
 
 def test_credentials_are_reported_by_presence_and_never_by_value(monkeypatch, tmp_path):
@@ -100,6 +111,7 @@ def test_credentials_are_reported_by_presence_and_never_by_value(monkeypatch, tm
     assert "leak-me" not in json.dumps(info)
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads through any mode, so 0o000 proves nothing")
 def test_an_unreadable_config_is_distinguished_from_an_absent_one(monkeypatch, tmp_path):
     """Both look like no file to an existence check, but only one is fixed by writing a token."""
     present = tmp_path / "modal.toml"

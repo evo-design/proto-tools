@@ -471,40 +471,70 @@ def _cmd_mcp(args: argparse.Namespace) -> int:
     return 0
 
 
+_CREDENTIAL_REMEDY = (
+    "Set MODAL_TOKEN_ID and MODAL_TOKEN_SECRET (these work in a container, CI job, or agent "
+    "sandbox), point MODAL_CONFIG_PATH at a token file, or run `modal token new` on a machine "
+    "you work on directly."
+)
+
+
 def _modal_auth_check() -> tuple[str, str | None]:
     """Return how Modal authenticated, and the remedy when it did not.
 
-    Asks the SDK rather than trusting the environment: a token can be present and still be
-    rejected, and the two failures need different fixes.
+    Calls the server rather than stopping at ``from_env``, which only checks that a token is
+    present. A revoked or mistyped token passes that check and fails every real call, so the
+    two are reported apart: they need different fixes.
     """
-    from proto_tools.modal import status
+    from proto_tools.utils import modal_status as status
 
     try:
         import modal
+        from modal.exception import AuthError
+    except ImportError as exc:
+        return f"unavailable — {exc}", "Reinstall proto-tools: Modal is a required dependency."
 
-        modal.Client.from_env()
+    try:
+        client = modal.Client.from_env()
     except Exception as exc:
         checked = f"checked {'/'.join(status.TOKEN_VARS)}, {status.config_path()} ({status.config_state()})"
+        return f"not found — {checked}", f"{_CREDENTIAL_REMEDY} Modal reported: {type(exc).__name__}: {exc}"
+
+    mechanism = status.auth_mechanism() or "a source the SDK resolved itself"
+    try:
+        client.hello()
+    except AuthError as exc:
         return (
-            f"not found — {checked}",
-            "Set MODAL_TOKEN_ID and MODAL_TOKEN_SECRET (works in a container, CI job, or agent "
-            "sandbox), or run `modal token new` on a machine you work on directly. "
-            f"Modal reported: {type(exc).__name__}: {exc}",
+            f"rejected — a credential was found via {mechanism}, and Modal refused it",
+            f"The token exists but is not valid: {exc}. It may have been revoked, or belong to "
+            f"another workspace. {_CREDENTIAL_REMEDY}",
+        )
+    except Exception as exc:
+        # Reaching Modal at all is a separate failure from the credential being wrong.
+        return (
+            f"unverified — found via {mechanism}, but Modal was unreachable",
+            f"Could not reach Modal to check the credential: {type(exc).__name__}: {exc}",
         )
 
-    return f"OK via {status.auth_mechanism() or 'a source the SDK resolved itself'}", None
+    return f"OK via {mechanism}", None
 
 
 def _proto_home_check() -> tuple[str, str | None]:
-    """Return the PROTO_HOME line, and the remedy when it cannot be written to."""
+    """Return the PROTO_HOME line, and the remedy when it cannot be written to.
+
+    A directory that does not exist yet is not a fault: it is created on first use. What
+    matters is whether the nearest existing ancestor can be written to.
+    """
     from proto_tools.utils.proto_home import get_proto_home
 
     home = get_proto_home()
-    if not home.exists():
-        return f"{home}   missing", f"Create {home}, or point PROTO_HOME at a writable directory."
-    if not os.access(home, os.W_OK):
-        return f"{home}   writable: no", f"Grant write access to {home}, or set PROTO_HOME elsewhere."
-    return f"{home}   writable: yes", None
+    existing = next((p for p in (home, *home.parents) if p.exists()), home)
+    if not os.access(existing, os.W_OK):
+        return (
+            f"{home}   writable: no ({existing} is read-only)",
+            f"Grant write access to {existing}, or point PROTO_HOME at a writable directory.",
+        )
+    suffix = "writable: yes" if existing == home else "writable: yes (created on first use)"
+    return f"{home}   {suffix}", None
 
 
 def _temp_space_check() -> tuple[str, str | None]:
@@ -538,10 +568,27 @@ def _mcp_extra_check() -> tuple[str, str | None]:
         return 'not installed — `pip install "proto-tools[mcp]"` to run the MCP server', None
 
 
+def _workspace_lines() -> dict[str, str]:
+    """Describe the workspace calls land in. Only meaningful once Modal has authenticated."""
+    import modal
+
+    from proto_tools.modal.app import resolve_environment
+    from proto_tools.modal.manifest import APP_BUCKETS
+    from proto_tools.utils.modal_status import deployed_apps
+
+    deployed = sorted(deployed_apps())
+    lines = {
+        "workspace": getattr(modal.config, "_profile", None) or "(unknown)",
+        "environment": resolve_environment(),
+        "apps deployed": f"{len(deployed)} of {len(APP_BUCKETS)}",
+    }
+    if deployed:
+        lines["apps deployed"] += f"   ({', '.join(deployed)})"
+    return lines
+
+
 def _cmd_doctor(args: argparse.Namespace) -> int:
     """Report whether this environment can run tools, and name the fix for whatever cannot."""
-    from proto_tools.modal import status
-
     lines: dict[str, str] = {}
     remedies: list[str] = []
 
@@ -555,18 +602,10 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
         if remedy:
             remedies.append(f"{label}: {remedy}")
 
-    if lines["modal auth"].startswith("OK"):
-        import modal
-
-        from proto_tools.modal.app import resolve_environment
-        from proto_tools.modal.manifest import APP_BUCKETS
-
-        deployed = sorted(status.deployed_apps())
-        lines["workspace"] = getattr(modal.config, "_profile", None) or "(unknown)"
-        lines["environment"] = resolve_environment()
-        lines["apps deployed"] = f"{len(deployed)} of {len(APP_BUCKETS)}"
-        if deployed:
-            lines["apps deployed"] += f"   ({', '.join(deployed)})"
+    # Only ask where calls land once the credential is known good; anything else would
+    # report a workspace this machine cannot actually reach.
+    if not any(r.startswith("modal auth:") for r in remedies):
+        lines.update(_workspace_lines())
 
     if args.json:
         print(_dump_json({"checks": lines, "remedies": remedies}))

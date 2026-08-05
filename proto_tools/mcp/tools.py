@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Any
 
 from proto_tools.mcp.device import Device, is_remote
-from proto_tools.modal.status import credentials_checked, deployed_apps
 from proto_tools.utils.base_config import BaseConfig
+from proto_tools.utils.modal_status import credentials_checked, deployed_apps
 
 logger = logging.getLogger(__name__)
 

@@ -30,46 +30,22 @@ modal setup
 
 This writes a token to `~/.modal.toml`.
 
-#### Running in a container, CI job, or agent sandbox
+To check your setup at any point, run `proto-tools doctor`. It reports whether Modal is reachable
+from where `proto-tools` runs, and names the fix when it is not.
 
-`modal setup` is the right step on a machine you work on directly. Where `proto-tools` runs
-inside a container, a CI job, or an agent sandbox, `~/.modal.toml` is often not writable, and
-a token file written outside the process is not visible to it. Supply the credentials as
-environment variables instead:
+#### Where credentials come from
+
+`modal setup` writes `~/.modal.toml`, which suits a machine you work on directly. Inside a
+container, a CI job, or an agent sandbox, that file is often unwritable or invisible to the
+process, so Modal reads credentials from the environment as well:
 
 ```bash
 export MODAL_TOKEN_ID=...
 export MODAL_TOKEN_SECRET=...
 ```
 
-Modal reads these directly, so no further configuration is needed. Both must be set.
-
-Where a host would rather mount a credential file than inject variables, `MODAL_CONFIG_PATH`
-points the SDK at a token file anywhere on disk:
-
-```bash
-export MODAL_CONFIG_PATH=/run/secrets/modal.toml
-```
-
-These are the three supported mechanisms, and `proto-tools doctor` reports which one was used:
-
-```
-$ proto-tools doctor
-modal auth      : OK via MODAL_TOKEN_ID/MODAL_TOKEN_SECRET
-workspace       : my-workspace
-environment     : proto-env
-apps deployed   : 6 of 54   (alphafold2, boltz2, esm2, esmfold, proteinmpnn, rfdiffusion3)
-PROTO_HOME      : /root/.proto   writable: yes
-temp space      : OK (/tmp)
-mcp extra       : installed (fastmcp 3.4.5)
-```
-
-When a credential is missing it names what it checked and exits non-zero, so a partial setup is
-visible without guesswork:
-
-```
-modal auth      : not found — checked MODAL_TOKEN_ID/MODAL_TOKEN_SECRET, /root/.modal.toml (absent)
-```
+`MODAL_CONFIG_PATH` is a third option, pointing Modal at a token file elsewhere on disk. Any of
+the three works, and `proto-tools doctor` reports which one was used.
 
 If you have multiple people who need access to the same tools, you can create a
 shared workspace. This will enable each user to access the same deployed apps and
