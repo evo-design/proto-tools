@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any
@@ -122,10 +123,36 @@ def available_keys(device: Device) -> set[str]:
     return deployed_keys(device) | answered_in_process_keys()
 
 
+def _modal_config_path() -> Path:
+    """Return the config file Modal reads, honoring ``MODAL_CONFIG_PATH``."""
+    override = os.environ.get("MODAL_CONFIG_PATH")
+    return Path(override) if override else Path.home() / ".modal.toml"
+
+
+def _modal_credentials_checked() -> dict[str, Any]:
+    """Report which credential sources are present, by presence only and never by value."""
+    config_path = _modal_config_path()
+    try:
+        with config_path.open("rb"):
+            config_state = "readable"
+    except FileNotFoundError:
+        config_state = "absent"
+    except OSError:
+        # Present but closed to this process, or inside a directory it cannot traverse. This
+        # is the container case, and it is invisible to a plain existence check.
+        config_state = "unreadable"
+
+    return {
+        "MODAL_TOKEN_ID": bool(os.environ.get("MODAL_TOKEN_ID")),
+        "MODAL_TOKEN_SECRET": bool(os.environ.get("MODAL_TOKEN_SECRET")),
+        "MODAL_PROFILE": bool(os.environ.get("MODAL_PROFILE")),
+        "config_file": str(config_path),
+        "config_file_state": config_state,
+    }
+
+
 def workspace_info(device: Device = "modal") -> dict[str, Any]:
     """Report where calls will land, and whether the caller can deploy there."""
-    import os
-
     if device == "local":
         from proto_tools.tools import ToolRegistry
         from proto_tools.utils.device import number_of_visible_gpus
@@ -172,7 +199,13 @@ def workspace_info(device: Device = "modal") -> dict[str, Any]:
             "device": "modal",
             "authenticated": False,
             "error": f"{type(exc).__name__}: {exc}",
-            "hint": "Run `modal token new` to authenticate.",
+            "hint": (
+                "Interactive shell: run `modal token new` (writes ~/.modal.toml). "
+                "Container, CI, or agent sandbox: set the MODAL_TOKEN_ID and "
+                "MODAL_TOKEN_SECRET environment variables instead — a token file written "
+                "outside this process is not visible to it."
+            ),
+            "credentials_checked": _modal_credentials_checked(),
         }
 
     # Modal exposes no public reader for the active profile: ``config_profiles()`` lists them all

@@ -30,6 +30,22 @@ modal setup
 
 This writes a token to `~/.modal.toml`.
 
+#### Running in a container, CI job, or agent sandbox
+
+`modal setup` is the right step on a machine you work on directly. Where `proto-tools` runs
+inside a container, a CI job, or an agent sandbox, `~/.modal.toml` is often not writable, and
+a token file written outside the process is not visible to it. Supply the credentials as
+environment variables instead:
+
+```bash
+export MODAL_TOKEN_ID=...
+export MODAL_TOKEN_SECRET=...
+```
+
+Modal reads these directly, so no further configuration is needed. Both must be set: the MCP
+server's `workspace_info` reports which of the two it found, and whether it could read a config
+file, so a partial setup is visible without guesswork.
+
 If you have multiple people who need access to the same tools, you can create a
 shared workspace. This will enable each user to access the same deployed apps and
 cached model weights.
