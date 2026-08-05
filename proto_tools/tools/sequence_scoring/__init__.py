@@ -123,6 +123,14 @@ from proto_tools.tools.sequence_scoring.parade import (
     run_parade_gradient,
     run_parade_stability,
 )
+from proto_tools.tools.sequence_scoring.primer3 import (
+    Primer3Oligo,
+    Primer3OligoResult,
+    Primer3ThermodynamicsConfig,
+    Primer3ThermodynamicsInput,
+    Primer3ThermodynamicsOutput,
+    run_primer3_thermodynamics,
+)
 from proto_tools.tools.sequence_scoring.puffin import (
     MOTIF_NAMES,
     PUFFIN_MIN_INPUT_LENGTH,
@@ -266,6 +274,13 @@ __all__ = [
     "run_parade_activity",
     "run_parade_gradient",
     "run_parade_stability",
+    # Primer3
+    "Primer3Oligo",
+    "Primer3OligoResult",
+    "Primer3ThermodynamicsConfig",
+    "Primer3ThermodynamicsInput",
+    "Primer3ThermodynamicsOutput",
+    "run_primer3_thermodynamics",
     # Puffin Interpretation
     "MOTIF_NAMES",
     "PuffinInterpretationConfig",
