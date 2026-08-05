@@ -47,6 +47,12 @@ def probe(monkeypatch):
 
     from proto_tools.modal import client as client_module
 
+    # A dispatch checks that credentials exist before resolving anything. These tests are about
+    # where a call is addressed, not whether the machine is set up, so supply a pair rather than
+    # inheriting one: CI has none, and a developer's own would make the result machine-dependent.
+    monkeypatch.setenv("MODAL_TOKEN_ID", "ak-test")
+    monkeypatch.setenv("MODAL_TOKEN_SECRET", "as-test")
+
     record = _Probe()
 
     class _Method:

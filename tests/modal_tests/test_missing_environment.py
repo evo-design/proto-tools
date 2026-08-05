@@ -77,8 +77,14 @@ def test_ambient_environment_is_not_second_guessed(modal_misses, monkeypatch):
 
 def test_workspace_info_reports_the_missing_environment(monkeypatch):
     """The MCP surface must not report a missing environment as "nothing deployed yet"."""
+    import modal
+
     from proto_tools.mcp import tools as mcp_tools
 
+    # ``workspace_info`` reports unauthenticated before it looks at anything else, so a machine
+    # without credentials never reaches the environment check. Stand one in, since the question
+    # here is what an authenticated caller is told about an environment that does not exist.
+    monkeypatch.setattr(modal.Client, "from_env", staticmethod(lambda *_a, **_k: object()))
     monkeypatch.setattr("proto_tools.modal.app.environment_exists", lambda _name, _client=None: False)
     monkeypatch.setenv("MODAL_ENVIRONMENT", "never-made")
 
