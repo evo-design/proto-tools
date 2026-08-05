@@ -7,8 +7,10 @@ smoke tests, not here.
 import asyncio
 import json
 import os
+from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 _READ_ONLY_SURFACE = {
     "workspace_info",
@@ -368,7 +370,33 @@ def test_example_elides_bulky_values():
     elided = impl._elide({"structure": {"structure": "X" * 90_000, "structure_format": "pdb"}})
     inner = elided["structure"]
     assert inner["structure_format"] == "pdb", "small fields must survive"
-    assert "elided" in inner["structure"] and len(inner["structure"]) < 200
+    assert "elided" in inner["structure"] and len(inner["structure"]) < 250
+
+
+def test_elided_structure_content_says_a_path_is_accepted():
+    """The placeholder otherwise reads as "inline 42,000 characters to call me"."""
+    from proto_tools.mcp import tools as impl
+
+    elided = impl._elide({"query_structure": {"structure": "X" * 90_000, "structure_format": "pdb"}})
+    assert "file path" in elided["query_structure"]["structure"]
+
+    # Only where it is true: an MSA takes its content, so the generic placeholder stands.
+    other = impl._elide({"aligned_sequences": "X" * 90_000})
+    assert "file path" not in other["aligned_sequences"]
+
+
+def test_a_structure_input_really_does_accept_a_path_and_an_msa_does_not():
+    """Guards the asymmetry the docstrings now promise, which is worse to state wrongly than not at all."""
+    from proto_tools.entities.msa import MSA
+    from proto_tools.tools import ToolRegistry
+
+    fixture = Path(__file__).resolve().parents[2] / "proto_tools/tools/structure_alignment/example_input_fixture.pdb"
+    spec = ToolRegistry.get("tmalign-alignment")
+    loaded = spec.input_model(query_structure=str(fixture), reference_structure=str(fixture))
+    assert loaded.query_structure.source == str(fixture), "the path is recorded, and its content loaded"
+
+    with pytest.raises(ValidationError):
+        MSA.model_validate(str(fixture))
 
 
 def test_run_tool_requires_inputs_or_use_example():

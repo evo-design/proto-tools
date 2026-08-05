@@ -186,6 +186,11 @@ def build_server(device: Device = "modal") -> FastMCP:
         model load, and a few tools (binder design, diffusion) legitimately run
         for many minutes. Check the tool description before calling.
 
+        Structure inputs take a file path or an http(s) URL in place of inlined
+        content — {"query_structure": "/path/to/file.pdb"} — so a file already on
+        disk, such as another tool's output, never has to be read into the call.
+        Other bulky inputs, such as MSAs, take their content rather than a path.
+
         Pass use_example=True to run the tool's canonical example input without
         supplying it — useful for structure tools whose inputs are very large.
 
