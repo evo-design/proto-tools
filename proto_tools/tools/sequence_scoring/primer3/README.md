@@ -2,6 +2,8 @@
 
 # Primer3
 
+![Primer3](https://proto-bio.github.io/proto-assets/images/tool/primer3/hero.png)
+
 > [!NOTE]
 > **License:** Primer3 has a GPL-2.0 license. Please refer to [the license](https://github.com/libnano/primer3-py/blob/master/LICENSE) for full terms.
 
