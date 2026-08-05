@@ -105,6 +105,7 @@ def example_input() -> Any:
 
 @tool(
     key="pdb-fetch-entry",
+    local_only="pdb-fetch-entry does not use a gpu and does not need an environment, so it can run in process",
     label="PDB Fetch Entry",
     category="database_retrieval",
     input_class=PdbFetchEntryInput,

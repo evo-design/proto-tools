@@ -53,6 +53,7 @@ CODONFM_MAX_NT = (CODONFM_MAX_TOKENS - 2) * 3
 CODONFM_CODON_VOCAB: list[str] = ["".join(codon) for codon in product("ACGT", repeat=3)]
 CODONFM_NUM_CODONS = len(CODONFM_CODON_VOCAB)
 
+
 def one_hot_codon_logits(sequence: str, *, sharpness: float = 20.0) -> list[list[float]]:
     """Build sharp one-hot ``(L, 64)`` codon logits from a coding sequence (for examples/tests).
 
@@ -111,7 +112,9 @@ def normalize_codon_sequence(sequence: str) -> str:
     if len(seq) % 3 != 0:
         raise ValueError(f"Coding sequence length must be a multiple of 3 (codon-aligned); got length {len(seq)}")
     if len(seq) > CODONFM_MAX_NT:
-        raise ValueError(f"CodonFM supports CDS up to {CODONFM_MAX_NT} nt ({CODONFM_MAX_TOKENS - 2} codons); got {len(seq)}")
+        raise ValueError(
+            f"CodonFM supports CDS up to {CODONFM_MAX_NT} nt ({CODONFM_MAX_TOKENS - 2} codons); got {len(seq)}"
+        )
     return seq
 
 

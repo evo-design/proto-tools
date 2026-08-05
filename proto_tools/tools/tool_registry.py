@@ -107,9 +107,28 @@ from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, Metrics, Mi
 
 ToolDispatchBackend = Callable[[str, BaseToolInput, BaseConfig], BaseToolOutput | None]
 
+# Closes every local_only refusal, so each tool states only its own reason and this stays in one place.
+_REMOTE_ROADMAP_NOTE = "We are looking into supporting remote options for these tools in the future."
+
 # Distinguishes "the author omitted max_chunk_size" from "the author chose None", which is a
 # real choice meaning the whole batch goes to one execution.
 _UNSET_CHUNK_SIZE = -1
+
+
+def _has_deployment(key: str) -> bool:
+    """Whether a deployment is written for ``key``.
+
+    Read from the generated dispatch table, which is the repository's record of what any remote
+    backend can serve. A tool absent from it has no deployment for either device, so asking one to
+    run it could only fail. Only consulted for local_cpu tools, where running here is always a valid
+    answer; every other tool still gets the backend's own error if it is not deployed.
+    """
+    try:
+        from proto_tools.modal.tool_map import TOOL_MAP
+    except Exception:  # a client without the Modal extra still dispatches; treat as "no deployment"
+        return False
+    return key in TOOL_MAP
+
 
 # ---------------------------------------------------------------------------
 # Parallel iterable-field helpers
@@ -133,6 +152,34 @@ class _ParallelItem:
     def cache_key(self) -> str:
         """Serialize every parallel field's value so dedup/cache keys reflect all of them."""
         return "\x1f".join(_serialize_for_cache_key(v) for v in self.values)
+
+
+def _reject_empty_batch(key: str, spec: ToolSpec | None, inputs: Any) -> None:
+    """Refuse a call whose primary iterable field is an empty list.
+
+    Only the primary field is checked. The parallel siblings that follow it are optional by
+    design -- ``msas`` alongside ``complexes`` is the usual case, and a caller who has no
+    alignments to supply passes none. Requiring those would reject a perfectly ordinary call.
+
+    Checked here rather than as a field constraint so a tool cannot omit it, and early enough
+    that nothing has been built or started. Without it an empty batch reaches the tool and fails
+    inside it, which on a remote device means a container start and a model load first.
+
+    Args:
+        key (str): Registry key, for the message.
+        spec (ToolSpec | None): Tool spec supplying the iterable fields.
+        inputs (Any): The call's inputs.
+
+    Raises:
+        ValueError: If the primary iterable field is present and empty.
+    """
+    fields = (spec.iterable_input_fields or []) if spec is not None else []
+    if not fields:
+        return
+    primary = fields[0]
+    value = getattr(inputs, primary, None)
+    if isinstance(value, list) and not value:
+        raise ValueError(f"{key}: {primary!r} is empty, so there is nothing to run. Pass at least one item.")
 
 
 def _active_iter_fields(inputs: Any, spec: ToolSpec) -> list[str]:
@@ -680,6 +727,19 @@ class ToolSpec(BaseModel):
             "a batch_size field (a tool that batches must state its granularity); otherwise defaults to 1."
         ),
     )
+    local_only: str | None = Field(
+        default=None,
+        exclude=True,
+        description=(
+            "Why this tool can never run on a remote device, or None if it can. A static property "
+            "of the tool, so a catalogue can list what is deployable without constructing a config. "
+            "Required on every local_cpu tool. Setting it always means 'never deploy this', and for "
+            "a tool that is not local_cpu it also refuses remote dispatch; a local_cpu tool is "
+            "short-circuited to in-process before that refusal is reached, so for those it is a "
+            "declaration rather than a gate. For a refusal that depends on how the tool is "
+            "configured, override BaseConfig.remote_unsupported_reason instead."
+        ),
+    )
     cacheable: bool = Field(
         default=False,
         exclude=True,
@@ -825,6 +885,7 @@ class ToolRegistry:
         iterable_input_fields: list[str] | None = None,
         iterable_output_field: str | None = None,
         max_chunk_size: int | None = _UNSET_CHUNK_SIZE,
+        local_only: str | None = None,
         cacheable: bool = False,
         stochastic: bool = False,
         post_process_iterable: Callable[[list[Any]], None] | None = None,
@@ -872,6 +933,12 @@ class ToolRegistry:
                 call when fanning out; the framework may hand out a smaller chunk, never larger.
                 Valid only for iterable tools. Required to be explicit when the config has a
                 ``batch_size`` field; other iterable tools default to 1 (per-item).
+            local_only (str | None): Why this tool can never run on a remote device, or ``None``
+                if it can. Use for a property of the tool itself — a user-provisioned binary, a
+                corpus too large to stage, or work that is already a call to someone else's API.
+                Being static, it lets a catalogue list what is deployable without constructing a
+                config. For a refusal that depends on how the tool is configured, override
+                ``BaseConfig.remote_unsupported_reason`` instead.
             cacheable (bool): Declares that this tool's output is a
                 deterministic function of (input, config), making it
                 eligible for the program-scoped cache and the framework's
@@ -998,6 +1065,8 @@ class ToolRegistry:
                 # Unseeded calls to stochastic tools skip cache so repeat dispatches advance RNG.
                 runtime_cacheable = cache_enabled and (not stochastic_tool or config.seed is not None)
 
+                _reject_empty_batch(key, spec, inputs)
+
                 deduped = None
                 original_items = None
                 strip = None
@@ -1071,10 +1140,14 @@ class ToolRegistry:
 
                     if is_remote_device(device_str):
                         # --- Nothing to offload ---
-                        # No GPU and no environment to build, so no remote worker can help.
-                        if spec is not None and spec.local_cpu:
+                        # A local_cpu tool has no GPU and no environment, so a worker can only help
+                        # it by taking a share of a large batch. That is worth a round trip for some
+                        # of them and not others, so the deciding question is whether one was
+                        # deployed — not whether the tool could run here. Where none exists the call
+                        # runs in-process rather than failing, since it always can.
+                        if spec is not None and spec.local_cpu and not _has_deployment(key):
                             logger.debug(
-                                "Tool %s: device=%r is a no-op for local_cpu tools; running in-process",
+                                "Tool %s: device=%r has no deployment and needs none; running in-process",
                                 key,
                                 device_str,
                             )
@@ -1082,43 +1155,39 @@ class ToolRegistry:
                             device_str = "cpu"
                         else:
                             # --- Every remote device ---
-                            # Refuse a config needing something local, such as a database or file.
-                            if (reason := config.remote_unsupported_reason(device_str)) is not None:
-                                raise ValueError(f"{key}: {reason}")
-
-                            # --- Proto endpoint ---
-                            if device_str == "proto":
-                                from proto_tools.proto import (
-                                    dispatch_batch_to_proto,
-                                    dispatch_to_proto,
-                                    is_proto_hostable,
-                                    proto_unhostable_message,
-                                )
-
-                                # Proto hosts under its own licence; a deployment the caller owns does not.
-                                if not is_proto_hostable(key):
-                                    raise ValueError(proto_unhostable_message(key))
-                                remote_dispatch = functools.partial(dispatch_to_proto, key)
-                                remote_dispatch_many = functools.partial(dispatch_batch_to_proto, key)
-                            # --- Modal endpoint ---
+                            # Asked first, because a call that runs here regardless leaves the two
+                            # refusals below with nothing to refuse. This is what lets a tool be
+                            # undeployable overall and still answer a request naming a remote device:
+                            # mmseqs2's remote search is an HTTP call, so no worker is needed for it
+                            # even though its local search could never run on one.
+                            # No endpoint is bound, which is what leaves it running in this process.
+                            if (reason := config.local_execution_reason(device_str)) is not None:
+                                logger.warning("Tool %s: %s Running on this machine instead.", key, reason)
+                                config = config.model_copy(update={"device": "cpu"})
+                                device_str = "cpu"
                             else:
-                                # An optional peer that depends on proto-tools, so imported lazily.
-                                try:
-                                    from proto_modal import dispatch_batch_to_modal, dispatch_to_modal
-                                except ImportError as exc:
-                                    # Restore the install instruction once proto-modal is published.
-                                    raise ImportError(
-                                        "device='modal' is coming soon and is not available yet."
-                                    ) from exc
-                                # proto_modal is untyped here; the result is a BaseToolOutput at runtime.
-                                remote_dispatch = cast(
-                                    "Callable[[BaseToolInput, BaseConfig], BaseToolOutput]",
-                                    functools.partial(dispatch_to_modal, key),
-                                )
-                                remote_dispatch_many = cast(
-                                    "Callable[[list[BaseToolInput], list[BaseConfig]], list[BaseToolOutput | Exception]]",
-                                    functools.partial(dispatch_batch_to_modal, key),
-                                )
+                                # Two refusals, in order of how fixed they are. A tool declared
+                                # local_only never runs remotely whatever the config says; otherwise
+                                # the config decides, since it knows what this call reaches for.
+                                if spec is not None and spec.local_only is not None:
+                                    raise ValueError(f"{key}: {spec.local_only} {_REMOTE_ROADMAP_NOTE}")
+                                if (reason := config.remote_unsupported_reason(device_str)) is not None:
+                                    raise ValueError(f"{key}: {reason}")
+
+                                # --- Proto endpoint ---
+                                if device_str == "proto":
+                                    from proto_tools.proto import dispatch_batch_to_proto, dispatch_to_proto
+
+                                    remote_dispatch = functools.partial(dispatch_to_proto, key)
+                                    remote_dispatch_many = functools.partial(dispatch_batch_to_proto, key)
+                                # --- Modal endpoint ---
+                                else:
+                                    # Imported here rather than at module scope to keep the Modal SDK
+                                    # off the import path of callers who never dispatch to it.
+                                    from proto_tools.modal import dispatch_batch_to_modal, dispatch_to_modal
+
+                                    remote_dispatch = functools.partial(dispatch_to_modal, key)
+                                    remote_dispatch_many = functools.partial(dispatch_batch_to_modal, key)
 
                     # --- Local hardware ---
                     # A remote endpoint allocates its own, so this validates only local devices.
@@ -1443,6 +1512,7 @@ class ToolRegistry:
                 iterable_input_fields=iterable_input_fields,
                 iterable_output_field=iterable_output_field,
                 max_chunk_size=resolved_max_chunk_size,
+                local_only=local_only,
                 cacheable=cacheable,
                 stochastic=stochastic,
                 post_process_iterable=post_process_iterable,
@@ -1463,6 +1533,41 @@ class ToolRegistry:
         return list(cls._registry.values())
 
     @classmethod
+    def suggest_keys(cls, key: str, n: int = 5) -> list[str]:
+        """Return the registered keys a caller most likely meant by ``key``.
+
+        Keys are ``<model>-<action>``, and a wrong guess is usually the model alone, read
+        from a paper or a model card. Three strategies apply in turn, because whole-key
+        edit distance alone is unreliable here: it returns nothing for ``esm2`` or
+        ``boltz2``, and answers ``tmalign`` with the unrelated ``mafft-align``.
+
+        1. Prefix, which catches a model name given without an action. Exact model
+           segments rank ahead of incidental ones, keeping ``esmfold-*`` above
+           ``esmfold2-*``, a different model.
+        2. Fuzzy match on the model segment, which catches a misspelled model
+           (``esmfld``) that whole-key distance scores too poorly to return.
+        3. Fuzzy match on the whole key, which catches a misspelled action.
+
+        Args:
+            key (str): The key a caller supplied, which is not registered.
+            n (int): Most suggestions to return.
+
+        Returns:
+            list[str]: Candidate keys, best first, empty when nothing is close.
+        """
+        guess = key.lower()
+        keys = sorted(cls._registry)
+
+        prefix = [k for k in keys if k.startswith(guess)]
+        if prefix:
+            return sorted(prefix, key=lambda k: (k.split("-")[0] != guess, k))[:n]
+
+        models = sorted({k.split("-")[0] for k in keys})
+        near = difflib.get_close_matches(guess, models, n=2, cutoff=0.6)
+        by_model = [k for model in near for k in keys if k.split("-")[0] == model]
+        return by_model[:n] or difflib.get_close_matches(guess, keys, n=n, cutoff=0.6)
+
+    @classmethod
     def get(cls, key: str) -> ToolSpec:
         """Get tool spec by key.
 
@@ -1476,7 +1581,7 @@ class ToolRegistry:
             ValueError: If key not found in registry
         """
         if key not in cls._registry:
-            suggestions = difflib.get_close_matches(key, cls._registry.keys(), n=3, cutoff=0.6)
+            suggestions = cls.suggest_keys(key)
             hint = f"; did you mean: {', '.join(suggestions)}?" if suggestions else ""
             raise ValueError(f"Unknown tool {key!r} ({len(cls._registry)} registered){hint}")
         return cls._registry[key]

@@ -17,9 +17,18 @@ from proto_tools.tools.masked_models.codonfm.shared_data_models import (
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseToolOutput, ToolInstance
 
-# Input / Config are the shared codon schemas.
+# Input uses the shared codon schema; config gets a tool-specific subclass so registry metadata
+# cannot be overwritten by another CodonFM operation using the same fields.
 CodonFMFitnessInput = CodonSequenceInput
-CodonFMFitnessConfig = CodonFMConfig
+
+
+class CodonFMFitnessConfig(CodonFMConfig):
+    """Configuration for CodonFM coding-sequence fitness scoring.
+
+    Attributes:
+        model_checkpoint (CodonFMCheckpoint): Encodon checkpoint to run.
+        batch_size (int): Sequences processed per GPU forward pass.
+    """
 
 
 class CodonFMFitnessResult(BaseModel):
@@ -103,6 +112,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["sequences"],
     iterable_output_field="results",
+    max_chunk_size=32,
     cacheable=True,
 )
 def run_codonfm_fitness(
@@ -152,5 +162,5 @@ def run_codonfm_fitness(
         results=[
             CodonFMFitnessResult(sequence=sequence, sequence_length=len(sequence), fitness=score)
             for sequence, score in zip(inputs.sequences, scores, strict=True)
-        ]
+        ],
     )

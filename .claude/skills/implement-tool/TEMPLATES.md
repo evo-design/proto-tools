@@ -445,6 +445,8 @@ Schema rules (enforced by `test_license_consistency.py`):
 - **SPDX allowlist** (else use `spdx: "Custom (<name>)"`): `Apache-2.0`, `MIT`, `BSD-2-Clause`, `BSD-3-Clause`, `GPL-3.0`, `LGPL-3.0`, `MPL-2.0`, `CC0-1.0`, `CC-BY-4.0`, `CC-BY-SA-4.0`, `CC-BY-NC-4.0`, `CC-BY-NC-SA-4.0`, `AGPL-3.0`, `ISC`, `Unlicense`.
 - **Text placement:** SPDX-allowlisted licenses must NOT inline a `text:` field — the canonical copy lives at `proto_tools/tools/_licenses/{spdx}.txt` (must exist; add it if introducing a new SPDX id). `Custom (...)` licenses MUST inline `text:`.
 - **`commercial_use`** ∈ `{'yes', 'no', 'restricted'}`. **`weights.access`** (optional) ∈ `{'hf-gated', 'request'}`.
+- **`redistribution`** asks whether **a commercial entity** may redistribute the tool commercially and
+  serve it from its own infrastructure.
 - Add an optional `weights:` block when the model weights carry a different license than the code, and a `data:` block (with `name`) for API-wrapper toolkits that fetch an external dataset.
 
 ---

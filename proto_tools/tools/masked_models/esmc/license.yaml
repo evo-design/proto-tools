@@ -7,5 +7,5 @@ weights:
 commercial_use: 'yes'
 redistribution: true
 attribution_required: false
-notes: ESM C code and HuggingFace weights (biohub/ESMC-300M, biohub/ESMC-600M, biohub/ESMC-6B) are MIT-licensed under Chan Zuckerberg Biohub copyright. This supersedes the EvolutionaryScale Cambrian Open / Non-Commercial licenses that previously covered the 300M and 600M checkpoints. The model cards additionally tag 'other', which links only to a third-party dependency notice imposing no terms on users beyond those dependencies' own licenses.
-last_updated: '2026-07-28'
+notes: ESM C code and HuggingFace weights (biohub/ESMC-300M, biohub/ESMC-600M, biohub/ESMC-6B) are MIT-licensed under Chan Zuckerberg Biohub copyright, as are the sparse autoencoders trained against them. This supersedes the EvolutionaryScale Cambrian Open / Non-Commercial licenses that previously covered the 300M and 600M checkpoints. The model cards additionally tag 'other', which links only to a third-party dependency notice imposing no terms on users beyond those dependencies' own licenses.
+last_updated: '2026-07-30'

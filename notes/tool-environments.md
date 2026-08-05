@@ -137,8 +137,10 @@ Both variables default to off, so setup output stays quiet unless a caller opts 
 
 When a tool's packaged `standalone/` setup does not work on your machine (a cluster needs a different CUDA wheel, a pinned version has to change, an install step needs patching) you can override the whole env definition without editing the installed package. This works identically whether proto-tools was installed editable (`pip install -e`) or as a regular wheel, since the override points at a directory you control rather than at the package. Two pieces:
 
-- `proto-tools eject-standalone <toolkit> [--dir DIR]` copies the tool's packaged env-def directory (resolving shared envs) into `DIR/<toolkit>/` (default `./proto_standalone/<toolkit>/`), giving you an editable copy of every file the env is built from (`setup.sh`, `python_version.txt`, `requirements.txt`, `env_vars.txt`, ...). It always copies the packaged baseline, ignoring any active override.
+- `proto-tools eject-standalone <toolkit> [--dir DIR]` copies the tool's packaged env-def directory (resolving shared envs) into `DIR/<toolkit>/` (default `./proto_standalone/<toolkit>/`), giving you an editable copy of every file the env is built from (`setup.sh`, `python_version.txt`, `requirements.txt`, `env_vars.txt`, `binary_config.py`, ...). It always copies the packaged baseline, ignoring any active override.
 - `PROTO_<TOOLKIT>_STANDALONE_DIR=<path>` makes `ToolInstance._resolve_env_def` use `<path>` as the env-def dir instead of the packaged one. `<TOOLKIT>` is the toolkit's **folder name** uppercased (e.g. `esm2` → `PROTO_ESM2_STANDALONE_DIR`), not a tool registration key like `esm2-embed`. `eject-standalone` accepts either form and prints the exact variable to export. The override builds under an isolated env name (`<toolkit>__override_<hash>_env`), so it never clobbers the packaged env and two projects pointing at different override dirs get separate envs on disk. Editing the override's files triggers the usual setup-hash rebuild.
+
+**Scope: the environment definition, not the tool implementation.** The override changes *how the environment is built* (which wheels, which CUDA build, which install steps), never what the tool computes. `run.py`, `inference.py`, and the modules they import are not ejected and are always loaded from the installed package, so a tool's results stay attributable to the version of proto-tools that produced them. `binary_config.py` is the one Python file that is ejected, because it configures the binary install rather than the computation. If an override directory left over from an older release still contains `run.py` or `inference.py`, proto-tools logs a warning that the file is ignored.
 
 Typical flow:
 
@@ -156,6 +158,14 @@ This works whether proto-tools is run from a clone or pip-installed, editable or
 ## Conda Environment Registration
 
 Proto-tools writes `register_envs: false` to `PROTO_HOME/.micromamba/condarc` so micromamba-managed tool environments do not appear in the user's global `conda env list`. During micromamba setup, `ToolInstance` also removes existing registry entries under the current `PROTO_HOME/proto_tool_envs/` and `PROTO_HOME/.foundation_env/` roots from `~/.conda/environments.txt`. Unrelated conda environments are left untouched.
+
+## Architecture and `--platform` Forcing
+
+A conda prefix holds packages from exactly one subdir. `ToolInstance._create_env` creates the tool env natively (`micromamba create -p $VENV_PATH python=...` on the host's own subdir), so **`setup.sh` must never pass `--platform` to a `micromamba install -p "$VENV_PATH"`**. Doing so mixes subdirs inside one prefix: the build succeeds, and the tool then dies at first invocation with dyld's `incompatible architecture` (foreign-arch executables resolving `@rpath` against the prefix's native libraries).
+
+When a package genuinely has no build for the host arch, give it its own internally consistent prefix instead. `gene_annotation/crispr_tracr_rna` is the reference: its x86_64-only bioconda dependencies (`vmatch`, `scikit-learn=0.22.1`) go into `$VENV_PATH/conda_deps` via `micromamba create --platform osx-64`, leaving the tool env native. Before reaching for either, check whether conda-forge already ships the package for the host subdir; bioconda's coverage of `osx-arm64` is thin, and channel order (`-c conda-forge` first) is often the whole fix.
+
+`tests/style_consistency_tests/test_conda_platform_forcing.py` enforces the `install` half of this rule across every `setup.sh`.
 
 ## env_vars.txt
 
@@ -353,9 +363,18 @@ env = get_subprocess_device_env("cuda:2")  # Maps to physical GPU
 subprocess.run(cmd, env=env)
 ```
 
-**Auto-copy mechanism:**
-- Source: `proto_tools/utils/standalone_helpers_source/standalone_helpers/` (the package, tracked in git, alongside `standalone_helpers.sh`)
-- Destination: `{tool}/standalone/standalone_helpers/` (not tracked, auto-copied at runtime by `_worker_bootstrap.py`)
+**Delivery mechanism:** helpers are never copied. `_build_subprocess_env()` publishes
+`proto_tools/utils/standalone_helpers_source/` to every tool subprocess:
+
+- on `PYTHONPATH`, so standalone scripts resolve `import standalone_helpers`
+- on `PATH`, so `setup.sh` resolves `source standalone_helpers.sh` (bash searches `PATH` for a
+  sourced name containing no slash)
+- as `PROTO_STANDALONE_HELPERS_DIR`, for the worker bootstrap's `sys.path` ordering and as an
+  escape hatch when running a tool env's interpreter by hand
+
+Tool envs contain the tool's dependencies but not `proto_tools`, which is why the helpers have
+to be published rather than imported normally. Because nothing is written, proto-tools never
+needs its own install directory to be writable at runtime.
 
 **Consistency enforcement:** The parametrized test `tests/tool_infra_tests/test_device_manager/test_tool_device_consistency.py::test_standalone_protocol_compliance` verifies that any tool making subprocess calls imports `get_subprocess_device_env()` and passes its result as `env=`.
 

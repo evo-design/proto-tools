@@ -314,11 +314,12 @@ def test_opendde_bundled_checkpoints_are_downloaded_by_setup():
 # ── Config: cloud support gate ───────────────────────────────────────────────
 
 
-def test_opendde_cloud_unsupported_reason():
-    """A bundled model name is cloud-OK; a custom checkpoint path is not."""
-    assert OpenDDEConfig(use_msa=False).cloud_unsupported_reason() is None
-    assert OpenDDEConfig(use_msa=False, model_checkpoint="opendde_abag").cloud_unsupported_reason() is None
-    assert OpenDDEConfig(use_msa=False, model_checkpoint="/local/ckpt.pt").cloud_unsupported_reason() is not None
+@pytest.mark.parametrize("device", ["proto", "modal"])
+def test_opendde_local_checkpoint_is_unavailable_on_any_remote(device):
+    """A local file exists only on this machine, so no remote worker can read it."""
+    assert OpenDDEConfig(use_msa=False).remote_unsupported_reason(device) is None
+    assert OpenDDEConfig(use_msa=False, model_checkpoint="opendde_abag").remote_unsupported_reason(device) is None
+    assert OpenDDEConfig(use_msa=False, model_checkpoint="/local/ckpt.pt").remote_unsupported_reason(device) is not None
 
 
 # ── Dispatch / metric assembly (mocked worker) ───────────────────────────────
@@ -605,15 +606,16 @@ def test_opendde_export(tmp_path):
 @pytest.mark.slow
 @pytest.mark.uses_gpu
 def test_opendde_benchmark(request):
-    """Benchmark opendde-prediction on the MfnG protein + L-tyrosine ligand (cold + warm).
+    """Benchmark opendde-prediction on the MfnG protein + L-tyrosine ligand with MSA (cold + warm).
 
-    Single ~390-residue protein-ligand complex without MSA — a representative
-    co-folding workload shared with the other AF3-family predictors. Cold pass
-    measures weight load + first inference; warm pass measures inference only.
+    Single ~390-residue protein-ligand complex — a co-folding workload shared with the other
+    AF3-family predictors. The MSA search is included because it is usually the dominant cost of a
+    real fold, and because nothing else exercises that path. Cold pass measures weight load + first
+    inference; warm pass measures inference only.
     """
     complex_ = load_benchmark_complex("MfnG_and_ligand")
     inputs = OpenDDEInput(complexes=[complex_])
-    config = OpenDDEConfig(use_msa=False, verbose=True)
+    config = OpenDDEConfig(use_msa=True, verbose=True)
 
     result = benchmark_twice(request, "opendde", lambda: run_opendde(inputs=inputs, config=config))
 

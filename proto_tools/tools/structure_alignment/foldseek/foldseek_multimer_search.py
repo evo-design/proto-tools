@@ -41,6 +41,7 @@ from proto_tools.utils import (
     build_http_session,
     poll_until_complete,
 )
+from proto_tools.utils.device import RemoteDevice
 
 logger = logging.getLogger(__name__)
 
@@ -213,6 +214,24 @@ class FoldseekMultimerSearchConfig(BaseConfig):
         if self.search_mode == "local":
             _require_linux_x86_64_for_gpu(self.use_gpu)
         return self
+
+    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
+        """Local-DB search can't run on a remote worker — the database lives on the caller's machine."""
+        if self.search_mode == "local":
+            return (
+                "search_mode='local' needs a local Foldseek database, which can't be staged to "
+                f"device='{device}'. Use search_mode='remote', or run locally with device='cpu'."
+            )
+        return None
+
+    def local_execution_reason(self, device: RemoteDevice) -> str | None:
+        """Remote search is an HTTP call to the public Foldseek server, so a worker adds only a hop."""
+        if self.search_mode == "remote":
+            return (
+                f"search_mode='remote' queries the public Foldseek server over HTTP, so "
+                f"device='{device}' would only add a network hop."
+            )
+        return None
 
     @property
     def gpus_per_instance(self) -> int:

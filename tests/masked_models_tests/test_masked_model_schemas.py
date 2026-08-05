@@ -1,12 +1,14 @@
 """Tests for masked model shared data model schemas."""
 
 import json
+import re
 
 import pytest
 
 from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelEmbeddingsOutput,
     MaskedModelInput,
+    MaskedModelSampleInput,
     MaskedModelScoringMetrics,
     MaskedModelScoringOutput,
     Projection2D,
@@ -23,6 +25,63 @@ def test_input_string_normalized_to_list():
 def test_input_rejects_none_in_sequences():
     with pytest.raises(ValueError, match="cannot be None"):
         MaskedModelInput(sequences=["A", None])
+
+
+# ── Sequence alphabet ───────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("model", [MaskedModelInput, MaskedModelSampleInput])
+def test_input_accepts_its_own_alphabet(model):
+    alphabet = model.SEQUENCE_ALPHABET
+    assert model(sequences=[alphabet]).sequences == [alphabet]
+
+
+def test_sample_input_accepts_the_mask_token():
+    assert MaskedModelSampleInput(sequences="MKT_V").sequences == ["MKT_V"]
+
+
+def test_base_input_rejects_the_mask_token():
+    with pytest.raises(ValueError, match=re.escape("does not do. Pass a fully specified sequence")):
+        MaskedModelInput(sequences=["MKT_V"])
+
+
+@pytest.mark.parametrize(
+    ("sequence", "expected"),
+    [
+        pytest.param("MKT123!!", "'1', '2', '3', '!' starting at position 4", id="digits_and_punctuation"),
+        pytest.param("MKTJV", "'J' starting at position 4", id="unrepresentable_residue"),
+        pytest.param("MKTAV ", "' ' starting at position 6", id="trailing_space"),
+        pytest.param("MKT\tV", "'\\t' starting at position 4", id="tab"),
+        pytest.param("MKTav", "'a', 'v' starting at position 4", id="lowercase"),
+        pytest.param("MKT-V", "'-' starting at position 4", id="alignment_gap"),
+        pytest.param("MKTV*", "'*' starting at position 5", id="translation_stop"),
+    ],
+)
+@pytest.mark.parametrize("model", [MaskedModelInput, MaskedModelSampleInput])
+def test_input_rejects_characters_outside_alphabet(model, sequence, expected):
+    with pytest.raises(ValueError, match=re.escape(f"invalid character(s) {expected}")):
+        model(sequences=[sequence])
+
+
+def test_literal_mask_token_error_points_at_the_mask_character():
+    with pytest.raises(ValueError, match=re.escape("write a masked position as '_', not '<mask>'")):
+        MaskedModelInput(sequences=["MKT<mask>V"])
+
+
+def test_alphabet_error_names_the_offending_sequence():
+    with pytest.raises(ValueError, match=r"sequences\[1\]: invalid character\(s\) 'J'"):
+        MaskedModelInput(sequences=["MKTV", "MKTJV"])
+
+
+def test_reported_position_locates_the_first_listed_character():
+    """Characters are listed by first occurrence, so the position describes the one named first."""
+    with pytest.raises(ValueError, match=re.escape("'z', 'a' starting at position 2")):
+        MaskedModelInput(sequences=["MzKTa"])
+
+
+def test_input_rejects_empty_sequence():
+    with pytest.raises(ValueError, match=r"sequences\[0\]: cannot be empty"):
+        MaskedModelInput(sequences=[""])
 
 
 # ── MaskedModelScoringMetrics attribute access ──────────────────────────────

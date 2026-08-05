@@ -192,7 +192,8 @@ def install_binary(toolkit: str) -> None:
         except (OSError, EOFError, tarfile.TarError, urllib.error.URLError) as exc:  # noqa: PERF203 -- retry loop
             last_error = exc
             # Leading \n breaks out of the progress bar's trailing \r so this line survives in CI logs.
-            print(f"\n  Download attempt {attempt}/{_MAX_DOWNLOAD_RETRIES} failed: {exc}", flush=True)
+            # Name the URL: on a network with an egress allowlist this is the only way to tell which host to permit.
+            print(f"\n  Download attempt {attempt}/{_MAX_DOWNLOAD_RETRIES} failed for {url}: {exc}", flush=True)
             if attempt < _MAX_DOWNLOAD_RETRIES:
                 delay = min(
                     _INITIAL_RETRY_DELAY_SECONDS * _BACKOFF_MULTIPLIER ** (attempt - 1), _MAX_RETRY_DELAY_SECONDS
@@ -200,7 +201,9 @@ def install_binary(toolkit: str) -> None:
                 print(f"  Retrying in {delay:.0f}s...", flush=True)
                 time.sleep(delay)
 
-    raise RuntimeError(f"Failed to download {toolkit} after {_MAX_DOWNLOAD_RETRIES} attempts. Last error: {last_error}")
+    raise RuntimeError(
+        f"Failed to download {toolkit} from {url} after {_MAX_DOWNLOAD_RETRIES} attempts. Last error: {last_error}"
+    )
 
 
 if __name__ == "__main__":

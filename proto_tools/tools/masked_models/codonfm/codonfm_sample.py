@@ -5,7 +5,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from proto_tools.tools.masked_models.codonfm.shared_data_models import (
     CodonFMCheckpoint,
@@ -73,24 +73,41 @@ class CodonFMSampleConfig(BaseConfig):
     )
 
 
+class CodonFMSampleResult(BaseModel):
+    """One resampled coding sequence.
+
+    Attributes:
+        sequence (str): Resampled coding sequence in the DNA alphabet.
+    """
+
+    sequence: str = Field(title="Sequence", description="Resampled coding sequence in the DNA alphabet")
+
+
 class CodonFMSampleOutput(BaseToolOutput):
     """Output from CodonFM masked-codon sampling.
 
     Attributes:
-        sequences (list[str]): One resampled coding sequence per input (length preserved).
+        results (list[CodonFMSampleResult]): One resampled coding sequence per input.
     """
 
-    sequences: list[str] = Field(
-        default_factory=list, title="Sequences", description="Resampled coding sequences, in input order."
+    results: list[CodonFMSampleResult] = Field(
+        default_factory=list,
+        title="Results",
+        description="Resampled coding sequences, one per input and in input order",
     )
+
+    @property
+    def sequences(self) -> list[str]:
+        """Return sampled sequence strings in input order."""
+        return [result.sequence for result in self.results]
 
     def __len__(self) -> int:
         """Return the number of sampled sequences."""
-        return len(self.sequences)
+        return len(self.results)
 
     def __getitem__(self, index: int) -> str:
         """Return one sampled sequence."""
-        return self.sequences[index]
+        return self.results[index].sequence
 
     def __iter__(self) -> Iterator[str]:  # type: ignore[override]
         """Iterate over sampled sequences."""
@@ -131,7 +148,8 @@ def example_input() -> Any:
     stochastic=True,
     example_input=example_input,
     iterable_input_fields=["sequences"],
-    iterable_output_field="sequences",
+    iterable_output_field="results",
+    max_chunk_size=32,
     cacheable=False,
 )
 def run_codonfm_sample(
@@ -192,5 +210,5 @@ def run_codonfm_sample(
 
     return CodonFMSampleOutput(
         metadata={"model_checkpoint": config.model_checkpoint, "num_sequences": len(inputs.sequences)},
-        sequences=sampled_sequences,
+        results=[CodonFMSampleResult(sequence=sequence) for sequence in sampled_sequences],
     )

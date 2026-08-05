@@ -40,6 +40,7 @@ from proto_tools.tools.masked_models.codonfm import (
     CodonFMSampleConfig,
     CodonFMSampleInput,
     CodonFMSampleOutput,
+    CodonFMSampleResult,
     CodonFMScoreConfig,
     CodonFMScoreInput,
     CodonFMScoreOutput,
@@ -89,7 +90,13 @@ from proto_tools.tools.masked_models.esmc import (
     ESMCEmbeddingsConfig,
     ESMCEmbeddingsInput,
     ESMCEmbeddingsOutput,
+    ESMCSAEFeaturesConfig,
+    ESMCSAEFeaturesInput,
+    ESMCSAEFeaturesOutput,
+    SAELayerFeatures,
+    SequenceSAEFeatures,
     run_esmc_embeddings,
+    run_esmc_sae_features,
 )
 from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelEmbeddingsConfig,
@@ -176,6 +183,7 @@ __all__ = [
     "CodonFMSampleConfig",
     "CodonFMSampleInput",
     "CodonFMSampleOutput",
+    "CodonFMSampleResult",
     "run_codonfm_sample",
     # ESM2 - Embeddings
     "run_esm2_embeddings",
@@ -217,4 +225,11 @@ __all__ = [
     "ESMCEmbeddingsInput",
     "ESMCEmbeddingsConfig",
     "ESMCEmbeddingsOutput",
+    # ESM C - SAE Features
+    "run_esmc_sae_features",
+    "ESMCSAEFeaturesInput",
+    "ESMCSAEFeaturesConfig",
+    "ESMCSAEFeaturesOutput",
+    "SAELayerFeatures",
+    "SequenceSAEFeatures",
 ]

@@ -13,6 +13,7 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field, field_validator
 
+from proto_tools.transforms.masking import MASK_TOKEN
 from proto_tools.utils import (
     BaseConfig,
     BaseToolInput,
@@ -20,7 +21,14 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
 )
+from proto_tools.utils.sequence import PROTEIN_AMINO_ACIDS
 from proto_tools.utils.tool_io import Metrics, MetricSpec
+
+# Named separately so the error reports the intended fix rather than the characters it decomposes into.
+_LITERAL_MASK_SPELLING = "<mask>"
+
+# Non-canonical codes the ESM tokenizers carry: X (any), B (Asx), Z (Glx), U (Sec), O (Pyl).
+NON_CANONICAL_AMINO_ACIDS = "XBZUO"
 
 
 # ============================================================================
@@ -32,6 +40,9 @@ class MaskedModelInput(BaseToolInput):
     Provides common input validation and normalization for protein
     sequences used across all masked protein language model tools (ESM2, ESM3, ESMC).
 
+    Sequences must be fully specified. ``MaskedModelSampleInput`` widens
+    ``SEQUENCE_ALPHABET`` with the mask token for the tools that fill positions in.
+
     Attributes:
         sequences (list[str]): Protein sequence(s) to process. Can be
             provided as:
@@ -40,9 +51,13 @@ class MaskedModelInput(BaseToolInput):
             - A list of protein sequence strings (e.g., ``["MVLSP", "GGGS"]``)
 
             After validation, sequences are automatically normalized to a list format.
-            Valid protein sequences contain only standard amino acid characters
-            (20 standard amino acids + X (any amino acid) + * (translation stop)).
+            Each sequence must be non-empty and drawn from ``SEQUENCE_ALPHABET``: the 20
+            canonical amino acids plus the non-canonical codes ``X``, ``B``, ``Z``, ``U``,
+            and ``O``. Characters are case-sensitive.
     """
+
+    # Every permitted character occupies one token, so string positions map onto token positions.
+    SEQUENCE_ALPHABET: ClassVar[str] = PROTEIN_AMINO_ACIDS + NON_CANONICAL_AMINO_ACIDS
 
     sequences: list[str] = InputField(
         title="Sequences",
@@ -69,9 +84,69 @@ class MaskedModelInput(BaseToolInput):
 
         return seqs
 
+    @field_validator("sequences")
+    @classmethod
+    def validate_sequence_alphabet(cls, sequences: list[str]) -> list[str]:
+        """Reject empty sequences and characters outside ``SEQUENCE_ALPHABET``.
+
+        Anything else reaches the tokenizer as an unknown or multi-character token,
+        which desynchronizes string positions from token positions and surfaces as an
+        out-of-bounds gather on the GPU rather than a validation error.
+        """
+        permitted = set(cls.SEQUENCE_ALPHABET)
+        for idx, seq in enumerate(sequences):
+            if not seq:
+                raise ValueError(f"sequences[{idx}]: cannot be empty")
+            invalid = set(seq) - permitted
+            if not invalid:
+                continue
+            if _LITERAL_MASK_SPELLING in seq:
+                raise ValueError(
+                    f"sequences[{idx}]: write a masked position as '{MASK_TOKEN}', not '{_LITERAL_MASK_SPELLING}'."
+                )
+            if MASK_TOKEN in invalid:
+                raise ValueError(
+                    f"sequences[{idx}]: '{MASK_TOKEN}' marks a position for a model to fill in, "
+                    f"which {cls.__name__} does not do. Pass a fully specified sequence."
+                )
+            # Ordered by first occurrence so the reported position describes the first one listed,
+            # and quoted so whitespace and control characters are legible rather than an empty gap.
+            offenders = sorted(invalid, key=seq.index)
+            listed = ", ".join(repr(char) for char in offenders)
+            raise ValueError(
+                f"sequences[{idx}]: invalid character(s) {listed} starting at position {seq.index(offenders[0]) + 1}. "
+                f"Allowed characters are {cls.SEQUENCE_ALPHABET}."
+            )
+        return sequences
+
     def __len__(self) -> int:
         """Get the total number of residues across all sequences."""
         return sum(len(seq) for seq in self.sequences)
+
+
+class MaskedModelSampleInput(MaskedModelInput):
+    """Base input for masked language model sampling tools.
+
+    Widens the alphabet with ``MASK_TOKEN`` (``_``), which the sampling tools replace with
+    the model's native mask token before tokenization. The embedding and scoring tools do
+    not, so the mask token stays off ``MaskedModelInput``.
+
+    Attributes:
+        sequences (list[str]): Protein sequence(s) with ``_`` at the positions the model
+            should fill in. A sequence carrying no ``_`` is masked by the configured
+            masking strategy instead.
+    """
+
+    SEQUENCE_ALPHABET: ClassVar[str] = MaskedModelInput.SEQUENCE_ALPHABET + MASK_TOKEN
+
+    sequences: list[str] = InputField(
+        title="Sequences",
+        description="Protein sequence(s), string or list; '_' marks a position for the model to fill in",
+        examples=[
+            "MVL_P",
+            ["MVL_P", "GG_S"],
+        ],
+    )
 
 
 class MaskedModelEmbeddingsConfig(BaseConfig):

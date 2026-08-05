@@ -622,12 +622,16 @@ def test_blast_search_benchmark(request: pytest.FixtureRequest, tmp_path: Path) 
         CreateBlastDbConfig(dbtype="nucl"),
     ).db_path
     inputs = BlastSearchInput(query=query)
+    # device is pinned deliberately: this measures local BLAST+ throughput against a database built
+    # on this machine, which BlastSearchConfig.remote_unsupported_reason refuses on a remote device.
+    # search_mode='online' would measure NCBI's queue instead — a different thing entirely.
     config = BlastSearchConfig(
         search_mode="local",
         program="blastn",
         local_db=db_path,
         task="blastn",
         num_threads=4,
+        device="cpu",
     )
 
     def run_batch():

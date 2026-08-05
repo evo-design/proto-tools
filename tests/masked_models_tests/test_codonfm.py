@@ -6,7 +6,6 @@ and the masked pseudo-log-likelihood gradient.
 
 import importlib.util
 import math
-import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -47,19 +46,11 @@ _persistent_tool = make_persistent_fixture("codonfm")
 _CDS = "ATGGTGAGCAAGGGCGAGGAGCTGTTCACC"  # 30 nt, 10 codons
 
 
-@pytest.fixture
-def _fake_hf_token(monkeypatch) -> None:
-    """Satisfy require_hf_token() for mocked dispatch tests (no real HF access needed)."""
-    monkeypatch.setenv("HF_TOKEN", "hf_fake_for_unit_tests")
-
-
 def _skip_if_no_gpu() -> None:
     from proto_tools.utils.device import number_of_visible_gpus
 
     if number_of_visible_gpus() < 1:
         pytest.skip("CodonFM GPU test requires a visible CUDA GPU")
-    if not os.environ.get("HF_TOKEN"):
-        pytest.skip("CodonFM checkpoints are gated (NVIDIA Open Model License); set HF_TOKEN to run")
 
 
 # ---------------------------------------------------------------------------
@@ -92,11 +83,17 @@ def test_codonfm_score_input_validates_mutation() -> None:
     assert len(inp) == 1
 
     with pytest.raises(ValidationError, match="does not match"):
-        CodonFMScoreInput(mutations=[{"sequence": "ATGGTGAGC", "codon_position": 2, "ref_codon": "AAA", "alt_codon": "GTA"}])
+        CodonFMScoreInput(
+            mutations=[{"sequence": "ATGGTGAGC", "codon_position": 2, "ref_codon": "AAA", "alt_codon": "GTA"}]
+        )
     with pytest.raises(ValidationError, match="out of range"):
-        CodonFMScoreInput(mutations=[{"sequence": "ATGGTG", "codon_position": 5, "ref_codon": "GTG", "alt_codon": "GTA"}])
+        CodonFMScoreInput(
+            mutations=[{"sequence": "ATGGTG", "codon_position": 5, "ref_codon": "GTG", "alt_codon": "GTA"}]
+        )
     with pytest.raises(ValidationError, match="3-nucleotide"):
-        CodonFMScoreInput(mutations=[{"sequence": "ATGGTG", "codon_position": 1, "ref_codon": "GT", "alt_codon": "GTA"}])
+        CodonFMScoreInput(
+            mutations=[{"sequence": "ATGGTG", "codon_position": 1, "ref_codon": "GT", "alt_codon": "GTA"}]
+        )
 
 
 def test_codonfm_one_hot_codon_logits_matches_vocab_order() -> None:
@@ -223,8 +220,14 @@ def test_codonfm_worker_gradient_is_padded_finite_and_does_not_touch_parameter_g
     fake_model.requires_grad_(False)
     tokenizer = SimpleNamespace(
         codons=CODONFM_CODON_VOCAB,
-        encoder={**{codon: idx for idx, codon in enumerate(CODONFM_CODON_VOCAB)}, "<CLS>": 64, "<SEP>": 65,
-                 "<MASK>": 66, "<PAD>": 67, "<UNK>": 68},
+        encoder={
+            **{codon: idx for idx, codon in enumerate(CODONFM_CODON_VOCAB)},
+            "<CLS>": 64,
+            "<SEP>": 65,
+            "<MASK>": 66,
+            "<PAD>": 67,
+            "<UNK>": 68,
+        },
         cls_token_id=64,
         sep_token_id=65,
         mask_token_id=66,
@@ -243,7 +246,7 @@ def test_codonfm_worker_gradient_is_padded_finite_and_does_not_touch_parameter_g
 
 
 def test_codonfm_resolve_checkpoint_source_covers_all_aliases() -> None:
-    """Every checkpoint alias resolves to gated HF resolve URLs plus a stable cache subdir."""
+    """Every checkpoint alias resolves to public HF URLs plus a stable cache subdir."""
     for alias, entry in CODONFM_CHECKPOINTS.items():
         safetensors_url, config_url, filename, subdir = resolve_checkpoint_source(alias)
         assert safetensors_url.startswith("https://huggingface.co/")
@@ -259,7 +262,7 @@ def test_codonfm_resolve_checkpoint_source_covers_all_aliases() -> None:
 # ---------------------------------------------------------------------------
 # Dispatch contracts (mocked worker)
 # ---------------------------------------------------------------------------
-def test_codonfm_fitness_dispatch_contract(monkeypatch, _fake_hf_token) -> None:
+def test_codonfm_fitness_dispatch_contract(monkeypatch) -> None:
     """run_codonfm_fitness dispatches the fitness op and maps per-sequence scores."""
     captured: dict[str, object] = {}
 
@@ -287,7 +290,7 @@ def test_codonfm_fitness_dispatch_contract(monkeypatch, _fake_hf_token) -> None:
     assert [r.sequence_length for r in result.results] == [30, 9]
 
 
-def test_codonfm_embeddings_dispatch_contract(monkeypatch, _fake_hf_token) -> None:
+def test_codonfm_embeddings_dispatch_contract(monkeypatch) -> None:
     """run_codonfm_embeddings dispatches the embeddings op and maps per-sequence vectors."""
     captured: dict[str, object] = {}
 
@@ -310,7 +313,7 @@ def test_codonfm_embeddings_dispatch_contract(monkeypatch, _fake_hf_token) -> No
     assert result.results[0].sequence_length == 30
 
 
-def test_codonfm_score_dispatch_contract(monkeypatch, _fake_hf_token) -> None:
+def test_codonfm_score_dispatch_contract(monkeypatch) -> None:
     """run_codonfm_score dispatches normalized mutations and maps ref/alt log-likelihoods + LLR."""
     captured: dict[str, object] = {}
 
@@ -348,7 +351,7 @@ def test_codonfm_score_dispatch_contract(monkeypatch, _fake_hf_token) -> None:
     assert result.results[0].ref_codon == "GTG"
 
 
-def test_codonfm_gradient_dispatch_contract(monkeypatch, _fake_hf_token) -> None:
+def test_codonfm_gradient_dispatch_contract(monkeypatch) -> None:
     """run_codonfm_gradient forwards logits/temperature/ste and returns the gradient bundle."""
     captured: dict[str, object] = {}
 
@@ -385,7 +388,7 @@ def test_codonfm_gradient_dispatch_contract(monkeypatch, _fake_hf_token) -> None
     assert result.vocab == CODONFM_CODON_VOCAB
 
 
-def test_codonfm_gradient_forward_mode_dispatch_contract(monkeypatch, _fake_hf_token) -> None:
+def test_codonfm_gradient_forward_mode_dispatch_contract(monkeypatch) -> None:
     """compute_gradient=False forwards the flag and returns gradient=None with the scalar objective."""
     captured: dict[str, object] = {}
 
@@ -414,7 +417,7 @@ def test_codonfm_gradient_forward_mode_dispatch_contract(monkeypatch, _fake_hf_t
     assert result.metrics["avg_log_likelihood"] == -0.5
 
 
-def test_codonfm_sample_dispatch_contract(monkeypatch, _fake_hf_token) -> None:
+def test_codonfm_sample_dispatch_contract(monkeypatch) -> None:
     """run_codonfm_sample forwards masking/temperature config and returns the resampled sequences."""
     captured: dict[str, object] = {}
 
@@ -431,7 +434,9 @@ def test_codonfm_sample_dispatch_contract(monkeypatch, _fake_hf_token) -> None:
 
     result = run_codonfm_sample(
         CodonFMSampleInput(sequences=[_CDS, "ATGGCCACC"]),
-        CodonFMSampleConfig(model_checkpoint="encodon_80m", num_mutations=2, temperature=1.2, batch_size=2, device="cpu"),
+        CodonFMSampleConfig(
+            model_checkpoint="encodon_80m", num_mutations=2, temperature=1.2, batch_size=2, device="cpu"
+        ),
     )
 
     assert captured["toolkit"] == "codonfm"
@@ -440,6 +445,7 @@ def test_codonfm_sample_dispatch_contract(monkeypatch, _fake_hf_token) -> None:
     assert captured["payload"]["num_mutations"] == 2
     assert captured["payload"]["mask_fraction"] == 0.15
     assert captured["payload"]["temperature"] == 1.2
+    assert [item.sequence for item in result.results] == [_CDS, "ATGGCCACC"]
     assert list(result.sequences) == [_CDS, "ATGGCCACC"]
     assert len(result) == 2
 
@@ -451,7 +457,7 @@ def test_codonfm_sample_dispatch_contract(monkeypatch, _fake_hf_token) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Integration (real model — GPU + gated checkpoint)
+# Integration (real model — GPU + public checkpoint)
 # ---------------------------------------------------------------------------
 @pytest.mark.uses_gpu
 @pytest.mark.slow

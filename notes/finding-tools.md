@@ -18,6 +18,7 @@ proto-tools catalog --json
 proto-tools docs esm2-embedding
 proto-tools docs esm2-embedding --json
 proto-tools schema esm2-embedding --input
+proto-tools signature esm2-embedding
 proto-tools example-input esm2-embedding
 proto-tools access esm3-embedding
 ```
@@ -81,7 +82,7 @@ ToolRegistry.get_output_schema("esm2-embedding")
 ToolRegistry.get_example_input("esm2-embedding")
 ```
 
-`example_input()` values are minimal valid `Input` objects, useful for smoke tests, notebooks, and script templates.
+`example_input()` values are minimal valid `Input` objects, useful for smoke tests, notebooks, and script templates. They carry real payloads, so for structure tools and model-context-length sequence tools they run to hundreds of KB; that size is inherent (`BorzoiInput` requires exactly 524,288 bp), not a fixture that could be trimmed. When you only need the symbol names and required field names, use `proto-tools signature <tool>`, which renders a fixed few hundred bytes for every tool.
 
 ## Citation, Links, License, and Access
 

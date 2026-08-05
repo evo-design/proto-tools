@@ -25,6 +25,7 @@ import numpy as np
 from standalone_helpers import (
     get_logger,
     log_likelihood_metrics,
+    move_model_to_device,
     resolve_weights_dir,
     serialize_output,
     set_torch_seed,
@@ -44,7 +45,7 @@ _STOP_CODONS = frozenset({"TAA", "TAG", "TGA"})
 
 
 # ---------------------------------------------------------------------------
-# HuggingFace checkpoint provisioning (gated NVIDIA Open Model License → HF_TOKEN)
+# HuggingFace checkpoint provisioning (public NVIDIA Open Model License weights)
 # ---------------------------------------------------------------------------
 def _is_trusted_hf_url(url: str) -> bool:
     """True only for an HTTPS URL on ``huggingface.co`` or a real subdomain."""
@@ -131,7 +132,7 @@ def _resolve_hf_token() -> str | None:
 
 
 def _download(url: str, dest: Path) -> None:
-    """Download a single HuggingFace file over HTTPS, attaching an HF token for the gated repo."""
+    """Download a public HuggingFace file over HTTPS, using an optional token when available."""
     if urllib.parse.urlparse(url).scheme != "https":
         raise ValueError(f"codonfm: checkpoint URL must use https, got {_redact_url(url)!r}")
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -167,8 +168,8 @@ def _weights_dir() -> Path:
 def _resolve_checkpoint(input_dict: dict[str, Any]) -> str:
     """Provision ``<name>.safetensors`` + ``config.json`` into one cache dir; return the safetensors path.
 
-    ``EncodonInference`` requires both files side by side. Downloads are HF-gated (NVIDIA Open
-    Model License), so ``HF_TOKEN`` must be set and the license accepted for the repo.
+    ``EncodonInference`` requires both files side by side. The repositories are public under the
+    NVIDIA Open Model License; an available ``HF_TOKEN`` is used but is not required.
     """
     safetensors_url = input_dict["safetensors_url"]
     config_url = input_dict["config_url"]
@@ -204,7 +205,7 @@ class CodonFMModel:
         from src.inference.task_types import TaskTypes
 
         if self.inference is not None and self.checkpoint_key == checkpoint_path:
-            self._to_device(device)
+            self.to_device(device)
             return
         if verbose:
             logger.info("Loading CodonFM checkpoint from %s", checkpoint_path)
@@ -216,13 +217,15 @@ class CodonFMModel:
         self.tokenizer = inference.tokenizer
         self.checkpoint_key = checkpoint_path
         self.device = "cpu"
-        self._to_device(device)
+        self.to_device(device)
 
-    def _to_device(self, device: str) -> None:
-        if self.inference is None or self.device == device:
-            return
-        self.inference.to(device)
-        self.device = device
+    def to_device(self, device: str) -> None:
+        """Move the loaded Encodon model to another device."""
+        if self.inference is None:
+            raise ValueError("codonfm: cannot move an unloaded model; call load() first")
+        if self.device != device:
+            self.inference = move_model_to_device(self.inference, self.device or "cpu", device)
+            self.device = device
 
     def _batch(self, items: list[dict[str, np.ndarray]]) -> dict[str, Any]:
         """Stack per-item numpy fields (all padded to a shared length) into device tensors."""
@@ -244,7 +247,7 @@ class CodonFMModel:
         """Mean per-token log-likelihood for each coding sequence (higher = more model-typical)."""
         from src.data.preprocess.codon_sequence import process_item
 
-        self._to_device(device)
+        self.to_device(device)
         fitness: list[float] = []
         for start in range(0, len(sequences), batch_size):
             chunk = sequences[start : start + batch_size]
@@ -258,7 +261,7 @@ class CodonFMModel:
         """CLS-token embedding vector for each coding sequence."""
         from src.data.preprocess.codon_sequence import process_item
 
-        self._to_device(device)
+        self.to_device(device)
         embeddings: list[list[float]] = []
         for start in range(0, len(sequences), batch_size):
             chunk = sequences[start : start + batch_size]
@@ -274,7 +277,7 @@ class CodonFMModel:
         """Ref-vs-alt codon log-likelihood ratio per mutation (ref_ll - alt_ll; higher = ref favored)."""
         from src.data.preprocess.mutation_pred import mlm_process_item
 
-        self._to_device(device)
+        self.to_device(device)
         results: list[dict[str, float]] = []
         for start in range(0, len(mutations), batch_size):
             chunk = mutations[start : start + batch_size]
@@ -350,8 +353,8 @@ class CodonFMModel:
         if any(len(row) != n_codons_vocab for row in logits_list):
             raise ValueError(f"codonfm: compute_gradient expects L x {n_codons_vocab} logits")
 
-        self._to_device(device)
-        dev = torch.device(self.device)
+        self.to_device(device)
+        dev = torch.device(device)
 
         embed_layer = self._embedding_layer()
         weight = embed_layer.word_embeddings.weight
@@ -445,7 +448,7 @@ class CodonFMModel:
                 total_loss_val += loss_sum.item()
 
                 if backprop:
-                    (loss_sum / sequence_length).backward()
+                    (loss_sum / sequence_length).backward()  # type: ignore[no-untyped-call]
                     ie_chunk_grad = ie_chunk.grad
                     if ie_chunk_grad is None:
                         raise RuntimeError("codonfm: missing input-embedding gradient")
@@ -507,8 +510,8 @@ class CodonFMModel:
         from src.data.metadata import MetadataFields
         from src.data.preprocess.codon_sequence import process_item
 
-        self._to_device(device)
-        dev = torch.device(self.device)
+        self.to_device(device)
+        dev = torch.device(device)
         rng = np.random.default_rng(seed)
         # Restrict resampling to the 61 sense codons so a masked interior codon can never be
         # replaced with a premature stop (TAA/TAG/TGA); ``codons``/``codon_token_ids`` stay aligned.
@@ -569,6 +572,7 @@ _MODEL = CodonFMModel()
 
 def _validate_request(input_dict: dict[str, Any], operation: str) -> None:
     """Reject malformed raw-worker payloads before resolving or loading a checkpoint."""
+
     def valid_sequence(sequence: Any) -> bool:
         return (
             isinstance(sequence, str)
@@ -600,7 +604,10 @@ def _validate_request(input_dict: dict[str, Any], operation: str) -> None:
         if any(
             not isinstance(row, list)
             or len(row) != 64
-            or any(isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) for value in row)
+            or any(
+                isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)
+                for value in row
+            )
             for row in logits
         ):
             raise ValueError("codonfm: gradient logits must be a finite L x 64 numeric matrix")
@@ -656,7 +663,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     _MODEL.load(checkpoint_path=_resolve_checkpoint(input_dict), device=device, verbose=verbose)
 
     if operation == "fitness":
-        return {"fitness": _MODEL.score_fitness(sequences=input_dict["sequences"], batch_size=batch_size, device=device)}
+        return {
+            "fitness": _MODEL.score_fitness(sequences=input_dict["sequences"], batch_size=batch_size, device=device)
+        }
     if operation == "embeddings":
         return {
             "embeddings": _MODEL.extract_embeddings(
@@ -664,7 +673,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             )
         }
     if operation == "score":
-        return {"mutations": _MODEL.score_mutations(mutations=input_dict["mutations"], batch_size=batch_size, device=device)}
+        return {
+            "mutations": _MODEL.score_mutations(mutations=input_dict["mutations"], batch_size=batch_size, device=device)
+        }
     if operation == "sample":
         return {
             "sequences": _MODEL.sample_sequences(
@@ -688,6 +699,21 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             verbose=verbose,
         )
     raise AssertionError("unreachable")
+
+
+def to_device(device: str) -> dict[str, Any]:
+    """Move the loaded Encodon model to a DeviceManager-selected device."""
+    if _MODEL.inference is not None:
+        _MODEL.to_device(device)
+        return {"success": True, "device": device}
+    return {"success": True, "device": device, "note": "model not loaded yet"}
+
+
+def get_memory_stats() -> dict[str, Any]:
+    """Report PyTorch device memory usage for DeviceManager monitoring."""
+    from standalone_helpers import get_pytorch_memory_stats
+
+    return get_pytorch_memory_stats(_MODEL.device or "cpu")  # type: ignore[no-any-return]
 
 
 def main() -> None:

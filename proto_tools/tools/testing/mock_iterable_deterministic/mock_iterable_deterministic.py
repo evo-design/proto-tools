@@ -140,6 +140,10 @@ def example_input() -> MockIterableDeterministicInput:
 
 @tool(
     key="mock-iterable-deterministic",
+    local_only=(
+        "mock-iterable-deterministic is an in-process test fixture with no model and no "
+        "environment. It does not need to be deployed and can run in this process."
+    ),
     label="Mock Iterable Deterministic Scorer",
     category="testing",
     input_class=MockIterableDeterministicInput,

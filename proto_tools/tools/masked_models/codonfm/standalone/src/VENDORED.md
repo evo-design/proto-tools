@@ -7,8 +7,8 @@ those checkpoints unpickle/load against the exact module topology they were trai
 
 - **Source:** [NVIDIA-BioNeMo/CodonFM](https://github.com/NVIDIA-BioNeMo/CodonFM)
 - **Commit (pinned):** `0561907ca25adae7ecbe685e8fc2882e634b1f91`
-- **License:** Apache-2.0 (upstream code). The Encodon model *weights* are separately gated under
-  the NVIDIA Open Model License — see the toolkit `license.yaml`.
+- **License:** Apache-2.0 (upstream code). The public Encodon model *weights* are separately
+  licensed under the NVIDIA Open Model License — see the toolkit `license.yaml`.
 - **Files vendored:** the 27 `.py` files under `src/` (see each file's header for its exact
   upstream path).
 

@@ -113,7 +113,9 @@ def test_metal3d_prediction_whole_protein() -> None:
 def test_metal3d_prediction_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark metal3d-prediction: all metal-binding residues of renin (~340 aa) with metal3d-cat (cold + warm)."""
     inputs = Metal3DPredictionInput(inputs=[Metal3DStructureInput(structure=Structure(structure=str(BENCHMARK_PDB)))])
-    config = Metal3DPredictionConfig(model_checkpoint="metal3d-cat", device="cuda")
+    # No device= — 'cuda' is already the default, and pinning it here would override the harness,
+    # so --use-modal would silently measure a local run instead of the deployment.
+    config = Metal3DPredictionConfig(model_checkpoint="metal3d-cat")
 
     output = benchmark_twice(request, "metal3d", lambda: run_metal3d_prediction(inputs, config))
 

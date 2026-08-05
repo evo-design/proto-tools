@@ -17,7 +17,6 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
-from proto_tools.utils.device import RemoteDevice
 
 logger = logging.getLogger(__name__)
 
@@ -208,24 +207,21 @@ class NAMPNNSpecificityConfig(BaseConfig):
         description="Keep intermediate raw NA-MPNN output directories",
     )
 
-    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
-        """NA-MPNN needs a local repo checkout + checkpoint that can't be staged to cloud."""
-        return (
-            "NA-MPNN requires a local repository checkout and checkpoint on disk, which "
-            f"can't be staged to device='{device}'. Run locally with device='cuda' or 'cpu'."
-        )
-
 
 # ============================================================================
 # Tool Implementation
 # ============================================================================
 def example_input() -> NAMPNNSpecificityInput:
     """Minimal valid input for testing and examples."""
-    return NAMPNNSpecificityInput(pdb_paths=["protein_dna_complex.pdb"])
+    return NAMPNNSpecificityInput(pdb_paths=[str(Path(__file__).parent / "example_input_fixture.pdb")])
 
 
 @tool(
     key="na-mpnn-specificity",
+    local_only=(
+        "NA-MPNN requires a local repository checkout and checkpoint on disk, which are not available "
+        "on a remote worker. Run locally with device='cuda' or 'cpu'."
+    ),
     label="NA-MPNN Specificity",
     category="sequence_scoring",
     input_class=NAMPNNSpecificityInput,

@@ -1,13 +1,12 @@
 """proto_tools/utils/standalone_helpers_source/standalone_helpers/__init__.py.
 
-Shared helpers copied to each tool's standalone/ directory at runtime.
+Shared helpers published to each tool subprocess on ``PYTHONPATH`` at launch.
 
 This package provides common utilities that standalone scripts need but cannot
 import from the main ``proto_tools`` package (due to environment isolation).
 
-DO NOT MODIFY THESE FILES INSIDE STANDALONE FOLDERS. CHANGES WILL BE OVERWRITTEN.
-If you need to make changes, modify the source files which are located at
-``proto-tools/proto_tools/utils/standalone_helpers_source/standalone_helpers/``.
+This directory is the only copy; edits here take effect on the next tool
+invocation, with no environment rebuild.
 
 Inside tool standalone directories, helpers can be imported either via the
 package entry point::
@@ -20,8 +19,9 @@ or from specific submodules::
     from standalone_helpers.seeding import set_torch_seed
     from standalone_helpers.compression import compress_array
 
-This file and the submodules are copied by the worker bootstrap. The source
-tree is tracked by git, but the copies in ``tools/*/standalone/`` are not.
+``_build_subprocess_env`` publishes this directory to the subprocess; the
+bootstrap then promotes it to ``sys.path[0]`` so it outranks any stale copy an
+older proto-tools left in a tool's ``standalone/`` dir.
 """
 
 import os

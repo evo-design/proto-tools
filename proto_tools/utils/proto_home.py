@@ -20,11 +20,9 @@ Layout under PROTO_HOME::
 
 import os
 import sys
-from functools import lru_cache
 from pathlib import Path
 
 
-@lru_cache(maxsize=1)
 def get_proto_home() -> Path:
     """Return the PROTO_HOME root directory.
 
@@ -37,10 +35,6 @@ def get_proto_home() -> Path:
     This keeps data separate from source code and gives every user
     a consistent, predictable location.  To use a custom location
     (e.g. on HPC), set ``PROTO_HOME`` in your shell profile.
-
-    The result is cached for the lifetime of the process.  Call
-    ``get_proto_home.cache_clear()`` if you need to re-resolve
-    (e.g. in tests after monkeypatching ``PROTO_HOME``).
     """
     env_val = os.environ.get("PROTO_HOME")
     if env_val:
