@@ -13,6 +13,31 @@ from proto_tools.modal.proto_tools_source import PATH_ENV, checkout_or_none
 # the tree that gets patched with standalone overrides is the one imports actually resolve to.
 CONTAINER_ROOT = "/root"
 
+#: Extra pip requirements every service image installs, separated by whitespace. For dependencies
+#: a deployment needs that proto-tools itself does not.
+EXTRA_PACKAGES_ENV = "PROTO_MODAL_EXTRA_PACKAGES"
+
+#: Extra local directories every service image carries, separated by :data:`os.pathsep`. Each is
+#: mounted under :data:`CONTAINER_ROOT` by its own name, so a container imports it as that name.
+EXTRA_SOURCE_ENV = "PROTO_MODAL_EXTRA_SOURCE"
+
+# Excluded from an extra source directory. Narrower than :data:`proto_tools.modal.utils`'
+# LOCAL_DIR_IGNORE, which also drops `tests` and `notes`: those name this repository's own layout,
+# and a directory of someone else's may be a package its code imports.
+#
+# `.git` is the load-bearing entry. A checkout is the obvious thing to point this at, and git
+# rewrites its index during ordinary work, so mounting it would change the layer hash between two
+# deploys of identical code and rebuild every image below it.
+EXTRA_SOURCE_IGNORE: list[str] = [
+    ".git",
+    "__pycache__",
+    "*.pyc",
+    "*.egg-info",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+]
+
 # Resolving a source tree is a deploy-time concern; a container never builds an image.
 _CHECKOUT = checkout_or_none()
 
@@ -59,6 +84,57 @@ def with_dependencies(image: modal.Image) -> modal.Image:
 BENCHMARK_REPORT_PATTERNS: list[str] = ["**/modal/*/*_deployment/README.md"]
 
 
+def extra_packages() -> list[str]:
+    """Return the requirements named in :data:`EXTRA_PACKAGES_ENV`.
+
+    Returns:
+        list[str]: Requirement specifiers, empty when the variable is unset. Split on whitespace
+            rather than commas, which a specifier may contain.
+    """
+    return os.environ.get(EXTRA_PACKAGES_ENV, "").split()
+
+
+def extra_source_dirs() -> list[Path]:
+    """Return the directories named in :data:`EXTRA_SOURCE_ENV`.
+
+    Returns:
+        list[Path]: Resolved directories, empty when the variable is unset.
+
+    Raises:
+        ValueError: If a named path is not a directory, or its name is not one a container could
+            import it by. Building an image without the code a deployment asked for would fail
+            later, inside a container, on the first call.
+    """
+    resolved = []
+    for entry in os.environ.get(EXTRA_SOURCE_ENV, "").split(os.pathsep):
+        if not entry:
+            continue
+        path = Path(entry).expanduser().resolve()
+        if not path.is_dir():
+            raise ValueError(f"{EXTRA_SOURCE_ENV} names {entry!r}, which is not a directory")
+        if not path.name.isidentifier():
+            raise ValueError(
+                f"{EXTRA_SOURCE_ENV} names {entry!r}, whose directory name is not a Python "
+                f"identifier. It is mounted under {CONTAINER_ROOT} by that name, so nothing "
+                f"could import it."
+            )
+        resolved.append(path)
+    return resolved
+
+
+def _with_extras(image: modal.Image) -> modal.Image:
+    """Add the packages and source a deployment asked for.
+
+    Applied here because every service image is built through :func:`with_proto_tools`, which is
+    not true of any later layer.
+    """
+    if packages := extra_packages():
+        image = image.pip_install(*packages)
+    for path in extra_source_dirs():
+        image = image.add_local_dir(str(path), f"{CONTAINER_ROOT}/{path.name}", copy=True, ignore=EXTRA_SOURCE_IGNORE)
+    return image
+
+
 def with_proto_tools(
     image: modal.Image, *, overrides: str | None = None, overrides_dir: Path | str | None = None
 ) -> modal.Image:
@@ -74,9 +150,13 @@ def with_proto_tools(
             normally the service module's own directory.
 
     Returns:
-        modal.Image: The image with proto-tools importable.
+        modal.Image: The image with proto-tools importable, and whatever :data:`EXTRA_PACKAGES_ENV`
+            and :data:`EXTRA_SOURCE_ENV` name.
     """
     from proto_tools.modal.utils import apply_standalone_overrides
+
+    # Applied first, so editing proto-tools does not rebuild a deployment's own layers.
+    image = _with_extras(image)
 
     # ignore=[] is required: the default keeps only .py, dropping every setup.sh and
     # requirements.txt a standalone environment needs.

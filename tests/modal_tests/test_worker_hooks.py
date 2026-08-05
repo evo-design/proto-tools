@@ -7,9 +7,13 @@ from typing import Any
 import pytest
 
 from proto_tools.modal.hooks import (
+    PLUGINS_ENV,
     CallContext,
+    _plugin_modules,
     apply_payload_hooks,
     clear_hooks,
+    load_plugins,
+    plugin_env,
     register_call_middleware,
     register_payload_hook,
     run_with_middleware,
@@ -274,3 +278,66 @@ def test_middleware_is_told_which_tool_it_wrapped() -> None:
 
     assert _CallContext(run_esm2_embeddings).tool_key == "esm2-embedding"
     assert _CallContext(lambda: None).tool_key is None, "an unregistered function resolves to nothing"
+
+
+# ── Plugin loading ───────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        pytest.param("", (), id="unset"),
+        pytest.param("pkg.one", ("pkg.one",), id="single"),
+        pytest.param("pkg.one,pkg.two", ("pkg.one", "pkg.two"), id="comma"),
+        pytest.param("pkg.one pkg.two", ("pkg.one", "pkg.two"), id="whitespace"),
+        pytest.param(" pkg.one , pkg.two ", ("pkg.one", "pkg.two"), id="padded"),
+    ],
+)
+def test_plugin_modules_parses_both_separators(raw: str, expected: tuple[str, ...]) -> None:
+    """A deployment naming several modules must not have to guess which separator is accepted."""
+    assert _plugin_modules(raw) == expected
+
+
+def test_a_plugin_module_body_runs_and_registers(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """The point of the whole mechanism: importing the named module is what installs the hooks."""
+    import sys
+
+    (tmp_path / "probe_plugin.py").write_text(
+        "from proto_tools.modal.hooks import register_call_middleware\n"
+        "register_call_middleware(lambda _ctx, nxt: {**nxt(), 'probed': True})\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.delitem(sys.modules, "probe_plugin", raising=False)
+    monkeypatch.setenv(PLUGINS_ENV, "probe_plugin")
+
+    assert load_plugins() == ("probe_plugin",)
+    assert run_with_middleware(_CTX, lambda: {"ok": True}) == {"ok": True, "probed": True}
+
+
+def test_the_import_is_not_repeated_on_every_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This runs on the path of every served call, so it must not re-import per call."""
+    from proto_tools.modal import hooks
+
+    calls: list[str] = []
+    monkeypatch.setattr(hooks.importlib, "import_module", calls.append)
+    monkeypatch.setenv(PLUGINS_ENV, "pkg.one")
+
+    load_plugins()
+    load_plugins()
+    assert calls == ["pkg.one"], "import_module ran per call rather than once"
+
+
+def test_an_unimportable_plugin_names_the_variable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bare ModuleNotFoundError leaves a reader no way to tell where the name came from."""
+    monkeypatch.setenv(PLUGINS_ENV, "proto_tools_plugin_that_does_not_exist")
+    with pytest.raises(ImportError, match=PLUGINS_ENV):
+        load_plugins()
+
+
+def test_plugin_env_reaches_the_container_only_when_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty variable baked into every image would be noise in each one's environment."""
+    monkeypatch.delenv(PLUGINS_ENV, raising=False)
+    assert plugin_env() == {}
+
+    monkeypatch.setenv(PLUGINS_ENV, "pkg.one")
+    assert plugin_env() == {PLUGINS_ENV: "pkg.one"}
