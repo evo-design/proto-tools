@@ -82,6 +82,7 @@ TOOL_MAP: dict[str, ToolEntry] = {
     "parade-gradient": ToolEntry("proto-tools-parade", "ParadeService", "gradient", True),
     "parade-stability": ToolEntry("proto-tools-parade", "ParadeService", "stability", True),
     "pdockq2": ToolEntry("proto-tools-pdockq2", "PDockQ2Service", "score", False),
+    "primer3-thermodynamics": ToolEntry("proto-tools-primer3", "Primer3Service", "score", False),
     "prodigal-prediction": ToolEntry("proto-tools-prodigal", "ProdigalService", "predict", False),
     "progen2-sample": ToolEntry("proto-tools-progen2", "ProGen2Service", "sample", True),
     "progen2-score": ToolEntry("proto-tools-progen2", "ProGen2Service", "score", True),
