@@ -36,6 +36,7 @@ from proto_tools.tools.masked_models.codonfm import (
     run_codonfm_score,
 )
 from proto_tools.tools.masked_models.codonfm.shared_data_models import CODONFM_CHECKPOINTS, CODONFM_MAX_NT
+from proto_tools.transforms.masking import RandomMaskingStrategy
 from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
@@ -424,8 +425,8 @@ def test_codonfm_sample_dispatch_contract(monkeypatch) -> None:
     def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured["toolkit"] = toolkit
         captured["payload"] = payload
-        # Echo one mutated sequence per input (length preserved by the real worker).
-        return {"sequences": list(payload["sequences"])}
+        # Refill the masked codons as the real worker does; a mask must never reach the output.
+        return {"sequences": [sequence.replace("___", "AAA") for sequence in payload["sequences"]]}
 
     monkeypatch.setattr(
         "proto_tools.tools.masked_models.codonfm.codonfm_sample.ToolInstance.dispatch",
@@ -435,25 +436,68 @@ def test_codonfm_sample_dispatch_contract(monkeypatch) -> None:
     result = run_codonfm_sample(
         CodonFMSampleInput(sequences=[_CDS, "ATGGCCACC"]),
         CodonFMSampleConfig(
-            model_checkpoint="encodon_80m", num_mutations=2, temperature=1.2, batch_size=2, device="cpu"
+            model_checkpoint="encodon_80m",
+            masking_strategy=RandomMaskingStrategy(num_mutations=2),
+            temperature=1.2,
+            batch_size=2,
+            device="cpu",
         ),
     )
 
     assert captured["toolkit"] == "codonfm"
     assert captured["payload"]["operation"] == "sample"
-    assert captured["payload"]["sequences"] == [_CDS, "ATGGCCACC"]
-    assert captured["payload"]["num_mutations"] == 2
-    assert captured["payload"]["mask_fraction"] == 0.15
     assert captured["payload"]["temperature"] == 1.2
-    assert [item.sequence for item in result.results] == [_CDS, "ATGGCCACC"]
-    assert list(result.sequences) == [_CDS, "ATGGCCACC"]
+    # The worker is told which codons to resample by the masks themselves, not by a count.
+    for sent, original in zip(captured["payload"]["sequences"], [_CDS, "ATGGCCACC"], strict=True):
+        assert len(sent) == len(original)
+        assert sent.count("_") == 6, "two whole codons, three characters each"
+    for sampled, original in zip(result.sequences, [_CDS, "ATGGCCACC"], strict=True):
+        assert len(sampled) == len(original), "resampling preserves length"
+        assert "_" not in sampled, "every mask is refilled before the result is returned"
+    assert [item.sequence for item in result.results] == list(result.sequences)
     assert len(result) == 2
 
-    with pytest.raises(ValueError, match="exceeds"):
+    with pytest.raises(ValueError, match="mutable positions"):
         run_codonfm_sample(
             CodonFMSampleInput(sequences=["ATG"]),
-            CodonFMSampleConfig(num_mutations=2, device="cpu"),
+            CodonFMSampleConfig(masking_strategy=RandomMaskingStrategy(num_mutations=2), device="cpu"),
         )
+
+
+def _captured_masks(monkeypatch, sequences, config) -> list[str]:
+    """Return the sequences a sample call would send to the worker."""
+    captured: dict[str, object] = {}
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        captured["sequences"] = list(payload["sequences"])
+        return {"sequences": [sequence.replace("___", "AAA") for sequence in payload["sequences"]]}
+
+    monkeypatch.setattr(
+        "proto_tools.tools.masked_models.codonfm.codonfm_sample.ToolInstance.dispatch",
+        staticmethod(fake_dispatch),
+    )
+    run_codonfm_sample(CodonFMSampleInput(sequences=sequences), config)
+    return captured["sequences"]  # type: ignore[return-value]
+
+
+def test_codonfm_sample_honours_a_caller_supplied_codon_mask(monkeypatch) -> None:
+    """Naming the codons to redesign is the point of accepting '_' on this tool's input alone."""
+    sent = _captured_masks(monkeypatch, ["ATG___AGCAAG"], CodonFMSampleConfig(device="cpu"))
+
+    assert sent == ["ATG___AGCAAG"], "the strategy must not re-mask a sequence the caller masked"
+
+
+def test_codonfm_sample_can_pin_the_start_codon(monkeypatch) -> None:
+    """A coding sequence almost always needs its start codon intact, which was unexpressible before."""
+    config = CodonFMSampleConfig(
+        masking_strategy=RandomMaskingStrategy(mask_fraction=1.0, fixed_positions=[1]),
+        device="cpu",
+        seed=0,
+    )
+    sent = _captured_masks(monkeypatch, ["ATGGTGAGCAAG"], config)[0]
+
+    assert sent.startswith("ATG"), "codon 1 was pinned"
+    assert sent[3:] == "_" * 9, "every other codon was eligible and masked"
 
 
 # ---------------------------------------------------------------------------
@@ -544,7 +588,13 @@ def test_codonfm_sample_real_gpu() -> None:
 
     result = run_codonfm_sample(
         CodonFMSampleInput(sequences=[_CDS]),
-        CodonFMSampleConfig(model_checkpoint="encodon_80m", num_mutations=3, temperature=1.0, device="cuda", seed=0),
+        CodonFMSampleConfig(
+            model_checkpoint="encodon_80m",
+            masking_strategy=RandomMaskingStrategy(num_mutations=3),
+            temperature=1.0,
+            device="cuda",
+            seed=0,
+        ),
     )
     assert len(result.sequences) == 1
     sampled = result.sequences[0]
@@ -646,7 +696,12 @@ def test_codonfm_sample_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark codonfm-sample on 50 length-300 coding sequences (cold + warm)."""
     sequences = ["ATG" * 100 for _ in range(50)]
     inputs = CodonFMSampleInput(sequences=sequences)
-    config = CodonFMSampleConfig(model_checkpoint="encodon_80m", num_mutations=10, batch_size=16, seed=0)
+    config = CodonFMSampleConfig(
+        model_checkpoint="encodon_80m",
+        masking_strategy=RandomMaskingStrategy(num_mutations=10),
+        batch_size=16,
+        seed=0,
+    )
 
     result = benchmark_twice(request, "codonfm", lambda: run_codonfm_sample(inputs, config))
     validate_output(result)
