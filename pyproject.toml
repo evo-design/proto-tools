@@ -171,6 +171,7 @@ exclude = [
     ".*parade/standalone/pl_regressor\\.py$",
     ".*parade/standalone/utrdata_cl\\.py$",
     ".*parade/standalone/stability_data\\.py$",
+    ".*codonfm/standalone/src/.*",
 ]
 
 [[tool.mypy.overrides]]
@@ -231,6 +232,7 @@ module = [
     "parade_scoring",
     "parade_scoring.*",
     "model.*",
+    "src.*",
 ]
 ignore_missing_imports = true
 
@@ -272,6 +274,8 @@ exclude = [
     "**/sequence_scoring/parade/standalone/pl_regressor.py",
     "**/sequence_scoring/parade/standalone/stability_data.py",
     "**/sequence_scoring/parade/standalone/utrdata_cl.py",
+    # Vendored byte-verbatim from NVIDIA-BioNeMo/CodonFM; format first-party wrappers only.
+    "**/masked_models/codonfm/standalone/src",
 ]
 
 [tool.ruff.lint]

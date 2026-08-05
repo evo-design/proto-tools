@@ -2,8 +2,10 @@
 
 # CodonFM (Encodon)
 
+![CodonFM (Encodon)](https://proto-bio.github.io/proto-assets/images/tool/codonfm/hero.png)
+
 > [!NOTE]
-> **License:** CodonFM (Encodon) uses Apache-2.0 for code and Custom (NVIDIA Open Model License) for model weights and may require explicit attribution when utilized. Please refer to the [code license](https://github.com/NVIDIA-BioNeMo/CodonFM/blob/main/LICENSE) and [model weights license](https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/) for full terms.
+> **License:** CodonFM (Encodon) uses Apache-2.0 for code and Custom (NVIDIA Open Model License) for model weights. Please refer to the [code license](https://github.com/NVIDIA-BioNeMo/CodonFM/blob/main/LICENSE) and [model weights license](https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/) for full terms.
 
 ## Overview
 
@@ -69,7 +71,7 @@ This exposes Encodon as a differentiable, codon-level naturalness prior for cont
 
 ### CodonFM Sampling (`codonfm-sample`)
 
-Resamples a subset of codons in a coding sequence. A number of codon positions (`num_mutations`, or `mask_fraction` of the codons) are chosen at random, masked, and refilled by sampling from Encodon's per-codon distribution over all 64 DNA codons in a single forward pass. The sequence length is preserved. Sampling can introduce or remove stop codons; enforce an ORF policy in the calling workflow if required.
+Resamples a subset of codons in a coding sequence. A number of codon positions (`num_mutations`, or `mask_fraction` of the codons) are chosen at random, masked, and refilled from Encodon's distribution over the 61 sense codons in a single forward pass. The sequence length is preserved and sampling cannot introduce a new stop codon. It can replace an existing stop if that position is selected, so keep a required terminal stop outside the editable region or restore it afterward.
 
 #### Applications
 

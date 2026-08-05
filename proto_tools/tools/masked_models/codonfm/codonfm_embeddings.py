@@ -17,7 +17,15 @@ from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseToolOutput, ToolInstance
 
 CodonFMEmbeddingsInput = CodonSequenceInput
-CodonFMEmbeddingsConfig = CodonFMConfig
+
+
+class CodonFMEmbeddingsConfig(CodonFMConfig):
+    """Configuration for CodonFM CLS-embedding extraction.
+
+    Attributes:
+        model_checkpoint (CodonFMCheckpoint): Encodon checkpoint to run.
+        batch_size (int): Sequences processed per GPU forward pass.
+    """
 
 
 class CodonFMEmbeddingResult(BaseModel):
@@ -93,6 +101,7 @@ def example_input() -> Any:
     example_input=example_input,
     iterable_input_fields=["sequences"],
     iterable_output_field="results",
+    max_chunk_size=32,
     cacheable=True,
 )
 def run_codonfm_embeddings(
@@ -145,5 +154,5 @@ def run_codonfm_embeddings(
         results=[
             CodonFMEmbeddingResult(sequence=sequence, sequence_length=len(sequence), embedding=vector)
             for sequence, vector in zip(inputs.sequences, vectors, strict=True)
-        ]
+        ],
     )
