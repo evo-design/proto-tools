@@ -33,6 +33,12 @@ subsequent calls fast.
 - If a user needs a tool that is deployable but that they have not yet deployed,
   use `deploy_tool`. It prompts the user to confirm before proceeding.
 
+- `deploy_tool` requires the name of the Modal environment to deploy into. Users
+  create one while setting up their account, and the documented name is
+  `proto-env`. `workspace_info` reports the one in use, which is where a deploy
+  should go; ask the user before deploying anywhere else, since a workspace can
+  hold several.
+
 - Any deployed tool can then be run using `run_tool`.
 
 IMPORTANT: Deploying and running tools bills activity to the user's Modal account.
@@ -72,11 +78,30 @@ Large outputs, such as predicted structures and embeddings, are written to disk
 and returned as file paths rather than inline.
 """
 
+# Stated for every backend because a key is the one argument a caller has to invent, and
+# guessing a model name read from a paper is the most common way a call goes wrong.
+_KEY_CONVENTION = """Tool keys are `<model>-<action>`, such as `esmfold-prediction` or
+`esm2-embedding`. A model name on its own is not a key: several actions usually exist for
+one model. Use `search_tools` or `list_tools` to resolve a name into a key.
+"""
+
 INSTRUCTIONS = {
-    "modal": _MODAL_INSTRUCTIONS,
-    "proto": _PROTO_INSTRUCTIONS,
-    "local": _LOCAL_INSTRUCTIONS,
+    "modal": _MODAL_INSTRUCTIONS + "\n" + _KEY_CONVENTION,
+    "proto": _PROTO_INSTRUCTIONS + "\n" + _KEY_CONVENTION,
+    "local": _LOCAL_INSTRUCTIONS + "\n" + _KEY_CONVENTION,
 }
+
+
+def instructions_for(device: Device) -> str:
+    """Return the instructions for ``device``, naming the categories the registry holds.
+
+    The category list is read rather than written down, so a new category reaches the agent
+    without anyone remembering to update prose.
+    """
+    from proto_tools.tools import ToolRegistry
+
+    categories = sorted({spec.category for spec in ToolRegistry.list_all()})
+    return f"{INSTRUCTIONS[device]}\n`list_tools` accepts a `category` filter. The categories are: {', '.join(categories)}.\n"
 
 
 def build_server(device: Device = "modal") -> FastMCP:
@@ -90,7 +115,7 @@ def build_server(device: Device = "modal") -> FastMCP:
     Returns:
         FastMCP: The configured server.
     """
-    mcp: FastMCP = FastMCP(name=f"proto-tools ({device})", instructions=INSTRUCTIONS[device])
+    mcp: FastMCP = FastMCP(name=f"proto-tools ({device})", instructions=instructions_for(device))
 
     @mcp.tool
     def workspace_info() -> dict[str, Any]:
@@ -102,23 +127,29 @@ def build_server(device: Device = "modal") -> FastMCP:
         return impl.workspace_info(device)
 
     @mcp.tool
-    def list_tools(deployed_only: bool = True) -> list[dict[str, Any]]:
-        """List available bioinformatics tools.
+    def list_tools(deployed_only: bool = True, category: str | None = None) -> list[dict[str, Any]]:
+        """List available bioinformatics tools, with what each one is for.
+
+        Each entry carries its category, a one-line summary, and whether it
+        needs a GPU, which is usually enough to choose without fetching a
+        schema for every candidate. Pass a category to narrow the list.
 
         Defaults to only those actually deployed in this workspace. Pass
         deployed_only=False to see the full catalogue, including tools the
         user would have to deploy first.
         """
-        return impl.list_tools(deployed_only=deployed_only, device=device)
+        return impl.list_tools(deployed_only=deployed_only, category=category, device=device)
 
     @mcp.tool
-    def search_tools(query: str, deployed_only: bool = True) -> list[dict[str, Any]]:
-        """Find tools by keyword, matching the tool key and its description.
+    def search_tools(query: str, deployed_only: bool = True, limit: int = 10) -> dict[str, Any]:
+        """Find tools by keyword, matching the tool key, category and summary.
 
         Useful for questions like "what can fold a protein" or "which tools
-        score sequences".
+        score sequences". Returns the best `limit` matches under `hits`, each
+        with the `score` it ranked on, plus `n_total` for how many matched in
+        all — raise `limit` only if the total says it is worth it.
         """
-        return impl.search_tools(query, deployed_only=deployed_only, device=device)
+        return impl.search_tools(query, deployed_only=deployed_only, limit=limit, device=device)
 
     @mcp.tool
     def get_tool_schema(tool_key: str) -> dict[str, Any]:
@@ -139,6 +170,14 @@ def build_server(device: Device = "modal") -> FastMCP:
         return impl.get_tool_example(tool_key)
 
     @mcp.tool
+    def get_tool_citation(tool_key: str) -> dict[str, Any]:
+        """Get the BibTeX citation and DOI for the method a tool implements.
+
+        Use this when reporting results, so the underlying work is attributed.
+        """
+        return impl.get_tool_citation(tool_key)
+
+    @mcp.tool
     def run_tool(
         tool_key: str,
         inputs: dict[str, Any] | None = None,
@@ -146,12 +185,21 @@ def build_server(device: Device = "modal") -> FastMCP:
         output_dir: str | None = None,
         use_example: bool = False,
     ) -> dict[str, Any]:
-        """Run a deployed tool on the user's Modal compute and return the result.
+        """Run a tool on this session's backend and return the result.
 
         Blocks until it finishes. Most tools return in seconds once warm, but
         the first call after a few minutes idle pays a container start and
         model load, and a few tools (binder design, diffusion) legitimately run
         for many minutes. Check the tool description before calling.
+
+        Some tools are answered in this process whatever the backend, because
+        they need no GPU and no environment, or cannot be deployed at all. The
+        `ran_on` field in the result reports where the call actually ran.
+
+        Structure inputs take a file path or an http(s) URL in place of inlined
+        content — {"query_structure": "/path/to/file.pdb"} — so a file already on
+        disk, such as another tool's output, never has to be read into the call.
+        Other bulky inputs, such as MSAs, take their content rather than a path.
 
         Pass use_example=True to run the tool's canonical example input without
         supplying it — useful for structure tools whose inputs are very large.

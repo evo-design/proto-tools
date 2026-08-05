@@ -30,6 +30,8 @@ modal setup
 
 This writes a token to `~/.modal.toml`.
 
+To check your setup at any point, run `proto-tools doctor`.
+
 If you have multiple people who need access to the same tools, you can create a
 shared workspace. This will enable each user to access the same deployed apps and
 cached model weights.

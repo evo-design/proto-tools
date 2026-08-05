@@ -383,7 +383,7 @@ def test_temperature_low_is_greedy():
     class GreedyTestMasker(Masker):
         requires = None
 
-        def score(self, sequences, position_score_fn=None):
+        def score(self, sequences, position_score_fn=None, token_size=1):
             # Position 0 gets score 2, rest get score 1
             return [[2.0] + [1.0] * (len(seq) - 1) for seq in sequences]
 
@@ -407,7 +407,7 @@ def test_temperature_high_is_uniform():
     class BiasedTestMasker(Masker):
         requires = None
 
-        def score(self, sequences, position_score_fn=None):
+        def score(self, sequences, position_score_fn=None, token_size=1):
             # Position 0 gets a much higher score
             return [[100.0] + [1.0] * (len(seq) - 1) for seq in sequences]
 
@@ -570,3 +570,46 @@ def test_masking_strategy_dedups_fixed_positions(caplog: pytest.LogCaptureFixtur
         strategy = MaskingStrategy(fixed_positions=[1, 1, 2, 3, 2])
     assert strategy.fixed_positions == [1, 2, 3]
     assert any("dropped 2 duplicate position(s)" in rec.message for rec in caplog.records)
+
+
+# ── Token-width masking ─────────────────────────────────────────────────────
+
+
+def test_a_masked_codon_keeps_the_reading_frame():
+    """Masking a character offset would land mid-codon, producing a sequence no vocabulary tokenizes."""
+    masked = RandomMaskingStrategy(num_mutations=2).mask(["AUGGCCUUUAAAGGG"], seed=0, token_size=3)[0]
+
+    assert len(masked) == 15, "a masked codon is three characters wide, not one"
+    codons = [masked[i : i + 3] for i in range(0, 15, 3)]
+    assert codons.count("___") == 2, "two whole codons masked"
+    assert all(c == "___" or "_" not in c for c in codons), f"a mask straddled a codon boundary: {codons}"
+
+
+def test_fixed_positions_are_counted_in_codons_not_characters():
+    """`fixed_positions=[1]` has to mean the start codon, not its first nucleotide."""
+    masked = RandomMaskingStrategy(num_mutations=3, fixed_positions=[1, 5]).mask(
+        ["AUGGCCUUUAAAGGG"], seed=0, token_size=3
+    )[0]
+
+    assert masked.startswith("AUG"), "the start codon was pinned and must survive intact"
+    assert masked.endswith("GGG"), "and so was the last codon"
+    assert masked == "AUG_________GGG", "the three codons between them were the only eligible ones"
+
+
+def test_a_sequence_that_is_not_whole_codons_is_refused():
+    """Silently truncating would shift every downstream position by a base."""
+    with pytest.raises(ValueError, match="not a multiple of token_size"):
+        RandomMaskingStrategy(num_mutations=1).mask(["AUGGC"], seed=0, token_size=3)
+
+
+def test_mask_fraction_and_counts_are_in_tokens():
+    """A fraction of a codon is meaningless; the count has to resolve against codons."""
+    masked = RandomMaskingStrategy(mask_fraction=0.4).mask(["AUGGCCUUUAAAGGG"], seed=0, token_size=3)[0]
+
+    assert masked.count("_") == 6, "0.4 of 5 codons is 2 codons, i.e. 6 characters"
+
+
+def test_too_many_mutations_reports_tokens():
+    """The count that failed is in codons, so the error has to say so to be actionable."""
+    with pytest.raises(ValueError, match="5 tokens"):
+        RandomMaskingStrategy(num_mutations=6).mask(["AUGGCCUUUAAAGGG"], seed=0, token_size=3)

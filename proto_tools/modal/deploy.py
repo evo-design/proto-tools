@@ -422,6 +422,25 @@ def require_proto_tools() -> None:
     )
 
 
+def require_extra_source() -> None:
+    """Fail early, on screen, when an extra source directory cannot be mounted.
+
+    Resolved during service-module import, inside a ``modal deploy`` subprocess whose output is
+    filtered down to recognised phase lines. Without this the reason reaches the log file only,
+    once per app, and the console shows a bare deploy failure.
+
+    Raises:
+        SystemExit: If :data:`~proto_tools.modal.base_images.EXTRA_SOURCE_ENV` names a path that
+            is not a mountable directory.
+    """
+    from proto_tools.modal.base_images import extra_source_dirs
+
+    try:
+        extra_source_dirs()
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+
 def build_parser(prog: str | None = None) -> argparse.ArgumentParser:
     """Build the argument parser, named for however it was invoked."""
     parser = argparse.ArgumentParser(prog=prog, description=USAGE, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -492,6 +511,7 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
 
     if not args.status:
         require_proto_tools()
+        require_extra_source()
 
     if args.env:
         os.environ["MODAL_ENVIRONMENT"] = args.env

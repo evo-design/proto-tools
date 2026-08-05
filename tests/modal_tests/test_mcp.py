@@ -5,8 +5,12 @@ smoke tests, not here.
 """
 
 import asyncio
+import json
+import os
+from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 _READ_ONLY_SURFACE = {
     "workspace_info",
@@ -14,6 +18,7 @@ _READ_ONLY_SURFACE = {
     "search_tools",
     "get_tool_schema",
     "get_tool_example",
+    "get_tool_citation",
     "run_tool",
 }
 
@@ -43,6 +48,193 @@ def test_proto_exposes_no_deploy_tool():
 
     names = {t.name for t in asyncio.run(build_server("proto").list_tools())}
     assert "deploy_tool" not in names
+
+
+# ── Unknown tool keys ───────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("verb", ["get_tool_schema", "get_tool_example", "run_tool"])
+def test_an_unknown_key_is_a_result_rather_than_a_protocol_error(verb: str):
+    """A raise reaches the agent as ToolError — "this call is broken" — and ends the attempt.
+
+    The key is the one argument an agent has to invent, so guessing it wrong has to be as
+    recoverable as passing bad arguments already is.
+    """
+    import fastmcp
+
+    from proto_tools.mcp import build_server
+
+    async def call():
+        async with fastmcp.Client(build_server("local")) as client:
+            return await client.call_tool(verb, {"tool_key": "esmfold"})
+
+    result = asyncio.run(call()).data
+    assert result["ok"] is False
+    assert "esmfold-prediction" in result["did_you_mean"]
+    assert "<model>-<action>" in result["hint"]
+
+
+def test_a_model_name_suggests_every_action_registered_for_it():
+    """Whole-key edit distance returns nothing for these, which is the reported failure."""
+    from proto_tools.tools import ToolRegistry
+
+    assert ToolRegistry.suggest_keys("esm2") == ["esm2-embedding", "esm2-gradient", "esm2-sample", "esm2-score"]
+    assert ToolRegistry.suggest_keys("boltz2") == ["boltz2-affinity", "boltz2-prediction"]
+    assert ToolRegistry.suggest_keys("tmalign") == ["tmalign-alignment"], "difflib answers this with mafft-align"
+
+
+def test_a_sibling_model_ranks_below_the_one_named():
+    """`esmfold2` is a different model, so it must not displace `esmfold`'s own actions."""
+    from proto_tools.tools import ToolRegistry
+
+    assert ToolRegistry.suggest_keys("esmfold")[-1] == "esmfold2-prediction"
+
+
+def test_a_misspelled_model_still_resolves():
+    """The fallback exists for typos; whole-key distance scores them too poorly to return."""
+    from proto_tools.tools import ToolRegistry
+
+    assert "esmfold-prediction" in ToolRegistry.suggest_keys("esmfld")
+    assert "esmfold-prediction" in ToolRegistry.suggest_keys("ESMFold"), "a name read from a paper is capitalised"
+
+
+# ── Choosing a tool from the listing ────────────────────────────────────────
+
+
+def test_listing_carries_what_choosing_a_tool_needs():
+    """Names alone forced a schema fetch per candidate, which is the expensive way to choose."""
+    from proto_tools.mcp import tools as impl
+
+    entry = next(e for e in impl.list_tools(device="local") if e["tool"] == "esmfold-prediction")
+
+    assert entry["category"] == "structure_prediction"
+    assert entry["summary"] and entry["uses_gpu"] is True
+
+
+def test_a_category_narrows_the_listing_and_an_unknown_one_names_the_choices():
+    """An agent that mistypes a facet should learn the vocabulary rather than get an empty list."""
+    from proto_tools.mcp import tools as impl
+
+    listed = impl.list_tools(deployed_only=False, category="structure_prediction", device="local")
+    assert listed and {e["category"] for e in listed} == {"structure_prediction"}
+    assert len(listed) < len(impl.list_tools(deployed_only=False, device="local"))
+
+    refused = impl.list_tools(category="structure-prediction", device="local")
+    assert refused[0]["ok"] is False
+    assert "structure_prediction" in refused[0]["categories"]
+
+
+def test_an_in_process_tool_says_it_needs_no_deployment_and_why(monkeypatch):
+    """Reading "not deployed" as "deploy it first" is the wrong move: it already runs here.
+
+    The reason matters just as much — it is where a tool says it runs for hours, which its
+    description does not.
+    """
+    from proto_tools.mcp import tools as impl
+
+    monkeypatch.setattr(impl, "_registry", dict)
+    monkeypatch.setattr(impl, "deployed_keys", lambda device: set())
+    monkeypatch.setattr(impl, "answered_in_process_keys", lambda: {"bindcraft-design"})
+
+    entry = next(e for e in impl.list_tools(device="modal") if e["tool"] == "bindcraft-design")
+
+    assert entry["runs_in_process"] is True
+    assert "no deployment is needed" in entry["note"]
+    assert "multi-hour" in entry["note"], "the duration warning exists only in the local_only reason"
+
+
+def test_a_citation_is_reachable_for_the_tools_that_register_one():
+    """An agent reporting a result has to attribute the method, and 132 of 134 ship a cite.bib."""
+    from proto_tools.mcp import tools as impl
+
+    cite = impl.get_tool_citation("esmfold-prediction")
+    assert cite["doi"] == "10.1126/science.ade2574"
+    assert "@article" in cite["bibtex"]
+
+
+def test_the_raised_error_still_names_the_key_and_stays_a_ValueError():
+    """Callers outside the MCP — the CLI, the Python API — depend on both."""
+    from proto_tools.tools import ToolRegistry
+
+    with pytest.raises(ValueError, match="Unknown tool 'esm2'"):
+        ToolRegistry.get("esm2")
+
+
+def _unauthenticated(monkeypatch, config_path, **env):
+    """Report what an unauthenticated caller sees, whatever this host's own credentials are."""
+    import modal
+
+    from proto_tools.mcp import tools as impl
+
+    def refuse(*args, **kwargs):
+        raise RuntimeError("AuthError: Token missing.")
+
+    monkeypatch.setattr(modal.Client, "from_env", refuse)
+    for name in ("MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET", "MODAL_PROFILE"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("MODAL_CONFIG_PATH", str(config_path))
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    return impl.workspace_info("modal")
+
+
+def test_the_auth_hint_names_the_environment_variables(monkeypatch, tmp_path):
+    """`modal token new` is unactionable in a container, so the hint has to name the other path."""
+    absent = tmp_path / "absent.toml"
+    info = _unauthenticated(monkeypatch, absent)
+
+    assert info["authenticated"] is False
+    assert "MODAL_TOKEN_ID" in info["hint"] and "MODAL_TOKEN_SECRET" in info["hint"]
+    assert info["credentials_checked"] == {
+        "MODAL_TOKEN_ID": "unset",
+        "MODAL_TOKEN_SECRET": "unset",
+        "MODAL_PROFILE": "unset",
+        "config_file": str(absent),
+        "config_file_state": "absent",
+    }
+
+
+def test_a_half_configured_caller_sees_which_half_is_missing(monkeypatch, tmp_path):
+    """One variable set without the other fails identically to setting neither."""
+    checked = _unauthenticated(monkeypatch, tmp_path / "absent.toml", MODAL_TOKEN_ID="ak-secret")["credentials_checked"]
+
+    assert checked["MODAL_TOKEN_ID"] == "set"
+    assert checked["MODAL_TOKEN_SECRET"] == "unset"
+
+
+def test_an_empty_variable_is_not_reported_as_absent(monkeypatch, tmp_path):
+    """Modal reads an empty variable and fails, rather than falling back to a readable file."""
+    config = tmp_path / "modal.toml"
+    config.write_text("[default]\n")
+    checked = _unauthenticated(monkeypatch, config, MODAL_TOKEN_ID="", MODAL_TOKEN_SECRET="")["credentials_checked"]
+
+    assert checked["MODAL_TOKEN_ID"] == "empty", "reporting this as unset hides why a good config file is ignored"
+    assert checked["config_file_state"] == "readable"
+
+
+def test_credentials_are_reported_by_presence_and_never_by_value(monkeypatch, tmp_path):
+    """The payload goes to an agent and into logs; a token in it would leak from both."""
+    info = _unauthenticated(
+        monkeypatch,
+        tmp_path / "absent.toml",
+        MODAL_TOKEN_ID="ak-leak-me",
+        MODAL_TOKEN_SECRET="as-leak-me",
+    )
+
+    assert "leak-me" not in json.dumps(info)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads through any mode, so 0o000 proves nothing")
+def test_an_unreadable_config_is_distinguished_from_an_absent_one(monkeypatch, tmp_path):
+    """Both look like no file to an existence check, but only one is fixed by writing a token."""
+    present = tmp_path / "modal.toml"
+    present.write_text("[default]\n")
+    assert _unauthenticated(monkeypatch, present)["credentials_checked"]["config_file_state"] == "readable"
+
+    present.chmod(0o000)
+    state = _unauthenticated(monkeypatch, present)["credentials_checked"]["config_file_state"]
+    present.chmod(0o644)
+    assert state == "unreadable"
 
 
 def test_every_tool_has_a_description():
@@ -125,8 +317,39 @@ def test_search_matches_natural_language_queries(monkeypatch):
     # setattr, not assign-then-del: deleting removes the real function for the rest of the
     # session rather than restoring it, and every later test calling it then fails.
     monkeypatch.setattr(impl, "list_tools", lambda **_kwargs: catalogue)
-    hits = impl.search_tools("compare two protein structures")
-    assert [h["tool"] for h in hits][:1] == ["tmalign-alignment"], hits
+    found = impl.search_tools("compare two protein structures")
+    assert [h["tool"] for h in found["hits"]][:1] == ["tmalign-alignment"], found
+
+
+def test_search_is_capped_and_says_how_many_it_left_out():
+    """Broad queries match half the catalogue; the agent should not pay for it to find that out."""
+    from proto_tools.mcp import tools as impl
+
+    found = impl.search_tools("compare two protein structures", deployed_only=False, limit=5, device="local")
+
+    assert len(found["hits"]) == 5
+    assert found["n_total"] > 5, "the total is what tells a caller whether raising the limit is worth it"
+    assert found["hits"][0]["score"] >= found["hits"][-1]["score"], "hits are ordered by the score they carry"
+
+
+def test_search_ranks_a_tool_named_for_the_query_above_one_that_merely_mentions_it():
+    """Rewriting "fold" to "structure" used to discard the token that matches esmfold in the key."""
+    from proto_tools.mcp import tools as impl
+
+    hits = impl.search_tools("fold a protein", deployed_only=False, limit=133, device="local")["hits"]
+    ranked = [h["tool"] for h in hits]
+
+    assert ranked.index("esmfold-prediction") < ranked.index("esm-if1-sample"), "inverse folding is the opposite"
+
+
+def test_a_query_that_matches_nothing_says_what_to_do_instead():
+    """An empty list reads as "no such capability exists" rather than "rephrase"."""
+    from proto_tools.mcp import tools as impl
+
+    found = impl.search_tools("crystallography", deployed_only=False, device="local")
+
+    assert found["hits"] == [] and found["n_total"] == 0
+    assert "list_tools(category=" in found["hint"] and "structure_prediction" in found["hint"]
 
 
 def test_example_elides_bulky_values():
@@ -136,7 +359,33 @@ def test_example_elides_bulky_values():
     elided = impl._elide({"structure": {"structure": "X" * 90_000, "structure_format": "pdb"}})
     inner = elided["structure"]
     assert inner["structure_format"] == "pdb", "small fields must survive"
-    assert "elided" in inner["structure"] and len(inner["structure"]) < 200
+    assert "elided" in inner["structure"] and len(inner["structure"]) < 250
+
+
+def test_elided_structure_content_says_a_path_is_accepted():
+    """The placeholder otherwise reads as "inline 42,000 characters to call me"."""
+    from proto_tools.mcp import tools as impl
+
+    elided = impl._elide({"query_structure": {"structure": "X" * 90_000, "structure_format": "pdb"}})
+    assert "file path" in elided["query_structure"]["structure"]
+
+    # Only where it is true: an MSA takes its content, so the generic placeholder stands.
+    other = impl._elide({"aligned_sequences": "X" * 90_000})
+    assert "file path" not in other["aligned_sequences"]
+
+
+def test_a_structure_input_really_does_accept_a_path_and_an_msa_does_not():
+    """Guards the asymmetry the docstrings now promise, which is worse to state wrongly than not at all."""
+    from proto_tools.entities.msa import MSA
+    from proto_tools.tools import ToolRegistry
+
+    fixture = Path(__file__).resolve().parents[2] / "proto_tools/tools/structure_alignment/example_input_fixture.pdb"
+    spec = ToolRegistry.get("tmalign-alignment")
+    loaded = spec.input_model(query_structure=str(fixture), reference_structure=str(fixture))
+    assert loaded.query_structure.source == str(fixture), "the path is recorded, and its content loaded"
+
+    with pytest.raises(ValidationError):
+        MSA.model_validate(str(fixture))
 
 
 def test_run_tool_requires_inputs_or_use_example():

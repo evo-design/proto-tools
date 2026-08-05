@@ -27,6 +27,7 @@ ENTRY = DatasetEntry(
                 "Homo_sapiens.GRCh37.dna.primary_assembly.fa.gz"
             ),
             filename=f"{FASTA}.gz",
+            expected_bytes=869_923_173,
         ),
     ],
     total_download_bytes=869_923_173,

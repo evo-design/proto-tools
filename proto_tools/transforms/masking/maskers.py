@@ -4,7 +4,7 @@ Each masker has:
 - ``requires``: which external input it needs to score positions
   (``None`` = no input needed, e.g. uniform random)
 - ``__init__(strategy)``: stores the strategy reference
-- ``score(sequences, position_score_fn)``: returns per-position scores
+- ``score(sequences, position_score_fn, token_size)``: returns one score per token
 
 The ``MaskingMethod`` Literal and ``MASKERS`` dict are the single source of
 truth for valid method names. ``Masker.requires`` plus a sampling tool's
@@ -47,6 +47,34 @@ class MaskingInput(str, Enum):
 MaskingMethod = Literal["random", "entropy", "max-logit"]
 
 
+def split_tokens(seq: str, token_size: int = 1) -> list[str]:
+    """Split a sequence into the tokens its model reads.
+
+    A token is one character for a residue-level model and three for a codon-level one, so
+    positions, scores and ``fixed_positions`` all count in the units the model actually sees.
+    Masking a character offset instead would land mid-codon and produce a sequence no codon
+    vocabulary can tokenize.
+
+    Args:
+        seq (str): Sequence to split.
+        token_size (int): Characters per token.
+
+    Returns:
+        list[str]: The tokens, in order.
+
+    Raises:
+        ValueError: If ``token_size`` is below 1, or the sequence does not divide evenly.
+    """
+    if token_size < 1:
+        raise ValueError(f"token_size must be at least 1, got {token_size}")
+    if len(seq) % token_size:
+        raise ValueError(
+            f"sequence length {len(seq)} is not a multiple of token_size {token_size}; "
+            f"a codon-level model needs whole codons"
+        )
+    return [seq[i : i + token_size] for i in range(0, len(seq), token_size)]
+
+
 # ============================================================================
 # Masker ABC
 # ============================================================================
@@ -85,9 +113,9 @@ class Masker(ABC):
         class MyCustomMasker(Masker):
             requires = None  # no input needed
 
-            def score(self, sequences, position_score_fn=None):
-                # Return higher scores for positions you want masked
-                return [[1.0 if c == "A" else 0.0 for c in seq] for seq in sequences]
+            def score(self, sequences, position_score_fn=None, token_size=1):
+                # Return one score per token; higher means more likely to be masked
+                return [[1.0 if t.startswith("A") else 0.0 for t in split_tokens(seq, token_size)] for seq in sequences]
     """
 
     requires: ClassVar[MaskingInput | None] = None
@@ -101,17 +129,21 @@ class Masker(ABC):
         self,
         sequences: list[str],
         position_score_fn: Callable[..., Any] | None = None,
+        token_size: int = 1,
     ) -> list[list[float]]:
-        """Score all positions for all sequences.
+        """Score every token of every sequence.
 
         Args:
-            sequences (list[str]): Protein sequences to score.
+            sequences (list[str]): Sequences to score.
             position_score_fn (Callable[..., Any] | None): Callable that takes a list of sequences
-                and returns per-position scores. Required for model-based
+                and returns one score per token. Required for model-based
                 maskers; ``None`` for maskers that don't use a model.
+            token_size (int): Characters per token. A model-based masker ignores it, since
+                the model already emits one row per token; a masker that counts positions
+                itself needs it so it counts tokens rather than characters.
 
         Returns:
-            list[list[float]]: List of per-position scores, one list per sequence.
+            list[list[float]]: List of per-token scores, one list per sequence.
                 Higher = more likely to mask.
         """
 
@@ -130,9 +162,10 @@ class RandomMasker(Masker):
         self,
         sequences: list[str],
         position_score_fn: Callable[..., Any] | None = None,  # noqa: ARG002 — required by abstract Masker interface
+        token_size: int = 1,
     ) -> list[list[float]]:
-        """Score all positions equally (uniform zero scores, no model)."""
-        return [[0.0] * len(seq) for seq in sequences]
+        """Score all tokens equally (uniform zero scores, no model)."""
+        return [[0.0] * len(split_tokens(seq, token_size)) for seq in sequences]
 
 
 class EntropyMasker(Masker):
@@ -144,8 +177,9 @@ class EntropyMasker(Masker):
         self,
         sequences: list[str],
         position_score_fn: Callable[..., Any] | None = None,
+        token_size: int = 1,  # noqa: ARG002 — logits already arrive one row per token
     ) -> list[list[float]]:
-        """Compute per-position Shannon entropy from model logits."""
+        """Compute per-token Shannon entropy from model logits."""
         logits = position_score_fn(sequences)  # type: ignore[misc]
         all_scores = []
         for seq_logits in logits:
@@ -170,8 +204,9 @@ class MaxLogitMasker(Masker):
         self,
         sequences: list[str],
         position_score_fn: Callable[..., Any] | None = None,
+        token_size: int = 1,  # noqa: ARG002 — logits already arrive one row per token
     ) -> list[list[float]]:
-        """Compute negated max-logit per position from model logits."""
+        """Compute negated max-logit per token from model logits."""
         logits = position_score_fn(sequences)  # type: ignore[misc]
         all_scores = []
         for seq_logits in logits:

@@ -20,7 +20,7 @@ from proto_tools.modal.app import HF_TOKEN_SECRET, MODEL_CACHE, SERVICE_RETRIES,
 from proto_tools.modal.base_images import CPU_BASE, with_proto_tools
 from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
 from proto_tools.modal.registry import register_tools
-from proto_tools.modal.utils import RUNTIME_ENV, dispatch_tool_call, env_for
+from proto_tools.modal.utils import RUNTIME_ENV, env_for, run_tool_call
 
 
 def _warmup() -> None:
@@ -90,9 +90,14 @@ class FoldseekService:
             run_foldseek_cluster,
         )
 
-        inputs = FoldseekClusterInput(**input_dict)
-        config = FoldseekClusterConfig(**config_dict)
-        return dispatch_tool_call(run_foldseek_cluster, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_foldseek_cluster,
+            FoldseekClusterInput,
+            FoldseekClusterConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
 
     @modal.method()
     def multimer_search(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -111,9 +116,14 @@ class FoldseekService:
             run_foldseek_multimer_search,
         )
 
-        inputs = FoldseekMultimerSearchInput(**input_dict)
-        config = FoldseekMultimerSearchConfig(**config_dict)
-        return dispatch_tool_call(run_foldseek_multimer_search, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_foldseek_multimer_search,
+            FoldseekMultimerSearchInput,
+            FoldseekMultimerSearchConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
 
     @modal.method()
     def multimer_cluster(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -132,9 +142,14 @@ class FoldseekService:
             run_foldseek_multimercluster,
         )
 
-        inputs = FoldseekMultimerClusterInput(**input_dict)
-        config = FoldseekMultimerClusterConfig(**config_dict)
-        return dispatch_tool_call(run_foldseek_multimercluster, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_foldseek_multimercluster,
+            FoldseekMultimerClusterInput,
+            FoldseekMultimerClusterConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
 
     @modal.method()
     def search(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
@@ -153,6 +168,11 @@ class FoldseekService:
             run_foldseek_search,
         )
 
-        inputs = FoldseekSearchInput(**input_dict)
-        config = FoldseekSearchConfig(**config_dict)
-        return dispatch_tool_call(run_foldseek_search, inputs, config, instance=self.instance)
+        return run_tool_call(
+            run_foldseek_search,
+            FoldseekSearchInput,
+            FoldseekSearchConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )

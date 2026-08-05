@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any
 
 from proto_tools.mcp.device import Device, is_remote
 from proto_tools.utils.base_config import BaseConfig
+from proto_tools.utils.modal_status import credentials_checked, deployed_apps
 
 logger = logging.getLogger(__name__)
 
@@ -40,26 +42,6 @@ def app_for_tool(tool_key: str) -> str | None:
         return _app_for(tool_key)
     except KeyError:
         return None
-
-
-def _deployed_apps() -> set[str]:
-    """Apps that currently resolve in the active Modal workspace.
-
-    One hydrate per app, no containers started. Failures read as "not deployed"
-    rather than propagating.
-    """
-    import modal
-
-    from proto_tools.modal.manifest import APP_BUCKETS
-
-    live = set()
-    for app_name, services in APP_BUCKETS.items():
-        try:
-            modal.Cls.from_name(app_name, services[0]).hydrate()
-            live.add(app_name)
-        except Exception:  # noqa: S112 — an unreachable app is "not deployed", not an error
-            continue
-    return live
 
 
 def _hosted_catalogue() -> dict[str, dict[str, Any]]:
@@ -109,7 +91,7 @@ def deployed_keys(device: Device) -> set[str]:
         return set()
     if device == "proto":
         return {key for key, entry in _hosted_catalogue().items() if entry.get("hosted")}
-    live = _deployed_apps()
+    live = deployed_apps()
     return {key for key in _registry() if _app_for(key) in live}
 
 
@@ -124,8 +106,6 @@ def available_keys(device: Device) -> set[str]:
 
 def workspace_info(device: Device = "modal") -> dict[str, Any]:
     """Report where calls will land, and whether the caller can deploy there."""
-    import os
-
     if device == "local":
         from proto_tools.tools import ToolRegistry
         from proto_tools.utils.device import number_of_visible_gpus
@@ -172,7 +152,13 @@ def workspace_info(device: Device = "modal") -> dict[str, Any]:
             "device": "modal",
             "authenticated": False,
             "error": f"{type(exc).__name__}: {exc}",
-            "hint": "Run `modal token new` to authenticate.",
+            "hint": (
+                "Interactive shell: run `modal token new` (writes ~/.modal.toml). "
+                "Container, CI, or agent sandbox: set the MODAL_TOKEN_ID and "
+                "MODAL_TOKEN_SECRET environment variables instead — a token file written "
+                "outside this process is not visible to it."
+            ),
+            "credentials_checked": credentials_checked(),
         }
 
     # Modal exposes no public reader for the active profile: ``config_profiles()`` lists them all
@@ -181,7 +167,7 @@ def workspace_info(device: Device = "modal") -> dict[str, Any]:
     # rather than reporting a working install as unauthenticated.
     workspace = getattr(modal.config, "_profile", None) or "(unknown)"
 
-    deployed = _deployed_apps()
+    deployed = deployed_apps()
     return {
         "device": "modal",
         "authenticated": True,
@@ -194,11 +180,16 @@ def workspace_info(device: Device = "modal") -> dict[str, Any]:
     }
 
 
-def list_tools(deployed_only: bool = True, device: Device = "modal") -> list[dict[str, Any]]:
+def list_tools(
+    deployed_only: bool = True, category: str | None = None, device: Device = "modal"
+) -> list[dict[str, Any]]:
     """List tools, flagged by whether they can actually run on ``device``.
 
     Defaults to available-only: an agent choosing from the full catalogue will
     pick tools that cannot run and hit an error it cannot resolve itself.
+
+    Each entry carries what choosing between tools needs — category, summary, and whether it
+    wants a GPU — so a caller can pick one without fetching a schema per candidate.
 
     "Available" is wider than "deployed". A tool needing no GPU and no environment, or one that
     can never be deployed, is answered in this process instead, so it runs on a remote device
@@ -207,6 +198,13 @@ def list_tools(deployed_only: bool = True, device: Device = "modal") -> list[dic
     When using ``modal``, "deployed" means deployed in your workspace, which you can change. When
     using ``proto``, it means hosted by Proto, which you cannot.
     """
+    from proto_tools.tools import ToolRegistry
+
+    if category is not None:
+        known = sorted({spec.category for spec in ToolRegistry.list_all()})
+        if category not in known:
+            return [{"ok": False, "error": f"no category named {category!r}", "categories": known}]
+
     available = available_keys(device)
     in_process = set() if device == "local" else answered_in_process_keys()
     # Resolved once: on ``modal`` this reads the live app list, which is a network call.
@@ -219,7 +217,23 @@ def list_tools(deployed_only: bool = True, device: Device = "modal") -> list[dic
         is_available = key in available
         if deployed_only and not is_available:
             continue
-        entry: dict[str, Any] = {"tool": key, "available": is_available}
+        spec = ToolRegistry.get(key)
+        if category is not None and spec.category != category:
+            continue
+        entry: dict[str, Any] = {
+            "tool": key,
+            "category": spec.category,
+            "summary": spec.description,
+            "uses_gpu": spec.uses_gpu,
+            "available": is_available,
+        }
+        # Both halves matter to a caller deciding what to do next: that no deployment is needed,
+        # and why -- which is where a tool says it runs for hours.
+        notes = ["Runs in this session; no deployment is needed."] if key in in_process else []
+        if spec.local_only:
+            notes.append(spec.local_only)
+        if notes:
+            entry["note"] = " ".join(notes)
         if key in in_process:
             entry["runs_in_process"] = True
         if device == "modal":
@@ -286,43 +300,92 @@ def _matches(term: str, haystack: str) -> bool:
     return term in haystack or _stem(term) in haystack
 
 
-def search_tools(query: str, deployed_only: bool = True, device: Device = "modal") -> list[dict[str, Any]]:
-    """Find tools by keyword, ranked by how many query terms match.
+# Where a term matched, strongest first. A tool named for what you asked for is a better
+# answer than one that merely mentions it.
+_KEY_SCORE, _CATEGORY_SCORE, _SUMMARY_SCORE = 3, 2, 1
+
+
+def _field_score(term: str, key: str, category: str, summary: str) -> int:
+    """Score one term against one tool, by the strongest field it matches."""
+    if _matches(term, key):
+        return _KEY_SCORE
+    if _matches(term, category):
+        return _CATEGORY_SCORE
+    if _matches(term, summary):
+        return _SUMMARY_SCORE
+    return 0
+
+
+def _no_match_hint() -> str:
+    """Say what to do next, so an empty result does not read as "no such capability"."""
+    from proto_tools.tools import ToolRegistry
+
+    categories = ", ".join(sorted({spec.category for spec in ToolRegistry.list_all()}))
+    return f"Nothing matched. Browse instead with list_tools(category=...); the categories are: {categories}."
+
+
+def search_tools(query: str, deployed_only: bool = True, limit: int = 10, device: Device = "modal") -> dict[str, Any]:
+    """Find tools by keyword, best match first.
 
     Matches per term rather than on the whole string: agents ask in natural
     language ("compare two protein structures"), and a literal substring
     search returns nothing for those, which reads as "no such tool exists"
     rather than "rephrase".
-    """
-    from proto_tools.tools import ToolRegistry
 
+    Returns the top ``limit`` under ``hits``, each carrying the ``score`` it ranked on, with
+    ``n_total`` for how many matched in all. Broad queries match half the catalogue, and an
+    agent that cannot tell first place from fiftieth pays for the whole list to find out.
+    """
     terms = [t for t in query.lower().split() if t not in _STOPWORDS and len(t) > 1]
-    terms = [_SYNONYMS.get(t, t) for t in terms]
-    if not terms:
-        return []
+    # Both the term and its expansion are scored: rewriting "fold" to "structure" otherwise
+    # discards the literal token that matches esmfold and foldseek in a key.
+    forms = [{t, _SYNONYMS.get(t, t)} for t in terms]
+    if not forms:
+        return {"hits": [], "n_total": 0, "hint": _no_match_hint()}
 
     scored = []
     for entry in list_tools(deployed_only=deployed_only, device=device):
-        key = entry["tool"]
-        try:
-            doc = (ToolRegistry.get(key).description or "").strip()
-        except Exception:
-            doc = ""
-        haystack = f"{key} {doc}".lower()
-        # A term in the tool key is a stronger signal than one buried in prose.
-        score = sum(2 if _matches(t, key.lower()) else 1 for t in terms if _matches(t, haystack))
+        key, category = entry["tool"].lower(), (entry.get("category") or "").lower()
+        summary = (entry.get("summary") or "").lower()
+        score = sum(max(_field_score(t, key, category, summary) for t in form) for form in forms)
         if score:
-            scored.append((score, {**entry, "description": doc[:300]}))
+            scored.append((score, entry))
 
-    scored.sort(key=lambda pair: -pair[0])
-    return [entry for _score, entry in scored]
+    # Key order after score, so a tie ranks the same way twice rather than by registry order.
+    scored.sort(key=lambda pair: (-pair[0], pair[1]["tool"]))
+    found = {"hits": [{**entry, "score": score} for score, entry in scored[:limit]], "n_total": len(scored)}
+    if not scored:
+        found["hint"] = _no_match_hint()
+    return found
+
+
+def _unknown_key(tool_key: str) -> dict[str, Any]:
+    """Describe an unresolvable tool key as a result the caller can act on.
+
+    Returned rather than raised: a raise becomes an MCP protocol error, which reads as
+    "this call is broken" instead of "try another argument". Guessing a key is the most
+    likely mistake an agent makes, because the key is the one thing it has to invent.
+    """
+    from proto_tools.tools import ToolRegistry
+
+    return {
+        "ok": False,
+        "error": f"no tool with key {tool_key!r}",
+        "did_you_mean": ToolRegistry.suggest_keys(tool_key),
+        "hint": (
+            "Tool keys are '<model>-<action>', for example 'esmfold-prediction'. Call search_tools() to find one."
+        ),
+    }
 
 
 def get_tool_schema(tool_key: str) -> dict[str, Any]:
     """Return the input, config and output JSON schemas for one tool."""
     from proto_tools.tools import ToolRegistry
 
-    spec = ToolRegistry.get(tool_key)
+    try:
+        spec = ToolRegistry.get(tool_key)
+    except (ValueError, KeyError):
+        return _unknown_key(tool_key)
     return {
         "tool": tool_key,
         "description": (spec.description or "").strip(),
@@ -332,20 +395,30 @@ def get_tool_schema(tool_key: str) -> dict[str, Any]:
     }
 
 
-def _elide(value: Any) -> Any:
+def _elide(value: Any, key: str = "") -> Any:
     """Replace bulky leaves with a description of what they hold.
 
     An example exists to show *shape*. Structure tools carry entire PDB files
     in theirs — tens of thousands of characters that tell a caller nothing it
     could not infer from a placeholder, and that overflow a context window.
+
+    Elided structure content says a path is accepted, because the placeholder otherwise reads
+    as "inline this much text to call me", and an agent either does that or gives up on the
+    tool. ``key`` carries the field the value sat under, so only the fields that really take a
+    path say so.
     """
     if isinstance(value, dict):
-        return {k: _elide(v) for k, v in value.items()}
+        return {k: _elide(v, k) for k, v in value.items()}
     if isinstance(value, list):
         if len(value) > 3:
-            return [_elide(v) for v in value[:3]] + [f"<… {len(value) - 3} more items>"]
-        return [_elide(v) for v in value]
+            return [_elide(v, key) for v in value[:3]] + [f"<… {len(value) - 3} more items>"]
+        return [_elide(v, key) for v in value]
     if isinstance(value, str) and len(value) > 200:
+        if key == "structure":
+            return (
+                f"<{len(value):,} characters elided — a file path or http(s) URL is accepted "
+                f"instead, here or in place of the whole field, e.g. '/path/to/structure.pdb'>"
+            )
         return f"<{len(value):,} characters elided — see run_tool(use_example=True)>"
     return value
 
@@ -359,8 +432,32 @@ def get_tool_example(tool_key: str) -> dict[str, Any] | None:
     """
     from proto_tools.tools import ToolRegistry
 
-    example = ToolRegistry.get_example_input(tool_key)
+    try:
+        example = ToolRegistry.get_example_input(tool_key)
+    except (ValueError, KeyError):
+        return _unknown_key(tool_key)
     return None if example is None else _elide(example.model_dump(mode="json"))
+
+
+def get_tool_citation(tool_key: str) -> dict[str, Any]:
+    """Return the BibTeX citation and DOI for the work a tool implements.
+
+    An agent that reports results is expected to attribute the method it used, and the
+    reference is already in the tool's ``cite.bib``. ``bibtex`` is ``None`` for the few
+    tools that register none.
+    """
+    from proto_tools.tools import ToolRegistry
+
+    try:
+        bibtex = ToolRegistry.get_citation(tool_key)
+    except (ValueError, KeyError):
+        return _unknown_key(tool_key)
+    return {
+        "tool": tool_key,
+        "bibtex": bibtex,
+        "doi": ToolRegistry.get_doi(tool_key),
+        "docs_url": ToolRegistry.get_docs_url(tool_key),
+    }
 
 
 def _spill_path(output_dir: Path, key_path: str, suffix: str) -> Path:
@@ -489,10 +586,17 @@ def run_tool(
 
     ``use_example=True`` runs the tool's canonical example input, so a caller
     can exercise a tool without materialising inputs that may be very large.
+
+    A structure input takes a file path or an http(s) URL where the schema shows an object,
+    so chaining one tool's output file into the next never reads it into the call. This is not
+    uniform across bulky inputs: an MSA takes its content, and a path is rejected.
     """
     from proto_tools.tools import ToolRegistry
 
-    spec = ToolRegistry.get(tool_key)
+    try:
+        spec = ToolRegistry.get(tool_key)
+    except (ValueError, KeyError):
+        return _unknown_key(tool_key)
     if use_example:
         example = ToolRegistry.get_example_input(tool_key)
         if example is None:

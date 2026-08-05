@@ -242,6 +242,12 @@ module = [
 ]
 ignore_missing_imports = true
 
+# IPython ships partial, version-varying annotations, so whether these ignores are
+# needed depends on the installed version. Keep them without failing when unused.
+[[tool.mypy.overrides]]
+module = ["proto_tools.utils.progress"]
+warn_unused_ignores = false
+
 [[tool.mypy.overrides]]
 module = ["biotite.*"]
 follow_imports = "skip"
@@ -337,8 +343,8 @@ ignore = [
 "proto_tools/cli.py" = ["T20"]
 "proto_tools/modal/deploy.py" = ["T20", "S603", "S607", "PERF203"]
 "proto_tools/modal/smoke.py" = ["T20", "S603", "S607"]
+"proto_tools/utils/modal_status.py" = ["PERF203"]
 "proto_tools/mcp/server.py" = ["T20"]
-"proto_tools/mcp/tools.py" = ["PERF203"]
 "proto_tools/__main__.py" = ["T20"]
 "proto_tools/tools/sequence_alignment/mmseqs2/setup_databases.py" = ["T20", "S603", "S607", "PERF203"]
 "proto_tools/utils/system_info.py" = ["PLW0603", "PLW1510", "S603", "S607"]
@@ -411,6 +417,7 @@ exclude = ["*.standalone.standalone_helpers", "*.standalone.standalone_helpers.*
 "proto_tools.modal.sequence_scoring.enformer_deployment" = ["README.md"]
 "proto_tools.modal.sequence_scoring.malinois_deployment" = ["README.md"]
 "proto_tools.modal.sequence_scoring.parade_deployment" = ["README.md"]
+"proto_tools.modal.sequence_scoring.primer3_deployment" = ["README.md"]
 "proto_tools.modal.sequence_scoring.puffin_deployment" = ["README.md"]
 "proto_tools.modal.sequence_utils.segmasker_deployment" = ["README.md"]
 "proto_tools.modal.structure_alignment.foldmason_deployment" = ["README.md"]

@@ -40,6 +40,7 @@ Prerequisites:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import shutil
 import subprocess
@@ -60,6 +61,12 @@ from proto_tools.utils.tool_instance import ToolInstance
 
 # Fraction of the cgroup-aware budget allotted to mmseqs index builds (mmseqs sizes splits from physical RAM, so the cap keeps `createindex` from OOMing under Slurm / container memory limits).
 _INDEX_MEMORY_SAFETY_FRACTION = 0.7
+
+# Suffix an in-flight download occupies until it is verified and renamed into place.
+_PARTIAL_SUFFIX = ".part"
+
+# Read size for checksumming, large enough to keep multi-gigabyte datasets I/O bound.
+_HASH_BLOCK_BYTES = 1024 * 1024
 
 # ============================================================================
 # Presets — mirror predictor `preferred_datasets` defaults from the design doc
@@ -131,35 +138,73 @@ def _which_downloader() -> tuple[str, list[str]]:
     raise RuntimeError("No download tool found in PATH. Install aria2c, curl, or wget.")
 
 
+def _wrong_size(path: Path, spec: DownloadSpec) -> str | None:
+    """Describe how ``path``'s size differs from ``spec``, or None when it matches or is unknown."""
+    if spec.expected_bytes is None:
+        return None
+    actual = path.stat().st_size
+    if actual == spec.expected_bytes:
+        return None
+    return f"{actual} bytes on disk, expected {spec.expected_bytes}"
+
+
+def _wrong_checksum(path: Path, spec: DownloadSpec) -> str | None:
+    """Describe how ``path``'s SHA-256 differs from ``spec``, or None when it matches or is unset."""
+    if spec.sha256 is None:
+        return None
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(_HASH_BLOCK_BYTES), b""):
+            digest.update(block)
+    actual = digest.hexdigest()
+    if actual == spec.sha256:
+        return None
+    return f"sha256 {actual}, expected {spec.sha256}"
+
+
 def _download_file(spec: DownloadSpec, cache_dir: Path, downloader: tuple[str, list[str]]) -> bool:
     """Download a single ``DownloadSpec`` into ``cache_dir``. Returns True on success.
 
-    Idempotent: skips if the target file already exists. ``downloader`` is the
-    ``(name, base_argv)`` tuple resolved once per provisioning run by the
-    caller (so we don't re-``shutil.which`` on every file).
+    Idempotent: an existing file is reused only when its size agrees with ``spec``, so an
+    incomplete file left by an earlier run is fetched again rather than trusted. The transfer
+    lands on a ``.part`` file and is renamed only once verified, so an interrupted download
+    never occupies the final path. ``downloader`` is the ``(name, base_argv)`` tuple resolved
+    once per provisioning run by the caller (so we don't re-``shutil.which`` on every file).
     """
     target = cache_dir / spec.filename
     if target.exists():
-        print(f"  [skip] {spec.filename} already present")
-        return True
+        stale = _wrong_size(target, spec)
+        if stale is None:
+            print(f"  [skip] {spec.filename} already present")
+            return True
+        print(f"  [stale] {spec.filename}: {stale}; downloading again")
+        target.unlink()
 
     name, base_argv = downloader
     print(f"  [download] {spec.filename} via {name}: {spec.url}")
+    partial = target.with_name(target.name + _PARTIAL_SUFFIX)
+    partial.unlink(missing_ok=True)
 
     if name == "aria2c":
-        cmd = [*base_argv, "-o", spec.filename, "-d", str(cache_dir), spec.url]
+        cmd = [*base_argv, "-o", partial.name, "-d", str(cache_dir), spec.url]
     elif name == "curl":
-        cmd = [*base_argv, "-o", str(target), spec.url]
+        cmd = [*base_argv, "-o", str(partial), spec.url]
     else:  # wget
-        cmd = [*base_argv, "-O", str(target), spec.url]
+        cmd = [*base_argv, "-O", str(partial), spec.url]
 
     try:
         subprocess.run(cmd, check=True)
-    except subprocess.CalledProcessError as e:
+        for problem in (_wrong_size(partial, spec), _wrong_checksum(partial, spec)):
+            if problem is not None:
+                msg = f"{spec.filename} did not download completely: {problem}"
+                raise RuntimeError(msg)
+    except (subprocess.CalledProcessError, RuntimeError) as e:
+        partial.unlink(missing_ok=True)
         if not spec.required:
             print(f"  [warn] optional file {spec.filename} download failed (continuing): {e}")
             return True
         raise
+    partial.replace(target)
     return True
 
 

@@ -111,6 +111,8 @@ for instructions related to account setup, deploying a tool, and costs, or the [
 ├── <a href="proto_tools/tools/masked_models/esm2/">esm2/</a>
 ├── <a href="proto_tools/tools/masked_models/esm3/">esm3/</a>
 └── <a href="proto_tools/tools/masked_models/esmc/">esmc/</a>
+<a href="proto_tools/tools/molecular_docking/">molecular_docking/</a>              # Protein-ligand binding pose prediction
+└── <a href="proto_tools/tools/molecular_docking/vina/">vina/</a>
 <a href="proto_tools/tools/mutagenesis/">mutagenesis/</a>                    # Random sequence mutagenesis
 ├── <a href="proto_tools/tools/mutagenesis/random_nucleotide/">random_nucleotide/</a>
 └── <a href="proto_tools/tools/mutagenesis/random_protein/">random_protein/</a>
@@ -133,6 +135,7 @@ for instructions related to account setup, deploying a tool, and costs, or the [
 ├── <a href="proto_tools/tools/sequence_scoring/malinois/">malinois/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/na_mpnn_specificity/">na_mpnn_specificity/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/parade/">parade/</a>
+├── <a href="proto_tools/tools/sequence_scoring/primer3/">primer3/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/puffin/">puffin/</a>
 └── <a href="proto_tools/tools/sequence_scoring/segmasker/">segmasker/</a>
 <a href="proto_tools/tools/structure_alignment/">structure_alignment/</a>            # Structure comparison

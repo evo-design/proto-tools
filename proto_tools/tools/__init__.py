@@ -352,6 +352,19 @@ from proto_tools.tools.masked_models import (
     run_esmc_sae_features,
 )
 
+# Molecular docking tools
+from proto_tools.tools.molecular_docking import (
+    VinaDockingConfig,
+    VinaDockingInput,
+    VinaDockingOutput,
+    VinaDockingPose,
+    VinaDockingPoseMetrics,
+    VinaLigandResult,
+    VinaReferenceLigandBox,
+    VinaSearchBox,
+    run_vina_docking,
+)
+
 # Mutagenesis tools
 from proto_tools.tools.mutagenesis import (
     RandomNucleotideSample,
@@ -562,6 +575,11 @@ from proto_tools.tools.sequence_scoring import (
     ParadeStabilityMetrics,
     ParadeStabilityOutput,
     ParadeStabilityResult,
+    Primer3Oligo,
+    Primer3OligoResult,
+    Primer3ThermodynamicsConfig,
+    Primer3ThermodynamicsInput,
+    Primer3ThermodynamicsOutput,
     PuffinInterpretationConfig,
     PuffinInterpretationInput,
     PuffinInterpretationOutput,
@@ -591,6 +609,7 @@ from proto_tools.tools.sequence_scoring import (
     run_parade_activity,
     run_parade_gradient,
     run_parade_stability,
+    run_primer3_thermodynamics,
     run_puffin_interpretation,
     run_puffin_prediction,
     run_segmasker,
@@ -1245,6 +1264,13 @@ __all__ = [
     "run_parade_activity",
     "run_parade_gradient",
     "run_parade_stability",
+    # Sequence scoring - Primer3
+    "Primer3Oligo",
+    "Primer3OligoResult",
+    "Primer3ThermodynamicsConfig",
+    "Primer3ThermodynamicsInput",
+    "Primer3ThermodynamicsOutput",
+    "run_primer3_thermodynamics",
     # Sequence scoring - Puffin Interpretation
     "MOTIF_NAMES",
     "PuffinInterpretationConfig",
@@ -1525,6 +1551,16 @@ __all__ = [
     "ESMCSAEFeaturesOutput",
     "SAELayerFeatures",
     "SequenceSAEFeatures",
+    # Molecular docking - AutoDock Vina
+    "VinaDockingConfig",
+    "VinaDockingInput",
+    "VinaDockingOutput",
+    "VinaDockingPose",
+    "VinaDockingPoseMetrics",
+    "VinaLigandResult",
+    "VinaReferenceLigandBox",
+    "VinaSearchBox",
+    "run_vina_docking",
     # RNA splicing - SpliceTransformer
     "run_splice_transformer",
     "SpliceTransformerInput",

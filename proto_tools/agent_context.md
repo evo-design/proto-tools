@@ -49,6 +49,37 @@ output. Resolve a tool by registry key (`esm2-embedding`), run-function name
 | `proto-tools example-input <tool> [--as-python]` | A minimal valid `Input`, as JSON or as a runnable snippet |
 | `proto-tools example <tool>` | The toolkit example notebook as markdown |
 
+## If you are connected over MCP, not writing Python
+
+The MCP server exposes a fixed set of tools and no Python API: the imports,
+`persist()` / `get()`, and `ToolPool` below do not apply, though the
+`Input -> Config -> run -> Output` shape does. Everything is reached through
+these:
+
+| Tool | Use it for |
+|---|---|
+| `workspace_info` | Where calls land, and whether credentials are configured. Start here if anything looks misconfigured. |
+| `list_tools` | What is available, with each tool's category, one-line summary, and whether it needs a GPU. Pass `category` to narrow. |
+| `search_tools` | Finding a tool by description. Returns the best matches with the score each ranked on. |
+| `get_tool_schema` | The input, config, and output schemas, before a first call. |
+| `get_tool_example` | A known-good example input, showing shape rather than payload. |
+| `get_tool_citation` | BibTeX and DOI for the method, when reporting a result. |
+| `run_tool` | Running one. |
+| `deploy_tool` | Deploying an app to Modal, after the user approves the spend. |
+
+Three things worth knowing before the first call:
+
+- **Tool keys are `<model>-<action>`** — `esmfold-prediction`, not `esmfold`.
+  Several actions usually exist for one model. If a key is rejected, the reply
+  lists near matches; `search_tools` resolves a name you only half know.
+- **Structure inputs take a file path or an http(s) URL** where the schema shows
+  an object, so a file already on disk — another tool's output, say — never has
+  to be read into the call. This is not uniform: an MSA takes its content.
+- **Not every tool needs deploying.** Many are answered in the server's own
+  process, because they need no GPU and no environment, or cannot be deployed at
+  all. Those are listed as available with a note saying so, and `run_tool`
+  reports where a call actually ran in `ran_on`.
+
 ## Don't guess symbol names from the registry key
 
 Model and run-function names come from the toolkit, not the registry key, so
