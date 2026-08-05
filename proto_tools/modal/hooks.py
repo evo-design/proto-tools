@@ -9,12 +9,23 @@ service class. Two extension points cover that, distinguished by what they can s
 
 Both are process-wide and applied in registration order. Register during import, before any call
 is served: registration is not synchronized.
+
+:data:`PLUGINS_ENV` names the modules a worker imports to perform that registration, since a
+deployed container imports only what a service module reaches.
 """
 
 import functools
+import importlib
+import os
+import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
+
+#: Modules a worker imports before serving its first call, separated by commas or whitespace.
+#: Each is imported for its side effects, which is where a deployment registers its hooks. Read
+#: in the environment a deploy runs from, and baked into the image so the container sees it.
+PLUGINS_ENV = "PROTO_MODAL_WORKER_PLUGINS"
 
 #: Adjusts a call's raw input and config mappings in place, before either is validated.
 PayloadHook = Callable[[dict[str, Any], dict[str, Any]], None]
@@ -74,10 +85,72 @@ def register_call_middleware(middleware: CallMiddleware) -> None:
     _call_middleware.append(middleware)
 
 
+def _plugin_modules(raw: str) -> tuple[str, ...]:
+    """Return the module names in ``raw``.
+
+    Args:
+        raw (str): Raw variable value, comma- or whitespace-separated.
+
+    Returns:
+        tuple[str, ...]: Module names in the order given, empty when ``raw`` names none.
+    """
+    return tuple(name for name in re.split(r"[,\s]+", raw) if name)
+
+
+@functools.cache
+def load_plugins() -> tuple[str, ...]:
+    """Import every module named in :data:`PLUGINS_ENV`.
+
+    An unimportable name raises rather than being skipped. A worker that quietly served calls
+    without a deployment's extensions would drop whatever they were responsible for.
+
+    Cached to keep this off the hot path; ``sys.modules`` is what makes a module body run once.
+
+    Returns:
+        tuple[str, ...]: The module names imported, in the order given.
+
+    Raises:
+        ImportError: If a named module cannot be imported.
+    """
+    names = _plugin_modules(os.environ.get(PLUGINS_ENV, ""))
+    for name in names:
+        _import_plugin(name)
+    return names
+
+
+def _import_plugin(name: str) -> None:
+    """Import one plugin module, naming the variable it came from when that fails.
+
+    Args:
+        name (str): Module to import.
+
+    Raises:
+        ImportError: If the module cannot be imported.
+    """
+    try:
+        importlib.import_module(name)
+    except ImportError as exc:
+        raise ImportError(f"{PLUGINS_ENV} names {name!r}, which this worker cannot import") from exc
+
+
+def plugin_env() -> dict[str, str]:
+    """Return :data:`PLUGINS_ENV` as image env, or empty when unset.
+
+    Returns:
+        dict[str, str]: Mapping to merge into a service image's runtime environment.
+    """
+    raw = os.environ.get(PLUGINS_ENV)
+    return {PLUGINS_ENV: raw} if raw else {}
+
+
 def clear_hooks() -> None:
-    """Remove every registered hook. Intended for tests, which must not leak into each other."""
+    """Remove every registered hook and forget which plugins were loaded.
+
+    Intended for tests, which must not leak into each other.
+    """
     _payload_hooks.clear()
     _call_middleware.clear()
+    load_plugins.cache_clear()
 
 
 def apply_payload_hooks(input_dict: dict[str, Any], config_dict: dict[str, Any]) -> None:
@@ -127,11 +200,14 @@ def _bind(
 
 
 __all__ = [
+    "PLUGINS_ENV",
     "CallContext",
     "CallMiddleware",
     "PayloadHook",
     "apply_payload_hooks",
     "clear_hooks",
+    "load_plugins",
+    "plugin_env",
     "register_call_middleware",
     "register_payload_hook",
     "run_with_middleware",
