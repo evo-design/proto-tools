@@ -96,6 +96,62 @@ def test_a_misspelled_model_still_resolves():
     assert "esmfold-prediction" in ToolRegistry.suggest_keys("ESMFold"), "a name read from a paper is capitalised"
 
 
+# ── Choosing a tool from the listing ────────────────────────────────────────
+
+
+@pytest.mark.parametrize("device", ["modal", "proto", "local"])
+def test_the_instructions_name_every_category_the_registry_has(device: str):
+    """The category filter is useless if the vocabulary is not visible; a new one must not be missed."""
+    from proto_tools.mcp.server import instructions_for
+    from proto_tools.tools import ToolRegistry
+
+    text = instructions_for(device)
+    missing = sorted(c for c in {s.category for s in ToolRegistry.list_all()} if c not in text)
+    assert not missing, f"categories absent from the {device} instructions: {missing}"
+
+
+def test_listing_carries_what_choosing_a_tool_needs():
+    """Names alone forced a schema fetch per candidate, which is the expensive way to choose."""
+    from proto_tools.mcp import tools as impl
+
+    entry = next(e for e in impl.list_tools(device="local") if e["tool"] == "esmfold-prediction")
+
+    assert entry["category"] == "structure_prediction"
+    assert entry["summary"] and entry["uses_gpu"] is True
+
+
+def test_a_category_narrows_the_listing_and_an_unknown_one_names_the_choices():
+    """An agent that mistypes a facet should learn the vocabulary rather than get an empty list."""
+    from proto_tools.mcp import tools as impl
+
+    listed = impl.list_tools(deployed_only=False, category="structure_prediction", device="local")
+    assert listed and {e["category"] for e in listed} == {"structure_prediction"}
+    assert len(listed) < len(impl.list_tools(deployed_only=False, device="local"))
+
+    refused = impl.list_tools(category="structure-prediction", device="local")
+    assert refused[0]["ok"] is False
+    assert "structure_prediction" in refused[0]["categories"]
+
+
+def test_an_in_process_tool_says_it_needs_no_deployment_and_why(monkeypatch):
+    """Reading "not deployed" as "deploy it first" is the wrong move: it already runs here.
+
+    The reason matters just as much — it is where a tool says it runs for hours, which its
+    description does not.
+    """
+    from proto_tools.mcp import tools as impl
+
+    monkeypatch.setattr(impl, "_registry", dict)
+    monkeypatch.setattr(impl, "deployed_keys", lambda device: set())
+    monkeypatch.setattr(impl, "answered_in_process_keys", lambda: {"bindcraft-design"})
+
+    entry = next(e for e in impl.list_tools(device="modal") if e["tool"] == "bindcraft-design")
+
+    assert entry["runs_in_process"] is True
+    assert "no deployment is needed" in entry["note"]
+    assert "multi-hour" in entry["note"], "the duration warning exists only in the local_only reason"
+
+
 def test_a_citation_is_reachable_for_the_tools_that_register_one():
     """An agent reporting a result has to attribute the method, and 132 of 134 ship a cite.bib."""
     from proto_tools.mcp import tools as impl

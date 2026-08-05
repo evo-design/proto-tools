@@ -180,11 +180,16 @@ def workspace_info(device: Device = "modal") -> dict[str, Any]:
     }
 
 
-def list_tools(deployed_only: bool = True, device: Device = "modal") -> list[dict[str, Any]]:
+def list_tools(
+    deployed_only: bool = True, category: str | None = None, device: Device = "modal"
+) -> list[dict[str, Any]]:
     """List tools, flagged by whether they can actually run on ``device``.
 
     Defaults to available-only: an agent choosing from the full catalogue will
     pick tools that cannot run and hit an error it cannot resolve itself.
+
+    Each entry carries what choosing between tools needs — category, summary, and whether it
+    wants a GPU — so a caller can pick one without fetching a schema per candidate.
 
     "Available" is wider than "deployed". A tool needing no GPU and no environment, or one that
     can never be deployed, is answered in this process instead, so it runs on a remote device
@@ -193,6 +198,13 @@ def list_tools(deployed_only: bool = True, device: Device = "modal") -> list[dic
     When using ``modal``, "deployed" means deployed in your workspace, which you can change. When
     using ``proto``, it means hosted by Proto, which you cannot.
     """
+    from proto_tools.tools import ToolRegistry
+
+    if category is not None:
+        known = sorted({spec.category for spec in ToolRegistry.list_all()})
+        if category not in known:
+            return [{"ok": False, "error": f"no category named {category!r}", "categories": known}]
+
     available = available_keys(device)
     in_process = set() if device == "local" else answered_in_process_keys()
     # Resolved once: on ``modal`` this reads the live app list, which is a network call.
@@ -205,7 +217,23 @@ def list_tools(deployed_only: bool = True, device: Device = "modal") -> list[dic
         is_available = key in available
         if deployed_only and not is_available:
             continue
-        entry: dict[str, Any] = {"tool": key, "available": is_available}
+        spec = ToolRegistry.get(key)
+        if category is not None and spec.category != category:
+            continue
+        entry: dict[str, Any] = {
+            "tool": key,
+            "category": spec.category,
+            "summary": spec.description,
+            "uses_gpu": spec.uses_gpu,
+            "available": is_available,
+        }
+        # Both halves matter to a caller deciding what to do next: that no deployment is needed,
+        # and why -- which is where a tool says it runs for hours.
+        notes = ["Runs in this session; no deployment is needed."] if key in in_process else []
+        if spec.local_only:
+            notes.append(spec.local_only)
+        if notes:
+            entry["note"] = " ".join(notes)
         if key in in_process:
             entry["runs_in_process"] = True
         if device == "modal":
@@ -280,8 +308,6 @@ def search_tools(query: str, deployed_only: bool = True, device: Device = "modal
     search returns nothing for those, which reads as "no such tool exists"
     rather than "rephrase".
     """
-    from proto_tools.tools import ToolRegistry
-
     terms = [t for t in query.lower().split() if t not in _STOPWORDS and len(t) > 1]
     terms = [_SYNONYMS.get(t, t) for t in terms]
     if not terms:
@@ -290,15 +316,11 @@ def search_tools(query: str, deployed_only: bool = True, device: Device = "modal
     scored = []
     for entry in list_tools(deployed_only=deployed_only, device=device):
         key = entry["tool"]
-        try:
-            doc = (ToolRegistry.get(key).description or "").strip()
-        except Exception:
-            doc = ""
-        haystack = f"{key} {doc}".lower()
+        haystack = f"{key} {entry.get('summary') or ''}".lower()
         # A term in the tool key is a stronger signal than one buried in prose.
         score = sum(2 if _matches(t, key.lower()) else 1 for t in terms if _matches(t, haystack))
         if score:
-            scored.append((score, {**entry, "description": doc[:300]}))
+            scored.append((score, entry))
 
     scored.sort(key=lambda pair: -pair[0])
     return [entry for _score, entry in scored]

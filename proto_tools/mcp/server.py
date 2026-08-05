@@ -86,6 +86,18 @@ INSTRUCTIONS = {
 }
 
 
+def instructions_for(device: Device) -> str:
+    """Return the instructions for ``device``, naming the categories the registry holds.
+
+    The category list is read rather than written down, so a new category reaches the agent
+    without anyone remembering to update prose.
+    """
+    from proto_tools.tools import ToolRegistry
+
+    categories = sorted({spec.category for spec in ToolRegistry.list_all()})
+    return f"{INSTRUCTIONS[device]}\n`list_tools` accepts a `category` filter. The categories are: {', '.join(categories)}.\n"
+
+
 def build_server(device: Device = "modal") -> FastMCP:
     """Construct the MCP server with its tool surface registered.
 
@@ -97,7 +109,7 @@ def build_server(device: Device = "modal") -> FastMCP:
     Returns:
         FastMCP: The configured server.
     """
-    mcp: FastMCP = FastMCP(name=f"proto-tools ({device})", instructions=INSTRUCTIONS[device])
+    mcp: FastMCP = FastMCP(name=f"proto-tools ({device})", instructions=instructions_for(device))
 
     @mcp.tool
     def workspace_info() -> dict[str, Any]:
@@ -109,14 +121,18 @@ def build_server(device: Device = "modal") -> FastMCP:
         return impl.workspace_info(device)
 
     @mcp.tool
-    def list_tools(deployed_only: bool = True) -> list[dict[str, Any]]:
-        """List available bioinformatics tools.
+    def list_tools(deployed_only: bool = True, category: str | None = None) -> list[dict[str, Any]]:
+        """List available bioinformatics tools, with what each one is for.
+
+        Each entry carries its category, a one-line summary, and whether it
+        needs a GPU, which is usually enough to choose without fetching a
+        schema for every candidate. Pass a category to narrow the list.
 
         Defaults to only those actually deployed in this workspace. Pass
         deployed_only=False to see the full catalogue, including tools the
         user would have to deploy first.
         """
-        return impl.list_tools(deployed_only=deployed_only, device=device)
+        return impl.list_tools(deployed_only=deployed_only, category=category, device=device)
 
     @mcp.tool
     def search_tools(query: str, deployed_only: bool = True) -> list[dict[str, Any]]:
