@@ -1533,6 +1533,41 @@ class ToolRegistry:
         return list(cls._registry.values())
 
     @classmethod
+    def suggest_keys(cls, key: str, n: int = 5) -> list[str]:
+        """Return the registered keys a caller most likely meant by ``key``.
+
+        Keys are ``<model>-<action>``, and a wrong guess is usually the model alone, read
+        from a paper or a model card. Three strategies apply in turn, because whole-key
+        edit distance alone is unreliable here: it returns nothing for ``esm2`` or
+        ``boltz2``, and answers ``tmalign`` with the unrelated ``mafft-align``.
+
+        1. Prefix, which catches a model name given without an action. Exact model
+           segments rank ahead of incidental ones, keeping ``esmfold-*`` above
+           ``esmfold2-*``, a different model.
+        2. Fuzzy match on the model segment, which catches a misspelled model
+           (``esmfld``) that whole-key distance scores too poorly to return.
+        3. Fuzzy match on the whole key, which catches a misspelled action.
+
+        Args:
+            key (str): The key a caller supplied, which is not registered.
+            n (int): Most suggestions to return.
+
+        Returns:
+            list[str]: Candidate keys, best first, empty when nothing is close.
+        """
+        guess = key.lower()
+        keys = sorted(cls._registry)
+
+        prefix = [k for k in keys if k.startswith(guess)]
+        if prefix:
+            return sorted(prefix, key=lambda k: (k.split("-")[0] != guess, k))[:n]
+
+        models = sorted({k.split("-")[0] for k in keys})
+        near = difflib.get_close_matches(guess, models, n=2, cutoff=0.6)
+        by_model = [k for model in near for k in keys if k.split("-")[0] == model]
+        return by_model[:n] or difflib.get_close_matches(guess, keys, n=n, cutoff=0.6)
+
+    @classmethod
     def get(cls, key: str) -> ToolSpec:
         """Get tool spec by key.
 
@@ -1546,7 +1581,7 @@ class ToolRegistry:
             ValueError: If key not found in registry
         """
         if key not in cls._registry:
-            suggestions = difflib.get_close_matches(key, cls._registry.keys(), n=3, cutoff=0.6)
+            suggestions = cls.suggest_keys(key)
             hint = f"; did you mean: {', '.join(suggestions)}?" if suggestions else ""
             raise ValueError(f"Unknown tool {key!r} ({len(cls._registry)} registered){hint}")
         return cls._registry[key]

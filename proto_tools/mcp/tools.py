@@ -304,11 +304,33 @@ def search_tools(query: str, deployed_only: bool = True, device: Device = "modal
     return [entry for _score, entry in scored]
 
 
+def _unknown_key(tool_key: str) -> dict[str, Any]:
+    """Describe an unresolvable tool key as a result the caller can act on.
+
+    Returned rather than raised: a raise becomes an MCP protocol error, which reads as
+    "this call is broken" instead of "try another argument". Guessing a key is the most
+    likely mistake an agent makes, because the key is the one thing it has to invent.
+    """
+    from proto_tools.tools import ToolRegistry
+
+    return {
+        "ok": False,
+        "error": f"no tool with key {tool_key!r}",
+        "did_you_mean": ToolRegistry.suggest_keys(tool_key),
+        "hint": (
+            "Tool keys are '<model>-<action>', for example 'esmfold-prediction'. Call search_tools() to find one."
+        ),
+    }
+
+
 def get_tool_schema(tool_key: str) -> dict[str, Any]:
     """Return the input, config and output JSON schemas for one tool."""
     from proto_tools.tools import ToolRegistry
 
-    spec = ToolRegistry.get(tool_key)
+    try:
+        spec = ToolRegistry.get(tool_key)
+    except (ValueError, KeyError):
+        return _unknown_key(tool_key)
     return {
         "tool": tool_key,
         "description": (spec.description or "").strip(),
@@ -345,8 +367,32 @@ def get_tool_example(tool_key: str) -> dict[str, Any] | None:
     """
     from proto_tools.tools import ToolRegistry
 
-    example = ToolRegistry.get_example_input(tool_key)
+    try:
+        example = ToolRegistry.get_example_input(tool_key)
+    except (ValueError, KeyError):
+        return _unknown_key(tool_key)
     return None if example is None else _elide(example.model_dump(mode="json"))
+
+
+def get_tool_citation(tool_key: str) -> dict[str, Any]:
+    """Return the BibTeX citation and DOI for the work a tool implements.
+
+    An agent that reports results is expected to attribute the method it used, and the
+    reference is already in the tool's ``cite.bib``. ``bibtex`` is ``None`` for the few
+    tools that register none.
+    """
+    from proto_tools.tools import ToolRegistry
+
+    try:
+        bibtex = ToolRegistry.get_citation(tool_key)
+    except (ValueError, KeyError):
+        return _unknown_key(tool_key)
+    return {
+        "tool": tool_key,
+        "bibtex": bibtex,
+        "doi": ToolRegistry.get_doi(tool_key),
+        "docs_url": ToolRegistry.get_docs_url(tool_key),
+    }
 
 
 def _spill_path(output_dir: Path, key_path: str, suffix: str) -> Path:
@@ -478,7 +524,10 @@ def run_tool(
     """
     from proto_tools.tools import ToolRegistry
 
-    spec = ToolRegistry.get(tool_key)
+    try:
+        spec = ToolRegistry.get(tool_key)
+    except (ValueError, KeyError):
+        return _unknown_key(tool_key)
     if use_example:
         example = ToolRegistry.get_example_input(tool_key)
         if example is None:
