@@ -16,6 +16,7 @@ _READ_ONLY_SURFACE = {
     "search_tools",
     "get_tool_schema",
     "get_tool_example",
+    "get_tool_citation",
     "run_tool",
 }
 
@@ -45,6 +46,71 @@ def test_proto_exposes_no_deploy_tool():
 
     names = {t.name for t in asyncio.run(build_server("proto").list_tools())}
     assert "deploy_tool" not in names
+
+
+# ── Unknown tool keys ───────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("verb", ["get_tool_schema", "get_tool_example", "run_tool"])
+def test_an_unknown_key_is_a_result_rather_than_a_protocol_error(verb: str):
+    """A raise reaches the agent as ToolError — "this call is broken" — and ends the attempt.
+
+    The key is the one argument an agent has to invent, so guessing it wrong has to be as
+    recoverable as passing bad arguments already is.
+    """
+    import fastmcp
+
+    from proto_tools.mcp import build_server
+
+    async def call():
+        async with fastmcp.Client(build_server("local")) as client:
+            return await client.call_tool(verb, {"tool_key": "esmfold"})
+
+    result = asyncio.run(call()).data
+    assert result["ok"] is False
+    assert "esmfold-prediction" in result["did_you_mean"]
+    assert "<model>-<action>" in result["hint"]
+
+
+def test_a_model_name_suggests_every_action_registered_for_it():
+    """Whole-key edit distance returns nothing for these, which is the reported failure."""
+    from proto_tools.tools import ToolRegistry
+
+    assert ToolRegistry.suggest_keys("esm2") == ["esm2-embedding", "esm2-gradient", "esm2-sample", "esm2-score"]
+    assert ToolRegistry.suggest_keys("boltz2") == ["boltz2-affinity", "boltz2-prediction"]
+    assert ToolRegistry.suggest_keys("tmalign") == ["tmalign-alignment"], "difflib answers this with mafft-align"
+
+
+def test_a_sibling_model_ranks_below_the_one_named():
+    """`esmfold2` is a different model, so it must not displace `esmfold`'s own actions."""
+    from proto_tools.tools import ToolRegistry
+
+    assert ToolRegistry.suggest_keys("esmfold")[-1] == "esmfold2-prediction"
+
+
+def test_a_misspelled_model_still_resolves():
+    """The fallback exists for typos; whole-key distance scores them too poorly to return."""
+    from proto_tools.tools import ToolRegistry
+
+    assert "esmfold-prediction" in ToolRegistry.suggest_keys("esmfld")
+    assert "esmfold-prediction" in ToolRegistry.suggest_keys("ESMFold"), "a name read from a paper is capitalised"
+
+
+def test_a_citation_is_reachable_for_the_tools_that_register_one():
+    """An agent reporting a result has to attribute the method, and 132 of 134 ship a cite.bib."""
+    from proto_tools.mcp import tools as impl
+
+    cite = impl.get_tool_citation("esmfold-prediction")
+    assert cite["doi"] == "10.1126/science.ade2574"
+    assert "@article" in cite["bibtex"]
+
+
+def test_the_raised_error_still_names_the_key_and_stays_a_ValueError():
+    """Callers outside the MCP — the CLI, the Python API — depend on both."""
+    from proto_tools.tools import ToolRegistry
+
+    with pytest.raises(ValueError, match="Unknown tool 'esm2'"):
+        ToolRegistry.get("esm2")
 
 
 def _unauthenticated(monkeypatch, config_path, **env):

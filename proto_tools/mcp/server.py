@@ -72,10 +72,17 @@ Large outputs, such as predicted structures and embeddings, are written to disk
 and returned as file paths rather than inline.
 """
 
+# Stated for every backend because a key is the one argument a caller has to invent, and
+# guessing a model name read from a paper is the most common way a call goes wrong.
+_KEY_CONVENTION = """Tool keys are `<model>-<action>`, such as `esmfold-prediction` or
+`esm2-embedding`. A model name on its own is not a key: several actions usually exist for
+one model. Use `search_tools` or `list_tools` to resolve a name into a key.
+"""
+
 INSTRUCTIONS = {
-    "modal": _MODAL_INSTRUCTIONS,
-    "proto": _PROTO_INSTRUCTIONS,
-    "local": _LOCAL_INSTRUCTIONS,
+    "modal": _MODAL_INSTRUCTIONS + "\n" + _KEY_CONVENTION,
+    "proto": _PROTO_INSTRUCTIONS + "\n" + _KEY_CONVENTION,
+    "local": _LOCAL_INSTRUCTIONS + "\n" + _KEY_CONVENTION,
 }
 
 
@@ -137,6 +144,14 @@ def build_server(device: Device = "modal") -> FastMCP:
         To actually run the example, call run_tool with use_example=True.
         """
         return impl.get_tool_example(tool_key)
+
+    @mcp.tool
+    def get_tool_citation(tool_key: str) -> dict[str, Any]:
+        """Get the BibTeX citation and DOI for the method a tool implements.
+
+        Use this when reporting results, so the underlying work is attributed.
+        """
+        return impl.get_tool_citation(tool_key)
 
     @mcp.tool
     def run_tool(
