@@ -12,6 +12,7 @@ from proto_tools.transforms.masking.maskers import (
     MaskingInput,
     MaskingMethod,
     compatible_methods,
+    split_tokens,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "apply_masking_strategy",
     "build_position_score_fn",
     "compatible_methods",
+    "split_tokens",
 ]
