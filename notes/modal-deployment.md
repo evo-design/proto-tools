@@ -263,10 +263,13 @@ PROTO_MODAL_WORKER_PLUGINS=observability.hooks \
 proto-tools deploy --apps tmalign --env proto-env
 ```
 
-The plugin list is baked into the image's runtime environment, so it applies to every call the
-container serves and not to the build-time warmup. Imports happen once per process, on the first
-call. A module that cannot be imported raises rather than being skipped: a worker that served
-calls without a deployment's extensions would silently drop whatever they were responsible for.
+All three are applied by `with_proto_tools`, which every service image is built through — a guard
+test asserts that, since a service bypassing it would silently ignore all three.
+
+Plugins are imported once per process, on the first call a worker serves. The deploy-time warmup
+calls run functions directly rather than through `run_tool_call`, so it never loads them. A module
+that cannot be imported raises rather than being skipped: a worker that served calls without a
+deployment's extensions would silently drop whatever they were responsible for.
 
 Extra layers are added below proto-tools' own, so editing proto-tools does not rebuild them. A
 directory named by `PROTO_MODAL_EXTRA_SOURCE` that does not exist fails the deploy rather than the

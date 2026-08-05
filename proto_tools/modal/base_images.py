@@ -99,11 +99,19 @@ def extra_source_dirs() -> list[Path]:
 
 
 def _with_extras(image: modal.Image) -> modal.Image:
-    """Add the packages and source a deployment asked for, below proto-tools' own layers."""
+    """Add the packages, source, and plugin environment a deployment asked for.
+
+    Applied here because every service image is built through :func:`with_proto_tools`, which is
+    not true of any later layer.
+    """
+    from proto_tools.modal.hooks import plugin_env
+
     if packages := extra_packages():
         image = image.pip_install(*packages)
     for path in extra_source_dirs():
         image = image.add_local_dir(str(path), f"{CONTAINER_ROOT}/{path.name}", copy=True)
+    if env := plugin_env():
+        image = image.env(env)
     return image
 
 
