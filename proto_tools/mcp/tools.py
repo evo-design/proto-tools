@@ -395,20 +395,30 @@ def get_tool_schema(tool_key: str) -> dict[str, Any]:
     }
 
 
-def _elide(value: Any) -> Any:
+def _elide(value: Any, key: str = "") -> Any:
     """Replace bulky leaves with a description of what they hold.
 
     An example exists to show *shape*. Structure tools carry entire PDB files
     in theirs — tens of thousands of characters that tell a caller nothing it
     could not infer from a placeholder, and that overflow a context window.
+
+    Elided structure content says a path is accepted, because the placeholder otherwise reads
+    as "inline this much text to call me", and an agent either does that or gives up on the
+    tool. ``key`` carries the field the value sat under, so only the fields that really take a
+    path say so.
     """
     if isinstance(value, dict):
-        return {k: _elide(v) for k, v in value.items()}
+        return {k: _elide(v, k) for k, v in value.items()}
     if isinstance(value, list):
         if len(value) > 3:
-            return [_elide(v) for v in value[:3]] + [f"<… {len(value) - 3} more items>"]
-        return [_elide(v) for v in value]
+            return [_elide(v, key) for v in value[:3]] + [f"<… {len(value) - 3} more items>"]
+        return [_elide(v, key) for v in value]
     if isinstance(value, str) and len(value) > 200:
+        if key == "structure":
+            return (
+                f"<{len(value):,} characters elided — a file path or http(s) URL is accepted "
+                f"instead, here or in place of the whole field, e.g. '/path/to/structure.pdb'>"
+            )
         return f"<{len(value):,} characters elided — see run_tool(use_example=True)>"
     return value
 
@@ -576,6 +586,10 @@ def run_tool(
 
     ``use_example=True`` runs the tool's canonical example input, so a caller
     can exercise a tool without materialising inputs that may be very large.
+
+    A structure input takes a file path or an http(s) URL where the schema shows an object,
+    so chaining one tool's output file into the next never reads it into the call. This is not
+    uniform across bulky inputs: an MSA takes its content, and a path is rejected.
     """
     from proto_tools.tools import ToolRegistry
 
