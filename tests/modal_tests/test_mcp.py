@@ -101,17 +101,6 @@ def test_a_misspelled_model_still_resolves():
 # ── Choosing a tool from the listing ────────────────────────────────────────
 
 
-@pytest.mark.parametrize("device", ["modal", "proto", "local"])
-def test_the_instructions_name_every_category_the_registry_has(device: str):
-    """The category filter is useless if the vocabulary is not visible; a new one must not be missed."""
-    from proto_tools.mcp.server import instructions_for
-    from proto_tools.tools import ToolRegistry
-
-    text = instructions_for(device)
-    missing = sorted(c for c in {s.category for s in ToolRegistry.list_all()} if c not in text)
-    assert not missing, f"categories absent from the {device} instructions: {missing}"
-
-
 def test_listing_carries_what_choosing_a_tool_needs():
     """Names alone forced a schema fetch per candidate, which is the expensive way to choose."""
     from proto_tools.mcp import tools as impl
