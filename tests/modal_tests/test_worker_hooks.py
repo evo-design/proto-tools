@@ -7,9 +7,13 @@ from typing import Any
 import pytest
 
 from proto_tools.modal.hooks import (
+    PLUGINS_ENV,
     CallContext,
     apply_payload_hooks,
     clear_hooks,
+    load_plugins,
+    plugin_env,
+    plugin_modules,
     register_call_middleware,
     register_payload_hook,
     run_with_middleware,
@@ -274,3 +278,53 @@ def test_middleware_is_told_which_tool_it_wrapped() -> None:
 
     assert _CallContext(run_esm2_embeddings).tool_key == "esm2-embedding"
     assert _CallContext(lambda: None).tool_key is None, "an unregistered function resolves to nothing"
+
+
+# ── Plugin loading ───────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        pytest.param("", (), id="unset"),
+        pytest.param("pkg.one", ("pkg.one",), id="single"),
+        pytest.param("pkg.one,pkg.two", ("pkg.one", "pkg.two"), id="comma"),
+        pytest.param("pkg.one pkg.two", ("pkg.one", "pkg.two"), id="whitespace"),
+        pytest.param(" pkg.one , pkg.two ", ("pkg.one", "pkg.two"), id="padded"),
+    ],
+)
+def test_plugin_modules_parses_both_separators(raw: str, expected: tuple[str, ...]) -> None:
+    """A deployment naming several modules must not have to guess which separator is accepted."""
+    assert plugin_modules(raw) == expected
+
+
+def test_plugins_are_imported_once_per_process(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Registration is not idempotent, so importing twice would double every hook."""
+    import sys
+    import types
+
+    imported: list[str] = []
+    module = types.ModuleType("proto_tools_plugin_probe")
+    module.__dict__["_"] = imported.append("imported")
+    monkeypatch.setitem(sys.modules, "proto_tools_plugin_probe", module)
+    monkeypatch.setenv(PLUGINS_ENV, "proto_tools_plugin_probe")
+
+    assert load_plugins() == ("proto_tools_plugin_probe",)
+    assert load_plugins() == ("proto_tools_plugin_probe",), "the second call must be cached"
+    assert imported == ["imported"]
+
+
+def test_an_unimportable_plugin_fails_the_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Serving without a deployment's extensions silently drops whatever they were responsible for."""
+    monkeypatch.setenv(PLUGINS_ENV, "proto_tools_plugin_that_does_not_exist")
+    with pytest.raises(ModuleNotFoundError):
+        load_plugins()
+
+
+def test_plugin_env_reaches_the_container_only_when_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty variable baked into every image would be noise in each one's environment."""
+    monkeypatch.delenv(PLUGINS_ENV, raising=False)
+    assert plugin_env() == {}
+
+    monkeypatch.setenv(PLUGINS_ENV, "pkg.one")
+    assert plugin_env() == {PLUGINS_ENV: "pkg.one"}

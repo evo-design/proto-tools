@@ -245,6 +245,33 @@ Two limits worth knowing: payload hooks run before the progress context opens, s
 silent on the caller's spinner; and a middleware that forgets to return raises `TypeError` rather
 than returning `None` to the client.
 
+### Getting extension code into a worker
+
+A deployed container imports only what a service module reaches, and carries only what its image
+was built with. Three variables, read where the deploy runs, cover both:
+
+| Variable | Effect |
+|---|---|
+| `PROTO_MODAL_EXTRA_PACKAGES` | Requirements every service image installs. Whitespace-separated, since a specifier may contain a comma. |
+| `PROTO_MODAL_EXTRA_SOURCE` | Directories every service image carries, separated by `os.pathsep`. Each is mounted under `/root` by its own name and imports as that name. |
+| `PROTO_MODAL_WORKER_PLUGINS` | Modules a worker imports before serving its first call. Comma- or whitespace-separated. |
+
+```bash
+PROTO_MODAL_EXTRA_PACKAGES="alpha>=1 beta" \
+PROTO_MODAL_EXTRA_SOURCE=/path/to/observability \
+PROTO_MODAL_WORKER_PLUGINS=observability.hooks \
+proto-tools deploy --apps tmalign --env proto-env
+```
+
+The plugin list is baked into the image's runtime environment, so it applies to every call the
+container serves and not to the build-time warmup. Imports happen once per process, on the first
+call. A module that cannot be imported raises rather than being skipped: a worker that served
+calls without a deployment's extensions would silently drop whatever they were responsible for.
+
+Extra layers are added below proto-tools' own, so editing proto-tools does not rebuild them. A
+directory named by `PROTO_MODAL_EXTRA_SOURCE` that does not exist fails the deploy rather than the
+first call.
+
 ## Hosted environments
 
 `PROTO_IS_HOSTED_ENV` marks a process running tools for someone else rather than on a
@@ -259,7 +286,7 @@ and therefore logs a warning rather than passing silently.
 
 ## Configuration
 
-Five environment variables, all optional, read in the environment a deploy runs from.
+Eight environment variables, all optional, read in the environment a deploy runs from.
 
 | Variable | Default | Effect |
 |---|---|---|
@@ -268,6 +295,9 @@ Five environment variables, all optional, read in the environment a deploy runs 
 | `PROTO_MODAL_SCALEDOWN_WINDOW` | `30` | Seconds an idle container stays alive holding its model. |
 | `PROTO_MODAL_TIMEOUT_SCALE` | `1` | Multiplies every container wall tier. Values below 1 are ignored. |
 | `PROTO_MODAL_PROTO_TOOLS` | unset | Build from this proto-tools checkout instead of the installed one. |
+| `PROTO_MODAL_EXTRA_PACKAGES` | unset | Requirements every service image installs. |
+| `PROTO_MODAL_EXTRA_SOURCE` | unset | Directories every service image carries, importable by their own names. |
+| `PROTO_MODAL_WORKER_PLUGINS` | unset | Modules a worker imports before serving its first call. |
 
 ### Container wall tiers
 
