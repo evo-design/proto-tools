@@ -4,5 +4,5 @@ code:
 commercial_use: 'yes'
 redistribution: false
 attribution_required: false
-notes: 'primer3-py (libnano) and the underlying Primer3 C library are both GPL-2.0. Installed from PyPI as a Cython binding; copyleft and source-disclosure obligations apply to derivative distribution, so bundling in a proprietary image needs legal review.'
-last_updated: '2026-07-30'
+notes: 'primer3-py (libnano) and the Primer3 C library it vendors are GPL-2.0-or-later. The vendored C tree also includes Amplicon3 (amplicontm.c) under GPL-3.0-or-later, which these tools do not exercise but which ships in the wheel. Installed from PyPI as a Cython binding; copyleft and source-disclosure obligations apply to derivative distribution, so bundling in a proprietary image needs legal review.'
+last_updated: '2026-08-04'
