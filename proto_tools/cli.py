@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -470,6 +471,117 @@ def _cmd_mcp(args: argparse.Namespace) -> int:
     return 0
 
 
+def _modal_auth_check() -> tuple[str, str | None]:
+    """Return how Modal authenticated, and the remedy when it did not.
+
+    Asks the SDK rather than trusting the environment: a token can be present and still be
+    rejected, and the two failures need different fixes.
+    """
+    from proto_tools.modal import status
+
+    try:
+        import modal
+
+        modal.Client.from_env()
+    except Exception as exc:
+        checked = f"checked {'/'.join(status.TOKEN_VARS)}, {status.config_path()} ({status.config_state()})"
+        return (
+            f"not found — {checked}",
+            "Set MODAL_TOKEN_ID and MODAL_TOKEN_SECRET (works in a container, CI job, or agent "
+            "sandbox), or run `modal token new` on a machine you work on directly. "
+            f"Modal reported: {type(exc).__name__}: {exc}",
+        )
+
+    return f"OK via {status.auth_mechanism() or 'a source the SDK resolved itself'}", None
+
+
+def _proto_home_check() -> tuple[str, str | None]:
+    """Return the PROTO_HOME line, and the remedy when it cannot be written to."""
+    from proto_tools.utils.proto_home import get_proto_home
+
+    home = get_proto_home()
+    if not home.exists():
+        return f"{home}   missing", f"Create {home}, or point PROTO_HOME at a writable directory."
+    if not os.access(home, os.W_OK):
+        return f"{home}   writable: no", f"Grant write access to {home}, or set PROTO_HOME elsewhere."
+    return f"{home}   writable: yes", None
+
+
+def _temp_space_check() -> tuple[str, str | None]:
+    """Return the temp-space line, and the remedy when a build directory cannot be made.
+
+    Tool environments build under the temp directory, so a sandbox that confines it stops
+    every local build before it starts.
+    """
+    import tempfile
+
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "probe").write_text("probe")
+    except OSError as exc:
+        return (
+            f"cannot write to {tempfile.gettempdir()}",
+            f"Point TMPDIR at a writable directory: {type(exc).__name__}: {exc}",
+        )
+    return f"OK ({tempfile.gettempdir()})", None
+
+
+def _mcp_extra_check() -> tuple[str, str | None]:
+    """Return the MCP extra line. Its absence is reported, not treated as a fault."""
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        import fastmcp  # noqa: F401
+
+        return f"installed (fastmcp {version('fastmcp')})", None
+    except (ImportError, PackageNotFoundError):
+        return 'not installed — `pip install "proto-tools[mcp]"` to run the MCP server', None
+
+
+def _cmd_doctor(args: argparse.Namespace) -> int:
+    """Report whether this environment can run tools, and name the fix for whatever cannot."""
+    from proto_tools.modal import status
+
+    lines: dict[str, str] = {}
+    remedies: list[str] = []
+
+    for label, check in (
+        ("modal auth", _modal_auth_check),
+        ("PROTO_HOME", _proto_home_check),
+        ("temp space", _temp_space_check),
+        ("mcp extra", _mcp_extra_check),
+    ):
+        lines[label], remedy = check()
+        if remedy:
+            remedies.append(f"{label}: {remedy}")
+
+    if lines["modal auth"].startswith("OK"):
+        import modal
+
+        from proto_tools.modal.app import resolve_environment
+        from proto_tools.modal.manifest import APP_BUCKETS
+
+        deployed = sorted(status.deployed_apps())
+        lines["workspace"] = getattr(modal.config, "_profile", None) or "(unknown)"
+        lines["environment"] = resolve_environment()
+        lines["apps deployed"] = f"{len(deployed)} of {len(APP_BUCKETS)}"
+        if deployed:
+            lines["apps deployed"] += f"   ({', '.join(deployed)})"
+
+    if args.json:
+        print(_dump_json({"checks": lines, "remedies": remedies}))
+        return 1 if remedies else 0
+
+    order = ["modal auth", "workspace", "environment", "apps deployed", "PROTO_HOME", "temp space", "mcp extra"]
+    for label in order:
+        if label in lines:
+            print(f"{label:<16}: {lines[label]}")
+    sys.stdout.flush()  # keep the remedies below the report when the two streams are captured
+    for remedy in remedies:
+        print(f"\n{remedy}", file=sys.stderr)
+    return 1 if remedies else 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="proto-tools",
@@ -621,6 +733,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
     p_mcp = sub.add_parser("mcp", help="Run the MCP server over stdio (needs the 'mcp' extra).")
     p_mcp.set_defaults(func=_cmd_mcp)
+
+    p_doctor = sub.add_parser(
+        "doctor",
+        help="Check this environment can reach Modal and build tools; exits non-zero with a remedy.",
+    )
+    p_doctor.add_argument("--json", action="store_true", help="Emit JSON instead of text.")
+    p_doctor.set_defaults(func=_cmd_doctor)
 
     return parser
 

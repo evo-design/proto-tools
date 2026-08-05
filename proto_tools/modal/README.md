@@ -42,9 +42,34 @@ export MODAL_TOKEN_ID=...
 export MODAL_TOKEN_SECRET=...
 ```
 
-Modal reads these directly, so no further configuration is needed. Both must be set: the MCP
-server's `workspace_info` reports which of the two it found, and whether it could read a config
-file, so a partial setup is visible without guesswork.
+Modal reads these directly, so no further configuration is needed. Both must be set.
+
+Where a host would rather mount a credential file than inject variables, `MODAL_CONFIG_PATH`
+points the SDK at a token file anywhere on disk:
+
+```bash
+export MODAL_CONFIG_PATH=/run/secrets/modal.toml
+```
+
+These are the three supported mechanisms, and `proto-tools doctor` reports which one was used:
+
+```
+$ proto-tools doctor
+modal auth      : OK via MODAL_TOKEN_ID/MODAL_TOKEN_SECRET
+workspace       : my-workspace
+environment     : proto-env
+apps deployed   : 6 of 54   (alphafold2, boltz2, esm2, esmfold, proteinmpnn, rfdiffusion3)
+PROTO_HOME      : /root/.proto   writable: yes
+temp space      : OK (/tmp)
+mcp extra       : installed (fastmcp 3.4.5)
+```
+
+When a credential is missing it names what it checked and exits non-zero, so a partial setup is
+visible without guesswork:
+
+```
+modal auth      : not found — checked MODAL_TOKEN_ID/MODAL_TOKEN_SECRET, /root/.modal.toml (absent)
+```
 
 If you have multiple people who need access to the same tools, you can create a
 shared workspace. This will enable each user to access the same deployed apps and

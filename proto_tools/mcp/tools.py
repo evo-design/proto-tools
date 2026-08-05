@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from proto_tools.mcp.device import Device, is_remote
+from proto_tools.modal.status import credentials_checked, deployed_apps
 from proto_tools.utils.base_config import BaseConfig
 
 logger = logging.getLogger(__name__)
@@ -41,26 +42,6 @@ def app_for_tool(tool_key: str) -> str | None:
         return _app_for(tool_key)
     except KeyError:
         return None
-
-
-def _deployed_apps() -> set[str]:
-    """Apps that currently resolve in the active Modal workspace.
-
-    One hydrate per app, no containers started. Failures read as "not deployed"
-    rather than propagating.
-    """
-    import modal
-
-    from proto_tools.modal.manifest import APP_BUCKETS
-
-    live = set()
-    for app_name, services in APP_BUCKETS.items():
-        try:
-            modal.Cls.from_name(app_name, services[0]).hydrate()
-            live.add(app_name)
-        except Exception:  # noqa: S112 — an unreachable app is "not deployed", not an error
-            continue
-    return live
 
 
 def _hosted_catalogue() -> dict[str, dict[str, Any]]:
@@ -110,7 +91,7 @@ def deployed_keys(device: Device) -> set[str]:
         return set()
     if device == "proto":
         return {key for key, entry in _hosted_catalogue().items() if entry.get("hosted")}
-    live = _deployed_apps()
+    live = deployed_apps()
     return {key for key in _registry() if _app_for(key) in live}
 
 
@@ -121,34 +102,6 @@ def available_keys(device: Device) -> set[str]:
         # is a question of time and disk rather than of what has been provisioned in advance.
         return _all_registered()
     return deployed_keys(device) | answered_in_process_keys()
-
-
-def _modal_config_path() -> Path:
-    """Return the config file Modal reads, honoring ``MODAL_CONFIG_PATH``."""
-    override = os.environ.get("MODAL_CONFIG_PATH")
-    return Path(override) if override else Path.home() / ".modal.toml"
-
-
-def _modal_credentials_checked() -> dict[str, Any]:
-    """Report which credential sources are present, by presence only and never by value."""
-    config_path = _modal_config_path()
-    try:
-        with config_path.open("rb"):
-            config_state = "readable"
-    except FileNotFoundError:
-        config_state = "absent"
-    except OSError:
-        # Present but closed to this process, or inside a directory it cannot traverse. This
-        # is the container case, and it is invisible to a plain existence check.
-        config_state = "unreadable"
-
-    return {
-        "MODAL_TOKEN_ID": bool(os.environ.get("MODAL_TOKEN_ID")),
-        "MODAL_TOKEN_SECRET": bool(os.environ.get("MODAL_TOKEN_SECRET")),
-        "MODAL_PROFILE": bool(os.environ.get("MODAL_PROFILE")),
-        "config_file": str(config_path),
-        "config_file_state": config_state,
-    }
 
 
 def workspace_info(device: Device = "modal") -> dict[str, Any]:
@@ -205,7 +158,7 @@ def workspace_info(device: Device = "modal") -> dict[str, Any]:
                 "MODAL_TOKEN_SECRET environment variables instead — a token file written "
                 "outside this process is not visible to it."
             ),
-            "credentials_checked": _modal_credentials_checked(),
+            "credentials_checked": credentials_checked(),
         }
 
     # Modal exposes no public reader for the active profile: ``config_profiles()`` lists them all
@@ -214,7 +167,7 @@ def workspace_info(device: Device = "modal") -> dict[str, Any]:
     # rather than reporting a working install as unauthenticated.
     workspace = getattr(modal.config, "_profile", None) or "(unknown)"
 
-    deployed = _deployed_apps()
+    deployed = deployed_apps()
     return {
         "device": "modal",
         "authenticated": True,
