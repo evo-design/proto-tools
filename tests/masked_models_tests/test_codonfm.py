@@ -605,6 +605,33 @@ def test_codonfm_sample_real_gpu() -> None:
 
 @pytest.mark.uses_gpu
 @pytest.mark.slow
+def test_codonfm_sample_real_gpu_rewrites_only_the_masked_codon() -> None:
+    """Proves '___' reaches Encodon as its own mask token, at that codon and nowhere else.
+
+    The worker swaps each mask for a placeholder codon so the tokenizer sees real input, then
+    overwrites that position with ``mask_token_id``. If the swap leaked, or the position were
+    off by one, an unmasked codon would come back changed.
+    """
+    _skip_if_no_gpu()
+    original = [_CDS[i : i + 3] for i in range(0, len(_CDS), 3)]
+    target = 4
+    masked = "".join("___" if index == target else codon for index, codon in enumerate(original))
+
+    result = run_codonfm_sample(
+        CodonFMSampleInput(sequences=[masked]),
+        CodonFMSampleConfig(model_checkpoint="encodon_80m", device="cuda", seed=0),
+    )
+    sampled = [result.sequences[0][i : i + 3] for i in range(0, len(_CDS), 3)]
+
+    assert [c for i, c in enumerate(sampled) if i != target] == [c for i, c in enumerate(original) if i != target], (
+        "every codon the caller did not mask must come back byte-identical"
+    )
+    assert sampled[target] in CODONFM_CODON_VOCAB, "the masked codon was refilled with a real codon"
+    assert sampled[target] not in {"TAA", "TAG", "TGA"}, "resampling never inserts a premature stop"
+
+
+@pytest.mark.uses_gpu
+@pytest.mark.slow
 def test_codonfm_gradient_forward_mode_matches_backward_loss() -> None:
     """compute_gradient=False keeps the scalar masked-PLL objective identical to the backward pass."""
     _skip_if_no_gpu()
