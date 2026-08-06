@@ -44,11 +44,15 @@ uv pip install -e "$GERMINAL_DIR"
 echo "Installing colabfold (--no-deps)..."
 uv pip install --no-deps colabfold==1.6.1
 
+# Pinned like the Germinal commit above: PyRosetta builds from 2026.26 onward take a
+# core.pose.DockingPartners for InterfaceAnalyzerMover.set_interface(), while the pinned
+# Germinal passes the string form ("A_B") in germinal/filters/pyrosetta_utils.py.
+# 2026.19 is contemporaneous with the pinned commit and accepts that string.
 echo "Installing PyRosetta via conda channel..."
 "$MAMBA_BIN" install -y -p "$VENV_PATH" \
     -c https://conda.rosettacommons.org \
     -c conda-forge \
-    pyrosetta
+    "pyrosetta=${GERMINAL_PYROSETTA_VERSION:-2026.19}"
 
 # Chai-1 (default validation backend; aarch64 lacks sm_121 support).
 if [ "$(uname -m)" = "aarch64" ]; then
