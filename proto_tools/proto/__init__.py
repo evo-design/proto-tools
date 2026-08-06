@@ -185,8 +185,7 @@ def _stream_remote_logs(client: Any, key: str, job_id: str, verbose: int) -> Non
             py_level = _RFC5424_TO_PY_LEVEL.get(getattr(rec, "level", "info"), logging.INFO)
             # Replay the phase flag so the local SpinnerFromLogsHandler drives the bar, exactly like a local run.
             # Strip the worker logger-name prefix from every line so cloud output reads identically to local.
-            # The job id identifies this call, carried onto every record so a consumer serving
-            # more than one caller can tell whose output it is reading.
+            # The job id identifies this call, so it rides along on every record.
             _remote_logger.log(
                 py_level,
                 "%s",

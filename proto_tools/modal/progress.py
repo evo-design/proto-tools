@@ -40,10 +40,8 @@ _END = "end"
 # a streamed line drives the bar exactly as the same line does in a local run.
 _remote_logger = logging.getLogger("proto_tools.modal.remote")
 
-# Attribute on a replayed record naming the call that produced it. Records reach the logger from a
-# tailer thread, so a process running one call at a time can ignore this, and one running several
-# needs it: without it a handler cannot tell two callers' output apart, and on a shared server that
-# is a leak rather than a display bug.
+# Attribute naming the call a replayed record came from. One call at a time can ignore it; a
+# process replaying for several callers cannot tell their output apart without it.
 CALL_ID_FIELD = "proto_call_id"
 
 
@@ -279,8 +277,7 @@ def stream_modal_progress(
         batch (int): Records to request per poll.
         poll_timeout (float): Seconds to block per poll.
     """
-    # The partition identifies this call, and is carried onto every record so a consumer serving
-    # more than one caller can tell whose output it is reading.
+    # The partition identifies this call, so it rides along on every record.
     consume = on_record or functools.partial(replay_record, call_id=partition)
     try:
         progress_queue = open_progress_queue(environment=environment, client=client)
@@ -314,10 +311,7 @@ def replay_record(record: dict[str, Any], call_id: str | None = None) -> None:
 
     Args:
         record (dict[str, Any]): One streamed record.
-        call_id (str | None): Which call produced it, stamped onto the emitted record. A local
-            session has one call in flight and can ignore it; a process replaying for several
-            callers at once cannot tell whose output a record is without it. See
-            :data:`CALL_ID_FIELD`.
+        call_id (str | None): Which call produced it, stamped on as :data:`CALL_ID_FIELD`.
     """
     message = record.get("m")
     if not message:
