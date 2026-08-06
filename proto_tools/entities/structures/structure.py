@@ -33,8 +33,41 @@ from proto_tools.entities.structures.utils import (
 from proto_tools.utils.tool_io import Metrics, MetricValue
 
 
+def _reject_private_address(url: str) -> None:
+    """Refuse a URL naming an address that is not routable on the public internet.
+
+    A structure field accepts a URL, and whoever supplies it does not necessarily own the machine
+    that fetches it -- a server accepting structures fetches on behalf of its callers. Left
+    unchecked that turns the field into a request-forgery primitive: ``169.254.169.254`` for cloud
+    instance credentials, or a private address for a service reachable only from inside.
+
+    Resolved rather than pattern-matched, so a public hostname pointing at a private address is
+    refused too.
+
+    Raises:
+        ValueError: If the host is unresolvable or resolves to a non-public address.
+    """
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
+
+    host = urlparse(url).hostname
+    if not host:
+        raise ValueError(f"structure URL names no host: {url!r}")
+    try:
+        resolved = socket.getaddrinfo(host, None)
+    except socket.gaierror as exc:
+        raise ValueError(f"could not resolve structure URL host {host!r}") from exc
+    for info in resolved:
+        address = ipaddress.ip_address(info[4][0])
+        if not address.is_global:
+            raise ValueError(f"structure URL host {host!r} resolves to the non-public address {address}")
+
+
 def _fetch_structure_url(url: str, timeout: float = 30.0) -> str:
     """Fetch structure-file text content from an ``http(s)`` URL.
+
+    The scheme is already ``http(s)``: every caller reaches this through :func:`looks_like_url`.
 
     Args:
         url (str): URL returning PDB or CIF content.
@@ -45,10 +78,17 @@ def _fetch_structure_url(url: str, timeout: float = 30.0) -> str:
 
     Raises:
         requests.HTTPError: If the request returns an error status.
+        ValueError: If the URL names a non-public address, or answers with a redirect.
     """
     import requests
 
-    response = requests.get(url, timeout=timeout)
+    _reject_private_address(url)
+    # Redirects are not followed: a hijacked host, or one that simply chooses to, could steer the
+    # fetch to an address the check above just refused. ``raise_for_status`` would not catch it,
+    # since a 3xx is not an error status.
+    response = requests.get(url, timeout=timeout, allow_redirects=False)
+    if response.is_redirect:
+        raise ValueError(f"structure URL redirected to {response.headers.get('Location')!r}; not followed")
     response.raise_for_status()
     return response.text
 
