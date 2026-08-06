@@ -25,6 +25,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from proto_tools.modal.progress import CALL_ID_FIELD
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.utils.base_config import BaseConfig
 from proto_tools.utils.logging_config import verbose_level_from_env
@@ -184,7 +185,14 @@ def _stream_remote_logs(client: Any, key: str, job_id: str, verbose: int) -> Non
             py_level = _RFC5424_TO_PY_LEVEL.get(getattr(rec, "level", "info"), logging.INFO)
             # Replay the phase flag so the local SpinnerFromLogsHandler drives the bar, exactly like a local run.
             # Strip the worker logger-name prefix from every line so cloud output reads identically to local.
-            _remote_logger.log(py_level, "%s", _strip_logger_prefix(msg), extra={"update_status": update_status})
+            # The job id identifies this call, carried onto every record so a consumer serving
+            # more than one caller can tell whose output it is reading.
+            _remote_logger.log(
+                py_level,
+                "%s",
+                _strip_logger_prefix(msg),
+                extra={"update_status": update_status, CALL_ID_FIELD: job_id},
+            )
     except Exception as exc:
         logger.debug("Remote log stream for job %s ended: %s", job_id, exc, exc_info=True)
 
