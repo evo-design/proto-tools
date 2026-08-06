@@ -26,7 +26,7 @@ def stale(monkeypatch):
 
     def _warnings(tool_key, service_class, environment=None, client=None):
         calls.append((tool_key, environment, client))
-        return [f"{tool_key}: the deployed tool's code differs from your local proto-tools."]
+        return [f"{tool_key}: the deployed tool's code differs from the proto-tools making this call."]
 
     monkeypatch.setattr("proto_tools.modal.fingerprint.drift_warnings", _warnings)
     return calls
@@ -36,7 +36,7 @@ def test_every_caller_is_told_not_just_the_first(stale):
     """``warnings.warn`` fires once per process. On a server that is one caller out of many."""
     first = impl.drift_for(TOOL_KEY, "modal", environment="proto-env", client=None)
     second = impl.drift_for(TOOL_KEY, "modal", environment="proto-env", client=None)
-    assert first and "differs from your local proto-tools" in first[0]
+    assert first and "differs from the proto-tools making this call" in first[0]
     assert first == second, "the second caller was told less than the first"
     assert len(stale) == 2
 
