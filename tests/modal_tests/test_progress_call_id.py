@@ -124,3 +124,72 @@ def test_both_remote_paths_agree_on_the_field_name():
     from proto_tools.proto import CALL_ID_FIELD as proto_field
 
     assert proto_field == CALL_ID_FIELD
+
+
+# --------------------------------------------------------------------------
+# A caller supplying its own partition
+# --------------------------------------------------------------------------
+
+
+def test_a_caller_can_name_the_partition_it_will_listen_on(monkeypatch):
+    """Stamping records is only half of it: a caller must know which id is its own.
+
+    The partition is minted inside ``_live_progress``, and nothing returned it, so a process
+    serving several callers received correctly-stamped records it still could not attribute.
+    Supplying the partition closes that.
+    """
+    from proto_tools.modal import client as client_module
+
+    seen: dict[str, str | None] = {}
+
+    def fake_live_progress(_configs, *, expected_ends=1, environment=None, client=None, partition=None):
+        seen["partition"] = partition
+        import contextlib
+
+        return contextlib.nullcontext()
+
+    monkeypatch.setattr(client_module, "_live_progress", fake_live_progress)
+    monkeypatch.setattr(client_module, "resolve_tool", lambda _k: ("app", "Service", "run"))
+    monkeypatch.setattr(client_module, "_require_modal_credentials", lambda _c=None: None)
+    monkeypatch.setattr(client_module, "_warn_once_on_drift", lambda *_a, **_k: None)
+    monkeypatch.setattr(client_module, "_warn_once_if_long_running", lambda *_a, **_k: None)
+    monkeypatch.setattr(client_module, "_resolve_device", lambda cfg, _s: cfg)
+    monkeypatch.setattr(client_module, "_validated_output", lambda _k, r: r)
+
+    class _Method:
+        @staticmethod
+        def remote(**_kwargs):
+            return {}
+
+    monkeypatch.setattr(client_module, "_bound_method", lambda *_a, **_k: _Method)
+
+    class _Inputs:
+        @staticmethod
+        def model_dump(**_kwargs):
+            return {}
+
+    client_module.dispatch_to_modal("esm2-embedding", _Inputs(), None, progress_partition="mine-123")
+
+    assert seen["partition"] == "mine-123"
+
+
+def test_omitting_it_still_mints_one(monkeypatch):
+    """A local caller must not have to invent an id it will never look at."""
+    from proto_tools.modal import progress
+
+    class _Queue:
+        def hydrate(self):
+            return None
+
+    monkeypatch.setattr(progress, "open_progress_queue", lambda **_k: _Queue())
+    from proto_tools.modal import client as client_module
+
+    monkeypatch.setattr(client_module, "has_active_progress_bar", lambda: True)
+    monkeypatch.setattr(client_module, "open_progress_queue", lambda **_k: _Queue())
+
+    from proto_tools.utils.base_config import BaseConfig
+
+    config = BaseConfig(verbose=1)
+    with client_module._live_progress([config], expected_ends=1):
+        assert config._progress_partition, "no partition was minted"
+        assert len(config._progress_partition) == 32, "expected a uuid4 hex"
