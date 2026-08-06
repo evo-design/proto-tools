@@ -79,6 +79,10 @@ Issues = "https://github.com/evo-design/proto-tools/issues"
 
 [project.scripts]
 proto-tools = "proto_tools.cli:main"
+# Its own entry point rather than a `proto-tools mcp` subcommand: an agent config names one
+# binary, and a launcher such as `uvx --from proto-tools[mcp] proto-tools-mcp` needs a script
+# to target. It also keeps the MCP entry point clear of the CLI's argument parsing.
+proto-tools-mcp = "proto_tools.mcp.server:main"
 
 [project.optional-dependencies]
 

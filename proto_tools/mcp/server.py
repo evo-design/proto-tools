@@ -257,13 +257,24 @@ def build_server(device: Device = "modal") -> FastMCP:
     return mcp
 
 
-HELP = """proto-tools mcp — run the proto-tools MCP server over stdio.
+HELP = """proto-tools-mcp — run the proto-tools MCP server over stdio.
 
 Exposes your deployed tools to MCP-compatible agents (e.g. Claude Code). The
 server speaks the MCP protocol on stdin/stdout, so run it directly only to
 register it with an agent, not interactively:
 
-    claude mcp add proto-tools --scope user -- python -m proto_tools.mcp
+    claude mcp add proto-tools --scope user -- proto-tools-mcp
+
+For a client configured through JSON, such as Claude Desktop or Cursor:
+
+    {"mcpServers": {"proto-tools": {"command": "proto-tools-mcp"}}}
+
+The console script is preferred over `python -m proto_tools.mcp`: pip pins the
+interpreter it was installed into, so a client that does not inherit your shell's
+environment still starts the right Python.
+
+Tools run on your own Modal workspace, which needs credentials (`modal token new`)
+and the tool deployed (`proto-tools deploy --apps <name>`).
 
 Options:
   -h, --help    Show this message and exit.

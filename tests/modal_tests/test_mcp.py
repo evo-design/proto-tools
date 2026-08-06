@@ -406,7 +406,7 @@ def test_mcp_help_prints_and_never_starts_the_server(flag, capsys, monkeypatch):
 
     monkeypatch.setattr(server, "build_server", _must_not_run)
     server.main([flag])  # returns instead of blocking
-    assert "proto-tools mcp" in capsys.readouterr().out
+    assert "proto-tools-mcp" in capsys.readouterr().out
 
 
 def test_mcp_no_args_would_start_the_server(monkeypatch):
@@ -607,3 +607,42 @@ def test_every_deploy_route_records_fingerprints():
     from proto_tools.modal.deploy import deploy_app
 
     assert "record_fingerprints(" in inspect.getsource(deploy_app)
+
+
+def test_the_mcp_console_script_resolves():
+    """An agent config names ``proto-tools-mcp``; a broken target fails at install, not in CI.
+
+    Checks the declaration and the target separately: a typo in either is invisible until a
+    user's client tries to start a server and gets nothing.
+    """
+    from importlib.metadata import entry_points
+    from pathlib import Path
+
+    declaration = 'proto-tools-mcp = "proto_tools.mcp.server:main"'
+
+    # The source declaration and the installed metadata are checked apart. Installed metadata
+    # is what a user actually gets, but it goes stale against an edited pyproject until the
+    # next install -- so on its own it would pass in a working tree that had removed the line.
+    pyproject = (Path(__file__).resolve().parents[2] / "pyproject.toml").read_text()
+    assert declaration in pyproject, "console script not declared in pyproject.toml"
+
+    scripts = {e.name: e.value for e in entry_points(group="console_scripts")}
+    assert scripts.get("proto-tools-mcp") == "proto_tools.mcp.server:main", (
+        f"declared but not installed; found {scripts.get('proto-tools-mcp')!r}. Reinstall."
+    )
+
+    from proto_tools.mcp.server import main
+
+    assert callable(main)
+
+
+def test_the_help_text_names_the_console_script():
+    """The docs and this text are the two places a user copies an invocation from.
+
+    They disagreed once already: the docs said ``python -m proto_tools.mcp`` while the entry
+    point had moved on.
+    """
+    from proto_tools.mcp.server import HELP
+
+    assert "claude mcp add proto-tools --scope user -- proto-tools-mcp" in HELP
+    assert '"command": "proto-tools-mcp"' in HELP.replace("'", '"')
