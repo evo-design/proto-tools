@@ -1,4 +1,4 @@
-"""Hashes that detect drift between local proto-tools and a deployment.
+"""Hashes that detect drift between a deployment and the proto-tools calling it.
 
 Covers a tool's schemas, its source, and its standalone environment.
 """
@@ -289,23 +289,27 @@ def drift_warnings(
 
         local = fingerprint(tool_key)
         out = []
+        # "the proto-tools making this call" rather than "your local proto-tools": the comparison
+        # is against whichever copy dispatched, which over a hosted server is the server's and not
+        # anything the reader has installed. Told otherwise, they go looking for a package that is
+        # not on their machine.
         if entry.get("schema_hash") != local.schema_hash:
             out.append(
-                f"{tool_key}: the deployed tool's schema differs from your local proto-tools "
-                f"(deployed {entry.get('schema_hash')}, local {local.schema_hash}). Calls may fail, "
-                f"or fields a newer deployment returns may be silently dropped. Redeploy to realign."
+                f"{tool_key}: the deployed tool's schema differs from the proto-tools making this "
+                f"call (deployed {entry.get('schema_hash')}, calling {local.schema_hash}). Calls may "
+                f"fail, or fields a newer deployment returns may be silently dropped. Redeploy to realign."
             )
         if entry.get("code_hash") != local.code_hash:
             out.append(
-                f"{tool_key}: the deployed tool's code differs from your local proto-tools "
-                f"(deployed {entry.get('code_hash')}, local {local.code_hash}). Results may not be "
-                f"comparable with local runs. Redeploy to realign."
+                f"{tool_key}: the deployed tool's code differs from the proto-tools making this "
+                f"call (deployed {entry.get('code_hash')}, calling {local.code_hash}). Results from "
+                f"the two may not be comparable. Redeploy to realign."
             )
         if entry.get("env_hash") != local.env_hash:
             out.append(
-                f"{tool_key}: the deployed tool's environment differs from your local proto-tools "
-                f"(deployed {entry.get('env_hash')}, local {local.env_hash}). Calls will still "
-                f"succeed, but results may not be comparable to a local run."
+                f"{tool_key}: the deployed tool's environment differs from the proto-tools making "
+                f"this call (deployed {entry.get('env_hash')}, calling {local.env_hash}). Calls will "
+                f"still succeed, but results from the two may not be comparable."
             )
         return out
     except Exception:
