@@ -133,7 +133,7 @@ def test_an_in_process_tool_says_it_needs_no_deployment_and_why(monkeypatch):
     from proto_tools.mcp import tools as impl
 
     monkeypatch.setattr(impl, "_registry", dict)
-    monkeypatch.setattr(impl, "deployed_keys", lambda device: set())
+    monkeypatch.setattr(impl, "deployed_keys", lambda device, **_kwargs: set())
     monkeypatch.setattr(impl, "answered_in_process_keys", lambda: {"bindcraft-design"})
 
     entry = next(e for e in impl.list_tools(device="modal") if e["tool"] == "bindcraft-design")

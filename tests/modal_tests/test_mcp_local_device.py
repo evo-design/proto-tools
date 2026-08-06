@@ -91,7 +91,7 @@ def test_a_deployed_tool_is_still_dispatched(monkeypatch) -> None:
 
     sent: dict[str, object] = {}
 
-    def fake_dispatch(tool_key, payload, cfg):
+    def fake_dispatch(tool_key, payload, cfg, **_kwargs):
         sent["tool"] = tool_key
         raise RuntimeError("dispatched")
 
