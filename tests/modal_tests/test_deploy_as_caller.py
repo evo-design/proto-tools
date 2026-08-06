@@ -1,24 +1,14 @@
 """Deploying into someone else's Modal workspace hands them nothing of the deploying process's.
 
-``modal deploy`` is a subprocess, so unlike every other Modal call here it authenticates by
-environment rather than by a client object. A subprocess inherits its parent's environment by
-default, which for a server deploying on a caller's behalf means handing over whatever that server
-holds: object-store credentials, a database URL, an API key.
+``modal deploy`` is a subprocess, so it authenticates by environment rather than by a client
+object, and a subprocess inherits its parent's environment by default. Given tokens it gets an
+allowlist instead, and these pin what crosses, what does not, and that the subprocess really runs
+under it.
 
-Worse than the secrets is what the inherited variables would *build*. proto-tools reads several of
-them to extend a deployment -- worker plugins that run arbitrary code in the container, extra
-source and packages added to the image, and named secrets attached to the service. A deploy that
-inherited those would build the deploying process's private variant of a tool inside the caller's
-workspace.
+Variable names are literals on purpose: read back from the module under test, moving one into the
+allowlist would shrink the test set instead of failing it.
 
-So a credentialed deploy gets an allowlist and nothing else, and these pin that: what crosses, what
-does not, and that the subprocess is actually run under it.
-
-Every variable name below is a literal on purpose. Reading them back from the module under test
-would make it its own oracle: moving a name into the allowlist -- the exact regression these exist
-to catch -- would shrink the test set instead of failing it.
-
-Offline throughout: no deploy is run, only the environment one would run under.
+Offline throughout -- no deploy is run, only the environment one would run under.
 """
 
 from __future__ import annotations

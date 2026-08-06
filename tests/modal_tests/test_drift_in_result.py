@@ -6,9 +6,6 @@ shape for a session on a laptop and reaches nobody anywhere else: an MCP caller 
 server's ``warnings``, and the warning is emitted once per process, so on a shared server the first
 caller to touch a stale deployment silences it for everyone after them.
 
-That is not hypothetical. A stale protenix deployment failed with ``No package metadata was found
-for proto-tools`` and the drift warning that would have explained it went to a log nobody read.
-
 So ``run_tool`` returns drift as part of the answer. These pin that it is returned, that it is
 returned per call rather than once, and that it never costs a successful run.
 """
