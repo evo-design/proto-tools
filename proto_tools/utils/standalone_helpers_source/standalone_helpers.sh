@@ -19,6 +19,8 @@
 #   proto_resolve_asset_availability <toolkit> <pattern> [license_url] [asset_kind] [hint]  -> sets $ASSET_DIR
 #   proto_check_gated_hf_repo <repo_id> <license_url> [probe_file]
 #   proto_download_gdrive <file_id> <dest>
+#   proto_sha256 <path>
+#   proto_download_verified <url> <dest> <sha256>
 # ============================================================================
 
 
@@ -432,4 +434,60 @@ with open(dest, 'wb') as f:
             break
         f.write(chunk)
 " "$1" "$2"
+}
+
+
+# ---------------------------------------------------------------------------
+# proto_sha256 <path>
+#
+# Print the SHA-256 of a file, or nothing when it is missing. Uses sha256sum on
+# Linux and shasum on macOS.
+# ---------------------------------------------------------------------------
+proto_sha256() {
+    [ -f "$1" ] || return 0
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | cut -d' ' -f1
+    else
+        shasum -a 256 "$1" | cut -d' ' -f1
+    fi
+}
+
+
+# ---------------------------------------------------------------------------
+# proto_download_verified <url> <dest> <sha256>
+#
+# Download <url> to <dest>, verifying against <sha256>. A file already at <dest>
+# is kept only when its digest matches, so a truncated or altered download is
+# re-fetched instead of being trusted for merely existing. The transfer lands in
+# a .part file that is moved into place only once it matches, so an interrupted
+# run never leaves something that looks finished. Returns nonzero if the freshly
+# downloaded file does not match, which aborts a `set -e` setup.sh.
+#
+# Example:
+#   proto_download_verified "$URL" "$WEIGHTS_DIR/model.pth" "$MODEL_SHA256"
+#
+# Reference: tools/structure_scoring/metal3d/standalone/setup.sh
+# ---------------------------------------------------------------------------
+proto_download_verified() {
+    local url="$1" dest="$2" expected="$3"
+    local actual
+
+    actual="$(proto_sha256 "$dest")"
+    if [ "$actual" = "$expected" ]; then
+        echo "$(basename "$dest") already present and verified."
+        return 0
+    fi
+    if [ -n "$actual" ]; then
+        echo "$(basename "$dest") failed checksum verification; re-downloading."
+    fi
+
+    echo "Downloading $(basename "$dest")..."
+    curl -fsSL -o "${dest}.part" "$url"
+    actual="$(proto_sha256 "${dest}.part")"
+    if [ "$actual" != "$expected" ]; then
+        rm -f "${dest}.part"
+        echo "ERROR: checksum mismatch for ${url} (expected ${expected}, got ${actual})" >&2
+        return 1
+    fi
+    mv "${dest}.part" "$dest"
 }
