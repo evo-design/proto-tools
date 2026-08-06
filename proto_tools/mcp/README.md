@@ -74,9 +74,6 @@ claude mcp add proto-tools --scope user -- proto-tools-mcp
 Add `proto-tools-mcp` as the command for a server named `proto-tools` in
 `claude_desktop_config.json`.
 
-Note that no credential goes into either configuration. The server reads `~/.modal.toml`
-itself, so nothing sensitive is written into an agent's config file.
-
 #### ChatGPT
 
 Not currently an option. ChatGPT accepts only remote MCP servers reached over HTTPS, so it
@@ -110,28 +107,6 @@ Each deploy builds an image in your workspace and takes a few minutes. See
 
 Ask the agent to call `workspace_info` first — it reports which workspace and environment
 your calls reach, and how many tools are deployed.
-
-## Other notes
-
-### Choosing where tools run
-
-The server resolves one backend at startup, from `--device`, and defaults to `modal`. It is
-fixed for the life of the server, so a client that needs both can register two entries under
-different names.
-
-`local` runs tools in the server process, building each tool's environment on first use.
-`modal` dispatches to your workspace, where the environment was built at deploy time.
-
-### Deploying from the agent
-
-The server exposes `deploy_tool`, so an agent can deploy on your behalf. This spends money on
-your Modal account and takes minutes per tool, so say what you want deployed rather than
-leaving it to the agent's judgement.
-
-### Do not run the server by hand
-
-A stdio server waits on standard input and prints nothing, so running `proto-tools-mcp`
-directly looks like it has hung. Use `--help` to confirm the entry point resolves.
 
 ## Hosted HTTPS server
 
