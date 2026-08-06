@@ -1,0 +1,11 @@
+github: https://github.com/NVIDIA-BioNeMo/CodonFM
+preprint: https://research.nvidia.com/labs/dbr/assets/data/manuscripts/nv-codonfm-preprint.pdf
+huggingface:
+  - https://huggingface.co/nvidia/NV-CodonFM-Encodon-80M-v1
+  - https://huggingface.co/nvidia/NV-CodonFM-Encodon-600M-v1
+  - https://huggingface.co/nvidia/NV-CodonFM-Encodon-1B-v1
+  - https://huggingface.co/nvidia/NV-CodonFM-Encodon-Cdwt-1B-v1
+organizations:
+  - NVIDIA
+  - Arc Institute
+  - University of California, San Francisco

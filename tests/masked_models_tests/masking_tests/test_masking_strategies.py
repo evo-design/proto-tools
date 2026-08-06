@@ -613,3 +613,32 @@ def test_too_many_mutations_reports_tokens():
     """The count that failed is in codons, so the error has to say so to be actionable."""
     with pytest.raises(ValueError, match="5 tokens"):
         RandomMaskingStrategy(num_mutations=6).mask(["AUGGCCUUUAAAGGG"], seed=0, token_size=3)
+
+
+@pytest.mark.parametrize(
+    "seq, offending",
+    [
+        pytest.param("AUG_CCUUU", "'_CC'", id="one_of_three"),
+        pytest.param("AUGG__UUU", "'G__'", id="two_of_three"),
+        pytest.param("AU__CCUUU", "'AU_'", id="straddles_the_boundary"),
+    ],
+)
+def test_a_mask_covering_part_of_a_codon_is_refused(seq: str, offending: str):
+    """`_CC` is neither a codon nor a mask, so the model could not tokenize it either way."""
+    with pytest.raises(ValueError, match="must cover a whole token"):
+        RandomMaskingStrategy(num_mutations=1).mask([seq], seed=0, token_size=3)
+
+    # The message names the token at fault, since the caller wrote the mask by hand.
+    with pytest.raises(ValueError, match=offending):
+        RandomMaskingStrategy(num_mutations=1).mask([seq], seed=0, token_size=3)
+
+
+def test_a_caller_supplied_codon_mask_passes_through_but_a_broken_one_does_not():
+    """Pre-masked input skips the strategy, so this is the last place a bad mask can be caught."""
+    config = _MockConfig(RandomMaskingStrategy())
+
+    kept = apply_masking_strategy(config, MaskedModelSampleInput(sequences=["AUG___UUU"]), token_size=3)
+    assert kept.sequences == ["AUG___UUU"], "the caller's own masks are honoured verbatim"
+
+    with pytest.raises(ValueError, match="must cover a whole token"):
+        apply_masking_strategy(config, MaskedModelSampleInput(sequences=["AUG_CCUUU"]), token_size=3)

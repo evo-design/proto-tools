@@ -108,6 +108,7 @@ for instructions related to account setup, deploying a tool, and costs, or the [
 └── <a href="proto_tools/tools/inverse_folding/proteinmpnn/">proteinmpnn/</a>
 <a href="proto_tools/tools/masked_models/">masked_models/</a>                  # Masked language models
 ├── <a href="proto_tools/tools/masked_models/ablang/">ablang/</a>
+├── <a href="proto_tools/tools/masked_models/codonfm/">codonfm/</a>
 ├── <a href="proto_tools/tools/masked_models/esm2/">esm2/</a>
 ├── <a href="proto_tools/tools/masked_models/esm3/">esm3/</a>
 └── <a href="proto_tools/tools/masked_models/esmc/">esmc/</a>

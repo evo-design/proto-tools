@@ -153,11 +153,22 @@ def discover_notebooks(only: str | None) -> list[Path]:
 def execute_notebook(path: Path, timeout: int) -> tuple[bool, str]:
     """Run the notebook in place via ``jupyter nbconvert --execute --inplace``.
 
+    Pinned to the interpreter running this script, in two places, because both resolve through
+    ``PATH`` otherwise and a notebook then executes against whichever environment happens to come
+    first — importing a different proto-tools than the one being tested, and failing on tools that
+    checkout does not have:
+
+    * ``jupyter`` itself, hence ``sys.executable -m jupyter`` rather than the bare command.
+    * the kernel, whose ``kernel.json`` says ``"argv": ["python", ...]`` with no path, so
+      ``PATH`` carries this interpreter's directory for the subprocess to resolve against.
+
     Returns:
         tuple[bool, str]: ``(success, message)`` — ``"ok"`` on success,
         or the last line of stderr/stdout on failure.
     """
     cmd = [
+        sys.executable,
+        "-m",
         "jupyter",
         "nbconvert",
         "--to",
@@ -167,6 +178,7 @@ def execute_notebook(path: Path, timeout: int) -> tuple[bool, str]:
         f"--ExecutePreprocessor.timeout={timeout}",
         str(path),
     ]
+    env = {**os.environ, "PATH": os.pathsep.join([str(Path(sys.executable).parent), os.environ.get("PATH", "")])}
     try:
         result = subprocess.run(
             cmd,
@@ -174,6 +186,7 @@ def execute_notebook(path: Path, timeout: int) -> tuple[bool, str]:
             text=True,
             timeout=timeout + 60,
             check=False,
+            env=env,
         )
     except subprocess.TimeoutExpired:
         return False, f"timeout after {timeout}s"
