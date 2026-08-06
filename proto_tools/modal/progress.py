@@ -210,19 +210,27 @@ def container_progress(
 # ============================================================================
 # Queue resolution, used from both sides
 # ============================================================================
-def open_progress_queue(*, create: bool = False) -> Any:
-    """Return the shared progress queue for the active Modal environment.
+def open_progress_queue(*, create: bool = False, environment: str | None = None, client: Any | None = None) -> Any:
+    """Return the shared progress queue for one Modal environment.
+
+    There is one queue per environment, so the writer and the reader must name the same one or
+    the container fills a queue nobody is tailing. A container leaves both arguments unset,
+    because ambient resolution inside the workspace is already correct.
 
     Args:
         create (bool): Create the queue when it does not exist. The client passes True; a container
             never creates one, because a partition nobody reads is wasted work.
+        environment (str | None): Modal environment holding the queue, or ``None`` for the ambient one.
+        client (Any | None): Modal client to open as, or ``None`` for the process's own.
 
     Returns:
         Any: A ``modal.Queue``.
     """
     import modal
 
-    handle = modal.Queue.from_name(PROGRESS_QUEUE_NAME, create_if_missing=create)
+    handle = modal.Queue.from_name(
+        PROGRESS_QUEUE_NAME, environment_name=environment, client=client, create_if_missing=create
+    )
     if create:
         # ``from_name`` is lazy and defers creation to first use, so the client hydrates here rather
         # than leaving the workers to race a queue that does not exist yet.
@@ -238,6 +246,8 @@ def stream_modal_progress(
     expected_ends: int,
     stop: threading.Event,
     *,
+    environment: str | None = None,
+    client: Any | None = None,
     on_record: Callable[[dict[str, Any]], None] | None = None,
     batch: int = 64,
     poll_timeout: float = 0.25,
@@ -255,13 +265,16 @@ def stream_modal_progress(
         partition (str): Queue partition for this call.
         expected_ends (int): End sentinels to wait for.
         stop (threading.Event): Set by the caller when the result has returned.
+        environment (str | None): Modal environment holding the queue. Must match the one the
+            dispatch resolves in, or this tails an empty queue of the same name.
+        client (Any | None): Modal client to tail as, or ``None`` for the process's own.
         on_record (Callable[[dict[str, Any]], None] | None): Record consumer, defaults to local replay.
         batch (int): Records to request per poll.
         poll_timeout (float): Seconds to block per poll.
     """
     consume = on_record or replay_record
     try:
-        progress_queue = open_progress_queue()
+        progress_queue = open_progress_queue(environment=environment, client=client)
     except Exception:
         logger.debug("progress queue unavailable; live updates disabled", exc_info=True)
         return

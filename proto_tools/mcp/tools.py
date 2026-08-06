@@ -85,27 +85,39 @@ def answered_in_process_keys() -> set[str]:
     return {spec.key for spec in ToolRegistry.list_all() if runs_in_process(spec.key)}
 
 
-def deployed_keys(device: Device) -> set[str]:
-    """Return the tools ``device`` actually serves, ignoring anything answered in-process."""
+def deployed_keys(device: Device, *, environment: str | None = None, client: Any | None = None) -> set[str]:
+    """Return the tools ``device`` actually serves, ignoring anything answered in-process.
+
+    ``environment`` and ``client`` name whose workspace to ask about. Omitted, the question is
+    answered for this process, which is what a local session wants. A server answering for
+    someone else must pass theirs, or it reports its own deployments as though they were the
+    caller's.
+    """
     if device == "local":
         return set()
     if device == "proto":
         return {key for key, entry in _hosted_catalogue().items() if entry.get("hosted")}
-    live = deployed_apps()
+    live = deployed_apps(environment=environment, client=client)
     return {key for key in _registry() if _app_for(key) in live}
 
 
-def available_keys(device: Device) -> set[str]:
+def available_keys(device: Device, *, environment: str | None = None, client: Any | None = None) -> set[str]:
     """Return the tool keys that can actually run on ``device``."""
     if device == "local":
         # Every registered tool runs here: a standalone env builds on first use, so availability
         # is a question of time and disk rather than of what has been provisioned in advance.
         return _all_registered()
-    return deployed_keys(device) | answered_in_process_keys()
+    return deployed_keys(device, environment=environment, client=client) | answered_in_process_keys()
 
 
-def workspace_info(device: Device = "modal") -> dict[str, Any]:
-    """Report where calls will land, and whether the caller can deploy there."""
+def workspace_info(
+    device: Device = "modal", *, environment: str | None = None, client: Any | None = None
+) -> dict[str, Any]:
+    """Report where calls will land, and whether the caller can deploy there.
+
+    ``environment`` and ``client`` describe whose workspace to report on. Omitted, this describes
+    the process's own, which is what a local session wants.
+    """
     if device == "local":
         from proto_tools.tools import ToolRegistry
         from proto_tools.utils.device import number_of_visible_gpus
@@ -146,7 +158,9 @@ def workspace_info(device: Device = "modal") -> dict[str, Any]:
     from proto_tools.modal.manifest import APP_BUCKETS
 
     try:
-        modal.Client.from_env()  # raises when no credentials are configured
+        # A caller-supplied client already carries credentials; only the process needs checking.
+        if client is None:
+            modal.Client.from_env()  # raises when no credentials are configured
     except Exception as exc:
         return {
             "device": "modal",
@@ -167,12 +181,31 @@ def workspace_info(device: Device = "modal") -> dict[str, Any]:
     # rather than reporting a working install as unauthenticated.
     workspace = getattr(modal.config, "_profile", None) or "(unknown)"
 
-    deployed = deployed_apps()
+    from proto_tools.modal.app import environment_exists
+
+    resolved = resolve_environment(environment)
+    # Asked before counting, because an environment that does not exist counts zero apps and
+    # reads as "nothing deployed yet" — which sends the caller off to deploy into a place that
+    # cannot receive it. The one-time setup is the actual answer.
+    if environment_exists(resolved, client) is False:
+        return {
+            "device": "modal",
+            "authenticated": True,
+            "workspace": workspace,
+            "environment": resolved,
+            "environment_exists": False,
+            "deployable": False,
+            "error": f"Modal environment {resolved!r} has not been created in this workspace.",
+            "hint": f"Create it with: proto-tools deploy --create-env --env {resolved}",
+        }
+
+    deployed = deployed_apps(environment=resolved, client=client)
     return {
         "device": "modal",
         "authenticated": True,
         "workspace": workspace,
-        "environment": resolve_environment(),
+        "environment": resolved,
+        "environment_exists": True,
         "apps_deployed": len(deployed),
         "apps_available": len(APP_BUCKETS),
         "tools_total": len(_registry()),
@@ -181,7 +214,12 @@ def workspace_info(device: Device = "modal") -> dict[str, Any]:
 
 
 def list_tools(
-    deployed_only: bool = True, category: str | None = None, device: Device = "modal"
+    deployed_only: bool = True,
+    category: str | None = None,
+    device: Device = "modal",
+    *,
+    environment: str | None = None,
+    client: Any | None = None,
 ) -> list[dict[str, Any]]:
     """List tools, flagged by whether they can actually run on ``device``.
 
@@ -205,10 +243,10 @@ def list_tools(
         if category not in known:
             return [{"ok": False, "error": f"no category named {category!r}", "categories": known}]
 
-    available = available_keys(device)
+    available = available_keys(device, environment=environment, client=client)
     in_process = set() if device == "local" else answered_in_process_keys()
     # Resolved once: on ``modal`` this reads the live app list, which is a network call.
-    deployed = deployed_keys(device)
+    deployed = deployed_keys(device, environment=environment, client=client)
     # The catalogue itself differs by device: the dispatch table lists what a container could
     # serve, which is the right universe for a remote backend but omits the tools answered here.
     catalogue = available if device == "local" else set(_registry()) | in_process
@@ -324,7 +362,15 @@ def _no_match_hint() -> str:
     return f"Nothing matched. Browse instead with list_tools(category=...); the categories are: {categories}."
 
 
-def search_tools(query: str, deployed_only: bool = True, limit: int = 10, device: Device = "modal") -> dict[str, Any]:
+def search_tools(
+    query: str,
+    deployed_only: bool = True,
+    limit: int = 10,
+    device: Device = "modal",
+    *,
+    environment: str | None = None,
+    client: Any | None = None,
+) -> dict[str, Any]:
     """Find tools by keyword, best match first.
 
     Matches per term rather than on the whole string: agents ask in natural
@@ -344,7 +390,7 @@ def search_tools(query: str, deployed_only: bool = True, limit: int = 10, device
         return {"hits": [], "n_total": 0, "hint": _no_match_hint()}
 
     scored = []
-    for entry in list_tools(deployed_only=deployed_only, device=device):
+    for entry in list_tools(deployed_only=deployed_only, device=device, environment=environment, client=client):
         key, category = entry["tool"].lower(), (entry.get("category") or "").lower()
         summary = (entry.get("summary") or "").lower()
         score = sum(max(_field_score(t, key, category, summary) for t in form) for form in forms)
@@ -501,7 +547,15 @@ def _setup_errors(device: Device) -> tuple[type[Exception], ...]:
     return (ModalDispatchError,)
 
 
-def _dispatch(device: Device, tool_key: str, payload: Any, cfg: Any) -> tuple[Any, Device]:
+def _dispatch(
+    device: Device,
+    tool_key: str,
+    payload: Any,
+    cfg: Any,
+    *,
+    environment: str | None = None,
+    client: Any | None = None,
+) -> tuple[Any, Device]:
     """Route one call to the backend ``device`` names, and report where it ran.
 
     The server is a stdio process on the caller's own machine, so "run it here" is always an
@@ -544,7 +598,7 @@ def _dispatch(device: Device, tool_key: str, payload: Any, cfg: Any) -> tuple[An
         return dispatch_to_proto(tool_key, payload, cfg), device
     from proto_tools.modal.client import dispatch_to_modal
 
-    return dispatch_to_modal(tool_key, payload, cfg), device
+    return dispatch_to_modal(tool_key, payload, cfg, environment=environment, client=client), device
 
 
 def _unavailable(device: Device, tool_key: str, error: str) -> dict[str, Any]:
@@ -577,6 +631,9 @@ def run_tool(
     output_dir: str | None = None,
     use_example: bool = False,
     device: Device = "modal",
+    *,
+    environment: str | None = None,
+    client: Any | None = None,
 ) -> dict[str, Any]:
     """Run a tool and return its result, with large fields written to disk.
 
@@ -628,7 +685,7 @@ def run_tool(
     if is_remote(device) and (reason := cfg.remote_unsupported_reason(device)) is not None:
         return {"ok": False, "error": reason, "not_supported_on": device}
     try:
-        result, ran_on = _dispatch(device, tool_key, payload, cfg)
+        result, ran_on = _dispatch(device, tool_key, payload, cfg, environment=environment, client=client)
     except _setup_errors(device) as exc:
         return {"ok": False, **_unavailable(device, tool_key, str(exc))}
     except Exception as exc:
