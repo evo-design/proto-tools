@@ -7,9 +7,12 @@ import logging
 import os
 from collections.abc import Callable, Coroutine
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from proto_tools.mcp.device import Device, is_remote
+
+if TYPE_CHECKING:  # imported for the annotation only; the runtime import stays inside deploy_tool
+    from proto_tools.modal.deploy import ModalTokens
 from proto_tools.utils.base_config import BaseConfig
 from proto_tools.utils.modal_status import credentials_checked, deployed_apps
 
@@ -711,7 +714,37 @@ def run_tool(
     saved = [v["_saved_to"] for v in _walk_saved(body)]
     # ``ran_on`` because the two can differ: a tool that cannot run remotely is answered here even
     # in a Modal session, and the caller should not have to infer that from the timing.
-    return {"ok": True, "tool": tool_key, "ran_on": ran_on, "result": body, "saved_files": saved}
+    answer = {"ok": True, "tool": tool_key, "ran_on": ran_on, "result": body, "saved_files": saved}
+    if drift := drift_for(tool_key, ran_on, environment=environment, client=client):
+        answer["warnings"] = drift
+    return answer
+
+
+def drift_for(tool_key: str, ran_on: Device, *, environment: str | None = None, client: Any | None = None) -> list[str]:
+    """Return drift warnings for a call that went to Modal, empty for one that did not.
+
+    The dispatch path warns about drift too, but through ``warnings.warn`` and only once per
+    process. That is right for a session on someone's laptop and wrong everywhere else: an MCP
+    caller never sees the process's warnings, and on a server the first caller to reach a stale
+    deployment consumes the warning for everyone after them. Returning it makes drift part of the
+    answer, so every caller who is affected is told.
+
+    Never raises -- :func:`drift_warnings` swallows its own failures, and a check that broke a
+    successful run would be worse than a missed warning.
+    """
+    if ran_on != "modal":
+        return []
+    from proto_tools.modal.app import resolve_environment
+    from proto_tools.modal.fingerprint import drift_warnings
+
+    try:
+        service, _method = _registry()[tool_key]
+    except KeyError:
+        return []
+    # Resolved, because the dispatch resolved it too: a caller who named no environment ran in
+    # proto-env, and reading the manifest from the ambient one compares against a deployment they
+    # never called. Unresolved, this reports nothing in exactly the default configuration.
+    return drift_warnings(tool_key, service, environment=resolve_environment(environment), client=client)
 
 
 def _walk_saved(node: Any) -> list[dict[str, Any]]:
@@ -729,7 +762,12 @@ def _walk_saved(node: Any) -> list[dict[str, Any]]:
 
 
 async def deploy_tool(
-    tool_key: str, environment: str, report: Callable[[str], Coroutine[Any, Any, None]]
+    tool_key: str,
+    environment: str,
+    report: Callable[[str], Coroutine[Any, Any, None]],
+    *,
+    tokens: ModalTokens | None = None,
+    client: Any | None = None,
 ) -> dict[str, Any]:
     """Deploy the Modal app serving one tool, after the caller has approved the spend.
 
@@ -740,14 +778,24 @@ async def deploy_tool(
 
     Args:
         tool_key (str): Tool whose serving app to deploy.
-        environment (str): Modal environment to deploy into.
+        environment (str): Modal environment to deploy into. Resolved the same way a dispatch
+            resolves it, so a deploy and the call that follows it name the same place.
         report (Callable[[str], Coroutine[Any, Any, None]]): Awaited with each build phase.
+        tokens (ModalTokens | None): Deploy into the workspace these tokens name rather than this
+            process's own. A server deploying for a caller passes theirs; a local session leaves
+            this unset, because its workspace is already the caller's.
+        client (Any | None): Modal client for recording fingerprints, opened from ``tokens`` when
+            not given.
 
     Returns:
-        dict[str, Any]: ``ok`` plus the app deployed, or an error.
+        dict[str, Any]: ``ok`` plus the app deployed, or an error carrying the end of the build
+            output, since a caller who is not on this machine cannot read the log themselves.
     """
     import asyncio
+    import contextlib
+    import tempfile
 
+    from proto_tools.modal.app import resolve_environment
     from proto_tools.modal.deploy import deploy_app
 
     try:
@@ -755,14 +803,56 @@ async def deploy_tool(
     except KeyError:
         return {"ok": False, "error": f"{tool_key!r} is not a tool this deployment serves."}
 
+    # ``modal deploy`` omits --env entirely for an empty or absent name, which lands the app in
+    # whichever environment the tokens make active. A dispatch resolves to proto-env instead, so
+    # unresolved the caller watches a deploy succeed and the next call miss it.
+    environment = resolve_environment(environment)
+
     loop = asyncio.get_running_loop()
 
     def emit(phase: str) -> None:
-        # Called from the reader thread; hop back to the loop to send the notification.
-        asyncio.run_coroutine_threadsafe(report(phase), loop)
+        # Called from the reader thread; hop back to the loop to send the notification. A caller
+        # who disconnected mid-build leaves a closed loop, and raising here would abandon the
+        # subprocess unwaited rather than let the deploy they paid for finish.
+        with contextlib.suppress(RuntimeError):
+            asyncio.run_coroutine_threadsafe(report(phase), loop)
 
     await report(f"deploying {app} to {environment}")
-    ok = await asyncio.to_thread(deploy_app, app, environment, emit)
-    if not ok:
-        return {"ok": False, "app": app, "error": "deploy failed; see logs/deploy.*.log for the build output"}
+    # A directory per deploy, so concurrent callers deploying the same app do not share a log file.
+    with tempfile.TemporaryDirectory(prefix="proto-tools-deploy-log-") as logs:
+        ok = await asyncio.to_thread(
+            deploy_app, app, environment, emit, tokens=tokens, client=client, log_dir=Path(logs)
+        )
+        if not ok:
+            return {"ok": False, "app": app, "error": "deploy failed", "build_output": _log_tail(Path(logs))}
     return {"ok": True, "app": app, "environment": environment, "tool": tool_key}
+
+
+#: Lines of build output returned when a deploy fails. Enough for the traceback Modal ends on,
+#: short enough not to bury the rest of the response.
+_LOG_TAIL_LINES = 40
+
+
+def _log_tail(logs: Path) -> str:
+    """Return the end of a deploy log, stripped of the frames that redraw a build tree.
+
+    A build renders an animated tree, so the raw log is mostly the same lines written over and
+    over. Reading it back means dropping those, or the tail is entirely spinner frames.
+
+    The colour codes and the spinner glyph go too. ``for_display`` keeps both, because in a
+    terminal they are what makes the build readable and show it is alive. Nothing here is watching
+    it animate, so they are only noise around the message an agent has to read.
+    """
+    from proto_tools.modal.deploy import _ANSI_ESCAPE, _SPINNER_FRAME, RecentLines, for_display
+
+    lines: list[str] = []
+    for log in sorted(logs.glob("deploy.*.log")):
+        try:
+            raw = log.read_text(errors="replace")
+        except OSError:
+            continue
+        seen = RecentLines()
+        shown = (for_display(line + "\n", seen) for line in raw.splitlines())
+        plain = (_ANSI_ESCAPE.sub("", text) for text in shown if text is not None)
+        lines += [_SPINNER_FRAME.sub("", text).rstrip() for text in plain]
+    return "\n".join(line for line in lines[-_LOG_TAIL_LINES:] if line)

@@ -196,12 +196,19 @@ def manifest_path(service_class: str) -> str:
     return f"{_MANIFEST_DIR}/{service_class}.json"
 
 
-def write_manifest(service_class: str, environment: str | None = None) -> int:
+def write_manifest(service_class: str, environment: str | None = None, client: Any | None = None) -> int:
     """Record the local fingerprints of ``service_class`` onto the cache volume.
 
     Called after a successful deploy, from the same checkout that was deployed,
     so the recorded values describe what actually shipped. Returns the number of
     tools recorded.
+
+    Args:
+        service_class (str): Service whose fingerprints to record.
+        environment (str | None): Modal environment holding the cache volume.
+        client (Any | None): Modal client to write as, or ``None`` for the process's own. Pairs
+            with the same argument on :func:`read_manifest`: a deploy made on someone's behalf
+            must record into their workspace, which is the only one that will read it back.
     """
     import io
 
@@ -217,7 +224,9 @@ def write_manifest(service_class: str, environment: str | None = None) -> int:
 
     from proto_tools.modal.app import CACHE_VOLUME_NAME
 
-    volume = modal.Volume.from_name(CACHE_VOLUME_NAME, environment_name=environment, create_if_missing=True)
+    volume = modal.Volume.from_name(
+        CACHE_VOLUME_NAME, environment_name=environment, client=client, create_if_missing=True
+    )
     with volume.batch_upload(force=True) as batch:
         batch.put_file(io.BytesIO(payload), manifest_path(service_class))
     return len(fps)
