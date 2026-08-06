@@ -6,6 +6,7 @@ Holds the container-side logging handler and drainer, and the client-side queue 
 from __future__ import annotations
 
 import contextlib
+import functools
 import logging
 import queue as queue_module
 import threading
@@ -38,6 +39,10 @@ _END = "end"
 # Records replay through the ``proto_tools`` namespace, where SpinnerFromLogsHandler is attached, so
 # a streamed line drives the bar exactly as the same line does in a local run.
 _remote_logger = logging.getLogger("proto_tools.modal.remote")
+
+# Attribute naming the call a replayed record came from. One call at a time can ignore it; a
+# process replaying for several callers cannot tell their output apart without it.
+CALL_ID_FIELD = "proto_call_id"
 
 
 # ============================================================================
@@ -272,7 +277,8 @@ def stream_modal_progress(
         batch (int): Records to request per poll.
         poll_timeout (float): Seconds to block per poll.
     """
-    consume = on_record or replay_record
+    # The partition identifies this call, so it rides along on every record.
+    consume = on_record or functools.partial(replay_record, call_id=partition)
     try:
         progress_queue = open_progress_queue(environment=environment, client=client)
     except Exception:
@@ -295,13 +301,17 @@ def stream_modal_progress(
                     consume(record)
 
 
-def replay_record(record: dict[str, Any]) -> None:
+def replay_record(record: dict[str, Any], call_id: str | None = None) -> None:
     """Re-emit one streamed record locally, into the spinner when there is one.
 
     With a bar on screen every record becomes its subtitle, so a long call reads as one line
     that keeps changing rather than a bar with output scrolling past it. Without a bar, records
     go to the logger as they would on the ``device='proto'`` path, carrying the ``update_status``
     flag so the same line behaves the same way.
+
+    Args:
+        record (dict[str, Any]): One streamed record.
+        call_id (str | None): Which call produced it, stamped on as :data:`CALL_ID_FIELD`.
     """
     message = record.get("m")
     if not message:
@@ -313,5 +323,5 @@ def replay_record(record: dict[str, Any]) -> None:
         int(record.get("l", logging.INFO)),
         "%s",
         message,
-        extra={"update_status": bool(record.get("s", False))},
+        extra={"update_status": bool(record.get("s", False)), CALL_ID_FIELD: call_id},
     )

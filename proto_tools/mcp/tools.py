@@ -555,6 +555,7 @@ def _dispatch(
     *,
     environment: str | None = None,
     client: Any | None = None,
+    progress_partition: str | None = None,
 ) -> tuple[Any, Device]:
     """Route one call to the backend ``device`` names, and report where it ran.
 
@@ -598,7 +599,12 @@ def _dispatch(
         return dispatch_to_proto(tool_key, payload, cfg), device
     from proto_tools.modal.client import dispatch_to_modal
 
-    return dispatch_to_modal(tool_key, payload, cfg, environment=environment, client=client), device
+    return (
+        dispatch_to_modal(
+            tool_key, payload, cfg, environment=environment, client=client, progress_partition=progress_partition
+        ),
+        device,
+    )
 
 
 def _unavailable(device: Device, tool_key: str, error: str) -> dict[str, Any]:
@@ -634,6 +640,7 @@ def run_tool(
     *,
     environment: str | None = None,
     client: Any | None = None,
+    progress_partition: str | None = None,
 ) -> dict[str, Any]:
     """Run a tool and return its result, with large fields written to disk.
 
@@ -685,7 +692,15 @@ def run_tool(
     if is_remote(device) and (reason := cfg.remote_unsupported_reason(device)) is not None:
         return {"ok": False, "error": reason, "not_supported_on": device}
     try:
-        result, ran_on = _dispatch(device, tool_key, payload, cfg, environment=environment, client=client)
+        result, ran_on = _dispatch(
+            device,
+            tool_key,
+            payload,
+            cfg,
+            environment=environment,
+            client=client,
+            progress_partition=progress_partition,
+        )
     except _setup_errors(device) as exc:
         return {"ok": False, **_unavailable(device, tool_key, str(exc))}
     except Exception as exc:
