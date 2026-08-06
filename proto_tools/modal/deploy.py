@@ -95,16 +95,6 @@ _DEPLOY_ENV_PASSTHROUGH = (
     "PROTO_MODAL_TIMEOUT_SCALE",
 )
 
-# Five variables are absent from that list because their absence is the point rather than an
-# oversight, and each makes a deployment something other than stock proto-tools:
-# PROTO_MODAL_WORKER_PLUGINS runs arbitrary code in the container, PROTO_MODAL_EXTRA_SOURCE,
-# PROTO_MODAL_EXTRA_PACKAGES and PROTO_MODAL_PROTO_TOOLS add code to the image, and
-# PROTO_MODAL_SECRETS attaches credentials the deploying process holds. A caller deploying into
-# their own workspace gets proto-tools as published, with nothing of the server's attached.
-#
-# PROTO_MODAL_HF_SECRET is absent for a different reason -- deploy_environ sets it rather than
-# dropping it, because unset is the dangerous value. See that function.
-
 
 def deploy_environ(tokens: ModalTokens | None) -> dict[str, str] | None:
     """Build the environment a ``modal deploy`` subprocess runs under.
