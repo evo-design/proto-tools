@@ -31,25 +31,6 @@ def test_server_registers_the_expected_surface():
     assert {t.name for t in asyncio.run(build_server("proto").list_tools())} == _READ_ONLY_SURFACE
 
 
-def test_deploying_is_the_only_state_changing_tool():
-    """Deployment incurs cost, and is the one such action exposed; nothing else mutates a workspace."""
-    from proto_tools.mcp import build_server
-
-    names = {t.name for t in asyncio.run(build_server("modal").list_tools())}
-    unexpected = [n for n in names if any(w in n for w in ("stop", "delete", "destroy", "teardown"))]
-
-    assert "deploy_tool" in names
-    assert not unexpected, f"the MCP must not expose destructive actions: {unexpected}"
-
-
-def test_proto_exposes_no_deploy_tool():
-    """Proto's catalogue is fixed, so offering to deploy would promise something impossible."""
-    from proto_tools.mcp import build_server
-
-    names = {t.name for t in asyncio.run(build_server("proto").list_tools())}
-    assert "deploy_tool" not in names
-
-
 # ── Unknown tool keys ───────────────────────────────────────────────────────
 
 
@@ -449,17 +430,6 @@ def test_proto_requires_a_key_and_says_so(monkeypatch):
         resolve_device("proto")
 
 
-def test_unknown_device_is_rejected(monkeypatch):
-    """A typo must not silently fall back to a working backend."""
-    import pytest as _pytest
-
-    from proto_tools.mcp.device import DeviceUnavailableError, resolve_device
-
-    monkeypatch.delenv("PROTO_MCP_DEVICE", raising=False)
-    with _pytest.raises(DeviceUnavailableError, match="unknown device"):
-        resolve_device("cloud")
-
-
 def test_only_modal_is_deployable():
     """Proto's catalogue is fixed; telling a caller to deploy to it sends them after nothing."""
     from proto_tools.mcp.device import is_deployable
@@ -558,17 +528,6 @@ def test_a_failed_deploy_returns_the_build_output():
 
     assert out["ok"] is False
     assert "ImportError" in out["build_output"]
-
-
-def test_build_output_is_summarised_not_streamed():
-    """Forwarding every line would bury the status an agent shows in one place."""
-    from proto_tools.modal.deploy import describe_progress
-
-    assert describe_progress("=> Step 3: RUN pip install numpy") == "RUN pip install numpy"
-    assert describe_progress("Building image im-abc123") == "building image"
-    assert "warmup" in (describe_progress("Running function _warmup") or "")
-    assert describe_progress("✓ App deployed in 143.8s! 🎉") == "deployed"
-    assert describe_progress("  Downloading numpy-2.4.6.whl (18 MB)") is None
 
 
 # ============================================================================

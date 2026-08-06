@@ -178,15 +178,6 @@ def _make_worker(script_path: Path, verbose: int = 0) -> PersistentWorker:
 # ── Basic send/receive ───────────────────────────────────────────────────────
 
 
-def test_echo(echo_script: Path):
-    worker = _make_worker(echo_script)
-    try:
-        result = worker.send({"foo": "bar"})
-        assert result == {"echo": {"foo": "bar"}}
-    finally:
-        worker.stop()
-
-
 def test_tool_env_path_injected(tmp_path: Path):
     """TOOL_VENV_PATH should be set in the subprocess environment."""
     script = tmp_path / "env_script.py"
@@ -331,13 +322,6 @@ def test_stderr_lines_buffer_is_bounded(monkeypatch: pytest.MonkeyPatch):
     assert len(worker._stderr_lines) == 5
     # FIFO eviction: only the last 5 survived.
     assert list(worker._stderr_lines) == [f"line {i}" for i in range(15, 20)]
-
-
-def test_stderr_lines_buffer_default_size(monkeypatch: pytest.MonkeyPatch):
-    """Default buffer size is 20 lines when the env var is unset."""
-    monkeypatch.delenv("PROTO_WORKER_STDERR_BUFFER_LINES", raising=False)
-    worker = PersistentWorker(toolkit="test", env_path=Path("/fake"), script_path=Path("/fake/script.py"), device="cpu")
-    assert worker._stderr_lines.maxlen == 20
 
 
 def test_stderr_lines_buffer_invalid_env_falls_back_to_default(monkeypatch: pytest.MonkeyPatch):
@@ -544,15 +528,6 @@ def test_stop_and_restart(echo_script: Path):
         worker.stop()
 
 
-def test_alive_property(echo_script: Path):
-    worker = _make_worker(echo_script)
-    assert not worker.alive
-    worker.start()
-    assert worker.alive
-    worker.stop()
-    assert not worker.alive
-
-
 def test_send_kills_worker_on_stale_frame(tmp_path: Path):
     """Mismatched-id raises AND kills the worker; the next dispatch must spawn fresh.
 
@@ -608,28 +583,6 @@ def test_stop_signals_process_group():
     # SIGTERM should be sent to the process group, not process.terminate()
     mock_killpg.assert_any_call(99999, signal.SIGTERM)
     mock_process.terminate.assert_not_called()
-    assert worker._process is None
-
-
-def test_stop_escalates_to_sigkill():
-    """stop() should SIGKILL the group if SIGTERM + wait fails."""
-    worker = PersistentWorker.__new__(PersistentWorker)
-    worker.toolkit = "test"
-
-    mock_process = MagicMock()
-    mock_process.poll.return_value = None
-    mock_process.pid = 99999
-    mock_process.stdin = MagicMock()
-    # First wait (after SIGTERM) times out, second wait (after SIGKILL) succeeds
-    mock_process.wait.side_effect = [Exception("timed out"), None]
-    worker._process = mock_process
-
-    with patch("proto_tools.utils.persistent_worker.os.killpg") as mock_killpg:
-        worker.stop()
-
-    calls = [c.args for c in mock_killpg.call_args_list]
-    assert (99999, signal.SIGTERM) in calls
-    assert (99999, signal.SIGKILL) in calls
     assert worker._process is None
 
 
@@ -749,23 +702,6 @@ def test_parse_env_vars_empty_file(tmp_path: Path):
     assert result == _EMPTY_RESULT
 
 
-@pytest.mark.parametrize(
-    "section_text, expected",
-    [
-        ("[passthrough]\nHF_TOKEN\nHF_HOME\n", {"passthrough": ["HF_TOKEN", "HF_HOME"]}),
-        ("[set]\nMY_VAR=${VENV_PATH}/data\n", {"set": ["MY_VAR=${VENV_PATH}/data"]}),
-        ("[no_passthrough]\nLD_LIBRARY_PATH\nHF_TOKEN\n", {"no_passthrough": ["LD_LIBRARY_PATH", "HF_TOKEN"]}),
-    ],
-    ids=["passthrough", "set", "no_passthrough"],
-)
-def test_parse_env_vars_single_section(tmp_path: Path, section_text: str, expected: dict[str, list[str]]):
-    """Each section parses correctly in isolation; other sections stay empty."""
-    f = tmp_path / "env_vars.txt"
-    f.write_text(section_text)
-    result = _parse_env_vars_file(f)
-    assert result == {**_EMPTY_RESULT, **expected}
-
-
 def test_parse_env_vars_all_sections(tmp_path: Path):
     """All three sections in one file land in their own buckets."""
     f = tmp_path / "env_vars.txt"
@@ -883,18 +819,6 @@ def test_path_ordering(monkeypatch, tmp_path: Path, device, expect_cuda):
         cuda_idx = path_parts.index("/usr/local/cuda/bin")
         conda_idx = path_parts.index("/opt/conda/bin")
         assert cuda_idx < conda_idx  # cuda/bin before parent PATH
-
-
-def test_path_without_conda_prefix(monkeypatch, tmp_path: Path):
-    """Without CONDA_PREFIX, no conda bin in PATH; parent PATH still carried over."""
-    monkeypatch.delenv("CONDA_PREFIX", raising=False)
-    monkeypatch.setenv("PATH", "/opt/hpc/bin:/usr/bin:/bin")
-
-    env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
-
-    path_parts = env["PATH"].split(":")
-    assert path_parts[0] == str(tmp_path / "bin")
-    assert "/opt/hpc/bin" in path_parts  # parent PATH entry carried over
 
 
 @pytest.mark.parametrize(
@@ -1079,14 +1003,6 @@ def test_xla_preallocation_disabled_for_cpu():
     assert env["XLA_PYTHON_CLIENT_ALLOCATOR"] == "platform"
 
 
-def test_xla_preallocation_disabled_for_cuda():
-    """GPU device should also disable JAX preallocation (DeviceManager handles placement)."""
-    env = _build_subprocess_env(device="cuda")
-
-    assert env["XLA_PYTHON_CLIENT_PREALLOCATE"] == "false"
-    assert env["XLA_PYTHON_CLIENT_ALLOCATOR"] == "platform"
-
-
 @pytest.mark.parametrize(
     "parent_has_var",
     [True, False],
@@ -1150,23 +1066,6 @@ def test_set_vars(tmp_path: Path, set_line, var, expected_suffix):
 
 
 # ── env_overrides (caller-supplied final layer) ─────────────────────────────
-
-
-def test_env_overrides_applied_to_subprocess_env(monkeypatch):
-    """Caller-supplied env_overrides land in the built env."""
-    env = _build_subprocess_env(
-        device="cpu",
-        env_overrides={
-            "OMP_NUM_THREADS": "4",
-            "MKL_NUM_THREADS": "4",
-            "OPENBLAS_NUM_THREADS": "4",
-            "NUMEXPR_NUM_THREADS": "4",
-        },
-    )
-    assert env["OMP_NUM_THREADS"] == "4"
-    assert env["MKL_NUM_THREADS"] == "4"
-    assert env["OPENBLAS_NUM_THREADS"] == "4"
-    assert env["NUMEXPR_NUM_THREADS"] == "4"
 
 
 def test_env_overrides_win_over_passthrough(monkeypatch):

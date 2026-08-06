@@ -143,17 +143,6 @@ def test_cpu_to_generic_cuda(device_manager, mock_callback):
     assert inst.device.startswith("cuda"), f"Should be on GPU, got {inst.device}"
 
 
-def test_cpu_to_specific_cuda(device_manager, mock_callback):
-    """Tool on CPU + config says 'cuda:1' -> should move to cuda:1."""
-    inst, _mock_worker = _make_instance(device_manager)
-
-    input_dict = {"device": "cuda:1"}
-    with patch.object(inst, "_to", wraps=inst._to) as mock_to:
-        inst.run(input_dict, reload_on=set())
-
-    mock_to.assert_called_once_with("cuda:1")
-
-
 def test_wrong_gpu_to_specific_cuda(device_manager, mock_callback):
     """Tool on cuda:0 + config says 'cuda:1' -> should move to cuda:1."""
     inst, _mock_worker = _make_instance(device_manager)
@@ -176,20 +165,6 @@ def test_already_on_correct_gpu_no_move(device_manager, mock_callback):
     inst.device = "cuda:0"
 
     input_dict = {"device": "cuda:0"}
-    with patch.object(inst, "_to", wraps=inst._to) as mock_to:
-        inst.run(input_dict, reload_on=set())
-
-    mock_to.assert_not_called()
-
-
-def test_generic_cuda_already_on_gpu_no_move(device_manager, mock_callback):
-    """Tool on cuda:0 + config says 'cuda' -> no move (already on a GPU)."""
-    inst, _mock_worker = _make_instance(device_manager)
-
-    device_manager.request_device("mock_pytorch_tool", "inst", device="cuda:0", eviction_callback=mock_callback)
-    inst.device = "cuda:0"
-
-    input_dict = {"device": "cuda"}
     with patch.object(inst, "_to", wraps=inst._to) as mock_to:
         inst.run(input_dict, reload_on=set())
 

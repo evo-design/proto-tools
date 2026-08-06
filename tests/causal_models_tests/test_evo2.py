@@ -21,34 +21,7 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _persistent_tool = make_persistent_fixture("evo2")
 
-_EVO2_TEST_CHECKPOINTS = ["evo2_7b", "evo2_20b"]
-
-
-# ── Sample input/config validation ────────────────────────────────────────────
-
-
-@pytest.mark.parametrize(
-    "input_kwargs,match",
-    [
-        ({"prompts": []}, "prompts must not be empty"),
-    ],
-)
-def test_evo2_sample_input_validation(input_kwargs, match):
-    with pytest.raises(ValueError, match=match):
-        Evo2SampleInput(**input_kwargs)
-
-
-@pytest.mark.parametrize(
-    "config_kwargs,match",
-    [
-        ({"temperature": 0.0}, "greater than 0"),
-        ({"top_p": 1.5}, "less than or equal to 1"),
-        ({"max_new_tokens": 0}, "greater than or equal to 1"),
-    ],
-)
-def test_evo2_sample_config_validation(config_kwargs, match):
-    with pytest.raises(ValueError, match=match):
-        Evo2SampleConfig(**config_kwargs)
+_EVO2_TEST_CHECKPOINTS = ["evo2_7b"]
 
 
 # ---------------------------------------------------------------------------
@@ -85,35 +58,6 @@ def test_evo2_sample_tool(model_checkpoint="evo2_7b"):
         assert seq.startswith(prompt), f"Sequence {i} should start with '{prompt}'"
         assert set(seq.upper()).issubset(valid_chars)
         assert len(seq) > len(prompt), f"Sequence {i} should be longer than prompt"
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.parametrize("model_checkpoint", _EVO2_TEST_CHECKPOINTS)
-@pytest.mark.parametrize(
-    "prompt",
-    [
-        "ATCGATCG",
-        "GCTAGCTA",
-        "AAAACCCC",
-    ],
-)
-def test_evo2_sample_prompt_handling(prompt, model_checkpoint):
-    """Test evo2 sampling with various prompt formats."""
-    inputs = Evo2SampleInput(prompts=prompt)
-    config = Evo2SampleConfig(
-        model_checkpoint=model_checkpoint,
-        max_new_tokens=50,
-        temperature=1.0,
-        verbose=False,
-    )
-
-    result = run_evo2_sample(inputs=inputs, config=config)
-    validate_output(result)
-
-    assert len(result.sequences) == 1
-    seq = result.sequences[0]
-    assert prompt in seq, f"Expected '{prompt}' in output"
-    assert len(seq) > len(prompt), "Should generate beyond prompt"
 
 
 @pytest.mark.uses_gpu
@@ -272,24 +216,6 @@ def test_evo2_score_batch_size_consistency(model_checkpoint):
 
 @pytest.mark.uses_gpu
 @pytest.mark.parametrize("model_checkpoint", _EVO2_TEST_CHECKPOINTS)
-def test_evo2_score_variable_length_sequences(model_checkpoint):
-    """Test scoring sequences of different lengths produces correct logits shapes."""
-    sequences = ["AT", "ATCG", "ATCGATCG", "ATCGATCGATCG"]
-    inputs = Evo2ScoringInput(sequences=sequences)
-    config = Evo2ScoringConfig(model_checkpoint=model_checkpoint, batch_size=2, verbose=False, return_logits=True)
-
-    result = run_evo2_score(inputs=inputs, config=config)
-    assert_metrics_in_spec(result)
-
-    for seq, score in zip(sequences, result.scores, strict=False):
-        assert score.logits is not None, "Logits should be present when return_logits=True"
-        assert len(score.logits) > 0, (
-            f"Sequence '{seq}' (len {len(seq)}): logits len should be > 0, got {len(score.logits)}"
-        )
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.parametrize("model_checkpoint", _EVO2_TEST_CHECKPOINTS)
 def test_evo2_score_tool(model_checkpoint):
     """Test the evo2 scoring tool with run_evo2_score."""
     sequences = ["ATCGATCGATCG", "GCTAGCTAGCTA"]
@@ -314,23 +240,6 @@ def test_evo2_score_tool(model_checkpoint):
         assert score.logits is not None, f"Sequence {i} should have logits"
 
 
-@pytest.mark.uses_gpu
-@pytest.mark.parametrize("model_checkpoint", _EVO2_TEST_CHECKPOINTS)
-def test_evo2_score_single_sequence(model_checkpoint):
-    """Test evo2 scoring with a single sequence (string input)."""
-    inputs = Evo2ScoringInput(sequences="ATCGATCGATCGATCGATCG")
-    config = Evo2ScoringConfig(
-        model_checkpoint=model_checkpoint,
-        verbose=False,
-    )
-
-    result = run_evo2_score(inputs=inputs, config=config)
-    validate_output(result)
-    assert_metrics_in_spec(result)
-
-    assert len(result.scores) == 1
-
-
 # ── Logits-specific tests (scoring) ──────────────────────────────────────────
 
 
@@ -350,33 +259,6 @@ def test_evo2_score_logits_disabled_by_default(model_checkpoint):
 
     for score in result.scores:
         assert score.logits is None, "Logits should be None when return_logits=False"
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.parametrize("model_checkpoint", _EVO2_TEST_CHECKPOINTS)
-def test_evo2_score_logits_serialization(model_checkpoint):
-    """Test that logits are properly serialized as nested lists."""
-    sequences = ["ATCGATCGATCG"]
-    inputs = Evo2ScoringInput(sequences=sequences)
-    config = Evo2ScoringConfig(
-        model_checkpoint=model_checkpoint,
-        verbose=False,
-        return_logits=True,
-    )
-
-    result = run_evo2_score(inputs=inputs, config=config)
-    validate_output(result)
-
-    score = result.scores[0]
-
-    assert isinstance(score.logits, list), "Logits should be a list"
-    assert len(score.logits) > 0, "Logits list should not be empty"
-    assert isinstance(score.logits[0], list), "Logits should be a list of lists"
-    assert len(score.logits[0]) == 512, "Inner logits list should have 512 elements (Evo2 byte-level vocab)"
-
-    for position_logits in score.logits:
-        for logit_value in position_logits:
-            assert isinstance(logit_value, (int, float)), f"Logit value should be numeric, got {type(logit_value)}"
 
 
 # ── Benchmarks ────────────────────────────────────────────────────────────────

@@ -27,9 +27,6 @@ from proto_tools.tools.gene_annotation.pyhmmer import (
     run_pyhmmer_nhmmer,
     run_pyhmmer_phmmer,
 )
-from proto_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
-    _build_hit_models,
-)
 from tests.conftest import benchmark_twice, random_dna_sequences, random_protein_sequences
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -73,15 +70,6 @@ def test_phmmer_input_single_strings():
 def test_jackhmmer_config_invalid_max_iterations():
     with pytest.raises(ValueError, match="greater than or equal to 1"):
         PyJackhmmerConfig(max_iterations=0)
-
-
-# ── Helper functions ─────────────────────────────────────────────────────
-
-
-def test_build_hit_models_empty():
-    seq_hits, dom_hits = _build_hit_models([], [])
-    assert seq_hits == []
-    assert dom_hits == []
 
 
 # ---------------------------------------------------------------------------

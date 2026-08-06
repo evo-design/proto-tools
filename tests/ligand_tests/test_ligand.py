@@ -77,7 +77,6 @@ def test_get_smiles_list_and_names_list():
 # ── PDB generation ──────────────────────────────────────────────────────
 
 
-@pytest.mark.integration
 def test_to_pdb_single_fragment():
     ligands = Ligands.from_smiles("CCO")
     pdb_string = ligands.to_pdb()
@@ -94,7 +93,6 @@ def test_to_pdb_single_fragment():
     assert all(line[21] == "A" for line in atom_lines)
 
 
-@pytest.mark.integration
 def test_to_pdb_multiple_fragments():
     ligands = Ligands(fragments=[Fragment(smiles="CCO"), Fragment(smiles="CO")])
     ligands.generate_conformers(num_conformers=1)
@@ -134,7 +132,6 @@ def test_to_pdb_write_file(tmp_path):
     assert is_valid_structure(pdb_path)
 
 
-@pytest.mark.integration
 def test_to_pdb_empty_ligands():
     ligands = Ligands(fragments=[])
 
@@ -169,12 +166,6 @@ def test_ligands_round_trip():
     assert len(reconstructed) == 2
     assert reconstructed[0].smiles == "CCO"
     assert reconstructed[1].smiles == "CO"
-
-
-def test_fragment_smiles_canonicalization():
-    frag = Fragment(smiles="c1ccccc1")
-    assert frag.smiles == "c1ccccc1"
-    assert frag.mol is not None
 
 
 def test_to_smi_round_trip(tmp_path):
@@ -291,28 +282,6 @@ def test_fragment_conformers_property():
     assert frag.conformers == []
     frag.generate_conformers(num_conformers=1)
     assert len(frag.conformers) == 1
-
-
-def test_to_pdb_basic():
-    ligands = Ligands.from_smiles("CCO")
-    pdb_str = ligands.to_pdb()
-    assert "END" in pdb_str
-    assert "TER" in pdb_str
-    atom_lines = [line for line in pdb_str.split("\n") if line.startswith(("HETATM", "ATOM"))]
-    assert len(atom_lines) > 0
-
-
-def test_to_pdb_two_fragments():
-    ligands = Ligands(fragments=[Fragment(smiles="CCO"), Fragment(smiles="CO")])
-    pdb_str = ligands.to_pdb()
-    lines = pdb_str.split("\n")
-    chain_ids = {line[21] for line in lines if line.startswith(("HETATM", "ATOM"))}
-    assert chain_ids == {"A", "B"}
-
-
-def test_to_pdb_empty_raises():
-    with pytest.raises(ValueError, match="no fragments"):
-        Ligands(fragments=[]).to_pdb()
 
 
 # ── Constructor shorthands ──────────────────────────────────────────────

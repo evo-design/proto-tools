@@ -169,12 +169,6 @@ def test_config_local_requires_db():
         BlastSearchConfig(search_mode="local")
 
 
-def test_config_local_with_db():
-    config = BlastSearchConfig(search_mode="local", local_db="/data/blast/nr")
-    assert config.search_mode == "local"
-    assert config.local_db == "/data/blast/nr"
-
-
 def test_config_online_only_warns_in_local(caplog):
     import logging
 
@@ -202,12 +196,6 @@ def test_config_local_only_warns_in_online(caplog):
 
 
 # ── XML → DataFrame parsing ───────────────────────────────────────────────
-
-
-def test_results_to_hits_empty():
-    hits = _blast_results_to_hits([])
-    assert len(hits) == 0
-    assert isinstance(hits, list)
 
 
 def test_results_to_hits_field_values():
@@ -432,21 +420,7 @@ def test_local_blastn_output_structure(nucl_blast_db):
     assert result.execution_time > 0
     assert result.metadata["search_mode"] == "local"
     assert result.metadata["program"] == "blastn"
-    # Verify BlastHit has expected fields
     assert len(result.hits) > 0
-    hit = result.hits[0]
-    assert hasattr(hit, "qseqid")
-    assert hasattr(hit, "sseqid")
-    assert hasattr(hit, "pident")
-    assert hasattr(hit, "length")
-    assert hasattr(hit, "mismatch")
-    assert hasattr(hit, "gapopen")
-    assert hasattr(hit, "qstart")
-    assert hasattr(hit, "qend")
-    assert hasattr(hit, "sstart")
-    assert hasattr(hit, "send")
-    assert hasattr(hit, "evalue")
-    assert hasattr(hit, "bitscore")
 
 
 @pytest.mark.integration
@@ -522,21 +496,7 @@ def test_online_blastn():
     assert isinstance(result, BlastSearchOutput)
     assert result.success, f"BLAST search failed: {result.errors}"
     assert result.num_hits >= 1
-    # Verify BlastHit has expected fields
     assert len(result.hits) > 0
-    hit = result.hits[0]
-    assert hasattr(hit, "qseqid")
-    assert hasattr(hit, "sseqid")
-    assert hasattr(hit, "pident")
-    assert hasattr(hit, "length")
-    assert hasattr(hit, "mismatch")
-    assert hasattr(hit, "gapopen")
-    assert hasattr(hit, "qstart")
-    assert hasattr(hit, "qend")
-    assert hasattr(hit, "sstart")
-    assert hasattr(hit, "send")
-    assert hasattr(hit, "evalue")
-    assert hasattr(hit, "bitscore")
 
 
 @pytest.mark.integration

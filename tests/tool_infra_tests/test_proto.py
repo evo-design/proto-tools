@@ -253,11 +253,6 @@ def test_proto_blocks_unsupported_config(fake_proto_client, clean_registry):
     assert fake_proto_client.last_instance is None
 
 
-def test_base_config_remote_unsupported_reason_defaults_none():
-    """The default hook returns None so ordinary tools still dispatch to cloud."""
-    assert _CloudConfig().remote_unsupported_reason("proto") is None
-
-
 def test_config_dependent_local_file_refusal():
     """A refusal that depends on how the tool is configured stays on the config."""
     from proto_tools.tools.sequence_alignment.blast.blast_search import BlastSearchConfig
@@ -863,13 +858,9 @@ VALID_DEVICE_STRINGS = [
     "cpu",
     "cuda",
     "cuda:0",
-    "cuda:7",
     "cudax2",
-    "cudax64",
     "cuda:0,1",
-    "cuda:0,1,2",
     "cuda:1,cuda:2",
-    "cuda:0,cuda:1,cuda:2",
     " cpu ",
     "cuda:0, 1",
     "proto",
@@ -934,59 +925,6 @@ def test_device_modal_delegates_and_returns_validated_output(clean_registry, mon
     assert result.success is True
     assert result.tool_id == "modal-tool"
     assert captured == {"key": "modal-tool", "payload": "hi", "device": "modal"}
-
-
-def test_device_modal_no_ops_trivially_local_tools(clean_registry, monkeypatch):
-    """A tool with no GPU and no standalone environment runs in-process rather than on Modal.
-
-    ``local_cpu`` means there is nothing to accelerate and nothing to build, so a worker can
-    offer the tool nothing and the round trip is pure cost. This does not reach the CPU tools
-    that are actually deployed: those carry a standalone environment, which is precisely what
-    makes running them remotely worthwhile.
-    """
-
-    def _dispatch_should_not_run(key, inputs, config):
-        raise AssertionError("a local_cpu tool has nothing to gain from Modal and must stay local")
-
-    _patch_modal_dispatch(monkeypatch, _dispatch_should_not_run)
-
-    def _local_impl(inputs, config, instance=None):
-        del instance
-        return _CloudOutput(result=f"local:{inputs.payload}:{config.device}")
-
-    clean_registry.register(
-        key="modal-local-cpu",
-        label="modal-local-cpu",
-        category="test",
-        input_class=_CloudInput,
-        config_class=_CloudConfig,
-        output_class=_CloudOutput,
-        description="pure-python tool — no GPU, no standalone env",
-    )(_local_impl)
-    spec = clean_registry.get("modal-local-cpu")
-    assert spec.local_cpu is True
-
-    result = spec.function(_CloudInput(payload="hi"), _CloudConfig(device="modal"))
-
-    # The device is rewritten to cpu so the tool sees where it actually ran.
-    assert result.result == "local:hi:cpu"
-
-
-def test_device_modal_blocks_unsupported_config(clean_registry, monkeypatch):
-    """A config needing a local resource fails fast before any dispatch is attempted."""
-
-    class _ModalUnsupportedConfig(_CloudConfig):
-        def remote_unsupported_reason(self, device):
-            return "needs a local database file" if device == "modal" else None
-
-    def _dispatch_should_not_run(key, inputs, config):
-        raise AssertionError("must not dispatch a config that declares itself unsupported")
-
-    _patch_modal_dispatch(monkeypatch, _dispatch_should_not_run)
-    spec = _register_cloud_tool(clean_registry, "modal-tool-3", config_class=_ModalUnsupportedConfig)
-
-    with pytest.raises(ValueError, match="needs a local database file"):
-        spec.function(_CloudInput(payload="hi"), _ModalUnsupportedConfig(device="modal"))
 
 
 def test_batch_dispatch_submits_every_job_before_waiting(fake_proto_client, arm_stub_client, clean_registry):

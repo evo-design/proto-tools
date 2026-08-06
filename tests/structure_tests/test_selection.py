@@ -327,11 +327,6 @@ def test_base_resolves_path_string() -> None:
     assert isinstance(inp.structure, Structure)
 
 
-def test_base_resolves_path_object() -> None:
-    inp = _SubInput(structure=EXAMPLE_PDB)
-    assert isinstance(inp.structure, Structure)
-
-
 def test_base_resolves_url_string(monkeypatch: pytest.MonkeyPatch) -> None:
     content = EXAMPLE_PDB.read_text()
     url = "https://example.test/example.pdb"
@@ -380,12 +375,6 @@ def test_base_auto_validates_single_chain_role() -> None:
 def test_base_auto_validates_residue_role() -> None:
     with pytest.raises(ValidationError, match=r"residue_role.*invalid positions"):
         _SubInput(structure=str(EXAMPLE_PDB), residue_role={"A": [9999]})
-
-
-def test_base_skips_none_fields() -> None:
-    inp = _SubInput(structure=str(EXAMPLE_PDB))
-    assert inp.chain_role is None
-    assert inp.residue_role is None
 
 
 def test_base_accepts_valid_selections() -> None:

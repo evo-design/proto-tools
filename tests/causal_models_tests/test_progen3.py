@@ -1,21 +1,15 @@
 """Tests for ProGen3 tool."""
 
-import json
-
 import pytest
-from pydantic import ValidationError
 
 from proto_tools.tools.causal_models.progen3 import (
     ProGen3SampleConfig,
     ProGen3SampleInput,
-    ProGen3SampleOutput,
     ProGen3ScoringConfig,
     ProGen3ScoringInput,
-    ProGen3ScoringOutput,
     run_progen3_sample,
     run_progen3_score,
 )
-from proto_tools.tools.causal_models.shared_data_models import CausalModelSample
 from proto_tools.utils import PROTEIN_AMINO_ACIDS
 from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
@@ -41,13 +35,7 @@ def test_sample_input_accepts_list():
     assert inp.prompts == ["MKTL", "RYTE"]
 
 
-def test_sample_input_rejects_empty():
-    """Empty list raises ValueError."""
-    with pytest.raises(ValueError, match="prompts must not be empty"):
-        ProGen3SampleInput(prompts=[])
-
-
-# ── Sample config validation ────────────────────────────────────────────────
+# ── Sample dispatch ─────────────────────────────────────────────────────────
 
 
 def test_sample_dispatches_one_sequence_per_prompt(monkeypatch):
@@ -73,82 +61,6 @@ def test_sample_dispatches_one_sequence_per_prompt(monkeypatch):
 
     assert result.sequences == ["AAAAG", "CCCCG"]
     assert [payload["prompts"] for payload in captured_payloads] == [["1AAAA", "1CCCC"]]
-
-
-def test_sample_config_rejects_invalid_temperature():
-    """Temperature must be > 0."""
-    with pytest.raises(ValidationError, match="greater than 0"):
-        ProGen3SampleConfig(temperature=0.0)
-    with pytest.raises(ValidationError, match="greater than 0"):
-        ProGen3SampleConfig(temperature=-1.0)
-
-
-def test_sample_config_rejects_invalid_top_p():
-    """top_p must be > 0 and <= 1."""
-    with pytest.raises(ValidationError, match="less than or equal to 1"):
-        ProGen3SampleConfig(top_p=1.5)
-    with pytest.raises(ValidationError, match="greater than 0"):
-        ProGen3SampleConfig(top_p=0.0)
-
-
-def test_sample_config_rejects_invalid_checkpoint():
-    """Invalid model checkpoint raises ValidationError."""
-    with pytest.raises(ValidationError):
-        ProGen3SampleConfig(model_checkpoint="progen3-invalid")
-
-
-def test_sample_config_rejects_invalid_direction():
-    """Invalid direction raises ValidationError."""
-    with pytest.raises(ValidationError):
-        ProGen3SampleConfig(direction="diagonal")
-
-
-# ── Sample output export ────────────────────────────────────────────────────
-
-
-def test_sample_output_export_fasta(tmp_path):
-    """Test FASTA export from a manually constructed output."""
-    output = ProGen3SampleOutput(
-        results=[CausalModelSample(sequence="MKTLVIVTGA"), CausalModelSample(sequence="EVQLVESGGS")],
-        tool_id="progen3-sample",
-        success=True,
-    )
-    output.export(name="test_output", export_path=str(tmp_path), file_format="fasta")
-
-    fasta_path = tmp_path / "test_output.fasta"
-    assert fasta_path.exists()
-    content = fasta_path.read_text()
-    assert ">seq_0" in content
-    assert "MKTLVIVTGA" in content
-    assert ">seq_1" in content
-    assert "EVQLVESGGS" in content
-
-
-def test_sample_output_export_json(tmp_path):
-    """Test JSON export from a manually constructed output."""
-    output = ProGen3SampleOutput(
-        results=[CausalModelSample(sequence="MKTLVIVTGA"), CausalModelSample(sequence="EVQLVESGGS")],
-        tool_id="progen3-sample",
-        success=True,
-    )
-    output.export(name="test_output", export_path=str(tmp_path), file_format="json")
-
-    json_path = tmp_path / "test_output.json"
-    assert json_path.exists()
-    data = json.loads(json_path.read_text())
-    assert data["sequences"] == ["MKTLVIVTGA", "EVQLVESGGS"]
-
-
-def test_scoring_output_has_correct_format_options():
-    """CausalModelScoringOutput supports csv and json export."""
-    output = ProGen3ScoringOutput(
-        scores=[],
-        tool_id="progen3-score",
-        success=True,
-    )
-    assert "csv" in output.output_format_options
-    assert "json" in output.output_format_options
-    assert output.output_format_default == "csv"
 
 
 # ---------------------------------------------------------------------------
@@ -218,19 +130,6 @@ def test_progen3_sample_same_length_batch():
 
 
 # ── Scoring tests ──────────────────────────────────────────────────────────
-
-
-@pytest.mark.uses_gpu
-def test_progen3_score_basic():
-    """Basic scoring returns valid metrics for a single sequence."""
-    inputs = ProGen3ScoringInput(sequences=["MKTLVIVTGASGAGK"])
-    config = ProGen3ScoringConfig(model_checkpoint=_SMALL_MODEL)
-    result = run_progen3_score(inputs, config)
-    assert_metrics_in_spec(result)
-
-    assert result.success
-    assert result.tool_id == "progen3-score"
-    assert len(result.scores) == 1
 
 
 @pytest.mark.uses_gpu

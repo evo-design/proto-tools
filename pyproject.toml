@@ -344,6 +344,7 @@ ignore = [
 "proto_tools/utils/device.py" = ["T20", "PLW1510", "S603", "S607"]
 "proto_tools/utils/proto_home.py" = ["T20"]
 "scripts/*.py" = ["T20", "S603", "S607"]
+"scripts/check_non_editable_install.py" = ["S101"]
 "proto_tools/cli.py" = ["T20"]
 "proto_tools/modal/deploy.py" = ["T20", "S603", "S607", "PERF203"]
 "proto_tools/modal/smoke.py" = ["T20", "S603", "S607"]

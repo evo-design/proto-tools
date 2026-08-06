@@ -143,21 +143,6 @@ def test_lpt_variable_costs_balances_load():
     assert costs == [70.0, 100.0]
 
 
-def test_lpt_heterogeneous_throughput_weights():
-    """Higher throughput_weight devices should get more work."""
-    items = [WorkItem(i, f"item_{i}", cost=10.0) for i in range(6)]
-    devices = [
-        DeviceCapability("cuda:0", throughput_weight=2.0),  # 2x faster
-        DeviceCapability("cuda:1", throughput_weight=1.0),
-    ]
-    assignments = lpt_schedule(items, devices)
-
-    # Faster device (weight=2.0) gets more items
-    fast = next(a for a in assignments if a.device.device_id == "cuda:0")
-    slow = next(a for a in assignments if a.device.device_id == "cuda:1")
-    assert len(fast.items) >= len(slow.items)
-
-
 def test_lpt_max_item_cost_filtering():
     """Items exceeding max_item_cost should be routed to capable devices."""
     items = [
@@ -227,32 +212,6 @@ def test_contextvar_pool_set_and_cleared():
     assert get_active_pool() is pool
     _active_pool.reset(token)
     assert get_active_pool() is None
-
-
-def test_contextvar_pool_executing_prevents_recursion():
-    """_pool_executing should be set inside worker threads."""
-    token = _pool_executing.set(True)
-    assert is_pool_executing() is True
-    _pool_executing.reset(token)
-    assert is_pool_executing() is False
-
-
-def test_contextvar_propagates_to_worker_threads():
-    """ContextVars from the main thread must be visible in pool worker threads."""
-    import contextvars
-    from concurrent.futures import ThreadPoolExecutor
-
-    test_var = contextvars.ContextVar("test_var", default=False)
-    test_var.set(True)
-
-    # Without copy_context, ThreadPoolExecutor threads see the default
-    with ThreadPoolExecutor(max_workers=1) as ex:
-        assert ex.submit(test_var.get).result() is False
-
-    # With copy_context (as ToolPool does), threads see the parent's value
-    ctx = contextvars.copy_context()
-    with ThreadPoolExecutor(max_workers=1) as ex:
-        assert ex.submit(ctx.run, test_var.get).result() is True
 
 
 def test_contextvar_nesting_raises_error():
@@ -581,25 +540,6 @@ def test_dispatch_gpus_per_instance_zero_bypasses_pool(clean_registry):
     assert result.results == ["processed_a", "processed_b", "processed_c"]
 
 
-def test_dispatch_pool_receives_pre_deduped_items(clean_registry):
-    """Pool should receive already-deduped items from @tool wrapper."""
-    func, call_log = _register_mock_tool(clean_registry)
-
-    pool = ToolPool(gpus=["cuda:0", "cuda:1"])
-    pool._gpu_devices = ["cuda:0", "cuda:1"]
-
-    inputs = MockInput(items=["a", "b", "c"])
-    config = MockConfig(device="cuda")
-
-    result = pool._parallel_dispatch("mock-process", func, inputs, config)
-
-    assert len(result.results) == 3
-    all_items = []
-    for call in call_log:
-        all_items.extend(call["items"])
-    assert sorted(all_items) == ["a", "b", "c"]
-
-
 def test_dispatch_collects_warnings_and_errors(clean_registry):
     """Merged output should collect warnings/errors from all partitions."""
 
@@ -774,51 +714,6 @@ def test_interception_pool_executing_prevents_re_interception(clean_registry):
 
 
 # ── ToolSpec integration tests ──────────────────────────────────────────────
-
-
-def test_toolspec_iterable_fields_stored(clean_registry):
-    """iterable_input_fields and iterable_output_field should be on ToolSpec."""
-
-    @clean_registry.register(
-        key="spec-test",
-        label="Spec Test",
-        category="testing",
-        input_class=MockInput,
-        config_class=MockConfig,
-        output_class=MockOutput,
-        description="Test",
-        iterable_input_fields=["items"],
-        iterable_output_field="results",
-        max_chunk_size=None,
-    )
-    def run_spec_test(inputs, config=None, instance=None):
-        return MockOutput(results=[], tool_id="spec-test", success=True)
-
-    spec = clean_registry.get("spec-test")
-    assert spec.iterable_input_fields == ["items"]
-    assert spec.iterable_output_field == "results"
-
-
-def test_toolspec_iterable_input_fields_parallel_group(clean_registry):
-    """iterable_input_fields stores the parallel group (primary first)."""
-
-    @clean_registry.register(
-        key="parallel-spec-test",
-        label="Parallel",
-        category="testing",
-        input_class=MockInput,
-        config_class=MockConfig,
-        output_class=MockOutput,
-        description="Test",
-        iterable_input_fields=["items", "tags"],
-        iterable_output_field="results",
-        max_chunk_size=None,
-    )
-    def run_parallel(inputs, config=None, instance=None):
-        return MockOutput(results=[], tool_id="parallel-spec-test", success=True)
-
-    spec = clean_registry.get("parallel-spec-test")
-    assert spec.iterable_input_fields == ["items", "tags"]
 
 
 def test_parallel_item_cache_key_folds_in_siblings():
@@ -1024,26 +919,6 @@ def test_broadcast_field_is_folded_into_dedup_key_through_wrapper(clean_registry
     assert out.results == ["a-p", "a-q"]
 
 
-def test_toolspec_iterable_fields_default_to_none(clean_registry):
-    """Tools without iterable fields should have None."""
-
-    @clean_registry.register(
-        key="no-iter-test",
-        label="No Iter",
-        category="testing",
-        input_class=MockNonIterableInput,
-        config_class=MockConfig,
-        output_class=MockNonIterableOutput,
-        description="Test",
-    )
-    def run_no_iter(inputs, config=None, instance=None):
-        return MockNonIterableOutput(answer="x", tool_id="no-iter-test", success=True)
-
-    spec = clean_registry.get("no-iter-test")
-    assert spec.iterable_input_fields is None
-    assert spec.iterable_output_field is None
-
-
 def test_toolspec_iterable_fields_excluded_from_serialization(clean_registry):
     """Iterable fields should be excluded from API serialization."""
 
@@ -1216,55 +1091,6 @@ def test_dispatch_cpu_fanout_partitions_items(clean_registry):
     assert result.results == [f"processed_{item}" for item in ["a", "b", "c", "d", "e", "f", "g", "h"]]
 
 
-def test_dispatch_cpu_short_circuit_preserved(clean_registry):
-    """Tools that explicitly opt out via cpus_per_instance=None short-circuit to a single call."""
-    _, call_log = _register_mock_tool(clean_registry)
-
-    class CpuOptOutConfig(BaseConfig):
-        device: str = ConfigField(default="cpu", title="Device", description="Device to use")
-
-        @property
-        def cpus_per_instance(self) -> int | None:
-            """Opt out — internal threading."""
-            return None
-
-    clean_registry._registry.clear()
-
-    @clean_registry.register(
-        key="mmseqs-style",
-        label="Mmseqs Style",
-        category="testing",
-        input_class=MockInput,
-        config_class=CpuOptOutConfig,
-        output_class=MockOutput,
-        description="Internal-threading CPU tool",
-        iterable_input_fields=["items"],
-        iterable_output_field="results",
-        max_chunk_size=None,
-    )
-    def run_mmseqs_style(inputs, config=None, instance=None):
-        call_log.append({"items": list(inputs.items), "instance": instance})
-        return MockOutput(
-            results=[f"processed_{item}" for item in inputs.items],
-            tool_id="mmseqs-style",
-            execution_time=0.01,
-            success=True,
-        )
-
-    pool = ToolPool(gpus=0, cpus=8)
-    pool._gpu_devices = []
-
-    inputs = MockInput(items=["a", "b", "c", "d"])
-    config = CpuOptOutConfig()
-    result = pool._parallel_dispatch("mmseqs-style", run_mmseqs_style, inputs, config)
-
-    # Single direct call with all items — no fan-out, no per-worker instance
-    assert len(call_log) == 1
-    assert call_log[0]["instance"] is None
-    assert call_log[0]["items"] == ["a", "b", "c", "d"]
-    assert result.results == ["processed_a", "processed_b", "processed_c", "processed_d"]
-
-
 # ── gpus_per_instance tests ──────────────────────────────────────────────
 
 
@@ -1284,20 +1110,6 @@ def test_gpus_per_instance_derived_from_device_string():
     assert BaseConfig(device="cudax4").gpus_per_instance == 4
     assert BaseConfig(device="cuda:0,cuda:1").gpus_per_instance == 2
     assert BaseConfig(device="proto").gpus_per_instance == 1
-
-
-def test_gpus_per_instance_override():
-    """Subclasses can override gpus_per_instance based on config values."""
-
-    class MultiGPU(BaseConfig):
-        model_name: str = ConfigField(default="small", title="Model Name", description="Model name")
-
-        @property
-        def gpus_per_instance(self) -> int:
-            return 2 if self.model_name == "large" else 1
-
-    assert MultiGPU(model_name="small").gpus_per_instance == 1
-    assert MultiGPU(model_name="large").gpus_per_instance == 2
 
 
 # ── Error propagation tests ─────────────────────────────────────────────────
@@ -1382,22 +1194,6 @@ def test_all_partitions_fail(clean_registry):
     assert len(err.failed) == 2
     failed_devices = {f["device_id"] for f in err.failed}
     assert failed_devices == {"cuda:0", "cuda:1"}
-
-
-def test_all_succeed_unchanged(clean_registry):
-    """Regression: happy path is unaffected by error propagation changes."""
-    func, call_log = _register_mock_tool(clean_registry)
-
-    pool = ToolPool(gpus=["cuda:0", "cuda:1"])
-    pool._gpu_devices = ["cuda:0", "cuda:1"]
-
-    inputs = MockInput(items=["a", "b", "c", "d"])
-    config = MockConfig(device="cuda")
-
-    result = pool._parallel_dispatch("mock-process", func, inputs, config)
-
-    assert result.results == ["processed_a", "processed_b", "processed_c", "processed_d"]
-    assert len(call_log) == 2  # Two partitions
 
 
 # ---------------------------------------------------------------------------

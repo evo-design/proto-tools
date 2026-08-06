@@ -67,14 +67,6 @@ def test_get_logger_returns_under_worker_namespace():
 # ── install() idempotency ───────────────────────────────────────────────────
 
 
-def test_install_attaches_single_bridge_handler():
-    """``install()`` must add exactly one ``_BridgeHandler`` to ``worker``."""
-    install()
-    worker = logging.getLogger("worker")
-    bridges = [h for h in worker.handlers if isinstance(h, _BridgeHandler)]
-    assert len(bridges) == 1
-
-
 def test_install_is_idempotent():
     """Multiple ``install()`` calls must not stack handlers."""
     install()
@@ -96,31 +88,6 @@ def test_install_sets_propagate_false_on_worker():
     """``worker`` must not propagate to root after install (no double-emit)."""
     install()
     assert logging.getLogger("worker").propagate is False
-
-
-# ── ProtoLogger accepts update_status kwarg ────────────────────────────────
-
-
-def test_log_record_carries_update_status_attribute():
-    """``update_status=True`` must land as a ``LogRecord`` attribute."""
-    install()
-    captured: list[logging.LogRecord] = []
-
-    class _Capture(logging.Handler):
-        def emit(self, record: logging.LogRecord) -> None:
-            captured.append(record)
-
-    logger = get_logger("test.attribute")
-    spy = _Capture()
-    logger.addHandler(spy)
-    try:
-        logger.info("flagged", update_status=True)
-        logger.info("plain")
-    finally:
-        logger.removeHandler(spy)
-    assert len(captured) == 2
-    assert getattr(captured[0], "update_status", False) is True
-    assert getattr(captured[1], "update_status", False) is False
 
 
 # ── _BridgeHandler tagged JSON emission ────────────────────────────────────

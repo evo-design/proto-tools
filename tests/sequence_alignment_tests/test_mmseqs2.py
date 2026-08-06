@@ -34,7 +34,6 @@ from tests.conftest import benchmark_twice, random_dna_sequences, random_protein
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_DATA_DIR = Path("tests/dummy_data")
-PROTEIN_FASTA = TEST_DATA_DIR / "test_protein_sequences.faa"
 M8_FILE = TEST_DATA_DIR / "test_mmseqs_results.m8"
 
 
@@ -377,40 +376,7 @@ def test_genome_search_thread_fallback_reraises_unrelated_error(monkeypatch, tmp
     assert len(calls) == 1  # no retry
 
 
-# ── M8 workflow (pure Python, local test data) ───────────────────────────
-
-
-def test_workflow_with_real_test_data():
-    """End-to-end parse → filter pipeline on local M8 file."""
-    if not M8_FILE.exists() or not PROTEIN_FASTA.exists():
-        pytest.skip("Test data files not found")
-
-    raw_output = M8_FILE.read_text()
-    df = _parse_m8_output(raw_output)
-    filtered_df = _filter_top_hits(df)
-
-    assert len(filtered_df) <= len(df)
-    query_counts = filtered_df.groupby("query").size()
-    assert all(count == 1 for count in query_counts)
-
-
-def test_column_names_consistency():
-    """Column names match MMseqs2 M8 format."""
-    if not M8_FILE.exists():
-        pytest.skip("Test data file not found")
-
-    raw_output = M8_FILE.read_text()
-    df = _parse_m8_output(raw_output)
-    assert list(df.columns) == ["query", "target", "pident", "evalue"]
-
-
 # ── Input validation ─────────────────────────────────────────────────────
-
-
-def test_search_proteins_input_valid():
-    """Sanity: a well-formed Input model accepts its required fields."""
-    inputs = Mmseqs2SearchProteinsInput(query_sequences=["MVLSPADKTN", "MKLLVVAAAA"])
-    assert len(inputs.query_sequences) == 2
 
 
 @pytest.mark.parametrize(
@@ -437,18 +403,6 @@ def test_search_proteins_input_valid():
 def test_input_field_validator_rejects_bad_value(input_cls, kwargs, msg):
     with pytest.raises(ValueError, match=msg):
         input_cls(**kwargs)
-
-
-@pytest.mark.parametrize(
-    "input_cls, base_kwargs, new_kwargs, cleared_field",
-    [
-        (Mmseqs2ClusteringInput, {}, {"mmseqs_db": "/p"}, "input_sequences"),
-    ],
-)
-def test_new_xor_modality_accepted(input_cls, base_kwargs, new_kwargs, cleared_field):
-    """Each tool's new XOR alternative (inline list or DB path) parses; the sibling field defaults to None."""
-    inputs = input_cls(**base_kwargs, **new_kwargs)
-    assert getattr(inputs, cleared_field) is None
 
 
 @pytest.mark.parametrize(

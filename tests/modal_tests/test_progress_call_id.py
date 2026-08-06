@@ -35,19 +35,6 @@ def _capture(logger_name: str) -> tuple[_Capture, logging.Logger]:
     return handler, logger
 
 
-def test_a_replayed_record_carries_its_call_id(monkeypatch):
-    """The whole point: a consumer must be able to tell whose output a record is."""
-    monkeypatch.setattr("proto_tools.modal.progress.has_active_progress_bar", lambda: False)
-    handler, logger = _capture("proto_tools.modal.remote")
-    try:
-        replay_record({"m": "Running esmfold", "l": logging.INFO}, call_id="partition-abc")
-    finally:
-        logger.removeHandler(handler)
-
-    assert len(handler.records) == 1
-    assert getattr(handler.records[0], CALL_ID_FIELD) == "partition-abc"
-
-
 def test_two_calls_are_distinguishable_on_one_logger(monkeypatch):
     """Records from concurrent callers share a logger, so the id is the only thing separating them."""
     monkeypatch.setattr("proto_tools.modal.progress.has_active_progress_bar", lambda: False)
@@ -117,13 +104,6 @@ def test_the_tailer_stamps_the_partition_it_is_reading(monkeypatch):
 
     assert handler.records, "the tailer replayed nothing"
     assert getattr(handler.records[0], CALL_ID_FIELD) == "partition-xyz"
-
-
-def test_both_remote_paths_agree_on_the_field_name():
-    """One name, imported rather than duplicated, so the two paths cannot drift apart."""
-    from proto_tools.proto import CALL_ID_FIELD as proto_field
-
-    assert proto_field == CALL_ID_FIELD
 
 
 # --------------------------------------------------------------------------

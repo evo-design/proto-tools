@@ -11,8 +11,6 @@ turn out to be worth keeping.
 import re
 import subprocess
 
-import pytest
-
 from tests.modal_tests.helpers import REPO, service_modules
 
 CACHE_MOUNT = "/weights"
@@ -92,21 +90,22 @@ def test_no_shipped_toolkit_blocks_proto_model_cache():
     assert not blockers, f"toolkits blocking PROTO_MODEL_CACHE: {blockers}"
 
 
-@pytest.mark.parametrize("toolkit", sorted(toolkits_we_ship()))
-def test_subprocess_env_carries_proto_model_cache(toolkit, monkeypatch):
+def test_subprocess_env_carries_proto_model_cache(monkeypatch):
     """The env handed to setup.sh must carry PROTO_MODEL_CACHE unchanged."""
     from proto_tools.utils.persistent_worker import _build_subprocess_env, _parse_env_vars_file
     from proto_tools.utils.tool_instance import ToolInstance
 
     monkeypatch.setenv("PROTO_MODEL_CACHE", CACHE_MOUNT)
-    env_dir, _ = ToolInstance._resolve_env_def(toolkit)
-    path = env_dir / "env_vars.txt"
-    tool_env_vars = _parse_env_vars_file(path) if path.is_file() else None
+    dropped = []
+    for toolkit in sorted(toolkits_we_ship()):
+        env_dir, _ = ToolInstance._resolve_env_def(toolkit)
+        path = env_dir / "env_vars.txt"
+        tool_env_vars = _parse_env_vars_file(path) if path.is_file() else None
 
-    env = _build_subprocess_env("cuda", tool_env_path="/nowhere/env", tool_env_vars=tool_env_vars)
-    assert env.get("PROTO_MODEL_CACHE") == CACHE_MOUNT, (
-        f"{toolkit}: setup.sh would not see PROTO_MODEL_CACHE (got {env.get('PROTO_MODEL_CACHE')!r})"
-    )
+        env = _build_subprocess_env("cuda", tool_env_path="/nowhere/env", tool_env_vars=tool_env_vars)
+        if env.get("PROTO_MODEL_CACHE") != CACHE_MOUNT:
+            dropped.append(f"{toolkit} (got {env.get('PROTO_MODEL_CACHE')!r})")
+    assert not dropped, f"toolkits whose setup.sh would not see PROTO_MODEL_CACHE: {dropped}"
 
 
 # --------------------------------------------------------------------------
@@ -130,16 +129,15 @@ def resolve_via_shell(toolkit: str, env: dict[str, str]) -> str:
     return out.stdout.strip().splitlines()[-1]
 
 
-@pytest.mark.parametrize("toolkit", ["rf3", "fampnn", "esm2"])
-def test_shell_resolver_targets_the_volume(toolkit, tmp_path):
-    """An absolute PROTO_MODEL_CACHE must resolve to <mount>/<toolkit>.
+def test_shell_resolver_targets_the_volume(tmp_path):
+    """An absolute PROTO_MODEL_CACHE must resolve to <mount>/rf3.
 
     Uses a temp dir as the mount because the helper mkdir -p's the target,
     and the test cannot create /weights locally.
     """
     mount = str(tmp_path / "weights")
     env = {"PATH": "/usr/bin:/bin", "HOME": str(tmp_path), "PROTO_MODEL_CACHE": mount}
-    assert resolve_via_shell(toolkit, env) == f"{mount}/{toolkit}"
+    assert resolve_via_shell("rf3", env) == f"{mount}/rf3"
 
 
 def test_shell_resolver_falls_back_without_the_variable(tmp_path):

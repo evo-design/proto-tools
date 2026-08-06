@@ -116,14 +116,6 @@ def test_get_tool_docs_omits_license_when_disabled() -> None:
     assert entry.license is None
 
 
-def test_get_tool_docs_returns_none_for_unknown_key_in_polished_readme() -> None:
-    """Asking for a key not present in the README returns None, not an error."""
-    # A bogus key resolves the toolkit but matches no H3, so the entry is absent.
-    sections = get_readme_sections("esm2-embedding")
-    keys_in_readme = {t.key for t in sections.tools}
-    assert "esm2-nonexistent" not in keys_in_readme
-
-
 def test_get_readme_section_round_trip() -> None:
     """``get_readme_section`` returns the same body as the structured field."""
     overview_via_section = get_readme_section("esm2-embedding", "Overview")

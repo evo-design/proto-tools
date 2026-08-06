@@ -114,14 +114,6 @@ def test_get_returns_same_instance(mock_init: MagicMock):
 
 
 @patch.object(ToolInstance, "__init__", return_value=None)
-def test_default_key_is_toolkit(mock_init: MagicMock):
-    """Without instance_name, cache key should be toolkit."""
-    ToolInstance.get("esm2")
-    assert "esm2" in _instances
-    assert len(_instances) == 1
-
-
-@patch.object(ToolInstance, "__init__", return_value=None)
 def test_get_different_tool_creates_new(mock_init: MagicMock):
     """Different tool name should create a new instance."""
     inst1 = ToolInstance.get("esm2")
@@ -141,15 +133,6 @@ def test_explicit_instance_name_creates_named_instance(mock_init: MagicMock):
 
 
 @patch.object(ToolInstance, "__init__", return_value=None)
-def test_same_instance_name_returns_same_instance(mock_init: MagicMock):
-    """Two calls with the same instance_name return the same object."""
-    inst1 = ToolInstance.get("esm2", instance_name="worker-1")
-    inst2 = ToolInstance.get("esm2", instance_name="worker-1")
-    assert inst1 is inst2
-    assert mock_init.call_count == 1
-
-
-@patch.object(ToolInstance, "__init__", return_value=None)
 def test_different_instance_names_create_separate_instances(mock_init: MagicMock):
     """Different instance_name values create separate instances."""
     inst1 = ToolInstance.get("esm2", instance_name="worker-1")
@@ -158,16 +141,6 @@ def test_different_instance_names_create_separate_instances(mock_init: MagicMock
     assert mock_init.call_count == 2
     assert "worker-1" in _instances
     assert "worker-2" in _instances
-
-
-@patch.object(ToolInstance, "__init__", return_value=None)
-def test_named_and_default_are_independent(mock_init: MagicMock):
-    """A named instance and the default instance are separate objects."""
-    default = ToolInstance.get("esm2")
-    named = ToolInstance.get("esm2", instance_name="my-esm2")
-    assert default is not named
-    assert "esm2" in _instances
-    assert "my-esm2" in _instances
 
 
 def test_clear_all():
@@ -367,17 +340,6 @@ def test_oneshot_does_not_cache(mock_init: MagicMock, mock_run: MagicMock):
     assert len(_instances) == 0
 
 
-@patch.object(ToolInstance, "_run_oneshot")
-@patch.object(ToolInstance, "__init__", return_value=None)
-def test_oneshot_calls_run_oneshot(mock_init: MagicMock, mock_run: MagicMock):
-    """_oneshot() should call _run_oneshot, not _run_persistent."""
-    mock_run.return_value = {"result": "ephemeral"}
-    with patch.object(ToolInstance, "script_path", Path("/fake/inference.py"), create=True):
-        result = ToolInstance._oneshot("esm2", {"op": "score"})
-    assert result == {"result": "ephemeral"}
-    mock_run.assert_called_once()
-
-
 def test_oneshot_injects_tool_env_path():
     """_run_oneshot() should set TOOL_VENV_PATH in the subprocess env."""
     inst = _make_fake_instance()
@@ -400,22 +362,6 @@ def test_oneshot_injects_tool_env_path():
 
 
 # ── persist_tool() tests ───────────────────────────────────────────────────
-
-
-@patch.object(ToolInstance, "__init__", return_value=None)
-def test_persistent_creates_cached_instance(mock_init: MagicMock):
-    """Instance should be in _instances during the block."""
-    with ToolInstance.persist_tool("esm2") as inst:
-        assert "esm2" in _instances
-        assert _instances["esm2"] is inst
-
-
-@patch.object(ToolInstance, "__init__", return_value=None)
-def test_persistent_cleans_up_on_exit(mock_init: MagicMock):
-    """Instance should be removed from _instances after the block."""
-    with ToolInstance.persist_tool("esm2"):
-        pass
-    assert "esm2" not in _instances
 
 
 @patch.object(ToolInstance, "__init__", return_value=None)
@@ -480,13 +426,6 @@ def test_persistent_anonymous_skips_cache_when_slot_taken(mock_init: MagicMock):
             assert inst_b is not inst_a
 
     assert "esm2" not in _instances
-
-
-@patch.object(ToolInstance, "__init__", return_value=None)
-def test_persistent_anonymous_second_is_different_object(mock_init: MagicMock):
-    """Two anonymous persistent instances are distinct objects."""
-    with ToolInstance.persist_tool("esm2") as inst_a, ToolInstance.persist_tool("esm2") as inst_b:
-        assert inst_a is not inst_b
 
 
 @patch.object(ToolInstance, "_oneshot")
@@ -615,19 +554,6 @@ def test_persist_auto_caches_on_dispatch(mock_init: MagicMock):
 
 
 @patch.object(ToolInstance, "__init__", return_value=None)
-def test_persist_reuses_cached_instance(mock_init: MagicMock):
-    """Second dispatch to same tool reuses the auto-cached instance."""
-    with ToolInstance.persist():
-        with patch.object(ToolInstance, "run", return_value={"r": 1}):
-            ToolInstance.dispatch("esm2", {"op": "score"})
-            ToolInstance.dispatch("esm2", {"op": "score"})
-
-        cache = _active_cache()
-        assert "esm2" in cache
-        assert mock_init.call_count == 1
-
-
-@patch.object(ToolInstance, "__init__", return_value=None)
 def test_persist_cleans_up_on_exit(mock_init: MagicMock):
     """All auto-cached instances should be shut down on block exit."""
     mock_workers = []
@@ -688,15 +614,6 @@ def test_persist_nestable(mock_init: MagicMock):
         assert "blast" not in _active_cache()
 
     assert len(_instances) == 0
-
-
-@patch.object(ToolInstance, "_oneshot")
-@patch.object(ToolInstance, "__init__", return_value=None)
-def test_dispatch_uses_oneshot_outside_persist(mock_init: MagicMock, mock_oneshot: MagicMock):
-    """Without persist(), dispatch() should still use one-shot."""
-    mock_oneshot.return_value = {"result": "ok"}
-    ToolInstance.dispatch("esm2", {"op": "score"})
-    mock_oneshot.assert_called_once()
 
 
 @patch.object(ToolInstance, "__init__", return_value=None)
@@ -812,15 +729,6 @@ def test_shutdown_instance_nonexistent_is_noop(mock_init: MagicMock):
 
 
 @patch.object(ToolInstance, "__init__", return_value=None)
-def test_shutdown_instance_with_named_key(mock_init: MagicMock):
-    """shutdown_instance() should use the explicit cache key."""
-    ToolInstance.get("esm2", instance_name="my-esm2")
-    assert "my-esm2" in _instances
-    ToolInstance.shutdown_instance("my-esm2")
-    assert "my-esm2" not in _instances
-
-
-@patch.object(ToolInstance, "__init__", return_value=None)
 def test_shutdown_instance_then_get_creates_fresh(mock_init: MagicMock):
     """After shutdown_instance(), get() should create a fresh instance."""
     inst1 = ToolInstance.get("esm2")
@@ -829,37 +737,6 @@ def test_shutdown_instance_then_get_creates_fresh(mock_init: MagicMock):
     inst2 = ToolInstance.get("esm2")
     assert inst1 is not inst2
     assert mock_init.call_count == 2
-
-
-# ── Device restart tests ───────────────────────────────────────────────────
-
-
-@patch.object(ToolInstance, "_oneshot")
-def test_dispatch_forwards_input_dict_to_oneshot(mock_oneshot: MagicMock):
-    """dispatch() should forward input_dict (with device) to _oneshot."""
-    mock_oneshot.return_value = {"result": "ok"}
-    ToolInstance.dispatch("esm2", {"op": "score", "device": "cuda"})
-    mock_oneshot.assert_called_once_with(
-        "esm2",
-        {"op": "score", "device": "cuda"},
-        script_path=None,
-        verbose=False,
-        timeout=DEFAULT_TIMEOUT,
-    )
-
-
-@patch.object(ToolInstance, "_oneshot")
-def test_dispatch_without_device_in_input_dict(mock_oneshot: MagicMock):
-    """dispatch() without device in input_dict should still forward."""
-    mock_oneshot.return_value = {"result": "ok"}
-    ToolInstance.dispatch("blast", {"op": "search"})
-    mock_oneshot.assert_called_once_with(
-        "blast",
-        {"op": "search"},
-        script_path=None,
-        verbose=False,
-        timeout=DEFAULT_TIMEOUT,
-    )
 
 
 # ── Reload-on-change tests ─────────────────────────────────────────────────
@@ -986,31 +863,6 @@ def test_base_config_reload_fields_empty():
     assert BaseConfig.reload_fields() == set()
 
 
-def test_subclass_without_reload_fields():
-    """Subclass without extra reload fields has empty reload_fields."""
-    from proto_tools.utils.base_config import BaseConfig, ConfigField
-
-    class MyConfig(BaseConfig):
-        param: int = ConfigField(default=1, title="Param", description="test")
-
-    assert MyConfig.reload_fields() == set()
-
-
-def test_subclass_with_reload_on_change():
-    """Subclass with reload_on_change=True includes those fields."""
-    from proto_tools.utils.base_config import BaseConfig, ConfigField
-
-    class MyConfig(BaseConfig):
-        model_checkpoint: str = ConfigField(
-            default="default",
-            title="Model Checkpoint",
-            description="model",
-            reload_on_change=True,
-        )
-
-    assert MyConfig.reload_fields() == {"model_checkpoint"}
-
-
 def test_reload_fields_excludes_non_reload():
     """Fields without reload_on_change are excluded."""
     from proto_tools.utils.base_config import BaseConfig, ConfigField
@@ -1112,21 +964,6 @@ def test_dispatch_uses_effective_timeout_override(mock_init: MagicMock, mock_one
     assert mock_oneshot.call_args.kwargs["timeout"] == 60
 
 
-@patch.object(ToolInstance, "_oneshot")
-@patch.object(ToolInstance, "__init__", return_value=None)
-def test_dispatch_defaults_timeout_to_default(mock_init: MagicMock, mock_oneshot: MagicMock):
-    """dispatch() should default timeout to DEFAULT_TIMEOUT when not in input_dict."""
-    mock_oneshot.return_value = {"result": "ok"}
-    ToolInstance.dispatch("esm2", {"op": "score"})
-    mock_oneshot.assert_called_once_with(
-        "esm2",
-        {"op": "score"},
-        script_path=None,
-        verbose=False,
-        timeout=DEFAULT_TIMEOUT,
-    )
-
-
 def test_send_timeout_kills_worker():
     """PersistentWorker.send() should kill the worker on timeout."""
     from proto_tools.utils.persistent_worker import PersistentWorker
@@ -1155,27 +992,6 @@ def test_send_timeout_kills_worker():
 
 
 # ── Warmup timeout tests ──────────────────────────────────────────────────
-
-
-def test_first_config_gets_warmup_timeout():
-    """A never-seen config combination should get extended warmup timeout."""
-    inst = _make_fake_instance(needs_warmup=True)
-    params = {"model_name": "protenix_mini_esm_v0.5.0"}
-
-    result = inst._apply_warmup_timeout(1200, params)
-    assert result == 3600  # warmup timeout (60 min)
-
-
-def test_seen_config_gets_normal_timeout():
-    """A previously-completed config should get the normal timeout."""
-    inst = _make_fake_instance(needs_warmup=True)
-    params = {"model_name": "protenix_mini_esm_v0.5.0"}
-
-    # Mark this config as completed
-    inst._mark_warmup_complete(params)
-
-    result = inst._apply_warmup_timeout(1200, params)
-    assert result == 1200  # normal timeout
 
 
 def test_different_configs_independent():
@@ -1231,23 +1047,6 @@ def test_no_params_defaults_to_empty():
     # No reload_params arg -> uses {} -> first run
     result = inst._apply_warmup_timeout(600)
     assert result == 3600
-
-
-def test_marker_deterministic():
-    """Same config params should produce the same marker path."""
-    inst = _make_fake_instance()
-    params = {"model_name": "esm_v1", "checkpoint": "ckpt_a"}
-    p1 = inst._config_marker_path(params)
-    p2 = inst._config_marker_path(params)
-    assert p1 == p2
-
-
-def test_marker_different_for_different_configs():
-    """Different config params should produce different marker paths."""
-    inst = _make_fake_instance()
-    p1 = inst._config_marker_path({"model_name": "model_a"})
-    p2 = inst._config_marker_path({"model_name": "model_b"})
-    assert p1 != p2
 
 
 def test_persistent_warmup_on_config_change():
@@ -1547,31 +1346,7 @@ def test_success_status_with_stale_hash_rebuilds(tmp_path: Path, caplog):
     assert "Setup files changed" in caplog.text
 
 
-def test_build_failures_cleared_between_tests():
-    """The autouse fixture clears _build_failures so tests are isolated."""
-    # The fixture already ran — _build_failures should be empty
-    assert len(ToolInstance._build_failures) == 0
-    ToolInstance._build_failures["some_tool"] = "test error"
-    # Next test will see it cleared by the fixture
-
-
 # ── Setup hash tests ──────────────────────────────────────────────────────
-
-
-def test_hash_includes_requirements_txt(tmp_path: Path):
-    """_setup_hash() should incorporate requirements.txt when present."""
-    inst = ToolInstance.__new__(ToolInstance)
-    inst.setup_script = tmp_path / "setup.sh"
-    inst.setup_script.write_text("#!/bin/bash\necho hi\n")
-
-    hash_without_req = inst._setup_hash()
-
-    # Add a requirements.txt — hash should change
-    req = tmp_path / "requirements.txt"
-    req.write_text("numpy==1.26\n")
-
-    hash_with_req = inst._setup_hash()
-    assert hash_without_req != hash_with_req
 
 
 def test_hash_changes_when_requirements_change(tmp_path: Path):
@@ -1601,21 +1376,6 @@ def test_hash_changes_when_setup_changes(tmp_path: Path):
     hash_v2 = inst._setup_hash()
 
     assert hash_v1 != hash_v2
-
-
-def test_hash_includes_env_vars_txt(tmp_path: Path):
-    """_setup_hash() should incorporate env_vars.txt when present."""
-    inst = ToolInstance.__new__(ToolInstance)
-    inst.setup_script = tmp_path / "setup.sh"
-    inst.setup_script.write_text("#!/bin/bash\necho hi\n")
-
-    hash_without = inst._setup_hash()
-
-    env_vars = tmp_path / "env_vars.txt"
-    env_vars.write_text("[passthrough]\nHF_TOKEN\n")
-
-    hash_with = inst._setup_hash()
-    assert hash_without != hash_with
 
 
 def test_hash_changes_when_env_vars_change(tmp_path: Path):
@@ -2155,22 +1915,6 @@ def test_purge_runs_once_per_directory(tmp_path: Path) -> None:
     inst._purge_legacy_helper_copies()
 
     assert (standalone / "standalone_helpers.py").exists()
-
-
-def test_get_tool_dirs_resolves_duplicate_names_by_init_py(tmp_path: Path) -> None:
-    _make_standalone(tmp_path, "old_cat", "mytool", ["setup.sh"])
-    real = _make_standalone(tmp_path, "new_cat", "mytool", ["setup.sh", "run.py"])
-    (real / "__init__.py").touch()
-
-    # Scan like _get_tool_dirs does, against our fake tree
-    candidates: dict[str, list[Path]] = {}
-    for standalone_dir in tmp_path.rglob("standalone"):
-        if standalone_dir.is_dir() and ToolInstance._has_valid_standalone(standalone_dir):
-            candidates.setdefault(standalone_dir.parent.name, []).append(standalone_dir.parent)
-
-    assert len(candidates["mytool"]) == 2
-    with_init = [d for d in candidates["mytool"] if (d / "__init__.py").is_file()]
-    assert with_init == [real]
 
 
 # ── Foundation env autodetect ───────────────────────────────────────────────

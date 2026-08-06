@@ -11,7 +11,6 @@ import pytest
 
 from proto_tools.modal import (
     ModalCredentialsError,
-    ModalDispatchError,
     ToolNotDeployedError,
     ToolNotShippedError,
 )
@@ -72,19 +71,6 @@ def test_not_deployed_names_the_deploy_command():
     assert "proto-tools deploy --apps esm2 --env" in message
     assert PROTO_TOOLS_REPO in message
     assert error.tool_key == "esm2-embedding"
-
-
-@pytest.mark.parametrize(
-    "error",
-    [
-        ToolNotShippedError("x", 57),
-        ModalCredentialsError("none are configured"),
-        ToolNotDeployedError("x", "proto-tools-x"),
-    ],
-)
-def test_all_dispatch_errors_share_the_actionable_base(error):
-    """The MCP layer catches ModalDispatchError to flag needs_human; every error must be one."""
-    assert isinstance(error, ModalDispatchError)
 
 
 def test_mcp_run_tool_flags_dispatch_errors_as_needs_human(monkeypatch):

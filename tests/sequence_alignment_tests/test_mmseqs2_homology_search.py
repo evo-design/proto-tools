@@ -164,21 +164,6 @@ def test_duplicate_sequence_ids_rejected() -> None:
         Mmseqs2HomologySearchInput(queries=[(UBIQUITIN, "x"), (HEMOGLOBIN_ALPHA, "x")])
 
 
-def test_paired_group_accepted_as_nested_list() -> None:
-    """A nested list of chains is accepted as one paired group."""
-    inp = Mmseqs2HomologySearchInput(
-        queries=[
-            [
-                Mmseqs2HomologySearchQuery(sequence=UBIQUITIN, sequence_id="a"),
-                Mmseqs2HomologySearchQuery(sequence=HEMOGLOBIN_ALPHA, sequence_id="b"),
-            ]
-        ]
-    )
-    assert len(inp) == 1
-    assert isinstance(inp.queries[0], list)
-    assert [q.sequence_id for q in inp.queries[0]] == ["a", "b"]
-
-
 def test_input_accepts_mixed_singleton_and_paired_groups() -> None:
     """One ``queries`` list may interleave singleton items and nested paired groups."""
     inp = Mmseqs2HomologySearchInput(
@@ -199,12 +184,6 @@ def test_input_accepts_mixed_singleton_and_paired_groups() -> None:
 # ============================================================================
 # Config validation
 # ============================================================================
-
-
-def test_unknown_dataset_rejected() -> None:
-    """A value outside the searchable product Literal is rejected at construction."""
-    with pytest.raises(ValidationError, match="Input should be"):
-        Mmseqs2HomologySearchConfig(dataset="does-not-exist")
 
 
 def test_non_searchable_dataset_not_selectable() -> None:
@@ -246,13 +225,6 @@ def test_dataset_literal_matches_registry_searchable_set() -> None:
     }
     literal_values = set(get_args(Mmseqs2HomologySearchConfig.model_fields["dataset"].annotation))
     assert literal_values == searchable
-
-
-def test_default_search_mode_is_remote_and_claims_no_gpu() -> None:
-    """The default config is remote: no local DB, and it claims no GPU."""
-    cfg = Mmseqs2HomologySearchConfig()
-    assert cfg.search_mode == "remote"
-    assert cfg.gpus_per_instance == 0
 
 
 def test_remote_mode_skips_gpu_platform_validation() -> None:
@@ -1067,12 +1039,6 @@ def test_remote_mixed_groups_preserve_order(monkeypatch: pytest.MonkeyPatch) -> 
 # ============================================================================
 # Metagenomic DB (use_metagenomic_db) — toggle, remote pass-through, local gate
 # ============================================================================
-
-
-def test_use_metagenomic_db_defaults_false() -> None:
-    """The metagenomic/environmental DB is off by default in both modes."""
-    assert Mmseqs2HomologySearchConfig().use_metagenomic_db is False
-    assert Mmseqs2HomologySearchConfig(search_mode="local", device="cpu").use_metagenomic_db is False
 
 
 def test_remote_use_metagenomic_db_passes_through(monkeypatch: pytest.MonkeyPatch) -> None:

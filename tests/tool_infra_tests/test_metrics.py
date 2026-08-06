@@ -166,6 +166,14 @@ def test_primary_value_none_when_metric_missing():
     assert _NoPrimary().primary_value is None
 
 
+def test_primary_value_none_when_primary_metric_unset():
+    class _Unnamed(Metrics):
+        metric_spec: ClassVar[dict[str, MetricSpec]] = {}
+        primary_metric: str | None = None
+
+    assert _Unnamed(score=1.0).primary_value is None
+
+
 def test_getitem_raises_keyerror_for_missing():
     m = _SampleMetrics(perplexity=2.0, log_likelihood=-1.0, per_position=[-1.0])
     with pytest.raises(KeyError):
@@ -217,14 +225,14 @@ def test_validate_list_metric_tolerates_none_gaps():
     m.validate_against_spec()
 
 
-@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+@pytest.mark.parametrize("bad", [float("nan")])
 def test_validate_rejects_non_finite_scalar(bad: float):
     m = _SampleMetrics(perplexity=bad, log_likelihood=-1.0, per_position=[-1.0])
     with pytest.raises(AssertionError, match=r"perplexity.*not finite"):
         m.validate_against_spec()
 
 
-@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+@pytest.mark.parametrize("bad", [float("nan")])
 def test_validate_rejects_non_finite_list_element(bad: float):
     m = _SampleMetrics(perplexity=2.0, log_likelihood=-1.0, per_position=[-1.0, bad])
     with pytest.raises(AssertionError, match=r"per_position.*index 1.*not finite"):

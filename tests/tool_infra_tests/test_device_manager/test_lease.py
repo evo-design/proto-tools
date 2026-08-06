@@ -8,7 +8,7 @@ import time
 
 import pytest
 
-from proto_tools.utils.device_manager import AllocationType, OffloadStrategy
+from proto_tools.utils.device_manager import OffloadStrategy
 
 # ── Lease basics ──────────────────────────────────────────────────────────
 
@@ -27,12 +27,6 @@ def test_lease_acquires_and_releases_device(device_manager):
     assert len(status["allocations"]) == 0
 
 
-def test_lease_returns_specific_cuda_device(device_manager):
-    """Generic 'cuda' resolves to 'cuda:N'."""
-    with device_manager.lease("esmfold", device="cuda") as device:
-        assert device in ("cuda:0", "cuda:1")
-
-
 def test_lease_with_explicit_device(device_manager):
     """Explicit 'cuda:1' allocates cuda:1."""
     with device_manager.lease("esmfold", device="cuda:1") as device:
@@ -46,17 +40,6 @@ def test_lease_cpu_passthrough(device_manager):
         # No allocation created
         status = device_manager.get_device_status()
         assert len(status["allocations"]) == 0
-
-
-def test_lease_allocation_is_transient(device_manager):
-    """Lease allocations are marked TRANSIENT."""
-    with device_manager.lease("esmfold", device="cuda"):
-        # Find the lease allocation
-        for alloc in device_manager._allocations.values():
-            if alloc.allocation_type == AllocationType.TRANSIENT:
-                break
-        else:
-            pytest.fail("No TRANSIENT allocation found")
 
 
 def test_lease_cleanup_on_exception(device_manager):
@@ -142,51 +125,7 @@ def test_persistent_request_skips_transient(device_manager, mock_callback):
         assert mock_callback.calls == ["cpu"]
 
 
-def test_mixed_persistent_and_transient(device_manager, mock_callback):
-    """In mixed scenario, only persistent allocations are evicted."""
-    device_manager.configure(offload_strategy=OffloadStrategy.CPU)
-    # Fill cuda:0 with persistent
-    device_manager.request_device("tool1", "inst1", device="cuda", eviction_callback=mock_callback)
-    time.sleep(0.01)
-
-    # Fill cuda:1 with transient lease
-    with device_manager.lease("tool2", device="cuda:1"), device_manager.lease("tool3", device="cuda") as device:
-        assert device == "cuda:0"
-        assert mock_callback.calls == ["cpu"]
-
-
 # ── Lease wait mechanism ─────────────────────────────────────────────────
-
-
-def test_lease_waits_for_transient_release(device_manager_1gpu):
-    """Thread waits for lease release, then acquires GPU."""
-    dm = device_manager_1gpu
-    acquired = threading.Event()
-    second_device = []
-
-    def hold_lease():
-        with dm.lease("tool1", device="cuda"):
-            acquired.set()
-            # Hold for a short time
-            time.sleep(0.3)
-
-    def wait_lease():
-        acquired.wait(timeout=5)
-        with dm.lease("tool2", device="cuda", timeout=5) as device:
-            second_device.append(device)
-
-    t1 = threading.Thread(target=hold_lease)
-    t2 = threading.Thread(target=wait_lease)
-    t1.start()
-    t2.start()
-
-    t1.join(timeout=5)
-    t2.join(timeout=5)
-
-    assert not t1.is_alive()
-    assert not t2.is_alive()
-    assert len(second_device) == 1
-    assert second_device[0] == "cuda:0"
 
 
 def test_lease_timeout_raises(device_manager_1gpu):

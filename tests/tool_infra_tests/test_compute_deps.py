@@ -9,59 +9,11 @@ import pytest
 
 from proto_tools.utils.compute_deps import (
     _get_jax_spec,
-    _get_torch_spec,
     detect_compute_environment,
 )
 from proto_tools.utils.system_info import GPUDevice, GPUInfo, get_gpu_info
 
 # ── Compatibility matrix validation ──────────────────────────────────────────
-
-
-def test_torch_compatibility_entries_valid():
-    """All PyTorch compatibility entries should be valid tuples."""
-    from proto_tools.utils.compute_deps import _TORCH_COMPATIBILITY
-
-    for driver_ver, (min_ver, max_ver, variant) in _TORCH_COMPATIBILITY.items():
-        assert isinstance(driver_ver, int)
-        assert isinstance(min_ver, str)
-        assert isinstance(max_ver, str)
-        assert isinstance(variant, str)
-        spec = f"torch>={min_ver},<{max_ver}"
-        assert "torch>=" in spec
-        assert ",<" in spec
-        assert variant.startswith("cu"), f"variant {variant!r} should start with 'cu'"
-
-
-def test_jax_compatibility_entries_valid():
-    """All JAX compatibility entries should be valid tuples."""
-    from proto_tools.utils.compute_deps import _JAX_COMPATIBILITY
-
-    for driver_ver, (min_ver, max_ver) in _JAX_COMPATIBILITY.items():
-        assert isinstance(driver_ver, int)
-        assert isinstance(min_ver, str)
-        assert isinstance(max_ver, str)
-        spec = f"jax[cuda12]>={min_ver},<{max_ver}"
-        assert "jax[" in spec
-        assert "]>=" in spec
-        assert ",<" in spec
-
-
-def test_get_torch_spec_returns_valid_format():
-    """_get_torch_spec should return properly formatted specs."""
-    for driver in [525, 550, 570, 999]:
-        spec = _get_torch_spec(driver)
-        assert spec.startswith("torch>=")
-        assert ",<" in spec
-
-
-def test_get_jax_spec_returns_valid_format():
-    """_get_jax_spec should return properly formatted specs."""
-    for driver, cuda in [(525, 12), (550, 12), (570, 13)]:
-        spec, variant = _get_jax_spec(driver, cuda)
-        assert spec.startswith("jax[")
-        assert "]>=" in spec
-        assert ",<" in spec
-        assert variant in ["cuda11", "cuda12", "cuda13"]
 
 
 def test_cuda13_requires_driver_580():

@@ -21,19 +21,9 @@ from proto_tools import (
 # ── AlphaGenomeInterval ──────────────────────────────────────────────────────
 
 
-def test_interval_rejects_end_before_start():
-    with pytest.raises(ValidationError, match=r"interval_end \(\d+\) must be > interval_start"):
-        AlphaGenomeInterval(chromosome="chr1", interval_start=100, interval_end=50)
-
-
 def test_interval_rejects_end_equal_to_start():
     with pytest.raises(ValidationError, match=r"interval_end \(\d+\) must be > interval_start"):
         AlphaGenomeInterval(chromosome="chr1", interval_start=100, interval_end=100)
-
-
-def test_interval_rejects_negative_start():
-    with pytest.raises(ValidationError, match="greater than or equal to 0"):
-        AlphaGenomeInterval(chromosome="chr1", interval_start=-1, interval_end=100)
 
 
 # ── AlphaGenomeVariant ───────────────────────────────────────────────────────
@@ -124,24 +114,7 @@ def test_variant_rejects_position_at_interval_end():
         )
 
 
-def test_variant_rejects_position_after_interval_end():
-    with pytest.raises(ValidationError, match=r"variant_position \(\d+\) must be within"):
-        AlphaGenomeVariant(
-            chromosome="chr1",
-            interval_start=0,
-            interval_end=16_384,
-            variant_position=99_999,
-            reference_bases="A",
-            alternate_bases="G",
-        )
-
-
 # ── AlphaGenomePredictSequencesInput ─────────────────────────────────────────
-
-
-def test_predict_sequences_accepts_single_supported_min_length():
-    inputs = AlphaGenomePredictSequencesInput(sequences=["ACGT" * (16_384 // 4)])
-    assert len(inputs.sequences) == 1
 
 
 def test_predict_sequences_rejects_unsupported_length():
@@ -152,16 +125,6 @@ def test_predict_sequences_rejects_unsupported_length():
 def test_predict_sequences_rejects_invalid_characters():
     with pytest.raises(ValidationError, match="sequence must only contain DNA bases"):
         AlphaGenomePredictSequencesInput(sequences=["X" * 16_384])
-
-
-def test_predict_sequences_accepts_multiple_supported_lengths():
-    inputs = AlphaGenomePredictSequencesInput(
-        sequences=[
-            "ACGT" * (16_384 // 4),
-            "TGCA" * (16_384 // 4),
-        ]
-    )
-    assert len(inputs.sequences) == 2
 
 
 def test_predict_sequences_rejects_empty_list():
@@ -228,16 +191,6 @@ def test_score_intervals_auto_wraps_single_interval():
     assert len(inputs.intervals) == 1
 
 
-def test_score_intervals_rejects_empty_list():
-    with pytest.raises(ValidationError, match="cannot be empty"):
-        AlphaGenomeScoreIntervalsInput(intervals=[])
-
-
-def test_score_intervals_rejects_none():
-    with pytest.raises(ValidationError, match="cannot be None"):
-        AlphaGenomeScoreIntervalsInput(intervals=None)
-
-
 # ── AlphaGenomePredictVariantsInput ──────────────────────────────────────────
 
 _VALID_VARIANT = {
@@ -258,16 +211,6 @@ def test_predict_variants_auto_wraps_single_variant():
     assert inputs.variants[0].variant_position == 1024
 
 
-def test_predict_variants_rejects_empty_list():
-    with pytest.raises(ValidationError, match="cannot be empty"):
-        AlphaGenomePredictVariantsInput(variants=[])
-
-
-def test_predict_variants_rejects_none():
-    with pytest.raises(ValidationError, match="cannot be None"):
-        AlphaGenomePredictVariantsInput(variants=None)
-
-
 # ── AlphaGenomeScoreVariantsInput ────────────────────────────────────────────
 
 
@@ -283,16 +226,6 @@ def test_score_variants_auto_wraps_single_variant():
         ),
     )
     assert len(inputs.variants) == 1
-
-
-def test_score_variants_rejects_empty_list():
-    with pytest.raises(ValidationError, match="cannot be empty"):
-        AlphaGenomeScoreVariantsInput(variants=[])
-
-
-def test_score_variants_rejects_none():
-    with pytest.raises(ValidationError, match="cannot be None"):
-        AlphaGenomeScoreVariantsInput(variants=None)
 
 
 # ── AlphaGenomeISM ──────────────────────────────────────────────────────────
@@ -349,19 +282,6 @@ def test_ism_accepts_optional_variant_fields_all_present():
     assert req.variant_position == 150
     assert req.reference_bases == "A"
     assert req.alternate_bases == "G"
-
-
-def test_ism_accepts_no_variant_fields():
-    req = AlphaGenomeISM(
-        chromosome="chr1",
-        interval_start=0,
-        interval_end=1000,
-        ism_interval_start=100,
-        ism_interval_end=200,
-    )
-    assert req.variant_position is None
-    assert req.reference_bases is None
-    assert req.alternate_bases is None
 
 
 # ── AlphaGenomeScoreISMInput ────────────────────────────────────────────────

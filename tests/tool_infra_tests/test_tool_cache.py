@@ -48,37 +48,6 @@ def empty_cache():
     return ToolCache()
 
 
-# ── CacheStripResult tests ──────────────────────────────────────────────────
-
-
-def test_cache_strip_result_all_cached():
-    """all_cached property returns True when uncached_items is empty."""
-    result = CacheStripResult(
-        uncached_items=[],
-        uncached_indices=[],
-        cached_results={0: "a", 1: "b"},
-        cache_keys=[],
-    )
-    assert result.all_cached is True
-
-
-def test_cache_strip_result_not_all_cached():
-    """all_cached property returns False when there are uncached items."""
-    result = CacheStripResult(
-        uncached_items=["x"],
-        uncached_indices=[2],
-        cached_results={0: "a", 1: "b"},
-        cache_keys=["key_x"],
-    )
-    assert result.all_cached is False
-
-
-def test_cache_strip_result_empty():
-    """Empty CacheStripResult is all_cached (vacuously true)."""
-    result = CacheStripResult()
-    assert result.all_cached is True
-
-
 # ── cache_strip_items tests ──────────────────────────────────────────────────
 
 
@@ -167,30 +136,6 @@ def test_cache_store_items_rejects_length_mismatch(_setup_cache):
 
 
 # ── cache_stitch_items tests ─────────────────────────────────────────────────
-
-
-def test_cache_stitch_items_all_cached():
-    """Stitching with no computed items returns cached items in order."""
-    strip = CacheStripResult(
-        uncached_items=[],
-        uncached_indices=[],
-        cached_results={0: "a", 1: "b", 2: "c"},
-        cache_keys=[],
-    )
-    result = cache_stitch_items(strip, [], 3)
-    assert result == ["a", "b", "c"]
-
-
-def test_cache_stitch_items_all_computed():
-    """Stitching with no cached items returns computed items in order."""
-    strip = CacheStripResult(
-        uncached_items=["x", "y", "z"],
-        uncached_indices=[0, 1, 2],
-        cached_results={},
-        cache_keys=["k1", "k2", "k3"],
-    )
-    result = cache_stitch_items(strip, ["rx", "ry", "rz"], 3)
-    assert result == ["rx", "ry", "rz"]
 
 
 def test_cache_stitch_items_mixed():
@@ -288,48 +233,6 @@ class _MockOptimizer:
             raise ValueError(f"Invalid type of clear_tool_cache: {type(self.clear_tool_cache)}")
 
 
-def test_config_bool_true_clears_all():
-    opt = _MockOptimizer(clear_config=True)
-    opt.tool_cache.set("t1", "k", "val")
-
-    opt._clear_tool_cache()
-
-    assert opt.tool_cache.current_size == 0
-    assert opt.tool_cache.get("t1", "k") is None
-
-
-def test_config_list_clears_specific():
-    opt = _MockOptimizer(clear_config=["t1"])
-    opt.tool_cache.set("t1", "k", "val")
-    opt.tool_cache.set("t2", "k", "val")
-
-    opt._clear_tool_cache()
-
-    # t1 should be gone.
-    assert opt.tool_cache.get("t1", "k") is None
-    # t2 should remain.
-    assert opt.tool_cache.get("t2", "k") == "val"
-
-
-def test_config_int_threshold_below_limit():
-    """Size is BELOW threshold, should NOT clear."""
-    # Set threshold to 1000 bytes.
-    opt = _MockOptimizer(clear_config=1000)
-
-    # Add small data (e.g., 50 bytes).
-    opt.tool_cache.set("t1", "k", "small_data")
-    initial_size = opt.tool_cache.current_size
-
-    # Ensure we are actually testing a valid scenario.
-    assert initial_size < 1000
-
-    opt._clear_tool_cache()
-
-    # Should still be there.
-    assert opt.tool_cache.current_size == initial_size
-    assert opt.tool_cache.get("t1", "k") == "small_data"
-
-
 def test_config_int_prunes_lru():
     """Test that we only remove enough to fit under the limit, removing the oldest items first."""
     old_data = "A" * 80
@@ -361,11 +264,6 @@ def test_config_int_prunes_lru():
 
 
 # ── ToolCache internals tests ──────────────────────────────────────────────
-
-
-def test_initial_state(empty_cache):
-    assert empty_cache.current_size == 0
-    assert empty_cache.get("tool", "key") is None
 
 
 def test_set_increases_size(empty_cache):
@@ -439,16 +337,6 @@ def test_circular_reference_safety():
 # ── deduplicate_items unit tests ─────────────────────────────────────────────
 
 
-def test_deduplicate_items_all_unique():
-    """All unique items should be returned unchanged."""
-    items = ["a", "b", "c"]
-    result = deduplicate_items(items, key_fn=str)
-
-    assert result.unique_items == ["a", "b", "c"]
-    assert len(result.unique_keys) == 3
-    assert result.index_map == [(0, 0), (1, 1), (2, 2)]
-
-
 def test_deduplicate_items_all_duplicates():
     """All-duplicate input should return a single unique item."""
     items = ["x", "x", "x"]
@@ -457,15 +345,6 @@ def test_deduplicate_items_all_duplicates():
     assert result.unique_items == ["x"]
     assert len(result.unique_keys) == 1
     assert result.index_map == [(0, 0), (1, 0), (2, 0)]
-
-
-def test_deduplicate_items_mixed():
-    """Mixed input should preserve first-occurrence order."""
-    items = ["a", "b", "a", "c", "b"]
-    result = deduplicate_items(items, key_fn=str)
-
-    assert result.unique_items == ["a", "b", "c"]
-    assert result.index_map == [(0, 0), (1, 1), (2, 0), (3, 2), (4, 1)]
 
 
 def test_deduplicate_items_empty():

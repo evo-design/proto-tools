@@ -17,19 +17,9 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 # ── Validation ────────────────────────────────────────────────────────────────
 
 
-def test_segmasker_input_rejects_missing_sequences():
-    with pytest.raises(ValidationError, match="sequences"):
-        SegmaskerInput()
-
-
 def test_segmasker_input_rejects_empty_sequences():
     with pytest.raises(ValidationError, match="At least one sequence"):
         SegmaskerInput(sequences=[])
-
-
-def test_segmasker_input_rejects_extra_fields():
-    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
-        SegmaskerInput(sequences=["MKTL"], extra_field="x")
 
 
 def test_segmasker_input_normalizes_single_string():

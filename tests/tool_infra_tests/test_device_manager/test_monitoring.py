@@ -76,13 +76,6 @@ def test_get_gpu_memory_used_invalid_device(device_manager):
     assert device_manager.get_gpu_memory_used("") == 0
 
 
-@pytest.mark.uses_gpu
-def test_get_gpu_memory_used_valid_device(device_manager):
-    """Test get_gpu_memory_used returns non-negative value for valid GPU."""
-    mem = device_manager.get_gpu_memory_used("cuda:0")
-    assert mem >= 0, "GPU memory should be non-negative"
-
-
 def test_get_instance_memory_stats_nonexistent_instance(device_manager):
     """Test get_instance_memory_stats for non-existent instance."""
     stats = device_manager.get_instance_memory_stats("nonexistent")
@@ -150,50 +143,6 @@ def test_memory_stats():
             assert "allocated_bytes" in dm_stats
             assert "max_allocated_bytes" in dm_stats
             assert dm_stats["allocated_bytes"] > 0
-
-    finally:
-        ToolInstance.clear_all()
-        DeviceManager.reset_instance()
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.slow
-def test_instance_memory_vs_total_gpu_memory():
-    """Test relationship between instance memory and total GPU memory."""
-    from proto_tools.tools.testing.mock_pytorch_tool import (
-        MockPyTorchToolConfig,
-        MockPyTorchToolInput,
-        run_mock_pytorch_tool,
-    )
-    from proto_tools.utils.tool_instance import ToolInstance
-
-    DeviceManager.reset_instance()
-    ToolInstance.clear_all()
-
-    dm = DeviceManager.get_instance()
-
-    try:
-        with ToolInstance.persist_tool("mock_pytorch_tool", instance_name="mock_compare"):
-            input1 = MockPyTorchToolInput()
-            config1 = MockPyTorchToolConfig()
-            result = run_mock_pytorch_tool(input1, config1, instance="mock_compare")
-            assert result.success
-
-            # Get per-instance memory
-            instance_stats = dm.get_instance_memory_stats("mock_compare")
-            instance_mem = instance_stats["allocated_bytes"]
-
-            # Get total GPU memory
-            total_mem = dm.get_gpu_memory_used("cuda:0")
-
-            # Instance memory should be <= total GPU memory
-            assert instance_mem <= total_mem, (
-                f"Instance memory ({instance_mem / 1e9:.2f} GB) should be <= "
-                f"total GPU memory ({total_mem / 1e9:.2f} GB)"
-            )
-
-            assert instance_mem > 0, "Instance should use memory"
-            assert total_mem > 0, "Total GPU should show memory usage"
 
     finally:
         ToolInstance.clear_all()

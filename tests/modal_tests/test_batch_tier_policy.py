@@ -16,7 +16,6 @@ from proto_tools.modal.client import LongRunningToolWarning, _warn_once_if_long_
 from proto_tools.modal.manifest import (
     BATCH_TIER,
     MODAL_MAX_TIMEOUT_SECONDS,
-    SERVICE_MODAL_TIMEOUTS,
     SERVICE_TIERS,
     TIER_SECONDS,
     runs_for_hours,
@@ -55,11 +54,6 @@ def test_no_tier_exceeds_modal_ceiling() -> None:
     """Modal rejects a timeout above 24 hours at deploy time, so a tier above it cannot ship."""
     assert TIER_SECONDS[BATCH_TIER] == MODAL_MAX_TIMEOUT_SECONDS
     assert all(seconds <= MODAL_MAX_TIMEOUT_SECONDS for seconds in TIER_SECONDS.values())
-
-
-def test_timeout_scale_cannot_push_a_wall_past_the_ceiling() -> None:
-    """``PROTO_MODAL_TIMEOUT_SCALE`` lifts short tiers; on batch it must clamp, not fail the deploy."""
-    assert all(seconds <= MODAL_MAX_TIMEOUT_SECONDS for seconds in SERVICE_MODAL_TIMEOUTS.values())
 
 
 @pytest.mark.parametrize("service", BATCH_SERVICES)

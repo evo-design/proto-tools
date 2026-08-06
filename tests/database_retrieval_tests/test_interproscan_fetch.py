@@ -534,17 +534,3 @@ def test_interproscan_config_env_var_default(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv("INTERPROSCAN_EMAIL", "env@example.org")
     cfg = InterProScanFetchConfig()
     assert cfg.email == "env@example.org"
-
-
-def test_interproscan_config_explicit_overrides_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An explicit config email overrides the env var."""
-    monkeypatch.setenv("INTERPROSCAN_EMAIL", "env@example.org")
-    cfg = InterProScanFetchConfig(email="explicit@example.org")
-    assert cfg.email == "explicit@example.org"
-
-
-def test_interproscan_config_no_env_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
-    """With INTERPROSCAN_EMAIL unset, the config email defaults to None."""
-    monkeypatch.delenv("INTERPROSCAN_EMAIL", raising=False)
-    cfg = InterProScanFetchConfig()
-    assert cfg.email is None

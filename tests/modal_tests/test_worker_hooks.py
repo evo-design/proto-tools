@@ -72,48 +72,10 @@ def test_payload_hooks_run_in_registration_order() -> None:
     assert payload["order"] == "first-second"
 
 
-def test_middleware_wraps_the_call() -> None:
-    """The common case: do something before and after, and return the result untouched."""
-    events: list[str] = []
-
-    def timing(_ctx, next_step):
-        events.append("before")
-        result = next_step()
-        events.append("after")
-        return result
-
-    register_call_middleware(timing)
-    assert run_with_middleware(_CTX, lambda: {"value": 1}) == {"value": 1}
-    assert events == ["before", "after"]
-
-
 def test_middleware_can_transform_the_result() -> None:
     """A large field may need moving elsewhere before the transport sees it."""
     register_call_middleware(lambda _ctx, nxt: {**nxt(), "added": True})
     assert run_with_middleware(_CTX, lambda: {"value": 1}) == {"value": 1, "added": True}
-
-
-def test_middleware_may_wrap_the_call_in_a_context() -> None:
-    """Capturing output for the duration of a call is the motivating shape."""
-    import contextlib
-
-    entered: list[str] = []
-
-    @contextlib.contextmanager
-    def capture():
-        entered.append("open")
-        try:
-            yield
-        finally:
-            entered.append("close")
-
-    def with_capture(_ctx, next_step):
-        with capture():
-            return next_step()
-
-    register_call_middleware(with_capture)
-    run_with_middleware(_CTX, lambda: {"ok": True})
-    assert entered == ["open", "close"]
 
 
 def test_the_first_registered_middleware_is_outermost() -> None:

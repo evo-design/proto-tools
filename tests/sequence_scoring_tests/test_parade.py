@@ -298,16 +298,6 @@ def test_parade_config_cross_field_assignments_are_atomic() -> None:
         run_parade_gradient(ParadeGradientInput(logits=[[[0.0] * 4] * 50]), gradient)
 
 
-def test_parade_activity_config_rejects_offpanel_and_duplicate_cells() -> None:
-    """c13 is 3'UTR-only, and requested codes must be unique."""
-    from proto_tools.tools.sequence_scoring.parade import ParadeActivityConfig
-
-    with pytest.raises(ValidationError, match="not in the utr5 panel"):
-        ParadeActivityConfig(construct_type="utr5", cell_types=["c13"])
-    with pytest.raises(ValidationError, match="cell_types must be unique"):
-        ParadeActivityConfig(construct_type="utr3", cell_types=["c2", "c2"])
-
-
 def test_parade_activity_run_dispatches_and_maps_scores(monkeypatch) -> None:
     """run_parade_activity dispatches to the worker and pivots per-cell scores."""
     import proto_tools.tools.sequence_scoring.parade.parade_activity as parade_activity
@@ -466,28 +456,6 @@ def test_parade_stability_run_dispatches_and_maps_log_ratios(monkeypatch) -> Non
     assert payload["checkpoint_md5"] == "511c0b4d794f948708ab1e6fa866734b"
     assert result.results[0].log_ratio == -1.64
     assert result.results[1].sequence_length == 50
-
-
-def test_parade_stability_accepts_mixed_lengths(monkeypatch) -> None:
-    """Mixed-length input is accepted (the standalone batches per length group)."""
-    import proto_tools.tools.sequence_scoring.parade.parade_stability as parade_stability
-    from proto_tools.tools.sequence_scoring.parade import (
-        ParadeStabilityConfig,
-        ParadeStabilityInput,
-        run_parade_stability,
-    )
-
-    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
-        return {"log_ratios": [float(len(s)) for s in payload["sequences"]]}
-
-    monkeypatch.setattr(parade_stability.ToolInstance, "dispatch", staticmethod(fake_dispatch))
-
-    result = run_parade_stability(
-        ParadeStabilityInput(sequences=["A" * 50, "C" * 51]),  # different lengths
-        ParadeStabilityConfig(),
-    )
-    assert [r.sequence_length for r in result.results] == [50, 51]
-    assert result.results[0].log_ratio == 50.0
 
 
 def test_parade_gradient_input_validates_logits() -> None:

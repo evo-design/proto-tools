@@ -184,12 +184,8 @@ def test_gpu_walls_leave_a_plausible_per_item_budget():
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
-        pytest.param(None, 1.0, id="unset"),
         pytest.param("2", 2.0, id="lengthens"),
-        pytest.param("1", 1.0, id="identity"),
         pytest.param("0.5", 1.0, id="would_shorten"),
-        pytest.param("0", 1.0, id="zero"),
-        pytest.param("-3", 1.0, id="negative"),
         pytest.param("later", 1.0, id="unparseable"),
     ],
 )

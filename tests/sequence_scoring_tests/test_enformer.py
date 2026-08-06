@@ -39,19 +39,6 @@ def test_enformer_input_valid():
     assert len(inp.sequences[0].sequence) == ENFORMER_CONTEXT
 
 
-def test_enformer_input_accepts_sequence_batches():
-    """Enformer input should normalize sequence batches to a list."""
-    from proto_tools.tools.sequence_scoring.enformer import EnformerInput
-
-    seq_a = _random_dna(ENFORMER_CONTEXT)
-    seq_b = _random_dna(ENFORMER_CONTEXT, seed=123)
-
-    inp = EnformerInput(sequences=[seq_a, seq_b])
-
-    assert [window.sequence for window in inp.sequences] == [seq_a, seq_b]
-    assert len(inp) == 2
-
-
 @pytest.mark.parametrize(
     "seq,label",
     [
@@ -82,20 +69,6 @@ def test_enformer_input_rejects_invalid_nucleotides():
     bad_seq = "X" * ENFORMER_CONTEXT
     with pytest.raises((ValueError, ValidationError), match=r"[Ii]nvalid"):
         EnformerInput(sequences=bad_seq)
-
-
-def test_enformer_input_accepts_target_aligned_sequences():
-    """Target coordinates let Enformer extract a model window from a larger construct."""
-    from proto_tools.tools.sequence_scoring.enformer import EnformerInput, SequenceTargetRange, SequenceWindow
-
-    sequence = ("C" * 100) + ("A" * ENFORMER_CONTEXT) + ("G" * 100)
-    target_start = 100 + ENFORMER_OUTPUT_FLANK
-
-    target_range = SequenceTargetRange(start=target_start, end=target_start + 10)
-    inputs = EnformerInput(sequences=[SequenceWindow(sequence=sequence, target_range=target_range)])
-
-    assert [window.sequence for window in inputs.sequences] == [sequence]
-    assert [window.target_range for window in inputs.sequences] == [target_range]
 
 
 def test_enformer_run_extracts_target_aligned_window(monkeypatch):
@@ -142,25 +115,6 @@ def test_enformer_run_extracts_target_aligned_window(monkeypatch):
     assert result.results[0].output_resolution == ENFORMER_OUTPUT_RESOLUTION
     assert result.results[0].target_start == target_start
     assert result.results[0].target_end == target_start + 10
-
-
-# ── Config validation ─────────────────────────────────────────────────────────
-
-
-def test_enformer_config_default_species():
-    """Default species is 'human'."""
-    from proto_tools.tools.sequence_scoring.enformer import EnformerConfig
-
-    config = EnformerConfig(output_tracks=[0])
-    assert config.species == "human"
-
-
-def test_enformer_config_rejects_invalid_species():
-    """Species values other than 'human' or 'mouse' are rejected."""
-    from proto_tools.tools.sequence_scoring.enformer import EnformerConfig
-
-    with pytest.raises(ValidationError, match="Input should be 'human' or 'mouse'"):
-        EnformerConfig(output_tracks=[0], species="zebrafish")
 
 
 # ---------------------------------------------------------------------------

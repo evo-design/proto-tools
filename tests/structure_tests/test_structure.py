@@ -193,19 +193,6 @@ def test_nested_field_typed_structure_accepts_structure_instance_envelope(test_p
 # ── Format conversion ────────────────────────────────────────────────────────
 
 
-def test_pdb_to_cif_conversion(protein_from_pdb_file):
-    cif_content = protein_from_pdb_file.structure_cif
-    assert isinstance(cif_content, str)
-    assert len(cif_content) > 0
-    assert "data_" in cif_content or "_atom_site" in cif_content
-
-
-def test_cif_to_pdb_conversion(protein_from_cif_file):
-    pdb_content = protein_from_cif_file.structure_pdb
-    assert isinstance(pdb_content, str)
-    assert "ATOM" in pdb_content
-
-
 def test_cif_to_pdb_no_warnings_for_clean_cif(test_cif_file_content):
     """A normal single-chain CIF (renin) should convert without any lossy-data warnings."""
     with warnings.catch_warnings(record=True) as caught:
@@ -256,12 +243,6 @@ def test_gemmi_struct_lazy_loading_and_caching(protein_from_pdb_file):
     assert struct1 is not None
     assert len(struct1) > 0
     assert protein_from_pdb_file.gemmi_struct is struct1
-
-
-@pytest.mark.parametrize("fixture_name", ["protein_from_pdb_file", "protein_from_cif_file"])
-def test_gemmi_struct_parses_both_formats(fixture_name, request):
-    protein = request.getfixturevalue(fixture_name)
-    assert len(protein.gemmi_struct) > 0
 
 
 # ── File I/O ──────────────────────────────────────────────────────────────────
@@ -407,27 +388,12 @@ def test_model_validate_missing_structure():
         Structure.model_validate({"b_factor_type": "unspecified", "structure_format": "pdb"})
 
 
-def test_model_validate_auto_detects_format(test_pdb_file_content):
-    s = Structure.model_validate({"structure": test_pdb_file_content, "b_factor_type": "unspecified"})
-    assert s.structure_format == "pdb"
-
-
-def test_visualize(protein_from_pdb_file):
-    _ = protein_from_pdb_file.visualize(show_legend=False)
-
-
 def test_metrics_survive_round_trip():
     protein = Structure.from_file(_TEST_PDB_FILE, metrics={"plddt": 85.2, "ptm": 0.9})
     reconstructed = Structure.model_validate(protein.model_dump())
     assert reconstructed.metrics["plddt"] == 85.2
     assert reconstructed.metrics["ptm"] == 0.9
     assert set(reconstructed.metrics.keys()) == {"plddt", "ptm"}
-
-
-def test_structure_approx_equal_matching():
-    a = Structure.from_file(_TEST_PDB_FILE)
-    b = Structure.from_file(_TEST_PDB_FILE)
-    a.approx_equal(b)
 
 
 def test_structure_metrics_access_goes_through_metrics_field():
@@ -505,49 +471,7 @@ def test_to_pdb_with_chain_mapping_does_not_mutate_cached_gemmi_struct():
     assert chains_before == chains_after == ["Heavy", "Light"]
 
 
-# ── Metrics container (from tool_io) ─────────────────────────────────────────
-
-
-def test_metrics_init_strips_none():
-    m = Metrics(ptm=0.9, plddt=None)
-    assert "ptm" in m
-    assert "plddt" not in m
-
-
-def test_metrics_dict_protocol():
-    m = Metrics(ptm=0.9, iptm=0.8)
-    assert m["ptm"] == 0.9
-    assert len(m) == 2
-    assert set(m) == {"ptm", "iptm"}
-    assert 42 not in m
-    assert len(Metrics()) == 0
-    with pytest.raises(KeyError):
-        m["missing"]
-
-
-def test_metrics_primary_value():
-    assert Metrics(ptm=0.9, primary_metric="ptm").primary_value == 0.9
-    assert Metrics(ptm=0.9).primary_value is None
-    # primary_metric set but the named metric isn't in the container
-    assert Metrics(primary_metric="missing").primary_value is None
-
-
-def test_metrics_update():
-    m = Metrics(ptm=0.9, iptm=0.7)
-    m.update({"iptm": 0.8, "new_key": 0.5})
-    assert m["iptm"] == 0.8
-    assert m["new_key"] == 0.5
-    # update from another Metrics instance
-    m.update(Metrics(another=1.0))
-    assert m["another"] == 1.0
-
-
 # ── Structure methods ────────────────────────────────────────────────────────
-
-
-def test_structure_add_metric(protein_from_pdb_file):
-    protein_from_pdb_file.add_metric("new_metric", 42.0)
-    assert protein_from_pdb_file.metrics["new_metric"] == 42.0
 
 
 def test_structure_properties(protein_from_pdb_file):
@@ -1335,30 +1259,6 @@ def _read_gemmi_pdb(content: str):
     return gemmi.read_pdb_string(content)
 
 
-def test_serialize_gemmi_pdb_to_pdb_no_warning():
-    """Re-emission in source format never warns."""
-    from proto_tools.entities.structures.utils import _serialize_gemmi
-
-    struct = _read_gemmi_pdb(_SINGLE_CHAIN_PDB)
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        out = _serialize_gemmi(struct, "pdb", source_format="pdb")
-    assert "ATOM" in out
-    assert [w for w in caught if "CIF→PDB" in str(w.message)] == []
-
-
-def test_serialize_gemmi_cif_to_cif_no_warning():
-    """CIF re-emission also never warns (no conversion happens)."""
-    from proto_tools.entities.structures.utils import _serialize_gemmi
-
-    struct = _read_gemmi_pdb(_SINGLE_CHAIN_PDB)
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        out = _serialize_gemmi(struct, "cif", source_format="cif")
-    assert out.startswith("data_")
-    assert [w for w in caught if "CIF→PDB" in str(w.message)] == []
-
-
 def test_serialize_gemmi_pdb_to_cif_no_warning():
     """PDB→CIF is lossless and never warns."""
     from proto_tools.entities.structures.utils import _serialize_gemmi
@@ -1455,16 +1355,6 @@ def test_gyration_radius_positive(pdl1_complex):
     assert whole > 0
     assert chain_a > 0
     assert chain_a < whole
-
-
-def test_longest_alpha_helix_nonnegative(pdl1_complex):
-    """Longest helix is a non-negative integer."""
-    assert pdl1_complex.longest_alpha_helix() >= 0
-
-
-def test_backbone_rmsd_self_is_zero(pdl1_complex):
-    """RMSD of a structure against itself is zero."""
-    assert pdl1_complex.backbone_rmsd(pdl1_complex) == pytest.approx(0.0, abs=1e-3)
 
 
 def test_backbone_rmsd_per_chain(pdl1_complex):

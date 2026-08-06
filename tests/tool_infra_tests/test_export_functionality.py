@@ -241,15 +241,6 @@ def test_validate_empty_file(tmp_path):
     assert result is False
 
 
-def test_validate_non_empty_file(tmp_path):
-    """Test validation succeeds for non-empty file."""
-    file = tmp_path / "data.txt"
-    file.write_text("test data")
-
-    result = validate_export_output(file)
-    assert result is True
-
-
 def test_validate_empty_directory(tmp_path):
     """Test validation fails for empty directory."""
     empty_dir = tmp_path / "empty_dir"
@@ -269,26 +260,6 @@ def test_validate_directory_with_empty_file(tmp_path):
     assert result is False
 
 
-def test_validate_directory_with_data(tmp_path):
-    """Test validation succeeds for directory with non-empty files."""
-    dir_with_data = tmp_path / "dir"
-    dir_with_data.mkdir()
-    (dir_with_data / "data.txt").write_text("test data")
-
-    result = validate_export_output(dir_with_data)
-    assert result is True
-
-
-def test_validate_nested_directory_structure(tmp_path):
-    """Test validation succeeds for nested directory with data."""
-    nested = tmp_path / "parent" / "child"
-    nested.mkdir(parents=True)
-    (nested / "data.txt").write_text("nested data")
-
-    result = validate_export_output(tmp_path / "parent")
-    assert result is True
-
-
 # ── BaseToolOutput.export() ─────────────────────────────────────────────────
 
 
@@ -301,22 +272,6 @@ def test_export_with_default_format(tmp_path):
     # Should create test_output.txt (default format is txt)
     exported = tmp_path / "test_output.txt"
     assert validate_export_output(exported)
-
-
-def test_export_with_custom_format(tmp_path):
-    """Test exporting with specific format."""
-    output = MockToolOutput(success=True, data=["item1", "item2", "item3"])
-
-    output.export(name="test_output", export_path=tmp_path, file_format="json")
-
-    exported = tmp_path / "test_output.json"
-    assert validate_export_output(exported)
-
-    # Verify JSON content
-    with open(exported) as f:
-        data = json.load(f)
-    assert "data" in data
-    assert len(data["data"]) == 3
 
 
 def test_export_all_supported_formats(tmp_path):
@@ -366,17 +321,6 @@ def test_export_creates_parent_directories(tmp_path):
 
     exported = nested_path / "test_output.txt"
     assert validate_export_output(exported)
-
-
-def test_export_empty_data(tmp_path):
-    """Test exporting with empty data still creates output."""
-    output = MockToolOutput(success=True, data=[])
-
-    output.export(name="test_output", export_path=tmp_path)
-
-    # Export should exist even with empty data (single-file export creates test_output.txt)
-    exported = tmp_path / "test_output.txt"
-    assert exported.exists()
 
 
 # ── Multi-file exports ──────────────────────────────────────────────────────

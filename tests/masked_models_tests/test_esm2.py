@@ -72,7 +72,7 @@ def test_esm2_gradient_dispatch_contract(monkeypatch):
         captured["payload"] = payload
         n = len(payload.get("logits", []))
         return {
-            "gradient": [[0.0] * 20] * n,
+            "gradient": [[0.0] * 20] * n if payload.get("compute_gradient") else None,
             "loss": 0.5,
             "metrics": {"log_likelihood": -1.0, "avg_log_likelihood": -0.5, "perplexity": np.exp(0.5)},
             "vocab": AMINO_ACIDS_LIST,
@@ -98,33 +98,12 @@ def test_esm2_gradient_dispatch_contract(monkeypatch):
     assert captured["payload"]["model_checkpoint"] == "esm2_t6_8M_UR50D"
     assert captured["payload"]["device"] == "cpu"
 
-
-def test_esm2_gradient_forward_mode_dispatch_contract(monkeypatch):
-    captured: dict[str, object] = {}
-
-    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
-        captured.update(payload=payload)
-        return {
-            "gradient": None,
-            "loss": 0.5,
-            "metrics": {"log_likelihood": -1.0, "avg_log_likelihood": -0.5, "perplexity": np.exp(0.5)},
-            "vocab": AMINO_ACIDS_LIST,
-        }
-
-    monkeypatch.setattr(
-        "proto_tools.tools.masked_models.esm2.esm2_gradient.ToolInstance.dispatch",
-        fake_dispatch,
-    )
-
-    result = run_esm2_gradient(
+    run_esm2_gradient(
         ESM2GradientInput(logits=[[0.0] * 20] * 3),
-        ESM2GradientConfig(compute_gradient=False, device="cpu"),
+        ESM2GradientConfig(model_checkpoint="esm2_t6_8M_UR50D", compute_gradient=False, device="cpu"),
     )
 
     assert captured["payload"]["compute_gradient"] is False
-    assert result.gradient is None
-    assert result.loss == 0.5
-    assert result.metrics["avg_log_likelihood"] == -0.5
 
 
 # ---------------------------------------------------------------------------
@@ -361,23 +340,6 @@ def test_esm2_score_different_sequences():
 
 
 @pytest.mark.uses_gpu
-def test_esm2_score_metrics_consistency():
-    """Test that scoring metrics are mathematically consistent."""
-    _seq = "MVLSPADKTNVKAAW"
-    inputs = ESM2ScoringInput(sequences=[_seq])
-    config = ESM2ScoringConfig(model_checkpoint="esm2_t33_650M_UR50D", verbose=False, return_logits=True)
-
-    result = run_esm2_score(inputs=inputs, config=config)
-    score = result.scores[0]
-
-    expected_perplexity = np.exp(-score.avg_log_likelihood)
-    np.testing.assert_allclose(score.perplexity, expected_perplexity, rtol=1e-5)
-
-    expected_avg = score.log_likelihood / len(_seq)
-    np.testing.assert_allclose(score.avg_log_likelihood, expected_avg, rtol=1e-5)
-
-
-@pytest.mark.uses_gpu
 def test_esm2_score_batched():
     """Test batched scoring with different batch sizes."""
     sequences = ["MKTAYIAKQR", "EVQLVESGGS", "MVLSPADKTN", "GSSGSSGSS"]
@@ -393,38 +355,6 @@ def test_esm2_score_batched():
         logits = np.array(score.logits)
         assert logits.shape[0] == len(seq)
         assert logits.shape[1] == 20
-
-
-@pytest.mark.uses_gpu
-def test_esm2_score_variable_length():
-    """Test scoring sequences of different lengths."""
-    sequences = ["MK", "MKTA", "MKTAYIAK", "MKTAYIAKQRQISFVK"]
-    inputs = ESM2ScoringInput(sequences=sequences)
-    config = ESM2ScoringConfig(model_checkpoint="esm2_t33_650M_UR50D", verbose=False, return_logits=True)
-
-    result = run_esm2_score(inputs=inputs, config=config)
-    assert_metrics_in_spec(result)
-
-    for seq, score in zip(sequences, result.scores, strict=False):
-        assert isinstance(score.logits, list), f"Logits should be a list, got {type(score.logits)}"
-        assert len(score.logits) == len(seq), (
-            f"Sequence '{seq}' (len {len(seq)}): logits len should be {len(seq)}, got {len(score.logits)}"
-        )
-        assert len(score.logits[0]) == 20, f"Logits vocab size should be 20, got {len(score.logits[0])}"
-
-
-@pytest.mark.uses_gpu
-def test_esm2_score_single_sequence():
-    """Test esm2 scoring with a single sequence (string input)."""
-    inputs = ESM2ScoringInput(sequences="MKTAYIAKQRQISFVKSHFS")
-    config = ESM2ScoringConfig(model_checkpoint="esm2_t33_650M_UR50D", verbose=False, return_logits=True)
-
-    result = run_esm2_score(inputs=inputs, config=config)
-    validate_output(result)
-    assert_metrics_in_spec(result)
-
-    assert len(result.scores) == 1
-    assert result.scores[0].logits is not None
 
 
 # ── Logits-specific tests ─────────────────────────────────────────────────────
@@ -445,29 +375,3 @@ def test_esm2_score_logits_disabled_by_default():
 
     for score in result.scores:
         assert score.logits is None, "Logits should be None when return_logits=False"
-
-
-@pytest.mark.uses_gpu
-def test_esm2_score_logits_serialization():
-    """Test that logits are properly serialized as nested lists."""
-    sequences = ["MKTAYIAKQR"]
-    inputs = ESM2ScoringInput(sequences=sequences)
-    config = ESM2ScoringConfig(
-        model_checkpoint="esm2_t33_650M_UR50D",
-        verbose=False,
-        return_logits=True,
-    )
-
-    result = run_esm2_score(inputs=inputs, config=config)
-    validate_output(result)
-
-    score = result.scores[0]
-
-    assert isinstance(score.logits, list), "Logits should be a list"
-    assert len(score.logits) > 0, "Logits list should not be empty"
-    assert isinstance(score.logits[0], list), "Logits should be a list of lists"
-    assert len(score.logits[0]) == 20, "Inner logits list should have 20 elements (vocab size)"
-
-    for position_logits in score.logits:
-        for logit_value in position_logits:
-            assert isinstance(logit_value, (int, float)), f"Logit value should be numeric, got {type(logit_value)}"

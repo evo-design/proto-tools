@@ -78,24 +78,6 @@ def test_dispatches_and_parses():
     assert out.results[0].seq.startswith("MDLSAL")
 
 
-def test_wraps_corrupt_json_with_context():
-    """Non-JSON body surfaces a tight error mentioning the URL."""
-    session = MagicMock()
-    response = MagicMock()
-    response.status_code = 200
-    response.url = "https://rest.ensembl.org/sequence/id/ENST00000357654"
-    response.text = "<html>err</html>"
-    response.raise_for_status.return_value = None
-    response.json.side_effect = ValueError("Expecting value: line 1 column 1 (char 0)")
-    session.get.return_value = response
-    with patch(
-        "proto_tools.tools.database_retrieval.ensembl.ensembl_sequence.build_session",
-        return_value=session,
-    ):
-        with pytest.raises(Exception, match="non-JSON"):
-            run_ensembl_sequence(EnsemblSequenceInput(ensembl_id="ENST00000357654"))
-
-
 # ---------------------------------------------------------------------------
 # Integration tests
 # ---------------------------------------------------------------------------

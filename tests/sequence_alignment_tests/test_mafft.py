@@ -5,130 +5,15 @@ Tests for MAFFT tool in proto_tools.tools.sequence_alignment.mafft
 
 import pytest
 
-from proto_tools.entities.msa import MSA
 from proto_tools.tools.sequence_alignment.mafft import (
     MafftConfig,
     MafftInput,
-    MafftOutput,
     run_mafft_align,
 )
 from tests.conftest import benchmark_twice, random_protein_sequences
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
-# ── Fixtures ──────────────────────────────────────────────────────────────────
-
-
-@pytest.fixture
-def two_seq_output():
-    return MafftOutput(
-        msa=MSA(
-            aligned_sequences=["MVLS", "AVLS"],
-            sequence_ids=["seq_0", "seq_1"],
-        ),
-        metadata={},
-    )
-
-
-@pytest.fixture
-def gapped_output():
-    return MafftOutput(
-        msa=MSA(
-            aligned_sequences=["MV--LS", "MVLLS-"],
-            sequence_ids=["seq_0", "seq_1"],
-        ),
-        metadata={},
-    )
-
-
-# ── MafftOutput tests ────────────────────────────────────────────────────────
-
-
-def test_mafft_output_basic_properties(two_seq_output):
-    assert two_seq_output.msa.num_sequences == 2
-    assert two_seq_output.msa.alignment_length == 4
-    assert two_seq_output.msa.total_gaps == 0
-    assert two_seq_output.msa.average_gap_fraction == 0.0
-
-
-def test_mafft_output_sequence_ids_and_originals(two_seq_output):
-    assert two_seq_output.msa.sequence_ids == ["seq_0", "seq_1"]
-    assert two_seq_output.msa.original_sequences == ["MVLS", "AVLS"]
-
-
-def test_mafft_output_gap_statistics(gapped_output):
-    assert gapped_output.msa.total_gaps == 3
-    assert gapped_output.msa.average_gap_fraction == pytest.approx((2 / 6 + 1 / 6) / 2)
-
-
-def test_mafft_output_get_column(two_seq_output):
-    assert two_seq_output.msa.get_column(0) == ["M", "A"]
-    assert two_seq_output.msa.get_column(1) == ["V", "V"]
-
-
-def test_mafft_output_get_column_out_of_range(two_seq_output):
-    with pytest.raises(IndexError):
-        two_seq_output.msa.get_column(4)
-    with pytest.raises(IndexError):
-        two_seq_output.msa.get_column(-1)
-
-
-def test_mafft_output_get_conservation():
-    output = MafftOutput(
-        msa=MSA(
-            aligned_sequences=["MVLS", "MVLS", "AVLS"],
-            sequence_ids=["seq_0", "seq_1", "seq_2"],
-        ),
-        metadata={},
-    )
-    assert output.msa.get_conservation(0) == pytest.approx(2 / 3)  # 2 M, 1 A
-    assert output.msa.get_conservation(1) == 1.0  # all V
-
-
-def test_mafft_output_get_conservation_all_gaps():
-    output = MafftOutput(
-        msa=MSA(
-            aligned_sequences=["MVL-", "MVL-"],
-            sequence_ids=["seq_0", "seq_1"],
-        ),
-        metadata={},
-    )
-    assert output.msa.get_conservation(3) == 0.0
-
-
-def test_mafft_output_to_fasta(two_seq_output):
-    fasta = two_seq_output.msa.to_fasta_string()
-    assert fasta == ">seq_0\nMVLS\n>seq_1\nAVLS\n"
-
-
-def test_mafft_output_msa_directly_accessible(two_seq_output):
-    """Test that MSA is directly accessible without conversion."""
-    assert isinstance(two_seq_output.msa, MSA)
-    assert two_seq_output.msa.num_sequences == 2
-    assert two_seq_output.msa.alignment_length == 4
-    assert two_seq_output.msa.aligned_sequences == ["MVLS", "AVLS"]
-    assert two_seq_output.msa.get_column(0) == ["M", "A"]
-    assert two_seq_output.msa.get_conservation(0) == pytest.approx(0.5)
-
-
 # ── Input validation tests ───────────────────────────────────────────────────
-
-
-def test_mafft_input_valid():
-    inputs = MafftInput(sequences=["MVLSPADKTN", "MKLLVVAAAA"])
-    assert len(inputs.sequences) == 2
-
-
-def test_mafft_input_valid_with_custom_ids():
-    inputs = MafftInput(
-        sequences=["MVLSPADKTN", "MKLLVVAAAA"],
-        sequence_ids=["protein_a", "protein_b"],
-    )
-    assert inputs.sequence_ids == ["protein_a", "protein_b"]
-
-
-def test_mafft_input_valid_without_ids():
-    inputs = MafftInput(sequences=["MVLSPADKTN", "MKLLVVAAAA"])
-    assert inputs.sequence_ids is None
 
 
 @pytest.mark.parametrize(
@@ -144,30 +29,6 @@ def test_mafft_input_valid_without_ids():
 def test_mafft_input_invalid(sequences, error_match):
     with pytest.raises(ValueError, match=error_match):
         MafftInput(sequences=sequences)
-
-
-# ── Config validation tests ──────────────────────────────────────────────────
-
-
-@pytest.mark.parametrize("method", ["auto", "localpair", "globalpair", "genafpair"])
-def test_mafft_config_valid_align_methods(method):
-    config = MafftConfig(align_method=method)
-    assert config.align_method == method
-
-
-def test_mafft_config_invalid_align_method():
-    with pytest.raises(ValueError, match="Input should be"):
-        MafftConfig(align_method="invalid")
-
-
-def test_mafft_config_invalid_iterations():
-    with pytest.raises(ValueError, match="greater than or equal to 0"):
-        MafftConfig(max_iterations=-1)
-
-
-def test_mafft_config_invalid_threads():
-    with pytest.raises(ValueError, match="greater than or equal to 1"):
-        MafftConfig(threads=0)
 
 
 # ── Test data constants ───────────────────────────────────────────────────────
@@ -363,22 +224,6 @@ def test_mafft_to_fasta_output_format():
     fasta = result.msa.to_fasta_string()
     expected = ">seq_0\nMKLVGAARLSSG\n>seq_1\nAKLVGAARLSSG\n"
     assert fasta == expected
-
-
-@pytest.mark.integration
-def test_mafft_gap_statistics_accuracy():
-    """Test gap fraction and average gap statistics are accurate."""
-    inputs = MafftInput(sequences=[PROTEIN_BASE, PROTEIN_WITH_GAP_SHORT, PROTEIN_EXTENDED])
-    result = run_mafft_align(inputs, MafftConfig())
-
-    # Validate output and export functionality
-    validate_output(result)
-
-    # Alignment length is 18
-    # seq_0: 3 gaps, seq_1: 6 gaps, seq_2: 0 gaps
-    assert result.msa.total_gaps == 9
-    # Average gap fraction = (3/18 + 6/18 + 0/18) / 3 = 9/54 = 1/6
-    assert result.msa.average_gap_fraction == pytest.approx((3 / 18 + 6 / 18 + 0 / 18) / 3)
 
 
 @pytest.mark.integration

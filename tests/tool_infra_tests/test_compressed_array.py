@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import time
 
 import numpy as np
 import pytest
@@ -25,20 +24,6 @@ def test_roundtrip_bit_exact():
     json_str = json.dumps(compressed)
     reloaded = json.loads(json_str)
     recovered = decompress_array(reloaded)
-
-    np.testing.assert_array_equal(original, recovered)
-
-
-def test_roundtrip_large_array():
-    """Roundtrip on a realistic AlphaGenome-sized array (16k x 667)."""
-    from proto_tools.utils.compressed_array import decompress_array
-    from proto_tools.utils.standalone_helpers_source.standalone_helpers import compress_array
-
-    rng = np.random.default_rng(42)
-    original = rng.standard_normal((16384, 667)).astype(np.float32)
-
-    compressed = compress_array(original)
-    recovered = decompress_array(compressed)
 
     np.testing.assert_array_equal(original, recovered)
 
@@ -103,30 +88,6 @@ def test_compression_reduces_json_size():
     compressed_json = json.dumps(compress_array(arr))
 
     assert len(compressed_json) < len(list_json) / 3
-
-
-@pytest.mark.slow
-def test_compressed_json_smaller_and_faster_than_list_json():
-    """Full pipeline: compress+json.dumps is faster and smaller than tolist+json.dumps."""
-    from proto_tools.utils.standalone_helpers_source.standalone_helpers import compress_array
-
-    rng = np.random.default_rng(42)
-    arr = rng.standard_normal((4000, 200)).astype(np.float32)
-
-    t0 = time.monotonic()
-    list_json = json.dumps(arr.tolist())
-    list_time = time.monotonic() - t0
-
-    t0 = time.monotonic()
-    compressed_json = json.dumps(compress_array(arr))
-    compress_time = time.monotonic() - t0
-
-    assert len(compressed_json) < len(list_json) / 3, (
-        f"Compressed JSON ({len(compressed_json):,}) should be <1/3 of list JSON ({len(list_json):,})"
-    )
-    assert compress_time < list_time, (
-        f"compress+json.dumps ({compress_time:.2f}s) should be faster than tolist+json.dumps ({list_time:.2f}s)"
-    )
 
 
 # ============================================================================

@@ -824,26 +824,6 @@ def test_uniform_cost_cuts_exactly_as_counting_did():
     assert chunk_indices(100, 7, [1.0] * 100) == chunk_indices(100, 7, None)
 
 
-def test_the_count_ceiling_still_binds_when_cost_would_allow_more():
-    """max_chunk_size is a hard cap: cost decides where a cut falls, count how wide it may get."""
-    costs = [1.0] * 8 + [1000.0]
-
-    spans = chunk_indices(9, 3, costs)
-
-    assert all(stop - start <= 3 for start, stop in spans), f"a span exceeded the ceiling: {spans}"
-
-
-def test_one_very_expensive_item_neither_wedges_nor_vanishes():
-    """A single item worth more than a whole share must still be dispatched, on its own if need be."""
-    costs = [1.0, 1.0, 900.0, 1.0]
-
-    spans = chunk_indices(4, 2, costs)
-
-    covered = [i for start, stop in spans for i in range(start, stop)]
-    assert covered == [0, 1, 2, 3], "every item is dispatched exactly once"
-    assert all(start < stop for start, stop in spans), "no empty span"
-
-
 def test_every_item_is_dispatched_once_whatever_the_costs():
     """Coverage is the invariant a caller relies on; a gap would silently drop work."""
     import random

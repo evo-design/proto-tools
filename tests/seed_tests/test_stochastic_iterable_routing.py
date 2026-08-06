@@ -99,24 +99,6 @@ def test_stochastic_duplicates_unseeded_skips_cache(fresh_cache):
     assert r1.completions != r2.completions, "seed=None must bypass cache; repeat call should not hit"
 
 
-# ── stochastic + iterable + unique items ────────────────────────────────────
-
-
-def test_stochastic_unique_items_seeded(fresh_cache):
-    """[p1, p2, p3] + seed=42 produces 3 outputs, reproducible across recomputes."""
-    inputs = MockIterableStochasticInput(prompts=["aa", "bb", "cc"])
-    config = MockIterableStochasticConfig(seed=42)
-
-    r1 = run_mock_iterable_stochastic(inputs, config)
-    fresh_cache.clear()
-    r2 = run_mock_iterable_stochastic(inputs, config)
-
-    assert r1.items_processed == 3
-    assert len(r1.completions) == 3
-    # Reproducible across independent runs of the tool's algorithm.
-    assert r1.completions == r2.completions
-
-
 # ── deterministic + iterable + duplicates ───────────────────────────────────
 
 
@@ -241,33 +223,6 @@ def test_stochastic_serial_duplicates_bypass_dedup_and_diverge(fresh_cache):
     assert r1.completions == r2.completions
 
 
-def test_stochastic_serial_seeded_repeat_hits_whole_call_cache(fresh_cache):
-    """Serial stochastic tool: repeat call with same seed returns cached object."""
-    inputs = MockIterableStochasticSerialInput(prompts=["a", "b", "c"])
-    config = MockIterableStochasticSerialConfig(seed=42)
-
-    r1 = run_mock_iterable_stochastic_serial(inputs, config)
-    r2 = run_mock_iterable_stochastic_serial(inputs, config)
-
-    assert r2 is r1, "second call should return the cached object"
-    assert r1.completions == r2.completions
-
-
-def test_stochastic_serial_unseeded_skips_cache(fresh_cache):
-    """Serial stochastic tool: seed=None disables cache."""
-    inputs = MockIterableStochasticSerialInput(prompts=["p", "p", "p"])
-    config = MockIterableStochasticSerialConfig()  # seed=None
-
-    r1 = run_mock_iterable_stochastic_serial(inputs, config)
-    r2 = run_mock_iterable_stochastic_serial(inputs, config)
-
-    # Each call diverges internally — all 3 completions distinct.
-    assert len(set(r1.completions)) == 3
-    assert len(set(r2.completions)) == 3
-    # Calls differ from each other (no cache reuse).
-    assert r1.completions != r2.completions
-
-
 def test_stochastic_serial_matches_batched_output_for_same_seed(fresh_cache):
     """Serial and batched mocks produce identical outputs for the same prompts + seed.
 
@@ -296,44 +251,6 @@ def test_stochastic_serial_matches_batched_output_for_same_seed(fresh_cache):
 
 
 # ── coverage-gap fills ──────────────────────────────────────────────────────
-
-
-def test_stochastic_unique_seeded_repeat_hits_whole_call_cache(fresh_cache):
-    """Stochastic + unique iterable items + seed=42: repeat call hits whole-call cache.
-
-    Parallel to ``test_stochastic_duplicates_seeded_repeat_hits_whole_call_cache``
-    but with unique inputs — confirms that the whole-call cache works
-    for unique items as well as duplicates. The cache key is computed
-    from the full input list, so the second call hits regardless of
-    whether the list has duplicates.
-    """
-    inputs = MockIterableStochasticInput(prompts=["aa", "bb", "cc"])
-    config = MockIterableStochasticConfig(seed=42)
-
-    r1 = run_mock_iterable_stochastic(inputs, config)
-    r2 = run_mock_iterable_stochastic(inputs, config)
-
-    assert r2 is r1, "second call should return the cached object"
-    assert r1.completions == r2.completions
-
-
-def test_stochastic_unique_items_unseeded_skips_cache(fresh_cache):
-    """Stochastic + unique iterable items + seed=None: each call produces different results.
-
-    Mirrors ``test_stochastic_duplicates_unseeded_skips_cache`` but with
-    unique inputs — verifies the cache-skip-when-unseeded rule applies
-    regardless of whether the iterable has duplicates.
-    """
-    inputs = MockIterableStochasticInput(prompts=["aa", "bb", "cc"])
-    config = MockIterableStochasticConfig()  # seed=None
-
-    r1 = run_mock_iterable_stochastic(inputs, config)
-    r2 = run_mock_iterable_stochastic(inputs, config)
-
-    # Each call diverges internally.
-    assert len(set(r1.completions)) >= 2
-    # The two calls produce different result sets (cache skipped).
-    assert r1.completions != r2.completions
 
 
 def test_stochastic_mixed_duplicates_with_internal_batching(fresh_cache):

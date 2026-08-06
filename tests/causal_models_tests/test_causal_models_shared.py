@@ -91,6 +91,8 @@ def test_sample_config_contract(input_cls, config_cls, output_cls):
         config_cls(top_p=0.0)
     with pytest.raises(ValidationError):
         config_cls(top_p=1.5)
+    with pytest.raises(ValidationError):
+        config_cls(max_new_tokens=0)
 
 
 @pytest.mark.parametrize("input_cls,config_cls,output_cls", SAMPLE_TOOLS)

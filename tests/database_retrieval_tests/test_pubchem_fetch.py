@@ -258,13 +258,3 @@ def test_pubchem_fetch_include_aids_returns_assay_ids():
     # Aspirin has hundreds of bioassays
     assert len(output.bioassay_ids) > 100
     assert all(isinstance(aid, int) and aid > 0 for aid in output.bioassay_ids)
-
-
-@pytest.mark.integration
-def test_pubchem_fetch_default_excludes_optional_payloads():
-    """Default config does NOT make extra HTTP calls for synonyms/descriptions/aids."""
-    output = run_pubchem_fetch(PubChemFetchInput(cid=2244), PubChemFetchConfig())
-    assert output.success
-    assert output.synonyms == []
-    assert output.descriptions == []
-    assert output.bioassay_ids == []

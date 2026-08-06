@@ -8,7 +8,6 @@ import pytest
 from pydantic import ValidationError
 
 from proto_tools.entities.structures import Structure
-from proto_tools.tools import ToolRegistry
 from proto_tools.tools.structure_scoring.dssp import (
     DSSPSecondaryStructureInput,
     DSSPSecondaryStructureMetrics,
@@ -23,19 +22,6 @@ FIXTURE = (
     Path(__file__).resolve().parents[2]
     / "proto_tools/tools/structure_scoring/structure_metrics/example_input_fixture.pdb"
 )
-
-
-def test_dssp_tool_is_registered() -> None:
-    """ToolRegistry exposes DSSP with a valid example input."""
-    spec = ToolRegistry.get("dssp-secondary-structure")
-
-    assert spec.key == "dssp-secondary-structure"
-    assert spec.category == "structure_scoring"
-    assert spec.input_model is DSSPSecondaryStructureInput
-    assert spec.example_input is not None
-    example = spec.example_input()
-    assert isinstance(example, DSSPSecondaryStructureInput)
-    assert ToolRegistry.get_links("dssp-secondary-structure") == {"github": "https://github.com/PDB-REDO/dssp"}
 
 
 def test_dssp_input_accepts_single_path_and_defaults_to_first_chain() -> None:

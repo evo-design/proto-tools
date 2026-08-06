@@ -5,10 +5,6 @@ Consistency test: every registered tool must have a benchmark test.
 A benchmark is a ``@pytest.mark.benchmark("<tool-key>")`` test exercising the
 tool on a realistic workload. This guard fails when a tool is registered without
 one, so coverage cannot silently regress.
-
-``_KNOWN_MISSING`` is a shrinking ratchet of tools that predate this requirement.
-Delete an entry the moment you add that tool's benchmark — the test enforces that
-the list stays exact (no stale entries, no entry that is now covered).
 """
 
 import ast
@@ -34,11 +30,6 @@ _EXEMPT_TOOLS = frozenset(
         "mmseqs2-homology-search",
     }
 )
-
-# Tools registered before the benchmark requirement existed. Remove an entry
-# when you add its benchmark; do NOT add new entries — write the benchmark
-# instead. The test below keeps this set honest.
-_KNOWN_MISSING: frozenset[str] = frozenset()
 
 # Defined in conftest because the report writer needs it too: a pinned benchmark measures this
 # machine, so its report must not carry the run's remote backend label.
@@ -81,33 +72,15 @@ def _registered_tool_keys() -> set[str]:
 
 
 def test_consistency_all_tools_have_benchmark() -> None:
-    """Every registered tool must have a benchmark, except the shrinking ratchet."""
+    """Every registered tool must have a benchmark, and the exemption list must stay current."""
     registered = _registered_tool_keys()
     benchmarked = _benchmarked_tool_keys()
 
-    new_gaps = sorted(registered - benchmarked - _KNOWN_MISSING)
+    new_gaps = sorted(registered - benchmarked)
     assert not new_gaps, (
         f"Tools registered without a benchmark test: {new_gaps}. Add a "
         '@pytest.mark.benchmark("<tool-key>") test exercising the tool on a '
-        "realistic workload. Do not add the tool to _KNOWN_MISSING."
-    )
-
-
-def test_known_missing_is_exact() -> None:
-    """The ratchet may not drift: no stale entries, no already-covered entries."""
-    registered = _registered_tool_keys()
-    benchmarked = _benchmarked_tool_keys()
-
-    unregistered = sorted(_KNOWN_MISSING - registered)
-    assert not unregistered, (
-        f"_KNOWN_MISSING names tools that are no longer registered: {unregistered}. "
-        "Remove them (likely renamed or deleted)."
-    )
-
-    now_covered = sorted(_KNOWN_MISSING & benchmarked)
-    assert not now_covered, (
-        f"_KNOWN_MISSING lists tools that now have a benchmark: {now_covered}. "
-        "Delete these entries — the requirement is met for them."
+        "realistic workload."
     )
 
     # Keep the per-tool exemption list honest too.
@@ -116,11 +89,6 @@ def test_known_missing_is_exact() -> None:
     assert not stale_exempt, (
         f"_EXEMPT_TOOLS names tools that are no longer registered: {stale_exempt}. "
         "Remove them (likely renamed or deleted)."
-    )
-    double_listed = sorted(_EXEMPT_TOOLS & _KNOWN_MISSING)
-    assert not double_listed, (
-        f"Tools are both exempt and in _KNOWN_MISSING: {double_listed}. "
-        "An exempt tool needs no benchmark — remove it from _KNOWN_MISSING."
     )
 
 

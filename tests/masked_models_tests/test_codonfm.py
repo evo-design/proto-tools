@@ -361,7 +361,7 @@ def test_codonfm_gradient_dispatch_contract(monkeypatch) -> None:
         captured["payload"] = payload
         n = len(payload["logits"])
         return {
-            "gradient": [[0.0] * 64 for _ in range(n)],
+            "gradient": [[0.0] * 64 for _ in range(n)] if payload["compute_gradient"] else None,
             "loss": 0.5,
             "metrics": {"log_likelihood": -5.0, "avg_log_likelihood": -0.5, "perplexity": float(np.exp(0.5))},
             "vocab": CODONFM_CODON_VOCAB,
@@ -388,34 +388,11 @@ def test_codonfm_gradient_dispatch_contract(monkeypatch) -> None:
     assert result.gradient is not None and len(result.gradient) == 3
     assert result.vocab == CODONFM_CODON_VOCAB
 
-
-def test_codonfm_gradient_forward_mode_dispatch_contract(monkeypatch) -> None:
-    """compute_gradient=False forwards the flag and returns gradient=None with the scalar objective."""
-    captured: dict[str, object] = {}
-
-    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
-        captured["payload"] = payload
-        return {
-            "gradient": None,
-            "loss": 0.5,
-            "metrics": {"log_likelihood": -5.0, "avg_log_likelihood": -0.5, "perplexity": float(np.exp(0.5))},
-            "vocab": CODONFM_CODON_VOCAB,
-        }
-
-    monkeypatch.setattr(
-        "proto_tools.tools.masked_models.codonfm.codonfm_gradient.ToolInstance.dispatch",
-        staticmethod(fake_dispatch),
-    )
-
-    result = run_codonfm_gradient(
+    run_codonfm_gradient(
         CodonFMGradientInput(logits=[[0.0] * 64] * 3),
-        CodonFMGradientConfig(compute_gradient=False, device="cpu"),
+        CodonFMGradientConfig(model_checkpoint="encodon_80m", compute_gradient=False, device="cpu"),
     )
-
     assert captured["payload"]["compute_gradient"] is False
-    assert result.gradient is None
-    assert result.loss == 0.5
-    assert result.metrics["avg_log_likelihood"] == -0.5
 
 
 def test_codonfm_sample_dispatch_contract(monkeypatch) -> None:

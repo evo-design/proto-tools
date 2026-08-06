@@ -53,14 +53,6 @@ def test_fixed_positions_never_violated():
 
 
 @pytest.mark.parametrize("strategy", CPU_STRATEGIES)
-def test_output_length_matches_input(strategy):
-    """Every strategy must preserve sequence length."""
-    seq = "ABCDEFGHIJ"
-    result = strategy.mask([seq])
-    assert len(result[0]) == len(seq)
-
-
-@pytest.mark.parametrize("strategy", CPU_STRATEGIES)
 def test_only_mask_tokens_introduced(strategy):
     """Masked positions become '_'; non-masked positions keep original character."""
     seq = "ABCDEFGHIJ"
@@ -299,20 +291,6 @@ def test_apply_masking_strategy_does_not_mutate_original():
 # ── Method field and validation ──────────────────────────────────────────────
 
 
-def test_method_field_default():
-    """Default method is 'random'."""
-    assert MaskingStrategy().method == "random"
-
-
-def test_method_field_roundtrip():
-    """Method field survives serialization."""
-    s = MaskingStrategy(method="entropy")
-    data = s.model_dump()
-    assert data["method"] == "entropy"
-    restored = MaskingStrategy(**data)
-    assert restored.method == "entropy"
-
-
 def test_invalid_method_raises():
     """Unknown method raises a validation error."""
     with pytest.raises(ValidationError, match="Input should be 'random', 'entropy' or 'max-logit'"):
@@ -363,11 +341,6 @@ def test_tool_masking_field_matches_declared_inputs():
 
 
 # ── Temperature ───────────────────────────────────────────────────────────────
-
-
-def test_temperature_default():
-    """Default temperature is 1.0."""
-    assert MaskingStrategy().temperature == 1.0
 
 
 def test_temperature_low_is_greedy():
@@ -422,15 +395,6 @@ def test_temperature_high_is_uniform():
     assert len(set(masked_positions)) > 1
 
 
-def test_temperature_serialization_roundtrip():
-    """Temperature survives serialization."""
-    s = MaskingStrategy(temperature=0.5)
-    data = s.model_dump()
-    assert data["temperature"] == 0.5
-    restored = MaskingStrategy(**data)
-    assert restored.temperature == 0.5
-
-
 # ── Masker persistence ────────────────────────────────────────────────────────
 
 
@@ -442,12 +406,6 @@ def test_masker_is_reused_across_calls():
     strategy.mask(["KLMNOPQRST"])
     masker_second = strategy._masker
     assert masker_first is masker_second
-
-
-def test_masker_not_set_before_first_call():
-    """_masker is None until .mask() is called."""
-    strategy = MaskingStrategy()
-    assert strategy._masker is None
 
 
 # ── E2E tests (parameterized over all methods) ──────────────────────────────

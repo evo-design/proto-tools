@@ -70,13 +70,6 @@ def benchmark_pdb_structure():
 # ============================================================================
 # Unit tests (no GPU required, schema and data model validation)
 # ============================================================================
-def test_fampnn_sample_input_schema():
-    """FAMPNNSampleInput accepts a structure path and validates."""
-    inp = FAMPNNSampleInput(inputs=[FAMPNNStructureInput(structure=str(TEST_PDB_FILE))])
-    assert len(inp.inputs) == 1
-    assert inp.inputs[0].structure is not None
-
-
 def test_fampnn_structure_input_with_sidechain_positions(pdb_structure):
     """FAMPNNStructureInput accepts a fixed_sidechain_positions selection."""
     chain_ids = pdb_structure.get_chain_ids()
@@ -95,48 +88,10 @@ def test_fampnn_structure_input_with_sidechain_positions(pdb_structure):
     assert inp.fixed_positions.chains == {first_chain: positions}
 
 
-def test_fampnn_pack_input_schema(pdb_structure):
-    """FAMPNNPackInput accepts a structure."""
-    inp = FAMPNNPackInput(inputs=[FAMPNNStructureInput(structure=pdb_structure)])
-    assert len(inp.inputs) == 1
-
-
-def test_fampnn_score_input_schema(pdb_structure):
-    """FAMPNNScoreInput accepts a structure and mutations."""
-    inp = FAMPNNScoreInput(
-        inputs=[
-            MutationInput(
-                structure=pdb_structure,
-                mutations=["A1V", "G6L"],
-            )
-        ]
-    )
-    assert len(inp.inputs) == 1
-    assert inp.inputs[0].mutations == ["A1V", "G6L"]
-
-
-def test_fampnn_score_all_mutations_input_schema(pdb_structure):
-    """FAMPNNScoreAllMutationsInput accepts a structure."""
-    inp = FAMPNNScoreAllMutationsInput(inputs=[pdb_structure])
-    assert len(inp.inputs) == 1
-
-
 def test_fampnn_sample_config_batch_size_defaults():
     """batch_size defaults to num_sequences_per_structure."""
     config = FAMPNNSampleConfig(num_sequences_per_structure=5)
     assert config.batch_size == 5
-
-
-def test_fampnn_sample_config_custom_batch_size():
-    """Custom batch_size is respected."""
-    config = FAMPNNSampleConfig(num_sequences_per_structure=10, batch_size=3)
-    assert config.batch_size == 3
-
-
-def test_fampnn_sample_config_rejects_excluded_amino_acids():
-    """FAMPNN does not declare excluded_amino_acids; extra='forbid' rejects it at construction."""
-    with pytest.raises(Exception, match=r"[Ee]xtra"):
-        FAMPNNSampleConfig(excluded_amino_acids=["C"])
 
 
 def test_fampnn_design_structure_and_metrics():

@@ -73,36 +73,6 @@ def _self_assignment_targets(func: ast.FunctionDef) -> list[str]:
     return violations
 
 
-@pytest.mark.parametrize(
-    "assignment,expected",
-    [
-        ("self.a = 1", "self.a"),
-        ("self.a.b = 1", "self.a.b"),
-        ("self.a[0] = 1", "self.a[...]"),
-        ("self.a[0].b = 1", "self.a[...].b"),
-        ("self.a += 1", "self.a"),
-    ],
-    ids=["attr", "nested_attr", "subscript", "subscript_attr", "augmented"],
-)
-def test_self_assignment_detection_covers_attribute_and_subscript_chains(assignment, expected):
-    """Assignments rooted at self are reported through both attribute and subscript chains."""
-    tree = ast.parse(f"class C:\n    def preprocess(self, inputs):\n        {assignment}\n        return inputs")
-    func = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef))
-
-    assert _self_assignment_targets(func) == [expected]
-
-
-def test_self_assignment_detection_ignores_local_names():
-    """Assignments not rooted at self are not reported."""
-    tree = ast.parse(
-        "class C:\n    def preprocess(self, inputs):\n"
-        "        other = 1\n        other.x = 2\n        inputs.y = 3\n        return inputs"
-    )
-    func = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef))
-
-    assert _self_assignment_targets(func) == []
-
-
 def test_preprocess_definitions_found():
     """The scan finds preprocess overrides, so a passing suite is not an empty scan."""
     assert len(_PREPROCESS_DEFS) > 1

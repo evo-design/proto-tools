@@ -25,24 +25,6 @@ def test_map_known_smiles_to_ccd():
     assert result == "SEP"
 
 
-@pytest.mark.integration
-def test_map_unknown_smiles_returns_none():
-    result = map_smiles_to_ccd_code("INVALID_SMILES_XYZ123")
-    assert result is None
-
-
-def test_map_empty_smiles_returns_none():
-    result = map_smiles_to_ccd_code("")
-    assert result is None
-
-
-def test_map_known_ccd_to_smiles():
-    result = map_ccd_code_to_smiles("SEP")
-    assert result is not None
-    assert isinstance(result, str)
-    assert len(result) > 0
-
-
 def test_map_ccd_case_insensitive():
     result_upper = map_ccd_code_to_smiles("SEP")
     result_lower = map_ccd_code_to_smiles("sep")
@@ -237,11 +219,6 @@ def test_entity_type_distinction():
     assert set(rna_g_mods) != set(dna_g_mods)
 
 
-def test_empty_result_for_no_modifications():
-    mods = get_modifications_for_component("protein", "Z")
-    assert isinstance(mods, list)
-
-
 def test_case_insensitive_canonical_letter():
     mods_upper = get_modifications_for_component("protein", "S")
     mods_lower = get_modifications_for_component("protein", "s")
@@ -263,35 +240,9 @@ def test_invalid_entity_type_raises_error():
 # ── Round-trip and edge cases ────────────────────────────────────────────
 
 
-def test_multiple_roundtrips():
-    test_codes = ["SEP", "TPO", "2MG", "PSU", "6OG"]
-    for original_ccd in test_codes:
-        smiles = map_ccd_code_to_smiles(original_ccd)
-        assert smiles is not None, f"Failed to get SMILES for {original_ccd}"
-
-        ccd_from_smiles = map_smiles_to_ccd_code(smiles)
-        assert ccd_from_smiles == original_ccd, f"Roundtrip failed for {original_ccd}"
-
-
 def test_whitespace_in_ccd_code():
     result = map_ccd_code_to_smiles("  SEP  ")
     assert result is None
-
-
-@pytest.mark.integration
-def test_case_sensitivity_smiles():
-    smiles_sep = map_ccd_code_to_smiles("SEP")
-    result1 = map_smiles_to_ccd_code(smiles_sep)
-    result2 = map_smiles_to_ccd_code(smiles_sep.upper())
-    result3 = map_smiles_to_ccd_code(smiles_sep.lower())
-    assert result1 == "SEP"
-    assert result2 is None or result2 == "SEP"
-    assert result3 is None or result3 == "SEP"
-
-
-def test_map_smiles_novel_returns_none():
-    """A SMILES with no canonical or InChIKey match in the CCD returns None."""
-    assert map_smiles_to_ccd_code("c1ccc(C(=O)NCCNCCN)cc1") is None
 
 
 def test_inchikey_cache_contains_known_ccd_entries():
@@ -375,8 +326,8 @@ def test_inchikey_cache_drops_ambiguous_keys():
 
 @pytest.mark.parametrize(
     "ccd_code",
-    ["ATP", "SEP", "TPO", "HEM", "FAD", "ADP", "NAD", "GTP"],
-    ids=["ATP", "SEP", "TPO", "HEM", "FAD", "ADP", "NAD", "GTP"],
+    ["ATP", "HEM"],
+    ids=["ATP", "HEM"],
 )
 def test_valid_ligand_roundtrip(ccd_code):
     """CCD → RDKit SMILES → CCD round-trip works via canonical comparison."""

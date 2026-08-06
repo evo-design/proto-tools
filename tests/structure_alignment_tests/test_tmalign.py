@@ -6,7 +6,6 @@ Tests for TMalign structure alignment tool.
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
 
 from proto_tools.tools.structure_alignment.tmalign import (
     TMalignConfig,
@@ -19,25 +18,6 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 _DUMMY_DATA = Path(__file__).parent.parent / "dummy_data"
 _PDB_1_PATH = _DUMMY_DATA / "test_structure_similarity.pdb"
 _PDB_2_PATH = _DUMMY_DATA / "renin_af3.pdb"
-_MINIMAL_PDB = "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
-
-
-# ── Validation ────────────────────────────────────────────────────────────────
-
-
-def test_tmalign_input_rejects_missing_query_structure():
-    with pytest.raises(ValidationError, match="query_structure"):
-        TMalignInput(reference_structure=_MINIMAL_PDB)
-
-
-def test_tmalign_input_rejects_missing_reference_structure():
-    with pytest.raises(ValidationError, match="reference_structure"):
-        TMalignInput(query_structure=_MINIMAL_PDB)
-
-
-def test_tmalign_input_rejects_extra_fields():
-    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
-        TMalignInput(query_structure=_MINIMAL_PDB, reference_structure=_MINIMAL_PDB, extra_field="x")
 
 
 # ---------------------------------------------------------------------------

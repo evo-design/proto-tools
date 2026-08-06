@@ -85,11 +85,6 @@ def test_num_sequences_with_promoter():
     assert output.num_sequences_with_promoter == 2
 
 
-def test_num_sequences_with_promoter_empty():
-    output = PromoterCalculatorOutput(results=[])
-    assert output.num_sequences_with_promoter == 0
-
-
 # ── Export ────────────────────────────────────────────────────────────────
 
 
@@ -109,12 +104,6 @@ def test_export_csv(sample_output, tmp_path):
     sample_output.export(name="promoter_calculator", export_path=str(tmp_path), file_format="csv")
     csv_path = tmp_path / "promoter_calculator.csv"
     assert validate_export_output(csv_path)
-
-
-def test_export_json(sample_output, tmp_path):
-    sample_output.export(name="promoter_calculator", export_path=str(tmp_path), file_format="json")
-    json_path = tmp_path / "promoter_calculator.json"
-    assert validate_export_output(json_path)
 
 
 # ---------------------------------------------------------------------------

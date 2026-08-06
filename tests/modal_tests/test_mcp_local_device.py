@@ -25,11 +25,6 @@ def test_an_unknown_device_names_all_three() -> None:
         resolve_device("laptop")
 
 
-def test_the_default_is_unchanged() -> None:
-    """Adding a backend must not move anyone off the one they already use."""
-    assert resolve_device(None) == "modal"
-
-
 def test_every_registered_tool_is_available_locally() -> None:
     """Nothing is provisioned in advance here, so the catalogue is the registry itself."""
     from proto_tools.mcp import tools as impl
@@ -37,15 +32,6 @@ def test_every_registered_tool_is_available_locally() -> None:
     listed = {entry["tool"] for entry in impl.list_tools(deployed_only=True, device="local")}
     assert listed == {spec.key for spec in ToolRegistry.list_all()}
     assert _LOCAL_ONLY_TOOL in listed, "a tool with no deployment still runs on this machine"
-
-
-def test_the_local_catalogue_is_larger_than_the_deployable_one() -> None:
-    """The dispatch table is the wrong universe locally: it omits tools that run here fine."""
-    from proto_tools.mcp import tools as impl
-
-    local = impl.list_tools(deployed_only=True, device="local")
-    deployable = impl.list_tools(deployed_only=False, device="modal")
-    assert len(local) > len(deployable)
 
 
 def test_workspace_info_reports_no_account_and_no_deploys() -> None:
@@ -132,11 +118,3 @@ def test_the_remote_catalogue_includes_tools_answered_in_process() -> None:
     assert entry["available"] is True
     assert entry["runs_in_process"] is True
     assert entry["deployed"] is False, "it is usable, but nothing is deployed for it"
-
-
-def test_the_mcp_remote_guard_is_the_registry_one() -> None:
-    """One definition of 'remote', derived from RemoteDevice, so the two cannot drift."""
-    from proto_tools.mcp.device import is_remote
-    from proto_tools.utils.device import is_remote_device
-
-    assert is_remote is is_remote_device

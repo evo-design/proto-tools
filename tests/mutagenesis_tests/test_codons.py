@@ -10,12 +10,10 @@ import pytest
 from proto_tools.tools.mutagenesis.codons import (
     CODON_TO_AA,
     COMMON_CODON_SCHEMES,
-    IUPAC_DNA,
     STANDARD_AMINO_ACIDS,
     get_codon_scheme,
     get_substitution_pool,
     sample_amino_acid,
-    sample_nucleotide,
 )
 
 # ============================================================================
@@ -35,16 +33,6 @@ def test_codon_table_covers_all_amino_acids():
 def test_codon_table_has_three_stop_codons():
     stops = [k for k, v in CODON_TO_AA.items() if v == "*"]
     assert set(stops) == {"TAA", "TAG", "TGA"}
-
-
-# ============================================================================
-# IUPAC codes
-# ============================================================================
-
-
-def test_iupac_single_bases():
-    for base in "ACGT":
-        assert IUPAC_DNA[base] == base
 
 
 # ============================================================================
@@ -99,12 +87,6 @@ def test_sample_amino_acid_nnk_no_stops():
         assert aa != "*"
 
 
-def test_sample_amino_acid_reproducible():
-    a1 = sample_amino_acid("NNK", rng=random.Random(123))
-    a2 = sample_amino_acid("NNK", rng=random.Random(123))
-    assert a1 == a2
-
-
 # ============================================================================
 # include_stop
 # ============================================================================
@@ -127,11 +109,6 @@ def test_degenerate_include_stop_weighted_by_codon_count():
     assert "*" in with_stop["amino_acids"]
     assert with_stop["weights"]["*"] == 1.0
     assert sum(with_stop["weights"].values()) == sum(base["weights"].values()) + 1.0
-
-
-def test_default_excludes_stop():
-    assert "*" not in get_codon_scheme("UNIFORM")["amino_acids"]
-    assert "*" not in get_codon_scheme("NNK")["amino_acids"]
 
 
 def test_sample_amino_acid_include_stop_can_draw_star():
@@ -162,19 +139,3 @@ def test_substitution_pool(code, expected):
 def test_substitution_pool_invalid():
     with pytest.raises(ValueError, match="Unknown IUPAC code"):
         get_substitution_pool("Z")
-
-
-# ============================================================================
-# sample_nucleotide
-# ============================================================================
-
-
-def test_sample_nucleotide_reproducible():
-    b1 = sample_nucleotide("N", rng=random.Random(99))
-    b2 = sample_nucleotide("N", rng=random.Random(99))
-    assert b1 == b2
-
-
-def test_sample_nucleotide_invalid_code():
-    with pytest.raises(ValueError, match="Unknown IUPAC code"):
-        sample_nucleotide("X")

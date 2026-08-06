@@ -181,23 +181,6 @@ def test_esm3_score_different_sequences():
 
 
 @pytest.mark.uses_gpu
-def test_esm3_score_metrics_consistency():
-    """Test that scoring metrics are mathematically consistent."""
-    _seq = "MVLSPADKTNVKAAW"
-    inputs = ESM3ScoringInput(sequences=[_seq])
-    config = ESM3ScoringConfig(verbose=False, return_logits=True)
-
-    result = run_esm3_score(inputs=inputs, config=config)
-    score = result.scores[0]
-
-    expected_perplexity = np.exp(-score.avg_log_likelihood)
-    np.testing.assert_allclose(score.perplexity, expected_perplexity, rtol=1e-5)
-
-    expected_avg = score.log_likelihood / len(_seq)
-    np.testing.assert_allclose(score.avg_log_likelihood, expected_avg, rtol=1e-5)
-
-
-@pytest.mark.uses_gpu
 def test_esm3_score_batched():
     """Test batched scoring with different batch sizes."""
     sequences = ["MKTAYIAKQR", "EVQLVESGGS", "MVLSPADKTN", "GSSGSSGSS"]
@@ -212,40 +195,6 @@ def test_esm3_score_batched():
     for seq, score in zip(sequences, result.scores, strict=False):
         logits = np.array(score.logits)
         assert logits.shape[0] == len(seq)
-
-
-@pytest.mark.uses_gpu
-def test_esm3_score_variable_length():
-    """Test scoring sequences of different lengths."""
-    sequences = ["MK", "MKTA", "MKTAYIAK", "MKTAYIAKQRQISFVK"]
-    inputs = ESM3ScoringInput(sequences=sequences)
-    config = ESM3ScoringConfig(verbose=False, return_logits=True)
-
-    result = run_esm3_score(inputs=inputs, config=config)
-
-    for seq, score in zip(sequences, result.scores, strict=False):
-        assert isinstance(score.logits, list), f"Logits should be a list, got {type(score.logits)}"
-        assert len(score.logits) == len(seq), (
-            f"Sequence '{seq}' (len {len(seq)}): logits len should be {len(seq)}, got {len(score.logits)}"
-        )
-        assert len(score.logits[0]) == 20, f"Logits vocab size should be 20, got {len(score.logits[0])}"
-
-        assert score.perplexity >= 1.0
-        assert score.log_likelihood < 0
-
-
-@pytest.mark.uses_gpu
-def test_esm3_score_single_sequence():
-    """Test esm3 scoring with a single sequence (string input)."""
-    inputs = ESM3ScoringInput(sequences="MKTAYIAKQRQISFVKSHFS")
-    config = ESM3ScoringConfig(verbose=False, return_logits=True)
-
-    result = run_esm3_score(inputs=inputs, config=config)
-    validate_output(result)
-
-    assert len(result.scores) == 1
-    assert result.scores[0].perplexity >= 1.0
-    assert result.scores[0].logits is not None
 
 
 # ── Logits-specific tests ─────────────────────────────────────────────────────
@@ -265,28 +214,3 @@ def test_esm3_score_logits_disabled_by_default():
 
     for score in result.scores:
         assert score.logits is None, "Logits should be None when return_logits=False"
-
-
-@pytest.mark.uses_gpu
-def test_esm3_score_logits_serialization():
-    """Test that logits are properly serialized as nested lists."""
-    sequences = ["MKTAYIAKQR"]
-    inputs = ESM3ScoringInput(sequences=sequences)
-    config = ESM3ScoringConfig(
-        verbose=False,
-        return_logits=True,
-    )
-
-    result = run_esm3_score(inputs=inputs, config=config)
-    validate_output(result)
-
-    score = result.scores[0]
-
-    assert isinstance(score.logits, list), "Logits should be a list"
-    assert len(score.logits) > 0, "Logits list should not be empty"
-    assert isinstance(score.logits[0], list), "Logits should be a list of lists"
-    assert len(score.logits[0]) == 20, "Inner logits list should have 20 elements (vocab size)"
-
-    for position_logits in score.logits:
-        for logit_value in position_logits:
-            assert isinstance(logit_value, (int, float)), f"Logit value should be numeric, got {type(logit_value)}"

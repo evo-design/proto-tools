@@ -94,12 +94,6 @@ def test_crispr_array_spacers_property():
     assert "TTAA" in spacers
 
 
-def test_crispr_array_empty():
-    array = CrisprArray()
-    assert array.num_repeats == 0
-    assert array.spacers == []
-
-
 def test_sequence_result_has_crispr_with_arrays():
     rs = CrisprRepeatSpacer(position=0, repeat="ATCG")
     array = CrisprArray(repeats_and_spacers=[rs])
@@ -124,11 +118,6 @@ def test_num_sequences_with_crispr():
 
     output = MincedOutput(results=[r1, r2, r3])
     assert output.num_sequences_with_crispr == 2
-
-
-def test_num_sequences_with_crispr_empty():
-    output = MincedOutput(results=[])
-    assert output.num_sequences_with_crispr == 0
 
 
 # ── Export ────────────────────────────────────────────────────────────────
@@ -159,26 +148,9 @@ def test_export_csv(sample_output, tmp_path):
     assert validate_export_output(csv_path)
 
 
-def test_export_json(sample_output, tmp_path):
-    sample_output.export(name="minced", export_path=str(tmp_path), file_format="json")
-    json_path = tmp_path / "minced.json"
-    assert validate_export_output(json_path)
-
-
 # ---------------------------------------------------------------------------
 # Integration tests
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.integration
-def test_run_minced_with_crispr_sequence():
-    """Run MinCED on a sequence with known CRISPR arrays."""
-    inputs = MincedInput(sequences=[_CRISPR_SEQUENCE])
-    config = MincedConfig(min_num_repeats=3, min_repeat_length=23)
-    result = run_minced(inputs, config)
-
-    assert isinstance(result, MincedOutput)
-    assert len(result.results) == 1
 
 
 @pytest.mark.integration

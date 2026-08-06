@@ -262,15 +262,3 @@ def test_supplied_client_satisfies_the_credential_check(monkeypatch, tmp_path):
     monkeypatch.setattr("pathlib.Path.home", staticmethod(lambda: tmp_path))
 
     _require_modal_credentials("their-client")  # must not raise
-
-
-def test_no_client_still_requires_process_credentials(monkeypatch, tmp_path):
-    """Without a client and without ambient credentials, the actionable error still fires."""
-    monkeypatch.delenv("MODAL_TOKEN_ID", raising=False)
-    monkeypatch.delenv("MODAL_TOKEN_SECRET", raising=False)
-    monkeypatch.setattr("pathlib.Path.home", staticmethod(lambda: tmp_path))
-
-    from proto_tools.modal import ModalCredentialsError
-
-    with pytest.raises(ModalCredentialsError):
-        _require_modal_credentials()

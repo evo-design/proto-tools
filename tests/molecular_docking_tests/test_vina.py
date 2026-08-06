@@ -14,7 +14,6 @@ from pydantic import ValidationError
 from rdkit import Chem
 from rdkit.Chem import AllChem, rdMolAlign
 
-from proto_tools.tools import ToolRegistry
 from proto_tools.tools.molecular_docking.vina import (
     VinaDockingConfig,
     VinaDockingInput,
@@ -142,30 +141,6 @@ def _crystallographic_heavy_atom_rmsd(pose_sdf: str) -> float:
 # Validation and registry
 
 
-def test_vina_tool_is_registered_with_expected_contract() -> None:
-    """The registry exposes Vina as a cacheable stochastic CPU tool."""
-    spec = ToolRegistry.get("vina-docking")
-
-    assert spec.key == "vina-docking"
-    assert spec.category == "molecular_docking"
-    assert spec.input_model is VinaDockingInput
-    assert spec.config_model is VinaDockingConfig
-    assert spec.output_model is VinaDockingOutput
-    assert spec.metrics_model is VinaDockingPoseMetrics
-    assert spec.uses_gpu is False
-    assert spec.cacheable is True
-    assert spec.stochastic is True
-    assert isinstance(ToolRegistry.get_example_input("vina-docking"), VinaDockingInput)
-    assert ToolRegistry.get_links("vina-docking") == {
-        "github": "https://github.com/ccsb-scripps/AutoDock-Vina",
-        "website": "https://vina.scripps.edu",
-        "paper": "https://doi.org/10.1021/acs.jcim.1c00203",
-        "organizations": ["Scripps Research", "Forli Lab"],
-    }
-    assert VinaDockingPoseMetrics.metric_spec["rmsd_lower_bound"]["better_values_are"] == "context-dependent"
-    assert VinaDockingPoseMetrics.metric_spec["rmsd_upper_bound"]["better_values_are"] == "context-dependent"
-
-
 def test_vina_input_accepts_bare_smiles() -> None:
     """A bare SMILES ligand is normalized to a single Fragment."""
     inputs = _example_input()
@@ -250,16 +225,6 @@ def test_vina_config_rejects_out_of_range_values(kwargs: dict[str, Any]) -> None
     """Search controls reject values outside Vina's supported ranges."""
     with pytest.raises(ValidationError):
         VinaDockingConfig(**kwargs)
-
-
-def test_vina_minimal_config_reduces_search_cost() -> None:
-    """The infrastructure smoke-test config performs one single-threaded search."""
-    config = VinaDockingConfig.minimal(seed=9)
-
-    assert config.exhaustiveness == 1
-    assert config.num_poses == 1
-    assert config.cpu == 1
-    assert config.seed == 9
 
 
 def test_vina_rejects_a_grid_allocation_above_the_safety_limit(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -17,7 +17,6 @@ from proto_tools.tools.binder_design import (
     GerminalOutput,
     run_germinal_design,
 )
-from proto_tools.tools.tool_registry import ToolRegistry
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -180,20 +179,6 @@ def test_germinal_design_round_trip_serialization():
     assert rebuilt.mpnn_index == original.mpnn_index
     assert dict(rebuilt.metrics.items()) == dict(original.metrics.items())
     assert rebuilt.structure.structure == original.structure.structure
-
-
-# ── Tool registration ───────────────────────────────────────────────────────
-
-
-def test_germinal_design_registered_with_expected_metadata():
-    """``@tool`` wires the right registry metadata + a callable example_input."""
-    spec = next((s for s in ToolRegistry.list_all() if s.key == "germinal-design"), None)
-    assert spec is not None
-    assert spec.category == "binder_design"
-    assert spec.uses_gpu is True
-    assert spec.cacheable is False
-    example = spec.example_input()
-    assert isinstance(example, GerminalInput)
 
 
 # ── Dispatch payload (mocked) ───────────────────────────────────────────────

@@ -61,13 +61,6 @@ def test_existing_local_path_is_accepted(tmp_path) -> None:
 
 
 @pytest.mark.parametrize("device", ["modal", "proto"])
-@pytest.mark.parametrize("assembly", ASSEMBLIES)
-def test_named_assembly_runs_remotely(assembly: str, device: str) -> None:
-    """A worker can provision an assembly by name, so it is the form that travels."""
-    assert SpliceAIScoreConfig(reference_fasta=assembly).remote_unsupported_reason(device) is None
-
-
-@pytest.mark.parametrize("device", ["modal", "proto"])
 def test_local_path_is_refused_remotely(tmp_path, device: str) -> None:
     """The path names a file on the caller's machine; a container would read something else or fail."""
     fasta = tmp_path / "custom.fa"

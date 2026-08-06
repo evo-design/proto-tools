@@ -163,12 +163,6 @@ def test_signature_lists_required_input_fields_only() -> None:
     assert "IPSAEScoringInput(structure=..., binder_chain=..., target_chains=...)" in out
 
 
-def test_signature_resolves_a_run_function_name() -> None:
-    code, out, _ = _run("signature", "run_create_blast_db")
-    assert code == 0
-    assert "CreateBlastDbInput" in out
-
-
 def test_signature_stays_small_for_a_tool_with_a_huge_example() -> None:
     """The reason the verb exists: cost is fixed, not proportional to the example payload.
 
@@ -390,13 +384,3 @@ def test_doctor_reports_which_mechanism_authenticated(monkeypatch, tmp_path) -> 
     assert code == 0
     assert "OK via MODAL_TOKEN_ID/MODAL_TOKEN_SECRET" in out
     assert "proto-tools-esm2" in out, "deployed apps are listed so the caller sees what is reachable"
-
-
-def test_doctor_json_carries_the_remedy_for_a_bug_report(monkeypatch, tmp_path) -> None:
-    """The JSON form is what gets pasted into an issue, so it must carry the fix, not just the fault."""
-    _modal_auth(monkeypatch, tmp_path, found=False)
-    code, out, _ = _run("doctor", "--json")
-
-    payload = json.loads(out)
-    assert code == 1
-    assert any("MODAL_TOKEN_ID" in r for r in payload["remedies"])

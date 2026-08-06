@@ -173,17 +173,6 @@ def test_designed_complex_helpers():
 # ── InverseFoldingOutput ─────────────────────────────────────────────────
 
 
-def test_output_len():
-    output = InverseFoldingOutput(design_sets=[_MockDesignSet(complexes=[_mock_complex()])])
-    assert len(output) == 1
-
-
-def test_output_getitem():
-    design_set = _MockDesignSet(complexes=[_mock_complex()])
-    output = InverseFoldingOutput(design_sets=[design_set])
-    assert output[0] == design_set
-
-
 def test_output_iter():
     design_set = _MockDesignSet(complexes=[_mock_complex()])
     output = InverseFoldingOutput(design_sets=[design_set])
@@ -316,17 +305,6 @@ def test_sequence_structure_pair_roundtrip():
     assert restored.structure.structure == original.structure.structure
     assert restored.fixed_positions is not None
     assert restored.fixed_positions.chains == {"A": [1, 2, 3]}
-
-
-def test_sequence_structure_pair_accepts_fixed_positions():
-    """fixed_positions accepts the {chain: [positions]} shorthand and exposes .chains."""
-    pair = SequenceStructurePair(
-        sequence="MVLSP",
-        structure=Structure.from_file(TEST_PDB_FILE),
-        fixed_positions={"A": [1, 2, 3]},
-    )
-    assert pair.fixed_positions is not None
-    assert pair.fixed_positions.chains == {"A": [1, 2, 3]}
 
 
 def test_sequence_structure_pair_rejects_invalid_fixed_chain():

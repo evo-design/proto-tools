@@ -72,41 +72,6 @@ def test_run_ensembl_vep_dispatches_and_parses():
     assert "9%3Ag.22125504G%3EC" in args[0]
 
 
-def test_run_ensembl_vep_wraps_corrupt_json():
-    """Non-JSON body surfaces a tight error mentioning the HGVS input."""
-    session = MagicMock()
-    response = MagicMock()
-    response.status_code = 200
-    response.url = "https://rest.ensembl.org/vep/homo_sapiens/hgvs/bad"
-    response.text = "<html>err</html>"
-    response.raise_for_status.return_value = None
-    response.json.side_effect = ValueError("Expecting value: line 1 column 1 (char 0)")
-    session.get.return_value = response
-    with patch(
-        "proto_tools.tools.database_retrieval.ensembl.ensembl_vep.build_session",
-        return_value=session,
-    ):
-        with pytest.raises(Exception, match="non-JSON"):
-            run_ensembl_vep(EnsemblVEPInput(hgvs="9:g.22125504G>C"))
-
-
-def test_run_ensembl_vep_rejects_non_list_payload():
-    """A dict where a list is expected indicates a server-shape regression — surface it."""
-    session = MagicMock()
-    response = MagicMock()
-    response.status_code = 200
-    response.url = "https://rest.ensembl.org/vep/homo_sapiens/hgvs/9%3Ag.22125504G%3EC"
-    response.raise_for_status.return_value = None
-    response.json.return_value = {"oops": "dict"}
-    session.get.return_value = response
-    with patch(
-        "proto_tools.tools.database_retrieval.ensembl.ensembl_vep.build_session",
-        return_value=session,
-    ):
-        with pytest.raises(Exception, match="non-list"):
-            run_ensembl_vep(EnsemblVEPInput(hgvs="9:g.22125504G>C"))
-
-
 # ---------------------------------------------------------------------------
 # Integration tests
 # ---------------------------------------------------------------------------

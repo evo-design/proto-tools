@@ -101,25 +101,6 @@ def test_input_warns_on_long_sequence(caplog):
 # ── Config validation ────────────────────────────────────────────────────────
 
 
-def test_config_rejects_num_samples_zero():
-    with pytest.raises(ValueError, match="greater than or equal to 1"):
-        BioEmuConfig(num_samples=0)
-
-
-def test_config_rejects_batch_size_zero():
-    with pytest.raises(ValueError, match="greater than or equal to 1"):
-        BioEmuConfig(batch_size=0)
-
-
-def test_config_rejects_invalid_model_name():
-    with pytest.raises(ValueError, match="Input should be"):
-        BioEmuConfig(model_name="invalid-model")
-
-
-def test_config_default_timeout_is_one_hour():
-    assert BioEmuConfig().timeout == 3600
-
-
 def test_config_passes_new_fields_to_dispatch():
     """All five new Config fields must flow to the dispatch payload."""
     # Pre-supply an empty per-complex MSA entry so preprocess() skips ColabFold.

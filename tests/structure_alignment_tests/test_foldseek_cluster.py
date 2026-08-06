@@ -229,17 +229,6 @@ def test_input_resolves_dir_with_fasta_files(tmp_path):
     assert _TINY_FASTA_2 in (inputs.structures or [])
 
 
-def test_input_resolves_dir_from_path_object(tmp_path):
-    """A `Path` directory (not just a str) is accepted by the merged `structures` field."""
-    (tmp_path / "alpha.pdb").write_text(_TINY_PDB)
-    (tmp_path / "beta.cif").write_text(_TINY_CIF)
-
-    inputs = FoldseekClusterInput(structures=tmp_path)
-
-    assert sorted(inputs.structure_ids or []) == ["alpha", "beta"]
-    assert _TINY_PDB in (inputs.structures or [])
-
-
 # ── run_foldseek_cluster (mocked dispatch) ────────────────────────────────────
 
 

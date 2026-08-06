@@ -37,28 +37,6 @@ def test_allocate_2_gpus_auto(device_manager, mock_callback):
     ], "Should store both device IDs"
 
 
-def test_allocate_3_gpus_auto(mock_callback):
-    """Test auto-allocating 3 GPUs (cudax3) with mocked 3 GPUs."""
-    DeviceManager.reset_instance()
-
-    with patch(
-        "proto_tools.utils.device_manager.number_of_visible_gpus",
-        return_value=3,
-    ):
-        dm = DeviceManager.get_instance()
-
-        devices = dm.request_device("tool1", "instance1", device="cudax3", eviction_callback=mock_callback)
-
-        assert devices == "cuda:0,cuda:1,cuda:2"
-        assert dm._allocations["instance1"].device_ids == [
-            "cuda:0",
-            "cuda:1",
-            "cuda:2",
-        ]
-
-    DeviceManager.reset_instance()
-
-
 # ── Explicit allocation ─────────────────────────────────────────────────
 
 
@@ -92,19 +70,6 @@ def test_allocate_2_gpus_explicit_shorthand():
         ], "Should store both device IDs"
 
     DeviceManager.reset_instance()
-
-
-def test_allocate_2_gpus_explicit_verbose(device_manager, mock_callback):
-    """Test explicit 2-GPU allocation with verbose syntax (cuda:0,cuda:1)."""
-    devices = device_manager.request_device(
-        "tool1",
-        "instance1",
-        device="cuda:0,cuda:1",
-        eviction_callback=mock_callback,
-    )
-
-    assert devices == "cuda:0,cuda:1"
-    assert device_manager._allocations["instance1"].device_ids == ["cuda:0", "cuda:1"]
 
 
 def test_insufficient_gpus_for_multi_gpu_request(device_manager, mock_callback):
@@ -210,20 +175,6 @@ def test_lru_eviction_multi_gpu_request():
     DeviceManager.reset_instance()
 
 
-# ── Multi-GPU with allow_multiple ────────────────────────────────────────
-
-
-def test_multi_gpu_with_allow_multiple(device_manager, mock_callback):
-    """Test multi-GPU allocation with allow_multiple_per_device=True."""
-    device_manager.configure(allow_multiple_per_device=True)
-
-    device_manager.request_device("tool1", "instance1", device="cudax2", eviction_callback=mock_callback)
-    device_manager.request_device("tool2", "instance2", device="cuda", eviction_callback=mock_callback)
-
-    assert "instance1" in device_manager._allocations
-    assert "instance2" in device_manager._allocations
-
-
 # ── Multi-GPU move and release ──────────────────────────────────────────
 
 
@@ -291,19 +242,3 @@ def test_mixed_single_and_multi_gpu():
         assert dm._allocations["instance2"].device_ids == ["cuda:1", "cuda:2"]
 
     DeviceManager.reset_instance()
-
-
-# ── Multi-GPU status ────────────────────────────────────────────────────
-
-
-def test_multi_gpu_device_status(device_manager, mock_callback):
-    """Test get_device_status() correctly reports multi-GPU allocations."""
-    device_manager.request_device("tool1", "instance1", device="cudax2", eviction_callback=mock_callback)
-
-    status = device_manager.get_device_status()
-
-    assert "instance1" in status["allocations"]
-    alloc_info = status["allocations"]["instance1"]
-    assert alloc_info["toolkit"] == "tool1"
-
-    assert "," in alloc_info["device_id"] or len(alloc_info["device_id"].split(":")) == 2

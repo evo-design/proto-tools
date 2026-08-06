@@ -59,28 +59,6 @@ def test_evo1_sample_input_preserves_list():
     assert len(inp.prompts) == 2
 
 
-def test_evo1_sample_input_rejects_empty():
-    with pytest.raises(ValueError, match="prompts must not be empty"):
-        Evo1SampleInput(prompts=[])
-
-
-# ── Sample config validation ─────────────────────────────────────────────────
-
-
-@pytest.mark.parametrize(
-    "config_kwargs,match",
-    [
-        ({"temperature": 0.0}, "greater than 0"),
-        ({"top_p": 1.5}, "less than or equal to 1"),
-        ({"max_new_tokens": 0}, "greater than or equal to 1"),
-        ({"top_k": 0}, "greater than or equal to 1"),
-    ],
-)
-def test_evo1_sample_config_rejects_invalid_values(config_kwargs, match):
-    with pytest.raises(ValueError, match=match):
-        Evo1SampleConfig(**config_kwargs)
-
-
 # ── Sample output export ─────────────────────────────────────────────────────
 
 

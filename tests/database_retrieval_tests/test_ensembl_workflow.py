@@ -2,13 +2,11 @@
 
 Cross-tool stress / real-user workflow integration tests for the ensembl-*
 toolkit. Each test emulates a realistic chained query (BRCA1, TP53, EGFR
-panel; non-coding RNA; non-human species; concurrent calls) and verifies
-the wrappers behave correctly under live conditions.
+panel; non-coding RNA; non-human species) and verifies the wrappers behave
+correctly under live conditions.
 """
 
 from __future__ import annotations
-
-from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -122,18 +120,3 @@ def test_vep_clinvar_pathogenic_variant():
         tc.get("transcript_id") == "ENST00000357654" and "missense_variant" in tc.get("consequence_terms", [])
         for tc in cons.transcript_consequences
     )
-
-
-@pytest.mark.integration
-def test_concurrent_lookup_panel_dispatch():
-    """8 concurrent lookups across distinct symbols all return correct gene records.
-
-    Exercises per-thread session lifecycle and result independence; under
-    typical load this won't trip Ensembl's rate limiter, so retry behavior
-    is not asserted here.
-    """
-    symbols = ["BRCA1", "TP53", "EGFR", "MYC", "PTEN", "KRAS", "ALK", "BRAF"]
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        outs = list(pool.map(lambda s: run_ensembl_lookup(EnsemblLookupInput(symbol=s)), symbols))
-    assert all(o.result.species == "homo_sapiens" for o in outs)
-    assert {o.result.display_name for o in outs} == set(symbols)

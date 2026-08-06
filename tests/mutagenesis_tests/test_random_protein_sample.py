@@ -117,6 +117,7 @@ def test_excluding_all_reachable_amino_acids_raises():
 
 @pytest.mark.parametrize("excluded", [["B"], ["*"]])
 def test_excluded_amino_acids_reject_invalid_values(excluded):
+    """Pins the field to list[AminoAcid]; widening it to list[str] would let a caller exclude the stop codon."""
     with pytest.raises(ValueError, match="excluded_amino_acids"):
         RandomProteinSampleConfig(excluded_amino_acids=excluded)
 

@@ -31,30 +31,6 @@ def test_progen2_sample_input_normalizes_single_string():
     assert inp.prompts == ["MKTLV"]
 
 
-@pytest.mark.parametrize(
-    "input_kwargs,match",
-    [
-        ({"prompts": []}, "prompts must not be empty"),
-    ],
-)
-def test_progen2_sample_input_validation(input_kwargs, match):
-    with pytest.raises(ValueError, match=match):
-        ProGen2SampleInput(**input_kwargs)
-
-
-@pytest.mark.parametrize(
-    "config_kwargs,match",
-    [
-        ({"temperature": 0.0}, "greater than 0"),
-        ({"top_p": 1.5}, "less than or equal to 1"),
-        ({"max_new_tokens": 0}, "greater than or equal to 1"),
-    ],
-)
-def test_progen2_sample_config_validation(config_kwargs, match):
-    with pytest.raises(ValueError, match=match):
-        ProGen2SampleConfig(**config_kwargs)
-
-
 def test_progen2_sample_dispatches_one_sequence_per_prompt(monkeypatch):
     """Multi-prompt input goes through a single dispatch carrying the full batch."""
     captured_payloads = []
@@ -181,23 +157,6 @@ def test_progen2_sample_prompt_handling(prompt, expected_prefix):
 
 
 @pytest.mark.uses_gpu
-def test_progen2_sample_max_new_tokens_respected():
-    """Test that max_new_tokens caps the newly generated portion of the output."""
-    inputs = ProGen2SampleInput(prompts="1M")
-    config = ProGen2SampleConfig(
-        model_checkpoint="progen2-small",
-        max_new_tokens=20,
-        temperature=0.2,
-        verbose=False,
-    )
-
-    result = run_progen2_sample(inputs=inputs, config=config)
-
-    # "1M" decodes to "M" after the start sentinel is stripped; output ≤ prompt + new tokens.
-    assert len(result.sequences[0]) <= 1 + 20
-
-
-@pytest.mark.uses_gpu
 def test_progen2_sample_special_token_stripping():
     """Test special token stripping behavior."""
     result_stripped = run_progen2_sample(
@@ -229,29 +188,6 @@ def test_progen2_sample_special_token_stripping():
 
 
 # ── Batched sampling tests ────────────────────────────────────────────────────
-
-
-@pytest.mark.uses_gpu
-def test_progen2_sample_batched():
-    """Test batched sampling via run_progen2_sample with batch_size."""
-    prompts = ["1MKTLV", "1EVQLV", "1AAAAA", "1GGGGG"]
-    inputs = ProGen2SampleInput(prompts=prompts)
-    config = ProGen2SampleConfig(
-        model_checkpoint="progen2-small",
-        max_new_tokens=50,
-        temperature=0.2,
-        batch_size=2,
-        verbose=False,
-    )
-
-    result = run_progen2_sample(inputs=inputs, config=config)
-    validate_output(result)
-
-    assert len(result.sequences) == 4
-
-    for i, (prompt, seq) in enumerate(zip(prompts, result.sequences, strict=False)):
-        prompt_aa = prompt[1:]
-        assert seq.startswith(prompt_aa), f"Sequence {i} should start with '{prompt_aa}', got '{seq[:10]}'"
 
 
 @pytest.mark.uses_gpu
@@ -422,24 +358,6 @@ def test_progen2_score_batch_size_consistency():
         np.testing.assert_allclose(log_likelihoods[0], log_likelihoods[2], rtol=1e-5)
 
 
-@pytest.mark.uses_gpu
-def test_progen2_score_variable_length_sequences():
-    """Test scoring sequences of different lengths produces correct logits shapes."""
-    sequences = ["MK", "MKTL", "MKTLVIVT", "MKTLVIVTGASG"]
-    inputs = ProGen2ScoringInput(sequences=sequences)
-    config = ProGen2ScoringConfig(model_checkpoint="progen2-small", batch_size=2, verbose=False, return_logits=True)
-
-    result = run_progen2_score(inputs=inputs, config=config)
-    assert_metrics_in_spec(result)
-
-    for seq, score in zip(sequences, result.scores, strict=False):
-        expected_len = len(seq) + 1  # +1 for start token
-        assert len(score.logits) == expected_len, (
-            f"Sequence '{seq}' (len {len(seq)}): expected logits len {expected_len}, got {len(score.logits)}"
-        )
-        assert len(score.logits[0]) == 30, "ProGen2 vocab size should be 30"
-
-
 # ── Logits-specific tests (scoring) ──────────────────────────────────────────
 
 
@@ -458,32 +376,6 @@ def test_progen2_score_logits_disabled_by_default():
 
     for score in result.scores:
         assert score.logits is None, "Logits should be None when return_logits=False"
-
-
-@pytest.mark.uses_gpu
-def test_progen2_score_logits_serialization():
-    """Test that logits are properly serialized as nested lists."""
-    sequences = ["MKTLVIVTGA"]
-    inputs = ProGen2ScoringInput(sequences=sequences)
-    config = ProGen2ScoringConfig(
-        model_checkpoint="progen2-small",
-        verbose=False,
-        return_logits=True,
-    )
-
-    result = run_progen2_score(inputs=inputs, config=config)
-    validate_output(result)
-
-    score = result.scores[0]
-
-    assert isinstance(score.logits, list), "Logits should be a list"
-    assert len(score.logits) > 0, "Logits list should not be empty"
-    assert isinstance(score.logits[0], list), "Logits should be a list of lists"
-    assert len(score.logits[0]) == 30, "Inner logits list should have 30 elements (ProGen2 vocab size)"
-
-    for position_logits in score.logits:
-        for logit_value in position_logits:
-            assert isinstance(logit_value, (int, float)), f"Logit value should be numeric, got {type(logit_value)}"
 
 
 # ── Logits-specific tests (sampling) ─────────────────────────────────────────

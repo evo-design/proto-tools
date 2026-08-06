@@ -62,28 +62,6 @@ def test_interface_analyzer_rejects_binder_in_target_set():
         PyRosettaInterfaceAnalyzerInput(inputs=[{"structure": TEST_PDB, "target_chains": ["A"], "binder_chain": "A"}])
 
 
-def test_interface_analyzer_input_accepts_multiple_structures():
-    """A list of multiple structures constructs correctly and preserves per-input chain labels."""
-    inp = PyRosettaInterfaceAnalyzerInput(
-        inputs=[
-            TEST_PDB,
-            {"structure": TEST_PDB, "target_chains": ["B"], "binder_chain": "A"},
-        ],
-    )
-    assert len(inp.inputs) == 2
-    assert inp.inputs[0].target_chains == ["A"]
-    assert inp.inputs[0].binder_chain == "B"
-    assert inp.inputs[1].target_chains == ["B"]
-    assert inp.inputs[1].binder_chain == "A"
-
-
-def test_interface_analyzer_accepts_multi_chain_target():
-    """A multi-chain target (binder-vs-rest) constructs when all chains exist and are disjoint."""
-    inp = InterfaceStructureInput(structure=_split_pdl1_target(), target_chains=["A", "B"], binder_chain="C")
-    assert inp.target_chains == ["A", "B"]
-    assert inp.binder_chain == "C"
-
-
 # ── Integration ───────────────────────────────────────────────────────────────
 
 

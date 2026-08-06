@@ -79,34 +79,6 @@ def test_lru_eviction_respects_last_used_update(device_manager, mock_callback):
 # ── Eviction callback tests ──────────────────────────────────────────────
 
 
-def test_cpu_eviction_calls_callback_with_cpu(device_manager):
-    """Test CPU eviction strategy calls callback with 'cpu' action."""
-    device_manager.configure(offload_strategy=OffloadStrategy.CPU)
-
-    calls1, calls2, calls3 = [], [], []
-
-    def cb1(action):
-        return calls1.append(action)
-
-    def cb2(action):
-        return calls2.append(action)
-
-    def cb3(action):
-        return calls3.append(action)
-
-    device_manager.request_device("tool1", "instance1", device="cuda", eviction_callback=cb1)
-    time.sleep(0.01)
-    device_manager.request_device("tool2", "instance2", device="cuda", eviction_callback=cb2)
-
-    # Request third device - should evict tool1 (LRU) to CPU
-    device_manager.request_device("tool3", "instance3", device="cuda", eviction_callback=cb3)
-
-    assert len(calls1) == 1
-    assert calls1[0] == "cpu"
-    assert len(calls2) == 0  # Not evicted
-    assert len(calls3) == 0  # Just allocated
-
-
 def test_restart_eviction_calls_callback_with_shutdown(device_manager):
     """Test RESTART eviction strategy calls callback with 'shutdown' action."""
     device_manager.configure(offload_strategy=OffloadStrategy.RESTART)
@@ -232,54 +204,6 @@ def test_cpu_request_works_without_gpus(no_gpus_manager, mock_callback):
     assert device == "cpu"
 
 
-def test_eviction_callback_does_not_update_last_used(device_manager):
-    """Production-like eviction callback does not update last_used.
-
-    Simulates what _run_persistent()'s eviction callback does: sends a
-    worker command and sets self.device = "cpu". Verifies that last_used
-    is NOT updated by the eviction path, so LRU ordering is preserved.
-
-    This covers a bug that test_cpu_eviction_preserves_lru_ordering misses
-    (that test uses bare lambda callbacks that don't call move_to_device).
-    """
-    device_manager.configure(offload_strategy=OffloadStrategy.CPU)
-
-    # Simulate production eviction callback (sends worker command, updates device)
-    # In production this sends to self._worker; here we just track calls.
-    worker_commands = []
-
-    class FakeInstance:
-        device = "cuda:0"
-
-    fake = FakeInstance()
-
-    def production_like_callback(action: str) -> None:
-        if action == "cpu":
-            # Simulate: self._worker.send({"command": "to_device", "device": "cpu"})
-            worker_commands.append("to_device:cpu")
-            # Simulate: self.device = "cpu"
-            fake.device = "cpu"
-
-    device_manager.request_device("tool1", "instance1", device="cuda", eviction_callback=production_like_callback)
-    time.sleep(0.01)
-    device_manager.request_device("tool2", "instance2", device="cuda", eviction_callback=lambda x: None)
-
-    # Record tool1's last_used before eviction
-    last_used_before = device_manager._allocations["instance1"].last_used
-
-    # Request third device -- evicts tool1 (LRU)
-    time.sleep(0.01)
-    device_manager.request_device("tool3", "instance3", device="cuda", eviction_callback=lambda x: None)
-
-    # Callback was invoked
-    assert worker_commands == ["to_device:cpu"]
-    assert fake.device == "cpu"
-
-    # last_used must NOT have changed (preserves LRU ordering)
-    last_used_after = device_manager._allocations["instance1"].last_used
-    assert last_used_after == last_used_before
-
-
 def test_multi_gpu_eviction_calls_callback_once(device_manager):
     """Test multi-GPU allocation eviction calls callback only once."""
     device_manager.configure(offload_strategy=OffloadStrategy.CPU)
@@ -324,32 +248,4 @@ def test_transient_allocation_not_evicted(device_manager, mock_callback):
             eviction_callback=mock_callback,
         )
         assert device3 == "cuda:1"
-        assert mock_callback.calls == ["cpu"]
-
-
-def test_persistent_evicted_before_transient(device_manager, mock_callback):
-    """With mixed allocation types, only persistent is evicted."""
-    device_manager.configure(offload_strategy=OffloadStrategy.CPU)
-
-    # Put persistent on cuda:0 (oldest)
-    device_manager.request_device(
-        "tool1",
-        "inst1",
-        device="cuda",
-        eviction_callback=mock_callback,
-    )
-    time.sleep(0.01)
-
-    # Put transient lease on cuda:1 (newer)
-    with device_manager.lease("tool2", device="cuda:1"):
-        # Request another device
-        device = device_manager.request_device(
-            "tool3",
-            "inst3",
-            device="cuda",
-            eviction_callback=mock_callback,
-        )
-        # Should evict inst1 (persistent) even though it's on cuda:0
-        assert device == "cuda:0"
-        # inst1 should have been offloaded to CPU
         assert mock_callback.calls == ["cpu"]

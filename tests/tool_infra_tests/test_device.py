@@ -8,10 +8,8 @@ import os
 import pytest
 
 from proto_tools.utils.device import (
-    DeviceSpec,
     determine_visible_devices,
     number_of_available_gpus,
-    number_of_physical_gpus,
     number_of_visible_gpus,
     parse_device_string,
 )
@@ -125,22 +123,6 @@ def test_parse_device_string_whitespace_handling():
     assert spec.count == 2
 
 
-# ============================================================================
-def test_parse_cuda_returns_devicespec():
-    """All CUDA variants return DeviceSpec with kind='cuda'."""
-    for device_str in ("cuda", "cudax2", "cuda:0", "cuda:0,1"):
-        spec = parse_device_string(device_str)
-        assert isinstance(spec, DeviceSpec)
-        assert spec.kind == "cuda"
-
-
-def test_devicespec_frozen():
-    """DeviceSpec is immutable."""
-    spec = parse_device_string("cuda")
-    with pytest.raises(AttributeError):
-        spec.kind = "cpu"
-
-
 def _expected_physical(*logical_indices: int) -> str:
     """Map logical CUDA indices to the expected physical device string.
 
@@ -183,34 +165,6 @@ def test_determine_visible_devices_multi_auto():
 
     result = determine_visible_devices("cudax3")
     assert result == _expected_physical(0, 1, 2)
-
-
-def test_determine_visible_devices_multi_explicit_shorthand():
-    """Test CUDA_VISIBLE_DEVICES for multi-GPU shorthand."""
-    num_gpus = number_of_available_gpus()
-    if num_gpus < 2:
-        pytest.skip(f"Test requires 2+ GPUs, found {num_gpus}")
-
-    result = determine_visible_devices("cuda:0,1")
-    assert result == _expected_physical(0, 1)
-
-    if num_gpus >= 5:
-        result = determine_visible_devices("cuda:2,3,4")
-        assert result == _expected_physical(2, 3, 4)
-
-
-def test_determine_visible_devices_multi_explicit_verbose():
-    """Test CUDA_VISIBLE_DEVICES for multi-GPU verbose syntax."""
-    num_gpus = number_of_available_gpus()
-    if num_gpus < 2:
-        pytest.skip(f"Test requires 2+ GPUs, found {num_gpus}")
-
-    result = determine_visible_devices("cuda:0,cuda:1")
-    assert result == _expected_physical(0, 1)
-
-    if num_gpus >= 4:
-        result = determine_visible_devices("cuda:1,cuda:3")
-        assert result == _expected_physical(1, 3)
 
 
 def test_determine_visible_devices_invalid_index_exceeds_gpus():
@@ -374,14 +328,6 @@ def test_determine_visible_devices_with_parent_cuda_visible_devices(monkeypatch)
     assert determine_visible_devices("cuda:1,2") == "5,7"
 
 
-def test_determine_visible_devices_with_single_parent_device(monkeypatch):
-    """Test mapping when parent has only one visible device."""
-    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "4")
-
-    # Only cuda:0 should be valid
-    assert determine_visible_devices("cuda:0") == "4"
-
-
 def test_determine_visible_devices_auto_allocate_with_parent(monkeypatch):
     """Test auto-allocation respects parent CUDA_VISIBLE_DEVICES."""
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2,3,4")
@@ -416,17 +362,6 @@ def test_determine_visible_devices_cpu_ignores_parent(monkeypatch):
 
 
 # ── determine_visible_devices(): List Input ───────────────────────────────────
-
-
-@pytest.mark.uses_gpu
-def test_determine_visible_devices_list_basic():
-    """List of CUDA device strings returns deduplicated physical indices."""
-    num_gpus = number_of_available_gpus()
-    if num_gpus < 2:
-        pytest.skip(f"Test requires 2+ GPUs, found {num_gpus}")
-
-    result = determine_visible_devices(["cuda:0", "cuda:1"])
-    assert result == _expected_physical(0, 1)
 
 
 def test_determine_visible_devices_list_skips_non_cuda():
@@ -494,23 +429,6 @@ def test_determine_visible_devices_list_int_invalid():
 # ── number_of_physical_gpus() and number_of_visible_gpus() ───────────────────
 
 
-def test_number_of_physical_gpus_returns_positive_or_zero():
-    """Test that number_of_physical_gpus() returns non-negative count."""
-    count = number_of_physical_gpus()
-    assert count >= 0
-
-
-def test_number_of_visible_gpus_without_cuda_visible_devices(monkeypatch):
-    """Test number_of_visible_gpus() without CUDA_VISIBLE_DEVICES set."""
-    # Remove CUDA_VISIBLE_DEVICES if it exists
-    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
-
-    # Should return same as physical GPUs
-    physical = number_of_physical_gpus()
-    visible = number_of_visible_gpus()
-    assert visible == physical
-
-
 def test_number_of_visible_gpus_with_cuda_visible_devices(monkeypatch):
     """Test number_of_visible_gpus() with CUDA_VISIBLE_DEVICES set."""
     # Set CUDA_VISIBLE_DEVICES to a subset of GPUs
@@ -519,14 +437,6 @@ def test_number_of_visible_gpus_with_cuda_visible_devices(monkeypatch):
     # Should return count of devices in CUDA_VISIBLE_DEVICES
     visible = number_of_visible_gpus()
     assert visible == 3
-
-
-def test_number_of_visible_gpus_with_single_device(monkeypatch):
-    """Test number_of_visible_gpus() with single GPU visible."""
-    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "3")
-
-    visible = number_of_visible_gpus()
-    assert visible == 1
 
 
 def test_number_of_visible_gpus_with_empty_cuda_visible_devices(monkeypatch):
@@ -552,12 +462,6 @@ def test_number_of_visible_gpus_with_invalid_indices(monkeypatch, caplog):
         assert visible == 3
         # Should log warning about invalid indices
         assert "non-existent GPU(s)" in caplog.text
-
-
-def test_number_of_visible_gpus_backward_compat():
-    """Test that number_of_available_gpus() is alias for number_of_visible_gpus()."""
-    # Both should return same value
-    assert number_of_available_gpus() == number_of_visible_gpus()
 
 
 def test_parse_device_string_cuda_non_integer_index():

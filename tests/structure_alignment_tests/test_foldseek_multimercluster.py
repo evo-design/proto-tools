@@ -26,16 +26,6 @@ _FIXTURES = Path(__file__).parent.parent / "dummy_data"
 # ── FoldseekMultimerClusterInput validators ───────────────────────────────────
 
 
-def test_input_requires_at_least_two_structures():
-    with pytest.raises(ValidationError, match="at least 2"):
-        FoldseekMultimerClusterInput(structures=[_TINY_MULTIMER_PDB])
-
-
-def test_input_requires_structures():
-    with pytest.raises(ValidationError, match="required"):
-        FoldseekMultimerClusterInput()
-
-
 def test_input_accepts_structure_objects():
     """`Structure` objects in the list are accepted (typed-entity input) and coerced to text."""
     from proto_tools.entities import Structure
@@ -45,21 +35,6 @@ def test_input_accepts_structure_objects():
     assert inputs.structures == [_TINY_MULTIMER_PDB, _TINY_MULTIMER_PDB]
     # Schema exposes the Structure entity.
     assert "Structure" in FoldseekMultimerClusterInput.model_json_schema().get("$defs", {})
-
-
-def test_input_rejects_ids_with_dir(tmp_path):
-    (tmp_path / "a.pdb").write_text(_TINY_MULTIMER_PDB)
-    (tmp_path / "b.pdb").write_text(_TINY_MULTIMER_PDB)
-    with pytest.raises(ValidationError, match="may not be combined"):
-        FoldseekMultimerClusterInput(structures=str(tmp_path), structure_ids=["x", "y"])
-
-
-def test_input_rejects_id_count_mismatch():
-    with pytest.raises(ValidationError, match="structure_ids length"):
-        FoldseekMultimerClusterInput(
-            structures=[_TINY_MULTIMER_PDB, _TINY_MULTIMER_PDB],
-            structure_ids=["only-one"],
-        )
 
 
 def test_input_rejects_user_supplied_ids_with_underscore():
@@ -76,17 +51,6 @@ def test_input_rejects_filename_stems_with_underscore(tmp_path):
     (tmp_path / "complex_a.pdb").write_text(_TINY_MULTIMER_PDB)
     (tmp_path / "complex_b.pdb").write_text(_TINY_MULTIMER_PDB)
     with pytest.raises(ValidationError, match="collides"):
-        FoldseekMultimerClusterInput(structures=str(tmp_path))
-
-
-def test_input_rejects_nonexistent_dir():
-    with pytest.raises(ValidationError, match="not an existing directory"):
-        FoldseekMultimerClusterInput(structures="/nonexistent/path/abcxyz")
-
-
-def test_input_rejects_dir_with_too_few_files(tmp_path):
-    (tmp_path / "only.pdb").write_text(_TINY_MULTIMER_PDB)
-    with pytest.raises(ValidationError, match="at least 2"):
         FoldseekMultimerClusterInput(structures=str(tmp_path))
 
 

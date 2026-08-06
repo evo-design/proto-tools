@@ -1,15 +1,16 @@
-"""tests/functional_tests/test_non_editable_install.py.
+#!/usr/bin/env python
+"""scripts/check_non_editable_install.py.
 
-Functional test: verify PROTO_HOME path resolution for non-editable pip install.
-
-Run from demo-project/ (NOT the repo root) to ensure Python loads from
-site-packages, not the local source directory.
+Manual check of PROTO_HOME and model-cache path resolution for a
+non-editable pip install. Run from a scratch directory (NOT the repo
+root) so Python loads proto_tools from site-packages rather than the
+local source tree.
 
 Usage:
     export PROTO_HOME=~/.proto
     export PROTO_MODEL_CACHE=~/.cache/proto-tools/model_weights
-    cd demo-project/
-    python test_non_editable_install.py
+    cd /path/to/scratch-project/
+    python /path/to/proto-tools/scripts/check_non_editable_install.py
 
 On storage-constrained systems (e.g. HPC clusters with a small $HOME quota),
 point PROTO_HOME and PROTO_MODEL_CACHE at directories with enough space for
@@ -20,11 +21,12 @@ import os
 
 
 def main():
+    """Print and assert the resolved storage locations for the installed package."""
     proto_home = os.environ.get("PROTO_HOME")
     proto_model_cache = os.environ.get("PROTO_MODEL_CACHE")
 
     print("=" * 70)
-    print("NON-EDITABLE INSTALL FUNCTIONAL TEST")
+    print("NON-EDITABLE INSTALL CHECK")
     print("=" * 70)
     print()
 
@@ -43,7 +45,7 @@ def main():
     print(f"    __file__ = {pkg_file}")
     assert "site-packages" in pkg_file, (
         f"Expected to load from site-packages but got: {pkg_file}\n"
-        f"Are you running from the repo root? Run from demo-project/ instead."
+        f"Are you running from the repo root? Run from a scratch directory instead."
     )
     print("    PASS: Loading from site-packages (non-editable)")
     print()

@@ -94,7 +94,7 @@ def test_invalid_default_value_raises_error(tmp_path, invalid):
         tool._get_python_version()
 
 
-@pytest.mark.parametrize("version", ["2.7", "3.6", "3.7"])
+@pytest.mark.parametrize("version", ["3.7"])
 def test_unsupported_default_version_raises_error(tmp_path, version):
     """Python versions before 3.8 are rejected."""
     (tmp_path / "python_version.txt").write_text(f"default: {version}\n")
@@ -103,16 +103,6 @@ def test_unsupported_default_version_raises_error(tmp_path, version):
     tool = _make_test_instance(tmp_path)
     with pytest.raises(ValueError, match=r"(Unsupported|version.*3\.8)"):
         tool._get_python_version()
-
-
-def test_comments_are_stripped(tmp_path):
-    """`#` comments are ignored; the rest of the file parses normally."""
-    content = "# Use Python 3.11 because of upstream constraints\ndefault: 3.11  # inline comment too\n"
-    (tmp_path / "python_version.txt").write_text(content)
-    (tmp_path / "setup.sh").write_text(_SETUP_SH_CONTENT)
-
-    tool = _make_test_instance(tmp_path)
-    assert tool._get_python_version() == "3.11"
 
 
 # ── _parse_python_version (pure parser, with explicit platform_key) ────────

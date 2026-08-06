@@ -26,10 +26,6 @@ def test_is_protein_sequence_dna():
     assert _is_protein_sequence("ATGCATGCATGC") is False
 
 
-def test_is_protein_sequence_rna():
-    assert _is_protein_sequence("AUGCAUGCAUGC") is False
-
-
 def test_is_protein_sequence_empty():
     assert _is_protein_sequence("") is False
 

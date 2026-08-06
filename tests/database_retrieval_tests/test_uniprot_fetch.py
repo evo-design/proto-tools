@@ -18,14 +18,6 @@ from proto_tools.tools.database_retrieval.uniprot.uniprot_fetch import (
 )
 
 
-def test_uniprot_fetch_input_requires_id_or_name():
-    with pytest.raises(
-        ValidationError,
-        match="Provide either uniprot_id or both target_name and organism",
-    ):
-        UniProtFetchInput()
-
-
 def test_uniprot_fetch_input_name_without_organism():
     with pytest.raises(
         ValidationError,

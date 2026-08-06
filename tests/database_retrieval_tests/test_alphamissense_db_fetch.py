@@ -106,25 +106,6 @@ def test_alphamissense_fetch_known_pathogenic_tp53_r175h():
 
 
 @pytest.mark.integration
-def test_alphamissense_fetch_client_side_filter_at_hotspots():
-    """Realistic constraint loop: caller post-filters to confidently pathogenic at TP53 hotspots 175/248/273."""
-    output = run_alphamissense_db_fetch(
-        AlphaMissenseDBFetchInput(uniprot_id="P04637"),
-        AlphaMissenseDBFetchConfig(),
-    )
-    assert output.success
-    assert output.num_predictions == 393 * 19
-
-    hotspot_positions = {175, 248, 273}
-    high_confidence_pathogenic = [
-        p for p in output.predictions if p.position in hotspot_positions and p.pathogenicity_score >= 0.8
-    ]
-    assert 0 < len(high_confidence_pathogenic) <= 3 * 19
-    for prediction in high_confidence_pathogenic:
-        assert prediction.classification == "likely_pathogenic"
-
-
-@pytest.mark.integration
 @pytest.mark.parametrize(
     "uniprot_id, reason",
     [

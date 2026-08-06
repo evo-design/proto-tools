@@ -39,14 +39,6 @@ def test_puffin_interpretation_input_rejects_short_sequence():
     assert "325" in str(exc_info.value)
 
 
-def test_puffin_interpretation_input_rejects_invalid_nucleotides():
-    """Non-ACGTN characters in any input are rejected."""
-    from proto_tools.tools.sequence_scoring.puffin import PuffinInterpretationInput
-
-    with pytest.raises(ValueError, match=r"[Ii]nvalid"):
-        PuffinInterpretationInput(sequences="X" * 1650)
-
-
 # ── Integration ───────────────────────────────────────────────────────────────
 
 

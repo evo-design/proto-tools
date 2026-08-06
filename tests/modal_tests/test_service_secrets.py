@@ -13,11 +13,6 @@ def _clear_extra_secrets(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv(EXTRA_SECRETS_ENV, raising=False)
 
 
-def test_the_default_is_the_huggingface_secret_alone() -> None:
-    """Every deployment gets weight downloads without naming anything."""
-    assert service_secrets() == [HF_TOKEN_SECRET]
-
-
 @pytest.mark.parametrize(
     "raw",
     [

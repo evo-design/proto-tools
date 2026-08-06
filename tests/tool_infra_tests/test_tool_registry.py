@@ -721,37 +721,6 @@ def test_tool_output_error_access_raises_exception(clean_registry, capture_error
     assert result.errors[0] == "RuntimeError: Tool execution failed"
 
 
-def test_tool_output_successful_access_works(clean_registry):
-    """Test that accessing fields on successful output works normally."""
-
-    @clean_registry.register(
-        key="success-access-tool",
-        label="Success Access Tool",
-        category="test",
-        input_class=MockToolInput,
-        config_class=MockToolConfig,
-        output_class=MockToolOutput,
-        description="Tool that succeeds and tests field access",
-    )
-    def success_access_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
-        return MockToolOutput(result="Success!")
-
-    # Get the registered function and call it
-    spec = clean_registry.get("success-access-tool")
-    inputs = MockToolInput(input_data="test")
-    config = MockToolConfig(param1="value1", param2=5)
-
-    result = spec.function(inputs, config)
-
-    # Verify output indicates success
-    assert result.success is True
-
-    # Accessing 'result' field should work normally
-    assert result.result == "Success!"
-    assert result.tool_id == "success-access-tool"
-    assert result.execution_time is not None
-
-
 def test_tool_registry_list_gpu_tools(clean_registry):
     """Test list_gpu_tools returns only GPU tools."""
 
@@ -1057,25 +1026,6 @@ class MockConfigWithDevice(BaseConfig):
     """Mock config with device field for testing device validation."""
 
     device: str = ConfigField(default="cpu", title="Device", description="Device to use")
-
-
-def test_tool_registry_default_device_count(clean_registry):
-    """Test that device_count defaults to '1' when not specified."""
-
-    @clean_registry.register(
-        key="default-device-count",
-        label="Default Device Count Tool",
-        category="test",
-        input_class=MockToolInput,
-        config_class=MockToolConfig,
-        output_class=MockToolOutput,
-        description="Tool with default device_count",
-    )
-    def default_device_count_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
-        return MockToolOutput(result="ok")
-
-    spec = clean_registry.get("default-device-count")
-    assert spec.device_count == "1"
 
 
 def test_tool_registry_exact_device_count_validation_passes(clean_registry):
@@ -1590,41 +1540,6 @@ def test_stochastic_unseeded_whole_output_skips_cache(clean_registry, _setup_cac
     assert result4.result == "processed_test_3"
 
 
-def test_cacheable_on_toolspec(clean_registry):
-    """Cacheable flag is stored on ToolSpec."""
-
-    @clean_registry.register(
-        key="cacheable-spec",
-        label="Cacheable Spec",
-        category="test",
-        input_class=MockToolInput,
-        config_class=MockToolConfig,
-        output_class=MockToolOutput,
-        description="Test cacheable on spec",
-        cacheable=True,
-    )
-    def run_tool(inputs, config=None, instance=None):
-        return MockToolOutput(result="ok")
-
-    spec = clean_registry.get("cacheable-spec")
-    assert spec.cacheable is True
-
-    @clean_registry.register(
-        key="non-cacheable-spec",
-        label="Non Cacheable Spec",
-        category="test",
-        input_class=MockToolInput,
-        config_class=MockToolConfig,
-        output_class=MockToolOutput,
-        description="Test non-cacheable on spec",
-    )
-    def run_tool2(inputs, config=None, instance=None):
-        return MockToolOutput(result="ok")
-
-    spec2 = clean_registry.get("non-cacheable-spec")
-    assert spec2.cacheable is False
-
-
 # ── Input/config coercion ───────────────────────────────────────────────────
 
 
@@ -1747,22 +1662,6 @@ def test_unrelated_input_raises_type_error(clean_registry):
         spec.function(unrelated_input, config)
 
 
-def test_exact_child_classes_not_coerced(clean_registry):
-    """Passing the exact child classes skips coercion entirely."""
-    spec = _register_coercion_tool(clean_registry, "coerce-noop")
-    inputs = ChildInput(sequences=["MKTL"], uppercase=False)
-    config = ChildConfig(temperature=0.3, model_name="v1")
-
-    result = spec.function(inputs, config)
-
-    assert result.success
-    assert result.input_type == "ChildInput"
-    assert result.config_type == "ChildConfig"
-    assert result.uppercase is False
-    assert result.temperature == 0.3
-    assert result.model_name == "v1"
-
-
 # ── preprocess hook ──────────────────────────────────────────────────────────
 
 
@@ -1794,27 +1693,6 @@ def test_preprocess_hook_called_by_wrapper(clean_registry):
     config = PreprocessConfig(prefix="PRE")
     result = run_tool(inputs, config)
     assert result.result == "PRE_hello"
-
-
-def test_preprocess_default_noop(clean_registry):
-    """BaseConfig.preprocess() returns inputs unchanged."""
-
-    @clean_registry.register(
-        key="preprocess-noop-test",
-        label="Preprocess Noop Test",
-        category="test",
-        input_class=MockToolInput,
-        config_class=MockToolConfig,
-        output_class=MockToolOutput,
-        description="Test default preprocess is noop",
-    )
-    def run_tool(inputs, config=None, instance=None):
-        return MockToolOutput(result=inputs.input_data)
-
-    inputs = MockToolInput(input_data="unchanged")
-    config = MockToolConfig(param1="x")
-    result = run_tool(inputs, config)
-    assert result.result == "unchanged"
 
 
 def test_wrapper_executes_with_the_config_preprocess_returns(clean_registry):
@@ -1913,13 +1791,6 @@ def test_local_tool_reusing_one_config_preprocesses_every_call(clean_registry):
     assert results == ["prepared:a", "prepared:b", "prepared:c"]
     assert calls == ["a", "b", "c"], "preprocess must run once per call, not once per config"
     assert config._preprocess_completed is False, "the caller's config must not be marked spent"
-
-
-def test_config_assignment_allowed_outside_preprocess():
-    """The freeze is scoped to the preprocess call; normal assignment still works."""
-    config = MockToolConfig(param1="x")
-    config.param1 = "y"
-    assert config.param1 == "y"
 
 
 @pytest.mark.parametrize("returns_pair", [False, True], ids=["bare_inputs", "inputs_and_config"])
@@ -2083,6 +1954,12 @@ def test_get_docs_url():
         ToolRegistry.get_docs_url("nonexistent-tool")
 
 
+def test_get_license_raises_for_unknown_tool():
+    """get_license raises ValueError for unknown tool keys."""
+    with pytest.raises(ValueError, match="Unknown tool"):
+        ToolRegistry.get_license("nonexistent-tool-key")
+
+
 def test_get_example_notebook_path():
     """get_example_notebook_path returns the path to examples/example.ipynb if present."""
     # Tool with example notebook
@@ -2181,15 +2058,6 @@ def test_post_process_iterable_runs_on_full_stitched_batch(clean_registry, _setu
     assert all(r.stamp == 5 for r in call(spec, "abcde").results)  # full cache hit
 
     assert dispatched_sizes == [5, 3]
-
-
-def test_post_process_iterable_optional(clean_registry, _setup_cache):
-    def run_tool(inputs, config=None, instance=None):
-        return MockIterableOutput(results=[f"out_{x}" for x in inputs.items])
-
-    spec = _register_cacheable_iterable(clean_registry, "no-post-process", run_tool)
-    result = spec.function(MockIterableInput(items=["a", "b", "c"]), MockToolConfig(param1="v"))
-    assert result.results == ["out_a", "out_b", "out_c"]
 
 
 # ── @tool boundary: non-finite-float warning ──

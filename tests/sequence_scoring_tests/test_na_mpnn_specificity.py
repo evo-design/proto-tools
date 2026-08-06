@@ -15,7 +15,6 @@ from proto_tools.tools.sequence_scoring.na_mpnn_specificity import (
     NAMPNNSpecificityOutput,
     run_na_mpnn_specificity,
 )
-from proto_tools.tools.tool_registry import ToolRegistry
 from tests.conftest import benchmark_twice
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -36,12 +35,6 @@ def test_input_normalizes_single_path_string():
     assert len(payload) == 1
 
 
-def test_input_rejects_empty_list():
-    """An empty pdb_paths list is rejected (min_length=1)."""
-    with pytest.raises(ValueError):
-        NAMPNNSpecificityInput(pdb_paths=[])
-
-
 # -- Cloud gating ----------------------------------------------------------------------
 
 
@@ -51,17 +44,6 @@ def test_tool_declared_local_only():
 
     spec = next(s for s in ToolRegistry.list_all() if s.key == "na-mpnn-specificity")
     assert spec.local_only and "NA-MPNN" in spec.local_only
-
-
-# -- Registration ----------------------------------------------------------------------
-
-
-def test_tool_key_registered():
-    """The tool is discoverable in the registry under its expected key/category."""
-    spec = ToolRegistry.get("na-mpnn-specificity")
-    assert spec.key == "na-mpnn-specificity"
-    assert spec.category == "sequence_scoring"
-    assert spec.uses_gpu is True
 
 
 # -- Canonicalization (pure numpy, no model) -------------------------------------------

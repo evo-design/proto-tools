@@ -21,7 +21,6 @@ from proto_tools.tools.binder_design.freebindcraft.freebindcraft_design import (
     _HARDCODED_INTERNAL_SETTINGS,
     _USER_FACING_UPSTREAM_KEYS,
 )
-from proto_tools.tools.tool_registry import ToolRegistry
 from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
@@ -221,22 +220,6 @@ def test_parse_outputs_surfaces_early_stop_accepted_designs(standalone, tmp_path
     assert design["seed"] == 7
     assert design["metrics"]["avg_ipsae"] == 0.66
     assert design["metrics"]["unrelaxed_clashes"] == 5.0
-
-
-# ── Tool registration ────────────────────────────────────────────────────────
-
-
-def test_freebindcraft_design_registered_with_expected_metadata() -> None:
-    """``@tool`` wires the right registry metadata + a callable example_input."""
-    spec = next((s for s in ToolRegistry.list_all() if s.key == "freebindcraft-design"), None)
-    assert spec is not None
-    assert spec.category == "binder_design"
-    assert spec.uses_gpu is True
-    assert spec.cacheable is False
-    assert spec.device_count == "1"
-    example = spec.example_input()
-    assert isinstance(example, FreeBindCraftInput)
-    assert example.number_of_final_designs == 1, "example_input should be a one-off, not a multi-day run"
 
 
 # ── Integration: real-world end-to-end ────────────────────────────────────────

@@ -20,7 +20,6 @@ from proto_tools.modal.deploy import (
     describe_progress,
     for_display,
     modal_command,
-    render_entrypoint,
     resolve_targets,
 )
 from proto_tools.modal.manifest import (
@@ -94,18 +93,6 @@ def test_skipping_the_deploy_tests_whatever_is_already_there():
 # ============================================================================
 # The rendered entrypoint
 # ============================================================================
-def test_the_entrypoint_imports_every_service_in_the_app():
-    """Importing a service binds its ``@app.cls`` to the app being deployed.
-
-    A service left out of the render deploys as an app with nothing in it.
-    """
-    app_name = "proto-tools-esm2"
-    source = render_entrypoint(app_name, APP_BUCKETS[app_name])
-    for service in APP_BUCKETS[app_name]:
-        assert f"import {service}" in source
-    assert f'get_app("{app_name}")' in source
-
-
 def test_modal_is_invoked_through_this_interpreter(tmp_path):
     """Modal runs through this interpreter, not whichever one is first on PATH.
 
@@ -147,6 +134,7 @@ def test_columns_of_nothing():
     [
         ("Building image im-abc", "building image"),
         ("=> Step 1: COPY . /", "COPY . /"),
+        ("Running function _warmup", "running warmup (this executes the tool once)"),
         ("Creating objects...", "creating Modal objects"),
         ("✓ App deployed in 12s! 🎉", "deployed"),
         ("Collecting numpy==1.26", None),

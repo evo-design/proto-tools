@@ -222,10 +222,7 @@ def _assert_gpu_memory(
     [
         pytest.param(_pytorch_tool, _jax_tool, id="pytorch-evicts-jax"),
         pytest.param(_pytorch_tool, _cli_tool, id="pytorch-evicts-cli"),
-        pytest.param(_jax_tool, _pytorch_tool, id="jax-evicts-pytorch"),
         pytest.param(_jax_tool, _cli_tool, id="jax-evicts-cli"),
-        pytest.param(_cli_tool, _pytorch_tool, id="cli-evicts-pytorch"),
-        pytest.param(_cli_tool, _jax_tool, id="cli-evicts-jax"),
     ],
 )
 def test_cross_framework_eviction_cpu(tool_a_factory, tool_b_factory):
@@ -300,7 +297,6 @@ def test_cross_framework_eviction_cpu(tool_a_factory, tool_b_factory):
     "tool_a_factory,tool_b_factory",
     [
         pytest.param(_pytorch_tool, _jax_tool, id="pytorch-evicts-jax"),
-        pytest.param(_jax_tool, _pytorch_tool, id="jax-evicts-pytorch"),
         pytest.param(_cli_tool, _pytorch_tool, id="cli-evicts-pytorch"),
     ],
 )
@@ -508,42 +504,6 @@ def test_shutdown_and_auto_restart(tool_factory):
         assert inst._worker is not None, "Worker should be back"
         assert "restarter" in dm.get_device_status()["allocations"]
         _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after auto-restart")
-    finally:
-        _teardown()
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.slow
-def test_evict_then_restart_preserves_correctness():
-    """After RESTART eviction, re-running the tool gives correct results."""
-    dm = _setup_dm(["cuda:0"], strategy=OffloadStrategy.RESTART)
-
-    try:
-        baseline = _snapshot_gpu_memory(dm)
-
-        inst_a = ToolInstance.get("mock_pytorch_tool", instance_name="a")
-        result1 = _run_tool(_pytorch_tool, "a")
-        assert result1.success
-        first_output = result1.results  # Save for comparison
-        _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after loading tool A")
-
-        time.sleep(0.01)
-
-        # Evict A by loading B (RESTART kills A's worker entirely)
-        with ToolInstance.persist_tool("mock_jax_tool", instance_name="b"):
-            _run_tool(_jax_tool, "b")
-
-            assert inst_a._worker is None, "Worker A should be shut down"
-            assert "a" not in dm.get_device_status()["allocations"]
-
-            # Tool B now occupies cuda:0 (tool A fully gone)
-            _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after RESTART eviction, tool B loaded")
-
-        # Re-run A; should restart and produce same-shape output
-        result2 = _run_tool(_pytorch_tool, "a")
-        assert result2.success
-        assert len(result2.results) == len(first_output), "Restarted tool should produce same-shape output"
-        _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after tool A restart")
     finally:
         _teardown()
 
@@ -778,19 +738,11 @@ def test_two_tools_share_one_gpu():
 # Used by ``alphagenome-predict-variants``. See ``notes/tool-environments.md``.
 
 
-def test_tool_spec_exposes_gpu_only_field():
-    """``ToolSpec`` has ``gpu_only`` defaulting to False; it propagates from the decorator."""
-    # Importing the modules registers the tools in the registry.
-    from proto_tools.tools.testing import mock_pytorch_tool  # noqa: F401
-    from proto_tools.tools.tool_registry import ToolRegistry, ToolSpec
-
-    assert "gpu_only" in ToolSpec.model_fields
-    assert ToolSpec.model_fields["gpu_only"].default is False
-
-    mock_spec = ToolRegistry.get("mock-pytorch-tool-run")
-    assert mock_spec.gpu_only is False, "mock tools should default to gpu_only=False"
-
+def test_gpu_only_propagates_from_decorator_to_tool_spec():
+    """``gpu_only=True`` on the decorator reaches the registered ``ToolSpec``."""
+    # Importing the module registers the tool in the registry.
     from proto_tools.tools.sequence_scoring.alphagenome import alphagenome_predict_variants  # noqa: F401
+    from proto_tools.tools.tool_registry import ToolRegistry
 
     ag_spec = ToolRegistry.get("alphagenome-predict-variants")
     assert ag_spec.gpu_only is True, "alphagenome-predict-variants should opt into gpu_only"

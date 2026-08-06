@@ -38,30 +38,10 @@ _SAMPLE_BARE_INPUTS: dict[type, list[object]] = {
 
 
 @pytest.mark.parametrize("wrapper", APPROVED_INPUT_WRAPPERS, ids=lambda w: w.__name__)
-def test_wrapper_has_before_validator(wrapper: type) -> None:
-    """Approved wrapper must define a ``model_validator(mode='before')``.
-
-    Without a before-validator, Pydantic can't coerce bare inputs (path strings,
-    raw content, etc.) into the wrapper, and tool authors typing fields as the
-    wrapper would silently get failures when callers pass anything other than
-    the canonical ``{"field": value}`` envelope.
-    """
-    decorators = wrapper.__pydantic_decorators__.model_validators
-    has_before = any(d.info.mode == "before" for d in decorators.values())
-    assert has_before, (
-        f"{wrapper.__name__} is in APPROVED_INPUT_WRAPPERS but has no "
-        f"model_validator(mode='before'). Either remove it from the list, or "
-        f"add a coercion validator that absorbs the supported input shapes."
-    )
-
-
-@pytest.mark.parametrize("wrapper", APPROVED_INPUT_WRAPPERS, ids=lambda w: w.__name__)
 def test_wrapper_coerces_bare_input(wrapper: type) -> None:
     """Approved wrapper must accept bare inputs (not just ``{"field": value}`` dicts).
 
-    This is the behavioral counterpart to ``test_wrapper_has_before_validator``:
-    even when a before-validator exists, it must actually coerce the canonical
-    bare-input shapes.
+    A before-validator must actually coerce the canonical bare-input shapes.
     """
     samples = _SAMPLE_BARE_INPUTS.get(wrapper)
     assert samples, (

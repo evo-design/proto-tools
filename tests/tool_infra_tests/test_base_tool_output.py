@@ -18,14 +18,6 @@ class _SimpleToolOutput(MockToolOutputBase):
     result: str = Field(description="Simple result string")
 
 
-class _ComplexToolOutput(MockToolOutputBase):
-    """Example complex tool output for testing."""
-
-    sequences: list[str] = Field(description="Output sequences")
-    scores: list[float] = Field(description="Quality scores")
-    count: int = Field(description="Number of results")
-
-
 class _ComputedToolOutput(MockToolOutputBase):
     """Example output with derived serialized state."""
 
@@ -125,38 +117,6 @@ def test_computed_field_json_round_trip(recwarn):
     assert reconstructed.items == ["a", "b"]
     assert reconstructed.count == 2
     assert not recwarn
-
-
-# ── Schema ───────────────────────────────────────────────────────────────────
-
-
-def test_json_schema_includes_tool_specific_fields():
-    """JSON schema contains tool-specific fields with descriptions."""
-    schema = _SimpleToolOutput.model_json_schema()
-
-    assert "result" in schema["properties"]
-    assert "description" in schema["properties"]["tool_id"]
-    assert "description" in schema["properties"]["execution_time"]
-    assert "result" in schema["required"]
-
-
-# ── Subclass fields ──────────────────────────────────────────────────────────
-
-
-def test_complex_subclass_preserves_typed_fields():
-    """Complex tool output with multiple typed fields works correctly."""
-    output = _ComplexToolOutput(
-        tool_id="complex-tool",
-        execution_time=10.5,
-        success=True,
-        sequences=["ATCG", "GCTA"],
-        scores=[0.95, 0.87],
-        count=2,
-    )
-
-    assert output.sequences == ["ATCG", "GCTA"]
-    assert output.scores == [0.95, 0.87]
-    assert output.count == 2
 
 
 # ── Cache key (BaseToolInput) ───────────────────────────────────────────────

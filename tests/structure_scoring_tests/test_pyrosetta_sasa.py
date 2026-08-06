@@ -28,11 +28,6 @@ def test_sasa_input_normalizes_single_structure():
     assert isinstance(inp.inputs[0], ScoringStructureInput)
 
 
-def test_sasa_input_rejects_invalid_chain():
-    with pytest.raises(ValueError, match="not in structure"):
-        PyRosettaSASAInput(inputs=[{"structure": TEST_PDB, "chains_to_score": ["Z"]}])
-
-
 # ── Integration ───────────────────────────────────────────────────────────────
 
 

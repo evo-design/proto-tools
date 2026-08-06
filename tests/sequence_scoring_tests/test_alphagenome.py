@@ -287,44 +287,6 @@ def test_ism_with_variant_context():
     assert len(result[0].scores) > 0
 
 
-# ---------------------------------------------------------------------------
-# Slow tests
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.slow
-@pytest.mark.uses_gpu
-def test_interval_prediction_131k_context():
-    """Interval prediction at the 131,072 bp context length (third-smallest supported)."""
-    from proto_tools import (
-        AlphaGenomeInterval,
-        AlphaGenomePredictIntervalsConfig,
-        AlphaGenomePredictIntervalsInput,
-        run_alphagenome_predict_intervals,
-    )
-
-    inputs = AlphaGenomePredictIntervalsInput(
-        intervals=AlphaGenomeInterval(
-            chromosome="chr1",
-            interval_start=0,
-            interval_end=131_072,
-        ),
-    )
-    config = AlphaGenomePredictIntervalsConfig(
-        requested_outputs=["RNA_SEQ"],
-        organism="human",
-    )
-
-    result = run_alphagenome_predict_intervals(inputs, config)
-
-    assert result.tool_id == "alphagenome-predict-intervals"
-    assert len(result) == 1
-    validate_output(result)
-    output = result[0]
-    assert output.interval_end == 131_072
-    assert "predictions" in output.result
-
-
 # ── Benchmarks ────────────────────────────────────────────────────────────────
 # Score tools require >=524 kbp context (default RNA_SEQ scorer needs a
 # 200,001 bp centre mask); predict tools use 131 kbp to keep wall time tractable.

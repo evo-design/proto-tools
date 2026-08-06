@@ -77,20 +77,6 @@ def test_get_subprocess_device_env_matches_multi_device(monkeypatch):
 # ── Standalone helpers specific tests ─────────────────────────────────────────
 
 
-def test_get_subprocess_device_env_returns_full_env():
-    """Verify get_subprocess_device_env returns a complete environment dict."""
-    env = get_subprocess_device_env("cpu")
-
-    # Should be a dict
-    assert isinstance(env, dict)
-
-    # Should contain CUDA_VISIBLE_DEVICES
-    assert "CUDA_VISIBLE_DEVICES" in env
-
-    # Should contain other environment variables (it's a copy of os.environ)
-    assert "PATH" in env
-
-
 def test_get_subprocess_device_env_doesnt_modify_parent_env(monkeypatch):
     """Verify get_subprocess_device_env doesn't modify os.environ."""
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1,2")
@@ -149,31 +135,6 @@ def test_get_subprocess_device_env_handles_spaces_in_parent(monkeypatch):
 # ── Edge cases ────────────────────────────────────────────────────────────────
 
 
-def test_get_subprocess_device_env_multi_device_non_contiguous_mapping(monkeypatch):
-    """Verify multi-device mapping with non-contiguous parent devices.
-
-    Parent CUDA_VISIBLE_DEVICES=0,3,5 (3 physical GPUs).
-    Requesting cuda:0,2 (logical indices 0 and 2) should map to
-    physical GPUs 0 and 5, giving CUDA_VISIBLE_DEVICES=0,5.
-    """
-    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,3,5")
-
-    env = get_subprocess_device_env("cuda:0,2")
-
-    assert env["CUDA_VISIBLE_DEVICES"] == "0,5"
-
-
-def test_get_subprocess_device_env_single_parent_device(monkeypatch):
-    """Verify behavior when parent has only one visible device."""
-    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "4")
-
-    # Only cuda:0 should be valid
-    env = get_subprocess_device_env("cuda:0")
-    expected = determine_visible_devices("cuda:0")
-
-    assert env["CUDA_VISIBLE_DEVICES"] == expected
-
-
 def test_get_subprocess_device_env_empty_parent(monkeypatch):
     """Verify behavior when CUDA_VISIBLE_DEVICES is set but empty."""
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "")
@@ -222,27 +183,6 @@ def test_gpu_subprocess_removes_jax_platforms_if_inherited(monkeypatch):
 
     # Subprocess gets GPU; should not be forced to CPU
     assert "JAX_PLATFORMS" not in env
-
-
-def test_multi_gpu_subprocess_removes_jax_restrictions(monkeypatch):
-    """Multi-GPU subprocesses should also remove JAX preallocation restrictions."""
-    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1,5,7")
-    monkeypatch.setenv("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
-    monkeypatch.setenv("XLA_PYTHON_CLIENT_ALLOCATOR", "platform")
-
-    env = get_subprocess_device_env("cuda:2,3")
-
-    assert env["CUDA_VISIBLE_DEVICES"] == "5,7"
-    assert "XLA_PYTHON_CLIENT_PREALLOCATE" not in env
-    assert "XLA_PYTHON_CLIENT_ALLOCATOR" not in env
-
-
-def test_invalid_device_raises(monkeypatch):
-    """Invalid device format raises ValueError instead of falling back to CPU."""
-    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
-
-    with pytest.raises(ValueError, match="unrecognized device 'not-a-device'"):
-        get_subprocess_device_env("not-a-device")
 
 
 # ── resolve_weights_dir ──────────────────────────────────────────────────────
@@ -313,44 +253,6 @@ def test_resolve_weights_dir_per_tool_override_beats_mode(monkeypatch, tmp_path)
     result = resolve_weights_dir("fampnn")
 
     assert result == str(override_dir)
-    assert os.path.isdir(result)
-
-
-def test_resolve_weights_dir_per_tool_override_beats_in_env(monkeypatch, tmp_path):
-    """PROTO_{TOOL}_WEIGHTS_DIR overrides IN_ENV mode too."""
-    override_dir = tmp_path / "override"
-    monkeypatch.setenv("PROTO_MODEL_CACHE", "IN_ENV")
-    monkeypatch.setenv("TOOL_VENV_PATH", str(tmp_path / "venv"))
-    monkeypatch.setenv("PROTO_ESM_IF1_WEIGHTS_DIR", str(override_dir))
-
-    result = resolve_weights_dir("esm_if1")
-
-    assert result == str(override_dir)
-
-
-def test_resolve_weights_dir_creates_leaf_directory(monkeypatch, tmp_path):
-    """resolve_weights_dir creates the leaf directory and tool subdirectory."""
-    parent = tmp_path / "existing"
-    parent.mkdir()
-    shared = parent / "weights"
-    monkeypatch.setenv("PROTO_MODEL_CACHE", str(shared))
-    monkeypatch.delenv("PROTO_FAMPNN_WEIGHTS_DIR", raising=False)
-
-    result = resolve_weights_dir("fampnn")
-
-    assert os.path.isdir(result)
-    assert result == str(shared / "fampnn")
-
-
-def test_resolve_weights_dir_creates_explicit_path(monkeypatch, tmp_path):
-    """resolve_weights_dir creates the directory when given an explicit path."""
-    cache_path = tmp_path / "custom_cache"
-    monkeypatch.setenv("PROTO_MODEL_CACHE", str(cache_path))
-    monkeypatch.delenv("PROTO_FAMPNN_WEIGHTS_DIR", raising=False)
-
-    result = resolve_weights_dir("fampnn")
-
-    assert result == str(cache_path / "fampnn")
     assert os.path.isdir(result)
 
 

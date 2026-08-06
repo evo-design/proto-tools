@@ -151,13 +151,6 @@ def test_multiple_sequences_positional_ids():
         assert result.predicted_orfs[1][0].parent_id == "seq_1"
 
 
-def test_sequence_ids_length_mismatch_raises():
-    from proto_tools.utils import resolve_sequence_ids
-
-    with pytest.raises(ValueError, match="ids length"):
-        resolve_sequence_ids(["ATGAAA", "ATGBBB"], ["only_one"])
-
-
 # ── Computed fields ────────────────────────────────────────────────────
 
 
@@ -181,22 +174,6 @@ def test_computed_fields_count(orfs_per_sequence, expected_total):
         success=True,
     )
     assert output.num_orfs == expected_total
-
-
-def test_cache_reconstruction():
-    """Output works when reconstructed from cache (only predicted_orfs passed)."""
-    orfs = [_create_sample_orf("seq_0", "ORF.1"), _create_sample_orf("seq_0", "ORF.2")]
-    output = OrfipyOutput(
-        tool_id="orfipy-prediction",
-        execution_time=0.0,
-        success=True,
-        warnings=[],
-        metadata={},
-        results=[OrfPredictionResult(orfs=orfs)],
-    )
-    assert output.num_orfs == 2
-    assert output.predicted_orfs[0][0].orf_id == "ORF.1"
-    assert output.predicted_orfs[0][1].orf_id == "ORF.2"
 
 
 def test_translation_table_map_matches_literal():

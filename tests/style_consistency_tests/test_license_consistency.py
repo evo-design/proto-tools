@@ -375,23 +375,6 @@ def test_get_weights_access_matches_license_yaml() -> None:
         )
 
 
-# ── ToolRegistry surface ────────────────────────────────────────────────────
-
-
-def test_get_license_raises_for_unknown_tool() -> None:
-    """get_license raises ValueError for unknown tool keys."""
-    with pytest.raises(ValueError, match="Unknown tool"):
-        ToolRegistry.get_license("nonexistent-tool-key")
-
-
-def test_list_licenses_keys_match_registry() -> None:
-    """All keys in list_licenses exist in the tool registry."""
-    licenses = ToolRegistry.list_licenses()
-    for key in licenses:
-        spec = ToolRegistry.get(key)
-        assert spec.key == key
-
-
 # ── URL reachability (network-gated) ────────────────────────────────────────
 
 # Browser-like UA so GitHub/HuggingFace etc. don't block the request.

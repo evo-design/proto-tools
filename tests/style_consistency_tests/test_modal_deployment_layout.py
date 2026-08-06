@@ -36,33 +36,12 @@ def test_services_are_discovered() -> None:
 
 
 @pytest.mark.parametrize("service", _SERVICES, ids=_service_id)
-def test_service_lives_in_a_deployment_directory(service: Path) -> None:
-    """Every service sits in its own ``*_deployment/`` directory."""
-    parent = service.parent.name
-    assert parent.endswith(_DEPLOYMENT_SUFFIX), (
-        f"{_service_id(service)} sits directly in '{parent}'; move it to "
-        f"'{parent}/{service.name[: -len(_SERVICE_SUFFIX)]}{_DEPLOYMENT_SUFFIX}/{service.name}'"
-    )
-
-
-@pytest.mark.parametrize("service", _SERVICES, ids=_service_id)
 def test_deployment_directory_matches_its_service(service: Path) -> None:
     """The directory name is the service's own stem, so the pair is greppable together."""
     expected = f"{service.name[: -len(_SERVICE_SUFFIX)]}{_DEPLOYMENT_SUFFIX}"
     assert service.parent.name == expected, (
         f"{_service_id(service)} is in '{service.parent.name}'; expected '{expected}'"
     )
-
-
-@pytest.mark.parametrize("service", _SERVICES, ids=_service_id)
-def test_deployment_directory_holds_one_service(service: Path) -> None:
-    """Two services in one directory would share a module-level ``app`` object.
-
-    Both would deploy into whichever app the directory bound while the manifest
-    claimed they were separate, and nothing would raise.
-    """
-    siblings = sorted(p.name for p in service.parent.glob(f"*{_SERVICE_SUFFIX}"))
-    assert siblings == [service.name], f"{service.parent.name}/ holds more than one service: {siblings}"
 
 
 def test_no_stray_standalone_overrides_directory() -> None:

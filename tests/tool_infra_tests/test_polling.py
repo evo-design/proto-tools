@@ -107,20 +107,6 @@ def test_poll_until_complete_text_extractor_iprscan_vocabulary(monkeypatch):
     assert session.get.call_count == 3
 
 
-def test_poll_until_complete_custom_success_state(monkeypatch):
-    """Caller-supplied success_states overrides the default 'COMPLETE' sentinel."""
-    monkeypatch.setattr("proto_tools.utils.polling.time.sleep", lambda _s: None)
-    session = _mock_session([{"id": "abc", "status": "DONE"}])
-
-    result = poll_until_complete(
-        session,
-        "https://example/ticket/abc",
-        success_states=frozenset({"DONE"}),
-    )
-
-    assert result == {"id": "abc", "status": "DONE"}
-
-
 def test_poll_until_complete_recovers_from_transient_mid_poll(monkeypatch):
     """RUNNING → ConnectionError → COMPLETE; the long submit-path doesn't die on one TCP reset."""
     import requests

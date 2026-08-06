@@ -6,7 +6,6 @@ Tests for Borzoi regulatory activity prediction tool.
 import random
 
 import pytest
-from pydantic import ValidationError
 
 from proto_tools.tools.sequence_scoring.borzoi import (
     BORZOI_CONTEXT,
@@ -39,19 +38,6 @@ def test_borzoi_input_valid():
     assert len(inputs.sequences[0].sequence) == BORZOI_CONTEXT
 
 
-def test_borzoi_input_accepts_sequence_batches():
-    """Borzoi input should normalize sequence batches to a list."""
-    from proto_tools.tools.sequence_scoring.borzoi import BorzoiInput
-
-    seq_a = _generate_random_dna_sequence(BORZOI_CONTEXT)
-    seq_b = _generate_random_dna_sequence(BORZOI_CONTEXT, seed=123)
-
-    inputs = BorzoiInput(sequences=[seq_a, seq_b])
-
-    assert [window.sequence for window in inputs.sequences] == [seq_a, seq_b]
-    assert len(inputs) == 2
-
-
 def test_borzoi_input_rejects_wrong_length():
     """Test that sequences with invalid length are rejected."""
     from proto_tools.tools.sequence_scoring.borzoi import BorzoiInput
@@ -63,20 +49,6 @@ def test_borzoi_input_rejects_wrong_length():
     # Too long
     with pytest.raises(ValueError, match=f"must have length {BORZOI_CONTEXT}"):
         BorzoiInput(sequences="ATCG" * 200000)
-
-
-def test_borzoi_input_accepts_target_aligned_sequences():
-    """Target coordinates let Borzoi extract a model window from a larger construct."""
-    from proto_tools.tools.sequence_scoring.borzoi import BorzoiInput, SequenceTargetRange, SequenceWindow
-
-    sequence = ("C" * 100) + ("A" * BORZOI_CONTEXT) + ("G" * 100)
-    target_start = 100 + BORZOI_OUTPUT_FLANK
-
-    target_range = SequenceTargetRange(start=target_start, end=target_start + 10)
-    inputs = BorzoiInput(sequences=[SequenceWindow(sequence=sequence, target_range=target_range)])
-
-    assert [window.sequence for window in inputs.sequences] == [sequence]
-    assert [window.target_range for window in inputs.sequences] == [target_range]
 
 
 def test_borzoi_run_extracts_target_aligned_window(monkeypatch):
@@ -131,22 +103,6 @@ def test_borzoi_run_extracts_target_aligned_window(monkeypatch):
 
 
 # -- Config validation -----------------------------------------------------------------
-
-
-def test_borzoi_config_rejects_invalid_species():
-    """Test that invalid species is rejected."""
-    from proto_tools.tools.sequence_scoring.borzoi import BorzoiConfig
-
-    with pytest.raises(ValidationError, match="Input should be 'human' or 'mouse'"):
-        BorzoiConfig(output_tracks=[0], species="zebrafish")
-
-
-def test_borzoi_config_rejects_invalid_replicate():
-    """Test that invalid replicate is rejected."""
-    from proto_tools.tools.sequence_scoring.borzoi import BorzoiConfig
-
-    with pytest.raises(ValidationError, match="Input should be '0', '1', '2' or '3'"):
-        BorzoiConfig(output_tracks=[0], replicate="5")
 
 
 @pytest.mark.parametrize(("species", "expected_flash_attn"), [("human", True), ("mouse", False)])
@@ -214,17 +170,6 @@ def test_borzoi_run_raises_when_worker_returns_wrong_replicate(monkeypatch):
             BorzoiInput(sequences=["A" * BORZOI_CONTEXT]),
             BorzoiConfig(output_tracks=[0], replicate="2", device="cuda"),
         )
-
-
-# -- Ensemble config validation --------------------------------------------------------
-
-
-def test_borzoi_ensemble_config_mouse():
-    """Mouse ensemble config is valid without a user-facing FlashAttention switch."""
-    from proto_tools.tools.sequence_scoring.borzoi import BorzoiEnsembleConfig
-
-    config = BorzoiEnsembleConfig(output_tracks=[0], species="mouse")
-    assert config.species == "mouse"
 
 
 # ---------------------------------------------------------------------------

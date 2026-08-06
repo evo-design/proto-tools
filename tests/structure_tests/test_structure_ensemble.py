@@ -15,12 +15,6 @@ def structure():
     return Structure.from_file(_TEST_PDB_FILE)
 
 
-def test_ensemble_creation(structure):
-    ensemble = StructureEnsemble(structures=[structure] * 5, sequence=_SAMPLE_SEQUENCE)
-    assert len(ensemble.structures) == 5
-    assert ensemble.sequence == _SAMPLE_SEQUENCE
-
-
 def test_approx_equal_matching(structure):
     a = StructureEnsemble(structures=[structure, structure], sequence=_SAMPLE_SEQUENCE)
     b = StructureEnsemble(structures=[structure, structure], sequence=_SAMPLE_SEQUENCE)

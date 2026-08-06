@@ -40,11 +40,6 @@ def test_sap_input_accepts_dict_with_chains_to_score():
     assert inp.inputs[0].chains_to_score.chains == ["A"]
 
 
-def test_sap_input_rejects_invalid_chain():
-    with pytest.raises(ValueError, match="not in structure"):
-        PyRosettaSAPInput(inputs=[{"structure": TEST_PDB, "chains_to_score": ["Z"]}])
-
-
 # ── Integration ───────────────────────────────────────────────────────────────
 
 

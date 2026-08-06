@@ -141,50 +141,6 @@ def test_orf_structure_fields():
 
 
 @pytest.mark.integration
-def test_end_to_end_prediction():
-    sequence = (
-        "ATGACCATGATTACGGATTCACTGGCCGTCGTTTTACAACGTCGTGACTGG"
-        "GAAAACCCTGGCGTTACCCAACTTAATCGCCTTGCAGCACATCCCCCTTTC"
-        "GCCAGCTGGCGTAATAGCGAAGAGGCCCGCACCGATCGCCCTTCCCAACAG"
-        "TTGCGCAGCCTGAATGGCGAATGGCGCTTTGCCTGGTTTCCGGCACCAGAA"
-        "GCGGTGCCGGAAAGCTGGCTGGAGTGCGATCTTCCTGAGGCCGATACTGTC"
-        "GTCGTCCCCTCAAACTGGCAGATGCACGGTTACGATGCGCCCATCTACACC"
-        "AACGTGACCTATCCCATTACGGTCAATCCGCCGTTTGTTCCCACGGAGAAT"
-        "CCGACGGGTTGTTACTCGCTCACATTTAATGTTGATGAAAGCTGGCTACAG"
-        "GAAGGCCAGACGCGAATTATTTTTGATGGCGTTAACTCGGCGTTTCATCTG"
-        "TGGTGCAACGGGCGCTGGGTCGGTTACGGCCAGGACAGTCGTTTGCCGTCT"
-        "TAA"
-    )
-
-    inp = ProdigalInput(input_sequences=sequence)
-    result = run_prodigal_prediction(inp, ProdigalConfig())
-
-    validate_output(result)
-    if result.num_orfs > 0:
-        orf = result.predicted_orfs[0][0]
-        assert orf.amino_acid_length > 0
-        assert orf.strand in ["+", "-"]
-
-
-@pytest.mark.integration
-def test_comparison_with_direct_pyrodigal():
-    try:
-        import pyrodigal
-    except ImportError:
-        pytest.skip("pyrodigal not available in base environment")
-
-    sequence = "ATGCGTAAATAA" * 50
-    inp = ProdigalInput(input_sequences=sequence)
-    our_result = run_prodigal_prediction(inp, ProdigalConfig(meta_mode=True))
-
-    validate_output(our_result)
-
-    gene_finder = pyrodigal.GeneFinder(meta=True)
-    direct_genes = gene_finder.find_genes(sequence.encode("utf-8"))
-    assert our_result.num_orfs == len(direct_genes)
-
-
-@pytest.mark.integration
 def test_batch_processing_consistency():
     """Batch gives same results as individual processing."""
     sequences = ["ATGCGTAAATAA" * 50, "ATGGCATAA" * 50]

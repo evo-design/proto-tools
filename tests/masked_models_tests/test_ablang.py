@@ -3,8 +3,6 @@
 import math
 import random
 import re
-import sys
-import types
 
 import pytest
 from pydantic import ValidationError
@@ -31,14 +29,6 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _VALID_AAS = set(PROTEIN_AMINO_ACIDS)
 _CANONICAL_VOCAB = list(PROTEIN_AMINO_ACIDS)
-
-
-def _import_ablang_inference():
-    """Lazy import of the standalone inference module (requires standalone_helpers stub)."""
-    sys.modules.setdefault("standalone_helpers", types.SimpleNamespace(serialize_output=lambda value: value))
-    from proto_tools.tools.masked_models.ablang.standalone import inference as ablang_inference
-
-    return ablang_inference
 
 
 _persistent_tool = make_persistent_fixture("ablang")
@@ -88,7 +78,7 @@ def test_ablang_gradient_dispatch_contract(monkeypatch):
         captured["payload"] = payload
         n = len(payload.get("logits", []))
         return {
-            "gradient": [[0.0] * 20] * n,
+            "gradient": [[0.0] * 20] * n if payload.get("compute_gradient") else None,
             "loss": 0.5,
             "metrics": {
                 "log_likelihood": -0.5 * n,
@@ -129,40 +119,12 @@ def test_ablang_gradient_dispatch_contract(monkeypatch):
     assert captured["payload"]["chain_break_position"] is None
     assert captured["payload"]["model_choice"] == "ablang1-light"
 
-
-def test_ablang_forward_mode_dispatch_contract(monkeypatch):
-    """compute_gradient=False forwards the flag and returns gradient=None."""
-    captured: dict[str, object] = {}
-
-    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
-        captured.update(payload=payload)
-        n = len(payload.get("logits", []))
-        return {
-            "gradient": None,
-            "loss": 0.5,
-            "metrics": {
-                "log_likelihood": -0.5 * n,
-                "avg_log_likelihood": -0.5,
-                "perplexity": math.exp(0.5),
-                "sequence_length": n,
-            },
-            "vocab": list(PROTEIN_AMINO_ACIDS),
-        }
-
-    monkeypatch.setattr(
-        "proto_tools.tools.masked_models.ablang.ablang_gradient.ToolInstance.dispatch",
-        fake_dispatch,
-    )
-
-    result = run_ablang_gradient(
-        AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=[[0.0] * 20] * 3)),
+    # Forward mode forwards compute_gradient=False
+    run_ablang_gradient(
+        AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=heavy)),
         AbLangGradientConfig(compute_gradient=False),
     )
-
     assert captured["payload"]["compute_gradient"] is False
-    assert result.gradient is None
-    assert result.loss == 0.5
-    assert result.metrics["avg_log_likelihood"] == -0.5
 
 
 # ── Gradient dispatch tests (subprocess venv, GPU-only) ──────────────────────
@@ -216,54 +178,6 @@ def test_compute_gradient_dispatch(
     assert result.metrics["perplexity"] == pytest.approx(math.exp(result.loss), rel=1e-6)
     assert result.metrics["sequence_length"] == expected_len
     assert result.vocab == _CANONICAL_VOCAB
-
-
-@pytest.mark.parametrize(
-    ("model_choice", "expected_model_choice"),
-    [("ablang1-heavy", "ablang1-heavy"), ("ablang2-paired", "ablang2-paired")],
-)
-def test_dispatch_routes_gradient_to_expected_checkpoint(
-    monkeypatch: pytest.MonkeyPatch,
-    model_choice: str,
-    expected_model_choice: str,
-) -> None:
-    """Dispatch should instantiate the requested model variant."""
-    created_model_choices: list[str] = []
-
-    class _FakeDispatchedModel:
-        def __init__(self, model_choice: str) -> None:
-            created_model_choices.append(model_choice)
-            self.model_choice = model_choice
-            self._loaded = False
-
-        def compute_gradient(self, **_kwargs):
-            return {
-                "gradient": [[0.0] * 20],
-                "loss": 0.0,
-                "metrics": {"model_choice": self.model_choice},
-                "vocab": list(PROTEIN_AMINO_ACIDS),
-            }
-
-    ablang_inference = _import_ablang_inference()
-    monkeypatch.setattr(ablang_inference, "AbLangModel", _FakeDispatchedModel)
-    monkeypatch.setattr(ablang_inference, "_model", None)
-
-    result = ablang_inference.dispatch(
-        {
-            "operation": "compute_gradient",
-            "logits": [[0.0] * 20],
-            "temperature": None,
-            "use_ste": False,
-            "model_choice": model_choice,
-            "chain_break_position": 1 if model_choice == "ablang2-paired" else None,
-            "seed": None,
-            "device": "cpu",
-            "verbose": False,
-        }
-    )
-
-    assert created_model_choices == [expected_model_choice]
-    assert result["metrics"]["model_choice"] == expected_model_choice
 
 
 # ── Embedding tests ──────────────────────────────────────────────────────────

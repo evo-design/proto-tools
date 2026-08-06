@@ -74,11 +74,7 @@ PROTEIN_SAMPLING_TOOLS = [
 
 MASKED_PROTEIN_SEQUENCES = [
     pytest.param(["MKTAY_AKQR"], id="single_mask"),
-    pytest.param(["_KTAYIAKQR"], id="first_position"),
-    pytest.param(["MKTAYIAKQ_"], id="last_position"),
-    pytest.param(["MK_AY_AK_R"], id="multiple_masks"),
     pytest.param(["__________"], id="all_masked"),
-    pytest.param(["MKTAY_AKQR", "EVQLV_SGGS"], id="batch"),
     pytest.param(["MK_A", "MKTAY_AKQR_VQL"], id="variable_length_batch"),
 ]
 

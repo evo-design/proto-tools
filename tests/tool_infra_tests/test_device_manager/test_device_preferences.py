@@ -61,12 +61,6 @@ def test_single_gpu_allocation_re_allocates_on_multi_gpu_request(device_manager,
 # ── Preferred device tests ────────────────────────────────────────────────
 
 
-def test_preferred_device_free(device_manager, mock_callback):
-    """Test allocating preferred device when it's free."""
-    device = device_manager.request_device("tool1", "instance1", device="cuda:1", eviction_callback=mock_callback)
-    assert device == "cuda:1", "Should get preferred device when free"
-
-
 def test_preferred_device_busy_with_warning(device_manager, mock_callback):
     """Test allocating preferred device when busy, with free alternatives."""
     # Occupy cuda:1
