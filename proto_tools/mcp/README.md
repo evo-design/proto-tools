@@ -1,9 +1,9 @@
 # MCP Server Set Up
 
 `proto-tools` packages an [MCP](https://modelcontextprotocol.io) server, which exposes its
-tools to an agent such as Claude Code or Claude Desktop. The agent can browse the catalogue,
-read a tool's schema, and run it — so you can ask for a structure prediction in conversation
-rather than writing the call yourself.
+tools to agents like Claude or ChatGPT. The agent can browse the catalogue, read a tool's
+schema, and run it — so you can ask for a structure prediction in conversation rather than
+writing the call yourself.
 
 This page covers installing the server and registering it with an agent.
 
