@@ -503,7 +503,7 @@ def test_deploy_reports_each_build_phase():
 
     from proto_tools.mcp import tools as impl
 
-    def fake_deploy(app, environment=None, on_progress=None):
+    def fake_deploy(app, environment=None, on_progress=None, verbose=False, *, tokens=None, client=None, log_dir=None):
         for phase in ("building image", "running warmup", "deployed"):
             on_progress(phase)
         return True
@@ -534,9 +534,14 @@ def test_deploy_rejects_a_tool_it_does_not_serve():
     assert out["ok"] is False
 
 
-def test_a_failed_deploy_points_at_the_build_log():
-    """The build output is the only place the cause is recorded."""
+def test_a_failed_deploy_returns_the_build_output():
+    """The build output is returned rather than named.
+
+    It is the only place the cause is recorded, and a caller reaching this over MCP has no access
+    to a log file on the machine that built.
+    """
     import asyncio as _asyncio
+    from pathlib import Path
     from unittest.mock import patch
 
     from proto_tools.mcp import tools as impl
@@ -544,11 +549,15 @@ def test_a_failed_deploy_points_at_the_build_log():
     async def report(_phase: str) -> None:
         return None
 
-    with patch("proto_tools.modal.deploy.deploy_app", lambda *a, **k: False):
+    def fake_deploy(app, environment=None, on_progress=None, verbose=False, *, tokens=None, client=None, log_dir=None):
+        Path(log_dir, "deploy.tmalign.log").write_text("ImportError: cannot import name 'x'\n")
+        return False
+
+    with patch("proto_tools.modal.deploy.deploy_app", fake_deploy):
         out = _asyncio.run(impl.deploy_tool("tmalign-alignment", "some-env", report))
 
     assert out["ok"] is False
-    assert "log" in out["error"]
+    assert "ImportError" in out["build_output"]
 
 
 def test_build_output_is_summarised_not_streamed():
