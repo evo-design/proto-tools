@@ -289,10 +289,6 @@ def drift_warnings(
 
         local = fingerprint(tool_key)
         out = []
-        # "the proto-tools making this call" rather than "your local proto-tools": the comparison
-        # is against whichever copy dispatched, which over a hosted server is the server's and not
-        # anything the reader has installed. Told otherwise, they go looking for a package that is
-        # not on their machine.
         if entry.get("schema_hash") != local.schema_hash:
             out.append(
                 f"{tool_key}: the deployed tool's schema differs from the proto-tools making this "
