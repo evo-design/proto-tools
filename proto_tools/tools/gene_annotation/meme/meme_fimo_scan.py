@@ -194,9 +194,15 @@ class MEMEFimoScanOutput(BaseToolOutput):
 # Tool Implementation
 # ============================================================================
 def example_input() -> Any:
-    """Minimal valid input for testing and examples."""
+    """Minimal valid input for testing and examples.
+
+    One repeat-spacer-repeat unit taken verbatim from the bundled S. pyogenes SF370
+    CRISPR1 locus, so the bundled direct-repeat motif occurs twice on the forward strand.
+    """
+    repeat = "GTTTTAGAGCTATGCTGTTTTGAATGGTCCCAAAAC"
+    spacer = "TGCGCTGGTTGATTTCTTCTTGCGCTTTTT"
     return MEMEFimoScanInput(
-        sequences=["GTTGAGCTGGTCAACAAGTTGAGCTGGTCAAC"],
+        sequences=[repeat + spacer + repeat],
         motifs=str(Path(__file__).parent / "examples" / "example.meme"),
     )
 
