@@ -111,15 +111,40 @@ def test_pmidockq_sigmoid_pins_zhu_2023_constants():
 # ── Integration: real algorithm runs against real PDB + PAE fixtures ─────────
 
 
-@pytest.mark.integration
-def test_run_pdockq2_matches_hand_computation():
-    """End-to-end algorithm pin on the bundled fixture at the 10 A default cutoff.
+def _hand_computed_structure(tmp_path: Path) -> Structure:
+    """Toy complex whose interface is small enough to count by hand.
 
-    Fixture: chain A (binder, pLDDT=90) and chain B (target, pLDDT=70), 4 residues
-    each. At 10 A, 7 cross-chain pairs. PAE is 3.0 on the A[0:2] x B[0:2] block
-    (4 of the 7 contacts) and 15.0 elsewhere.
+    Chain A (binder, pLDDT=90) and chain B (target, pLDDT=70), 4 residues each,
+    laid out so exactly 7 of the 16 cross-chain pairs fall within the 10 A default
+    cutoff: A1-{B1,B2}, A2-{B1,B2,B3}, A3-{B2,B3}. A4 and B4 sit far off. PAE is
+    3.0 on the A[0:2] x B[0:2] block -- all 4 of those pairs are contacts -- and
+    15.0 elsewhere, so the 7 contacts carry PAE 3.0 x4 and 15.0 x3.
     """
-    out = run_pdockq2(example_input(), PDockQ2Config())
+    _write_ca_pdb(
+        tmp_path / "hand.pdb",
+        [
+            ("A", 1, (0.0, 0.0, 0.0), 90.0),
+            ("A", 2, (4.0, 0.0, 0.0), 90.0),
+            ("A", 3, (9.0, 0.0, 0.0), 90.0),
+            ("A", 4, (40.0, 0.0, 0.0), 90.0),
+            ("B", 1, (0.0, 6.0, 0.0), 70.0),
+            ("B", 2, (4.0, 6.0, 0.0), 70.0),
+            ("B", 3, (9.0, 6.0, 0.0), 70.0),
+            ("B", 4, (40.0, 60.0, 0.0), 70.0),
+        ],
+    )
+    pae = [[15.0] * 8 for _ in range(8)]
+    for i in (0, 1):  # A1, A2
+        for j in (4, 5):  # B1, B2
+            pae[i][j] = pae[j][i] = 3.0
+    return Structure.from_file(tmp_path / "hand.pdb", b_factor_type=BFactorType.PLDDT, metrics={"pae": pae})
+
+
+@pytest.mark.integration
+def test_run_pdockq2_matches_hand_computation(tmp_path):
+    """End-to-end algorithm pin against a by-hand interface at the 10 A default cutoff."""
+    structure = _hand_computed_structure(tmp_path)
+    out = run_pdockq2(PDockQ2Input(structure=structure, binder_chain="A", target_chains=["B"]), PDockQ2Config())
 
     assert out.success
     assert out.tool_id == "pdockq2"
@@ -134,6 +159,26 @@ def test_run_pdockq2_matches_hand_computation():
     by_chain = {row.chain_id: row for row in out.metrics.interfaces}
     assert by_chain["A"].if_plddt == pytest.approx(90.0)
     assert by_chain["B"].if_plddt == pytest.approx(70.0)
+    assert by_chain["A"].neighbor_chains == "B"
+    assert by_chain["B"].neighbor_chains == "A"
+    assert_metrics_in_spec(out)
+
+
+@pytest.mark.integration
+def test_bundled_barnase_barstar_scores_as_published():
+    """The bundled example scores the barnase-barstar complex it was captured at.
+
+    A real, well-predicted cofolded complex: high pLDDT on both chains and a
+    near-1.0 normalized PAE drive pDockQ2 to 0.94, the value the fixture ships for.
+    """
+    out = run_pdockq2(example_input(), PDockQ2Config())
+
+    assert out.success
+    assert out.metrics.pdockq2 == pytest.approx(0.9404, abs=1e-3)
+    assert out.metrics.num_interface_contacts == 100
+    assert out.metrics.avg_interface_plddt == pytest.approx(97.92, abs=0.01)
+
+    by_chain = {row.chain_id: row for row in out.metrics.interfaces}
     assert by_chain["A"].neighbor_chains == "B"
     assert by_chain["B"].neighbor_chains == "A"
     assert_metrics_in_spec(out)
