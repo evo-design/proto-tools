@@ -61,40 +61,31 @@ Run `proto-tools doctor` to check the credential, the environment, and what is d
 The server speaks MCP over standard input and output, so the agent launches it — you do not
 run it yourself.
 
-**Claude Code:**
+#### Claude Code
 
 ```bash
 claude mcp add proto-tools --scope user -- proto-tools-mcp
 ```
 
-`--scope user` registers it for every session. To remove it later:
+`--scope user` registers it for every session.
 
-```bash
-claude mcp remove proto-tools --scope user
-```
+#### Claude Desktop
 
-**Claude Desktop, Cursor, and other clients configured through JSON:**
+Add `proto-tools-mcp` as the command for a server named `proto-tools` in
+`claude_desktop_config.json`.
 
-```json
-{
-  "mcpServers": {
-    "proto-tools": {
-      "command": "proto-tools-mcp"
-    }
-  }
-}
-```
-
-For Claude Desktop this goes in `claude_desktop_config.json`.
-
-Prefer `proto-tools-mcp` over `python -m proto_tools.mcp`. The console script carries the
-interpreter it was installed into, so a client that does not inherit your shell environment —
-Claude Desktop is a desktop application, not a terminal — still starts the right Python.
-
-Note that no credential appears in either configuration. The server reads `~/.modal.toml`
+Note that no credential goes into either configuration. The server reads `~/.modal.toml`
 itself, so nothing sensitive is written into an agent's config file.
 
-**To run tools on this machine instead**, add `--device local`:
+#### ChatGPT
+
+Not currently an option. ChatGPT accepts only remote MCP servers reached over HTTPS, so it
+cannot launch the local server described here — unlike Claude Desktop and Cursor, which run
+one directly. Connecting ChatGPT will need the hosted server below.
+
+#### Running on this machine
+
+Add `--device local`:
 
 ```bash
 claude mcp add proto-tools --scope user -- proto-tools-mcp --device local

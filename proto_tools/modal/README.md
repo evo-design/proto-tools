@@ -30,6 +30,10 @@ modal setup
 
 This writes a token to `~/.modal.toml`.
 
+Your Modal credentials stay on your machine. Following these instructions, `proto-tools`
+reads that token locally to talk to Modal on your behalf — it is never sent to Proto Bio,
+and we neither see nor store it. Your account, your containers, your bill.
+
 To check your setup at any point, run `proto-tools doctor`.
 
 If you have multiple people who need access to the same tools, you can create a
