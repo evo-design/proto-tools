@@ -7,10 +7,17 @@ writing the call yourself.
 
 This page covers installing the server and registering it with an agent.
 
-**Tools run on your own Modal account.** The server dispatches work to remote containers you
-deploy and pay for, so set that up first: see [Modal Set Up](../modal/README.md) for creating
-an account, creating an environment, and deploying a tool. Without it the server starts and
-every tool call fails.
+Tools run either on this machine or on remote compute, and you choose which when you register
+the server.
+
+**Locally**, `proto-tools` builds each tool's environment on first use, so no account and no
+setup is needed beyond the install. Tools use whatever compute this machine has, so a tool
+that needs a GPU needs one here.
+
+**Remote tools run on your Modal account.** If you would like to run tools on remote compute —
+GPU models in particular — you can do so by connecting your Modal account. See
+[Modal Set Up](../modal/README.md) for creating an account, creating an environment, and
+deploying a tool.
 
 ## Setup
 
@@ -31,9 +38,11 @@ proto-tools-mcp --help
 The install is large — the dependency tree includes RDKit, biotite and the scientific Python
 stack — so expect it to take a few minutes.
 
-### Step 2: Authenticate with Modal
+### Step 2: Connect Modal, for remote compute
 
-The server defaults to running tools on Modal, which needs a credential on this machine:
+Skip this step to run tools on this machine only.
+
+The server defaults to running tools on Modal, which needs a credential here:
 
 ```bash
 modal setup
@@ -85,7 +94,18 @@ Claude Desktop is a desktop application, not a terminal — still starts the rig
 Note that no credential appears in either configuration. The server reads `~/.modal.toml`
 itself, so nothing sensitive is written into an agent's config file.
 
-### Step 4: Deploy the tools you want
+**To run tools on this machine instead**, add `--device local`:
+
+```bash
+claude mcp add proto-tools --scope user -- proto-tools-mcp --device local
+```
+
+Environments are built on first use, so the first call to a given tool is slow and later ones
+are not. Nothing is deployed and nothing is billed.
+
+### Step 4: Deploy the tools you want, if using Modal
+
+Running locally, there is nothing to deploy — skip this step.
 
 A fresh Modal workspace has nothing deployed, and the agent can only run what exists. Deploy
 a tool before asking for it:
@@ -104,15 +124,12 @@ your calls reach, and how many tools are deployed.
 
 ### Choosing where tools run
 
-The server resolves one backend at startup, and defaults to `modal`. Pass `--device` to
-change it:
+The server resolves one backend at startup, from `--device`, and defaults to `modal`. It is
+fixed for the life of the server, so a client that needs both can register two entries under
+different names.
 
-```bash
-claude mcp add proto-tools --scope user -- proto-tools-mcp --device local
-```
-
-`local` runs tools in the server process, which suits tools that need no GPU and no
-standalone environment. `modal` dispatches to your workspace.
+`local` runs tools in the server process, building each tool's environment on first use.
+`modal` dispatches to your workspace, where the environment was built at deploy time.
 
 ### Deploying from the agent
 
