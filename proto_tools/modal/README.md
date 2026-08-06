@@ -111,9 +111,11 @@ You are now set up to use the tool on Modal!
 ### Using an MCP agent
 
 `proto-tools` also packages an MCP server that exposes the same deployed tools
-to a coding agent, allowing you to deploy to and run tools on Modal. See our
+to a coding agent, allowing you to deploy to and run tools on Modal. See
+[MCP Server Set Up](../mcp/README.md) to install it and register it with Claude
+Code or Claude Desktop, or our
 [documentation website](https://proto.evodesign.org/docs/mcp/introduction) for
-more details.
+the full tool reference.
 
 ### Scale Down Window
 
