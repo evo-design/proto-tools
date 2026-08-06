@@ -62,9 +62,6 @@ analyses/*
 **/standalone/standalone_helpers.sh
 **/shared_envs/*/standalone_helpers.sh
 
-# Vendored upstream scripts fetched by standalone setup.sh (not committed)
-proto_tools/tools/structure_scoring/ipsae/standalone/ipsae.py
-
 # BLAST database artifacts generated when run_create_blast_db runs with default
 # config alongside the example_input fixture (.ndb, .nhr, .nin, .nsq, etc.)
 proto_tools/tools/sequence_alignment/blast/example_input_fixture.*
