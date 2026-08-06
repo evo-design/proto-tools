@@ -57,6 +57,14 @@ def _is_complementable(motif: Any) -> bool:
     return motif.alphabet.size == 4 and {"A", "C", "G"} <= symbols and ("T" in symbols or "U" in symbols)
 
 
+# pymemesuite slides its scoring window over ``range(length - width)``, one position
+# short of the end, so an occurrence ending at the final base is never scored. Appending
+# a single base makes that last window fall inside the loop; the padded window itself
+# stays outside it, so no spurious site is scored. 'N' is valid in both the nucleotide
+# and protein alphabets.
+_END_PAD = "N"
+
+
 def _sequence_index(name: str) -> int | None:
     """Parse the 0-based input index from a ``seq_{i}`` sequence name."""
     try:
@@ -74,7 +82,8 @@ def run_fimo_scan(input_data: dict[str, Any]) -> dict[str, Any]:
     Returns one match list per input sequence, aligned by position, so the result
     maps 1:1 onto the input ``sequences`` (the tool's iterable contract).
     """
-    sequences = [Sequence(seq, name=f"seq_{i}".encode()) for i, seq in enumerate(input_data["sequences"])]
+    lengths = [len(seq) for seq in input_data["sequences"]]
+    sequences = [Sequence(seq + _END_PAD, name=f"seq_{i}".encode()) for i, seq in enumerate(input_data["sequences"])]
     motifs, background = _read_motifs(input_data["motifs_path"])
 
     # FIMO only reverse-complements nucleotide alphabets; mirror the CLI by scanning
@@ -100,12 +109,15 @@ def run_fimo_scan(input_data: dict[str, Any]) -> dict[str, Any]:
                 continue
             # FIMO reports start <= stop with strand separate; pymemesuite gives
             # strand-oriented coordinates, so normalize to (min, max).
+            start, stop = int(min(element.start, element.stop)), int(max(element.start, element.stop))
+            if stop > lengths[idx]:  # window overlapping the end pad, not a real site
+                continue
             results[idx].append(
                 {
                     "motif_id": motif_id,
                     "motif_alt_id": motif_alt_id,
-                    "start": int(min(element.start, element.stop)),
-                    "stop": int(max(element.start, element.stop)),
+                    "start": start,
+                    "stop": stop,
                     "strand": element.strand,
                     "score": float(element.score),
                     "pvalue": float(element.pvalue),
