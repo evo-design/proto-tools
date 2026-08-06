@@ -61,10 +61,21 @@ Run `proto-tools doctor` to check the credential, the environment, and what is d
 The server speaks MCP over standard input and output, so the agent launches it — you do not
 run it yourself.
 
+Where tools run is chosen here, and is fixed for the life of the server. To have both, register
+two servers under different names.
+
 #### Claude Code
+
+To run tools on Modal:
 
 ```bash
 claude mcp add proto-tools --scope user -- proto-tools-mcp
+```
+
+To run them on this machine:
+
+```bash
+claude mcp add proto-tools-local --scope user -- proto-tools-mcp --device local
 ```
 
 `--scope user` registers it for every session.
@@ -79,17 +90,6 @@ Add `proto-tools-mcp` as the command for a server named `proto-tools` in
 Not currently an option. ChatGPT accepts only remote MCP servers reached over HTTPS, so it
 cannot launch the local server described here — unlike Claude Desktop and Cursor, which run
 one directly. Connecting ChatGPT will need the hosted server below.
-
-#### Running on this machine
-
-Add `--device local`:
-
-```bash
-claude mcp add proto-tools --scope user -- proto-tools-mcp --device local
-```
-
-Environments are built on first use, so the first call to a given tool is slow and later ones
-are not. Nothing is deployed and nothing is billed.
 
 ### Step 4: Deploy the tools you want, if using Modal
 
@@ -112,10 +112,3 @@ your calls reach, and how many tools are deployed.
 
 **Coming soon.** A hosted version of this server, reachable over HTTPS, so an agent can use
 proto-tools without a local install. Tools will still run on your own Modal account.
-
-## Further reading
-
-- [Modal Set Up](../modal/README.md) — accounts, environments, deploying tools, and what it
-  costs.
-- [Documentation website](https://proto.evodesign.org/docs/mcp/introduction) — the MCP tool
-  reference, including every function the server exposes.
