@@ -232,27 +232,52 @@ def test_deployed_apps_asks_about_the_dispatch_environment(monkeypatch):
     ``resolve_environment`` picks. That made ``list_tools(deployed_only=True)`` describe a
     different environment's deployments, and hid apps that were in fact deployed.
     """
+    from proto_tools.utils import modal_status
+
+    seen: list[str] = []
+
+    def listed(environment, _client):
+        seen.append(environment)
+        return {"proto-tools-esm2"}
+
+    monkeypatch.setattr(modal_status, "_listed_apps", listed)
+    monkeypatch.delenv("MODAL_ENVIRONMENT", raising=False)
+
+    assert modal_status.deployed_apps() == {"proto-tools-esm2"}
+    assert seen == ["proto-env"], f"asked about the wrong environment: {seen}"
+
+
+def test_deployed_apps_falls_back_when_the_listing_fails(monkeypatch):
+    """A broken fast path must not read as an empty workspace.
+
+    The listing goes through SDK internals, so a Modal upgrade can move it out from under us.
+    Nothing distinguishes "could not ask" from "nothing is deployed" at the call site, and the
+    latter hides every tool a user has — so the slow path has to answer instead.
+    """
     import modal
 
-    from proto_tools.utils.modal_status import deployed_apps
+    from proto_tools.modal.manifest import APP_BUCKETS
+    from proto_tools.utils import modal_status
 
-    seen: list[str | None] = []
+    def refuse(_environment, _client):
+        raise RuntimeError("AppList moved")
+
+    probed: list[str] = []
 
     class _Hydrated:
         def hydrate(self):
             return None
 
-    def cls_from_name(_app, _name, *, environment_name=None, **_kwargs):
-        seen.append(environment_name)
+    def cls_from_name(app_name, _service, *, environment_name=None, **_kwargs):
+        probed.append(environment_name)
         return _Hydrated()
 
+    monkeypatch.setattr(modal_status, "_listed_apps", refuse)
     monkeypatch.setattr(modal.Cls, "from_name", staticmethod(cls_from_name))
     monkeypatch.delenv("MODAL_ENVIRONMENT", raising=False)
 
-    deployed_apps()
-
-    assert seen, "no apps were probed"
-    assert set(seen) == {"proto-env"}, f"probed the wrong environment: {set(seen)}"
+    assert modal_status.deployed_apps() == set(APP_BUCKETS)
+    assert set(probed) == {"proto-env"}, f"fell back onto the wrong environment: {set(probed)}"
 
 
 def test_supplied_client_satisfies_the_credential_check(monkeypatch, tmp_path):

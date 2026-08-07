@@ -7,9 +7,12 @@ SDK at module scope, so the credential checks still answer in that state.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # Both must be set for the SDK to authenticate from the environment.
 TOKEN_VARS = ("MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET")
@@ -73,11 +76,54 @@ def auth_mechanism() -> str | None:
     return None
 
 
+def _listed_apps(environment: str, client: Any | None) -> set[str]:
+    """Names of the deployed apps in ``environment``, from one call.
+
+    This is the request ``modal app list`` makes, and the SDK's own blocking bridge is what runs
+    it, so a caller holding an ordinary ``modal.Client`` needs no event loop of its own.
+    """
+    import modal
+    from modal._utils.async_utils import synchronizer
+    from modal_proto import api_pb2
+
+    @synchronizer.create_blocking
+    async def _list(asking_as: Any) -> Any:
+        return await asking_as.stub.AppList(api_pb2.AppListRequest(environment_name=environment))
+
+    response = _list(client if client is not None else modal.Client.from_env())
+    return {app.description for app in response.apps if app.state == api_pb2.APP_STATE_DEPLOYED}
+
+
+def _hydrated_apps(environment: str, client: Any | None) -> set[str]:
+    """The same answer, asked one app at a time.
+
+    Kept as the fallback for :func:`deployed_apps` because the fast path reaches into SDK
+    internals: if a Modal upgrade moves them, this still answers, only slowly.
+    """
+    import modal
+
+    from proto_tools.modal.manifest import APP_BUCKETS
+
+    live = set()
+    for app_name, services in APP_BUCKETS.items():
+        try:
+            modal.Cls.from_name(app_name, services[0], environment_name=environment, client=client).hydrate()
+            live.add(app_name)
+        except Exception:  # noqa: S112 — an unreachable app is "not deployed", not an error
+            continue
+    return live
+
+
 def deployed_apps(environment: str | None = None, client: Any | None = None) -> set[str]:
     """Apps that currently resolve in the Modal environment a dispatch would reach.
 
-    One hydrate per app, no containers started. Failures read as "not deployed"
-    rather than propagating.
+    One listing call, no containers started. Failures read as "not deployed" rather than
+    propagating.
+
+    Asking per app instead costs a round trip each, which is seconds across the catalogue and
+    grows with every tool added. Callers use this to describe a whole catalogue at once, so the
+    question is "what is deployed here" rather than "is this one app deployed", and Modal answers
+    that in a single request.
 
     The environment is named rather than inherited, and must be: a dispatch resolves
     ``proto-env`` while an unconfigured Modal profile resolves the workspace default, so asking
@@ -92,17 +138,11 @@ def deployed_apps(environment: str | None = None, client: Any | None = None) -> 
     Returns:
         set[str]: App names that resolve.
     """
-    import modal
-
     from proto_tools.modal.app import resolve_environment
-    from proto_tools.modal.manifest import APP_BUCKETS
 
     environment = resolve_environment(environment)
-    live = set()
-    for app_name, services in APP_BUCKETS.items():
-        try:
-            modal.Cls.from_name(app_name, services[0], environment_name=environment, client=client).hydrate()
-            live.add(app_name)
-        except Exception:  # noqa: S112 — an unreachable app is "not deployed", not an error
-            continue
-    return live
+    try:
+        return _listed_apps(environment, client)
+    except Exception:
+        logger.warning("could not list Modal apps; falling back to per-app lookup", exc_info=True)
+        return _hydrated_apps(environment, client)
