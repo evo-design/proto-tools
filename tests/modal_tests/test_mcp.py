@@ -301,6 +301,49 @@ def test_summarize_recurses_into_nested_structures(tmp_path):
     assert "_saved_to" in out["outer"]["inner"]
 
 
+def test_summarize_spills_inside_list_items_not_the_whole_list(tmp_path):
+    """A list is sized after its leaves spill, so small siblings of a bulky field stay inline.
+
+    Regression for a real failure: esmfold2-prediction returned its whole
+    ``structures`` list as one placeholder, because a Structure crosses the
+    limit on its coordinate string alone. That took ``metrics`` — pLDDT, pTM,
+    the numbers the call was made for — to disk with it, leaving an agent a
+    result it could not judge without reading the file back.
+    """
+    from proto_tools.mcp import tools as impl
+
+    structure = {"structure": "ATOM" * 40_000, "metrics": {"plddt": 0.91, "ptm": 0.92}}
+    out = impl._summarize({"structures": [structure]}, "", tmp_path)
+
+    assert isinstance(out["structures"], list), "the list itself must survive"
+    assert out["structures"][0]["metrics"] == {"plddt": 0.91, "ptm": 0.92}
+    assert "_saved_to" in out["structures"][0]["structure"]
+
+
+def test_summarize_still_spills_a_list_of_small_items(tmp_path):
+    """Per-leaf spilling cannot shrink a long list of small values, so the list still goes out whole."""
+    from proto_tools.mcp import tools as impl
+
+    out = impl._summarize({"per_residue": list(range(5_000))}, "", tmp_path)
+    assert "_saved_to" in out["per_residue"]
+
+
+def test_summarize_writes_a_numeric_matrix_as_one_file(tmp_path):
+    """A PAE matrix has no small siblings to rescue, so it spills whole rather than row by row.
+
+    Model output is full-precision, which puts a single row over the limit on its own —
+    descending into the matrix would write a file per row and call it an improvement.
+    """
+    from proto_tools.mcp import tools as impl
+
+    pae = [[3.578874111175537 + i + j * 1e-6 for j in range(150)] for i in range(150)]
+    out = impl._summarize({"metrics": {"plddt": 0.914555549621582, "pae": pae}}, "", tmp_path)
+
+    assert out["metrics"]["plddt"] == 0.914555549621582, "small metrics stay inline"
+    assert "_saved_to" in out["metrics"]["pae"]
+    assert len(list(tmp_path.iterdir())) == 1, "the matrix is one file, not one per row"
+
+
 def test_search_matches_natural_language_queries(monkeypatch):
     """Agents ask in prose; a literal substring search returns nothing for that.
 
