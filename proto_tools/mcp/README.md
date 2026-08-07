@@ -85,9 +85,8 @@ Add `proto-tools-mcp` as the command for a server named `proto-tools` in
 
 #### ChatGPT
 
-Not currently an option. ChatGPT accepts only remote MCP servers reached over HTTPS, so it
-cannot launch the local server described here — unlike Claude Desktop and Cursor, which run
-one directly. Connecting ChatGPT will need the hosted server below.
+`proto-tools` is not currently available on ChatGPT since the ChatGPT app only accepts remote
+MCP servers reached over HTTPS. An HTTPS based version of the MCP is in development.
 
 ### Step 4: Deploy the tools you want, if using Modal
 
