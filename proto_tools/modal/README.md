@@ -30,6 +30,10 @@ modal setup
 
 This writes a token to `~/.modal.toml`.
 
+Your Modal credentials stay on your machine. Following these instructions, `proto-tools`
+reads that token locally to talk to Modal on your behalf — it is never sent to Proto Bio,
+and we neither see nor store it. Your account, your containers, your bill.
+
 To check your setup at any point, run `proto-tools doctor`.
 
 If you have multiple people who need access to the same tools, you can create a
@@ -111,9 +115,11 @@ You are now set up to use the tool on Modal!
 ### Using an MCP agent
 
 `proto-tools` also packages an MCP server that exposes the same deployed tools
-to a coding agent, allowing you to deploy to and run tools on Modal. See our
+to agents like Claude or ChatGPT, allowing you to deploy to and run tools on
+Modal. See [MCP Server Set Up](../mcp/README.md) to install it and register it
+with an agent, or our
 [documentation website](https://proto.evodesign.org/docs/mcp/introduction) for
-more details.
+the full tool reference.
 
 ### Scale Down Window
 

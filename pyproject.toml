@@ -79,6 +79,7 @@ Issues = "https://github.com/evo-design/proto-tools/issues"
 
 [project.scripts]
 proto-tools = "proto_tools.cli:main"
+proto-tools-mcp = "proto_tools.mcp.server:main"
 
 [project.optional-dependencies]
 
