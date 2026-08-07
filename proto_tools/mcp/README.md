@@ -61,8 +61,9 @@ Run `proto-tools doctor` to check the credential, the environment, and what is d
 The server speaks MCP over standard input and output, so the agent launches it — you do not
 run it yourself.
 
-Where tools run is chosen here, and is fixed for the life of the server. To have both, register
-two servers under different names.
+Where tools run is chosen here, and becomes the default for the session. An agent can override
+it for a single call by passing `run_on` to `run_tool` — useful for sending one cheap CPU tool
+to this machine, or one GPU tool to Modal.
 
 #### Claude Code
 
@@ -75,7 +76,7 @@ claude mcp add proto-tools --scope user -- proto-tools-mcp
 To run them on this machine:
 
 ```bash
-claude mcp add proto-tools-local --scope user -- proto-tools-mcp --device local
+claude mcp add proto-tools --scope user -- proto-tools-mcp --device local
 ```
 
 `--scope user` registers it for every session.

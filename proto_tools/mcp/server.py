@@ -184,6 +184,7 @@ def build_server(device: Device = "modal") -> FastMCP:
         config: dict[str, Any] | None = None,
         output_dir: str | None = None,
         use_example: bool = False,
+        run_on: str | None = None,
     ) -> dict[str, Any]:
         """Run a tool on this session's backend and return the result.
 
@@ -191,6 +192,12 @@ def build_server(device: Device = "modal") -> FastMCP:
         the first call after a few minutes idle pays a container start and
         model load, and a few tools (binder design, diffusion) legitimately run
         for many minutes. Check the tool description before calling.
+
+        run_on overrides the backend for this call alone: "local" runs it on
+        this machine, "modal" dispatches it to the deployment. Useful for
+        sending a small CPU tool to the local machine without paying a
+        container start, or one GPU tool to Modal from a local session. Omit it
+        to use the session's own backend.
 
         Some tools are answered in this process whatever the backend, because
         they need no GPU and no environment, or cannot be deployed at all. The
@@ -207,7 +214,16 @@ def build_server(device: Device = "modal") -> FastMCP:
         Large fields are written under output_dir (default ./proto_tools_outputs)
         and returned as paths.
         """
-        return impl.run_tool(tool_key, inputs, config, output_dir, use_example, device=device)
+        if run_on is None:
+            target = device
+        else:
+            try:
+                target = resolve_device(run_on)
+            except DeviceUnavailableError as exc:
+                # A bad backend name is the caller's to correct, so it comes back as a result
+                # rather than a protocol error, the same way an unknown tool key does.
+                return {"ok": False, "error": str(exc), "valid_run_on": ["local", "modal", "proto"]}
+        return impl.run_tool(tool_key, inputs, config, output_dir, use_example, device=target)
 
     if device == "modal":
 

@@ -646,3 +646,62 @@ def test_the_help_text_names_the_console_script():
 
     assert "claude mcp add proto-tools --scope user -- proto-tools-mcp" in HELP
     assert '"command": "proto-tools-mcp"' in HELP.replace("'", '"')
+
+
+def test_run_on_overrides_the_session_backend_for_one_call():
+    """A session is bound to one backend, which is wrong for a mixed catalogue.
+
+    Sending a cheap CPU tool to this machine should not require registering a second server,
+    and neither should sending one GPU tool to a deployment from a local session.
+    """
+    import asyncio as _asyncio
+
+    from proto_tools.mcp import tools as impl
+
+    seen: list[str] = []
+
+    def _record(tool_key, inputs=None, config=None, output_dir=None, use_example=False, **kwargs):
+        seen.append(kwargs.get("device"))
+        return {"ok": True, "ran_on": kwargs.get("device")}
+
+    import fastmcp
+
+    from proto_tools.mcp import build_server
+
+    async def call(args):
+        async with fastmcp.Client(build_server("modal")) as client:
+            return (await client.call_tool("run_tool", args)).data
+
+    original = impl.run_tool
+    impl.run_tool = _record
+    try:
+        base = {"tool_key": "tmalign-alignment", "use_example": True}
+        _asyncio.run(call(base))
+        _asyncio.run(call({**base, "run_on": "local"}))
+    finally:
+        impl.run_tool = original
+
+    assert seen == ["modal", "local"], "run_on did not redirect the call"
+
+
+def test_an_unknown_run_on_is_a_result_not_a_protocol_error():
+    """The backend name is a value an agent invents, so getting it wrong must be recoverable."""
+    import asyncio as _asyncio
+
+    import fastmcp
+
+    from proto_tools.mcp import build_server
+
+    async def call():
+        async with fastmcp.Client(build_server("modal")) as client:
+            return (
+                await client.call_tool(
+                    "run_tool",
+                    {"tool_key": "tmalign-alignment", "use_example": True, "run_on": "gpu-cluster"},
+                )
+            ).data
+
+    result = _asyncio.run(call())
+    assert result["ok"] is False
+    assert "gpu-cluster" in result["error"]
+    assert result["valid_run_on"] == ["local", "modal", "proto"]
