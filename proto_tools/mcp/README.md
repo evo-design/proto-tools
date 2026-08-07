@@ -35,9 +35,6 @@ This installs a `proto-tools-mcp` command. Check it resolves:
 proto-tools-mcp --help
 ```
 
-The install is large — the dependency tree includes RDKit, biotite and the scientific Python
-stack — so expect it to take a few minutes.
-
 ### Step 2: Connect Modal, for remote compute
 
 Skip this step to run tools on this machine only.
