@@ -28,11 +28,7 @@ pip install modal
 modal setup
 ```
 
-This writes a token to `~/.modal.toml`.
-
-Your Modal credentials stay on your machine. Following these instructions, `proto-tools`
-reads that token locally to talk to Modal on your behalf — it is never sent to Proto Bio,
-and we neither see nor store it. Your account, your containers, your bill.
+This writes a token to `~/.modal.toml`. Your credentials never leave your local machine.
 
 To check your setup at any point, run `proto-tools doctor`.
 
