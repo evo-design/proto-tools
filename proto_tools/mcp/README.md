@@ -2,8 +2,8 @@
 
 `proto-tools` packages an [MCP](https://modelcontextprotocol.io) server, which exposes its
 tools to agents like Claude or ChatGPT. The agent can browse the catalogue, read a tool's
-schema, and run it — so you can ask for a structure prediction in conversation rather than
-writing the call yourself.
+schema, and run it. You can ask for a structure prediction in conversation rather than writing
+the call yourself.
 
 This page covers installing the server and registering it with an agent.
 
@@ -14,8 +14,8 @@ the server.
 setup is needed beyond the install. Tools use whatever compute this machine has, so a tool
 that needs a GPU needs one here.
 
-**Remote tools run on your Modal account.** If you would like to run tools on remote compute —
-GPU models in particular — you can do so by connecting your Modal account. See
+**Remote tools run on your Modal account.** Connect your Modal account to run tools on remote
+compute, GPU models in particular. See
 [Modal Set Up](../modal/README.md) for creating an account, creating an environment, and
 deploying a tool.
 
@@ -55,28 +55,18 @@ Run `proto-tools doctor` to check the credential, the environment, and what is d
 
 ### Step 3: Register the server with your agent
 
-The server speaks MCP over standard input and output, so the agent launches it — you do not
-run it yourself.
-
-Where tools run is chosen here, and becomes the default for the session. An agent can override
-it for a single call by passing `run_on` to `run_tool` — useful for sending one cheap CPU tool
-to this machine, or one GPU tool to Modal.
+The agent launches the server. You do not run it yourself.
 
 #### Claude Code
-
-To run tools on Modal:
 
 ```bash
 claude mcp add proto-tools --scope user -- proto-tools-mcp
 ```
 
-To run them on this machine:
-
-```bash
-claude mcp add proto-tools --scope user -- proto-tools-mcp --device local
-```
-
 `--scope user` registers it for every session.
+
+Tools run on Modal by default. Add `--device local` to run them on this machine instead. The
+choice becomes the session default. An agent can override it per call with `run_on`.
 
 #### Claude Desktop
 
@@ -90,7 +80,7 @@ MCP servers reached over HTTPS. An HTTPS based version of the MCP is in developm
 
 ### Step 4: Deploy the tools you want, if using Modal
 
-Running locally, there is nothing to deploy — skip this step.
+Running locally, there is nothing to deploy. Skip this step.
 
 A fresh Modal workspace has nothing deployed, and the agent can only run what exists. Deploy
 a tool before asking for it:
@@ -102,8 +92,8 @@ proto-tools deploy --apps tmalign
 Each deploy builds an image in your workspace and takes a few minutes. See
 [Modal Set Up](../modal/README.md) for the full deploy workflow.
 
-Ask the agent to call `workspace_info` first — it reports which workspace and environment
-your calls reach, and how many tools are deployed.
+Ask the agent to call `workspace_info` first. It reports which workspace and environment your
+calls reach, and how many tools are deployed.
 
 ## Hosted HTTPS server
 
