@@ -524,9 +524,14 @@ def _summarize(value: Any, key_path: str, output_dir: Path) -> Any:
     if isinstance(value, dict):
         return {k: _summarize(v, f"{key_path}.{k}" if key_path else k, output_dir) for k, v in value.items()}
     if isinstance(value, list):
-        rendered = json.dumps(value, default=str)
+        items = [
+            _summarize(v, f"{key_path}.{i}" if key_path else str(i), output_dir) if isinstance(v, dict) else v
+            for i, v in enumerate(value)
+        ]
+        rendered = json.dumps(items, default=str)
         if len(rendered) <= INLINE_CHAR_LIMIT:
-            return value
+            return items
+        # Many small items: nothing left to spill individually, so the list goes out whole.
         path = _spill_path(output_dir, key_path, "json")
         path.write_text(rendered)
         return {"_saved_to": str(path), "_kind": "json", "_items": len(value), "_bytes": len(rendered)}
