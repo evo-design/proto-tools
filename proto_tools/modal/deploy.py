@@ -257,6 +257,18 @@ def describe_progress(line: str) -> str | None:
     return None
 
 
+#: Modal's own words when two deploys of one app publish at the same time.
+#:
+#: The image build is shared -- both deploys attach to one build and pay for one -- so only the
+#: final publish collides, and it collides cheaply. The loser is told to try again, and the retry
+#: updates the deployment that just landed instead of creating a second one.
+DEPLOY_RACE_MARKER = "Possible race between two concurrent deploys"
+
+#: Attempts a publish race is worth. A racing deploy publishes in seconds, so a couple of retries
+#: covers a genuine collision; more would mean something other than a race is wrong.
+DEPLOY_RACE_ATTEMPTS = 3
+
+
 def deploy_app(
     app_name: str,
     environment: str | None = None,
@@ -299,10 +311,26 @@ def deploy_app(
     logs_dir.mkdir(exist_ok=True, parents=True)
     log_file = logs_dir / f"deploy.{app_slug(app_name)}.log"
 
-    with tempfile.TemporaryDirectory(prefix="proto-tools-deploy-") as scratch:
-        entrypoint = Path(scratch) / f"{module_name(app_name)}.py"
-        entrypoint.write_text(render_entrypoint(app_name, APP_BUCKETS[app_name]))
-        deployed = _run_modal_deploy(app_name, entrypoint, environment, log_file, on_progress, verbose, tokens)
+    # Retried rather than coordinated. The same app reaches Modal from this CLI, from a server
+    # deploying on someone's behalf, and from their own machine, and those three share no state to
+    # lock with. They do not have to: only the publish collides, and a second attempt settles it.
+    for attempt in range(1, DEPLOY_RACE_ATTEMPTS + 1):
+        with tempfile.TemporaryDirectory(prefix="proto-tools-deploy-") as scratch:
+            entrypoint = Path(scratch) / f"{module_name(app_name)}.py"
+            entrypoint.write_text(render_entrypoint(app_name, APP_BUCKETS[app_name]))
+            deployed, raced = _run_modal_deploy(
+                app_name, entrypoint, environment, log_file, on_progress, verbose, tokens
+            )
+        if deployed or not raced:
+            break
+        if attempt == DEPLOY_RACE_ATTEMPTS:
+            # Said here rather than by the run itself, which stays quiet about a race precisely
+            # because the usual outcome is a retry that works. Giving up is the reportable event.
+            print(
+                f"[{app_slug(app_name)}] deploy kept losing to concurrent deploys — full log at {_display_path(log_file)}"
+            )
+            break
+        print(f"[{app_slug(app_name)}] another deploy published first; retrying ({attempt + 1}/{DEPLOY_RACE_ATTEMPTS})")
 
     # Recorded here rather than by the caller, so every route that deploys gets drift detection.
     # An absent manifest reads as "nothing to report", so a path that skipped this would leave the
@@ -323,16 +351,21 @@ def _run_modal_deploy(
     on_progress: Callable[[str], None] | None = None,
     verbose: bool = False,
     tokens: ModalTokens | None = None,
-) -> bool:
+) -> tuple[bool, bool]:
     """Run ``modal deploy`` for one entrypoint, reporting its progress prefixed by app.
 
     Prints a line per phase by default. Modal renders an animated build tree, and IPython runs
     ``!`` commands under a pseudo-terminal, so the raw stream reaches a notebook as thousands of
     redraw frames. ``verbose`` streams every line instead; either way the log file has it all.
+
+    Returns:
+        tuple[bool, bool]: Whether the deploy succeeded, and whether it lost a publish race. The
+            second is worth separating because it is the one failure a retry fixes.
     """
     cmd = modal_command(entrypoint, environment)
     seen = RecentLines()
     last_phase: str | None = None
+    raced = False
     try:
         with open(log_file, "w") as f:
             process = subprocess.Popen(
@@ -345,7 +378,9 @@ def _run_modal_deploy(
             )
             for line in process.stdout or ():
                 f.write(line)  # the log keeps the raw stream, redraw frames and all
-                phase = describe_progress(_ANSI_ESCAPE.sub("", line))
+                clean = _ANSI_ESCAPE.sub("", line)
+                raced = raced or DEPLOY_RACE_MARKER in clean
+                phase = describe_progress(clean)
                 if verbose:
                     # Prefix per-app stdout so parallel deploy output stays greppable.
                     if (shown := for_display(line, seen)) is not None:
@@ -360,10 +395,11 @@ def _run_modal_deploy(
             process.wait()
             if process.returncode != 0:
                 raise subprocess.CalledProcessError(process.returncode, cmd)
-        return True
+        return True, raced
     except subprocess.CalledProcessError:
-        print(f"[{app_slug(app_name)}] deploy failed — full log at {_display_path(log_file)}")
-        return False
+        if not raced:
+            print(f"[{app_slug(app_name)}] deploy failed — full log at {_display_path(log_file)}")
+        return False, raced
 
 
 def deploy_apps(

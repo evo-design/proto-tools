@@ -194,3 +194,104 @@ def test_a_line_returning_after_the_window_is_shown_again():
     for filler in ("a\n", "b\n"):
         for_display(filler, seen)
     assert for_display("same\n", seen) == "same"
+
+
+def _fake_run(outcomes):
+    """A ``_run_modal_deploy`` stand-in that replays ``outcomes``, recording each call."""
+    calls = []
+
+    def run(app_name, entrypoint, environment, log_file, on_progress, verbose, tokens):
+        calls.append(app_name)
+        return outcomes[len(calls) - 1]
+
+    return run, calls
+
+
+def test_a_lost_publish_race_is_retried(monkeypatch, tmp_path, capsys):
+    """Losing a publish race must not surface as a failed deploy.
+
+    The same app reaches Modal from this CLI, from a server deploying on someone's behalf, and
+    from their own machine, and none of those can see the others. Modal shares the image build
+    between them, so a collision costs only the final publish, and it says to try again.
+    """
+    from proto_tools.modal import deploy as deploy_module
+
+    run, calls = _fake_run([(False, True), (True, False)])
+    monkeypatch.setattr(deploy_module, "_run_modal_deploy", run)
+    monkeypatch.setattr(deploy_module, "record_fingerprints", lambda *a, **k: None)
+
+    assert deploy_module.deploy_app("proto-tools-esm2", "proto-env", log_dir=tmp_path) is True
+    assert len(calls) == 2, "the losing attempt was not retried"
+    assert "retrying" in capsys.readouterr().out
+
+
+def test_an_ordinary_failure_is_not_retried(monkeypatch, tmp_path):
+    """A build that genuinely fails must fail once, not three times.
+
+    Retrying it would triple the wait before a user sees a broken image, and each attempt costs
+    them a build.
+    """
+    from proto_tools.modal import deploy as deploy_module
+
+    run, calls = _fake_run([(False, False)])
+    monkeypatch.setattr(deploy_module, "_run_modal_deploy", run)
+    monkeypatch.setattr(deploy_module, "record_fingerprints", lambda *a, **k: None)
+
+    assert deploy_module.deploy_app("proto-tools-esm2", "proto-env", log_dir=tmp_path) is False
+    assert len(calls) == 1
+
+
+def test_giving_up_on_a_race_still_reports_the_failure(monkeypatch, tmp_path, capsys):
+    """A run stays quiet about a race, so exhausting the retries must not be silent."""
+    from proto_tools.modal import deploy as deploy_module
+
+    run, calls = _fake_run([(False, True)] * deploy_module.DEPLOY_RACE_ATTEMPTS)
+    monkeypatch.setattr(deploy_module, "_run_modal_deploy", run)
+    monkeypatch.setattr(deploy_module, "record_fingerprints", lambda *a, **k: None)
+
+    assert deploy_module.deploy_app("proto-tools-esm2", "proto-env", log_dir=tmp_path) is False
+    assert len(calls) == deploy_module.DEPLOY_RACE_ATTEMPTS
+    assert "kept losing" in capsys.readouterr().out
+
+
+def test_the_race_marker_matches_what_modal_actually_says(monkeypatch, tmp_path):
+    """Pinned against Modal's wording, observed from a real concurrent deploy.
+
+    The marker is the whole mechanism: if Modal rephrases it, a race silently stops being
+    retried, and there is nothing else in the output that identifies one.
+    """
+    from proto_tools.modal import deploy as deploy_module
+
+    observed = (
+        "modal.exception.AlreadyExistsError: A deployment with this name already exists "
+        "and should be updated. Possible race between two concurrent deploys. Try again."
+    )
+    assert deploy_module.DEPLOY_RACE_MARKER in observed
+
+
+def test_the_run_recognises_a_race_in_modal_output(monkeypatch, tmp_path):
+    """The detection itself, over the stream rather than a stubbed return value.
+
+    This is the half a stubbed ``_run_modal_deploy`` cannot check, and the half that breaks if
+    the marker or the ANSI stripping is wrong.
+    """
+    import subprocess
+
+    from proto_tools.modal import deploy as deploy_module
+
+    class _Process:
+        # Modal colours its errors, so the marker arrives wrapped in escape codes.
+        stdout = iter(["Building image\n", f"\x1b[31m{deploy_module.DEPLOY_RACE_MARKER}. Try again.\x1b[0m\n"])
+        returncode = 1
+
+        def wait(self):
+            return None
+
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: _Process())
+
+    deployed, raced = deploy_module._run_modal_deploy(
+        "proto-tools-esm2", tmp_path / "e.py", "proto-env", tmp_path / "d.log", None, False, None
+    )
+
+    assert deployed is False
+    assert raced is True, "the race went unrecognised, so it would not be retried"
