@@ -14,6 +14,7 @@ from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
     ParadeConstructType,
     _SafeCheckpointUrlConfigMixin,
     normalize_checkpoint_override,
+    resolve_cell_type,
     resolve_checkpoint_source,
 )
 from proto_tools.tools.tool_registry import tool
@@ -38,8 +39,9 @@ class ParadeGradientLossTerm(BaseModel):
     """One differentiable PARADE UTR-activity objective term.
 
     Attributes:
-        cell_type (ParadeCellType): PARADE cell code to optimize; must be in the
-            configured ``construct_type`` panel.
+        cell_type (ParadeCellType): PARADE cell to optimize, given by code (``"c2"``) or
+            cell-line name (``"HepG2"``, case-insensitive); resolved to its canonical code,
+            which must be in the configured ``construct_type`` panel.
         direction (ParadeObjectiveDirection): ``"max"`` minimizes
             ``1 - sigmoid((raw - center) / scale)``; ``"min"`` minimizes
             ``sigmoid((raw - center) / scale)``.
@@ -50,7 +52,11 @@ class ParadeGradientLossTerm(BaseModel):
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True, frozen=True)
 
-    cell_type: ParadeCellType = Field(default="c2", title="Cell Type", description="PARADE cell code to optimize.")
+    cell_type: ParadeCellType = Field(
+        default="c2",
+        title="Cell Type",
+        description="PARADE cell to optimize, by code ('c2') or cell-line name ('HepG2', case-insensitive).",
+    )
     direction: ParadeObjectiveDirection = Field(
         default="max",
         title="Direction",
@@ -76,6 +82,14 @@ class ParadeGradientLossTerm(BaseModel):
         title="Sigmoid Scale",
         description="Sigmoid steepness in raw-activity units; larger values produce a wider transition",
     )
+
+    @field_validator("cell_type", mode="before")
+    @classmethod
+    def _resolve_cell_type(cls, value: Any) -> Any:
+        """Accept a cell code ('c2') or cell-line name ('HepG2') and resolve it to its canonical code."""
+        if isinstance(value, str):
+            return resolve_cell_type(value)
+        return value
 
 
 class ParadeGradientInput(BaseToolInput):

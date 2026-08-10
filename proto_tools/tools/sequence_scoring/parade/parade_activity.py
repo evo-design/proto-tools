@@ -9,12 +9,14 @@ from typing import Any
 from pydantic import BaseModel, Field, ValidationInfo, computed_field, field_validator
 
 from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
+    PARADE_CELL_LINE_NAMES,
     PARADE_CELL_TYPES,
     ParadeActivityMetrics,
     ParadeCellType,
     ParadeCheckpointConfig,
     ParadeConstructType,
     ParadeSequenceInput,
+    resolve_cell_type,
     resolve_checkpoint_source,
 )
 from proto_tools.tools.tool_registry import tool
@@ -32,9 +34,10 @@ class ParadeActivityConfig(ParadeCheckpointConfig):
             (5' UTR) or ``"utr3"`` (3' UTR). Selects the checkpoint and the cell-code
             panel. Matching the upstream predictor, the model scores the bare insert
             (no reporter flanks are added).
-        cell_types (list[ParadeCellType]): PARADE cell codes to return. Empty means
-            the full panel for ``construct_type``. Requested codes must belong to
-            that panel.
+        cell_types (list[ParadeCellType]): PARADE cell lines to return, each given by
+            code (``"c2"``) or cell-line name (``"HepG2"``, case-insensitive); names are
+            resolved to canonical codes. Empty means the full panel for ``construct_type``.
+            Requested codes must belong to that panel.
         checkpoint (str): Optional override for the pinned checkpoint — a local ``.ckpt`` path or an
             ``https`` link (a schemeless ``host.tld/path`` is accepted). Caller overrides run on local
             devices only (rejected on ``device="proto"``). Empty uses the pinned per-target checkpoint.
@@ -50,18 +53,25 @@ class ParadeActivityConfig(ParadeCheckpointConfig):
     cell_types: list[ParadeCellType] = ConfigField(
         title="Cell Types",
         default_factory=list,
-        description="PARADE cell codes to return; empty returns the full panel for the construct type.",
+        description=(
+            "PARADE cell lines to return by code ('c2') or name ('HepG2', case-insensitive); "
+            "empty returns the full panel for the construct type."
+        ),
     )
 
     @field_validator("cell_types", mode="before")
     @classmethod
     def normalize_cell_types(cls, value: Any) -> list[Any]:
-        """Normalize a single cell code to a list."""
+        """Normalize a single selector to a list and resolve names or codes to canonical codes."""
         if value is None:
             return []
         if isinstance(value, str):
-            return [value]
-        return value  # type: ignore[no-any-return]
+            value = [value]
+        if not isinstance(value, list):
+            return value  # type: ignore[no-any-return]
+        # Resolve every str selector (a cell code or cell-line name) to its canonical code; leave
+        # non-str items untouched so the field's type validation rejects them with a clear error.
+        return [resolve_cell_type(item) if isinstance(item, str) else item for item in value]
 
     @field_validator("construct_type")
     @classmethod
@@ -123,6 +133,9 @@ class ParadeActivityOutput(BaseToolOutput):
         construct_type (str): UTR model used, derived from ``results`` (computed field).
         cell_types (list[str]): Cell codes in each result, derived from ``results``
             (computed field).
+        cell_line_names (dict[str, str]): ``{code: cell-line name}`` for the present codes,
+            a display aid derived from ``cell_types`` (computed field); ``scores`` stays
+            code-keyed.
     """
 
     results: list[ParadeActivityResult] = Field(
@@ -144,6 +157,15 @@ class ParadeActivityOutput(BaseToolOutput):
     def cell_types(self) -> list[str]:
         """Cell codes present in each result, derived from ``results`` (computed field)."""
         return [code for code, _ in self.results[0].scores.items()] if self.results else []
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def cell_line_names(self) -> dict[str, str]:
+        """Human-readable cell-line name for each present code, ``{code: name}`` (computed field).
+
+        A display aid derived from ``cell_types``; ``scores`` stays keyed by the canonical code.
+        """
+        return {code: PARADE_CELL_LINE_NAMES[code] for code in self.cell_types}
 
     def __len__(self) -> int:
         """Return the number of per-sequence results."""
@@ -181,6 +203,7 @@ class ParadeActivityOutput(BaseToolOutput):
                 ],
                 "construct_type": self.construct_type,
                 "cell_types": self.cell_types,
+                "cell_line_names": {code: PARADE_CELL_LINE_NAMES[code] for code in self.cell_types},
             }
             with open(path, "w") as f:
                 json.dump(data, f, indent=2)
@@ -188,7 +211,8 @@ class ParadeActivityOutput(BaseToolOutput):
         if file_format == "csv":
             with open(path, "w", newline="") as f:
                 writer = csv.writer(f)
-                writer.writerow(["sequence_index", "sequence", "sequence_length", *self.cell_types])
+                cell_headers = [f"{PARADE_CELL_LINE_NAMES[code]} ({code})" for code in self.cell_types]
+                writer.writerow(["sequence_index", "sequence", "sequence_length", *cell_headers])
                 for idx, result in enumerate(self.results):
                     writer.writerow(
                         [
@@ -229,6 +253,9 @@ def run_parade_activity(
     instance: Any = None,
 ) -> ParadeActivityOutput:
     """Predict cell-type-specific UTR activity with PARADE.
+
+    A requested cell line may be given by code (``"c2"``) or by cell-line name (``"HepG2"``,
+    case-insensitive); names are resolved to canonical codes and the scores stay code-keyed.
 
     Args:
         inputs (ParadeActivityInput): UTR sequences to score.

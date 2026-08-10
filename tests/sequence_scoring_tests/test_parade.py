@@ -308,6 +308,72 @@ def test_parade_activity_config_rejects_offpanel_and_duplicate_cells() -> None:
         ParadeActivityConfig(construct_type="utr3", cell_types=["c2", "c2"])
 
 
+def test_parade_resolve_cell_type_accepts_codes_and_names() -> None:
+    """resolve_cell_type maps a code or a (case/whitespace-insensitive) cell-line name to its code."""
+    from proto_tools.tools.sequence_scoring.parade.shared_data_models import resolve_cell_type
+
+    assert resolve_cell_type("c2") == "c2"  # a code passes through unchanged
+    assert resolve_cell_type("HepG2") == "c2"  # name -> code
+    assert resolve_cell_type("hepg2") == "c2"  # case-insensitive
+    assert resolve_cell_type(" HepG2 ") == "c2"  # surrounding whitespace stripped
+    assert resolve_cell_type("MDA-MB-231") == "c1"
+    assert resolve_cell_type("PA-1") == "c13"
+    with pytest.raises(ValueError, match="Unknown PARADE cell type"):
+        resolve_cell_type("nope")
+
+
+def test_parade_cell_line_names_are_the_expected_panel_members() -> None:
+    """PARADE_CELL_LINE_NAMES holds exactly the six pairs, each keyed by a member of some panel."""
+    from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
+        PARADE_CELL_LINE_NAMES,
+        PARADE_CELL_TYPES,
+    )
+
+    assert PARADE_CELL_LINE_NAMES == {
+        "c1": "MDA-MB-231",
+        "c2": "HepG2",
+        "c4": "Jurkat",
+        "c6": "SW480",
+        "c17": "NALM6",
+        "c13": "PA-1",
+    }
+    panel_codes = {code for panel in PARADE_CELL_TYPES.values() for code in panel}
+    assert all(code in panel_codes for code in PARADE_CELL_LINE_NAMES)
+
+
+def test_parade_activity_config_resolves_cell_line_names() -> None:
+    """cell_types accepts cell-line names and codes, normalizing both to canonical codes."""
+    from proto_tools.tools.sequence_scoring.parade import ParadeActivityConfig
+
+    by_name = ParadeActivityConfig(cell_types=["HepG2", "Jurkat"])
+    assert by_name.cell_types == ["c2", "c4"]
+    assert by_name.resolved_cell_types == ["c2", "c4"]
+    # A name and a code can be mixed in the same request.
+    assert ParadeActivityConfig(cell_types=["HepG2", "c4"]).cell_types == ["c2", "c4"]
+    # A single string selector normalizes to a one-item code list.
+    assert ParadeActivityConfig(cell_types="HepG2").cell_types == ["c2"]
+
+
+def test_parade_activity_config_rejects_offpanel_and_unknown_names() -> None:
+    """A name resolving to an off-panel code, or an unknown name, is rejected on the config."""
+    from proto_tools.tools.sequence_scoring.parade import ParadeActivityConfig
+
+    # PA-1 resolves to c13, which is 3'UTR-only and therefore off the utr5 panel.
+    with pytest.raises(ValidationError, match="not in the utr5 panel"):
+        ParadeActivityConfig(construct_type="utr5", cell_types=["PA-1"])
+    with pytest.raises(ValidationError, match="Unknown PARADE cell type"):
+        ParadeActivityConfig(cell_types=["nope"])
+
+
+def test_parade_gradient_loss_term_resolves_cell_line_name() -> None:
+    """A loss-term cell_type given as a cell-line name resolves to its canonical code."""
+    from proto_tools.tools.sequence_scoring.parade import ParadeGradientConfig, ParadeGradientLossTerm
+
+    assert ParadeGradientLossTerm(cell_type="HepG2").cell_type == "c2"
+    config = ParadeGradientConfig(loss_terms=[ParadeGradientLossTerm(cell_type="HepG2")])
+    assert config.loss_terms[0].cell_type == "c2"
+
+
 def test_parade_activity_run_dispatches_and_maps_scores(monkeypatch) -> None:
     """run_parade_activity dispatches to the worker and pivots per-cell scores."""
     import proto_tools.tools.sequence_scoring.parade.parade_activity as parade_activity
