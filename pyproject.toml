@@ -79,6 +79,7 @@ Issues = "https://github.com/evo-design/proto-tools/issues"
 
 [project.scripts]
 proto-tools = "proto_tools.cli:main"
+proto-tools-mcp = "proto_tools.mcp.server:main"
 
 [project.optional-dependencies]
 
@@ -180,6 +181,7 @@ exclude = [
     ".*parade/standalone/pl_regressor\\.py$",
     ".*parade/standalone/utrdata_cl\\.py$",
     ".*parade/standalone/stability_data\\.py$",
+    ".*codonfm/standalone/src/.*",
 ]
 
 [[tool.mypy.overrides]]
@@ -239,6 +241,7 @@ module = [
     "parade_scoring",
     "parade_scoring.*",
     "model.*",
+    "src.*",
 ]
 ignore_missing_imports = true
 
@@ -277,6 +280,8 @@ exclude = [
     "**/sequence_scoring/parade/standalone/pl_regressor.py",
     "**/sequence_scoring/parade/standalone/stability_data.py",
     "**/sequence_scoring/parade/standalone/utrdata_cl.py",
+    # Vendored byte-verbatim from NVIDIA-BioNeMo/CodonFM; format first-party wrappers only.
+    "**/masked_models/codonfm/standalone/src",
 ]
 
 [tool.ruff.lint]
@@ -403,6 +408,7 @@ exclude = ["*.standalone.standalone_helpers", "*.standalone.standalone_helpers.*
 "proto_tools.modal.inverse_folding.ligandmpnn_deployment" = ["README.md"]
 "proto_tools.modal.inverse_folding.proteinmpnn_deployment" = ["README.md"]
 "proto_tools.modal.masked_models.ablang_deployment" = ["README.md"]
+"proto_tools.modal.masked_models.codonfm_deployment" = ["README.md"]
 "proto_tools.modal.masked_models.esm2_deployment" = ["README.md"]
 "proto_tools.modal.masked_models.esm3_deployment" = ["README.md"]
 "proto_tools.modal.masked_models.esmc_deployment" = ["README.md"]

@@ -12,6 +12,28 @@ from standalone_helpers import get_logger
 logger = get_logger(__name__)
 
 
+def _resolve_ipsae_script() -> str:
+    """Return the path to ipsae.py, which setup.sh installs into the venv.
+
+    An override is honored first, then the venv location; the directory holding this
+    module is a last resort so an ejected standalone keeps working.
+    """
+    override = os.environ.get("IPSAE_SCRIPT_PATH")
+    candidates = [
+        *([override] if override else []),
+        os.path.join(sys.prefix, "share", "ipsae", "ipsae.py"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "ipsae.py"),
+    ]
+    for candidate in candidates:
+        if os.path.isfile(candidate):
+            return candidate
+
+    raise FileNotFoundError(
+        f"ipsae: ipsae.py not found (looked in {candidates}); "
+        "set IPSAE_SCRIPT_PATH or rebuild the environment so setup.sh downloads it"
+    )
+
+
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Run IPSAE scoring on a cofolded complex.
 
@@ -28,11 +50,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     pae_cutoff: float = float(input_dict.get("pae_cutoff", 10))
     dist_cutoff: float = float(input_dict.get("dist_cutoff", 10))
 
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    ipsae_script = os.path.join(script_dir, "ipsae.py")
-
-    if not os.path.isfile(ipsae_script):
-        raise FileNotFoundError(f"ipsae: ipsae.py not found at {ipsae_script}; run setup.sh first")
+    ipsae_script = _resolve_ipsae_script()
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         pdb_path = os.path.join(tmp_dir, "complex.pdb")

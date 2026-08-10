@@ -133,7 +133,7 @@ def test_an_in_process_tool_says_it_needs_no_deployment_and_why(monkeypatch):
     from proto_tools.mcp import tools as impl
 
     monkeypatch.setattr(impl, "_registry", dict)
-    monkeypatch.setattr(impl, "deployed_keys", lambda device: set())
+    monkeypatch.setattr(impl, "deployed_keys", lambda device, **_kwargs: set())
     monkeypatch.setattr(impl, "answered_in_process_keys", lambda: {"bindcraft-design"})
 
     entry = next(e for e in impl.list_tools(device="modal") if e["tool"] == "bindcraft-design")
@@ -301,6 +301,49 @@ def test_summarize_recurses_into_nested_structures(tmp_path):
     assert "_saved_to" in out["outer"]["inner"]
 
 
+def test_summarize_spills_inside_list_items_not_the_whole_list(tmp_path):
+    """A list is sized after its leaves spill, so small siblings of a bulky field stay inline.
+
+    Regression for a real failure: esmfold2-prediction returned its whole
+    ``structures`` list as one placeholder, because a Structure crosses the
+    limit on its coordinate string alone. That took ``metrics`` — pLDDT, pTM,
+    the numbers the call was made for — to disk with it, leaving an agent a
+    result it could not judge without reading the file back.
+    """
+    from proto_tools.mcp import tools as impl
+
+    structure = {"structure": "ATOM" * 40_000, "metrics": {"plddt": 0.91, "ptm": 0.92}}
+    out = impl._summarize({"structures": [structure]}, "", tmp_path)
+
+    assert isinstance(out["structures"], list), "the list itself must survive"
+    assert out["structures"][0]["metrics"] == {"plddt": 0.91, "ptm": 0.92}
+    assert "_saved_to" in out["structures"][0]["structure"]
+
+
+def test_summarize_still_spills_a_list_of_small_items(tmp_path):
+    """Per-leaf spilling cannot shrink a long list of small values, so the list still goes out whole."""
+    from proto_tools.mcp import tools as impl
+
+    out = impl._summarize({"per_residue": list(range(5_000))}, "", tmp_path)
+    assert "_saved_to" in out["per_residue"]
+
+
+def test_summarize_writes_a_numeric_matrix_as_one_file(tmp_path):
+    """A PAE matrix has no small siblings to rescue, so it spills whole rather than row by row.
+
+    Model output is full-precision, which puts a single row over the limit on its own —
+    descending into the matrix would write a file per row and call it an improvement.
+    """
+    from proto_tools.mcp import tools as impl
+
+    pae = [[3.578874111175537 + i + j * 1e-6 for j in range(150)] for i in range(150)]
+    out = impl._summarize({"metrics": {"plddt": 0.914555549621582, "pae": pae}}, "", tmp_path)
+
+    assert out["metrics"]["plddt"] == 0.914555549621582, "small metrics stay inline"
+    assert "_saved_to" in out["metrics"]["pae"]
+    assert len(list(tmp_path.iterdir())) == 1, "the matrix is one file, not one per row"
+
+
 def test_search_matches_natural_language_queries(monkeypatch):
     """Agents ask in prose; a literal substring search returns nothing for that.
 
@@ -406,7 +449,7 @@ def test_mcp_help_prints_and_never_starts_the_server(flag, capsys, monkeypatch):
 
     monkeypatch.setattr(server, "build_server", _must_not_run)
     server.main([flag])  # returns instead of blocking
-    assert "proto-tools mcp" in capsys.readouterr().out
+    assert "proto-tools-mcp" in capsys.readouterr().out
 
 
 def test_mcp_no_args_would_start_the_server(monkeypatch):
@@ -503,7 +546,7 @@ def test_deploy_reports_each_build_phase():
 
     from proto_tools.mcp import tools as impl
 
-    def fake_deploy(app, environment=None, on_progress=None):
+    def fake_deploy(app, environment=None, on_progress=None, verbose=False, *, tokens=None, client=None, log_dir=None):
         for phase in ("building image", "running warmup", "deployed"):
             on_progress(phase)
         return True
@@ -534,9 +577,14 @@ def test_deploy_rejects_a_tool_it_does_not_serve():
     assert out["ok"] is False
 
 
-def test_a_failed_deploy_points_at_the_build_log():
-    """The build output is the only place the cause is recorded."""
+def test_a_failed_deploy_returns_the_build_output():
+    """The build output is returned rather than named.
+
+    It is the only place the cause is recorded, and a caller reaching this over MCP has no access
+    to a log file on the machine that built.
+    """
     import asyncio as _asyncio
+    from pathlib import Path
     from unittest.mock import patch
 
     from proto_tools.mcp import tools as impl
@@ -544,11 +592,15 @@ def test_a_failed_deploy_points_at_the_build_log():
     async def report(_phase: str) -> None:
         return None
 
-    with patch("proto_tools.modal.deploy.deploy_app", lambda *a, **k: False):
+    def fake_deploy(app, environment=None, on_progress=None, verbose=False, *, tokens=None, client=None, log_dir=None):
+        Path(log_dir, "deploy.tmalign.log").write_text("ImportError: cannot import name 'x'\n")
+        return False
+
+    with patch("proto_tools.modal.deploy.deploy_app", fake_deploy):
         out = _asyncio.run(impl.deploy_tool("tmalign-alignment", "some-env", report))
 
     assert out["ok"] is False
-    assert "log" in out["error"]
+    assert "ImportError" in out["build_output"]
 
 
 def test_build_output_is_summarised_not_streamed():
@@ -598,3 +650,101 @@ def test_every_deploy_route_records_fingerprints():
     from proto_tools.modal.deploy import deploy_app
 
     assert "record_fingerprints(" in inspect.getsource(deploy_app)
+
+
+def test_the_mcp_console_script_resolves():
+    """An agent config names ``proto-tools-mcp``; a broken target fails at install, not in CI.
+
+    Checks the declaration and the target separately: a typo in either is invisible until a
+    user's client tries to start a server and gets nothing.
+    """
+    from importlib.metadata import entry_points
+    from pathlib import Path
+
+    declaration = 'proto-tools-mcp = "proto_tools.mcp.server:main"'
+
+    # The source declaration and the installed metadata are checked apart. Installed metadata
+    # is what a user actually gets, but it goes stale against an edited pyproject until the
+    # next install -- so on its own it would pass in a working tree that had removed the line.
+    pyproject = (Path(__file__).resolve().parents[2] / "pyproject.toml").read_text()
+    assert declaration in pyproject, "console script not declared in pyproject.toml"
+
+    scripts = {e.name: e.value for e in entry_points(group="console_scripts")}
+    assert scripts.get("proto-tools-mcp") == "proto_tools.mcp.server:main", (
+        f"declared but not installed; found {scripts.get('proto-tools-mcp')!r}. Reinstall."
+    )
+
+    from proto_tools.mcp.server import main
+
+    assert callable(main)
+
+
+def test_the_help_text_names_the_console_script():
+    """The docs and this text are the two places a user copies an invocation from.
+
+    They disagreed once already: the docs said ``python -m proto_tools.mcp`` while the entry
+    point had moved on.
+    """
+    from proto_tools.mcp.server import HELP
+
+    assert "claude mcp add proto-tools --scope user -- proto-tools-mcp" in HELP
+    assert '"command": "proto-tools-mcp"' in HELP.replace("'", '"')
+
+
+def test_run_on_overrides_the_session_backend_for_one_call():
+    """A session is bound to one backend, which is wrong for a mixed catalogue.
+
+    Sending a cheap CPU tool to this machine should not require registering a second server,
+    and neither should sending one GPU tool to a deployment from a local session.
+    """
+    import asyncio as _asyncio
+
+    from proto_tools.mcp import tools as impl
+
+    seen: list[str] = []
+
+    def _record(tool_key, inputs=None, config=None, output_dir=None, use_example=False, **kwargs):
+        seen.append(kwargs.get("device"))
+        return {"ok": True, "ran_on": kwargs.get("device")}
+
+    import fastmcp
+
+    from proto_tools.mcp import build_server
+
+    async def call(args):
+        async with fastmcp.Client(build_server("modal")) as client:
+            return (await client.call_tool("run_tool", args)).data
+
+    original = impl.run_tool
+    impl.run_tool = _record
+    try:
+        base = {"tool_key": "tmalign-alignment", "use_example": True}
+        _asyncio.run(call(base))
+        _asyncio.run(call({**base, "run_on": "local"}))
+    finally:
+        impl.run_tool = original
+
+    assert seen == ["modal", "local"], "run_on did not redirect the call"
+
+
+def test_an_unknown_run_on_is_a_result_not_a_protocol_error():
+    """The backend name is a value an agent invents, so getting it wrong must be recoverable."""
+    import asyncio as _asyncio
+
+    import fastmcp
+
+    from proto_tools.mcp import build_server
+
+    async def call():
+        async with fastmcp.Client(build_server("modal")) as client:
+            return (
+                await client.call_tool(
+                    "run_tool",
+                    {"tool_key": "tmalign-alignment", "use_example": True, "run_on": "gpu-cluster"},
+                )
+            ).data
+
+    result = _asyncio.run(call())
+    assert result["ok"] is False
+    assert "gpu-cluster" in result["error"]
+    assert result["valid_run_on"] == ["local", "modal", "proto"]

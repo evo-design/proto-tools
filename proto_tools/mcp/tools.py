@@ -7,9 +7,12 @@ import logging
 import os
 from collections.abc import Callable, Coroutine
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from proto_tools.mcp.device import Device, is_remote
+
+if TYPE_CHECKING:  # imported for the annotation only; the runtime import stays inside deploy_tool
+    from proto_tools.modal.deploy import ModalTokens
 from proto_tools.utils.base_config import BaseConfig
 from proto_tools.utils.modal_status import credentials_checked, deployed_apps
 
@@ -85,27 +88,39 @@ def answered_in_process_keys() -> set[str]:
     return {spec.key for spec in ToolRegistry.list_all() if runs_in_process(spec.key)}
 
 
-def deployed_keys(device: Device) -> set[str]:
-    """Return the tools ``device`` actually serves, ignoring anything answered in-process."""
+def deployed_keys(device: Device, *, environment: str | None = None, client: Any | None = None) -> set[str]:
+    """Return the tools ``device`` actually serves, ignoring anything answered in-process.
+
+    ``environment`` and ``client`` name whose workspace to ask about. Omitted, the question is
+    answered for this process, which is what a local session wants. A server answering for
+    someone else must pass theirs, or it reports its own deployments as though they were the
+    caller's.
+    """
     if device == "local":
         return set()
     if device == "proto":
         return {key for key, entry in _hosted_catalogue().items() if entry.get("hosted")}
-    live = deployed_apps()
+    live = deployed_apps(environment=environment, client=client)
     return {key for key in _registry() if _app_for(key) in live}
 
 
-def available_keys(device: Device) -> set[str]:
+def available_keys(device: Device, *, environment: str | None = None, client: Any | None = None) -> set[str]:
     """Return the tool keys that can actually run on ``device``."""
     if device == "local":
         # Every registered tool runs here: a standalone env builds on first use, so availability
         # is a question of time and disk rather than of what has been provisioned in advance.
         return _all_registered()
-    return deployed_keys(device) | answered_in_process_keys()
+    return deployed_keys(device, environment=environment, client=client) | answered_in_process_keys()
 
 
-def workspace_info(device: Device = "modal") -> dict[str, Any]:
-    """Report where calls will land, and whether the caller can deploy there."""
+def workspace_info(
+    device: Device = "modal", *, environment: str | None = None, client: Any | None = None
+) -> dict[str, Any]:
+    """Report where calls will land, and whether the caller can deploy there.
+
+    ``environment`` and ``client`` describe whose workspace to report on. Omitted, this describes
+    the process's own, which is what a local session wants.
+    """
     if device == "local":
         from proto_tools.tools import ToolRegistry
         from proto_tools.utils.device import number_of_visible_gpus
@@ -146,7 +161,9 @@ def workspace_info(device: Device = "modal") -> dict[str, Any]:
     from proto_tools.modal.manifest import APP_BUCKETS
 
     try:
-        modal.Client.from_env()  # raises when no credentials are configured
+        # A caller-supplied client already carries credentials; only the process needs checking.
+        if client is None:
+            modal.Client.from_env()  # raises when no credentials are configured
     except Exception as exc:
         return {
             "device": "modal",
@@ -169,28 +186,28 @@ def workspace_info(device: Device = "modal") -> dict[str, Any]:
 
     from proto_tools.modal.app import environment_exists
 
-    environment = resolve_environment()
+    resolved = resolve_environment(environment)
     # Asked before counting, because an environment that does not exist counts zero apps and
     # reads as "nothing deployed yet" — which sends the caller off to deploy into a place that
     # cannot receive it. The one-time setup is the actual answer.
-    if environment_exists(environment) is False:
+    if environment_exists(resolved, client) is False:
         return {
             "device": "modal",
             "authenticated": True,
             "workspace": workspace,
-            "environment": environment,
+            "environment": resolved,
             "environment_exists": False,
             "deployable": False,
-            "error": f"Modal environment {environment!r} has not been created in this workspace.",
-            "hint": f"Create it with: proto-tools deploy --create-env --env {environment}",
+            "error": f"Modal environment {resolved!r} has not been created in this workspace.",
+            "hint": f"Create it with: proto-tools deploy --create-env --env {resolved}",
         }
 
-    deployed = deployed_apps()
+    deployed = deployed_apps(environment=resolved, client=client)
     return {
         "device": "modal",
         "authenticated": True,
         "workspace": workspace,
-        "environment": environment,
+        "environment": resolved,
         "environment_exists": True,
         "apps_deployed": len(deployed),
         "apps_available": len(APP_BUCKETS),
@@ -200,7 +217,12 @@ def workspace_info(device: Device = "modal") -> dict[str, Any]:
 
 
 def list_tools(
-    deployed_only: bool = True, category: str | None = None, device: Device = "modal"
+    deployed_only: bool = True,
+    category: str | None = None,
+    device: Device = "modal",
+    *,
+    environment: str | None = None,
+    client: Any | None = None,
 ) -> list[dict[str, Any]]:
     """List tools, flagged by whether they can actually run on ``device``.
 
@@ -224,10 +246,10 @@ def list_tools(
         if category not in known:
             return [{"ok": False, "error": f"no category named {category!r}", "categories": known}]
 
-    available = available_keys(device)
+    available = available_keys(device, environment=environment, client=client)
     in_process = set() if device == "local" else answered_in_process_keys()
     # Resolved once: on ``modal`` this reads the live app list, which is a network call.
-    deployed = deployed_keys(device)
+    deployed = deployed_keys(device, environment=environment, client=client)
     # The catalogue itself differs by device: the dispatch table lists what a container could
     # serve, which is the right universe for a remote backend but omits the tools answered here.
     catalogue = available if device == "local" else set(_registry()) | in_process
@@ -343,7 +365,15 @@ def _no_match_hint() -> str:
     return f"Nothing matched. Browse instead with list_tools(category=...); the categories are: {categories}."
 
 
-def search_tools(query: str, deployed_only: bool = True, limit: int = 10, device: Device = "modal") -> dict[str, Any]:
+def search_tools(
+    query: str,
+    deployed_only: bool = True,
+    limit: int = 10,
+    device: Device = "modal",
+    *,
+    environment: str | None = None,
+    client: Any | None = None,
+) -> dict[str, Any]:
     """Find tools by keyword, best match first.
 
     Matches per term rather than on the whole string: agents ask in natural
@@ -363,7 +393,7 @@ def search_tools(query: str, deployed_only: bool = True, limit: int = 10, device
         return {"hits": [], "n_total": 0, "hint": _no_match_hint()}
 
     scored = []
-    for entry in list_tools(deployed_only=deployed_only, device=device):
+    for entry in list_tools(deployed_only=deployed_only, device=device, environment=environment, client=client):
         key, category = entry["tool"].lower(), (entry.get("category") or "").lower()
         summary = (entry.get("summary") or "").lower()
         score = sum(max(_field_score(t, key, category, summary) for t in form) for form in forms)
@@ -494,9 +524,14 @@ def _summarize(value: Any, key_path: str, output_dir: Path) -> Any:
     if isinstance(value, dict):
         return {k: _summarize(v, f"{key_path}.{k}" if key_path else k, output_dir) for k, v in value.items()}
     if isinstance(value, list):
-        rendered = json.dumps(value, default=str)
+        items = [
+            _summarize(v, f"{key_path}.{i}" if key_path else str(i), output_dir) if isinstance(v, dict) else v
+            for i, v in enumerate(value)
+        ]
+        rendered = json.dumps(items, default=str)
         if len(rendered) <= INLINE_CHAR_LIMIT:
-            return value
+            return items
+        # Many small items: nothing left to spill individually, so the list goes out whole.
         path = _spill_path(output_dir, key_path, "json")
         path.write_text(rendered)
         return {"_saved_to": str(path), "_kind": "json", "_items": len(value), "_bytes": len(rendered)}
@@ -520,7 +555,16 @@ def _setup_errors(device: Device) -> tuple[type[Exception], ...]:
     return (ModalDispatchError,)
 
 
-def _dispatch(device: Device, tool_key: str, payload: Any, cfg: Any) -> tuple[Any, Device]:
+def _dispatch(
+    device: Device,
+    tool_key: str,
+    payload: Any,
+    cfg: Any,
+    *,
+    environment: str | None = None,
+    client: Any | None = None,
+    progress_partition: str | None = None,
+) -> tuple[Any, Device]:
     """Route one call to the backend ``device`` names, and report where it ran.
 
     The server is a stdio process on the caller's own machine, so "run it here" is always an
@@ -563,7 +607,12 @@ def _dispatch(device: Device, tool_key: str, payload: Any, cfg: Any) -> tuple[An
         return dispatch_to_proto(tool_key, payload, cfg), device
     from proto_tools.modal.client import dispatch_to_modal
 
-    return dispatch_to_modal(tool_key, payload, cfg), device
+    return (
+        dispatch_to_modal(
+            tool_key, payload, cfg, environment=environment, client=client, progress_partition=progress_partition
+        ),
+        device,
+    )
 
 
 def _unavailable(device: Device, tool_key: str, error: str) -> dict[str, Any]:
@@ -596,6 +645,10 @@ def run_tool(
     output_dir: str | None = None,
     use_example: bool = False,
     device: Device = "modal",
+    *,
+    environment: str | None = None,
+    client: Any | None = None,
+    progress_partition: str | None = None,
 ) -> dict[str, Any]:
     """Run a tool and return its result, with large fields written to disk.
 
@@ -647,7 +700,15 @@ def run_tool(
     if is_remote(device) and (reason := cfg.remote_unsupported_reason(device)) is not None:
         return {"ok": False, "error": reason, "not_supported_on": device}
     try:
-        result, ran_on = _dispatch(device, tool_key, payload, cfg)
+        result, ran_on = _dispatch(
+            device,
+            tool_key,
+            payload,
+            cfg,
+            environment=environment,
+            client=client,
+            progress_partition=progress_partition,
+        )
     except _setup_errors(device) as exc:
         return {"ok": False, **_unavailable(device, tool_key, str(exc))}
     except Exception as exc:
@@ -658,7 +719,37 @@ def run_tool(
     saved = [v["_saved_to"] for v in _walk_saved(body)]
     # ``ran_on`` because the two can differ: a tool that cannot run remotely is answered here even
     # in a Modal session, and the caller should not have to infer that from the timing.
-    return {"ok": True, "tool": tool_key, "ran_on": ran_on, "result": body, "saved_files": saved}
+    answer = {"ok": True, "tool": tool_key, "ran_on": ran_on, "result": body, "saved_files": saved}
+    if drift := drift_for(tool_key, ran_on, environment=environment, client=client):
+        answer["warnings"] = drift
+    return answer
+
+
+def drift_for(tool_key: str, ran_on: Device, *, environment: str | None = None, client: Any | None = None) -> list[str]:
+    """Return drift warnings for a call that went to Modal, empty for one that did not.
+
+    The dispatch path warns about drift too, but through ``warnings.warn`` and only once per
+    process. That is right for a session on someone's laptop and wrong everywhere else: an MCP
+    caller never sees the process's warnings, and on a server the first caller to reach a stale
+    deployment consumes the warning for everyone after them. Returning it makes drift part of the
+    answer, so every caller who is affected is told.
+
+    Never raises -- :func:`drift_warnings` swallows its own failures, and a check that broke a
+    successful run would be worse than a missed warning.
+    """
+    if ran_on != "modal":
+        return []
+    from proto_tools.modal.app import resolve_environment
+    from proto_tools.modal.fingerprint import drift_warnings
+
+    try:
+        service, _method = _registry()[tool_key]
+    except KeyError:
+        return []
+    # Resolved, because the dispatch resolved it too: a caller who named no environment ran in
+    # proto-env, and reading the manifest from the ambient one compares against a deployment they
+    # never called. Unresolved, this reports nothing in exactly the default configuration.
+    return drift_warnings(tool_key, service, environment=resolve_environment(environment), client=client)
 
 
 def _walk_saved(node: Any) -> list[dict[str, Any]]:
@@ -676,7 +767,12 @@ def _walk_saved(node: Any) -> list[dict[str, Any]]:
 
 
 async def deploy_tool(
-    tool_key: str, environment: str, report: Callable[[str], Coroutine[Any, Any, None]]
+    tool_key: str,
+    environment: str,
+    report: Callable[[str], Coroutine[Any, Any, None]],
+    *,
+    tokens: ModalTokens | None = None,
+    client: Any | None = None,
 ) -> dict[str, Any]:
     """Deploy the Modal app serving one tool, after the caller has approved the spend.
 
@@ -687,14 +783,24 @@ async def deploy_tool(
 
     Args:
         tool_key (str): Tool whose serving app to deploy.
-        environment (str): Modal environment to deploy into.
+        environment (str): Modal environment to deploy into. Resolved the same way a dispatch
+            resolves it, so a deploy and the call that follows it name the same place.
         report (Callable[[str], Coroutine[Any, Any, None]]): Awaited with each build phase.
+        tokens (ModalTokens | None): Deploy into the workspace these tokens name rather than this
+            process's own. A server deploying for a caller passes theirs; a local session leaves
+            this unset, because its workspace is already the caller's.
+        client (Any | None): Modal client for recording fingerprints, opened from ``tokens`` when
+            not given.
 
     Returns:
-        dict[str, Any]: ``ok`` plus the app deployed, or an error.
+        dict[str, Any]: ``ok`` plus the app deployed, or an error carrying the end of the build
+            output, since a caller who is not on this machine cannot read the log themselves.
     """
     import asyncio
+    import contextlib
+    import tempfile
 
+    from proto_tools.modal.app import resolve_environment
     from proto_tools.modal.deploy import deploy_app
 
     try:
@@ -702,14 +808,56 @@ async def deploy_tool(
     except KeyError:
         return {"ok": False, "error": f"{tool_key!r} is not a tool this deployment serves."}
 
+    # ``modal deploy`` omits --env entirely for an empty or absent name, which lands the app in
+    # whichever environment the tokens make active. A dispatch resolves to proto-env instead, so
+    # unresolved the caller watches a deploy succeed and the next call miss it.
+    environment = resolve_environment(environment)
+
     loop = asyncio.get_running_loop()
 
     def emit(phase: str) -> None:
-        # Called from the reader thread; hop back to the loop to send the notification.
-        asyncio.run_coroutine_threadsafe(report(phase), loop)
+        # Called from the reader thread; hop back to the loop to send the notification. A caller
+        # who disconnected mid-build leaves a closed loop, and raising here would abandon the
+        # subprocess unwaited rather than let the deploy they paid for finish.
+        with contextlib.suppress(RuntimeError):
+            asyncio.run_coroutine_threadsafe(report(phase), loop)
 
     await report(f"deploying {app} to {environment}")
-    ok = await asyncio.to_thread(deploy_app, app, environment, emit)
-    if not ok:
-        return {"ok": False, "app": app, "error": "deploy failed; see logs/deploy.*.log for the build output"}
+    # A directory per deploy, so concurrent callers deploying the same app do not share a log file.
+    with tempfile.TemporaryDirectory(prefix="proto-tools-deploy-log-") as logs:
+        ok = await asyncio.to_thread(
+            deploy_app, app, environment, emit, tokens=tokens, client=client, log_dir=Path(logs)
+        )
+        if not ok:
+            return {"ok": False, "app": app, "error": "deploy failed", "build_output": _log_tail(Path(logs))}
     return {"ok": True, "app": app, "environment": environment, "tool": tool_key}
+
+
+#: Lines of build output returned when a deploy fails. Enough for the traceback Modal ends on,
+#: short enough not to bury the rest of the response.
+_LOG_TAIL_LINES = 40
+
+
+def _log_tail(logs: Path) -> str:
+    """Return the end of a deploy log, stripped of the frames that redraw a build tree.
+
+    A build renders an animated tree, so the raw log is mostly the same lines written over and
+    over. Reading it back means dropping those, or the tail is entirely spinner frames.
+
+    The colour codes and the spinner glyph go too. ``for_display`` keeps both, because in a
+    terminal they are what makes the build readable and show it is alive. Nothing here is watching
+    it animate, so they are only noise around the message an agent has to read.
+    """
+    from proto_tools.modal.deploy import _ANSI_ESCAPE, _SPINNER_FRAME, RecentLines, for_display
+
+    lines: list[str] = []
+    for log in sorted(logs.glob("deploy.*.log")):
+        try:
+            raw = log.read_text(errors="replace")
+        except OSError:
+            continue
+        seen = RecentLines()
+        shown = (for_display(line + "\n", seen) for line in raw.splitlines())
+        plain = (_ANSI_ESCAPE.sub("", text) for text in shown if text is not None)
+        lines += [_SPINNER_FRAME.sub("", text).rstrip() for text in plain]
+    return "\n".join(line for line in lines[-_LOG_TAIL_LINES:] if line)

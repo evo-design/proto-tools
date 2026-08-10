@@ -346,6 +346,7 @@ def _live_progress(
     *,
     environment: str | None = None,
     client: Any | None = None,
+    partition: str | None = None,
 ) -> Iterator[None]:
     """Stream the workers' log output to this process for the duration of the block.
 
@@ -365,6 +366,9 @@ def _live_progress(
             per environment, so opening a different one leaves the tailer waiting on an empty
             queue while the container fills another.
         client (Any | None): Modal client to open and tail as, or ``None`` for the process's own.
+        partition (str | None): Queue partition to stream through. ``None`` mints one, which is
+            what a caller with a single call in flight wants. A caller serving several supplies
+            its own, so it can recognise its records among the rest.
     """
     present = [one for one in configs if one is not None]
     wanted = has_active_progress_bar() or verbose_level_from_env() > 0 or any(one.verbose > 0 for one in present)
@@ -376,7 +380,9 @@ def _live_progress(
     # started, and on a cold start that is several seconds of a motionless spinner.
     set_substatus(remote_connecting_status("modal"))
 
-    partition = uuid.uuid4().hex
+    # A caller that needs to recognise its own records supplies the partition; anyone else gets
+    # a fresh one and never has to know it exists.
+    partition = partition or uuid.uuid4().hex
     try:
         open_progress_queue(create=True, environment=environment, client=client)
     except Exception:  # a workspace that cannot host the queue simply gets no progress
@@ -416,6 +422,7 @@ def dispatch_to_modal(
     environment: str | None = None,
     scaledown_window: int | None = None,
     client: Any | None = None,
+    progress_partition: str | None = None,
 ) -> BaseToolOutput:
     """Run a tool on Modal apps deployed in the active workspace.
 
@@ -432,6 +439,8 @@ def dispatch_to_modal(
             in a session; see :func:`_bound_method`.
         client (Any | None): Modal client to dispatch as, for a caller acting on behalf of
             someone else. ``None`` lets Modal resolve the process's own credentials.
+        progress_partition (str | None): Queue partition progress streams through, so a caller
+            can recognise its own records. ``None`` mints one.
 
     Returns:
         BaseToolOutput: The validated tool output.
@@ -453,7 +462,10 @@ def dispatch_to_modal(
 
     config = _resolve_device(config, service_class)
     method = _bound_method(app_name, service_class, method_name, key, scaledown_window, environment=env, client=client)
-    with remote_progress("modal"), _live_progress([config], expected_ends=1, environment=env, client=client):
+    with (
+        remote_progress("modal"),
+        _live_progress([config], expected_ends=1, environment=env, client=client, partition=progress_partition),
+    ):
         result: dict[str, Any] = method.remote(
             input_dict=inputs.model_dump(mode="json"),
             config_dict=config.to_transport_dict() if config is not None else {},
@@ -469,6 +481,7 @@ def dispatch_batch_to_modal(
     environment: str | None = None,
     scaledown_window: int | None = None,
     client: Any | None = None,
+    progress_partition: str | None = None,
 ) -> list[BaseToolOutput | Exception]:
     """Run one tool over many inputs via Modal's ``starmap``, fanning out across containers.
 
@@ -484,6 +497,8 @@ def dispatch_batch_to_modal(
             overriding the deployed value.
         client (Any | None): Modal client to dispatch as, for a caller acting on behalf of
             someone else. ``None`` lets Modal resolve the process's own credentials.
+        progress_partition (str | None): Queue partition progress streams through, so a caller
+            can recognise its own records. ``None`` mints one.
 
     Returns:
         list[BaseToolOutput | Exception]: One entry per input, in input order. A chunk that failed
@@ -512,7 +527,9 @@ def dispatch_batch_to_modal(
     outputs: list[BaseToolOutput | Exception] = []
     with (
         remote_progress("modal"),
-        _live_progress(configs, expected_ends=len(inputs), environment=env, client=client),
+        _live_progress(
+            configs, expected_ends=len(inputs), environment=env, client=client, partition=progress_partition
+        ),
     ):
         args = [
             (item.model_dump(mode="json"), one.to_transport_dict() if one is not None else {})

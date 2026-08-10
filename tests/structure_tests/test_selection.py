@@ -338,17 +338,24 @@ def test_base_resolves_url_string(monkeypatch: pytest.MonkeyPatch) -> None:
 
     class Response:
         text = content
+        is_redirect = False
 
         def raise_for_status(self) -> None:
             return None
 
-    def fake_get(request_url: str, timeout: float) -> Response:
+    def fake_get(request_url: str, timeout: float, **kwargs: object) -> Response:
         assert request_url == url
         assert timeout == 30.0
         return Response()
 
+    import socket
+
     import requests
 
+    # ``example.test`` is reserved and does not resolve, and a fetch refuses a host it cannot
+    # resolve before issuing the request. Answer for it, publicly, so this still exercises the
+    # URL-to-Structure path rather than the address check.
+    monkeypatch.setattr(socket, "getaddrinfo", lambda host, port: [(2, 1, 6, "", ("93.184.216.34", 0))])
     monkeypatch.setattr(requests, "get", fake_get)
     inp = _SubInput(structure=url)
     assert isinstance(inp.structure, Structure)

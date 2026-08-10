@@ -33,6 +33,34 @@ MASK_TOKEN = "_"  # noqa: S105 -- not a password
 # ============================================================================
 
 
+def validate_whole_token_masks(seq: str, token_size: int = 1) -> list[str]:
+    """Split *seq* into tokens, refusing a mask that covers only part of one.
+
+    A caller may pre-mask its own positions, and for a codon model the only meaningful
+    unit is a whole codon: ``"AUG___UUU"`` asks for codon 2, while ``"AUG_CCUUU"`` leaves
+    ``"_CC"``, which is neither a codon nor a mask and cannot be tokenized. Catching it
+    here names the offending token instead of failing later inside the model.
+
+    Args:
+        seq (str): Sequence to check.
+        token_size (int): Characters per token.
+
+    Returns:
+        list[str]: The sequence's tokens.
+
+    Raises:
+        ValueError: If a token is partly masked.
+    """
+    tokens = split_tokens(seq, token_size)
+    whole = MASK_TOKEN * token_size
+    for i, token in enumerate(tokens):
+        if MASK_TOKEN in token and token != whole:
+            raise ValueError(
+                f"token {i + 1} is {token!r}: a mask must cover a whole token ({whole!r}), not part of one"
+            )
+    return tokens
+
+
 def mutable_mask(seq: str, fixed: list[int] | None = None, token_size: int = 1) -> list[bool]:
     """Return a boolean mask where True = designable (eligible for masking).
 
@@ -50,7 +78,7 @@ def mutable_mask(seq: str, fixed: list[int] | None = None, token_size: int = 1) 
         # A token is designable if it is not already masked
         # and not in the fixed set (convert 0-indexed i to 1-indexed)
         MASK_TOKEN not in token and (i + 1) not in fixed_set
-        for i, token in enumerate(split_tokens(seq, token_size))
+        for i, token in enumerate(validate_whole_token_masks(seq, token_size))
     ]
 
 
@@ -182,6 +210,10 @@ def apply_masking_strategy(config: Any, inputs: Any, position_score_fn: Any = No
 
     already_masked = any(MASK_TOKEN in seq for seq in inputs.sequences)
     if already_masked:
+        # This branch hands the caller's own masks straight to the model, so it is the last
+        # place a half-masked token can be caught.
+        for seq in inputs.sequences:
+            validate_whole_token_masks(seq, token_size)
         if strategy != type(strategy)():
             logger.warning(
                 "Sequences already contain mask tokens ('_'); ignoring "

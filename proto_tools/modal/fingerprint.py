@@ -1,4 +1,4 @@
-"""Hashes that detect drift between local proto-tools and a deployment.
+"""Hashes that detect drift between a deployment and the proto-tools calling it.
 
 Covers a tool's schemas, its source, and its standalone environment.
 """
@@ -196,12 +196,19 @@ def manifest_path(service_class: str) -> str:
     return f"{_MANIFEST_DIR}/{service_class}.json"
 
 
-def write_manifest(service_class: str, environment: str | None = None) -> int:
+def write_manifest(service_class: str, environment: str | None = None, client: Any | None = None) -> int:
     """Record the local fingerprints of ``service_class`` onto the cache volume.
 
     Called after a successful deploy, from the same checkout that was deployed,
     so the recorded values describe what actually shipped. Returns the number of
     tools recorded.
+
+    Args:
+        service_class (str): Service whose fingerprints to record.
+        environment (str | None): Modal environment holding the cache volume.
+        client (Any | None): Modal client to write as, or ``None`` for the process's own. Pairs
+            with the same argument on :func:`read_manifest`: a deploy made on someone's behalf
+            must record into their workspace, which is the only one that will read it back.
     """
     import io
 
@@ -217,7 +224,9 @@ def write_manifest(service_class: str, environment: str | None = None) -> int:
 
     from proto_tools.modal.app import CACHE_VOLUME_NAME
 
-    volume = modal.Volume.from_name(CACHE_VOLUME_NAME, environment_name=environment, create_if_missing=True)
+    volume = modal.Volume.from_name(
+        CACHE_VOLUME_NAME, environment_name=environment, client=client, create_if_missing=True
+    )
     with volume.batch_upload(force=True) as batch:
         batch.put_file(io.BytesIO(payload), manifest_path(service_class))
     return len(fps)
@@ -282,21 +291,21 @@ def drift_warnings(
         out = []
         if entry.get("schema_hash") != local.schema_hash:
             out.append(
-                f"{tool_key}: the deployed tool's schema differs from your local proto-tools "
-                f"(deployed {entry.get('schema_hash')}, local {local.schema_hash}). Calls may fail, "
-                f"or fields a newer deployment returns may be silently dropped. Redeploy to realign."
+                f"{tool_key}: the deployed tool's schema differs from the proto-tools making this "
+                f"call (deployed {entry.get('schema_hash')}, calling {local.schema_hash}). Calls may "
+                f"fail, or fields a newer deployment returns may be silently dropped. Redeploy to realign."
             )
         if entry.get("code_hash") != local.code_hash:
             out.append(
-                f"{tool_key}: the deployed tool's code differs from your local proto-tools "
-                f"(deployed {entry.get('code_hash')}, local {local.code_hash}). Results may not be "
-                f"comparable with local runs. Redeploy to realign."
+                f"{tool_key}: the deployed tool's code differs from the proto-tools making this "
+                f"call (deployed {entry.get('code_hash')}, calling {local.code_hash}). Results from "
+                f"the two may not be comparable. Redeploy to realign."
             )
         if entry.get("env_hash") != local.env_hash:
             out.append(
-                f"{tool_key}: the deployed tool's environment differs from your local proto-tools "
-                f"(deployed {entry.get('env_hash')}, local {local.env_hash}). Calls will still "
-                f"succeed, but results may not be comparable to a local run."
+                f"{tool_key}: the deployed tool's environment differs from the proto-tools making "
+                f"this call (deployed {entry.get('env_hash')}, calling {local.env_hash}). Calls will "
+                f"still succeed, but results from the two may not be comparable."
             )
         return out
     except Exception:

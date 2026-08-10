@@ -1,0 +1,11 @@
+# CodonFM (Encodon) inference deps. torch is installed by proto_install_pytorch (setup.sh);
+# the rest are the vendored src/ import closure. Pinned near upstream NVIDIA-BioNeMo/CodonFM.
+lightning>=2.4
+safetensors
+einops>=0.8
+transformers==4.54.1
+numpy
+peft
+torchmetrics
+tqdm
+xformers==0.0.28.post3

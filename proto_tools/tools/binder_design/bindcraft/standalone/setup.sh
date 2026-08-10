@@ -22,11 +22,15 @@ uv pip install -r requirements.txt
 echo "Installing ColabDesign (pinned, --no-deps)..."
 uv pip install --no-deps "colabdesign @ git+https://github.com/sokrypton/ColabDesign.git@e31a56fe1d9b4de25c8697f3a28b75892941cc72"
 
+# Pinned like BindCraft and ColabDesign above: newer PyRosetta builds take a
+# core.pose.DockingPartners for InterfaceAnalyzerMover.set_interface(), while the pinned
+# BindCraft passes the string form ("A_B") its functions/pyrosetta_utils.py has always used.
+# 2024.42 is contemporaneous with BindCraft v1.2.0 and accepts that string.
 echo "Installing PyRosetta via conda channel..."
 "$MAMBA_BIN" install -y -p "$VENV_PATH" \
     -c https://conda.rosettacommons.org \
     -c conda-forge \
-    pyrosetta
+    "pyrosetta=${BINDCRAFT_PYROSETTA_VERSION:-2024.42}"
 
 # AF2 weights are shared with the alphafold2 toolkit (~5.5 GB, avoid re-download).
 proto_resolve_weights_dir alphafold2

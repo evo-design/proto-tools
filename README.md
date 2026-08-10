@@ -60,7 +60,7 @@ For shared filesystems, model weights can be reused to avoid downloading duplica
 
 A few tools use gated models or software that require accepting a license / terms-of-use first (e.g. ESM3, AlphaGenome, AlphaFold3, X3DNA). See [notes/gated-models.md](notes/gated-models.md) for the full list and per-model access steps.
 
-### Step 4: Remote compute (optional) <a href="https://modal.com"><img src="guides/assets/modal/modal-logo.png" alt="Modal" height="20" align="center"></a>
+### Step 4: Remote compute (optional) <a href="https://modal.com"><img src="guides/assets/modal/modal-logo.png" alt="Modal" height="20" align="absmiddle"></a>
 
 `proto-tools` enables users to scale their tool use beyond their local machine through an
 integration with [Modal](https://modal.com), a serverless compute platform that
@@ -108,6 +108,7 @@ for instructions related to account setup, deploying a tool, and costs, or the [
 └── <a href="proto_tools/tools/inverse_folding/proteinmpnn/">proteinmpnn/</a>
 <a href="proto_tools/tools/masked_models/">masked_models/</a>                  # Masked language models
 ├── <a href="proto_tools/tools/masked_models/ablang/">ablang/</a>
+├── <a href="proto_tools/tools/masked_models/codonfm/">codonfm/</a>
 ├── <a href="proto_tools/tools/masked_models/esm2/">esm2/</a>
 ├── <a href="proto_tools/tools/masked_models/esm3/">esm3/</a>
 └── <a href="proto_tools/tools/masked_models/esmc/">esmc/</a>
@@ -216,12 +217,12 @@ Please also cite the underlying tools you use in your work, in addition to our p
 
 ## Acknowledgements
 
-Thank you to <a href="https://modal.com"><img src="https://github.com/modal-labs.png?size=40" alt="" height="16" align="center"> Modal</a>
+Thank you to <a href="https://modal.com"><img src="https://github.com/modal-labs.png?size=40" alt="" height="16" align="absmiddle"> Modal</a>
 for sponsoring the compute used to develop and test the remote execution layer, and for making it
 straightforward to host this catalogue.
 
-Thank you to <a href="https://www.stanford.edu"><img src="https://www.stanford.edu/icon1.png" alt="" height="16" align="center"> Stanford University</a>
-and the <a href="https://arcinstitute.org"><img src="https://github.com/arcinstitute.png?size=40" alt="" height="16" align="center"> Arc Institute</a>
+Thank you to <a href="https://www.stanford.edu"><img src="https://www.stanford.edu/icon1.png" alt="" height="16" align="absmiddle"> Stanford University</a>
+and the <a href="https://arcinstitute.org"><img src="https://github.com/arcinstitute.png?size=40" alt="" height="16" align="absmiddle"> Arc Institute</a>
 for supporting this work's development.
 
 Thank you to everyone who has contributed to `proto-tools`. Contributions of every size are

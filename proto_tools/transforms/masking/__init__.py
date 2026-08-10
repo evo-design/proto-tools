@@ -6,6 +6,7 @@ from proto_tools.transforms.masking.base import (
     RandomMaskingStrategy,
     apply_masking_strategy,
     build_position_score_fn,
+    validate_whole_token_masks,
 )
 from proto_tools.transforms.masking.maskers import (
     MASKERS,
@@ -26,4 +27,5 @@ __all__ = [
     "build_position_score_fn",
     "compatible_methods",
     "split_tokens",
+    "validate_whole_token_masks",
 ]

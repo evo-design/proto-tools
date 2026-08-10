@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import importlib.util
 import io
 import os
@@ -14,6 +15,7 @@ from collections import deque
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from typing import Any
 
 from proto_tools.modal.app import DEFAULT_ENVIRONMENT, resolve_environment
 from proto_tools.modal.manifest import APP_BUCKETS, SERVICE_TO_MODULE, app_name_for_slug, app_slug, module_name
@@ -31,6 +33,91 @@ Each tool is its own Modal app, so you deploy only what you need.
 Apps go to the 'proto-env' environment unless --env names another one, or
 MODAL_ENVIRONMENT is set. Create it with: modal environment create proto-env
 """
+
+
+@dataclasses.dataclass(frozen=True)
+class ModalTokens:
+    """A Modal token pair, for deploying into a workspace that is not this process's own.
+
+    ``modal deploy`` is a subprocess, so it authenticates by environment rather than by the client
+    object every other Modal call here takes. That makes this the one place a caller's raw
+    credentials are handled, hence the redacting ``__repr__``: a deploy failure raises
+    :class:`subprocess.CalledProcessError`, whose string form carries the command it ran.
+    """
+
+    token_id: str
+    token_secret: str
+    hf_secret: str | None = None
+    """Modal secret in the caller's own workspace holding their HuggingFace token, if they have
+    one. A name rather than a token: it resolves where the app is being deployed, so a caller's
+    token stays in their account and is never sent here. ``None`` deploys anonymously."""
+
+    def __repr__(self) -> str:
+        """Name the token without printing it, so a traceback cannot leak the pair."""
+        return (
+            f"ModalTokens(token_id={self.token_id[:8]!r}..., token_secret='<redacted>', hf_secret={self.hf_secret!r})"
+        )
+
+    def client(self) -> Any:
+        """Open a Modal client for these tokens, for the calls that take one rather than an env."""
+        import modal
+
+        return modal.Client.from_credentials(self.token_id, self.token_secret)
+
+
+# Variables a deploy-as-someone-else subprocess inherits. An allowlist rather than a denylist: this
+# is the boundary between the process's own environment and a caller's build, and a variable added
+# to a deployment later should have to be named here to cross it.
+#
+# The proxy variables and certificate bundles are how a deploy reaches Modal at all on a network
+# that requires them; the PROTO_ ones change what gets built and so must match what this process
+# would have built for itself.
+_DEPLOY_ENV_PASSTHROUGH = (
+    "PATH",
+    "HOME",
+    "TMPDIR",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "PYTHONPATH",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "REQUESTS_CA_BUNDLE",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "no_proxy",
+    "PROTO_HOME",
+    "PROTO_MODAL_CACHE_VOLUME",
+    "PROTO_MODAL_SCALEDOWN_WINDOW",
+    "PROTO_MODAL_TIMEOUT_SCALE",
+)
+
+
+def deploy_environ(tokens: ModalTokens | None) -> dict[str, str] | None:
+    """Build the environment a ``modal deploy`` subprocess runs under.
+
+    Returns ``None`` when no tokens are given, which leaves the subprocess inheriting this
+    process's environment -- correct for the CLI, where the deploying workspace is the caller's
+    own and the two environments are the same thing.
+
+    With tokens, the caller is someone else, and inheriting would hand them whatever this process
+    holds. The subprocess gets the allowlist, the tokens, and nothing else.
+
+    The HuggingFace secret is named explicitly rather than left to fall through, because
+    falling through reads this machine's token. A caller who manages one in their own workspace
+    gets it attached; a caller who does not deploys anonymously, which is the same thing an
+    unauthenticated ``modal deploy`` would do.
+    """
+    if tokens is None:
+        return None
+    env = {name: os.environ[name] for name in _DEPLOY_ENV_PASSTHROUGH if name in os.environ}
+    env["MODAL_TOKEN_ID"] = tokens.token_id
+    env["MODAL_TOKEN_SECRET"] = tokens.token_secret
+    env["PROTO_MODAL_HF_SECRET"] = tokens.hf_secret or "none"
+    return env
 
 
 def render_entrypoint(app_name: str, services: list[str]) -> str:
@@ -175,6 +262,10 @@ def deploy_app(
     environment: str | None = None,
     on_progress: Callable[[str], None] | None = None,
     verbose: bool = False,
+    *,
+    tokens: ModalTokens | None = None,
+    client: Any | None = None,
+    log_dir: Path | None = None,
 ) -> bool:
     """Deploy one app, rendering its entrypoint fresh from the manifest.
 
@@ -190,24 +281,37 @@ def deploy_app(
             description as the build moves through it. A deploy takes minutes, so a
             caller with no other output needs this to show it has not hung.
         verbose (bool): Stream every line of Modal's output rather than one line per phase.
+        tokens (ModalTokens | None): Deploy into the workspace these tokens name rather than
+            this process's own, with a build environment holding nothing of this process's.
+        client (Any | None): Modal client for recording fingerprints, opened from ``tokens``
+            when not given. A server that already holds a client for this caller should pass it:
+            ``Client.from_credentials`` registers a shutdown hook rather than closing, so one
+            opened per deploy stays open for the life of the process.
+        log_dir (Path | None): Where to write the deploy log, or ``None`` for ``./logs``. A
+            server deploying for several callers gives each one a directory of its own, since
+            the default names the log after the app and two callers deploying the same app
+            would otherwise overwrite each other.
 
     Returns:
         bool: Whether the deploy succeeded.
     """
-    logs_dir = _logs_dir()
+    logs_dir = log_dir if log_dir is not None else _logs_dir()
     logs_dir.mkdir(exist_ok=True, parents=True)
     log_file = logs_dir / f"deploy.{app_slug(app_name)}.log"
 
     with tempfile.TemporaryDirectory(prefix="proto-tools-deploy-") as scratch:
         entrypoint = Path(scratch) / f"{module_name(app_name)}.py"
         entrypoint.write_text(render_entrypoint(app_name, APP_BUCKETS[app_name]))
-        deployed = _run_modal_deploy(app_name, entrypoint, environment, log_file, on_progress, verbose)
+        deployed = _run_modal_deploy(app_name, entrypoint, environment, log_file, on_progress, verbose, tokens)
 
     # Recorded here rather than by the caller, so every route that deploys gets drift detection.
     # An absent manifest reads as "nothing to report", so a path that skipped this would leave the
     # app permanently exempt from the check rather than visibly missing it.
+    #
+    # Written as whoever deployed. Recording against this process's workspace instead would leave
+    # the caller's deployment unfingerprinted and permanently exempt from the drift check.
     if deployed:
-        record_fingerprints([app_name], environment)
+        record_fingerprints([app_name], environment, client=client, tokens=tokens)
     return deployed
 
 
@@ -218,6 +322,7 @@ def _run_modal_deploy(
     log_file: Path,
     on_progress: Callable[[str], None] | None = None,
     verbose: bool = False,
+    tokens: ModalTokens | None = None,
 ) -> bool:
     """Run ``modal deploy`` for one entrypoint, reporting its progress prefixed by app.
 
@@ -230,7 +335,14 @@ def _run_modal_deploy(
     last_phase: str | None = None
     try:
         with open(log_file, "w") as f:
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                env=deploy_environ(tokens),
+            )
             for line in process.stdout or ():
                 f.write(line)  # the log keeps the raw stream, redraw frames and all
                 phase = describe_progress(_ANSI_ESCAPE.sub("", line))
@@ -266,19 +378,44 @@ def deploy_apps(
     return results
 
 
-def record_fingerprints(app_names: list[str], environment: str | None) -> None:
+def record_fingerprints(
+    app_names: list[str],
+    environment: str | None,
+    *,
+    client: Any | None = None,
+    tokens: ModalTokens | None = None,
+) -> None:
     """Record what each app was built from, so clients can detect drift later.
 
     Runs from the same source that was just deployed, so the recorded values
     describe what actually shipped. Best-effort: a failure here leaves a working
     deployment with no drift detection, which beats failing the deploy.
+
+    Args:
+        app_names (list[str]): Apps whose services to record.
+        environment (str | None): Modal environment holding the cache volume.
+        client (Any | None): Modal client to write as, or ``None`` for the process's own. Must
+            name the workspace that was deployed into, or the record describes one deployment
+            while the drift check reads another.
+        tokens (ModalTokens | None): Opened for a client when ``client`` is not given, so a
+            caller's deploy records into their workspace rather than this process's.
     """
     from proto_tools.modal.fingerprint import write_manifest
+
+    if client is None and tokens is not None:
+        try:
+            client = tokens.client()
+        except Exception as exc:
+            # Skipped rather than recorded as this process. Falling back would describe the
+            # caller's deployment on this process's own cache volume, where their drift check
+            # will never look and this one would read it as a deployment of its own.
+            print(f"  ⚠️  could not record fingerprints ({exc})")
+            return
 
     for app_name in sorted(app_names):
         for service in APP_BUCKETS[app_name]:
             try:
-                write_manifest(service, environment)
+                write_manifest(service, environment, client=client)
             except Exception as exc:
                 # Only the failure is worth saying. Recording fingerprints is bookkeeping the
                 # caller did not ask for, and announcing it pushes the deploy result off the end.

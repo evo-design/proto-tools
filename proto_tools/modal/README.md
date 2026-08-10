@@ -28,7 +28,7 @@ pip install modal
 modal setup
 ```
 
-This writes a token to `~/.modal.toml`.
+This writes a token to `~/.modal.toml`. Your credentials never leave your local machine.
 
 To check your setup at any point, run `proto-tools doctor`.
 
@@ -111,9 +111,11 @@ You are now set up to use the tool on Modal!
 ### Using an MCP agent
 
 `proto-tools` also packages an MCP server that exposes the same deployed tools
-to a coding agent, allowing you to deploy to and run tools on Modal. See our
+to agents like Claude or ChatGPT, allowing you to deploy to and run tools on
+Modal. See [MCP Server Set Up](../mcp/README.md) to install it and register it
+with an agent, or our
 [documentation website](https://proto.evodesign.org/docs/mcp/introduction) for
-more details.
+the full tool reference.
 
 ### Scale Down Window
 
