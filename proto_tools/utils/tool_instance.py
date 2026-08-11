@@ -2355,6 +2355,31 @@ class ToolInstance:
         except Exception:
             return False
 
+    @staticmethod
+    def _clean_package_archives(mamba_bin: Path) -> None:
+        """Remove downloaded package archives from the micromamba cache.
+
+        An archive is spent once extracted: ``micromamba`` hardlinks a new env
+        from the extracted package directories under ``pkgs/``, never from the
+        ``.conda`` / ``.tar.bz2`` files, so dropping them reclaims disk without
+        making later env creation re-download or re-extract anything. Extracted
+        packages are left alone (that is ``clean --packages``, which would).
+
+        Called only after a successful build, so a failed build keeps its
+        downloads for the retry. Best-effort: cleanup never fails a build that
+        already succeeded.
+        """
+        try:
+            subprocess.run(
+                [str(mamba_bin), "clean", "--tarballs", "--yes"],
+                env={**os.environ, "MAMBA_ROOT_PREFIX": str(ToolInstance._get_micromamba_root())},
+                check=False,
+                capture_output=True,
+                timeout=300,
+            )
+        except (subprocess.SubprocessError, OSError) as e:
+            logger.debug("Could not clean micromamba package archives: %s", e)
+
     def _create_env(self) -> None:
         """Create (or rebuild) the tool's isolated environment.
 
@@ -2469,6 +2494,7 @@ class ToolInstance:
         if returncode == 0:
             status_file.write_text(f"SUCCESS\nSetup hash: {self._setup_hash()}\n")
             logger.debug("Environment setup completed for %s", self.toolkit)
+            self._clean_package_archives(mamba_bin)
         else:
             tail = self._stderr_tail(combined_output)
             logger.error(
