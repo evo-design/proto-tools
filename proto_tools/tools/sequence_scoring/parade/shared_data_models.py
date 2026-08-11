@@ -102,6 +102,7 @@ def resolve_cell_type(value: str) -> ParadeCellType:
         raise ValueError(f"Unknown PARADE cell type {value!r}; expected a cell code or cell-line name: {known}")
     return code
 
+
 _VALID_INPUT_CHARS = "N"  # U is normalized to T; A/C/G/T come from DNA_NUCLEOTIDES.
 
 _CUSTOM_CHECKPOINT_REJECTED = (

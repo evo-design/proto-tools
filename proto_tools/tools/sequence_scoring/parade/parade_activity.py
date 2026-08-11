@@ -4,7 +4,7 @@ import csv
 import json
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, Field, ValidationInfo, computed_field, field_validator
 
@@ -53,10 +53,7 @@ class ParadeActivityConfig(ParadeCheckpointConfig):
     cell_types: list[ParadeCellType] = ConfigField(
         title="Cell Types",
         default_factory=list,
-        description=(
-            "PARADE cell lines to return by code ('c2') or name ('HepG2', case-insensitive); "
-            "empty returns the full panel for the construct type."
-        ),
+        description="Cell lines to return by code ('c2') or name ('HepG2'); empty returns the full panel.",
     )
 
     @field_validator("cell_types", mode="before")
@@ -165,7 +162,7 @@ class ParadeActivityOutput(BaseToolOutput):
 
         A display aid derived from ``cell_types``; ``scores`` stays keyed by the canonical code.
         """
-        return {code: PARADE_CELL_LINE_NAMES[code] for code in self.cell_types}
+        return {code: PARADE_CELL_LINE_NAMES[cast(ParadeCellType, code)] for code in self.cell_types}
 
     def __len__(self) -> int:
         """Return the number of per-sequence results."""
@@ -203,7 +200,9 @@ class ParadeActivityOutput(BaseToolOutput):
                 ],
                 "construct_type": self.construct_type,
                 "cell_types": self.cell_types,
-                "cell_line_names": {code: PARADE_CELL_LINE_NAMES[code] for code in self.cell_types},
+                "cell_line_names": {
+                    code: PARADE_CELL_LINE_NAMES[cast(ParadeCellType, code)] for code in self.cell_types
+                },
             }
             with open(path, "w") as f:
                 json.dump(data, f, indent=2)
@@ -211,7 +210,9 @@ class ParadeActivityOutput(BaseToolOutput):
         if file_format == "csv":
             with open(path, "w", newline="") as f:
                 writer = csv.writer(f)
-                cell_headers = [f"{PARADE_CELL_LINE_NAMES[code]} ({code})" for code in self.cell_types]
+                cell_headers = [
+                    f"{PARADE_CELL_LINE_NAMES[cast(ParadeCellType, code)]} ({code})" for code in self.cell_types
+                ]
                 writer.writerow(["sequence_index", "sequence", "sequence_length", *cell_headers])
                 for idx, result in enumerate(self.results):
                     writer.writerow(
