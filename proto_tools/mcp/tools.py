@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -284,8 +285,6 @@ def list_tools(
     return out
 
 
-# Words carrying no signal in a tool search — matching them would rank
-# everything equally.
 # The vocabulary an agent reaches for rarely matches a tool's own wording:
 # nobody searching for a structure comparison types "alignment". Substring
 # matching cannot bridge that, so map the common cases explicitly.
@@ -298,7 +297,6 @@ _SYNONYMS = {
     "predict": "prediction",
     "design": "design",
     "embed": "embedding",
-    "embeddings": "embedding",
     "mutate": "mutagenesis",
     "similarity": "align",
 }
@@ -327,6 +325,17 @@ _STOPWORDS = frozenset(
         "two",
         "some",
         "any",
+        "at",
+        "by",
+        "from",
+        "in",
+        "into",
+        "is",
+        "it",
+        "its",
+        "on",
+        "use",
+        "using",
     }
 )
 
@@ -336,25 +345,54 @@ def _stem(term: str) -> str:
     return term[:-1] if len(term) > 4 and term.endswith("s") and not term.endswith("ss") else term
 
 
-def _matches(term: str, haystack: str) -> bool:
-    """Match a term or its singular form anywhere in ``haystack``."""
-    return term in haystack or _stem(term) in haystack
+def _tokens(text: str) -> set[str]:
+    """Split a field into stemmed words, so matching is per word rather than per substring."""
+    return {_stem(word) for word in re.split(r"[^a-z0-9]+", text.lower()) if word}
 
 
-# Where a term matched, strongest first. A tool named for what you asked for is a better
-# answer than one that merely mentions it.
-_KEY_SCORE, _CATEGORY_SCORE, _SUMMARY_SCORE = 3, 2, 1
+# Where a term matched, strongest first, and a whole word ahead of a fragment of one.
+_KEY_WORD, _KEY_PART = 10, 6
+_CATEGORY_WORD, _CATEGORY_PART = 6, 4
+_SUMMARY_WORD, _SUMMARY_PART = 2, 1
+# Bonus for a tool whose whole category the query named.
+_CATEGORY_COVERAGE = 12
+# Below this, a fragment match is noise: "dna" appears inside a dozen unrelated words.
+_MIN_PART_LEN = 4
 
 
-def _field_score(term: str, key: str, category: str, summary: str) -> int:
-    """Score one term against one tool, by the strongest field it matches."""
-    if _matches(term, key):
-        return _KEY_SCORE
-    if _matches(term, category):
-        return _CATEGORY_SCORE
-    if _matches(term, summary):
-        return _SUMMARY_SCORE
+def _field_score(term: str, tokens: set[str], word: int, part: int) -> int:
+    """Score one term against one field, by how much of a word it matched."""
+    if term in tokens:
+        return word
+    if len(term) >= _MIN_PART_LEN and any(term in token for token in tokens):
+        return part
     return 0
+
+
+def _tool_score(forms: list[set[str]], key: set[str], category: set[str], summary: set[str]) -> int:
+    """Score one tool against the query, as a relevance out of 100.
+
+    Each term scores against the strongest field it matched. Normalising by the best a tool
+    could have scored keeps the range wide enough to tell a near-exact match from a
+    coincidental keyword overlap, which a sum of small integers does not.
+    """
+    total = sum(
+        max(
+            max(
+                _field_score(term, key, _KEY_WORD, _KEY_PART),
+                _field_score(term, category, _CATEGORY_WORD, _CATEGORY_PART),
+                _field_score(term, summary, _SUMMARY_WORD, _SUMMARY_PART),
+            )
+            for term in form
+        )
+        for form in forms
+    )
+    if total and category:
+        asked = sum(
+            1 for token in category if any(_field_score(term, {token}, 1, 1) for form in forms for term in form)
+        )
+        total += _CATEGORY_COVERAGE * asked // len(category)
+    return min(100, round(100 * total / (_KEY_WORD * len(forms))))
 
 
 def _no_match_hint() -> str:
@@ -381,22 +419,25 @@ def search_tools(
     search returns nothing for those, which reads as "no such tool exists"
     rather than "rephrase".
 
-    Returns the top ``limit`` under ``hits``, each carrying the ``score`` it ranked on, with
-    ``n_total`` for how many matched in all. Broad queries match half the catalogue, and an
-    agent that cannot tell first place from fiftieth pays for the whole list to find out.
+    Returns the top ``limit`` under ``hits``, each carrying the ``score`` out of 100 it ranked
+    on, with ``n_total`` for how many matched in all. Broad queries match half the catalogue,
+    and an agent that cannot tell first place from fiftieth pays for the whole list to find out.
     """
-    terms = [t for t in query.lower().split() if t not in _STOPWORDS and len(t) > 1]
+    terms = [_stem(t) for t in re.split(r"[^a-z0-9]+", query.lower()) if t not in _STOPWORDS and len(t) > 1]
     # Both the term and its expansion are scored: rewriting "fold" to "structure" otherwise
     # discards the literal token that matches esmfold and foldseek in a key.
-    forms = [{t, _SYNONYMS.get(t, t)} for t in terms]
+    forms = [{t, _stem(_SYNONYMS.get(t, t))} for t in terms]
     if not forms:
         return {"hits": [], "n_total": 0, "hint": _no_match_hint()}
 
     scored = []
     for entry in list_tools(deployed_only=deployed_only, device=device, environment=environment, client=client):
-        key, category = entry["tool"].lower(), (entry.get("category") or "").lower()
-        summary = (entry.get("summary") or "").lower()
-        score = sum(max(_field_score(t, key, category, summary) for t in form) for form in forms)
+        score = _tool_score(
+            forms,
+            _tokens(entry["tool"]),
+            _tokens(entry.get("category") or ""),
+            _tokens(entry.get("summary") or ""),
+        )
         if score:
             scored.append((score, entry))
 
