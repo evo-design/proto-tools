@@ -105,7 +105,7 @@ You are now set up to use tools on Modal!
 to agents like Claude or ChatGPT, allowing you to deploy to and run tools on
 Modal. See [MCP Server Set Up](../mcp/README.md) to install it and register it
 with an agent, or our
-[documentation website](https://proto.evodesign.org/docs/mcp/introduction) for
+[documentation website](https://proto.evodesign.org/docs/tools/introduction) for
 the full tool reference.
 
 ### Scale Down Window

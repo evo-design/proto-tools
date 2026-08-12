@@ -149,8 +149,8 @@ def build_server(device: Device = "modal") -> FastMCP:
 
         Useful for questions like "what can fold a protein" or "which tools
         score sequences". Returns the best `limit` matches under `hits`, each
-        with the `score` it ranked on, plus `n_total` for how many matched in
-        all — raise `limit` only if the total says it is worth it.
+        with the `score` out of 100 it ranked on, plus `n_total` for how many
+        matched in all — raise `limit` only if the total says it is worth it.
         """
         return impl.search_tools(query, deployed_only=deployed_only, limit=limit, device=device)
 
