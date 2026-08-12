@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import itertools
 import sys
 from dataclasses import dataclass
 from typing import Any
@@ -178,7 +181,8 @@ def build_server(device: Device = "modal") -> FastMCP:
         return impl.get_tool_citation(tool_key)
 
     @mcp.tool
-    def run_tool(
+    async def run_tool(
+        ctx: Context,
         tool_key: str,
         inputs: dict[str, Any] | None = None,
         config: dict[str, Any] | None = None,
@@ -223,7 +227,53 @@ def build_server(device: Device = "modal") -> FastMCP:
                 # A bad backend name is the caller's to correct, so it comes back as a result
                 # rather than a protocol error, the same way an unknown tool key does.
                 return {"ok": False, "error": str(exc), "valid_run_on": ["local", "modal", "proto"]}
-        return impl.run_tool(tool_key, inputs, config, output_dir, use_example, device=target)
+
+        loop = asyncio.get_running_loop()
+        # A task scheduled from another thread falls outside this request's context, where the
+        # progress token lives, and silently reports nothing.
+        messages: asyncio.Queue[str | None] = asyncio.Queue()
+
+        async def pump() -> None:
+            # Records carry no notion of how much is left, so the count is all there is to send.
+            # A client reads it as "still going", which is the question being asked.
+            for step in itertools.count(1):
+                message = await messages.get()
+                if message is None:
+                    return
+                # One unreportable message is not worth failing a tool call that is otherwise fine.
+                with contextlib.suppress(Exception):
+                    await ctx.report_progress(progress=step, message=message)
+
+        pumping = asyncio.create_task(pump())
+        # Named first, or the opening message is generic and a tool that reports nothing at all
+        # stays that way throughout.
+        messages.put_nowait(f"Running {tool_key}")
+
+        def forward(record: dict[str, Any]) -> None:
+            # On the tailer thread: a caller who disconnected leaves a closed loop, and raising
+            # here would take down progress for a run that is otherwise fine.
+            message = record.get("m")
+            if not message:
+                return
+            with contextlib.suppress(RuntimeError):
+                loop.call_soon_threadsafe(messages.put_nowait, str(message))
+
+        try:
+            # Off the loop, or the notifications above would sit in the queue until the tool
+            # returned and arrive at once, which is the silence this exists to remove.
+            return await asyncio.to_thread(
+                impl.run_tool,
+                tool_key,
+                inputs,
+                config,
+                output_dir,
+                use_example,
+                device=target,
+                on_record=forward,
+            )
+        finally:
+            messages.put_nowait(None)
+            await pumping
 
     if device == "modal":
 

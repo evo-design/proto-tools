@@ -262,7 +262,7 @@ def adjacent_distances(coordinates: np.ndarray) -> np.ndarray:
 def get_centroid(coordinates: np.ndarray) -> np.ndarray:
     """Calculate the centroid of coordinates."""
     assert _is_Nx3(coordinates), "Coordinates must be Nx3."  # noqa: S101
-    return coordinates.mean(axis=0).reshape(1, 3)  # type: ignore[no-any-return]
+    return coordinates.mean(axis=0).reshape(1, 3)
 
 
 def distances_to_centroid(coordinates: np.ndarray) -> np.ndarray:

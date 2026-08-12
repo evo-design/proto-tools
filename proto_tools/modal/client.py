@@ -9,7 +9,7 @@ import os
 import threading
 import uuid
 import warnings
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING, Any
 
 from proto_tools.modal.app import resolve_environment
@@ -347,6 +347,7 @@ def _live_progress(
     environment: str | None = None,
     client: Any | None = None,
     partition: str | None = None,
+    on_record: Callable[[dict[str, Any]], None] | None = None,
 ) -> Iterator[None]:
     """Stream the workers' log output to this process for the duration of the block.
 
@@ -369,9 +370,18 @@ def _live_progress(
         partition (str | None): Queue partition to stream through. ``None`` mints one, which is
             what a caller with a single call in flight wants. A caller serving several supplies
             its own, so it can recognise its records among the rest.
+        on_record (Callable[[dict[str, Any]], None] | None): Consumer for each streamed record,
+            replacing the local replay. A caller with no terminal to draw on -- the MCP server
+            forwarding to its client -- passes one, and asking at all is what turns streaming on
+            for it: none of the conditions below can be true in a process nobody is watching.
     """
     present = [one for one in configs if one is not None]
-    wanted = has_active_progress_bar() or verbose_level_from_env() > 0 or any(one.verbose > 0 for one in present)
+    wanted = (
+        has_active_progress_bar()
+        or verbose_level_from_env() > 0
+        or any(one.verbose > 0 for one in present)
+        or on_record is not None
+    )
     if not present or not wanted:
         yield
         return
@@ -379,6 +389,11 @@ def _live_progress(
     # Said before anything is dispatched, because the container reports nothing until it has
     # started, and on a cold start that is several seconds of a motionless spinner.
     set_substatus(remote_connecting_status("modal"))
+    # A consumer replacing the local replay never sees that substatus, and the cold start is the
+    # longest silence there is, so hand it the same phase as a record of its own.
+    if on_record is not None:
+        with contextlib.suppress(Exception):
+            on_record({"m": remote_connecting_status("modal"), "l": logging.INFO})
 
     # A caller that needs to recognise its own records supplies the partition; anyone else gets
     # a fresh one and never has to know it exists.
@@ -400,7 +415,7 @@ def _live_progress(
     tailer = threading.Thread(
         target=stream_modal_progress,
         args=(partition, expected_ends, stop),
-        kwargs={"environment": environment, "client": client},
+        kwargs={"environment": environment, "client": client, "on_record": on_record},
         name=f"proto-tools-progress-tail-{partition[:8]}",
         daemon=True,
     )
@@ -423,6 +438,7 @@ def dispatch_to_modal(
     scaledown_window: int | None = None,
     client: Any | None = None,
     progress_partition: str | None = None,
+    on_record: Callable[[dict[str, Any]], None] | None = None,
 ) -> BaseToolOutput:
     """Run a tool on Modal apps deployed in the active workspace.
 
@@ -441,6 +457,9 @@ def dispatch_to_modal(
             someone else. ``None`` lets Modal resolve the process's own credentials.
         progress_partition (str | None): Queue partition progress streams through, so a caller
             can recognise its own records. ``None`` mints one.
+        on_record (Callable[[dict[str, Any]], None] | None): Consumer for each progress record,
+            in place of replaying it locally. Passing one also turns streaming on, for a caller
+            with no terminal of its own; see :func:`_live_progress`.
 
     Returns:
         BaseToolOutput: The validated tool output.
@@ -464,7 +483,14 @@ def dispatch_to_modal(
     method = _bound_method(app_name, service_class, method_name, key, scaledown_window, environment=env, client=client)
     with (
         remote_progress("modal"),
-        _live_progress([config], expected_ends=1, environment=env, client=client, partition=progress_partition),
+        _live_progress(
+            [config],
+            expected_ends=1,
+            environment=env,
+            client=client,
+            partition=progress_partition,
+            on_record=on_record,
+        ),
     ):
         result: dict[str, Any] = method.remote(
             input_dict=inputs.model_dump(mode="json"),

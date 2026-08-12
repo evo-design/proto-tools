@@ -142,7 +142,7 @@ def test_a_caller_can_name_the_partition_it_will_listen_on(monkeypatch):
 
     seen: dict[str, str | None] = {}
 
-    def fake_live_progress(_configs, *, expected_ends=1, environment=None, client=None, partition=None):
+    def fake_live_progress(_configs, *, expected_ends=1, environment=None, client=None, partition=None, on_record=None):
         seen["partition"] = partition
         import contextlib
 
