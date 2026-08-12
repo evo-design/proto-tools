@@ -113,9 +113,10 @@ class ESMFold2Config(MSAStructurePredictionConfig):
         model_checkpoint (Literal["esmfold2", "esmfold2-fast"]): Which ESMFold2
             variant to load. Default ``"esmfold2-fast"``.
         num_loops (int): Iterative refinement loops through the model. Higher =
-            more accurate but slower. Default 3.
+            more accurate but slower. Default 20 from paper, though fewer loops
+            may be needed for monomers.
         num_sampling_steps (int): Diffusion sampling steps for the structure
-            module. Higher = more refined but slower. Default 50.
+            module. Higher = more refined but slower. Default 100.
         diffusion_samples (int): Independent diffusion samples per complex; the
             highest-pLDDT sample is returned. Higher = better quality but slower.
             Default 1.
@@ -154,13 +155,13 @@ class ESMFold2Config(MSAStructurePredictionConfig):
     )
     num_loops: int = ConfigField(
         title="Number of Refinement Loops",
-        default=3,
+        default=20,
         ge=1,
         description="Iterative refinement loops through the model. Higher = more accurate but slower.",
     )
     num_sampling_steps: int = ConfigField(
         title="Number of Sampling Steps",
-        default=50,
+        default=100,
         ge=1,
         description="Diffusion sampling steps for the structure module. Higher = more refined but slower.",
     )
@@ -276,7 +277,7 @@ def run_esmfold2(inputs: ESMFold2Input, config: ESMFold2Config, instance: Any = 
 
     Example:
         >>> inputs = ESMFold2Input(complexes=[["MVLSPADKTNVKAAW", "GSSGSSGSS"]])
-        >>> config = ESMFold2Config(num_loops=3, num_sampling_steps=50)
+        >>> config = ESMFold2Config(num_loops=20, num_sampling_steps=100)
         >>> result = run_esmfold2(inputs, config)
         >>> print(f"plddt: {result.structures[0].metrics.plddt:.3f}")
     """
