@@ -15,7 +15,7 @@ PARADE (Prediction And RAtional DEsign of mRNA UTRs) is a LegNet convolutional m
 
 PARADE ([Khoroshkin et al., 2024](https://doi.org/10.1101/2024.12.31.630783)) is a generative framework for designing UTRs with tailored cell-type-specific activity. Its predictive core adapts the DREAM-challenge LegNet architecture: an EfficientNet-style convolutional network with squeeze-and-excite blocks that reads a one-hot UTR sequence plus a reading-frame positional channel and, for activity, broadcast cell-condition channels.
 
-The activity models are trained per construct type — one for 5' UTRs and one for 3' UTRs — and condition on a panel of anonymized cell-line codes (`c1`, `c2`, `c4`, `c6`, `c17`, and, for 3' UTRs, `c13`), returning a predicted activity mass-center for each. A separate 3' UTR model predicts mRNA stability as an RNA/gDNA log-ratio. The featurization matches the upstream reference pipeline exactly, so predictions reproduce the published values.
+The activity models are trained per construct type — one for 5' UTRs and one for 3' UTRs — and condition on a panel of named cell lines (`c1` MDA-MB-231, `c2` HepG2, `c4` Jurkat, `c6` SW480, `c17` NALM6, and, for 3' UTRs only, `c13` PA-1), returning a predicted activity mass-center for each. A separate 3' UTR model predicts mRNA stability as an RNA/gDNA log-ratio. The featurization matches the upstream reference pipeline exactly, so predictions reproduce the published values.
 
 ## Tools
 
@@ -30,7 +30,7 @@ Use this tool to rank UTR designs by predicted activity, screen candidate UTRs f
 #### Usage Tips
 
 - **Pick the construct type.** Set `construct_type` to `utr5` or `utr3`; it selects the matching checkpoint and cell-code panel.
-- **Cell codes are panel-specific.** `c13` exists only for `utr3`. Leave `cell_types` empty to return the full panel for the construct type.
+- **Cell codes are panel-specific.** `c13` exists only for `utr3`. Select a cell line by either its code (`c2`) or its cell-line name (`HepG2`, case-insensitive). Leave `cell_types` empty to return the full panel for the construct type.
 - **Match the training length.** Upstream trained the 5' UTR model on ~50-nt inserts and the 3' UTR model on ~240-nt (roughly 200–300 nt) inserts; the model accepts any length (adaptive pooling) but predictions are only meaningful near the training regime.
 - **Mixed lengths batch together.** Different-length sequences in one call are batched per length group; RNA input (`U`) is accepted and mapped to `T`.
 
@@ -59,7 +59,7 @@ Use this tool inside gradient-based UTR design loops (e.g. Fast SeqProp) to maxi
 #### Usage Tips
 
 - **Logits are batched.** Pass logits with shape `B x L x 4` in `A,C,G,T` order; use `B=1` for a single candidate.
-- **Terms target cell codes.** Each loss term names a `cell_type`, a `direction` (`max`/`min`), and a `weight`; all codes must be in the `construct_type` panel.
+- **Terms target cell codes.** Each loss term names a `cell_type` — its code (`c2`) or cell-line name (`HepG2`, case-insensitive) — a `direction` (`max`/`min`), and a `weight`; all must be in the `construct_type` panel.
 - **Soft/hard mixing controls relaxation.** `soft=1.0, hard=0.0` is fully soft; increasing `hard` uses a straight-through hard-forward estimator.
 
 ## Toolkit Notes

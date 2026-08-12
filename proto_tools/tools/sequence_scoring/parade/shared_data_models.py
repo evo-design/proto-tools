@@ -42,17 +42,66 @@ PARADE_CHECKPOINTS: dict[str, dict[str, str]] = {
     },
 }
 
-# PARADE anonymized cell-line codes exposed (queryable) per UTR construct type -- the codes the
-# upstream tutorial predicts on. These are a subset of the model's trained condition channels: the
-# vendored ``CELLTYPE_CODES_UTR3`` map also has ``c10``, which the checkpoint conditions on but the
-# upstream pipeline never queries, so it is intentionally omitted from the queryable panel here.
-# The model still conditions on all of its trained channels via broadcast one-hot inputs.
+# PARADE's queryable cell-line panel per UTR construct type -- the lines the upstream tutorial
+# predicts on. Each code identifies a human cell line (see ``PARADE_CELL_LINE_NAMES``); the codes
+# remain the canonical identifiers the model is conditioned on, while callers may select a line by
+# either its code or its name. These are a subset of the model's trained condition channels: the
+# vendored ``CELLTYPE_CODES_UTR3`` map also has ``c10`` (an extra, unnamed channel) which the
+# checkpoint conditions on but the upstream pipeline never queries, so it is intentionally omitted
+# from the queryable panel here. The model still conditions on all its trained channels via
+# broadcast one-hot inputs.
 ParadeConstructType = Literal["utr5", "utr3"]
 ParadeCellType = Literal["c1", "c2", "c4", "c6", "c17", "c13"]
 PARADE_CELL_TYPES: dict[str, tuple[ParadeCellType, ...]] = {
     "utr5": ("c1", "c2", "c4", "c6", "c17"),
     "utr3": ("c1", "c2", "c4", "c6", "c17", "c13"),
 }
+
+# Human-readable identities for the queryable panel codes. The upstream PARADE release and paper
+# refer to these conditions only by anonymized code; naming them lets callers select a cell line by
+# name (e.g. ``"HepG2"``) instead of the opaque code. Codes stay canonical -- a name is resolved to
+# its code at the input boundary and the model is always addressed by code. ``c13`` is 3'UTR-only.
+PARADE_CELL_LINE_NAMES: dict[ParadeCellType, str] = {
+    "c1": "MDA-MB-231",
+    "c2": "HepG2",
+    "c4": "Jurkat",
+    "c6": "SW480",
+    "c17": "NALM6",
+    "c13": "PA-1",
+}
+
+# Case-insensitive lookup that accepts either a code (``"c2"``) or a cell-line name (``"HepG2"``).
+_CELL_SELECTOR_TO_CODE: dict[str, ParadeCellType] = {
+    **{code.lower(): code for code in PARADE_CELL_LINE_NAMES},
+    **{name.lower(): code for code, name in PARADE_CELL_LINE_NAMES.items()},
+}
+
+
+def resolve_cell_type(value: str) -> ParadeCellType:
+    """Resolve a PARADE cell selector to its canonical code.
+
+    Accepts either a cell code (``"c2"``) or a cell-line name (``"HepG2"``), matched
+    case-insensitively after stripping surrounding whitespace; a code is returned unchanged.
+    Panel membership (which codes are valid for a given construct type) is enforced separately
+    by the tool configs -- this only maps a name or code to a code.
+
+    Args:
+        value (str): A PARADE cell code or cell-line name.
+
+    Returns:
+        ParadeCellType: The canonical cell code.
+
+    Raises:
+        ValueError: If ``value`` is not a known code or cell-line name.
+    """
+    if not isinstance(value, str):
+        raise ValueError(f"PARADE cell type must be a string, got {type(value).__name__}")
+    code = _CELL_SELECTOR_TO_CODE.get(value.strip().lower())
+    if code is None:
+        known = ", ".join(f"{name} ({code})" for code, name in PARADE_CELL_LINE_NAMES.items())
+        raise ValueError(f"Unknown PARADE cell type {value!r}; expected a cell code or cell-line name: {known}")
+    return code
+
 
 _VALID_INPUT_CHARS = "N"  # U is normalized to T; A/C/G/T come from DNA_NUCLEOTIDES.
 
@@ -364,10 +413,10 @@ class ParadeActivityMetrics(Metrics):
             "type": "float",
             "min": None,
             "max": None,
-            "description": f"Predicted PARADE UTR activity for cell code {code}.",
+            "description": f"Predicted PARADE UTR activity for {PARADE_CELL_LINE_NAMES[code]} (cell code {code}).",
             "better_values_are": "context-dependent",
         }
-        for code in ("c1", "c2", "c4", "c6", "c17", "c13")
+        for code in PARADE_CELL_LINE_NAMES
     }
 
 
