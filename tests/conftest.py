@@ -8,8 +8,10 @@ Supports the same CLI options and markers as the main proto-language tests:
   --ext        Include extensive combinatorial tests (e.g., every tool x device). Long form: --extensive
   --skip-ci    Skip tests marked skip_ci (mimics CI)
   --no-log-console  Disable console logging during tests
-  --env-report[=PATH]  Run venv smoke tests and generate compatibility report
-                       (combine with -k to re-test specific tools incrementally)
+  --env-report[=PATH]  DELETE built tool envs, rebuild them, and generate a
+                       compatibility report (combine with -k to rebuild only
+                       specific tools). Prompts before deleting.
+  -Y, --yes    Skip the --env-report confirmation prompt (-y is reserved by pytest)
 """
 
 import functools
@@ -922,12 +924,21 @@ def pytest_addoption(parser):
         const=True,
         default=False,
         help=(
-            "Run venv smoke tests and generate platform compatibility report. "
-            "Combine with -k to re-test specific tools (only their envs are cleaned, "
-            "results merge into existing report). Without -k, cleans all tool_envs/ "
-            "and writes a fresh report. Optionally specify output path: "
-            "--env-report=path/to/report.md"
+            "DELETES built tool environments and rebuilds them from scratch, then writes a "
+            "platform compatibility report. Without -k this removes ALL of tool_envs/; combine "
+            "with -k to delete only the selected tools' envs (results merge into the existing "
+            "report). Prompts for confirmation unless -y is passed. Optionally specify output "
+            "path: --env-report=path/to/report.md"
         ),
+    )
+    # pytest reserves lowercase short options for itself ("lowercase shortoptions
+    # reserved"), so the conventional -y is unavailable here.
+    parser.addoption(
+        "-Y",
+        "--yes",
+        action="store_true",
+        default=False,
+        help="Skip the --env-report confirmation prompt (for CI and unattended runs)",
     )
 
 
@@ -1474,6 +1485,55 @@ def setup_test_logging(request):
     yield
 
 
+def _confirm_env_deletion(config, targets: list[Path], *, full_root: Path | None) -> None:
+    """Require explicit confirmation before ``--env-report`` deletes built tool environments.
+
+    Rebuilding an env re-downloads every dependency and can take hours, so the
+    destructive step is made opt-in rather than a side effect of asking for a
+    report. ``-y`` skips the prompt. A non-interactive session without ``-y``
+    aborts rather than guessing, so an unattended run can never silently wipe
+    a populated ``tool_envs/``.
+
+    Args:
+        config: The pytest config, used for the ``-y`` flag and capture manager.
+        targets (list[Path]): Environment directories that would be removed.
+        full_root (Path | None): The env root when the whole tree is being
+            removed, or None when only selected envs are.
+    """
+    if config.getoption("--yes"):
+        return
+
+    scope = f"ALL {len(targets)} environments under {full_root}" if full_root else f"{len(targets)} environment(s)"
+    preview = targets[:10]
+    lines = [
+        "",
+        "--env-report DELETES built tool environments and rebuilds them from scratch.",
+        f"  About to remove: {scope}",
+        *[f"    - {path.name}" for path in preview],
+    ]
+    if len(targets) > len(preview):
+        lines.append(f"    ... and {len(targets) - len(preview)} more")
+    lines += ["  This re-downloads every dependency and can take hours.", "  Pass -Y (--yes) to skip this prompt.", ""]
+
+    capman = config.pluginmanager.getplugin("capturemanager")
+    if capman is not None:
+        capman.suspend_global_capture(in_=True)
+    try:
+        print("\n".join(lines), file=sys.stderr)
+        if sys.stdin is None or not sys.stdin.isatty():
+            pytest.exit(
+                "--env-report needs confirmation but stdin is not interactive; re-run with -Y (--yes) to proceed.",
+                returncode=pytest.ExitCode.USAGE_ERROR,
+            )
+        answer = input("Type 'yes' to delete and rebuild: ").strip().lower()
+    finally:
+        if capman is not None:
+            capman.resume_global_capture()
+
+    if answer != "yes":
+        pytest.exit("--env-report aborted; no environments were deleted.", returncode=pytest.ExitCode.INTERRUPTED)
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _env_report_clean_envs(request, setup_test_logging):
     """Clean tool envs when --env-report is active (after logging is configured).
@@ -1513,17 +1573,23 @@ def _env_report_clean_envs(request, setup_test_logging):
             except ValueError:
                 continue
             env_names_to_clean.add(env_name)
-        for env_name in env_names_to_clean:
-            env_dir = venvs_dir / f"{env_name}_env"
-            if env_dir.exists():
-                logger.warning(f"Cleaning {env_dir} for rebuild...")
-                subprocess.run(
-                    ["rm", "-rf", str(env_dir)],
-                    check=False,
-                    capture_output=True,
-                )
+        targets = sorted(path for path in (venvs_dir / f"{name}_env" for name in env_names_to_clean) if path.exists())
+        if not targets:
+            return
+        _confirm_env_deletion(request.config, targets, full_root=None)
+        for env_dir in targets:
+            logger.warning(f"Cleaning {env_dir} for rebuild...")
+            subprocess.run(
+                ["rm", "-rf", str(env_dir)],
+                check=False,
+                capture_output=True,
+            )
     else:
         # Full run: clean everything
+        targets = sorted(path for path in venvs_dir.iterdir() if path.is_dir())
+        if not targets:
+            return
+        _confirm_env_deletion(request.config, targets, full_root=venvs_dir)
         logger.warning(
             f"Cleaning {venvs_dir} for fresh environment rebuilds (this may take a while on network filesystems)..."
         )

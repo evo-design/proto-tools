@@ -2,10 +2,10 @@
 
 # Modal Set Up
 
-`proto-tools` enables users to scale their tool use beyond their local machine through an
-integration with [Modal](https://modal.com). Modal is a third party serverless compute
+`proto-tools` enables users to scale their tool use beyond their local compute through an
+integration with [Modal](https://modal.com). Modal is a third-party serverless compute
 platform that allows users to execute models and tools in remote containers. Note that
-using Modal costs money! You can review their pricing on their website here: [https://modal.com/pricing](https://modal.com/pricing)
+using Modal costs money, but new users get $30 for free to try out their service. You can review their pricing on their website here: [https://modal.com/pricing](https://modal.com/pricing)
 
 After setting up an account and deploying the tools you would like to have access to,
 setting `device="modal"` in a tool config will dispatch the execution of your tool to a
@@ -21,28 +21,28 @@ available. For a runnable walkthrough that deploys a model and calls it, see the
 
 To begin, you will need to set up an account on [modal.com](https://modal.com).
 
-You will then need to authenticate your account on your local machine.
+You will then need to authenticate your account on your local machine. Run the following commands and follow the instructions.
 
 ```bash
 pip install modal
 modal setup
 ```
 
-This writes a token to `~/.modal.toml`. Your credentials never leave your local machine.
-
-To check your setup at any point, run `proto-tools doctor`.
+Once you have authenticated, a token will be written to `~/.modal.toml`. Proto reads it to
+run and deploy tools on your account. Your local Modal key authenticates you directly with
+Modal and is never transmitted to Proto or stored on any system we operate.
 
 If you have multiple people who need access to the same tools, you can create a
 shared workspace. This will enable each user to access the same deployed apps and
-cached model weights.
+cached model weights, which can save money.
 
 ### Step 2: Create an environment
 
 Next, you will need to create a Modal *environment*. An environment is a namespace
-inside your Modal account that houses apps (that will run your deployed tools)
+inside your Modal account that houses apps (services which will run your deployed models)
 and their storage (such as cached model weights).
 
-Here we will call our environment `proto-env`, but you can use any name:
+The default environment used by proto-tools is `proto-env`, but you can use any name. We recommend using the same environment everywhere to avoid redundancy.
 
 ```bash
 modal environment create proto-env
@@ -55,16 +55,10 @@ run the command above, these settings default to your Modal workspace limit.
 
 ### Step 3: Deploy a tool
 
-The next step is to deploy a tool you would like to use through Modal. Deploying a tool means
-setting up an app through which you will be able to run inference in the future. This step
-installs the environment dependencies and then downloads weights so the model is ready to run.
+After you have authenticated, you are now able to deploy a tool. Deploying a tool creates a runnable 'App' service inside your Modal account that you can use to remotely run the tool. After you deploy a tool, it will remain runnable until you remove the deployment using your Modal dashboard.
 
 > [!NOTE]
-> Deploying a tool and storing weights on Modal costs money. The build ends by running the tool
-> once to warm it, on a GPU for GPU-backed tools, so a deploy bills compute before it returns
-> anything. The weights it downloads then persist on a Modal volume and accrue storage cost
-> until you remove them. Deploying is a one-time cost per tool — later calls reuse the app and
-> the cached weights.
+> Deploying a tool and storing weights on Modal costs money. The weights a tool downloads persist on a Modal storage volume so you can reuse them without needing to redownload. This accrues a minimal storage cost until you remove them. Deploying itself is a one-time cost per tool as later calls reuse the app and the cached weights.
 
 To determine which tools are available to deploy, run the following command:
 
@@ -78,17 +72,11 @@ You can then deploy tools as you need them, one by one:
 proto-tools deploy --apps esmc --env proto-env
 ```
 
-Depending on the model, a deployment can take minutes to complete. Note that some
-deployments are a little flaky due to issues with third party download links failing.
-We recommend just retrying them.
-
-A deployment that finishes has built an image, which is not quite the same as the tool
-working. To check that, run it once against what you just deployed with `--test`, where
-`--skip-deploy` keeps the command from rebuilding:
-
-```bash
-proto-tools deploy --apps esmc --env proto-env --test --skip-deploy
-```
+Depending on the model, a deployment can take some time to complete. Note that some
+deployments are a little flaky due to issues with third-party download links failing.
+We recommend retrying them once if they fail. If you run into any issues with your deployments,
+please let us know by creating a GitHub issue on the
+[proto-tools](https://github.com/evo-design/proto-tools/issues) repository.
 
 ### Step 4: Run a tool
 
@@ -104,7 +92,10 @@ output = run_esmc_embeddings(
 
 print(len(output.results[0].mean_embedding))
 ```
-You are now set up to use the tool on Modal!
+
+The tool will execute on Modal and return the result.
+
+You are now set up to use tools on Modal!
 
 ## Other notes
 

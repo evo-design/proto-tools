@@ -163,7 +163,7 @@ exclude_lines = [
 ]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.12"
 plugins = ["pydantic.mypy"]
 strict = true
 warn_unreachable = true
@@ -389,7 +389,7 @@ include = ["proto_tools*"]
 exclude = ["*.standalone.standalone_helpers", "*.standalone.standalone_helpers.*"]
 
 [tool.setuptools.package-data]
-"*" = ["*.sh", "*.txt", "*.csv", "*.smi", "*.cif", "*.bib", "*.yaml", "*.md", "*.ipynb", "*.pkl", "*.pdb", "*.a3m", "*.fasta", "*.hmm", "*.meme", "*.json", "py.typed"]
+"*" = ["*.sh", "*.txt", "*.csv", "*.smi", "*.cif", "*.bib", "*.yaml", "*.md", "*.ipynb", "*.pkl", "*.pdb", "*.a3m", "*.fasta", "*.hmm", "*.meme", "*.json", "*.def", "py.typed"]
 
 [tool.setuptools.exclude-package-data]
 "proto_tools.modal.binder_design.freebindcraft_deployment" = ["README.md"]

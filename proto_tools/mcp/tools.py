@@ -564,6 +564,7 @@ def _dispatch(
     environment: str | None = None,
     client: Any | None = None,
     progress_partition: str | None = None,
+    on_record: Callable[[dict[str, Any]], None] | None = None,
 ) -> tuple[Any, Device]:
     """Route one call to the backend ``device`` names, and report where it ran.
 
@@ -609,7 +610,13 @@ def _dispatch(
 
     return (
         dispatch_to_modal(
-            tool_key, payload, cfg, environment=environment, client=client, progress_partition=progress_partition
+            tool_key,
+            payload,
+            cfg,
+            environment=environment,
+            client=client,
+            progress_partition=progress_partition,
+            on_record=on_record,
         ),
         device,
     )
@@ -649,6 +656,7 @@ def run_tool(
     environment: str | None = None,
     client: Any | None = None,
     progress_partition: str | None = None,
+    on_record: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Run a tool and return its result, with large fields written to disk.
 
@@ -662,6 +670,10 @@ def run_tool(
     A structure input takes a file path or an http(s) URL where the schema shows an object,
     so chaining one tool's output file into the next never reads it into the call. This is not
     uniform across bulky inputs: an MSA takes its content, and a path is rejected.
+
+    ``on_record`` receives the worker's progress records as they arrive, for a caller that has
+    somewhere to put them. Without one the call is silent until it returns, which is what a
+    terminal-less caller would otherwise get for a fold that takes minutes.
     """
     from proto_tools.tools import ToolRegistry
 
@@ -708,6 +720,7 @@ def run_tool(
             environment=environment,
             client=client,
             progress_partition=progress_partition,
+            on_record=on_record,
         )
     except _setup_errors(device) as exc:
         return {"ok": False, **_unavailable(device, tool_key, str(exc))}

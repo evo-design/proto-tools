@@ -2298,6 +2298,47 @@ class ToolInstance:
                     return toolkit.strip(), asset_kind.strip()
         return None
 
+    # Object-store and transfer errors that indicate an incomplete clone rather
+    # than a bad package. Paired with uv's own wrapper text so a tool that runs
+    # git itself does not get pointed at uv's cache.
+    _GIT_CACHE_CORRUPTION_SIGNATURES: ClassVar[tuple[str, ...]] = (
+        "unable to read tree",
+        "unpack-objects failed",
+        "fetch-pack: unexpected disconnect",
+        "did not send all necessary objects",
+        "failed to fetch commit",
+        "early EOF",
+    )
+
+    @staticmethod
+    def _git_cache_hint(output: str | None) -> str:
+        """Guidance for a build that failed against a corrupt clone in uv's git cache.
+
+        An interrupted fetch can leave a partially populated object store in
+        ``uv_cache/git-v0``. uv reuses that entry on later builds without
+        revalidating it, so a one-off network fault becomes a failure that
+        repeats every time, reported as ``unable to read tree`` — which points
+        at the package rather than at the cache.
+
+        Returns an empty string unless the output carries both a git
+        object-store error and uv's own git wrapper text.
+        """
+        if not output or not any(sig in output for sig in ToolInstance._GIT_CACHE_CORRUPTION_SIGNATURES):
+            return ""
+        if "Git operation failed" not in output and "git-v0" not in output:
+            return ""
+
+        from proto_tools.utils.proto_home import get_proto_home
+
+        cache_dir = os.environ.get("UV_CACHE_DIR") or str(get_proto_home() / "uv_cache")
+        return (
+            "\n\nThis looks like a corrupt clone in uv's git cache rather than a broken package. "
+            "An interrupted fetch leaves an incomplete object store that uv reuses without "
+            "revalidating, so the build keeps failing until the cache entry is removed:\n"
+            f"  rm -rf {cache_dir}/git-v0\n"
+            "  # then re-run; uv re-clones from scratch."
+        )
+
     def _fix_env_hint(self) -> str:
         """Guidance appended to env-build failures, pointing at the ``fix-env`` skill."""
         var = f"PROTO_{self.toolkit.upper().replace('-', '_')}_STANDALONE_DIR"
@@ -2354,6 +2395,31 @@ class ToolInstance:
             return f"Setup hash: {current_hash}" in status
         except Exception:
             return False
+
+    @staticmethod
+    def _clean_package_archives(mamba_bin: Path) -> None:
+        """Remove downloaded package archives from the micromamba cache.
+
+        An archive is spent once extracted: ``micromamba`` hardlinks a new env
+        from the extracted package directories under ``pkgs/``, never from the
+        ``.conda`` / ``.tar.bz2`` files, so dropping them reclaims disk without
+        making later env creation re-download or re-extract anything. Extracted
+        packages are left alone (that is ``clean --packages``, which would).
+
+        Called only after a successful build, so a failed build keeps its
+        downloads for the retry. Best-effort: cleanup never fails a build that
+        already succeeded.
+        """
+        try:
+            subprocess.run(
+                [str(mamba_bin), "clean", "--tarballs", "--yes"],
+                env={**os.environ, "MAMBA_ROOT_PREFIX": str(ToolInstance._get_micromamba_root())},
+                check=False,
+                capture_output=True,
+                timeout=300,
+            )
+        except (subprocess.SubprocessError, OSError) as e:
+            logger.debug("Could not clean micromamba package archives: %s", e)
 
     def _create_env(self) -> None:
         """Create (or rebuild) the tool's isolated environment.
@@ -2469,6 +2535,7 @@ class ToolInstance:
         if returncode == 0:
             status_file.write_text(f"SUCCESS\nSetup hash: {self._setup_hash()}\n")
             logger.debug("Environment setup completed for %s", self.toolkit)
+            self._clean_package_archives(mamba_bin)
         else:
             tail = self._stderr_tail(combined_output)
             logger.error(
@@ -2498,7 +2565,8 @@ class ToolInstance:
                 raise MissingAssetError(toolkit, asset_kind, tail)
 
             raise RuntimeError(
-                f"{self.toolkit}: setup.sh failed (exit {returncode}): {tail or '<no stderr>'}{self._fix_env_hint()}"
+                f"{self.toolkit}: setup.sh failed (exit {returncode}): {tail or '<no stderr>'}"
+                f"{self._git_cache_hint(combined_output)}{self._fix_env_hint()}"
             )
 
 
