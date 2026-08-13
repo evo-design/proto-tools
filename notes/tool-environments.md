@@ -86,6 +86,20 @@ Some tools have hard version pins for ABI compatibility with pre-built wheels (f
 - `evo2`: `torch==2.6.0` (flash-attn + transformer-engine compatibility)
 - `borzoi`: `torch==2.7.1` (flash-attn wheel compatibility)
 
+### Pinned torch and the pruned PyTorch wheel index
+
+`download.pytorch.org/whl/<variant>` is pruned over time, and uv's default `first-index` strategy will not look past it: once a package name appears on that index, uv refuses to source *any* version of it from PyPI. A pin whose transitive wheel has since been removed therefore fails outright with "No solution found" instead of falling back.
+
+torch 2.4.x through 2.6.0 pin `nvidia-cudnn-cu12==9.1.0.70`, which the cu124 index no longer carries (it goes 9.0.0.312 → 9.1.1.17) but PyPI still does. A tool pinning a torch in that range against a PyTorch index needs the cross-index lookup enabled:
+
+```bash
+proto_install_pytorch "torch==2.6.*" torchvision --index-strategy unsafe-best-match
+```
+
+Both indexes are trusted here, so "unsafe" only names the dependency-confusion risk uv declines to take by default. Setting `UV_INDEX_STRATEGY` outside the build is *not* an alternative: setup.sh runs under the `_BASE_PASSTHROUGH` allowlist in `proto_tools/utils/persistent_worker.py`, which carries `UV_CACHE_DIR` but not `UV_INDEX_STRATEGY`, so the variable is stripped before setup.sh sees it.
+
+The same wall applies to a version *missing* from a variant index: cu128 has no torch 2.6.x at all (it jumps 2.0.1 → 2.7.0), so pinning 2.6 against `RECOMMENDED_TORCH_INDEX` on a driver-570+ host fails the same way.
+
 ### Compatibility Matrices
 
 Based on official sources (PyTorch RELEASE.md, JAX docs, NVIDIA CUDA compatibility):

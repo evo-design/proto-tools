@@ -13,7 +13,11 @@ pip install uv
 proto_install_cuda_toolkit "${GERMINAL_CUDA_TOOLKIT_CONSTRAINT:-12.4.*}"
 
 export GERMINAL_TORCH_SPEC="${GERMINAL_TORCH_SPEC:-torch==2.6.*}"
-proto_install_pytorch "$GERMINAL_TORCH_SPEC" torchvision torchaudio
+# torch 2.6.0+cu124 pins nvidia-cudnn-cu12==9.1.0.70, which the cu124 wheel index no longer
+# carries; without this uv's first-index default refuses to source it from PyPI, where it remains.
+# torchaudio is pinned alongside because recent releases declare no torch dependency at all, so
+# the cross-index lookup would otherwise float it to a version built against a different torch.
+proto_install_pytorch "$GERMINAL_TORCH_SPEC" torchvision "torchaudio==2.6.*" --index-strategy unsafe-best-match
 export GERMINAL_JAX_SPEC="${GERMINAL_JAX_SPEC:-jax[cuda12]==0.5.3}"
 proto_install_jax GERMINAL
 
