@@ -130,7 +130,7 @@ def build_server(device: Device = "modal") -> FastMCP:
         return impl.workspace_info(device)
 
     @mcp.tool
-    def list_tools(deployed_only: bool = True, category: str | None = None) -> list[dict[str, Any]]:
+    def list_tools(deployed_only: bool = True, category: str | None = None) -> dict[str, Any]:
         """List available bioinformatics tools, with what each one is for.
 
         Each entry carries its category, a one-line summary, and whether it
@@ -140,17 +140,24 @@ def build_server(device: Device = "modal") -> FastMCP:
         Defaults to only those actually deployed in this workspace. Pass
         deployed_only=False to see the full catalogue, including tools the
         user would have to deploy first.
+
+        Entries arrive under `tools`, the same as search_tools, each with the
+        key to run under `tool_key`.
         """
-        return impl.list_tools(deployed_only=deployed_only, category=category, device=device)
+        found = impl.list_tools(deployed_only=deployed_only, category=category, device=device)
+        return {"tools": found, "n_total": len(found)}
 
     @mcp.tool
     def search_tools(query: str, deployed_only: bool = True, limit: int = 10) -> dict[str, Any]:
         """Find tools by keyword, matching the tool key, category and summary.
 
         Useful for questions like "what can fold a protein" or "which tools
-        score sequences". Returns the best `limit` matches under `hits`, each
+        score sequences". Returns the best `limit` matches under `tools`, each
         with the `score` out of 100 it ranked on, plus `n_total` for how many
         matched in all — raise `limit` only if the total says it is worth it.
+
+        Run what you find by its `tool_key`, exactly as given. A display name
+        is not a key, and inferring one produces a tool that does not exist.
         """
         return impl.search_tools(query, deployed_only=deployed_only, limit=limit, device=device)
 

@@ -105,7 +105,7 @@ def test_listing_carries_what_choosing_a_tool_needs():
     """Names alone forced a schema fetch per candidate, which is the expensive way to choose."""
     from proto_tools.mcp import tools as impl
 
-    entry = next(e for e in impl.list_tools(device="local") if e["tool"] == "esmfold-prediction")
+    entry = next(e for e in impl.list_tools(device="local") if e["tool_key"] == "esmfold-prediction")
 
     assert entry["category"] == "structure_prediction"
     assert entry["summary"] and entry["uses_gpu"] is True
@@ -136,7 +136,7 @@ def test_an_in_process_tool_says_it_needs_no_deployment_and_why(monkeypatch):
     monkeypatch.setattr(impl, "deployed_keys", lambda device, **_kwargs: set())
     monkeypatch.setattr(impl, "answered_in_process_keys", lambda: {"bindcraft-design"})
 
-    entry = next(e for e in impl.list_tools(device="modal") if e["tool"] == "bindcraft-design")
+    entry = next(e for e in impl.list_tools(device="modal") if e["tool_key"] == "bindcraft-design")
 
     assert entry["runs_in_process"] is True
     assert "no deployment is needed" in entry["note"]
@@ -354,14 +354,14 @@ def test_search_matches_natural_language_queries(monkeypatch):
     from proto_tools.mcp import tools as impl
 
     catalogue = [
-        {"tool": "tmalign-alignment", "app": "a", "deployed": True},
-        {"tool": "esm2-score", "app": "b", "deployed": True},
+        {"tool_key": "tmalign-alignment", "app": "a", "deployed": True},
+        {"tool_key": "esm2-score", "app": "b", "deployed": True},
     ]
     # setattr, not assign-then-del: deleting removes the real function for the rest of the
     # session rather than restoring it, and every later test calling it then fails.
     monkeypatch.setattr(impl, "list_tools", lambda **_kwargs: catalogue)
     found = impl.search_tools("compare two protein structures")
-    assert [h["tool"] for h in found["hits"]][:1] == ["tmalign-alignment"], found
+    assert [h["tool_key"] for h in found["tools"]][:1] == ["tmalign-alignment"], found
 
 
 def test_search_is_capped_and_says_how_many_it_left_out():
@@ -370,17 +370,17 @@ def test_search_is_capped_and_says_how_many_it_left_out():
 
     found = impl.search_tools("compare two protein structures", deployed_only=False, limit=5, device="local")
 
-    assert len(found["hits"]) == 5
+    assert len(found["tools"]) == 5
     assert found["n_total"] > 5, "the total is what tells a caller whether raising the limit is worth it"
-    assert found["hits"][0]["score"] >= found["hits"][-1]["score"], "hits are ordered by the score they carry"
+    assert found["tools"][0]["score"] >= found["tools"][-1]["score"], "hits are ordered by the score they carry"
 
 
 def test_search_ranks_a_tool_named_for_the_query_above_one_that_merely_mentions_it():
     """Rewriting "fold" to "structure" used to discard the token that matches esmfold in the key."""
     from proto_tools.mcp import tools as impl
 
-    hits = impl.search_tools("fold a protein", deployed_only=False, limit=133, device="local")["hits"]
-    ranked = [h["tool"] for h in hits]
+    tools = impl.search_tools("fold a protein", deployed_only=False, limit=133, device="local")["tools"]
+    ranked = [h["tool_key"] for h in tools]
 
     assert ranked.index("esmfold-prediction") < ranked.index("esm-if1-sample"), "inverse folding is the opposite"
 
@@ -391,7 +391,7 @@ def test_a_query_that_matches_nothing_says_what_to_do_instead():
 
     found = impl.search_tools("crystallography", deployed_only=False, device="local")
 
-    assert found["hits"] == [] and found["n_total"] == 0
+    assert found["tools"] == [] and found["n_total"] == 0
     assert "list_tools(category=" in found["hint"] and "structure_prediction" in found["hint"]
 
 
