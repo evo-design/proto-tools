@@ -63,7 +63,7 @@ these:
 | `search_tools` | Finding a tool by description. Returns the best matches with the score each ranked on. |
 | `get_tool_schema` | The input, config, and output schemas, before a first call. |
 | `get_tool_example` | A known-good example input, showing shape rather than payload. |
-| `get_tool_citation` | BibTeX and DOI for the method, when reporting a result. |
+| `get_tool_info` | Where a tool comes from: citation, DOI, the model's own links, and the implementation. |
 | `run_tool` | Running one. |
 | `deploy_tool` | Deploying an app to Modal, after the user approves the spend. |
 

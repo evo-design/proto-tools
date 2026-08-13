@@ -18,7 +18,7 @@ _READ_ONLY_SURFACE = {
     "search_tools",
     "get_tool_schema",
     "get_tool_example",
-    "get_tool_citation",
+    "get_tool_info",
     "run_tool",
 }
 
@@ -147,9 +147,30 @@ def test_a_citation_is_reachable_for_the_tools_that_register_one():
     """An agent reporting a result has to attribute the method, and 132 of 134 ship a cite.bib."""
     from proto_tools.mcp import tools as impl
 
-    cite = impl.get_tool_citation("esmfold-prediction")
-    assert cite["doi"] == "10.1126/science.ade2574"
-    assert "@article" in cite["bibtex"]
+    info = impl.get_tool_info("esmfold-prediction")
+    assert info["doi"] == "10.1126/science.ade2574"
+    assert "@article" in info["bibtex"]
+
+
+def test_provenance_points_at_both_the_model_and_the_implementation():
+    """Two different questions: whose method is this, and what code ran it."""
+    from proto_tools.mcp import tools as impl
+
+    info = impl.get_tool_info("esmfold-prediction")
+
+    assert info["source"].startswith(f"{impl.SOURCE_REPO}/tree/main/proto_tools/tools/")
+    assert info["source"].endswith("/esmfold"), "the toolkit directory, not the file"
+    assert "github" in info["links"], "the model's own repository, which is not ours"
+
+
+def test_provenance_derives_for_every_registered_tool():
+    """The source path is read from the registry, so a tool laid out unusually shows up here."""
+    from proto_tools.mcp import tools as impl
+    from proto_tools.tools import ToolRegistry
+
+    missing = [s.key for s in ToolRegistry.list_all() if not impl._source_url(s.source_file)]
+
+    assert missing == [], f"no source URL for: {missing}"
 
 
 def test_the_raised_error_still_names_the_key_and_stays_a_ValueError():
