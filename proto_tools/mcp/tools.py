@@ -263,7 +263,7 @@ def list_tools(
         if category is not None and spec.category != category:
             continue
         entry: dict[str, Any] = {
-            "tool": key,
+            "tool_key": key,
             "category": spec.category,
             "summary": spec.description,
             "uses_gpu": spec.uses_gpu,
@@ -419,22 +419,24 @@ def search_tools(
     search returns nothing for those, which reads as "no such tool exists"
     rather than "rephrase".
 
-    Returns the top ``limit`` under ``hits``, each carrying the ``score`` out of 100 it ranked
+    Returns the top ``limit`` under ``tools``, each carrying the ``score`` out of 100 it ranked
     on, with ``n_total`` for how many matched in all. Broad queries match half the catalogue,
     and an agent that cannot tell first place from fiftieth pays for the whole list to find out.
+
+    Take the key to run from each entry's ``tool_key``. A display name is not a key.
     """
     terms = [_stem(t) for t in re.split(r"[^a-z0-9]+", query.lower()) if t not in _STOPWORDS and len(t) > 1]
     # Both the term and its expansion are scored: rewriting "fold" to "structure" otherwise
     # discards the literal token that matches esmfold and foldseek in a key.
     forms = [{t, _stem(_SYNONYMS.get(t, t))} for t in terms]
     if not forms:
-        return {"hits": [], "n_total": 0, "hint": _no_match_hint()}
+        return {"tools": [], "n_total": 0, "hint": _no_match_hint()}
 
     scored = []
     for entry in list_tools(deployed_only=deployed_only, device=device, environment=environment, client=client):
         score = _tool_score(
             forms,
-            _tokens(entry["tool"]),
+            _tokens(entry["tool_key"]),
             _tokens(entry.get("category") or ""),
             _tokens(entry.get("summary") or ""),
         )
@@ -442,8 +444,8 @@ def search_tools(
             scored.append((score, entry))
 
     # Key order after score, so a tie ranks the same way twice rather than by registry order.
-    scored.sort(key=lambda pair: (-pair[0], pair[1]["tool"]))
-    found = {"hits": [{**entry, "score": score} for score, entry in scored[:limit]], "n_total": len(scored)}
+    scored.sort(key=lambda pair: (-pair[0], pair[1]["tool_key"]))
+    found = {"tools": [{**entry, "score": score} for score, entry in scored[:limit]], "n_total": len(scored)}
     if not scored:
         found["hint"] = _no_match_hint()
     return found
@@ -477,7 +479,7 @@ def get_tool_schema(tool_key: str) -> dict[str, Any]:
     except (ValueError, KeyError):
         return _unknown_key(tool_key)
     return {
-        "tool": tool_key,
+        "tool_key": tool_key,
         "description": (spec.description or "").strip(),
         "input_schema": spec.input_model.model_json_schema(),
         "config_schema": spec.config_model.model_json_schema(),
@@ -543,7 +545,7 @@ def get_tool_citation(tool_key: str) -> dict[str, Any]:
     except (ValueError, KeyError):
         return _unknown_key(tool_key)
     return {
-        "tool": tool_key,
+        "tool_key": tool_key,
         "bibtex": bibtex,
         "doi": ToolRegistry.get_doi(tool_key),
         "docs_url": ToolRegistry.get_docs_url(tool_key),
@@ -773,7 +775,7 @@ def run_tool(
     saved = [v["_saved_to"] for v in _walk_saved(body)]
     # ``ran_on`` because the two can differ: a tool that cannot run remotely is answered here even
     # in a Modal session, and the caller should not have to infer that from the timing.
-    answer = {"ok": True, "tool": tool_key, "ran_on": ran_on, "result": body, "saved_files": saved}
+    answer = {"ok": True, "tool_key": tool_key, "ran_on": ran_on, "result": body, "saved_files": saved}
     if drift := drift_for(tool_key, ran_on, environment=environment, client=client):
         answer["warnings"] = drift
     return answer
@@ -884,7 +886,7 @@ async def deploy_tool(
         )
         if not ok:
             return {"ok": False, "app": app, "error": "deploy failed", "build_output": _log_tail(Path(logs))}
-    return {"ok": True, "app": app, "environment": environment, "tool": tool_key}
+    return {"ok": True, "app": app, "environment": environment, "tool_key": tool_key}
 
 
 #: Lines of build output returned when a deploy fails. Enough for the traceback Modal ends on,

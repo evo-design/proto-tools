@@ -34,7 +34,7 @@ def test_every_registered_tool_is_available_locally() -> None:
     """Nothing is provisioned in advance here, so the catalogue is the registry itself."""
     from proto_tools.mcp import tools as impl
 
-    listed = {entry["tool"] for entry in impl.list_tools(deployed_only=True, device="local")}
+    listed = {entry["tool_key"] for entry in impl.list_tools(deployed_only=True, device="local")}
     assert listed == {spec.key for spec in ToolRegistry.list_all()}
     assert _LOCAL_ONLY_TOOL in listed, "a tool with no deployment still runs on this machine"
 
@@ -92,14 +92,14 @@ def test_a_deployed_tool_is_still_dispatched(monkeypatch) -> None:
     sent: dict[str, object] = {}
 
     def fake_dispatch(tool_key, payload, cfg, **_kwargs):
-        sent["tool"] = tool_key
+        sent["tool_key"] = tool_key
         raise RuntimeError("dispatched")
 
     monkeypatch.setattr(client, "dispatch_to_modal", fake_dispatch)
     example = ToolRegistry.get_example_input("esm2-embedding")
     result = impl.run_tool("esm2-embedding", inputs=example.model_dump(mode="json"), device="modal")
 
-    assert sent["tool"] == "esm2-embedding"
+    assert sent["tool_key"] == "esm2-embedding"
     assert result["ok"] is False
 
 
@@ -126,7 +126,7 @@ def test_the_remote_catalogue_includes_tools_answered_in_process() -> None:
     """An agent on a remote device can still call a tool that has no deployment."""
     from proto_tools.mcp import tools as impl
 
-    listed = {entry["tool"]: entry for entry in impl.list_tools(deployed_only=True, device="modal")}
+    listed = {entry["tool_key"]: entry for entry in impl.list_tools(deployed_only=True, device="modal")}
     entry = listed.get(_LOCAL_ONLY_TOOL)
     assert entry is not None, "a local_only tool is usable on modal, so it belongs in the catalogue"
     assert entry["available"] is True
