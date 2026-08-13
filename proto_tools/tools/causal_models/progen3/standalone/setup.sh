@@ -91,7 +91,9 @@ echo "Installing torch..."
 # Pin torch to upstream progen3's requirement (torch>=2.5.0,<2.5.2).
 # flash-attn and megablocks wheels must match this exact torch ABI.
 # Upstream uses cu124 wheels; torch 2.5.x is not on the cu126 index.
-uv pip install "torch>=2.5.0,<2.5.2" --extra-index-url "https://download.pytorch.org/whl/cu124" --refresh
+# torch 2.5.x pins nvidia-cudnn-cu12==9.1.0.70, which the cu124 index no longer carries; without
+# this uv's first-index default refuses to source it from PyPI, where it remains.
+uv pip install "torch>=2.5.0,<2.5.2" --extra-index-url "https://download.pytorch.org/whl/cu124" --index-strategy unsafe-best-match --refresh
 
 echo "Installing build dependencies..."
 uv pip install psutil ninja packaging setuptools wheel numpy

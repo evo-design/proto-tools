@@ -86,6 +86,11 @@ Some tools have hard version pins for ABI compatibility with pre-built wheels (f
 - `evo2`: `torch==2.6.0` (flash-attn + transformer-engine compatibility)
 - `borzoi`: `torch==2.7.1` (flash-attn wheel compatibility)
 
+PyTorch prunes old wheels from `download.pytorch.org/whl/<variant>`, so a pinned torch can stop
+resolving with no change here; uv's default `first-index` strategy will not fall back to PyPI.
+Affected pins pass `--index-strategy unsafe-best-match` on the install line.
+`tests/tool_infra_tests/test_torch_index_pruning.py` dry-runs every pin against each variant daily.
+
 ### Compatibility Matrices
 
 Based on official sources (PyTorch RELEASE.md, JAX docs, NVIDIA CUDA compatibility):

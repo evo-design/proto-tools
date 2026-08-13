@@ -99,7 +99,9 @@ echo "CC: $(which gcc) ($(gcc --version | head -1))"
 # Install Python packages
 # ============================================================================
 echo "Installing torch..."
-uv pip install torch==2.6.0 --extra-index-url "${RECOMMENDED_TORCH_INDEX}" --refresh
+# torch 2.6.0+cu124 pins nvidia-cudnn-cu12==9.1.0.70, which the cu124 index no longer carries;
+# without this uv's first-index default refuses to source it from PyPI, where it remains.
+uv pip install torch==2.6.0 --extra-index-url "${RECOMMENDED_TORCH_INDEX}" --index-strategy unsafe-best-match --refresh
 
 echo "Installing build dependencies..."
 uv pip install psutil ninja packaging setuptools wheel numpy

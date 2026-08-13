@@ -93,7 +93,11 @@ echo "CC: $(which gcc) ($(gcc --version | head -1))"
 # Install Python packages
 # ============================================================================
 echo "Installing torch..."
-uv pip install torch==2.6.0 --extra-index-url "${RECOMMENDED_TORCH_INDEX}" --refresh
+# torch 2.6.0 is absent from the cu128 index entirely, and on cu124 its pinned
+# nvidia-cudnn-cu12==9.1.0.70 has been pruned. Either way uv's first-index default refuses to fall
+# back to PyPI, which still carries both. The recommended index is kept rather than forced to cu124
+# so drivers 550-569 still get a native +cu126 build.
+uv pip install torch==2.6.0 --extra-index-url "${RECOMMENDED_TORCH_INDEX}" --index-strategy unsafe-best-match --refresh
 
 echo "Installing build dependencies..."
 uv pip install psutil ninja packaging setuptools wheel numpy
