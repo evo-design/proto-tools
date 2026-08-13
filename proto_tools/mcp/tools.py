@@ -531,22 +531,54 @@ def get_tool_example(tool_key: str) -> dict[str, Any] | None:
     return None if example is None else _elide(example.model_dump(mode="json"))
 
 
-def get_tool_citation(tool_key: str) -> dict[str, Any]:
-    """Return the BibTeX citation and DOI for the work a tool implements.
+#: Where the implementations live, for a caller who wants to read the one that produced their result.
+SOURCE_REPO = "https://github.com/evo-design/proto-tools"
 
-    An agent that reports results is expected to attribute the method it used, and the
-    reference is already in the tool's ``cite.bib``. ``bibtex`` is ``None`` for the few
-    tools that register none.
+
+def _source_url(source_file: str | Path | None) -> str | None:
+    """The toolkit directory a tool is implemented in, as a URL.
+
+    Every tool lives at ``proto_tools/tools/{category}/{toolkit}/``, so the directory is derived
+    from the registered source path rather than reassembled from the key -- a key does not always
+    split into its toolkit ("esm-if1-sample" is one toolkit and a two-word action).
+
+    The last ``proto_tools`` component is the package root: a checkout is usually inside a directory
+    of a similar name, so the first match would climb one level too high.
+    """
+    if not source_file:
+        return None
+    parts = Path(source_file).parts
+    if "proto_tools" not in parts:
+        return None
+    root = len(parts) - 1 - parts[::-1].index("proto_tools")
+    return f"{SOURCE_REPO}/tree/main/{'/'.join(parts[root:-1])}"
+
+
+def get_tool_info(tool_key: str) -> dict[str, Any]:
+    """Where a tool comes from: who built the model, how to cite it, and the code that runs it.
+
+    Separate from ``get_tool_schema``, which answers "what arguments does this take" and is called
+    before every run. This answers "what is this and who should be credited", which is wanted when
+    reporting a result rather than producing one, so folding it into the schema would enlarge the
+    most frequent call for the sake of the least frequent need.
+
+    ``source`` is this project's implementation -- the wrapper, its environment and its example.
+    ``links`` are the model's own: its authors' repository, paper and published weights.
     """
     from proto_tools.tools import ToolRegistry
 
     try:
-        bibtex = ToolRegistry.get_citation(tool_key)
+        spec = ToolRegistry.get(tool_key)
     except (ValueError, KeyError):
         return _unknown_key(tool_key)
+
     return {
         "tool_key": tool_key,
-        "bibtex": bibtex,
+        "description": spec.description,
+        "category": spec.category,
+        "source": _source_url(spec.source_file),
+        "links": ToolRegistry.get_links(tool_key) or {},
+        "bibtex": ToolRegistry.get_citation(tool_key),
         "doi": ToolRegistry.get_doi(tool_key),
         "docs_url": ToolRegistry.get_docs_url(tool_key),
     }

@@ -180,12 +180,14 @@ def build_server(device: Device = "modal") -> FastMCP:
         return impl.get_tool_example(tool_key)
 
     @mcp.tool
-    def get_tool_citation(tool_key: str) -> dict[str, Any]:
-        """Get the BibTeX citation and DOI for the method a tool implements.
+    def get_tool_info(tool_key: str) -> dict[str, Any]:
+        """Where a tool comes from: who built the model, how to cite it, and the code that runs it.
 
-        Use this when reporting results, so the underlying work is attributed.
+        Use this when reporting results, so the method is attributed and a reader can follow it
+        back to the paper, the weights, or the implementation. Separate from get_tool_schema, which
+        answers what arguments a tool takes and is called before every run.
         """
-        return impl.get_tool_citation(tool_key)
+        return impl.get_tool_info(tool_key)
 
     @mcp.tool
     async def run_tool(
