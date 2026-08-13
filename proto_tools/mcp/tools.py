@@ -578,8 +578,6 @@ def get_tool_info(tool_key: str) -> dict[str, Any]:
         "category": spec.category,
         "source": _source_url(spec.source_file),
         "links": ToolRegistry.get_links(tool_key) or {},
-        # Named for the format rather than the concept, and kept identical to what get_tool_citation
-        # returned, so this is a strict superset of the call it replaces.
         "bibtex": ToolRegistry.get_citation(tool_key),
         "doi": ToolRegistry.get_doi(tool_key),
         "docs_url": ToolRegistry.get_docs_url(tool_key),
