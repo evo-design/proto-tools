@@ -1,0 +1,15 @@
+code:
+  spdx: MIT
+  url: https://github.com/evo-design/proto-tools
+data:
+  name: Genomic Intelligence
+  spdx: Custom (Genomic Intelligence Terms of Service)
+  url: https://docs.genomicintelligence.ai
+  text: Predictions are returned by a hosted API under Genomic Intelligence's terms of service. An API key is required. Research and development use; not for clinical or diagnostic decisions.
+  attribution_required: true
+commercial_use: restricted
+redistribution: false
+attribution_required: true
+proto_tools_original: true
+notes: proto-tools original client code (MIT) calling the Genomic Intelligence /v1 REST API over HTTPS. No model weights are distributed; inference runs on the vendor's hosted service and requires a GI_API_KEY bearer token.
+last_updated: '2026-08-19'

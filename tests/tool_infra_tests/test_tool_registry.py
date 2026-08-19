@@ -902,6 +902,14 @@ def test_local_cpu_tools_match_known_set():
         "pubchem-fetch",
         "sequence-fetch",
         "uniprot-fetch",
+        # sequence_scoring — thin clients for the hosted Genomic Intelligence API
+        "gi-annotation",
+        "gi-chromatin",
+        "gi-enhancer",
+        "gi-expression",
+        "gi-find-genes-and-predict-expression",
+        "gi-promoter",
+        "gi-splice",
         # mutagenesis — trivial pure-Python samplers
         "random-nucleotide-sample",
         "random-protein-sample",
