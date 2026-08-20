@@ -3,7 +3,7 @@
 # Genomic Intelligence
 
 > [!NOTE]
-> **License:** Genomic Intelligence retrieves data from Genomic Intelligence, distributed under Genomic Intelligence Terms of Service. Attribution to Genomic Intelligence is required when the data is redistributed. The client wrapper code is MIT-licensed. Please refer to [the data terms](https://docs.genomicintelligence.ai) for full terms.
+> **License:** Genomic Intelligence retrieves data from Genomic Intelligence, distributed under Genomic Intelligence Terms of Service. Attribution to Genomic Intelligence is required when the data is redistributed. The client wrapper code is MIT-licensed. Please refer to [the data terms](https://docs.genomicintelligence.ai) for full terms. Research and development use. Not for clinical or diagnostic decisions.
 
 ## Overview
 
@@ -66,7 +66,7 @@ Use this to rank candidate enhancers, or as a dual-objective fitness function wh
 
 ### GI Chromatin State (`gi-chromatin`)
 
-Scores each window against a large panel of chromatin assays across many cell types, returning the calls above the threshold plus per-category counts.
+Scores each window against a large panel of chromatin assays across many cell types, returning how many calls clear the threshold, per window and per assay category.
 
 #### Applications
 
@@ -75,12 +75,12 @@ Use this to ask whether a sequence looks accessible, bound, or marked in a given
 #### Usage Tips
 
 - **Minimum input is 200 bp.**
-- **The panel is large.** Lowering `threshold` materially increases response size; the per-category counts in the summary are usually enough without reading every call.
-- **Calls span many cell types.** A positive call is not specific to one context unless you filter by category.
+- **The panel is large.** Lowering `threshold` materially increases the size of the response the service returns.
+- **Calls span many cell types and assays.** The tool reports totals and per-category counts rather than the individual calls, so a high count is not evidence about any one cellular context.
 
 ### GI Gene Annotation (`gi-annotation`)
 
-Finds transcripts de novo in raw sequence with no reference, returning gene bounds, strand, TSS and poly(A) positions, and — for structure-aware models — exon, intron and CDS spans.
+Finds transcripts de novo in raw sequence with no reference, returning each transcript's bounds, strand, confidence score, and TSS and poly(A) positions.
 
 #### Applications
 

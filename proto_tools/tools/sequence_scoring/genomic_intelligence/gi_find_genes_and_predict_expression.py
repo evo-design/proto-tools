@@ -8,8 +8,8 @@ This is the one endpoint with a delivery rule rather than a delivery preference:
 a synchronous request above 50,000 bp is refused with ``413 sync_too_large``, so
 long loci must set ``respond_async``. The tool does that automatically. Its
 length ceiling is the endpoint's own 500,000 bp, which is not the same as the
-expression model's window — reading the model's number here is a known way to
-reject input the service would have accepted.
+expression model's window; gating on the model's number here rejects input the
+service accepts.
 """
 
 from __future__ import annotations
@@ -50,7 +50,8 @@ class GIFindGenesInput(BaseToolInput):
 
     Attributes:
         sequences (list[GISequence]): Loci to process. A bare DNA string is
-            accepted and coerced. Each must be at least 1,000 bp.
+            accepted and coerced. Each must be at least 1,000 bp, the
+            endpoint's published floor.
     """
 
     sequences: list[GISequence] = InputField(

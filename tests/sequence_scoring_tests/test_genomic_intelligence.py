@@ -407,7 +407,8 @@ def test_api_error_carries_code_and_request_id() -> None:
 
 
 # ============================================================================
-# Integration — live API, skipped unless the run-integration label is set
+# Integration — live API, skipped unless pytest runs with --integration
+# (in CI, the run-integration label)
 # ============================================================================
 
 

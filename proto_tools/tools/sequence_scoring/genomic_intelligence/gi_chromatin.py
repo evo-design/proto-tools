@@ -2,7 +2,7 @@
 
 Scores each window against a large panel of chromatin assays — accessibility,
 transcription-factor occupancy and histone marks — across many cell types, and
-returns the calls that clear the threshold together with per-category counts.
+returns how many calls clear the threshold, per window and per assay category.
 """
 
 from __future__ import annotations

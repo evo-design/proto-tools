@@ -270,9 +270,6 @@ def run_gi_promoter(
 ) -> GIPromoterOutput:
     """Predict promoter regions for each submitted sequence.
 
-    One HTTPS request per sequence. Sequence lengths are checked against the
-    endpoint's published floor before any request is issued.
-
     Args:
         inputs (GIPromoterInput): Sequences to score.
         config (GIPromoterConfig): API credentials, model selection, threshold.

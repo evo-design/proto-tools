@@ -440,7 +440,7 @@ def call_predict(
     options: dict[str, Any] | None = None,
     extra_body: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Call one ``POST /v1/tasks/{task}/predict`` endpoint.
+    """Call the predict operation for one task.
 
     Each task is its own published operation with its own request schema and its
     own closed ``options`` object, so option keys are never interchangeable

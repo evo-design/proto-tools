@@ -1,10 +1,10 @@
 """De-novo gene and transcript annotation via the Genomic Intelligence hosted API.
 
-Finds transcripts in raw sequence without a reference, returning gene bounds,
-TSS and poly(A) positions, and — for structure-aware models — exon, intron and
-CDS spans. Detection is strand-insensitive: genes on either strand are found
-from a single submission, and the reported ``strand`` is relative to the
-sequence as submitted.
+Finds transcripts in raw sequence without a reference, returning each
+transcript's bounds, strand, confidence score, and TSS and poly(A) positions.
+Detection is strand-insensitive: genes on either strand are found from a single
+submission, and the reported ``strand`` is relative to the sequence as
+submitted.
 
 Annotation is the slowest of the tasks. Setting ``respond_async`` on the config
 returns a job id immediately and polls it, which avoids holding a long HTTP
