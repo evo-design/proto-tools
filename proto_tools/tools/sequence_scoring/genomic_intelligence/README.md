@@ -38,7 +38,7 @@ Use this to locate transcription start regions in unannotated sequence, or to sc
 
 ### GI Splice Sites (`gi-splice`)
 
-Predicts splice donor and acceptor sites, returning each site's position, class and score together with per-class counts.
+Predicts splice donor and acceptor sites, returning each site's span, class and score together with per-class counts.
 
 #### Applications
 
@@ -47,6 +47,7 @@ Use this to locate exon boundaries in unannotated transcripts, to check whether 
 #### Usage Tips
 
 - **Submit transcript orientation.** The model is strand-specific, and the wrong strand does not fail loudly: it returns sites at different positions, frequently at high confidence. No score or count identifies a mis-oriented submission after the fact, so reverse-complement minus-strand genes before calling.
+- **A site's `start`/`end` is a token span, not the junction base.** It bounds one variable-width tokenizer token — 4–10 bp across the sequences measured so far — and the exon/intron boundary lies somewhere inside it. Locate a boundary to within the span; do not reduce the pair to a single base position, and do not intersect it against reference annotation as though it were one.
 - **Minimum input is 100 bp.**
 - **Very low thresholds return every scored position.** The response grows accordingly; the default is a working value.
 

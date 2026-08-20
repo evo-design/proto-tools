@@ -99,17 +99,30 @@ class GISpliceConfig(GIConfig):
 class SpliceSite(BaseModel):
     """One predicted splice site.
 
+    ``start`` and ``end`` bound a tokenizer span, not the exon/intron junction.
+    The span is one variable-width token -- 4-10 bp across the sequences measured
+    so far -- and the junction lies somewhere inside it, so neither endpoint is a
+    base-resolution boundary coordinate.
+
     Attributes:
         name (str): Service-assigned site label.
-        start (int): 0-based inclusive start in the submitted sequence.
-        end (int): 0-based exclusive end in the submitted sequence.
+        start (int): 0-based inclusive start of the site's token span.
+        end (int): 0-based exclusive end of the site's token span.
         site_type (str): ``donor`` or ``acceptor``.
         score (float): Model score for the site.
     """
 
     name: str = Field(title="Name", default="", description="Service-assigned site label")
-    start: int = Field(title="Start", description="0-based inclusive start in the submitted sequence", ge=0)
-    end: int = Field(title="End", description="0-based exclusive end in the submitted sequence", ge=0)
+    start: int = Field(
+        title="Start",
+        description="0-based inclusive start of the site's token span in the submitted sequence",
+        ge=0,
+    )
+    end: int = Field(
+        title="End",
+        description="0-based exclusive end of the site's token span in the submitted sequence",
+        ge=0,
+    )
     site_type: str = Field(title="Site Type", description="'donor' or 'acceptor'")
     score: float = Field(title="Score", description="Model score for the site")
 
