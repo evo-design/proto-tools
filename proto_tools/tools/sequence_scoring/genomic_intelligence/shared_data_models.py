@@ -276,7 +276,8 @@ def validate_gi_sequence(sequence: str, *, min_bp: int, task: str) -> str:
     round-trip ``422`` into an immediate, local error.
 
     Args:
-        sequence (str): Raw DNA sequence.
+        sequence (str): DNA sequence. Whitespace is stripped first, matching
+            how the API measures length, so a line-wrapped body is accepted.
         min_bp (int): The task's published floor in base pairs.
         task (str): Task name, used in the error message.
 
@@ -287,7 +288,13 @@ def validate_gi_sequence(sequence: str, *, min_bp: int, task: str) -> str:
         ValueError: If the sequence is empty, contains non-nucleotide
             characters, or falls outside the task's published bounds.
     """
-    cleaned = validate_dna_sequence(sequence)
+    # Strip whitespace before validating. The API strips newlines, spaces and
+    # tabs and measures length against the stripped string, so a line-wrapped
+    # FASTA body is legal input there. The shared validate_dna_sequence upper-
+    # cases but does not strip, so passing a wrapped body straight through
+    # reports it as an invalid nucleotide character and refuses a sequence the
+    # service would have scored.
+    cleaned = validate_dna_sequence("".join(sequence.split()))
     length = len(cleaned)
     if length < min_bp:
         raise ValueError(

@@ -406,6 +406,33 @@ def test_api_error_carries_code_and_request_id() -> None:
     assert "abc-123" in str(error)
 
 
+
+class TestWrappedSequencesMatchServerSemantics:
+    """The API strips whitespace and measures the stripped length; so do we.
+
+    The shared validate_dna_sequence upper-cases but does not strip, so a
+    line-wrapped body used to be refused as an invalid nucleotide character —
+    stricter than the service, which scores it.
+    """
+
+    def test_a_wrapped_body_is_accepted_and_measured_stripped(self) -> None:
+        bases = "ACGT" * 2300
+        wrapped = "\n".join(bases[i : i + 60] for i in range(0, len(bases), 60))
+        assert len(validate_gi_sequence(wrapped, min_bp=9198, task="expression")) == 9200
+
+    def test_length_is_judged_on_bases_not_characters(self) -> None:
+        """9,000 bases plus newlines exceeds 9,198 characters but is still short."""
+        bases = "ACGT" * 2250
+        wrapped = "\n".join(bases[i : i + 45] for i in range(0, len(bases), 45))
+        assert len(wrapped) > 9198
+        with pytest.raises(ValueError, match="9,000 bp"):
+            validate_gi_sequence(wrapped, min_bp=9198, task="expression")
+
+    def test_ambiguity_codes_are_still_refused(self) -> None:
+        with pytest.raises(ValueError, match="Invalid nucleotide"):
+            validate_gi_sequence("ACGTRACGT" * 20, min_bp=50, task="enhancer")
+
+
 # ============================================================================
 # Integration — live API, skipped unless pytest runs with --integration
 # (in CI, the run-integration label)
