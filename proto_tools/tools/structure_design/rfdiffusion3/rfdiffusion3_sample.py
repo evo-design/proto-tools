@@ -126,9 +126,7 @@ class RFdiffusion3DesignSpec(BaseModel):
 
         select_hotspots (bool | str | dict[str, str] | None): Atom or residue
             hotspots for binder/PPI design (typically <=4.5 Angstroms to any
-            heavy atom in the designed structure). Requires ``contig`` (not
-            just ``length``) to state how the designed binder relates to
-            ``input_structure``, e.g. ``"A1-1366/0,80-120"``.
+            heavy atom in the designed structure).
 
         symmetry (str | dict[str, Any] | None): Symmetry for homo-oligomer design.
             A group-id string (e.g. ``"C3"``) is wrapped as ``{"id": "C3"}``; a
@@ -219,7 +217,7 @@ class RFdiffusion3DesignSpec(BaseModel):
     select_hotspots: bool | str | dict[str, str] | None = Field(
         default=None,
         title="Hotspots",
-        description="Atom/residue-level hotspots for binder design; requires 'contig', not just 'length'",
+        description="Atom/residue-level hotspots for binder design (True/False, contig string, or dict)",
         examples=["A24,A35,A50"],
     )
     symmetry: str | dict[str, Any] | None = Field(
@@ -375,22 +373,52 @@ class RFdiffusion3DesignSpec(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_hotspots_require_contig(self) -> Any:
-        """Reject ``select_hotspots`` without ``contig``.
+    def validate_composition_spec(self) -> Any:
+        """Mirror rfd3's own composition rules so a bad spec fails here, not after GPU dispatch.
 
-        Hotspots mark contacts for a designed binder chain, but naming them doesn't tell
-        rfd3 how that chain relates to ``input_structure`` -- ``length`` alone leaves the
-        new chain's composition undefined relative to the input, and rfd3 rejects the spec
-        deep in its own validation (past ours) with "Input provided but unused in
-        composition specification". ``contig`` is what actually states the composition,
-        e.g. ``"A1-1366/0,80-120"`` to keep chain A and add a new 80-120 residue chain.
+        Upstream ``DesignInputSpecification.validate_input_schema`` (rfd3
+        ``inference/input_parsing.py``) enforces four rules, all of which otherwise surface
+        only inside the subprocess -- after weights load and a real dispatch, with no
+        structures produced. ``select_*`` fields are *not* part of any of them: naming
+        hotspots on a target says nothing about how the design composes with that target,
+        so hotspots alongside a bare ``length`` trips rule 2 like any other unused input.
         """
-        if self.select_hotspots is not None and self.contig is None:
+        # Rule 1: something must establish what to build. Every other typed field
+        # (symmetry, ligand, partial_t, plddt_enhanced, ...) only modifies a composition.
+        if self.input_structure is None and self.contig is None and self.length is None:
             raise ValueError(
-                "'select_hotspots' requires 'contig' to define the designed chain's "
-                "composition relative to 'input_structure' (e.g. 'A1-1366/0,80-120' to "
-                "keep chain A and add a new 80-120 residue binder). 'length' alone doesn't "
-                "state that relationship."
+                "Provide at least one of 'input_structure', 'contig', or 'length': the "
+                "remaining fields (symmetry, ligand, select_*, plddt_enhanced, ...) modify "
+                "a composition but cannot define one."
+            )
+
+        # Rule 2: an input structure has to be consumed by the composition itself. Only
+        # these four fields place input atoms into the design; select_* fields annotate
+        # atoms that some other field already placed.
+        consumers = ("contig", "unindex", "ligand", "partial_t")
+        if self.input_structure is not None and all(getattr(self, f) is None for f in consumers):
+            raise ValueError(
+                "'input_structure' is unused: pass one of 'contig', 'unindex', 'ligand', or "
+                "'partial_t' to state how the input enters the design. For binder design use "
+                "a contig such as 'A1-100/0,80-120' (keep chain A, add an 80-120 residue "
+                "binder); 'length' alone describes a chain unrelated to the input, and "
+                "'select_*' fields only annotate atoms placed by those four."
+            )
+
+        if self.partial_t is None:
+            # Rule 3: unindexed motifs float inside a design of known extent.
+            if self.unindex is not None and self.contig is None and self.length is None:
+                raise ValueError(
+                    "'unindex' requires 'contig' or 'length' to size the design its unindexed motifs are placed into."
+                )
+        elif self.length is not None:
+            # Rule 4: partial diffusion re-noises the input, so its extent is already fixed.
+            # Upstream's companion check (partial diffusion requires an input) needs no mirror:
+            # rule 1 and ``validate_selections_require_input_structure`` already reject every
+            # input-free spec that could reach it.
+            raise ValueError(
+                "'length' must not be combined with 'partial_t': partial diffusion "
+                "re-noises 'input_structure', so the design's extent comes from the input."
             )
         return self
 
