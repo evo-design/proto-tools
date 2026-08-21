@@ -7,6 +7,7 @@ sequence submit-and-poll paths against EBI's iprscan5 endpoint.
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 from pydantic import ValidationError
 
 from proto_tools.tools.database_retrieval import (
@@ -16,6 +17,7 @@ from proto_tools.tools.database_retrieval import (
     run_interproscan_fetch,
     run_uniprot_fetch,
 )
+from proto_tools.tools.database_retrieval.interproscan import interproscan_fetch
 from proto_tools.tools.database_retrieval.interproscan.interproscan_fetch import (
     _DIRECT_LOOKUP_MAX_PAGES,
     _direct_lookup,
@@ -269,6 +271,43 @@ def test_direct_lookup_wraps_corrupt_json_with_context():
         _direct_lookup("P04637", InterProScanFetchConfig(), session)
 
 
+class _ResetThenOkSession:
+    """A session whose ``get``/``post`` mimics a reused keep-alive connection the server already closed."""
+
+    def __init__(self, failures: int, response):
+        self.failures = failures
+        self.response = response
+        self.calls = 0
+
+    def get(self, *args, **kwargs):
+        return self._call()
+
+    def post(self, *args, **kwargs):
+        return self._call()
+
+    def _call(self):
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise requests.exceptions.ConnectionError(
+                "Connection aborted.", ConnectionResetError(104, "Connection reset by peer")
+            )
+        return self.response
+
+
+def test_direct_lookup_retries_connection_reset(monkeypatch):
+    """Same reused-connection failure as rest.uniprot.org, here against InterPro's REST API."""
+    monkeypatch.setattr(interproscan_fetch, "_BACKOFF_SECONDS", 0.0)
+    response = MagicMock()
+    response.status_code = 200
+    response.raise_for_status.return_value = None
+    response.text = '{"results": [], "next": null}'
+    response.json.return_value = {"results": [], "next": None}
+    session = _ResetThenOkSession(failures=2, response=response)
+    output = _direct_lookup("P04637", InterProScanFetchConfig(), session)
+    assert output.num_domains == 0
+    assert session.calls == 3
+
+
 # ---------------------------------------------------------------------------
 # iprscan5 submit + parse tests
 # ---------------------------------------------------------------------------
@@ -293,6 +332,18 @@ def test_submit_iprscan_returns_plain_text_job_id():
     posted_data = dict(kwargs["data"]) if isinstance(kwargs["data"], list) else kwargs["data"]
     assert posted_data["email"] == "dev@example.org"
     assert posted_data["sequence"] == "MKTILVAA"
+
+
+def test_submit_iprscan_retries_connection_reset(monkeypatch):
+    """Same reused-connection failure as rest.uniprot.org, here against EBI's iprscan5 submit endpoint."""
+    monkeypatch.setattr(interproscan_fetch, "_BACKOFF_SECONDS", 0.0)
+    response = MagicMock()
+    response.text = "iprscan5-job-123"
+    response.raise_for_status.return_value = None
+    session = _ResetThenOkSession(failures=2, response=response)
+    job_id = _submit_iprscan("MKT", "dev@example.org", InterProScanFetchConfig(email="dev@example.org"), session)
+    assert job_id == "iprscan5-job-123"
+    assert session.calls == 3
 
 
 def test_submit_iprscan_rejects_empty_body():

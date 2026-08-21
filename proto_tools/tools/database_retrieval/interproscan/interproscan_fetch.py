@@ -27,6 +27,7 @@ from proto_tools.utils import (
     build_http_session,
     extract_text_status,
     poll_until_complete,
+    request_with_retry,
 )
 
 logger = logging.getLogger(__name__)
@@ -437,7 +438,12 @@ def _direct_lookup(
         if next_url in seen_urls:
             raise ValueError(f"InterPro pagination cursor revisited URL {next_url!r} for '{accession}'")
         seen_urls.add(next_url)
-        response = session.get(next_url, timeout=_REQUEST_TIMEOUT_SECONDS)
+        current_url = next_url
+
+        def _get(url: str = current_url) -> requests.Response:
+            return session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
+
+        response = request_with_retry(_get, retries=_HTTP_RETRIES, backoff_seconds=_BACKOFF_SECONDS)
         # 204 / 404 = "unknown accession" (InterPro's actual signals).
         if response.status_code in (204, 404):
             raise ValueError(f"InterPro has no entries for UniProt accession '{accession}'")
@@ -585,7 +591,11 @@ def _submit_and_poll(
         status_extractor=extract_text_status,
     )
     result_url = f"{_IPRSCAN5_BASE}/result/{job_id}/json"
-    response = session.get(result_url, timeout=_RESULT_TIMEOUT_SECONDS)
+    response = request_with_retry(
+        lambda: session.get(result_url, timeout=_RESULT_TIMEOUT_SECONDS),
+        retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+    )
     response.raise_for_status()
     try:
         payload = response.json()
@@ -612,7 +622,11 @@ def _submit_iprscan(
     ]
     if config.applications:
         data.extend(("appl", app) for app in config.applications)
-    response = session.post(f"{_IPRSCAN5_BASE}/run/", data=data, timeout=_REQUEST_TIMEOUT_SECONDS)
+    response = request_with_retry(
+        lambda: session.post(f"{_IPRSCAN5_BASE}/run/", data=data, timeout=_REQUEST_TIMEOUT_SECONDS),
+        retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+    )
     response.raise_for_status()
     job_id = response.text.strip()
     if not job_id:
