@@ -22,6 +22,7 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
     build_http_session,
+    request_with_retry,
 )
 
 logger = logging.getLogger(__name__)
@@ -429,10 +430,14 @@ def _resolve_to_cids(inputs: PubChemFetchInput, session: requests.Session) -> li
 
     if inputs.inchi is not None:
         url = f"{_PUBCHEM_BASE}/compound/inchi/cids/JSON"
-        response = session.post(
-            url,
-            data={"inchi": inputs.inchi},
-            timeout=_REQUEST_TIMEOUT_SECONDS,
+        response = request_with_retry(
+            lambda: session.post(
+                url,
+                data={"inchi": inputs.inchi},
+                timeout=_REQUEST_TIMEOUT_SECONDS,
+            ),
+            retries=_HTTP_RETRIES,
+            backoff_seconds=_BACKOFF_SECONDS,
         )
     else:
         if inputs.name is not None:
@@ -441,7 +446,11 @@ def _resolve_to_cids(inputs: PubChemFetchInput, session: requests.Session) -> li
             url = f"{_PUBCHEM_BASE}/compound/smiles/{quote(inputs.smiles, safe='')}/cids/JSON"
         else:
             url = f"{_PUBCHEM_BASE}/compound/inchikey/{quote(inputs.inchikey or '', safe='')}/cids/JSON"
-        response = session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
+        response = request_with_retry(
+            lambda: session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS),
+            retries=_HTTP_RETRIES,
+            backoff_seconds=_BACKOFF_SECONDS,
+        )
 
     if response.status_code == 404:
         return []
@@ -458,7 +467,11 @@ def _fetch_properties(
     """Fetch the requested property bundle for a CID. Returns (record, url)."""
     props = ",".join(config.properties)
     url = f"{_PUBCHEM_BASE}/compound/cid/{cid}/property/{props}/JSON"
-    response = session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
+    response = request_with_retry(
+        lambda: session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS),
+        retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+    )
     response.raise_for_status()
     properties = response.json()["PropertyTable"]["Properties"]
     if not properties:
@@ -476,7 +489,11 @@ def _fetch_synonyms(cid: int, session: requests.Session) -> list[str]:
     other malformed shape raises KeyError via direct dict access.
     """
     url = f"{_PUBCHEM_BASE}/compound/cid/{cid}/synonyms/JSON"
-    response = session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
+    response = request_with_retry(
+        lambda: session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS),
+        retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+    )
     if response.status_code == 404:
         return []
     response.raise_for_status()
@@ -494,7 +511,11 @@ def _fetch_descriptions(cid: int, session: requests.Session) -> list[str]:
     contribute a Title).
     """
     url = f"{_PUBCHEM_BASE}/compound/cid/{cid}/description/JSON"
-    response = session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
+    response = request_with_retry(
+        lambda: session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS),
+        retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+    )
     if response.status_code == 404:
         return []
     response.raise_for_status()
@@ -509,7 +530,11 @@ def _fetch_aids(cid: int, session: requests.Session) -> list[int]:
     For common compounds (e.g., aspirin) this can return thousands of IDs.
     """
     url = f"{_PUBCHEM_BASE}/compound/cid/{cid}/aids/JSON"
-    response = session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
+    response = request_with_retry(
+        lambda: session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS),
+        retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+    )
     if response.status_code == 404:
         return []
     response.raise_for_status()

@@ -22,6 +22,7 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
     build_http_session,
+    request_with_retry,
 )
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
@@ -506,7 +507,11 @@ def _select_record(
 
 def _fetch_prediction(api_url: str, session: requests.Session) -> list[dict[str, Any]] | None:
     """Fetch prediction metadata list. Returns None on 404."""
-    response = session.get(api_url, timeout=_REQUEST_TIMEOUT_SECONDS)
+    response = request_with_retry(
+        lambda: session.get(api_url, timeout=_REQUEST_TIMEOUT_SECONDS),
+        retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+    )
     if response.status_code == 404:
         logger.debug("AlphaFold DB returned 404 for %s", api_url)
         return None
@@ -519,14 +524,22 @@ def _fetch_prediction(api_url: str, session: requests.Session) -> list[dict[str,
 
 def _fetch_text(url: str, session: requests.Session) -> str:
     """Fetch a remote file as text (used for structure files and MSA A3M)."""
-    response = session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
+    response = request_with_retry(
+        lambda: session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS),
+        retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+    )
     response.raise_for_status()
     return response.text
 
 
 def _fetch_plddt(url: str, session: requests.Session) -> list[float]:
     """Fetch the per-residue pLDDT confidence array."""
-    response = session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
+    response = request_with_retry(
+        lambda: session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS),
+        retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+    )
     response.raise_for_status()
     payload = response.json()
     scores = payload.get("confidenceScore")
@@ -537,7 +550,11 @@ def _fetch_plddt(url: str, session: requests.Session) -> list[float]:
 
 def _fetch_pae(url: str, session: requests.Session) -> list[list[float]]:
     """Fetch the PAE matrix as a 2D list of floats."""
-    response = session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
+    response = request_with_retry(
+        lambda: session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS),
+        retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+    )
     response.raise_for_status()
     payload = response.json()
     if not isinstance(payload, list) or not payload:

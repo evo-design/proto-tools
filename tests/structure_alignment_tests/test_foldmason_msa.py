@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 from pydantic import ValidationError
 
 from proto_tools.tools.structure_alignment import (
@@ -14,6 +15,7 @@ from proto_tools.tools.structure_alignment import (
     FoldmasonMSAInput,
     run_foldmason_msa,
 )
+from proto_tools.tools.structure_alignment.foldmason import foldmason_msa
 from proto_tools.tools.structure_alignment.foldmason.foldmason_msa import (
     _msa_dimensions,
     _parse_msa_response_json,
@@ -184,6 +186,73 @@ def test_remote_mode_submits_polls_and_parses_json():
     files = fake_session.post.call_args.kwargs["files"]
     field_names = [name for name, _ in files]
     assert field_names == ["fileNames[]", "queries[]", "fileNames[]", "queries[]"]
+
+
+class _ResetThenOkSession:
+    """A session whose ``post``/``get`` mimic a reused keep-alive connection the server already closed."""
+
+    def __init__(self, failures: int, post_response, get_response):
+        self.failures = failures
+        self.post_response = post_response
+        self.get_response = get_response
+        self.calls = 0
+
+    def post(self, *args, **kwargs):
+        return self._call(self.post_response)
+
+    def get(self, *args, **kwargs):
+        return self._call(self.get_response)
+
+    def close(self):
+        pass
+
+    def _call(self, response):
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise requests.exceptions.ConnectionError(
+                "Connection aborted.", ConnectionResetError(104, "Connection reset by peer")
+            )
+        return response
+
+
+def test_remote_mode_retries_connection_reset(monkeypatch):
+    """Same reused-connection failure as rest.uniprot.org, here against search.foldseek.com."""
+    monkeypatch.setattr(foldmason_msa, "_BACKOFF_SECONDS", 0.0)
+    inputs = FoldmasonMSAInput(structures=[_TINY_PDB, _TINY_PDB], structure_ids=["q1", "q2"])
+    config = FoldmasonMSAConfig()
+
+    submit_response = MagicMock()
+    submit_response.status_code = 200
+    submit_response.raise_for_status.return_value = None
+    submit_response.json.return_value = {"id": "tk-123"}
+
+    result_response = MagicMock()
+    result_response.raise_for_status.return_value = None
+    result_response.json.return_value = {
+        "entries": [
+            {"name": "q1", "aa": "MK", "ss": "DD", "ca": ""},
+            {"name": "q2", "aa": "MK", "ss": "DD", "ca": ""},
+        ],
+        "tree": "(q1,q2);",
+        "scores": [0.8, 0.8],
+        "statistics": {"msaLDDT": 0.8},
+    }
+
+    # 2 failures each on submit and result-fetch, sharing one failure counter against one session --
+    # simplest faithful reproduction of a connection reset hitting either call.
+    fake_session = _ResetThenOkSession(failures=2, post_response=submit_response, get_response=result_response)
+
+    with (
+        patch(
+            "proto_tools.tools.structure_alignment.foldmason.foldmason_msa.build_http_session",
+            return_value=fake_session,
+        ),
+        patch("proto_tools.tools.structure_alignment.foldmason.foldmason_msa.poll_until_complete"),
+    ):
+        output = run_foldmason_msa(inputs, config)
+
+    assert output.success
+    assert output.ticket_id == "tk-123"
 
 
 def test_remote_submit_raises_on_missing_ticket_id():

@@ -40,6 +40,7 @@ from proto_tools.utils import (
     ToolInstance,
     build_http_session,
     poll_until_complete,
+    request_with_retry,
 )
 from proto_tools.utils.device import RemoteDevice
 
@@ -352,7 +353,11 @@ def _remote_multimer_search(
             timeout_seconds=config.timeout_seconds,
         )
         result_url = f"{_FOLDSEEK_BASE}/api/result/download/{ticket_id}"
-        archive_response = session.get(result_url, timeout=_RESULT_DOWNLOAD_TIMEOUT_SECONDS)
+        archive_response = request_with_retry(
+            lambda: session.get(result_url, timeout=_RESULT_DOWNLOAD_TIMEOUT_SECONDS),
+            retries=_HTTP_RETRIES,
+            backoff_seconds=_BACKOFF_SECONDS,
+        )
         archive_response.raise_for_status()
         hits = _parse_m8_archive(archive_response.content)
         return FoldseekMultimerSearchOutput(

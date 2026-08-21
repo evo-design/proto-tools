@@ -4,6 +4,7 @@ Tests for the PDB fetch tools (fetch-entry, fetch-fasta).
 """
 
 import pytest
+import requests
 
 from proto_tools.tools.database_retrieval import (
     PdbFetchConfig,
@@ -12,9 +13,11 @@ from proto_tools.tools.database_retrieval import (
     run_pdb_fetch_entry,
     run_pdb_fetch_fasta,
 )
+from proto_tools.tools.database_retrieval.pdb import shared_data_models
 from proto_tools.tools.database_retrieval.pdb.shared_data_models import (
     _chain_ids_from_header,
     _is_protein_sequence,
+    _request_pdb,
 )
 
 
@@ -32,6 +35,37 @@ def test_is_protein_sequence_rna():
 
 def test_is_protein_sequence_empty():
     assert _is_protein_sequence("") is False
+
+
+class _ResetThenOkSession:
+    """A session whose ``get`` mimics a reused keep-alive connection the server already closed."""
+
+    def __init__(self, failures: int, text: str):
+        self.failures = failures
+        self.text = text
+        self.calls = 0
+
+    def get(self, *args, **kwargs):
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise requests.exceptions.ConnectionError(
+                "Connection aborted.", ConnectionResetError(104, "Connection reset by peer")
+            )
+        response = requests.Response()
+        response.status_code = 200
+        response.url = "https://example/entry.json"
+        response._content = self.text.encode()
+        return response
+
+
+def test_request_pdb_retries_connection_reset(monkeypatch):
+    """Same reused-connection failure as rest.uniprot.org, here against RCSB PDB."""
+    monkeypatch.setattr(shared_data_models, "_BACKOFF_SECONDS", 0.0)
+    session = _ResetThenOkSession(failures=2, text='{"entry": {"id": "1TUP"}}')
+    response = _request_pdb(session, "https://example/entry.json", "pdb-fetch-entry")
+    assert response is not None
+    assert response.json() == {"entry": {"id": "1TUP"}}
+    assert session.calls == 3
 
 
 @pytest.mark.parametrize(
