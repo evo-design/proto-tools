@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+import requests
 
 from proto_tools.entities.structures.structure import BFactorType, Structure
 from proto_tools.tools.database_retrieval import (
@@ -20,6 +21,7 @@ from proto_tools.tools.database_retrieval import (
     run_alphafold_db_fetch,
     run_uniprot_fetch,
 )
+from proto_tools.tools.database_retrieval.alphafold_db import alphafold_db_fetch
 from proto_tools.tools.database_retrieval.alphafold_db.alphafold_db_fetch import (
     AlphaFoldDBFetchOutput,
     _fetch_pae,
@@ -76,6 +78,36 @@ def test_fetch_prediction_returns_none_on_404():
     result = _fetch_prediction("https://example/api", session)
     assert result is None
     session.get.return_value.json.assert_not_called()
+
+
+class _ResetThenOkSession:
+    """A session whose ``get`` mimics a reused keep-alive connection the server already closed."""
+
+    def __init__(self, failures: int, payload):
+        self.failures = failures
+        self.payload = payload
+        self.calls = 0
+
+    def get(self, *args, **kwargs):
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise requests.exceptions.ConnectionError(
+                "Connection aborted.", ConnectionResetError(104, "Connection reset by peer")
+            )
+        response = MagicMock()
+        response.status_code = 200
+        response.raise_for_status.return_value = None
+        response.json.return_value = self.payload
+        return response
+
+
+def test_fetch_prediction_retries_connection_reset(monkeypatch):
+    """Same reused-connection failure as rest.uniprot.org, here against the AFDB API."""
+    monkeypatch.setattr(alphafold_db_fetch, "_BACKOFF_SECONDS", 0.0)
+    session = _ResetThenOkSession(failures=2, payload=[{"modelEntityId": "AF-P04637-F1"}])
+    result = _fetch_prediction("https://example/api", session)
+    assert result == [{"modelEntityId": "AF-P04637-F1"}]
+    assert session.calls == 3
 
 
 # ---------------------------------------------------------------------------
