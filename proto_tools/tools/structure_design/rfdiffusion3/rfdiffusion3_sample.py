@@ -126,7 +126,9 @@ class RFdiffusion3DesignSpec(BaseModel):
 
         select_hotspots (bool | str | dict[str, str] | None): Atom or residue
             hotspots for binder/PPI design (typically <=4.5 Angstroms to any
-            heavy atom in the designed structure).
+            heavy atom in the designed structure). Requires ``contig`` (not
+            just ``length``) to state how the designed binder relates to
+            ``input_structure``, e.g. ``"A1-1366/0,80-120"``.
 
         symmetry (str | dict[str, Any] | None): Symmetry for homo-oligomer design.
             A group-id string (e.g. ``"C3"``) is wrapped as ``{"id": "C3"}``; a
@@ -217,7 +219,7 @@ class RFdiffusion3DesignSpec(BaseModel):
     select_hotspots: bool | str | dict[str, str] | None = Field(
         default=None,
         title="Hotspots",
-        description="Atom/residue-level hotspots for binder design (True/False, contig string, or dict)",
+        description="Atom/residue-level hotspots for binder design; requires 'contig', not just 'length'",
         examples=["A24,A35,A50"],
     )
     symmetry: str | dict[str, Any] | None = Field(
@@ -369,6 +371,26 @@ class RFdiffusion3DesignSpec(BaseModel):
                 "Pass either 'contig' or 'length', not both: a contig already encodes "
                 "its designed-segment lengths, while 'length' is for unconditional "
                 "design with no contig."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_hotspots_require_contig(self) -> Any:
+        """Reject ``select_hotspots`` without ``contig``.
+
+        Hotspots mark contacts for a designed binder chain, but naming them doesn't tell
+        rfd3 how that chain relates to ``input_structure`` -- ``length`` alone leaves the
+        new chain's composition undefined relative to the input, and rfd3 rejects the spec
+        deep in its own validation (past ours) with "Input provided but unused in
+        composition specification". ``contig`` is what actually states the composition,
+        e.g. ``"A1-1366/0,80-120"`` to keep chain A and add a new 80-120 residue chain.
+        """
+        if self.select_hotspots is not None and self.contig is None:
+            raise ValueError(
+                "'select_hotspots' requires 'contig' to define the designed chain's "
+                "composition relative to 'input_structure' (e.g. 'A1-1366/0,80-120' to "
+                "keep chain A and add a new 80-120 residue binder). 'length' alone doesn't "
+                "state that relationship."
             )
         return self
 

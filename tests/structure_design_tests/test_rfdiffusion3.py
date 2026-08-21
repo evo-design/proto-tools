@@ -65,9 +65,10 @@ def test_rfdiffusion3_design_spec_selections_require_input_structure():
     with pytest.raises(ValueError, match=pattern):
         RFdiffusion3DesignSpec(unindex="A244,A274")
 
-    # Happy path 1: input_structure alone with select_*
-    spec = RFdiffusion3DesignSpec(input_structure=synthetic_cif(["A"]), select_hotspots="A24,A35,A50")
-    assert spec.select_hotspots == "A24,A35,A50"
+    # Happy path 1: input_structure alone with a select_* field other than select_hotspots
+    # (select_hotspots additionally requires contig -- see test_rfdiffusion3_hotspots_require_contig).
+    spec = RFdiffusion3DesignSpec(input_structure=synthetic_cif(["A"]), select_buried="A24,A35,A50")
+    assert spec.select_buried == "A24,A35,A50"
 
     # Happy path 2: input_structure + contig + select_* (full motif scaffolding shape)
     spec = RFdiffusion3DesignSpec(
@@ -87,6 +88,31 @@ def test_rfdiffusion3_design_spec_rejects_contig_with_length():
     """Contig and length are mutually exclusive; a contig already encodes its lengths."""
     with pytest.raises(ValueError, match=r"Pass either 'contig' or 'length'"):
         RFdiffusion3DesignSpec(input_structure=synthetic_cif(["A"]), contig="A1-100", length="100")
+
+
+def test_rfdiffusion3_hotspots_require_contig():
+    """select_hotspots + input_structure + length (no contig) is rejected before dispatch.
+
+    Regression: this combination used to pass our validators and reach the rfd3 subprocess,
+    which rejected it deep in its own validation ("Input provided but unused in composition
+    specification") -- a binder-design attempt (hotspots on a fixed target, a free length for
+    the new chain) with no contig stating how the new chain composes with the target.
+    """
+    with pytest.raises(ValueError, match=r"'select_hotspots' requires 'contig'"):
+        RFdiffusion3DesignSpec(
+            input_structure=synthetic_cif(["A"]),
+            length="80-120",
+            select_hotspots="A24,A35,A50",
+        )
+
+    # The fix: a contig stating the composition (keep chain A, add a new binder chain).
+    spec = RFdiffusion3DesignSpec(
+        input_structure=synthetic_cif(["A"]),
+        contig="A1-100/0,80-120",
+        select_hotspots="A24,A35,A50",
+    )
+    assert spec.contig == "A1-100/0,80-120"
+    assert spec.select_hotspots == "A24,A35,A50"
 
 
 def test_rfdiffusion3_config_gamma_0_symmetry_constraint():
