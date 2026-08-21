@@ -93,12 +93,10 @@ def test_rfdiffusion3_design_spec_rejects_contig_with_length():
 def test_rfdiffusion3_rejects_unused_input():
     """An input_structure no composition field consumes is rejected before dispatch.
 
-    Regression: a live binder-design run (hotspots on a fixed target + a free ``length`` for
-    the new chain, no contig) passed our validators and reached the rfd3 subprocess, which
-    rejected it after a real GPU dispatch with "Input provided but unused in composition
-    specification". Upstream's rule keys on the four fields that consume the input, not on
-    hotspots, so the identical failure occurred for any select_* field -- both shapes below
-    reach the same upstream error and must be caught here.
+    Regression: a live binder-design run (hotspots + a free ``length``, no contig) reached the
+    rfd3 subprocess and failed there with "Input provided but unused in composition
+    specification". Upstream keys that rule on the four consuming fields, not on hotspots, so
+    the select_* variants below hit the identical error and must be caught here too.
     """
     cif = synthetic_cif(["A"])
     pattern = r"'input_structure' is unused"
