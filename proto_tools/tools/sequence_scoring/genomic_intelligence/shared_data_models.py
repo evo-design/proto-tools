@@ -529,24 +529,27 @@ def require_envelope(response: requests.Response) -> dict[str, Any]:
             ``data`` member that is missing, not an object, or empty.
     """
     body = _parse_json_body(response)
-    data = body.get("data") if isinstance(body, dict) else None
-    if not isinstance(data, dict) or not data:
-        if not isinstance(body, dict):
-            detail = f"body was {type(body).__name__}"
-        elif data is None:
+    if isinstance(body, dict):
+        data = body.get("data")
+        if isinstance(data, dict) and data:
+            # Returned from inside the isinstance check so the decoded body is
+            # a dict here by narrowing, not by assertion.
+            return body
+        if data is None:
             detail = "'data' was missing or null"
         elif not isinstance(data, dict):
             detail = f"'data' was {type(data).__name__}"
         else:
             detail = "'data' was an empty object"
-        raise GIAPIError(
-            response.status_code,
-            "http_error",
-            f"expected a JSON object with a non-empty object 'data' member: {detail}",
-            response.headers.get("X-Request-Id"),
-            None,
-        )
-    return body
+    else:
+        detail = f"body was {type(body).__name__}"
+    raise GIAPIError(
+        response.status_code,
+        "http_error",
+        f"expected a JSON object with a non-empty object 'data' member: {detail}",
+        response.headers.get("X-Request-Id"),
+        None,
+    )
 
 
 def _job_status(response: requests.Response) -> tuple[str, Any]:
