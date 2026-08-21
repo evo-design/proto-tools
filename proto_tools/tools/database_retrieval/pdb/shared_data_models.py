@@ -12,7 +12,7 @@ from typing import Any
 import requests
 from pydantic import BaseModel, Field
 
-from proto_tools.utils import BaseConfig
+from proto_tools.utils import BaseConfig, request_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,11 @@ class PdbFetchConfig(BaseConfig):
 
 def _request_pdb(session: requests.Session, url: str, source_label: str) -> requests.Response | None:
     """Execute an HTTP GET, returning None on 404."""
-    response = session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
+    response = request_with_retry(
+        lambda: session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS),
+        retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+    )
     if response.status_code == 404:
         logger.debug("No record found at %s: %s", source_label, response.url)
         return None
