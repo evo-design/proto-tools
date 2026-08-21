@@ -6,6 +6,7 @@ Tests for the PubChem fetch tool.
 from unittest.mock import MagicMock
 
 import pytest
+import requests
 from pydantic import ValidationError
 
 from proto_tools.tools.database_retrieval import (
@@ -13,6 +14,7 @@ from proto_tools.tools.database_retrieval import (
     PubChemFetchInput,
     run_pubchem_fetch,
 )
+from proto_tools.tools.database_retrieval.pubchem import pubchem_fetch
 from proto_tools.tools.database_retrieval.pubchem.pubchem_fetch import (
     _fetch_properties,
     _fetch_synonyms,
@@ -59,6 +61,35 @@ def test_resolve_to_cids_parses_response(status_code, payload, expected):
     session.get.return_value = response
     cids = _resolve_to_cids(PubChemFetchInput(name="anything"), session)
     assert cids == expected
+
+
+class _ResetThenOkSession:
+    """A session whose ``get`` mimics a reused keep-alive connection the server already closed."""
+
+    def __init__(self, failures: int, payload):
+        self.failures = failures
+        self.payload = payload
+        self.calls = 0
+
+    def get(self, *args, **kwargs):
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise requests.exceptions.ConnectionError(
+                "Connection aborted.", ConnectionResetError(104, "Connection reset by peer")
+            )
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = self.payload
+        return response
+
+
+def test_resolve_to_cids_retries_connection_reset(monkeypatch):
+    """Same reused-connection failure as rest.uniprot.org, here against PubChem PUG REST."""
+    monkeypatch.setattr(pubchem_fetch, "_BACKOFF_SECONDS", 0.0)
+    session = _ResetThenOkSession(failures=2, payload={"IdentifierList": {"CID": [2244]}})
+    cids = _resolve_to_cids(PubChemFetchInput(name="aspirin"), session)
+    assert cids == [2244]
+    assert session.calls == 3
 
 
 def test_fetch_properties_raises_when_property_table_empty():
