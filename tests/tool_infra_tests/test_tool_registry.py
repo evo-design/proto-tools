@@ -952,6 +952,28 @@ def test_retryable_error_succeeds_after_retries(clean_registry, fast_retry):
     assert call_count == 3
 
 
+def test_requests_connection_error_is_retried(clean_registry, fast_retry):
+    """Regression: requests.exceptions.ConnectionError doesn't subclass the builtin one this tuple named.
+
+    A tool raising it via `requests` was never retried here.
+    """
+    import requests
+
+    call_count = 0
+
+    def tool(inputs, config, instance=None):
+        nonlocal call_count
+        call_count += 1
+        if call_count < 3:
+            raise requests.exceptions.ConnectionError("Connection aborted.")
+        return MockToolOutput(result="success")
+
+    result = _register_and_run(clean_registry, "retry-requests-connection-error", tool)
+    assert result.success is True
+    assert result.result == "success"
+    assert call_count == 3
+
+
 def test_retries_exhaust_raises_by_default(clean_registry, fast_retry):
     call_count = 0
 

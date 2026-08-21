@@ -24,6 +24,7 @@ from functools import wraps
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
+import requests
 import yaml
 from pydantic import BaseModel, Field, field_serializer
 
@@ -47,8 +48,11 @@ IGNORED_WARNING_SUBSTRINGS = [
 MAX_RETRIES = 3
 RETRY_DELAY = 2.0  # Base delay in seconds (exponential backoff: 2s, 4s, 8s)
 
-# TimeoutError excluded: retrying with the same limit would just time out again
-_RETRYABLE_EXCEPTIONS = (ConnectionError,)
+# TimeoutError excluded: retrying with the same limit would just time out again.
+#
+# requests.exceptions.ConnectionError does not subclass the builtin one (its MRO is
+# RequestException -> OSError), so a tool raising it via `requests` was never retried here.
+_RETRYABLE_EXCEPTIONS = (ConnectionError, requests.exceptions.ConnectionError)
 
 # Set PROTO_CAPTURE_ERRORS=1 to capture tool exceptions into success=False outputs instead of raising.
 _CAPTURE_ERRORS_ENV_VAR = "PROTO_CAPTURE_ERRORS"

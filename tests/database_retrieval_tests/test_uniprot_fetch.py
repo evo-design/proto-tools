@@ -4,6 +4,7 @@ Tests for the UniProt fetch tool.
 """
 
 import pytest
+import requests
 from pydantic import ValidationError
 
 from proto_tools.tools.database_retrieval import (
@@ -11,10 +12,12 @@ from proto_tools.tools.database_retrieval import (
     UniProtFetchInput,
     run_uniprot_fetch,
 )
+from proto_tools.tools.database_retrieval.uniprot import uniprot_fetch
 from proto_tools.tools.database_retrieval.uniprot.uniprot_fetch import (
     _entry_priority,
     _extract_gene_names,
     _extract_pdb_crossrefs,
+    _fetch_entry,
 )
 
 
@@ -65,6 +68,53 @@ def test_extract_pdb_crossrefs():
 
 def test_extract_pdb_crossrefs_empty():
     assert _extract_pdb_crossrefs({}) == []
+
+
+class _FakeResponse:
+    status_code = 200
+
+    def raise_for_status(self) -> None:
+        pass
+
+    def json(self) -> dict:
+        return {"primaryAccession": "P13569"}
+
+
+class _ResetThenOkSession:
+    """A session whose ``get`` mimics a reused keep-alive connection the server already closed."""
+
+    def __init__(self, failures: int):
+        self.failures = failures
+        self.calls = 0
+
+    def get(self, *args, **kwargs):
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise requests.exceptions.ConnectionError(
+                "Connection aborted.", ConnectionResetError(104, "Connection reset by peer")
+            )
+        return _FakeResponse()
+
+
+def test_fetch_entry_retries_connection_reset(monkeypatch):
+    """A connection reset on a reused connection is retried rather than raised.
+
+    Reproduces the ``rest.uniprot.org`` failure directly: urllib3's adapter-level ``Retry`` does
+    not catch a reset that happens while sending on a pooled connection, so ``_fetch_entry`` must.
+    """
+    monkeypatch.setattr(uniprot_fetch, "_BACKOFF_SECONDS", 0.0)
+    session = _ResetThenOkSession(failures=2)
+    entry = _fetch_entry("P13569", session)  # type: ignore[arg-type]
+    assert entry == {"primaryAccession": "P13569"}
+    assert session.calls == 3
+
+
+def test_fetch_entry_gives_up_after_configured_retries(monkeypatch):
+    monkeypatch.setattr(uniprot_fetch, "_BACKOFF_SECONDS", 0.0)
+    session = _ResetThenOkSession(failures=5)
+    with pytest.raises(requests.exceptions.ConnectionError):
+        _fetch_entry("P13569", session)  # type: ignore[arg-type]
+    assert session.calls == 3
 
 
 def test_entry_priority_distinguishes_reviewed_from_unreviewed():
