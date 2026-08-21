@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+import requests
 from pydantic import ValidationError
 
 from proto_tools.tools.database_retrieval import (
@@ -21,6 +22,7 @@ from proto_tools.tools.structure_alignment import (
     FoldseekSearchInput,
     run_foldseek_search,
 )
+from proto_tools.tools.structure_alignment.foldseek import foldseek_search
 from proto_tools.tools.structure_alignment.foldseek.foldseek_search import (
     FoldseekHit,
     _parse_m8_archive,
@@ -149,6 +151,47 @@ def test_submit_parses_ticket_id_and_encodes_databases():
         ("database[]", "afdb50"),
         ("mode", "tmalign"),
     ]
+
+
+class _ResetThenOkSession:
+    """A session whose ``post``/``get`` mimic a reused keep-alive connection the server already closed."""
+
+    def __init__(self, failures: int, response):
+        self.failures = failures
+        self.response = response
+        self.calls = 0
+
+    def post(self, *args, **kwargs):
+        return self._call()
+
+    def get(self, *args, **kwargs):
+        return self._call()
+
+    def _call(self):
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise requests.exceptions.ConnectionError(
+                "Connection aborted.", ConnectionResetError(104, "Connection reset by peer")
+            )
+        return self.response
+
+
+def test_submit_retries_connection_reset(monkeypatch):
+    """Same reused-connection failure as rest.uniprot.org, here against search.foldseek.com.
+
+    _submit is shared by foldseek-search and foldseek-multimer-search, so this covers both.
+    """
+    monkeypatch.setattr(foldseek_search, "_BACKOFF_SECONDS", 0.0)
+    response = MagicMock()
+    response.status_code = 200
+    response.raise_for_status.return_value = None
+    response.json.return_value = {"id": "ticket-abc-123", "status": "PENDING"}
+    session = _ResetThenOkSession(failures=2, response=response)
+
+    ticket_id = _submit("PDB...", ["pdb100"], "tmalign", session)
+
+    assert ticket_id == "ticket-abc-123"
+    assert session.calls == 3
 
 
 # ── Local mode (mocked dispatch) ─────────────────────────────────────────────
