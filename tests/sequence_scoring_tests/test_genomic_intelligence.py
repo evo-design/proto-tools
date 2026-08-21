@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -18,16 +19,26 @@ import requests
 from proto_tools.tools.sequence_scoring.genomic_intelligence import (
     EXPRESSION_WINDOW_BP,
     ExpressionSequence,
+    GIAnnotationConfig,
     GIAnnotationInput,
+    GIChromatinConfig,
     GIChromatinInput,
     GIConfig,
+    GIEnhancerConfig,
     GIEnhancerInput,
     GIExpressionConfig,
+    GIExpressionInput,
+    GIFindGenesConfig,
     GIFindGenesInput,
     GIPromoterConfig,
     GIPromoterInput,
     GISpliceConfig,
     GISpliceInput,
+    run_gi_annotation,
+    run_gi_chromatin,
+    run_gi_enhancer,
+    run_gi_expression,
+    run_gi_find_genes_and_predict_expression,
     run_gi_promoter,
     run_gi_splice,
     shared_data_models,
@@ -50,6 +61,7 @@ from proto_tools.tools.sequence_scoring.genomic_intelligence.shared_data_models 
     validate_gi_sequence,
 )
 from proto_tools.utils.tool_io import ToolExecutionError
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # Response shapes recorded from the live service. These pin the shape, not the
 # science: a prediction moving is expected, a key disappearing is a contract break.
@@ -818,3 +830,167 @@ def test_live_splice_is_strand_dependent() -> None:
     reverse_out = run_gi_splice(GISpliceInput(sequences=reverse), GISpliceConfig())
     assert forward_out.results[0].meta.request_id
     assert reverse_out.results[0].meta.request_id
+
+
+# ============================================================================
+# Benchmarks — live API, run only under --benchmark
+# ============================================================================
+#
+# Every tool here is a client for a hosted HTTP API, so the only realistic
+# workload is a real request: there is no local model to warm up and nothing
+# offline to measure. Benchmarks are deselected unless pytest runs with
+# --benchmark, and each one skips when GI_API_KEY is unset, which is the same
+# guard the live tests above use.
+#
+# Workload is the HBB locus shipped with the toolkit (GRCh38
+# chr11:5,220,000-5,245,000, 25,000 bp, gene-sense) rather than random DNA, so
+# the timings reflect sequence the models were built for. The per-window tools
+# score a batch of three 5,000 bp windows, the shape a caller scoring a
+# population submits; the locus-level tools take the whole 25,000 bp.
+
+_GI_EXAMPLES_DIR = (
+    Path(__file__).resolve().parents[2] / "proto_tools/tools/sequence_scoring/genomic_intelligence/examples"
+)
+
+_BENCH_WINDOW_BP = 5_000
+_BENCH_WINDOW_OFFSETS = (0, 6_000, 12_000)
+
+
+def _hbb_locus() -> str:
+    """Return the HBB locus shipped beside the toolkit's example notebook."""
+    return (_GI_EXAMPLES_DIR / "hbb_locus.txt").read_text().strip()
+
+
+def _bench_windows() -> list[dict[str, str]]:
+    """Three non-overlapping 5,000 bp windows of the HBB locus."""
+    locus = _hbb_locus()
+    return [
+        {"sequence": locus[offset : offset + _BENCH_WINDOW_BP], "name": f"window_{offset}"}
+        for offset in _BENCH_WINDOW_OFFSETS
+    ]
+
+
+def _require_live_key() -> None:
+    """Skip when no key is configured; a hosted-API benchmark cannot run without one."""
+    if not os.environ.get("GI_API_KEY"):
+        pytest.skip("GI_API_KEY not set")
+
+
+@pytest.mark.benchmark("gi-promoter")
+@pytest.mark.slow
+def test_gi_promoter_benchmark() -> None:
+    """Benchmark gi-promoter: 3 x 5,000 bp HBB windows."""
+    _require_live_key()
+    output = run_gi_promoter(GIPromoterInput(sequences=_bench_windows()), GIPromoterConfig())
+    validate_output(output)
+
+    assert output.tool_id == "gi-promoter"
+    assert len(output.results) == len(_BENCH_WINDOW_OFFSETS)
+    for result in output.results:
+        assert result.total_windows >= 1
+        assert result.meta.request_id
+
+
+@pytest.mark.benchmark("gi-splice")
+@pytest.mark.slow
+def test_gi_splice_benchmark() -> None:
+    """Benchmark gi-splice: 3 x 5,000 bp HBB windows, gene-sense strand."""
+    _require_live_key()
+    output = run_gi_splice(GISpliceInput(sequences=_bench_windows()), GISpliceConfig())
+    validate_output(output)
+
+    assert output.tool_id == "gi-splice"
+    assert len(output.results) == len(_BENCH_WINDOW_OFFSETS)
+    for result in output.results:
+        assert result.total_sites == result.donor_sites + result.acceptor_sites
+        assert result.meta.request_id
+
+
+@pytest.mark.benchmark("gi-enhancer")
+@pytest.mark.slow
+def test_gi_enhancer_benchmark() -> None:
+    """Benchmark gi-enhancer: 3 x 5,000 bp HBB windows."""
+    _require_live_key()
+    output = run_gi_enhancer(GIEnhancerInput(sequences=_bench_windows()), GIEnhancerConfig())
+    validate_output(output)
+
+    assert output.tool_id == "gi-enhancer"
+    assert len(output.results) == len(_BENCH_WINDOW_OFFSETS)
+    for result in output.results:
+        assert result.total_windows >= 1
+        assert result.meta.request_id
+
+
+@pytest.mark.benchmark("gi-chromatin")
+@pytest.mark.slow
+def test_gi_chromatin_benchmark() -> None:
+    """Benchmark gi-chromatin: 3 x 5,000 bp HBB windows."""
+    _require_live_key()
+    output = run_gi_chromatin(GIChromatinInput(sequences=_bench_windows()), GIChromatinConfig())
+    validate_output(output)
+
+    assert output.tool_id == "gi-chromatin"
+    assert len(output.results) == len(_BENCH_WINDOW_OFFSETS)
+    for result in output.results:
+        assert result.total_windows >= 1
+        assert result.meta.request_id
+
+
+@pytest.mark.benchmark("gi-annotation")
+@pytest.mark.slow
+def test_gi_annotation_benchmark() -> None:
+    """Benchmark gi-annotation: the whole 25,000 bp HBB locus."""
+    _require_live_key()
+    locus = _hbb_locus()
+    output = run_gi_annotation(
+        GIAnnotationInput(sequences=[{"sequence": locus, "name": "HBB"}]),
+        GIAnnotationConfig(),
+    )
+    validate_output(output)
+
+    assert output.tool_id == "gi-annotation"
+    result = output.results[0]
+    assert result.sequence_length == len(locus)
+    assert result.total_transcripts >= 0
+    assert result.meta.request_id
+
+
+@pytest.mark.benchmark("gi-expression")
+@pytest.mark.slow
+def test_gi_expression_benchmark() -> None:
+    """Benchmark gi-expression: the 25,000 bp HBB locus cut to one window around its midpoint."""
+    _require_live_key()
+    locus = _hbb_locus()
+    # The model scores one 9,198 bp window, so a longer locus needs the TSS
+    # offset. The midpoint keeps the required flank on both sides without
+    # depending on an annotation call to place it.
+    output = run_gi_expression(
+        GIExpressionInput(sequences=[{"sequence": locus, "name": "HBB", "tss_index": len(locus) // 2}]),
+        GIExpressionConfig(),
+    )
+    validate_output(output)
+
+    assert output.tool_id == "gi-expression"
+    result = output.results[0]
+    assert result.sequence_length == len(locus)
+    assert result.expression_log_tpm is not None
+    assert result.meta.request_id
+
+
+@pytest.mark.benchmark("gi-find-genes-and-predict-expression")
+@pytest.mark.slow
+def test_gi_find_genes_and_predict_expression_benchmark() -> None:
+    """Benchmark the workflow: annotation plus per-gene expression over the 25,000 bp HBB locus."""
+    _require_live_key()
+    locus = _hbb_locus()
+    output = run_gi_find_genes_and_predict_expression(
+        GIFindGenesInput(sequences=[{"sequence": locus, "name": "HBB"}]),
+        GIFindGenesConfig(),
+    )
+    validate_output(output)
+
+    assert output.tool_id == "gi-find-genes-and-predict-expression"
+    result = output.results[0]
+    assert result.sequence_length == len(locus)
+    assert result.genes_scored <= result.genes_found
+    assert result.meta.request_id
