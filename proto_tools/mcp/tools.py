@@ -640,6 +640,7 @@ def _dispatch(
     client: Any | None = None,
     progress_partition: str | None = None,
     on_record: Callable[[dict[str, Any]], None] | None = None,
+    force_remote: bool = False,
 ) -> tuple[Any, Device]:
     """Route one call to the backend ``device`` names, and report where it ran.
 
@@ -666,7 +667,7 @@ def _dispatch(
         return spec.function(payload, cfg), ran_on
     # A search mode whose implementation is an HTTP call is answered from here. Otherwise the
     # server would look for a deployment that such a tool has no reason to have.
-    if (reason := cfg.local_execution_reason(device)) is not None:
+    if not force_remote and (reason := cfg.local_execution_reason(device)) is not None:
         logger.info("Tool %s: %s Running in this process instead.", tool_key, reason)
         cfg.device = "cpu"
         return spec.function(payload, cfg), "local"
@@ -732,6 +733,7 @@ def run_tool(
     client: Any | None = None,
     progress_partition: str | None = None,
     on_record: Callable[[dict[str, Any]], None] | None = None,
+    force_remote: bool = False,
 ) -> dict[str, Any]:
     """Run a tool and return its result, with large fields written to disk.
 
@@ -749,6 +751,10 @@ def run_tool(
     ``on_record`` receives the worker's progress records as they arrive, for a caller that has
     somewhere to put them. Without one the call is silent until it returns, which is what a
     terminal-less caller would otherwise get for a fold that takes minutes.
+
+    ``force_remote`` is an internal hosted-gateway control. It bypasses a config's advisory
+    in-process preference, but not intrinsically inline CPU tools or hard remote-capability checks
+    such as a caller-local database path.
     """
     from proto_tools.tools import ToolRegistry
 
@@ -796,6 +802,7 @@ def run_tool(
             client=client,
             progress_partition=progress_partition,
             on_record=on_record,
+            force_remote=force_remote,
         )
     except _setup_errors(device) as exc:
         return {"ok": False, **_unavailable(device, tool_key, str(exc))}

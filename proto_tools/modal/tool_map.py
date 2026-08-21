@@ -27,6 +27,7 @@ TOOL_MAP: dict[str, ToolEntry] = {
     "alphagenome-score-ism-variants-batch": ToolEntry("proto-tools-alphagenome", "AlphaGenomeService", "score_ism_variants", True),
     "alphagenome-score-variants": ToolEntry("proto-tools-alphagenome", "AlphaGenomeService", "score_variants", True),
     "bioemu-sample": ToolEntry("proto-tools-bioemu", "BioEmuService", "sample", True),
+    "blast-search": ToolEntry("proto-tools-blast", "BlastService", "search", False),
     "boltz2-affinity": ToolEntry("proto-tools-boltz2", "Boltz2Service", "affinity", True),
     "boltz2-prediction": ToolEntry("proto-tools-boltz2", "Boltz2Service", "predict", True),
     "borzoi-ensemble": ToolEntry("proto-tools-borzoi", "BorzoiService", "predict_ensemble", True),

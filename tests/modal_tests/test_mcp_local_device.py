@@ -103,6 +103,92 @@ def test_a_deployed_tool_is_still_dispatched(monkeypatch) -> None:
     assert result["ok"] is False
 
 
+def test_online_blast_stays_local_unless_the_host_forces_remote(monkeypatch) -> None:
+    """Hosted MCP can require caller-owned compute without changing ordinary SDK behavior."""
+    from proto_tools.mcp import tools as impl
+    from proto_tools.modal import client
+
+    local_calls: list[str] = []
+    remote_calls: list[str] = []
+
+    spec = ToolRegistry.get("blast-search")
+
+    def fake_local(payload, cfg):
+        local_calls.append(cfg.device)
+        raise RuntimeError("ran locally")
+
+    def fake_remote(tool_key, payload, cfg, **_kwargs):
+        remote_calls.append(tool_key)
+        raise RuntimeError("ran remotely")
+
+    monkeypatch.setattr(spec, "function", fake_local)
+    monkeypatch.setattr(client, "dispatch_to_modal", fake_remote)
+    example = ToolRegistry.get_example_input("blast-search")
+    inputs = example.model_dump(mode="json")
+
+    ordinary = impl.run_tool("blast-search", inputs=inputs, device="modal")
+    forced = impl.run_tool("blast-search", inputs=inputs, device="modal", force_remote=True)
+
+    assert local_calls == ["cpu"]
+    assert "ran locally" in ordinary["error"]
+    assert remote_calls == ["blast-search"]
+    assert "ran remotely" in forced["error"]
+
+
+def test_forced_remote_blast_still_rejects_a_local_database(monkeypatch) -> None:
+    """The hosted override skips a preference, never a hard capability boundary."""
+    from proto_tools.mcp import tools as impl
+    from proto_tools.modal import client
+
+    monkeypatch.setattr(
+        client,
+        "dispatch_to_modal",
+        lambda *_args, **_kwargs: pytest.fail("a local database must never be dispatched"),
+    )
+    result = impl.run_tool(
+        "blast-search",
+        inputs={"query": "ATGC"},
+        config={"search_mode": "local", "local_db": "/blast/db"},
+        device="modal",
+        force_remote=True,
+    )
+
+    assert result["ok"] is False
+    assert result["not_supported_on"] == "modal"
+    assert "local BLAST database" in result["error"]
+
+
+def test_forced_remote_keeps_intrinsically_inline_cpu_tools_in_process(monkeypatch) -> None:
+    """The hosted override is config-specific; it must not require deployments for simple lookups."""
+    from proto_tools.mcp import tools as impl
+    from proto_tools.modal import client
+
+    tool_key = "pdb-fetch-entry"
+    called: list[str] = []
+    spec = ToolRegistry.get(tool_key)
+
+    def fake_local(payload, cfg):
+        called.append(cfg.device)
+        raise RuntimeError("ran inline")
+
+    monkeypatch.setattr(spec, "function", fake_local)
+    monkeypatch.setattr(
+        client,
+        "dispatch_to_modal",
+        lambda *_args, **_kwargs: pytest.fail("an intrinsically inline tool must not be dispatched"),
+    )
+    example = ToolRegistry.get_example_input(tool_key)
+    result = impl.run_tool(
+        tool_key,
+        inputs=example.model_dump(mode="json"),
+        device="modal",
+        force_remote=True,
+    )
+
+    assert called == ["modal"]
+    assert "ran inline" in result["error"]
+
+
 def test_a_deployed_local_cpu_tool_is_not_flagged_as_running_here() -> None:
     """local_cpu means a deployment is optional, not absent — two of them have one.
 

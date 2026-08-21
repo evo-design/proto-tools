@@ -45,6 +45,7 @@ APP_BUCKETS: dict[str, list[str]] = {
     "proto-tools-splice-transformer": ["SpliceTransformerService"],
     "proto-tools-spliceai": ["SpliceAIService"],
     # CPU services — one app each, so deploying one does not build the others.
+    "proto-tools-blast": ["BlastService"],
     "proto-tools-ccd-lookup": ["CcdLookupService"],
     "proto-tools-crispr-tracr-rna": ["CrisprTracrRNAService"],
     "proto-tools-dssp": ["DSSPService"],
@@ -114,6 +115,7 @@ SERVICE_TIERS: dict[str, str] = {
     "AlphaFold2Service": "long",
     "AlphaGenomeService": "long",
     "BioEmuService": "extended",
+    "BlastService": "medium",
     "Boltz2Service": "long",
     "BorzoiService": "long",
     "CcdLookupService": "fast",
@@ -285,6 +287,7 @@ SERVICE_TO_MODULE: dict[str, str] = {
     "AlphaFold2Service": "proto_tools.modal.structure_prediction.alphafold2_deployment.alphafold2_service",
     "AlphaGenomeService": "proto_tools.modal.sequence_scoring.alphagenome_deployment.alphagenome_service",
     "BioEmuService": "proto_tools.modal.structure_dynamics.bioemu_deployment.bioemu_service",
+    "BlastService": "proto_tools.modal.sequence_alignment.blast_deployment.blast_service",
     "Boltz2Service": "proto_tools.modal.structure_prediction.boltz2_deployment.boltz2_service",
     "BorzoiService": "proto_tools.modal.sequence_scoring.borzoi_deployment.borzoi_service",
     "CcdLookupService": "proto_tools.modal.database_retrieval.ccd_lookup_deployment.ccd_lookup_service",
