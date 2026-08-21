@@ -72,6 +72,7 @@ from proto_tools.tools.sequence_scoring.genomic_intelligence.shared_data_models 
     GIAPIError,
     GIConfig,
     GIRequestMeta,
+    GIResponseShapeError,
     GISequence,
     GITask,
 )
@@ -82,6 +83,7 @@ __all__ = [
     "GIAPIError",
     "GIConfig",
     "GIRequestMeta",
+    "GIResponseShapeError",
     "GISequence",
     "GITask",
     # Promoter

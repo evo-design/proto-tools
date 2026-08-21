@@ -7,10 +7,13 @@ reach the live API carry ``@pytest.mark.integration`` and are skipped by default
 
 from __future__ import annotations
 
+import json
 import os
+import re
 from typing import Any
 
 import pytest
+import requests
 
 from proto_tools.tools.sequence_scoring.genomic_intelligence import (
     EXPRESSION_WINDOW_BP,
@@ -27,6 +30,7 @@ from proto_tools.tools.sequence_scoring.genomic_intelligence import (
     GISpliceInput,
     run_gi_promoter,
     run_gi_splice,
+    shared_data_models,
 )
 from proto_tools.tools.sequence_scoring.genomic_intelligence.gi_annotation import parse_annotation_data
 from proto_tools.tools.sequence_scoring.genomic_intelligence.gi_chromatin import parse_chromatin_data
@@ -39,9 +43,13 @@ from proto_tools.tools.sequence_scoring.genomic_intelligence.gi_promoter import 
 from proto_tools.tools.sequence_scoring.genomic_intelligence.gi_splice import parse_splice_data
 from proto_tools.tools.sequence_scoring.genomic_intelligence.shared_data_models import (
     GIAPIError,
+    GIResponseShapeError,
+    call_predict,
+    call_workflow,
     resolve_api_key,
     validate_gi_sequence,
 )
+from proto_tools.utils.tool_io import ToolExecutionError
 
 # Response shapes recorded from the live service. These pin the shape, not the
 # science: a prediction moving is expected, a key disappearing is a contract break.
@@ -406,7 +414,6 @@ def test_api_error_carries_code_and_request_id() -> None:
     assert "abc-123" in str(error)
 
 
-
 class TestWrappedSequencesMatchServerSemantics:
     """The API strips whitespace and measures the stripped length; so do we.
 
@@ -431,6 +438,349 @@ class TestWrappedSequencesMatchServerSemantics:
     def test_ambiguity_codes_are_still_refused(self) -> None:
         with pytest.raises(ValueError, match="Invalid nucleotide"):
             validate_gi_sequence("ACGTRACGT" * 20, min_bp=50, task="enhancer")
+
+
+# ============================================================================
+# Response shape — a malformed 2xx is refused and named, never substituted
+# ============================================================================
+#
+# The idiom these guards replace was `x or {}` / `x or []`, which handles null
+# and absent but passes a truthy wrong type straight through. Two outcomes
+# followed and both are wrong: an AttributeError raised deep inside a parse
+# helper, which reads as a client bug, or -- if the wrong value is replaced
+# with an empty one -- a result object of zeros returned to the caller with
+# real-looking provenance beside it, indistinguishable from a prediction of
+# nothing. The tests below assert the third option, a typed refusal that names
+# the offending field, and they assert it at the level the caller sees.
+
+
+class _FakeResponse:
+    """The parts of ``requests.Response`` the client actually reads."""
+
+    def __init__(
+        self,
+        status_code: int,
+        body: Any = None,
+        *,
+        text: str | None = None,
+        json_raises: bool = False,
+    ) -> None:
+        self.status_code = status_code
+        self._body = body
+        self._json_raises = json_raises
+        self.text = text if text is not None else json.dumps(body)
+        self.headers = {"X-Request-Id": "req-abc-123"}
+
+    @property
+    def ok(self) -> bool:
+        return 200 <= self.status_code < 400
+
+    def json(self) -> Any:
+        if self._json_raises:
+            raise ValueError("Expecting value: line 1 column 1 (char 0)")
+        return self._body
+
+    def raise_for_status(self) -> None:
+        if not self.ok:
+            raise requests.HTTPError(f"{self.status_code}", response=self)  # type: ignore[arg-type]
+
+
+class _FakeSession:
+    """A session that replays a scripted POST and a queue of job polls."""
+
+    def __init__(self, post: _FakeResponse, polls: list[_FakeResponse] | None = None) -> None:
+        self._post = post
+        self._polls = list(polls or [])
+        self.headers: dict[str, str] = {}
+        self.closed = False
+
+    def post(self, *_args: Any, **_kwargs: Any) -> _FakeResponse:
+        return self._post
+
+    def get(self, *_args: Any, **_kwargs: Any) -> _FakeResponse:
+        return self._polls.pop(0)
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def _install_session(
+    monkeypatch: pytest.MonkeyPatch,
+    post: _FakeResponse,
+    polls: list[_FakeResponse] | None = None,
+) -> _FakeSession:
+    """Point the client at a fake session instead of the network."""
+    session = _FakeSession(post, polls)
+    monkeypatch.setattr(shared_data_models, "_build_session", lambda _config: session)
+    return session
+
+
+_GOOD_DATA = {"model": "g0-promoter-2000bp", "input": {"sequence_length": 400}, "summary": {"total_windows": 1}}
+
+_BAD_SUMMARY_PAYLOAD: dict[str, Any] = {"data": {**_GOOD_DATA, "summary": "all good"}, "meta": _META}
+
+
+def _predict(config: GIConfig) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Issue one promoter predict call through the shared client."""
+    return call_predict(config, "promoter", "ATGC" * 100, "demo")
+
+
+class TestTheEnvelopeIsRequired:
+    """Every path that reads content out of ``data`` requires ``data``.
+
+    There was no envelope check of any kind before this: ``call_predict`` and
+    ``call_workflow`` both ended in ``payload.get("data") or {}`` and handed the
+    result to the parse helpers, so a 2xx with no ``data``, an empty ``data``,
+    or a ``data`` of the wrong type all produced a zero-valued result rather
+    than an error. These drive the client against fake sessions rather than
+    inspecting its source, so the check has to be reachable to pass.
+    """
+
+    def test_a_synchronous_result_must_carry_data(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _install_session(monkeypatch, _FakeResponse(200, {"meta": _META}))
+        with pytest.raises(GIAPIError, match="'data' was missing or null"):
+            _predict(GIConfig(gi_api_key="gi_test"))
+
+    def test_an_empty_data_object_is_refused(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The whole point: ``{"data": {}}`` is malformed for every caller."""
+        _install_session(monkeypatch, _FakeResponse(200, {"data": {}, "meta": _META}))
+        with pytest.raises(GIAPIError, match="'data' was an empty object"):
+            _predict(GIConfig(gi_api_key="gi_test"))
+
+    def test_a_wrong_typed_data_is_refused(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _install_session(monkeypatch, _FakeResponse(200, {"data": "all good", "meta": _META}))
+        with pytest.raises(GIAPIError, match="'data' was str"):
+            _predict(GIConfig(gi_api_key="gi_test"))
+
+    def test_a_non_object_body_is_refused(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _install_session(monkeypatch, _FakeResponse(200, ["not", "an", "envelope"]))
+        with pytest.raises(GIAPIError, match="body was list"):
+            _predict(GIConfig(gi_api_key="gi_test"))
+
+    def test_a_non_json_two_hundred_is_named_rather_than_decoded(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A raw decode error here reads as a client bug.
+
+        Worse on the polling path, where ``JSONDecodeError`` is a
+        ``RequestException`` and ``poll_until_complete`` retries it to the
+        wall-clock deadline before failing with ``TimeoutError``.
+        """
+        _install_session(monkeypatch, _FakeResponse(200, None, text="<html>502</html>", json_raises=True))
+        with pytest.raises(GIAPIError, match="non-JSON response body"):
+            _predict(GIConfig(gi_api_key="gi_test"))
+
+    def test_the_error_carries_the_correlation_id(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The refusal names the request the way a support ticket needs.
+
+        That is why the envelope check lives in the client rather than in the
+        parse helpers: the response, and its ``X-Request-Id``, are still in hand.
+        """
+        _install_session(monkeypatch, _FakeResponse(200, {"data": {}, "meta": _META}))
+        with pytest.raises(GIAPIError) as caught:
+            _predict(GIConfig(gi_api_key="gi_test"))
+        assert caught.value.request_id == "req-abc-123"
+
+    def test_an_accepted_job_must_carry_data(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """``data.job_id`` is read out of the 202, so the 202 is enveloped too."""
+        _install_session(monkeypatch, _FakeResponse(202, {"data": {}, "meta": _META}))
+        with pytest.raises(GIAPIError, match="'data' was an empty object"):
+            _predict(GIConfig(gi_api_key="gi_test", respond_async=True))
+
+    def test_a_finished_job_result_must_carry_data(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _install_session(
+            monkeypatch,
+            _FakeResponse(202, {"data": {"job_id": "job-1"}, "meta": _META}),
+            [_FakeResponse(200, {"data": {}, "meta": _META})],
+        )
+        with pytest.raises(GIAPIError, match="'data' was an empty object"):
+            _predict(GIConfig(gi_api_key="gi_test", respond_async=True))
+
+    def test_the_workflow_endpoint_is_enveloped_too(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _install_session(monkeypatch, _FakeResponse(200, {"data": {}, "meta": _META}))
+        with pytest.raises(GIAPIError, match="'data' was an empty object"):
+            call_workflow(GIConfig(gi_api_key="gi_test"), "ATGC" * 3000, "demo", {})
+
+    def test_a_running_job_is_not_enveloped(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A job still running legitimately has nothing in ``data`` yet.
+
+        So the 202 polls in between are exempt from the envelope check on
+        purpose. Only the result the caller is handed is enveloped.
+        """
+        _install_session(
+            monkeypatch,
+            _FakeResponse(202, {"data": {"job_id": "job-1"}, "meta": _META}),
+            [
+                _FakeResponse(202, {"data": {}, "meta": _META}),
+                _FakeResponse(200, {"data": _GOOD_DATA, "meta": _META}),
+            ],
+        )
+        data, _ = _predict(GIConfig(gi_api_key="gi_test", respond_async=True, poll_interval_seconds=1.0))
+        assert data == _GOOD_DATA
+
+    def test_a_well_formed_envelope_still_passes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        session = _install_session(monkeypatch, _FakeResponse(200, {"data": _GOOD_DATA, "meta": _META}))
+        data, payload = _predict(GIConfig(gi_api_key="gi_test"))
+        assert data == _GOOD_DATA
+        assert payload["meta"]["request_id"] == _META["request_id"]
+        assert session.closed
+
+
+class TestNestedFieldsOfTheWrongType:
+    """The fields nested inside ``data`` are checked per task.
+
+    ``require_envelope`` guarantees ``data`` itself, and stops there: it is
+    shared by six predict endpoints and one workflow, so it must not encode any
+    single task's schema.
+
+    Absent and null stay legitimate throughout -- a task that reports no regions
+    omits the member -- so only a field that is *present with the wrong type* is
+    a refusal.
+    """
+
+    @pytest.mark.parametrize(
+        ("data", "field"),
+        [
+            ({"summary": "all good"}, "data.summary"),
+            ({"regions": "none"}, "data.regions"),
+            ({"window_details": {"probability": 0.9}}, "data.window_details"),
+            ({"input": "400 bp"}, "data.input"),
+        ],
+    )
+    def test_promoter_names_the_offending_field(self, data: dict[str, Any], field: str) -> None:
+        with pytest.raises(GIResponseShapeError, match=re.escape(field)):
+            parse_promoter_data(data, {"data": data, "meta": _META}, "demo")
+
+    def test_an_array_element_of_the_wrong_type_names_its_index(self) -> None:
+        """A wrong-typed element is named by index, not dropped.
+
+        ``or []`` let a list of strings through and the row loop built rows out
+        of them. Skipping them instead would lose rows the caller needed, which
+        is the same quiet wrong answer in a different place.
+        """
+        data = {"window_details": [{"window_index": 0}, "second"]}
+        with pytest.raises(GIResponseShapeError, match=re.escape("data.window_details[1]")):
+            parse_promoter_data(data, {"data": data, "meta": _META}, "demo")
+
+    def test_splice_sites_of_the_wrong_type(self) -> None:
+        data = {"sites": "SD_1"}
+        with pytest.raises(GIResponseShapeError, match=re.escape("data.sites")):
+            parse_splice_data(data, {"data": data, "meta": _META}, "demo")
+
+    def test_enhancer_windows_of_the_wrong_type(self) -> None:
+        data = {"windows": 3}
+        with pytest.raises(GIResponseShapeError, match=re.escape("data.windows")):
+            parse_enhancer_data(data, {"data": data, "meta": _META}, "demo")
+
+    def test_chromatin_category_counts_of_the_wrong_type(self) -> None:
+        """One level deeper than the others, and named to that depth."""
+        data = {"summary": {"category_counts": "promoter=3"}}
+        with pytest.raises(GIResponseShapeError, match=re.escape("data.summary.category_counts")):
+            parse_chromatin_data(data, {"data": data, "meta": _META}, "demo")
+
+    def test_annotation_transcripts_of_the_wrong_type(self) -> None:
+        data = {"transcripts": "transcript_0"}
+        with pytest.raises(GIResponseShapeError, match=re.escape("data.transcripts")):
+            parse_annotation_data(data, {"data": data, "meta": _META}, "demo")
+
+    def test_expression_prediction_of_the_wrong_type(self) -> None:
+        data = {"prediction": "3.2 log TPM"}
+        with pytest.raises(GIResponseShapeError, match=re.escape("data.prediction")):
+            parse_expression_data(data, {"data": data, "meta": _META}, "demo")
+
+    def test_expression_reads_its_window_through_a_checked_meta(self) -> None:
+        """Expression's applied window is provenance, and it lives in ``meta``.
+
+        It is read back rather than assumed from the request because an in-range
+        but wrong ``tss_index`` scores a different window and still returns 200,
+        so a wrong-typed ``meta`` there is not something to shrug at.
+        """
+        data = {"prediction": {"expression_log_tpm": 3.2}}
+        payload = {"data": data, "meta": {"task_specific_counts": "scored_window=[0, 9198]"}}
+        with pytest.raises(GIResponseShapeError, match=re.escape("meta.task_specific_counts")):
+            parse_expression_data(data, payload, "demo")
+
+    def test_workflow_predictions_of_the_wrong_type(self) -> None:
+        data = {"expression_predictions": "gene_0"}
+        with pytest.raises(GIResponseShapeError, match=re.escape("data.expression_predictions")):
+            parse_workflow_data(data, {"data": data, "meta": _META}, "demo")
+
+    def test_a_wrong_typed_meta_is_refused(self) -> None:
+        """``meta`` carries the provenance a caller cites in a support request."""
+        data = dict(_PROMOTER_PAYLOAD["data"])
+        with pytest.raises(GIResponseShapeError, match=re.escape("meta")):
+            parse_promoter_data(data, {"data": data, "meta": "ok"}, "demo")
+
+    @pytest.mark.parametrize("value", [None, "absent"])
+    def test_absent_and_null_are_still_legitimate(self, value: Any) -> None:
+        """A task with nothing to report omits the member, or sends null."""
+        data: dict[str, Any] = {"model": "m", "summary": {"total_windows": 0}}
+        if value is None:
+            data["regions"] = None
+            data["window_details"] = None
+            data["input"] = None
+        result = parse_promoter_data(data, {"data": data, "meta": _META}, "demo")
+        assert result.regions == []
+        assert result.windows == []
+        assert result.sequence_length == 0
+
+    def test_a_well_formed_payload_is_untouched(self) -> None:
+        """The recorded live shapes still parse, so the guard is not overreaching."""
+        assert parse_promoter_data(_PROMOTER_PAYLOAD["data"], _PROMOTER_PAYLOAD, "demo").total_windows == 1
+        assert parse_splice_data(_SPLICE_PAYLOAD["data"], _SPLICE_PAYLOAD, "demo").total_sites == 1
+
+
+class TestTheCallerSeesTheRefusal:
+    """The durable half: what the tool hands back, not what a helper raised.
+
+    Asserting only that a helper raised does not show what the caller ends up
+    with, which is the mistake GI-057 made -- it pinned *survival* as the
+    specification and made the quiet wrong answer official.
+
+    ``proto_tools`` has two caller-visible outcomes and both are asserted here.
+    By default a tool re-raises, so the refusal reaches the caller as an
+    exception naming the field. Under ``PROTO_CAPTURE_ERRORS=1`` the framework
+    captures it into the output instead, and what matters there is that the
+    output says ``success=False`` and carries the field name -- not that it came
+    back holding a plausible-looking result of zeros.
+    """
+
+    def test_a_wrong_typed_summary_raises_rather_than_returning_zeros(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _install_session(monkeypatch, _FakeResponse(200, _BAD_SUMMARY_PAYLOAD))
+        monkeypatch.delenv("PROTO_CAPTURE_ERRORS", raising=False)
+        with pytest.raises(GIResponseShapeError, match=re.escape("data.summary")):
+            run_gi_promoter(
+                GIPromoterInput(sequences="ATGC" * 100),
+                GIPromoterConfig(gi_api_key="gi_test"),
+            )
+
+    def test_capture_mode_reports_a_failure_not_a_result(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _install_session(monkeypatch, _FakeResponse(200, _BAD_SUMMARY_PAYLOAD))
+        monkeypatch.setenv("PROTO_CAPTURE_ERRORS", "1")
+        output = run_gi_promoter(
+            GIPromoterInput(sequences="ATGC" * 100),
+            GIPromoterConfig(gi_api_key="gi_test"),
+        )
+        assert output.success is False
+        assert "data.summary" in " ".join(output.errors)
+        # And the results are not merely empty, they are unreadable: the
+        # framework refuses the attribute on a failed output, so a caller
+        # cannot mistake this for a prediction that found nothing.
+        with pytest.raises(ToolExecutionError, match=re.escape("data.summary")):
+            _ = output.results
+
+    def test_a_sound_response_still_produces_a_result(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The same path with the one field corrected.
+
+        Without this, a passing refusal test could be the fake session failing
+        rather than the guard firing.
+        """
+        _install_session(monkeypatch, _FakeResponse(200, _PROMOTER_PAYLOAD))
+        monkeypatch.delenv("PROTO_CAPTURE_ERRORS", raising=False)
+        output = run_gi_promoter(
+            GIPromoterInput(sequences="ATGC" * 100),
+            GIPromoterConfig(gi_api_key="gi_test"),
+        )
+        assert output.results[0].total_windows == 1
+        assert output.results[0].meta.request_id == _META["request_id"]
 
 
 # ============================================================================

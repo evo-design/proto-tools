@@ -17,6 +17,8 @@ from proto_tools.tools.sequence_scoring.genomic_intelligence.shared_data_models 
     GIConfig,
     GIRequestMeta,
     GISequence,
+    as_object,
+    as_object_list,
     build_request_meta,
     call_predict,
     coerce_gi_sequences,
@@ -180,7 +182,7 @@ def parse_chromatin_data(data: dict[str, Any], payload: dict[str, Any], name: st
     Returns:
         GIChromatinResult: Parsed result.
     """
-    summary = data.get("summary") or {}
+    summary = as_object(data.get("summary"), "data.summary")
     windows = [
         ChromatinWindow(
             window_index=int(window.get("window_index", index)),
@@ -188,12 +190,12 @@ def parse_chromatin_data(data: dict[str, Any], payload: dict[str, Any], name: st
             end=int(window.get("end", 0)),
             annotation_count=int(window.get("annotation_count", 0)),
         )
-        for index, window in enumerate(data.get("windows") or [])
+        for index, window in enumerate(as_object_list(data.get("windows"), "data.windows"))
     ]
-    raw_counts = summary.get("category_counts") or {}
+    raw_counts = as_object(summary.get("category_counts"), "data.summary.category_counts")
     return GIChromatinResult(
         name=name,
-        sequence_length=int((data.get("input") or {}).get("sequence_length", 0)),
+        sequence_length=int(as_object(data.get("input"), "data.input").get("sequence_length", 0)),
         total_windows=int(summary.get("total_windows", len(windows))),
         total_annotations=int(summary.get("total_annotations", 0)),
         category_counts={str(key): int(value) for key, value in raw_counts.items()},
@@ -245,7 +247,10 @@ def run_gi_chromatin(
         GIChromatinOutput: One result per submitted sequence, in order.
 
     Raises:
-        GIAPIError: On any non-2xx response from the API.
+        GIAPIError: On any non-2xx response from the API, and on a 2xx whose
+            body is not a ``{data, meta}`` envelope.
+        GIResponseShapeError: If a field inside ``data`` documented as an
+            object or an array arrives as something else.
         OSError: If no API key is configured.
         ValueError: If a sequence falls outside the endpoint's published bounds.
     """

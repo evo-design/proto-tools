@@ -16,6 +16,8 @@ from proto_tools.tools.sequence_scoring.genomic_intelligence.shared_data_models 
     GIConfig,
     GIRequestMeta,
     GISequence,
+    as_object,
+    as_object_list,
     build_request_meta,
     call_predict,
     coerce_gi_sequences,
@@ -204,8 +206,8 @@ def parse_promoter_data(data: dict[str, Any], payload: dict[str, Any], name: str
     Returns:
         GIPromoterResult: Parsed result.
     """
-    summary = data.get("summary") or {}
-    raw_windows = data.get("window_details") or []
+    summary = as_object(data.get("summary"), "data.summary")
+    raw_windows = as_object_list(data.get("window_details"), "data.window_details")
     windows = [
         PromoterWindow(
             window_index=int(window.get("window_index", index)),
@@ -223,11 +225,11 @@ def parse_promoter_data(data: dict[str, Any], payload: dict[str, Any], name: str
             score=float(region.get("score", 0.0)),
             name=str(region.get("name", "")),
         )
-        for region in (data.get("regions") or [])
+        for region in as_object_list(data.get("regions"), "data.regions")
     ]
     return GIPromoterResult(
         name=name,
-        sequence_length=int((data.get("input") or {}).get("sequence_length", 0)),
+        sequence_length=int(as_object(data.get("input"), "data.input").get("sequence_length", 0)),
         promoter_windows=int(summary.get("promoter_windows", 0)),
         total_windows=int(summary.get("total_windows", len(windows))),
         max_probability=max((window.probability for window in windows), default=None),
@@ -279,7 +281,10 @@ def run_gi_promoter(
         GIPromoterOutput: One result per submitted sequence, in order.
 
     Raises:
-        GIAPIError: On any non-2xx response from the API.
+        GIAPIError: On any non-2xx response from the API, and on a 2xx whose
+            body is not a ``{data, meta}`` envelope.
+        GIResponseShapeError: If a field inside ``data`` documented as an
+            object or an array arrives as something else.
         OSError: If no API key is configured.
         ValueError: If a sequence falls outside the endpoint's published bounds.
     """

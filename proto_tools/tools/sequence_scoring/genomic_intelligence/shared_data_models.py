@@ -93,6 +93,93 @@ class GIAPIError(RuntimeError):
         super().__init__(f"[{status} {code}] {message} (request_id={request_id or 'unset'})")
 
 
+class GIResponseShapeError(RuntimeError):
+    """A 2xx body whose nested fields contradict their documented types.
+
+    Distinct from :class:`GIAPIError`, which reports what the service itself
+    said went wrong. This is a well-formed response carrying a field the
+    contract documents as an object or an array that arrived as something else.
+
+    The envelope itself is checked in the client, where the ``Response`` is
+    still in hand, so a malformed envelope raises :class:`GIAPIError` with the
+    real status and correlation id. The per-task fields nested inside ``data``
+    are checked in the parse helpers, which take plain dicts and have no
+    response to name, hence the separate type.
+    """
+
+
+# ============================================================================
+# Response shape
+# ============================================================================
+
+
+def as_object(value: Any, field: str) -> dict[str, Any]:
+    """Read a response field documented as an object.
+
+    :func:`require_envelope` guarantees ``data`` is a non-empty object. It
+    deliberately does not police the per-task fields nested inside it, because
+    it is shared by six predict endpoints and one workflow and must not encode
+    any single task's schema, so the checking happens here.
+
+    Absent or null is legitimate -- a task with no ``prediction`` omits it --
+    and becomes ``{}``. A field that is *present with the wrong type* is a
+    malformed response and is reported as one.
+
+    Two failure modes pull in opposite directions here. The ``x or {}`` idiom
+    this replaces handled null and absent but not a truthy wrong type: a
+    ``summary`` arriving as a string passed ``or {}`` untouched and then raised
+    ``AttributeError`` on ``.get``, which reads as a client bug. Substituting
+    ``{}`` for it instead trades that traceback for something worse, a result
+    object of zeros returned to the caller as a successful prediction and
+    indistinguishable from a real prediction of nothing. Raising a typed error
+    is neither.
+
+    Args:
+        value (Any): Raw field value from the response.
+        field (str): Dotted path to the field, used in the error message.
+
+    Returns:
+        dict[str, Any]: The object, or ``{}`` when absent or null.
+
+    Raises:
+        GIResponseShapeError: If the field is present with a non-object type.
+    """
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise GIResponseShapeError(f"{field} should be an object, got {type(value).__name__}")
+    return value
+
+
+def as_object_list(value: Any, field: str) -> list[dict[str, Any]]:
+    """Same as :func:`as_object`, for a field documented as an array of objects.
+
+    A truthy non-list (a bare string) is iterable, so ``or []`` let it through
+    and the row comprehension iterated its characters; non-object elements fail
+    the same way. Neither is dropped silently, because a result missing rows it
+    should have had is exactly the quiet wrong answer this is here to prevent.
+
+    Args:
+        value (Any): Raw field value from the response.
+        field (str): Dotted path to the field, used in the error message.
+
+    Returns:
+        list[dict[str, Any]]: The array, or ``[]`` when absent or null.
+
+    Raises:
+        GIResponseShapeError: If the field is present with a non-array type, or
+            if any element is not an object.
+    """
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise GIResponseShapeError(f"{field} should be an array, got {type(value).__name__}")
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise GIResponseShapeError(f"{field}[{index}] should be an object, got {type(item).__name__}")
+    return value
+
+
 # ============================================================================
 # Config
 # ============================================================================
@@ -196,8 +283,11 @@ def build_request_meta(payload: dict[str, Any], data: dict[str, Any]) -> GIReque
 
     Returns:
         GIRequestMeta: Provenance for the call.
+
+    Raises:
+        GIResponseShapeError: If ``meta`` is present with a non-object type.
     """
-    meta = payload.get("meta") or {}
+    meta = as_object(payload.get("meta"), "meta")
     return GIRequestMeta(
         model=str(data.get("model") or meta.get("model") or ""),
         request_id=meta.get("request_id"),
@@ -381,6 +471,84 @@ def raise_for_gi_error(response: requests.Response) -> None:
     )
 
 
+def _parse_json_body(response: requests.Response) -> Any:
+    """Parse a 2xx body, reporting a non-JSON one as a named API error.
+
+    ``response.json()`` raises ``requests.exceptions.JSONDecodeError``, which is
+    a ``RequestException``; on the polling path ``poll_until_complete`` treats
+    that as transient and retries it to the wall-clock deadline, so a 200 that
+    is not JSON becomes a half-hour wait ending in ``TimeoutError``. Raising
+    :class:`GIAPIError` instead stops immediately and names the body.
+
+    Args:
+        response (requests.Response): A response already known to be 2xx.
+
+    Returns:
+        Any: The decoded body.
+
+    Raises:
+        GIAPIError: If the body is not JSON.
+    """
+    try:
+        return response.json()
+    except ValueError:
+        raise GIAPIError(
+            response.status_code,
+            "http_error",
+            f"non-JSON response body: {response.text[:200]!r}",
+            response.headers.get("X-Request-Id"),
+            None,
+        ) from None
+
+
+def require_envelope(response: requests.Response) -> dict[str, Any]:
+    """Parse a 2xx body and require the documented ``{data, meta}`` envelope.
+
+    Every predict endpoint, the workflow endpoint and the job-result endpoint
+    return content inside ``data``: a prediction payload, a ``job_id``, or a
+    finished job's result. ``data`` must therefore be a non-empty object for all
+    of them, and ``{"data": {}}`` is malformed for every one. Accepting it
+    produced a result object of zeros with real-looking provenance beside it,
+    which the caller cannot tell from a prediction of nothing.
+
+    Not every endpoint is enveloped: ``GET /v1/tasks/{task}/models`` and
+    ``/health`` are deliberately bare, so this is applied at the three call
+    sites that read out of ``data`` rather than in :func:`raise_for_gi_error`.
+    A ``202`` poll of a *running* job is not one of them -- its ``data`` carries
+    optional progress and is legitimately empty -- so that path parses without
+    enveloping.
+
+    Args:
+        response (requests.Response): A response already known to be 2xx.
+
+    Returns:
+        dict[str, Any]: The full payload.
+
+    Raises:
+        GIAPIError: If the body is not JSON, is not an object, or carries a
+            ``data`` member that is missing, not an object, or empty.
+    """
+    body = _parse_json_body(response)
+    data = body.get("data") if isinstance(body, dict) else None
+    if not isinstance(data, dict) or not data:
+        if not isinstance(body, dict):
+            detail = f"body was {type(body).__name__}"
+        elif data is None:
+            detail = "'data' was missing or null"
+        elif not isinstance(data, dict):
+            detail = f"'data' was {type(data).__name__}"
+        else:
+            detail = "'data' was an empty object"
+        raise GIAPIError(
+            response.status_code,
+            "http_error",
+            f"expected a JSON object with a non-empty object 'data' member: {detail}",
+            response.headers.get("X-Request-Id"),
+            None,
+        )
+    return body
+
+
 def _job_status(response: requests.Response) -> tuple[str, Any]:
     """Map a job-poll response to a polling state.
 
@@ -393,15 +561,23 @@ def _job_status(response: requests.Response) -> tuple[str, Any]:
 
     Returns:
         tuple[str, Any]: ``(state, payload)`` for ``poll_until_complete``.
+
+    Raises:
+        GIAPIError: On a non-2xx response, a non-JSON body, or a completed job
+            whose payload is not a ``{data, meta}`` envelope.
     """
     if response.status_code == 202:
-        payload = response.json()
-        progress = (payload.get("data") or {}).get("progress") or {}
-        if progress:
+        # A running job is not enveloped: its ``data`` is legitimately empty
+        # until there is a result. ``progress`` is advisory, logged only, and
+        # read defensively so a surprise there cannot fail the job.
+        payload = _parse_json_body(response)
+        data = payload.get("data") if isinstance(payload, dict) else None
+        progress = data.get("progress") if isinstance(data, dict) else None
+        if isinstance(progress, dict) and progress:
             logger.info("Genomic Intelligence job progress: %s", progress)
         return "PENDING", payload
     raise_for_gi_error(response)
-    return "COMPLETE", response.json()
+    return "COMPLETE", require_envelope(response)
 
 
 def _post(
@@ -410,7 +586,15 @@ def _post(
     path: str,
     body: dict[str, Any],
 ) -> dict[str, Any]:
-    """POST a request body and return the completed ``{data, meta}`` payload."""
+    """POST a request body and return the completed ``{data, meta}`` payload.
+
+    Raises:
+        GIAPIError: On a non-2xx response, or on a 2xx that is not a
+            ``{data, meta}`` envelope. Both the synchronous result and the
+            ``202`` acceptance read content out of ``data``, so both are
+            enveloped here; the polls in between are enveloped by
+            :func:`_job_status` when the job completes.
+    """
     headers = {"Prefer": "respond-async"} if config.respond_async else {}
     response = session.post(
         f"{config.base_url.rstrip('/')}/{_API_VERSION}/{path.lstrip('/')}",
@@ -419,11 +603,11 @@ def _post(
         timeout=_REQUEST_TIMEOUT_SECONDS,
     )
     raise_for_gi_error(response)
-    payload: dict[str, Any] = response.json()
+    payload: dict[str, Any] = require_envelope(response)
     if response.status_code != 202:
         return payload
 
-    job_id = (payload.get("data") or {}).get("job_id")
+    job_id = payload["data"].get("job_id")
     if not job_id:
         raise GIAPIError(response.status_code, "unknown", "202 response carried no job_id", None, payload)
     logger.info("Genomic Intelligence job %s accepted; polling", job_id)
@@ -465,9 +649,11 @@ def call_predict(
 
     Returns:
         tuple[dict[str, Any], dict[str, Any]]: ``(data, full_payload)``.
+        ``data`` is a non-empty object, guaranteed by :func:`require_envelope`.
 
     Raises:
-        GIAPIError: On any non-2xx response.
+        GIAPIError: On any non-2xx response, and on a 2xx whose body is not a
+            ``{data, meta}`` envelope.
     """
     body: dict[str, Any] = {"sequence": sequence, "sequence_name": sequence_name}
     if config.model is not None:
@@ -482,7 +668,7 @@ def call_predict(
         payload = _post(session, config, f"tasks/{task}/predict", body)
     finally:
         session.close()
-    data: dict[str, Any] = payload.get("data") or {}
+    data: dict[str, Any] = payload["data"]
     return data, payload
 
 
@@ -508,9 +694,11 @@ def call_workflow(
 
     Returns:
         tuple[dict[str, Any], dict[str, Any]]: ``(data, full_payload)``.
+        ``data`` is a non-empty object, guaranteed by :func:`require_envelope`.
 
     Raises:
-        GIAPIError: On any non-2xx response.
+        GIAPIError: On any non-2xx response, and on a 2xx whose body is not a
+            ``{data, meta}`` envelope.
     """
     body: dict[str, Any] = {"sequence": sequence, "sequence_name": sequence_name, "options": options}
     if config.model is not None:
@@ -521,5 +709,5 @@ def call_workflow(
         payload = _post(session, config, "workflows/find-genes-and-predict-expression", body)
     finally:
         session.close()
-    data: dict[str, Any] = payload.get("data") or {}
+    data: dict[str, Any] = payload["data"]
     return data, payload

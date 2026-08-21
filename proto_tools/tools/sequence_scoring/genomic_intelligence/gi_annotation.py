@@ -24,6 +24,8 @@ from proto_tools.tools.sequence_scoring.genomic_intelligence.shared_data_models 
     GIConfig,
     GIRequestMeta,
     GISequence,
+    as_object,
+    as_object_list,
     build_request_meta,
     call_predict,
     coerce_gi_sequences,
@@ -205,7 +207,7 @@ def parse_annotation_data(data: dict[str, Any], payload: dict[str, Any], name: s
     Returns:
         GIAnnotationResult: Parsed result.
     """
-    summary = data.get("summary") or {}
+    summary = as_object(data.get("summary"), "data.summary")
     transcripts = [
         Transcript(
             name=str(record.get("name", "")),
@@ -217,11 +219,11 @@ def parse_annotation_data(data: dict[str, Any], payload: dict[str, Any], name: s
             polya_position=record.get("polya_position"),
             transcript_type=record.get("transcript_type"),
         )
-        for record in (data.get("transcripts") or [])
+        for record in as_object_list(data.get("transcripts"), "data.transcripts")
     ]
     return GIAnnotationResult(
         name=name,
-        sequence_length=int((data.get("input") or {}).get("sequence_length", 0)),
+        sequence_length=int(as_object(data.get("input"), "data.input").get("sequence_length", 0)),
         total_transcripts=int(summary.get("total_transcripts", len(transcripts))),
         forward_strand=int(summary.get("forward_strand", 0)),
         reverse_strand=int(summary.get("reverse_strand", 0)),
@@ -289,7 +291,10 @@ def run_gi_annotation(
         GIAnnotationOutput: One result per submitted sequence, in order.
 
     Raises:
-        GIAPIError: On any non-2xx response from the API.
+        GIAPIError: On any non-2xx response from the API, and on a 2xx whose
+            body is not a ``{data, meta}`` envelope.
+        GIResponseShapeError: If a field inside ``data`` documented as an
+            object or an array arrives as something else.
         OSError: If no API key is configured.
         ValueError: If a sequence falls outside the endpoint's published bounds.
     """

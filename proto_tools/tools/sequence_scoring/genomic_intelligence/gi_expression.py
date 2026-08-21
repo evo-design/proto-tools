@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from proto_tools.tools.sequence_scoring.genomic_intelligence.shared_data_models import (
     GIConfig,
     GIRequestMeta,
+    as_object,
     build_request_meta,
     call_predict,
     validate_gi_sequence,
@@ -232,12 +233,13 @@ def parse_expression_data(data: dict[str, Any], payload: dict[str, Any], name: s
     Returns:
         ExpressionPrediction: Parsed result.
     """
-    prediction = data.get("prediction") or {}
-    counts = (payload.get("meta") or {}).get("task_specific_counts") or {}
+    prediction = as_object(data.get("prediction"), "data.prediction")
+    meta = as_object(payload.get("meta"), "meta")
+    counts = as_object(meta.get("task_specific_counts"), "meta.task_specific_counts")
     window = counts.get("scored_window")
     return ExpressionPrediction(
         name=name,
-        sequence_length=int((data.get("input") or {}).get("sequence_length", 0)),
+        sequence_length=int(as_object(data.get("input"), "data.input").get("sequence_length", 0)),
         expression_log_tpm=prediction.get("expression_log_tpm"),
         expression_tpm=prediction.get("expression_tpm"),
         tss_index=counts.get("tss_index"),
@@ -291,7 +293,10 @@ def run_gi_expression(
         GIExpressionOutput: One result per submitted locus, in order.
 
     Raises:
-        GIAPIError: On any non-2xx response from the API.
+        GIAPIError: On any non-2xx response from the API, and on a 2xx whose
+            body is not a ``{data, meta}`` envelope.
+        GIResponseShapeError: If a field inside ``data`` documented as an
+            object or an array arrives as something else.
         OSError: If no API key is configured.
         ValueError: If a sequence falls outside the endpoint's published bounds.
     """

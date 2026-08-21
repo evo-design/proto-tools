@@ -24,6 +24,8 @@ from proto_tools.tools.sequence_scoring.genomic_intelligence.shared_data_models 
     GIConfig,
     GIRequestMeta,
     GISequence,
+    as_object,
+    as_object_list,
     call_workflow,
     coerce_gi_sequences,
     validate_gi_sequence,
@@ -210,8 +212,8 @@ def parse_workflow_data(data: dict[str, Any], payload: dict[str, Any], name: str
     Returns:
         GIFindGenesResult: Parsed result.
     """
-    summary = data.get("summary") or {}
-    meta = payload.get("meta") or {}
+    summary = as_object(data.get("summary"), "data.summary")
+    meta = as_object(payload.get("meta"), "meta")
     predictions = [
         GenePrediction(
             gene_index=int(record.get("gene_index", index)),
@@ -223,13 +225,15 @@ def parse_workflow_data(data: dict[str, Any], payload: dict[str, Any], name: str
             skipped=bool(record.get("skipped", False)),
             skip_reason=record.get("skip_reason"),
         )
-        for index, record in enumerate(data.get("expression_predictions") or [])
+        for index, record in enumerate(
+            as_object_list(data.get("expression_predictions"), "data.expression_predictions")
+        )
     ]
     annotation_model = str(data.get("annotation_model") or "")
     expression_model = str(data.get("expression_model") or "")
     return GIFindGenesResult(
         name=name,
-        sequence_length=int((data.get("input") or {}).get("sequence_length", 0)),
+        sequence_length=int(as_object(data.get("input"), "data.input").get("sequence_length", 0)),
         genes_found=int(summary.get("genes_found", len(predictions))),
         genes_scored=int(summary.get("genes_predicted", sum(1 for record in predictions if not record.skipped))),
         predictions=predictions,
@@ -309,7 +313,10 @@ def run_gi_find_genes_and_predict_expression(
         GIFindGenesOutput: One result per submitted locus, in order.
 
     Raises:
-        GIAPIError: On any non-2xx response from the API.
+        GIAPIError: On any non-2xx response from the API, and on a 2xx whose
+            body is not a ``{data, meta}`` envelope.
+        GIResponseShapeError: If a field inside ``data`` documented as an
+            object or an array arrives as something else.
         OSError: If no API key is configured.
         ValueError: If a sequence falls outside the endpoint's published bounds.
     """

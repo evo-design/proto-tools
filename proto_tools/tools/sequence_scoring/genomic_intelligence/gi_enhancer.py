@@ -18,6 +18,8 @@ from proto_tools.tools.sequence_scoring.genomic_intelligence.shared_data_models 
     GIConfig,
     GIRequestMeta,
     GISequence,
+    as_object,
+    as_object_list,
     build_request_meta,
     call_predict,
     coerce_gi_sequences,
@@ -169,7 +171,7 @@ def parse_enhancer_data(data: dict[str, Any], payload: dict[str, Any], name: str
     Returns:
         GIEnhancerResult: Parsed result.
     """
-    summary = data.get("summary") or {}
+    summary = as_object(data.get("summary"), "data.summary")
     windows = [
         EnhancerWindow(
             window_index=int(window.get("window_index", index)),
@@ -178,11 +180,11 @@ def parse_enhancer_data(data: dict[str, Any], payload: dict[str, Any], name: str
             dev_score=float(window.get("dev_score", 0.0)),
             hk_score=float(window.get("hk_score", 0.0)),
         )
-        for index, window in enumerate(data.get("windows") or [])
+        for index, window in enumerate(as_object_list(data.get("windows"), "data.windows"))
     ]
     return GIEnhancerResult(
         name=name,
-        sequence_length=int((data.get("input") or {}).get("sequence_length", 0)),
+        sequence_length=int(as_object(data.get("input"), "data.input").get("sequence_length", 0)),
         total_windows=int(summary.get("total_windows", len(windows))),
         dev_score_max=summary.get("dev_score_max"),
         hk_score_max=summary.get("hk_score_max"),
@@ -233,7 +235,10 @@ def run_gi_enhancer(
         GIEnhancerOutput: One result per submitted sequence, in order.
 
     Raises:
-        GIAPIError: On any non-2xx response from the API.
+        GIAPIError: On any non-2xx response from the API, and on a 2xx whose
+            body is not a ``{data, meta}`` envelope.
+        GIResponseShapeError: If a field inside ``data`` documented as an
+            object or an array arrives as something else.
         OSError: If no API key is configured.
         ValueError: If a sequence falls outside the endpoint's published bounds.
     """

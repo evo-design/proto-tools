@@ -19,6 +19,8 @@ from proto_tools.tools.sequence_scoring.genomic_intelligence.shared_data_models 
     GIConfig,
     GIRequestMeta,
     GISequence,
+    as_object,
+    as_object_list,
     build_request_meta,
     call_predict,
     coerce_gi_sequences,
@@ -200,7 +202,7 @@ def parse_splice_data(data: dict[str, Any], payload: dict[str, Any], name: str) 
     Returns:
         GISpliceResult: Parsed result.
     """
-    summary = data.get("summary") or {}
+    summary = as_object(data.get("summary"), "data.summary")
     sites = [
         SpliceSite(
             name=str(site.get("name", "")),
@@ -209,11 +211,11 @@ def parse_splice_data(data: dict[str, Any], payload: dict[str, Any], name: str) 
             site_type=str(site.get("site_type", "")),
             score=float(site.get("score", 0.0)),
         )
-        for site in (data.get("sites") or [])
+        for site in as_object_list(data.get("sites"), "data.sites")
     ]
     return GISpliceResult(
         name=name,
-        sequence_length=int((data.get("input") or {}).get("sequence_length", 0)),
+        sequence_length=int(as_object(data.get("input"), "data.input").get("sequence_length", 0)),
         total_sites=int(summary.get("total_sites", len(sites))),
         donor_sites=int(summary.get("donor_sites", 0)),
         acceptor_sites=int(summary.get("acceptor_sites", 0)),
@@ -286,7 +288,10 @@ def run_gi_splice(
         GISpliceOutput: One result per submitted sequence, in order.
 
     Raises:
-        GIAPIError: On any non-2xx response from the API.
+        GIAPIError: On any non-2xx response from the API, and on a 2xx whose
+            body is not a ``{data, meta}`` envelope.
+        GIResponseShapeError: If a field inside ``data`` documented as an
+            object or an array arrives as something else.
         OSError: If no API key is configured.
         ValueError: If a sequence falls outside the endpoint's published bounds.
     """
