@@ -162,6 +162,10 @@ def _request_with_retry(
     ``ConnectionError``, and the tool wrapper's own retry would resubmit the whole job
     rather than re-poll the one already running.
 
+    Not the same function as ``proto_tools.utils.http_session.request_with_retry``: this one also
+    retries retryable HTTP status codes and reads ``Retry-After`` off the response, which needs
+    the request-dispatch shape below rather than a generic callable.
+
     Args:
         session (requests.Session): Authenticated session to send on.
         method (str): HTTP method.
