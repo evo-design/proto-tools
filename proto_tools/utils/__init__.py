@@ -17,7 +17,7 @@ from proto_tools.utils.device_manager import SUPPORTED_DEVICE_PREFIXES, Allocati
 from proto_tools.utils.env_runner import run_in_env
 from proto_tools.utils.export_names import build_export_name, sanitize_field
 from proto_tools.utils.gradient_models import GradientInput, GradientOutput, GradientValue
-from proto_tools.utils.http_session import build_http_session
+from proto_tools.utils.http_session import build_http_session, request_with_retry
 from proto_tools.utils.logging_config import get_logger, setup_logging
 from proto_tools.utils.msa import extract_msa_sequences
 from proto_tools.utils.polling import StatusExtractor, extract_text_status, poll_until_complete
@@ -130,6 +130,7 @@ __all__ = [
     "SUPPORTED_DEVICE_PREFIXES",
     # HTTP
     "build_http_session",
+    "request_with_retry",
     "extract_text_status",
     "poll_until_complete",
     "StatusExtractor",

@@ -22,6 +22,7 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
     build_http_session,
+    request_with_retry,
 )
 
 logger = logging.getLogger(__name__)
@@ -286,10 +287,14 @@ def _fetch_entry(
 ) -> dict[str, Any] | None:
     """Fetch a UniProtKB entry by accession. Returns None on 404."""
     params = {"fields": ",".join(fields)} if fields else None
-    response = session.get(
-        f"{_UNIPROT_BASE}/uniprotkb/{uniprot_id}.json",
-        params=params,
-        timeout=_REQUEST_TIMEOUT_SECONDS,
+    response = request_with_retry(
+        lambda: session.get(
+            f"{_UNIPROT_BASE}/uniprotkb/{uniprot_id}.json",
+            params=params,
+            timeout=_REQUEST_TIMEOUT_SECONDS,
+        ),
+        retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
     )
     if response.status_code == 404:
         logger.debug("UniProt ID '%s' not found", uniprot_id)
@@ -323,10 +328,18 @@ def _search_entry(
         }
         if fields:
             params["fields"] = ",".join(fields)
-        response = session.get(
-            f"{_UNIPROT_BASE}/uniprotkb/search",
-            params=params,
-            timeout=_REQUEST_TIMEOUT_SECONDS,
+
+        def _get(params: dict[str, Any] = params) -> requests.Response:
+            return session.get(
+                f"{_UNIPROT_BASE}/uniprotkb/search",
+                params=params,
+                timeout=_REQUEST_TIMEOUT_SECONDS,
+            )
+
+        response = request_with_retry(
+            _get,
+            retries=_HTTP_RETRIES,
+            backoff_seconds=_BACKOFF_SECONDS,
         )
         if response.status_code >= 400:
             logger.warning(
