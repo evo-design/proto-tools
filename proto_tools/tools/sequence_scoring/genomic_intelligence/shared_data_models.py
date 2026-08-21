@@ -652,7 +652,8 @@ def call_predict(
 
     Returns:
         tuple[dict[str, Any], dict[str, Any]]: ``(data, full_payload)``.
-        ``data`` is a non-empty object, guaranteed by :func:`require_envelope`.
+            ``data`` is a non-empty object, guaranteed by
+            :func:`require_envelope`.
 
     Raises:
         GIAPIError: On any non-2xx response, and on a 2xx whose body is not a
@@ -697,7 +698,8 @@ def call_workflow(
 
     Returns:
         tuple[dict[str, Any], dict[str, Any]]: ``(data, full_payload)``.
-        ``data`` is a non-empty object, guaranteed by :func:`require_envelope`.
+            ``data`` is a non-empty object, guaranteed by
+            :func:`require_envelope`.
 
     Raises:
         GIAPIError: On any non-2xx response, and on a 2xx whose body is not a
