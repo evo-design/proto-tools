@@ -4,6 +4,7 @@ Tests for the NCBI Entrez tools (esearch, esummary, efetch).
 """
 
 import pytest
+import requests
 from pydantic import ValidationError
 
 from proto_tools.tools.database_retrieval import (
@@ -15,8 +16,10 @@ from proto_tools.tools.database_retrieval import (
     run_ncbi_esearch,
     run_ncbi_esummary,
 )
+from proto_tools.tools.database_retrieval.ncbi import shared_data_models
 from proto_tools.tools.database_retrieval.ncbi.shared_data_models import (
     _accession_from_header,
+    _ncbi_esearch,
     _parse_fasta_records,
 )
 
@@ -34,6 +37,37 @@ def test_ncbi_esummary_requires_identifier():
 def test_ncbi_efetch_requires_identifier():
     with pytest.raises(ValidationError):
         NCBIEfetchInput(db="protein")
+
+
+class _ResetThenOkSession:
+    """A session whose ``get`` mimics a reused keep-alive connection the server already closed."""
+
+    def __init__(self, failures: int, text: str, url: str = "https://example/esearch.fcgi"):
+        self.failures = failures
+        self.text = text
+        self.url = url
+        self.calls = 0
+
+    def get(self, *args, **kwargs):
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise requests.exceptions.ConnectionError(
+                "Connection aborted.", ConnectionResetError(104, "Connection reset by peer")
+            )
+        response = requests.Response()
+        response.status_code = 200
+        response.url = self.url
+        response._content = self.text.encode()
+        return response
+
+
+def test_ncbi_esearch_retries_connection_reset(monkeypatch):
+    """Same reused-connection failure as rest.uniprot.org, here against NCBI eutils."""
+    monkeypatch.setattr(shared_data_models, "_BACKOFF_SECONDS", 0.0)
+    session = _ResetThenOkSession(failures=2, text='{"esearchresult": {"idlist": ["12345"]}}')
+    ids = _ncbi_esearch("protein", "lacI", 10, NCBIFetchConfig(), session)
+    assert ids == ["12345"]
+    assert session.calls == 3
 
 
 def test_parse_fasta_records():

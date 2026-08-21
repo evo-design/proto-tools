@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 import requests
 from pydantic import BaseModel, Field
 
-from proto_tools.utils import BaseConfig, ConfigField
+from proto_tools.utils import BaseConfig, ConfigField, request_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -158,10 +158,14 @@ def _ncbi_esearch(
         params["reldate"] = reldate
     params.update(_ncbi_common_params(config))
 
-    response = session.get(
-        f"{_NCBI_EUTILS_BASE}/esearch.fcgi",
-        params=params,
-        timeout=_REQUEST_TIMEOUT_SECONDS,
+    response = request_with_retry(
+        lambda: session.get(
+            f"{_NCBI_EUTILS_BASE}/esearch.fcgi",
+            params=params,
+            timeout=_REQUEST_TIMEOUT_SECONDS,
+        ),
+        retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
     )
     if not _check_response(response, "ncbi-esearch"):
         return []
@@ -183,10 +187,14 @@ def _ncbi_esummary(
     }
     params.update(_ncbi_common_params(config))
 
-    response = session.get(
-        f"{_NCBI_EUTILS_BASE}/esummary.fcgi",
-        params=params,
-        timeout=_REQUEST_TIMEOUT_SECONDS,
+    response = request_with_retry(
+        lambda: session.get(
+            f"{_NCBI_EUTILS_BASE}/esummary.fcgi",
+            params=params,
+            timeout=_REQUEST_TIMEOUT_SECONDS,
+        ),
+        retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
     )
     if not _check_response(response, "ncbi-esummary"):
         return None
@@ -221,10 +229,14 @@ def _ncbi_efetch(
 
     params.update(_ncbi_common_params(config))
 
-    response = session.get(
-        f"{_NCBI_EUTILS_BASE}/efetch.fcgi",
-        params=params,
-        timeout=_REQUEST_TIMEOUT_SECONDS,
+    response = request_with_retry(
+        lambda: session.get(
+            f"{_NCBI_EUTILS_BASE}/efetch.fcgi",
+            params=params,
+            timeout=_REQUEST_TIMEOUT_SECONDS,
+        ),
+        retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
     )
     if not _check_response(response, "ncbi-efetch"):
         return None
