@@ -27,6 +27,7 @@ from proto_tools.utils import (
     ToolInstance,
     build_http_session,
     poll_until_complete,
+    request_with_retry,
 )
 
 logger = logging.getLogger(__name__)
@@ -287,7 +288,11 @@ def _remote_msa(inputs: FoldmasonMSAInput, config: FoldmasonMSAConfig) -> Foldma
             timeout_seconds=config.timeout_seconds,
         )
         result_url = f"{_FOLDMASON_BASE}/api/result/foldmason/{ticket_id}"
-        result_response = session.get(result_url, timeout=_RESULT_DOWNLOAD_TIMEOUT_SECONDS)
+        result_response = request_with_retry(
+            lambda: session.get(result_url, timeout=_RESULT_DOWNLOAD_TIMEOUT_SECONDS),
+            retries=_HTTP_RETRIES,
+            backoff_seconds=_BACKOFF_SECONDS,
+        )
         result_response.raise_for_status()
         aa_fasta, three_di_fasta, newick, num_sequences, alignment_length = _parse_msa_response_json(
             result_response.json()
@@ -361,10 +366,14 @@ def _submit_foldmason(
     for sid, text in zip(structure_ids, structures, strict=True):
         files.append(("fileNames[]", (None, sid, "text/plain")))
         files.append(("queries[]", (sid, text, "chemical/x-pdb")))
-    response = session.post(
-        f"{_FOLDMASON_BASE}/api/ticket/foldmason",
-        files=files,
-        timeout=_REQUEST_TIMEOUT_SECONDS,
+    response = request_with_retry(
+        lambda: session.post(
+            f"{_FOLDMASON_BASE}/api/ticket/foldmason",
+            files=files,
+            timeout=_REQUEST_TIMEOUT_SECONDS,
+        ),
+        retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
     )
     response.raise_for_status()
     payload = response.json()
