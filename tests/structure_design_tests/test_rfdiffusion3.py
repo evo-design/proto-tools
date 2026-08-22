@@ -65,9 +65,10 @@ def test_rfdiffusion3_design_spec_selections_require_input_structure():
     with pytest.raises(ValueError, match=pattern):
         RFdiffusion3DesignSpec(unindex="A244,A274")
 
-    # Happy path 1: input_structure alone with select_*
-    spec = RFdiffusion3DesignSpec(input_structure=synthetic_cif(["A"]), select_hotspots="A24,A35,A50")
-    assert spec.select_hotspots == "A24,A35,A50"
+    # Happy path 1: input_structure + select_* with no contig, using 'ligand' to consume the
+    # input (a select_* field cannot consume it -- see test_rfdiffusion3_rejects_unused_input).
+    spec = RFdiffusion3DesignSpec(input_structure=synthetic_cif(["A"]), ligand="HAX", select_buried="A24,A35,A50")
+    assert spec.select_buried == "A24,A35,A50"
 
     # Happy path 2: input_structure + contig + select_* (full motif scaffolding shape)
     spec = RFdiffusion3DesignSpec(
@@ -87,6 +88,61 @@ def test_rfdiffusion3_design_spec_rejects_contig_with_length():
     """Contig and length are mutually exclusive; a contig already encodes its lengths."""
     with pytest.raises(ValueError, match=r"Pass either 'contig' or 'length'"):
         RFdiffusion3DesignSpec(input_structure=synthetic_cif(["A"]), contig="A1-100", length="100")
+
+
+def test_rfdiffusion3_rejects_unused_input():
+    """An input_structure no composition field consumes is rejected before dispatch.
+
+    Regression: a live binder-design run (hotspots + a free ``length``, no contig) passed our
+    validators and was rejected by rfd3's own prevalidation instead, after a GPU dispatch that
+    produced nothing. Upstream keys that rule on the four consuming fields rather than on
+    hotspots, so the select_* variants below fail the same way and must be caught here too.
+    """
+    cif = synthetic_cif(["A"])
+    pattern = r"'input_structure' is unused"
+
+    with pytest.raises(ValueError, match=pattern):
+        RFdiffusion3DesignSpec(input_structure=cif, length="80-120", select_hotspots="A24,A35,A50")
+    with pytest.raises(ValueError, match=pattern):
+        RFdiffusion3DesignSpec(input_structure=cif, length="80-120", select_buried="A24")
+    with pytest.raises(ValueError, match=pattern):
+        RFdiffusion3DesignSpec(input_structure=cif, select_buried="A24")
+
+    # Each of the four consuming fields makes the same hotspot spec valid.
+    spec = RFdiffusion3DesignSpec(input_structure=cif, contig="A1-100/0,80-120", select_hotspots="A24")
+    assert spec.contig == "A1-100/0,80-120"
+    assert RFdiffusion3DesignSpec(input_structure=cif, partial_t=10.0, select_hotspots="A24").partial_t == 10.0
+    assert RFdiffusion3DesignSpec(input_structure=cif, ligand="HAX", select_hotspots="A24").ligand == "HAX"
+    assert RFdiffusion3DesignSpec(input_structure=cif, unindex="A24", length="80-120").unindex == "A24"
+
+
+def test_rfdiffusion3_rejects_spec_with_no_composition_field():
+    """Modifier-only specs (no input_structure, contig, or length) are rejected."""
+    pattern = r"at least one of 'input_structure', 'contig', or 'length'"
+    with pytest.raises(ValueError, match=pattern):
+        RFdiffusion3DesignSpec(symmetry="C3")
+    with pytest.raises(ValueError, match=pattern):
+        RFdiffusion3DesignSpec(plddt_enhanced=True)
+
+
+def test_rfdiffusion3_unindex_requires_contig_or_length():
+    """Unindexed motifs need a contig or length to size the design they float inside."""
+    with pytest.raises(ValueError, match=r"'unindex' requires 'contig' or 'length'"):
+        RFdiffusion3DesignSpec(input_structure=synthetic_cif(["A"]), unindex="A24", ligand="HAX")
+
+
+def test_rfdiffusion3_partial_diffusion_constraints():
+    """partial_t re-noises the input, so it forbids length."""
+    with pytest.raises(ValueError, match=r"'length' must not be combined with 'partial_t'"):
+        RFdiffusion3DesignSpec(input_structure=synthetic_cif(["A"]), length="100", partial_t=10.0)
+    # partial_t alone never reaches the partial-diffusion branch: it states no composition,
+    # so the first rule rejects it (upstream orders its own checks the same way).
+    with pytest.raises(ValueError, match=r"at least one of 'input_structure', 'contig', or 'length'"):
+        RFdiffusion3DesignSpec(partial_t=10.0)
+
+    # partial_t == 0.0 is a legal noise level, not an absent one.
+    spec = RFdiffusion3DesignSpec(input_structure=synthetic_cif(["A"]), partial_t=0.0)
+    assert spec.partial_t == 0.0
 
 
 def test_rfdiffusion3_config_gamma_0_symmetry_constraint():
@@ -352,7 +408,7 @@ def test_rfdiffusion3_json_spec_generation(tmp_path, monkeypatch):
 def test_rfdiffusion3_input_structure_accepts_structure_object(tmp_path):
     """A Structure object is materialized to a file; "input" is that path (rfd3 needs a path, not content)."""
     structure = Structure(structure=synthetic_cif(["A"]))
-    inputs = RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(input_structure=structure, length="40")])
+    inputs = RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(input_structure=structure, contig="A1-1/0,40")])
     spec = json.loads(inputs.to_json_spec(input_dir=tmp_path))
     input_path = Path(spec["spec-0"]["input"])
     assert input_path.is_file() and input_path.suffix == ".cif"  # synthetic_cif → cif format

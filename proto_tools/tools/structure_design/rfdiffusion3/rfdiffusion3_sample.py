@@ -372,6 +372,47 @@ class RFdiffusion3DesignSpec(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def validate_composition_spec(self) -> Any:
+        """Mirror rfd3's own composition rules so a bad spec fails here, not after GPU dispatch."""
+        # Upstream ``DesignInputSpecification.validate_input_schema`` (rfd3
+        # ``inference/input_parsing.py``) enforces the four rules below; each otherwise
+        # surfaces only inside the subprocess, after weights load and a real dispatch.
+
+        # Rule 1: something must establish what to build. Every other typed field
+        # (symmetry, ligand, partial_t, plddt_enhanced, ...) only modifies a composition.
+        if self.input_structure is None and self.contig is None and self.length is None:
+            raise ValueError(
+                "Provide at least one of 'input_structure', 'contig', or 'length': the other "
+                "fields modify a composition but cannot define one."
+            )
+
+        # Rule 2: an input structure must be consumed by the composition itself. Only these
+        # four fields place input atoms into the design; every select_* field, hotspots
+        # included, merely annotates atoms that one of the four already placed -- naming
+        # hotspots on a target says nothing about how the design composes with that target.
+        consumers = ("contig", "unindex", "ligand", "partial_t")
+        if self.input_structure is not None and all(getattr(self, f) is None for f in consumers):
+            raise ValueError(
+                "'input_structure' is unused: pass 'contig', 'unindex', 'ligand', or 'partial_t' "
+                "to state how it enters the design (e.g. contig 'A1-100/0,80-120' for a binder)."
+            )
+
+        if self.partial_t is None:
+            # Rule 3: unindexed motifs float inside a design of known extent.
+            if self.unindex is not None and self.contig is None and self.length is None:
+                raise ValueError("'unindex' requires 'contig' or 'length' to size the design it is placed into.")
+        elif self.length is not None:
+            # Rule 4: partial diffusion re-noises the input, so its extent is already fixed.
+            # Upstream's companion check (partial diffusion requires an input) needs no mirror:
+            # rule 1 and ``validate_selections_require_input_structure`` already reject every
+            # input-free spec that could reach it.
+            raise ValueError(
+                "'length' must not be combined with 'partial_t': partial diffusion re-noises "
+                "'input_structure', so the design's extent comes from the input."
+            )
+        return self
+
     def to_dict(self) -> dict[str, Any]:
         """Convert design spec to RFdiffusion3 JSON format.
 
