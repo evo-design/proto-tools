@@ -23,6 +23,16 @@ FIXTURE = (
     Path(__file__).resolve().parents[2]
     / "proto_tools/tools/structure_scoring/structure_metrics/example_input_fixture.pdb"
 )
+_SETUP_SH = Path(__file__).resolve().parents[2] / "proto_tools/tools/structure_scoring/dssp/standalone/setup.sh"
+
+
+def test_dssp_setup_pins_abi_compatible_packages_and_executes_binary() -> None:
+    """The standalone env must keep DSSP on its build-time libmcfp ABI."""
+    setup = _SETUP_SH.read_text()
+
+    assert '"dssp=4.6.1"' in setup
+    assert '"libmcfp=1.4.2"' in setup
+    assert 'subprocess.run([executable, "--version"], check=True)' in setup
 
 
 def test_dssp_tool_is_registered() -> None:
