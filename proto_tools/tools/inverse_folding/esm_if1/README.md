@@ -50,6 +50,7 @@ Use this to rank candidate sequences or assess point mutations by structural com
 
 #### Usage Tips
 - **Lower perplexity is better, and it tracks the log-likelihood directly.** Perplexity is `exp(-avg_log_likelihood)`, so the two metrics rank candidates identically. Treat the score as compatibility under the model, not a guarantee the sequence folds, and confirm shortlisted candidates with a structure predictor.
+- **`return_logits` (default `False`) enables one-pass variant analysis.** When enabled, scoring also returns a `(target chain length x 20)` logit array and its canonical amino-acid vocabulary. The logits come from the same teacher-forced forward pass as the scalar score; leave them disabled when only aggregate metrics are needed to reduce response size.
 
 ## Toolkit Notes
 

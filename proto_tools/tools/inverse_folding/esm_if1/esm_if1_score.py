@@ -129,6 +129,7 @@ class ESMIF1ScoringConfig(BaseConfig):
     Attributes:
         weights_variant (Literal['esmif', 'protein_dpo']): Which model weights to use. 'esmif' loads vanilla ESM-IF1,
             'protein_dpo' loads DPO-aligned weights optimized for protein stability.
+        return_logits (bool): Whether to include per-position amino-acid logits.
         device (str): Device to run the model on.
     """
 
@@ -138,6 +139,12 @@ class ESMIF1ScoringConfig(BaseConfig):
         description="'esmif' for vanilla ESM-IF1, 'protein_dpo' for DPO-aligned weights",
         reload_on_change=True,
         examples=["esmif", "protein_dpo"],
+    )
+
+    return_logits: bool = ConfigField(
+        title="Return Logits",
+        default=False,
+        description="Whether to include per-position amino-acid logits in the output.",
     )
 
     device: str = ConfigField(
@@ -235,6 +242,7 @@ def run_esm_if1_score(
                 "seed": config.seed,
                 "device": config.device,
                 "weights_variant": config.weights_variant,
+                "return_logits": config.return_logits,
                 "verbose": config.verbose,
             }
             result = ToolInstance.dispatch(
@@ -243,7 +251,13 @@ def run_esm_if1_score(
                 instance=instance,
                 config=config,
             )
-        scores.append(InverseFoldingScoringMetrics(**result["metrics"]))
+        scores.append(
+            InverseFoldingScoringMetrics(
+                **result["metrics"],
+                logits=result["logits"],
+                vocab=result["vocab"],
+            )
+        )
 
     return ESMIF1ScoringOutput(scores=scores)
 

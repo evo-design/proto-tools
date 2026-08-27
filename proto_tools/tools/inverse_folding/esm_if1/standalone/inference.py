@@ -9,6 +9,7 @@ from typing import Any
 
 import torch
 from standalone_helpers import (
+    AMINO_ACIDS_LIST,
     get_logger,
     log_likelihood_metrics,
     move_model_to_device,
@@ -223,6 +224,7 @@ class ESMIF1Model:
         seed: int | None = None,
         device: str = "cuda",
         weights_variant: str = "protein_dpo",
+        return_logits: bool = False,
         verbose: bool = False,
     ) -> dict[str, Any]:
         """Score a sequence against a structure using the score_complex approach.
@@ -240,31 +242,67 @@ class ESMIF1Model:
             seed: Random seed.
             device: Device to run on.
             weights_variant: 'esmif' for vanilla or 'protein_dpo' for DPO weights.
+            return_logits: Whether to return canonical amino-acid logits for each position.
             verbose: Whether to print status messages.
 
         Returns:
-            Dictionary with keys: metrics (dict of scalar metrics)
+            Dictionary with keys: metrics, logits, and vocab. ``logits`` has
+            shape ``(sequence_length, 20)`` when requested and is otherwise
+            ``None``; ``vocab`` gives its canonical amino-acid column order.
         """
         if not self._loaded or self._weights_variant != weights_variant:
             self.load(device, weights_variant, verbose)
         elif self.device != device:
             self.to_device(device)
 
-        import esm.inverse_folding.multichain_util
+        import torch.nn.functional as F
+        from esm.inverse_folding.multichain_util import _concatenate_coords
+        from esm.inverse_folding.util import CoordBatchConverter
 
         all_coords, _all_native_seqs, target_chain = self._load_structure(pdb_path, chain_ids, target_chain)
 
         set_torch_seed(seed)
-        # Score the sequence in the complex context
-        avg_ll, _ = esm.inverse_folding.multichain_util.score_sequence_in_complex(
-            self.model,
-            self.alphabet,
-            all_coords,
-            target_chain,
-            sequence,
+        # ESM-IF1 places the target chain first and appends the remaining chains
+        # as encoder-only structural context.  Run the same teacher-forced
+        # forward pass used by fair-esm's score_sequence_in_complex(), retaining
+        # its logits rather than discarding them after cross-entropy.
+        coords = _concatenate_coords(all_coords, target_chain)
+        batch_converter = CoordBatchConverter(self.alphabet)
+        coords_tensor, confidence, _strs, tokens, padding_mask = batch_converter(
+            [(coords, None, sequence)],
+            device=self.device,
         )
+        prev_output_tokens = tokens[:, :-1]
+        target = tokens[:, 1:]
+        target_padding_mask = target == self.alphabet.padding_idx
 
-        return {"metrics": log_likelihood_metrics(float(avg_ll), len(sequence))}
+        with torch.no_grad():
+            raw_logits, _ = self.model.forward(
+                coords_tensor,
+                padding_mask,
+                confidence,
+                prev_output_tokens,
+            )
+            losses = F.cross_entropy(raw_logits, target, reduction="none")[0]
+            valid_positions = ~target_padding_mask[0]
+            avg_ll = -losses[valid_positions].mean().item()
+
+            logits = None
+            if return_logits:
+                # Model output is (batch, vocab, position).  Expose only the
+                # canonical amino-acid columns, matching the other ESM tools.
+                aa_token_ids = torch.tensor(
+                    [self.alphabet.get_idx(aa) for aa in AMINO_ACIDS_LIST],
+                    device=raw_logits.device,
+                )
+                position_logits = raw_logits[0, :, : len(sequence)].transpose(0, 1)
+                logits = position_logits.index_select(1, aa_token_ids).float().cpu().tolist()
+
+        return {
+            "metrics": log_likelihood_metrics(avg_ll, len(sequence)),
+            "logits": logits,
+            "vocab": AMINO_ACIDS_LIST if return_logits else None,
+        }
 
     def load(
         self,
@@ -371,6 +409,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             seed=input_dict["seed"],
             device=input_dict["device"],
             weights_variant=input_dict["weights_variant"],
+            return_logits=input_dict.get("return_logits", False),
             verbose=input_dict["verbose"],
         )
     raise ValueError(f"esm-if1: unknown operation {operation!r}; valid: ['sample', 'score']")

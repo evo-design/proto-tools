@@ -28,6 +28,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingScoringMetrics,
     InverseFoldingStructureInput,
 )
+from proto_tools.utils.sequence import PROTEIN_AMINO_ACIDS
 from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
@@ -244,6 +245,48 @@ def test_esm_if1_score(pdb_structure: Structure):
     assert output.tool_id == "esm-if1-score"
     assert len(output.scores) == 1
     assert isinstance(output.scores[0], InverseFoldingScoringMetrics)
+    assert output.scores[0].logits is None
+    assert output.vocab is None
+
+
+def test_esm_if1_score_logits_dispatch_contract(monkeypatch, pdb_structure: Structure):
+    """The wrapper requests and preserves one-pass canonical amino-acid logits."""
+    sequence = pdb_structure.get_chain_sequence("A")
+    captured = {}
+    vocab = list(PROTEIN_AMINO_ACIDS)
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        captured["toolkit"] = toolkit
+        captured["payload"] = payload
+        return {
+            "metrics": {
+                "log_likelihood": -float(len(sequence)),
+                "avg_log_likelihood": -1.0,
+                "perplexity": float(np.e),
+            },
+            "logits": [[0.0] * len(vocab) for _ in sequence],
+            "vocab": vocab,
+        }
+
+    monkeypatch.setattr(
+        "proto_tools.tools.inverse_folding.esm_if1.esm_if1_score.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+
+    output = run_esm_if1_score(
+        ESMIF1ScoringInput(
+            sequence_structure_pairs=[
+                ESMIF1ScoringPair(sequence=sequence, structure=pdb_structure),
+            ]
+        ),
+        ESMIF1ScoringConfig(device="cpu", return_logits=True),
+    )
+
+    assert captured["toolkit"] == "esm_if1"
+    assert captured["payload"]["return_logits"] is True
+    assert output.vocab == vocab
+    assert output.scores[0].logits is not None
+    assert np.asarray(output.scores[0].logits).shape == (len(sequence), len(vocab))
 
 
 @pytest.mark.uses_gpu
@@ -256,12 +299,17 @@ def test_esm_if1_score_fields(pdb_structure: Structure):
             ESMIF1ScoringPair(sequence=original_sequence, structure=pdb_structure),
         ]
     )
-    config = ESMIF1ScoringConfig()
+    config = ESMIF1ScoringConfig(return_logits=True)
     output = run_esm_if1_score(inp, config)
     assert output.success
     assert_metrics_in_spec(output)
 
     score = output.scores[0]
+
+    # Canonical amino-acid logits come from the same teacher-forced pass.
+    assert output.vocab == list(PROTEIN_AMINO_ACIDS)
+    assert score.logits is not None
+    assert np.asarray(score.logits).shape == (len(original_sequence), len(PROTEIN_AMINO_ACIDS))
 
     # Value range checks
     assert score.avg_log_likelihood <= 0
