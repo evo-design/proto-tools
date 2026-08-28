@@ -78,11 +78,23 @@ def _small_structure() -> Structure:
     return Structure(structure=_SMALL_PDB)
 
 
+def _small_homotrimer_structure() -> Structure:
+    atom_lines = [line for line in _SMALL_PDB.splitlines() if line.startswith("ATOM")]
+    chains = []
+    serial = 1
+    for chain_id in "ABC":
+        for line in atom_lines:
+            chains.append(f"{line[:6]}{serial:5d}{line[11:21]}{chain_id}{line[22:]}")
+            serial += 1
+    return Structure(structure="\n".join([*chains, "END", ""]))
+
+
 def test_proteinmpnn_sample_backbone_noise_uses_model_constructor(monkeypatch, tmp_path):
     """ColabDesign's mk_mpnn_model has no set_opt; backbone_noise is a constructor arg."""
     from proto_tools.tools.inverse_folding.proteinmpnn.standalone import inference as proteinmpnn_inference
 
     calls: list[float] = []
+    prep_calls: list[dict] = []
 
     class FakeMpnnModel:
         def __init__(self, *, model_name, weights, backbone_noise=0.0):
@@ -90,6 +102,7 @@ def test_proteinmpnn_sample_backbone_noise_uses_model_constructor(monkeypatch, t
             self._model = SimpleNamespace(params={"p": np.array([1.0])})
 
         def prep_inputs(self, *args, **kwargs):
+            prep_calls.append(kwargs)
             return None
 
         def sample_parallel(self, *args, **kwargs):
@@ -120,9 +133,18 @@ def test_proteinmpnn_sample_backbone_noise_uses_model_constructor(monkeypatch, t
     pdb_path.write_text("END\n")
     model = proteinmpnn_inference.ProteinMPNNModel()
 
-    noisy = model.sample(str(pdb_path), ["A"], batch_size=1, seed=1, device="cpu", backbone_noise=0.02)
+    noisy = model.sample(
+        str(pdb_path),
+        ["A"],
+        batch_size=1,
+        seed=1,
+        device="cpu",
+        backbone_noise=0.02,
+        homooligomer=True,
+    )
     assert noisy["seq"].tolist() == ["AGSVL"]
     assert calls == [0.02]
+    assert prep_calls[0]["homooligomer"] is True
 
     model.sample(str(pdb_path), ["A"], batch_size=1, seed=2, device="cpu", backbone_noise=0.0)
     assert calls == [0.02, 0.0]

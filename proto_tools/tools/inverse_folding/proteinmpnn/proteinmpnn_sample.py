@@ -53,6 +53,8 @@ class ProteinMPNNSampleConfig(InverseFoldingConfig):
             yields more diverse, robust designs at some cost to native-sequence recovery. ``"abmpnn"``
             is antibody-optimized; ``"soluble"`` is soluble-protein-trained.
         backbone_noise (float): Gaussian noise (Å) added to backbone coordinates before each forward pass.
+        homooligomer (bool): Tie corresponding positions across equal-length redesigned chains so one
+            protomer sequence is sampled in the full oligomeric backbone context.
     """
 
     model_choice: Literal["proteinmpnn", "v_48_002", "v_48_010", "v_48_030", "abmpnn", "soluble"] = ConfigField(
@@ -73,6 +75,11 @@ class ProteinMPNNSampleConfig(InverseFoldingConfig):
         default=None,
         description="Single-letter codes of amino acids to exclude (e.g. ['C'] to forbid cysteine)",
         examples=[["C"]],
+    )
+    homooligomer: bool = ConfigField(
+        title="Tie Homooligomer Chains",
+        default=False,
+        description="Tie corresponding positions across equal-length redesigned chains",
     )
 
     @field_validator("excluded_amino_acids", mode="before")
@@ -237,6 +244,14 @@ def run_proteinmpnn_sample(
         # Staged once per input and reused across chunks, numbered 1..N per chain so ProteinMPNN,
         # which addresses residues by number alone, sees every insertion-coded residue.
         with inp.staged() as staged:
+            redesign_ids = inp.chain_ids_to_redesign
+            if config.homooligomer:
+                chain_lengths = [len(inp.structure.get_chain_sequence(cid)) for cid in redesign_ids]
+                if len(redesign_ids) < 2 or len(set(chain_lengths)) != 1:
+                    raise ValueError(
+                        "homooligomer=True requires at least two equal-length chains_to_redesign; "
+                        f"got {dict(zip(redesign_ids, chain_lengths, strict=True))}"
+                    )
             while remaining > 0:
                 chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
                 input_dict = {
@@ -253,6 +268,7 @@ def run_proteinmpnn_sample(
                     "verbose": config.verbose,
                     "return_logits": False,
                     "backbone_noise": config.backbone_noise,
+                    "homooligomer": config.homooligomer,
                 }
                 result = ToolInstance.dispatch(
                     "proteinmpnn",
@@ -270,6 +286,8 @@ def run_proteinmpnn_sample(
         for raw_seq, perp, recovery in zip(all_seqs, all_perp, all_seq_recovery, strict=True):
             # Segments are the redesigned chains in chain_ids_to_redesign order.
             segments = raw_seq.split("/")
+            if config.homooligomer and len(segments) == 1:
+                segments = segments * len(redesign_ids)
             if len(segments) != len(redesign_ids):
                 raise ValueError(
                     f"ProteinMPNN returned {len(segments)} sequence segment(s) but "

@@ -40,6 +40,7 @@ Use this to redesign or stabilize a natural protein, or to generate sequences fo
 - **`fixed_positions` is counted from 1, not 0.** Listing a position keeps that residue at its input identity, which is how you preserve catalytic or interface residues while redesigning everything else.
 - **`excluded_amino_acids` forbids residue types everywhere.** Use it to keep unwanted residues out of every design, for example `["C"]` to avoid introducing cysteines.
 - **`backbone_noise` (default `0.0`) and `seed`.** `backbone_noise` adds Gaussian noise in angstroms to the input backbone. Small values such as `0.02` increase diversity at some cost in recovery. Set `seed` for reproducible sampling.
+- **Use `homooligomer=True` for symmetric equal-length protomers.** List every protomer chain in `chains_to_redesign`; ProteinMPNN then ties corresponding positions during decoding and returns a complete complex with the same sampled protomer sequence on each redesigned chain. This is preferable to designing one chain against placeholder partner sequences and repeating it afterwards. Unequal-length or single-chain selections are rejected.
 
 ### ProteinMPNN Scoring (`proteinmpnn-score`)
 
