@@ -80,9 +80,13 @@ def _ensure_prostt5_weights(override: str | None) -> str:
     return str(weights_path)
 
 
-# Force `pident` (0-100) so local M8 matches the public server's format.
-# The CLI default is `fident` (0-1), which would silently corrupt parsing.
-_M8_FORMAT_PIDENT = "query,target,pident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,evalue,bits"
+# Force `pident` (0-100) so local M8 matches the public server's first 12
+# columns.  Append Foldseek's three TM-score normalizations so callers can
+# observe the score actually filtered by --tmscore-threshold-mode=0 instead
+# of treating the configured threshold as if it were a measured score.
+_M8_FORMAT_PIDENT = (
+    "query,target,pident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,evalue,bits,alntmscore,qtmscore,ttmscore"
+)
 
 
 def _gpu_args(use_gpu: bool) -> list[str]:

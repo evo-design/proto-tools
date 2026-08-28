@@ -91,6 +91,10 @@ class FoldseekHit(BaseModel):
         target_end (int): 1-indexed end position in the target.
         evalue (float): Expectation value.
         bit_score (float): Bit score.
+        alignment_tm_score (float | None): TM-score normalized by alignment
+            length, used by Foldseek's default TM-score threshold mode.
+        query_tm_score (float | None): TM-score normalized by query length.
+        target_tm_score (float | None): TM-score normalized by target length.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -116,6 +120,27 @@ class FoldseekHit(BaseModel):
         ge=0.0,
     )
     bit_score: float = Field(title="Bit Score", description="Foldseek alignment bit score; higher is better")
+    alignment_tm_score: float | None = Field(
+        default=None,
+        title="Alignment-normalized TM-score",
+        description="TM-score normalized by alignment length (local extended M8 only)",
+        ge=0.0,
+        le=1.0,
+    )
+    query_tm_score: float | None = Field(
+        default=None,
+        title="Query-normalized TM-score",
+        description="TM-score normalized by query length (local extended M8 only)",
+        ge=0.0,
+        le=1.0,
+    )
+    target_tm_score: float | None = Field(
+        default=None,
+        title="Target-normalized TM-score",
+        description="TM-score normalized by target length (local extended M8 only)",
+        ge=0.0,
+        le=1.0,
+    )
 
     @model_validator(mode="after")
     def _validate_ranges(self) -> "FoldseekHit":
@@ -503,7 +528,7 @@ def _submit(
 
 
 def _parse_m8_text(text: str, database: str) -> list[FoldseekHit]:
-    """Parse standard 12-column BLAST M8 text into FoldseekHit objects.
+    """Parse standard or locally extended BLAST M8 text into FoldseekHit objects.
 
     Rows with fewer than 12 columns, non-numeric fields, or out-of-range
     coordinates are skipped (logged at warning level). Sequence identity in
@@ -530,6 +555,9 @@ def _parse_m8_text(text: str, database: str) -> list[FoldseekHit]:
                     target_end=int(row[9]),
                     evalue=float(row[10]),
                     bit_score=float(row[11]),
+                    alignment_tm_score=float(row[12]) if len(row) >= 15 else None,
+                    query_tm_score=float(row[13]) if len(row) >= 15 else None,
+                    target_tm_score=float(row[14]) if len(row) >= 15 else None,
                 )
             )
         except (ValueError, ValidationError) as exc:
