@@ -639,7 +639,9 @@ class RFdiffusion3Config(BaseConfig):
         n_batches (int): Independent batches per spec
             (total designs = ``n_batches * diffusion_batch_size * num_specs``).
         diffusion_batch_size (int): Designs sampled in parallel per batch.
-        num_timesteps (int): Diffusion timesteps; more = slower, generally higher quality.
+        num_timesteps (int): Diffusion timesteps; at least two are required to
+            define one denoising transition, and more are slower but generally
+            higher quality.
         step_scale (float): Step size scale; higher = less diverse, more designable.
         sampler_kind (Literal['default', 'symmetry']): Sampler kind;
             ``'symmetry'`` for homo-oligomer design (paired with ``DesignSpec.symmetry``).
@@ -690,8 +692,8 @@ class RFdiffusion3Config(BaseConfig):
     num_timesteps: int = ConfigField(
         title="Number of Timesteps",
         default=200,
-        ge=1,
-        description="Diffusion timesteps for sampling (more = slower, generally higher quality)",
+        ge=2,
+        description="Diffusion steps (minimum 2; more is slower and generally higher quality)",
     )
     step_scale: float = ConfigField(
         title="Step Scale",
