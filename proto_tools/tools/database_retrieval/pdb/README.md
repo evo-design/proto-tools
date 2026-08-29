@@ -9,7 +9,7 @@
 
 ## Overview
 
-The RCSB Protein Data Bank is a database of experimentally determined three-dimensional structures of proteins, nucleic acids, and their complexes. This toolkit provides two CPU-only tools: `pdb-fetch-entry` retrieves structure metadata (title, experimental method, and resolution) for a PDB accession, and `pdb-fetch-fasta` retrieves the chain sequences of an entry and classifies each as protein or nucleic acid. It runs on CPU and requires only network access.
+The RCSB Protein Data Bank is a database of experimentally determined three-dimensional structures of proteins, nucleic acids, and their complexes. This toolkit provides three CPU-only tools: `pdb-fetch-entry` retrieves structure metadata (title, experimental method, and resolution), `pdb-fetch-fasta` retrieves chain sequences, and `pdb-structure-similarity` searches experimental PDB chains or assemblies with RCSB's learned structure embedding. They require network access.
 
 ## Background
 
@@ -17,9 +17,12 @@ The Protein Data Bank ([Berman et al., 2000](https://doi.org/10.1093/nar/28.1.23
 
 The tools call two RCSB HTTP endpoints directly. `pdb-fetch-entry` issues a GET request to the RCSB Data API core entry endpoint (`https://data.rcsb.org/rest/v1/core/entry/{pdb_id}`) and reads the structure title from `struct.title`, the experimental method from the first `exptl` record, and the resolution from `rcsb_entry_info.resolution_combined`, which covers both X-ray and cryo-EM entries; entries solved by NMR have no resolution value. `pdb-fetch-fasta` requests the FASTA endpoint (`https://www.rcsb.org/fasta/entry/{pdb_id}`), parses each record, extracts the author-assigned chain identifiers from the header, and classifies a sequence as protein when it contains amino-acid letters that do not also occur in nucleotide alphabets. Both tools uppercase the supplied accession, retry transient HTTP failures with backoff, and return an empty result when the accession is not found (HTTP 404). Results reflect the live archive at query time rather than a fixed release snapshot.
 
+`pdb-structure-similarity` calls the RCSB Search API's structure service. The service represents structures with ESM3 residue embeddings followed by a learned aggregator whose cosine similarity was trained to approximate maximum TM-score ([Segura et al., 2026](https://doi.org/10.1093/bioinformatics/btag058)). It is an independent approximate-nearest-neighbor search, not Foldseek or an exact structural alignment. Public PDB references are queried by entry and chain/assembly ID. Custom structures are converted to PDB format and sent to RCSB's public upload service, which requires the caller to set `allow_external_upload=True` explicitly.
+
 ### Learning Resources
 
 - [RCSB PDB Data API documentation](https://www.rcsb.org/docs/programmatic-access/web-apis-overview) (RCSB PDB) - reference for the REST endpoints, query syntax, and rate limits.
+- [RCSB PDB 3D similarity search](https://www.rcsb.org/docs/search-and-browse/advanced-search/3d-similarity-search) (RCSB PDB) - structure-embedding search semantics and query modes.
 - [PDB-101 training and education](https://pdb101.rcsb.org/) (RCSB PDB) - guided material on PDB data, structure determination methods, and how to interpret entries.
 
 ## Tools
@@ -53,11 +56,26 @@ Use this to extract reference sequences from an experimental structure for seque
 - **An unknown accession is not an error.** A missing or obsolete accession returns an empty `chains` list rather than raising.
 - **Exporting to `fasta` writes the original headers.** The `fasta` export emits each record using its stored FASTA header verbatim; `json` and `csv` are also supported, with the `csv` form joining shared chain identifiers with a semicolon.
 
+### PDB Structure Similarity (`pdb-structure-similarity`)
+
+Searches the experimental PDB structure index using either a public PDB chain/assembly or a custom `Structure`. It returns ranked identifiers, RCSB's normalized ranking score, and the structure service's original predicted TM-like score.
+
+#### Applications
+
+Use this as database-scale evidence for structural relatedness when an independent global structure search is appropriate: screen de novo structures for close experimental neighbors, identify remote structural analogs, or compare assemblies at whole-complex scale. Calibrate score direction and a decision threshold with matched known-related and known-unrelated controls before filtering a design pool.
+
+#### Usage Tips
+
+- **This is not Foldseek or an exact TM-align result.** `predicted_tm_score` comes from RCSB's learned embedding model. Treat it as an independent proxy and do not silently substitute it for a task's named structural oracle.
+- **Use `global` for whole-fold relatedness and `local` for shared substructures.** Match `target_search_space` to chains (`polymer_entity_instance`) or assemblies (`assembly`).
+- **Custom structures leave the local environment.** Their coordinates and embedded sequences are sent to RCSB. The default rejects that operation; set `allow_external_upload=True` only when external disclosure is permitted. Public `pdb_id` queries require no local upload.
+- **A small result limit can miss neighbors.** `number_of_candidates` controls approximate retrieval breadth, while `predicted_tm_score_cutoff` filters the model score. Calibrate both with controls when absence of a hit drives selection.
+
 ## Toolkit Notes
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every PDB tool in this toolkit (`pdb-fetch-entry`, `pdb-fetch-fasta`).
+These apply to every PDB tool in this toolkit (`pdb-fetch-entry`, `pdb-fetch-fasta`, `pdb-structure-similarity`).
 
 - **Requires network access.** The tools call the live RCSB PDB HTTP endpoints; they do not run offline and keep no local copy of the archive.
 - **Subject to RCSB rate limits.** RCSB throttles clients that exceed a few requests per second and returns HTTP 429 when the limit is exceeded; space out high-volume requests, since no account or API key is available to raise the limit.
