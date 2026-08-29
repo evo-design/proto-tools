@@ -11,6 +11,7 @@ from __future__ import annotations
 import csv
 import json
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Literal
@@ -230,6 +231,90 @@ class PdbStructureSimilarityOutput(BaseToolOutput):
         raise ValueError(f"Unsupported format: {file_format}")
 
 
+class PdbStructureSimilarityBatchInput(BaseToolInput):
+    """Aligned public or custom structure queries for bounded parallel search."""
+
+    queries: list[PdbStructureSimilarityInput] = InputField(
+        min_length=1,
+        title="Structure Queries",
+        description="Public PDB references or custom structures to search",
+    )
+    query_ids: list[str] | None = InputField(
+        default=None,
+        title="Query Identifiers",
+        description="Optional unique identifiers aligned one-to-one with queries",
+    )
+
+    @model_validator(mode="after")
+    def _validate_alignment(self) -> PdbStructureSimilarityBatchInput:
+        if self.query_ids is not None:
+            if len(self.query_ids) != len(self.queries):
+                raise ValueError("query_ids must align one-to-one with queries")
+            if len(set(self.query_ids)) != len(self.query_ids):
+                raise ValueError("query_ids must be unique")
+        return self
+
+
+class PdbStructureSimilarityBatchConfig(PdbStructureSimilarityConfig):
+    """Similarity settings plus conservative RCSB request concurrency."""
+
+    max_workers: int = ConfigField(
+        default=2,
+        ge=1,
+        le=4,
+        title="Maximum Workers",
+        description="Concurrent query workers; keep low to respect RCSB rate limits",
+        include_in_key=False,
+    )
+    fail_fast: bool = ConfigField(
+        default=False,
+        title="Fail Fast",
+        description="Raise on the first failed query instead of returning an explicit per-query error",
+    )
+
+
+class PdbStructureSimilarityBatchResult(BaseModel):
+    """One aligned batch result with explicit failure evidence."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query_id: str
+    input_index: int = Field(ge=0)
+    output: PdbStructureSimilarityOutput | None = None
+    error_type: str | None = None
+    error_message: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_outcome(self) -> PdbStructureSimilarityBatchResult:
+        if (self.output is None) == (self.error_type is None):
+            raise ValueError("Provide exactly one of output or error_type")
+        return self
+
+
+class PdbStructureSimilarityBatchOutput(BaseToolOutput):
+    """Input-aligned structure-search results and explicit failures."""
+
+    results: list[PdbStructureSimilarityBatchResult] = Field(default_factory=list)
+    successful_count: int = Field(default=0, ge=0)
+    failed_count: int = Field(default=0, ge=0)
+
+    @property
+    def output_format_options(self) -> list[str]:
+        """Return supported export formats."""
+        return ["json"]
+
+    @property
+    def output_format_default(self) -> str:
+        """Return the default export format."""
+        return "json"
+
+    def _export_output(self, export_path: Any, file_format: str) -> None:
+        if file_format != "json":
+            raise ValueError(f"Unsupported format: {file_format}")
+        path = Path(export_path).with_suffix(".json")
+        path.write_text(json.dumps(self.model_dump(mode="json"), indent=2) + "\n", encoding="utf-8")
+
+
 def _original_structure_score(result: dict[str, Any]) -> float | None:
     """Extract the structure node's unnormalized/original score."""
     direct = result.get("original_score")
@@ -311,6 +396,17 @@ def example_input() -> Any:
     return PdbStructureSimilarityInput(pdb_id="1YCR", chain_id="A")
 
 
+def batch_example_input() -> Any:
+    """Two aligned public-data queries that require no external upload."""
+    return PdbStructureSimilarityBatchInput(
+        query_ids=["p53", "mdm2"],
+        queries=[
+            PdbStructureSimilarityInput(pdb_id="1YCR", chain_id="B"),
+            PdbStructureSimilarityInput(pdb_id="1YCR", chain_id="A"),
+        ],
+    )
+
+
 @tool(
     key="pdb-structure-similarity",
     label="PDB Structure Similarity",
@@ -384,4 +480,65 @@ def run_pdb_structure_similarity(
         total_count=int(payload.get("total_count", len(hits))),
         max_predicted_tm_score=max(measured) if measured else None,
         query_was_uploaded=uploaded_url is not None,
+    )
+
+
+@tool(
+    key="pdb-structure-similarity-batch",
+    label="Batch PDB Structure Similarity",
+    category="database_retrieval",
+    input_class=PdbStructureSimilarityBatchInput,
+    config_class=PdbStructureSimilarityBatchConfig,
+    output_class=PdbStructureSimilarityBatchOutput,
+    description=(
+        "Search an aligned structure shortlist against experimental PDB with bounded parallel RCSB requests, "
+        "returning explicit per-query failures for complete proxy coverage audits"
+    ),
+    uses_gpu=False,
+    example_input=batch_example_input,
+    cacheable=True,
+)
+def run_pdb_structure_similarity_batch(
+    inputs: PdbStructureSimilarityBatchInput,
+    config: PdbStructureSimilarityBatchConfig,
+    instance: Any = None,
+) -> PdbStructureSimilarityBatchOutput:
+    """Search a shortlist concurrently while preserving input alignment."""
+    del instance
+    single_config = PdbStructureSimilarityConfig.model_validate(
+        config.model_dump(exclude={"max_workers", "fail_fast"})
+    )
+    query_ids = inputs.query_ids or [str(index) for index in range(len(inputs.queries))]
+
+    def search(index: int) -> PdbStructureSimilarityBatchResult:
+        try:
+            output = run_pdb_structure_similarity(inputs.queries[index], single_config)
+        except Exception as error:
+            if config.fail_fast:
+                raise
+            return PdbStructureSimilarityBatchResult(
+                query_id=query_ids[index],
+                input_index=index,
+                error_type=type(error).__name__,
+                error_message=str(error)[:1000],
+            )
+        return PdbStructureSimilarityBatchResult(
+            query_id=query_ids[index],
+            input_index=index,
+            output=output,
+        )
+
+    with ThreadPoolExecutor(max_workers=min(config.max_workers, len(inputs.queries))) as executor:
+        results = list(executor.map(search, range(len(inputs.queries))))
+    successful_count = sum(result.output is not None for result in results)
+    return PdbStructureSimilarityBatchOutput(
+        results=results,
+        successful_count=successful_count,
+        failed_count=len(results) - successful_count,
+        metadata={
+            "query_count": len(results),
+            "max_workers": config.max_workers,
+            "input_order_preserved": True,
+            "failed_queries_are_not_measurements": True,
+        },
     )

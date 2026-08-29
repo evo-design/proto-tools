@@ -71,11 +71,38 @@ Use this as database-scale evidence for structural relatedness when an independe
 - **Custom structures leave the local environment.** Their coordinates and embedded sequences are sent to RCSB. The default rejects that operation; set `allow_external_upload=True` only when external disclosure is permitted. Public `pdb_id` queries require no local upload.
 - **A small result limit can miss neighbors.** `number_of_candidates` controls approximate retrieval breadth, while `predicted_tm_score_cutoff` filters the model score. Calibrate both with controls when absence of a hit drives selection.
 
+### Batch PDB Structure Similarity (`pdb-structure-similarity-batch`)
+
+Runs the same learned RCSB comparison for an aligned shortlist with conservative
+bounded concurrency. Results preserve input order and query identifiers. A
+failed upload or search is returned as an explicit error record, never as a
+novelty measurement.
+
+#### Applications
+
+Use this when proxy coverage—not generation—is limiting a design campaign. It
+is especially useful for measuring every finalist and matched control through
+the same wrapper before attempting feedback calibration or portfolio selection.
+
+#### Usage Tips
+
+- **Keep concurrency conservative.** The default of two workers improves
+  shortlist throughput without treating a public service as local compute; the
+  configuration caps concurrency at four.
+- **Audit coverage before selection.** Require an `output` for any query whose
+  score participates in filtering or calibration. `error_type` and
+  `error_message` are failure evidence, not evidence of database novelty.
+- **The same disclosure boundary applies.** Custom structures still require
+  `allow_external_upload=True`; batching does not weaken that acknowledgement.
+- **The proxy remains independent.** Batch execution improves coverage but does
+  not make the learned RCSB score equivalent to Foldseek, TM-align, or another
+  task-named oracle.
+
 ## Toolkit Notes
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every PDB tool in this toolkit (`pdb-fetch-entry`, `pdb-fetch-fasta`, `pdb-structure-similarity`).
+These apply to every PDB tool in this toolkit (`pdb-fetch-entry`, `pdb-fetch-fasta`, `pdb-structure-similarity`, `pdb-structure-similarity-batch`).
 
 - **Requires network access.** The tools call the live RCSB PDB HTTP endpoints; they do not run offline and keep no local copy of the archive.
 - **Subject to RCSB rate limits.** RCSB throttles clients that exceed a few requests per second and returns HTTP 429 when the limit is exceeded; space out high-volume requests, since no account or API key is available to raise the limit.

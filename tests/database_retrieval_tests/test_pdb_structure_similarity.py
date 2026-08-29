@@ -8,9 +8,13 @@ from pydantic import ValidationError
 
 from proto_tools import Structure
 from proto_tools.tools.database_retrieval import (
+    PdbStructureSimilarityBatchConfig,
+    PdbStructureSimilarityBatchInput,
     PdbStructureSimilarityConfig,
     PdbStructureSimilarityInput,
+    PdbStructureSimilarityOutput,
     run_pdb_structure_similarity,
+    run_pdb_structure_similarity_batch,
 )
 from proto_tools.tools.database_retrieval.pdb import structure_similarity as module
 
@@ -138,3 +142,59 @@ def test_custom_chain_search_preserves_chain_level_return_type(monkeypatch: pyte
 
     search_payload = session.calls[1][1]["json"]
     assert search_payload["return_type"] == "polymer_instance"
+
+
+def test_batch_preserves_alignment_and_reports_partial_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    def search(
+        inputs: PdbStructureSimilarityInput,
+        config: PdbStructureSimilarityConfig,
+    ) -> PdbStructureSimilarityOutput:
+        if inputs.pdb_id == "FAIL":
+            raise RuntimeError("synthetic unavailable query")
+        return PdbStructureSimilarityOutput(
+            max_predicted_tm_score=0.75 if inputs.chain_id == "A" else 0.25,
+            total_count=1,
+        )
+
+    monkeypatch.setattr(module, "run_pdb_structure_similarity", search)
+    output = run_pdb_structure_similarity_batch(
+        PdbStructureSimilarityBatchInput(
+            query_ids=["first", "broken", "third"],
+            queries=[
+                PdbStructureSimilarityInput(pdb_id="1YCR", chain_id="A"),
+                PdbStructureSimilarityInput(pdb_id="FAIL", chain_id="A"),
+                PdbStructureSimilarityInput(pdb_id="1YCR", chain_id="B"),
+            ],
+        ),
+        PdbStructureSimilarityBatchConfig(max_workers=2),
+    )
+
+    assert [result.query_id for result in output.results] == ["first", "broken", "third"]
+    assert [result.input_index for result in output.results] == [0, 1, 2]
+    assert output.results[0].output is not None
+    assert output.results[0].output.max_predicted_tm_score == pytest.approx(0.75)
+    assert output.results[1].output is None
+    assert output.results[1].error_type == "RuntimeError"
+    assert "synthetic unavailable" in (output.results[1].error_message or "")
+    assert output.results[2].output is not None
+    assert output.results[2].output.max_predicted_tm_score == pytest.approx(0.25)
+    assert output.successful_count == 2
+    assert output.failed_count == 1
+    assert output.metadata["failed_queries_are_not_measurements"] is True
+
+
+def test_batch_fail_fast_propagates_query_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail(
+        inputs: PdbStructureSimilarityInput,
+        config: PdbStructureSimilarityConfig,
+    ) -> PdbStructureSimilarityOutput:
+        raise RuntimeError("stop now")
+
+    monkeypatch.setattr(module, "run_pdb_structure_similarity", fail)
+    with pytest.raises(RuntimeError, match="stop now"):
+        run_pdb_structure_similarity_batch(
+            PdbStructureSimilarityBatchInput(
+                queries=[PdbStructureSimilarityInput(pdb_id="1YCR", chain_id="A")]
+            ),
+            PdbStructureSimilarityBatchConfig(fail_fast=True),
+        )
