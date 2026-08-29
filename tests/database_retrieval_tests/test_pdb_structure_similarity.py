@@ -68,7 +68,13 @@ def test_input_requires_exactly_one_source() -> None:
 
 def test_public_entry_search_returns_original_structure_score(monkeypatch: pytest.MonkeyPatch) -> None:
     session = _Session()
-    monkeypatch.setattr(module, "build_http_session", lambda **_kwargs: session)
+    session_config: dict[str, Any] = {}
+
+    def build_session(**kwargs: Any) -> _Session:
+        session_config.update(kwargs)
+        return session
+
+    monkeypatch.setattr(module, "build_http_session", build_session)
 
     output = run_pdb_structure_similarity(
         PdbStructureSimilarityInput(pdb_id="1ycr", chain_id="A"),
@@ -76,6 +82,7 @@ def test_public_entry_search_returns_original_structure_score(monkeypatch: pytes
     )
 
     assert session.closed is True
+    assert session_config["allowed_methods"] == ["POST"]
     assert [url for url, _kwargs in session.calls] == [module._SEARCH_URL]
     payload = session.calls[0][1]["json"]
     parameters = payload["query"]["parameters"]

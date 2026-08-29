@@ -344,6 +344,10 @@ def run_pdb_structure_similarity(
         http_retries=_HTTP_RETRIES,
         backoff_seconds=_BACKOFF_SECONDS,
         user_agent=_USER_AGENT,
+        # Both upload and search are POST requests. The shared session defaults
+        # to retrying GET only, which previously made the configured retry count
+        # ineffective for every operation in this tool.
+        allowed_methods=["POST"],
         mount_http=True,
     )
     uploaded_url: str | None = None
