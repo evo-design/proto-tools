@@ -119,5 +119,22 @@ def test_acknowledged_custom_structure_is_uploaded(monkeypatch: pytest.MonkeyPat
         "url": module._UPLOAD_DOWNLOAD_BASE + "synthetic/query.bcif",
         "format": "bcif",
     }
-    assert search_payload["return_type"] == "entry"
+    assert search_payload["return_type"] == "assembly"
     assert output.query_was_uploaded is True
+
+
+def test_custom_chain_search_preserves_chain_level_return_type(monkeypatch: pytest.MonkeyPatch) -> None:
+    fixture = Path(__file__).parent.parent / "dummy_data" / "test_structure_similarity.pdb"
+    session = _Session()
+    monkeypatch.setattr(module, "build_http_session", lambda **_kwargs: session)
+
+    run_pdb_structure_similarity(
+        PdbStructureSimilarityInput(structure=fixture),
+        PdbStructureSimilarityConfig(
+            allow_external_upload=True,
+            target_search_space="polymer_entity_instance",
+        ),
+    )
+
+    search_payload = session.calls[1][1]["json"]
+    assert search_payload["return_type"] == "polymer_instance"

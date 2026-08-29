@@ -288,11 +288,12 @@ def _query_parameters(
 def _search_payload(
     parameters: dict[str, Any], config: PdbStructureSimilarityConfig, *, custom_query: bool
 ) -> dict[str, Any]:
-    return_type = (
-        "entry"
-        if custom_query
-        else ("polymer_instance" if config.target_search_space == "polymer_entity_instance" else "assembly")
-    )
+    del custom_query
+    # RCSB supports chain- and assembly-level return identifiers for both
+    # deposited and URL-backed custom structure queries. Returning only entry
+    # IDs for custom inputs discards the matched chain/assembly identity and
+    # makes a bounded follow-up alignment ambiguous.
+    return_type = "polymer_instance" if config.target_search_space == "polymer_entity_instance" else "assembly"
     return {
         "query": {"type": "terminal", "service": "structure", "parameters": parameters, "node_id": 0},
         "return_type": return_type,
