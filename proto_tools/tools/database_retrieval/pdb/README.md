@@ -58,7 +58,7 @@ Use this to extract reference sequences from an experimental structure for seque
 
 ### PDB Structure Similarity (`pdb-structure-similarity`)
 
-Searches the experimental PDB structure index using either a public PDB chain/assembly or a custom `Structure`. It returns ranked identifiers, RCSB's normalized ranking score, and the structure service's original predicted TM-like score. For custom queries, `align_top_hits` can additionally download a bounded number of independently retrieved neighbors and run local TM-align (chains) or US-align (assemblies).
+Searches the experimental PDB structure index using either a public PDB chain/assembly or a custom `Structure`. It returns ranked identifiers, RCSB's normalized ranking score, and the structure service's original predicted TM-like score.
 
 #### Applications
 
@@ -67,8 +67,7 @@ Use this as database-scale evidence for structural relatedness when an independe
 #### Usage Tips
 
 - **This is not Foldseek or an exact TM-align result.** `predicted_tm_score` comes from RCSB's learned embedding model. Treat it as an independent proxy and do not silently substitute it for a task's named structural oracle.
-- **Local alignment is an opt-in composition, not exhaustive database search.** Set `align_top_hits` from one to five only for a custom query. The tool aligns the query against the independently retrieved neighbors and reports query- and reference-normalized maxima. This can strengthen a calibrated proxy, but it can miss a close structure that retrieval did not return.
-- **Alignment failures are missing evidence.** A failed download or alignment populates `alignment_error`; it never becomes a low similarity score. Check `aligned_reference_count` and coverage before ranking candidates.
+- **For exact evidence, align the retrieved neighbors yourself.** This tool returns identifiers in `hits`; fetch them with `pdb-fetch-entry` and align against your query with a registered `structure_alignment` tool such as `tmalign-alignment` or `usalign-alignment`. Treat a fetch or alignment failure as missing evidence rather than as low similarity.
 - **Use `global` for whole-fold relatedness and `local` for shared substructures.** Match `target_search_space` to chains (`polymer_entity_instance`) or assemblies (`assembly`).
 - **Custom structures leave the local environment.** Their coordinates and embedded sequences are sent to RCSB. The default rejects that operation; set `allow_external_upload=True` only when external disclosure is permitted. Public `pdb_id` queries require no local upload.
 - **A small result limit can miss neighbors.** `number_of_candidates` controls approximate retrieval breadth, while `predicted_tm_score_cutoff` filters the model score. Calibrate both with controls when absence of a hit drives selection.
@@ -100,49 +99,9 @@ the same wrapper before attempting feedback calibration or portfolio selection.
   `error_message` are failure evidence, not evidence of database novelty.
 - **The same disclosure boundary applies.** Custom structures still require
   `allow_external_upload=True`; batching does not weaken that acknowledgement.
-- **Aligned follow-up is available but bounded.** `align_top_hits` is inherited
-  by the batch configuration. Each successful query reports aligned coverage
-  and maxima separately from the learned RCSB score; require both when your
-  calibrated decision rule depends on local alignment.
 - **The proxy remains independent.** Batch execution improves coverage but does
   not make the learned RCSB score equivalent to Foldseek, TM-align, or another
   task-named oracle.
-
-### Batch Aligned PDB Neighbors (`pdb-aligned-neighbor-similarity-batch`)
-
-Use this explicit composition when custom candidate structures need a closer
-structural-novelty measurement than learned retrieval alone. It performs the
-same bounded RCSB search, locally aligns one retrieved experimental-PDB
-neighbor per query by default, and reports learned and aligned scores
-separately. It never edits or generates candidates.
-
-#### Applications
-
-Use this when a campaign needs a closer look at a shortlist whose learned
-retrieval scores are clustered, and when the extra alignment cost per candidate
-is affordable. It suits per-candidate follow-up on a handful of finalists rather
-than a first-pass screen over a large pool.
-
-#### Usage Tips
-
-- **Do not assume alignment beats the learned score.** Adding a local alignment
-  is not automatically better evidence than the learned retrieval score from
-  `pdb-structure-similarity-batch`, and it may be worse. Calibrate both against
-  your own matched controls for the decision at hand before preferring either.
-- **Expect the retrieved neighbor to move.** The alignment score depends on
-  which neighbor retrieval returns, and that choice is sensitive to the query
-  structure. Changing the structure predictor that produced the query can change
-  the top hit, so this score is less stable under such a change than an
-  aggregate over many embedding candidates.
-- **Custom structures require explicit disclosure.** This surface accepts
-  custom structures only and therefore still requires
-  `allow_external_upload=True`.
-- **Raise `align_top_hits` only for cause.** Each extra neighbor adds a
-  download and an alignment per query.
-- **Treat failures as missing evidence.** A retrieved-neighbor alignment is not
-  an exhaustive database search: missing a close structure during retrieval
-  remains unresolved uncertainty, and any download or alignment failure is
-  missing evidence rather than a novelty pass.
 
 ## Toolkit Notes
 
