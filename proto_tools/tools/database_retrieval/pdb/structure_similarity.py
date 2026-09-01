@@ -20,6 +20,16 @@ import requests
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from proto_tools.entities import Structure
+from proto_tools.tools.structure_alignment.tmalign.tmalign import (
+    TMalignConfig,
+    TMalignInput,
+    run_tmalign,
+)
+from proto_tools.tools.structure_alignment.usalign.usalign import (
+    USalignConfig,
+    USalignInput,
+    run_usalign,
+)
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -33,6 +43,7 @@ from proto_tools.utils import (
 _UPLOAD_URL = "https://user-upload.rcsb.org/v1/putMultipart"
 _UPLOAD_DOWNLOAD_BASE = "https://user-upload.rcsb.org/v1/download/"
 _SEARCH_URL = "https://search.rcsb.org/rcsbsearch/v2/query"
+_DOWNLOAD_URL = "https://files.rcsb.org/download/{name}"
 _USER_AGENT = "proto-tools/pdb-structure-similarity-v1"
 _HTTP_RETRIES = 3
 _BACKOFF_SECONDS = 1.0
@@ -60,10 +71,10 @@ class PdbStructureSimilarityInput(BaseToolInput):
     not upload local data.
 
     Attributes:
-        structure: Custom query structure, mutually exclusive with ``pdb_id``.
-        pdb_id: Existing public PDB entry ID.
-        chain_id: Input chain/asym ID for a public PDB query.
-        assembly_id: Input biological assembly ID for a public PDB query.
+        structure (Structure | None): Custom query structure, mutually exclusive with ``pdb_id``.
+        pdb_id (str | None): Existing public PDB entry ID.
+        chain_id (str | None): Input chain/asym ID for a public PDB query.
+        assembly_id (str | None): Input biological assembly ID for a public PDB query.
     """
 
     structure: Structure | None = InputField(
@@ -104,12 +115,15 @@ class PdbStructureSimilarityConfig(BaseConfig):
     """RCSB embedding-search settings.
 
     Attributes:
-        target_search_space: Experimental PDB chains or assemblies to search.
-        similarity_type: Global whole-shape or local substructure similarity.
-        predicted_tm_score_cutoff: Minimum learned predicted TM-like score.
-        number_of_candidates: Maximum nearest-neighbor candidates considered.
-        allow_external_upload: Acknowledge disclosure of a custom structure.
-        timeout_seconds: Per-request HTTP timeout.
+        target_search_space (PdbStructureTarget): Experimental PDB chains or assemblies to search.
+        similarity_type (PdbStructureSimilarityType): Global whole-shape or local substructure similarity.
+        predicted_tm_score_cutoff (float): Minimum learned predicted TM-like score.
+        number_of_candidates (int): Maximum nearest-neighbor candidates considered.
+        allow_external_upload (bool): Acknowledge disclosure of a custom structure.
+        timeout_seconds (float): Per-request HTTP timeout.
+        align_top_hits (int): Number of independently retrieved neighbors to align locally.
+        max_reference_chains (int): Bound for ambiguous chain-level reference entries.
+        alignment_timeout_seconds (int): Per-comparison local alignment timeout.
     """
 
     target_search_space: PdbStructureTarget = ConfigField(
@@ -149,6 +163,29 @@ class PdbStructureSimilarityConfig(BaseConfig):
         description="Timeout for each RCSB upload or search request",
         include_in_key=False,
     )
+    align_top_hits: int = ConfigField(
+        default=0,
+        ge=0,
+        le=5,
+        title="Align Top Hits",
+        description=(
+            "Locally align this many independently retrieved neighbors; zero returns learned retrieval only"
+        ),
+    )
+    max_reference_chains: int = ConfigField(
+        default=32,
+        ge=1,
+        le=128,
+        title="Maximum Reference Chains",
+        description="Maximum unique protein chains aligned when an RCSB hit lacks chain granularity",
+    )
+    alignment_timeout_seconds: int = ConfigField(
+        default=300,
+        ge=10,
+        title="Alignment Timeout",
+        description="Timeout for each local TM-align or US-align comparison",
+        include_in_key=False,
+    )
 
 
 class PdbStructureSimilarityHit(BaseModel):
@@ -164,17 +201,44 @@ class PdbStructureSimilarityHit(BaseModel):
         le=1.0,
         description="Structure service original score, trained to approximate maximum TM-score",
     )
+    aligned_tm_score_query_normalized: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        title="Aligned TM (Query Norm)",
+        description="Largest local alignment TM-score normalized by the query length",
+    )
+    aligned_tm_score_reference_normalized: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        title="Aligned TM (Ref Norm)",
+        description="Largest local alignment TM-score normalized by the retrieved reference length",
+    )
+    aligned_reference_count: int = Field(
+        default=0,
+        ge=0,
+        description="Number of retrieved chains or assemblies aligned locally",
+    )
+    alignment_error: str | None = Field(
+        default=None,
+        description="Explicit retrieval/alignment failure; never evidence of novelty",
+    )
 
 
 class PdbStructureSimilarityOutput(BaseToolOutput):
     """Ranked experimental-PDB matches for one structure query.
 
     Attributes:
-        hits: Ranked experimental-PDB structure matches.
-        total_count: Number of matches reported by RCSB.
-        max_predicted_tm_score: Largest learned predicted TM-like hit score.
-        source_url: RCSB Search API endpoint used for the query.
-        query_was_uploaded: Whether the call sent a custom structure to RCSB.
+        hits (list[PdbStructureSimilarityHit]): Ranked experimental-PDB structure matches.
+        total_count (int): Number of matches reported by RCSB.
+        max_predicted_tm_score (float | None): Largest learned predicted TM-like hit score.
+        max_aligned_tm_score_query_normalized (float | None): Largest query-normalized local
+            TM-score among successfully aligned neighbors, or None when no neighbor was aligned.
+        max_aligned_tm_score_reference_normalized (float | None): Largest reference-normalized
+            local TM-score among successfully aligned neighbors, or None when none was aligned.
+        source_url (str): RCSB Search API endpoint used for the query.
+        query_was_uploaded (bool): Whether the call sent a custom structure to RCSB.
     """
 
     hits: list[PdbStructureSimilarityHit] = Field(
@@ -194,6 +258,20 @@ class PdbStructureSimilarityOutput(BaseToolOutput):
         le=1.0,
         title="Maximum Predicted TM-score",
         description="Largest learned predicted TM-like score among returned hits",
+    )
+    max_aligned_tm_score_query_normalized: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        title="Max Aligned TM (Query)",
+        description="Largest query-normalized local TM-score among successfully aligned neighbors",
+    )
+    max_aligned_tm_score_reference_normalized: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        title="Max Aligned TM (Ref)",
+        description="Largest reference-normalized local TM-score among successfully aligned neighbors",
     )
     source_url: str = Field(
         default=_SEARCH_URL,
@@ -224,7 +302,18 @@ class PdbStructureSimilarityOutput(BaseToolOutput):
             return
         if file_format == "csv":
             with path.open("w", encoding="utf-8", newline="") as handle:
-                writer = csv.DictWriter(handle, fieldnames=["identifier", "score", "predicted_tm_score"])
+                writer = csv.DictWriter(
+                    handle,
+                    fieldnames=[
+                        "identifier",
+                        "score",
+                        "predicted_tm_score",
+                        "aligned_tm_score_query_normalized",
+                        "aligned_tm_score_reference_normalized",
+                        "aligned_reference_count",
+                        "alignment_error",
+                    ],
+                )
                 writer.writeheader()
                 writer.writerows(hit.model_dump() for hit in self.hits)
             return
@@ -232,7 +321,14 @@ class PdbStructureSimilarityOutput(BaseToolOutput):
 
 
 class PdbStructureSimilarityBatchInput(BaseToolInput):
-    """Aligned public or custom structure queries for bounded parallel search."""
+    """Aligned public or custom structure queries for bounded parallel search.
+
+    Attributes:
+        queries (list[PdbStructureSimilarityInput]): Public PDB references or
+            custom structures to search.
+        query_ids (list[str] | None): Optional unique identifiers aligned
+            one-to-one with ``queries``.
+    """
 
     queries: list[PdbStructureSimilarityInput] = InputField(
         min_length=1,
@@ -256,7 +352,21 @@ class PdbStructureSimilarityBatchInput(BaseToolInput):
 
 
 class PdbStructureSimilarityBatchConfig(PdbStructureSimilarityConfig):
-    """Similarity settings plus conservative RCSB request concurrency."""
+    """Similarity settings plus conservative RCSB request concurrency.
+
+    Attributes:
+        target_search_space (PdbStructureTarget): Experimental PDB chains or assemblies to search.
+        similarity_type (PdbStructureSimilarityType): Global whole-shape or local substructure similarity.
+        predicted_tm_score_cutoff (float): Minimum learned predicted TM-like score.
+        number_of_candidates (int): Maximum nearest-neighbor candidates considered.
+        allow_external_upload (bool): Acknowledge disclosure of a custom structure.
+        timeout_seconds (float): Per-request HTTP timeout.
+        align_top_hits (int): Number of independently retrieved neighbors to align locally.
+        max_reference_chains (int): Bound for ambiguous chain-level reference entries.
+        alignment_timeout_seconds (int): Per-comparison local alignment timeout.
+        max_workers (int): Concurrent query workers, kept low for RCSB rate limits.
+        fail_fast (bool): Raise on the first failed query instead of reporting it per query.
+    """
 
     max_workers: int = ConfigField(
         default=2,
@@ -273,16 +383,63 @@ class PdbStructureSimilarityBatchConfig(PdbStructureSimilarityConfig):
     )
 
 
+class PdbAlignedNeighborBatchConfig(PdbStructureSimilarityBatchConfig):
+    """Bounded local alignment settings for custom-structure novelty screens.
+
+    Attributes:
+        target_search_space (PdbStructureTarget): Experimental PDB chains or assemblies to search.
+        similarity_type (PdbStructureSimilarityType): Global whole-shape or local substructure similarity.
+        predicted_tm_score_cutoff (float): Minimum learned predicted TM-like score.
+        number_of_candidates (int): Maximum nearest-neighbor candidates considered.
+        allow_external_upload (bool): Acknowledge disclosure of a custom structure.
+        timeout_seconds (float): Per-request HTTP timeout.
+        align_top_hits (int): Retrieved neighbors aligned locally per query, at least one.
+        max_reference_chains (int): Bound for ambiguous chain-level reference entries.
+        alignment_timeout_seconds (int): Per-comparison local alignment timeout.
+        max_workers (int): Concurrent query workers, kept low for RCSB rate limits.
+        fail_fast (bool): Raise on the first failed query instead of reporting it per query.
+    """
+
+    align_top_hits: int = ConfigField(
+        default=1,
+        ge=1,
+        le=5,
+        title="Align Top Hits",
+        description=(
+            "Number of independently retrieved experimental-PDB neighbors aligned locally per custom query"
+        ),
+    )
+
+
 class PdbStructureSimilarityBatchResult(BaseModel):
     """One aligned batch result with explicit failure evidence."""
 
     model_config = ConfigDict(extra="forbid")
 
-    query_id: str
-    input_index: int = Field(ge=0)
-    output: PdbStructureSimilarityOutput | None = None
-    error_type: str | None = None
-    error_message: str | None = None
+    query_id: str = Field(
+        title="Query ID",
+        description="Identifier of the query structure this result belongs to",
+    )
+    input_index: int = Field(
+        ge=0,
+        title="Input Index",
+        description="Zero-based position of the query in the submitted batch",
+    )
+    output: PdbStructureSimilarityOutput | None = Field(
+        default=None,
+        title="Search Output",
+        description="Structure-search result, or None when this query failed",
+    )
+    error_type: str | None = Field(
+        default=None,
+        title="Error Type",
+        description="Exception class name when this query failed, otherwise None",
+    )
+    error_message: str | None = Field(
+        default=None,
+        title="Error Message",
+        description="Failure detail when this query failed, otherwise None",
+    )
 
     @model_validator(mode="after")
     def _validate_outcome(self) -> PdbStructureSimilarityBatchResult:
@@ -292,11 +449,34 @@ class PdbStructureSimilarityBatchResult(BaseModel):
 
 
 class PdbStructureSimilarityBatchOutput(BaseToolOutput):
-    """Input-aligned structure-search results and explicit failures."""
+    """Input-aligned structure-search results and explicit failures.
 
-    results: list[PdbStructureSimilarityBatchResult] = Field(default_factory=list)
-    successful_count: int = Field(default=0, ge=0)
-    failed_count: int = Field(default=0, ge=0)
+    Attributes:
+        results (list[PdbStructureSimilarityBatchResult]): One result per
+            submitted query, in input order, each a success or a failure.
+        successful_count (int): Number of queries that returned a
+            structure-search result.
+        failed_count (int): Number of queries that failed and carry no
+            measurement.
+    """
+
+    results: list[PdbStructureSimilarityBatchResult] = Field(
+        default_factory=list,
+        title="Results",
+        description="One result per submitted query, in input order, each a success or a failure",
+    )
+    successful_count: int = Field(
+        default=0,
+        ge=0,
+        title="Successful Count",
+        description="Number of queries that returned a structure-search result",
+    )
+    failed_count: int = Field(
+        default=0,
+        ge=0,
+        title="Failed Count",
+        description="Number of queries that failed and carry no measurement",
+    )
 
     @property
     def output_format_options(self) -> list[str]:
@@ -327,6 +507,113 @@ def _original_structure_score(result: dict[str, Any]) -> float | None:
             if isinstance(node, dict) and isinstance(node.get("original_score"), int | float):
                 return float(node["original_score"])
     return None
+
+
+def _protein_chains(structure: Structure, maximum: int) -> list[Structure]:
+    """Return unique protein-like chains, bounded for ambiguous entry-level hits."""
+    chains: list[Structure] = []
+    seen_sequences: set[str] = set()
+    for chain_id, coordinates in structure.ca_coordinates_by_chain().items():
+        if len(coordinates) < 20:
+            continue
+        chain = structure.select_chain(chain_id)
+        sequence = chain.get_chain_sequence(chain_id).replace("-", "")
+        if sequence in seen_sequences:
+            continue
+        seen_sequences.add(sequence)
+        chains.append(chain)
+        if len(chains) == maximum:
+            break
+    return chains
+
+
+def _hit_reference_name(identifier: str, target_search_space: PdbStructureTarget) -> tuple[str, str | None]:
+    """Map an RCSB result identifier to a coordinate filename and optional chain."""
+    if "." in identifier:
+        entry_id, chain_id = identifier.split(".", 1)
+        return f"{entry_id.upper()}.cif", chain_id
+    if target_search_space == "assembly" and "-" in identifier:
+        entry_id, assembly_id = identifier.split("-", 1)
+        return f"{entry_id.upper()}-assembly{assembly_id}.cif", None
+    entry_id = identifier.split("-", 1)[0].upper()
+    return f"{entry_id}.cif", None
+
+
+def _download_hit_structure(
+    session: Any,
+    identifier: str,
+    target_search_space: PdbStructureTarget,
+    timeout_seconds: float,
+) -> tuple[Structure, str | None]:
+    filename, chain_id = _hit_reference_name(identifier, target_search_space)
+    response = session.get(_DOWNLOAD_URL.format(name=filename), timeout=timeout_seconds)
+    _raise_for_status(response, "structure download")
+    return Structure(structure=response.text, structure_format="cif"), chain_id
+
+
+def _align_retrieved_hit(
+    query: Structure,
+    hit: PdbStructureSimilarityHit,
+    config: PdbStructureSimilarityConfig,
+    session: Any,
+) -> None:
+    """Attach local alignment evidence to one independently retrieved neighbor."""
+    try:
+        reference, chain_id = _download_hit_structure(
+            session,
+            hit.identifier,
+            config.target_search_space,
+            config.timeout_seconds,
+        )
+        if config.target_search_space == "assembly":
+            alignment = run_usalign(
+                USalignInput(query_structure=query, reference_structure=reference),
+                USalignConfig(timeout=config.alignment_timeout_seconds),
+            )
+            query_scores = [float(alignment.metrics.tm_score_structure_1)]
+            reference_scores = [float(alignment.metrics.tm_score_structure_2)]
+        else:
+            references: list[Structure]
+            if chain_id is not None and chain_id in reference.ca_coordinates_by_chain():
+                references = [reference.select_chain(chain_id)]
+            else:
+                references = _protein_chains(reference, config.max_reference_chains)
+            alignments = [
+                run_tmalign(
+                    TMalignInput(query_structure=query, reference_structure=chain),
+                    TMalignConfig(timeout=config.alignment_timeout_seconds),
+                )
+                for chain in references
+            ]
+            query_scores = [float(item.metrics.tm_score_chain_1) for item in alignments]
+            reference_scores = [float(item.metrics.tm_score_chain_2) for item in alignments]
+        if not query_scores:
+            raise ValueError("retrieved hit contained no alignable protein structure")
+        hit.aligned_tm_score_query_normalized = max(query_scores)
+        hit.aligned_tm_score_reference_normalized = max(reference_scores)
+        hit.aligned_reference_count = len(query_scores)
+    except Exception as error:
+        hit.alignment_error = f"{type(error).__name__}: {error}"[:1000]
+
+
+def _align_retrieved_hits(
+    query: Structure,
+    hits: list[PdbStructureSimilarityHit],
+    config: PdbStructureSimilarityConfig,
+) -> None:
+    """Attach local alignment evidence to independently retrieved neighbors."""
+    session = build_http_session(
+        http_retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+        user_agent=_USER_AGENT,
+        allowed_methods=["GET"],
+        mount_http=True,
+    )
+    try:
+        for hit in hits[: config.align_top_hits]:
+            _align_retrieved_hit(query, hit, config, session)
+    finally:
+        session.close()
 
 
 def _upload_structure(session: Any, structure: Structure, timeout_seconds: float) -> str:
@@ -414,7 +701,10 @@ def batch_example_input() -> Any:
     input_class=PdbStructureSimilarityInput,
     config_class=PdbStructureSimilarityConfig,
     output_class=PdbStructureSimilarityOutput,
-    description="Search experimental PDB chains or assemblies with RCSB's learned structure embedding",
+    description=(
+        "Compare protein structures against experimental PDB for prediction-independent structural novelty "
+        "evidence using RCSB's learned structure embedding"
+    ),
     uses_gpu=False,
     example_input=example_input,
     cacheable=True,
@@ -436,6 +726,8 @@ def run_pdb_structure_similarity(
             "Custom structure search uploads coordinates and embedded sequences to RCSB; "
             "set allow_external_upload=True only when that disclosure is permitted"
         )
+    if config.align_top_hits and inputs.structure is None:
+        raise ValueError("align_top_hits currently requires a custom query structure")
 
     session = build_http_session(
         http_retries=_HTTP_RETRIES,
@@ -474,11 +766,28 @@ def run_pdb_structure_similarity(
         for item in payload.get("result_set", [])
         if isinstance(item, dict) and item.get("identifier") is not None
     ]
+    if config.align_top_hits:
+        query_structure = inputs.structure
+        if query_structure is None:  # pragma: no cover - guarded before network access
+            raise ValueError("align_top_hits currently requires a custom query structure")
+        _align_retrieved_hits(query_structure, hits, config)
     measured = [hit.predicted_tm_score for hit in hits if hit.predicted_tm_score is not None]
+    aligned_query = [
+        hit.aligned_tm_score_query_normalized
+        for hit in hits
+        if hit.aligned_tm_score_query_normalized is not None
+    ]
+    aligned_reference = [
+        hit.aligned_tm_score_reference_normalized
+        for hit in hits
+        if hit.aligned_tm_score_reference_normalized is not None
+    ]
     return PdbStructureSimilarityOutput(
         hits=hits,
         total_count=int(payload.get("total_count", len(hits))),
         max_predicted_tm_score=max(measured) if measured else None,
+        max_aligned_tm_score_query_normalized=max(aligned_query) if aligned_query else None,
+        max_aligned_tm_score_reference_normalized=max(aligned_reference) if aligned_reference else None,
         query_was_uploaded=uploaded_url is not None,
     )
 
@@ -491,8 +800,8 @@ def run_pdb_structure_similarity(
     config_class=PdbStructureSimilarityBatchConfig,
     output_class=PdbStructureSimilarityBatchOutput,
     description=(
-        "Search an aligned structure shortlist against experimental PDB with bounded parallel RCSB requests, "
-        "returning explicit per-query failures for complete proxy coverage audits"
+        "Batch portfolio comparison of protein structures against experimental PDB for prediction-independent "
+        "structural novelty evidence, with bounded RCSB requests and explicit per-query failures"
     ),
     uses_gpu=False,
     example_input=batch_example_input,
@@ -542,3 +851,34 @@ def run_pdb_structure_similarity_batch(
             "failed_queries_are_not_measurements": True,
         },
     )
+
+
+@tool(
+    key="pdb-aligned-neighbor-similarity-batch",
+    label="Batch Aligned PDB Neighbors",
+    category="database_retrieval",
+    input_class=PdbStructureSimilarityBatchInput,
+    config_class=PdbAlignedNeighborBatchConfig,
+    output_class=PdbStructureSimilarityBatchOutput,
+    description=(
+        "Retrieve bounded experimental-PDB neighbors for custom protein structures and locally align them for "
+        "a closer, non-exhaustive structural-novelty proxy; preserves learned and aligned evidence separately "
+        "and reports every failure as missing evidence"
+    ),
+    uses_gpu=False,
+    example_input=batch_example_input,
+    cacheable=True,
+)
+def run_pdb_aligned_neighbor_similarity_batch(
+    inputs: PdbStructureSimilarityBatchInput,
+    config: PdbAlignedNeighborBatchConfig,
+    instance: Any = None,
+) -> PdbStructureSimilarityBatchOutput:
+    """Run the explicit aligned-neighbor composition for custom structures."""
+    non_custom = [index for index, query in enumerate(inputs.queries) if query.structure is None]
+    if non_custom:
+        raise ValueError(
+            "pdb-aligned-neighbor-similarity-batch requires custom query structures; "
+            f"public PDB references were supplied at indices {non_custom}"
+        )
+    return run_pdb_structure_similarity_batch(inputs, config, instance=instance)
