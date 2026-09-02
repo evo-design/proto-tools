@@ -1,7 +1,7 @@
 code:
   spdx: MIT
   url: https://github.com/evo-design/proto-tools
-data:
+service:
   name: Genomic Intelligence
   spdx: Custom (Genomic Intelligence Terms of Service)
   url: https://docs.genomicintelligence.ai

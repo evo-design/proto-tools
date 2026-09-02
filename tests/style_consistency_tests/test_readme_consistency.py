@@ -385,9 +385,10 @@ def _expected_license_callouts(lic: dict, name: str) -> list[str]:
                 category, toolkit = dep["tool"].split("/", 1)
                 dep_url = f"https://bio-pro.mintlify.app/tools/{_slugify(category)}/{_slugify(toolkit)}"
                 dep_lic = yaml.safe_load((_TOOLS_DIR / dep["tool"] / "license.yaml").read_text())
-                # Data-orchestrator deps surface the sibling's data SPDX (governs use of retrieved records);
-                # pipeline deps surface code SPDX. Falls back to code.spdx when no explicit data block exists.
-                dep_data = dep_lic.get("data")
+                # Data-orchestrator deps surface the sibling's data or service SPDX (governs use of the
+                # retrieved records or returned predictions); pipeline deps surface code SPDX. Falls back
+                # to code.spdx when the sibling declares neither block.
+                dep_data = dep_lic.get("data") or dep_lic.get("service")
                 if not has_weights:
                     ds = dep_data["spdx"] if isinstance(dep_data, dict) else dep_lic["code"]["spdx"]
                     if isinstance(ds, str) and ds.startswith("Custom (") and ds.endswith(")"):
@@ -415,6 +416,29 @@ def _expected_license_callouts(lic: dict, name: str) -> list[str]:
             f"> [!NOTE]\n> **License:** {' '.join(intro)}\n>\n"
             "> Bundled dependencies, each under its own license:\n>\n" + "\n".join(bullets) + f"\n>\n> {review}"
         ]
+
+    # Hosted-inference toolkits: the shipped code is a thin client, nothing is retrieved,
+    # and the vendor's terms govern both the submitted sequence and the returned predictions.
+    service = lic.get("service")
+    if service:
+        s_name = service["name"]
+        s_spdx = service["spdx"]
+        s_url = service["url"]
+        # Strip a "Custom (...)" wrapper for display, as the data branch does.
+        s_disp = s_spdx
+        if isinstance(s_spdx, str) and s_spdx.startswith("Custom (") and s_spdx.endswith(")"):
+            s_disp = s_spdx[len("Custom (") : -1]
+        attribution_sentence = (
+            f" Attribution to {s_name} is required when results are redistributed."
+            if bool(service.get("attribution_required"))
+            else ""
+        )
+        body = (
+            f"{name} is a client for the hosted {s_name} API; inference runs on the vendor's service "
+            f"under {s_disp}. Submitted sequences are transmitted to {s_name}.{attribution_sentence} "
+            f"The client wrapper code is {code_spdx}-licensed."
+        )
+        return [f"> [!NOTE]\n> **License:** {body} Please refer to [the service terms]({s_url}) for full terms."]
 
     # Database / API-wrapper toolkits: the shipped code is a thin client; what governs
     # use of the retrieved results is the external data resource's own terms.
@@ -651,6 +675,50 @@ def test_expected_license_callouts_data_block() -> None:
         "Structure Database is required when the data is redistributed. "
         "The client wrapper code is Apache-2.0-licensed. "
         "Please refer to [the data terms](https://alphafold.ebi.ac.uk/faq) for full terms."
+    ]
+
+
+def test_expected_license_callouts_service_block() -> None:
+    """A ``service:`` block yields a hosted-inference callout, not a data-resource one.
+
+    Nothing is retrieved from a hosted inference service, so the callout states
+    that sequences are transmitted and that no weights ship, and attributes the
+    returned predictions rather than redistributed records.
+    """
+    attributed = {
+        "code": {"spdx": "MIT", "url": "https://github.com/evo-design/proto-tools"},
+        "service": {
+            "name": "Genomic Intelligence",
+            "spdx": "Custom (Genomic Intelligence Terms of Service)",
+            "url": "https://docs.genomicintelligence.ai",
+            "attribution_required": True,
+        },
+        "commercial_use": "restricted",
+    }
+    assert _expected_license_callouts(attributed, "Genomic Intelligence") == [
+        "> [!NOTE]\n> **License:** Genomic Intelligence is a client for the hosted Genomic "
+        "Intelligence API; inference runs on the vendor's service under Genomic Intelligence Terms "
+        "of Service. Submitted sequences are transmitted to Genomic Intelligence. Attribution to "
+        "Genomic Intelligence is required when results are redistributed. "
+        "The client wrapper code is MIT-licensed. "
+        "Please refer to [the service terms](https://docs.genomicintelligence.ai) for full terms."
+    ]
+
+    unattributed = {
+        "code": {"spdx": "Apache-2.0", "url": "https://github.com/evo-design/proto-tools"},
+        "service": {
+            "name": "Acme Fold",
+            "spdx": "Apache-2.0",
+            "url": "https://example.org/terms",
+            "attribution_required": False,
+        },
+        "commercial_use": "yes",
+    }
+    assert _expected_license_callouts(unattributed, "Acme") == [
+        "> [!NOTE]\n> **License:** Acme is a client for the hosted Acme Fold API; inference runs "
+        "on the vendor's service under Apache-2.0. Submitted sequences are transmitted to Acme "
+        "Fold. The client wrapper code is Apache-2.0-licensed. "
+        "Please refer to [the service terms](https://example.org/terms) for full terms."
     ]
 
 
