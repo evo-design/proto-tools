@@ -817,10 +817,12 @@ def test_live_promoter_scores_a_sequence() -> None:
 
 @pytest.mark.integration
 def test_live_splice_is_strand_dependent() -> None:
-    """The reverse complement scores differently, and not near zero.
+    """The reverse complement is scored as a different sequence.
 
-    Documents the trap rather than asserting a value: the wrong strand returns
-    plausible sites, so a caller cannot detect orientation from the result.
+    Pins strand dependence itself rather than any particular score: as long as
+    the model is strand-specific the two calls disagree on which sites exist and
+    where. Submitting the wrong strand is therefore a silent error, since a
+    result read on its own carries no sign that the orientation was wrong.
     """
     if not os.environ.get("GI_API_KEY"):
         pytest.skip("GI_API_KEY not set")
@@ -829,8 +831,18 @@ def test_live_splice_is_strand_dependent() -> None:
     reverse = sequence.translate(complement)[::-1]
     forward_out = run_gi_splice(GISpliceInput(sequences=sequence), GISpliceConfig())
     reverse_out = run_gi_splice(GISpliceInput(sequences=reverse), GISpliceConfig())
-    assert forward_out.results[0].meta.request_id
-    assert reverse_out.results[0].meta.request_id
+    forward, reverse_result = forward_out.results[0], reverse_out.results[0]
+    assert forward.meta.request_id
+    assert reverse_result.meta.request_id
+
+    # Compared as (type, position) pairs so the check survives score drift
+    # between model versions but still fails if the strands stop disagreeing.
+    forward_sites = [(site.site_type, site.start) for site in forward.sites]
+    reverse_sites = [(site.site_type, site.start) for site in reverse_result.sites]
+    assert forward_sites != reverse_sites, (
+        f"both strands returned the same sites ({forward_sites}); "
+        "gi-splice is strand-specific, so this should not happen"
+    )
 
 
 # ============================================================================
