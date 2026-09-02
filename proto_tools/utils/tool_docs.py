@@ -34,6 +34,7 @@ from __future__ import annotations
 import inspect
 import json
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Any, get_args
@@ -571,6 +572,13 @@ def get_tool_docs(
 # Pydantic model docs
 # =============================================================================
 
+# Shortest default worth value-matching against the environment. Short strings
+# ("1", "true") collide with unrelated variables and would be misreported.
+_ENV_MATCH_MIN_CHARS = 8
+
+# Environment variable naming convention, used to pick the name out of a factory.
+_ENV_VAR_NAME_RE = re.compile(r"[A-Z][A-Z0-9_]*")
+
 
 def _format_type(annotation: Any) -> str:
     """Stringify a Python type annotation for display."""
@@ -581,11 +589,63 @@ def _format_type(annotation: Any) -> str:
     return re.sub(r"(?:[A-Za-z_]\w*\.)+([A-Za-z_]\w*)", r"\1", text)
 
 
+class EnvVarDefault(str):
+    """A default sourced from an environment variable, shown as ``$NAME``.
+
+    Subclasses ``str`` so every consumer treats it as the string it renders as,
+    and overrides ``__repr__`` so table cells read ``$GI_API_KEY`` rather than
+    a quoted literal.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        """Return the placeholder without the quotes ``str`` would add."""
+        return str(self)
+
+
+def _default_factory_env_var(factory: Any) -> str | None:
+    """Return the environment variable a default factory reads, if any.
+
+    Recognises the ``os.environ.get("NAME")`` / ``os.getenv("NAME")`` shape by
+    inspecting the factory's bytecode: in a callable that touches ``environ`` or
+    ``getenv``, the first env-var-shaped string constant is the variable name.
+    A named factory's docstring is also a constant, so it is excluded.
+    """
+    code = getattr(factory, "__code__", None)
+    if code is None or not {"environ", "getenv"} & set(code.co_names):
+        return None
+    doc = getattr(factory, "__doc__", None)
+    return next(
+        (c for c in code.co_consts if isinstance(c, str) and c != doc and _ENV_VAR_NAME_RE.fullmatch(c)),
+        None,
+    )
+
+
 def _format_default(field_info: Any) -> Any:
-    """Resolve a Pydantic v2 ``FieldInfo`` default value (or None for required)."""
+    """Resolve a Pydantic v2 ``FieldInfo`` default value (or None for required).
+
+    A default read from the environment is reported as ``$NAME`` rather than the
+    value found there, so rendering a config table never prints a credential the
+    process happens to hold.
+    """
     if field_info.is_required():
         return None
-    return field_info.get_default(call_default_factory=True)
+
+    factory = getattr(field_info, "default_factory", None)
+    if factory is not None:
+        name = _default_factory_env_var(factory)
+        if name is not None:
+            return EnvVarDefault(f"${name}")
+
+    default = field_info.get_default(call_default_factory=True)
+    # Safety net for factories the bytecode check does not recognise: a default
+    # equal to some environment value is reported by name instead.
+    if isinstance(default, str) and len(default) >= _ENV_MATCH_MIN_CHARS:
+        for name, value in os.environ.items():
+            if value == default:
+                return EnvVarDefault(f"${name}")
+    return default
 
 
 def _clean_docstring(obj: Any) -> str:

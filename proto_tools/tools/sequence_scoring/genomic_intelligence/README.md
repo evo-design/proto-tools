@@ -2,8 +2,12 @@
 
 # Genomic Intelligence
 
+![Genomic Intelligence](https://proto-bio.github.io/proto-assets/images/tool/genomic_intelligence/hero.png)
+
 > [!NOTE]
-> **License:** Genomic Intelligence retrieves data from Genomic Intelligence, distributed under Genomic Intelligence Terms of Service. Attribution to Genomic Intelligence is required when the data is redistributed. The client wrapper code is MIT-licensed. Please refer to [the data terms](https://docs.genomicintelligence.ai) for full terms. Research and development use. Not for clinical or diagnostic decisions.
+> **License:** Genomic Intelligence is a client for the hosted Genomic Intelligence API; inference runs on the vendor's service under Genomic Intelligence Terms of Service. Submitted sequences are transmitted to Genomic Intelligence. Attribution to Genomic Intelligence is required when results are redistributed. The client wrapper code is MIT-licensed. Please refer to [the service terms](https://docs.genomicintelligence.ai) for full terms. Research and development use. Not for clinical or diagnostic decisions.
+
+> This toolkit was developed by [Genomic Intelligence](https://genomicintelligence.ai/).
 
 ## Overview
 

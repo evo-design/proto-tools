@@ -73,14 +73,10 @@ class GISpliceConfig(GIConfig):
             classes. Leave unset to report both.
         gi_api_key (str | None): Bearer key for the hosted API. Defaults to the
             ``GI_API_KEY`` environment variable.
-        base_url (str): API root. Override only to target a non-production
-            deployment.
         model (str | None): Model identifier. Leave unset: the service resolves
             the current default for the task.
         respond_async (bool): Request ``202`` + polling instead of a synchronous
             ``200``. A per-request delivery choice available on every endpoint.
-        poll_interval_seconds (float): Delay between job polls when
-            ``respond_async`` is set.
         timeout_seconds (float): Wall-clock cap on the async wait.
     """
 
