@@ -304,6 +304,38 @@ def test_parse_expression_reads_applied_window_from_meta() -> None:
     assert result.scored_window == [0, 9198]
 
 
+def test_parse_expression_takes_the_submitted_length_from_meta_not_the_echo() -> None:
+    """``sequence_length`` is the submission, read from ``meta``.
+
+    ``data.input`` carries a ``sequence_length`` of its own holding the 9,198 bp
+    scored window, so the two disagree for any locus longer than one window.
+    Only ``meta.sequence_length`` is in the published schema; the echo is an
+    untyped object no contract pin covers. This payload makes them disagree so
+    that reading the echo fails here rather than in a user's report.
+    """
+    payload = {
+        "data": {
+            **_EXPRESSION_PAYLOAD["data"],
+            "input": {
+                "sequence_name": "demo",
+                "sequence_length": 9198,
+                "submitted_sequence_length": 25000,
+                "tss_index": 12500,
+                "scored_window": [7901, 17099],
+            },
+        },
+        "meta": {
+            **_EXPRESSION_PAYLOAD["meta"],
+            "sequence_length": 25000,
+            "task_specific_counts": {"tss_index": 12500, "scored_window": [7901, 17099]},
+        },
+    }
+    result = parse_expression_data(payload["data"], payload, "demo")
+    assert result.sequence_length == 25000
+    assert result.scored_window == [7901, 17099]
+    assert result.scored_window[1] - result.scored_window[0] == EXPRESSION_WINDOW_BP
+
+
 def test_parse_workflow_counts_scored_and_skipped_genes() -> None:
     """Workflow parsing separates genes scored from genes skipped."""
     result = parse_workflow_data(_WORKFLOW_PAYLOAD["data"], _WORKFLOW_PAYLOAD, "HBB")
@@ -985,11 +1017,14 @@ def test_gi_expression_benchmark() -> None:
 
     assert output.tool_id == "gi-expression"
     result = output.results[0]
-    # The two lengths mean different things and this locus is the only place we
-    # can tell: sequence_length is the scored window, submitted_sequence_length
-    # is what went up. Asserting both keeps them from quietly becoming one field.
-    assert result.sequence_length == EXPRESSION_WINDOW_BP
-    assert result.submitted_sequence_length == len(locus)
+    # This locus is longer than one window, so it is the only place the two
+    # quantities can be told apart: sequence_length must be what was submitted
+    # (meta), and the window must stay 9,198 wide. data.input carries a
+    # sequence_length of its own holding the window -- reading that one is the
+    # mistake these two assertions exist to catch.
+    assert result.sequence_length == len(locus)
+    assert result.scored_window is not None
+    assert result.scored_window[1] - result.scored_window[0] == EXPRESSION_WINDOW_BP
     assert result.expression_log_tpm is not None
     assert result.meta.request_id
 

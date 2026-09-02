@@ -154,12 +154,10 @@ class ExpressionPrediction(BaseModel):
 
     Attributes:
         name (str): Label supplied with the sequence.
-        sequence_length (int): Length of the window the service scored, in base
-            pairs -- always 9,198, not the length submitted. The service echoes
-            both, and this is the one it names ``sequence_length``.
-        submitted_sequence_length (int | None): Length of the sequence as
-            submitted, whitespace-stripped. Equal to ``sequence_length`` only
-            when exactly one window was sent.
+        sequence_length (int): Length of the submitted sequence in base pairs,
+            whitespace-stripped. Read from ``meta``, not from ``data.input``:
+            the echo carries a field of the same name holding the 9,198 bp
+            window instead, and only ``meta`` is in the published schema.
         expression_log_tpm (float | None): Predicted log(TPM+1).
         expression_tpm (float | None): Predicted TPM.
         tss_index (int | None): TSS offset the service applied.
@@ -170,13 +168,7 @@ class ExpressionPrediction(BaseModel):
 
     name: str = Field(title="Name", description="Label supplied with the sequence")
     sequence_length: int = Field(
-        title="Scored Window Length", description="Length of the window the service scored, in bp (always 9,198)", ge=0
-    )
-    submitted_sequence_length: int | None = Field(
-        title="Submitted Sequence Length",
-        default=None,
-        description="Length of the sequence as submitted, whitespace-stripped",
-        ge=0,
+        title="Sequence Length", description="Length of the submitted sequence in base pairs", ge=0
     )
     expression_log_tpm: float | None = Field(
         title="Expression Log TPM", default=None, description="Predicted log(TPM+1)"
@@ -244,11 +236,9 @@ def parse_expression_data(data: dict[str, Any], payload: dict[str, Any], name: s
     meta = as_object(payload.get("meta"), "meta")
     counts = as_object(meta.get("task_specific_counts"), "meta.task_specific_counts")
     window = counts.get("scored_window")
-    input_echo = as_object(data.get("input"), "data.input")
     return ExpressionPrediction(
         name=name,
-        sequence_length=int(input_echo.get("sequence_length", 0)),
-        submitted_sequence_length=input_echo.get("submitted_sequence_length"),
+        sequence_length=int(meta.get("sequence_length", 0)),
         expression_log_tpm=prediction.get("expression_log_tpm"),
         expression_tpm=prediction.get("expression_tpm"),
         tss_index=counts.get("tss_index"),
