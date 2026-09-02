@@ -47,6 +47,7 @@ _HTTP_RETRIES = 2
 _BACKOFF_SECONDS = 1.0
 _USER_AGENT = "proto-tools/genomic-intelligence-v1"
 _POLL_TIMEOUT_SECONDS = 15.0
+_DEFAULT_POLL_INTERVAL_SECONDS = 5.0
 
 _MAX_BP = 500_000
 """Upper bound shared by every endpoint, published as ``maxLength``."""
@@ -192,16 +193,12 @@ class GIConfig(BaseConfig):
         gi_api_key (str | None): Bearer key for the hosted API. Defaults to the
             ``GI_API_KEY`` environment variable; an explicit value passed to the
             config overrides the env var.
-        base_url (str): API root. Override only to target a non-production
-            deployment.
         model (str | None): Model identifier. Leave unset: the service resolves
             the current default for the task. Enumerate the choices with
             ``GET /v1/tasks/{task}/models`` rather than pinning one here.
         respond_async (bool): Request ``202`` + polling instead of a
             synchronous ``200``. A per-request delivery choice available on
             every endpoint; useful for long inputs.
-        poll_interval_seconds (float): Delay between job polls when
-            ``respond_async`` is set.
         timeout_seconds (float): Wall-clock cap on the async wait.
     """
 
@@ -209,12 +206,6 @@ class GIConfig(BaseConfig):
         title="GI API Key",
         default_factory=lambda: os.environ.get("GI_API_KEY"),
         description="Bearer key for api.genomicintelligence.ai. Defaults to the GI_API_KEY env var if not set.",
-        include_in_key=False,
-    )
-    base_url: str = ConfigField(
-        title="Base URL",
-        default=GI_BASE_URL,
-        description="API root; override only to target a non-production deployment",
         include_in_key=False,
     )
     model: str | None = ConfigField(
@@ -226,13 +217,6 @@ class GIConfig(BaseConfig):
         title="Respond Async",
         default=False,
         description="Send Prefer: respond-async and poll the job instead of waiting for a synchronous 200",
-        include_in_key=False,
-    )
-    poll_interval_seconds: float = ConfigField(
-        title="Poll Interval (seconds)",
-        default=5.0,
-        ge=1.0,
-        description="Delay between job polls when respond_async is set",
         include_in_key=False,
     )
     timeout_seconds: float = ConfigField(
@@ -583,6 +567,37 @@ def _job_status(response: requests.Response) -> tuple[str, Any]:
     return "COMPLETE", require_envelope(response)
 
 
+def resolve_base_url() -> str:
+    """Return the API root, from ``GI_BASE_URL`` when set.
+
+    Not a config field: production is the only root end users target, and an
+    alternate deployment is an environment concern rather than a per-call one.
+    """
+    return os.environ.get("GI_BASE_URL", GI_BASE_URL).rstrip("/")
+
+
+def resolve_poll_interval() -> float:
+    """Return the delay between job polls, from ``GI_POLL_INTERVAL_SECONDS`` when set.
+
+    Not a config field: how often to poll is a property of the deployment rather
+    than of the prediction being requested.
+
+    Raises:
+        ValueError: If the variable is set to something that is not a positive
+            number, rather than silently falling back to the default.
+    """
+    raw = os.environ.get("GI_POLL_INTERVAL_SECONDS")
+    if raw is None:
+        return _DEFAULT_POLL_INTERVAL_SECONDS
+    try:
+        interval = float(raw)
+    except ValueError:
+        raise ValueError(f"GI_POLL_INTERVAL_SECONDS must be a number, got {raw!r}") from None
+    if interval <= 0:
+        raise ValueError(f"GI_POLL_INTERVAL_SECONDS must be positive, got {interval}")
+    return interval
+
+
 def _post(
     session: requests.Session,
     config: GIConfig,
@@ -600,7 +615,7 @@ def _post(
     """
     headers = {"Prefer": "respond-async"} if config.respond_async else {}
     response = session.post(
-        f"{config.base_url.rstrip('/')}/{_API_VERSION}/{path.lstrip('/')}",
+        f"{resolve_base_url()}/{_API_VERSION}/{path.lstrip('/')}",
         json=body,
         headers=headers,
         timeout=_REQUEST_TIMEOUT_SECONDS,
@@ -616,8 +631,8 @@ def _post(
     logger.info("Genomic Intelligence job %s accepted; polling", job_id)
     result: dict[str, Any] = poll_until_complete(
         session,
-        f"{config.base_url.rstrip('/')}/{_API_VERSION}/tasks/jobs/{job_id}",
-        poll_interval_seconds=config.poll_interval_seconds,
+        f"{resolve_base_url()}/{_API_VERSION}/tasks/jobs/{job_id}",
+        poll_interval_seconds=resolve_poll_interval(),
         timeout_seconds=config.timeout_seconds,
         success_states=frozenset({"COMPLETE"}),
         failure_states=frozenset({"FAILED"}),

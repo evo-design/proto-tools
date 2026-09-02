@@ -625,7 +625,8 @@ class TestTheEnvelopeIsRequired:
                 _FakeResponse(200, {"data": _GOOD_DATA, "meta": _META}),
             ],
         )
-        data, _ = _predict(GIConfig(gi_api_key="gi_test", respond_async=True, poll_interval_seconds=1.0))
+        monkeypatch.setenv("GI_POLL_INTERVAL_SECONDS", "1.0")
+        data, _ = _predict(GIConfig(gi_api_key="gi_test", respond_async=True))
         assert data == _GOOD_DATA
 
     def test_a_well_formed_envelope_still_passes(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -972,7 +973,7 @@ def test_gi_expression_benchmark() -> None:
 
     assert output.tool_id == "gi-expression"
     result = output.results[0]
-    assert result.sequence_length == len(locus)
+    assert result.sequence_length == EXPRESSION_WINDOW_BP
     assert result.expression_log_tpm is not None
     assert result.meta.request_id
 
