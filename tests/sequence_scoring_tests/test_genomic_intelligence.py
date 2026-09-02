@@ -985,7 +985,11 @@ def test_gi_expression_benchmark() -> None:
 
     assert output.tool_id == "gi-expression"
     result = output.results[0]
+    # The two lengths mean different things and this locus is the only place we
+    # can tell: sequence_length is the scored window, submitted_sequence_length
+    # is what went up. Asserting both keeps them from quietly becoming one field.
     assert result.sequence_length == EXPRESSION_WINDOW_BP
+    assert result.submitted_sequence_length == len(locus)
     assert result.expression_log_tpm is not None
     assert result.meta.request_id
 
