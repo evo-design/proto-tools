@@ -687,7 +687,6 @@ class TestNestedFieldsOfTheWrongType:
             ({"summary": "all good"}, "data.summary"),
             ({"regions": "none"}, "data.regions"),
             ({"window_details": {"probability": 0.9}}, "data.window_details"),
-            ({"input": "400 bp"}, "data.input"),
         ],
     )
     def test_promoter_names_the_offending_field(self, data: dict[str, Any], field: str) -> None:
@@ -765,7 +764,9 @@ class TestNestedFieldsOfTheWrongType:
         result = parse_promoter_data(data, {"data": data, "meta": _META}, "demo")
         assert result.regions == []
         assert result.windows == []
-        assert result.sequence_length == 0
+        # The length comes from meta, so a null or absent data.input -- which the
+        # parser no longer reads at all -- cannot degrade it to a silent zero.
+        assert result.sequence_length == _META["sequence_length"]
 
     def test_a_well_formed_payload_is_untouched(self) -> None:
         """The recorded live shapes still parse, so the guard is not overreaching."""

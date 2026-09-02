@@ -189,9 +189,10 @@ def parse_chromatin_data(data: dict[str, Any], payload: dict[str, Any], name: st
         for index, window in enumerate(as_object_list(data.get("windows"), "data.windows"))
     ]
     raw_counts = as_object(summary.get("category_counts"), "data.summary.category_counts")
+    meta = as_object(payload.get("meta"), "meta")
     return GIChromatinResult(
         name=name,
-        sequence_length=int(as_object(data.get("input"), "data.input").get("sequence_length", 0)),
+        sequence_length=int(meta.get("sequence_length", 0)),
         total_windows=int(summary.get("total_windows", len(windows))),
         total_annotations=int(summary.get("total_annotations", 0)),
         category_counts={str(key): int(value) for key, value in raw_counts.items()},

@@ -223,9 +223,10 @@ def parse_promoter_data(data: dict[str, Any], payload: dict[str, Any], name: str
         )
         for region in as_object_list(data.get("regions"), "data.regions")
     ]
+    meta = as_object(payload.get("meta"), "meta")
     return GIPromoterResult(
         name=name,
-        sequence_length=int(as_object(data.get("input"), "data.input").get("sequence_length", 0)),
+        sequence_length=int(meta.get("sequence_length", 0)),
         promoter_windows=int(summary.get("promoter_windows", 0)),
         total_windows=int(summary.get("total_windows", len(windows))),
         max_probability=max((window.probability for window in windows), default=None),

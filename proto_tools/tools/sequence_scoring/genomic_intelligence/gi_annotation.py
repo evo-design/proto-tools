@@ -217,9 +217,10 @@ def parse_annotation_data(data: dict[str, Any], payload: dict[str, Any], name: s
         )
         for record in as_object_list(data.get("transcripts"), "data.transcripts")
     ]
+    meta = as_object(payload.get("meta"), "meta")
     return GIAnnotationResult(
         name=name,
-        sequence_length=int(as_object(data.get("input"), "data.input").get("sequence_length", 0)),
+        sequence_length=int(meta.get("sequence_length", 0)),
         total_transcripts=int(summary.get("total_transcripts", len(transcripts))),
         forward_strand=int(summary.get("forward_strand", 0)),
         reverse_strand=int(summary.get("reverse_strand", 0)),

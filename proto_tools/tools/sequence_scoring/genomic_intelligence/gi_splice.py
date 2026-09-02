@@ -209,9 +209,10 @@ def parse_splice_data(data: dict[str, Any], payload: dict[str, Any], name: str) 
         )
         for site in as_object_list(data.get("sites"), "data.sites")
     ]
+    meta = as_object(payload.get("meta"), "meta")
     return GISpliceResult(
         name=name,
-        sequence_length=int(as_object(data.get("input"), "data.input").get("sequence_length", 0)),
+        sequence_length=int(meta.get("sequence_length", 0)),
         total_sites=int(summary.get("total_sites", len(sites))),
         donor_sites=int(summary.get("donor_sites", 0)),
         acceptor_sites=int(summary.get("acceptor_sites", 0)),

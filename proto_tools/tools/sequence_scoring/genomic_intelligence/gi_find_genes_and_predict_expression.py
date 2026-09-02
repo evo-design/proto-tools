@@ -229,7 +229,7 @@ def parse_workflow_data(data: dict[str, Any], payload: dict[str, Any], name: str
     expression_model = str(data.get("expression_model") or "")
     return GIFindGenesResult(
         name=name,
-        sequence_length=int(as_object(data.get("input"), "data.input").get("sequence_length", 0)),
+        sequence_length=int(meta.get("sequence_length", 0)),
         genes_found=int(summary.get("genes_found", len(predictions))),
         genes_scored=int(summary.get("genes_predicted", sum(1 for record in predictions if not record.skipped))),
         predictions=predictions,
