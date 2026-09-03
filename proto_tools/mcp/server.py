@@ -314,9 +314,7 @@ def build_server(device: Device = "modal") -> FastMCP:
                 f"This builds a container image and then executes {tool_key} once. Both are "
                 f"billed to your own Modal account, and both occur before any result is "
                 f"returned. It may take several minutes. Declining incurs no cost.",
-                # fastmcp's elicit overloads do not resolve under postponed annotations; a
-                # dataclass is the documented response type and works at runtime.
-                response_type=_Approval,  # type: ignore[arg-type]
+                response_type=_Approval,
             )
             # Declined, cancelled, or a client that cannot ask at all: none of them approve.
             # Read defensively so an unexpected payload shape reads as refusal, never consent.
