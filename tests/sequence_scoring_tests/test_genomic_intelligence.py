@@ -369,6 +369,25 @@ def test_invalid_nucleotides_are_rejected() -> None:
         validate_gi_sequence("ACGTZZZZ" * 100, min_bp=50, task="enhancer")
 
 
+def test_rna_uracil_is_rejected_locally() -> None:
+    r"""The shared validator allows U; these endpoints do not, so the gate narrows it.
+
+    Every predict schema publishes ``^\s*(?:[ACGNTacgnt]\s*)+$`` and the service
+    answers a U with a 422 naming the character. Refusing it here keeps an RNA paste
+    from costing a round trip.
+    """
+    with pytest.raises(ValueError, match=r"does not accept: \['U'\]"):
+        validate_gi_sequence("ACGU" * 100, min_bp=50, task="enhancer")
+
+
+def test_the_gate_accepts_exactly_the_published_alphabet() -> None:
+    """Case and wrapping are accepted, N is accepted, and nothing else is."""
+    assert validate_gi_sequence("acg tn\nACGTN" * 20, min_bp=50, task="enhancer") == "ACGTNACGTN" * 20
+    for character in "URYKMSWBDHV-":
+        with pytest.raises(ValueError):
+            validate_gi_sequence(("ACGT" * 25) + character, min_bp=50, task="enhancer")
+
+
 def test_bare_string_is_coerced_to_one_sequence() -> None:
     """Every task input accepts a bare DNA string in place of a list."""
     for input_class in (GIPromoterInput, GISpliceInput, GIEnhancerInput, GIChromatinInput, GIAnnotationInput):

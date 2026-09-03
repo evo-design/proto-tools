@@ -52,6 +52,9 @@ _DEFAULT_POLL_INTERVAL_SECONDS = 5.0
 _MAX_BP = 500_000
 """Upper bound shared by every endpoint, published as ``maxLength``."""
 
+_GI_ALPHABET = frozenset("ACGNT")
+"""The characters every predict schema's published ``sequence.pattern`` accepts."""
+
 GITask = Literal["promoter", "splice", "enhancer", "chromatin", "annotation", "expression"]
 
 _MISSING_KEY_MESSAGE = (
@@ -369,6 +372,17 @@ def validate_gi_sequence(sequence: str, *, min_bp: int, task: str) -> str:
     # reports it as an invalid nucleotide character and refuses a sequence the
     # service would have scored.
     cleaned = validate_dna_sequence("".join(sequence.split()))
+    # The shared validator allows RNA, so it accepts U. The published request
+    # schemas do not: every predict operation carries
+    # ^\s*(?:[ACGNTacgnt]\s*)+$, and the service rejects a U with a 422 naming
+    # the character. Narrow the shared result to the alphabet this API accepts
+    # so the refusal is local rather than a round trip.
+    outside = sorted({character for character in cleaned if character not in _GI_ALPHABET})
+    if outside:
+        raise ValueError(
+            f"{task}: sequence contains characters the endpoint does not accept: {outside}. "
+            f"The published request schema allows {''.join(sorted(_GI_ALPHABET))} only."
+        )
     length = len(cleaned)
     if length < min_bp:
         raise ValueError(
