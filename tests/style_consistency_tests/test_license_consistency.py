@@ -206,6 +206,23 @@ def test_toolkit_license_yaml_schema(toolkit_dir: Path) -> None:
                     f"data.attribution_required: expected bool, got {type(data_block['attribution_required']).__name__}"
                 )
 
+    # service block (optional): the hosted inference service an API-client toolkit calls.
+    if "service" in data:
+        service_block = data["service"]
+        _validate_terms_block(service_block, "service", errors)
+        if isinstance(service_block, dict):
+            if not isinstance(service_block.get("name"), str) or not service_block["name"].strip():
+                errors.append("service.name: expected non-empty string")
+            if "attribution_required" in service_block and not isinstance(service_block["attribution_required"], bool):
+                errors.append(
+                    "service.attribution_required: expected bool, got "
+                    f"{type(service_block['attribution_required']).__name__}"
+                )
+
+    # A toolkit either retrieves records from a resource or calls a hosted service, not both.
+    if "data" in data and "service" in data:
+        errors.append("data and service are mutually exclusive: declare the one that governs use of the results")
+
     # bundled_dependencies (optional): bundled tools with notable license terms; each entry references a toolkit or inlines external terms.
     deps = data.get("bundled_dependencies")
     if deps is not None:
@@ -263,6 +280,7 @@ def test_toolkit_license_yaml_schema(toolkit_dir: Path) -> None:
     allowed_top = _REQUIRED_TOP_KEYS | {
         "weights",
         "data",
+        "service",
         "attribution_required",
         "notes",
         "proto_tools_original",

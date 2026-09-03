@@ -71,6 +71,33 @@ Set inside the `weights:` block. Omit when the weights download freely.
 Any toolkit with `weights.access` set must also appear in the root
 `README.md` "Gated model access" table (also cross-checked).
 
+### `service` (optional)
+
+**Question answered:** Does the toolkit send inputs to a hosted service that
+returns computed results, rather than retrieving stored records?
+
+Declare a `service:` block when the toolkit is a client for a third-party
+inference API. Nothing is retrieved; what governs use is the vendor's
+terms, covering both the input transmitted and the predictions returned.
+
+```yaml
+service:
+  name: Genomic Intelligence
+  spdx: Custom (Genomic Intelligence Terms of Service)
+  url: https://docs.genomicintelligence.ai
+  attribution_required: true
+```
+
+`name` is the service as it should read in prose, `spdx` its terms (wrap
+vendor terms as `Custom (...)`), and `url` the canonical terms page. Set
+`attribution_required: true` when the vendor requires credit for redistributed
+results.
+
+`service` and `data` are mutually exclusive. Use `data` for a resource the
+toolkit reads records out of, and `service` for one it submits work to; the
+License callout in the toolkit README is built from whichever is present, and
+the two render different sentences.
+
 ### `proto_tools_original: bool` (optional, default `false`)
 
 **Question answered:** Is the toolkit's computation/orchestration fully

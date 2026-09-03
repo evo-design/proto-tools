@@ -14,9 +14,11 @@ Coverage:
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
+from pydantic import BaseModel, Field
 
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.utils.tool_docs import (
@@ -369,3 +371,32 @@ def test_get_example_notebook_renders_markdown_and_code_fences() -> None:
 def test_get_example_notebook_returns_none_when_missing() -> None:
     """Toolkits without examples/example.ipynb return None rather than raising."""
     assert get_example_notebook("mmseqs2-clustering") is None
+
+
+def test_env_var_defaults_render_as_the_variable_not_its_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A default read from the environment must never render the value it found.
+
+    Config tables are rendered into committed example notebooks, so a field
+    defaulting from a credential env var would publish that credential. Both the
+    recognised ``os.environ.get`` shape and an unrecognised factory that merely
+    returns an environment value are reported by variable name.
+    """
+    monkeypatch.setenv("PROTO_TEST_SECRET", "s3cret-value-not-for-print")
+
+    def _indirect() -> str | None:
+        """Read the variable in a shape the bytecode check does not recognise."""
+        return dict(os.environ).get("PROTO_TEST_SECRET")
+
+    class _Config(BaseModel):
+        direct: str | None = Field(default_factory=lambda: os.environ.get("PROTO_TEST_SECRET"))
+        indirect: str | None = Field(default_factory=_indirect)
+        plain: str = Field(default="unchanged")
+
+    defaults = {f.name: f.default for f in get_model_doc(_Config).fields}
+
+    assert defaults["direct"] == "$PROTO_TEST_SECRET"
+    assert defaults["indirect"] == "$PROTO_TEST_SECRET"
+    assert defaults["plain"] == "unchanged"
+    assert "s3cret-value-not-for-print" not in repr(defaults)
+    # repr drops the quotes a plain str would add, so the table cell reads $NAME.
+    assert repr(defaults["direct"]) == "$PROTO_TEST_SECRET"

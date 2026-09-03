@@ -133,6 +133,7 @@ for instructions related to account setup, deploying a tool, and costs, or the [
 ├── <a href="proto_tools/tools/sequence_scoring/borzoi/">borzoi/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/deeppbs_specificity/">deeppbs_specificity/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/enformer/">enformer/</a>
+├── <a href="proto_tools/tools/sequence_scoring/genomic_intelligence/">genomic_intelligence/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/malinois/">malinois/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/na_mpnn_specificity/">na_mpnn_specificity/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/parade/">parade/</a>
