@@ -893,8 +893,13 @@ class TestTheCallerSeesTheRefusal:
 
 # ============================================================================
 # Integration — live API, skipped unless pytest runs with --integration
-# (in CI, the run-integration label)
 # ============================================================================
+#
+# The `run-integration` label starts Integration Tests, which runs pytest with
+# --integration, so these two cases are selected there. They still skip: that
+# workflow sets no GI_API_KEY, and a pull request from a fork is not given
+# repository secrets in any case. Running them for real means a local run with
+# a key in the environment.
 
 
 @pytest.mark.integration
