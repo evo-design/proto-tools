@@ -34,6 +34,7 @@ from proto_tools.utils import (
     build_http_session,
     get_logger,
     poll_until_complete,
+    request_with_retry,
 )
 
 logger = get_logger(__name__)
@@ -628,11 +629,15 @@ def _post(
             :func:`_job_status` when the job completes.
     """
     headers = {"Prefer": "respond-async"} if config.respond_async else {}
-    response = session.post(
-        f"{resolve_base_url()}/{_API_VERSION}/{path.lstrip('/')}",
-        json=body,
-        headers=headers,
-        timeout=_REQUEST_TIMEOUT_SECONDS,
+    response = request_with_retry(
+        lambda: session.post(
+            f"{resolve_base_url()}/{_API_VERSION}/{path.lstrip('/')}",
+            json=body,
+            headers=headers,
+            timeout=_REQUEST_TIMEOUT_SECONDS,
+        ),
+        retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
     )
     raise_for_gi_error(response)
     payload: dict[str, Any] = require_envelope(response)

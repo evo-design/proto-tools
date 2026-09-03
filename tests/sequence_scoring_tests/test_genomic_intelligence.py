@@ -567,6 +567,28 @@ class _FakeSession:
         self.closed = True
 
 
+class _ResetThenOkSession:
+    """A session whose ``post`` mimics a reused keep-alive connection the server already closed."""
+
+    def __init__(self, failures: int, post: _FakeResponse) -> None:
+        self.failures = failures
+        self._post = post
+        self.calls = 0
+        self.headers: dict[str, str] = {}
+        self.closed = False
+
+    def post(self, *_args: Any, **_kwargs: Any) -> _FakeResponse:
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise requests.exceptions.ConnectionError(
+                "Connection aborted.", ConnectionResetError(104, "Connection reset by peer")
+            )
+        return self._post
+
+    def close(self) -> None:
+        self.closed = True
+
+
 def _install_session(
     monkeypatch: pytest.MonkeyPatch,
     post: _FakeResponse,
@@ -586,6 +608,27 @@ _BAD_SUMMARY_PAYLOAD: dict[str, Any] = {"data": {**_GOOD_DATA, "summary": "all g
 def _predict(config: GIConfig) -> tuple[dict[str, Any], dict[str, Any]]:
     """Issue one promoter predict call through the shared client."""
     return call_predict(config, "promoter", "ATGC" * 100, "demo")
+
+
+def test_predict_submission_retries_a_connection_reset(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The same reused-connection failure the other fetch tools retry, here on the predict submission.
+
+    ``build_http_session``'s adapter does not cover this: a server closing a pooled
+    keep-alive connection raises ``ConnectionResetError`` while urllib3 is *sending*
+    the next request on it, which surfaces above the adapter as a
+    ``requests.exceptions.ConnectionError``. Retrying the submission is safe for the
+    same reason it is safe for the other job-creating POSTs in this repo -- the
+    request never reached the server, so no job was created.
+    """
+    monkeypatch.setattr(shared_data_models, "_BACKOFF_SECONDS", 0.0)
+    session = _ResetThenOkSession(failures=2, post=_FakeResponse(200, {"data": _GOOD_DATA, "meta": _META}))
+    monkeypatch.setattr(shared_data_models, "_build_session", lambda _config: session)
+
+    data, _payload = _predict(GIConfig(gi_api_key="gi_test"))
+
+    assert data == _GOOD_DATA
+    assert session.calls == 3
+    assert session.closed
 
 
 class TestTheEnvelopeIsRequired:
