@@ -603,7 +603,7 @@ def _install_session(
     return session
 
 
-_GOOD_DATA = {"model": "g0-promoter-2000bp", "input": {"sequence_length": 400}, "summary": {"total_windows": 1}}
+_GOOD_DATA = {"model": "g0-promoter-2000bp", "input": {"sequence_name": "demo"}, "summary": {"total_windows": 1}}
 
 _BAD_SUMMARY_PAYLOAD: dict[str, Any] = {"data": {**_GOOD_DATA, "summary": "all good"}, "meta": _META}
 
@@ -1090,9 +1090,13 @@ def test_gi_expression_benchmark() -> None:
     result = output.results[0]
     # This locus is longer than one window, so it is the only place the two
     # quantities can be told apart: sequence_length must be what was submitted
-    # (meta), and the window must stay 9,198 wide. data.input carries a
-    # sequence_length of its own holding the window -- reading that one is the
-    # mistake these two assertions exist to catch.
+    # (meta), and the window must stay 9,198 wide. data.input used to carry a
+    # sequence_length of its own holding the window, and reading that one
+    # instead of meta is the mistake these two assertions exist to catch. The
+    # service dropped that key at contract revision 13 on 2026-09-03, so today
+    # a reader of the echo gets None rather than the window -- still wrong,
+    # still caught here, and data.input is an open object that nothing stops
+    # the key returning to.
     assert result.sequence_length == len(locus)
     assert result.scored_window is not None
     assert result.scored_window[1] - result.scored_window[0] == EXPRESSION_WINDOW_BP
