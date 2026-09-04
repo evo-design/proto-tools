@@ -80,7 +80,7 @@ _PROMOTER_PAYLOAD: dict[str, Any] = {
     "data": {
         "task": "promoter",
         "model": "g0-promoter-2000bp",
-        "input": {"sequence_name": "demo", "sequence_length": 400},
+        "input": {"sequence_name": "demo"},
         "summary": {"total_windows": 1, "promoter_windows": 0, "threshold_used": 0.5},
         "regions": [],
         "window_details": [
@@ -103,7 +103,7 @@ _SPLICE_PAYLOAD: dict[str, Any] = {
     "data": {
         "task": "splice",
         "model": "g0-splice-bigbird",
-        "input": {"sequence_name": "demo", "sequence_length": 1200},
+        "input": {"sequence_name": "demo"},
         "summary": {"total_sites": 1, "donor_sites": 1, "acceptor_sites": 0, "total_windows": 1},
         "sites": [
             {
@@ -126,7 +126,7 @@ _ENHANCER_PAYLOAD: dict[str, Any] = {
     "data": {
         "task": "enhancer",
         "model": "g0-deepstarr",
-        "input": {"sequence_name": "demo", "sequence_length": 1200},
+        "input": {"sequence_name": "demo"},
         "summary": {"total_windows": 1, "dev_score_max": -0.91, "hk_score_max": -0.09},
         "windows": [
             {
@@ -148,7 +148,7 @@ _CHROMATIN_PAYLOAD: dict[str, Any] = {
     "data": {
         "task": "chromatin",
         "model": "g0-deepsea",
-        "input": {"sequence_name": "demo", "sequence_length": 1200},
+        "input": {"sequence_name": "demo"},
         "summary": {
             "total_windows": 1,
             "total_annotations": 383,
@@ -164,7 +164,7 @@ _ANNOTATION_PAYLOAD: dict[str, Any] = {
     "data": {
         "task": "annotation",
         "model": "g0-annotation",
-        "input": {"sequence_name": "demo", "sequence_length": 25000},
+        "input": {"sequence_name": "demo"},
         "summary": {"total_transcripts": 1, "forward_strand": 1, "reverse_strand": 0},
         "transcripts": [
             {
@@ -186,7 +186,7 @@ _EXPRESSION_PAYLOAD: dict[str, Any] = {
     "data": {
         "task": "expression",
         "model": "g0-expression",
-        "input": {"sequence_name": "demo", "sequence_length": 9198},
+        "input": {"sequence_name": "demo"},
         "summary": {},
         "prediction": {
             "expression": 0.95,
@@ -203,7 +203,7 @@ _WORKFLOW_PAYLOAD: dict[str, Any] = {
         "task": "find_genes_and_predict_expression",
         "annotation_model": "g0-annotation",
         "expression_model": "g0-expression",
-        "input": {"sequence_name": "HBB", "sequence_length": 25000},
+        "input": {"sequence_name": "HBB"},
         "summary": {"genes_found": 2, "genes_predicted": 1, "genes_skipped": 1},
         "annotation": {},
         "expression_predictions": [
@@ -307,11 +307,14 @@ def test_parse_expression_reads_applied_window_from_meta() -> None:
 def test_parse_expression_takes_the_submitted_length_from_meta_not_the_echo() -> None:
     """``sequence_length`` is the submission, read from ``meta``.
 
-    ``data.input`` carries a ``sequence_length`` of its own holding the 9,198 bp
-    scored window, so the two disagree for any locus longer than one window.
-    Only ``meta.sequence_length`` is in the published schema; the echo is an
-    untyped object no contract pin covers. This payload makes them disagree so
-    that reading the echo fails here rather than in a user's report.
+    ``data.input`` used to carry a ``sequence_length`` of its own holding the
+    9,198 bp scored window, so the two disagreed for any locus longer than one
+    window. The service dropped that key from the echo at contract revision 13
+    (2026-09-03), but ``data.input`` is an untyped, open object no contract pin
+    covers, so nothing stops it coming back or an older recorded body still
+    carrying it. Only ``meta.sequence_length`` is in the published schema. This
+    payload keeps the removed key and makes the two disagree, so that reading
+    the echo fails here rather than in a user's report.
     """
     payload = {
         "data": {
