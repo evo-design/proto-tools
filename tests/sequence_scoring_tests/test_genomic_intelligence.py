@@ -369,6 +369,25 @@ def test_invalid_nucleotides_are_rejected() -> None:
         validate_gi_sequence("ACGTZZZZ" * 100, min_bp=50, task="enhancer")
 
 
+def test_rna_uracil_is_rejected_locally() -> None:
+    r"""The shared validator allows U; these endpoints do not, so the gate narrows it.
+
+    Every predict schema publishes ``^\s*(?:[ACGNTacgnt]\s*)+$`` and the service
+    answers a U with a 422 naming the character. Refusing it here keeps an RNA paste
+    from costing a round trip.
+    """
+    with pytest.raises(ValueError, match=r"does not accept: \['U'\]"):
+        validate_gi_sequence("ACGU" * 100, min_bp=50, task="enhancer")
+
+
+def test_the_gate_accepts_exactly_the_published_alphabet() -> None:
+    """Case and wrapping are accepted, N is accepted, and nothing else is."""
+    assert validate_gi_sequence("acg tn\nACGTN" * 20, min_bp=50, task="enhancer") == "ACGTNACGTN" * 20
+    for character in "URYKMSWBDHV-":
+        with pytest.raises(ValueError):
+            validate_gi_sequence(("ACGT" * 25) + character, min_bp=50, task="enhancer")
+
+
 def test_bare_string_is_coerced_to_one_sequence() -> None:
     """Every task input accepts a bare DNA string in place of a list."""
     for input_class in (GIPromoterInput, GISpliceInput, GIEnhancerInput, GIChromatinInput, GIAnnotationInput):
@@ -548,6 +567,28 @@ class _FakeSession:
         self.closed = True
 
 
+class _ResetThenOkSession:
+    """A session whose ``post`` mimics a reused keep-alive connection the server already closed."""
+
+    def __init__(self, failures: int, post: _FakeResponse) -> None:
+        self.failures = failures
+        self._post = post
+        self.calls = 0
+        self.headers: dict[str, str] = {}
+        self.closed = False
+
+    def post(self, *_args: Any, **_kwargs: Any) -> _FakeResponse:
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise requests.exceptions.ConnectionError(
+                "Connection aborted.", ConnectionResetError(104, "Connection reset by peer")
+            )
+        return self._post
+
+    def close(self) -> None:
+        self.closed = True
+
+
 def _install_session(
     monkeypatch: pytest.MonkeyPatch,
     post: _FakeResponse,
@@ -567,6 +608,27 @@ _BAD_SUMMARY_PAYLOAD: dict[str, Any] = {"data": {**_GOOD_DATA, "summary": "all g
 def _predict(config: GIConfig) -> tuple[dict[str, Any], dict[str, Any]]:
     """Issue one promoter predict call through the shared client."""
     return call_predict(config, "promoter", "ATGC" * 100, "demo")
+
+
+def test_predict_submission_retries_a_connection_reset(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The same reused-connection failure the other fetch tools retry, here on the predict submission.
+
+    ``build_http_session``'s adapter does not cover this: a server closing a pooled
+    keep-alive connection raises ``ConnectionResetError`` while urllib3 is *sending*
+    the next request on it, which surfaces above the adapter as a
+    ``requests.exceptions.ConnectionError``. Retrying the submission is safe for the
+    same reason it is safe for the other job-creating POSTs in this repo -- the
+    request never reached the server, so no job was created.
+    """
+    monkeypatch.setattr(shared_data_models, "_BACKOFF_SECONDS", 0.0)
+    session = _ResetThenOkSession(failures=2, post=_FakeResponse(200, {"data": _GOOD_DATA, "meta": _META}))
+    monkeypatch.setattr(shared_data_models, "_build_session", lambda _config: session)
+
+    data, _payload = _predict(GIConfig(gi_api_key="gi_test"))
+
+    assert data == _GOOD_DATA
+    assert session.calls == 3
+    assert session.closed
 
 
 class TestTheEnvelopeIsRequired:
@@ -831,8 +893,13 @@ class TestTheCallerSeesTheRefusal:
 
 # ============================================================================
 # Integration — live API, skipped unless pytest runs with --integration
-# (in CI, the run-integration label)
 # ============================================================================
+#
+# The `run-integration` label starts Integration Tests, which runs pytest with
+# --integration, so these two cases are selected there. They still skip: that
+# workflow sets no GI_API_KEY, and a pull request from a fork is not given
+# repository secrets in any case. Running them for real means a local run with
+# a key in the environment.
 
 
 @pytest.mark.integration

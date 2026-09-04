@@ -34,6 +34,7 @@ from proto_tools.utils import (
     build_http_session,
     get_logger,
     poll_until_complete,
+    request_with_retry,
 )
 
 logger = get_logger(__name__)
@@ -51,6 +52,9 @@ _DEFAULT_POLL_INTERVAL_SECONDS = 5.0
 
 _MAX_BP = 500_000
 """Upper bound shared by every endpoint, published as ``maxLength``."""
+
+_GI_ALPHABET = frozenset("ACGNT")
+"""The characters every predict schema's published ``sequence.pattern`` accepts."""
 
 GITask = Literal["promoter", "splice", "enhancer", "chromatin", "annotation", "expression"]
 
@@ -369,6 +373,17 @@ def validate_gi_sequence(sequence: str, *, min_bp: int, task: str) -> str:
     # reports it as an invalid nucleotide character and refuses a sequence the
     # service would have scored.
     cleaned = validate_dna_sequence("".join(sequence.split()))
+    # The shared validator allows RNA, so it accepts U. The published request
+    # schemas do not: every predict operation carries
+    # ^\s*(?:[ACGNTacgnt]\s*)+$, and the service rejects a U with a 422 naming
+    # the character. Narrow the shared result to the alphabet this API accepts
+    # so the refusal is local rather than a round trip.
+    outside = sorted({character for character in cleaned if character not in _GI_ALPHABET})
+    if outside:
+        raise ValueError(
+            f"{task}: sequence contains characters the endpoint does not accept: {outside}. "
+            f"The published request schema allows {''.join(sorted(_GI_ALPHABET))} only."
+        )
     length = len(cleaned)
     if length < min_bp:
         raise ValueError(
@@ -614,11 +629,15 @@ def _post(
             :func:`_job_status` when the job completes.
     """
     headers = {"Prefer": "respond-async"} if config.respond_async else {}
-    response = session.post(
-        f"{resolve_base_url()}/{_API_VERSION}/{path.lstrip('/')}",
-        json=body,
-        headers=headers,
-        timeout=_REQUEST_TIMEOUT_SECONDS,
+    response = request_with_retry(
+        lambda: session.post(
+            f"{resolve_base_url()}/{_API_VERSION}/{path.lstrip('/')}",
+            json=body,
+            headers=headers,
+            timeout=_REQUEST_TIMEOUT_SECONDS,
+        ),
+        retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
     )
     raise_for_gi_error(response)
     payload: dict[str, Any] = require_envelope(response)
