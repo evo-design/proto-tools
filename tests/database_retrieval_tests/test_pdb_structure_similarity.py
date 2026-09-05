@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import requests
 from pydantic import ValidationError
 
 from proto_tools import Structure
@@ -87,6 +88,7 @@ def test_public_entry_search_returns_original_structure_score(monkeypatch: pytes
 
     assert session.closed is True
     assert session_config["allowed_methods"] == ["POST"]
+    assert session_config["http_retries"] == 1
     assert [url for url, _kwargs in session.calls] == [module._SEARCH_URL]
     payload = session.calls[0][1]["json"]
     parameters = payload["query"]["parameters"]
@@ -97,6 +99,37 @@ def test_public_entry_search_returns_original_structure_score(monkeypatch: pytes
     assert output.max_predicted_tm_score == pytest.approx(0.978926)
     assert output.hits[1].predicted_tm_score == pytest.approx(0.71)
     assert output.query_was_uploaded is False
+
+
+def test_exhausted_transport_retry_is_not_retried_by_registry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FailingSession:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def post(self, *_args: Any, **_kwargs: Any) -> _Response:
+            raise requests.ConnectTimeout("synthetic timeout")
+
+        def close(self) -> None:
+            self.closed = True
+
+    session = FailingSession()
+    seen: dict[str, Any] = {}
+
+    def build_session(**kwargs: Any) -> FailingSession:
+        seen.update(kwargs)
+        return session
+
+    monkeypatch.setattr(module, "build_http_session", build_session)
+    with pytest.raises(RuntimeError, match="bounded HTTP retry budget"):
+        run_pdb_structure_similarity(
+            PdbStructureSimilarityInput(pdb_id="1YCR", chain_id="A"),
+            PdbStructureSimilarityConfig(timeout_seconds=45, http_retries=0),
+        )
+
+    assert seen["http_retries"] == 0
+    assert session.closed is True
 
 
 def test_custom_structure_requires_external_upload_acknowledgement() -> None:

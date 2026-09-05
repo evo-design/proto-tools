@@ -35,7 +35,7 @@ _UPLOAD_DOWNLOAD_BASE = "https://user-upload.rcsb.org/v1/download/"
 _SEARCH_URL = "https://search.rcsb.org/rcsbsearch/v2/query"
 _DOWNLOAD_URL = "https://files.rcsb.org/download/{name}"
 _USER_AGENT = "proto-tools/pdb-structure-similarity-v1"
-_HTTP_RETRIES = 3
+_HTTP_RETRIES = 1
 _BACKOFF_SECONDS = 1.0
 
 PdbStructureTarget = Literal["polymer_entity_instance", "assembly"]
@@ -111,6 +111,7 @@ class PdbStructureSimilarityConfig(BaseConfig):
         number_of_candidates (int): Maximum nearest-neighbor candidates considered.
         allow_external_upload (bool): Acknowledge disclosure of a custom structure.
         timeout_seconds (float): Per-request HTTP timeout.
+        http_retries (int): Extra transport attempts per upload/search request.
     """
 
     target_search_space: PdbStructureTarget = ConfigField(
@@ -148,6 +149,17 @@ class PdbStructureSimilarityConfig(BaseConfig):
         ge=10.0,
         title="HTTP Timeout",
         description="Timeout for each RCSB upload or search request",
+        include_in_key=False,
+    )
+    http_retries: int = ConfigField(
+        default=_HTTP_RETRIES,
+        ge=0,
+        le=3,
+        title="HTTP Retries",
+        description=(
+            "Extra bounded transport attempts for each RCSB upload/search request. "
+            "Failures are returned after this budget instead of being retried again by the tool wrapper."
+        ),
         include_in_key=False,
     )
 
@@ -513,7 +525,7 @@ def run_pdb_structure_similarity(
             "set allow_external_upload=True only when that disclosure is permitted"
         )
     session = build_http_session(
-        http_retries=_HTTP_RETRIES,
+        http_retries=config.http_retries,
         backoff_seconds=_BACKOFF_SECONDS,
         user_agent=_USER_AGENT,
         # Both upload and search are POST requests. The shared session defaults
@@ -537,6 +549,16 @@ def run_pdb_structure_similarity(
         )
         _raise_for_status(response, "structure search")
         payload = response.json()
+    except requests.RequestException as exc:
+        # The registry normally retries ConnectionError around the entire tool
+        # call.  This tool already has per-request retries in its HTTP adapter;
+        # converting the exhausted transport error prevents multiplicative
+        # upload+search retries that can turn a bounded shortlist into hours of
+        # repeated external calls.
+        raise RuntimeError(
+            "RCSB structure similarity exhausted its bounded HTTP retry budget "
+            f"(timeout_seconds={config.timeout_seconds}, http_retries={config.http_retries}): {exc}"
+        ) from exc
     finally:
         session.close()
 
@@ -617,5 +639,4 @@ def run_pdb_structure_similarity_batch(
             "failed_queries_are_not_measurements": True,
         },
     )
-
 

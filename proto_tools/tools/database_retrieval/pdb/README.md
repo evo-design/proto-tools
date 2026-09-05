@@ -75,6 +75,11 @@ Use this as database-scale evidence for structural relatedness when an independe
   preserves input alignment and explicit failures while applying conservative
   concurrency; this is preferable to a long sequential loop when every
   finalist or control needs the same measurement.
+- **Remote retries are deliberately bounded.** `timeout_seconds` limits each
+  upload/search request and `http_retries` controls extra transport attempts
+  (default 1, maximum 3). Exhaustion is reported once and is not retried again
+  around the entire upload-plus-search operation. Preserve successful batch
+  entries and treat failed entries as missing evidence.
 
 ### Batch PDB Structure Similarity (`pdb-structure-similarity-batch`)
 
