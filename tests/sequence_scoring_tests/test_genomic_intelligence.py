@@ -186,7 +186,7 @@ _EXPRESSION_PAYLOAD: dict[str, Any] = {
     "data": {
         "task": "expression",
         "model": "g0-expression",
-        "input": {"sequence_name": "demo"},
+        "input": {"sequence_name": "demo", "description": "K562 RNA-seq", "tss_index": 4599},
         "summary": {},
         "prediction": {
             "expression": 0.95,
@@ -203,7 +203,7 @@ _WORKFLOW_PAYLOAD: dict[str, Any] = {
         "task": "find_genes_and_predict_expression",
         "annotation_model": "g0-annotation",
         "expression_model": "g0-expression",
-        "input": {"sequence_name": "HBB"},
+        "input": {"sequence_name": "HBB", "description": "HBB locus"},
         "summary": {"genes_found": 2, "genes_predicted": 1, "genes_skipped": 1},
         "annotation": {},
         "expression_predictions": [
@@ -304,17 +304,65 @@ def test_parse_expression_reads_applied_window_from_meta() -> None:
     assert result.scored_window == [0, 9198]
 
 
+def test_recorded_input_echoes_carry_no_derived_key() -> None:
+    """No recorded ``data.input`` carries a key the service stopped echoing.
+
+    Contract revision 16 (2026-09-06) made every ``data.input`` a closed object:
+    ``additionalProperties: false``, every field required. The published shapes
+    are ``{sequence_name}`` for promoter / splice / enhancer / chromatin /
+    annotation, ``{sequence_name, description, tss_index}`` for expression, and
+    ``{sequence_name, description}`` for the composite workflow.
+
+    These fixtures are recorded bodies, so nothing upstream keeps them honest --
+    a stale one simply describes a service that no longer exists, and the client
+    it exercises goes on passing. This test is that check. It deliberately does
+    not cover the adversarial payload below, which keeps the removed keys on
+    purpose.
+    """
+    derived = {"sequence_length", "submitted_sequence_length", "scored_window"}
+    recorded = {
+        "promoter": _PROMOTER_PAYLOAD,
+        "splice": _SPLICE_PAYLOAD,
+        "enhancer": _ENHANCER_PAYLOAD,
+        "chromatin": _CHROMATIN_PAYLOAD,
+        "annotation": _ANNOTATION_PAYLOAD,
+        "expression": _EXPRESSION_PAYLOAD,
+        "workflow": _WORKFLOW_PAYLOAD,
+    }
+    for task, payload in recorded.items():
+        echo = payload["data"]["input"]
+        assert derived.isdisjoint(echo), f"{task} echo still carries {derived & set(echo)}"
+
+
+def test_the_recorded_expression_echo_matches_the_published_shape() -> None:
+    """Expression echoes exactly its three inputs, and the composite its two."""
+    assert set(_EXPRESSION_PAYLOAD["data"]["input"]) == {
+        "sequence_name",
+        "description",
+        "tss_index",
+    }
+    assert set(_WORKFLOW_PAYLOAD["data"]["input"]) == {"sequence_name", "description"}
+
+
 def test_parse_expression_takes_the_submitted_length_from_meta_not_the_echo() -> None:
     """``sequence_length`` is the submission, read from ``meta``.
 
     ``data.input`` used to carry a ``sequence_length`` of its own holding the
     9,198 bp scored window, so the two disagreed for any locus longer than one
     window. The service dropped that key from the echo at contract revision 13
-    (2026-09-03), but ``data.input`` is an untyped, open object no contract pin
-    covers, so nothing stops it coming back or an older recorded body still
-    carrying it. Only ``meta.sequence_length`` is in the published schema. This
-    payload keeps the removed key and makes the two disagree, so that reading
-    the echo fails here rather than in a user's report.
+    (2026-09-03), then dropped ``submitted_sequence_length`` and
+    ``scored_window`` at revision 16 (2026-09-06), which also made every
+    ``data.input`` a typed, closed object -- ``additionalProperties: false``,
+    every field required, and covered by the consumer pins for the first time.
+    Only ``meta`` carries the derived numbers: ``meta.sequence_length`` for the
+    submission and ``meta.task_specific_counts.scored_window`` for the window.
+
+    A recorded body is not the live document, so being closed upstream does not
+    stop an older payload -- or a replayed cassette -- still carrying the
+    removed keys. That is what this test is for: the payload below keeps all
+    three and makes them disagree with ``meta``, so reading the echo fails here
+    rather than in a user's report. Do not "fix" this fixture by making it match
+    the current contract; its whole value is that it does not.
     """
     payload = {
         "data": {
@@ -1093,10 +1141,12 @@ def test_gi_expression_benchmark() -> None:
     # (meta), and the window must stay 9,198 wide. data.input used to carry a
     # sequence_length of its own holding the window, and reading that one
     # instead of meta is the mistake these two assertions exist to catch. The
-    # service dropped that key at contract revision 13 on 2026-09-03, so today
-    # a reader of the echo gets None rather than the window -- still wrong,
-    # still caught here, and data.input is an open object that nothing stops
-    # the key returning to.
+    # service dropped that key at contract revision 13 on 2026-09-03, and at
+    # revision 16 on 2026-09-06 dropped scored_window and
+    # submitted_sequence_length too, closing data.input against extra keys. So
+    # today a reader of the echo gets None rather than the window -- still
+    # wrong, and still caught here. This is a live call, so it also fails if
+    # the service ever reopens the echo and a reader drifts back to it.
     assert result.sequence_length == len(locus)
     assert result.scored_window is not None
     assert result.scored_window[1] - result.scored_window[0] == EXPRESSION_WINDOW_BP
