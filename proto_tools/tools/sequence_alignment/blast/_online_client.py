@@ -5,6 +5,7 @@ import logging
 import math
 import os
 import re
+import tempfile
 import threading
 import time
 from contextlib import contextmanager
@@ -29,6 +30,19 @@ def _is_rejected(page: str) -> bool:
     return bool(re.search(r"Cannot accept request,\s*error code:\s*-99(?![\w.])", page))
 
 
+def _publish_slot(path: Path, spacing: float) -> None:
+    """Atomically retain a pacing reservation even if a requesting process dies."""
+    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as handle:
+        temporary = Path(handle.name)
+        try:
+            handle.write(str(time.time() + spacing))
+            handle.flush()
+            os.fsync(handle.fileno())
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
 @contextmanager
 def _shared_slot(deadline: float | None):
     """Optionally coordinate participating processes using an explicit shared path."""
@@ -49,6 +63,7 @@ def _shared_slot(deadline: float | None):
             if not math.isfinite(next_epoch):
                 raise ValueError("Invalid BLAST pacing timestamp")
             _wait(max(0.0, next_epoch - time.time()), deadline)
+        _publish_slot(path, 10.0)
         yield path
 
 
@@ -92,8 +107,7 @@ def _request(parameters: dict[str, Any], deadline: float | None) -> str:
             finally:
                 _NEXT_REQUEST = time.monotonic() + spacing
                 if pacing_path is not None:
-                    # A crash during writing fails closed on the next reader.
-                    pacing_path.write_text(str(time.time() + spacing))
+                    _publish_slot(pacing_path, spacing)
     finally:
         _REQUEST_LOCK.release()
 
