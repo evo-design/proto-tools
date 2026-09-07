@@ -16,6 +16,7 @@ def clock(monkeypatch):
     monkeypatch.setattr(client.time, "monotonic", lambda: now[0])
     monkeypatch.setattr(client.time, "sleep", lambda seconds: now.__setitem__(0, now[0] + seconds))
     monkeypatch.setattr(client, "_NEXT_REQUEST", 0)
+    monkeypatch.delenv("PROTO_BLAST_PACING_PATH", raising=False)
     return now
 
 
@@ -61,9 +62,161 @@ def test_submission_rejection_does_not_poll(monkeypatch, clock):
         return io.BytesIO(b'<p class="error">Cannot accept request, error code: -99</p>')
 
     monkeypatch.setattr(client, "urlopen", reject)
-    with pytest.raises(ValueError, match="error code: -99"):
+    with pytest.raises(client.BlastSubmissionRejected, match="error code: -99"):
+        client.search_xml({"QUERY": "ACGT"}, 300)
+    assert len(calls) == 3
+
+
+def test_rejection_recovers_under_one_deadline(monkeypatch, clock):
+    responses = iter(
+        [
+            b"Cannot accept request, error code: -99",
+            b"Cannot accept request, error code: -99",
+            b"RID = TEST123\nRTOE = 30\n",
+            b"<?xml version='1.0'?><BlastOutput/>",
+        ]
+    )
+    calls = []
+
+    def respond(request, timeout):
+        calls.append((clock[0], request.data, timeout))
+        return io.BytesIO(next(responses))
+
+    monkeypatch.setattr(client, "urlopen", respond)
+    assert client.search_xml({"QUERY": "ACGT"}, 300).startswith("<?xml")
+    assert [call[0] for call in calls] == [100, 160, 280, 340]
+    assert calls[0][1] == calls[1][1] == calls[2][1]
+    assert [call[2] for call in calls] == [300, 240, 120, 60]
+
+
+def test_rejection_deadline_is_not_retryable_by_outer_layer(monkeypatch, clock):
+    from proto_tools.utils.remote_errors import is_retryable_remote_error
+
+    monkeypatch.setattr(client, "urlopen", lambda *a, **k: io.BytesIO(b"Cannot accept request, error code: -99"))
+    with pytest.raises(client.BlastSubmissionRejected, match="deadline") as error:
+        client.search_xml({"QUERY": "ACGT"}, 50)
+    assert not is_retryable_remote_error(error.value)
+
+
+def test_poll_rejection_reuses_rid(monkeypatch, clock):
+    responses = iter([b"RID = TEST123\nRTOE = 30\n", b"Cannot accept request, error code: -99", b"<BlastOutput/>"])
+    calls = []
+
+    def respond(request, timeout):
+        calls.append(parse_qs(request.data.decode()))
+        return io.BytesIO(next(responses))
+
+    monkeypatch.setattr(client, "urlopen", respond)
+    assert client.search_xml({"QUERY": "ACGT"}, 300) == "<BlastOutput/>"
+    assert [call["CMD"] for call in calls] == [["Put"], ["Get"], ["Get"]]
+    assert calls[1]["RID"] == calls[2]["RID"]
+
+
+def test_other_rejection_is_not_retried(monkeypatch, clock):
+    calls = []
+
+    def reject(*args, **kwargs):
+        calls.append(1)
+        return io.BytesIO(b'<p class="error">Cannot accept request, error code: -98</p>')
+
+    monkeypatch.setattr(client, "urlopen", reject)
+    with pytest.raises(ValueError, match="-98"):
         client.search_xml({"QUERY": "ACGT"}, 300)
     assert len(calls) == 1
+
+
+def test_outer_attempts_do_not_multiply_rejection_budget(monkeypatch, clock):
+    import inspect
+
+    calls = []
+
+    def reject(*args, **kwargs):
+        calls.append(1)
+        return io.BytesIO(b"Cannot accept request, error code: -99")
+
+    monkeypatch.setattr(client, "urlopen", reject)
+    with pytest.raises(client.BlastSubmissionRejected, match="exhausted"):
+        inspect.unwrap(search.run_blast_search)(
+            search.BlastSearchInput(query="ACGT"), search.BlastSearchConfig(online_attempts=5, timeout=600)
+        )
+    assert len(calls) == 3
+
+
+def test_deadline_after_retried_submission_stays_terminal(monkeypatch, clock):
+    responses = iter([b"Cannot accept request, error code: -99", b"RID = TEST123\nRTOE = 30\n"])
+    monkeypatch.setattr(client, "urlopen", lambda *a, **k: io.BytesIO(next(responses)))
+    with pytest.raises(client.BlastSubmissionRejected, match="deadline"):
+        client.search_xml({"QUERY": "ACGT"}, 100)
+
+
+def test_request_timeout_during_rejection_recovery_stays_terminal(monkeypatch, clock):
+    calls = []
+
+    def respond(*args, **kwargs):
+        calls.append(1)
+        if len(calls) > 1:
+            raise TimeoutError("socket timeout")
+        return io.BytesIO(b"Cannot accept request, error code: -99")
+
+    monkeypatch.setattr(client, "urlopen", respond)
+    with pytest.raises(client.BlastSubmissionRejected, match="deadline"):
+        client.search_xml({"QUERY": "ACGT"}, 300)
+
+
+def test_shared_pacing_survives_process_local_reset(monkeypatch, clock, tmp_path):
+    path = tmp_path / "pacing"
+    monkeypatch.setenv("PROTO_BLAST_PACING_PATH", str(path))
+    monkeypatch.setattr(client.time, "time", lambda: clock[0] + 1000)
+    calls = []
+
+    def respond(*args, **kwargs):
+        calls.append(clock[0])
+        return io.BytesIO(b"Cannot accept request, error code: -99")
+
+    monkeypatch.setattr(client, "urlopen", respond)
+    client._request({"CMD": "Put"}, None)
+    monkeypatch.setattr(client, "_NEXT_REQUEST", 0)
+    client._request({"CMD": "Put"}, None)
+    assert calls == [100, 160]
+
+
+def test_corrupt_shared_pacing_fails_closed(monkeypatch, clock, tmp_path):
+    path = tmp_path / "pacing"
+    path.write_text("nan")
+    monkeypatch.setenv("PROTO_BLAST_PACING_PATH", str(path))
+    monkeypatch.setattr(client, "urlopen", lambda *a, **k: pytest.fail("No request permitted"))
+    with pytest.raises(ValueError, match="pacing timestamp"):
+        client._request({"CMD": "Put"}, None)
+
+
+@pytest.mark.slow
+def test_two_processes_share_request_spacing(monkeypatch, tmp_path):
+    import subprocess
+    import sys
+
+    monkeypatch.setenv("PROTO_BLAST_PACING_PATH", str(tmp_path / "pacing"))
+    code = """
+import io
+import time
+from proto_tools.tools.sequence_alignment.blast import _online_client as client
+def response(*args, **kwargs):
+    print(time.time(), flush=True)
+    return io.BytesIO(b'response')
+client.urlopen = response
+client._request({'CMD': 'Put'}, time.monotonic() + 30)
+"""
+    first = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    second = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        outputs = [process.communicate(timeout=45) for process in (first, second)]
+        assert first.returncode == second.returncode == 0, outputs
+        times = sorted(float(output[0].strip()) for output in outputs)
+        assert times[1] - times[0] >= 10.0
+    finally:
+        for process in (first, second):
+            if process.poll() is None:
+                process.kill()
+                process.wait()
 
 
 @pytest.mark.parametrize("response", [b"Status=FAILED", b"Status=UNKNOWN", b"<html>failure</html>", b"Status=READY"])

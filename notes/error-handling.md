@@ -47,8 +47,12 @@ The online BLAST client owns its identified HTTP transport and process-local
 request pacing, without replacing global Biopython functions. Submission errors
 remain exceptions; failed/unknown polling states and unexpected non-XML responses
 cannot be treated as empty successful searches. The search-attempt deadline
-includes pacing and polling. Cluster-wide request coordination remains the
-caller's responsibility. See the BLAST toolkit README for the transport contract.
+includes pacing and polling. Exact NCBI `-99` rejections have two native cooldown
+retries within that deadline, including RID-preserving poll recovery. Exhaustion
+raises a non-retryable `ValueError` subclass, so generic transport retries do not
+restart the rejection budget. Shared process pacing is opt-in through
+`PROTO_BLAST_PACING_PATH`; cluster filesystem semantics and coordination with
+other clients remain the caller's responsibility. See the BLAST toolkit README.
 
 ## ToolPool
 

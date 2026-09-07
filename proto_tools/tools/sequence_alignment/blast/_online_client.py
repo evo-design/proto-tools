@@ -1,9 +1,14 @@
 """Identified NCBI BLAST transport without process-global Biopython patches."""
 
 import io
+import logging
+import math
+import os
 import re
 import threading
 import time
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -12,6 +17,39 @@ _URL = "https://blast.ncbi.nlm.nih.gov/Blast.cgi"
 _USER_AGENT = "Proto-Tools/BLAST (+https://github.com/evo-design/proto-tools)"
 _REQUEST_LOCK = threading.Lock()
 _NEXT_REQUEST = 0.0
+logger = logging.getLogger(__name__)
+
+
+class BlastSubmissionRejected(ValueError):
+    """NCBI -99 recovery exhausted; callers must not automatically restart its budget."""
+
+
+def _is_rejected(page: str) -> bool:
+    """Recognize the observed application rejection, not arbitrary server errors."""
+    return bool(re.search(r"Cannot accept request,\s*error code:\s*-99(?![\w.])", page))
+
+
+@contextmanager
+def _shared_slot(deadline: float | None):
+    """Optionally coordinate participating processes using an explicit shared path."""
+    from filelock import FileLock
+
+    location = os.environ.get("PROTO_BLAST_PACING_PATH")
+    if not location:
+        yield None
+        return
+    path = Path(location)
+    if not path.is_absolute():
+        raise ValueError("PROTO_BLAST_PACING_PATH must be absolute")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    remaining = _remaining(deadline)
+    with FileLock(str(path) + ".lock", timeout=remaining if remaining is not None else -1):
+        if path.exists():
+            next_epoch = float(path.read_text())
+            if not math.isfinite(next_epoch):
+                raise ValueError("Invalid BLAST pacing timestamp")
+            _wait(max(0.0, next_epoch - time.time()), deadline)
+        yield path
 
 
 def _remaining(deadline: float | None) -> float | None:
@@ -41,14 +79,21 @@ def _request(parameters: dict[str, Any], deadline: float | None) -> str:
         raise TimeoutError("Online BLAST deadline exhausted waiting for request slot")
     try:
         _wait(max(0.0, _NEXT_REQUEST - time.monotonic()), deadline)
-        request = Request(_URL, urlencode(parameters).encode(), headers={"User-Agent": _USER_AGENT})  # noqa: S310 - fixed HTTPS endpoint
-        try:
-            with urlopen(request, timeout=_remaining(deadline)) as response:  # noqa: S310 - fixed HTTPS endpoint
-                text = response.read().decode()
-            _remaining(deadline)
-            return text
-        finally:
-            _NEXT_REQUEST = time.monotonic() + 10.0
+        with _shared_slot(deadline) as pacing_path:
+            spacing = 10.0
+            request = Request(_URL, urlencode(parameters).encode(), headers={"User-Agent": _USER_AGENT})  # noqa: S310 - fixed HTTPS endpoint
+            try:
+                with urlopen(request, timeout=_remaining(deadline)) as response:  # noqa: S310 - fixed HTTPS endpoint
+                    text = response.read().decode()
+                if _is_rejected(text):
+                    spacing = 60.0
+                _remaining(deadline)
+                return text
+            finally:
+                _NEXT_REQUEST = time.monotonic() + spacing
+                if pacing_path is not None:
+                    # A crash during writing fails closed on the next reader.
+                    pacing_path.write_text(str(time.time() + spacing))
     finally:
         _REQUEST_LOCK.release()
 
@@ -65,7 +110,39 @@ def search_xml(parameters: dict[str, Any], timeout: int | None) -> str:
     """
     from Bio.Blast import NCBIWWW
 
+    from proto_tools.utils.remote_errors import is_retryable_remote_error
+
     deadline = None if timeout is None else time.monotonic() + timeout
+    rejections = 0
+
+    def wait_with_recovery_budget(seconds: float) -> None:
+        try:
+            _wait(seconds, deadline)
+        except TimeoutError as exc:
+            if not rejections:
+                raise
+            raise BlastSubmissionRejected("NCBI BLAST error code: -99; recovery deadline exhausted") from exc
+
+    def request_with_recovery(parameters: dict[str, Any]) -> str:
+        nonlocal rejections
+        while True:
+            try:
+                page = _request(parameters, deadline)
+            except Exception as exc:
+                if not rejections or not is_retryable_remote_error(exc):
+                    raise
+                raise BlastSubmissionRejected(
+                    "NCBI BLAST error code: -99; recovery interrupted or deadline exhausted"
+                ) from exc
+            if not _is_rejected(page) or re.search(r"^\s*RID\s*=\s*\S+\s*$", page, re.MULTILINE):
+                return page
+            if rejections >= 2:
+                raise BlastSubmissionRejected("NCBI BLAST error code: -99; bounded recovery exhausted")
+            delay = 60.0 * 2**rejections
+            rejections += 1
+            logger.warning("NCBI BLAST -99; retry %s/2 in %.0fs (%s)", rejections, delay, parameters["CMD"])
+            wait_with_recovery_budget(delay)
+
     # Match the previous qblast defaults; never silently substitute databases.
     put = {
         "EXPECT": 10.0,
@@ -75,13 +152,13 @@ def search_xml(parameters: dict[str, Any], timeout: int | None) -> str:
         "CMD": "Put",
         "tool": "proto-tools",
     }
-    page = _request(put, deadline)
+    page = request_with_recovery(put)
     # Reuse Biopython's established server-error/RID parser, not its hardcoded HTTP client.
     rid, _ = NCBIWWW._parse_qblast_ref_page(io.BytesIO(page.encode()))
     get = {"CMD": "Get", "RID": rid, "FORMAT_TYPE": "XML", "ALIGNMENTS": 500, "DESCRIPTIONS": 500}
     while True:
-        _wait(60.0, deadline)
-        xml = _request(get, deadline)
+        wait_with_recovery_budget(60.0)
+        xml = request_with_recovery(get)
         status = re.search(r"Status=\s*([A-Za-z]+)", xml)
         if not xml.strip() or (status and status.group(1).upper() == "WAITING"):
             continue

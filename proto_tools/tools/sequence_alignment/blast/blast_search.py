@@ -369,6 +369,21 @@ class BlastSearchConfig(BaseConfig):
         description="Composition-based scoring (protein): 0=off, 1=stats, 2=adjust (default), 3=unconditional.",
     )
 
+    online_attempts: int = ConfigField(
+        default=1,
+        ge=1,
+        le=5,
+        title="Online Attempts",
+        description="Transport-error attempts; NCBI -99 has a separate bounded cooldown budget",
+    )
+    online_retry_delay_seconds: float = ConfigField(
+        default=10.0,
+        ge=0.0,
+        le=60.0,
+        title="Online Retry Delay",
+        description="Initial backoff, capped at 60 seconds; each QBLAST call still needs an outer deadline",
+    )
+
     # --- Filtering parameters ---
     # Many of these are local-only because the wrapper's online path goes
     # through the NCBI web API, which doesn't expose them.

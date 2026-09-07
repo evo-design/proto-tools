@@ -58,18 +58,31 @@ This tool is the prerequisite for any local BLAST workflow that searches against
 ## Toolkit Notes
 
 Online searches use a truthful `Proto-Tools/BLAST` HTTP client identity for both
-submission and result polling. This avoids the observed NCBI `-99` rejection of
+submission and result polling. This addresses the observed identity-related rejection of
 the generic `BiopythonClient` header without changing search parameters or
 impersonating a browser. Biopython still parses submission errors and result XML;
 no process-global Biopython or urllib settings are patched.
 
 Requests are spaced by at least 10 seconds within one process, and each search
 is polled no more than once per 60 seconds, including its first poll. Multiple
-processes or machines sharing an outbound address still require caller-side
-coordination. `timeout` bounds each search attempt, including pacing and polling;
+processes can opt into shared pacing with `PROTO_BLAST_PACING_PATH`, an absolute
+timestamp-file path visible to all participating clients. A file lock serializes
+HTTP requests; only a timestamp is stored, never queries. Cross-node use requires
+verified shared-filesystem lock semantics and synchronized clocks. Unrelated
+clients sharing outbound access are not coordinated. Corrupt state fails closed.
+`timeout` bounds each search attempt, including lock acquisition, pacing and polling;
 `None` preserves an unbounded wait. Unknown, failed or non-XML responses raise
-rather than becoming successful zero-hit results. Existing bounded retry policy
-is unchanged. The requested database is not rewritten by this client; NCBI may
+rather than becoming successful zero-hit results. The exact NCBI application
+rejection `Cannot accept request, error code: -99` receives at most two retries,
+after 60 and 120 seconds, shared across submission and polling within one search
+deadline. Accepted request IDs are reused for poll retries, not resubmitted.
+Rejection also defers other participating clients for at least 60 seconds.
+Exhaustion raises `BlastSubmissionRejected` (a `ValueError`), deliberately not a
+generic retryable transport failure. Other invalid-request errors are not retried.
+The cooldown is a bounded recovery policy, not proof that `-99` means throttling
+or a guarantee of server acceptance. Higher-level whole-task retries must still
+be explicitly bounded; pending request IDs do not survive process termination.
+The requested database is not rewritten by this client; NCBI may
 independently redirect `nt` to `core_nt`.
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
