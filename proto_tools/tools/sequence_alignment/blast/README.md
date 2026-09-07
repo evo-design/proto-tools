@@ -57,6 +57,21 @@ This tool is the prerequisite for any local BLAST workflow that searches against
 
 ## Toolkit Notes
 
+Online searches use a truthful `Proto-Tools/BLAST` HTTP client identity for both
+submission and result polling. This avoids the observed NCBI `-99` rejection of
+the generic `BiopythonClient` header without changing search parameters or
+impersonating a browser. Biopython still parses submission errors and result XML;
+no process-global Biopython or urllib settings are patched.
+
+Requests are spaced by at least 10 seconds within one process, and each search
+is polled no more than once per 60 seconds, including its first poll. Multiple
+processes or machines sharing an outbound address still require caller-side
+coordination. `timeout` bounds each search attempt, including pacing and polling;
+`None` preserves an unbounded wait. Unknown, failed or non-XML responses raise
+rather than becoming successful zero-hit results. Existing bounded retry policy
+is unchanged. The requested database is not rewritten by this client; NCBI may
+independently redirect `nt` to `core_nt`.
+
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
 These apply to every BLAST tool in this toolkit (`blast-search`, `blast-create-db`).

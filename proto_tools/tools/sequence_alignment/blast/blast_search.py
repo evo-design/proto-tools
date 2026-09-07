@@ -218,7 +218,7 @@ class BlastSearchConfig(BaseConfig):
 
     Controls search mode (online vs local), BLAST program selection, scoring,
     filtering, and output options. The wrapper's online path goes through
-    Biopython's NCBIWWW.qblast which only exposes a subset of BLAST+ flags;
+    NCBI's QBLAST web API which only exposes a subset of BLAST+ flags;
     fields outside that subset are local-only and gated via ``depends_on`` /
     listed in ``_local_only_fields``.
 
@@ -262,7 +262,7 @@ class BlastSearchConfig(BaseConfig):
             (tblastn/tblastx, both modes).
         extra_args (list[str]): Verbatim BLAST+ CLI tokens for niche flags
             not exposed above (e.g. ``["-max_hsps", "1"]``). Local mode only;
-            online mode goes through ``NCBIWWW.qblast`` which doesn't accept
+            online mode goes through the NCBI web API which doesn't accept
             arbitrary CLI tokens.
     """
 
@@ -371,7 +371,7 @@ class BlastSearchConfig(BaseConfig):
 
     # --- Filtering parameters ---
     # Many of these are local-only because the wrapper's online path goes
-    # through Biopython's NCBIWWW.qblast, which doesn't expose them.
+    # through the NCBI web API, which doesn't expose them.
     max_target_seqs: int | None = ConfigField(
         default=None,
         title="Max Target Sequences",
@@ -585,7 +585,9 @@ def run_blast_search(
 def _online_search(inputs: BlastSearchInput, config: BlastSearchConfig) -> BlastSearchOutput:
     """Submit query to NCBI QBLAST and return results."""
     from Bio import SeqIO
-    from Bio.Blast import NCBIWWW, NCBIXML
+    from Bio.Blast import NCBIXML
+
+    from proto_tools.tools.sequence_alignment.blast._online_client import search_xml
 
     # Resolve query sequence
     if inputs.query_type == "fasta_path":
@@ -625,16 +627,15 @@ def _online_search(inputs: BlastSearchInput, config: BlastSearchConfig) -> Blast
         ge = config.gapextend if config.gapextend is not None else 1
         qblast_kwargs["gapcosts"] = f"{go} {ge}"
 
-    handle = NCBIWWW.qblast(
-        program=config.program,
-        database=config.database,
-        sequence=query_seq,
-        format_type="XML",
-        **qblast_kwargs,
+    raw_xml = search_xml(
+        {
+            "PROGRAM": config.program,
+            "DATABASE": config.database,
+            "QUERY": query_seq,
+            **{key.upper(): value for key, value in qblast_kwargs.items()},
+        },
+        timeout=config.timeout,
     )
-
-    raw_xml = handle.read()
-    handle.close()
 
     blast_records = list(NCBIXML.parse(io.StringIO(raw_xml)))  # type: ignore[no-untyped-call]
     hits = _blast_results_to_hits(blast_records)

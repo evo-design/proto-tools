@@ -41,6 +41,15 @@ The wrapper retries `ConnectionError` (and any other entry in `_RETRYABLE_EXCEPT
 
 `TimeoutError` is intentionally non-retryable, because hitting the timeout once means hitting it again at the same limit, so it is surfaced immediately.
 
+## Online BLAST transport
+
+The online BLAST client owns its identified HTTP transport and process-local
+request pacing, without replacing global Biopython functions. Submission errors
+remain exceptions; failed/unknown polling states and unexpected non-XML responses
+cannot be treated as empty successful searches. The search-attempt deadline
+includes pacing and polling. Cluster-wide request coordination remains the
+caller's responsibility. See the BLAST toolkit README for the transport contract.
+
 ## ToolPool
 
 `ToolPool._parallel_dispatch` is independent of the `PROTO_CAPTURE_ERRORS` policy, because pool partitions call the **raw undecorated** tool function, bypassing the `@tool` wrapper entirely. Per-partition exceptions are caught by the pool's own `try: future.result() except Exception` and aggregated into `PartialFailureError`, with the original exception type preserved on `PartialFailureError.failed[i]["exception"]` and successful partitions' results preserved on `PartialFailureError.succeeded`.
