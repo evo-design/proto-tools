@@ -57,6 +57,15 @@ This tool is the prerequisite for any local BLAST workflow that searches against
 
 ## Toolkit Notes
 
+Online FASTA inputs submit all records in one multi-query search, preserving
+unique FASTA identifiers. Empty records and duplicate identifiers are rejected.
+Results expose `metadata["query_ids"]`, including queries with no hits; missing,
+duplicate or unexpected result identifiers fail instead of becoming zero-hit
+successes. `query_length` is the total number of submitted residues, excluding
+FASTA headers. Callers should split large inputs into bounded batches; one
+`timeout` budget covers the entire submitted batch. Local database execution
+remains preferable for large-scale searches.
+
 Online searches use a truthful `Proto-Tools/BLAST` HTTP client identity for both
 submission and result polling. This addresses the observed identity-related rejection of
 the generic `BiopythonClient` header without changing search parameters or

@@ -621,12 +621,20 @@ def _online_search(inputs: BlastSearchInput, config: BlastSearchConfig) -> Blast
 
     from proto_tools.tools.sequence_alignment.blast._online_client import search_xml
 
-    # Resolve query sequence
+    # Preserve every FASTA record and its identifier, including no-hit queries.
+    query_ids: list[str] | None = None
     if inputs.query_type == "fasta_path":
-        seq_record = next(SeqIO.parse(inputs.query, "fasta"))  # type: ignore[no-untyped-call]
-        query_seq = str(seq_record.seq)
+        sequences = list(SeqIO.parse(inputs.query, "fasta"))  # type: ignore[no-untyped-call]
+        query_ids = [record.id for record in sequences]
+        if not sequences or any(not record.seq for record in sequences):
+            raise ValueError("Online BLAST requires nonempty FASTA records")
+        if len(set(query_ids)) != len(query_ids):
+            raise ValueError("Online BLAST requires unique FASTA identifiers")
+        query_seq = "".join(f">{record.id}\n{record.seq}\n" for record in sequences)
+        query_length = sum(len(record.seq) for record in sequences)
     else:
         query_seq = inputs.query
+        query_length = len(query_seq)
 
     # Build qblast keyword arguments from typed config fields.
     # Mapping: config field name → qblast kwarg name.
@@ -670,6 +678,12 @@ def _online_search(inputs: BlastSearchInput, config: BlastSearchConfig) -> Blast
     )
 
     blast_records = list(NCBIXML.parse(io.StringIO(raw_xml)))  # type: ignore[no-untyped-call]
+    returned_ids = [record.query.split()[0] for record in blast_records]
+    if query_ids is not None:
+        if len(returned_ids) != len(query_ids) or set(returned_ids) != set(query_ids):
+            raise ValueError("Online BLAST response query identifiers do not match submitted FASTA")
+    elif len(blast_records) != 1:
+        raise ValueError("Online BLAST single-sequence response must contain one query")
     hits = _blast_results_to_hits(blast_records)
 
     return BlastSearchOutput(
@@ -677,7 +691,8 @@ def _online_search(inputs: BlastSearchInput, config: BlastSearchConfig) -> Blast
             "search_mode": "online",
             "program": config.program,
             "database": config.database,
-            "query_length": len(query_seq),
+            "query_length": query_length,
+            "query_ids": returned_ids,
         },
         hits=hits,
     )
