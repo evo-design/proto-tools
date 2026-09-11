@@ -133,6 +133,7 @@ TOOL_MAP: dict[str, ToolEntry] = {
     "rfd4-design": ToolEntry("proto-tools-rfd4", "RFD4Service", "design", True),
     "rfd4-inverse-folding": ToolEntry("proto-tools-rfd4", "RFD4Service", "inverse_folding", True),
     "rfdiffusion3-design": ToolEntry("proto-tools-rfdiffusion3", "RFdiffusion3Service", "generate", True),
+    "rs3-score": ToolEntry("proto-tools-rs3", "RS3Service", "score", False),
     "segmasker-score": ToolEntry("proto-tools-segmasker", "SegmaskerService", "score", False),
     "splice-transformer-prediction": ToolEntry("proto-tools-splice-transformer", "SpliceTransformerService", "run", True),
     "spliceai-predict": ToolEntry("proto-tools-spliceai", "SpliceAIService", "predict", True),
