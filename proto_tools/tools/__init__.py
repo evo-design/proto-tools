@@ -657,12 +657,19 @@ from proto_tools.tools.rna_splicing import (
 
 # Sequence alignment tools
 from proto_tools.tools.sequence_alignment import (
+    CRISPRITZ_COMMIT,
+    CRISPRITZ_VERSION,
     BlastSearchConfig,
     BlastSearchInput,
     BlastSearchOutput,
     CreateBlastDbConfig,
     CreateBlastDbInput,
     CreateBlastDbOutput,
+    CRISPRitzHit,
+    CRISPRitzReferenceFile,
+    CRISPRitzSearchConfig,
+    CRISPRitzSearchInput,
+    CRISPRitzSearchOutput,
     MafftConfig,
     MafftInput,
     MafftOutput,
@@ -686,6 +693,7 @@ from proto_tools.tools.sequence_alignment import (
     Mmseqs2SequenceSearchResult,
     run_blast_search,
     run_create_blast_db,
+    run_crispritz_search,
     run_mafft_align,
     run_mmseqs2_clustering,
     run_mmseqs2_homology_search,
@@ -1337,6 +1345,15 @@ __all__ = [
     "CreateBlastDbInput",
     "CreateBlastDbConfig",
     "CreateBlastDbOutput",
+    # CRISPRitz
+    "CRISPRITZ_COMMIT",
+    "CRISPRITZ_VERSION",
+    "CRISPRitzHit",
+    "CRISPRitzReferenceFile",
+    "CRISPRitzSearchInput",
+    "CRISPRitzSearchConfig",
+    "CRISPRitzSearchOutput",
+    "run_crispritz_search",
     # PyHMMER
     "run_pyhmmer_hmmsearch",
     "run_pyhmmer_hmmscan",
