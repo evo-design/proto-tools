@@ -101,6 +101,9 @@ class BlastHit(BaseModel):
         send (int): End of alignment in subject.
         evalue (float): Expect value.
         bitscore (float): Bit score.
+        qseq (str | None): Aligned query sequence, including gaps.
+        sseq (str | None): Aligned subject sequence, including gaps.
+        btop (str | None): BLAST traceback operations encoding mismatches and gaps.
     """
 
     qseqid: str = Field(title="Query ID", description="Query sequence ID")
@@ -118,6 +121,21 @@ class BlastHit(BaseModel):
     send: int = Field(title="Subject End", description="1-indexed inclusive subject end")
     evalue: float = Field(title="E-value", description="Expect value; smaller values are more significant")
     bitscore: float = Field(title="Bit Score", description="Alignment bit score; higher is better")
+    qseq: str | None = Field(
+        default=None,
+        title="Aligned Query Sequence",
+        description="Aligned query sequence including gaps, when returned by the backend",
+    )
+    sseq: str | None = Field(
+        default=None,
+        title="Aligned Subject Sequence",
+        description="Aligned subject sequence including gaps, when returned by the backend",
+    )
+    btop: str | None = Field(
+        default=None,
+        title="BLAST Traceback Operations",
+        description="BTOP mismatch and gap encoding, when returned by the backend",
+    )
 
 
 # Input:
@@ -752,9 +770,10 @@ def _local_search(
             cli_args.extend([flag, str(val)])
     cli_args.extend(str(arg) for arg in config.extra_args)
 
-    # Default to tabular output unless the user overrides via extra_args.
+    # Alignment strings and BTOP let downstream consumers locate mismatches,
+    # including biologically important mismatches near an oligo's 3-prime end.
     if "-outfmt" not in cli_args:
-        cli_args.extend(["-outfmt", "6"])
+        cli_args.extend(["-outfmt", "6 std qseq sseq btop"])
 
     input_data = {
         "operation": "local_blast",
@@ -804,8 +823,9 @@ def _local_search(
 def _blast_results_to_hits(blast_records: Any) -> list[BlastHit]:
     """Convert Biopython BLAST records to BlastHit objects.
 
-    Produces the same 12-column layout as BLAST+ ``-outfmt 6`` so that
-    online and local results are directly comparable.
+    Produces the standard BLAST fields plus aligned query and subject strings.
+    BTOP is unavailable from Biopython's XML representation and remains
+    ``None`` for online results.
 
     Args:
         blast_records (Any): List of Bio.Blast.Record objects from NCBIXML.parse.
@@ -837,6 +857,8 @@ def _blast_results_to_hits(blast_records: Any) -> list[BlastHit]:
                         send=hsp.sbjct_end,
                         evalue=hsp.expect,
                         bitscore=hsp.bits,
+                        qseq=hsp.query,
+                        sseq=hsp.sbjct,
                     )
                 )
 

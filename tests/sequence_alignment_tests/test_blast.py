@@ -224,6 +224,9 @@ def test_results_to_hits_field_values():
     assert hit.send == 110
     assert hit.evalue == pytest.approx(1e-5)
     assert hit.bitscore == pytest.approx(42.0)
+    assert hit.qseq == "ATGC--GTAA"
+    assert hit.sseq == "ATGCAAGTAA"
+    assert hit.btop is None
 
 
 def test_results_to_hits_multiple_gap_opens():
@@ -518,6 +521,20 @@ def test_local_blastn_fasta_file_query(nucl_blast_db, tmp_path):
         ),
     )
     assert result.num_hits >= 1
+
+
+@pytest.mark.integration
+def test_local_blastn_reports_alignment_traceback(nucl_blast_db):
+    """Local hits carry the aligned query/subject and BTOP traceback."""
+    query = "ATGCGTAAACCCGGGTTTTTTAAACCCGGGTTTATGCGTAAACCCGGGTTTTTTAAACCC"
+    result = run_blast_search(
+        BlastSearchInput(query=query),
+        BlastSearchConfig(search_mode="local", program="blastn", local_db=nucl_blast_db, task="blastn"),
+    )
+    hit = result.hits[0]
+    assert hit.qseq is not None
+    assert hit.sseq is not None
+    assert hit.btop is not None
 
 
 @pytest.mark.integration
