@@ -371,6 +371,96 @@ def test_boltz2_affinity_benchmark(request):
 # ── Resident-checkpoint cache: reload_on_change invariant ───────────────────
 
 
+def _load_boltz2_standalone_inference():
+    import importlib.util
+    import logging
+    import sys
+    import types
+
+    helpers = sys.modules.setdefault("standalone_helpers", types.ModuleType("standalone_helpers"))
+    helpers.get_logger = logging.getLogger
+    helpers.is_cuda_oom = lambda _message: False
+    helpers.raise_oom = lambda *_args, **_kwargs: None
+    standalone = (
+        Path(__file__).resolve().parents[2]
+        / "proto_tools"
+        / "tools"
+        / "structure_prediction"
+        / "boltz2"
+        / "standalone"
+        / "inference.py"
+    )
+    spec = importlib.util.spec_from_file_location("_boltz2_si_for_tests", standalone)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_boltz2_checkpoint_corruption_classifier_is_narrow():
+    mod = _load_boltz2_standalone_inference()
+    assert mod._is_checkpoint_corruption_error(
+        RuntimeError("PytorchStreamReader failed reading zip archive: failed finding central directory")
+    )
+    assert not mod._is_checkpoint_corruption_error(RuntimeError("CUDA out of memory"))
+    assert not mod._is_checkpoint_corruption_error(OSError("Permission denied"))
+
+
+def test_boltz2_retries_once_after_removing_exact_corrupt_checkpoint(tmp_path, monkeypatch):
+    import sys
+    import types
+
+    mod = _load_boltz2_standalone_inference()
+    checkpoint = tmp_path / "boltz2_aff.ckpt"
+    checkpoint.write_bytes(b"truncated")
+    (tmp_path / "input.yaml").write_text("sequences: []\n")
+    calls = 0
+
+    def predict(**_kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise mod._CorruptCheckpointError(checkpoint, RuntimeError("failed finding central directory"))
+
+    boltz = types.ModuleType("boltz")
+    boltz_main = types.ModuleType("boltz.main")
+    boltz_main.predict = types.SimpleNamespace(callback=predict)
+    monkeypatch.setitem(sys.modules, "boltz", boltz)
+    monkeypatch.setitem(sys.modules, "boltz.main", boltz_main)
+    monkeypatch.setattr(mod, "_install_checkpoint_cache", lambda: None)
+    fake_torch = types.ModuleType("torch")
+    fake_torch.cuda = types.SimpleNamespace(is_available=lambda: False)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+
+    model = mod.Boltz2Model.__new__(mod.Boltz2Model)
+    model.cache_dir = tmp_path
+    model._run_boltz_predict(
+        input_yaml_path=str(tmp_path / "input.yaml"),
+        output_dir=str(tmp_path / "out"),
+        device="cpu",
+        recycling_steps=1,
+        sampling_steps=1,
+        diffusion_samples=1,
+        step_scale=1.5,
+        max_msa_seqs=1,
+        subsample_msa=False,
+        num_workers=1,
+        seed=1,
+        verbose=False,
+    )
+
+    assert calls == 2
+    assert not checkpoint.exists()
+    assert model._last_recovery_actions == [
+        {
+            "action": "removed_corrupt_checkpoint",
+            "path": str(checkpoint.resolve()),
+            "reason": "failed finding central directory",
+            "attempt": 1,
+        }
+    ]
+
+
 def test_boltz2_reload_on_change_covers_load_threaded_fields():
     """Lock the ``reload_on_change`` set against the fields boltz threads into ``load_from_checkpoint``.
 

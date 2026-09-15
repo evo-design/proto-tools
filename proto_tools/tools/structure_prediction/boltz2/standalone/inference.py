@@ -6,8 +6,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import torch
-from standalone_helpers import get_logger
+from standalone_helpers import (
+    RecoveryAction,
+    get_logger,
+    is_checkpoint_corruption_error,
+    remove_checkpoint_within,
+    retry_checkpoint_operation,
+)
 
 logger = get_logger(__name__)
 
@@ -22,6 +27,20 @@ def _prepare_output_values(value: Any) -> Any:
 _checkpoint_cache_installed = False
 # Resident Boltz2 models keyed by checkpoint path; lives at module scope so to_device() can relocate them.
 _checkpoint_cache: dict[str, Any] = {}
+
+
+def _is_checkpoint_corruption_error(exc: BaseException) -> bool:
+    """Return whether PyTorch failed because a downloaded checkpoint is malformed."""
+    return is_checkpoint_corruption_error(exc)
+
+
+class _CorruptCheckpointError(RuntimeError):
+    """Identify the exact Boltz checkpoint that could not be deserialized."""
+
+    def __init__(self, checkpoint: Any, cause: BaseException) -> None:
+        self.checkpoint = Path(checkpoint)
+        self.cause = cause
+        super().__init__(f"corrupt Boltz2 checkpoint {self.checkpoint}: {cause}")
 
 
 def _install_checkpoint_cache() -> None:
@@ -77,6 +96,7 @@ class Boltz2Model:
                 self.cache_dir = Path(hf_home) / "boltz"
             else:
                 raise RuntimeError("boltz2: cannot determine cache directory; set PROTO_HOME or PROTO_MODEL_CACHE")
+        self._last_recovery_actions: list[dict[str, str | int]] = []
 
     def __call__(
         self,
@@ -211,6 +231,8 @@ class Boltz2Model:
         _install_checkpoint_cache()
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
+        import torch
+
         num_devices = 1 if torch.cuda.is_available() else 0
         kwargs: dict[str, Any] = {
             "data": input_yaml_path,
@@ -232,8 +254,27 @@ class Boltz2Model:
             kwargs["diffusion_samples_affinity"] = affinity["diffusion_samples_affinity"]
             kwargs["affinity_mw_correction"] = affinity["affinity_mw_correction"]
 
+        def recover(exc: BaseException, attempt: int) -> list[RecoveryAction]:
+            if not isinstance(exc, _CorruptCheckpointError):
+                return []
+            _checkpoint_cache.pop(str(exc.checkpoint), None)
+            return [
+                remove_checkpoint_within(
+                    exc.checkpoint,
+                    self.cache_dir,
+                    reason=str(exc.cause),
+                    attempt=attempt,
+                )
+            ]
+
         try:
-            predict_cmd.callback(**kwargs)
+            _, actions = retry_checkpoint_operation(
+                lambda: predict_cmd.callback(**kwargs),
+                recover,
+                tool_name="boltz2",
+                max_attempts=2,
+            )
+            self._last_recovery_actions = [action.as_dict() for action in actions]
         except RuntimeError as e:
             if is_cuda_oom(str(e)):
                 raise_oom("boltz2", hint="Reduce the complex size or use a GPU with more memory.")
