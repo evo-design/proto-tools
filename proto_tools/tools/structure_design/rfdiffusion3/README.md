@@ -33,10 +33,49 @@ This tool is appropriate for any task in which the output is a novel protein bac
 - **The `contig` string specifies the design topology.** Comma-separated segments select chain-indexed residues from the input (`A40-60`), insert designed regions of variable length (`70-80`), or introduce a chain break (`/0`). The full grammar is documented in the [RFdiffusion3 input specification](https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md).
 - **`num_timesteps` and `step_scale` are the principal parameters controlling design quality and diversity.** Increasing `num_timesteps` (default `200`) extends the number of denoising steps and generally improves designability at a linear cost in runtime. `step_scale` (default `1.5`) scales the per-step denoising magnitude. Lower values yield more diverse but less designable outputs. Higher values produce structures closer to the training distribution.
 - **`sampler_kind="symmetry"` is required for homo-oligomer design and must be paired with a `symmetry` group on the specification.** Setting `symmetry="C3"` on the specification is converted internally to the `{"id": "C3"}` `SymmetryConfig` required by the RFdiffusion3 sampler. The symmetric sampler also imposes a `gamma_0 > 0.5` constraint, which is enforced during configuration validation. Under symmetry, `length` is per-protomer (`length="100"` + `symmetry="C3"` → 300-residue trimer).
-- **Classifier-free guidance is disabled by default and enabled by setting `use_classifier_free_guidance=True`.** When disabled, `cfg_scale`, `cfg_features`, and `cfg_t_max` have no effect. When enabled, increasing `cfg_scale` (typical range 1.0 to 3.0) more strongly weights the conditioning features (active-site hydrogen-bond donors and acceptors, per-atom relative accessible surface area) during sampling.
+- **Classifier-free guidance is disabled by default and enabled by setting `use_classifier_free_guidance=True`.** Enable it only for explicitly feature-conditioned designs using fields such as `select_buried`, `select_exposed`, or `select_hbond_*`. Every specification in a mixed batch must include at least one of those native CFG feature selectors; unconditional `length`/`symmetry` specifications are rejected before GPU dispatch. `select_hotspots` controls binder placement and does not supply a CFG feature tensor. When disabled, `cfg_scale`, `cfg_features`, and `cfg_t_max` have no effect. When enabled, increasing `cfg_scale` (typical range 1.0 to 3.0) more strongly weights the conditioning features, while optional top-level `cfg_t_max` limits the portion of diffusion time over which the upstream sampler applies CFG.
 - **`partial_t` enables partial diffusion, in which the sampler refines an input structure rather than starting from random noise.** The input is perturbed with Gaussian noise at the specified amplitude in angstroms and then denoised back, supporting local redesign and topology-preserving diversification of an existing backbone. The RFdiffusion3 `InputSpecification` reference lists 5.0 to 15.0 angstroms as a recommended range, but the [partial-diffusion documentation](https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md#partial-diffusion) notes that `partial_t` is nonlinear and recommends beginning near 2 angstroms and increasing gradually.
 - **`is_non_loopy` is the only secondary-structure conditioning parameter available.** Setting it on `RFdiffusion3DesignSpec` to `True` biases the sampler toward fewer loops and substantially more helical content, with reduced sheet content. Setting it to `False` biases toward more loops and correspondingly fewer helices. Leaving it `None` (the default) applies no topology preference. The parameter is a single boolean flag and offers no per-residue or fractional control.
-- **Finer sampler tuning is grouped under the `sampler_tuning` field, a typed `RFdiffusion3SamplerTuning` whose settings map to the upstream `inference_sampler` block:** the noise schedule (`noise_scale`, `p`, `s_trans`), the stochasticity threshold `gamma_min` (paired with `gamma_0`), and the motif-noise settings `allow_realignment` / `s_jitter_origin` (effective only for motif-conditioned designs). Each defaults to `None` and is forwarded to the sampler only when set, otherwise inheriting the checkpoint's upstream default. Pass them as a dict, e.g. `RFdiffusion3Config(sampler_tuning={"noise_scale": 1.003})`; any other valid `inference_sampler` setting (e.g. `cfg_t_max`) may be included and is forwarded verbatim.
+- **Finer sampler tuning is grouped under the `sampler_tuning` field, a typed `RFdiffusion3SamplerTuning` whose settings map to the upstream `inference_sampler` block:** the noise schedule (`noise_scale`, `p`, `s_trans`), the stochasticity threshold `gamma_min` (paired with `gamma_0`), and the motif-noise settings `allow_realignment` / `s_jitter_origin` (effective only for motif-conditioned designs). Each defaults to `None` and is forwarded to the sampler only when set, otherwise inheriting the checkpoint's upstream default. Pass them as a dict, e.g. `RFdiffusion3Config(sampler_tuning={"noise_scale": 1.003})`; less-common upstream fields may be included and are forwarded verbatim with an unvalidated-setting warning. Prefer the typed top-level field for `cfg_t_max`.
+- **For hotspot-conditioned protein binders, keep the target chain in `contig`, append a designed chain after `/0`, set `select_hotspots` on target residues, and use `infer_ori_strategy="hotspots"`.** Sample multiple independent batches because the hotspots constrain the epitope rather than selecting one interface geometry. Validate the emitted sequences directly or pass each backbone through several modest ProteinMPNN temperature arms before staged structure and interface validation.
+
+**Composing a hotspot-conditioned binder campaign.**
+
+Hotspot-conditioned binder design is a native RFdiffusion3 use case, not a
+separate model or tool. Supply the target as `input_structure`, retain its chain
+in `contig`, append a designed chain of the desired length, and identify the
+target epitope with `select_hotspots`. Setting
+`infer_ori_strategy="hotspots"` places the diffusion origin near that epitope.
+For example, a target on chain A and a new 70--100 residue binder can be
+represented as:
+
+```python
+spec = RFdiffusion3DesignSpec(
+    input_structure=target,
+    contig="A1-150,/0,70-100",
+    select_hotspots="A24,A31,A47",
+    infer_ori_strategy="hotspots",
+)
+result = run_rfdiffusion3(
+    RFdiffusion3Input(design_specs=[spec]),
+    RFdiffusion3Config(n_batches=4, diffusion_batch_size=4, seed=seed),
+)
+```
+
+Replace the illustrative residue range and hotspots with positions from the
+actual target. Sample multiple independent batches because hotspot conditioning
+defines the binding region but does not select a single interface geometry.
+RFdiffusion3 co-designs sequence, so its emitted sequences can be evaluated
+directly. When additional inverse folding is useful, sample several sequences
+per backbone across a small ProteinMPNN temperature range rather than treating
+one temperature as universally optimal. Apply deterministic checks first, use
+structure and interface predictors on progressively smaller pools, and retain
+structurally and sequentially distinct finalists after multi-metric ranking.
+
+This composition intentionally leaves proposal counts, temperature values,
+predictors, and acceptance thresholds to the biological objective and compute
+budget. RFdiffusion3 generation, inverse folding, optimization, and validation
+remain separate operations so each can be exchanged or repeated independently.
 
 ## Toolkit Notes
 
@@ -46,6 +85,7 @@ These apply to every RFdiffusion3 tool in this toolkit (`rfdiffusion3-design`).
 
 - **A GPU is required for any practical use.** CPU execution is supported via `device="cpu"` but is prohibitively slow for typical workloads. The default execution environment uses CUDA.
 - **GPU memory consumption scales with `diffusion_batch_size` and the length of the designs.** When GPU memory is exhausted, first reduce `diffusion_batch_size`. If memory exhaustion persists, set `low_memory_mode=True` to enable memory-efficient tokenization at the cost of throughput.
+- **Proto Tools applies one narrowly versioned precision compatibility shim for `rc-foundry==0.2.0`.** That release can call a CUDA-unsupported low-precision SVD while realigning a motif, so only that alignment calculation is promoted to float32. Other Foundry versions are left untouched, and the shim path is injected into the worker environment exactly once while preserving the caller's existing `PYTHONPATH`.
 - **Designs are returned as a structure together with a sequence and carry no built-in confidence score.** A standard validation procedure is to score the designed sequence against the designed structure with [ProteinMPNN](https://bio-pro.mintlify.app/tools/inverse-folding/proteinmpnn), then predict the structure of the designed sequence with [ESMFold](https://bio-pro.mintlify.app/tools/structure-prediction/esmfold) or [Boltz2](https://bio-pro.mintlify.app/tools/structure-prediction/boltz2) and compare the predicted backbone to the designed backbone.
 - **Each design exposes `structure` (coordinates) and a predictor-ready `complex` (`Complex`).** `complex` carries the per-chain sequences and entity types; feed `design.complex` straight to a structure predictor. A chain's sequence is `design.complex.chains[i].sequence`.
 - **Output chains are returned with positional IDs (`A`, `B`, ...) in emission order.** Symmetric designs are emitted with transformation-suffixed chain IDs (e.g. `A1, A2, A3` for a C3 trimer); these are normalized to `A, B, C` so a chain's ID is its position. Identify a chain by position or sequence rather than assuming a fixed semantic role.

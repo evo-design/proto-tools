@@ -209,6 +209,7 @@ def test_rfdiffusion3_config_get_cli_kwargs():
         gamma_0=0.7,
         center_option="motif",
         use_classifier_free_guidance=True,
+        cfg_t_max=0.8,
         dump_trajectories=True,
         align_trajectory_structures=True,
         prevalidate_inputs=True,
@@ -222,6 +223,7 @@ def test_rfdiffusion3_config_get_cli_kwargs():
         "inference_sampler.kind": "symmetry",
         "inference_sampler.center_option": "motif",
         "inference_sampler.use_classifier_free_guidance": True,
+        "inference_sampler.cfg_t_max": 0.8,
     }
     for key, value in expected_dotted.items():
         assert kwargs[key] == value, f"{key} not emitted as dotted path"
@@ -232,21 +234,29 @@ def test_rfdiffusion3_config_get_cli_kwargs():
     assert kwargs["prevalidate_inputs"] is True
 
     # Typed sampler keys MUST NOT also appear flat — Hydra would silently ignore them.
-    for flat in ("cfg_scale", "gamma_0", "kind", "center_option", "use_classifier_free_guidance"):
+    for flat in ("cfg_scale", "cfg_t_max", "gamma_0", "kind", "center_option", "use_classifier_free_guidance"):
         assert flat not in kwargs
 
     # Finer sampler settings go through sampler_tuning and emit under inference_sampler.*.
     tuned = RFdiffusion3Config(sampler_tuning={"noise_scale": 1.003}).get_cli_kwargs()
     assert tuned["inference_sampler.noise_scale"] == 1.003
     # Untyped-but-valid inference_sampler settings ride the sampler_tuning extras passthrough.
-    tail = RFdiffusion3Config(sampler_tuning={"cfg_t_max": 0.8}).get_cli_kwargs()
-    assert tail["inference_sampler.cfg_t_max"] == 0.8
+    assert "inference_sampler.cfg_t_max" not in RFdiffusion3Config().get_cli_kwargs()
+
+    with pytest.raises(ValueError, match="greater than or equal to 0"):
+        RFdiffusion3Config(cfg_t_max=-0.1)
 
 
 def test_rfdiffusion3_headline_field_overrides_sampler_tuning_on_collision():
     """A headline top-level sampler field wins over the same key set in sampler_tuning extras."""
-    config = RFdiffusion3Config(cfg_scale=2.0, sampler_tuning={"cfg_scale": 99.0})
-    assert config.get_cli_kwargs()["inference_sampler.cfg_scale"] == 2.0
+    config = RFdiffusion3Config(
+        cfg_scale=2.0,
+        cfg_t_max=0.8,
+        sampler_tuning={"cfg_scale": 99.0, "cfg_t_max": 99.0},
+    )
+    kwargs = config.get_cli_kwargs()
+    assert kwargs["inference_sampler.cfg_scale"] == 2.0
+    assert kwargs["inference_sampler.cfg_t_max"] == 0.8
 
 
 # ── DesignSpec: JSON spec emission ──────────────────────────────────────────
@@ -459,6 +469,12 @@ def test_rfdiffusion3_standalone_failure_reports_full_subprocess_output(monkeypa
     stdout = "\n".join(f"stdout line {i}" for i in range(20))
 
     def fake_run(*args, **kwargs):
+        assert args[0][:2] == [sys.executable, "rfd3"]
+        pythonpath_entries = kwargs["env"]["PYTHONPATH"].split(":")
+        precision_site = Path(pythonpath_entries[0])
+        assert precision_site.name == "rfd3_precision_site"
+        assert (precision_site / "sitecustomize.py").is_file()
+        assert pythonpath_entries.count(str(precision_site)) == 1
         raise subprocess.CalledProcessError(
             returncode=2,
             cmd=args[0],
@@ -480,6 +496,168 @@ def test_rfdiffusion3_standalone_failure_reports_full_subprocess_output(monkeypa
     assert "stderr line 19" in message
     assert "stdout line 0" in message
     assert "stdout line 19" in message
+
+
+def test_rfdiffusion3_standalone_sequence_skips_ligand_chains():
+    """Worker sequence output aligns only to polymer chains, one letter per residue."""
+    standalone_dir = Path(__file__).resolve().parents[2] / "proto_tools/tools/structure_design/rfdiffusion3/standalone"
+    spec = util.spec_from_file_location("rfdiffusion3_standalone_sequence", standalone_dir / "inference.py")
+    mod = util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(mod)
+
+    pdb = """\
+ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00 20.00           N
+ATOM      2  CA  ALA A   1       1.000   0.000   0.000  1.00 20.00           C
+ATOM      3  C   ALA A   1       2.000   0.000   0.000  1.00 20.00           C
+ATOM      4  N   CYS A   3       3.000   0.000   0.000  1.00 20.00           N
+ATOM      5  CA  CYS A   3       4.000   0.000   0.000  1.00 20.00           C
+ATOM      6  C   CYS A   3       5.000   0.000   0.000  1.00 20.00           C
+HETATM    7 ZN    ZN B   1       8.000   0.000   0.000  1.00 20.00          ZN
+TER
+END
+"""
+
+    assert mod.RFdiffusion3Model()._extract_sequence(pdb) == ["AC"]
+
+
+def test_rfdiffusion3_precision_site_promotes_low_precision_alignment(monkeypatch):
+    """The child-process patch must run Foundry's SVD in float32 and restore output dtype."""
+    from importlib import metadata
+
+    monkeypatch.setattr(metadata, "version", lambda distribution: "0.2.0")
+
+    torch = types.ModuleType("torch")
+    torch.float16 = "float16"
+    torch.bfloat16 = "bfloat16"
+    torch.float32 = "float32"
+
+    class FakeTensor:
+        def __init__(self, dtype):
+            self.dtype = dtype
+
+        def float(self):
+            return FakeTensor(torch.float32)
+
+        def to(self, dtype):
+            return FakeTensor(dtype)
+
+    torch.Tensor = FakeTensor
+
+    seen_dtypes = []
+    alignment = types.ModuleType("foundry.utils.alignment")
+
+    def original(X_L, X_gt_L, X_exists_L=None, w_L=None):
+        seen_dtypes.append((X_L.dtype, X_gt_L.dtype, None if w_L is None else w_L.dtype))
+        return X_gt_L
+
+    alignment.weighted_rigid_align = original
+    foundry = types.ModuleType("foundry")
+    utils = types.ModuleType("foundry.utils")
+    utils.alignment = alignment
+    monkeypatch.setitem(sys.modules, "foundry", foundry)
+    monkeypatch.setitem(sys.modules, "foundry.utils", utils)
+    monkeypatch.setitem(sys.modules, "foundry.utils.alignment", alignment)
+    monkeypatch.setitem(sys.modules, "torch", torch)
+
+    site = (
+        Path(__file__).resolve().parents[2]
+        / "proto_tools/tools/structure_design/rfdiffusion3/standalone/rfd3_precision_site/sitecustomize.py"
+    )
+    spec = util.spec_from_file_location("_rfd3_precision_site_for_tests", site)
+    mod = util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(mod)
+
+    x = FakeTensor(torch.bfloat16)
+    weights = FakeTensor(torch.bfloat16)
+    result = alignment.weighted_rigid_align(x, x, w_L=weights)
+
+    assert seen_dtypes == [(torch.float32, torch.float32, torch.float32)]
+    assert result.dtype == torch.bfloat16
+
+
+def test_rfdiffusion3_precision_site_is_inert_for_unaffected_foundry(monkeypatch):
+    """A Foundry release outside the audited compatibility range must not be monkey-patched."""
+    from importlib import metadata
+
+    monkeypatch.setattr(metadata, "version", lambda distribution: "0.2.1")
+
+    torch = types.ModuleType("torch")
+    torch.Tensor = object
+    torch.float16 = "float16"
+    torch.bfloat16 = "bfloat16"
+
+    alignment = types.ModuleType("foundry.utils.alignment")
+
+    def original(X_L, X_gt_L, X_exists_L=None, w_L=None):
+        return X_gt_L
+
+    alignment.weighted_rigid_align = original
+    foundry = types.ModuleType("foundry")
+    utils = types.ModuleType("foundry.utils")
+    utils.alignment = alignment
+    monkeypatch.setitem(sys.modules, "foundry", foundry)
+    monkeypatch.setitem(sys.modules, "foundry.utils", utils)
+    monkeypatch.setitem(sys.modules, "foundry.utils.alignment", alignment)
+    monkeypatch.setitem(sys.modules, "torch", torch)
+
+    site = (
+        Path(__file__).resolve().parents[2]
+        / "proto_tools/tools/structure_design/rfdiffusion3/standalone/rfd3_precision_site/sitecustomize.py"
+    )
+    spec = util.spec_from_file_location("_rfd3_precision_site_unaffected_for_tests", site)
+    mod = util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(mod)
+
+    assert alignment.weighted_rigid_align is original
+    assert not hasattr(alignment.weighted_rigid_align, "_proto_low_precision_safe")
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_rfdiffusion3_two_timestep_boundary_executes():
+    """The intentional minimum accepted schedule completes one real denoising transition."""
+    output = run_rfdiffusion3(
+        RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(length="40")]),
+        RFdiffusion3Config(n_batches=1, diffusion_batch_size=1, num_timesteps=2, seed=42),
+    )
+
+    assert len(output.designed_structures) == 1
+    assert len(output[0].structures) == 1
+    assert len(output[0][0].complex.chains[0].sequence) == 40
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_rfdiffusion3_motif_realignment_executes():
+    """The version-scoped precision path supports a real motif-realignment sampling run."""
+    output = run_rfdiffusion3(
+        RFdiffusion3Input(
+            design_specs=[
+                RFdiffusion3DesignSpec(
+                    input_structure=synthetic_cif(["A"]),
+                    contig="A1-1/0,20",
+                    select_fixed_atoms="A1",
+                )
+            ]
+        ),
+        RFdiffusion3Config(
+            n_batches=1,
+            diffusion_batch_size=1,
+            num_timesteps=2,
+            center_option="motif",
+            sampler_tuning={"allow_realignment": True},
+            seed=42,
+        ),
+    )
+
+    assert len(output.designed_structures) == 1
+    assert len(output[0].structures) == 1
+    assert output[0][0].structure.get_chain_ids()
 
 
 # ---------------------------------------------------------------------------

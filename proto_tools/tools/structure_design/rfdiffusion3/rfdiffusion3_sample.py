@@ -563,7 +563,7 @@ class RFdiffusion3SamplerTuning(BaseModel):
     The settings below are the commonly tuned sampler parameters; each is validated,
     defaults to ``None``, and is forwarded to ``inference_sampler.<name>`` only
     when set, otherwise inheriting the checkpoint's upstream default. Any other
-    valid ``inference_sampler`` field (e.g. ``cfg_t_max``, ``s_min``, ``s_max``)
+    valid ``inference_sampler`` field (e.g. ``s_min`` or ``s_max``)
     may be passed as an extra keyword and is forwarded verbatim. See
     https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
 
@@ -648,6 +648,8 @@ class RFdiffusion3Config(BaseConfig):
             ``diffuse`` (diffused region only).
         use_classifier_free_guidance (bool): Enable CFG sampling.
         cfg_scale (float): CFG scale factor (typical 1.0-3.0); no-op when CFG is off.
+        cfg_t_max (float | None): Optional diffusion-time threshold for applying
+            CFG; ``None`` uses CFG wherever the upstream sampler permits it.
         gamma_0 (float): Sampler stochasticity; lower = more designable,
             less diverse; ``0.0`` = deterministic ODE. Must be ``> 0.5``
             when ``sampler_kind="symmetry"``.
@@ -665,8 +667,8 @@ class RFdiffusion3Config(BaseConfig):
         device (str): ``"cuda"`` or ``"cpu"``.
 
     Note:
-        Headline sampler controls (``sampler_kind``, ``cfg_scale``, ``gamma_0``,
-        ``center_option``, ``use_classifier_free_guidance``) are top-level fields.
+        Headline sampler controls (``sampler_kind``, ``cfg_scale``, ``cfg_t_max``,
+        ``gamma_0``, ``center_option``, ``use_classifier_free_guidance``) are top-level fields.
         Finer ``inference_sampler`` settings live under ``sampler_tuning`` (a typed
         :class:`RFdiffusion3SamplerTuning`), e.g.
         ``RFdiffusion3Config(sampler_tuning={"noise_scale": 1.003})``. See
@@ -718,6 +720,12 @@ class RFdiffusion3Config(BaseConfig):
         default=1.5,
         ge=0.0,
         description="CFG scale (typical: 1.0-3.0); requires use_classifier_free_guidance=True",
+    )
+    cfg_t_max: float | None = ConfigField(
+        title="CFG Maximum Time",
+        default=None,
+        ge=0.0,
+        description="Optional upstream diffusion-time threshold for classifier-free guidance",
     )
     gamma_0: float = ConfigField(
         title="Gamma 0",
@@ -811,6 +819,8 @@ class RFdiffusion3Config(BaseConfig):
                 "inference_sampler.gamma_0": self.gamma_0,
             }
         )
+        if self.cfg_t_max is not None:
+            cli_kwargs["inference_sampler.cfg_t_max"] = self.cfg_t_max
         return cli_kwargs
 
 
@@ -987,6 +997,33 @@ def _canonicalize_design_chain_ids(structure: Structure) -> Structure:
     return structure.with_renamed_chains(dict(zip(observed, target, strict=True)))
 
 
+_CFG_FEATURE_FIELDS = (
+    "select_buried",
+    "select_partially_buried",
+    "select_exposed",
+    "select_hbond_donor",
+    "select_hbond_acceptor",
+)
+
+
+def _missing_cfg_feature_specs(inputs: RFdiffusion3Input) -> list[str]:
+    """Return every spec key that lacks native RFd3 CFG feature conditioning."""
+    if inputs.raw_json:
+        payload = json.loads(inputs.raw_json)
+        if not isinstance(payload, dict):
+            raise ValueError("RFdiffusion3 raw_json must contain a top-level object of named design specs")
+        specs = payload.items()
+    else:
+        specs = ((f"spec-{index}", spec.to_dict()) for index, spec in enumerate(inputs.design_specs))
+
+    missing = []
+    empty_values = (None, "", [], {})
+    for spec_key, spec in specs:
+        if not isinstance(spec, dict) or not any(spec.get(field) not in empty_values for field in _CFG_FEATURE_FIELDS):
+            missing.append(str(spec_key))
+    return missing
+
+
 @tool(
     key="rfdiffusion3-design",
     label="RFdiffusion3 Structure Design",
@@ -1054,6 +1091,17 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
         - Memory usage scales with batch size and protein length
         - Dependency isolation is handled automatically via venv subprocess
     """
+    if config.use_classifier_free_guidance:
+        missing_cfg_specs = _missing_cfg_feature_specs(inputs)
+        if missing_cfg_specs:
+            raise ValueError(
+                "use_classifier_free_guidance=True requires every design spec to include native CFG "
+                "feature conditioning (select_buried/select_partially_buried/select_exposed/"
+                f"select_hbond_*); missing for {missing_cfg_specs}. Hotspot controls are distinct from "
+                "CFG features. Disable CFG for unconditional or hotspot-only generation; otherwise "
+                "upstream RFdiffusion3 fails after GPU dispatch."
+            )
+
     logger.debug("Using local GPU for RFdiffusion3 structure design...")
 
     with tempfile.TemporaryDirectory() as temp_dir_str:
