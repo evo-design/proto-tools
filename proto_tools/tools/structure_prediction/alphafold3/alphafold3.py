@@ -161,8 +161,9 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
             NOT be automatically deleted. Default: ``None``.
 
         sif_path (str | None): Optional path to a pre-built AlphaFold3 Apptainer
-            image (``.sif``). When set, the tool runs ``run_alphafold.py`` inside
-            this image via ``apptainer exec`` instead of the in-env Python install. When ``None`` (default), inference.py looks
+            image (``.sif``). When set, the tool runs ``apptainer exec`` or
+            ``singularity exec`` against this image instead of
+            the in-env Python install. When ``None`` (default), inference.py looks
             for ``$VENV_PATH/alphafold3.sif`` (provisioned by setup.sh) and falls
             back to the env-based install if absent.
             Default: ``None``.
@@ -272,6 +273,7 @@ def run_alphafold3(
 ) -> AlphaFold3Output:
     """Predict protein 3D structures using AlphaFold3."""
     output_structures: list[Structure] = []
+    runtime_provenance: list[dict[str, Any]] = []
 
     # Seeded: single seed; unseeded: fresh random seeds, count taken from config.seeds for AF3 seed-averaging.
     if config.seed is not None:
@@ -351,6 +353,8 @@ def run_alphafold3(
             # Extract results from dict
             pdb_path = output_data["structure_pdb"]
             metrics = AlphaFold3Metrics(**output_data["metrics"])
+            if output_data.get("runtime_provenance"):
+                runtime_provenance.append(output_data["runtime_provenance"])
 
             structure = Structure.from_file(
                 pdb_path,
@@ -365,6 +369,7 @@ def run_alphafold3(
         metadata={
             "num_complexes": len(output_structures),
             "total_chains": sum(s.num_chains for s in output_structures),
+            "runtime_provenance": runtime_provenance,
         },
     )
 
