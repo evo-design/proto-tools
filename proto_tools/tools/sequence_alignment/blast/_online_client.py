@@ -9,6 +9,7 @@ import tempfile
 import threading
 import time
 from contextlib import contextmanager
+from enum import Enum
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -21,6 +22,16 @@ _NEXT_REQUEST = 0.0
 logger = logging.getLogger(__name__)
 
 
+class _SearchState(str, Enum):
+    """Internal QBLAST submit/poll terminal-state model."""
+
+    SUBMIT = "submit"
+    POLL = "poll"
+    SUCCESS = "success"
+    FAILURE = "failure"
+    TIMEOUT = "timeout"
+
+
 class BlastSubmissionRejected(ValueError):
     """NCBI -99 recovery exhausted; callers must not automatically restart its budget."""
 
@@ -28,6 +39,19 @@ class BlastSubmissionRejected(ValueError):
 def _is_rejected(page: str) -> bool:
     """Recognize the observed application rejection, not arbitrary server errors."""
     return bool(re.search(r"Cannot accept request,\s*error code:\s*-99(?![\w.])", page))
+
+
+def _classify_poll(page: str) -> tuple[_SearchState, str | None]:
+    """Classify one QBLAST poll response without treating ambiguity as no hits."""
+    status_match = re.search(r"Status=\s*([A-Za-z]+)", page)
+    status = status_match.group(1).upper() if status_match else None
+    if not page.strip() or status == "WAITING":
+        return _SearchState.POLL, status
+    if status is not None and status != "READY":
+        return _SearchState.FAILURE, status
+    if page.lstrip().startswith(("<?xml", "<BlastOutput")):
+        return _SearchState.SUCCESS, status
+    return _SearchState.FAILURE, status
 
 
 def _publish_slot(path: Path, spacing: float) -> None:
@@ -166,18 +190,43 @@ def search_xml(parameters: dict[str, Any], timeout: int | None) -> str:
         "CMD": "Put",
         "tool": "proto-tools",
     }
-    page = request_with_recovery(put)
-    # Reuse Biopython's established server-error/RID parser, not its hardcoded HTTP client.
-    rid, _ = NCBIWWW._parse_qblast_ref_page(io.BytesIO(page.encode()))
-    get = {"CMD": "Get", "RID": rid, "FORMAT_TYPE": "XML", "ALIGNMENTS": 500, "DESCRIPTIONS": 500}
-    while True:
-        wait_with_recovery_budget(60.0)
-        xml = request_with_recovery(get)
-        status = re.search(r"Status=\s*([A-Za-z]+)", xml)
-        if not xml.strip() or (status and status.group(1).upper() == "WAITING"):
-            continue
-        if status and status.group(1).upper() != "READY":
-            raise ValueError(f"NCBI BLAST search {rid} returned status {status.group(1)}")
-        if not xml.lstrip().startswith(("<?xml", "<BlastOutput")):
-            raise ValueError(f"NCBI BLAST search {rid} returned a non-XML response; no hits can be inferred")
-        return xml
+    state = _SearchState.SUBMIT
+    rid: str | None = None
+    xml: str | None = None
+    try:
+        while state not in {_SearchState.SUCCESS, _SearchState.FAILURE}:
+            if state is _SearchState.SUBMIT:
+                page = request_with_recovery(put)
+                # Reuse Biopython's established server-error/RID parser, not its
+                # hardcoded HTTP client.
+                rid, _ = NCBIWWW._parse_qblast_ref_page(io.BytesIO(page.encode()))
+                state = _SearchState.POLL
+                continue
+
+            if state is _SearchState.POLL:
+                if rid is None:  # defensive state-integrity guard
+                    state = _SearchState.FAILURE
+                    raise RuntimeError("NCBI BLAST poll state has no accepted request ID")
+                wait_with_recovery_budget(60.0)
+                get = {
+                    "CMD": "Get",
+                    "RID": rid,
+                    "FORMAT_TYPE": "XML",
+                    "ALIGNMENTS": 500,
+                    "DESCRIPTIONS": 500,
+                }
+                page = request_with_recovery(get)
+                state, reported_status = _classify_poll(page)
+                if state is _SearchState.SUCCESS:
+                    xml = page
+                elif state is _SearchState.FAILURE:
+                    if reported_status is not None and reported_status != "READY":
+                        raise ValueError(f"NCBI BLAST search {rid} returned status {reported_status}")
+                    raise ValueError(f"NCBI BLAST search {rid} returned a non-XML response; no hits can be inferred")
+    except TimeoutError:
+        state = _SearchState.TIMEOUT
+        raise
+
+    if state is not _SearchState.SUCCESS or xml is None:
+        raise RuntimeError(f"NCBI BLAST search ended in unexpected state {state.value}")
+    return xml

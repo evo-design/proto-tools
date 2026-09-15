@@ -54,6 +54,22 @@ def test_identified_submit_and_poll_preserve_parameters(monkeypatch, clock):
     assert NCBIWWW.Request is original_request
 
 
+@pytest.mark.parametrize(
+    ("response", "expected_state", "expected_status"),
+    [
+        ("", client._SearchState.POLL, None),
+        ("Status=WAITING", client._SearchState.POLL, "WAITING"),
+        ("Status=FAILED", client._SearchState.FAILURE, "FAILED"),
+        ("Status=UNKNOWN", client._SearchState.FAILURE, "UNKNOWN"),
+        ("Status=READY", client._SearchState.FAILURE, "READY"),
+        ("<?xml version='1.0'?><BlastOutput/>", client._SearchState.SUCCESS, None),
+    ],
+)
+def test_poll_response_state_classification(response, expected_state, expected_status):
+    """Every poll response maps to an explicit non-ambiguous protocol state."""
+    assert client._classify_poll(response) == (expected_state, expected_status)
+
+
 def test_submission_rejection_does_not_poll(monkeypatch, clock):
     calls = []
 

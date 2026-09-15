@@ -85,10 +85,17 @@ be explicitly bounded; pending request IDs do not survive process termination.
 The requested database is not rewritten by this client; NCBI may
 independently redirect `nt` to `core_nt`.
 
+The client advances through explicit submit, poll, success, failure, and timeout
+states. A successful submission is polled under the same deadline and request ID;
+only a BLAST XML document is a successful terminal response. Empty/`WAITING`
+responses remain pending, while `FAILED`, `UNKNOWN`, `READY` without XML, and
+other non-XML bodies fail explicitly. Live protocol canaries require the separate
+integration, network, and slow test selectors.
+
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
 These apply to every BLAST tool in this toolkit (`blast-search`, `blast-create-db`).
 
-- **Hits use the standard BLAST `-outfmt 6` tabular schema.** Each `BlastHit` carries the twelve canonical fields `qseqid`, `sseqid`, `pident`, `length`, `mismatch`, `gapopen`, `qstart`, `qend`, `sstart`, `send`, `evalue`, and `bitscore`. `pident` is reported on a 0-to-100 scale.
+- **Hits include the standard BLAST tabular fields and alignment detail.** Each `BlastHit` carries the twelve canonical `-outfmt 6` fields plus aligned query (`qseq`), aligned subject (`sseq`), and BTOP traceback operations. Local BLAST returns all three alignment-detail fields; online XML returns the aligned strings and leaves `btop` null. These fields allow consumers to distinguish terminal from internal mismatches. `pident` is reported on a 0-to-100 scale. CSV export deliberately retains the established twelve-column schema; JSON and the typed Python records retain the additive alignment-detail fields.
 - **The local installation downloads the platform-specific NCBI BLAST+ distribution on first use.** The standalone setup pulls the appropriate NCBI BLAST+ tarball and extracts the `blastn`, `blastp`, `blastx`, `tblastn`, `tblastx`, and `makeblastdb` executables. No reference database is bundled, so local execution requires either a user-built database from `blast-create-db` or a separately downloaded NCBI database.
 - **The two tools differ in execution mode.** `blast-search` supports both online (`search_mode="online"`, the default) and local (`search_mode="local"`) execution. `blast-create-db` runs only locally because the NCBI web service does not expose `makeblastdb`.
