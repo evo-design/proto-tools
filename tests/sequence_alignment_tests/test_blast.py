@@ -1,5 +1,7 @@
 """Tests for BLAST tools."""
 
+import io
+import json
 import warnings
 from pathlib import Path
 
@@ -343,6 +345,123 @@ def test_output_export_invalid_format(tmp_path):
         output._export_output(tmp_path / "results", "xlsx")
 
 
+def test_csv_export_preserves_standard_twelve_column_contract(tmp_path):
+    """Additive alignment details do not change the established CSV schema."""
+    output = BlastSearchOutput(
+        hits=[
+            BlastHit(
+                qseqid="q",
+                sseqid="s",
+                pident=75.0,
+                length=4,
+                mismatch=1,
+                gapopen=0,
+                qstart=1,
+                qend=4,
+                sstart=1,
+                send=4,
+                evalue=0.01,
+                bitscore=8.0,
+                qseq="ACGT",
+                sseq="ACCT",
+                btop="2GC1",
+            )
+        ]
+    )
+
+    output._export_output(tmp_path / "results", "csv")
+
+    assert list(pd.read_csv(tmp_path / "results.csv").columns) == [
+        "qseqid",
+        "sseqid",
+        "pident",
+        "length",
+        "mismatch",
+        "gapopen",
+        "qstart",
+        "qend",
+        "sstart",
+        "send",
+        "evalue",
+        "bitscore",
+    ]
+
+
+def test_json_export_retains_alignment_details(tmp_path):
+    """The full-fidelity JSON export includes additive aligned strings and BTOP."""
+    hit = BlastHit(
+        qseqid="q",
+        sseqid="s",
+        pident=75.0,
+        length=4,
+        mismatch=1,
+        gapopen=0,
+        qstart=1,
+        qend=4,
+        sstart=1,
+        send=4,
+        evalue=0.01,
+        bitscore=8.0,
+        qseq="ACGT",
+        sseq="ACCT",
+        btop="2GC1",
+    )
+    BlastSearchOutput(hits=[hit])._export_output(tmp_path / "results", "json")
+
+    exported = json.loads((tmp_path / "results.json").read_text())
+    assert exported[0]["qseq"] == "ACGT"
+    assert exported[0]["sseq"] == "ACCT"
+    assert exported[0]["btop"] == "2GC1"
+
+
+def test_golden_online_xml_parses_alignment_detail():
+    """A representative NCBI XML response retains standard and aligned fields."""
+    from Bio.Blast import NCBIXML
+
+    fixture = Path(__file__).parent.parent / "dummy_data" / "blast_single_hit.xml"
+    records = list(NCBIXML.parse(io.StringIO(fixture.read_text())))
+
+    hit = _blast_results_to_hits(records)[0]
+    assert hit.model_dump() == {
+        "qseqid": "query",
+        "sseqid": "S1",
+        "pident": 75.0,
+        "length": 4,
+        "mismatch": 1,
+        "gapopen": 0,
+        "qstart": 1,
+        "qend": 4,
+        "sstart": 1,
+        "send": 4,
+        "evalue": 0.01,
+        "bitscore": 8.0,
+        "qseq": "ACGT",
+        "sseq": "ACCT",
+        "btop": None,
+    }
+
+
+def test_hit_alignment_details_are_backward_compatible():
+    """Legacy twelve-column hit payloads remain valid after additive fields."""
+    hit = BlastHit(
+        qseqid="q",
+        sseqid="s",
+        pident=90.0,
+        length=10,
+        mismatch=1,
+        gapopen=0,
+        qstart=1,
+        qend=10,
+        sstart=20,
+        send=11,
+        evalue=0.1,
+        bitscore=15.0,
+    )
+    assert hit.qseq is None
+    assert hit.sseq is None
+    assert hit.btop is None
+
+
 # ---------------------------------------------------------------------------
 # Integration tests
 # ---------------------------------------------------------------------------
@@ -433,6 +552,8 @@ def test_local_blastp_no_hits(prot_blast_db):
 
 
 @pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.slow
 @pytest.mark.skip_ci
 def test_online_blastp():
     """Search a known hemoglobin fragment against swissprot → expect hits."""

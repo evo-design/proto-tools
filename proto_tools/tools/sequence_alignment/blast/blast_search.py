@@ -62,6 +62,21 @@ BLAST_TASKS = Literal[
 # Simple heuristic for raw sequence detection: only contains valid
 # nucleotide/protein characters plus common whitespace.
 _SEQUENCE_CHARS = re.compile(r"^[A-Za-z*\-\s]+$")
+_STANDARD_HIT_FIELDS = (
+    "qseqid",
+    "sseqid",
+    "pident",
+    "length",
+    "mismatch",
+    "gapopen",
+    "qstart",
+    "qend",
+    "sstart",
+    "send",
+    "evalue",
+    "bitscore",
+)
+_ALIGNMENT_DETAIL_FIELDS = ("qseq", "sseq", "btop")
 
 
 # ============================================================================
@@ -202,11 +217,13 @@ class BlastSearchOutput(BaseToolOutput):
 
         path = Path(export_path).with_suffix(f".{file_format}")
 
-        df = pd.DataFrame([hit.model_dump() for hit in self.hits])
-
         if file_format == "csv":
+            # Preserve the established twelve-column CSV contract. Alignment
+            # detail remains available on BlastHit and in the JSON export.
+            df = pd.DataFrame([hit.model_dump(include=_STANDARD_HIT_FIELDS) for hit in self.hits])
             df.to_csv(path, index=False)
         elif file_format == "json":
+            df = pd.DataFrame([hit.model_dump() for hit in self.hits])
             df.to_json(path, orient="records", indent=2)
         else:
             raise ValueError(f"Unsupported format: {file_format}")
@@ -751,7 +768,11 @@ def _local_search(
     raw_output = output_data["stdout"]
     hits: list[BlastHit] = []
     if raw_output.strip():
-        reader = csv.DictReader(io.StringIO(raw_output), delimiter="\t", fieldnames=list(BlastHit.model_fields))
+        reader = csv.DictReader(
+            io.StringIO(raw_output),
+            delimiter="\t",
+            fieldnames=[*_STANDARD_HIT_FIELDS, *_ALIGNMENT_DETAIL_FIELDS],
+        )
         hits.extend(BlastHit(**row) for row in reader)  # type: ignore[arg-type]
 
     return BlastSearchOutput(
