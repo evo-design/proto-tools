@@ -63,6 +63,28 @@ def test_parse_m8_text_skips_malformed_rows():
     assert [h.target_id for h in hits] == ["1abc_A"]
 
 
+def test_parse_m8_text_preserves_local_tm_scores():
+    """Extended local rows expose the score used by Foldseek's threshold mode."""
+    row = "q\t1abc_A\t55.0\t120\t10\t2\t1\t120\t5\t125\t1e-30\t150.0\t0.47\t0.61\t0.29"
+    hit = _parse_m8_text(row, "testdb")[0]
+    assert hit.alignment_tm_score == pytest.approx(0.47)
+    assert hit.query_tm_score == pytest.approx(0.61)
+    assert hit.target_tm_score == pytest.approx(0.29)
+
+
+def test_remote_12_and_local_15_column_rows_have_base_field_parity():
+    """Adding local TM columns must not alter any established server field."""
+    standard = "q\t1abc_A\t55.0\t120\t10\t2\t1\t120\t5\t125\t1e-30\t150.0"
+    remote_hit = _parse_m8_text(standard, "testdb")[0]
+    local_hit = _parse_m8_text(f"{standard}\t0.47\t0.61\t0.29", "testdb")[0]
+    tm_fields = {"alignment_tm_score", "query_tm_score", "target_tm_score"}
+
+    assert remote_hit.model_dump(exclude=tm_fields) == local_hit.model_dump(exclude=tm_fields)
+    assert remote_hit.alignment_tm_score is None
+    assert remote_hit.query_tm_score is None
+    assert remote_hit.target_tm_score is None
+
+
 def test_foldseek_hit_rejects_invalid_coordinates():
     """FoldseekHit enforces 1-indexed coordinates with start <= end."""
     base = {
@@ -206,13 +228,18 @@ def test_local_mode_dispatches_easy_search():
     config = FoldseekSearchConfig(search_mode="local", local_db="/path/to/db", num_threads=8)
 
     with patch("proto_tools.tools.structure_alignment.foldseek.foldseek_search.ToolInstance.dispatch") as mock_dispatch:
-        mock_dispatch.return_value = {"stdout": "query\t1abc_A\t50.0\t100\t5\t1\t1\t100\t10\t110\t1e-30\t150.0\n"}
+        mock_dispatch.return_value = {
+            "stdout": "query\t1abc_A\t50.0\t100\t5\t1\t1\t100\t10\t110\t1e-30\t150.0\t0.48\t0.62\t0.31\n"
+        }
         output = run_foldseek_search(inputs, config)
 
     assert output.success
     assert output.ticket_id == ""  # local mode doesn't issue a ticket
     assert output.num_hits == 1
     assert output.hits[0].target_id == "1abc_A"
+    assert output.hits[0].alignment_tm_score == pytest.approx(0.48)
+    assert output.hits[0].query_tm_score == pytest.approx(0.62)
+    assert output.hits[0].target_tm_score == pytest.approx(0.31)
     assert output.databases_queried == ["/path/to/db"]
 
     payload = mock_dispatch.call_args.args[1]

@@ -56,7 +56,7 @@ _USER_AGENT = "proto-tools/foldseek-multimer-search-v1"
 
 
 FoldseekMultimerHit = FoldseekHit
-"""Same shape as FoldseekHit — multimer search returns the standard 12-column M8."""
+"""Same typed shape as FoldseekHit for remote 12- and local 15-column M8 rows."""
 
 
 class FoldseekMultimerSearchInput(BaseToolInput):
