@@ -95,6 +95,21 @@ from proto_tools.tools.database_retrieval.ncbi import (
     run_ncbi_esummary,
 )
 
+# Paperclip literature retrieval
+from proto_tools.tools.database_retrieval.paperclip import (
+    LiteratureAccessKind,
+    PaperclipDocument,
+    PaperclipDocumentConfig,
+    PaperclipDocumentInput,
+    PaperclipDocumentOutput,
+    PaperclipSearchConfig,
+    PaperclipSearchHit,
+    PaperclipSearchInput,
+    PaperclipSearchOutput,
+    run_paperclip_document,
+    run_paperclip_search,
+)
+
 # PDB tools
 from proto_tools.tools.database_retrieval.pdb import (
     PdbChain,
@@ -254,6 +269,18 @@ __all__ = [
     "NCBIEfetchInput",
     "NCBIEfetchOutput",
     "run_ncbi_efetch",
+    # Paperclip literature retrieval
+    "LiteratureAccessKind",
+    "PaperclipDocument",
+    "PaperclipDocumentConfig",
+    "PaperclipDocumentInput",
+    "PaperclipDocumentOutput",
+    "PaperclipSearchConfig",
+    "PaperclipSearchHit",
+    "PaperclipSearchInput",
+    "PaperclipSearchOutput",
+    "run_paperclip_document",
+    "run_paperclip_search",
     # UniProt fetch
     "UniProtFetchConfig",
     "UniProtFetchInput",

@@ -1,0 +1,1 @@
+# The locked Paperclip wheel in setup.sh declares and installs its own dependencies.
