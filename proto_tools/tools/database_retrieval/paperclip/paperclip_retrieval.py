@@ -10,7 +10,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, JsonValue, field_validator
 
 from proto_tools.entities.provenance import AccessLevel, RetrievedArtifact, SourceProvenance
 from proto_tools.tools.tool_registry import tool
@@ -379,7 +379,10 @@ def run_paperclip_document(
     metadata = json.loads(metadata_output)
     metadata_content = metadata_output.encode("utf-8")
     metadata_digest = hashlib.sha256(metadata_content).hexdigest()
-    provenance_parameters = {"operation": "document", "include_full_text": config.include_full_text}
+    provenance_parameters: dict[str, JsonValue] = {
+        "operation": "document",
+        "include_full_text": config.include_full_text,
+    }
     metadata_provenance = SourceProvenance(
         provider="Paperclip",
         source_url=f"https://paperclip.gxl.ai/citations/papers/{inputs.document_id}",
