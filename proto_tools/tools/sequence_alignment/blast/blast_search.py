@@ -5,6 +5,7 @@ import io
 import logging
 import re
 import tempfile
+import time
 import warnings
 from pathlib import Path
 from typing import Any, Literal
@@ -21,6 +22,7 @@ from proto_tools.utils import (
     ToolInstance,
 )
 from proto_tools.utils.device import RemoteDevice
+from proto_tools.utils.remote_errors import is_retryable_remote_error
 
 logger = logging.getLogger(__name__)
 
@@ -263,6 +265,10 @@ class BlastSearchConfig(BaseConfig):
         program (BLAST_PROGRAMS): BLAST algorithm (blastn, blastp, blastx,
             tblastn, tblastx).
         database (BLAST_DATABASES): NCBI database to search (online only).
+        online_attempts (int): Bounded attempts for transient transport errors;
+            default one avoids nested retries.
+        online_retry_delay_seconds (float): Initial exponential backoff, capped
+            at 60 seconds.
         entrez_query (str | None): Restrict online search with an Entrez query.
         hitlist_size (int | None): Number of hits to return (online only).
         megablast (bool | None): Use MegaBLAST (online, blastn only).
@@ -626,7 +632,22 @@ def run_blast_search(
     """
     if config.search_mode == "local":
         return _local_search(inputs, config, instance=instance)
-    return _online_search(inputs, config)
+    for attempt in range(config.online_attempts):
+        try:
+            return _online_search(inputs, config)
+        except Exception as exc:  # noqa: PERF203 - each bounded remote attempt needs independent recovery
+            if attempt + 1 >= config.online_attempts or not is_retryable_remote_error(exc):
+                raise
+            delay = min(60.0, config.online_retry_delay_seconds * 2**attempt)
+            logger.warning(
+                "Transient online BLAST failure; retry %s/%s in %.1fs (%s)",
+                attempt + 2,
+                config.online_attempts,
+                delay,
+                type(exc).__name__,
+            )
+            time.sleep(delay)
+    raise RuntimeError("Online BLAST attempt budget exhausted")
 
 
 # ============================================================================
