@@ -220,7 +220,7 @@ class BlastSearchOutput(BaseToolOutput):
         if file_format == "csv":
             # Preserve the established twelve-column CSV contract. Alignment
             # detail remains available on BlastHit and in the JSON export.
-            df = pd.DataFrame([hit.model_dump(include=_STANDARD_HIT_FIELDS) for hit in self.hits])
+            df = pd.DataFrame([hit.model_dump(include=set(_STANDARD_HIT_FIELDS)) for hit in self.hits])
             df.to_csv(path, index=False)
         elif file_format == "json":
             df = pd.DataFrame([hit.model_dump() for hit in self.hits])

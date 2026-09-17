@@ -8,6 +8,7 @@ import re
 import tempfile
 import threading
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from enum import Enum
 from pathlib import Path
@@ -68,7 +69,7 @@ def _publish_slot(path: Path, spacing: float) -> None:
 
 
 @contextmanager
-def _shared_slot(deadline: float | None):
+def _shared_slot(deadline: float | None) -> Iterator[Path | None]:
     """Optionally coordinate participating processes using an explicit shared path."""
     from filelock import FileLock
 
@@ -127,7 +128,7 @@ def _request(parameters: dict[str, Any], deadline: float | None) -> str:
                 if _is_rejected(text):
                     spacing = 60.0
                 _remaining(deadline)
-                return text
+                return str(text)
             finally:
                 _NEXT_REQUEST = time.monotonic() + spacing
                 if pacing_path is not None:
@@ -199,7 +200,9 @@ def search_xml(parameters: dict[str, Any], timeout: int | None) -> str:
                 page = request_with_recovery(put)
                 # Reuse Biopython's established server-error/RID parser, not its
                 # hardcoded HTTP client.
-                rid, _ = NCBIWWW._parse_qblast_ref_page(io.BytesIO(page.encode()))
+                rid, _ = NCBIWWW._parse_qblast_ref_page(  # type: ignore[no-untyped-call]
+                    io.BytesIO(page.encode())
+                )
                 state = _SearchState.POLL
                 continue
 
