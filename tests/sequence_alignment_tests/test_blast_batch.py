@@ -19,9 +19,9 @@ def test_batch_query_coverage_including_no_hits(monkeypatch, tmp_path, returned)
         return "mock XML"
 
     monkeypatch.setattr(_online_client, "search_xml", submit)
-    monkeypatch.setattr(NCBIXML, "parse", lambda _: iter([
-        SimpleNamespace(query=query, alignments=[]) for query in returned
-    ]))
+    monkeypatch.setattr(
+        NCBIXML, "parse", lambda _: iter([SimpleNamespace(query=query, alignments=[]) for query in returned])
+    )
     inputs = blast_search.BlastSearchInput(query=str(path))
     config = blast_search.BlastSearchConfig()
     if returned == ["b", "a"]:
