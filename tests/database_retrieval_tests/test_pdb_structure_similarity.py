@@ -226,8 +226,6 @@ def test_batch_fail_fast_propagates_query_error(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(module, "run_pdb_structure_similarity", fail)
     with pytest.raises(RuntimeError, match="stop now"):
         run_pdb_structure_similarity_batch(
-            PdbStructureSimilarityBatchInput(
-                queries=[PdbStructureSimilarityInput(pdb_id="1YCR", chain_id="A")]
-            ),
+            PdbStructureSimilarityBatchInput(queries=[PdbStructureSimilarityInput(pdb_id="1YCR", chain_id="A")]),
             PdbStructureSimilarityBatchConfig(fail_fast=True),
         )

@@ -409,11 +409,6 @@ def _original_structure_score(result: dict[str, Any]) -> float | None:
     return None
 
 
-
-
-
-
-
 def _upload_structure(session: Any, structure: Structure, timeout_seconds: float) -> str:
     with TemporaryDirectory(prefix="proto-rcsb-structure-") as temp_dir:
         path = Path(temp_dir) / "query.pdb"
@@ -602,9 +597,7 @@ def run_pdb_structure_similarity_batch(
 ) -> PdbStructureSimilarityBatchOutput:
     """Search a shortlist concurrently while preserving input alignment."""
     del instance
-    single_config = PdbStructureSimilarityConfig.model_validate(
-        config.model_dump(exclude={"max_workers", "fail_fast"})
-    )
+    single_config = PdbStructureSimilarityConfig.model_validate(config.model_dump(exclude={"max_workers", "fail_fast"}))
     query_ids = inputs.query_ids or [str(index) for index in range(len(inputs.queries))]
 
     def search(index: int) -> PdbStructureSimilarityBatchResult:
@@ -639,4 +632,3 @@ def run_pdb_structure_similarity_batch(
             "failed_queries_are_not_measurements": True,
         },
     )
-
