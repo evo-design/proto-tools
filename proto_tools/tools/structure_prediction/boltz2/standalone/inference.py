@@ -31,7 +31,7 @@ _checkpoint_cache: dict[str, Any] = {}
 
 def _is_checkpoint_corruption_error(exc: BaseException) -> bool:
     """Return whether PyTorch failed because a downloaded checkpoint is malformed."""
-    return is_checkpoint_corruption_error(exc)
+    return bool(is_checkpoint_corruption_error(exc))
 
 
 class _CorruptCheckpointError(RuntimeError):

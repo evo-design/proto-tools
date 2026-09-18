@@ -23,7 +23,7 @@ LOAD_BACKOFF_BASE_S = 2.0
 
 def _is_checkpoint_corruption_error(exc: BaseException) -> bool:
     """Compatibility wrapper around the shared corruption classifier."""
-    return is_checkpoint_corruption_error(exc)
+    return bool(is_checkpoint_corruption_error(exc))
 
 
 def _cuequivariance_available() -> bool:
