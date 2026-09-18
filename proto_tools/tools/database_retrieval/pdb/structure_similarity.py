@@ -601,6 +601,8 @@ def run_pdb_structure_similarity_batch(
     def search(index: int) -> PdbStructureSimilarityBatchResult:
         try:
             output = run_pdb_structure_similarity(inputs.queries[index], single_config)
+            if not isinstance(output, PdbStructureSimilarityOutput):
+                raise TypeError("pdb-structure-similarity returned an unexpected output type")
         except Exception as error:
             if config.fail_fast:
                 raise
