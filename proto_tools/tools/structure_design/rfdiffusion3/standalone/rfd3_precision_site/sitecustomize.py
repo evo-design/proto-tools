@@ -1,15 +1,17 @@
 """Promote Foundry's rigid-alignment SVD to float32 on low-precision inference."""
 
 from importlib import metadata
+from typing import Any
 
 import torch
-from foundry.utils import alignment
+from foundry.utils import alignment  # type: ignore[import-not-found]
 from standalone_helpers import get_logger
 
 logger = get_logger(__name__)
 
 _AFFECTED_RC_FOUNDRY_VERSIONS = {"0.2.0"}
 
+_foundry_version: str | None
 try:
     _foundry_version = metadata.version("rc-foundry")
 except metadata.PackageNotFoundError:
@@ -20,7 +22,12 @@ if _foundry_version in _AFFECTED_RC_FOUNDRY_VERSIONS and not getattr(
 ):
     _original_weighted_rigid_align = alignment.weighted_rigid_align
 
-    def _low_precision_safe_weighted_rigid_align(X_L, X_gt_L, X_exists_L=None, w_L=None):
+    def _low_precision_safe_weighted_rigid_align(
+        X_L: Any,
+        X_gt_L: Any,
+        X_exists_L: Any = None,
+        w_L: Any = None,
+    ) -> Any:
         """Run the small Kabsch/SVD calculation in a CUDA-supported dtype.
 
         Foundry executes motif realignment under bfloat16 autocast on recent GPUs,
@@ -39,7 +46,7 @@ if _foundry_version in _AFFECTED_RC_FOUNDRY_VERSIONS and not getattr(
             return aligned.to(output_dtype)
         return _original_weighted_rigid_align(X_L, X_gt_L, X_exists_L, w_L)
 
-    _low_precision_safe_weighted_rigid_align._proto_low_precision_safe = True
+    _low_precision_safe_weighted_rigid_align._proto_low_precision_safe = True  # type: ignore[attr-defined]
     alignment.weighted_rigid_align = _low_precision_safe_weighted_rigid_align
 elif _foundry_version not in _AFFECTED_RC_FOUNDRY_VERSIONS:
     logger.debug("RFdiffusion3 precision compatibility shim is not required for rc-foundry %s", _foundry_version)

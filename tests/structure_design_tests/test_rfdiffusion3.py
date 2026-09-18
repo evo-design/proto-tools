@@ -5,6 +5,8 @@ Tests for RFdiffusion3.
 
 import json
 import subprocess
+import sys
+import types
 from importlib import util
 from pathlib import Path
 
@@ -469,7 +471,7 @@ def test_rfdiffusion3_standalone_failure_reports_full_subprocess_output(monkeypa
     stdout = "\n".join(f"stdout line {i}" for i in range(20))
 
     def fake_run(*args, **kwargs):
-        assert args[0][:2] == [sys.executable, "rfd3"]
+        assert args[0][:2] == ["rfd3", "design"]
         pythonpath_entries = kwargs["env"]["PYTHONPATH"].split(":")
         precision_site = Path(pythonpath_entries[0])
         assert precision_site.name == "rfd3_precision_site"

@@ -19,7 +19,7 @@ import json
 import logging
 import tempfile
 from collections import defaultdict
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any, Literal
 
@@ -1010,16 +1010,17 @@ _CFG_FEATURE_FIELDS = (
 
 def _missing_cfg_feature_specs(inputs: RFdiffusion3Input) -> list[str]:
     """Return every spec key that lacks native RFd3 CFG feature conditioning."""
+    specs: Iterable[tuple[str, Any]]
     if inputs.raw_json:
         payload = json.loads(inputs.raw_json)
         if not isinstance(payload, dict):
             raise ValueError("RFdiffusion3 raw_json must contain a top-level object of named design specs")
-        specs = payload.items()
+        specs = ((str(key), value) for key, value in payload.items())
     else:
         specs = ((f"spec-{index}", spec.to_dict()) for index, spec in enumerate(inputs.design_specs))
 
-    missing = []
-    empty_values = (None, "", [], {})
+    missing: list[str] = []
+    empty_values: tuple[Any, ...] = (None, "", [], {})
     for spec_key, spec in specs:
         if not isinstance(spec, dict) or not any(spec.get(field) not in empty_values for field in _CFG_FEATURE_FIELDS):
             missing.append(str(spec_key))
