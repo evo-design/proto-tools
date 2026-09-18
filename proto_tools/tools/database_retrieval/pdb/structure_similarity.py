@@ -156,10 +156,7 @@ class PdbStructureSimilarityConfig(BaseConfig):
         ge=0,
         le=3,
         title="HTTP Retries",
-        description=(
-            "Extra bounded transport attempts for each RCSB upload/search request. "
-            "Failures are returned after this budget instead of being retried again by the tool wrapper."
-        ),
+        description="Extra bounded transport attempts per RCSB request",
         include_in_key=False,
     )
 
@@ -292,6 +289,7 @@ class PdbStructureSimilarityBatchConfig(PdbStructureSimilarityConfig):
         number_of_candidates (int): Maximum nearest-neighbor candidates considered.
         allow_external_upload (bool): Acknowledge disclosure of a custom structure.
         timeout_seconds (float): Per-request HTTP timeout.
+        http_retries (int): Extra bounded transport attempts per RCSB request.
         max_workers (int): Concurrent query workers, kept low for RCSB rate limits.
         fail_fast (bool): Raise on the first failed query instead of reporting it per query.
     """
