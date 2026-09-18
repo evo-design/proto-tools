@@ -291,7 +291,7 @@ class AlphaFold3Model:
             input_dir = os.path.dirname(input_json_path)
             if self.container_runtime is None:
                 raise RuntimeError("alphafold3: container runtime was not resolved during load")
-            return self.container_runtime.build_exec_command(
+            command: list[str] = self.container_runtime.build_exec_command(
                 arguments=common_args,
                 binds=[
                     (input_dir, input_dir),
@@ -311,6 +311,7 @@ class AlphaFold3Model:
                 environment={"LD_LIBRARY_PATH": "/usr/lib/x86_64-linux-gnu"},
                 gpu=True,
             )
+            return command
 
         # Env path: direct python subprocess against the cloned repo.
         assert self.repo_path is not None
