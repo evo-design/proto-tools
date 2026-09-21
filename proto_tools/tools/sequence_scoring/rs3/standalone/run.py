@@ -11,7 +11,7 @@ logger = get_logger(__name__)
 
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Return sequence-only Rule Set 3 predictions."""
-    from rs3.seq import predict_seq
+    from rs3.seq import predict_seq  # type: ignore[import-not-found]
 
     scores = predict_seq(input_dict["sequences"], sequence_tracr=input_dict["tracr_rna"])
     return {"scores": [float(score) for score in scores]}

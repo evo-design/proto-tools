@@ -36,7 +36,9 @@ class RS3ScoreInput(BaseToolInput):
         """Normalize a single context to a one-item batch."""
         if isinstance(value, str):
             return [value]
-        return value
+        if isinstance(value, list):
+            return list(value)
+        raise ValueError("sequences must be a context or list of contexts")
 
     @field_validator("sequences")
     @classmethod
@@ -87,6 +89,7 @@ class RS3Metrics(Metrics):
         }
     }
     primary_metric: str | None = Field(default="score", title="Primary Metric", description="Primary ranking metric")
+    score: float = Field(title="Score", description="Raw mean-centered Rule Set 3 activity score")
 
 
 class RS3ScoreResult(BaseModel):
