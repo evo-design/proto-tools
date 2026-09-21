@@ -216,6 +216,27 @@ def test_batch_preserves_alignment_and_reports_partial_failure(monkeypatch: pyte
     assert output.metadata["failed_queries_are_not_measurements"] is True
 
 
+@pytest.mark.parametrize("fail_fast", [False, True])
+def test_batch_unexpected_output_respects_failure_policy(monkeypatch: pytest.MonkeyPatch, fail_fast: bool) -> None:
+    def invalid_output(*_args: Any, **_kwargs: Any) -> object:
+        return object()
+
+    monkeypatch.setattr(module, "run_pdb_structure_similarity", invalid_output)
+    inputs = PdbStructureSimilarityBatchInput(
+        queries=[PdbStructureSimilarityInput(pdb_id="1YCR", chain_id="A")],
+    )
+    config = PdbStructureSimilarityBatchConfig(fail_fast=fail_fast)
+    if fail_fast:
+        with pytest.raises(TypeError, match="unexpected output type"):
+            run_pdb_structure_similarity_batch(inputs, config)
+    else:
+        output = run_pdb_structure_similarity_batch(inputs, config)
+        assert output.successful_count == 0
+        assert output.failed_count == 1
+        assert output.results[0].output is None
+        assert output.results[0].error_type == "TypeError"
+
+
 def test_batch_fail_fast_propagates_query_error(monkeypatch: pytest.MonkeyPatch) -> None:
     def fail(
         inputs: PdbStructureSimilarityInput,
