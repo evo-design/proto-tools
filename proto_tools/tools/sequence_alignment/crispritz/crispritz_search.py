@@ -28,10 +28,9 @@ class CRISPRitzSearchInput(BaseToolInput):
     returned inside an ``ncbi-reference-bundle`` artifact.
 
     Attributes:
-        guides (list[str]): PAM-free guide protospacers of a uniform length.
-        reference_fasta (str): Local FASTA file or FASTA-containing directory.
-        reference_id (str | None): Optional versioned assembly/accession label
-            recorded in the result provenance.
+        guides (list[str]): PAM-free guide protospacers to search.
+        reference_fasta (str): Local uncompressed reference FASTA path.
+        reference_id (str | None): Optional versioned reference identifier.
     """
 
     guides: list[str] = InputField(
@@ -84,17 +83,15 @@ class CRISPRitzSearchConfig(BaseConfig):
     genomic strands. Mismatch and bulge limits are inclusive maxima.
 
     Attributes:
-        pam (str): IUPAC PAM motif without protospacer placeholder bases.
-        pam_side (Literal['three_prime', 'five_prime']): PAM position relative
-            to the protospacer in nuclease orientation.
-        nuclease (str): Descriptive nuclease identity retained as provenance.
-        max_mismatches (int): Inclusive maximum substitutions per hit.
-        max_dna_bulges (int): Inclusive maximum DNA bulge length per hit.
-        max_rna_bulges (int): Inclusive maximum RNA bulge length per hit.
-        max_total_edits (int | None): Optional inclusive mismatch-plus-bulge cap.
+        pam (str): IUPAC PAM motif without protospacer bases.
+        pam_side (Literal["three_prime", "five_prime"]): PAM position relative to the protospacer.
+        nuclease (str): Nuclease identity retained as provenance.
+        max_mismatches (int): Inclusive substitution limit per hit.
+        max_dna_bulges (int): Inclusive DNA-bulge limit per hit.
+        max_rna_bulges (int): Inclusive RNA-bulge limit per hit.
+        max_total_edits (int | None): Optional inclusive limit on all edits.
         threads (int): CPU threads used for indexing and search.
-        index_cache_dir (str | None): Persistent index-cache directory. The
-            default is ``$PROTO_HOME/proto_tool_cache/crispritz/indexes``.
+        index_cache_dir (str | None): Optional persistent CRISPRitz index cache.
     """
 
     pam: str = ConfigField(default="NGG", title="PAM", description="IUPAC PAM motif without protospacer bases")
@@ -140,13 +137,7 @@ class CRISPRitzSearchConfig(BaseConfig):
 
 
 class CRISPRitzReferenceFile(BaseModel):
-    """One FASTA source included in the indexed reference.
-
-    Attributes:
-        path (str): Resolved source FASTA path.
-        sha256 (str): SHA256 checksum of the source file bytes.
-        size_bytes (int): Source-file size in bytes.
-    """
+    """One FASTA source included in the indexed reference."""
 
     path: str = Field(title="Path", description="Resolved source FASTA path")
     sha256: str = Field(title="SHA256", description="SHA256 checksum of the source FASTA bytes")
@@ -154,23 +145,7 @@ class CRISPRitzReferenceFile(BaseModel):
 
 
 class CRISPRitzHit(BaseModel):
-    """One CRISPRitz target or off-target alignment.
-
-    Attributes:
-        guide (str): Normalized PAM-free guide protospacer.
-        bulge_type (Literal['none', 'dna', 'rna', 'dna_rna']): Alignment
-            indel class; ``dna_rna`` is CRISPRitz 2.8's joint-bulge result.
-        crispritz_bulge_type (str): Unmodified upstream bulge label.
-        guide_alignment (str): CRISPRitz crRNA alignment including gaps and PAM placeholders.
-        target_alignment (str): Genomic alignment including gaps and lowercase differing bases.
-        chromosome (str): FASTA record identifier.
-        position (int): Zero-based CRISPRitz genomic start coordinate.
-        cluster_position (int): Zero-based upstream cluster coordinate.
-        strand (Literal['+', '-']): Genomic target strand.
-        mismatches (int): Substitution count excluding the bulge.
-        bulge_size (int): Bulge length.
-        total_edits (int): Mismatches plus bulge length.
-    """
+    """One CRISPRitz target or off-target alignment."""
 
     guide: str = Field(title="Guide", description="Normalized PAM-free guide protospacer")
     bulge_type: Literal["none", "dna", "rna", "dna_rna"] = Field(
@@ -194,18 +169,18 @@ class CRISPRitzSearchOutput(BaseToolOutput):
     """Structured mismatch- and bulge-aware off-target enumeration.
 
     Attributes:
-        hits (list[CRISPRitzHit]): Every target emitted by CRISPRitz.
-        guides (list[str]): Normalized PAM-free queried protospacers.
-        reference_id (str | None): Caller-supplied reference identifier.
-        reference_sha256 (str): Combined checksum of all reference FASTA files.
-        reference_files (list[CRISPRitzReferenceFile]): Source-file checksums.
+        hits (list[CRISPRitzHit]): Enumerated target and off-target sites.
+        guides (list[str]): Normalized queried protospacers.
+        reference_id (str | None): Optional reference accession.
+        reference_sha256 (str): Combined reference FASTA checksum.
+        reference_files (list[CRISPRitzReferenceFile]): Checksummed reference files.
         index_key (str): Content- and parameter-addressed index key.
-        index_reused (bool): Whether a completed cached index was reused.
-        crispritz_version (str): Pinned upstream CRISPRitz version.
-        crispritz_commit (str): Verified upstream source revision.
+        index_reused (bool): Whether a completed index was reused.
+        crispritz_version (str): Pinned CRISPRitz version.
+        crispritz_commit (str): Verified CRISPRitz source revision.
         nuclease (str): Caller-supplied nuclease identity.
         pam (str): IUPAC PAM motif.
-        pam_side (Literal['three_prime', 'five_prime']): PAM orientation.
+        pam_side (Literal["three_prime", "five_prime"]): PAM orientation.
         max_mismatches (int): Search substitution limit.
         max_dna_bulges (int): Search DNA-bulge limit.
         max_rna_bulges (int): Search RNA-bulge limit.

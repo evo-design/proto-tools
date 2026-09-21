@@ -3,7 +3,7 @@
 # CRISPRitz
 
 > [!NOTE]
-> **License:** CRISPRitz has an AGPL-3.0-only (academic use); separate commercial license required license and has restrictions around commercial use and may require explicit attribution when utilized. Please refer to [the license](https://github.com/pinellolab/CRISPRitz/blob/v2.8.1/LICENSE) for full terms.
+> **License:** CRISPRitz has an AGPL-3.0 license and has restrictions around commercial use and may require explicit attribution when utilized. Please refer to [the license](https://github.com/pinellolab/CRISPRitz/blob/v2.8.1/LICENSE) for full terms.
 
 ## Overview
 
@@ -64,6 +64,3 @@ CRISPRitz 2.8 can also emit joint `RNA,DNA` alignments; these are represented as
 The output also records per-file and combined reference checksums, index reuse,
 all search parameters, nuclease label, and pinned CRISPRitz version and source
 commit.
-
-CRISPRitz is free to academic researchers under AGPL-3.0; commercial use
-requires a separate license from its authors. Consult `license.yaml` before use.

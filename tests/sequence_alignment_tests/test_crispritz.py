@@ -15,6 +15,8 @@ from proto_tools.tools.sequence_alignment.crispritz.standalone.run import (
     _parse_hits,
     _split_fasta,
 )
+from tests.conftest import benchmark_twice
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 
 def test_input_contract_normalizes_rna_and_rejects_nonuniform_guides() -> None:
@@ -128,3 +130,21 @@ def test_parser_preserves_joint_bulge_type_and_zero_based_position(tmp_path: Pat
     assert hit["bulge_type"] == "dna_rna"
     assert hit["crispritz_bulge_type"] == "RNA,DNA"
     assert hit["position"] == 0
+
+
+@pytest.mark.benchmark("crispritz-search")
+@pytest.mark.slow
+def test_crispritz_search_benchmark(request: pytest.FixtureRequest, tmp_path: Path) -> None:
+    """Benchmark 100 guides against a synthetic 100-kb local reference index."""
+    guide = "GACTGCATTGCATGACTGCA"
+    reference = tmp_path / "reference.fasta"
+    reference.write_text(">synthetic\n" + ("ACGT" * 24_993) + f"AAAA{guide}TGGAAA\n")
+    guides = [guide, *("A" * 19 + base for base in "ACG"), *("C" * 19 + base for base in "AGT")]
+    inputs = CRISPRitzSearchInput(guides=guides * 14 + guides[:2], reference_fasta=str(reference))
+    config = CRISPRitzSearchConfig(device="cpu", threads=4)
+
+    result = benchmark_twice(request, "crispritz", lambda: run_crispritz_search(inputs, config))
+
+    validate_output(result)
+    assert result.tool_id == "crispritz-search"
+    assert len(result.guides) == 100

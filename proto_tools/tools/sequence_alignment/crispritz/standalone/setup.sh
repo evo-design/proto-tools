@@ -1,5 +1,7 @@
 #!/bin/bash
 set -euo pipefail
+source standalone_helpers.sh
+proto_ensure_uv
 
 CRISPRITZ_VERSION="2.8.1"
 CRISPRITZ_COMMIT="1b4cfca5059bb4fc3230b583badafe64494e2cce"

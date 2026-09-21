@@ -12,6 +12,10 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from standalone_helpers import get_logger
+
+logger = get_logger(__name__)
+
 VERSION = "2.8.1"
 FASTA_SUFFIXES = {".fa", ".fasta", ".fna"}
 

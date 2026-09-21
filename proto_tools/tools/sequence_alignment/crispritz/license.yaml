@@ -1,7 +1,7 @@
 code:
-  spdx: AGPL-3.0-only (academic use); separate commercial license required
+  spdx: AGPL-3.0
   url: https://github.com/pinellolab/CRISPRitz/blob/v2.8.1/LICENSE
-commercial_use: license_required
+commercial_use: restricted
 redistribution: true
 attribution_required: true
 notes: CRISPRitz is free to academic researchers under AGPL-3.0. For-profit use requires a license from the authors.
