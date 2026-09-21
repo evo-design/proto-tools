@@ -4,6 +4,10 @@ import json
 import sys
 from typing import Any
 
+from standalone_helpers import get_logger
+
+logger = get_logger(__name__)
+
 
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Return sequence-only Rule Set 3 predictions."""

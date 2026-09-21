@@ -3,6 +3,8 @@
 import pytest
 
 from proto_tools.tools.sequence_scoring.rs3 import RS3ScoreConfig, RS3ScoreInput, run_rs3_score
+from tests.conftest import benchmark_twice
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 
 def test_input_normalizes_and_validates_context() -> None:
@@ -40,3 +42,20 @@ def test_rejects_missing_score(monkeypatch) -> None:
     monkeypatch.setattr(module.ToolInstance, "dispatch", staticmethod(lambda *args, **kwargs: {"scores": []}))
     with pytest.raises(ValueError, match="Expected 1"):
         run_rs3_score(RS3ScoreInput(sequences="GACGAAAGCGACAACGCGTTCATCCGGGCA"), RS3ScoreConfig())
+
+
+@pytest.mark.benchmark("rs3-score")
+@pytest.mark.slow
+def test_rs3_score_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark Rule Set 3 on 1,000 valid, distinct 30-nt SpCas9 contexts."""
+    bases = "ACGT"
+    contexts = [
+        "A" * 19 + "".join(bases[(index >> shift) & 3] for shift in (8, 6, 4, 2, 0)) + "TGGGCA"
+        for index in range(1_000)
+    ]
+    inputs = RS3ScoreInput(sequences=contexts)
+    result = benchmark_twice(request, "rs3", lambda: run_rs3_score(inputs, RS3ScoreConfig()))
+
+    validate_output(result)
+    assert result.tool_id == "rs3-score"
+    assert len(result.results) == len(contexts)

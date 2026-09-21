@@ -106,7 +106,14 @@ class RS3ScoreResult(BaseModel):
 
 
 class RS3ScoreOutput(BaseToolOutput):
-    """Batch of Rule Set 3 activity predictions."""
+    """Batch of Rule Set 3 activity predictions.
+
+    Attributes:
+        results (list[RS3ScoreResult]): Per-context activity predictions.
+        model_name (str): Scoring model identity.
+        model_version (str): Pinned rs3 package version.
+        tracr_rna (str): Scaffold feature set used by the model.
+    """
 
     results: list[RS3ScoreResult] = Field(title="Results", description="Per-context activity predictions")
     model_name: str = Field(title="Model Name", description="Scoring model identity")
