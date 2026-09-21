@@ -141,7 +141,7 @@ def test_crispritz_search_benchmark(request: pytest.FixtureRequest, tmp_path: Pa
     reference.write_text(">synthetic\n" + ("ACGT" * 24_993) + f"AAAA{guide}TGGAAA\n")
     guides = [guide, *("A" * 19 + base for base in "ACG"), *("C" * 19 + base for base in "AGT")]
     inputs = CRISPRitzSearchInput(guides=guides * 14 + guides[:2], reference_fasta=str(reference))
-    config = CRISPRitzSearchConfig(device="cpu", threads=4)
+    config = CRISPRitzSearchConfig(threads=4)
 
     result = benchmark_twice(request, "crispritz", lambda: run_crispritz_search(inputs, config))
 
