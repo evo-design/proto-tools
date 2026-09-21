@@ -68,11 +68,25 @@ Use this to pull reference sequences into a design or analysis pipeline: retriev
 - **Subsequence coordinates are 1-indexed and inclusive on both ends, to match biological residue selection conventions.** Position 1 is the first residue, and `seq_stop` is included in the returned span.
 - **Strand `"-"` returns the reverse complement.** Antisense retrieval applies to nucleotide databases. It returns the reverse complement of the requested region.
 
+### NCBI Reference Bundle (`ncbi-reference-bundle`)
+
+Downloads a version-pinned NCBI Datasets assembly bundle, safely stages extraction, and records the exact ZIP response in `archive_artifact`. Every extracted file has its own checksum and an explicit derivation link to that archive.
+
+#### Applications
+
+Use this to materialize a fixed genome, transcript, protein, and annotation reference for reproducible specificity searches and sequence design.
+
+#### Usage Tips
+
+- Always provide a versioned `GCA_` or `GCF_` accession.
+- Use an empty or nonexistent destination; the tool will not overwrite existing content.
+- Set `max_download_bytes` to a workload-appropriate bound for compressed and extracted data.
+
 ## Toolkit Notes
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every NCBI tool in this toolkit (`ncbi-esearch`, `ncbi-esummary`, `ncbi-efetch`).
+These apply to every NCBI tool in this toolkit (`ncbi-esearch`, `ncbi-esummary`, `ncbi-efetch`, `ncbi-reference-bundle`).
 
 - **Requires network access.** The tools call the live NCBI E-utilities online.
 - **An NCBI API key raises the rate limit.** Without credentials, NCBI E-utilities permits 3 requests per second per IP. Setting credentials raises this to 10 requests per second. A key is obtained at no cost from the Settings page of a free NCBI account (https://www.ncbi.nlm.nih.gov/account/). NCBI also asks that a contact email be set; it uses the email for abuse handling and IP-block recovery. Provide credentials either via the `ncbi_api_key` / `ncbi_email` config attributes or via the `NCBI_API_KEY` / `NCBI_EMAIL` environment variables; an explicit config value overrides the env var.
