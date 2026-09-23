@@ -519,7 +519,21 @@ class Complex(BaseModel):
             if chain_type == "polymer":
                 sequence = structure.get_chain_sequence(chain_id)
                 if sequence:
-                    entries.append(Chain(id=chain_id, sequence=sequence))
+                    # The structure parser has already established that this is
+                    # a polymer. Restrict inference to supported biopolymers so
+                    # RFdiffusion/experimental placeholder sequences such as
+                    # ``A-X-X`` are not sent through RDKit as candidate SMILES.
+                    # Gaps are ignored for type detection but preserved in the
+                    # faithful sequence representation.
+                    entity_type = detect_sequence_type(
+                        sequence.replace("-", ""), allowed_types=("dna", "rna", "protein")
+                    )
+                    if entity_type == "unknown":
+                        # Complex currently represents polymer chains as
+                        # protein/DNA/RNA. Unknown residues are overwhelmingly
+                        # protein placeholders (UNK) in generated structures.
+                        entity_type = "protein"
+                    entries.append(Chain(id=chain_id, sequence=sequence, entity_type=entity_type))
             for resname, _seqid in structure.get_chain_ligands(chain_id):
                 entries.append(Fragment(id=chain_id, ccd_code=resname))
         return cls(chains=entries)

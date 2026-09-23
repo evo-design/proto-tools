@@ -69,6 +69,12 @@ END
 _persistent_tool = make_persistent_fixture("proteinmpnn")
 
 
+def test_proteinmpnn_scoring_accepts_explicit_default_checkpoint_name():
+    """The upstream v_48_020 name is equivalent to the public proteinmpnn alias."""
+    config = ProteinMPNNScoringConfig(model_choice="v_48_020")
+    assert config.model_choice == "v_48_020"
+
+
 @pytest.fixture(scope="module")
 def pdb_structure():
     return Structure.from_file(TEST_PDB_FILE)

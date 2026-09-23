@@ -284,6 +284,22 @@ def test_standalone_dispatch_rejects_unknown_operation():
         standalone.dispatch({"operation": "bogus"})
 
 
+def test_backfill_empty_a3ms_handles_partial_hit_batch(tmp_path):
+    """Successful mixed batches retain hits and materialize every no-hit query."""
+    from proto_tools.tools.sequence_alignment.mmseqs2.standalone.run import _backfill_empty_a3ms
+
+    query_fasta = tmp_path / "queries.fasta"
+    query_fasta.write_text(">__q0\nMKTAYIAK\n>__q1\nMEISEEEK\n")
+    existing = tmp_path / "__q0.a3m"
+    existing_text = ">__q0\nMKTAYIAK\n>hit\nMKTAYIAK\n"
+    existing.write_text(existing_text)
+
+    _backfill_empty_a3ms(query_fasta, tmp_path)
+
+    assert existing.read_text() == existing_text
+    assert (tmp_path / "__q1.a3m").read_text() == ">__q1\nMEISEEEK\n"
+
+
 def test_genome_search_thread_fallback_retries_on_world_size_error(monkeypatch, tmp_path):
     """A split-index 'World Size > dbSize' abort retries once with --threads clamped to the reported dbSize."""
     from proto_tools.tools.sequence_alignment.mmseqs2.standalone import run as standalone

@@ -730,6 +730,12 @@ def run_homology_search(input_dict: dict[str, Any]) -> dict[str, Any]:
         # Paired search ran with --unpack 0; unpack the result DBs ourselves.
         if pairing_strategy is not None:
             _unpack_paired_dbs(mmseqs_path, output_dir)
+        # A mixed batch can succeed because at least one query has hits while
+        # emitting no A3M at all for another query.  Make those individual
+        # no-hit outcomes explicit as query-only A3Ms; the public layer still
+        # normalizes them to MSA=None, but downstream tools can distinguish a
+        # completed local search from a missing input and must not search again.
+        _backfill_empty_a3ms(query_fasta, output_dir)
         return {"success": True, "output_dir": str(output_dir), "db_name": db_name}
     except subprocess.TimeoutExpired as e:
         return {
@@ -744,8 +750,8 @@ def run_homology_search(input_dict: dict[str, Any]) -> dict[str, Any]:
             if e.stderr:
                 print(e.stderr, file=sys.stderr)
         stderr = e.stderr or ""
-        # "prof_res does not exist" = no hits at all; backfill empty A3Ms and
-        # treat as success so the tool layer can return MSA=None for those queries.
+        # "prof_res does not exist" = no hits at all; backfill query-only A3Ms
+        # and treat as success so the tool layer can return MSA=None for them.
         if "prof_res does not exist" in stderr:
             _backfill_empty_a3ms(query_fasta, output_dir)
             return {"success": True, "output_dir": str(output_dir), "db_name": db_name, "no_hits_fallback": True}
