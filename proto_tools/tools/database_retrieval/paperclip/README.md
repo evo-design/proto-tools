@@ -1,7 +1,5 @@
 <a href="https://bio-pro.mintlify.app/tools/database-retrieval/paperclip"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a>
 
-<img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
-
 # Paperclip
 
 > [!NOTE]
@@ -13,25 +11,18 @@ Paperclip provides live literature search and exact-document retrieval without m
 
 ## Background
 
-Paperclip exposes searchable publication metadata, abstracts, matched passages, and available full text from PMC and supported preprint and abstract corpora. Proto Tools runs the authenticated client in the tool's managed standalone environment, and results record their observed access level and source provenance.
+Paperclip exposes searchable publication metadata, abstracts, matched passages, and available full text from PMC and supported preprint and abstract corpora. The corpus, search index, and full text all live on GXL's servers; Proto Tools talks to the service directly over HTTPS with the same command protocol the official `paperclip` CLI uses, and results record their observed access level and source provenance.
 
 ## Installation
 
-No pre-existing Paperclip installation is required. On the first Paperclip tool
-call, Proto Tools creates the standard isolated `paperclip` environment and runs
-`standalone/setup.sh`. That setup downloads the repository-pinned client wheel,
-verifies its SHA-256, and installs its declared dependencies.
+Nothing to install. The tools run in process and need only network access to
+`https://paperclip.gxl.ai` plus a credential. There is no local corpus, model, or
+managed environment, and the `gxl-paperclip` package is not required.
 
-Paperclip currently publishes its SDK at one mutable wheel URL rather than at
-immutable versioned URLs. Proto Tools therefore pins the reviewed version and
-checksum together and fails closed if that upstream artifact changes. A
-Paperclip upgrade requires updating and reviewing both values in
-`standalone/setup.sh`.
-
-Export `PAPERCLIP_API_KEY` for a new non-interactive environment. Existing
-credentials created by `paperclip login` are also reused when present. The
-optional `PAPERCLIP_LIBRARY_PATH` setting remains as a compatibility fallback,
-but is not needed for normal Proto Tools execution.
+Export `PAPERCLIP_API_KEY` (or `PAPERCLIP_BEARER_TOKEN`) before calling either
+tool, or pass `paperclip_api_key` in the tool config. The key is sent as a request
+header and is excluded from cache keys and provenance. Set `PAPERCLIP_BASE_URL` to
+point at a different Paperclip deployment.
 
 ## Tools
 
@@ -58,10 +49,8 @@ Use these tools to collect source-backed design evidence and natural examples be
 
 #### Usage Tips
 
-- Set `PAPERCLIP_API_KEY` before retrieval. A pre-existing Paperclip login is
-  also detected, but is not required when the API key is configured.
-- Use `PAPERCLIP_LIBRARY_PATH` only as a compatibility fallback for an existing
-  client installation.
+- Set `PAPERCLIP_API_KEY` before retrieval; the tools do not read credentials
+  saved by an interactive `paperclip login`.
 - Treat literature as evidence for candidate generation, not functional validation.
 - Inspect `access_kind` before relying on content beyond citation metadata.
 
@@ -71,5 +60,5 @@ Use these tools to collect source-backed design evidence and natural examples be
 
 These notes apply to both Paperclip operations.
 
-- **Requires authenticated network access.** No literature database is bundled or synchronized locally.
-- **Runs on CPU.** Runtime is dominated by remote retrieval.
+- **Requires authenticated network access.** No literature database is bundled or synchronized locally; every call is an HTTPS request to the Paperclip service.
+- **Runs in process on CPU.** There is no environment to build and no worker to start; runtime is dominated by remote retrieval.

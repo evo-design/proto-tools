@@ -13,11 +13,13 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, JsonValue, field_validator
 
 from proto_tools.entities.provenance import AccessLevel, RetrievedArtifact, SourceProvenance
+from proto_tools.tools.database_retrieval.paperclip.paperclip_client import PaperclipClient, PaperclipCommandError
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import BaseConfig, BaseToolInput, BaseToolOutput, ConfigField, InputField, ToolInstance
+from proto_tools.utils import BaseConfig, BaseToolInput, BaseToolOutput, ConfigField, InputField
 
 PaperclipSource = Literal["pmc", "abstracts", "biorxiv", "medrxiv", "arxiv"]
 _DOCUMENT_ID = re.compile(r"^(?:PMC\d+|bio_[A-Za-z0-9]+|med_[A-Za-z0-9]+|arx_[A-Za-z0-9]+)$")
+_PAPER_URL = "https://paperclip.gxl.ai/citations/papers/{document_id}"
 
 
 class LiteratureAccessKind(str, Enum):
@@ -33,17 +35,11 @@ class _PaperclipConfig(BaseConfig):
     """Shared Paperclip client settings.
 
     Attributes:
-        paperclip_library_path (str): Directory containing the optional client.
         paperclip_base_url (str | None): Optional Paperclip service override.
-        paperclip_api_key (str | None): Optional API key or login credentials.
+        paperclip_api_key (str | None): Optional API key; falls back to the environment.
         timeout_seconds (float): Maximum duration of one service operation.
     """
 
-    paperclip_library_path: str = ConfigField(
-        default_factory=lambda: os.environ.get("PAPERCLIP_LIBRARY_PATH", str(Path.home() / ".paperclip" / "lib")),
-        title="Paperclip Library Path",
-        description="Directory containing the optional gxl_paperclip Python client",
-    )
     paperclip_base_url: str | None = ConfigField(
         default_factory=lambda: os.environ.get("PAPERCLIP_BASE_URL"),
         title="Paperclip Base URL",
@@ -52,7 +48,7 @@ class _PaperclipConfig(BaseConfig):
     paperclip_api_key: str | None = ConfigField(
         default_factory=lambda: os.environ.get("PAPERCLIP_API_KEY"),
         title="Paperclip API Key",
-        description="Optional API key; otherwise reuse credentials from paperclip login",
+        description="Optional API key; otherwise PAPERCLIP_API_KEY or PAPERCLIP_BEARER_TOKEN is used",
         include_in_key=False,
     )
     timeout_seconds: float = ConfigField(
@@ -83,9 +79,8 @@ class PaperclipSearchConfig(_PaperclipConfig):
     """Paperclip corpus selection and bounded search settings.
 
     Attributes:
-        paperclip_library_path (str): Directory containing the optional client.
         paperclip_base_url (str | None): Optional Paperclip service override.
-        paperclip_api_key (str | None): Optional API key or login credentials.
+        paperclip_api_key (str | None): Optional API key; falls back to the environment.
         timeout_seconds (float): Maximum duration of one service operation.
         sources (list[PaperclipSource]): Literature corpora to search.
         limit (int): Maximum number of returned hits.
@@ -198,9 +193,8 @@ class PaperclipDocumentConfig(_PaperclipConfig):
     """Settings for exact Paperclip document retrieval.
 
     Attributes:
-        paperclip_library_path (str): Directory containing the optional client.
         paperclip_base_url (str | None): Optional Paperclip service override.
-        paperclip_api_key (str | None): Optional API key or login credentials.
+        paperclip_api_key (str | None): Optional API key; falls back to the environment.
         timeout_seconds (float): Maximum duration of one service operation.
         include_full_text (bool): Retrieve line-addressable text when available.
     """
@@ -250,14 +244,13 @@ class PaperclipDocumentOutput(_JsonOutput):
     document: PaperclipDocument = Field(title="Document", description="Retrieved literature document")
 
 
-def _shared_config(config: _PaperclipConfig) -> dict[str, Any]:
-    """Serialize client settings for the managed standalone worker."""
-    return {
-        "paperclip_library_path": config.paperclip_library_path,
-        "paperclip_base_url": config.paperclip_base_url,
-        "paperclip_api_key": config.paperclip_api_key,
-        "timeout_seconds": config.timeout_seconds,
-    }
+def _client(config: _PaperclipConfig) -> PaperclipClient:
+    """Build the authenticated service client from the tool config."""
+    return PaperclipClient(
+        api_key=config.paperclip_api_key,
+        base_url=config.paperclip_base_url,
+        timeout_seconds=config.timeout_seconds,
+    )
 
 
 def _search_example() -> Any:
@@ -266,6 +259,9 @@ def _search_example() -> Any:
 
 @tool(
     key="paperclip-literature-search",
+    local_only=(
+        "paperclip-literature-search does not use a gpu and does not need an environment, so it can run in process"
+    ),
     label="Paperclip Literature Search",
     category="database_retrieval",
     input_class=PaperclipSearchInput,
@@ -279,29 +275,29 @@ def _search_example() -> Any:
 def run_paperclip_search(
     inputs: PaperclipSearchInput, config: PaperclipSearchConfig, instance: Any = None
 ) -> PaperclipSearchOutput:
-    """Search configured Paperclip literature corpora and normalize the hits."""
-    result = ToolInstance.dispatch(
-        "paperclip",
-        {
-            "operation": "search",
-            "query": inputs.query,
-            "config": {
-                **_shared_config(config),
-                "sources": list(config.sources),
-                "limit": config.limit,
-                "exact": config.exact,
-                "since": config.since,
-            },
-        },
-        instance=instance,
-        config=config,
+    """Search configured Paperclip literature corpora and normalize the hits.
+
+    Args:
+        inputs (PaperclipSearchInput): The literature query.
+        config (PaperclipSearchConfig): Corpus selection, result bound, and client settings.
+        instance (Any): Unused; the tool runs in process.
+
+    Returns:
+        PaperclipSearchOutput: Normalized, citable hits with source provenance.
+    """
+    del instance
+    result_id, papers = _client(config).search(
+        inputs.query,
+        sources=config.sources,
+        limit=config.limit,
+        exact=config.exact,
+        since=config.since,
     )
-    hits = [_normalize_hit(item) for item in result["papers"]]
     return PaperclipSearchOutput(
         query=inputs.query,
         sources=list(config.sources),
-        result_id=result.get("result_id"),
-        hits=hits,
+        result_id=result_id,
+        hits=[_normalize_hit(item) for item in papers],
     )
 
 
@@ -315,7 +311,7 @@ def _normalize_hit(item: dict[str, Any]) -> PaperclipSearchHit:
     pmid = item.get("pmid") or (item.get("citation_canonical_work") or {}).get("pmid")
     provenance = SourceProvenance(
         provider="Paperclip",
-        source_url=f"https://paperclip.gxl.ai/citations/papers/{document_id}",
+        source_url=_PAPER_URL.format(document_id=document_id),
         identifier=document_id,
         version=str(item.get("pub_date") or item.get("citation_year") or "") or None,
         access_level=AccessLevel.OPEN_ACCESS if source != "abstracts" else AccessLevel.METADATA_ONLY,
@@ -348,6 +344,9 @@ def _document_example() -> Any:
 
 @tool(
     key="paperclip-literature-document",
+    local_only=(
+        "paperclip-literature-document does not use a gpu and does not need an environment, so it can run in process"
+    ),
     label="Paperclip Literature Document",
     category="database_retrieval",
     input_class=PaperclipDocumentInput,
@@ -361,33 +360,44 @@ def _document_example() -> Any:
 def run_paperclip_document(
     inputs: PaperclipDocumentInput, config: PaperclipDocumentConfig, instance: Any = None
 ) -> PaperclipDocumentOutput:
-    """Retrieve exact Paperclip metadata and available line-addressable text."""
-    result = ToolInstance.dispatch(
-        "paperclip",
-        {
-            "operation": "document",
-            "document_id": inputs.document_id,
-            "config": {
-                **_shared_config(config),
-                "include_full_text": config.include_full_text,
-            },
-        },
-        instance=instance,
-        config=config,
-    )
-    metadata_output = result["metadata_output"]
-    metadata = json.loads(metadata_output)
+    """Retrieve exact Paperclip metadata and available line-addressable text.
+
+    Full text counts as complete only when its byte length matches the size Paperclip reports
+    for the file; anything shorter is kept as a preview and labelled inaccessible.
+
+    Args:
+        inputs (PaperclipDocumentInput): The Paperclip document identifier.
+        config (PaperclipDocumentConfig): Full-text selection and client settings.
+        instance (Any): Unused; the tool runs in process.
+
+    Returns:
+        PaperclipDocumentOutput: Metadata, any complete content, and checksummed artifacts.
+    """
+    del instance
+    client = _client(config)
+    paper_dir = f"/papers/{inputs.document_id}"
+    metadata_output = client.read_file(f"{paper_dir}/meta.json")
+    try:
+        metadata = json.loads(metadata_output)
+    except ValueError as exc:
+        raise PaperclipCommandError(
+            f"Paperclip returned non-JSON metadata for {inputs.document_id}: {metadata_output[:300]!r}"
+        ) from exc
+    if not isinstance(metadata, dict):
+        raise PaperclipCommandError(f"Paperclip metadata for {inputs.document_id} is not a JSON object")
     metadata_content = metadata_output.encode("utf-8")
     metadata_digest = hashlib.sha256(metadata_content).hexdigest()
+    source_url = _PAPER_URL.format(document_id=inputs.document_id)
+    version = str(metadata.get("pub_date") or metadata.get("year") or "") or None
     provenance_parameters: dict[str, JsonValue] = {
         "operation": "document",
         "include_full_text": config.include_full_text,
     }
     metadata_provenance = SourceProvenance(
         provider="Paperclip",
-        source_url=f"https://paperclip.gxl.ai/citations/papers/{inputs.document_id}",
+        source_url=source_url,
         identifier=inputs.document_id,
-        version=str(metadata.get("pub_date") or metadata.get("year") or "") or None,
+        version=version,
         content_sha256=metadata_digest,
         media_type="application/json",
         license=metadata.get("license"),
@@ -406,12 +416,11 @@ def run_paperclip_document(
     expected_content_bytes: int | None = None
     access_kind = LiteratureAccessKind.METADATA
     if config.include_full_text:
-        content_output = result.get("content_output")
-        if result.get("content_exit_code") == 0 and content_output and content_output.strip():
-            fields = (result.get("wc_output") or "").split()
-            expected_content_bytes = int(fields[2]) if result.get("wc_exit_code") == 0 and len(fields) >= 3 else None
-            observed = content_output.encode("utf-8")
-            if expected_content_bytes == len(observed):
+        content_path = f"{paper_dir}/content.lines"
+        content_output = client.read_file(content_path)
+        if content_output.strip():
+            expected_content_bytes = client.byte_count(content_path)
+            if expected_content_bytes == len(content_output.encode("utf-8")):
                 content = content_output
                 access_kind = LiteratureAccessKind.FULL_TEXT
             else:
@@ -427,9 +436,9 @@ def run_paperclip_document(
         content_digest = hashlib.sha256(content_bytes).hexdigest()
         provenance = SourceProvenance(
             provider="Paperclip",
-            source_url=f"https://paperclip.gxl.ai/citations/papers/{inputs.document_id}",
+            source_url=source_url,
             identifier=inputs.document_id,
-            version=str(metadata.get("pub_date") or metadata.get("year") or "") or None,
+            version=version,
             content_sha256=content_digest,
             media_type="text/plain",
             license=metadata.get("license"),
