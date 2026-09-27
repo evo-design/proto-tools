@@ -337,11 +337,12 @@ def test_document_preserves_exact_full_text_and_checksum(monkeypatch):
     assert document.content == content
     assert document.content_preview is None
     assert document.expected_content_bytes == len(content.encode())
-    assert document.metadata_artifact.matches_content(metadata.encode())
-    assert document.artifact is not None
-    assert document.artifact.matches_content(content.encode())
-    assert document.provenance.details == {"access_level": "open_access", "license": "CC BY"}
-    assert document.metadata_artifact.provenance.details == {"access_level": "metadata_only", "license": "CC BY"}
+    assert document.metadata_provenance.matches(metadata.encode())
+    assert document.content_provenance is not None
+    assert document.content_provenance.matches(content.encode())
+    assert document.content_provenance.media_type == "text/plain"
+    assert document.content_provenance.details == {"access_level": "open_access", "license": "CC BY"}
+    assert document.metadata_provenance.details == {"access_level": "metadata_only", "license": "CC BY"}
 
 
 def test_document_keeps_short_content_as_preview(monkeypatch):
@@ -359,7 +360,7 @@ def test_document_keeps_short_content_as_preview(monkeypatch):
     assert document.content is None
     assert document.content_preview == "L1 partial\n"
     assert document.expected_content_bytes == 5000
-    assert document.artifact is document.metadata_artifact
+    assert document.content_provenance is None
 
 
 def test_document_without_full_text_request_reads_only_metadata(monkeypatch):
@@ -372,9 +373,9 @@ def test_document_without_full_text_request_reads_only_metadata(monkeypatch):
     ).document
 
     assert document.access_kind == "metadata"
-    assert document.provenance.version == "2024"
-    assert document.provenance.details == {"access_level": "metadata_only"}
-    assert document.provenance.request_parameters == {"operation": "document", "include_full_text": False}
+    assert document.metadata_provenance.version == "2024"
+    assert document.metadata_provenance.details == {"access_level": "metadata_only"}
+    assert document.metadata_provenance.request_parameters == {"operation": "document", "include_full_text": False}
 
 
 def test_document_rejects_non_json_metadata(monkeypatch):

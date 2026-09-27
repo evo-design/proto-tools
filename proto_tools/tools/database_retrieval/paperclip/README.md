@@ -28,7 +28,7 @@ point at a different Paperclip deployment.
 
 ### Paperclip Literature Search (`paperclip-literature-search`)
 
-Searches selected corpora and normalizes stable identifiers, citation metadata, matched text, access level, and provenance. Exact-document retrieval separately checksums the client-returned metadata bytes and, when complete full text is available, the full-text bytes; no second content copy is stored in the artifact descriptors.
+Searches selected corpora and normalizes stable identifiers, citation metadata, matched text, access level, and provenance. Exact-document retrieval records separate provenance, with a SHA-256 and byte size, for the metadata bytes and, when complete full text is available, the full-text bytes.
 
 #### Applications
 

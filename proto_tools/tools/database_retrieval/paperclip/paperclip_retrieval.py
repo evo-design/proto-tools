@@ -12,7 +12,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, JsonValue, field_validator
 
-from proto_tools.entities.provenance import RetrievedArtifact, SourceProvenance
+from proto_tools.entities.provenance import SourceProvenance
 from proto_tools.tools.database_retrieval.paperclip.paperclip_client import PaperclipClient, PaperclipCommandError
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseConfig, BaseToolInput, BaseToolOutput, ConfigField, InputField
@@ -221,16 +221,14 @@ class PaperclipDocument(BaseModel):
         default=None, title="Expected Content Bytes", description="Expected full-text byte count"
     )
     access_kind: LiteratureAccessKind = Field(title="Access Kind", description="Content granularity returned")
-    provenance: SourceProvenance = Field(title="Provenance", description="Source and request provenance")
-    metadata_artifact: RetrievedArtifact | None = Field(
-        default=None,
-        title="Metadata Artifact",
-        description="Checksum and size descriptor for exact Paperclip metadata output",
+    metadata_provenance: SourceProvenance = Field(
+        title="Metadata Provenance",
+        description="Provenance and checksum of the exact metadata bytes Paperclip returned",
     )
-    artifact: RetrievedArtifact | None = Field(
+    content_provenance: SourceProvenance | None = Field(
         default=None,
-        title="Artifact",
-        description="Checksummed full-text artifact, or metadata artifact when full text was not returned",
+        title="Content Provenance",
+        description="Provenance and checksum of the full text, set only when it is complete",
     )
 
 
@@ -380,7 +378,7 @@ def run_paperclip_document(
         instance (Any): Unused; the tool runs in process.
 
     Returns:
-        PaperclipDocumentOutput: Metadata, any complete content, and checksummed artifacts.
+        PaperclipDocumentOutput: Metadata, any complete content, and per-file provenance.
     """
     del instance
     client = _client(config)
@@ -394,33 +392,31 @@ def run_paperclip_document(
         ) from exc
     if not isinstance(metadata, dict):
         raise PaperclipCommandError(f"Paperclip metadata for {inputs.document_id} is not a JSON object")
-    metadata_content = metadata_output.encode("utf-8")
-    metadata_digest = hashlib.sha256(metadata_content).hexdigest()
     source_url = _PAPER_URL.format(document_id=inputs.document_id)
     version = str(metadata.get("pub_date") or metadata.get("year") or "") or None
-    provenance_parameters: dict[str, JsonValue] = {
+    request_parameters: dict[str, JsonValue] = {
         "operation": "document",
         "include_full_text": config.include_full_text,
     }
-    metadata_provenance = SourceProvenance(
-        provider="Paperclip",
-        source_url=source_url,
-        identifier=inputs.document_id,
-        version=version,
-        content_sha256=metadata_digest,
-        media_type="application/json",
-        request_parameters=provenance_parameters,
-        details=_details("metadata_only", metadata),
-    )
-    metadata_artifact = RetrievedArtifact(
-        name=f"Paperclip {inputs.document_id} metadata",
-        content_sha256=metadata_digest,
-        media_type="application/json",
-        size_bytes=len(metadata_content),
-        provenance=metadata_provenance,
-    )
+
+    def provenance_for(text: str, media_type: str, access_level: str) -> SourceProvenance:
+        content_bytes = text.encode("utf-8")
+        return SourceProvenance(
+            provider="Paperclip",
+            source_url=source_url,
+            identifier=inputs.document_id,
+            version=version,
+            media_type=media_type,
+            content_sha256=hashlib.sha256(content_bytes).hexdigest(),
+            size_bytes=len(content_bytes),
+            request_parameters=request_parameters,
+            details=_details(access_level, metadata),
+        )
+
+    metadata_provenance = provenance_for(metadata_output, "application/json", "metadata_only")
     content: str | None = None
     content_preview: str | None = None
+    content_provenance: SourceProvenance | None = None
     expected_content_bytes: int | None = None
     access_kind = LiteratureAccessKind.METADATA
     if config.include_full_text:
@@ -430,35 +426,13 @@ def run_paperclip_document(
             expected_content_bytes = client.byte_count(content_path)
             if expected_content_bytes == len(content_output.encode("utf-8")):
                 content = content_output
+                content_provenance = provenance_for(content, "text/plain", "open_access")
                 access_kind = LiteratureAccessKind.FULL_TEXT
             else:
                 content_preview = content_output
                 access_kind = LiteratureAccessKind.INACCESSIBLE
         else:
             access_kind = LiteratureAccessKind.INACCESSIBLE
-    if content is None:
-        provenance = metadata_provenance
-        artifact = metadata_artifact
-    else:
-        content_bytes = content.encode("utf-8")
-        content_digest = hashlib.sha256(content_bytes).hexdigest()
-        provenance = SourceProvenance(
-            provider="Paperclip",
-            source_url=source_url,
-            identifier=inputs.document_id,
-            version=version,
-            content_sha256=content_digest,
-            media_type="text/plain",
-            request_parameters=provenance_parameters,
-            details=_details("open_access", metadata),
-        )
-        artifact = RetrievedArtifact(
-            name=f"Paperclip {inputs.document_id} full text",
-            content_sha256=content_digest,
-            media_type="text/plain",
-            size_bytes=len(content_bytes),
-            provenance=provenance,
-        )
     return PaperclipDocumentOutput(
         document=PaperclipDocument(
             document_id=inputs.document_id,
@@ -467,8 +441,7 @@ def run_paperclip_document(
             content_preview=content_preview,
             expected_content_bytes=expected_content_bytes,
             access_kind=access_kind,
-            provenance=provenance,
-            metadata_artifact=metadata_artifact,
-            artifact=artifact,
+            metadata_provenance=metadata_provenance,
+            content_provenance=content_provenance,
         )
     )
