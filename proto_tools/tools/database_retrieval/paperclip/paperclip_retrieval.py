@@ -12,7 +12,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, JsonValue, field_validator
 
-from proto_tools.entities.provenance import AccessLevel, RetrievedArtifact, SourceProvenance
+from proto_tools.entities.provenance import RetrievedArtifact, SourceProvenance
 from proto_tools.tools.database_retrieval.paperclip.paperclip_client import PaperclipClient, PaperclipCommandError
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseConfig, BaseToolInput, BaseToolOutput, ConfigField, InputField
@@ -244,6 +244,15 @@ class PaperclipDocumentOutput(_JsonOutput):
     document: PaperclipDocument = Field(title="Document", description="Retrieved literature document")
 
 
+def _details(access_level: str, metadata: dict[str, Any] | None = None) -> dict[str, JsonValue]:
+    """Provider-specific provenance context: the observed access level and any reported licence."""
+    details: dict[str, JsonValue] = {"access_level": access_level}
+    license_terms = (metadata or {}).get("license")
+    if isinstance(license_terms, str) and license_terms:
+        details["license"] = license_terms
+    return details
+
+
 def _client(config: _PaperclipConfig) -> PaperclipClient:
     """Build the authenticated service client from the tool config."""
     return PaperclipClient(
@@ -314,9 +323,9 @@ def _normalize_hit(item: dict[str, Any]) -> PaperclipSearchHit:
         source_url=_PAPER_URL.format(document_id=document_id),
         identifier=document_id,
         version=str(item.get("pub_date") or item.get("citation_year") or "") or None,
-        access_level=AccessLevel.OPEN_ACCESS if source != "abstracts" else AccessLevel.METADATA_ONLY,
         media_type="application/json",
         request_parameters={"operation": "search", "source": source},
+        details={"access_level": "open_access" if source != "abstracts" else "metadata_only"},
     )
     return PaperclipSearchHit(
         document_id=document_id,
@@ -400,9 +409,8 @@ def run_paperclip_document(
         version=version,
         content_sha256=metadata_digest,
         media_type="application/json",
-        license=metadata.get("license"),
-        access_level=AccessLevel.METADATA_ONLY,
         request_parameters=provenance_parameters,
+        details=_details("metadata_only", metadata),
     )
     metadata_artifact = RetrievedArtifact(
         name=f"Paperclip {inputs.document_id} metadata",
@@ -441,9 +449,8 @@ def run_paperclip_document(
             version=version,
             content_sha256=content_digest,
             media_type="text/plain",
-            license=metadata.get("license"),
-            access_level=AccessLevel.OPEN_ACCESS,
             request_parameters=provenance_parameters,
+            details=_details("open_access", metadata),
         )
         artifact = RetrievedArtifact(
             name=f"Paperclip {inputs.document_id} full text",

@@ -303,12 +303,12 @@ def test_search_normalizes_citable_hits(monkeypatch):
     assert first.access_kind == "abstract"
     assert first.relevance_score == 0.9
     assert first.provenance.provider == "Paperclip"
-    assert first.provenance.access_level == "open_access"
+    assert first.provenance.details == {"access_level": "open_access"}
     assert second.document_id == "PMC2"
     assert second.title == "PMC2"
     assert second.access_kind == "metadata"
     assert second.relevance_score == 0.4
-    assert second.provenance.access_level == "metadata_only"
+    assert second.provenance.details == {"access_level": "metadata_only"}
 
 
 def test_search_rejects_hits_without_a_document_id(monkeypatch):
@@ -340,8 +340,8 @@ def test_document_preserves_exact_full_text_and_checksum(monkeypatch):
     assert document.metadata_artifact.matches_content(metadata.encode())
     assert document.artifact is not None
     assert document.artifact.matches_content(content.encode())
-    assert document.provenance.license == "CC BY"
-    assert document.provenance.access_level == "open_access"
+    assert document.provenance.details == {"access_level": "open_access", "license": "CC BY"}
+    assert document.metadata_artifact.provenance.details == {"access_level": "metadata_only", "license": "CC BY"}
 
 
 def test_document_keeps_short_content_as_preview(monkeypatch):
@@ -373,7 +373,7 @@ def test_document_without_full_text_request_reads_only_metadata(monkeypatch):
 
     assert document.access_kind == "metadata"
     assert document.provenance.version == "2024"
-    assert document.provenance.access_level == "metadata_only"
+    assert document.provenance.details == {"access_level": "metadata_only"}
     assert document.provenance.request_parameters == {"operation": "document", "include_full_text": False}
 
 
