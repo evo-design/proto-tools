@@ -11,9 +11,15 @@ from pydantic import ValidationError
 from proto_tools.tools.database_retrieval import (
     PaperclipDocumentConfig,
     PaperclipDocumentInput,
+    PaperclipGrepConfig,
+    PaperclipGrepInput,
+    PaperclipLookupConfig,
+    PaperclipLookupInput,
     PaperclipSearchConfig,
     PaperclipSearchInput,
     run_paperclip_document,
+    run_paperclip_grep,
+    run_paperclip_lookup,
     run_paperclip_search,
 )
 from proto_tools.tools.database_retrieval.paperclip import paperclip_client, paperclip_retrieval
@@ -21,6 +27,7 @@ from proto_tools.tools.database_retrieval.paperclip.paperclip_client import (
     PaperclipAuthError,
     PaperclipClient,
     PaperclipCommandError,
+    PaperclipCommandResult,
     PaperclipError,
 )
 from proto_tools.tools.tool_registry import ToolRegistry
@@ -73,22 +80,48 @@ class _FakeSession:
 class _FakeClient:
     """Stand-in for PaperclipClient at the tool boundary."""
 
-    def __init__(self, *, files: dict[str, str] | None = None, sizes: dict[str, int] | None = None, **kwargs):
+    def __init__(
+        self,
+        *,
+        files: dict[str, str] | None = None,
+        sizes: dict[str, int] | None = None,
+        grep_output: str = "",
+        grep_result_id: str | None = None,
+        **kwargs,
+    ):
         self.kwargs = kwargs
         self.files = files or {}
         self.sizes = sizes or {}
-        self.search_calls: list[dict[str, Any]] = []
-        self.search_result: tuple[str | None, list[dict[str, Any]]] = (None, [])
+        self.grep_output = grep_output
+        self.grep_result_id = grep_result_id
+        self.calls: list[tuple[str, tuple[Any, ...], dict[str, Any]]] = []
+        self.saved_result: tuple[str | None, list[dict[str, Any]]] = (None, [])
 
     def search(self, query: str, **kwargs: Any) -> tuple[str | None, list[dict[str, Any]]]:
-        self.search_calls.append({"query": query, **kwargs})
-        return self.search_result
+        self.calls.append(("search", (query,), kwargs))
+        return self.saved_result
+
+    def lookup(self, field: str, value: str, **kwargs: Any) -> tuple[str | None, list[dict[str, Any]]]:
+        self.calls.append(("lookup", (field, value), kwargs))
+        return self.saved_result
+
+    def grep(self, pattern: str, path: str, **kwargs: Any) -> PaperclipCommandResult:
+        self.calls.append(("grep", (pattern, path), kwargs))
+        return PaperclipCommandResult(command="grep", output=self.grep_output, result_id=self.grep_result_id)
 
     def read_file(self, path: str) -> str:
+        self.calls.append(("read_file", (path,), {}))
         return self.files[path]
+
+    def read_lines(self, path: str, start: int, end: int) -> str:
+        self.calls.append(("read_lines", (path, start, end), {}))
+        return self.files.get(path, "")
 
     def byte_count(self, path: str) -> int | None:
         return self.sizes.get(path)
+
+    def operations(self) -> list[str]:
+        return [name for name, _, _ in self.calls]
 
 
 def _install_fake_client(monkeypatch, fake: _FakeClient) -> None:
@@ -212,6 +245,54 @@ def test_fetch_result_papers_accepts_the_results_alias_and_missing_data():
     assert client.fetch_result_papers("s_3") == []
 
 
+def _command_client(*commands: str) -> tuple[PaperclipClient, _FakeSession]:
+    session = _FakeSession(commands={command: _mcp_reply("") for command in commands})
+    return PaperclipClient(api_key="k", session=session), session
+
+
+def test_search_sends_ranking_and_metadata_filters_as_paperclip_flags():
+    command = (
+        "search BRCA1 -n 5 -s papers --ranking bm25 --since 2024-01-01 --year 2024 "
+        "--journal Nature --author Smith --article-type review"
+    )
+    client, session = _command_client(command)
+    client.search(
+        "BRCA1",
+        sources=["papers"],
+        limit=5,
+        ranking="bm25",
+        since="2024-01-01",
+        year=2024,
+        journal="Nature",
+        author="Smith",
+        article_type="review",
+    )
+    assert session.posts[0]["json"]["params"]["arguments"]["command"] == command
+
+
+def test_lookup_saves_hits_and_reads_them_back():
+    session = _FakeSession(
+        commands={"lookup doi 10.1/x -n 3": _mcp_reply("1 paper saved as s_00beef")},
+        results={"s_00beef": {"result_data": {"papers": [{"document_id": "PMC1"}]}}},
+    )
+    result_id, papers = PaperclipClient(api_key="k", session=session).lookup("doi", "10.1/x", limit=3)
+    assert (result_id, papers) == ("s_00beef", [{"document_id": "PMC1"}])
+
+
+def test_grep_sends_match_limit_context_and_scan_flags():
+    command = "grep -i -m 20 -B 2 -A 2 --exhaustive 'BRCA[12]' /papers/"
+    client, session = _command_client(command)
+    client.grep("BRCA[12]", "/papers/", ignore_case=True, max_matches=20, context_lines=2, exhaustive=True)
+    assert session.posts[0]["json"]["params"]["arguments"]["command"] == command
+
+
+def test_read_lines_uses_an_inclusive_sed_range():
+    command = "sed -n 10,20p /papers/PMC1/content.lines"
+    client, session = _command_client(command)
+    client.read_lines("/papers/PMC1/content.lines", 10, 20)
+    assert session.posts[0]["json"]["params"]["arguments"]["command"] == command
+
+
 def test_byte_count_returns_none_for_unparseable_output():
     session = _FakeSession(commands={"wc /papers/PMC1/content.lines": _mcp_reply("wc: no such file")})
     assert PaperclipClient(api_key="k", session=session).byte_count("/papers/PMC1/content.lines") is None
@@ -268,7 +349,7 @@ def test_non_json_reply_raises():
 
 def test_search_normalizes_citable_hits(monkeypatch):
     fake = _FakeClient()
-    fake.search_result = (
+    fake.saved_result = (
         "s_fixture",
         [
             {
@@ -289,13 +370,15 @@ def test_search_normalizes_citable_hits(monkeypatch):
 
     output = run_paperclip_search(
         PaperclipSearchInput(query="CAR T"),
-        PaperclipSearchConfig(paperclip_api_key="pk", limit=7, sources=["pmc", "abstracts", "pmc"]),
+        PaperclipSearchConfig(paperclip_api_key="pk", limit=7, sources=["pmc", "abstracts", "pmc"], ranking="hybrid"),
     )
 
     assert fake.kwargs["api_key"] == "pk"
-    assert fake.search_calls == [
-        {"query": "CAR T", "sources": ["pmc", "abstracts"], "limit": 7, "exact": False, "since": None}
-    ]
+    _, args, kwargs = fake.calls[0]
+    assert args == ("CAR T",)
+    assert kwargs["sources"] == ["pmc", "abstracts"]
+    assert kwargs["limit"] == 7
+    assert kwargs["ranking"] == "hybrid"
     assert output.result_id == "s_fixture"
     first, second = output.hits
     assert first.document_id == "PMC11754230"
@@ -303,24 +386,130 @@ def test_search_normalizes_citable_hits(monkeypatch):
     assert first.access_kind == "abstract"
     assert first.relevance_score == 0.9
     assert first.provenance.provider == "Paperclip"
-    assert first.provenance.details == {"access_level": "open_access"}
+    assert first.provenance.details == {}
     assert second.document_id == "PMC2"
     assert second.title == "PMC2"
     assert second.access_kind == "metadata"
     assert second.relevance_score == 0.4
-    assert second.provenance.details == {"access_level": "metadata_only"}
 
 
 def test_search_rejects_hits_without_a_document_id(monkeypatch):
     fake = _FakeClient()
-    fake.search_result = ("s_1", [{"title": "anonymous"}])
+    fake.saved_result = ("s_1", [{"title": "anonymous"}])
     _install_fake_client(monkeypatch, fake)
     with pytest.raises(ValueError, match="stable document_id"):
         run_paperclip_search(PaperclipSearchInput(query="x"), PaperclipSearchConfig(paperclip_api_key="pk"))
 
 
-def test_document_preserves_exact_full_text_and_checksum(monkeypatch):
-    metadata = json.dumps({"source": "pmc", "license": "CC BY", "doi": "10.1/example"})
+def test_lookup_returns_normalized_hits(monkeypatch):
+    fake = _FakeClient()
+    fake.saved_result = ("s_2", [{"document_id": "PMC7", "title": "T", "source": "pmc", "doi": "10.1/x"}])
+    _install_fake_client(monkeypatch, fake)
+
+    output = run_paperclip_lookup(
+        PaperclipLookupInput(field="doi", value="10.1/x"), PaperclipLookupConfig(paperclip_api_key="pk", limit=3)
+    )
+
+    assert fake.calls == [("lookup", ("doi", "10.1/x"), {"limit": 3})]
+    assert output.result_id == "s_2"
+    assert [hit.document_id for hit in output.hits] == ["PMC7"]
+    assert output.hits[0].provenance.request_parameters == {"operation": "lookup", "source": "pmc"}
+
+
+def test_lookup_rejects_unknown_fields():
+    with pytest.raises(ValidationError):
+        PaperclipLookupInput(field="sequence", value="MKT")
+
+
+def test_grep_collects_matching_papers_in_order_of_first_match(monkeypatch):
+    output_text = (
+        "/papers/PMC5/content.lines:L12: uses ProteinMPNN\n"
+        "/papers/bio_ab12/content.lines:L3: ProteinMPNN redesign\n"
+        "/papers/PMC5/content.lines:L40: ProteinMPNN again\n\n"
+    )
+    fake = _FakeClient(grep_output=output_text, grep_result_id="s_9")
+    _install_fake_client(monkeypatch, fake)
+
+    output = run_paperclip_grep(
+        PaperclipGrepInput(pattern="ProteinMPNN"), PaperclipGrepConfig(paperclip_api_key="pk", max_matches=5)
+    )
+
+    _, args, kwargs = fake.calls[0]
+    assert args == ("ProteinMPNN", "/papers/")
+    assert kwargs == {"ignore_case": False, "max_matches": 5, "exhaustive": False}
+    assert output.document_ids == ["PMC5", "bio_ab12"]
+    assert len(output.lines) == 3
+    assert output.result_id == "s_9"
+    assert output.provenance.request_parameters["pattern"] == "ProteinMPNN"
+
+
+def test_document_reads_a_line_range_by_default(monkeypatch):
+    excerpt = "L1 Title\nL2 Abstract\n"
+    fake = _FakeClient(files={"/papers/PMC1/meta.json": '{"license": "CC BY"}', "/papers/PMC1/content.lines": excerpt})
+    _install_fake_client(monkeypatch, fake)
+
+    document = run_paperclip_document(
+        PaperclipDocumentInput(document_id="PMC1"), PaperclipDocumentConfig(paperclip_api_key="pk", end_line=2)
+    ).document
+
+    assert fake.operations() == ["read_file", "read_lines"]
+    assert fake.calls[1][1] == ("/papers/PMC1/content.lines", 1, 2)
+    assert document.access_kind == "excerpt"
+    assert document.excerpt == excerpt
+    assert document.content is None
+    assert document.content_provenance is not None
+    assert document.content_provenance.matches(excerpt.encode())
+    assert document.content_provenance.request_parameters == {"operation": "lines", "start_line": 1, "end_line": 2}
+    assert document.metadata_provenance.details == {"license": "CC BY"}
+
+
+def test_document_grep_parses_match_and_context_lines(monkeypatch):
+    fake = _FakeClient(
+        files={"/papers/PMC1/meta.json": "{}"},
+        grep_output="L44- context before\nL45: the IC50 was 3 nM\nnot a line\n",
+    )
+    _install_fake_client(monkeypatch, fake)
+
+    document = run_paperclip_document(
+        PaperclipDocumentInput(document_id="PMC1"),
+        PaperclipDocumentConfig(paperclip_api_key="pk", read="grep", pattern="IC50", context_lines=1),
+    ).document
+
+    assert fake.calls[1] == (
+        "grep",
+        ("IC50", "/papers/PMC1/content.lines"),
+        {"ignore_case": False, "context_lines": 1},
+    )
+    assert [(m.line_number, m.text, m.is_match) for m in document.matches] == [
+        (44, "context before", False),
+        (45, "the IC50 was 3 nM", True),
+    ]
+    assert document.access_kind == "excerpt"
+
+
+def test_document_grep_without_matches_returns_metadata_only(monkeypatch):
+    fake = _FakeClient(files={"/papers/PMC1/meta.json": "{}"}, grep_output="no matches")
+    _install_fake_client(monkeypatch, fake)
+    document = run_paperclip_document(
+        PaperclipDocumentInput(document_id="PMC1"),
+        PaperclipDocumentConfig(paperclip_api_key="pk", read="grep", pattern="absent"),
+    ).document
+    assert document.matches == []
+    assert document.access_kind == "metadata"
+    assert document.content_provenance is None
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [({"read": "grep"}, "pattern is required"), ({"start_line": 10, "end_line": 5}, "greater than or equal")],
+)
+def test_document_config_rejects_inconsistent_read_settings(overrides: dict[str, Any], message: str):
+    with pytest.raises(ValidationError, match=message):
+        PaperclipDocumentConfig(**overrides)
+
+
+def test_document_full_text_preserves_exact_text_and_checksum(monkeypatch):
+    metadata = json.dumps({"source": "pmc", "license": "CC BY"})
     content = "L1 First line\nL2 Second line\n"
     fake = _FakeClient(
         files={"/papers/PMC11754230/meta.json": metadata, "/papers/PMC11754230/content.lines": content},
@@ -328,24 +517,21 @@ def test_document_preserves_exact_full_text_and_checksum(monkeypatch):
     )
     _install_fake_client(monkeypatch, fake)
 
-    output = run_paperclip_document(
-        PaperclipDocumentInput(document_id="PMC11754230"), PaperclipDocumentConfig(paperclip_api_key="pk")
-    )
+    document = run_paperclip_document(
+        PaperclipDocumentInput(document_id="PMC11754230"),
+        PaperclipDocumentConfig(paperclip_api_key="pk", read="full_text"),
+    ).document
 
-    document = output.document
     assert document.access_kind == "full_text"
     assert document.content == content
-    assert document.content_preview is None
     assert document.expected_content_bytes == len(content.encode())
     assert document.metadata_provenance.matches(metadata.encode())
     assert document.content_provenance is not None
     assert document.content_provenance.matches(content.encode())
-    assert document.content_provenance.media_type == "text/plain"
-    assert document.content_provenance.details == {"access_level": "open_access", "license": "CC BY"}
-    assert document.metadata_provenance.details == {"access_level": "metadata_only", "license": "CC BY"}
+    assert document.content_provenance.details == {"license": "CC BY"}
 
 
-def test_document_keeps_short_content_as_preview(monkeypatch):
+def test_document_full_text_keeps_short_content_as_preview(monkeypatch):
     fake = _FakeClient(
         files={"/papers/PMC1/meta.json": "{}", "/papers/PMC1/content.lines": "L1 partial\n"},
         sizes={"/papers/PMC1/content.lines": 5000},
@@ -353,29 +539,26 @@ def test_document_keeps_short_content_as_preview(monkeypatch):
     _install_fake_client(monkeypatch, fake)
 
     document = run_paperclip_document(
-        PaperclipDocumentInput(document_id="PMC1"), PaperclipDocumentConfig(paperclip_api_key="pk")
+        PaperclipDocumentInput(document_id="PMC1"), PaperclipDocumentConfig(paperclip_api_key="pk", read="full_text")
     ).document
 
     assert document.access_kind == "inaccessible"
     assert document.content is None
     assert document.content_preview == "L1 partial\n"
-    assert document.expected_content_bytes == 5000
     assert document.content_provenance is None
 
 
-def test_document_without_full_text_request_reads_only_metadata(monkeypatch):
+def test_document_metadata_mode_reads_only_metadata(monkeypatch):
     fake = _FakeClient(files={"/papers/PMC1/meta.json": '{"year": 2024}'})
     _install_fake_client(monkeypatch, fake)
 
     document = run_paperclip_document(
-        PaperclipDocumentInput(document_id="PMC1"),
-        PaperclipDocumentConfig(paperclip_api_key="pk", include_full_text=False),
+        PaperclipDocumentInput(document_id="PMC1"), PaperclipDocumentConfig(paperclip_api_key="pk", read="metadata")
     ).document
 
+    assert fake.operations() == ["read_file"]
     assert document.access_kind == "metadata"
     assert document.metadata_provenance.version == "2024"
-    assert document.metadata_provenance.details == {"access_level": "metadata_only"}
-    assert document.metadata_provenance.request_parameters == {"operation": "document", "include_full_text": False}
 
 
 def test_document_rejects_non_json_metadata(monkeypatch):
@@ -403,7 +586,15 @@ def test_api_key_is_excluded_from_the_cache_key():
     assert with_key.cache_key() == other_key.cache_key()
 
 
-@pytest.mark.parametrize("key", ["paperclip-literature-search", "paperclip-literature-document"])
+@pytest.mark.parametrize(
+    "key",
+    [
+        "paperclip-literature-search",
+        "paperclip-literature-lookup",
+        "paperclip-literature-grep",
+        "paperclip-literature-document",
+    ],
+)
 def test_registry_runs_paperclip_in_process(key):
     spec = ToolRegistry.get(key)
     assert spec.has_standalone_env is False

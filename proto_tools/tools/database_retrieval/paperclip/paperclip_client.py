@@ -11,7 +11,9 @@ speaks that same wire protocol directly with ``requests`` and needs no extra dep
 - Paper metadata and full text are files under ``/papers/{document_id}/`` in the service's
   virtual filesystem, read with ``cat`` and measured with ``wc``.
 
-Only the commands the Paperclip tools use are wrapped here.
+Only the commands the Paperclip tools use are wrapped here: ``search`` and ``lookup`` (which
+save their hits on the server), ``grep`` over one paper or a whole corpus, and ``cat``, ``sed``,
+and ``wc`` for reading paper files.
 """
 
 from __future__ import annotations
@@ -206,32 +208,80 @@ class PaperclipClient:
             papers = result_data.get("results")
         return [paper for paper in papers if isinstance(paper, dict)] if isinstance(papers, list) else []
 
+    def _saved_result(self, command: str, args: Sequence[str]) -> tuple[str | None, list[dict[str, Any]]]:
+        """Run a command that saves its hits on the server; return the result id and those hits."""
+        result = self.execute(command, args)
+        if result.result_id is None:
+            if result.output.strip():
+                logger.warning("Paperclip %s returned output without a saved result id: %.200s", command, result.output)
+            return None, []
+        return result.result_id, self.fetch_result_papers(result.result_id)
+
     def search(
         self,
         query: str,
         *,
         sources: Sequence[str],
         limit: int,
+        ranking: str | None = None,
         exact: bool = False,
         since: str | None = None,
+        year: int | None = None,
+        journal: str | None = None,
+        author: str | None = None,
+        article_type: str | None = None,
     ) -> tuple[str | None, list[dict[str, Any]]]:
         """Search the selected corpora; return the saved result id and its structured hits."""
         args: list[str] = []
         if exact:
             args.append("-e")
         args += [query, "-n", str(limit), "-s", ",".join(sources)]
-        if since:
-            args += ["--since", since]
-        result = self.execute("search", args)
-        if result.result_id is None:
-            if result.output.strip():
-                logger.warning("Paperclip search returned output without a saved result id: %.200s", result.output)
-            return None, []
-        return result.result_id, self.fetch_result_papers(result.result_id)
+        optional = {
+            "--ranking": ranking,
+            "--since": since,
+            "--year": None if year is None else str(year),
+            "--journal": journal,
+            "--author": author,
+            "--article-type": article_type,
+        }
+        for flag, value in optional.items():
+            if value:
+                args += [flag, value]
+        return self._saved_result("search", args)
+
+    def lookup(self, field: str, value: str, *, limit: int) -> tuple[str | None, list[dict[str, Any]]]:
+        """Find papers by one metadata field; return the saved result id and its structured hits."""
+        return self._saved_result("lookup", [field, value, "-n", str(limit)])
+
+    def grep(
+        self,
+        pattern: str,
+        path: str,
+        *,
+        ignore_case: bool = False,
+        max_matches: int | None = None,
+        context_lines: int = 0,
+        exhaustive: bool = False,
+    ) -> PaperclipCommandResult:
+        """Run a regular-expression search over one file or a whole corpus directory."""
+        args: list[str] = []
+        if ignore_case:
+            args.append("-i")
+        if max_matches is not None:
+            args += ["-m", str(max_matches)]
+        if context_lines:
+            args += ["-B", str(context_lines), "-A", str(context_lines)]
+        if exhaustive:
+            args.append("--exhaustive")
+        return self.execute("grep", [*args, pattern, path])
 
     def read_file(self, path: str) -> str:
         """Return the complete text of a file in Paperclip's virtual filesystem."""
         return self.execute("cat", [path]).output
+
+    def read_lines(self, path: str, start: int, end: int) -> str:
+        """Return lines ``start`` through ``end`` (1-indexed, inclusive) of a file."""
+        return self.execute("sed", ["-n", f"{start},{end}p", path]).output
 
     def byte_count(self, path: str) -> int | None:
         """Return the size in bytes that Paperclip reports for a file, or None if unparseable."""

@@ -7,13 +7,13 @@
 
 ## Overview
 
-[Paperclip](https://paperclip.gxl.ai/) is a hosted literature search and retrieval service from [GXL](https://gxl.ai/) covering more than 3.4 million papers and preprints. This toolkit exposes two tools over the Paperclip API, namely `paperclip-literature-search` (ranked hits with citation metadata, abstracts, and matched passages for a free-text query) and `paperclip-literature-document` (exact metadata and, when available, complete line-numbered full text for one paper). Both run on CPU in process and need only network access and a Paperclip API key.
+[Paperclip](https://paperclip.gxl.ai/) is a hosted literature search and retrieval service from [GXL](https://gxl.ai/) covering more than 3.4 million papers and preprints. This toolkit exposes four tools over the Paperclip API that follow GXL's recommended workflow, namely `paperclip-literature-search` (find papers by topic), `paperclip-literature-lookup` (find papers by DOI, PMID, or another metadata field), `paperclip-literature-grep` (find papers whose full text mentions exact text), and `paperclip-literature-document` (read part of one paper). All four run on CPU in process and need only network access and a Paperclip API key.
 
 ## Background
 
 [Paperclip](https://paperclip.gxl.ai/) is built by [GXL](https://gxl.ai/) to make the biomedical literature searchable and readable by researchers and AI agents. It indexes full-text papers from [PubMed Central](https://www.ncbi.nlm.nih.gov/pmc/) together with preprints from [bioRxiv](https://www.biorxiv.org/), [medRxiv](https://www.medrxiv.org/), and [arXiv](https://arxiv.org/), plus a separate abstract-level index spanning all of these sources. Searches combine keyword matching with matching by meaning, so a relevant passage can be found even when it is worded differently from the query. Every paper has a stable identifier, such as `PMC11754230`, and its full text is served with numbered lines, which makes it easy to cite the exact lines that support a claim.
 
-Search returns the most relevant papers for a query, with citation details, abstracts, and the passages that matched. Document retrieval then fetches one paper's metadata and, when it is available, its complete full text. Both tools query the live Paperclip service, so results reflect the literature at the time of the request rather than a fixed snapshot. Each result also records where and when it was retrieved, so the same record can be traced back and checked later.
+GXL recommends finding papers first, then reading only the parts that matter. Search returns the most relevant papers for a topic, lookup resolves an identifier you already have, and grep finds every paper that mentions an exact term such as a gene name or accession. Reading a paper then means fetching a range of lines or the lines that match a pattern, rather than the whole text. Both tools query the live Paperclip service, so results reflect the literature at the time of the request rather than a fixed snapshot. Each result also records where and when it was retrieved, so the same record can be traced back and checked later.
 
 ### Learning Resources
 
@@ -23,7 +23,7 @@ Search returns the most relevant papers for a query, with citation details, abst
 
 ### Paperclip Literature Search (`paperclip-literature-search`)
 
-Searches selected corpora and normalizes stable identifiers, citation metadata, matched text, access level, and provenance. Exact-document retrieval records separate provenance, with a SHA-256 and byte size, for the metadata bytes and, when complete full text is available, the full-text bytes.
+Finds papers by topic, ranking them by a mix of keyword and meaning-based matching. Each hit carries its citation details, abstract, matched passage, and provenance.
 
 #### Applications
 
@@ -31,12 +31,39 @@ Use search to find natural sequences, experimental context, and design methods r
 
 #### Usage Tips
 
-- Select only the corpora relevant to the query.
-- Preserve stable identifiers and provenance when using a hit downstream.
+- For general biomedical literature, search `pmc`, the default. Use `papers` to cover PMC, bioRxiv, medRxiv, and arXiv together.
+- Narrow results with `year`, `journal`, `author`, or `article_type` rather than adding those words to the query.
+- For cross-domain method analogues, set `ranking="analogical"` and use a full abstract or a one-sentence description of the method as the query, not topic keywords.
+- Up to 100 hits, a smaller `limit` returns a prefix of a larger one, as long as the Paperclip index has not been updated in between.
+
+### Paperclip Literature Lookup (`paperclip-literature-lookup`)
+
+Finds papers by one metadata field: DOI, PMID, PMC ID, arXiv ID, title, author, journal, or year.
+
+#### Applications
+
+Use lookup to open a paper that another tool already identified, such as a PMID from NCBI or a DOI from a UniProt reference.
+
+#### Usage Tips
+
+- Pass the returned `document_id` to `paperclip-literature-document` to read the paper.
+
+### Paperclip Literature Grep (`paperclip-literature-grep`)
+
+Searches the full text of every paper for a regular expression and returns the matching lines and the papers they came from.
+
+#### Applications
+
+Use grep to find every paper that mentions an exact gene, protein, dataset, or accession, including mentions in methods or data-availability sections that search can rank low.
+
+#### Usage Tips
+
+- Corpus-wide grep is time-bounded, so repeated calls can return a different set or order of matches.
+- If a rare pattern returns nothing, retry with `exhaustive=True` to give the scan more time.
 
 ### Paperclip Literature Document (`paperclip-literature-document`)
 
-Retrieves exact metadata and complete line-addressable content when available. Truncated content is retained only as a preview and is never labeled full text.
+Reads one paper's metadata plus a range of lines, the lines matching a pattern, or its full text. Every line is numbered, so evidence can be cited by line.
 
 #### Applications
 
@@ -44,16 +71,16 @@ Use these tools to collect source-backed design evidence and natural examples be
 
 #### Usage Tips
 
-- Set `PAPERCLIP_API_KEY` before retrieval; the tools do not read credentials
-  saved by an interactive `paperclip login`.
+- Prefer `read="lines"` (the default, first 100 lines) or `read="grep"` with a `pattern`. GXL advises against reading whole papers.
+- `read="full_text"` returns the complete text only when its length matches the size Paperclip reports; otherwise the text is kept as `content_preview`.
+- Set `PAPERCLIP_API_KEY` before retrieval; the tools do not read credentials saved by an interactive `paperclip login`.
 - Treat literature as evidence for candidate generation, not functional validation.
-- Inspect `access_kind` before relying on content beyond citation metadata.
 
 ## Toolkit Notes
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These notes apply to both Paperclip operations.
+These notes apply to all four Paperclip tools.
 
 - **Requires authenticated network access.** No literature database is bundled or synchronized locally; every call is an HTTPS request to the Paperclip service.
 - **Runs in process on CPU.** There is no environment to build and no worker to start; runtime is dominated by remote retrieval.
