@@ -7,11 +7,19 @@
 
 ## Overview
 
-Paperclip provides live literature search and exact-document retrieval without maintaining a local corpus.
+[Paperclip](https://paperclip.gxl.ai/) is a hosted literature search and retrieval service from [GXL](https://gxl.ai/) covering more than 11 million biomedical papers and preprints. This toolkit exposes two tools over the Paperclip API, namely `paperclip-literature-search` (ranked hits with citation metadata, abstracts, and matched passages for a free-text query) and `paperclip-literature-document` (exact metadata and, when available, complete line-numbered full text for one paper). Both run on CPU in process and need only network access and a Paperclip API key.
 
 ## Background
 
-Paperclip exposes searchable publication metadata, abstracts, matched passages, and available full text from PMC and supported preprint and abstract corpora. The corpus, search index, and full text all live on GXL's servers; Proto Tools talks to the service directly over HTTPS with the same command protocol the official `paperclip` CLI uses, and results record their observed access level and source provenance.
+[Paperclip](https://paperclip.gxl.ai/) is operated by [GXL](https://gxl.ai/) as a searchable index over scholarly corpora, including [PubMed Central](https://www.ncbi.nlm.nih.gov/pmc/) full-text papers, [bioRxiv](https://www.biorxiv.org/) and [medRxiv](https://www.medrxiv.org/) preprints, [arXiv](https://arxiv.org/) preprints, and an abstract-level index spanning all of its scholarly sources. Search ranks results by combining lexical BM25 matching with embedding similarity, so a query can surface a relevant passage even when it shares few exact words with the text. Each paper is addressed by a stable identifier, such as `PMC11754230` or a `bio_`, `med_`, or `arx_` preprint ID, and is served as files in a virtual directory: `meta.json` holds its citation metadata, and `content.lines` holds its full text as numbered lines. The service also indexes regulatory documents, clinical trial registries, and protein databases, which these tools do not expose.
+
+Internally, both tools send commands to the Paperclip API at `https://paperclip.gxl.ai` over HTTPS, authenticated with an API key header, using the same command protocol as the official `paperclip` command-line client. `paperclip-literature-search` runs one `search` over the selected corpora, which saves its hits on the server under a result ID, then reads the structured hit list back from that saved result. `paperclip-literature-document` reads the paper's `meta.json`, then its `content.lines` when full text is requested, and asks the service for that file's byte count. Text is labelled complete full text only when its length matches that count; anything shorter is returned as a preview. Results reflect the live service at query time rather than a fixed corpus snapshot.
+
+Each hit and document records its source provenance, including the Paperclip identifier and URL, the retrieval time, and the observed access level. Document retrieval also records the SHA-256 checksum and byte size of the exact metadata and full-text bytes returned, so a later retrieval can be checked against them.
+
+### Learning Resources
+
+- [Paperclip documentation](https://paperclip.gxl.ai/docs) (GXL) - official guide to the corpora, search options, and the command-line client.
 
 ## Tools
 
