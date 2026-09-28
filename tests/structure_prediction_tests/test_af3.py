@@ -30,6 +30,7 @@ from tests.conftest import benchmark_twice
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 
+
 def _load_af3_standalone_module(monkeypatch):
     """Load the AF3 worker module without running its worker loop."""
     standalone_dir = Path(__file__).parents[2] / "proto_tools/tools/structure_prediction/alphafold3/standalone"
@@ -125,6 +126,8 @@ def test_af3_load_reports_missing_container_runtime(tmp_path, monkeypatch):
         match="no Apptainer or Singularity executable is available",
     ):
         module.AlphaFold3Model().load(sif_path=str(image))
+
+
 # ── Module-level constants ────────────────────────────────────────────────────
 
 _EPINEPHRINE_SMILES = "CNC[C@@H](c1ccc(c(c1)O)O)O"  # L-epinephrine → ALE
