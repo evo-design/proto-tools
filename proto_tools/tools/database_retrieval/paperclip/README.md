@@ -13,17 +13,6 @@ Paperclip provides live literature search and exact-document retrieval without m
 
 Paperclip exposes searchable publication metadata, abstracts, matched passages, and available full text from PMC and supported preprint and abstract corpora. The corpus, search index, and full text all live on GXL's servers; Proto Tools talks to the service directly over HTTPS with the same command protocol the official `paperclip` CLI uses, and results record their observed access level and source provenance.
 
-## Installation
-
-Nothing to install. The tools run in process and need only network access to
-`https://paperclip.gxl.ai` plus a credential. There is no local corpus, model, or
-managed environment, and the `gxl-paperclip` package is not required.
-
-Export `PAPERCLIP_API_KEY` (or `PAPERCLIP_BEARER_TOKEN`) before calling either
-tool, or pass `paperclip_api_key` in the tool config. The key is sent as a request
-header and is excluded from cache keys and provenance. Set `PAPERCLIP_BASE_URL` to
-point at a different Paperclip deployment.
-
 ## Tools
 
 ### Paperclip Literature Search (`paperclip-literature-search`)
