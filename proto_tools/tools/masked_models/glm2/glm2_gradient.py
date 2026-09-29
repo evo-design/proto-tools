@@ -1,17 +1,17 @@
 """gLM2 gradient for prepared mixed protein/DNA sequences."""
 
 import logging
-from typing import Any, Literal
+from typing import Any
 
+from proto_tools.tools.masked_models.execution import dispatch_masked_model
+from proto_tools.tools.masked_models.glm2.config import GLM2Config
+from proto_tools.tools.masked_models.mixed_configs import MixedGradientConfig
 from proto_tools.tools.masked_models.mixed_data_models import (
-    MixedGradientConfig,
     MixedGradientOutput,
     MixedSequenceGradientInput,
-    dispatch_mixed_model,
     one_hot_mixed_logits,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import ConfigField
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ GLM2GradientInput = MixedSequenceGradientInput
 GLM2GradientOutput = MixedGradientOutput
 
 
-class GLM2GradientConfig(MixedGradientConfig):
+class GLM2GradientConfig(GLM2Config, MixedGradientConfig):
     """Configuration for gLM2 gradient.
 
     Attributes:
@@ -31,13 +31,6 @@ class GLM2GradientConfig(MixedGradientConfig):
         use_ste (bool): Hard forward tokens with soft-probability gradients.
         compute_gradient (bool): Compute the gradient, or evaluate only the masked PLL loss.
     """
-
-    model_checkpoint: Literal["tattabio/gLM2_150M", "tattabio/gLM2_650M"] = ConfigField(
-        default="tattabio/gLM2_650M",
-        title="Model Checkpoint",
-        description="gLM2 checkpoint; downloaded automatically from Hugging Face",
-        reload_on_change=True,
-    )
 
 
 def example_input() -> GLM2GradientInput:
@@ -73,4 +66,4 @@ def run_glm2_gradient(
         GLM2GradientOutput: Token-aligned gradient output.
     """
     logger.debug("Using local worker for gLM2 gradient: %s", config.model_checkpoint)
-    return GLM2GradientOutput(**dispatch_mixed_model("glm2", "gradient", inputs, config, instance))
+    return GLM2GradientOutput(**dispatch_masked_model("glm2", "gradient", inputs, config, instance))

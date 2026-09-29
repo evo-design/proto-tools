@@ -1,16 +1,16 @@
 """gLM2 sample for prepared mixed protein/DNA sequences."""
 
 import logging
-from typing import Any, Literal
+from typing import Any
 
+from proto_tools.tools.masked_models.execution import dispatch_masked_model
+from proto_tools.tools.masked_models.glm2.config import GLM2Config
+from proto_tools.tools.masked_models.mixed_configs import MixedSampleConfig
 from proto_tools.tools.masked_models.mixed_data_models import (
-    MixedSampleConfig,
     MixedSampleOutput,
     MixedSequenceSampleInput,
-    dispatch_mixed_model,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import ConfigField
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ GLM2SampleInput = MixedSequenceSampleInput
 GLM2SampleOutput = MixedSampleOutput
 
 
-class GLM2SampleConfig(MixedSampleConfig):
+class GLM2SampleConfig(GLM2Config, MixedSampleConfig):
     """Configuration for gLM2 sample.
 
     Attributes:
@@ -37,13 +37,6 @@ class GLM2SampleConfig(MixedSampleConfig):
         temperature_annealing (bool): Cool temperature during iterative refinement.
         return_logits (bool): Include biological logits from the completed sequence.
     """
-
-    model_checkpoint: Literal["tattabio/gLM2_150M", "tattabio/gLM2_650M"] = ConfigField(
-        default="tattabio/gLM2_650M",
-        title="Model Checkpoint",
-        description="gLM2 checkpoint; downloaded automatically from Hugging Face",
-        reload_on_change=True,
-    )
 
 
 def example_input() -> GLM2SampleInput:
@@ -83,4 +76,4 @@ def run_glm2_sample(
         GLM2SampleOutput: Token-aligned sample output.
     """
     logger.debug("Using local worker for gLM2 sample: %s", config.model_checkpoint)
-    return GLM2SampleOutput(**dispatch_mixed_model("glm2", "sample", inputs, config, instance))
+    return GLM2SampleOutput(**dispatch_masked_model("glm2", "sample", inputs, config, instance))

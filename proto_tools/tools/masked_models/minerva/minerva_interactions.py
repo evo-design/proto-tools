@@ -5,26 +5,27 @@ from typing import Any, Literal
 
 from pydantic import field_validator
 
+from proto_tools.tools.masked_models.execution import dispatch_masked_model
+from proto_tools.tools.masked_models.minerva.config import MinervaConfig
 from proto_tools.tools.masked_models.mixed_data_models import (
-    InteractionHead,
-    MixedInteractionsOutput,
-    MixedModelConfig,
     MixedSequenceInput,
-    dispatch_mixed_model,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField
+from proto_tools.utils.interaction_models import SequenceInteractionsOutput
 
 logger = logging.getLogger(__name__)
+
+InteractionHead = Literal["base_pairing", "protein", "repeat"]
 
 # Input:
 MinervaInteractionsInput = MixedSequenceInput
 
 # Output:
-MinervaInteractionsOutput = MixedInteractionsOutput
+MinervaInteractionsOutput = SequenceInteractionsOutput
 
 
-class MinervaInteractionsConfig(MixedModelConfig):
+class MinervaInteractionsConfig(MinervaConfig):
     """Configuration for Minerva interactions.
 
     Attributes:
@@ -33,13 +34,6 @@ class MinervaInteractionsConfig(MixedModelConfig):
         interaction_layers (Literal[2, 6]): Number of final transformer layers used by the heads.
         batch_size (int): Equal-token-length sequences per forward pass; one limits matrix memory.
     """
-
-    model_checkpoint: Literal["gbrixi/minerva-mlm", "gbrixi/minerva-mlm-8k"] = ConfigField(
-        default="gbrixi/minerva-mlm",
-        title="Model Checkpoint",
-        description="Minerva checkpoint; downloaded automatically from Hugging Face",
-        reload_on_change=True,
-    )
 
     heads: list[InteractionHead] = ConfigField(
         default_factory=lambda: ["base_pairing", "protein", "repeat"],
@@ -98,4 +92,4 @@ def run_minerva_interactions(
         MinervaInteractionsOutput: Token-aligned interactions output.
     """
     logger.debug("Using local worker for Minerva interactions: %s", config.model_checkpoint)
-    return MinervaInteractionsOutput(**dispatch_mixed_model("minerva", "interactions", inputs, config, instance))
+    return MinervaInteractionsOutput(**dispatch_masked_model("minerva", "interactions", inputs, config, instance))

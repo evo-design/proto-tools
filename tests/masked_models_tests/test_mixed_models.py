@@ -11,24 +11,25 @@ from standalone_helpers.compression import compress_array
 from standalone_helpers.mixed_sequence import tokenize_mixed_sequence
 
 import proto_tools
+from proto_tools.entities import SequenceInteractionMap
+from proto_tools.tools.masked_models.execution import dispatch_masked_model
 from proto_tools.tools.masked_models.glm2 import GLM2EmbeddingsConfig
 from proto_tools.tools.masked_models.minerva import MinervaEmbeddingsConfig, MinervaInteractionsConfig
 from proto_tools.tools.masked_models.mixed_data_models import (
     MIXED_VOCAB,
     MixedEmbeddingsOutput,
     MixedGradientOutput,
-    MixedInteractionsOutput,
     MixedSampleOutput,
     MixedScoringOutput,
     MixedSequenceGradientInput,
     MixedSequenceInput,
     MixedSequenceSampleInput,
-    SequenceInteractionMap,
-    dispatch_mixed_model,
     one_hot_mixed_logits,
 )
 from proto_tools.tools.tool_registry import ToolRegistry
+from proto_tools.transforms.masking import MaskingStrategy
 from proto_tools.utils import ToolInstance
+from proto_tools.utils.interaction_models import SequenceInteractionsOutput
 
 _LOCUS = "<+>MA<->acX"
 _TOKENS = ["<+>", "M", "A", "<->", "a", "c", "X"]
@@ -129,6 +130,40 @@ def test_mixed_context_caps_count_atomic_markers(config_class, checkpoint, limit
         config_class(model_checkpoint=checkpoint, repr_layer=depth + 1)
 
 
+@pytest.mark.parametrize("toolkit", ["glm2", "minerva"])
+@pytest.mark.parametrize("method", ["entropy", "max-logit"])
+def test_automatic_masking_uses_own_toolkit_and_preserves_modalities(monkeypatch, toolkit, method):
+    embedding = ToolRegistry.get(f"{toolkit}-embedding")
+    sampling = ToolRegistry.get(f"{toolkit}-sample")
+    config = sampling.config_model(
+        device="cpu", seed=7, masking_strategy=MaskingStrategy(method=method, num_mutations=2)
+    )
+    calls = []
+
+    def embed(inputs, embedding_config):
+        calls.append((inputs, embedding_config))
+        return MixedEmbeddingsOutput(
+            results=[
+                {"tokens": _TOKENS, "mean_embedding": [0.1], "attention_mask": [1] * 7, "logits": [[0.0] * 24] * 7}
+            ]
+        )
+
+    monkeypatch.setattr(embedding, "function", embed)
+    result = config.preprocess(MixedSequenceSampleInput(sequences=_LOCUS))
+    assert len(calls) == 1
+    inputs, embedding_config = calls[0]
+    assert inputs.sequences == [_LOCUS]
+    assert embedding_config.model_checkpoint == config.model_checkpoint
+    assert embedding_config.tool_key == f"{toolkit}-embedding"
+    assert embedding_config.return_logits
+    assert embedding_config.device == "cpu"
+    tokens = tokenize_mixed_sequence(result.sequences[0], allow_masks=True)
+    assert [tokens[i] for i in (0, 3, 6)] == ["<+>", "<->", "X"]
+    assert tokens.count("_") == 2
+    expected = {i + 1: ("dna" if _TOKENS[i] in "acgt" else "protein") for i, token in enumerate(tokens) if token == "_"}
+    assert result.mask_modalities == [expected]
+
+
 # ── Labeled results, public exports, and compressed transport ────────────────
 
 
@@ -169,7 +204,7 @@ def test_mixed_output_json_roundtrips_preserve_token_metadata():
             ]
         ),
         MixedGradientOutput(tokens=_TOKENS, gradient=logits, loss=1.0, vocab=MIXED_VOCAB),
-        MixedInteractionsOutput(results=[{"maps": {"protein": {"tokens": _TOKENS, "values": np.eye(7).tolist()}}}]),
+        SequenceInteractionsOutput(results=[{"maps": {"protein": {"tokens": _TOKENS, "values": np.eye(7).tolist()}}}]),
     ]
     for output in outputs:
         restored = type(output).model_validate_json(output.model_dump_json())
@@ -177,7 +212,7 @@ def test_mixed_output_json_roundtrips_preserve_token_metadata():
 
 
 def test_mixed_interactions_export_npz_and_json_preserve_axes(tmp_path):
-    output = MixedInteractionsOutput(
+    output = SequenceInteractionsOutput(
         results=[{"maps": {"base_pairing": {"tokens": ["<+>", "a"], "values": [[0.1, 0.2], [0.2, 0.8]]}}}]
     )
     output._export_output(tmp_path / "contacts.v1", "npz")
@@ -186,7 +221,7 @@ def test_mixed_interactions_export_npz_and_json_preserve_axes(tmp_path):
         np.testing.assert_allclose(archive["0_base_pairing"], [[0.1, 0.2], [0.2, 0.8]])
         assert archive["0_base_pairing"].dtype == np.float32
     output._export_output(tmp_path / "contacts.v1", "json")
-    restored = MixedInteractionsOutput(results=json.loads((tmp_path / "contacts.v1.json").read_text()))
+    restored = SequenceInteractionsOutput(results=json.loads((tmp_path / "contacts.v1.json").read_text()))
     assert restored.results == output.results
 
 
@@ -200,8 +235,8 @@ def test_mixed_dispatch_decompresses_nested_matrices(monkeypatch):
 
     monkeypatch.setattr(ToolInstance, "dispatch", staticmethod(dispatch))
     config = MinervaInteractionsConfig(device="cpu", heads=["protein"])
-    raw = dispatch_mixed_model("minerva", "interactions", MixedSequenceInput(sequences="<+>A"), config, None)
-    output = MixedInteractionsOutput(**raw)
+    raw = dispatch_masked_model("minerva", "interactions", MixedSequenceInput(sequences="<+>A"), config, None)
+    output = SequenceInteractionsOutput(**raw)
     assert captured["toolkit"] == "minerva"
     assert captured["payload"]["operation"] == "interactions"
     assert captured["payload"]["sequences"] == ["<+>A"]

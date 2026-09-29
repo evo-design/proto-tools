@@ -1,17 +1,17 @@
 """gLM2 embeddings for prepared mixed protein/DNA sequences."""
 
 import logging
-from typing import Any, Literal
+from typing import Any
 
+from proto_tools.tools.masked_models.execution import dispatch_masked_model
+from proto_tools.tools.masked_models.glm2.config import GLM2Config
+from proto_tools.tools.masked_models.mixed_configs import MixedEmbeddingsConfig
 from proto_tools.tools.masked_models.mixed_data_models import (
-    MixedEmbeddingsConfig,
     MixedEmbeddingsOutput,
     MixedSequenceInput,
-    dispatch_mixed_model,
 )
 from proto_tools.tools.masked_models.projection import attach_projections
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import ConfigField
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ GLM2EmbeddingsInput = MixedSequenceInput
 GLM2EmbeddingsOutput = MixedEmbeddingsOutput
 
 
-class GLM2EmbeddingsConfig(MixedEmbeddingsConfig):
+class GLM2EmbeddingsConfig(GLM2Config, MixedEmbeddingsConfig):
     """Configuration for gLM2 embeddings.
 
     Attributes:
@@ -31,13 +31,6 @@ class GLM2EmbeddingsConfig(MixedEmbeddingsConfig):
         return_logits (bool): Include token-aligned biological logits.
         repr_layer (int): 0=embedding table, 1..N=transformer output, -1=last layer.
     """
-
-    model_checkpoint: Literal["tattabio/gLM2_150M", "tattabio/gLM2_650M"] = ConfigField(
-        default="tattabio/gLM2_650M",
-        title="Model Checkpoint",
-        description="gLM2 checkpoint; downloaded automatically from Hugging Face",
-        reload_on_change=True,
-    )
 
 
 def example_input() -> GLM2EmbeddingsInput:
@@ -77,4 +70,4 @@ def run_glm2_embeddings(
         GLM2EmbeddingsOutput: Token-aligned embeddings output.
     """
     logger.debug("Using local worker for gLM2 embeddings: %s", config.model_checkpoint)
-    return GLM2EmbeddingsOutput(**dispatch_mixed_model("glm2", "embeddings", inputs, config, instance))
+    return GLM2EmbeddingsOutput(**dispatch_masked_model("glm2", "embeddings", inputs, config, instance))

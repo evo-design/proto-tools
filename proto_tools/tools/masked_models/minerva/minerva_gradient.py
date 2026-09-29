@@ -1,17 +1,17 @@
 """Minerva gradient for prepared mixed protein/DNA sequences."""
 
 import logging
-from typing import Any, Literal
+from typing import Any
 
+from proto_tools.tools.masked_models.execution import dispatch_masked_model
+from proto_tools.tools.masked_models.minerva.config import MinervaConfig
+from proto_tools.tools.masked_models.mixed_configs import MixedGradientConfig
 from proto_tools.tools.masked_models.mixed_data_models import (
-    MixedGradientConfig,
     MixedGradientOutput,
     MixedSequenceGradientInput,
-    dispatch_mixed_model,
     one_hot_mixed_logits,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import ConfigField
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ MinervaGradientInput = MixedSequenceGradientInput
 MinervaGradientOutput = MixedGradientOutput
 
 
-class MinervaGradientConfig(MixedGradientConfig):
+class MinervaGradientConfig(MinervaConfig, MixedGradientConfig):
     """Configuration for Minerva gradient.
 
     Attributes:
@@ -31,13 +31,6 @@ class MinervaGradientConfig(MixedGradientConfig):
         use_ste (bool): Hard forward tokens with soft-probability gradients.
         compute_gradient (bool): Compute the gradient, or evaluate only the masked PLL loss.
     """
-
-    model_checkpoint: Literal["gbrixi/minerva-mlm", "gbrixi/minerva-mlm-8k"] = ConfigField(
-        default="gbrixi/minerva-mlm",
-        title="Model Checkpoint",
-        description="Minerva checkpoint; downloaded automatically from Hugging Face",
-        reload_on_change=True,
-    )
 
 
 def example_input() -> MinervaGradientInput:
@@ -73,4 +66,4 @@ def run_minerva_gradient(
         MinervaGradientOutput: Token-aligned gradient output.
     """
     logger.debug("Using local worker for Minerva gradient: %s", config.model_checkpoint)
-    return MinervaGradientOutput(**dispatch_mixed_model("minerva", "gradient", inputs, config, instance))
+    return MinervaGradientOutput(**dispatch_masked_model("minerva", "gradient", inputs, config, instance))

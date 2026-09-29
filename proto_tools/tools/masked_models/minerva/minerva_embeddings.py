@@ -1,17 +1,17 @@
 """Minerva embeddings for prepared mixed protein/DNA sequences."""
 
 import logging
-from typing import Any, Literal
+from typing import Any
 
+from proto_tools.tools.masked_models.execution import dispatch_masked_model
+from proto_tools.tools.masked_models.minerva.config import MinervaConfig
+from proto_tools.tools.masked_models.mixed_configs import MixedEmbeddingsConfig
 from proto_tools.tools.masked_models.mixed_data_models import (
-    MixedEmbeddingsConfig,
     MixedEmbeddingsOutput,
     MixedSequenceInput,
-    dispatch_mixed_model,
 )
 from proto_tools.tools.masked_models.projection import attach_projections
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import ConfigField
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ MinervaEmbeddingsInput = MixedSequenceInput
 MinervaEmbeddingsOutput = MixedEmbeddingsOutput
 
 
-class MinervaEmbeddingsConfig(MixedEmbeddingsConfig):
+class MinervaEmbeddingsConfig(MinervaConfig, MixedEmbeddingsConfig):
     """Configuration for Minerva embeddings.
 
     Attributes:
@@ -31,13 +31,6 @@ class MinervaEmbeddingsConfig(MixedEmbeddingsConfig):
         return_logits (bool): Include token-aligned biological logits.
         repr_layer (int): 0=embedding table, 1..N=transformer output, -1=last layer.
     """
-
-    model_checkpoint: Literal["gbrixi/minerva-mlm", "gbrixi/minerva-mlm-8k"] = ConfigField(
-        default="gbrixi/minerva-mlm",
-        title="Model Checkpoint",
-        description="Minerva checkpoint; downloaded automatically from Hugging Face",
-        reload_on_change=True,
-    )
 
 
 def example_input() -> MinervaEmbeddingsInput:
@@ -77,4 +70,4 @@ def run_minerva_embeddings(
         MinervaEmbeddingsOutput: Token-aligned embeddings output.
     """
     logger.debug("Using local worker for Minerva embeddings: %s", config.model_checkpoint)
-    return MinervaEmbeddingsOutput(**dispatch_mixed_model("minerva", "embeddings", inputs, config, instance))
+    return MinervaEmbeddingsOutput(**dispatch_masked_model("minerva", "embeddings", inputs, config, instance))

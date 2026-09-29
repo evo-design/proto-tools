@@ -1,5 +1,6 @@
 """Masked language models for protein, codon, and mixed protein/DNA sequences."""
 
+from proto_tools.entities.sequence_interactions import SequenceInteractionMap, SequenceInteractions
 from proto_tools.tools.masked_models.ablang import (
     AbLangEmbeddingsConfig,
     AbLangEmbeddingsInput,
@@ -142,7 +143,6 @@ from proto_tools.tools.masked_models.mixed_data_models import (
     MIXED_VOCAB,
     MixedEmbeddingsOutput,
     MixedGradientOutput,
-    MixedInteractionsOutput,
     MixedSampleOutput,
     MixedScoringMetrics,
     MixedScoringOutput,
@@ -151,8 +151,6 @@ from proto_tools.tools.masked_models.mixed_data_models import (
     MixedSequenceInput,
     MixedSequenceSample,
     MixedSequenceSampleInput,
-    SequenceInteractionMap,
-    SequenceInteractions,
     one_hot_mixed_logits,
 )
 from proto_tools.tools.masked_models.shared_data_models import (
@@ -167,13 +165,16 @@ from proto_tools.tools.masked_models.shared_data_models import (
     SequenceEmbedding,
 )
 from proto_tools.transforms.masking import MaskingMethod, MaskingStrategy
+from proto_tools.utils.interaction_models import SequenceInteractionsOutput
 
 __all__ = [
+    "SequenceInteractionMap",
+    "SequenceInteractions",
+    "SequenceInteractionsOutput",
     # Mixed protein/DNA models and public contracts
     "MIXED_VOCAB",
     "MixedEmbeddingsOutput",
     "MixedGradientOutput",
-    "MixedInteractionsOutput",
     "MixedSampleOutput",
     "MixedScoringMetrics",
     "MixedScoringOutput",
@@ -182,8 +183,6 @@ __all__ = [
     "MixedSequenceInput",
     "MixedSequenceSample",
     "MixedSequenceSampleInput",
-    "SequenceInteractionMap",
-    "SequenceInteractions",
     "one_hot_mixed_logits",
     "GLM2EmbeddingsConfig",
     "GLM2EmbeddingsInput",

@@ -1,4 +1,4 @@
-"""Entities: antibodies, structures, and ligands."""
+"""Entities: antibodies, structures, ligands, and sequence interactions."""
 
 from proto_tools.entities.antibody import Antibody, AntibodyLogits
 from proto_tools.entities.ligands import (
@@ -13,6 +13,7 @@ from proto_tools.entities.ligands import (
     map_ccd_code_to_smiles,
     map_smiles_to_ccd_code,
 )
+from proto_tools.entities.sequence_interactions import SequenceInteractionMap, SequenceInteractions
 from proto_tools.entities.structures import (
     GFP_CIF_PATH,
     BFactorType,
@@ -37,6 +38,9 @@ __all__ = [
     # Antibodies
     "Antibody",
     "AntibodyLogits",
+    # Sequence interactions
+    "SequenceInteractionMap",
+    "SequenceInteractions",
     # Structures
     "Structure",
     "StructureEnsemble",
