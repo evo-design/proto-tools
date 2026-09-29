@@ -7,15 +7,42 @@
 
 ## Overview
 
-[Minerva](https://github.com/garykbrixi/minerva) is a genome language model initialized from gLM2 and trained on mixed protein/DNA sequences. Alongside embeddings, masked scoring, sampling, and gradients, this toolkit exposes the released base-pairing, protein, and repeat interaction heads as labeled token-by-token probability maps.
+[Minerva](https://github.com/garykbrixi/minerva) uses coevolutionary signals to mine microbial genomes and metagenomes for functional elements. Its fast, alignment-free maps of base pairing, protein contacts, and repeats help identify structured non-coding RNAs and genomic systems missed by existing annotations or homology searches.
+
+This toolkit exposes Minerva-MLM's three interaction heads for genomic screening, alongside embeddings, masked sequence scoring, sampling, and gradients for follow-up sequence analysis.
 
 ## Background
 
-Minerva-MLM extends the mixed genomic representation used by gLM2: translated coding regions use uppercase amino acids, intergenic regions use lowercase nucleotides, and atomic strand markers retain orientation. The released 650M-parameter checkpoints support contexts of 4096 or 8192 tokens. The upstream [model card](https://huggingface.co/gbrixi/minerva-mlm) describes the model and its interaction heads; no paper citation is supplied there, so this toolkit cites the software repository.
+Many non-coding elements retain their structure or repeated organization despite substantial sequence divergence. Minerva reads out the coevolutionary patterns learned by a genome language model as separate maps of base pairing, protein contacts, and repeats. Each head combines attention features to predict its interaction type in a single forward pass, enabling rapid scans of genomic regions without constructing multiple sequence alignments.
 
-The interaction heads turn internal model features into separate dense predictions for RNA base pairing, protein contacts, and repeats. These are learned interaction signals; a high matrix value alone does not establish a physical contact or a validated RNA secondary structure.
+| Interaction head | Predicted relationship | Discovery use |
+| --- | --- | --- |
+| `base_pairing` | Nucleotide pairing, evaluated on conserved RNA base pairs | Find candidate structured ncRNAs, hairpins, and extensions to annotated RNA structures |
+| `protein` | Residue contacts within protein monomers | Examine protein structural signals alongside neighboring non-coding elements |
+| `repeat` | Relationships between repetitive sequence motifs | Identify repeat arrays, including CRISPR-like and repetitive extragenic palindromic (REP) patterns |
+
+**Speed makes genome-scale mining practical.** In the [Minerva study](https://www.biorxiv.org/content/10.64898/2026.09.22.753630v2.full), the authors scanned 150 bacterial genomes in 100 minutes on one NVIDIA H100 GPU, plus 31 minutes to write the maps. That upstream workflow used overlapping 4096-token windows and the last-two-layer interaction heads; this wrapper exposes the inference step on prepared loci.
+
+The study used these maps to identify unannotated structured regions, extend the known TwoAYGGAY RNA architecture, and discover arrays of structurally conserved but sequence-diverse ncRNAs beside prophage UG27 reverse transcriptases. Experimental follow-up showed that the UG27 RNAs template short cDNA hairpins. These examples illustrate how interaction patterns can guide candidate selection, comparative analysis, and experimental discovery. See [Li et al. (2026)](https://doi.org/10.64898/2026.09.22.753630).
+
+Minerva-MLM was initialized from gLM2 and retains its mixed protein/DNA representation, with amino acids for coding regions, nucleotides for intergenic regions, and strand markers.
 
 ## Tools
+
+### Minerva Interactions (`minerva-interactions`)
+
+Predicts base-pairing, protein-contact, and repetitive-motif maps in a single model pass. Every selected head returns a labeled `(L, L)` probability matrix, with one result bundle per input locus.
+
+#### Applications
+
+Screen intergenic regions for structured ncRNAs and repeat arrays, inspect their organization around nearby genes, and prioritize unannotated loci for comparative analysis or experimental follow-up. Combining the base-pairing and repeat maps can highlight arrays of structured elements, as in the study's UG27 discovery. The protein map adds monomeric contact predictions for the coding parts of the same locus.
+
+#### Usage Tips
+
+- **`heads` selects the returned channels.** All three are returned by default. Select fewer to reduce output size; this does not change the meaning of an individual channel.
+- **`interaction_layers=2` is the fast screening default.** It uses the final two transformer layers, as in the paper's genome scans. The released six-layer variant (`interaction_layers=6`) offers slightly higher accuracy at greater memory and compute cost.
+- **The axes include strand markers and ambiguous context.** Padding is removed. Use `tokens` to select biological subregions; matrix indices are not genome coordinates. The wrapper returns the upstream probabilities without symmetrizing, thresholding, removing the diagonal, or combining strands.
+- **Dense output grows quadratically with token count.** Doubling the locus length quadruples each matrix's element count. The default export is compressed NPZ, with keys such as `0_protein` and `0_protein_tokens`; arrays load with `numpy.load(..., allow_pickle=False)`. JSON is also supported, and the public Python values remain nested lists.
 
 ### Minerva Embeddings (`minerva-embedding`)
 
@@ -23,7 +50,7 @@ Returns one mean-pooled embedding per prepared locus, with optional logits over 
 
 #### Applications
 
-Use the pooled vector as a feature for clustering, retrieval, or a downstream supervised model. Keep the checkpoint and representation layer fixed when comparing embeddings.
+Cluster or retrieve candidate loci after an interaction-map screen, or use the pooled vectors as features in a downstream classifier. Keep the checkpoint and representation layer fixed when comparing embeddings.
 
 #### Usage Tips
 
@@ -76,27 +103,6 @@ Use the masked-language-model objective as a differentiable prior in sequence op
 - **The matrix axis includes every model token.** Columns are `ACDEFGHIKLMNPQRSTVWYacgt`. Strand-marker and ambiguous-context rows must be zero; their returned gradients are also zero. Opposite-modality columns do not influence a position.
 - **`temperature=1.0` treats the input as logits.** The worker applies a softmax within the position's modality. With `temperature=None`, provide a nonnegative probability distribution within that modality and zeros elsewhere. `one_hot_mixed_logits()` builds a valid starting state from a template.
 - **The objective masks canonical sites one at a time.** The target at each site is its current discrete argmax token. `use_ste=True` uses hard forward tokens with soft derivatives; `compute_gradient=False` returns the objective with `gradient=None`.
-
-### Minerva Interactions (`minerva-interactions`)
-
-Results use the shared `SequenceInteractionMap`, `SequenceInteractions`, and
-`SequenceInteractionsOutput` models in `proto_tools.utils.interaction_models`,
-which provide validation and JSON/NPZ export. These types accept
-arbitrary token labels and channel names; Minerva's `heads` config selects its
-released `base_pairing`, `protein`, and `repeat` channels.
-
-Returns the selected `base_pairing`, `protein`, and `repeat` heads as separate dense probability matrices. Every map has a `tokens` axis and an `(L, L)` `values` matrix, with one result bundle per input locus.
-
-#### Applications
-
-Inspect candidate protein contacts, RNA base-pairing signals, and repeat patterns in a prepared locus, or pass the labeled matrices to a downstream analysis.
-
-#### Usage Tips
-
-- **`heads` selects the returned channels.** All three are returned by default. Select fewer to reduce output size; this does not change the meaning of an individual channel.
-- **`interaction_layers` chooses a released head variant.** The default 2 uses the last two transformer layers; 6 selects heads trained on the last six layers.
-- **The axes include strand markers and ambiguous context.** Padding is removed. Use `tokens` to select biological subregions; matrix indices are not genome coordinates. The wrapper returns the upstream probabilities without symmetrizing, thresholding, removing the diagonal, or combining strands.
-- **Dense output grows quadratically with token count.** Doubling the locus length quadruples each matrix's element count. The default export is compressed NPZ, with keys such as `0_protein` and `0_protein_tokens`; arrays load with `numpy.load(..., allow_pickle=False)`. JSON is also supported, and the public Python values remain nested lists.
 
 ## Toolkit Notes
 
