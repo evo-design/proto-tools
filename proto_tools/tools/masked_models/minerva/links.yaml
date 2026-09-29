@@ -1,0 +1,4 @@
+github: https://github.com/garykbrixi/minerva
+huggingface:
+  - https://huggingface.co/gbrixi/minerva-mlm
+  - https://huggingface.co/gbrixi/minerva-mlm-8k

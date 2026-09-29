@@ -124,6 +124,14 @@ class Masker(ABC):
         """Store the owning MaskingStrategy."""
         self.strategy = strategy
 
+    def score_tokens(
+        self,
+        sequences: list[list[str]],
+        position_score_fn: Callable[..., Any] | None = None,
+    ) -> list[list[float]]:
+        """Score atomic tokens using the model's already token-aligned logits."""
+        return self.score(["".join(tokens) for tokens in sequences], position_score_fn=position_score_fn)
+
     @abstractmethod
     def score(
         self,
@@ -158,6 +166,14 @@ class RandomMasker(Masker):
 
     requires = None
 
+    def score_tokens(
+        self,
+        sequences: list[list[str]],
+        position_score_fn: Callable[..., Any] | None = None,  # noqa: ARG002 -- shared masker interface
+    ) -> list[list[float]]:
+        """Score variable-width atomic tokens uniformly."""
+        return [[0.0] * len(tokens) for tokens in sequences]
+
     def score(
         self,
         sequences: list[str],
@@ -165,7 +181,7 @@ class RandomMasker(Masker):
         token_size: int = 1,
     ) -> list[list[float]]:
         """Score all tokens equally (uniform zero scores, no model)."""
-        return [[0.0] * len(split_tokens(seq, token_size)) for seq in sequences]
+        return self.score_tokens([split_tokens(seq, token_size) for seq in sequences])
 
 
 class EntropyMasker(Masker):
