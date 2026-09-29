@@ -280,7 +280,7 @@ def tiny_mixed_runtime():
     """Use a context-dependent toy MLM to test algorithms without model downloads."""
     from types import SimpleNamespace
 
-    import torch
+    torch = pytest.importorskip("torch")
     from standalone_helpers.mixed_mlm import MixedMLMAdapter, MixedMLMRuntime
 
     vocabulary = (
