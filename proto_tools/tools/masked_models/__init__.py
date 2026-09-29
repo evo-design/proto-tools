@@ -1,6 +1,5 @@
 """Masked language models for protein, codon, and mixed protein/DNA sequences."""
 
-from proto_tools.entities.sequence_interactions import SequenceInteractionMap, SequenceInteractions
 from proto_tools.tools.masked_models.ablang import (
     AbLangEmbeddingsConfig,
     AbLangEmbeddingsInput,
@@ -165,7 +164,11 @@ from proto_tools.tools.masked_models.shared_data_models import (
     SequenceEmbedding,
 )
 from proto_tools.transforms.masking import MaskingMethod, MaskingStrategy
-from proto_tools.utils.interaction_models import SequenceInteractionsOutput
+from proto_tools.utils.interaction_models import (
+    SequenceInteractionMap,
+    SequenceInteractions,
+    SequenceInteractionsOutput,
+)
 
 __all__ = [
     "SequenceInteractionMap",

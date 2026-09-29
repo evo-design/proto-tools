@@ -18,7 +18,11 @@ from proto_tools.utils.env_runner import run_in_env
 from proto_tools.utils.export_names import build_export_name, sanitize_field
 from proto_tools.utils.gradient_models import GradientInput, GradientOutput, GradientValue
 from proto_tools.utils.http_session import build_http_session, request_with_retry
-from proto_tools.utils.interaction_models import SequenceInteractionsOutput
+from proto_tools.utils.interaction_models import (
+    SequenceInteractionMap,
+    SequenceInteractions,
+    SequenceInteractionsOutput,
+)
 from proto_tools.utils.logging_config import get_logger, setup_logging
 from proto_tools.utils.msa import extract_msa_sequences
 from proto_tools.utils.polling import StatusExtractor, extract_text_status, poll_until_complete
@@ -58,6 +62,8 @@ from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField,
 from proto_tools.utils.tool_pool import ToolPool
 
 __all__ = [
+    "SequenceInteractionMap",
+    "SequenceInteractions",
     "SequenceInteractionsOutput",
     # Config
     "BaseConfig",

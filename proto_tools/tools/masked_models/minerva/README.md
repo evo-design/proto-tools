@@ -79,8 +79,9 @@ Use the masked-language-model objective as a differentiable prior in sequence op
 
 ### Minerva Interactions (`minerva-interactions`)
 
-Results use the shared `SequenceInteractionMap` and `SequenceInteractions` entities,
-with `SequenceInteractionsOutput` providing JSON and NPZ export. These types accept
+Results use the shared `SequenceInteractionMap`, `SequenceInteractions`, and
+`SequenceInteractionsOutput` models in `proto_tools.utils.interaction_models`,
+which provide validation and JSON/NPZ export. These types accept
 arbitrary token labels and channel names; Minerva's `heads` config selects its
 released `base_pairing`, `protein`, and `repeat` channels.
 

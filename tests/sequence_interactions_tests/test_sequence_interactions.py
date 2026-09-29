@@ -7,8 +7,11 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from proto_tools.entities import SequenceInteractionMap, SequenceInteractions
-from proto_tools.utils.interaction_models import SequenceInteractionsOutput
+from proto_tools.utils.interaction_models import (
+    SequenceInteractionMap,
+    SequenceInteractions,
+    SequenceInteractionsOutput,
+)
 
 _VALUES = [[0.1, 0.8, 0.0], [0.3, 0.2, 1.0], [0.9, 0.4, 0.5]]
 

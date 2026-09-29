@@ -11,7 +11,6 @@ from standalone_helpers.compression import compress_array
 from standalone_helpers.mixed_sequence import tokenize_mixed_sequence
 
 import proto_tools
-from proto_tools.entities import SequenceInteractionMap
 from proto_tools.tools.masked_models.execution import dispatch_masked_model
 from proto_tools.tools.masked_models.glm2 import GLM2EmbeddingsConfig
 from proto_tools.tools.masked_models.minerva import MinervaEmbeddingsConfig, MinervaInteractionsConfig
@@ -29,7 +28,7 @@ from proto_tools.tools.masked_models.mixed_data_models import (
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.transforms.masking import MaskingStrategy
 from proto_tools.utils import ToolInstance
-from proto_tools.utils.interaction_models import SequenceInteractionsOutput
+from proto_tools.utils.interaction_models import SequenceInteractionMap, SequenceInteractionsOutput
 
 _LOCUS = "<+>MA<->acX"
 _TOKENS = ["<+>", "M", "A", "<->", "a", "c", "X"]
