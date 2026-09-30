@@ -35,7 +35,7 @@ class GLM2EmbeddingsConfig(GLM2Config, MixedEmbeddingsConfig):
 
 def example_input() -> GLM2EmbeddingsInput:
     """Return a short prepared locus for examples and infrastructure checks."""
-    return GLM2EmbeddingsInput(sequences=["<+>MKTL<+>acgt<->ACDE"])
+    return GLM2EmbeddingsInput(sequences=["+MKTL+acgt-ACDE"])
 
 
 @tool(

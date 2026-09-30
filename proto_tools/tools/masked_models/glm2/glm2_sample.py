@@ -41,7 +41,7 @@ class GLM2SampleConfig(GLM2Config, MixedSampleConfig):
 
 def example_input() -> GLM2SampleInput:
     """Return a short prepared locus for examples and infrastructure checks."""
-    return GLM2SampleInput(sequences=["<+>MKTL<+>acgt<->ACDE"])
+    return GLM2SampleInput(sequences=["+MKTL+acgt-ACDE"])
 
 
 @tool(

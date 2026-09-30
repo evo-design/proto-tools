@@ -25,7 +25,7 @@ This utility centralises that logic in one place so ESM2 and ESM3 share the same
    - `"entropy"` — Shannon entropy of the model's per-position logit distribution (higher = more uncertain)
    - `"max-logit"` — negated max logit over the vocabulary (higher = model is least confident in its top prediction)
 4. Draws positions via weighted sampling (`weighted_sample`). A score temperature (`temperature`) controls how sharply the sampler concentrates on the top-scoring positions when `method` is `"entropy"` or `"max-logit"`.
-5. Masks the selected atomic tokens and reconstructs the sequence for the downstream model.
+5. Applies the mask to the sequence with `apply_mask`, returning the masked string ready for the downstream model to fill in.
 
 All randomness flows through an explicit `np.random.RandomState`, so a given `(method, mask_fraction, fixed_positions, seed)` tuple is fully reproducible.
 
@@ -60,26 +60,21 @@ The masked strings are handed directly to ESM2 / ESM3 sampling tools; see the [E
 - **Use explicit seeds for reproducibility.** The samplers use a `np.random.RandomState`; pass a seed through the tool's config to get byte-identical masked outputs across runs.
 - **Score temperature only affects the scored methods.** Adjusting `temperature` when `method="random"` has no effect.
 
-## Variable-width tokens
+## Protected tokens
 
-Protein and codon callers continue to use `mask(..., token_size=1)` or `token_size=3`.
-Mixed genomic models call `mask_tokens` with atomic tokens so `<+>` and `<->` each
-occupy one position. Both paths share the same count, weighting, and random selection.
+Pass `eligibility` to `mask` to protect specific tokens: one row of flags per sequence,
+aligned with its tokens. Ineligible tokens are never masked and do not count toward
+`mask_fraction`. The gLM2 and Minerva samplers use this to keep `+`/`-` strand markers
+and ambiguous protein symbols fixed.
 
 ```python
-MaskingStrategy(mask_fraction=1.0, fixed_positions=[3]).mask_tokens(
-    [["<+>", "M", "K", "<+>", "a", "c"]],
+MaskingStrategy(mask_fraction=1.0, fixed_positions=[3]).mask(
+    ["+MK+ac"],
     eligibility=[[False, True, True, False, True, True]],
     seed=7,
 )
-# [["<+>", "_", "K", "<+>", "_", "_"]]
+# ["+_K+__"]
 ```
-
-`fixed_positions` is 1-indexed over the complete token axis, including markers.
-Eligibility protects strand markers and ambiguous context tokens before resolving
-mask counts. A model-based callback receives the joined sequence strings and must
-return one logits row per atomic token. Mixed-model tools restrict the logits
-to each position's original modality before computing selection scores.
 
 For gLM2 and Minerva, premasked `_` sites require explicit `mask_modalities` in the
 input because the mask character alone cannot distinguish protein from DNA.

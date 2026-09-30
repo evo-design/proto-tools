@@ -17,6 +17,7 @@ from tests.conftest import benchmark_twice
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
+# Long-form markers, since upstream_reference passes this string verbatim to the upstream tokenizer.
 LOCUS = "<+>MA<->acX"
 
 
@@ -80,6 +81,7 @@ def check_embeddings_score_gradient(toolkit, checkpoint):
 
 def check_sampling(toolkit, checkpoint, sampling_method):
     """Keep markers and alphabets fixed while advancing RNG across duplicate loci."""
+    # Long-form markers in the input come back as one-character markers.
     sequence = "<+>____<->____X"
     mapping = {**dict.fromkeys(range(2, 6), "protein"), **dict.fromkeys(range(7, 11), "dna")}
     inputs = {"sequences": [sequence] * 3, "mask_modalities": [mapping] * 3}
@@ -96,7 +98,8 @@ def check_sampling(toolkit, checkpoint, sampling_method):
     assert len(set(output.sequences)) > 1
     for result in output.results:
         assert result.tokens == tokenize_mixed_sequence(result.sequence)
-        assert [result.tokens[i] for i in [0, 5, 10]] == ["<+>", "<->", "X"]
+        assert [result.tokens[i] for i in [0, 5, 10]] == ["+", "-", "X"]
+        assert result.sequence == "".join(result.tokens)
         assert all(token in MIXED_VOCAB[:20] for token in result.tokens[1:5])
         assert all(token in MIXED_VOCAB[20:] for token in result.tokens[6:10])
         assert np.asarray(result.logits).shape == (11, 24)

@@ -35,7 +35,7 @@ class MinervaGradientConfig(MinervaConfig, MixedGradientConfig):
 
 def example_input() -> MinervaGradientInput:
     """Return a short prepared locus for examples and infrastructure checks."""
-    return MinervaGradientInput(sequence="<+>MKTL<+>acgt", logits=one_hot_mixed_logits("<+>MKTL<+>acgt", sharpness=2.0))
+    return MinervaGradientInput(sequence="+MKTL+acgt", logits=one_hot_mixed_logits("+MKTL+acgt", sharpness=2.0))
 
 
 @tool(

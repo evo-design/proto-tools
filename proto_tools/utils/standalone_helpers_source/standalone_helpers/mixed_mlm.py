@@ -8,7 +8,7 @@ from typing import Any, ClassVar
 
 from .compression import compress_array
 from .device import move_model_to_device
-from .mixed_sequence import DNA_TOKENS, MIXED_VOCAB, PROTEIN_TOKENS, tokenize_mixed_sequence
+from .mixed_sequence import DNA_TOKENS, MIXED_VOCAB, PROTEIN_TOKENS, UPSTREAM_STRAND_TOKENS, tokenize_mixed_sequence
 from .proto_logging import get_logger
 from .scoring import log_likelihood_metrics
 from .seeding import set_torch_seed
@@ -104,12 +104,13 @@ class MixedMLMRuntime:
         self.adapter = adapter
 
     def _ids(self, tokens: list[list[str]]) -> Any:
-        """Map validated atomic tokens to model IDs without adding special tokens."""
+        """Map validated tokens to model IDs without adding special tokens."""
         import torch
 
         vocab = self.adapter.tokenizer.get_vocab()
+        upstream = {**UPSTREAM_STRAND_TOKENS, "_": "<mask>"}
         return torch.tensor(
-            [[vocab["<mask>" if symbol == "_" else symbol] for symbol in row] for row in tokens],
+            [[vocab[upstream.get(symbol, symbol)] for symbol in row] for row in tokens],
             dtype=torch.long,
             device=self.adapter.device,
         )
@@ -244,7 +245,9 @@ class MixedMLMRuntime:
 
         set_torch_seed(payload.get("seed"))
         vocab = self.adapter.tokenizer.get_vocab()
-        reverse_vocab = {value: key for key, value in vocab.items()}
+        # Decode upstream strand-marker IDs back to one-character tokens.
+        short = {upstream: marker for marker, upstream in UPSTREAM_STRAND_TOKENS.items()}
+        reverse_vocab = {value: short.get(key, key) for key, value in vocab.items()}
         vocab_ids = self._vocab_ids()
         mask_id = self.adapter.tokenizer.mask_token_id
         results: list[Any] = [None] * len(tokens)

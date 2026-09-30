@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 from standalone_helpers.compression import compress_array
-from standalone_helpers.mixed_sequence import tokenize_mixed_sequence
+from standalone_helpers.mixed_sequence import UPSTREAM_STRAND_TOKENS, tokenize_mixed_sequence
 
 import proto_tools
 from proto_tools.tools.masked_models.execution import dispatch_masked_model
@@ -30,31 +30,53 @@ from proto_tools.transforms.masking import MaskingStrategy
 from proto_tools.utils import ToolInstance
 from proto_tools.utils.interaction_models import SequenceInteractionMap, SequenceInteractionsOutput
 
-_LOCUS = "<+>MA<->acX"
-_TOKENS = ["<+>", "M", "A", "<->", "a", "c", "X"]
+_LOCUS = "+MA-acX"
+_LONG_LOCUS = "<+>MA<->acX"
+_TOKENS = ["+", "M", "A", "-", "a", "c", "X"]
 
 
 # ── Atomic tokens and modality ──────────────────────────────────────────────
 
 
 def test_mixed_sequence_token_axis_preserves_case_and_markers():
-    inputs = MixedSequenceInput(sequences=_LOCUS)
+    inputs = MixedSequenceInput(sequences=_LONG_LOCUS)
     assert inputs.sequences == [_LOCUS]
     assert tokenize_mixed_sequence(_LOCUS) == _TOKENS
+    assert tokenize_mixed_sequence(_LONG_LOCUS) == _TOKENS
     assert len(inputs) == 7
     assert tokenize_mixed_sequence("ACGTacgtXBUZO") == list("ACGTacgtXBUZO")
 
 
 @pytest.mark.parametrize(
-    "sequence", ["", "<+><->", "acng", "acu", "AC*", "A C", " A", "A\n", "<mask>", "<sep>", "<+A", "A_"]
+    "sequence",
+    ["", "<+><->", "+-", "acng", "acu", "AC*", "A C", " A", "A\n", "<mask>", "<sep>", "<+A", "<+", "+>", "A_"],
 )
 def test_mixed_parser_rejects_invalid_or_empty_sequences(sequence):
     with pytest.raises(ValueError, match=r"Invalid mixed-sequence character|at least one biological"):
         tokenize_mixed_sequence(sequence)
 
 
+@pytest.mark.parametrize(
+    ("input_class", "field", "extra"),
+    [
+        (MixedSequenceInput, "sequences", {}),
+        (MixedSequenceSampleInput, "sequences", {}),
+        (MixedSequenceGradientInput, "sequence", {"logits": one_hot_mixed_logits(_LOCUS)}),
+    ],
+)
+@pytest.mark.parametrize("spelling", [_LONG_LOCUS, "<+>MA-acX", "+MA<->acX"])
+def test_mixed_inputs_normalize_long_and_mixed_marker_spellings(input_class, field, extra, spelling):
+    long_form = input_class(**{field: spelling}, **extra)
+    short_form = input_class(**{field: _LOCUS}, **extra)
+    assert getattr(long_form, field) == getattr(short_form, field)
+    stored = getattr(long_form, field)
+    assert (stored if isinstance(stored, str) else stored[0]) == _LOCUS
+    assert tokenize_mixed_sequence(_LOCUS) == _TOKENS
+
+
 def test_mixed_sample_mask_metadata_uses_token_coordinates():
     inputs = MixedSequenceSampleInput(sequences="<+>A_<->a_", mask_modalities=[{3: "protein", 6: "dna"}])
+    assert inputs.sequences == ["+A_-a_"]
     assert len(inputs) == 6
     restored = MixedSequenceSampleInput.model_validate_json(inputs.model_dump_json())
     assert restored.mask_modalities == [{3: "protein", 6: "dna"}]
@@ -157,10 +179,48 @@ def test_automatic_masking_uses_own_toolkit_and_preserves_modalities(monkeypatch
     assert embedding_config.return_logits
     assert embedding_config.device == "cpu"
     tokens = tokenize_mixed_sequence(result.sequences[0], allow_masks=True)
-    assert [tokens[i] for i in (0, 3, 6)] == ["<+>", "<->", "X"]
+    assert [tokens[i] for i in (0, 3, 6)] == ["+", "-", "X"]
     assert tokens.count("_") == 2
     expected = {i + 1: ("dna" if _TOKENS[i] in "acgt" else "protein") for i, token in enumerate(tokens) if token == "_"}
     assert result.mask_modalities == [expected]
+
+
+@pytest.mark.parametrize("toolkit", ["glm2", "minerva"])
+@pytest.mark.parametrize("method", ["random", "entropy", "max-logit"])
+def test_automatic_masking_is_identical_for_long_and_short_markers(monkeypatch, toolkit, method):
+    embedding = ToolRegistry.get(f"{toolkit}-embedding")
+    sampling = ToolRegistry.get(f"{toolkit}-sample")
+    strategy = MaskingStrategy(method=method, mask_fraction=0.5, fixed_positions=[2])
+    config = sampling.config_model(device="cpu", seed=13, masking_strategy=strategy)
+    seen = []
+
+    def embed(inputs, embedding_config):
+        seen.extend(inputs.sequences)
+        # Deterministic non-uniform logits so scored methods select specific sites.
+        rng = np.random.default_rng(0)
+        return MixedEmbeddingsOutput(
+            results=[
+                {
+                    "tokens": list(sequence),
+                    "mean_embedding": [0.1],
+                    "attention_mask": [1] * len(sequence),
+                    "logits": rng.normal(size=(len(sequence), 24)).tolist(),
+                }
+                for sequence in inputs.sequences
+            ]
+        )
+
+    monkeypatch.setattr(embedding, "function", embed)
+    long_form = config.preprocess(MixedSequenceSampleInput(sequences="<+>MKTLA<->acgtX"))
+    short_form = config.preprocess(MixedSequenceSampleInput(sequences="+MKTLA-acgtX"))
+    assert long_form.sequences == short_form.sequences
+    assert long_form.mask_modalities == short_form.mask_modalities
+    if method != "random":
+        assert seen == ["+MKTLA-acgtX"] * 2
+    (masked,) = long_form.sequences
+    assert [masked[i] for i in (0, 1, 6, 11)] == ["+", "M", "-", "X"]
+    assert masked.count("_") == 4
+    assert all(masked[position - 1] == "_" for position in long_form.mask_modalities[0])
 
 
 # ── Labeled results, public exports, and compressed transport ────────────────
@@ -212,11 +272,11 @@ def test_mixed_output_json_roundtrips_preserve_token_metadata():
 
 def test_mixed_interactions_export_npz_and_json_preserve_axes(tmp_path):
     output = SequenceInteractionsOutput(
-        results=[{"maps": {"base_pairing": {"tokens": ["<+>", "a"], "values": [[0.1, 0.2], [0.2, 0.8]]}}}]
+        results=[{"maps": {"base_pairing": {"tokens": ["+", "a"], "values": [[0.1, 0.2], [0.2, 0.8]]}}}]
     )
     output._export_output(tmp_path / "contacts.v1", "npz")
     with np.load(tmp_path / "contacts.v1.npz", allow_pickle=False) as archive:
-        assert archive["0_base_pairing_tokens"].tolist() == ["<+>", "a"]
+        assert archive["0_base_pairing_tokens"].tolist() == ["+", "a"]
         np.testing.assert_allclose(archive["0_base_pairing"], [[0.1, 0.2], [0.2, 0.8]])
         assert archive["0_base_pairing"].dtype == np.float32
     output._export_output(tmp_path / "contacts.v1", "json")
@@ -230,7 +290,7 @@ def test_mixed_dispatch_decompresses_nested_matrices(monkeypatch):
 
     def dispatch(toolkit, payload, *, instance=None, config=None):
         captured.update(toolkit=toolkit, payload=payload)
-        return {"results": [{"maps": {"protein": {"tokens": ["<+>", "A"], "values": compress_array(matrix)}}}]}
+        return {"results": [{"maps": {"protein": {"tokens": ["+", "A"], "values": compress_array(matrix)}}}]}
 
     monkeypatch.setattr(ToolInstance, "dispatch", staticmethod(dispatch))
     config = MinervaInteractionsConfig(device="cpu", heads=["protein"])
@@ -238,7 +298,7 @@ def test_mixed_dispatch_decompresses_nested_matrices(monkeypatch):
     output = SequenceInteractionsOutput(**raw)
     assert captured["toolkit"] == "minerva"
     assert captured["payload"]["operation"] == "interactions"
-    assert captured["payload"]["sequences"] == ["<+>A"]
+    assert captured["payload"]["sequences"] == ["+A"]
     assert output.metadata["model_checkpoint"] == "gbrixi/minerva-mlm"
     np.testing.assert_array_equal(output.results[0].maps["protein"].values, matrix)
 
@@ -319,6 +379,20 @@ def tiny_mixed_runtime():
     return MixedMLMRuntime(TinyAdapter())
 
 
+def test_mixed_runtime_ids_map_short_markers_and_masks_to_upstream_vocab(monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
+    from standalone_helpers.mixed_mlm import MixedMLMRuntime
+
+    # A stub torch keeps the ID mapping testable without the model environment.
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(tensor=lambda data, **_: data, long=None))
+    vocab = {"A": 0, "a": 1, "<+>": 2, "<->": 3, "<mask>": 4}
+    tokenizer = SimpleNamespace(get_vocab=lambda: vocab)
+    runtime = MixedMLMRuntime(SimpleNamespace(tokenizer=tokenizer, device="cpu"))
+    assert runtime._ids([tokenize_mixed_sequence("<+>A_-a", allow_masks=True)]) == [[2, 0, 4, 3, 1]]
+
+
 def _tiny_dispatch(runtime, operation, **payload):
     from proto_tools.utils.compressed_array import decompress_result
 
@@ -333,7 +407,7 @@ def test_mixed_runtime_score_matches_full_vocab_reference_and_gradient(tiny_mixe
     _tiny_dispatch(runtime, "embeddings", sequences=[_LOCUS], return_logits=True)
     result = _tiny_dispatch(runtime, "score", sequences=[_LOCUS], batch_size=2, return_logits=True)["scores"][0]
     vocab = runtime.adapter.tokenizer.get_vocab()
-    ids = torch.tensor([[vocab[token] for token in _TOKENS]])
+    ids = torch.tensor([[vocab[UPSTREAM_STRAND_TOKENS.get(token, token)] for token in _TOKENS]])
     log_probs = []
     for position in [1, 2, 4, 5]:
         masked = ids.clone()
@@ -403,7 +477,7 @@ def test_mixed_runtime_ste_uses_hard_context_and_soft_backward(tiny_mixed_runtim
     # Differentiate the toy model's hard context directly, without embedding hooks.
     model = runtime.adapter.model
     vocab = runtime.adapter.tokenizer.get_vocab()
-    ids = torch.tensor([vocab[token] for token in _TOKENS])
+    ids = torch.tensor([vocab[UPSTREAM_STRAND_TOKENS.get(token, token)] for token in _TOKENS])
     hard_embeddings = model.embedding(ids).detach().requires_grad_(True)
     mask_embedding = model.embedding.weight[vocab["<mask>"]].detach()
     positions = [1, 2, 4, 5]
@@ -487,7 +561,8 @@ def test_mixed_runtime_sample_preserves_alphabets_and_fixed_context(tiny_mixed_r
     assert [row["sequence"] for row in output] == [row["sequence"] for row in repeated]
     assert len({row["sequence"] for row in output}) > 1
     for row in output:
-        assert [row["tokens"][i] for i in [0, 5, 10]] == ["<+>", "<->", "X"]
+        assert [row["tokens"][i] for i in [0, 5, 10]] == ["+", "-", "X"]
+        assert row["sequence"] == "".join(row["tokens"])
         assert all(token in MIXED_VOCAB[:20] for token in row["tokens"][1:5])
         assert all(token in MIXED_VOCAB[20:] for token in row["tokens"][6:10])
         assert np.asarray(row["logits"]).shape == (11, 24)
