@@ -15,6 +15,7 @@ from standalone_helpers.mixed_sequence import (
 
 from proto_tools.transforms.masking import MaskingInput, MaskingStrategy
 from proto_tools.utils import BaseConfig, ConfigField
+from proto_tools.utils.base_config import _marked_preprocessed
 
 logger = logging.getLogger(__name__)
 
@@ -188,13 +189,16 @@ class MixedSampleConfig(MixedModelConfig):
                 raise ValueError("Automatic masking requires a registered sampling config")
             embedding_key = self.tool_key.removesuffix("-sample") + "-embedding"
             spec = ToolRegistry.get(embedding_key)
+            # This preprocess already checked these sequences, so the scoring call skips its own.
             result = spec.function(
                 spec.input_model.model_validate({"sequences": sequences}),
-                spec.config_model(
-                    model_checkpoint=self.model_checkpoint,
-                    batch_size=self.batch_size,
-                    device=self.device,
-                    return_logits=True,
+                _marked_preprocessed(
+                    spec.config_model(
+                        model_checkpoint=self.model_checkpoint,
+                        batch_size=self.batch_size,
+                        device=self.device,
+                        return_logits=True,
+                    )
                 ),
             )
             restricted_logits = []

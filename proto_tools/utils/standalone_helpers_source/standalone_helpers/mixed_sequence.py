@@ -27,7 +27,8 @@ def tokenize_mixed_sequence(sequence: str, *, allow_masks: bool = False) -> list
     """Split a prepared locus into one-character tokens without altering its biological content.
 
     Strand markers may be written ``+``/``-`` or ``<+>``/``<->``; both become one ``+``/``-``
-    token. Each marker must be followed by a biological token, and ``-`` by protein. No
+    token. Two markers may not be adjacent, and DNA may not directly follow ``-``. A missing
+    leading marker or a trailing marker is accepted, as in windows cut from a longer locus. No
     automatic strand insertion, case conversion, translation, whitespace removal, or reverse
     complementation is performed.
     """

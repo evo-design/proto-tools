@@ -18,7 +18,7 @@ from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # Long-form markers, since upstream_reference passes this string verbatim to the upstream tokenizer.
-LOCUS = "<+>MA<->acX"
+LOCUS = "<+>MA<+>ac<->X"
 
 
 def call_model(toolkit, operation, checkpoint, inputs, **settings):
@@ -44,7 +44,7 @@ def call_model(toolkit, operation, checkpoint, inputs, **settings):
 
 def check_embeddings_score_gradient(toolkit, checkpoint):
     """Verify token alignment, exact-length batching, and inference-to-backward persistence."""
-    sequences = [LOCUS, "<->Wg", "<+>AC<->gtX"]
+    sequences = [LOCUS, "<->W<+>g", "<+>AC<+>gt<->X"]
     batch = call_model(toolkit, "embeddings", checkpoint, {"sequences": sequences}, return_logits=True, batch_size=3)
     singles = call_model(toolkit, "embeddings", checkpoint, {"sequences": sequences}, return_logits=True, batch_size=1)
     for sequence, result, single in zip(sequences, batch.results, singles.results, strict=True):
@@ -61,15 +61,15 @@ def check_embeddings_score_gradient(toolkit, checkpoint):
     assert score.scored_positions == [2, 3, 5, 6]
     assert score.log_likelihood == pytest.approx(4 * score.avg_log_likelihood)
     assert score.perplexity == pytest.approx(math.exp(-score.avg_log_likelihood))
-    assert np.asarray(score.logits).shape == (7, 24)
-    np.testing.assert_array_equal(np.asarray(score.logits)[[0, 3, 6]], 0.0)
+    assert np.asarray(score.logits).shape == (8, 24)
+    np.testing.assert_array_equal(np.asarray(score.logits)[[0, 3, 6, 7]], 0.0)
     inputs = {"sequence": LOCUS, "logits": one_hot_mixed_logits(LOCUS, sharpness=1.0), "temperature": None}
     backward = call_model(toolkit, "gradient", checkpoint, inputs, batch_size=2)
     forward = call_model(toolkit, "gradient", checkpoint, inputs, batch_size=2, compute_gradient=False)
     gradient = np.asarray(backward.gradient)
-    assert gradient.shape == (7, 24)
+    assert gradient.shape == (8, 24)
     assert np.isfinite(gradient).all()
-    np.testing.assert_array_equal(gradient[[0, 3, 6]], 0.0)
+    np.testing.assert_array_equal(gradient[[0, 3, 6, 7]], 0.0)
     np.testing.assert_array_equal(gradient[[1, 2], 20:], 0.0)
     np.testing.assert_array_equal(gradient[[4, 5], :20], 0.0)
     assert np.any(gradient[[1, 2, 4, 5]] != 0.0)
@@ -82,7 +82,7 @@ def check_embeddings_score_gradient(toolkit, checkpoint):
 def check_sampling(toolkit, checkpoint, sampling_method):
     """Keep markers and alphabets fixed while advancing RNG across duplicate loci."""
     # Long-form markers in the input come back as one-character markers.
-    sequence = "<+>____<->____X"
+    sequence = "<+>____<+>____<->X"
     mapping = {**dict.fromkeys(range(2, 6), "protein"), **dict.fromkeys(range(7, 11), "dna")}
     inputs = {"sequences": [sequence] * 3, "mask_modalities": [mapping] * 3}
     settings = {
@@ -98,17 +98,17 @@ def check_sampling(toolkit, checkpoint, sampling_method):
     assert len(set(output.sequences)) > 1
     for result in output.results:
         assert result.tokens == tokenize_mixed_sequence(result.sequence)
-        assert [result.tokens[i] for i in [0, 5, 10]] == ["+", "-", "X"]
+        assert [result.tokens[i] for i in [0, 5, 10, 11]] == ["+", "+", "-", "X"]
         assert result.sequence == "".join(result.tokens)
         assert all(token in MIXED_VOCAB[:20] for token in result.tokens[1:5])
         assert all(token in MIXED_VOCAB[20:] for token in result.tokens[6:10])
-        assert np.asarray(result.logits).shape == (11, 24)
+        assert np.asarray(result.logits).shape == (12, 24)
         assert result.vocab == MIXED_VOCAB
 
 
 def check_gradient_finite_difference(toolkit, checkpoint):
     """Compare a real model's relaxed masked-PLL derivative with a central difference."""
-    sequence = "<+>Ma"
+    sequence = "<+>M<+>a"
     logits = np.asarray(one_hot_mixed_logits(sequence, sharpness=2.0))
     inputs = {"sequence": sequence, "logits": logits.tolist(), "temperature": 0.9}
     result = call_model(toolkit, "gradient", checkpoint, inputs, batch_size=2)
@@ -116,7 +116,7 @@ def check_gradient_finite_difference(toolkit, checkpoint):
     losses = []
     for delta in [epsilon, -epsilon]:
         perturbed = logits.copy()
-        perturbed[2, 21] += delta
+        perturbed[3, 21] += delta
         losses.append(
             call_model(
                 toolkit,
@@ -128,7 +128,7 @@ def check_gradient_finite_difference(toolkit, checkpoint):
             ).loss
         )
     derivative = (losses[0] - losses[1]) / (2 * epsilon)
-    assert result.gradient[2][21] == pytest.approx(derivative, rel=0.03, abs=3e-4)
+    assert result.gradient[3][21] == pytest.approx(derivative, rel=0.03, abs=3e-4)
 
 
 _UPSTREAM_REFERENCE = """
@@ -205,7 +205,7 @@ def check_upstream_pll(toolkit, checkpoint):
 
 def benchmark_operation(request, toolkit, checkpoint, operation):
     """Benchmark each public operation with a representative, bounded mixed locus."""
-    sequence = "<+>" + "MKTLACDE" * 4 + "<->" + "acgt" * 8
+    sequence = "<+>" + "MKTLACDE" * 4 + "<+>" + "acgt" * 8
     inputs = {"sequences": [sequence] * (4 if operation == "sample" else 1)}
     if operation == "embeddings":
         inputs = {"sequences": [sequence[:-1] + base for base in "acgt"]}

@@ -1,6 +1,7 @@
 """Tests for mixed protein/DNA sequence contracts and transport."""
 
 import json
+import logging
 import math
 from typing import ClassVar
 
@@ -30,9 +31,9 @@ from proto_tools.transforms.masking import MaskingStrategy
 from proto_tools.utils import ToolInstance
 from proto_tools.utils.interaction_models import SequenceInteractionMap, SequenceInteractionsOutput
 
-_LOCUS = "+MA-acX"
-_LONG_LOCUS = "<+>MA<->acX"
-_TOKENS = ["+", "M", "A", "-", "a", "c", "X"]
+_LOCUS = "+MA+ac-X"
+_LONG_LOCUS = "<+>MA<+>ac<->X"
+_TOKENS = ["+", "M", "A", "+", "a", "c", "-", "X"]
 
 
 # ── Atomic tokens and modality ──────────────────────────────────────────────
@@ -43,8 +44,8 @@ def test_mixed_sequence_token_axis_preserves_case_and_markers():
     assert inputs.sequences == [_LOCUS]
     assert tokenize_mixed_sequence(_LOCUS) == _TOKENS
     assert tokenize_mixed_sequence(_LONG_LOCUS) == _TOKENS
-    assert len(inputs) == 7
-    assert tokenize_mixed_sequence("ACGTacgtXBUZO") == list("ACGTacgtXBUZO")
+    assert len(inputs) == 8
+    assert tokenize_mixed_sequence("+ACGTXBUZO+acgt") == list("+ACGTXBUZO+acgt")
 
 
 @pytest.mark.parametrize(
@@ -57,6 +58,37 @@ def test_mixed_parser_rejects_invalid_or_empty_sequences(sequence):
 
 
 @pytest.mark.parametrize(
+    ("sequence", "message"),
+    [
+        ("+MA+-X", "Consecutive strand markers at token positions 4-5"),
+        ("<+>MA<+><->X", "Consecutive strand markers at token positions 4-5"),
+        ("+MA-ac", r"DNA follows a '-' marker at token position 5"),
+        ("<+>MA<->a", r"DNA follows a '-' marker at token position 5"),
+    ],
+)
+def test_mixed_parser_rejects_empty_elements_and_reverse_strand_dna(sequence, message):
+    with pytest.raises(ValueError, match=message):
+        tokenize_mixed_sequence(sequence)
+
+
+@pytest.mark.parametrize("sequence", ["+MA+ac-", "MA+ac-X", "-M_", "+M+a-X"])
+def test_mixed_parser_accepts_window_edges_and_masked_reverse_strand_sites(sequence):
+    # Windows cut from a longer locus may start mid-element or end on a marker.
+    assert "".join(tokenize_mixed_sequence(sequence, allow_masks=True)) == sequence
+
+
+def test_mixed_preprocess_warns_once_per_sequence_missing_leading_marker(caplog):
+    inputs = MixedSequenceInput(sequences=["MA+ac-X", _LOCUS, "ac-X"])
+    with caplog.at_level(logging.WARNING, logger="proto_tools.tools.masked_models.mixed_configs"):
+        GLM2EmbeddingsConfig(device="cpu").preprocess(inputs)
+    warnings = [record.getMessage() for record in caplog.records if "strand marker" in record.getMessage()]
+    assert warnings == [
+        "Sequence 0 does not start with a strand marker (+ or -). Generally this means the input was malformed.",
+        "Sequence 2 does not start with a strand marker (+ or -). Generally this means the input was malformed.",
+    ]
+
+
+@pytest.mark.parametrize(
     ("input_class", "field", "extra"),
     [
         (MixedSequenceInput, "sequences", {}),
@@ -64,7 +96,7 @@ def test_mixed_parser_rejects_invalid_or_empty_sequences(sequence):
         (MixedSequenceGradientInput, "sequence", {"logits": one_hot_mixed_logits(_LOCUS)}),
     ],
 )
-@pytest.mark.parametrize("spelling", [_LONG_LOCUS, "<+>MA-acX", "+MA<->acX"])
+@pytest.mark.parametrize("spelling", [_LONG_LOCUS, "<+>MA+ac<->X", "+MA<+>ac-X"])
 def test_mixed_inputs_normalize_long_and_mixed_marker_spellings(input_class, field, extra, spelling):
     long_form = input_class(**{field: spelling}, **extra)
     short_form = input_class(**{field: _LOCUS}, **extra)
@@ -75,8 +107,8 @@ def test_mixed_inputs_normalize_long_and_mixed_marker_spellings(input_class, fie
 
 
 def test_mixed_sample_mask_metadata_uses_token_coordinates():
-    inputs = MixedSequenceSampleInput(sequences="<+>A_<->a_", mask_modalities=[{3: "protein", 6: "dna"}])
-    assert inputs.sequences == ["+A_-a_"]
+    inputs = MixedSequenceSampleInput(sequences="<+>A_<+>a_", mask_modalities=[{3: "protein", 6: "dna"}])
+    assert inputs.sequences == ["+A_+a_"]
     assert len(inputs) == 6
     restored = MixedSequenceSampleInput.model_validate_json(inputs.model_dump_json())
     assert restored.mask_modalities == [{3: "protein", 6: "dna"}]
@@ -87,6 +119,42 @@ def test_mixed_sample_mask_metadata_uses_token_coordinates():
 def test_mixed_sample_rejects_missing_extra_or_misaligned_mask_metadata(modalities):
     with pytest.raises(ValidationError, match=r"exactly the masked token positions|one mapping per sequence"):
         MixedSequenceSampleInput(sequences="<+>A_", mask_modalities=modalities)
+
+
+@pytest.mark.parametrize(
+    ("sequence", "modalities", "expected"),
+    [
+        # A mask directly after '-' starts a reverse-strand protein.
+        ("+MA-_K", {5: "dna"}, "protein"),
+        # A mask run between same-modality tokens shares their modality.
+        ("+M_K", {3: "dna"}, "protein"),
+        ("+M__K", {3: "protein", 4: "dna"}, "protein"),
+        ("+a_c", {3: "protein"}, "dna"),
+        # Ambiguous protein symbols fix the modality like canonical residues.
+        ("+X_M", {3: "dna"}, "protein"),
+    ],
+)
+def test_mixed_sample_rejects_mask_modalities_that_contradict_context(sequence, modalities, expected):
+    with pytest.raises(ValidationError, match=f"must be '{expected}' from its context"):
+        MixedSequenceSampleInput(sequences=sequence, mask_modalities=[modalities])
+
+
+@pytest.mark.parametrize(
+    ("sequence", "modalities"),
+    [
+        ("+MA-_K", {5: "protein"}),
+        ("+M__K", {3: "protein", 4: "protein"}),
+        ("+a__c", {3: "dna", 4: "dna"}),
+        # Masks after '+', at an edge, or beside a marker have no implied modality.
+        ("+_A", {2: "dna"}),
+        ("+MA_", {4: "dna"}),
+        ("+M_+ac", {3: "dna"}),
+        ("_M+ac", {1: "dna"}),
+    ],
+)
+def test_mixed_sample_accepts_mask_modalities_consistent_with_context(sequence, modalities):
+    inputs = MixedSequenceSampleInput(sequences=sequence, mask_modalities=[modalities])
+    assert inputs.mask_modalities == [modalities]
 
 
 def test_mixed_sequence_one_hot_alignment_and_probability_mode():
@@ -106,7 +174,7 @@ def test_mixed_sequence_one_hot_alignment_and_probability_mode():
 @pytest.mark.parametrize("sharpness", [math.nan, math.inf, -math.inf])
 def test_mixed_one_hot_rejects_nonfinite_sharpness(sharpness):
     with pytest.raises(ValueError, match=r"sharpness must be finite"):
-        one_hot_mixed_logits("Aa", sharpness=sharpness)
+        one_hot_mixed_logits("+A+a", sharpness=sharpness)
 
 
 def test_mixed_gradient_rejects_alignment_fixed_context_and_nonfinite_values():
@@ -118,7 +186,7 @@ def test_mixed_gradient_rejects_alignment_fixed_context_and_nonfinite_values():
         MixedSequenceGradientInput(sequence=_LOCUS, logits=rows)
     for row in [[0.0] * 23, [math.nan] * 24, [math.inf] * 24]:
         with pytest.raises(ValidationError, match=r"24 finite numbers"):
-            MixedSequenceGradientInput(sequence="A", logits=[row])
+            MixedSequenceGradientInput(sequence="+A", logits=[[0.0] * 24, row])
     with pytest.raises(ValidationError, match=r"at least one canonical"):
         MixedSequenceGradientInput(sequence="<+>X", logits=[[0.0] * 24] * 2)
 
@@ -126,7 +194,7 @@ def test_mixed_gradient_rejects_alignment_fixed_context_and_nonfinite_values():
 @pytest.mark.parametrize("row", [[0.0] * 24, [-1.0] + [0.0] * 23, [0.0] * 20 + [1.0, 0.0, 0.0, 0.0]])
 def test_mixed_gradient_probability_mode_rejects_wrong_domains(row):
     with pytest.raises(ValidationError, match=r"probability distribution within its modality"):
-        MixedSequenceGradientInput(sequence="A", logits=[row], temperature=None)
+        MixedSequenceGradientInput(sequence="+A", logits=[[0.0] * 24, row], temperature=None)
 
 
 # ── Checkpoint-specific limits ──────────────────────────────────────────────
@@ -165,7 +233,7 @@ def test_automatic_masking_uses_own_toolkit_and_preserves_modalities(monkeypatch
         calls.append((inputs, embedding_config))
         return MixedEmbeddingsOutput(
             results=[
-                {"tokens": _TOKENS, "mean_embedding": [0.1], "attention_mask": [1] * 7, "logits": [[0.0] * 24] * 7}
+                {"tokens": _TOKENS, "mean_embedding": [0.1], "attention_mask": [1] * 8, "logits": [[0.0] * 24] * 8}
             ]
         )
 
@@ -178,8 +246,10 @@ def test_automatic_masking_uses_own_toolkit_and_preserves_modalities(monkeypatch
     assert embedding_config.tool_key == f"{toolkit}-embedding"
     assert embedding_config.return_logits
     assert embedding_config.device == "cpu"
+    # The registry skips a marked config's preprocess, so its checks and warnings run once.
+    assert embedding_config._preprocess_completed
     tokens = tokenize_mixed_sequence(result.sequences[0], allow_masks=True)
-    assert [tokens[i] for i in (0, 3, 6)] == ["+", "-", "X"]
+    assert [tokens[i] for i in (0, 3, 6, 7)] == ["+", "+", "-", "X"]
     assert tokens.count("_") == 2
     expected = {i + 1: ("dna" if _TOKENS[i] in "acgt" else "protein") for i, token in enumerate(tokens) if token == "_"}
     assert result.mask_modalities == [expected]
@@ -211,14 +281,14 @@ def test_automatic_masking_is_identical_for_long_and_short_markers(monkeypatch, 
         )
 
     monkeypatch.setattr(embedding, "function", embed)
-    long_form = config.preprocess(MixedSequenceSampleInput(sequences="<+>MKTLA<->acgtX"))
-    short_form = config.preprocess(MixedSequenceSampleInput(sequences="+MKTLA-acgtX"))
+    long_form = config.preprocess(MixedSequenceSampleInput(sequences="<+>MKTLA<+>acgt<->X"))
+    short_form = config.preprocess(MixedSequenceSampleInput(sequences="+MKTLA+acgt-X"))
     assert long_form.sequences == short_form.sequences
     assert long_form.mask_modalities == short_form.mask_modalities
     if method != "random":
-        assert seen == ["+MKTLA-acgtX"] * 2
+        assert seen == ["+MKTLA+acgt-X"] * 2
     (masked,) = long_form.sequences
-    assert [masked[i] for i in (0, 1, 6, 11)] == ["+", "M", "-", "X"]
+    assert [masked[i] for i in (0, 1, 6, 11, 12)] == ["+", "M", "+", "-", "X"]
     assert masked.count("_") == 4
     assert all(masked[position - 1] == "_" for position in long_form.mask_modalities[0])
 
@@ -246,7 +316,7 @@ def test_mixed_output_json_roundtrips_preserve_token_metadata():
     logits = [[float(i)] * 24 for i in range(len(_TOKENS))]
     outputs = [
         MixedEmbeddingsOutput(
-            results=[{"tokens": _TOKENS, "mean_embedding": [0.1, 0.2], "attention_mask": [1] * 7, "logits": logits}]
+            results=[{"tokens": _TOKENS, "mean_embedding": [0.1, 0.2], "attention_mask": [1] * 8, "logits": logits}]
         ),
         MixedSampleOutput(results=[{"sequence": _LOCUS, "tokens": _TOKENS, "logits": logits}]),
         MixedScoringOutput(
@@ -263,7 +333,9 @@ def test_mixed_output_json_roundtrips_preserve_token_metadata():
             ]
         ),
         MixedGradientOutput(tokens=_TOKENS, gradient=logits, loss=1.0, vocab=MIXED_VOCAB),
-        SequenceInteractionsOutput(results=[{"maps": {"protein": {"tokens": _TOKENS, "values": np.eye(7).tolist()}}}]),
+        SequenceInteractionsOutput(
+            results=[{"maps": {"protein": {"tokens": _TOKENS, "values": np.eye(len(_TOKENS)).tolist()}}}]
+        ),
     ]
     for output in outputs:
         restored = type(output).model_validate_json(output.model_dump_json())
@@ -390,7 +462,7 @@ def test_mixed_runtime_ids_map_short_markers_and_masks_to_upstream_vocab(monkeyp
     vocab = {"A": 0, "a": 1, "<+>": 2, "<->": 3, "<mask>": 4}
     tokenizer = SimpleNamespace(get_vocab=lambda: vocab)
     runtime = MixedMLMRuntime(SimpleNamespace(tokenizer=tokenizer, device="cpu"))
-    assert runtime._ids([tokenize_mixed_sequence("<+>A_-a", allow_masks=True)]) == [[2, 0, 4, 3, 1]]
+    assert runtime._ids([tokenize_mixed_sequence("<+>a<->A_", allow_masks=True)]) == [[2, 1, 3, 0, 4]]
 
 
 def _tiny_dispatch(runtime, operation, **payload):
@@ -428,7 +500,7 @@ def test_mixed_runtime_score_matches_full_vocab_reference_and_gradient(tiny_mixe
     gradient = np.asarray(gradient_result["gradient"])
     assert np.isfinite(gradient).all()
     assert np.any(gradient != 0.0)
-    np.testing.assert_array_equal(gradient[[0, 3, 6]], 0.0)
+    np.testing.assert_array_equal(gradient[[0, 3, 6, 7]], 0.0)
     np.testing.assert_array_equal(gradient[[1, 2], 20:], 0.0)
     np.testing.assert_array_equal(gradient[[4, 5], :20], 0.0)
     assert all(parameter.grad is None for parameter in runtime.adapter.model.parameters())
@@ -438,21 +510,21 @@ def test_mixed_runtime_score_matches_full_vocab_reference_and_gradient(tiny_mixe
 @pytest.mark.parametrize("batch_size", [1, 2, 8])
 def test_mixed_runtime_relaxed_gradient_matches_finite_difference(tiny_mixed_runtime, batch_size):
     runtime = tiny_mixed_runtime
-    logits = np.asarray(one_hot_mixed_logits("<+>Ma", sharpness=2.0))
-    payload = {"sequence": "<+>Ma", "logits": logits.tolist(), "temperature": 0.9, "batch_size": batch_size}
+    logits = np.asarray(one_hot_mixed_logits("<+>M<+>a", sharpness=2.0))
+    payload = {"sequence": "<+>M<+>a", "logits": logits.tolist(), "temperature": 0.9, "batch_size": batch_size}
     result = _tiny_dispatch(runtime, "gradient", **payload)
     losses = []
     epsilon = 0.01
     for delta in [epsilon, -epsilon]:
         perturbed = logits.copy()
-        perturbed[2, 21] += delta
+        perturbed[3, 21] += delta
         losses.append(
             _tiny_dispatch(runtime, "gradient", **{**payload, "logits": perturbed.tolist(), "compute_gradient": False})[
                 "loss"
             ]
         )
     numerical = (losses[0] - losses[1]) / (2 * epsilon)
-    assert result["gradient"][2][21] == pytest.approx(numerical, rel=0.01, abs=3e-5)
+    assert result["gradient"][3][21] == pytest.approx(numerical, rel=0.01, abs=3e-5)
 
 
 @pytest.mark.parametrize("batch_size", [1, 2, 8])
@@ -504,7 +576,7 @@ def test_mixed_runtime_ste_uses_hard_context_and_soft_backward(tiny_mixed_runtim
     np.testing.assert_allclose(gradient, expected.numpy(), rtol=1e-5, atol=1e-7)
     assert np.isfinite(gradient).all()
     assert np.any(gradient != 0.0)
-    np.testing.assert_array_equal(gradient[[0, 3, 6]], 0.0)
+    np.testing.assert_array_equal(gradient[[0, 3, 6, 7]], 0.0)
     np.testing.assert_array_equal(gradient[[1, 2], 20:], 0.0)
     np.testing.assert_array_equal(gradient[[4, 5], :20], 0.0)
     assert all(parameter.grad is None for parameter in model.parameters())
@@ -520,7 +592,7 @@ def test_mixed_runtime_gradient_removes_embedding_hook_after_failure(tiny_mixed_
 
     monkeypatch.setattr(runtime.adapter, "forward", fail_forward)
     with pytest.raises(RuntimeError, match=r"synthetic forward failure"):
-        _tiny_dispatch(runtime, "gradient", sequence="Aa", logits=one_hot_mixed_logits("Aa"))
+        _tiny_dispatch(runtime, "gradient", sequence="+A+a", logits=one_hot_mixed_logits("+A+a"))
     assert not runtime.adapter.embedding_layer._forward_hooks
 
 
@@ -534,9 +606,9 @@ def test_mixed_runtime_batches_exact_lengths_and_restores_order(tiny_mixed_runti
         return forward(ids, **kwargs)
 
     monkeypatch.setattr(runtime.adapter, "forward", track)
-    sequences = ["<+>Ma", "a", "<->Ac", "aG"]
+    sequences = ["<+>M<+>a", "+a", "<->A<+>c", "<->AG"]
     batched = _tiny_dispatch(runtime, "embeddings", sequences=sequences, batch_size=4, return_logits=True)["results"]
-    assert observed == [(2, 3), (1, 1), (1, 2)]
+    assert observed == [(2, 4), (1, 2), (1, 3)]
     singles = _tiny_dispatch(runtime, "embeddings", sequences=sequences, batch_size=1, return_logits=True)["results"]
     assert [row["tokens"] for row in batched] == [tokenize_mixed_sequence(sequence) for sequence in sequences]
     for batch, single in zip(batched, singles, strict=True):
@@ -546,7 +618,7 @@ def test_mixed_runtime_batches_exact_lengths_and_restores_order(tiny_mixed_runti
 
 @pytest.mark.parametrize("method", ["single_pass", "iterative_refinement"])
 def test_mixed_runtime_sample_preserves_alphabets_and_fixed_context(tiny_mixed_runtime, method):
-    sequence = "<+>____<->____X"
+    sequence = "<+>____<+>____<->X"
     metadata = {**dict.fromkeys(range(2, 6), "protein"), **dict.fromkeys(range(7, 11), "dna")}
     payload = {
         "sequences": [sequence] * 3,
@@ -561,21 +633,21 @@ def test_mixed_runtime_sample_preserves_alphabets_and_fixed_context(tiny_mixed_r
     assert [row["sequence"] for row in output] == [row["sequence"] for row in repeated]
     assert len({row["sequence"] for row in output}) > 1
     for row in output:
-        assert [row["tokens"][i] for i in [0, 5, 10]] == ["+", "-", "X"]
+        assert [row["tokens"][i] for i in [0, 5, 10, 11]] == ["+", "+", "-", "X"]
         assert row["sequence"] == "".join(row["tokens"])
         assert all(token in MIXED_VOCAB[:20] for token in row["tokens"][1:5])
         assert all(token in MIXED_VOCAB[20:] for token in row["tokens"][6:10])
-        assert np.asarray(row["logits"]).shape == (11, 24)
+        assert np.asarray(row["logits"]).shape == (12, 24)
 
 
 @pytest.mark.parametrize(
     ("payload", "error"),
     [
         ({"operation": "unknown"}, "unknown operation"),
-        ({"operation": "interactions", "sequences": ["Aa"]}, "Only Minerva"),
-        ({"operation": "score", "sequences": ["Aa"], "batch_size": 0}, "positive integer"),
+        ({"operation": "interactions", "sequences": ["+A+a"]}, "Only Minerva"),
+        ({"operation": "score", "sequences": ["+A+a"], "batch_size": 0}, "positive integer"),
         ({"operation": "score", "sequences": ["<+>X"]}, "at least one canonical"),
-        ({"operation": "embeddings", "sequences": ["A" * 4097]}, "at most 4096"),
+        ({"operation": "embeddings", "sequences": ["+" + "A" * 4096]}, "at most 4096"),
         ({"operation": "sample", "sequences": ["<+>_"], "mask_modalities": [{}]}, "exactly the masked"),
     ],
 )
@@ -591,7 +663,7 @@ def test_mixed_runtime_rejects_invalid_requests_before_loading(tiny_mixed_runtim
 @pytest.mark.parametrize("method", ["single_pass", "iterative_refinement"])
 def test_mixed_runtime_sampling_is_independent_of_mask_mapping_order(tiny_mixed_runtime, method):
     positions = [(position, "protein" if position < 6 else "dna") for position in [2, 3, 4, 5, 7, 8, 9, 10]]
-    payload = {"sequences": ["<+>____<->____X"] * 3, "seed": 31, "sampling_method": method, "num_steps": 3}
+    payload = {"sequences": ["<+>____<+>____<->X"] * 3, "seed": 31, "sampling_method": method, "num_steps": 3}
     forward = _tiny_dispatch(tiny_mixed_runtime, "sample", **payload, mask_modalities=[dict(positions)] * 3)
     reverse = _tiny_dispatch(tiny_mixed_runtime, "sample", **payload, mask_modalities=[dict(reversed(positions))] * 3)
     assert [row["sequence"] for row in forward["results"]] == [row["sequence"] for row in reverse["results"]]

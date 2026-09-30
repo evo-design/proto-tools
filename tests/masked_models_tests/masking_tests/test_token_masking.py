@@ -11,19 +11,19 @@ def _eligibility(sequence):
 
 
 def test_ineligible_tokens_and_fixed_positions_are_never_masked():
-    sequence = "+MK-acX"
+    sequence = "+MK+ac-X"
     result = RandomMaskingStrategy(mask_fraction=1.0, fixed_positions=[3]).mask(
         [sequence], eligibility=[_eligibility(sequence)], seed=7
     )
-    assert result == ["+_K-__X"]
+    assert result == ["+_K+__-X"]
 
 
 def test_mask_fraction_counts_only_eligible_tokens():
-    sequence = "+MKLA-acgt"
+    sequence = "+MKLA+acgt"
     (result,) = RandomMaskingStrategy(mask_fraction=0.5).mask([sequence], eligibility=[_eligibility(sequence)], seed=3)
     assert result.count("_") == 4
     assert result[0] == "+"
-    assert result[5] == "-"
+    assert result[5] == "+"
 
 
 def test_all_true_eligibility_matches_unrestricted_masking():
@@ -50,16 +50,16 @@ def test_misaligned_eligibility_raises(eligibility, error):
 
 
 def test_model_scored_masking_receives_sequences_and_skips_ineligible_sites():
-    sequence = "+Ma-K"
+    sequence = "+M+a-K"
     seen = []
 
     def logits(sequences):
         seen.extend(sequences)
         # Uniform rows on markers would win on entropy if eligibility were ignored.
-        return [[[0.0, 0.0], [30.0, 0.0], [0.0, 0.0], [0.0, 0.0], [30.0, 0.0]]]
+        return [[[0.0, 0.0], [30.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [30.0, 0.0]]]
 
     result = MaskingStrategy(method="entropy", temperature=0.001, num_mutations=1).mask(
         [sequence], eligibility=[_eligibility(sequence)], position_score_fn=logits, seed=4
     )
     assert seen == [sequence]
-    assert result == ["+M_-K"]
+    assert result == ["+M+_-K"]
