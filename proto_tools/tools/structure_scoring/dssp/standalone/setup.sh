@@ -4,8 +4,7 @@ set -euo pipefail
 echo "Setting up DSSP standalone environment..."
 
 echo "Installing DSSP binary from conda-forge..."
-# DSSP 4.6.1 is built against the libmcfp 1.4.2 ABI. libmcfp 2.x is not
-# binary-compatible and makes mkdssp fail at startup with an undefined symbol.
+# libmcfp=1.4.2 excludes the dssp 4.6.1 _0/_1 builds, whose mkdssp needs a libmcfp symbol no release has.
 "$MAMBA_BIN" install -y -p "$VENV_PATH" -c conda-forge "dssp=4.6.1" "libmcfp=1.4.2"
 
 echo "Installing Python dependencies..."
