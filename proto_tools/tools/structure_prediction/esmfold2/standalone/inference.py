@@ -121,17 +121,14 @@ class ESMFold2Model:
 
     def load(self, device: str, verbose: bool = False) -> None:
         """Load the ESMFold2 model and input builder onto ``device``."""
-        from esm.models.esmfold2 import ESMFold2InputBuilder
-        from transformers.models.esmfold2.modeling_esmfold2 import (
-            ESMFold2Model as _UpstreamESMFold2Model,
-        )
+        from esm.models.esmfold2 import ESMFold2InputBuilder, EsmFold2Model
 
         repo = _CHECKPOINT_REPOS[self.model_checkpoint]
         if verbose:
             logger.info(f"Loading ESMFold2 model: {repo} on {device}")
 
         try:
-            self.model = _UpstreamESMFold2Model.from_pretrained(repo).to(device).eval()
+            self.model = EsmFold2Model.from_pretrained(repo, device=device).eval()
         except OSError as e:
             raise RuntimeError(f"esmfold2: HF weight load from {repo!r} failed: {e}") from e
 

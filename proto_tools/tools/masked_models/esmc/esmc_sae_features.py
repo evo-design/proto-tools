@@ -238,8 +238,8 @@ class ESMCSAEFeaturesConfig(BaseConfig):
             sizes exist depends on ``model_checkpoint`` and ``sae_target``.
         backbone (ESMC_SAE_BACKBONES): Which ESM C implementation supplies the activations
             the SAE reads. ``"transformers"`` matches the published SAE documentation.
-            ``"esm"`` reads the ``esmc`` toolkit's weights instead, avoiding a second
-            backbone download at the cost of ~1% disagreement in active features.
+            ``"esm"`` reads activations through the ``esmc`` toolkit's ``ESMC`` wrapper
+            instead, which disagrees on ~1% of active features.
         batch_size (int): Sequences per forward pass.
         device (str): Device to run the model on.
 
@@ -281,7 +281,7 @@ class ESMCSAEFeaturesConfig(BaseConfig):
     backbone: ESMC_SAE_BACKBONES = ConfigField(
         title="Backbone Source",
         default="transformers",
-        description="Which ESM C implementation supplies activations; 'esm' reuses the esmc toolkit weights",
+        description="Which ESM C implementation supplies activations; 'esm' reads them via the ESMC wrapper",
         reload_on_change=True,
     )
     batch_size: int = ConfigField(

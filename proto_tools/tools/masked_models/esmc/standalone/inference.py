@@ -4,8 +4,8 @@ Embedding-focused masked language model, plus sparse-autoencoder feature
 extraction over its activations. Ships in the same ``esm`` package as ESM3 and
 shares the ``biohub_esm`` env.
 
-``ESMCModel`` loads the ``esm``-package weights for embeddings. ``ESMCSAEModel``
-loads the Transformers-format backbone, which is what the published SAEs are
+``ESMCModel`` loads the legacy ``ESMC`` wrapper for embeddings. ``ESMCSAEModel``
+loads the published backbone as ``EsmcModel``, which is what the published SAEs are
 defined against. Each is constructed only when its operation is first requested.
 """
 
@@ -189,8 +189,7 @@ class ESMCModel:
                 torch.cuda.empty_cache()
 
 
-# HuggingFace repos holding the Transformers-format backbone weights. These are
-# distinct from the `esm`-package repos ``ESMCModel`` above loads.
+# HuggingFace repos holding the published backbone weights.
 BACKBONE_REPOS = {
     "esmc_300m": "biohub/ESMC-300M",
     "esmc_600m": "biohub/ESMC-600M",
@@ -215,7 +214,7 @@ class ESMCSAEModel:
             sae_repo: HuggingFace repo id holding the SAE weights.
             layers: Backbone layer indices to attach SAEs to.
             backbone: ``"transformers"`` for the published path, or ``"esm"`` to read
-                activations from the esmc toolkit's weights.
+                activations through the legacy ``ESMC`` wrapper.
         """
         self._loaded = False
         self.model_checkpoint = model_checkpoint
@@ -272,13 +271,13 @@ class ESMCSAEModel:
             inputs = {k: v.to(device) for k, v in inputs.items()}
 
             with torch.inference_mode():
-                outputs = self.model(**inputs)
+                outputs = self.model(**inputs, return_dict=True)
 
             # The SAE stack emits one row per *unpadded* token, concatenated
             # across the batch, so rows must be split by each sequence's real
             # token count rather than reshaped to (batch, padded_len, codebook).
             token_counts = inputs["attention_mask"].sum(dim=1).tolist()
-            features.extend(self._split_batch(outputs["sae_outputs"], token_counts))
+            features.extend(self._split_batch(outputs.sae_outputs, token_counts))
 
         return {"features": features}
 
@@ -363,7 +362,7 @@ class ESMCSAEModel:
     # ============================================================================
     def load(self, device: str, verbose: bool = False) -> None:
         """Load the backbone and SAE layers onto the device."""
-        from transformers.models.esmc.modeling_esmc_sae import ESMCSAEModel as HFSAEModel
+        from esm.models.esmc import EsmcSaeModel
 
         logger.update_status(f"Loading {self.model_checkpoint}")
         if self.backbone == "esm":
@@ -374,23 +373,23 @@ class ESMCSAEModel:
             self.model = ESMC.from_pretrained(self.model_checkpoint, device=torch.device(device)).eval()
             self.tokenizer = self.model.tokenizer
         else:
-            from transformers import AutoModel, AutoTokenizer
+            from esm.models.esmc import EsmcModel, EsmcTokenizer
 
             repo = BACKBONE_REPOS[self.model_checkpoint]
             if verbose:
                 logger.info(f"Loading ESM C backbone {repo} on {device}")
-            self.model = AutoModel.from_pretrained(repo, device_map=device).eval()
-            self.tokenizer = AutoTokenizer.from_pretrained(repo)
+            self.model = EsmcModel.from_pretrained(repo, device=device).eval()
+            self.tokenizer = EsmcTokenizer()
 
         # Fetch only the requested layers; the all-layer SAE repos hold one file
         # per backbone layer and the 6B collection is tens of gigabytes.
         allow_patterns = ["config.json"] + [f"layer_{layer}.safetensors" for layer in self.layers]
         logger.update_status(f"Loading SAE layers {list(self.layers)}")
         device_for_sae = self.model.device if hasattr(self.model, "device") else device
-        sae = HFSAEModel.from_pretrained(self.sae_repo, allow_patterns=allow_patterns, device=device_for_sae)
+        sae = EsmcSaeModel.from_pretrained(self.sae_repo, allow_patterns=allow_patterns, device=device_for_sae)
         sae.initialize_layers(list(self.layers))
         self.sae = sae
-        # The esm path applies the SAE modules itself; only Transformers hooks them in.
+        # The esm path applies the SAE modules itself; only EsmcModel hooks them in.
         if self.backbone != "esm":
             self.model.add_sae_models([sae.layers[str(layer)] for layer in self.layers])
 

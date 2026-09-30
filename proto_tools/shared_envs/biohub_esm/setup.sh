@@ -8,7 +8,9 @@ source standalone_helpers.sh
 
 echo "Setting up Biohub ESM env (covers ESM3 and ESM C)..."
 
-proto_install_pytorch
+# esm pins torch>=2.11,<2.12. Install it from the driver-matched index here; otherwise
+# the requirements step swaps in PyPI's torch 2.11, a CUDA 13 build that needs driver 580+.
+proto_install_pytorch "torch>=2.11,<2.12"
 
 echo "Installing dependencies from requirements.txt..."
 uv pip install -r requirements.txt
