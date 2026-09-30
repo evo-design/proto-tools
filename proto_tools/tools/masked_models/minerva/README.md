@@ -2,6 +2,8 @@
 
 # Minerva
 
+![Minerva](https://proto-bio.github.io/proto-assets/images/tool/minerva/hero.png)
+
 > [!NOTE]
 > **License:** Minerva is open source and free for academic and commercial use under an Apache-2.0 license. Please refer to [the license](https://github.com/garykbrixi/minerva/blob/main/LICENSE) for full terms.
 

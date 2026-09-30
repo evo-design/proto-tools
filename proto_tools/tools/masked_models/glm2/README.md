@@ -2,6 +2,8 @@
 
 # gLM2
 
+![gLM2](https://proto-bio.github.io/proto-assets/images/tool/glm2/hero.png)
+
 > [!NOTE]
 > **License:** gLM2 is open source and free for academic and commercial use under an Apache-2.0 license. Please refer to [the license](https://github.com/TattaBio/gLM2/blob/main/LICENSE) for full terms.
 
