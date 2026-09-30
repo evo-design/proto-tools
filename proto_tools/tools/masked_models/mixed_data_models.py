@@ -83,7 +83,7 @@ def _implied_mask_modality(sequence: str, index: int) -> MixedModality | None:
     if left == "-":
         return "protein"
     # A mask run between two same-modality tokens within one element shares their modality.
-    if left in MIXED_VOCAB_SET and right in MIXED_VOCAB_SET:
+    if left is not None and right is not None and left in MIXED_VOCAB_SET and right in MIXED_VOCAB_SET:
         left_modality = _token_modality(left)
         if left_modality == _token_modality(right):
             return left_modality

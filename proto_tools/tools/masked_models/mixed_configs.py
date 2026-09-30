@@ -2,7 +2,7 @@
 
 import logging
 import math
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 
 from pydantic import model_validator
 from standalone_helpers.mixed_sequence import (
@@ -193,11 +193,14 @@ class MixedSampleConfig(MixedModelConfig):
             result = spec.function(
                 spec.input_model.model_validate({"sequences": sequences}),
                 _marked_preprocessed(
-                    spec.config_model(
-                        model_checkpoint=self.model_checkpoint,
-                        batch_size=self.batch_size,
-                        device=self.device,
-                        return_logits=True,
+                    cast(
+                        BaseConfig,
+                        spec.config_model(
+                            model_checkpoint=self.model_checkpoint,
+                            batch_size=self.batch_size,
+                            device=self.device,
+                            return_logits=True,
+                        ),
                     )
                 ),
             )

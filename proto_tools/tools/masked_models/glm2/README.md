@@ -30,7 +30,7 @@ Use the pooled vector as a feature for clustering, retrieval, or a downstream su
 #### Usage Tips
 
 - **`repr_layer=-1` selects the last transformer output.** Layer 0 selects the input embedding table; positive indices select transformer outputs. Pooling includes every unpadded token, including strand markers.
-- **`return_logits=True` adds an `(L, 24)` matrix.** Columns follow `ACDEFGHIKLMNPQRSTVWYacgt`; these are raw logits, not normalized probabilities. Both the matrix and `tokens` include strand-marker rows.
+- **`return_logits=True` adds an `(L, 24)` matrix.** Columns follow `ACDEFGHIKLMNPQRSTVWYacgt`; these are raw logits, not normalized probabilities. The matrix includes strand-marker rows, one row per input character.
 - **CSV, NPY, and PT exports contain pooled vectors.** JSON also preserves `vocab` and optional `logits` for position-level analysis; logits rows follow the input sequence.
 
 ### gLM2 Scoring (`glm2-score`)
