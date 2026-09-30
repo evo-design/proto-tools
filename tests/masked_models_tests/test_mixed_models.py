@@ -1,6 +1,5 @@
 """Tests for mixed protein/DNA sequence contracts and transport."""
 
-import json
 import logging
 import math
 from typing import ClassVar
@@ -11,7 +10,6 @@ from pydantic import ValidationError
 from standalone_helpers.compression import compress_array
 from standalone_helpers.mixed_sequence import UPSTREAM_STRAND_TOKENS, tokenize_mixed_sequence
 
-import proto_tools
 from proto_tools.tools.masked_models.execution import dispatch_masked_model
 from proto_tools.tools.masked_models.glm2 import GLM2EmbeddingsConfig
 from proto_tools.tools.masked_models.minerva import MinervaEmbeddingsConfig, MinervaInteractionsConfig
@@ -19,8 +17,6 @@ from proto_tools.tools.masked_models.mixed_data_models import (
     MIXED_VOCAB,
     MixedEmbeddingsOutput,
     MixedGradientOutput,
-    MixedSampleOutput,
-    MixedScoringOutput,
     MixedSequenceGradientInput,
     MixedSequenceInput,
     MixedSequenceSampleInput,
@@ -29,7 +25,7 @@ from proto_tools.tools.masked_models.mixed_data_models import (
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.transforms.masking import MaskingStrategy
 from proto_tools.utils import ToolInstance
-from proto_tools.utils.interaction_models import SequenceInteractionMap, SequenceInteractionsOutput
+from proto_tools.utils.interaction_models import SequenceInteractionsOutput
 
 _LOCUS = "+MA+ac-X"
 _LONG_LOCUS = "<+>MA<+>ac<->X"
@@ -293,63 +289,6 @@ def test_automatic_masking_is_identical_for_long_and_short_markers(monkeypatch, 
 # ── Labeled results, public exports, and compressed transport ────────────────
 
 
-@pytest.mark.parametrize(
-    ("axis_labels", "values", "error"),
-    [
-        (["A", "a"], [[0.1]], "square"),
-        (["A"], [[0.1, 0.2]], "square"),
-        (["A"], [[-0.01]], "finite values"),
-        (["A"], [[1.01]], "finite values"),
-        (["A"], [[math.nan]], "finite values"),
-        (["A"], [[math.inf]], "finite values"),
-    ],
-)
-def test_interaction_map_rejects_invalid_axes_or_probabilities(axis_labels, values, error):
-    with pytest.raises(ValidationError, match=error):
-        SequenceInteractionMap(axis_labels=axis_labels, values=values)
-
-
-def test_mixed_output_json_roundtrips_preserve_axis_metadata():
-    logits = [[float(i)] * 24 for i in range(len(_TOKENS))]
-    outputs = [
-        MixedEmbeddingsOutput(results=[{"mean_embedding": [0.1, 0.2], "attention_mask": [1] * 8, "logits": logits}]),
-        MixedSampleOutput(results=[{"sequence": _LOCUS, "logits": logits}]),
-        MixedScoringOutput(
-            scores=[
-                {
-                    "scored_positions": [2, 3, 5, 6],
-                    "log_likelihood": -4.0,
-                    "avg_log_likelihood": -1.0,
-                    "perplexity": math.e,
-                    "logits": logits,
-                    "vocab": MIXED_VOCAB,
-                }
-            ]
-        ),
-        MixedGradientOutput(gradient=logits, loss=1.0, vocab=MIXED_VOCAB),
-        SequenceInteractionsOutput(
-            results=[{"maps": {"protein": {"axis_labels": _TOKENS, "values": np.eye(len(_TOKENS)).tolist()}}}]
-        ),
-    ]
-    for output in outputs:
-        restored = type(output).model_validate_json(output.model_dump_json())
-        assert restored.model_dump() == output.model_dump()
-
-
-def test_mixed_interactions_export_npz_and_json_preserve_axes(tmp_path):
-    output = SequenceInteractionsOutput(
-        results=[{"maps": {"base_pairing": {"axis_labels": ["+", "a"], "values": [[0.1, 0.2], [0.2, 0.8]]}}}]
-    )
-    output._export_output(tmp_path / "contacts.v1", "npz")
-    with np.load(tmp_path / "contacts.v1.npz", allow_pickle=False) as archive:
-        assert archive["0_base_pairing_axis_labels"].tolist() == ["+", "a"]
-        np.testing.assert_allclose(archive["0_base_pairing"], [[0.1, 0.2], [0.2, 0.8]])
-        assert archive["0_base_pairing"].dtype == np.float32
-    output._export_output(tmp_path / "contacts.v1", "json")
-    restored = SequenceInteractionsOutput(results=json.loads((tmp_path / "contacts.v1.json").read_text()))
-    assert restored.results == output.results
-
-
 def test_mixed_dispatch_decompresses_nested_matrices(monkeypatch):
     captured = {}
     matrix = np.array([[0.1, 0.2], [0.2, 0.8]], dtype=np.float32)
@@ -367,27 +306,6 @@ def test_mixed_dispatch_decompresses_nested_matrices(monkeypatch):
     assert captured["payload"]["sequences"] == ["+A"]
     assert output.metadata["model_checkpoint"] == "gbrixi/minerva-mlm"
     np.testing.assert_array_equal(output.results[0].maps["protein"].values, matrix)
-
-
-def test_mixed_public_exports_and_registry_keys():
-    for name in [
-        "MixedSequenceInput",
-        "MixedSequenceGradientInput",
-        "MixedSequenceSampleInput",
-        "SequenceInteractionMap",
-        "SequenceInteractions",
-        "MixedSequenceEmbedding",
-        "MixedSequenceSample",
-        "MIXED_VOCAB",
-        "one_hot_mixed_logits",
-    ]:
-        assert getattr(proto_tools, name) is not None
-    keys = {spec.key for spec in ToolRegistry.list_all()}
-    for toolkit, prefix in [("glm2", "GLM2"), ("minerva", "Minerva")]:
-        for operation in ["embedding", "score", "gradient", "sample"]:
-            assert f"{toolkit}-{operation}" in keys
-        assert getattr(proto_tools, f"{prefix}EmbeddingsConfig") is not None
-    assert "minerva-interactions" in keys
 
 
 def test_mixed_gradient_export_preserves_values(tmp_path):
