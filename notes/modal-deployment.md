@@ -428,10 +428,6 @@ costs minutes, and a cold container starts with nothing compiled. `env_for()` se
   For a 300-residue AlphaFold3 input in a bucket nothing had compiled, the first cold
   container took 165 s and the next cold container 76 s.
 
-The cache key includes the GPU type, and `GPU_DEFAULT` lets a container land on any of
-several, so each type compiles once on first use. Inspect or clear it with
-`modal volume ls proto-cache jax_cache/` and `modal volume rm -r proto-cache jax_cache/<toolkit>`.
-
 ## Spending
 
 Every deploy costs money before you run anything, because each build ends in a real
